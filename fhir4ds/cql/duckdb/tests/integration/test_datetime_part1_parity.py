@@ -52,7 +52,7 @@ define DurationDays: days between @2024-01-01 and @2024-01-31
     assert "cqlBeforeP" in str(translated["BeforeMonth"])
     assert translated["DateCtor"].to_sql() == "'2024-01-15'"
     assert translated["DateTimeCtor"].to_sql() == "'2024-01-15T10:30:00'"
-    assert "SUBSTR" in str(translated["YearComponent"])
+    assert "dateComponent" in str(translated["YearComponent"])
     assert "cqlDifferenceBetween" in str(translated["DifferenceMonths"])
     assert "cqlDurationBetween" in str(translated["DurationDays"])
 
@@ -72,12 +72,17 @@ def test_cql_datetime_part1_duckdb_surface_matches_cpp_registration() -> None:
         "SELECT cqlDurationBetween('2024-01-01', '2024-01-31', 'day')",
         "SELECT cqlDurationBetween('2012-01-02', '2012', 'month')",
         "SELECT cqlDurationBetween('2005T', '2010T', 'year')",
+        "SELECT cqlDurationBetween('2024', '2025', 'bogus')",
         "SELECT cqlDifferenceBetween('2012-01-02', '2012', 'month')",
+        "SELECT cqlDifferenceBetween('2024', '2025', 'bogus')",
         "SELECT cqlDifferenceBetween('2000-10-10T10:05:45.500-06:00', '2000-10-10T10:05:45.900-07:00', 'millisecond')",
         "SELECT cqlDurationBetween('2024', '2025', 'month')",
         "SELECT dateAddQuantity('2024-01-01T10:00:00+14:30', '{\"value\":1,\"unit\":\"hour\"}')",
         "SELECT dateSubtractQuantity('2024-01-01T10:00:00+14:30', '{\"value\":1,\"unit\":\"hour\"}')",
         "SELECT dateComponent('2024-01-01T10:00:00+14:30', 'hour')",
+        "SELECT dateComponent('2024-01-01T10:00:00+05:00', 'millisecond')",
+        "SELECT dateComponent('T10:00:00+05:00', 'millisecond')",
+        "SELECT dateComponent('2024-01-01T10:00:00.123+05:00', 'millisecond')",
         "SELECT cqlBeforeP('2024-01-01T10:00:00+14:30','2024-01-01T11:00:00+14:30','hour')",
         "SELECT cqlDurationBetween('2024-01-01T10:00:00+14:30','2024-01-01T11:00:00+14:30','hour')",
         "SELECT cqlDifferenceBetween('2024-01-01T10:00:00+14:30','2024-01-01T11:00:00+14:30','hour')",
@@ -95,6 +100,54 @@ def test_cql_datetime_part1_duckdb_surface_matches_cpp_registration() -> None:
     try:
         for expression in expressions:
             assert cpp.execute(expression).fetchone() == py.execute(expression).fetchone()
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_datetime_part1_explorer_component_timezone_suffix_regression() -> None:
+    cql = """library DateTime1ExplorerComponent version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define MsOffsetNoMs: millisecond from @2024-01-01T10:00:00+05:00
+define MsOffsetZuluNoMs: millisecond from @2024-01-01T10:00:00Z
+define MsOffsetWithMs: millisecond from @2024-01-01T10:00:00.123+05:00
+define SecOffsetNoMs: second from @2024-01-01T10:00:00+05:00
+define QueryAliasMsNoMs: singleton from ({ @2024-01-01T10:00:00+05:00 } D return millisecond from D)
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "MsOffsetNoMs": None,
+        "MsOffsetZuluNoMs": None,
+        "MsOffsetWithMs": 123,
+        "SecOffsetNoMs": 0,
+        "QueryAliasMsNoMs": None,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (expected_value,), name
+            assert cpp.execute(sql).fetchone() == (expected_value,), name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_datetime_part1_rejects_invalid_between_units() -> None:
+    expressions = [
+        "SELECT cqlDurationBetween('2024', '2025', 'bogus')",
+        "SELECT cqlDifferenceBetween('2024', '2025', 'bogus')",
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression in expressions:
+            assert py.execute(expression).fetchone() == (None,)
+            assert cpp.execute(expression).fetchone() == (None,)
     finally:
         py.close()
         cpp.close()
@@ -128,6 +181,7 @@ define DurationDifferenceArithmeticDivision: Truncate(280 - (difference in days 
 define DurationDifferenceArithmeticDiv: (280 - (difference in days between @2024-01-01 and @2024-01-08)) div 7
 define DurationMonthsUncertain: months between @2012-01-02 and @2012
 define DurationMonthsUncertainCompare: months between @2012-01-02 and @2012 > 5
+define DurationMonthsUncertainLessThan11: months between @2012-01-02 and @2012 < 11
 define AddInvalidTimezone: @2024-01-01T10:00:00+14:30 + 1 hour
 define BeforeInvalidTimezone: @2024-01-01T10:00:00+14:30 before hour of @2024-01-01T11:00:00+14:30
 define DurationInvalidTimezone: hours between @2024-01-01T10:00:00+14:30 and @2024-01-01T11:00:00+14:30
@@ -165,8 +219,9 @@ define TimeInvalidHour: Time(24, 0)
         "DurationDaysParenthesizedScalarCompare": True,
         "DurationDifferenceArithmeticDivision": 39.0,
         "DurationDifferenceArithmeticDiv": 39.0,
-        "DurationMonthsUncertain": '{"start":0,"end":11,"lowClosed":true,"highClosed":true}',
+        "DurationMonthsUncertain": '{"start":0,"end":10,"lowClosed":true,"highClosed":true}',
         "DurationMonthsUncertainCompare": None,
+        "DurationMonthsUncertainLessThan11": True,
         "AddInvalidTimezone": None,
         "BeforeInvalidTimezone": None,
         "DurationInvalidTimezone": None,

@@ -21,7 +21,7 @@ fhir4ds dqm --help
 
 ## DQM Commands
 
-The `dqm` command group includes batch-evaluation commands and HAPI
+The `dqm` command group includes batch-evaluation commands plus HAPI and Mongo
 materialization commands:
 
 | Command | Purpose |
@@ -33,6 +33,11 @@ materialization commands:
 | `fhir4ds dqm hapi sync-config` | Sync materialized measure config into PostgreSQL. |
 | `fhir4ds dqm hapi process-queue` | Process one batch of queued HAPI patient changes. |
 | `fhir4ds dqm hapi listen` | Listen for HAPI change notifications and process continuously. |
+| `fhir4ds dqm hapi explain-scope` | Show PostgreSQL `EXPLAIN` for decoded-view patient pushdown. |
+| `fhir4ds dqm mongo install` | Create Mongo materialization indexes. |
+| `fhir4ds dqm mongo sync-config` | Sync materialized measure config into Mongo. |
+| `fhir4ds dqm mongo process-queue` | Process one batch of queued Mongo patient changes. |
+| `fhir4ds dqm mongo listen` | Watch Mongo change streams and process continuously. |
 
 Use the config-file workflow for repeatable production jobs:
 
@@ -110,11 +115,33 @@ fhir4ds dqm hapi install \
 
 fhir4ds dqm hapi sync-config --config hapi-dqm.yaml
 fhir4ds dqm hapi process-queue --config hapi-dqm.yaml --limit 100
+fhir4ds dqm hapi explain-scope --config hapi-dqm.yaml --patient-id patient-1
 fhir4ds dqm hapi listen --config hapi-dqm.yaml
 ```
 
 See [HAPI FHIR Server Integration](/docs/integrations/hapi-fhir) for table
 layout, trigger behavior, and result persistence details.
+
+## Mongo Materialization
+
+Mongo materialization commands require the optional `pymongo` dependency:
+
+```bash
+python3 -m pip install "fhir4ds-v2[mongo]"
+```
+
+Then create indexes and run the worker:
+
+```bash
+fhir4ds dqm mongo install --config mongo-dqm.yaml
+fhir4ds dqm mongo sync-config --config mongo-dqm.yaml
+fhir4ds dqm mongo enqueue-patients --config mongo-dqm.yaml --all
+fhir4ds dqm mongo listen --config mongo-dqm.yaml
+```
+
+Mongo change streams require a replica set or sharded cluster. See
+[Mongo FHIR Server Integration](/docs/integrations/mongo-fhir-server) for queue,
+change-stream, and generated MeasureReport storage details.
 
 ## Audit Modes
 

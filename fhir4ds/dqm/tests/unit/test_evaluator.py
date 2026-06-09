@@ -493,6 +493,58 @@ class TestMeasureEvaluatorValidation:
         kept = pruned["denominator_exclusion"].iloc[1]["evidence"]
         assert kept[0]["findings"][0]["target"] == "Condition/yes"
 
+    def test_prune_population_evidence_only_prunes_current_group(self):
+        """Multi-group measures must not compact the same row more than once."""
+        pop_map = PopulationMap(
+            measure_id="multi-group-audit",
+            cql_library_ref="http://example.com/Library/Test",
+            groups=[
+                GroupMap(
+                    group_id="group-a",
+                    population_basis="boolean",
+                    populations=[
+                        PopulationEntry(
+                            "initial-population", "group-a", "Initial Population",
+                            AuditPersona.INCLUSION,
+                        ),
+                    ],
+                ),
+                GroupMap(
+                    group_id="group-b",
+                    population_basis="boolean",
+                    populations=[
+                        PopulationEntry(
+                            "initial-population", "group-b", "Initial Population",
+                            AuditPersona.INCLUSION,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        df = pd.DataFrame(
+            {
+                "_group_id": ["group-a"],
+                "initial_population": [
+                    {
+                        "result": True,
+                        "evidence": [
+                            {
+                                "target": "Encounter/group-a-ip",
+                                "operator": "exists",
+                                "trace": ["Initial Population"],
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        evaluator = MeasureEvaluator(conn=None)
+
+        pruned = evaluator._prune_population_evidence(df, pop_map)
+        evidence = pruned["initial_population"].iloc[0]["evidence"]
+
+        assert evidence[0]["findings"][0]["target"] == "Encounter/group-a-ip"
+
 
 class TestToMeasureReport:
     """Tests for to_measure_report()."""

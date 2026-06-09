@@ -6,13 +6,13 @@ Loads test cases from the FHIR R4 test suite and runs each test,
 reporting pass/fail status and generating a compliance report.
 """
 
-import xml.etree.ElementTree as ET
-from pathlib import Path
-from dataclasses import dataclass, field
-from typing import Any, Optional
-from datetime import datetime
 import json
 import sys
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).parent))
@@ -24,15 +24,15 @@ class FHIRPathTestCase:
     """Represents a single FHIRPath test case."""
     name: str
     expression: str
-    input_file: Optional[str] = None
-    input_resource: Optional[str] = None
+    input_file: str | None = None
+    input_resource: str | None = None
     expected_outputs: list = field(default_factory=list)  # List of (type, value) tuples
     expected_error: bool = False
-    error_type: Optional[str] = None  # 'syntax' or other error type
-    description: Optional[str] = None
+    error_type: str | None = None  # 'syntax' or other error type
+    description: str | None = None
     source_file: str = ""
     line_number: int = 0
-    predicate: Optional[bool] = None  # Some tests specify predicate="true/false"
+    predicate: bool | None = None  # Some tests specify predicate="true/false"
 
 
 @dataclass
@@ -41,7 +41,7 @@ class TestResult:
     test_case: FHIRPathTestCase
     passed: bool
     actual_output: Any = None
-    error_message: Optional[str] = None
+    error_message: str | None = None
     execution_time_ms: float = 0.0
 
 
@@ -180,7 +180,7 @@ def parse_test_xml(xml_path: Path) -> list[FHIRPathTestCase]:
     return test_cases
 
 
-def load_resource_file(resource_path: Path) -> Optional[str]:
+def load_resource_file(resource_path: Path) -> str | None:
     """Load a resource file content. Tries JSON version first if available."""
     # Try JSON version first (often more complete than XML stubs)
     if resource_path.suffix == '.xml':
@@ -325,7 +325,7 @@ def fhir_xml_to_dict(elem) -> dict | str | None:
     return result if result else None
 
 
-def parse_fhir_resource(resource_str: str) -> Optional[dict]:
+def parse_fhir_resource(resource_str: str) -> dict | None:
     """
     Parse a FHIR resource from XML or JSON string.
     """
@@ -354,7 +354,7 @@ def parse_fhir_resource(resource_str: str) -> Optional[dict]:
             print(f"JSON parse error: {e}")
             return None
     else:
-        print(f"Unknown resource format")
+        print("Unknown resource format")
         return None
 
 
@@ -408,7 +408,7 @@ def get_r4_model():
     return _R4_MODEL
 
 
-def evaluate_fhirpath(expression: str, resource: Any, use_rust: bool = False) -> tuple[Any, Optional[str]]:
+def evaluate_fhirpath(expression: str, resource: Any, use_rust: bool = False) -> tuple[Any, str | None]:
     """
     Evaluate a FHIRPath expression against a resource.
 
@@ -423,8 +423,9 @@ def evaluate_fhirpath(expression: str, resource: Any, use_rust: bool = False) ->
 
         if use_rust:
             # Use Rust implementation (fhirpath-rs) - archived, not available
-            from fhirpath_rs import evaluate as fhirpath_eval_rust
             import json
+
+            from fhirpath_rs import evaluate as fhirpath_eval_rust
 
             resource_json = json.dumps(resource) if isinstance(resource, dict) else resource
             result = fhirpath_eval_rust(resource_json, expression)
@@ -547,7 +548,9 @@ def compare_results(expected_outputs: list, actual: Any) -> tuple[bool, str]:
         return False, f"Expected {len(expected_outputs)} values, got {len(actual)}: {actual}"
 
     # Compare each value
-    for i, ((expected_type, expected_value), actual_val) in enumerate(zip(expected_outputs, actual)):
+    for i, ((expected_type, expected_value), actual_val) in enumerate(
+        zip(expected_outputs, actual, strict=True)
+    ):
         if not compare_single_output(expected_type, expected_value, actual_val):
             return False, f"At index {i}: Expected ({expected_type}): {expected_value}, Got: {actual_val}"
 
@@ -651,7 +654,7 @@ def generate_report(report: ComplianceReport, output_format: str = "text") -> st
             filename = r.test_case.source_file
             if filename not in grouped_results:
                 grouped_results[filename] = {"tests": []}
-            
+
             test_obj = {
                 "name": r.test_case.name,
                 "result": {
@@ -660,9 +663,9 @@ def generate_report(report: ComplianceReport, output_format: str = "text") -> st
             }
             if not r.passed:
                 test_obj["result"]["error"] = r.error_message
-            
+
             grouped_results[filename]["tests"].append(test_obj)
-            
+
         return json.dumps(grouped_results, indent=2)
 
     # Text format
@@ -745,7 +748,7 @@ def main():
 
     project_root = get_project_root()
     test_dir = args.test_dir or (project_root / "fhir4ds" / "fhirpath" / "tests" / "compliance" / "r4")
-    
+
     # Default output path if not specified
     if args.output is None:
         args.output = Path("conformance/reports/fhirpath_report.json")

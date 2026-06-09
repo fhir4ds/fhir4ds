@@ -54,6 +54,7 @@ def _cpp_connection() -> duckdb.DuckDBPyConnection:
 def test_cql_structural_type_expressions_parse_and_translate() -> None:
     is_expr = parse_expression("true is Boolean")
     as_expr = parse_expression("true as Boolean")
+    cast_expr = parse_expression("cast true as Boolean")
     convert_expr = parse_expression("convert '5' to Integer")
     children_expr = parse_expression("Children({ a: 1 })")
     descendants_expr = parse_expression("Descendants({ a: { b: 1 } })")
@@ -62,6 +63,10 @@ def test_cql_structural_type_expressions_parse_and_translate() -> None:
     assert is_expr.operator == "is"
     assert isinstance(as_expr, BinaryExpression)
     assert as_expr.operator == "as"
+    assert not as_expr.strict
+    assert isinstance(cast_expr, BinaryExpression)
+    assert cast_expr.operator == "as"
+    assert cast_expr.strict
     assert isinstance(convert_expr, BinaryExpression)
     assert convert_expr.operator == "convert"
     assert isinstance(children_expr, FunctionRef)
@@ -77,6 +82,7 @@ define AsBool: true as Boolean
 define IsChoice: 5 is Choice<Integer, String>
 define IsTuple: { a: 1 } is Tuple { a: Integer }
 define Converted: convert '5' to Integer
+define ConvertAnyPreservesSourceType: (convert 5 to Any) as String
 define ChildrenTuple: Children({ a: 1, b: { c: 2 }, d: {3, 4}, n: null })
 define DescendantsTuple: Descendants({ a: { b: 1 }, c: {2, 3} })
 define MessageAsInterval: Message(null, true, 'NOT_IMPLEMENTED', 'Error', 'x') as Interval<DateTime>
@@ -88,6 +94,7 @@ define MessageAsInterval: Message(null, true, 'NOT_IMPLEMENTED', 'Error', 'x') a
         "IsChoice",
         "IsTuple",
         "Converted",
+        "ConvertAnyPreservesSourceType",
         "ChildrenTuple",
         "DescendantsTuple",
         "MessageAsInterval",
@@ -95,6 +102,7 @@ define MessageAsInterval: Message(null, true, 'NOT_IMPLEMENTED', 'Error', 'x') a
     assert translated["IsBool"].to_sql() == "TRUE"
     assert "value=True" in str(translated["AsBool"])
     assert translated["Converted"].to_sql() == "ToInteger('5')"
+    assert translated["ConvertAnyPreservesSourceType"].to_sql() == "NULL"
     assert translated["ChildrenTuple"].to_sql().startswith("cqlChildren(")
     assert translated["DescendantsTuple"].to_sql().startswith("cqlDescendants(")
     assert translated["MessageAsInterval"].to_sql() == (
@@ -111,6 +119,112 @@ def test_cql_structural_type_rejects_unknown_targets() -> None:
     ]:
         with pytest.raises(TranslationError, match="unknown type 'DefinitelyNotAType'"):
             translate_cql(header + f"define Bad: {expression}\n")
+
+
+def test_cql_structural_strict_cast_differs_from_nullable_as() -> None:
+    translated = translate_cql(
+        """library StructuralStrictCast version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define AsMismatch: 5 as String
+define CastMismatch: cast 5 as String
+define CastQuantityMismatch: cast 5 as Quantity
+define CastMatch: cast 5 as Integer
+"""
+    )
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            assert con.execute(f"SELECT {translated['AsMismatch'].to_sql()}").fetchone() == (None,)
+            assert con.execute(f"SELECT {translated['CastMatch'].to_sql()}").fetchone() == (5,)
+            for name in ("CastMismatch", "CastQuantityMismatch"):
+                sql = translated[name].to_sql()
+                assert "CQL strict cast failed" in sql
+                with pytest.raises(duckdb.Error, match="CQL strict cast failed"):
+                    con.execute(f"SELECT {sql}").fetchone()
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_structural_strict_cast_survives_function_inlining() -> None:
+    translated = translate_cql(
+        """library StructuralStrictCastFunction version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define function StrictString(x Any): cast x as String
+define function NullableString(x Any): x as String
+define StrictFunctionMismatch: StrictString(5)
+define StrictFunctionMatch: StrictString('ok')
+define NullableFunctionMismatch: NullableString(5)
+"""
+    )
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            assert con.execute(
+                f"SELECT {translated['StrictFunctionMatch'].to_sql()}"
+            ).fetchone() == ("ok",)
+            assert con.execute(
+                f"SELECT {translated['NullableFunctionMismatch'].to_sql()}"
+            ).fetchone() == (None,)
+            with pytest.raises(duckdb.Error, match="CQL strict cast failed"):
+                con.execute(
+                    f"SELECT {translated['StrictFunctionMismatch'].to_sql()}"
+                ).fetchone()
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_structural_traversal_preserves_nested_primitive_type_tags() -> None:
+    translated = translate_cql(
+        """library StructuralNestedTraversal version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define NestedDateDescendants: Descendants({ a: { d: @2024-01-01 } })
+define NestedDateDescendantIsDate: Last(Descendants({ a: { d: @2024-01-01 } })) is Date
+define NestedDateDescendantAsDate: Last(Descendants({ a: { d: @2024-01-01 } })) as Date
+define NestedTimeDescendantIsTime: Last(Descendants({ a: { t: @T10:00:00 } })) is Time
+define ListDateChildIsDate: First(Children({ a: {@2024-01-01} })) is Date
+define ListDateChildAsDate: First(Children({ a: {@2024-01-01} })) as Date
+define NestedLongDescendantIsLong: Last(Descendants({ a: { l: 1L } })) is Long
+define NestedLongDescendantIsInteger: Last(Descendants({ a: { l: 1L } })) is Integer
+"""
+    )
+    expected = {
+        "NestedDateDescendantIsDate": (True,),
+        "NestedDateDescendantAsDate": ("2024-01-01",),
+        "NestedTimeDescendantIsTime": (True,),
+        "ListDateChildIsDate": (True,),
+        "ListDateChildAsDate": ("2024-01-01",),
+        "NestedLongDescendantIsLong": (True,),
+        "NestedLongDescendantIsInteger": (False,),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expr in translated.items():
+            py_result = py.execute(f"SELECT {expr.to_sql()}").fetchone()
+            cpp_result = cpp.execute(f"SELECT {expr.to_sql()}").fetchone()
+            assert cpp_result == py_result, name
+            if name == "NestedDateDescendants":
+                assert py_result == (
+                    [
+                        '{"d":{"__fhir4ds_cql_type":"Date","value":"2024-01-01"}}',
+                        '{"__fhir4ds_cql_type":"Date","value":"2024-01-01"}',
+                    ],
+                )
+            else:
+                assert py_result == expected[name], name
+    finally:
+        py.close()
+        cpp.close()
 
 
 def test_cql_structural_type_translated_sql_matches_cpp_registration() -> None:
@@ -143,14 +257,24 @@ define QuantityAsQuantity: 5 'mg' as Quantity
 define IntegerAsQuantity: 5 as Quantity
 define StringConvertToQuantity: convert '5 ''mg''' to Quantity
 define QuantityConvertToString: convert 5 'mg' to String
+define ConvertedQuantityConvertToString: convert (convert '5 ''mg''' to Quantity) to String
 define StringConvertToRatio: convert '10 ''mg'':2 ''mL''' to Ratio
 define RatioConvertToString: convert ToRatio('10 ''mg'':2 ''mL''') to String
 define StringConvertToConcept: convert '{"code":"x","system":"s"}' to Concept
 define StringConvertToPatient: convert 'x' to Patient
+define ConvertIntegerAnyAsString: (convert 5 to Any) as String
+define ConvertStringAnyAsInteger: (convert '5' to Any) as Integer
+define ConvertIntegerAnyIsString: (convert 5 to Any) is String
+define ConvertStringAnyIsInteger: (convert '5' to Any) is Integer
+define ConvertDateAnyIsDateTime: (convert @2024-01-01 to Any) is DateTime
 define ListIsList: {1, 2} is List<Integer>
 define IntegerIsNotList: 5 is List<Integer>
 define ListAsList: {1, 2} as List<Integer>
 define IntegerAsList: 5 as List<Integer>
+define NullListIsList: (null as List<Integer>) is List<Integer>
+define NullListAsList: null as List<Integer>
+define MixedListAsListInteger: {1, 'x'} as List<Integer>
+define MixedListIsListInteger: {1, 'x'} is List<Integer>
 define IntegerIsChoice: 5 is Choice<Integer, String>
 define StringAsChoice: 'abc' as Choice<Integer, String>
 define BoolAsChoice: true as Choice<Integer, String>
@@ -220,13 +344,23 @@ define RatioAliasAsRatio: RatioAlias as Ratio
         "QuantityIsTrue": (True,),
         "IntegerIsNotQuantity": (False,),
         "IntegerAsQuantity": (None,),
-        "QuantityConvertToString": ("5.0 'mg'",),
+        "QuantityConvertToString": ("5 'mg'",),
+        "ConvertedQuantityConvertToString": ("5 'mg'",),
         "RatioConvertToString": ("10.0 'mg':2.0 'mL'",),
         "StringConvertToPatient": (None,),
+        "ConvertIntegerAnyAsString": (None,),
+        "ConvertStringAnyAsInteger": (None,),
+        "ConvertIntegerAnyIsString": (False,),
+        "ConvertStringAnyIsInteger": (False,),
+        "ConvertDateAnyIsDateTime": (False,),
         "ListIsList": (True,),
         "IntegerIsNotList": (False,),
         "ListAsList": ([1, 2],),
         "IntegerAsList": (None,),
+        "NullListIsList": (False,),
+        "NullListAsList": (None,),
+        "MixedListAsListInteger": (None,),
+        "MixedListIsListInteger": (False,),
         "IntegerIsChoice": (True,),
         "StringAsChoice": ("abc",),
         "BoolAsChoice": (None,),
@@ -260,7 +394,10 @@ define RatioAliasAsRatio: RatioAlias as Ratio
             sql = f"SELECT {expr.to_sql()}"
             py_result = py.execute(sql).fetchone()
             cpp_result = cpp.execute(sql).fetchone()
-            assert cpp_result == py_result, name
+            if name in {"QuantityAsQuantity", "StringConvertToQuantity"}:
+                assert json.loads(cpp_result[0]) == json.loads(py_result[0]), name
+            else:
+                assert cpp_result == py_result, name
             if name in expected:
                 assert py_result == expected[name], name
 
@@ -325,6 +462,7 @@ using FHIR version '4.0.1'
 context Patient
 define EstimatedGestationalAge: First([Observation] O return O.value as Quantity)
 define GestationalAgeAtLeast37Weeks: EstimatedGestationalAge >= 37 'weeks'
+define GestationalAgeToString: convert EstimatedGestationalAge to String
 """
     library = parse_cql(cql)
     sql = CQLToSQLTranslator().translate_library_to_population_sql(
@@ -332,6 +470,7 @@ define GestationalAgeAtLeast37Weeks: EstimatedGestationalAge >= 37 'weeks'
         output_columns={
             "estimated_gestational_age": "EstimatedGestationalAge",
             "gestational_age_at_least_37_weeks": "GestationalAgeAtLeast37Weeks",
+            "gestational_age_to_string": "GestationalAgeToString",
         },
     )
     setup_sql = [
@@ -366,6 +505,8 @@ define GestationalAgeAtLeast37Weeks: EstimatedGestationalAge >= 37 'weeks'
         assert json.loads(cpp_rows["p2"][1]) == json.loads(py_rows["p2"][1])
         assert cpp_rows["p1"][2] == py_rows["p1"][2]
         assert cpp_rows["p2"][2] == py_rows["p2"][2]
+        assert cpp_rows["p1"][3] == py_rows["p1"][3] == "38 'weeks'"
+        assert cpp_rows["p2"][3] == py_rows["p2"][3] == "37 'cm'"
         quantity = json.loads(py_rows["p1"][1])
         assert quantity["value"] == 38
         assert quantity["code"] == "weeks"

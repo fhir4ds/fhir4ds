@@ -51,10 +51,16 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # Skip - Skip first n elements
     # Returns full list for NULL n, empty list for negative or n >= length.
     # ============================================
+    integer_count_types = (
+        "'TINYINT', 'SMALLINT', 'INTEGER', 'BIGINT', 'HUGEINT', "
+        "'UTINYINT', 'USMALLINT', 'UINTEGER', 'UBIGINT', 'UHUGEINT'"
+    )
     con.execute(
-        "CREATE MACRO IF NOT EXISTS Skip(lst, n) AS "
+        "CREATE OR REPLACE MACRO Skip(lst, n) AS "
         "CASE WHEN lst IS NULL THEN NULL "
         "WHEN n IS NULL THEN lst "
+        f"WHEN typeof(n) NOT IN ({integer_count_types}) "
+        "THEN error('CQL Skip count must be Integer') "
         "WHEN n < 0 THEN lst[1:0] "
         "WHEN n >= system.array_length(lst) THEN lst[1:0] "
         "ELSE lst[n + 1:] END"
@@ -66,8 +72,10 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # DuckDB slicing is inclusive: [1:n] returns elements at positions 1 through n
     # ============================================
     con.execute(
-        "CREATE MACRO IF NOT EXISTS Take(lst, n) AS "
+        "CREATE OR REPLACE MACRO Take(lst, n) AS "
         "CASE WHEN lst IS NULL THEN NULL "
+        f"WHEN n IS NOT NULL AND typeof(n) NOT IN ({integer_count_types}) "
+        "THEN error('CQL Take count must be Integer') "
         "WHEN n IS NULL OR n <= 0 THEN lst[1:0] "
         "ELSE lst[1:n] END"
     )
@@ -78,10 +86,114 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # transported as JSON strings that require quantityCompare for equality.
     # ============================================
     con.execute(
+        "CREATE OR REPLACE MACRO CQLClinicalCodeSystem(_code_json) AS "
+        "COALESCE(json_extract_string(_code_json, '$.system'), "
+        "json_extract_string(_code_json, '$.codesystem'))"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLClinicalValueKind(_clinical_value) AS "
+        "CASE WHEN TRY_CAST(CAST(_clinical_value AS VARCHAR) AS JSON) IS NULL THEN NULL "
+        "WHEN json_type(TRY_CAST(CAST(_clinical_value AS VARCHAR) AS JSON), '$.codes') = 'ARRAY' "
+        "THEN 'Concept' "
+        "WHEN json_extract_string(TRY_CAST(CAST(_clinical_value AS VARCHAR) AS JSON), '$.code') IS NOT NULL "
+        "AND json_type(TRY_CAST(CAST(_clinical_value AS VARCHAR) AS JSON), '$.value') IS NULL "
+        "THEN 'Code' "
+        "ELSE NULL END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLClinicalValueHasShape(_clinical_value) AS "
+        "CQLClinicalValueKind(_clinical_value) IS NOT NULL"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLIntervalValueHasShape(_interval_value) AS "
+        "CASE WHEN TRY_CAST(CAST(_interval_value AS VARCHAR) AS JSON) IS NULL THEN FALSE "
+        "WHEN json_type(TRY_CAST(CAST(_interval_value AS VARCHAR) AS JSON), '$.lowClosed') = 'BOOLEAN' "
+        "AND json_type(TRY_CAST(CAST(_interval_value AS VARCHAR) AS JSON), '$.highClosed') = 'BOOLEAN' "
+        "AND (json_type(TRY_CAST(CAST(_interval_value AS VARCHAR) AS JSON), '$.low') IS NOT NULL "
+        "OR json_type(TRY_CAST(CAST(_interval_value AS VARCHAR) AS JSON), '$.high') IS NOT NULL) "
+        "THEN TRUE ELSE FALSE END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLClinicalCodeEqual(left_code, right_code) AS "
+        "CASE "
+        "WHEN CQLClinicalValueKind(left_code) != 'Code' "
+        "OR CQLClinicalValueKind(right_code) != 'Code' THEN FALSE "
+        "WHEN (json_extract_string(TRY_CAST(CAST(left_code AS VARCHAR) AS JSON), '$.code') IS NULL) "
+        "OR (json_extract_string(TRY_CAST(CAST(right_code AS VARCHAR) AS JSON), '$.code') IS NULL) THEN FALSE "
+        "WHEN ((CQLClinicalCodeSystem(TRY_CAST(CAST(left_code AS VARCHAR) AS JSON)) IS NOT NULL) <> "
+        "(CQLClinicalCodeSystem(TRY_CAST(CAST(right_code AS VARCHAR) AS JSON)) IS NOT NULL)) THEN NULL "
+        "WHEN ((json_type(TRY_CAST(CAST(left_code AS VARCHAR) AS JSON), '$.display') IS NOT NULL) <> "
+        "(json_type(TRY_CAST(CAST(right_code AS VARCHAR) AS JSON), '$.display') IS NOT NULL)) THEN NULL "
+        "WHEN ((json_type(TRY_CAST(CAST(left_code AS VARCHAR) AS JSON), '$.version') IS NOT NULL) <> "
+        "(json_type(TRY_CAST(CAST(right_code AS VARCHAR) AS JSON), '$.version') IS NOT NULL)) THEN NULL "
+        "WHEN json_extract_string(TRY_CAST(CAST(left_code AS VARCHAR) AS JSON), '$.code') IS DISTINCT FROM "
+        "json_extract_string(TRY_CAST(CAST(right_code AS VARCHAR) AS JSON), '$.code') THEN FALSE "
+        "WHEN CQLClinicalCodeSystem(TRY_CAST(CAST(left_code AS VARCHAR) AS JSON)) IS DISTINCT FROM "
+        "CQLClinicalCodeSystem(TRY_CAST(CAST(right_code AS VARCHAR) AS JSON)) THEN FALSE "
+        "WHEN json_type(TRY_CAST(CAST(left_code AS VARCHAR) AS JSON), '$.display') IS NOT NULL "
+        "AND json_extract_string(TRY_CAST(CAST(left_code AS VARCHAR) AS JSON), '$.display') IS DISTINCT FROM "
+        "json_extract_string(TRY_CAST(CAST(right_code AS VARCHAR) AS JSON), '$.display') THEN FALSE "
+        "WHEN json_type(TRY_CAST(CAST(left_code AS VARCHAR) AS JSON), '$.version') IS NOT NULL "
+        "AND json_extract_string(TRY_CAST(CAST(left_code AS VARCHAR) AS JSON), '$.version') IS DISTINCT FROM "
+        "json_extract_string(TRY_CAST(CAST(right_code AS VARCHAR) AS JSON), '$.version') THEN FALSE "
+        "ELSE TRUE END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLClinicalConceptCodesEqual(left_concept, right_concept) AS "
+        "CASE "
+        "WHEN json_array_length(json_extract(TRY_CAST(CAST(left_concept AS VARCHAR) AS JSON), '$.codes')) "
+        "!= json_array_length(json_extract(TRY_CAST(CAST(right_concept AS VARCHAR) AS JSON), '$.codes')) "
+        "THEN FALSE "
+        "WHEN EXISTS (SELECT 1 "
+        "FROM json_each(TRY_CAST(CAST(left_concept AS VARCHAR) AS JSON), '$.codes') AS _left_each "
+        "JOIN json_each(TRY_CAST(CAST(right_concept AS VARCHAR) AS JSON), '$.codes') AS _right_each "
+        "ON TRY_CAST(_left_each.key AS BIGINT) = TRY_CAST(_right_each.key AS BIGINT) "
+        "WHERE CQLClinicalCodeEqual(TRY_CAST(_left_each.value AS JSON), "
+        "TRY_CAST(_right_each.value AS JSON)) IS FALSE) THEN FALSE "
+        "WHEN EXISTS (SELECT 1 "
+        "FROM json_each(TRY_CAST(CAST(left_concept AS VARCHAR) AS JSON), '$.codes') AS _left_each "
+        "JOIN json_each(TRY_CAST(CAST(right_concept AS VARCHAR) AS JSON), '$.codes') AS _right_each "
+        "ON TRY_CAST(_left_each.key AS BIGINT) = TRY_CAST(_right_each.key AS BIGINT) "
+        "WHERE CQLClinicalCodeEqual(TRY_CAST(_left_each.value AS JSON), "
+        "TRY_CAST(_right_each.value AS JSON)) IS NULL) THEN NULL "
+        "ELSE TRUE END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLClinicalValueEqual(left_value, right_value) AS "
+        "CASE "
+        "WHEN CQLClinicalValueKind(left_value) IS NULL "
+        "OR CQLClinicalValueKind(right_value) IS NULL THEN FALSE "
+        "WHEN CQLClinicalValueKind(left_value) != CQLClinicalValueKind(right_value) THEN FALSE "
+        "WHEN CQLClinicalValueKind(left_value) = 'Code' "
+        "THEN CQLClinicalCodeEqual(left_value, right_value) "
+        "WHEN ((json_type(TRY_CAST(CAST(left_value AS VARCHAR) AS JSON), '$.display') IS NOT NULL) <> "
+        "(json_type(TRY_CAST(CAST(right_value AS VARCHAR) AS JSON), '$.display') IS NOT NULL)) THEN NULL "
+        "WHEN json_type(TRY_CAST(CAST(left_value AS VARCHAR) AS JSON), '$.display') IS NOT NULL "
+        "AND json_extract_string(TRY_CAST(CAST(left_value AS VARCHAR) AS JSON), '$.display') IS DISTINCT FROM "
+        "json_extract_string(TRY_CAST(CAST(right_value AS VARCHAR) AS JSON), '$.display') THEN FALSE "
+        "ELSE CQLClinicalConceptCodesEqual(left_value, right_value) END"
+    )
+    con.execute(
         "CREATE OR REPLACE MACRO CQLListElementEqual(left_value, right_value) AS "
         "CASE "
         "WHEN left_value IS NULL AND right_value IS NULL THEN TRUE "
         "WHEN left_value IS NULL OR right_value IS NULL THEN FALSE "
+        "WHEN CQLClinicalValueHasShape(left_value) AND CQLClinicalValueHasShape(right_value) "
+        "THEN CQLClinicalValueEqual(left_value, right_value) "
+        "WHEN CQLClinicalValueHasShape(left_value) OR CQLClinicalValueHasShape(right_value) "
+        "THEN FALSE "
+        "WHEN CQLIntervalValueHasShape(left_value) AND CQLIntervalValueHasShape(right_value) "
+        "THEN intervalEquals(CAST(left_value AS VARCHAR), CAST(right_value AS VARCHAR)) "
+        "WHEN CQLIntervalValueHasShape(left_value) OR CQLIntervalValueHasShape(right_value) "
+        "THEN FALSE "
+        "WHEN starts_with(ltrim(CAST(left_value AS VARCHAR)), '{') "
+        "AND starts_with(ltrim(CAST(right_value AS VARCHAR)), '{') "
+        "AND system.contains(CAST(left_value AS VARCHAR), '\"value\"') "
+        "AND system.contains(CAST(left_value AS VARCHAR), '\"unit\"') "
+        "AND system.contains(CAST(right_value AS VARCHAR), '\"value\"') "
+        "AND system.contains(CAST(right_value AS VARCHAR), '\"unit\"') "
+        "THEN quantityCompare(CAST(left_value AS VARCHAR), "
+        "CAST(right_value AS VARCHAR), '==') "
         "WHEN typeof(left_value) != typeof(right_value) "
         "AND (system.contains(typeof(left_value), 'INT') "
         "OR starts_with(typeof(left_value), 'DECIMAL') "
@@ -93,22 +205,17 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "TRY_CAST(right_value AS DECIMAL(38,8)), FALSE) "
         "WHEN typeof(left_value) != typeof(right_value) THEN FALSE "
         "WHEN left_value = right_value THEN TRUE "
-        "WHEN starts_with(ltrim(CAST(left_value AS VARCHAR)), '{') "
-        "AND starts_with(ltrim(CAST(right_value AS VARCHAR)), '{') "
-        "AND system.contains(CAST(left_value AS VARCHAR), '\"value\"') "
-        "AND system.contains(CAST(left_value AS VARCHAR), '\"unit\"') "
-        "AND system.contains(CAST(right_value AS VARCHAR), '\"value\"') "
-        "AND system.contains(CAST(right_value AS VARCHAR), '\"unit\"') "
-        "THEN COALESCE(quantityCompare(CAST(left_value AS VARCHAR), "
-        "CAST(right_value AS VARCHAR), '=='), FALSE) "
         "ELSE FALSE END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO CQLListContainsEq(lst, elem) AS "
         "CASE WHEN lst IS NULL THEN FALSE "
         "WHEN elem IS NULL THEN system.array_length(lst) != list_count(lst) "
-        "ELSE COALESCE((SELECT bool_or(CQLListElementEqual(_cql_contains_item, elem)) "
-        "FROM UNNEST(COALESCE(lst, [])) AS _cql_contains_u(_cql_contains_item)), FALSE) END"
+        "WHEN EXISTS (SELECT 1 FROM UNNEST(COALESCE(lst, [])) AS _cql_contains_u(_cql_contains_item) "
+        "WHERE CQLListElementEqual(_cql_contains_item, elem) IS TRUE) THEN TRUE "
+        "WHEN EXISTS (SELECT 1 FROM UNNEST(COALESCE(lst, [])) AS _cql_contains_u(_cql_contains_item) "
+        "WHERE CQLListElementEqual(_cql_contains_item, elem) IS NULL) THEN NULL "
+        "ELSE FALSE END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO CQLListTemporalElementEqual(left_value, right_value) AS "
@@ -162,8 +269,11 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute(
         "CREATE OR REPLACE MACRO CQLListHasAllEq(left_lst, right_lst) AS "
         "CASE WHEN left_lst IS NULL OR right_lst IS NULL THEN NULL "
-        "ELSE COALESCE((SELECT bool_and(CQLListContainsEq(left_lst, _cql_has_all_item)) "
-        "FROM UNNEST(COALESCE(right_lst, [])) AS _cql_has_all_u(_cql_has_all_item)), TRUE) END"
+        "WHEN EXISTS (SELECT 1 FROM UNNEST(COALESCE(right_lst, [])) AS _cql_has_all_u(_cql_has_all_item) "
+        "WHERE CQLListContainsEq(left_lst, _cql_has_all_item) IS FALSE) THEN FALSE "
+        "WHEN EXISTS (SELECT 1 FROM UNNEST(COALESCE(right_lst, [])) AS _cql_has_all_u(_cql_has_all_item) "
+        "WHERE CQLListContainsEq(left_lst, _cql_has_all_item) IS NULL) THEN NULL "
+        "ELSE TRUE END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO CQLListHasAllTemporalEq(left_lst, right_lst) AS "
@@ -178,12 +288,21 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "CREATE OR REPLACE MACRO CQLListEqualEq(left_lst, right_lst) AS "
         "CASE WHEN left_lst IS NULL OR right_lst IS NULL THEN NULL "
         "WHEN system.array_length(left_lst) != system.array_length(right_lst) THEN FALSE "
-        "ELSE COALESCE((SELECT bool_and(CQLListElementEqual(_cql_equal_l, _cql_equal_r)) "
+        "WHEN EXISTS (SELECT 1 "
         "FROM (SELECT unnest(left_lst) AS _cql_equal_l, "
         "generate_subscripts(left_lst, 1) AS _cql_equal_pos) _cql_equal_left "
         "JOIN (SELECT unnest(right_lst) AS _cql_equal_r, "
         "generate_subscripts(right_lst, 1) AS _cql_equal_pos) _cql_equal_right "
-        "USING (_cql_equal_pos)), TRUE) END"
+        "USING (_cql_equal_pos) "
+        "WHERE CQLListElementEqual(_cql_equal_l, _cql_equal_r) IS FALSE) THEN FALSE "
+        "WHEN EXISTS (SELECT 1 "
+        "FROM (SELECT unnest(left_lst) AS _cql_equal_l, "
+        "generate_subscripts(left_lst, 1) AS _cql_equal_pos) _cql_equal_left "
+        "JOIN (SELECT unnest(right_lst) AS _cql_equal_r, "
+        "generate_subscripts(right_lst, 1) AS _cql_equal_pos) _cql_equal_right "
+        "USING (_cql_equal_pos) "
+        "WHERE CQLListElementEqual(_cql_equal_l, _cql_equal_r) IS NULL) THEN NULL "
+        "ELSE TRUE END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO CQLListEqualTemporalEq(left_lst, right_lst) AS "
@@ -206,10 +325,47 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "ELSE TRUE END"
     )
     con.execute(
+        "CREATE OR REPLACE MACRO CQLClinicalValueEquivalent(left_value, right_value) AS "
+        "CASE WHEN NOT CQLClinicalValueHasShape(left_value) "
+        "OR NOT CQLClinicalValueHasShape(right_value) THEN FALSE "
+        "ELSE COALESCE((SELECT COUNT(*) > 0 "
+        "FROM ("
+        "SELECT TRY_CAST(CAST(left_value AS VARCHAR) AS JSON) AS _left_code "
+        "WHERE json_extract_string(TRY_CAST(CAST(left_value AS VARCHAR) AS JSON), '$.code') IS NOT NULL "
+        "AND json_type(TRY_CAST(CAST(left_value AS VARCHAR) AS JSON), '$.value') IS NULL "
+        "UNION ALL "
+        "SELECT TRY_CAST(_left_each.value AS JSON) AS _left_code "
+        "FROM json_each(TRY_CAST(CAST(left_value AS VARCHAR) AS JSON), '$.codes') AS _left_each "
+        "WHERE json_extract_string(TRY_CAST(_left_each.value AS JSON), '$.code') IS NOT NULL "
+        "AND json_type(TRY_CAST(_left_each.value AS JSON), '$.value') IS NULL"
+        ") _left_codes "
+        "CROSS JOIN ("
+        "SELECT TRY_CAST(CAST(right_value AS VARCHAR) AS JSON) AS _right_code "
+        "WHERE json_extract_string(TRY_CAST(CAST(right_value AS VARCHAR) AS JSON), '$.code') IS NOT NULL "
+        "AND json_type(TRY_CAST(CAST(right_value AS VARCHAR) AS JSON), '$.value') IS NULL "
+        "UNION ALL "
+        "SELECT TRY_CAST(_right_each.value AS JSON) AS _right_code "
+        "FROM json_each(TRY_CAST(CAST(right_value AS VARCHAR) AS JSON), '$.codes') AS _right_each "
+        "WHERE json_extract_string(TRY_CAST(_right_each.value AS JSON), '$.code') IS NOT NULL "
+        "AND json_type(TRY_CAST(_right_each.value AS JSON), '$.value') IS NULL"
+        ") _right_codes "
+        "WHERE json_extract_string(_left_code, '$.code') IS NOT DISTINCT FROM "
+        "json_extract_string(_right_code, '$.code') "
+        "AND CQLClinicalCodeSystem(_left_code) IS NOT DISTINCT FROM "
+        "CQLClinicalCodeSystem(_right_code)), FALSE) END"
+    )
+    con.execute(
         "CREATE OR REPLACE MACRO CQLListElementEquivalent(left_value, right_value) AS "
         "CASE "
         "WHEN left_value IS NULL AND right_value IS NULL THEN TRUE "
         "WHEN left_value IS NULL OR right_value IS NULL THEN FALSE "
+        "WHEN CQLClinicalValueEquivalent(left_value, right_value) THEN TRUE "
+        "WHEN CQLClinicalValueHasShape(left_value) OR CQLClinicalValueHasShape(right_value) "
+        "THEN FALSE "
+        "WHEN CQLIntervalValueHasShape(left_value) AND CQLIntervalValueHasShape(right_value) "
+        "THEN intervalEquivalent(CAST(left_value AS VARCHAR), CAST(right_value AS VARCHAR)) "
+        "WHEN CQLIntervalValueHasShape(left_value) OR CQLIntervalValueHasShape(right_value) "
+        "THEN FALSE "
         "WHEN starts_with(ltrim(CAST(left_value AS VARCHAR)), '{') "
         "AND starts_with(ltrim(CAST(right_value AS VARCHAR)), '{') "
         "AND system.contains(CAST(left_value AS VARCHAR), '\"value\"') "
@@ -265,10 +421,19 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute(
         "CREATE OR REPLACE MACRO CQLIndexOf(lst, elem) AS "
         "CASE WHEN lst IS NULL OR elem IS NULL THEN NULL "
-        "ELSE COALESCE((SELECT MIN(_cql_index_pos) - 1 "
+        "WHEN EXISTS (SELECT 1 "
         "FROM (SELECT unnest(lst) AS _cql_index_item, "
         "generate_subscripts(lst, 1) AS _cql_index_pos) _cql_index_items "
-        "WHERE CQLListElementEqual(_cql_index_item, elem)), -1) END"
+        "WHERE CQLListElementEqual(_cql_index_item, elem) IS TRUE) "
+        "THEN (SELECT MIN(_cql_index_pos) - 1 "
+        "FROM (SELECT unnest(lst) AS _cql_index_item, "
+        "generate_subscripts(lst, 1) AS _cql_index_pos) _cql_index_items "
+        "WHERE CQLListElementEqual(_cql_index_item, elem) IS TRUE) "
+        "WHEN EXISTS (SELECT 1 "
+        "FROM (SELECT unnest(lst) AS _cql_index_item, "
+        "generate_subscripts(lst, 1) AS _cql_index_pos) _cql_index_items "
+        "WHERE CQLListElementEqual(_cql_index_item, elem) IS NULL) THEN NULL "
+        "ELSE -1 END"
     )
 
     # ============================================
@@ -277,16 +442,38 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # Combine(source List<String>, separator String) → String
     # ============================================
     con.execute(
-        "CREATE MACRO IF NOT EXISTS Combine(lst) AS "
-        "CASE WHEN lst IS NULL THEN NULL "
+        "CREATE OR REPLACE MACRO Combine(lst) AS "
+        "CASE WHEN typeof(lst) NOT IN ('VARCHAR[]', '\"NULL\"[]', '\"NULL\"') "
+        "THEN error('CQL Combine requires List<String> source') "
+        "WHEN lst IS NULL THEN NULL "
         "WHEN system.array_length(list_filter(lst, x -> x IS NOT NULL)) = 0 THEN NULL "
         "ELSE system.array_to_string(list_filter(lst, x -> x IS NOT NULL), '') END"
     )
     con.execute(
-        "CREATE MACRO IF NOT EXISTS CombineSep(lst, sep) AS "
-        "CASE WHEN lst IS NULL THEN NULL "
+        "CREATE OR REPLACE MACRO CombineSep(lst, sep) AS "
+        "CASE WHEN typeof(lst) NOT IN ('VARCHAR[]', '\"NULL\"[]', '\"NULL\"') "
+        "THEN error('CQL Combine requires List<String> source') "
+        "WHEN typeof(sep) NOT IN ('VARCHAR', '\"NULL\"') "
+        "THEN error('CQL Combine separator must be String') "
+        "WHEN lst IS NULL THEN NULL "
         "WHEN system.array_length(list_filter(lst, x -> x IS NOT NULL)) = 0 THEN NULL "
         "ELSE system.array_to_string(list_filter(lst, x -> x IS NOT NULL), COALESCE(sep, '')) END"
+    )
+
+    numeric_list_guard = (
+        "("
+        "typeof(lst) IN ("
+        "'TINYINT[]', 'SMALLINT[]', 'INTEGER[]', 'BIGINT[]', 'HUGEINT[]', "
+        "'UTINYINT[]', 'USMALLINT[]', 'UINTEGER[]', 'UBIGINT[]', 'UHUGEINT[]', "
+        "'FLOAT[]', 'DOUBLE[]', '\"NULL\"[]'"
+        ") OR (starts_with(typeof(lst), 'DECIMAL(') AND ends_with(typeof(lst), '[]'))"
+        ")"
+    )
+    numeric_values = (
+        "list_filter("
+        "list_transform(lst, _v -> TRY_CAST(_v AS DOUBLE)), "
+        "_v -> _v IS NOT NULL"
+        ")"
     )
 
     # ============================================
@@ -294,16 +481,21 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # Uses list_aggregate with 'product'; casts elements to DOUBLE first
     # ============================================
     con.execute(
-        "CREATE MACRO IF NOT EXISTS Product(lst) AS "
+        "CREATE OR REPLACE MACRO Product(lst) AS "
         "CASE WHEN lst IS NULL THEN NULL "
-        "ELSE list_aggregate(list_transform(lst, _v -> TRY_CAST(_v AS DOUBLE)), 'product') END"
+        f"WHEN NOT {numeric_list_guard} THEN error('CQL Product requires numeric List source') "
+        f"ELSE list_aggregate({numeric_values}, 'product') END"
     )
 
     # GeometricMean - CQL aggregate over positive numeric values
     con.execute(
-        "CREATE MACRO IF NOT EXISTS GeometricMean(lst) AS "
+        "CREATE OR REPLACE MACRO GeometricMean(lst) AS "
         "CASE WHEN lst IS NULL THEN NULL "
-        "ELSE system.exp(list_aggregate(list_transform(lst, _v -> system.ln(TRY_CAST(_v AS DOUBLE))), 'avg')) END"
+        f"WHEN NOT {numeric_list_guard} THEN error('CQL GeometricMean requires List<Decimal> source') "
+        f"WHEN system.array_length({numeric_values}) = 0 THEN NULL "
+        f"WHEN list_min({numeric_values}) < 0 THEN NULL "
+        f"WHEN list_min({numeric_values}) = 0 THEN 0.0 "
+        f"ELSE system.exp(list_aggregate(list_transform({numeric_values}, _v -> system.ln(_v)), 'avg')) END"
     )
 
     # CQL Mode returns a single statistical mode. If no non-null mode exists

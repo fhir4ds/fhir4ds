@@ -53,6 +53,29 @@ def test_cql_logical_truth_tables_match_cpp_registration() -> None:
         cpp.close()
 
 
+def test_cql_direct_logical_helpers_do_not_use_duckdb_truthiness() -> None:
+    expressions = [
+        'SELECT "And"(1, true)',
+        "SELECT \"And\"('x', true)",
+        'SELECT "Or"(false, 1)',
+        'SELECT "Xor"(1, false)',
+        'SELECT "Implies"(1, false)',
+        'SELECT "Not"(1)',
+        "SELECT logicalImplies('yes', 'false')",
+        "SELECT logicalImplies('bad', 'true')",
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression in expressions:
+            assert py.execute(expression).fetchone() == (None,), expression
+            assert cpp.execute(expression).fetchone() == (None,), expression
+    finally:
+        py.close()
+        cpp.close()
+
+
 def test_cql_logical_operators_survive_query_let_return_population_sql() -> None:
     cql = """
 library CQL04LogicalMeasureSurface version '1.0.0'
@@ -131,6 +154,88 @@ define QueryReturnLogic:
         cpp.close()
 
 
+def test_cql_logical_singleton_query_return_is_patient_correlated() -> None:
+    cql = """
+library CQL04LogicalSingletonQueryCorrelation version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+
+define QueryLetWhereReturn:
+  singleton from ([Observation] O
+    let High: O.value > 10,
+        Final: O.status = 'final'
+    where High implies Final
+    return High xor Final)
+"""
+    population_sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql),
+        output_columns={"QueryLetWhereReturn": "QueryLetWhereReturn"},
+    )
+
+    resources = [
+        (
+            "p1",
+            "Patient",
+            json.dumps({"resourceType": "Patient", "id": "p1", "active": True}),
+            "p1",
+        ),
+        (
+            "o1",
+            "Observation",
+            json.dumps(
+                {
+                    "resourceType": "Observation",
+                    "id": "o1",
+                    "subject": {"reference": "Patient/p1"},
+                    "status": "final",
+                    "valueInteger": 15,
+                }
+            ),
+            "p1",
+        ),
+        (
+            "p2",
+            "Patient",
+            json.dumps({"resourceType": "Patient", "id": "p2", "active": False}),
+            "p2",
+        ),
+        (
+            "o2",
+            "Observation",
+            json.dumps(
+                {
+                    "resourceType": "Observation",
+                    "id": "o2",
+                    "subject": {"reference": "Patient/p2"},
+                    "status": "preliminary",
+                    "valueInteger": 5,
+                }
+            ),
+            "p2",
+        ),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            con.execute(
+                "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
+            )
+            for row in resources:
+                con.execute(
+                    "INSERT INTO resources VALUES (?, ?, ?::JSON, ?)",
+                    list(row),
+                )
+            assert con.execute(population_sql).fetchall() == [
+                ("p1", False),
+                ("p2", False),
+            ]
+    finally:
+        py.close()
+        cpp.close()
+
+
 def test_cql_logical_precedence_matches_spec_in_translated_execution() -> None:
     cql = """
 library CQL04LogicalPrecedence version '1.0.0'
@@ -174,6 +279,8 @@ define TemporalPrecisionThenAnd: Interval[@2026-01-01, @2026-01-02] ends during 
         "1 implies false",
         "not 1",
         "{ true, false } and true",
+        "Code { code: 'x', system: 'urn:test' } and true",
+        "not Code { code: 'x', system: 'urn:test' }",
     ],
 )
 def test_cql_logical_operators_reject_static_non_boolean_operands(expression: str) -> None:
@@ -187,6 +294,58 @@ define Result: {expression}
         CQLToSQLTranslator().translate_library(parse_cql(cql))
 
 
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "(1 as Any) and true",
+        "(Code { code: 'x', system: 'urn:test' } as Any) or false",
+        "(5 'mg' as System.Any) xor true",
+        "not ({ true, false } as Any)",
+        "(Tuple { a: true } as Any) implies true",
+        "(Interval[1, 2] as System.Any) and true",
+        "(convert 1 to Any) and true",
+        "(convert true to String) and true",
+        "ToString(true) and true",
+        "(ToString(true) as Any) and true",
+        "ToInteger('1') and true",
+        "ToQuantity('5 \\'mg\\'') and true",
+    ],
+)
+def test_cql_logical_operators_reject_non_boolean_as_any_operands(expression: str) -> None:
+    cql = f"""
+library CQL04LogicalInvalidAsAnyOperand version '1.0.0'
+
+define Result: {expression}
+"""
+
+    with pytest.raises(TranslationError, match="requires Boolean operands"):
+        CQLToSQLTranslator().translate_library(parse_cql(cql))
+
+
+def test_cql_logical_operators_allow_boolean_as_any_operands() -> None:
+    cql = """
+library CQL04LogicalBooleanAsAnyOperand version '1.0.0'
+
+define Result: (true as Any) and true
+define ConvertedBoolean: (convert true to Boolean) and true
+define ToBooleanResult: ToBoolean('yes') and true
+define ConvertsResult: ConvertsToInteger('1') and true
+"""
+
+    translated = CQLToSQLTranslator().translate_library(parse_cql(cql))
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name in ("Result", "ConvertedBoolean", "ToBooleanResult", "ConvertsResult"):
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (True,)
+            assert cpp.execute(sql).fetchone() == (True,)
+    finally:
+        py.close()
+        cpp.close()
+
+
 def test_cql_logical_operators_reject_non_boolean_definition_aliases() -> None:
     cql = """
 library CQL04LogicalInvalidAlias version '1.0.0'
@@ -195,6 +354,19 @@ define NumericAlias: 1
 define StringAlias: 'x'
 define BadAnd: NumericAlias and true
 define BadNot: not StringAlias
+"""
+
+    with pytest.raises(TranslationError, match="requires Boolean operands"):
+        CQLToSQLTranslator().translate_library(parse_cql(cql))
+
+
+def test_cql_logical_operators_reject_non_boolean_parameters() -> None:
+    cql = """
+library CQL04LogicalInvalidParameter version '1.0.0'
+
+parameter P Integer default 1
+
+define BadAnd: P and true
 """
 
     with pytest.raises(TranslationError, match="requires Boolean operands"):

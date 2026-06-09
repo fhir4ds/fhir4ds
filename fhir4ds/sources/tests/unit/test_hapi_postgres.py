@@ -90,6 +90,41 @@ class TestHapiPostgresSourceSql:
         assert "updated_at" in sql
         assert "hfj_resource" not in sql
 
+    def test_decoded_view_select_can_push_patient_scope(self):
+        schema = HapiPostgresSchema(decoded_view="fhir4ds_hapi_current_resources")
+        src = HapiPostgresSource(
+            "postgresql://hapi:hapi@localhost/hapi",
+            schema=schema,
+        )
+
+        src.set_patient_scope(["p2", "p1", "p1", "bad'id"])
+        sql = src._current_resources_select()
+
+        assert "WHERE patient_ref IN ('bad''id', 'p1', 'p2')" in sql
+
+    def test_raw_table_select_can_push_patient_scope(self):
+        src = HapiPostgresSource("postgresql://hapi:hapi@localhost/hapi")
+
+        src.set_patient_scope(["p1"])
+        sql = src._current_resources_select()
+
+        assert "COALESCE(" in sql
+        assert "IN ('p1')" in sql
+        assert 'AND v."res_text_vc" IS NOT NULL' in sql
+
+    def test_empty_patient_scope_matches_no_rows(self):
+        src = HapiPostgresSource("postgresql://hapi:hapi@localhost/hapi")
+
+        src.set_patient_scope([])
+
+        assert "1 = 0" in src._current_resources_select()
+
+    def test_rejects_invalid_patient_scope(self):
+        src = HapiPostgresSource("postgresql://hapi:hapi@localhost/hapi")
+
+        with pytest.raises(TypeError, match="patient_ids"):
+            src.set_patient_scope("p1")  # type: ignore[arg-type]
+
     def test_custom_schema_identifiers_are_quoted(self):
         schema = HapiPostgresSchema(
             schema='clinical "schema"',
@@ -293,6 +328,7 @@ class TestHapiPostgresIncremental:
         src = HapiPostgresSource("postgresql://unused", fail_on_unsupported_storage=False)
         src._con = con
         src._attached = True
+        src.set_patient_scope(["not-1000"])
 
         changed = src.get_changed_patients(
             datetime(2026, 5, 23, 1, 30, tzinfo=timezone.utc)

@@ -35,6 +35,8 @@ period:
 
 worker:
   batch_size: 100
+  source_patient_pushdown: true
+  source_patient_pushdown_mode: literal
   poll_interval_seconds: 30
   max_attempts: 3
   retry_backoff_seconds: 60

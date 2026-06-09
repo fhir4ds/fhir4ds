@@ -1,0 +1,14 @@
+# Example MongoFhirServerSource configuration for local smoke testing.
+# This file is documentation-only; pass these values to MongoFhirServerSchema
+# in Python or adapt them for your deployment configuration system.
+
+connection_string: mongodb://localhost:27018
+schema:
+  database_name: fhir
+  base_version: 4_0_0
+  collection_strategy: per_resource
+  resource_types:
+    - Patient
+    - Observation
+  include_hidden: false
+  sample_size: -1

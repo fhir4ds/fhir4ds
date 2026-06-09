@@ -446,6 +446,15 @@ class TestFunctionCalls:
         assert expr.name == "Substring"
         assert len(expr.arguments) == 3
 
+    def test_ratio_literal_lowers_to_toratio(self):
+        """Test quantity:quantity ratio literal parsing."""
+        expr = parse_expression("1'cm':2.1'cm'")
+        assert isinstance(expr, FunctionRef)
+        assert expr.name == "ToRatio"
+        assert len(expr.arguments) == 1
+        assert isinstance(expr.arguments[0], Literal)
+        assert expr.arguments[0].value == "1 'cm':2.1 'cm'"
+
     def test_qualified_function(self):
         """Test qualified function call.
 
@@ -649,6 +658,21 @@ class TestTerminologyDefinitions:
         """)
         assert len(library.valuesets) == 1
         assert library.valuesets[0].name == "Diabetes Codes"
+
+    def test_valueset_definition_with_codesystems(self):
+        """Test valueset definition with CQL 1.5 codesystems overrides."""
+        library = parse_cql("""
+            library Test
+            codesystem "SNOMED-CT:2024": 'http://snomed.info/sct' version '2024'
+            codesystem LOINC: 'http://loinc.org' version '2.74'
+            valueset Diabetes: 'http://example.org/fhir/ValueSet/diabetes' version '2026'
+              codesystems { "SNOMED-CT:2024", LOINC }
+        """)
+        assert len(library.valuesets) == 1
+        assert library.valuesets[0].name == "Diabetes"
+        assert library.valuesets[0].id == "http://example.org/fhir/ValueSet/diabetes"
+        assert library.valuesets[0].version == "2026"
+        assert library.valuesets[0].codesystems == ["SNOMED-CT:2024", "LOINC"]
 
 
 class TestFunctionDefinitions:

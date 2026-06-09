@@ -19,6 +19,7 @@ Interval format: JSON string {"low": "2024-01-01", "high": "2024-12-31", "lowClo
 from __future__ import annotations
 
 import re
+import math
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -561,6 +562,8 @@ def _raw_closed_bound(interval: str, primary_key: str, fhir_key: str, closed_key
         raw_bound = raw.get(fhir_key)
     if raw_bound is None:
         return None
+    if raw_bound == "__null__":
+        return None
     return raw_bound if isinstance(raw_bound, str) else str(raw_bound)
 
 
@@ -631,6 +634,48 @@ def _parse_date_or_datetime(value: str | date | datetime | None) -> date | datet
         return None
 
 
+def _cql_minimum_for_peer_bound(peer: Any, raw_peer: Any) -> str | None:
+    """Return CQL point-type minimum for a closed null low boundary."""
+    if _is_time_like_string(raw_peer):
+        return "T00:00:00.000"
+    if isinstance(peer, bool):
+        return None
+    if isinstance(peer, int):
+        return "-2147483648"
+    if isinstance(peer, float):
+        return "-99999999999999999999.99999999"
+    if _is_quantity_bound(peer):
+        return None
+    if isinstance(peer, datetime):
+        if isinstance(raw_peer, str) and ("T" in raw_peer or " " in raw_peer):
+            return "0001-01-01T00:00:00.000+00:00"
+        return "0001-01-01"
+    if isinstance(peer, date):
+        return "0001-01-01"
+    return None
+
+
+def _cql_maximum_for_peer_bound(peer: Any, raw_peer: Any) -> str | None:
+    """Return CQL point-type maximum for a closed null high boundary."""
+    if _is_time_like_string(raw_peer):
+        return "T23:59:59.999"
+    if isinstance(peer, bool):
+        return None
+    if isinstance(peer, int):
+        return "2147483647"
+    if isinstance(peer, float):
+        return "99999999999999999999.99999999"
+    if _is_quantity_bound(peer):
+        return None
+    if isinstance(peer, datetime):
+        if isinstance(raw_peer, str) and ("T" in raw_peer or " " in raw_peer):
+            return "9999-12-31T23:59:59.999+00:00"
+        return "9999-12-31"
+    if isinstance(peer, date):
+        return "9999-12-31"
+    return None
+
+
 def intervalStart(interval: str | None) -> str | None:
     """Get the start of an interval.
 
@@ -654,12 +699,12 @@ def intervalStart(interval: str | None) -> str | None:
         try:
             raw = orjson.loads(interval)
             raw_low = raw.get("low") or raw.get("start")
-            if raw_low is not None:
+            if raw_low is not None and raw_low != "__null__":
                 return str(raw_low)
         except JSONDecodeError:
             pass
         if iv.get("low_closed", True) and iv["high"] is not None:
-            return "0001-01-01T00:00:00.000+00:00"
+            return _cql_minimum_for_peer_bound(iv["high"], iv.get("high_raw"))
         return None
     # Return raw bound values only when the authored boundary was closed.
     # _parse_interval normalizes open discrete bounds to closed effective
@@ -677,7 +722,8 @@ def intervalStart(interval: str | None) -> str | None:
         return None
     if isinstance(v, float):
         return _format_decimal(v)
-    return _format_adjusted_bound_for_raw(v, iv.get("low_raw")) if isinstance(v, (date, datetime)) else str(v)
+    formatted = _format_adjusted_bound_for_raw(v, iv.get("low_raw"))
+    return formatted if isinstance(formatted, str) else str(formatted)
 
 
 def intervalEnd(interval: str | None) -> str | None:
@@ -703,12 +749,12 @@ def intervalEnd(interval: str | None) -> str | None:
         try:
             raw = orjson.loads(interval)
             raw_high = raw.get("high") or raw.get("end")
-            if raw_high is not None:
+            if raw_high is not None and raw_high != "__null__":
                 return str(raw_high)
         except JSONDecodeError:
             pass
         if iv.get("high_closed", True) and iv["low"] is not None:
-            return "9999-12-31T23:59:59.999+00:00"
+            return _cql_maximum_for_peer_bound(iv["low"], iv.get("low_raw"))
         return None
     try:
         raw = orjson.loads(interval)
@@ -722,7 +768,8 @@ def intervalEnd(interval: str | None) -> str | None:
         return None
     if isinstance(v, float):
         return _format_decimal(v)
-    return _format_adjusted_bound_for_raw(v, iv.get("high_raw")) if isinstance(v, (date, datetime)) else str(v)
+    formatted = _format_adjusted_bound_for_raw(v, iv.get("high_raw"))
+    return formatted if isinstance(formatted, str) else str(formatted)
 
 
 def pointFrom(interval: str | None) -> str | None:
@@ -900,9 +947,11 @@ def intervalContains(interval: str | None, point: str | None) -> bool | None:
     (interval in interval) and point-in-interval checks.  When *point* is
     actually an interval JSON string, delegate to ``intervalIncludes``.
 
-    Returns None (NULL) for null/unparseable inputs per CQL three-valued logic.
+    Null inputs return null per CQL three-valued logic.
     """
-    if not point:
+    if interval is None:
+        return None
+    if point is None:
         return None
 
     # Detect whether the second argument is an interval (JSON object) or a
@@ -976,18 +1025,29 @@ def intervalProperlyContains(interval: str | None, point: str | None) -> bool | 
         return None
 
     low, high = iv["low"], iv["high"]
+    point_for_compare = point if _is_temporal_string(point) else pt
 
     # Official CQL conformance treats interval-point "properly includes" as
     # strict containment: boundary points are not properly contained.
     low_ok = True
     if low is not None:
-        cmp = _compare_interval_values(low, pt)
+        low_for_compare = _interval_bound(iv, "low", "low_raw")
+        cmp = (
+            _precision_aware_compare(low_for_compare, point_for_compare)
+            if _is_temporal_string(low_for_compare) and _is_temporal_string(point_for_compare)
+            else _compare_interval_values(low, pt)
+        )
         if cmp is None:
             return None
         low_ok = cmp < 0
     high_ok = True
     if high is not None:
-        cmp = _compare_interval_values(pt, high)
+        high_for_compare = _interval_bound(iv, "high", "high_raw")
+        cmp = (
+            _precision_aware_compare(point_for_compare, high_for_compare)
+            if _is_temporal_string(point_for_compare) and _is_temporal_string(high_for_compare)
+            else _compare_interval_values(pt, high)
+        )
         if cmp is None:
             return None
         high_ok = cmp < 0
@@ -1153,14 +1213,8 @@ def _normalize_for_compare(a, b):
         except Exception as e:
             _logger.debug("Quantity interval comparison normalization failed: %s", e)
             return a, b
-    if q_a is not None and isinstance(b, (int, float)):
-        numeric = _quantity_numeric(a)
-        if numeric is not None:
-            return numeric, b
-    if q_b is not None and isinstance(a, (int, float)):
-        numeric = _quantity_numeric(b)
-        if numeric is not None:
-            return a, numeric
+    if (q_a is not None) != (q_b is not None):
+        return a, b
 
     # Coerce Time strings to millis for comparison with int time-millis
     if _is_time_str(a):
@@ -1534,6 +1588,9 @@ def intervalMeets(interval1: str | None, interval2: str | None) -> bool | None:
             if s == t:
                 return True
 
+    if end1 is None or start2 is None or end2 is None or start1 is None:
+        return None
+
     return False
 
 
@@ -1542,6 +1599,8 @@ def _is_temporal_string(s) -> bool:
     if not isinstance(s, str):
         return False
     s = s.strip()
+    if _is_time_like_string(s):
+        return True
     # ISO 8601 date/datetime patterns: YYYY or YYYY-MM etc.
     return len(s) >= 4 and s[0:4].isdigit() and (len(s) == 4 or s[4] == '-' or s[4] == 'T')
 
@@ -1601,7 +1660,9 @@ def intervalAfterPrecise(interval1: str | None, interval2: str | None, precision
 
 def intervalContainsPrecise(interval: str | None, point: str | None, precision: str | None) -> bool | None:
     """Precision-aware CQL interval contains point/interval."""
-    if interval is None or point is None or precision is None:
+    if interval is None:
+        return False
+    if point is None or precision is None:
         return None
     iv = _parse_interval(interval)
     if not iv:
@@ -1894,18 +1955,10 @@ def intervalProperlyIncludes(interval1: str | None, interval2: str | None) -> bo
 def intervalProperlyIncludedIn(interval1: str | None, interval2: str | None) -> bool | None:
     """Check if interval1 is properly included in interval2 (CQL §19.14).
 
-    Per CQL type semantics, a null container (interval2) in a typed comparison
-    context represents an unbounded interval — null bounds are inferred to typed
-    nulls by the type system, meaning the interval is unbounded.  A finite
-    interval is always properly included in an unbounded container.
+    Per CQL null propagation, a null interval value is not the same as an
+    interval with typed-null bounds.  ``Interval[null, null]`` is unbounded;
+    ``null as Interval<T>`` yields SQL NULL for this operator.
     """
-    # When the container (interval2) is null, treat as unbounded per CQL type inference.
-    # A valid finite interval is always properly included in an unbounded range.
-    # CQL §19.14: typed null bounds → unbounded interval.
-    if interval2 is None and interval1 is not None:
-        iv1 = _parse_interval(interval1)
-        if iv1:
-            return True
     return intervalProperlyIncludes(interval2, interval1)
 
 
@@ -1920,6 +1973,8 @@ def intervalOverlapsBefore(interval1: str | None, interval2: str | None) -> bool
         return None
     # Must overlap AND iv1 starts before iv2
     overlaps = intervalOverlaps(interval1, interval2)
+    if overlaps is None:
+        return None
     if not overlaps:
         return False
     # Compare effective starts (accounts for open bounds via successor)
@@ -1929,8 +1984,10 @@ def intervalOverlapsBefore(interval1: str | None, interval2: str | None) -> bool
         return True  # -infinity is before any start
     if s2 is None:
         return False  # can't start before -infinity
-    l1, l2 = _normalize_for_compare(s1, s2)
-    return l1 < l2
+    cmp = _compare_interval_values(s1, s2)
+    if cmp is None:
+        return None
+    return cmp < 0
 
 
 def intervalOverlapsAfter(interval1: str | None, interval2: str | None) -> bool | None:
@@ -1944,6 +2001,8 @@ def intervalOverlapsAfter(interval1: str | None, interval2: str | None) -> bool 
         return None
     # Must overlap AND iv1 ends after iv2
     overlaps = intervalOverlaps(interval1, interval2)
+    if overlaps is None:
+        return None
     if not overlaps:
         return False
     # Compare effective ends (accounts for open bounds via predecessor)
@@ -1953,8 +2012,25 @@ def intervalOverlapsAfter(interval1: str | None, interval2: str | None) -> bool 
         return True  # +infinity is after any end
     if e2 is None:
         return False  # can't end after +infinity
-    h1, h2 = _normalize_for_compare(e1, e2)
-    return h1 > h2
+    cmp = _compare_interval_values(e1, e2)
+    if cmp is None:
+        return None
+    return cmp > 0
+
+
+def _interval_definitely_after(iv1: dict, iv2: dict) -> bool:
+    """Return True when iv1 starts after iv2 ends with known bounds."""
+    start1 = _effective_start(iv1)
+    end2 = _effective_end(iv2)
+    if start1 is None or end2 is None:
+        return False
+    start1_raw = _authored_closed_temporal_raw(iv1, "low_raw", "low_closed", "low_was_open")
+    end2_raw = _authored_closed_temporal_raw(iv2, "high_raw", "high_closed", "high_was_open")
+    cmp = _precision_aware_compare(
+        start1_raw if start1_raw else start1,
+        end2_raw if end2_raw else end2,
+    )
+    return cmp is not None and cmp > 0
 
 
 def intervalMeetsBefore(interval1: str | None, interval2: str | None) -> bool | None:
@@ -1970,6 +2046,8 @@ def intervalMeetsBefore(interval1: str | None, interval2: str | None) -> bool | 
     end1 = _effective_end(iv1)
     start2 = _effective_start(iv2)
     if end1 is None or start2 is None:
+        if _interval_definitely_after(iv1, iv2):
+            return False
         return None
     succ = _successor_for_bound(end1, iv1.get("high_raw"))
     if succ is None:
@@ -2094,10 +2172,12 @@ def intervalIntersect(interval1: str | None, interval2: str | None) -> str | Non
     except Exception as e:
         _logger.debug("Unexpected error in UDF intervalIntersect JSON parse: %s", e)
         return None
-    raw1_low = raw1.get("low") or raw1.get("start")
-    raw1_high = raw1.get("high") or raw1.get("end")
-    raw2_low = raw2.get("low") or raw2.get("start")
-    raw2_high = raw2.get("high") or raw2.get("end")
+    # Use parser-normalized raw bounds so discrete open endpoints compare and
+    # serialize through their effective CQL Start/End values.
+    raw1_low = iv1.get("low_raw")
+    raw1_high = iv1.get("high_raw")
+    raw2_low = iv2.get("low_raw")
+    raw2_high = iv2.get("high_raw")
     raw1_low = None if raw1_low == "__null__" else raw1_low
     raw1_high = None if raw1_high == "__null__" else raw1_high
     raw2_low = None if raw2_low == "__null__" else raw2_low
@@ -2502,8 +2582,10 @@ def collapse_intervals(intervals_json: str | None) -> str | None:
     except JSONDecodeError as e:
         _logger.warning("collapse_intervals JSON parse failed: %s", e)
         return None
-    if not isinstance(raw_list, list) or len(raw_list) == 0:
+    if not isinstance(raw_list, list):
         return None
+    if len(raw_list) == 0:
+        return "[]"
 
     # Detect input type for output formatting
     input_type = "numeric"  # default
@@ -2729,19 +2811,118 @@ def _expand_points_impl(interval_or_list, per) -> str | None:
 
 def _parse_expand_per(per):
     """Parse the per (step size) argument for expand."""
-    step_value = None
-    step_unit = None
-    if per is not None and isinstance(per, str):
-        per_stripped = per.strip()
-        if per_stripped.startswith('{'):
-            try:
-                q = orjson.loads(per_stripped)
-                if isinstance(q, dict):
-                    step_value = float(q.get("value", 1))
-                    step_unit = q.get("unit", "") or q.get("code", "") or ""
-            except (JSONDecodeError, TypeError, ValueError):
-                pass
-    return step_value, step_unit
+    if per is None:
+        return None, None, True
+    if not isinstance(per, str):
+        return None, None, False
+    per_stripped = per.strip()
+    if not per_stripped.startswith('{'):
+        return None, None, False
+    try:
+        q = orjson.loads(per_stripped)
+    except (JSONDecodeError, TypeError, ValueError):
+        return None, None, False
+    if not isinstance(q, dict):
+        return None, None, False
+    raw_value = q.get("value")
+    if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+        return None, None, False
+    step_value = float(raw_value)
+    if not math.isfinite(step_value):
+        return None, None, False
+    step_unit = q.get("unit", "") or q.get("code", "") or ""
+    return step_value, step_unit, True
+
+
+_TEMPORAL_EXPAND_UNITS = {
+    "year", "years", "a",
+    "month", "months", "mo",
+    "week", "weeks", "wk",
+    "day", "days", "d",
+    "hour", "hours", "h",
+    "minute", "minutes", "min",
+    "second", "seconds", "s",
+    "millisecond", "milliseconds", "ms",
+}
+
+
+def _is_default_expand_unit(unit: str | None) -> bool:
+    return unit is None or str(unit).strip().lower() in {"", "1"}
+
+
+def _is_temporal_expand_unit(unit: str | None) -> bool:
+    return str(unit or "").strip().lower() in _TEMPORAL_EXPAND_UNITS
+
+
+def _expand_quantity(
+    low,
+    high,
+    low_closed: bool,
+    high_closed: bool,
+    step_value,
+    step_unit: str | None,
+) -> list:
+    low_json = _quantity_json(low)
+    high_json = _quantity_json(high)
+    if low_json is None or high_json is None:
+        return []
+
+    try:
+        from .quantity import _parse_quantity, quantityConvert
+        low_q = _parse_quantity(low_json)
+        if not low_q or low_q.get("value") is None:
+            return []
+        target_unit = low_q.get("code") or low_q.get("unit") or "1"
+        high_converted = quantityConvert(high_json, target_unit)
+        high_q = _parse_quantity(high_converted) if high_converted else None
+        if not high_q or high_q.get("value") is None:
+            return []
+        step = Decimal(str(step_value if step_value is not None else 0.00000001))
+        if step_unit:
+            step_json = orjson.dumps({
+                "value": float(step),
+                "unit": step_unit,
+                "code": step_unit,
+                "system": "http://unitsofmeasure.org",
+            }).decode("utf-8")
+            step_converted = quantityConvert(step_json, target_unit)
+            step_q = _parse_quantity(step_converted) if step_converted else None
+            if not step_q or step_q.get("value") is None:
+                return []
+            step = Decimal(str(step_q["value"]))
+        if step <= 0:
+            return []
+
+        start = Decimal(str(low_q["value"]))
+        end = Decimal(str(high_q["value"]))
+        if not low_closed:
+            start += Decimal("0.00000001")
+        if not high_closed:
+            end -= Decimal("0.00000001")
+        if end < start:
+            return []
+
+        result = []
+        current = start
+        max_points = 10000
+        while current <= end and len(result) < max_points:
+            value = float(current)
+            quantity = {
+                "value": value,
+                "unit": target_unit,
+                "code": target_unit,
+                "system": "http://unitsofmeasure.org",
+            }
+            result.append({
+                "low": quantity,
+                "high": dict(quantity),
+                "lowClosed": True,
+                "highClosed": True,
+            })
+            current += step
+        return result
+    except (ArithmeticError, JSONDecodeError, TypeError, ValueError):
+        return []
 
 
 def _expand_impl(interval_or_list, per) -> str | None:
@@ -2758,7 +2939,9 @@ def _expand_impl(interval_or_list, per) -> str | None:
         if not items:
             return "[]"
         # Parse step
-        step_value, step_unit = _parse_expand_per(per)
+        step_value, step_unit, valid_per = _parse_expand_per(per)
+        if not valid_per:
+            return None
         # Expand each interval
         result = []
         for item in items:
@@ -2771,8 +2954,8 @@ def _expand_impl(interval_or_list, per) -> str | None:
                     high_closed = parsed.get("highClosed", True)
                     if low_raw is None or high_raw is None:
                         continue
-                    low_parsed = _parse_interval_bound(str(low_raw) if not isinstance(low_raw, str) else low_raw)
-                    high_parsed = _parse_interval_bound(str(high_raw) if not isinstance(high_raw, str) else high_raw)
+                    low_parsed = _parse_interval_bound(low_raw)
+                    high_parsed = _parse_interval_bound(high_raw)
                     if low_parsed is None or high_parsed is None:
                         continue
                     expanded = _expand_single_interval(
@@ -2794,7 +2977,9 @@ def _expand_impl(interval_or_list, per) -> str | None:
         return None
 
     # Parse per (step size)
-    step_value, step_unit = _parse_expand_per(per)
+    step_value, step_unit, valid_per = _parse_expand_per(per)
+    if not valid_per:
+        return None
 
     # Parse input: could be a list of intervals or a single interval
     intervals = []
@@ -2833,8 +3018,8 @@ def _expand_impl(interval_or_list, per) -> str | None:
         if low_raw is None or high_raw is None:
             continue
 
-        low_parsed = _parse_interval_bound(str(low_raw) if not isinstance(low_raw, str) else low_raw)
-        high_parsed = _parse_interval_bound(str(high_raw) if not isinstance(high_raw, str) else high_raw)
+        low_parsed = _parse_interval_bound(low_raw)
+        high_parsed = _parse_interval_bound(high_raw)
 
         if low_parsed is None or high_parsed is None:
             continue
@@ -2857,6 +3042,12 @@ def _expand_single_interval(
     from decimal import Decimal
 
     # Determine type category
+    if _is_quantity_bound(low_parsed) or _is_quantity_bound(high_parsed):
+        if step_unit is not None and _is_temporal_expand_unit(step_unit):
+            return []
+        return _expand_quantity(
+            low_parsed, high_parsed, low_closed, high_closed, step_value, step_unit
+        )
     # Check for time values first: they are parsed as millis (integers) but raw values are time strings.
     if isinstance(low_parsed, (int, float)) and not isinstance(low_parsed, bool):
         raw_str = str(low_raw) if low_raw is not None else ""
@@ -2864,9 +3055,13 @@ def _expand_single_interval(
             return _expand_time(low_raw, high_raw, low_parsed, high_parsed,
                                 low_closed, high_closed, step_value, step_unit)
     if isinstance(low_parsed, (date, datetime)):
+        if step_unit is not None and not _is_temporal_expand_unit(step_unit):
+            return []
         return _expand_temporal(low_raw, high_raw, low_parsed, high_parsed,
                                 low_closed, high_closed, step_value, step_unit)
     elif isinstance(low_parsed, int) and not isinstance(low_parsed, bool):
+        if not _is_default_expand_unit(step_unit):
+            return []
         # If step_value is fractional, promote integer to decimal.
         # Integer Interval[10, 10] spans [10.0, 10.99999999] in decimal space.
         if step_value is not None and float(step_value) != int(float(step_value)):
@@ -2874,14 +3069,10 @@ def _expand_single_interval(
             promoted_high = float(high_parsed + 1) - 1e-8 if high_closed else float(high_parsed) - 1e-8
             return _expand_numeric(promoted_low, promoted_high,
                                    True, True, step_value, is_int=False)
-        # If step has a time unit, incompatible with integer → empty
-        if step_unit and step_unit in ('year','month','week','day','hour','minute','second','millisecond'):
-            return []
         return _expand_numeric(low_parsed, high_parsed, low_closed, high_closed,
                                step_value, is_int=True)
     elif isinstance(low_parsed, float):
-        # If step has a time unit, incompatible with numeric → empty
-        if step_unit and step_unit in ('year','month','week','day','hour','minute','second','millisecond'):
+        if not _is_default_expand_unit(step_unit):
             return []
         return _expand_numeric(low_parsed, high_parsed, low_closed, high_closed,
                                step_value, is_int=False)
@@ -2889,6 +3080,8 @@ def _expand_single_interval(
         # Could be time (stored as millis) — check if raw values look like times
         raw_str = str(low_raw)
         if ':' in raw_str and '-' not in raw_str:
+            if step_unit is not None and not _is_temporal_expand_unit(step_unit):
+                return []
             return _expand_time(low_raw, high_raw, low_parsed, high_parsed,
                                 low_closed, high_closed, step_value, step_unit)
         return []
@@ -2956,7 +3149,7 @@ def _expand_temporal(low_raw, high_raw, low_parsed, high_parsed,
                      low_closed, high_closed, step_value, step_unit):
     """Expand a date/datetime interval into unit intervals."""
     # Determine default step
-    if step_unit is None or step_unit == "":
+    if step_unit is None:
         # Default based on type
         if isinstance(low_parsed, datetime):
             step_unit = "millisecond"
@@ -2964,6 +3157,8 @@ def _expand_temporal(low_raw, high_raw, low_parsed, high_parsed,
         else:
             step_unit = "day"
             step_value = 1.0
+    elif not _is_temporal_expand_unit(step_unit):
+        return []
     if step_value is None:
         step_value = 1.0
 
@@ -3078,9 +3273,11 @@ def _expand_time(low_raw, high_raw, low_parsed_millis, high_parsed_millis,
     CQL §19.25: If per is more precise than the boundary precision, return empty.
     Output times are formatted at the per unit's precision.
     """
-    if step_unit is None or step_unit == "":
+    if step_unit is None:
         step_unit = "hour"
         step_value = 1.0
+    elif not _is_temporal_expand_unit(step_unit):
+        return []
     if step_value is None:
         step_value = 1.0
 

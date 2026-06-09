@@ -159,12 +159,19 @@ def test_cql_clinical_direct_surface_matches_cpp_registration() -> None:
 
 
 def test_cql_clinical_age_direct_surface_matches_no_python_registration() -> None:
+    patient = json.dumps({"resourceType": "Patient", "birthDate": "2000-05-14"})
     leap_patient = json.dumps({"resourceType": "Patient", "birthDate": "2020-02-29"})
     cases = [
         ("SELECT AgeInYearsAt(?, ?)", [leap_patient, "2021-02-28"], (1,)),
         ("SELECT AgeInMonthsAt(?, ?)", [leap_patient, "2021-02-28"], (12,)),
+        ("SELECT AgeInHoursAt(?, ?)", [patient, "2000-05-14T01:00:00Z"], (1,)),
+        ("SELECT AgeInMinutesAt(?, ?)", [patient, "2000-05-14T00:01:00Z"], (1,)),
+        ("SELECT AgeInSecondsAt(?, ?)", [patient, "2000-05-14T00:00:01Z"], (1,)),
         ("SELECT CalculateAgeInYearsAt(?, ?)", ["2000-02-29", "2021-02-28"], (21,)),
         ("SELECT CalculateAgeInMonthsAt(?, ?)", ["2020-02-29", "2021-02-28"], (12,)),
+        ("SELECT CalculateAgeInHoursAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T01:00:00Z"], (1,)),
+        ("SELECT CalculateAgeInMinutesAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T00:01:00Z"], (1,)),
+        ("SELECT CalculateAgeInSecondsAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T00:00:01Z"], (1,)),
     ]
 
     with no_python_connection() as con:
@@ -294,6 +301,187 @@ define ConceptEquivalentIntersection: BP ~ HRConcept
         "CodeEqualDifferentComponents": None,
         "CodeEquivalentIgnoresDisplay": True,
         "ConceptEquivalentIntersection": True,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (expected_value,), name
+            assert cpp.execute(sql).fetchone() == (expected_value,), name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_clinical_static_list_membership_overloads_match_cpp_registration() -> None:
+    cql = """library ClinicalListTerminologyOps version '1.0.0'
+using FHIR version '4.0.1'
+codesystem LOINC: 'http://loinc.org'
+codesystem SNOMED: 'http://snomed.info/sct'
+valueset Vitals: 'http://example.org/fhir/ValueSet/vitals'
+code HR: '8867-4' from LOINC display 'Heart rate'
+code Other: '123' from SNOMED
+code HRNoDisplay: '8867-4' from LOINC
+concept BP: { Other, HRNoDisplay } display 'BP'
+concept OtherConcept: { Other } display 'Other'
+context Patient
+define CodeListInCodeSystem: { Other, HR } in LOINC
+define CodeListNotInCodeSystem: { Other } in LOINC
+define StringListInCodeSystem: { 'not-here', '8867-4' } in LOINC
+define ConceptListInCodeSystem: { OtherConcept, BP } in LOINC
+define CodeListInValueSet: { Other, HR } in Vitals
+define CodeListNotInValueSet: { Other } in Vitals
+define StringListInValueSet: { 'not-here', 'code-only' } in Vitals
+define StringListNotInValueSet: { 'not-here' } in Vitals
+define ConceptListInValueSet: { OtherConcept, BP } in Vitals
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "CodeListInCodeSystem": True,
+        "CodeListNotInCodeSystem": False,
+        "StringListInCodeSystem": True,
+        "ConceptListInCodeSystem": True,
+        "CodeListInValueSet": True,
+        "CodeListNotInValueSet": False,
+        "StringListInValueSet": True,
+        "StringListNotInValueSet": False,
+        "ConceptListInValueSet": True,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            for name, expected_value in expected.items():
+                assert con.execute(f"SELECT {translated[name].to_sql()}").fetchone() == (
+                    expected_value,
+                ), name
+        with no_python_connection() as no_py:
+            _load_valueset_table(no_py)
+            no_py.execute("SELECT cql_valueset_cache_add(?, ?, ?)", [VALUESET_URL, "http://loinc.org", "8867-4"])
+            no_py.execute("SELECT cql_valueset_cache_add(?, ?, ?)", [VALUESET_URL, "", "code-only"])
+            for name, expected_value in expected.items():
+                assert no_py.execute(f"SELECT {translated[name].to_sql()}").fetchone() == (
+                    expected_value,
+                ), name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_clinical_expand_valueset_direct_surface_matches_no_python_registration() -> None:
+    valueset_arg = json.dumps(
+        {"resourceType": "ValueSet", "id": VALUESET_URL, "name": "Vitals"}
+    )
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            assert con.execute(
+                "SELECT array_length(ExpandValueSet(?))", [valueset_arg]
+            ).fetchone() == (2,)
+            assert con.execute("SELECT ExpandValueSet(NULL)").fetchone() == (None,)
+        with no_python_connection() as no_py:
+            _load_valueset_table(no_py)
+            assert no_py.execute(
+                "SELECT array_length(ExpandValueSet(?))", [valueset_arg]
+            ).fetchone() == (2,)
+            assert no_py.execute("SELECT ExpandValueSet(NULL)").fetchone() == (None,)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_clinical_versioned_expand_valueset_matches_membership_url() -> None:
+    valueset_version = "2026"
+    versioned_url = f"{VALUESET_URL}|{valueset_version}"
+    cql = f"""library VersionedClinicalTerminologyOps version '1.0.0'
+using FHIR version '4.0.1'
+codesystem LOINC: 'http://loinc.org'
+valueset Vitals: '{VALUESET_URL}' version '{valueset_version}'
+code HR: '8867-4' from LOINC display 'Heart rate'
+context Patient
+define VersionedExpandedCount: Count(ExpandValueSet(Vitals))
+define VersionedMembership: HR in Vitals
+"""
+    translated = translate_cql(cql)
+    valueset_arg = json.dumps(
+        {
+            "resourceType": "ValueSet",
+            "id": VALUESET_URL,
+            "version": valueset_version,
+            "name": "Vitals",
+        }
+    )
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        py.remove_function("in_valueset")
+        py.create_function(
+            "in_valueset",
+            createValuesetMembershipUdf(
+                {
+                    VALUESET_URL: {("http://loinc.org", "8867-4"), ("", "code-only")},
+                    versioned_url: {("http://loinc.org", "8867-4")},
+                }
+            ),
+            null_handling="special",
+        )
+        for con in (py, cpp):
+            con.execute("INSERT INTO valueset_codes VALUES (?, ?, ?, ?)", [versioned_url, "http://loinc.org", "8867-4", "Heart rate"])
+            if con is cpp:
+                con.execute("SELECT cql_valueset_cache_add(?, ?, ?)", [versioned_url, "http://loinc.org", "8867-4"])
+            assert con.execute(
+                "SELECT array_length(ExpandValueSet(?))", [valueset_arg]
+            ).fetchone() == (1,)
+            assert con.execute(
+                f"SELECT {translated['VersionedExpandedCount'].to_sql()}"
+            ).fetchone() == (1,)
+            assert con.execute(
+                f"SELECT {translated['VersionedMembership'].to_sql()}"
+            ).fetchone() == (True,)
+        with no_python_connection() as no_py:
+            no_py.execute("INSERT INTO valueset_codes VALUES (?, ?, ?, ?)", [versioned_url, "http://loinc.org", "8867-4", "Heart rate"])
+            no_py.execute("SELECT cql_valueset_cache_add(?, ?, ?)", [versioned_url, "http://loinc.org", "8867-4"])
+            assert no_py.execute(
+                "SELECT array_length(ExpandValueSet(?))", [valueset_arg]
+            ).fetchone() == (1,)
+            assert no_py.execute(
+                f"SELECT {translated['VersionedExpandedCount'].to_sql()}"
+            ).fetchone() == (1,)
+            assert no_py.execute(
+                f"SELECT {translated['VersionedMembership'].to_sql()}"
+            ).fetchone() == (True,)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_clinical_null_terminology_membership_is_false() -> None:
+    cql = """library ClinicalNullTerminologyOps version '1.0.0'
+using FHIR version '4.0.1'
+codesystem LOINC: 'http://loinc.org'
+valueset Vitals: 'http://example.org/fhir/ValueSet/vitals'
+context Patient
+define NullCodeInCodeSystem: null as Code in LOINC
+define NullStringInCodeSystem: null as String in LOINC
+define NullConceptInCodeSystem: null as Concept in LOINC
+define NullCodeInValueSet: null as Code in Vitals
+define NullStringInValueSet: null as String in Vitals
+define NullConceptInValueSet: null as Concept in Vitals
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "NullCodeInCodeSystem": False,
+        "NullStringInCodeSystem": False,
+        "NullConceptInCodeSystem": False,
+        "NullCodeInValueSet": False,
+        "NullStringInValueSet": False,
+        "NullConceptInValueSet": False,
     }
 
     py = _python_only_connection()

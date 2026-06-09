@@ -54,10 +54,23 @@ fhir4ds dqm hapi status \
   --config docker/hapi-postgres/hapi-materialization.example.yaml
 ```
 
+Check the PostgreSQL plan for the patient-scoped decoded view:
+
+```bash
+fhir4ds dqm hapi explain-scope \
+  --config docker/hapi-postgres/hapi-materialization.example.yaml \
+  --patient-id example-patient \
+  --analyze
+```
+
 `install` creates FHIR4DS-owned queue/result tables, the decoded current-resource
 view, and HAPI triggers. The triggers enqueue patient IDs and send
 `LISTEN/NOTIFY` wake-up messages; measure calculation runs only in the FHIR4DS
 worker.
+
+The worker defaults to `source_patient_pushdown: true`, which recreates the
+DuckDB `resources` view for each claimed batch so PostgreSQL receives a
+`patient_ref` filter through the decoded view.
 
 Run the packaged worker container:
 

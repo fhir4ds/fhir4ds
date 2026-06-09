@@ -904,30 +904,37 @@ class TestDateComponent:
         return ExpressionTranslator(context)
 
     def test_date_component_year(self, translator: ExpressionTranslator):
-        """Test year extraction: year from @2024-01-15 -> CASE WHEN LENGTH(...) >= 4 THEN CAST(SUBSTR(...))."""
+        """Test year extraction routes through the spec-aware component UDF."""
         from ...parser.ast_nodes import DateComponent
         result = translator.translate(
             DateComponent(component="year", operand=DateTimeLiteral(value="2024-01-15"))
         )
-        assert isinstance(result, SQLCase)
-        assert "SUBSTR" in result.to_sql()
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "dateComponent"
+        assert len(result.args) == 2
+        assert result.args[1] == SQLLiteral("year")
 
     def test_date_component_month(self, translator: ExpressionTranslator):
-        """Test month extraction: month from @2024-06-15 -> CASE WHEN LENGTH(...) >= N THEN CAST(SUBSTR(...))."""
+        """Test month extraction routes through the spec-aware component UDF."""
         from ...parser.ast_nodes import DateComponent
         result = translator.translate(
             DateComponent(component="month", operand=DateTimeLiteral(value="2024-06-15"))
         )
-        assert isinstance(result, SQLCase)
-        assert "SUBSTR" in result.to_sql()
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "dateComponent"
+        assert len(result.args) == 2
+        assert result.args[1] == SQLLiteral("month")
 
     def test_date_component_millisecond(self, translator: ExpressionTranslator):
-        """Test millisecond extraction: millisecond from @T12:30:45.123 -> CASE WHEN ..."""
+        """Test millisecond extraction routes through the spec-aware component UDF."""
         from ...parser.ast_nodes import DateComponent, TimeLiteral
         result = translator.translate(
             DateComponent(component="millisecond", operand=TimeLiteral(value="T12:30:45.123"))
         )
-        assert isinstance(result, SQLCase)
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "dateComponent"
+        assert len(result.args) == 2
+        assert result.args[1] == SQLLiteral("millisecond")
 
 
 class TestExistsExpression:
@@ -1175,27 +1182,26 @@ class TestTypeConversion:
         assert result.name == "ToInteger"
 
     def test_to_string(self, translator: ExpressionTranslator):
-        """Test ToString function: ToString(42) -> CAST(42 AS VARCHAR)."""
+        """Test ToString function routes through the spec-aware public macro."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
+        from ...translator.types import SQLFunctionCall
         result = translator.translate(
             FunctionRef(name="ToString", arguments=[Literal(value=42)])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "VARCHAR"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToString"
         sql = result.to_sql()
-        assert "CAST" in sql
-        assert "VARCHAR" in sql
+        assert "ToString" in sql
 
     def test_to_string_from_boolean(self, translator: ExpressionTranslator):
-        """Test ToString from boolean: ToString(true) -> CAST(TRUE AS VARCHAR)."""
+        """Test ToString from boolean routes through the public macro."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
+        from ...translator.types import SQLFunctionCall
         result = translator.translate(
             FunctionRef(name="ToString", arguments=[Literal(value=True)])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "VARCHAR"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToString"
 
     def test_to_boolean(self, translator: ExpressionTranslator):
         """Test ToBoolean function: ToBoolean('true') -> ToBoolean('true')."""

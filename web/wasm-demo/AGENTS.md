@@ -23,6 +23,10 @@ Search `web/wasm-demo/` and `web/website/docs/` for the old version string (e.g.
 - `web/website/docs/integrations/wasm-engine.md` — translator wheel filename in two places
 - `web/wasm-demo/vite.config.ts` — fallback wheel filename in the `WHEEL_NAME` constant
 - `web/wasm-demo/src/workers/pyodide.worker.ts` — comment with example filename
+- `web/website/src/pages/index.tsx` — homepage `PRODUCT_VERSION`
+- `web/website/tests/demo.spec.ts` — homepage version assertion
+- `web/website/docs/examples/notebooks.md` and `docs/getting-started/releases.md`
+  — public install snippets and current release notes
 
 ### Step 3: Update `__version__` in subpackages
 
@@ -95,6 +99,14 @@ npx playwright test tests/e2e/playground.spec.ts tests/e2e/web-component.spec.ts
 Do not skip `cms-measures.spec.ts`. The playground and web-component tests can
 pass while the quality-measure examples fail at runtime because the CQL
 translator emits UDFs that are not registered in the CQL WASM extension.
+
+After refreshing `web/website/static/wasm-app/`, also run the website gates:
+
+```bash
+cd web/website
+npm run typecheck
+npm run build
+```
 
 ### Browser CQL Runtime Surface
 

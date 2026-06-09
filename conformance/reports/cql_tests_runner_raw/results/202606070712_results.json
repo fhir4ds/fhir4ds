@@ -1,0 +1,109 @@
+{
+  "cqlengine": {
+    "apiUrl": "http://127.0.0.1:56183/fhir/$cql",
+    "description": "",
+    "cqlVersion": "1.5",
+    "cqlTranslator": "FHIR4DS",
+    "cqlTranslatorVersion": "0.0.7",
+    "cqlEngine": "FHIR4DS",
+    "cqlEngineVersion": "0.0.7"
+  },
+  "testsRunDateTime": "2026-06-07T12:12:35.204Z",
+  "testResultsSummary": {
+    "passCount": 8,
+    "skipCount": 0,
+    "failCount": 0,
+    "errorCount": 0
+  },
+  "testsRunDescription": "FHIR4DS local $cql facade test run",
+  "results": [
+    {
+      "testsName": "CqlAggregateFunctionsTest",
+      "groupName": "AllTrue",
+      "testName": "AllTrueAllTrue",
+      "expression": "AllTrue({true,true})",
+      "testStatus": "pass",
+      "responseStatus": 200,
+      "actual": "true",
+      "expected": "true",
+      "invalid": "false"
+    },
+    {
+      "testsName": "CqlAggregateFunctionsTest",
+      "groupName": "AllTrue",
+      "testName": "AllTrueTrueFirst",
+      "expression": "AllTrue({true,false})",
+      "testStatus": "pass",
+      "responseStatus": 200,
+      "actual": "false",
+      "expected": "false",
+      "invalid": "false"
+    },
+    {
+      "testsName": "CqlAggregateFunctionsTest",
+      "groupName": "AllTrue",
+      "testName": "AllTrueFalseFirst",
+      "expression": "AllTrue({false,true})",
+      "testStatus": "pass",
+      "responseStatus": 200,
+      "actual": "false",
+      "expected": "false",
+      "invalid": "false"
+    },
+    {
+      "testsName": "CqlAggregateFunctionsTest",
+      "groupName": "AllTrue",
+      "testName": "AllTrueAllTrueFalseTrue",
+      "expression": "AllTrue({true,false,true})",
+      "testStatus": "pass",
+      "responseStatus": 200,
+      "actual": "false",
+      "expected": "false",
+      "invalid": "false"
+    },
+    {
+      "testsName": "CqlAggregateFunctionsTest",
+      "groupName": "AllTrue",
+      "testName": "AllTrueAllFalseTrueFalse",
+      "expression": "AllTrue({false,true,false})",
+      "testStatus": "pass",
+      "responseStatus": 200,
+      "actual": "false",
+      "expected": "false",
+      "invalid": "false"
+    },
+    {
+      "testsName": "CqlAggregateFunctionsTest",
+      "groupName": "AllTrue",
+      "testName": "AllTrueNullFirst",
+      "expression": "AllTrue({null,true,true})",
+      "testStatus": "pass",
+      "responseStatus": 200,
+      "actual": "true",
+      "expected": "true",
+      "invalid": "false"
+    },
+    {
+      "testsName": "CqlAggregateFunctionsTest",
+      "groupName": "AllTrue",
+      "testName": "AllTrueEmptyList",
+      "expression": "AllTrue({})",
+      "testStatus": "pass",
+      "responseStatus": 200,
+      "actual": "true",
+      "expected": "true",
+      "invalid": "false"
+    },
+    {
+      "testsName": "CqlAggregateFunctionsTest",
+      "groupName": "AllTrue",
+      "testName": "AllTrueIsTrueWhenNull",
+      "expression": "AllTrue(null)",
+      "testStatus": "pass",
+      "responseStatus": 200,
+      "actual": "true",
+      "expected": "true",
+      "invalid": "false"
+    }
+  ]
+}

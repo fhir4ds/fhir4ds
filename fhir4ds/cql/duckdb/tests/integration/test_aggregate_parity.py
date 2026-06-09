@@ -5,10 +5,12 @@ from __future__ import annotations
 import math
 
 import duckdb
+import pytest
 
 from fhir4ds.cql.duckdb import register
 from fhir4ds.cql.duckdb.extension import _register_python_supplements
 from fhir4ds.cql.duckdb.tests.integration.wasm_runtime_helpers import no_python_connection
+from fhir4ds.cql.errors import TranslationError
 from fhir4ds.cql.parser import parse_expression
 from fhir4ds.cql.parser.ast_nodes import FunctionRef
 from fhir4ds.cql.translator import translate_cql
@@ -141,6 +143,98 @@ def test_cql_aggregate_direct_surface_matches_cpp_registration() -> None:
         cpp.close()
 
 
+def test_cql_aggregate_rejects_static_invalid_element_types() -> None:
+    invalid_definitions = [
+        "define BadAllTrue: AllTrue({1, 2})",
+        "define BadAnyTrue: AnyTrue({'true', 'false'})",
+        "define BadAvg: Avg({'1', '2'})",
+        "define BadMedian: Median({'1', '2'})",
+        "define BadStdDev: StdDev({'1', '2'})",
+        "define BadProduct: Product({'2', '3'})",
+        "define BadGeometricMean: GeometricMean({'2', '3'})",
+        "define BadAllTrueNestedList: AllTrue({{1, 2}})",
+        "define BadAvgFunctionReturn: Avg({ToString(5)})",
+        "define BadAvgDateTimeConstructor: Avg({DateTime(2012, 1, 1)})",
+        "define BadAllTrueDateConstructor: AllTrue({Date(2012, 1, 1)})",
+        "define BadMinTuple: Min({Tuple { a: 1 }, Tuple { a: 2 }})",
+        "define BadQueryAllTrueInteger: AllTrue((from { 1, 2 } I return I))",
+        "define BadQueryAnyTrueString: AnyTrue((from { 'true', 'false' } S return S))",
+        "define BadQueryAvgString: Avg((from { '1', '2' } S return S))",
+        "define BadQuerySumDateTime: Sum((from { @2012-01-01T00:00:00 } D return D))",
+        "define BadQueryMedianTime: Median((from { @T10:00, @T11:00 } T return T))",
+        "define BadQueryMinTuple: Min((from { Tuple { a: 1 }, Tuple { a: 2 } } T return T))",
+    ]
+
+    for definition in invalid_definitions:
+        with pytest.raises(TranslationError):
+            translate_cql(
+                f"""library BadAggregateTypes version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+{definition}
+"""
+            )
+
+
+def test_cql_aggregate_direct_surface_rejects_string_numeric_coercion() -> None:
+    cases = [
+        "SELECT Median(['1', '2'])",
+        "SELECT StdDev(['1', '2'])",
+        "SELECT Variance(['1', '2'])",
+        "SELECT PopulationStdDev(['1', '2'])",
+        "SELECT PopulationVariance(['1', '2'])",
+        "SELECT Product(['2', '3'])",
+        "SELECT GeometricMean(['2', '8'])",
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for con in (py, cpp, no_py):
+                for sql in cases:
+                    with pytest.raises(Exception):
+                        con.execute(sql).fetchone()
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_geometric_mean_zero_and_query_lists_follow_product_formula() -> None:
+    translated = translate_cql(
+        """library GeometricMeanZero version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define DirectZero: GeometricMean({0.0, 4.0})
+define QueryZero: GeometricMean((from {0.0, 4.0} D return D))
+define QueryNonZero: GeometricMean((from {1.0, 4.0} D return D))
+define QueryAllNull: GeometricMean((from {null as Decimal, null as Decimal} D return D))
+"""
+    )
+    expected = {
+        "DirectZero": 0.0,
+        "QueryZero": 0.0,
+        "QueryNonZero": 2.0,
+        "QueryAllNull": None,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expr in translated.items():
+                sql = f"SELECT {expr.to_sql()}"
+                py_value = py.execute(sql).fetchone()[0]
+                cpp_value = cpp.execute(sql).fetchone()[0]
+                no_py_value = no_py.execute(sql).fetchone()[0]
+                _assert_equal_or_close(cpp_value, py_value, name)
+                _assert_equal_or_close(no_py_value, py_value, name)
+                _assert_equal_or_close(py_value, expected[name], name)
+    finally:
+        py.close()
+        cpp.close()
+
+
 def test_cql_aggregate_query_sources_and_mode_ties_are_list_semantics() -> None:
     translated = translate_cql(
         """library AggregateQuerySources version '1.0.0'
@@ -154,6 +248,7 @@ define QueryCountNullOnly: Count((from { null as Integer, null as Integer } I re
 define QueryCountNonNull: Count((from { 1, null as Integer, 2 } I return I))
 define QueryAvgWithNull: Avg((from { 1.0, null as Decimal, 3.0 } D return D))
 define QueryMedianWithNull: Median((from { 1.0, null as Decimal, 3.0 } D return D))
+define QueryProductZero: Product((from { 2.0, 0.0, null as Decimal, 4.0 } D return D))
 define ModeTieList: Mode({ 2.0, 2.0, 8.0, 8.0 })
 define QueryModeTie: Mode((from { 2.0, 2.0, 8.0, 8.0 } D return D))
 define ListDateMax: Max({ @2012-12-31, @2013-01-01, @2012-01-01 })
@@ -175,6 +270,7 @@ define QueryTimeMin: Min((from { @T12:00, @T10:00, @T11:00 } T return T))
         "QueryCountNonNull": 2,
         "QueryAvgWithNull": 2.0,
         "QueryMedianWithNull": 2.0,
+        "QueryProductZero": 0.0,
         "ModeTieList": None,
         "QueryModeTie": None,
         "ListDateMax": "2013-01-01",

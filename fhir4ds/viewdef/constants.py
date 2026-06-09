@@ -5,9 +5,11 @@ Handles the resolution of constants defined in ViewDefinitions into SQL values.
 Constants are pre-resolved into SQL strings before query generation.
 
 Supported constant types:
-- valueCode: Simple string/code value
-- valueCoding: {system, code, display} object
-- valueCodeableConcept: {coding: [...], text} object
+- SQL-on-FHIR primitive value[x] choices validated in types.py, such as
+  valueCode, valueString, valueInteger, valueDateTime, and valueInstant.
+- Complex Coding/CodeableConcept constants are not part of the current
+  ViewDefinition constant value[x] choice list and must be rejected at parser
+  and dataclass boundaries before this resolver is used.
 
 Usage:
     from .constants import ConstantResolver, resolve_constant
@@ -21,10 +23,11 @@ Usage:
 
 from __future__ import annotations
 
-import logging
 import re
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
+
+from .errors import ConstantResolutionError
 
 if TYPE_CHECKING:
     from .types import Constant
@@ -33,9 +36,6 @@ if TYPE_CHECKING:
 # evaluation time (not user-defined constants).  Used by both the constant
 # resolver and the SQL generator for validation.
 FHIRPATH_BUILTIN_VARIABLES = {"rowIndex", "context", "resource", "rootResource", "ucum"}
-
-_logger = logging.getLogger(__name__)
-
 
 _FHIRPATH_IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -129,10 +129,9 @@ def resolve_constant(constant: Constant) -> str:
         >>> resolve_constant(constant)
         "'female'"
 
-        >>> coding = {"system": "http://hl7.org/fhir/gender-identity", "code": "female"}
-        >>> const = Constant(name="FemaleCoding", value=coding, value_type="Coding")
-        >>> resolve_constant(constant)
-        "Coding{system: 'http://hl7.org/fhir/gender-identity', code: 'female'}"
+        >>> const = Constant(name="MaxCount", value=10, value_type="integer")
+        >>> resolve_constant(const)
+        "10"
     """
     value = constant.value
 
@@ -331,13 +330,10 @@ def resolve_constants_in_path(path: str, constants: dict[str, Constant]) -> str:
             resolved_parts.append(path[start:end])
             last_end = end
             continue
-        _logger.warning(
-            "Undefined constant reference '%%%s' in FHIRPath expression. "
-            "This may cause evaluation errors.",
-            const_name,
+        raise ConstantResolutionError(
+            f"Undefined constant reference '%{const_name}' in FHIRPath expression",
+            constant_name=const_name,
         )
-        resolved_parts.append(path[start:end])
-        last_end = end
 
     resolved_parts.append(path[last_end:])
     return "".join(resolved_parts)
@@ -391,9 +387,13 @@ class ConstantResolver:
         constants: dict[str, Constant] = {}
         for const_item in constants_list:
             if isinstance(const_item, ConstantType):
+                if const_item.name in constants:
+                    raise ValueError(f"Duplicate constant name: {const_item.name}")
                 constants[const_item.name] = const_item
             elif isinstance(const_item, dict):
                 const = ConstantType.from_dict(const_item)
+                if const.name in constants:
+                    raise ValueError(f"Duplicate constant name: {const.name}")
                 constants[const.name] = const
         return cls(constants)
 
@@ -410,6 +410,8 @@ class ConstantResolver:
         """
         constants_dict: dict[str, Constant] = {}
         for const in view_definition.constants:
+            if const.name in constants_dict:
+                raise ValueError(f"Duplicate constant name: {const.name}")
             constants_dict[const.name] = const
         return cls(constants_dict)
 
@@ -425,6 +427,8 @@ class ConstantResolver:
         Args:
             constant: A Constant instance to add.
         """
+        if constant.name in self._constants:
+            raise ValueError(f"Duplicate constant name: {constant.name}")
         self._constants[constant.name] = constant
 
     def add_from_dict(self, data: dict[str, Any]) -> None:
@@ -439,6 +443,8 @@ class ConstantResolver:
         """
         from .types import Constant as ConstantType
         const = ConstantType.from_dict(data)
+        if const.name in self._constants:
+            raise ValueError(f"Duplicate constant name: {const.name}")
         self._constants[const.name] = const
 
     def get_constant(self, name: str) -> Constant | None:

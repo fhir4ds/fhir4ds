@@ -25,6 +25,7 @@ Reference: docs/PLAN-CQL-TO-SQL-TRANSLATOR.md
 
 from __future__ import annotations
 
+import copy
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
 
 from ..errors import TranslationError
 from ..parser.ast_nodes import (
+    ChoiceTypeSpecifier,
     CodeSystemDefinition,
     ContextDefinition,
     Definition,
@@ -49,13 +51,17 @@ from ..parser.ast_nodes import (
     FunctionRef,
     Identifier,
     IncludeDefinition,
+    IntervalTypeSpecifier,
     Library,
+    ListTypeSpecifier,
     MethodInvocation,
+    NamedTypeSpecifier,
     ParameterDefinition,
     Property,
     Query,
     QuerySource,
     Retrieve,
+    TupleTypeSpecifier,
     ValueSetDefinition,
 )
 
@@ -281,6 +287,14 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
     def context(self) -> SQLTranslationContext:
         """Get the current translation context."""
         return self._context
+
+    def get_definition_meta(self, name: str):
+        """Return a defensive copy of metadata for a translated definition.
+
+        The CQL/FHIR server facade needs semantic result metadata after
+        translation, but should not mutate the translator's live context.
+        """
+        return copy.deepcopy(self._context.definition_meta.get(name))
 
     @property
     def fhir_schema(self):
@@ -622,9 +636,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         # Validate that all declared parameters have bindings
         for param in library.parameters:
+            binding_present = param.name in self._context._parameter_bindings
             binding = self._context._parameter_bindings.get(param.name)
-            if binding is None or (isinstance(binding, tuple) and all(v is None for v in binding)):
-                if not param.default:
+            if not binding_present or (isinstance(binding, tuple) and all(v is None for v in binding)):
+                if param.default is None:
                     raise TranslationError(
                         f"Required CQL parameter '{param.name}' has no supplied value and no default. "
                         f"Supply the parameter via evaluate_measure(parameters={{...}})."
@@ -891,6 +906,8 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 meta.has_resource = has_resource
                 if has_resource:
                     meta.value_column = "resource"
+                elif meta.value_column == "resource":
+                    meta.value_column = "value"
 
             # Inject function promotion CTEs whose dependencies are all satisfied.
             # A function CTE can be emitted once every definition it references
@@ -2710,16 +2727,31 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         Args:
             library: The parsed CQL library.
         """
+        # Set up code systems before value sets so ValueSet codesystems
+        # overrides can be resolved into structured CodeSystem references.
+        for cs in library.codesystems:
+            self._context.add_codesystem(cs.name, cs.id, cs.version)
+
         # Set up value sets
         for vs in library.valuesets:
             url = vs.id
             if vs.version:
                 url = f"{url}|{vs.version}"
-            self._context.define_valueset(vs.name, url)
-
-        # Set up code systems
-        for cs in library.codesystems:
-            self._context.add_codesystem(cs.name, cs.id, cs.version)
+            codesystems = list(getattr(vs, "codesystems", []) or [])
+            if not codesystems and getattr(vs, "codesystem", None):
+                codesystems = [vs.codesystem]
+            unresolved = [
+                cs_name
+                for cs_name in codesystems
+                if cs_name not in self._context.codesystems
+                and cs_name.split(".")[-1] not in self._context.codesystems
+            ]
+            if unresolved:
+                raise TranslationError(
+                    f"ValueSet '{vs.name}' references undefined CodeSystem(s): "
+                    f"{', '.join(unresolved)}"
+                )
+            self._context.define_valueset(vs.name, url, codesystems)
 
         # Set up codes and concepts
         # Note: CodeDefinition and ConceptDefinition are stored in separate lists
@@ -2783,9 +2815,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             context: The translation context.
         """
         for param in library.parameters:
-            param_type = str(param.type) if param.type else "Any"
+            param_type = self._parameter_type_name(param.type)
             default = None
-            if param.default:
+            has_default = param.default is not None
+            if has_default:
                 # Try to extract default value
                 try:
                     default = self._extract_default_value(param.default)
@@ -2801,15 +2834,40 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
             # Populate parameter bindings from default interval values
             if isinstance(default, dict) and ("low" in default or "high" in default):
-                p_start = default.get("low")
-                p_end = default.get("high")
-                if p_start:
-                    # Strip time/timezone suffix for DATE literal (e.g. "2026-01-01T00:00:00.000Z" -> "2026-01-01")
-                    p_start = str(p_start)[:10]
-                if p_end:
-                    p_end = str(p_end)[:10]
-                context.set_parameter_binding(param.name, (p_start, p_end))
+                context.set_parameter_binding(
+                    param.name,
+                    {
+                        "low": default.get("low"),
+                        "high": default.get("high"),
+                        "lowClosed": default.get("lowClosed", True),
+                        "highClosed": default.get("highClosed", False),
+                    },
+                )
                 # No special-case for "Measurement Period" — set_parameter_binding is sufficient
+            elif has_default and param.name not in context._parameter_bindings:
+                context.set_parameter_binding(param.name, param.default)
+
+    def _parameter_type_name(self, type_spec: Any) -> str:
+        """Return canonical CQL text for a parameter type specifier."""
+        if type_spec is None:
+            return "Any"
+        if isinstance(type_spec, NamedTypeSpecifier):
+            return type_spec.name
+        if isinstance(type_spec, IntervalTypeSpecifier):
+            return f"Interval<{self._parameter_type_name(type_spec.point_type)}>"
+        if isinstance(type_spec, ListTypeSpecifier):
+            return f"List<{self._parameter_type_name(type_spec.element_type)}>"
+        if isinstance(type_spec, ChoiceTypeSpecifier):
+            return "Choice<" + ", ".join(
+                self._parameter_type_name(choice) for choice in type_spec.choices
+            ) + ">"
+        if isinstance(type_spec, TupleTypeSpecifier):
+            fields = ", ".join(
+                f"{element.name}: {self._parameter_type_name(element.type)}"
+                for element in type_spec.elements
+            )
+            return f"Tuple{{{fields}}}"
+        return str(type_spec)
 
     def _extract_default_value(self, expr: Expression) -> Any:
         """

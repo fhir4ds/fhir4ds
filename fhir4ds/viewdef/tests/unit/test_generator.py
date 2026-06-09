@@ -10,6 +10,7 @@ from ...parser import parse_view_definition, Column, Constant, Select, ViewDefin
 from ...generator import SQLGenerator
 from ...errors import ValidationError
 from ...metadata import SHAREABLE_VIEWDEFINITION_PROFILE, TABULAR_VIEWDEFINITION_PROFILE
+from ...types import ColumnTag
 
 
 class TestSQLGeneratorInit:
@@ -25,6 +26,18 @@ class TestSQLGeneratorInit:
         with pytest.raises(ValueError) as exc_info:
             SQLGenerator(dialect="postgres")
         assert "Unsupported dialect" in str(exc_info.value)
+
+    def test_generate_revalidates_direct_column_tag_objects(self):
+        """Direct generator boundaries reject mutated invalid ColumnTag objects."""
+        tag = ColumnTag("ansi/type", "DATE")
+        tag.value = None
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[Select(column=[Column(path="id", name="id", tag=[tag])])],
+        )
+
+        with pytest.raises(ValidationError, match="Column.tag.value"):
+            SQLGenerator().generate(vd)
 
 
 class TestTableNames:
@@ -289,6 +302,13 @@ class TestFullQueryGeneration:
 
         assert "SELECT NULL WHERE FALSE" in sql
 
+    def test_direct_view_definition_select_must_be_non_empty(self):
+        """Generator rejects direct dataclass bypass of root select cardinality."""
+        vd = ViewDefinition(resource="Patient", select=[])
+
+        with pytest.raises(ValidationError, match="select.*non-empty"):
+            SQLGenerator().generate(vd)
+
     def test_observation_resource(self):
         """Test generating view for Observation resource."""
         vd = parse_view_definition('''
@@ -350,13 +370,46 @@ class TestFullQueryGeneration:
         with pytest.raises(ValidationError, match="FHIRVersion"):
             SQLGenerator().generate(vd)
 
+    @pytest.mark.parametrize(
+        "profile",
+        [
+            "http://example.org/StructureDefinition/not-an-array",
+            None,
+            [""],
+            [123],
+            ["not a canonical with spaces"],
+        ],
+    )
+    def test_direct_view_definition_profile_must_be_canonical_array(self, profile):
+        """Generator validates direct dataclass profile cardinality and canonical shape."""
+        vd = ViewDefinition(
+            resource="Patient",
+            profile=profile,
+            select=[Select(column=[Column(path="id", name="id")])],
+        )
+
+        with pytest.raises(ValidationError, match="profile|canonical"):
+            SQLGenerator().generate(vd)
+
     def test_direct_view_definition_supported_profiles_are_validated(self):
         """Generator validates profile constraints for direct dataclass construction."""
+        missing_status = ViewDefinition(
+            resource="Patient",
+            meta={"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
+            url="https://example.org/ViewDefinition/shareable",
+            name="shareable_patient",
+            fhirVersion=["4.0.1"],
+            select=[Select(column=[Column(path="id", name="id", type="id")])],
+        )
+        with pytest.raises(ValidationError, match="ViewDefinition.status"):
+            SQLGenerator().generate(missing_status)
+
         shareable = ViewDefinition(
             resource="Patient",
             meta={"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
             url="https://example.org/ViewDefinition/shareable",
             name="shareable_patient",
+            status="active",
             fhirVersion=["4.0.1"],
             select=[Select(column=[Column(path="id", name="id")])],
         )
@@ -366,6 +419,7 @@ class TestFullQueryGeneration:
         tabular = ViewDefinition(
             resource="Patient",
             meta={"profile": [TABULAR_VIEWDEFINITION_PROFILE]},
+            status="active",
             select=[Select(column=[Column(path="name", name="name", type="HumanName")])],
         )
         with pytest.raises(ValidationError, match="primitive"):
@@ -376,6 +430,10 @@ class TestFullQueryGeneration:
         [
             (Constant(name="_bad", value="x", value_type="string"), "sql-name"),
             (Constant(name="Good", value=None, value_type="string"), "no value"),
+            (Constant(name="BadInteger", value="1", value_type="integer"), "valueInteger"),
+            (Constant(name="BadDateTime", value="2024T00:00:00Z", value_type="dateTime"), "valueDateTime"),
+            (Constant(name="BadInstant", value="2024-01T00:00:00Z", value_type="instant"), "valueInstant"),
+            (Constant(name="BadType", value="x", value_type="notatype"), "Unsupported"),
         ],
     )
     def test_direct_view_definition_constants_are_validated(self, constant, message):
@@ -387,6 +445,20 @@ class TestFullQueryGeneration:
         )
 
         with pytest.raises(ValidationError, match=message):
+            SQLGenerator().generate(vd)
+
+    def test_direct_view_definition_duplicate_constants_are_rejected(self):
+        """Generator rejects ambiguous duplicate constant names."""
+        vd = ViewDefinition(
+            resource="Patient",
+            constants=[
+                Constant(name="Duplicate", value="first", value_type="string"),
+                Constant(name="Duplicate", value="second", value_type="string"),
+            ],
+            select=[Select(column=[Column(path="id = %Duplicate", name="matches")])],
+        )
+
+        with pytest.raises(ValidationError, match="Duplicate constant name"):
             SQLGenerator().generate(vd)
 
     def test_direct_select_iteration_shapes_are_validated(self):
@@ -402,6 +474,14 @@ class TestFullQueryGeneration:
         vd = ViewDefinition(
             resource="Patient",
             select=[Select(repeat="name", column=[Column(path="$this", name="value")])],
+        )
+
+        with pytest.raises(ValidationError, match="repeat"):
+            SQLGenerator().generate(vd)
+
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[Select(repeat=[], column=[Column(path="$this", name="value")])],
         )
 
         with pytest.raises(ValidationError, match="repeat"):

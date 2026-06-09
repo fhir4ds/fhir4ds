@@ -246,6 +246,44 @@ def _high_boundary(iso_str: str) -> datetime:
     return datetime(y, mo, d, h, mi, s, ms * 1000)
 
 
+def _duration_high_boundary(iso_str: str, unit_key: str) -> datetime:
+    """Highest endpoint for duration uncertainty at the requested precision.
+
+    Difference counts crossed boundaries, so it uses the full high boundary.
+    Duration counts whole calendar periods; finer unspecified components of
+    the end operand must stay at their minimums or a partial period can be
+    counted as whole. For example, months between 2012-01-02 and @2012 is
+    [0,10], not [0,11].
+    """
+    comps = _parse_components(iso_str)
+    current_idx = _PRECISION_INDEX.get(_infer_precision(iso_str), 6)
+    target_idx = _PRECISION_INDEX.get(unit_key, 2)
+
+    y, mo, d = comps["year"], comps["month"], comps["day"]
+    h, mi, s, ms = comps["hour"], comps["minute"], comps["second"], comps["millisecond"]
+
+    if current_idx < 1 <= target_idx:
+        mo = 12
+        d = 1
+        h = mi = s = ms = 0
+    if current_idx < 2 <= target_idx:
+        d = calendar.monthrange(y, mo)[1]
+        h = mi = s = ms = 0
+    if current_idx < 3 <= target_idx:
+        h = 23
+        mi = s = ms = 0
+    if current_idx < 4 <= target_idx:
+        mi = 59
+        s = ms = 0
+    if current_idx < 5 <= target_idx:
+        s = 59
+        ms = 0
+    if current_idx < 6 <= target_idx:
+        ms = 999
+
+    return datetime(y, mo, d, h, mi, s, ms * 1000)
+
+
 def _days_in_month(year: int, month: int) -> int:
     return calendar.monthrange(year, month)[1]
 
@@ -341,7 +379,29 @@ def _compute_difference(s: datetime, e: datetime, unit: str, is_week: bool) -> i
     return (e.date() - s.date()).days
 
 
-def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) -> str:
+def _normalize_between_unit(unit: str) -> str | None:
+    """Normalize a CQL duration/difference precision name or UCUM alias."""
+    normalized = str(unit).strip().lower()
+    aliases = {
+        "a": "year",
+        "mo": "month",
+        "wk": "week",
+        "d": "day",
+        "h": "hour",
+        "min": "minute",
+        "s": "second",
+        "ms": "millisecond",
+    }
+    if normalized in aliases:
+        return aliases[normalized]
+    if normalized.endswith("s"):
+        normalized = normalized[:-1]
+    if normalized in _PRECISION_INDEX or normalized == "week":
+        return normalized
+    return None
+
+
+def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) -> str | None:
     """CQL §22.21 DurationBetween with uncertainty interval support.
 
     Always returns VARCHAR: either an integer string or a JSON interval string.
@@ -349,7 +409,9 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
     s_prec = _infer_precision(start_str)
     e_prec = _infer_precision(end_str)
 
-    unit_key = unit.rstrip('s')
+    unit_key = _normalize_between_unit(unit)
+    if unit_key is None:
+        return None
     is_week = unit_key == 'week'
     if is_week:
         unit_key = 'day'
@@ -381,7 +443,7 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
     s_low = _low_boundary(start_str)
     s_high = _high_boundary(start_str)
     e_low = _low_boundary(end_str)
-    e_high = _high_boundary(end_str)
+    e_high = _duration_high_boundary(end_str, unit_key)
 
     # Min duration: start at highest, end at lowest
     min_val = _compute_duration(s_high, e_low, unit, is_week)
@@ -399,12 +461,14 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
     }).decode('utf-8')
 
 
-def _difference_between_with_uncertainty(start_str: str, end_str: str, unit: str) -> str:
+def _difference_between_with_uncertainty(start_str: str, end_str: str, unit: str) -> str | None:
     """CQL §22.22 DifferenceBetween with uncertainty interval support."""
     s_prec = _infer_precision(start_str)
     e_prec = _infer_precision(end_str)
 
-    unit_key = unit.rstrip('s')
+    unit_key = _normalize_between_unit(unit)
+    if unit_key is None:
+        return None
     is_week = unit_key == 'week'
     if is_week:
         unit_key = 'day'
@@ -929,7 +993,7 @@ def dateTimeSameAs(a: str | None, b: str | None, precision: str | None = None) -
 
     try:
         cmp, certain = _compare_at_specified_precision(str(a), str(b), str(precision).lower())
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, OverflowError):
         return None
     if cmp != 0:
         return False
@@ -951,7 +1015,7 @@ def dateTimeSameOrBefore(a: str | None, b: str | None, precision: str | None = N
 
     try:
         cmp, certain = _compare_at_specified_precision(str(a), str(b), str(precision).lower())
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, OverflowError):
         return None
     if cmp < 0:
         return True
@@ -975,7 +1039,7 @@ def dateTimeSameOrAfter(a: str | None, b: str | None, precision: str | None = No
 
     try:
         cmp, certain = _compare_at_specified_precision(str(a), str(b), str(precision).lower())
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, OverflowError):
         return None
     if cmp > 0:
         return True
@@ -1342,6 +1406,25 @@ def dateSubtractQuantity(date_val: str | None, quantity_json: str | None) -> str
 # Precision levels ordered from coarsest to finest
 _PRECISION_ORDER = ('year', 'month', 'day', 'hour', 'minute', 'second', 'millisecond')
 _PRECISION_INDEX = {p: i for i, p in enumerate(_PRECISION_ORDER)}
+_HOUR_PRECISION_INDEX = _PRECISION_INDEX["hour"]
+
+
+def _is_time_only_text(value: str) -> bool:
+    stripped = value.strip()
+    try:
+        body, _tz = _split_timezone_suffix(stripped)
+    except ValueError:
+        body = stripped
+    return body.startswith('T') or (len(body) < 10 and ':' in body and '-' not in body)
+
+
+def _should_normalize_timezone_for_compare(a_str: str, b_str: str, precision_idx: int) -> bool:
+    """CQL timezone normalization applies to DateTime hour-or-finer comparisons only."""
+    if precision_idx < _HOUR_PRECISION_INDEX:
+        return False
+    if _is_time_only_text(a_str) or _is_time_only_text(b_str):
+        return False
+    return bool(_parse_components(a_str).get('tz') or _parse_components(b_str).get('tz'))
 
 
 def _infer_precision(iso_str: str) -> str:
@@ -1604,8 +1687,9 @@ def _compare_at_min_precision(
     a_comps = _parse_components(a_str)
     b_comps = _parse_components(b_str)
 
-    # CQL §22.1: Normalize timezone-aware values to UTC before comparing
-    if a_comps.get('tz') or b_comps.get('tz'):
+    # CQL DateTime comparison normalizes timezone offsets only for hour-or-finer
+    # precision. Time values compare their specified components directly.
+    if _should_normalize_timezone_for_compare(a_str, b_str, min_idx):
         a_comps = _normalize_to_utc(a_comps)
         b_comps = _normalize_to_utc(b_comps)
 
@@ -1635,11 +1719,11 @@ def _compare_at_min_precision(
             promoted = a_str + 'T00:00:00.000'
             a_comps2 = _parse_components(promoted)
             b_comps2 = b_comps
-            if a_comps2.get('tz') or b_comps2.get('tz'):
-                a_comps2 = _normalize_to_utc(a_comps2)
-                b_comps2 = _normalize_to_utc(b_comps2)
             new_max = _PRECISION_INDEX[_infer_precision(promoted)]
             compare_to = min(new_max, b_idx)
+            if _should_normalize_timezone_for_compare(promoted, b_str, compare_to):
+                a_comps2 = _normalize_to_utc(a_comps2)
+                b_comps2 = _normalize_to_utc(b_comps2)
             for field in _PRECISION_ORDER[:compare_to + 1]:
                 av = a_comps2[field]
                 bv = b_comps2[field]
@@ -1653,11 +1737,11 @@ def _compare_at_min_precision(
             promoted = b_str + 'T00:00:00.000'
             a_comps2 = a_comps
             b_comps2 = _parse_components(promoted)
-            if a_comps2.get('tz') or b_comps2.get('tz'):
-                a_comps2 = _normalize_to_utc(a_comps2)
-                b_comps2 = _normalize_to_utc(b_comps2)
             new_max = _PRECISION_INDEX[_infer_precision(promoted)]
             compare_to = min(a_idx, new_max)
+            if _should_normalize_timezone_for_compare(a_str, promoted, compare_to):
+                a_comps2 = _normalize_to_utc(a_comps2)
+                b_comps2 = _normalize_to_utc(b_comps2)
             for field in _PRECISION_ORDER[:compare_to + 1]:
                 av = a_comps2[field]
                 bv = b_comps2[field]
@@ -1682,7 +1766,7 @@ def cqlSameOrBefore(a: str | None, b: str | None) -> bool | None:
     a_s, b_s = str(a), str(b)
     try:
         cmp, certain = _compare_at_min_precision(a_s, b_s)
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, OverflowError):
         return None
     if cmp < 0:
         return True
@@ -1701,7 +1785,7 @@ def cqlSameOrAfter(a: str | None, b: str | None) -> bool | None:
     a_s, b_s = str(a), str(b)
     try:
         cmp, certain = _compare_at_min_precision(a_s, b_s)
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, OverflowError):
         return None
     if cmp > 0:
         return True
@@ -1719,7 +1803,7 @@ def cqlBefore(a: str | None, b: str | None) -> bool | None:
     a_s, b_s = str(a), str(b)
     try:
         cmp, certain = _compare_at_min_precision(a_s, b_s)
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, OverflowError):
         return None
     if cmp < 0:
         return True
@@ -1737,7 +1821,7 @@ def cqlAfter(a: str | None, b: str | None) -> bool | None:
     a_s, b_s = str(a), str(b)
     try:
         cmp, certain = _compare_at_min_precision(a_s, b_s)
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, OverflowError):
         return None
     if cmp > 0:
         return True
@@ -1802,19 +1886,20 @@ def _compare_at_specified_precision(a_str: str, b_str: str, precision: str) -> t
     a_str = _extract_datetime_from_interval(a_str)
     b_str = _extract_datetime_from_interval(b_str)
 
-    a_comps = _parse_components(a_str)
-    b_comps = _parse_components(b_str)
-
-    # Normalize timezone to UTC for comparison
-    if a_comps.get('tz') or b_comps.get('tz'):
-        a_comps = _normalize_to_utc(a_comps)
-        b_comps = _normalize_to_utc(b_comps)
-
     a_prec = _infer_precision(a_str)
     b_prec = _infer_precision(b_str)
     a_idx = _PRECISION_INDEX.get(a_prec, 0)
     b_idx = _PRECISION_INDEX.get(b_prec, 0)
     target_idx = _PRECISION_INDEX.get(precision, 2)
+
+    a_comps = _parse_components(a_str)
+    b_comps = _parse_components(b_str)
+
+    # CQL Reference v1.5.3: timezone offsets are normalized for DateTime
+    # comparisons only at hour/minute/second/millisecond precision.
+    if _should_normalize_timezone_for_compare(a_str, b_str, target_idx):
+        a_comps = _normalize_to_utc(a_comps)
+        b_comps = _normalize_to_utc(b_comps)
 
     # If either operand is coarser than the target precision, uncertain
     if a_idx < target_idx or b_idx < target_idx:
@@ -1847,7 +1932,7 @@ def cqlSameOrBeforeP(a: str | None, b: str | None, precision: str | None) -> boo
         return None
     try:
         cmp, certain = _compare_at_specified_precision(str(a), str(b), str(precision))
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, OverflowError):
         return None
     if cmp < 0:
         return True
@@ -1864,7 +1949,7 @@ def cqlSameOrAfterP(a: str | None, b: str | None, precision: str | None) -> bool
         return None
     try:
         cmp, certain = _compare_at_specified_precision(str(a), str(b), str(precision))
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, OverflowError):
         return None
     if cmp > 0:
         return True
@@ -1881,7 +1966,7 @@ def cqlBeforeP(a: str | None, b: str | None, precision: str | None) -> bool | No
         return None
     try:
         cmp, certain = _compare_at_specified_precision(str(a), str(b), str(precision))
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, OverflowError):
         return None
     if cmp < 0:
         return True
@@ -1898,7 +1983,7 @@ def cqlAfterP(a: str | None, b: str | None, precision: str | None) -> bool | Non
         return None
     try:
         cmp, certain = _compare_at_specified_precision(str(a), str(b), str(precision))
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, OverflowError):
         return None
     if cmp > 0:
         return True
@@ -1915,7 +2000,7 @@ def cqlSameAsP(a: str | None, b: str | None, precision: str | None) -> bool | No
         return None
     try:
         cmp, certain = _compare_at_specified_precision(str(a), str(b), str(precision))
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, OverflowError):
         return None
     if cmp != 0:
         return False

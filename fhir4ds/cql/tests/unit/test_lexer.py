@@ -151,6 +151,18 @@ class TestStringLiterals:
         assert tokens[0].type == TokenType.STRING
         assert tokens[0].value == "path\\to\\file"
 
+    def test_spec_escape_sequences(self):
+        """Test all CQL grammar-defined string escape sequences."""
+        tokens = tokenize_cql("'\\'\\\"\\`\\/\\r\\n\\t\\f\\\\\\u0041'")
+        assert tokens[0].type == TokenType.STRING
+        assert tokens[0].value == "'\"`/\r\n\t\f\\A"
+
+    def test_non_spec_backslash_sequences_are_preserved(self):
+        """Backslash sequences outside ESC are literal text, not control chars."""
+        tokens = tokenize_cql("'\\v\\0\\b'")
+        assert tokens[0].type == TokenType.STRING
+        assert tokens[0].value == "\\v\\0\\b"
+
     def test_unicode_escape(self):
         """Test unicode escape sequence."""
         tokens = tokenize_cql("'\\u0041'")
@@ -206,6 +218,14 @@ class TestNumbers:
         tokens = tokenize_cql("1234567890")
         assert tokens[0].type == TokenType.INTEGER
         assert tokens[0].value == "1234567890"
+
+    def test_long_literal_requires_uppercase_l_suffix(self):
+        """CQL LONGNUMBER grammar uses uppercase L."""
+        tokens = tokenize_cql("123L")
+        assert tokens[0].type == TokenType.LONG
+        assert tokens[0].value == "123"
+        with pytest.raises(LexerError):
+            tokenize_cql("123l")
 
     def test_decimal(self):
         """Test decimal literal."""

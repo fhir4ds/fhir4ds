@@ -107,6 +107,112 @@ def _camel_to_snake_cached(name: str) -> str:
 
 class CoreMixin:
     """Mixin providing literal, identifier, and basic conversion translations."""
+    @staticmethod
+    def _bare_parameter_type_name(cql_type: Optional[str]) -> Optional[str]:
+        """Return the bare CQL type name for parameter metadata."""
+        if cql_type is None:
+            return None
+        text = str(cql_type)
+        if "name='" in text:
+            text = text.split("name='", 1)[1].split("'", 1)[0]
+        elif 'name="' in text:
+            text = text.split('name="', 1)[1].split('"', 1)[0]
+        if "." in text:
+            text = text.rsplit(".", 1)[-1]
+        return text
+
+    def _parameter_binding_expression(
+        self,
+        binding: Any,
+        cql_type: Optional[str],
+    ) -> SQLExpression:
+        """Lower a scalar parameter binding/default with declared CQL type."""
+        if isinstance(
+            binding,
+            (
+                BinaryExpression,
+                DateTimeLiteral,
+                FunctionRef,
+                Identifier,
+                ListExpression,
+                Literal,
+                Quantity,
+                TimeLiteral,
+                TupleExpression,
+                UnaryExpression,
+            ),
+        ):
+            return self.translate(binding, usage=ExprUsage.SCALAR)
+
+        if binding is None:
+            return SQLNull()
+
+        bare_type = (self._bare_parameter_type_name(cql_type) or "Any").lower()
+        literal = SQLLiteral(value=binding)
+        target_sql_type = {
+            "boolean": "BOOLEAN",
+            "integer": "INTEGER",
+            "long": "BIGINT",
+            "decimal": "DECIMAL(38, 8)",
+        }.get(bare_type)
+        if target_sql_type is not None:
+            return SQLCast(expression=literal, target_type=target_sql_type, try_cast=True)
+        if bare_type == "string":
+            return SQLLiteral(value=str(binding))
+        return literal
+
+    @staticmethod
+    def _interval_parameter_binding_parts(
+        binding: Any,
+    ) -> tuple[Any, Any, bool, bool] | None:
+        """Return low/high/closure metadata for an interval parameter binding.
+
+        Runtime two-tuples keep their historical closed-bound behavior. CQL
+        authored defaults are stored as dictionaries so their interval syntax
+        (`[`, `]`, `(`, `)`) survives into population SQL.
+        """
+        if isinstance(binding, dict) and ("low" in binding or "high" in binding):
+            return (
+                binding.get("low"),
+                binding.get("high"),
+                bool(binding.get("lowClosed", True)),
+                bool(binding.get("highClosed", False)),
+            )
+        if isinstance(binding, tuple):
+            if len(binding) == 2:
+                return (binding[0], binding[1], True, True)
+            if len(binding) == 4:
+                return (binding[0], binding[1], bool(binding[2]), bool(binding[3]))
+        return None
+
+    @staticmethod
+    def _interval_parameter_bound_sql(
+        value: Any,
+        *,
+        is_datetime: bool,
+        is_high: bool,
+    ) -> SQLExpression:
+        if value is None:
+            return SQLLiteral(value="{mp_end}" if is_high else "{mp_start}")
+        text = str(value)
+        if is_datetime and _re.match(r"^\d{4}-\d{2}-\d{2}$", text):
+            text = text + ("T23:59:59.999" if is_high else "T00:00:00.000")
+        return SQLLiteral(value=text)
+
+    def _parameter_reference_expression(self, name: str, cql_type: Optional[str]) -> SQLExpression:
+        """Return a runtime parameter reference preserving declared primitive type."""
+        ref = SQLParameterRef(name=name)
+        bare_type = (self._bare_parameter_type_name(cql_type) or "Any").lower()
+        target_sql_type = {
+            "boolean": "BOOLEAN",
+            "integer": "INTEGER",
+            "long": "BIGINT",
+            "decimal": "DECIMAL(38, 8)",
+        }.get(bare_type)
+        if target_sql_type is not None:
+            return SQLCast(expression=ref, target_type=target_sql_type, try_cast=True)
+        return ref
+
     def _camel_to_snake(self, name: str) -> str:
         """Convert CamelCase to snake_case."""
         return _camel_to_snake_cached(name)
@@ -149,6 +255,21 @@ class CoreMixin:
         valueset_obj: Dict[str, Any] = {"id": identifier, "name": name}
         if version:
             valueset_obj["version"] = version
+        codesystems = []
+        for cs_name in self.context.valueset_codesystems.get(name, []):
+            lookup_name = cs_name.split(".")[-1]
+            cs_id = self.context.codesystems.get(cs_name)
+            if cs_id is None:
+                cs_id = self.context.codesystems.get(lookup_name, cs_name)
+            cs_obj: Dict[str, Any] = {"id": cs_id, "name": lookup_name}
+            cs_version = self.context.codesystem_versions.get(cs_name)
+            if cs_version is None:
+                cs_version = self.context.codesystem_versions.get(lookup_name)
+            if cs_version:
+                cs_obj["version"] = cs_version
+            codesystems.append(cs_obj)
+        if codesystems:
+            valueset_obj["codesystems"] = codesystems
         return SQLLiteral(value=json.dumps(valueset_obj, separators=(",", ":")))
 
     def _clinical_codesystem_literal(self, name: str, ref: str) -> SQLLiteral:
@@ -324,7 +445,7 @@ class CoreMixin:
 
         # Create a JSON representation of the quantity
         quantity_dict = {
-            "value": float(value) if not isinstance(value, float) else value,
+            "value": value,
             "unit": unit,
             "system": "http://unitsofmeasure.org",
         }
@@ -420,6 +541,9 @@ class CoreMixin:
             symbol = self.context.lookup_symbol(name)
             table_alias = getattr(symbol, "table_alias", None) if symbol else None
             if table_alias and usage == ExprUsage.SCALAR:
+                source_ast = getattr(self.context, "_alias_source_asts", {}).get(name)
+                if isinstance(source_ast, ListExpression):
+                    return SQLIdentifier(name=table_alias)
                 cte_name = getattr(symbol, "cte_name", None)
                 col = "resource"
                 if cte_name:
@@ -517,37 +641,42 @@ class CoreMixin:
         if symbol:
             if symbol.symbol_type == "parameter":
                 # Generic interval parameter binding lookup
-                binding = self.context.get_parameter_binding(name)
-                if binding is not None and isinstance(binding, tuple) and len(binding) == 2:
-                    b_start, b_end = binding
-                    p_start = b_start or "{mp_start}"
-                    p_end = b_end or "{mp_end}"
+                parameter_bindings = getattr(self.context, "_parameter_bindings", {})
+                has_binding = name in parameter_bindings
+                binding = parameter_bindings[name] if has_binding else None
+                interval_parts = self._interval_parameter_binding_parts(binding)
+                if interval_parts is not None:
+                    b_start, b_end, low_closed, high_closed = interval_parts
                     # For Interval<DateTime> parameters, use TIMESTAMP precision
                     # so that datetime comparisons are exact (e.g.,
                     # 2026-01-01T08:00 is NOT within [2025-07-01, 2026-01-01]
                     # because at datetime precision 08:00 > 00:00).
                     # Date-only end bounds get end-of-day (T23:59:59.999)
                     # to match CQL date→datetime promotion semantics.
-                    _date_only_re = _re.compile(r"^\d{4}-\d{2}-\d{2}$")
                     is_dt = symbol.cql_type and "DateTime" in str(symbol.cql_type)
-                    if is_dt:
-                        if isinstance(p_start, str) and _date_only_re.match(p_start):
-                            p_start = p_start + "T00:00:00.000"
-                        if isinstance(p_end, str) and _date_only_re.match(p_end):
-                            p_end = p_end + "T23:59:59.999"
-                        cast_type = "TIMESTAMP"
-                    else:
-                        cast_type = "DATE"
+                    cast_type = "TIMESTAMP" if is_dt else "DATE"
+                    start_literal = self._interval_parameter_bound_sql(
+                        b_start,
+                        is_datetime=bool(is_dt),
+                        is_high=False,
+                    )
+                    end_literal = self._interval_parameter_bound_sql(
+                        b_end,
+                        is_datetime=bool(is_dt),
+                        is_high=True,
+                    )
                     return SQLFunctionCall(
                         name="intervalFromBounds",
                         args=[
-                            SQLCast(expression=SQLLiteral(value=p_start), target_type=cast_type),
-                            SQLCast(expression=SQLLiteral(value=p_end), target_type=cast_type),
-                            SQLLiteral(value=True),
-                            SQLLiteral(value=True),
+                            SQLCast(expression=start_literal, target_type=cast_type),
+                            SQLCast(expression=end_literal, target_type=cast_type),
+                            SQLLiteral(value=low_closed),
+                            SQLLiteral(value=high_closed),
                         ],
                     )
-                return SQLParameterRef(name=name)
+                if has_binding:
+                    return self._parameter_binding_expression(binding, symbol.cql_type)
+                return self._parameter_reference_expression(name, symbol.cql_type)
             elif symbol.symbol_type == "definition":
                 # Reference to a named expression - generate subquery reference to CTE
                 # The definition will be available as a CTE in the final SQL

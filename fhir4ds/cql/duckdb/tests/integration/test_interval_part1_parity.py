@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import duckdb
 
 from fhir4ds.cql.duckdb import register
@@ -23,6 +25,10 @@ def _cpp_connection() -> duckdb.DuckDBPyConnection:
     con = duckdb.connect(config={"allow_unsigned_extensions": True})
     register(con, include_fhirpath=True)
     return con
+
+
+def _load_json(value: str):
+    return json.loads(value)
 
 
 def test_cql_interval_part1_expressions_parse_and_translate() -> None:
@@ -201,6 +207,111 @@ def test_cql_interval_part1_precision_uncertainty_matches_no_python_cpp() -> Non
         cpp.close()
 
 
+def test_cql_interval_part1_contains_null_container_semantics_match_no_python_cpp() -> None:
+    """CQL contains/in null-container rules return false, not SQL NULL."""
+    cql = """library IntervalNullContainment version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define NullContainsPoint: null contains 5
+define PointInNullInterval: 5 in (null as Interval<Integer>)
+define NullBoundsContainsPoint: Interval[null, null] contains 5
+define PointInNullBounds: 5 in Interval[null, null]
+define ContainsNullPoint: Interval[1, 10] contains null
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "NullContainsPoint": (False,),
+        "PointInNullInterval": (False,),
+        "NullBoundsContainsPoint": (False,),
+        "PointInNullBounds": (False,),
+        "ContainsNullPoint": (None,),
+    }
+    direct_cases = [
+        ("SELECT intervalContains(NULL, '5')", (None,)),
+        ("SELECT intervalContains(intervalFromBounds('1', '10', true, true), NULL)", (None,)),
+        ("SELECT intervalContainsPrecise(NULL, '2024-01-05', 'day')", (False,)),
+        (
+            "SELECT intervalContainsPrecise("
+            "intervalFromBounds('2024-01-01', '2024-01-31', true, true), NULL, 'day')",
+            (None,),
+        ),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for sql, expected_result in direct_cases:
+                assert py.execute(sql).fetchone() == expected_result
+                assert cpp.execute(sql).fetchone() == expected_result
+                assert no_py.execute(sql).fetchone() == expected_result
+            for name, expected_result in expected.items():
+                sql = f"SELECT {translated[name].to_sql()}"
+                assert py.execute(sql).fetchone() == expected_result
+                assert cpp.execute(sql).fetchone() == expected_result
+                assert no_py.execute(sql).fetchone() == expected_result
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part1_collapse_expand_empty_and_incompatible_per_match_no_python_cpp() -> None:
+    """Empty collapse and incompatible per units preserve spec-shaped outputs."""
+    cql = """library IntervalCollapseExpandPer version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define CollapseEmpty: collapse { }
+define CollapseInvalidPer: collapse { Interval[1, 3] } per 1 'cm'
+define CollapseValidPer: collapse { Interval[1, 3], Interval[5, 6] } per 2
+define ExpandNull: expand null
+define ExpandInvalidPer: expand Interval[1, 3] per 1 'cm'
+define ExpandValidNumericPer: expand Interval[1, 5] per 2
+"""
+    translated = translate_cql(cql)
+    direct_cases = [
+        ("SELECT collapse_intervals('[]')", "[]"),
+        (
+            "SELECT expand_points(intervalFromBounds('1', '3', true, true), "
+            "'{\"value\":1,\"unit\":\"cm\",\"code\":\"cm\"}')",
+            "[]",
+        ),
+    ]
+    expected = {
+        "CollapseEmpty": "[]",
+        "CollapseInvalidPer": None,
+        "CollapseValidPer": [
+            {"low": "1", "high": "2", "lowClosed": True, "highClosed": True},
+            {"low": "5", "high": "6", "lowClosed": True, "highClosed": True},
+        ],
+        "ExpandNull": None,
+        "ExpandInvalidPer": "[]",
+        "ExpandValidNumericPer": [1, 3],
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for sql, expected_result in direct_cases:
+                assert py.execute(sql).fetchone()[0] == expected_result
+                assert cpp.execute(sql).fetchone()[0] == expected_result
+                assert no_py.execute(sql).fetchone()[0] == expected_result
+            for name, expected_result in expected.items():
+                sql = f"SELECT {translated[name].to_sql()}"
+                py_value = py.execute(sql).fetchone()[0]
+                cpp_value = cpp.execute(sql).fetchone()[0]
+                no_py_value = no_py.execute(sql).fetchone()[0]
+                if isinstance(expected_result, list):
+                    assert _load_json(py_value) == _load_json(cpp_value) == _load_json(no_py_value), name
+                    assert _load_json(py_value) == expected_result
+                else:
+                    assert cpp_value == py_value == no_py_value, name
+                    assert py_value == expected_result
+    finally:
+        py.close()
+        cpp.close()
+
+
 def test_cql_interval_part1_open_interval_equality_uses_start_end_semantics() -> None:
     cql = """library IntervalEquality version '1.0.0'
 using FHIR version '4.0.1'
@@ -342,6 +453,99 @@ define IncludesCompatibleQuantity: Interval[1 'g', 2 'g'] includes Interval[1500
                 assert py.execute(sql).fetchone() == expected_result
                 assert cpp.execute(sql).fetchone() == expected_result
                 assert no_py.execute(sql).fetchone() == expected_result
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_quantity_membership_preserves_fhir_quantity_projection() -> None:
+    cql = """library IntervalQuantityFHIRPath version '1.0.0'
+using FHIR version '4.0.1'
+codesystem "LOINC": 'http://loinc.org'
+code "Systolic blood pressure": '8480-6' from "LOINC" display 'Systolic blood pressure'
+context Patient
+define LastBP: First([Observation])
+define SystolicInRange:
+  (singleton from (LastBP.component C where C.code ~ "Systolic blood pressure")).value in Interval[120 'mm[Hg]', 129 'mm[Hg]']
+"""
+    translated = translate_cql(cql)
+    sql = translated["SystolicInRange"].to_sql()
+
+    assert "intervalContains" in sql
+    assert "fhirpath_text" in sql
+    assert "valueQuantity'))" in sql
+    assert "valueQuantity.value')" not in sql
+
+
+def test_cql_interval_quantity_boundaries_and_expand_preserve_quantity_shape() -> None:
+    cql = """library IntervalQuantityExpand version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define EndOpenQuantity: end of Interval[1 'g', 2 'g')
+define QuantityExceptLeft: Interval[1 'g', 2 'g'] except Interval[1500 'mg', 2 'g']
+define QuantityExpandList: expand { Interval[1 'g', 3 'g'] } per 1 'g'
+define QuantityExpandPoints: expand Interval[1 'g', 3 'g'] per 1 'g'
+"""
+    translated = translate_cql(cql)
+    direct_cases = {
+        "QuantityContainsScalar": (
+            "SELECT intervalContains("
+            "intervalFromBounds('{\"value\":1,\"unit\":\"g\",\"code\":\"g\"}', "
+            "'{\"value\":2,\"unit\":\"g\",\"code\":\"g\"}', true, true), '1.5')",
+            None,
+        ),
+        "QuantityExpandList": (
+            "SELECT expand([intervalFromBounds('{\"value\":1,\"unit\":\"g\",\"code\":\"g\"}', "
+            "'{\"value\":3,\"unit\":\"g\",\"code\":\"g\"}', true, true)], "
+            "'{\"value\":1,\"unit\":\"g\",\"code\":\"g\"}')",
+            [
+                {"low": {"value": 1.0, "unit": "g", "code": "g", "system": "http://unitsofmeasure.org"}, "high": {"value": 1.0, "unit": "g", "code": "g", "system": "http://unitsofmeasure.org"}, "lowClosed": True, "highClosed": True},
+                {"low": {"value": 2.0, "unit": "g", "code": "g", "system": "http://unitsofmeasure.org"}, "high": {"value": 2.0, "unit": "g", "code": "g", "system": "http://unitsofmeasure.org"}, "lowClosed": True, "highClosed": True},
+                {"low": {"value": 3.0, "unit": "g", "code": "g", "system": "http://unitsofmeasure.org"}, "high": {"value": 3.0, "unit": "g", "code": "g", "system": "http://unitsofmeasure.org"}, "lowClosed": True, "highClosed": True},
+            ],
+        ),
+        "QuantityExpandPoints": (
+            "SELECT expand_points(intervalFromBounds('{\"value\":1,\"unit\":\"g\",\"code\":\"g\"}', "
+            "'{\"value\":3,\"unit\":\"g\",\"code\":\"g\"}', true, true), "
+            "'{\"value\":1,\"unit\":\"g\",\"code\":\"g\"}')",
+            [
+                {"value": 1.0, "unit": "g", "code": "g", "system": "http://unitsofmeasure.org"},
+                {"value": 2.0, "unit": "g", "code": "g", "system": "http://unitsofmeasure.org"},
+                {"value": 3.0, "unit": "g", "code": "g", "system": "http://unitsofmeasure.org"},
+            ],
+        ),
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            end_sql = f"SELECT {translated['EndOpenQuantity'].to_sql()}"
+            assert _load_json(py.execute(end_sql).fetchone()[0])["value"] == 1.99999999
+            assert _load_json(cpp.execute(end_sql).fetchone()[0])["value"] == 1.99999999
+            assert _load_json(no_py.execute(end_sql).fetchone()[0])["value"] == 1.99999999
+
+            except_sql = f"SELECT {translated['QuantityExceptLeft'].to_sql()}"
+            for con in (py, cpp, no_py):
+                result = _load_json(con.execute(except_sql).fetchone()[0])
+                assert result["high"]["value"] == 1499.99999999
+                assert result["high"]["unit"] == "mg"
+
+            for sql, expected in direct_cases.values():
+                for con in (py, cpp, no_py):
+                    actual = con.execute(sql).fetchone()[0]
+                    if isinstance(expected, list):
+                        assert _load_json(actual) == expected
+                    else:
+                        assert actual is expected
+
+            translated_expected = {
+                "QuantityExpandList": direct_cases["QuantityExpandList"][1],
+                "QuantityExpandPoints": direct_cases["QuantityExpandPoints"][1],
+            }
+            for name, expected in translated_expected.items():
+                sql = f"SELECT {translated[name].to_sql()}"
+                for con in (py, cpp, no_py):
+                    assert _load_json(con.execute(sql).fetchone()[0]) == expected
     finally:
         py.close()
         cpp.close()

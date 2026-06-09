@@ -18,6 +18,7 @@ import binascii
 from typing import Any, Dict, List, Optional
 
 from .metadata import (
+    FHIR_VERSION_CODES,
     KNOWN_FHIR_RESOURCE_TYPES,
     PUBLICATION_STATUS_CODES,
     SHAREABLE_VIEWDEFINITION_PROFILE,
@@ -84,14 +85,61 @@ def validate_optional_uri_string(value: Any, field_name: str) -> Optional[str]:
     return value
 
 
+def validate_canonical_array(value: Any, field_name: str) -> List[str]:
+    """Validate a repeating canonical primitive field and return a copy."""
+    if value is None or not isinstance(value, list):
+        raise ValueError(f"{field_name} must be an array of canonical strings")
+    canonical_values: List[str] = []
+    for index, item in enumerate(value):
+        item_name = f"{field_name}[{index}]"
+        if not isinstance(item, str) or not item:
+            raise ValueError(f"{item_name} must be a non-empty canonical string")
+        try:
+            validate_optional_uri_string(item, item_name)
+        except ValueError as exc:
+            raise ValueError(f"{item_name} must be a valid canonical string") from exc
+        canonical_values.append(item)
+    return canonical_values
+
+
+def validate_fhir_version_array(value: Any, field_name: str) -> List[str]:
+    """Validate a repeating FHIRVersion-bound code field and return a copy."""
+    if value is None or not isinstance(value, list):
+        raise ValueError(f"{field_name} must be an array of FHIRVersion codes")
+    version_values: List[str] = []
+    for index, item in enumerate(value):
+        item_name = f"{field_name}[{index}]"
+        if not isinstance(item, str) or not item:
+            raise ValueError(f"{item_name} must be a non-empty FHIRVersion code")
+        if item not in FHIR_VERSION_CODES:
+            raise ValueError(
+                f"{item_name} value {item!r} is not in the required FHIRVersion binding"
+            )
+        version_values.append(item)
+    return version_values
+
+
+def validate_resource_type(value: Any, field_name: str) -> str:
+    """Validate a required FHIR ResourceType-bound code field."""
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field_name} must be a single FHIR ResourceType string")
+    if value not in KNOWN_FHIR_RESOURCE_TYPES:
+        raise ValueError(
+            f"{field_name} {value!r} is not in the required ResourceType binding"
+        )
+    return value
+
+
 def validate_repeat_paths(value: Any, field_name: str) -> Optional[List[str]]:
     """Validate a repeating string FHIRPath field used by Select.repeat."""
     if value is None:
-        raise ValueError(f"{field_name} must be an array of non-empty strings")
+        raise ValueError(f"{field_name} must be a non-empty array of non-empty strings")
     if isinstance(value, str):
-        raise ValueError(f"{field_name} must be an array of non-empty strings")
+        raise ValueError(f"{field_name} must be a non-empty array of non-empty strings")
     if not isinstance(value, list):
-        raise ValueError(f"{field_name} must be an array of non-empty strings")
+        raise ValueError(f"{field_name} must be a non-empty array of non-empty strings")
+    if not value:
+        raise ValueError(f"{field_name} must be a non-empty array of non-empty strings")
     for item in value:
         validate_required_string(item, field_name)
     return list(value)
@@ -175,6 +223,10 @@ CONSTANT_VALUE_FIELD_TYPES = {
     "valueUri": "uri",
     "valueUrl": "url",
     "valueUuid": "uuid",
+}
+CONSTANT_VALUE_TYPE_FIELDS = {
+    value_type: field_name
+    for field_name, value_type in CONSTANT_VALUE_FIELD_TYPES.items()
 }
 
 
@@ -264,13 +316,27 @@ def _validate_primitive_value(field_name: str, value: Any, value_type: str) -> N
         match = _DATETIME_RE.fullmatch(value)
         if not match:
             raise ValueError(f"{field_name} must be a valid FHIR dateTime")
-        _validate_partial_date(match.group("date"), field_name)
+        date_text = match.group("date")
+        _validate_partial_date(date_text, field_name)
+        if match.group("time") and len(date_text) != len("YYYY-MM-DD"):
+            raise ValueError(
+                f"{field_name} must use a complete YYYY-MM-DD date when a time is present"
+            )
+        if match.group("time") and not match.group("tz"):
+            raise ValueError(
+                f"{field_name} with a time component must include a timezone"
+            )
     elif value_type == "id":
         if not _ID_RE.fullmatch(value):
             raise ValueError(f"{field_name} must be a valid FHIR id")
     elif value_type == "instant":
         match = _DATETIME_RE.fullmatch(value)
-        if not match or not match.group("time") or not match.group("tz"):
+        if (
+            not match
+            or len(match.group("date")) != len("YYYY-MM-DD")
+            or not match.group("time")
+            or not match.group("tz")
+        ):
             raise ValueError(f"{field_name} must be a valid FHIR instant with timezone")
         _validate_partial_date(match.group("date"), field_name)
     elif value_type == "oid":
@@ -319,6 +385,31 @@ def _extract_constant_value(data: Dict[str, Any]) -> tuple[Any, str]:
     value_type = CONSTANT_VALUE_FIELD_TYPES[field_name]
     _validate_primitive_value(field_name, value, value_type)
     return value, value_type
+
+
+def validate_constant_fields(
+    name: Any,
+    value: Any,
+    value_type: Any,
+) -> tuple[str, str]:
+    """Validate a Constant object's spec-defined fields."""
+    valid_name = validate_sql_name(name, "Constant.name")
+    if value_type is None:
+        raise ValueError("Constant.value_type is required for value[x] serialization")
+    if not isinstance(value_type, str) or value_type not in CONSTANT_VALUE_TYPE_FIELDS:
+        supported = ", ".join(CONSTANT_VALUE_TYPE_FIELDS)
+        raise ValueError(
+            f"Unsupported Constant.value_type {value_type!r}. "
+            f"Supported value types are: {supported}."
+        )
+    if value is None:
+        raise ValueError(
+            f"Constant {valid_name!r} has no value. A constant must include "
+            "a typed value[x] property."
+        )
+    field_name = CONSTANT_VALUE_TYPE_FIELDS[value_type]
+    _validate_primitive_value(field_name, value, value_type)
+    return valid_name, value_type
 
 
 class ColumnType(Enum):
@@ -427,7 +518,10 @@ class ColumnTag:
         )
 
     def to_dict(self) -> Dict[str, str]:
-        return {"name": self.name, "value": self.value}
+        return {
+            "name": validate_required_string(self.name, "Column.tag.name"),
+            "value": validate_required_string(self.value, "Column.tag.value"),
+        }
 
 
 @dataclass
@@ -471,16 +565,33 @@ class Column:
         self.tag = converted_tags
 
     def to_dict(self) -> Dict[str, Any]:
+        path, name, description = validate_column_fields(
+            self.path,
+            self.name,
+            self.description,
+        )
+        collection = validate_optional_boolean(self.collection, "Column.collection")
+
         data: Dict[str, Any] = {
-            "path": self.path,
-            "name": self.name,
+            "path": path,
+            "name": name,
         }
         if self.type is not None:
-            data["type"] = self.type.value if isinstance(self.type, ColumnType) else self.type
-        if self.collection:
-            data["collection"] = self.collection
-        if self.description is not None:
-            data["description"] = self.description
+            if isinstance(self.type, ColumnType):
+                data["type"] = self.type.value
+            elif isinstance(self.type, str):
+                data["type"] = validate_optional_uri_string(self.type, "Column.type")
+            else:
+                raise ValueError("Column.type must be a URI string")
+        if collection:
+            data["collection"] = collection
+        if description is not None:
+            data["description"] = description
+        if self.tag is None or not isinstance(self.tag, list):
+            raise ValueError("Column.tag must be an array of tag objects")
+        for tag in self.tag:
+            if not isinstance(tag, ColumnTag):
+                raise ValueError("Column.tag items must be ColumnTag objects")
         if self.tag:
             data["tag"] = [tag.to_dict() for tag in self.tag]
         return data
@@ -513,6 +624,42 @@ class Select:
     repeat: Optional[List[str]] = None
 
     def to_dict(self) -> Dict[str, Any]:
+        if self.column is None or not isinstance(self.column, list):
+            raise ValueError("Select.column must be an array of Column objects")
+        if self.select is None or not isinstance(self.select, list):
+            raise ValueError("Select.select must be an array of Select objects")
+        if self.unionAll is None or not isinstance(self.unionAll, list):
+            raise ValueError("Select.unionAll must be an array of Select objects")
+
+        validate_optional_fhirpath_string(self.forEach, "Select.forEach")
+        validate_optional_fhirpath_string(self.forEachOrNull, "Select.forEachOrNull")
+        if self.repeat is not None:
+            validate_repeat_paths(self.repeat, "Select.repeat")
+
+        active_iterators = [
+            name for name, value in (
+                ("forEach", self.forEach),
+                ("forEachOrNull", self.forEachOrNull),
+                ("repeat", self.repeat),
+            )
+            if value
+        ]
+        if len(active_iterators) > 1:
+            raise ValueError(
+                "Select can only have at most one of forEach, forEachOrNull, or repeat; "
+                f"got {', '.join(active_iterators)}"
+            )
+
+        for column in self.column:
+            if not isinstance(column, Column):
+                raise ValueError("Select.column items must be Column objects")
+        for nested in self.select:
+            if not isinstance(nested, Select):
+                raise ValueError("Select.select items must be Select objects")
+        for nested in self.unionAll:
+            if not isinstance(nested, Select):
+                raise ValueError("Select.unionAll items must be Select objects")
+
         data: Dict[str, Any] = {}
         if self.column:
             data["column"] = [column.to_dict() for column in self.column]
@@ -524,8 +671,13 @@ class Select:
             data["forEachOrNull"] = self.forEachOrNull
         if self.unionAll:
             data["unionAll"] = [select.to_dict() for select in self.unionAll]
+        if self.where is None:
+            raise ValueError("Select.where must be an array of where condition objects")
         if self.where:
-            data["where"] = [dict(condition) for condition in self.where]
+            data["where"] = [
+                dict(condition)
+                for condition in validate_where_conditions(self.where, "Select.where")
+            ]
         if self.repeat is not None:
             data["repeat"] = list(self.repeat)
         return data
@@ -671,14 +823,15 @@ class Constant:
         return cls(name=name, value=value, value_type=value_type)
 
     def to_dict(self) -> Dict[str, Any]:
-        data: Dict[str, Any] = {"name": self.name}
-        for field_name, value_type in CONSTANT_VALUE_FIELD_TYPES.items():
-            if value_type == self.value_type:
-                data[field_name] = self.value
-                return data
-        if self.value_type:
-            raise ValueError(f"Unsupported Constant.value_type {self.value_type!r}")
-        raise ValueError("Constant.value_type is required for JSON serialization")
+        name, value_type = validate_constant_fields(
+            self.name,
+            self.value,
+            self.value_type,
+        )
+        return {
+            "name": name,
+            CONSTANT_VALUE_TYPE_FIELDS[value_type]: self.value,
+        }
 
 
 @dataclass
@@ -790,37 +943,82 @@ class ViewDefinition:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize using SQL-on-FHIR logical-model JSON field names."""
+        (
+            resource_type,
+            view_id,
+            meta,
+            url,
+            version,
+            status,
+            title,
+            description,
+        ) = validate_root_metadata_fields(
+            resourceType=self.resourceType,
+            id=self.id,
+            meta=self.meta,
+            url=self.url,
+            version=self.version,
+            status=self.status,
+            title=self.title,
+            description=self.description,
+        )
+        resource = validate_resource_type(self.resource, "ViewDefinition.resource")
+        profile = (
+            validate_canonical_array(self.profile, "ViewDefinition.profile")
+            if self.profile or not isinstance(self.profile, list)
+            else []
+        )
+        fhir_version = (
+            validate_fhir_version_array(self.fhirVersion, "ViewDefinition.fhirVersion")
+            if self.fhirVersion or not isinstance(self.fhirVersion, list)
+            else []
+        )
+
         data: Dict[str, Any] = {}
-        if self.resourceType is not None:
-            data["resourceType"] = self.resourceType
-        if self.id is not None:
-            data["id"] = self.id
-        if self.meta is not None:
-            data["meta"] = dict(self.meta)
-        if self.url is not None:
-            data["url"] = self.url
-        if self.version is not None:
-            data["version"] = self.version
+        if resource_type is not None:
+            data["resourceType"] = resource_type
+        if view_id is not None:
+            data["id"] = view_id
+        if meta is not None:
+            data["meta"] = meta
+        if url is not None:
+            data["url"] = url
+        if version is not None:
+            data["version"] = version
         if self.name is not None:
-            data["name"] = self.name
-        if self.status is not None:
-            data["status"] = self.status
-        if self.title is not None:
-            data["title"] = self.title
-        if self.description is not None:
-            data["description"] = self.description
-        data["resource"] = self.resource
-        if self.profile:
-            data["profile"] = list(self.profile)
-        if self.fhirVersion:
-            data["fhirVersion"] = list(self.fhirVersion)
+            data["name"] = validate_sql_name(self.name, "ViewDefinition.name")
+        if status is not None:
+            data["status"] = status
+        if title is not None:
+            data["title"] = title
+        if description is not None:
+            data["description"] = description
+        data["resource"] = resource
+        if profile:
+            data["profile"] = profile
+        if fhir_version:
+            data["fhirVersion"] = fhir_version
         if self.constants:
             data["constant"] = [constant.to_dict() for constant in self.constants]
+        if not isinstance(self.select, list) or not self.select:
+            raise ValueError("ViewDefinition.select must be a non-empty array of Select objects")
+        for select in self.select:
+            if not isinstance(select, Select):
+                raise ValueError("ViewDefinition.select items must be Select objects")
         data["select"] = [select.to_dict() for select in self.select]
+        validate_supported_view_profiles(self)
         if self.joins:
             data["joins"] = [join.to_dict() for join in self.joins]
+        if self.where is None:
+            raise ValueError("ViewDefinition.where must be an array of where condition objects")
         if self.where:
-            data["where"] = [dict(condition) for condition in self.where]
+            data["where"] = [
+                dict(condition)
+                for condition in validate_where_conditions(
+                    self.where,
+                    "ViewDefinition.where",
+                )
+            ]
         return data
 
 
@@ -892,13 +1090,12 @@ def validate_root_metadata_fields(
     if meta is not None:
         if not isinstance(meta, dict):
             raise ValueError("ViewDefinition.meta must be a JSON object")
-        if "profile" in meta:
-            raw_profile = meta["profile"]
-            if raw_profile is None or not isinstance(raw_profile, list):
-                raise ValueError("ViewDefinition.meta.profile must be an array of canonical strings")
-            if not all(isinstance(item, str) and item for item in raw_profile):
-                raise ValueError("ViewDefinition.meta.profile must contain only non-empty canonical strings")
         meta = dict(meta)
+        if "profile" in meta:
+            meta["profile"] = validate_canonical_array(
+                meta["profile"],
+                "ViewDefinition.meta.profile",
+            )
     if url is not None:
         url = validate_optional_uri_string(url, "ViewDefinition.url")
     if version is not None:
@@ -915,7 +1112,21 @@ def validate_root_metadata_fields(
 
 def validate_supported_view_profiles(view_definition: ViewDefinition) -> None:
     """Validate profile constraints supported by this implementation."""
-    if view_definition.has_profile(SHAREABLE_VIEWDEFINITION_PROFILE):
+    has_shareable_profile = view_definition.has_profile(SHAREABLE_VIEWDEFINITION_PROFILE)
+    has_tabular_profile = view_definition.has_profile(TABULAR_VIEWDEFINITION_PROFILE)
+
+    if has_shareable_profile or has_tabular_profile:
+        profile_names = []
+        if has_shareable_profile:
+            profile_names.append("ShareableViewDefinition")
+        if has_tabular_profile:
+            profile_names.append("TabularViewDefinition")
+        if not view_definition.status:
+            raise ValueError(
+                f"{' and '.join(profile_names)} requires ViewDefinition.status"
+            )
+
+    if has_shareable_profile:
         if not view_definition.url:
             raise ValueError("ShareableViewDefinition requires ViewDefinition.url")
         if not view_definition.name:
@@ -928,7 +1139,7 @@ def validate_supported_view_profiles(view_definition: ViewDefinition) -> None:
                     f"ShareableViewDefinition requires Column.type for column {column.name!r}"
                 )
 
-    if view_definition.has_profile(TABULAR_VIEWDEFINITION_PROFILE):
+    if has_tabular_profile:
         for column in _iter_select_columns(view_definition.select):
             if column.collection:
                 raise ValueError(

@@ -129,6 +129,10 @@ define TimeOfDaySecond: second from TimeOfDay()
 define TimeHourOnly: Time(12)
 define TimeHourOnlyFromComponent: Time(hour from @T12:30)
 define TimeFromDateTimeExtraction: time from @2024-01-01T12:30:15
+define TimeMinuteNull: Time(12, null)
+define TimeSecondNull: Time(12, 30, null)
+define TimeMillisecondNull: Time(12, 30, 0, null)
+define TimeInvalidGap: Time(12, null, 0)
 """
     )
 
@@ -147,6 +151,10 @@ define TimeFromDateTimeExtraction: time from @2024-01-01T12:30:15
             assert con.execute(f"SELECT {translated['TimeHourOnly'].to_sql()}").fetchone() == ("T12",)
             assert con.execute(f"SELECT {translated['TimeHourOnlyFromComponent'].to_sql()}").fetchone() == ("T12",)
             assert con.execute(f"SELECT {translated['TimeFromDateTimeExtraction'].to_sql()}").fetchone() == ("T12:30:15",)
+            assert con.execute(f"SELECT {translated['TimeMinuteNull'].to_sql()}").fetchone() == ("T12",)
+            assert con.execute(f"SELECT {translated['TimeSecondNull'].to_sql()}").fetchone() == ("T12:30",)
+            assert con.execute(f"SELECT {translated['TimeMillisecondNull'].to_sql()}").fetchone() == ("T12:30:00",)
+            assert con.execute(f"SELECT {translated['TimeInvalidGap'].to_sql()}").fetchone() == (None,)
     finally:
         py.close()
         cpp.close()
@@ -205,6 +213,58 @@ define OnAfterWeek: @2024-01-02 on or after week of @2024-01-01
             sql = f"SELECT {translated[name].to_sql()}"
             assert py.execute(sql).fetchone() == (None,)
             assert cpp.execute(sql).fetchone() == (None,)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_datetime_timezone_precision_edges_match_reference() -> None:
+    translated = translate_cql(
+        """library DateTime2TimezonePrecision version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define SameDayOffsetLocal:
+  @2024-01-01T00:30:00+01:00 same day as @2024-01-01T00:30:00Z
+define SameMonthOffsetLocal:
+  @2024-01-01T00:30:00+01:00 same month as @2024-01-01T00:30:00Z
+define SameSecondOffsetNormalized:
+  @2024-01-01T00:30:00+01:00 same second as @2023-12-31T23:30:00Z
+define SameDayOrAfterOffsetLocal:
+  @2024-01-01T00:30:00+01:00 same day or after @2024-01-01T23:30:00-02:00
+define SameDayOrBeforeOffsetLocal:
+  @2024-01-01T23:30:00-02:00 same day or before @2024-01-01T00:30:00+01:00
+"""
+    )
+    expected = {
+        "SameDayOffsetLocal": True,
+        "SameMonthOffsetLocal": True,
+        "SameSecondOffsetNormalized": True,
+        "SameDayOrAfterOffsetLocal": True,
+        "SameDayOrBeforeOffsetLocal": True,
+    }
+    direct = {
+        "SELECT cqlSameAsP('2024-01-01T00:30:00+01:00','2024-01-01T00:30:00Z','day')": True,
+        "SELECT cqlSameAsP('2024-01-01T00:30:00+01:00','2024-01-01T00:30:00Z','month')": True,
+        "SELECT cqlSameAsP('2024-01-01T00:30:00+01:00','2023-12-31T23:30:00Z','second')": True,
+        "SELECT cqlSameOrAfterP('2024-01-01T00:30:00+01:00','2024-01-01T23:30:00-02:00','day')": True,
+        "SELECT cqlSameOrBeforeP('2024-01-01T23:30:00-02:00','2024-01-01T00:30:00+01:00','day')": True,
+        "SELECT dateTimeSameAs('2024-01-01T00:30:00+01:00','2024-01-01T00:30:00Z','day')": True,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            for name, expected_value in expected.items():
+                assert con.execute(f"SELECT {translated[name].to_sql()}").fetchone() == (expected_value,)
+            for sql, expected_value in direct.items():
+                assert con.execute(sql).fetchone() == (expected_value,)
+            assert con.execute(
+                "SELECT cqlSameAsP('T00:30:00+01:00','T00:30:00Z','hour')"
+            ).fetchone() == (True,)
+            assert con.execute(
+                "SELECT cqlSameAsP('T00:30:00+01:00','T23:30:00Z','second')"
+            ).fetchone() == (False,)
     finally:
         py.close()
         cpp.close()

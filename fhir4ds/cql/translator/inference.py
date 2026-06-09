@@ -432,7 +432,8 @@ class InferenceMixin:
             # Constructor functions that produce scalar values
             if func_name in ('datetime', 'date', 'time', 'now', 'today', 'timeofdayvalue',
                             'tointeger', 'todecimal', 'tostring', 'toboolean',
-                            'todate', 'todatetime', 'totime', 'toquantity',
+                            'tolong', 'todate', 'todatetime', 'totime',
+                            'toquantity', 'toratio', 'toconcept',
                             'abs', 'ceiling', 'floor', 'truncate', 'round',
                             'length', 'indexof', 'substring', 'lower', 'upper',
                             'combine', 'concatenate'):
@@ -1038,6 +1039,19 @@ class InferenceMixin:
             self._infer_expr_type_in_query(return_expr, alias_sources, visited)
         )
 
+    @staticmethod
+    def _static_numeric_literal_value(ast_node: Any) -> int | float | None:
+        from ..parser.ast_nodes import Literal, UnaryExpression
+
+        if isinstance(ast_node, Literal) and isinstance(ast_node.value, (int, float)) and not isinstance(ast_node.value, bool):
+            return ast_node.value
+        if isinstance(ast_node, UnaryExpression) and ast_node.operator in {"+", "-"}:
+            inner = InferenceMixin._static_numeric_literal_value(ast_node.operand)
+            if inner is None:
+                return None
+            return -inner if ast_node.operator == "-" else inner
+        return None
+
     def _infer_cql_type(self, ast_node: Any) -> str:
         """
         Infer the CQL type of an expression.
@@ -1054,7 +1068,7 @@ class InferenceMixin:
             FirstExpression, LastExpression, ConditionalExpression,
             DurationBetween, DifferenceBetween, Interval, CodeSelector,
             InstanceExpression, ListExpression, Quantity, DateTimeLiteral,
-            TimeLiteral, DistinctExpression,
+            TimeLiteral, DistinctExpression, TupleExpression,
         )
 
         if ast_node is None:
@@ -1066,7 +1080,15 @@ class InferenceMixin:
         if isinstance(ast_node, InstanceExpression):
             type_name = getattr(ast_node, "type", "")
             bare = type_name.split(".")[-1] if "." in type_name else type_name
-            if bare in {"Code", "Concept", "ValueSet", "CodeSystem", "Vocabulary"}:
+            if bare in {
+                "Code",
+                "Concept",
+                "ValueSet",
+                "CodeSystem",
+                "Vocabulary",
+                "Quantity",
+                "Ratio",
+            }:
                 return bare
 
         if isinstance(ast_node, Quantity):
@@ -1099,6 +1121,11 @@ class InferenceMixin:
 
         # Literals
         if isinstance(ast_node, Literal):
+            explicit_type = getattr(ast_node, "type", None)
+            if explicit_type:
+                bare_type = str(explicit_type).split(".")[-1]
+                if bare_type in {"Boolean", "Integer", "Long", "Decimal", "String"}:
+                    return bare_type
             value = ast_node.value
             if isinstance(value, bool):
                 return "Boolean"
@@ -1122,6 +1149,13 @@ class InferenceMixin:
             if all(element_type == first_type for element_type in element_types):
                 return f"List<{first_type}>"
             return "List<Any>"
+
+        if isinstance(ast_node, TupleExpression):
+            fields = []
+            for element in ast_node.elements:
+                field_type = self._infer_cql_type(element.type)
+                fields.append(f"{element.name}: {field_type}")
+            return "Tuple{" + ", ".join(fields) + "}"
 
         # Interval expressions
         if isinstance(ast_node, Interval):
@@ -1151,10 +1185,37 @@ class InferenceMixin:
                 return "Integer"
             elif func_name == 'indexof':
                 return "Integer"
-            elif func_name in ('sum', 'avg'):
+            elif func_name in ('sum', 'product', 'min', 'max'):
+                if ast_node.arguments:
+                    source_type = self._infer_cql_type(ast_node.arguments[0])
+                    if source_type == "List<Long>":
+                        return "Long"
+                if func_name in ('min', 'max'):
+                    return "Any"
                 return "Decimal"
-            elif func_name in ('min', 'max'):
-                return "Any"  # Depends on input
+            elif func_name == 'avg':
+                return "Decimal"
+            elif func_name in ('abs',):
+                if ast_node.arguments:
+                    arg_type = self._infer_cql_type(ast_node.arguments[0])
+                    if arg_type in {"Integer", "Long", "Decimal", "Quantity"}:
+                        return arg_type
+                return "Any"
+            elif func_name in ('power',):
+                arg_types = [self._infer_cql_type(arg) for arg in ast_node.arguments]
+                if arg_types and all(arg_type in {"Integer", "Long"} for arg_type in arg_types):
+                    exponent = ast_node.arguments[1] if len(ast_node.arguments) > 1 else None
+                    if self._static_numeric_literal_value(exponent) is not None and self._static_numeric_literal_value(exponent) < 0:
+                        return "Decimal"
+                    if "Long" in arg_types:
+                        return "Long"
+                return "Decimal"
+            elif func_name in ('minimum', 'maximum'):
+                if ast_node.arguments and isinstance(ast_node.arguments[0], Identifier):
+                    type_name = ast_node.arguments[0].name.split(".")[-1]
+                    if type_name in {"Integer", "Long", "Decimal", "Date", "DateTime", "Time"}:
+                        return type_name
+                return "Any"
             elif func_name in ('first', 'last'):
                 # Returns element type of source
                 if ast_node.arguments:
@@ -1180,6 +1241,36 @@ class InferenceMixin:
                     if source_type.startswith("List<"):
                         return "List<Any>"
                 return "List<Any>"
+            elif func_name in {
+                "toboolean",
+                "tointeger",
+                "tolong",
+                "todecimal",
+                "tostring",
+                "todate",
+                "todatetime",
+                "totime",
+                "toquantity",
+                "toratio",
+                "toconcept",
+            }:
+                return {
+                    "toboolean": "Boolean",
+                    "tointeger": "Integer",
+                    "tolong": "Long",
+                    "todecimal": "Decimal",
+                    "tostring": "String",
+                    "todate": "Date",
+                    "todatetime": "DateTime",
+                    "totime": "Time",
+                    "toquantity": "Quantity",
+                    "toratio": "Ratio",
+                    "toconcept": "Concept",
+                }[func_name]
+            else:
+                func_info = self.context.get_function(ast_node.name)
+                if func_info and func_info.expression is not None:
+                    return self._infer_cql_type(func_info.expression)
 
         # Binary comparisons and temporal operators return Boolean
         if isinstance(ast_node, BinaryExpression):
@@ -1223,16 +1314,20 @@ class InferenceMixin:
                     return "Quantity"
                 if "Decimal" in (left_type, right_type):
                     return "Decimal"
+                if "Long" in (left_type, right_type):
+                    return "Long"
                 if "Integer" in (left_type, right_type):
                     return "Integer"
                 return "Any"
-            if op in ('*', '/', 'div', 'mod'):
+            if op in ('*', '/', 'div', 'mod', '^'):
                 left_type = self._infer_cql_type(ast_node.left)
                 right_type = self._infer_cql_type(ast_node.right)
                 if left_type == "Quantity" or right_type == "Quantity":
                     return "Quantity"
                 if "Decimal" in (left_type, right_type) or op == '/':
                     return "Decimal"
+                if "Long" in (left_type, right_type):
+                    return "Long"
                 if "Integer" in (left_type, right_type):
                     return "Integer"
                 return "Any"
@@ -1243,8 +1338,36 @@ class InferenceMixin:
                 if isinstance(ts, NamedTypeSpecifier):
                     type_name = getattr(ts, 'name', None)
                     if type_name:
+                        bare_type = type_name.split(".")[-1]
+                        source_type = self._infer_cql_type(ast_node.left)
+                        if bare_type == "Any":
+                            return source_type
+                        if bare_type == "Vocabulary" and source_type in {"ValueSet", "CodeSystem"}:
+                            return source_type
                         return type_name
                 elif isinstance(ts, Identifier):
+                    bare_type = ts.name.split(".")[-1]
+                    source_type = self._infer_cql_type(ast_node.left)
+                    if bare_type == "Any":
+                        return source_type
+                    if bare_type == "Vocabulary" and source_type in {"ValueSet", "CodeSystem"}:
+                        return source_type
+                    return ts.name
+            if op == 'convert':
+                from ..parser.ast_nodes import NamedTypeSpecifier
+                ts = ast_node.right
+                source_type = self._infer_cql_type(ast_node.left)
+                if isinstance(ts, NamedTypeSpecifier):
+                    type_name = getattr(ts, 'name', None)
+                    if type_name:
+                        bare_type = type_name.split(".")[-1]
+                        if bare_type == "Any":
+                            return source_type
+                        return type_name
+                elif isinstance(ts, Identifier):
+                    bare_type = ts.name.split(".")[-1]
+                    if bare_type == "Any":
+                        return source_type
                     return ts.name
 
         # Unary NOT returns Boolean; "singleton from" extracts element type
@@ -1252,6 +1375,8 @@ class InferenceMixin:
             op = getattr(ast_node, 'operator', '').lower()
             if op in ('not', 'is null', 'is not null'):
                 return "Boolean"
+            if op in ('+', '-', 'predecessor of', 'successor of'):
+                return self._infer_cql_type(ast_node.operand)
             if op == 'singleton from':
                 operand_type = self._infer_cql_type(ast_node.operand)
                 if operand_type.startswith("List<"):
@@ -1297,6 +1422,9 @@ class InferenceMixin:
             meta = self._context.definition_meta.get(ast_node.name)
             if meta:
                 return meta.cql_type
+            param_info = self._context.parameters.get(ast_node.name)
+            if param_info and getattr(param_info, "cql_type", None):
+                return str(param_info.cql_type)
             # Forward ref: check CQL AST for type hints.
             # The cql_ast represents the EXPRESSION of the definition, so infer
             # its type directly (it already represents the full definition type,

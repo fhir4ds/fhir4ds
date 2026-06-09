@@ -35,6 +35,15 @@ def registerAggregateMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # aggregates call DuckDB row aggregates with the system.* prefix when they
     # need row aggregation, so these public names can keep CQL list semantics.
     # ============================================
+    numeric_list_guard = (
+        "("
+        "typeof(x) IN ("
+        "'TINYINT[]', 'SMALLINT[]', 'INTEGER[]', 'BIGINT[]', 'HUGEINT[]', "
+        "'UTINYINT[]', 'USMALLINT[]', 'UINTEGER[]', 'UBIGINT[]', 'UHUGEINT[]', "
+        "'FLOAT[]', 'DOUBLE[]', '\"NULL\"[]'"
+        ") OR (starts_with(typeof(x), 'DECIMAL(') AND ends_with(typeof(x), '[]'))"
+        ")"
+    )
     numeric_list = (
         "list_filter("
         "list_transform(x, _v -> TRY_CAST(_v AS DOUBLE)), "
@@ -43,7 +52,9 @@ def registerAggregateMacros(con: "duckdb.DuckDBPyConnection") -> None:
     )
     con.execute(
         "CREATE OR REPLACE MACRO Median(x) AS "
-        f"CASE WHEN x IS NULL THEN NULL ELSE list_aggregate({numeric_list}, 'median') END"
+        f"CASE WHEN x IS NULL THEN NULL "
+        f"WHEN NOT {numeric_list_guard} THEN error('CQL Median requires List<Decimal> source') "
+        f"ELSE list_aggregate({numeric_list}, 'median') END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO Mode(x) AS "
@@ -51,27 +62,39 @@ def registerAggregateMacros(con: "duckdb.DuckDBPyConnection") -> None:
     )
     con.execute(
         "CREATE OR REPLACE MACRO StdDev(x) AS "
-        f"CASE WHEN x IS NULL THEN NULL ELSE list_aggregate({numeric_list}, 'stddev_samp') END"
+        f"CASE WHEN x IS NULL THEN NULL "
+        f"WHEN NOT {numeric_list_guard} THEN error('CQL StdDev requires List<Decimal> source') "
+        f"ELSE list_aggregate({numeric_list}, 'stddev_samp') END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO PopulationStdDev(x) AS "
-        f"CASE WHEN x IS NULL THEN NULL ELSE list_aggregate({numeric_list}, 'stddev_pop') END"
+        f"CASE WHEN x IS NULL THEN NULL "
+        f"WHEN NOT {numeric_list_guard} THEN error('CQL PopulationStdDev requires List<Decimal> source') "
+        f"ELSE list_aggregate({numeric_list}, 'stddev_pop') END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO StdDevPop(x) AS "
-        f"CASE WHEN x IS NULL THEN NULL ELSE list_aggregate({numeric_list}, 'stddev_pop') END"
+        f"CASE WHEN x IS NULL THEN NULL "
+        f"WHEN NOT {numeric_list_guard} THEN error('CQL StdDevPop requires List<Decimal> source') "
+        f"ELSE list_aggregate({numeric_list}, 'stddev_pop') END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO Variance(x) AS "
-        f"CASE WHEN x IS NULL THEN NULL ELSE list_aggregate({numeric_list}, 'var_samp') END"
+        f"CASE WHEN x IS NULL THEN NULL "
+        f"WHEN NOT {numeric_list_guard} THEN error('CQL Variance requires List<Decimal> source') "
+        f"ELSE list_aggregate({numeric_list}, 'var_samp') END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO PopulationVariance(x) AS "
-        f"CASE WHEN x IS NULL THEN NULL ELSE list_aggregate({numeric_list}, 'var_pop') END"
+        f"CASE WHEN x IS NULL THEN NULL "
+        f"WHEN NOT {numeric_list_guard} THEN error('CQL PopulationVariance requires List<Decimal> source') "
+        f"ELSE list_aggregate({numeric_list}, 'var_pop') END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO VarPop(x) AS "
-        f"CASE WHEN x IS NULL THEN NULL ELSE list_aggregate({numeric_list}, 'var_pop') END"
+        f"CASE WHEN x IS NULL THEN NULL "
+        f"WHEN NOT {numeric_list_guard} THEN error('CQL VarPop requires List<Decimal> source') "
+        f"ELSE list_aggregate({numeric_list}, 'var_pop') END"
     )
 
     # ============================================

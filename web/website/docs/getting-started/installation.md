@@ -26,6 +26,13 @@ For advanced measure evaluation and clinical reasoning, install the `measures` e
 pip install "fhir4ds-v2[measures]"
 ```
 
+For DQM materialization workers:
+
+```bash
+pip install "fhir4ds-v2[hapi]"   # HAPI PostgreSQL worker
+pip install "fhir4ds-v2[mongo]"  # Mongo change-stream worker
+```
+
 After installation, import from the `fhir4ds` namespace:
 
 ```python

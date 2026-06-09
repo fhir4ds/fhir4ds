@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 import orjson
 
-from .quantity import is_valid_quantity_object
+from .quantity import is_valid_quantity_object, quantityCompare, toQuantity
 
 if TYPE_CHECKING:
     import duckdb
@@ -43,7 +43,32 @@ def _parse_ratio(value: str) -> dict | None:
         return None
 
 
+def _parse_valid_ratio(value: str | None) -> dict | None:
+    ratio = _parse_ratio(value) if value is not None else None
+    if not isinstance(ratio, dict):
+        return None
+    numerator = ratio.get("numerator")
+    denominator = ratio.get("denominator")
+    if not is_valid_quantity_object(numerator) or not is_valid_quantity_object(denominator):
+        return None
+    return ratio
+
+
+def _quantity_json(value: dict) -> str:
+    return orjson.dumps(value).decode("utf-8")
+
+
+def _cql_and(left: bool | None, right: bool | None) -> bool | None:
+    if left is False or right is False:
+        return False
+    if left is None or right is None:
+        return None
+    return True
+
+
 def _decimal_value(value) -> float | None:
+    if isinstance(value, (bool, str)):
+        return None
     try:
         decimal_value = Decimal(str(value))
     except (InvalidOperation, ValueError):
@@ -60,7 +85,7 @@ def ratioNumeratorValue(ratio: str | None) -> float | None:
     if not r:
         return None
     num = r.get("numerator", {})
-    if not isinstance(num, dict):
+    if not is_valid_quantity_object(num):
         return None
     return _decimal_value(num.get("value"))
 
@@ -71,7 +96,7 @@ def ratioDenominatorValue(ratio: str | None) -> float | None:
     if not r:
         return None
     denom = r.get("denominator", {})
-    if not isinstance(denom, dict):
+    if not is_valid_quantity_object(denom):
         return None
     return _decimal_value(denom.get("value"))
 
@@ -93,7 +118,7 @@ def ratioNumeratorUnit(ratio: str | None) -> str | None:
     if not r:
         return None
     num = r.get("numerator", {})
-    if not isinstance(num, dict):
+    if not is_valid_quantity_object(num):
         return None
     return num.get("unit") or num.get("code")
 
@@ -104,7 +129,7 @@ def ratioDenominatorUnit(ratio: str | None) -> str | None:
     if not r:
         return None
     denom = r.get("denominator", {})
-    if not isinstance(denom, dict):
+    if not is_valid_quantity_object(denom):
         return None
     return denom.get("unit") or denom.get("code")
 
@@ -129,6 +154,50 @@ def RatioToString(ratio: str | None) -> str | None:
     if numerator is None or denominator is None:
         return None
     return f"{numerator}:{denominator}"
+
+
+def ratioCompare(left: str | None, right: str | None, op: str | None) -> bool | None:
+    """Compare CQL Ratio values for equality or equivalence.
+
+    Equality is component-wise Quantity equality. Equivalence compares the
+    represented ratio value, matching CQL Appendix B Ratio comparison semantics.
+    """
+    if op not in {"==", "!=", "~", "!~"}:
+        return None
+
+    if op in {"~", "!~"}:
+        if left is None and right is None:
+            equivalent = True
+        elif left is None or right is None:
+            equivalent = False
+        elif _parse_valid_ratio(left) is None or _parse_valid_ratio(right) is None:
+            equivalent = False
+        else:
+            equivalent_result = quantityCompare(toQuantity(left), toQuantity(right), "~")
+            equivalent = bool(equivalent_result) if equivalent_result is not None else False
+        return not equivalent if op == "!~" else equivalent
+
+    if left is None or right is None:
+        return None
+    left_ratio = _parse_valid_ratio(left)
+    right_ratio = _parse_valid_ratio(right)
+    if left_ratio is None or right_ratio is None:
+        return None
+
+    numerator_equal = quantityCompare(
+        _quantity_json(left_ratio["numerator"]),
+        _quantity_json(right_ratio["numerator"]),
+        "==",
+    )
+    denominator_equal = quantityCompare(
+        _quantity_json(left_ratio["denominator"]),
+        _quantity_json(right_ratio["denominator"]),
+        "==",
+    )
+    equal = _cql_and(numerator_equal, denominator_equal)
+    if op == "!=":
+        return None if equal is None else not equal
+    return equal
 
 
 # ========================================
@@ -168,6 +237,12 @@ def registerRatioUdfs(con: "duckdb.DuckDBPyConnection") -> None:
         return_type="VARCHAR",
         null_handling="special"
     )
+    con.create_function(
+        "ratioCompare",
+        ratioCompare,
+        return_type="BOOLEAN",
+        null_handling="special"
+    )
 
 
 __all__ = [
@@ -178,4 +253,5 @@ __all__ = [
     "ratioNumeratorUnit",
     "ratioDenominatorUnit",
     "RatioToString",
+    "ratioCompare",
 ]

@@ -79,19 +79,23 @@ from .types import (
     Select,
     ViewDefinition,
     SQL_NAME_RE,
+    validate_canonical_array,
+    validate_fhir_version_array,
     validate_optional_boolean,
     validate_optional_markdown,
     validate_optional_fhirpath_string,
     validate_optional_uri_string,
     validate_repeat_paths,
+    validate_resource_type,
     validate_required_string,
     validate_root_metadata_fields,
     validate_sql_name,
+    validate_constant_fields,
     validate_supported_view_profiles,
     validate_where_conditions,
 )
 from .errors import ValidationError
-from .metadata import FHIR_VERSION_CODES, KNOWN_FHIR_RESOURCE_TYPES
+from .metadata import KNOWN_FHIR_RESOURCE_TYPES
 
 from .unnest import generate_foreach_unnest, generate_foreachornull_unnest, generate_repeat_unnest
 from .constants import ConstantResolver, extract_constant_references, iter_constant_references
@@ -158,6 +162,10 @@ class SQLGenerator:
         "unsignedInt": "INTEGER",
         "integer64": "BIGINT",
     }
+    _ROW_INDEX_TYPE_CAST = {
+        **_TYPE_CAST,
+        "decimal": "DOUBLE",
+    }
 
     _COLLECTION_ELEMENT_CAST = {
         "boolean": "BOOLEAN",
@@ -184,14 +192,28 @@ class SQLGenerator:
         "decimal", "id", "instant", "integer", "integer64", "markdown", "oid",
         "positiveInt", "string", "time", "unsignedInt", "uri", "url", "uuid",
     }
-
-    _STRING_COMPATIBLE_TYPE_NAMES = {
-        "base64Binary", "canonical", "code", "id", "markdown", "oid", "string",
-        "uri", "url", "uuid",
+    _SYSTEM_PRIMITIVE_TYPE_NAMES = {
+        "Boolean", "Date", "DateTime", "Decimal", "Integer", "String", "Time",
     }
 
-    _INTEGER_COMPATIBLE_TYPE_NAMES = {"integer", "integer64", "positiveInt", "unsignedInt"}
-    _DECIMAL_COMPATIBLE_TYPE_NAMES = _INTEGER_COMPATIBLE_TYPE_NAMES | {"decimal"}
+    _STRING_COMPATIBLE_TYPE_NAMES = {
+        "String", "base64Binary", "canonical", "code", "id", "markdown", "oid",
+        "string", "uri", "url", "uuid",
+    }
+
+    _INTEGER_COMPATIBLE_TYPE_NAMES = {
+        "Integer", "integer", "integer64", "positiveInt", "unsignedInt"
+    }
+    _DECIMAL_COMPATIBLE_TYPE_NAMES = _INTEGER_COMPATIBLE_TYPE_NAMES | {"Decimal", "decimal"}
+    _ROW_INDEX_COMPATIBLE_TYPE_NAMES = {
+        "integer", "integer64", "positiveInt", "unsignedInt", "decimal"
+    }
+    _JSON_INTEGER_TYPES = {"BIGINT", "UBIGINT"}
+    _JSON_NUMBER_TYPES = _JSON_INTEGER_TYPES | {"DOUBLE"}
+    _JSON_STRING_TYPES = {"VARCHAR"}
+    _JSON_BOOLEAN_TYPES = {"BOOLEAN"}
+    _JSON_COMPLEX_TYPES = {"OBJECT", "ARRAY"}
+    _JSON_NULL_TYPES = {"NULL"}
 
     def _is_element_id_type(self, type_str: str | None) -> bool:
         """Return True for FHIR element ID notation such as Observation.referenceRange."""
@@ -285,6 +307,13 @@ class SQLGenerator:
             return None
         return self._COLLECTION_ELEMENT_CAST.get(type_str)
 
+    def _get_row_index_sql_cast(self, column_type) -> str | None:
+        """Return the SQL type used to cast the integer-valued %rowIndex."""
+        type_str = self._get_type_name(column_type)
+        if type_str is None:
+            return None
+        return self._ROW_INDEX_TYPE_CAST.get(type_str)
+
     def _allowed_actual_type_names(self, declared_type: str) -> set[str]:
         """Return runtime FHIRPath type().name values compatible with a declaration."""
         if declared_type == "string":
@@ -293,6 +322,16 @@ class SQLGenerator:
             return set(self._INTEGER_COMPATIBLE_TYPE_NAMES)
         if declared_type == "decimal":
             return set(self._DECIMAL_COMPATIBLE_TYPE_NAMES)
+        if declared_type == "boolean":
+            return {"Boolean", "boolean"}
+        if declared_type == "date":
+            return {"Date", "String", "date", "string"}
+        if declared_type == "dateTime":
+            return {"DateTime", "String", "dateTime", "string"}
+        if declared_type == "time":
+            return {"String", "Time", "string", "time"}
+        if declared_type == "instant":
+            return {"DateTime", "String", "dateTime", "instant", "string"}
         if declared_type in self._STRING_COMPATIBLE_TYPE_NAMES:
             # Python fallback cannot always distinguish FHIR string subtypes such
             # as id from plain string, so accept the physical string shape too.
@@ -387,6 +426,111 @@ class SQLGenerator:
         """
         return bool(_SIMPLE_FHIRPATH_NAV_RE.fullmatch(resolved_path))
 
+    def _expression_runtime_complex_guard_condition(
+        self,
+        values_expr: str,
+        type_names: str,
+        column: Column,
+    ) -> str | None:
+        """Guard non-simple expressions that physically return complex JSON.
+
+        Function-valued primitive expressions can report FHIRPath System type
+        names or no type name, so do not apply the full simple-path type guard
+        here. This catches the spec-critical case where a non-simple expression
+        returns object/array JSON while ``column.type`` is unset or incompatible.
+        """
+        declared_type = self._get_type_name(column.type)
+        if self._is_element_id_type(declared_type):
+            return None
+        if declared_type is None:
+            allowed_names = self._PRIMITIVE_TYPE_NAMES | self._SYSTEM_PRIMITIVE_TYPE_NAMES
+        else:
+            allowed_names = self._allowed_actual_type_names(declared_type)
+        allowed = self._sql_string_list(allowed_names)
+        complex_values = (
+            f"array_length(list_filter({values_expr}, _v -> "
+            "COALESCE(json_type(TRY_CAST(CAST(_v AS VARCHAR) AS JSON)) "
+            "IN ('OBJECT', 'ARRAY'), false))) > 0"
+        )
+        incompatible_types = (
+            f"array_length(list_filter({type_names}, _t -> NOT (_t IN ({allowed})))) > 0"
+        )
+        if declared_type is not None:
+            return (
+                f"(array_length({type_names}) > 0 AND {incompatible_types}) OR "
+                f"({complex_values} AND array_length({type_names}) = 0)"
+            )
+        return (
+            f"({complex_values}) AND "
+            f"(array_length({type_names}) = 0 OR {incompatible_types})"
+        )
+
+    def _json_values_for_path_expr(self, resource_var: str, path_expr: str) -> str:
+        """Return a JSON[] expression for the FHIRPath JSON result array."""
+        json_result = f"TRY_CAST(fhirpath_json({resource_var}, {path_expr}) AS JSON)"
+        return (
+            "COALESCE("
+            f"CAST(json_extract({json_result}, '$[*]') AS JSON[]), "
+            "[]::JSON[]"
+            ")"
+        )
+
+    def _physical_json_type_guard_condition(
+        self,
+        resource_var: str,
+        resolved_path: str,
+        column: Column,
+        *,
+        row_index_expr: str = "0",
+    ) -> str | None:
+        """Guard iterator contexts where FHIRPath type metadata is unavailable.
+
+        Unrolled iterator aliases are JSON fragments, not full resources. For
+        those contexts, FHIRPath ``type().name`` can be backend-dependent, so
+        enforce the portable physical JSON shape instead.
+        """
+        declared_type = self._get_type_name(column.type)
+        path_expr = self._fhirpath_expression_sql(resolved_path, row_index_expr)
+        json_values = self._json_values_for_path_expr(resource_var, path_expr)
+
+        allowed_types: set[str]
+        if declared_type is None:
+            allowed_types = (
+                self._JSON_INTEGER_TYPES
+                | self._JSON_NUMBER_TYPES
+                | self._JSON_STRING_TYPES
+                | self._JSON_BOOLEAN_TYPES
+                | self._JSON_NULL_TYPES
+            )
+        elif self._is_complex_declared_type(declared_type):
+            allowed_types = self._JSON_COMPLEX_TYPES | self._JSON_NULL_TYPES
+        elif declared_type == "integer64":
+            return (
+                f"array_length(list_filter({json_values}, _j -> NOT ("
+                f"json_type(_j) IN ({self._sql_string_list(self._JSON_INTEGER_TYPES | self._JSON_NULL_TYPES)}) "
+                "OR (json_type(_j) = 'VARCHAR' "
+                "AND regexp_matches(json_extract_string(_j, '$'), '^-?[0-9]+$'))"
+                "))) > 0"
+            )
+        elif declared_type in self._INTEGER_COMPATIBLE_TYPE_NAMES:
+            allowed_types = self._JSON_INTEGER_TYPES | self._JSON_NULL_TYPES
+        elif declared_type in self._DECIMAL_COMPATIBLE_TYPE_NAMES:
+            allowed_types = self._JSON_NUMBER_TYPES | self._JSON_NULL_TYPES
+        elif declared_type == "boolean":
+            allowed_types = self._JSON_BOOLEAN_TYPES | self._JSON_NULL_TYPES
+        elif declared_type in self._STRING_COMPATIBLE_TYPE_NAMES or declared_type in {
+            "date", "dateTime", "time", "instant"
+        }:
+            allowed_types = self._JSON_STRING_TYPES | self._JSON_NULL_TYPES
+        else:
+            return None
+
+        allowed = self._sql_string_list(allowed_types)
+        return (
+            f"array_length(list_filter({json_values}, "
+            f"_j -> NOT (json_type(_j) IN ({allowed})))) > 0"
+        )
+
     def _runtime_guard_condition(
         self,
         resource_var: str,
@@ -405,29 +549,47 @@ class SQLGenerator:
         if not column.collection:
             conditions.append(f"{value_count} > 1")
 
-        if include_type_checks and self._path_supports_runtime_type_guard(resolved_path):
+        if include_type_checks:
             type_path = f"({resolved_path}).type().name"
             type_path_expr = self._fhirpath_expression_sql(type_path, row_index_expr)
             type_names = f"fhirpath({resource_var}, {type_path_expr})"
             declared_type = self._get_type_name(column.type)
-            if self._is_element_id_type(declared_type):
-                # Element-ID declarations identify a specific FHIR element
-                # shape (e.g. Observation.referenceRange). Runtime
-                # type().name values are datatype-oriented and can differ
-                # between native and fallback paths, so cardinality remains the
-                # portable execution guard.
-                pass
-            elif declared_type is None:
-                allowed = self._sql_string_list(self._PRIMITIVE_TYPE_NAMES)
-                conditions.append(
-                    f"array_length(list_filter({type_names}, _t -> NOT (_t IN ({allowed})))) > 0"
-                )
+            if self._path_supports_runtime_type_guard(resolved_path):
+                if self._is_element_id_type(declared_type):
+                    # Element-ID declarations identify a specific FHIR element
+                    # shape (e.g. Observation.referenceRange). Runtime
+                    # type().name values are datatype-oriented and can differ
+                    # between native and fallback paths, so cardinality remains
+                    # the portable execution guard.
+                    pass
+                elif declared_type is None:
+                    allowed = self._sql_string_list(self._PRIMITIVE_TYPE_NAMES)
+                    conditions.append(
+                        f"array_length(list_filter({type_names}, _t -> NOT (_t IN ({allowed})))) > 0"
+                    )
+                else:
+                    allowed_names = self._allowed_actual_type_names(declared_type)
+                    allowed = self._sql_string_list(allowed_names)
+                    conditions.append(
+                        f"array_length(list_filter({type_names}, _t -> NOT (_t IN ({allowed})))) > 0"
+                    )
             else:
-                allowed_names = self._allowed_actual_type_names(declared_type)
-                allowed = self._sql_string_list(allowed_names)
-                conditions.append(
-                    f"array_length(list_filter({type_names}, _t -> NOT (_t IN ({allowed})))) > 0"
+                complex_guard = self._expression_runtime_complex_guard_condition(
+                    values_expr,
+                    type_names,
+                    column,
                 )
+                if complex_guard:
+                    conditions.append(complex_guard)
+        else:
+            physical_guard = self._physical_json_type_guard_condition(
+                resource_var,
+                resolved_path,
+                column,
+                row_index_expr=row_index_expr,
+            )
+            if physical_guard:
+                conditions.append(physical_guard)
 
         return " OR ".join(f"({condition})" for condition in conditions) if conditions else None
 
@@ -557,6 +719,7 @@ class SQLGenerator:
             for tag in column.tag:
                 if not isinstance(tag, ColumnTag):
                     raise ValueError("Column.tag items must be ColumnTag objects")
+                tag.to_dict()
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
 
@@ -630,7 +793,21 @@ class SQLGenerator:
         # %rowIndex: 0-based row counter within the enclosing forEach context
         if resolved_path == "%rowIndex":
             quoted_name = _quote_column_identifier(column.name)
-            return f"{row_index_expr} as {quoted_name}"
+            declared_type = self._get_type_name(column.type)
+            if (
+                declared_type is not None
+                and declared_type not in self._ROW_INDEX_COMPATIBLE_TYPE_NAMES
+            ):
+                raise ValidationError(
+                    f"ViewDefinition column {column.name!r} path '%rowIndex' "
+                    f"violates declared type {declared_type}; %rowIndex is an "
+                    "integer-valued SQL-on-FHIR environment variable"
+                )
+            expr = row_index_expr
+            sql_cast = self._get_row_index_sql_cast(column.type)
+            if sql_cast:
+                expr = f"TRY_CAST({expr} AS {sql_cast})"
+            return f"{expr} as {quoted_name}"
 
         resolved_path, eval_resource_var = self._resolve_environment_path_context(
             resolved_path,
@@ -644,16 +821,21 @@ class SQLGenerator:
         if resolved_path == "$this":
             udf_func = self._get_udf_for_type(column.type)
             quoted_name = _quote_column_identifier(column.name)
-            complex_value = self._json_complex_condition(eval_resource_var)
-            declared_type = self._get_type_name(column.type)
-            if self._is_complex_declared_type(declared_type):
-                guard = f"({eval_resource_var} IS NOT NULL AND NOT ({complex_value}))"
-            else:
-                guard = complex_value
-
-            expr = (
-                f"COALESCE({udf_func}({eval_resource_var}, '$this'), "
-                f"CAST({eval_resource_var} AS VARCHAR))"
+            udf_call = f"{udf_func}({eval_resource_var}, '$this')"
+            expr = udf_call
+            sql_cast = self._get_sql_cast(column.type)
+            if sql_cast:
+                expr = f"TRY_CAST({udf_call} AS {sql_cast})"
+            elif udf_func in {"fhirpath_text", "fhirpath_json"}:
+                expr = (
+                    f"COALESCE({udf_call}, "
+                    f"CAST({eval_resource_var} AS VARCHAR))"
+                )
+            guard = self._physical_json_type_guard_condition(
+                eval_resource_var,
+                "$this",
+                column,
+                row_index_expr=row_index_expr,
             )
             if guard:
                 message = self._runtime_error_message(column)
@@ -851,13 +1033,12 @@ class SQLGenerator:
             if not isinstance(const, Constant):
                 raise ValidationError("ViewDefinition.constant items must be Constant objects")
             try:
-                validate_sql_name(const.name, "Constant.name")
+                validate_constant_fields(const.name, const.value, const.value_type)
             except ValueError as exc:
                 raise ValidationError(str(exc)) from exc
-            if const.value is None:
+            if const.name in defined_constants:
                 raise ValidationError(
-                    f"Constant {const.name!r} has no value. A constant must include "
-                    "a typed value[x] property."
+                    f"Duplicate constant name: {const.name}"
                 )
             defined_constants.add(const.name)
 
@@ -1799,16 +1980,23 @@ class SQLGenerator:
             validate_supported_view_profiles(view_definition)
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
-        if not isinstance(view_definition.fhirVersion, list):
-            raise ValidationError("ViewDefinition.fhirVersion must be an array of FHIRVersion codes")
-        for version in view_definition.fhirVersion:
-            if not isinstance(version, str) or version not in FHIR_VERSION_CODES:
-                raise ValidationError(
-                    f"ViewDefinition.fhirVersion value {version!r} is not in the "
-                    "required FHIRVersion binding"
-                )
+        try:
+            view_definition.profile = validate_canonical_array(
+                view_definition.profile,
+                "ViewDefinition.profile",
+            )
+            view_definition.fhirVersion = validate_fhir_version_array(
+                view_definition.fhirVersion,
+                "ViewDefinition.fhirVersion",
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
 
         self._validate_select_shape(view_definition.select)
+        if not view_definition.select:
+            raise ValidationError(
+                "ViewDefinition.select must be a non-empty array of Select objects"
+            )
         self._validate_where_shapes(view_definition)
         self._validate_fhirpath_syntax(view_definition)
         self._validate_constants(view_definition)
@@ -1820,11 +2008,13 @@ class SQLGenerator:
         self._alias_counter = 0
         self._constant_resolver = ConstantResolver.from_view_definition(view_definition)
 
-        resource = view_definition.resource
-        if not isinstance(resource, str):
-            raise ValidationError(
-                "ViewDefinition.resource must be a single FHIR ResourceType string"
+        try:
+            view_definition.resource = validate_resource_type(
+                view_definition.resource,
+                "ViewDefinition.resource",
             )
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
 
         return self._generate_single_resource(view_definition)
 

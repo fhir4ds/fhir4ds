@@ -87,6 +87,17 @@ DuckDB UDFs. If generated browser SQL needs helper functions such as
 `fhirpath_repeat`, implement and test them in the C++ extension or change the
 generator so the browser path uses only C++ UDFs and SQL macros.
 
+SQL-on-FHIR runner parity also depends on primitive metadata surviving native
+evaluation. JSON numeric children must carry both their numeric value and raw
+number text (`1.0` scale matters for `precision()`, `lowBoundary()`, and
+`highBoundary()`), FHIR `date`/`dateTime`/`time` strings must coerce by
+field/choice metadata before boundary functions, and root-level
+`where(criteria)` must dispatch through the same filter implementation as
+chained `.where(criteria)`. This was fixed by the SOF-VD-11 SKEPTIC fresh
+rerun on 2026-06-01; keep `test_environment_type_parity.py`,
+ViewDefinition runner regressions, and native/fallback official spec_tests
+aligned after evaluator changes.
+
 `fhirpath_repeat` is a public SQL-on-FHIR compatibility surface. Repeat paths
 are FHIRPath expressions, not simple key chains; native C++ must stay aligned
 with the Python fallback for recursive expression evaluation, duplicate-node
@@ -138,6 +149,18 @@ See `docs/architecture/AUDIT_REPORT.md` §7 for full details.
 - Build: ✅ | Tests: 72 SQL assertions pass
 
 ### Known Fragile Areas (Found by QA - 2026-04-30)
+- **FHIRPath Section 5.1 native arity validation (Domain 1 SKEPTIC, 2026-06-07):**
+  **FIXED:** Native `Evaluator::evalFunction()` must reject invalid arities for
+  Section 5.1 existence helpers before dispatch, and `Evaluator::evalExists()`
+  must independently reject more than one criteria expression because
+  `exists()` is parsed as `NodeType::ExistsCall` and bypasses generic function
+  dispatch. Guard zero-arg helpers (`empty`, `count`, `distinct`,
+  `isDistinct`, Boolean aggregates), `exists([criteria])`, and exact-one
+  helpers (`all`, `subsetOf`, `supersetOf`). Include the FHIR-specific
+  zero-argument `hasValue()` helper in the same guard cluster. Keep
+  `test_existence_parity.py::test_existence_helpers_reject_invalid_arity_in_native_and_fallback`,
+  `.temp/qa/domain1_skeptic_probe.py`, and native SQL tests aligned, and
+  rebuild/copy the bundled extension after future evaluator changes.
 - **FHIRPath FP-20 EXPLORER resource-specific code metadata rerun (2026-05-24):**
   **FIXED:** Native `fhirFieldType()` must include R4 primitive code fields
   whose names are not globally obvious. `Questionnaire.subjectType` is typed

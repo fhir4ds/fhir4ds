@@ -43,6 +43,7 @@ from .temporal_fields import (
     TEMPORAL_CHOICE_SUFFIXES,
     TEMPORAL_FHIR_TYPES,
 )
+from .fhirpath_builder import escape_fhirpath_string_literal
 
 if TYPE_CHECKING:
     from .context import SQLTranslationContext
@@ -539,7 +540,9 @@ def build_retrieve_cte(
             code_val = parts[1] if len(parts) > 1 else ""
             from ..translator.patterns.retrieve import _TERMINOLOGY_PROPERTY_DEFAULTS
             effective_code_property = code_property or _TERMINOLOGY_PROPERTY_DEFAULTS.get(resource_type, "code")
-            fhirpath_expr = f"{effective_code_property}.coding.where(system='{system_url}' and code='{code_val}').exists()"
+            escaped_system = escape_fhirpath_string_literal(system_url)
+            escaped_code = escape_fhirpath_string_literal(code_val)
+            fhirpath_expr = f"{effective_code_property}.coding.where(system='{escaped_system}' and code='{escaped_code}').exists()"
             where_conditions.append(
                 SQLFunctionCall(
                     name="fhirpath_bool",

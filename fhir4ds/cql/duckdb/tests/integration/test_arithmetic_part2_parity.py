@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from decimal import Decimal
 
 import duckdb
@@ -15,6 +16,14 @@ from fhir4ds.cql.parser.ast_nodes import BinaryExpression, FunctionRef, UnaryExp
 from fhir4ds.cql.translator import translate_cql
 
 from .wasm_runtime_helpers import no_python_connection
+
+
+def _raw_quantity_tuple(payload: str) -> tuple[Decimal, str]:
+    value_match = re.search(r'"value":(-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)', payload)
+    unit_match = re.search(r'"(?:code|unit)":"([^"]*)"', payload)
+    assert value_match is not None
+    assert unit_match is not None
+    return Decimal(value_match.group(1)), unit_match.group(1)
 
 
 def _python_only_connection() -> duckdb.DuckDBPyConnection:
@@ -147,9 +156,12 @@ def test_cql_arithmetic_part2_duckdb_surface_matches_cpp_registration() -> None:
         "SELECT Div(10.1, 3.1)",
         "SELECT Div(-10.1, 3.1)",
         "SELECT mathRound('2.5','0')",
+        "SELECT mathRound('-0.5','0')",
+        "SELECT mathRound('-1.5','0')",
         "SELECT mathRound('-2.5','0')",
         "SELECT mathRound('-2.55','1')",
         "SELECT mathRound('3.456','2')",
+        "SELECT mathRound('3.1', NULL)",
         "SELECT Power(-2, 0.5)",
         "SELECT mathPower('2','10')",
         "SELECT mathPower('4','0.5')",
@@ -218,8 +230,15 @@ def test_cql_arithmetic_part2_duckdb_surface_matches_cpp_registration() -> None:
             assert py.execute(sql).fetchone()[0] == expected
             assert cpp.execute(sql).fetchone()[0] == expected
 
-        assert_scalar("SELECT mathRound('-2.5','0')", "-2")
-        assert_scalar("SELECT mathRound('-2.55','1')", "-2.5")
+        assert_scalar("SELECT mathRound('-0.5','0')", "-1")
+        assert_scalar("SELECT mathRound('-1.5','0')", "-2")
+        assert_scalar("SELECT mathRound('-2.5','0')", "-3")
+        assert_scalar("SELECT mathRound('-2.55','1')", "-2.6")
+        assert_scalar("SELECT mathRound('3.1', NULL)", "3")
+        assert_scalar("SELECT Round(-0.5)::VARCHAR", "-1.00000000")
+        assert_scalar("SELECT Round(-1.5)::VARCHAR", "-2.00000000")
+        assert_scalar("SELECT RoundTo(-2.55, 1)::VARCHAR", "-2.60000000")
+        assert_scalar("SELECT RoundTo(3.1, NULL)::VARCHAR", "3.00000000")
         assert_scalar("SELECT Power(-2, 0.5)", None)
         assert_scalar("SELECT mathPower('1e308','2')", None)
         assert_scalar("SELECT Div(10.1, 3.1)", 3.0)
@@ -277,6 +296,9 @@ define NegMinDecimal: -(minimum Decimal)
 define PredMinDecimal: predecessor of minimum Decimal
 define SuccMaxDecimal: successor of maximum Decimal
 define PrecisionOffset: Precision(@2014-01-01T10:30:00.000-05:00)
+define RoundNegHalf: Round(-0.5)
+define RoundNegTenth: Round(-2.55, 1)
+define RoundNullPrecision: Round(3.1, null as Integer)
 """
     translated = translate_cql(cql)
     expected = {
@@ -286,6 +308,9 @@ define PrecisionOffset: Precision(@2014-01-01T10:30:00.000-05:00)
         "PredMinDecimal": None,
         "SuccMaxDecimal": None,
         "PrecisionOffset": 17,
+        "RoundNegHalf": Decimal("-1.00000000"),
+        "RoundNegTenth": Decimal("-2.60000000"),
+        "RoundNullPrecision": Decimal("3.00000000"),
     }
 
     py = _python_only_connection()
@@ -302,6 +327,106 @@ define PrecisionOffset: Precision(@2014-01-01T10:30:00.000-05:00)
     with no_python_connection() as con:
         assert con.execute("SELECT predecessorOf('T25:00')").fetchone()[0] is None
         assert con.execute("SELECT CQLPrecision('2014-01-01T10:30:00.000-05:00')").fetchone()[0] == 17
+        assert con.execute("SELECT RoundTo(3.1, NULL)::VARCHAR").fetchone()[0] == "3.00000000"
+
+
+def test_cql_arithmetic_part2_quantity_predecessor_successor_shape() -> None:
+    cql = """library Arithmetic2QuantityStep version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define PredIntegerQuantity: predecessor of 1 'cm'
+define SuccIntegerQuantity: successor of 1 'cm'
+define PredDecimalQuantity: predecessor of 1.0 'cm'
+define SuccDecimalQuantity: successor of 1.0 'cm'
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "PredIntegerQuantity": (Decimal("0"), "cm"),
+        "SuccIntegerQuantity": (Decimal("2"), "cm"),
+        "PredDecimalQuantity": (Decimal("0.99999999"), "cm"),
+        "SuccDecimalQuantity": (Decimal("1.00000001"), "cm"),
+    }
+
+    def quantity_tuple(payload: str) -> tuple[Decimal, str]:
+        parsed = json.loads(payload)
+        return Decimal(str(parsed["value"])), parsed["code"]
+
+    direct_cases = {
+        "SELECT predecessorOf('{\"value\":\"5\",\"code\":\"mg\"}')": None,
+        "SELECT successorOf('{\"value\":\"5\",\"code\":\"mg\"}')": None,
+        "SELECT predecessorOf('{\"value\":1,\"code\":\"cm\"}')": (Decimal("0"), "cm"),
+        "SELECT successorOf('{\"value\":1,\"code\":\"cm\"}')": (Decimal("2"), "cm"),
+        "SELECT predecessorOf('{\"value\":1.0,\"code\":\"cm\"}')": (Decimal("0.99999999"), "cm"),
+        "SELECT successorOf('{\"value\":1.0,\"code\":\"cm\"}')": (Decimal("1.00000001"), "cm"),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            for name, expected_value in expected.items():
+                got = con.execute("SELECT " + translated[name].to_sql()).fetchone()[0]
+                assert quantity_tuple(got) == expected_value
+            for sql, expected_value in direct_cases.items():
+                got = con.execute(sql).fetchone()[0]
+                assert (quantity_tuple(got) if got is not None else None) == expected_value
+    finally:
+        py.close()
+        cpp.close()
+
+    with no_python_connection() as con:
+        for sql, expected_value in direct_cases.items():
+            got = con.execute(sql).fetchone()[0]
+            assert (quantity_tuple(got) if got is not None else None) == expected_value
+
+
+def test_cql_arithmetic_part2_max_min_quantity_and_numeric_text_surface() -> None:
+    cql = """library Arithmetic2ExplorerMaxMin version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define MaxQuantity: maximum Quantity
+define MinQuantity: minimum Quantity
+define QueryQuantityPred: singleton from (from { 1 'cm' } Q return predecessor of Q)
+define QueryQuantitySucc: singleton from (from { 1.0 'cm' } Q return successor of Q)
+define SingletonQuantityPred: predecessor of singleton from { 1 'cm' }
+define SingletonQuantitySucc: successor of singleton from { 1.0 'cm' }
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "MaxQuantity": (Decimal("99999999999999999999.99999999"), "1"),
+        "MinQuantity": (Decimal("-99999999999999999999.99999999"), "1"),
+        "QueryQuantityPred": (Decimal("0"), "cm"),
+        "QueryQuantitySucc": (Decimal("1.00000001"), "cm"),
+        "SingletonQuantityPred": (Decimal("0"), "cm"),
+        "SingletonQuantitySucc": (Decimal("1.00000001"), "cm"),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            for name, expected_value in expected.items():
+                got = con.execute("SELECT " + translated[name].to_sql()).fetchone()[0]
+                assert _raw_quantity_tuple(got) == expected_value
+
+            assert con.execute("SELECT predecessorOf('5')").fetchone()[0] == 4.99999999
+            assert con.execute("SELECT successorOf('5')").fetchone()[0] == 5.00000001
+    finally:
+        py.close()
+        cpp.close()
+
+    for expression in ("maximum String", "minimum String", "maximum Code", "minimum Concept"):
+        cql = f"""library Arithmetic2ExplorerInvalid version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define Invalid: {expression}
+"""
+        with pytest.raises(ValueError):
+            translate_cql(cql)
+
+    with no_python_connection() as con:
+        assert con.execute("SELECT predecessorOf('5')").fetchone()[0] == "4.99999999"
+        assert con.execute("SELECT successorOf('5')").fetchone()[0] == "5.00000001"
 
 
 def test_cql_arithmetic_part2_dynamic_fhir_numeric_choices() -> None:

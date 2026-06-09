@@ -4,18 +4,21 @@ CQL Type Conversion functions as DuckDB SQL macros.
 Tier 1 implementation - zero Python overhead.
 """
 
+import logging
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import duckdb
+import duckdb
+
+
+_logger = logging.getLogger(__name__)
 
 
 def _create_private_function(con: "duckdb.DuckDBPyConnection", name: str, fn) -> None:
     """Register a private scalar helper, tolerating repeated extension setup."""
     try:
         con.create_function(name, fn, null_handling="special")
-    except Exception:
-        pass
+    except (duckdb.CatalogException, duckdb.InvalidInputException) as exc:
+        _logger.debug("Skipping private conversion helper %s registration: %s", name, exc)
 
 
 def registerConversionMacros(con: "duckdb.DuckDBPyConnection") -> None:
@@ -25,8 +28,39 @@ def registerConversionMacros(con: "duckdb.DuckDBPyConnection") -> None:
     Registers native DuckDB SQL macros for CQL type conversion functions.
     All use CAST for zero Python overhead.
     """
-    # String conversion
-    con.execute("CREATE OR REPLACE MACRO ToString(x) AS CAST(x AS VARCHAR)")
+    # String conversion. CQL Appendix B defines String conversions for scalar
+    # primitive/temporal/Quantity/Ratio values, not structural List/Tuple values.
+    structural_type_guard = (
+        "ends_with(typeof(x), '[]') "
+        "OR starts_with(typeof(x), 'STRUCT') "
+        "OR starts_with(typeof(x), 'MAP') "
+        "OR typeof(x) = 'JSON'"
+    )
+    con.execute(f"""
+        CREATE OR REPLACE MACRO ToString(x) AS
+        CASE
+            WHEN x IS NULL THEN NULL
+            WHEN {structural_type_guard} THEN NULL
+            WHEN typeof(x) = 'VARCHAR'
+                AND regexp_full_match(
+                    CAST(x AS VARCHAR),
+                    '^T[0-9]{{2}}(:[0-9]{{2}}(:[0-9]{{2}}(\\.[0-9]{{1,3}})?)?)?(Z|[+-][0-9]{{2}}:[0-9]{{2}})?$'
+                )
+                THEN substr(CAST(x AS VARCHAR), 2)
+            WHEN typeof(x) = 'VARCHAR'
+                AND regexp_full_match(CAST(x AS VARCHAR), '^[0-9]{{4}}(-[0-9]{{2}}){{0,2}}T$')
+                THEN regexp_replace(CAST(x AS VARCHAR), 'T$', '')
+            ELSE CAST(x AS VARCHAR)
+        END
+    """)
+    con.execute(f"""
+        CREATE OR REPLACE MACRO ConvertsToString(x) AS
+        CASE
+            WHEN x IS NULL THEN NULL
+            WHEN {structural_type_guard} THEN false
+            ELSE true
+        END
+    """)
 
     # Numeric conversions
     con.execute("""
@@ -88,9 +122,15 @@ def registerConversionMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute(
         "CREATE OR REPLACE MACRO QuantityToString(q) AS "
         "CASE WHEN q IS NULL THEN NULL "
-        "WHEN typeof(q) = 'VARCHAR' AND q LIKE '{%' THEN "
-        "CAST(json_extract(q, '$.value') AS VARCHAR) || ' ''' || "
-        "COALESCE(json_extract_string(q, '$.unit'), json_extract_string(q, '$.code'), '1') || '''' "
+        "WHEN starts_with(LTRIM(CAST(q AS VARCHAR)), '{') "
+        "AND TRY_CAST(json_extract_string(CAST(q AS VARCHAR), '$.value') AS DECIMAL(38, 8)) IS NOT NULL THEN "
+        "regexp_replace("
+        "regexp_replace("
+        "CAST(TRY_CAST(json_extract_string(CAST(q AS VARCHAR), '$.value') AS DECIMAL(38, 8)) AS VARCHAR), "
+        "'0+$', ''), "
+        "'\\.$', '') || ' ''' || "
+        "COALESCE(json_extract_string(CAST(q AS VARCHAR), '$.unit'), "
+        "json_extract_string(CAST(q AS VARCHAR), '$.code'), '1') || '''' "
         "ELSE CAST(q AS VARCHAR) END"
     )
 

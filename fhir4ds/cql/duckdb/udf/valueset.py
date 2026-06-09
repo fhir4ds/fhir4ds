@@ -629,7 +629,15 @@ def registerValuesetUdfs(con: "duckdb.DuckDBPyConnection") -> None:
                 )
                 FROM valueset_codes
                 WHERE valueset_url = COALESCE(
-                    json_extract_string(TRY_CAST(vs AS JSON), '$.id'),
+                    CASE
+                      WHEN json_extract_string(TRY_CAST(vs AS JSON), '$.id') IS NULL THEN NULL
+                      WHEN json_extract_string(TRY_CAST(vs AS JSON), '$.version') IS NULL
+                        THEN json_extract_string(TRY_CAST(vs AS JSON), '$.id')
+                      ELSE
+                        json_extract_string(TRY_CAST(vs AS JSON), '$.id')
+                        || '|'
+                        || json_extract_string(TRY_CAST(vs AS JSON), '$.version')
+                    END,
                     CAST(vs AS VARCHAR)
                 )
               )

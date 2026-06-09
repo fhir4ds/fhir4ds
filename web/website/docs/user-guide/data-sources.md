@@ -83,6 +83,7 @@ fhir4ds.attach(con, csv_source)
 | S3/Azure/GCS data lake | `FileSystemSource` with `CloudCredentials` |
 | FHIR JSON stored in PostgreSQL | `PostgresSource` with `PostgresTableMapping` |
 | HAPI FHIR JPA Server on PostgreSQL | `HapiPostgresSource` |
+| Mongo-backed FHIR server | `MongoFhirServerSource` |
 | Flat CSV files that need FHIR JSON construction | `CSVSource` with a projection SQL |
 | Already loaded data via `FHIRDataLoader` | `ExistingTableSource` for adapter API uniformity |
 | Already loaded data, no adapter API needed | Use `FHIRDataLoader` directly — no adapter required |
@@ -129,6 +130,16 @@ current resources from HAPI's resource/version tables.
 *   **Scope:** Current resources with `res_encoding = 'JSON'`; inline
     `res_text_vc` by default, plus `res_text` large-object JSON when using the
     installed decoded view.
+
+### Mongo FHIR Server (`MongoFhirServerSource`)
+Connects directly to Mongo-backed FHIR server collections through DuckDB's
+community `mongo` extension and projects current resources into the standard
+view.
+
+*   **Best for:** Helix/icanbwell-style Mongo FHIR deployments, read replicas,
+    and custom Mongo resource collections.
+*   **Scope:** Current resources in per-resource, explicit, or shared
+    collection layouts.
 
 ### CSV Files (`CSVSource`)
 Maps flat CSV files to the FHIR schema using a user-defined SQL projection.

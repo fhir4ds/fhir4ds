@@ -22,6 +22,7 @@ from fhir4ds.dqm.config import (
 )
 from fhir4ds.dqm.hapi_materialization import (
     enqueue_existing_patients,
+    explain_patient_scope_plan,
     install_materialization_schema,
     listen_and_process,
     load_materialization_config,
@@ -30,6 +31,34 @@ from fhir4ds.dqm.hapi_materialization import (
     prune_materialization_history,
     reset_materialization_queue,
     sync_measure_config,
+)
+from fhir4ds.dqm.mongo_materialization import (
+    enqueue_existing_patients as mongo_enqueue_existing_patients,
+)
+from fhir4ds.dqm.mongo_materialization import (
+    install_mongo_materialization,
+    load_mongo_materialization_config,
+)
+from fhir4ds.dqm.mongo_materialization import (
+    listen_and_process as mongo_listen_and_process,
+)
+from fhir4ds.dqm.mongo_materialization import (
+    materialization_status as mongo_materialization_status,
+)
+from fhir4ds.dqm.mongo_materialization import (
+    process_queue_once as mongo_process_queue_once,
+)
+from fhir4ds.dqm.mongo_materialization import (
+    prune_materialization_history as mongo_prune_materialization_history,
+)
+from fhir4ds.dqm.mongo_materialization import (
+    require_pymongo as mongo_require_pymongo,
+)
+from fhir4ds.dqm.mongo_materialization import (
+    reset_patient_queue as mongo_reset_patient_queue,
+)
+from fhir4ds.dqm.mongo_materialization import (
+    sync_measure_config as mongo_sync_measure_config,
 )
 from fhir4ds.dqm.types import AuditMode
 
@@ -52,17 +81,25 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
     )
     _add_hapi_args(hapi_parser)
 
+    mongo_parser = subparsers.add_parser(
+        "mongo",
+        help="Manage Mongo DQM materialization",
+    )
+    _add_mongo_args(mongo_parser)
+
 
 def run(args: argparse.Namespace) -> int:
     if args.dqm_command is None:
         print(
-            "fhir4ds dqm requires a subcommand: run, validate, inspect, or hapi",
+            "fhir4ds dqm requires a subcommand: run, validate, inspect, hapi, or mongo",
             file=sys.stderr,
         )
         return 2
     try:
         if args.dqm_command == "hapi":
             return _run_hapi(args)
+        if args.dqm_command == "mongo":
+            return _run_mongo(args)
 
         config = _load_config_from_args(args)
         if args.dqm_command == "validate":
@@ -170,6 +207,23 @@ def _add_hapi_args(parser: argparse.ArgumentParser) -> None:
         help="Number of recent runs to include",
     )
 
+    explain_parser = subparsers.add_parser(
+        "explain-scope",
+        help="Show PostgreSQL EXPLAIN for HAPI decoded-view patient scope",
+    )
+    explain_parser.add_argument("--config", required=True, help="HAPI materialization config")
+    explain_parser.add_argument(
+        "--patient-id",
+        action="append",
+        required=True,
+        help="Patient id to include in the scoped plan; may be repeated",
+    )
+    explain_parser.add_argument(
+        "--analyze",
+        action="store_true",
+        help="Run EXPLAIN ANALYZE with BUFFERS",
+    )
+
     reset_parser = subparsers.add_parser(
         "reset-queue",
         help="Reset selected patient-change queue rows to pending for retry",
@@ -199,12 +253,108 @@ def _add_hapi_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_mongo_args(parser: argparse.ArgumentParser) -> None:
+    subparsers = parser.add_subparsers(dest="mongo_command")
+
+    install_parser = subparsers.add_parser(
+        "install",
+        help="Create Mongo materialization indexes",
+    )
+    install_parser.add_argument("--config", required=True, help="Mongo materialization config")
+
+    sync_parser = subparsers.add_parser(
+        "sync-config",
+        help="Sync materialized measure config into Mongo",
+    )
+    sync_parser.add_argument("--config", required=True, help="Mongo materialization config")
+
+    process_parser = subparsers.add_parser(
+        "process-queue",
+        help="Process one batch of queued Mongo patient changes",
+    )
+    process_parser.add_argument("--config", required=True, help="Mongo materialization config")
+    process_parser.add_argument("--limit", type=int, help="Maximum patients to claim")
+    process_parser.add_argument("--log-level", default="WARNING", help="Python logging level")
+
+    enqueue_parser = subparsers.add_parser(
+        "enqueue-patients",
+        help="Queue current Patient resources for initial Mongo materialization or re-run",
+    )
+    enqueue_parser.add_argument("--config", required=True, help="Mongo materialization config")
+    enqueue_parser.add_argument(
+        "--patient-id",
+        action="append",
+        default=[],
+        help="Specific patient id to enqueue; may be repeated",
+    )
+    enqueue_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Queue all current Patient resources when no --patient-id is supplied",
+    )
+    enqueue_parser.add_argument("--limit", type=int, help="Maximum patients to enqueue")
+
+    listen_parser = subparsers.add_parser(
+        "listen",
+        help="Watch Mongo change streams and process continuously",
+    )
+    listen_parser.add_argument("--config", required=True, help="Mongo materialization config")
+    listen_parser.add_argument("--log-level", default="INFO", help="Python logging level")
+
+    prune_parser = subparsers.add_parser(
+        "prune",
+        help="Apply configured Mongo materialization retention policy",
+    )
+    prune_parser.add_argument("--config", required=True, help="Mongo materialization config")
+    prune_parser.add_argument("--log-level", default="WARNING", help="Python logging level")
+
+    status_parser = subparsers.add_parser(
+        "status",
+        help="Show queue, run, result, and MeasureReport materialization status",
+    )
+    status_parser.add_argument("--config", required=True, help="Mongo materialization config")
+    status_parser.add_argument(
+        "--limit",
+        type=int,
+        default=5,
+        help="Number of recent runs to include",
+    )
+
+    reset_parser = subparsers.add_parser(
+        "reset-queue",
+        help="Reset selected Mongo patient-change queue rows to pending for retry",
+    )
+    reset_parser.add_argument("--config", required=True, help="Mongo materialization config")
+    reset_parser.add_argument(
+        "--status",
+        action="append",
+        choices=["failed", "processing", "complete"],
+        help="Queue status to reset; may be repeated. Defaults to failed.",
+    )
+    reset_parser.add_argument(
+        "--patient-id",
+        action="append",
+        default=[],
+        help="Specific patient id to reset; may be repeated",
+    )
+    reset_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Reset all rows matching --status when no --patient-id is supplied",
+    )
+    reset_parser.add_argument(
+        "--keep-attempts",
+        action="store_true",
+        help="Preserve queue attempt counters instead of resetting them to zero",
+    )
+
+
 def _run_hapi(args: argparse.Namespace) -> int:
     if args.hapi_command is None:
         print(
             "fhir4ds dqm hapi requires a subcommand: "
             "install, sync-config, enqueue-patients, process-queue, listen, prune, "
-            "status, or reset-queue",
+            "status, explain-scope, or reset-queue",
             file=sys.stderr,
         )
         return 2
@@ -294,6 +444,14 @@ def _run_hapi(args: argparse.Namespace) -> int:
             )
         )
         return 0
+    if args.hapi_command == "explain-scope":
+        for line in explain_patient_scope_plan(
+            config,
+            args.patient_id,
+            analyze=args.analyze,
+        ):
+            print(line)
+        return 0
     if args.hapi_command == "reset-queue":
         if not args.patient_id and not args.all:
             print(
@@ -315,6 +473,106 @@ def _run_hapi(args: argparse.Namespace) -> int:
         return 0
 
     print(f"Unknown HAPI command: {args.hapi_command}", file=sys.stderr)
+    return 2
+
+
+def _run_mongo(args: argparse.Namespace) -> int:
+    if args.mongo_command is None:
+        print(
+            "fhir4ds dqm mongo requires a subcommand: "
+            "install, sync-config, enqueue-patients, process-queue, listen, prune, "
+            "status, or reset-queue",
+            file=sys.stderr,
+        )
+        return 2
+
+    config = load_mongo_materialization_config(args.config)
+    if args.mongo_command == "install":
+        install_mongo_materialization(config)
+        print("Installed Mongo materialization indexes")
+        return 0
+    if args.mongo_command == "sync-config":
+        count = mongo_sync_measure_config(config)
+        print(f"Synced {count} Mongo measure configuration row(s)")
+        return 0
+    if args.mongo_command == "process-queue":
+        _configure_logging(args.log_level)
+        result = mongo_process_queue_once(config, limit=args.limit)
+        metrics_suffix = ""
+        if result.metrics:
+            metrics_suffix = (
+                f", cache_hits={result.metrics.get('cache_hits', 0)}, "
+                f"cache_misses={result.metrics.get('cache_misses', 0)}, "
+                f"execute_ms={float(result.metrics.get('execute_ms', 0.0) or 0.0):.1f}"
+            )
+        print(
+            f"Processed Mongo queue batch: run_id={result.run_id}, "
+            f"patients={len(result.claimed)}, measures={result.measures}, "
+            f"errors={len(result.errors)}, stale_reset={result.stale_reset}"
+            f"{metrics_suffix}"
+        )
+        return 1 if result.errors else 0
+    if args.mongo_command == "enqueue-patients":
+        if not args.patient_id and not args.all:
+            print(
+                "ERROR: enqueue-patients requires --patient-id or --all",
+                file=sys.stderr,
+            )
+            return 2
+        count = mongo_enqueue_existing_patients(
+            config,
+            patient_ids=args.patient_id or None,
+            limit=args.limit,
+        )
+        print(f"Queued Mongo patients for materialization: count={count}")
+        return 0
+    if args.mongo_command == "listen":
+        _configure_logging(args.log_level)
+        mongo_listen_and_process(config)
+        return 0
+    if args.mongo_command == "prune":
+        _configure_logging(args.log_level)
+        deleted = mongo_prune_materialization_history(config)
+        print(
+            "Pruned Mongo materialization history: "
+            f"audits={deleted['audits']}, "
+            f"inactive_results={deleted['inactive_results']}, "
+            f"runs={deleted['runs']}"
+        )
+        return 0
+    if args.mongo_command == "status":
+        print(
+            json.dumps(
+                mongo_materialization_status(config, limit=args.limit),
+                indent=2,
+                default=str,
+            )
+        )
+        return 0
+    if args.mongo_command == "reset-queue":
+        if not args.patient_id and not args.all:
+            print(
+                "ERROR: reset-queue requires --patient-id or --all",
+                file=sys.stderr,
+            )
+            return 2
+        statuses = args.status or ["failed"]
+        pymongo = mongo_require_pymongo()
+        with pymongo.MongoClient(config.connection_string) as client:
+            count = mongo_reset_patient_queue(
+                client[config.materialization_database],
+                collections=config.collections,
+                statuses=statuses,
+                patient_ids=args.patient_id or None,
+                reset_attempts=not args.keep_attempts,
+            )
+        print(
+            "Reset Mongo materialization queue rows: "
+            f"count={count}, statuses={','.join(statuses)}"
+        )
+        return 0
+
+    print(f"Unknown Mongo command: {args.mongo_command}", file=sys.stderr)
     return 2
 
 

@@ -94,6 +94,8 @@ class HapiMaterializationConfig:
     processing_timeout_seconds: float = 900.0
     notification_channel: str = NOTIFICATION_CHANNEL
     fail_on_unsupported_storage: bool = True
+    source_patient_pushdown: bool = True
+    source_patient_pushdown_mode: str = "literal"
     hapi_schema: HapiPostgresSchema = field(default_factory=HapiPostgresSchema)
     retention: HapiRetentionPolicy = field(default_factory=HapiRetentionPolicy)
 
@@ -230,13 +232,23 @@ def load_materialization_config(path: str | Path) -> HapiMaterializationConfig:
     text = config_path.read_text()
     suffix = config_path.suffix.lower()
     if suffix == ".json":
-        raw = json.loads(text)
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise DQMConfigError(
+                f"Invalid JSON HAPI materialization config {config_path}: {exc}"
+            ) from exc
     elif suffix in {".yaml", ".yml"}:
         try:
             import yaml  # type: ignore[import-untyped]
         except ImportError as exc:  # pragma: no cover - PyYAML is a dependency
             raise DQMConfigError("YAML config files require PyYAML") from exc
-        raw = yaml.safe_load(text)
+        try:
+            raw = yaml.safe_load(text)
+        except Exception as exc:  # pragma: no cover - depends on optional PyYAML internals
+            raise DQMConfigError(
+                f"Invalid YAML HAPI materialization config {config_path}: {exc}"
+            ) from exc
     else:
         raise DQMConfigError("HAPI materialization config must be JSON or YAML")
     return parse_materialization_config(raw, base_dir=config_path.parent)
@@ -315,8 +327,10 @@ def parse_materialization_config(
             (global_period["start"], global_period["end"]),
         )
 
-    global_libraries = _parse_paths(raw.get("libraries", {}).get("paths", []), base)
-    global_valuesets = _parse_paths(raw.get("terminology", {}).get("valuesets", []), base)
+    global_libraries = _parse_section_paths(raw.get("libraries"), "libraries", "paths", base)
+    global_valuesets = _parse_section_paths(
+        raw.get("terminology"), "terminology", "valuesets", base
+    )
     measures = _parse_materialized_measures(
         raw.get("measures", []),
         base=base,
@@ -355,6 +369,10 @@ def parse_materialization_config(
         ),
         fail_on_unsupported_storage=bool(
             worker.get("fail_on_unsupported_storage", True)
+        ),
+        source_patient_pushdown=bool(worker.get("source_patient_pushdown", True)),
+        source_patient_pushdown_mode=_parse_source_patient_pushdown_mode(
+            worker.get("source_patient_pushdown_mode", "literal")
         ),
         hapi_schema=_parse_hapi_schema(
             postgres.get("hapi_schema", raw.get("hapi_schema"))
@@ -827,6 +845,49 @@ def enqueue_existing_patients(
             patient_ids=patient_ids,
             limit=limit,
         )
+
+
+def explain_patient_scope_plan(
+    config: HapiMaterializationConfig,
+    patient_ids: list[str] | tuple[str, ...],
+    *,
+    analyze: bool = False,
+) -> list[str]:
+    """
+    Return PostgreSQL EXPLAIN output for decoded-view patient pushdown.
+
+    This inspects the PostgreSQL plan directly. It requires the decoded current
+    resource view used by materialization, because that view exposes
+    ``patient_ref`` as a first-class column.
+    """
+    normalized_patient_ids: list[str] = []
+    for index, patient_id in enumerate(patient_ids):
+        if not isinstance(patient_id, str):
+            raise DQMConfigError(
+                f"patient_ids[{index}] must be a string, got {type(patient_id).__name__}"
+            )
+        if patient_id:
+            normalized_patient_ids.append(patient_id)
+    if not normalized_patient_ids:
+        raise DQMConfigError("At least one patient id is required for EXPLAIN")
+    if not config.hapi_schema.decoded_view:
+        raise DQMConfigError(
+            "HAPI patient-scope EXPLAIN requires hapi_schema.decoded_view"
+        )
+    psycopg = require_psycopg()
+    explain = "EXPLAIN (ANALYZE, BUFFERS)" if analyze else "EXPLAIN"
+    relation = _decoded_view_relation(config.hapi_schema)
+    with psycopg.connect(config.postgres_connection_string) as conn:
+        rows = conn.execute(
+            f"""
+            {explain}
+            SELECT id, "resourceType", patient_ref
+            FROM {relation}
+            WHERE patient_ref = ANY(%s::text[])
+            """,
+            [sorted(set(normalized_patient_ids))],
+        ).fetchall()
+    return [str(row[0]) for row in rows]
 
 
 def load_enabled_measure_config(conn: Any) -> list[HapiMaterializedMeasure]:
@@ -1328,6 +1389,7 @@ def _process_claimed_patients(
     watermark_by_patient = {
         patient.patient_id: patient.input_watermark for patient in patients
     }
+    _apply_source_patient_scope(runtime, config, patient_ids)
     patient_errors: dict[str, str] = {}
 
     metrics: dict[str, Any] = {}
@@ -1376,6 +1438,22 @@ def _process_claimed_patients(
         else:
             mark_patient_complete(pg_conn, patient.patient_id)
     return metrics
+
+
+def _apply_source_patient_scope(
+    runtime: HapiMaterializationRuntime,
+    config: HapiMaterializationConfig,
+    patient_ids: list[str],
+) -> None:
+    if config.source_patient_pushdown:
+        if config.source_patient_pushdown_mode != "literal":
+            raise DQMConfigError(
+                "Only source_patient_pushdown_mode='literal' is currently supported"
+            )
+        runtime.source.set_patient_scope(patient_ids)
+    else:
+        runtime.source.clear_patient_scope()
+    runtime.evaluator.invalidate_prepared_statements()
 
 
 def _evaluate_materialized_measure(
@@ -1824,6 +1902,15 @@ def _parse_retention_policy(raw: dict[str, Any]) -> HapiRetentionPolicy:
     )
 
 
+def _parse_source_patient_pushdown_mode(value: Any) -> str:
+    mode = str(value or "literal").lower()
+    if mode not in {"literal"}:
+        raise DQMConfigError(
+            "'worker.source_patient_pushdown_mode' must be 'literal'"
+        )
+    return mode
+
+
 def _optional_positive_int(value: Any, field_name: str) -> int | None:
     if value is None:
         return None
@@ -1950,6 +2037,14 @@ def _parse_paths(raw: Any, base: Path) -> list[Path]:
     if not isinstance(raw, list) or not all(isinstance(path, str) for path in raw):
         raise DQMConfigError("Expected a path string or list of path strings")
     return [_resolve_path(path, base) for path in raw]
+
+
+def _parse_section_paths(raw: Any, section: str, field: str, base: Path) -> list[Path]:
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        raise DQMConfigError(f"'{section}' must be an object")
+    return _parse_paths(raw.get(field, []), base)
 
 
 def _optional_path(raw: Any, base: Path) -> Path | None:

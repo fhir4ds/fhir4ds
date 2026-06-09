@@ -29,6 +29,21 @@ def _python_fallback_connection(monkeypatch) -> duckdb.DuckDBPyConnection:
     return con
 
 
+def test_primitive_root_this_equality_matches_cpp(monkeypatch) -> None:
+    """Compound $this predicates over primitive JSON roots stay backend-aligned."""
+    query = "SELECT fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)"
+    params = ['"keep"', "$this = 'keep'", '"keep"', "$this = 'keep'"]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        assert native.execute(query, params).fetchone() == ("[true]", True)
+        assert fallback.execute(query, params).fetchone() == ("[true]", True)
+    finally:
+        native.close()
+        fallback.close()
+
+
 def test_equality_and_equivalence_match_cpp() -> None:
     resource = json.dumps(
         {

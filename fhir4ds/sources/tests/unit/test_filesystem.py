@@ -88,6 +88,22 @@ _SAMPLE_ROWS = [
 # ---------------------------------------------------------------------------
 
 class TestUnsupportedFormat:
+    def test_path_pattern_must_be_string(self):
+        with pytest.raises(TypeError, match="path_pattern"):
+            FileSystemSource(123)  # type: ignore[arg-type]
+
+    def test_path_pattern_must_be_non_empty(self):
+        with pytest.raises(ValueError, match="path_pattern"):
+            FileSystemSource("")
+
+    def test_format_must_be_string(self):
+        with pytest.raises(TypeError, match="format"):
+            FileSystemSource("/data/fhir/", format=None)  # type: ignore[arg-type]
+
+    def test_format_must_be_non_empty(self):
+        with pytest.raises(ValueError, match="format"):
+            FileSystemSource("/data/fhir/", format="")
+
     def test_raises_value_error(self):
         with pytest.raises(ValueError, match="Unsupported format"):
             FileSystemSource("/data/fhir/", format="csv")

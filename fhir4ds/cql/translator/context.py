@@ -349,6 +349,7 @@ class SQLTranslationContext:
         definition_asts: Dictionary of definition name to SQLExpression AST nodes.
         includes: Dictionary of library alias to LibraryInfo.
         valuesets: Dictionary of valueset name to URL.
+        valueset_codesystems: CodeSystem override names declared for each ValueSet.
         codesystems: Dictionary of codesystem name to URL.
         codes: Dictionary of code name to code info.
         scopes: Stack of scope levels.
@@ -372,6 +373,7 @@ class SQLTranslationContext:
     includes: Dict[str, LibraryInfo] = field(default_factory=dict)
     _unresolved_includes: Set[str] = field(default_factory=set)
     valuesets: Dict[str, str] = field(default_factory=dict)
+    valueset_codesystems: Dict[str, List[str]] = field(default_factory=dict)
     codesystems: Dict[str, str] = field(default_factory=dict)
     codesystem_versions: Dict[str, str] = field(default_factory=dict)
     codes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -396,6 +398,10 @@ class SQLTranslationContext:
     resource_type: Optional[str] = None
     # Maps query alias names to their FHIR resource types for overload resolution
     _alias_resource_types: Dict[str, str] = field(default_factory=dict)
+    # Maps query aliases over static tuple/list sources to their CQL AST source.
+    # This is type-inference metadata only; unlike SymbolInfo.ast_expr, it must
+    # never be used as a SQL expression.
+    _alias_source_asts: Dict[str, Any] = field(default_factory=dict)
 
     # Patient context tracking for correlated subqueries
     patient_alias: Optional[str] = None  # e.g., "_pt" when in "FROM patients _pt"
@@ -740,25 +746,35 @@ class SQLTranslationContext:
         """Check if an included library was not resolved."""
         return alias in self._unresolved_includes
 
-    def add_valueset(self, name: str, url: str) -> None:
+    def add_valueset(
+        self, name: str, url: str, codesystems: Optional[List[str]] = None
+    ) -> None:
         """
         Add a valueset definition.
 
         Args:
             name: The valueset name.
             url: The valueset URL.
+            codesystems: Optional CQL CodeSystem override references.
         """
         self.valuesets[name] = url
+        if codesystems is not None:
+            self.valueset_codesystems[name] = list(codesystems)
 
-    def define_valueset(self, name: str, url: str) -> None:
+    def define_valueset(
+        self, name: str, url: str, codesystems: Optional[List[str]] = None
+    ) -> None:
         """
         Define a valueset (alias for add_valueset for compatibility).
 
         Args:
             name: The valueset name.
             url: The valueset URL.
+            codesystems: Optional CQL CodeSystem override references.
         """
         self.valuesets[name] = url
+        if codesystems is not None:
+            self.valueset_codesystems[name] = list(codesystems)
 
     def add_codesystem(self, name: str, url: str, version: Optional[str] = None) -> None:
         """
@@ -962,6 +978,7 @@ class SQLTranslationContext:
         self._functions.clear()
         self._function_overloads.clear()
         self.valuesets.clear()
+        self.valueset_codesystems.clear()
         self.codesystems.clear()
         self.codesystem_versions.clear()
         self.codes.clear()
@@ -974,6 +991,7 @@ class SQLTranslationContext:
         self._included_definition_names.clear()
         self._alias_scopes.clear()
         self._alias_resource_types.clear()
+        self._alias_source_asts.clear()
         self._used_cte_names.clear()
         self._subquery_cte_counter = 0
         self.scopes.clear()

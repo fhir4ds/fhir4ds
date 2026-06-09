@@ -141,6 +141,17 @@ def _literal_int_values(args: list) -> Optional[list[int]]:
     return values
 
 
+def _is_untyped_null_bound_interval(node: object) -> bool:
+    """Return true for authored ``Interval[null, null]`` literals."""
+    return (
+        isinstance(node, Interval)
+        and isinstance(node.low, Literal)
+        and node.low.value is None
+        and isinstance(node.high, Literal)
+        and node.high.value is None
+    )
+
+
 def _is_datetime_boundary_constructor(node: object, values: list[int]) -> bool:
     if not isinstance(node, FunctionRef) or node.name.lower() != "datetime":
         return False
@@ -443,9 +454,11 @@ def _ensure_audit_struct(expr: SQLExpression) -> SQLExpression:
 from ...translator.expressions._utils import (
     BINARY_OPERATOR_MAP,
     UNARY_OPERATOR_MAP,
+    _coerce_query_rows_to_list,
     _is_list_returning_sql,
     _contains_sql_subquery,
     _ensure_scalar_body,
+    escape_fhirpath_string_literal,
     _get_qicore_extension_fhirpath,
     _resolve_library_code_constant,
 )
@@ -460,6 +473,37 @@ def _normalize_cql_type_name(cql_type: Optional[str]) -> str:
         return "Any"
     bare = str(cql_type).strip()
     return bare.split(".")[-1] if "." in bare else bare
+
+
+_CQL_STRING_CONVERSION_TYPES = {
+    "Any",
+    "Boolean",
+    "Integer",
+    "Long",
+    "Decimal",
+    "String",
+    "Quantity",
+    "Ratio",
+    "Date",
+    "DateTime",
+    "Time",
+}
+
+
+def _static_type_supports_string_conversion(cql_type: Optional[str]) -> bool:
+    """Return false for known CQL types outside Appendix B ToString overloads."""
+    normalized = _normalize_cql_type_name(cql_type)
+    if normalized in _CQL_STRING_CONVERSION_TYPES:
+        return True
+    if (
+        normalized.startswith("List<")
+        or normalized.startswith("Interval<")
+        or normalized.startswith("Choice<")
+        or normalized.startswith("Tuple")
+        or normalized in {"Code", "Concept", "ValueSet", "CodeSystem", "Vocabulary"}
+    ):
+        return False
+    return True
 
 logger = logging.getLogger(__name__)
 
@@ -483,8 +527,10 @@ def _is_quantity_expression(expr: SQLExpression) -> bool:
     if getattr(expr, 'result_type', None) == "Quantity":
         return True
     if isinstance(expr, SQLFunctionCall):
+        if (expr.name or "").upper() == "COALESCE":
+            return any(_is_quantity_expression(arg) for arg in expr.args)
         _QUANTITY_RETURNING_FUNCS = frozenset({
-            "parse_quantity", "quantityNegate", "quantityAbs",
+            "parse_quantity", "ToQuantity", "quantityNegate", "quantityAbs",
             "quantityAdd", "quantity_add", "quantitySubtract", "quantity_subtract",
             "quantityMultiply", "quantityDivide", "quantityTruncatedDivide",
             "quantityModulo", "quantityConvert", "quantity_convert",
@@ -532,6 +578,19 @@ def _quantity_operand_for_arithmetic(expr: SQLExpression, is_quantity: bool) -> 
     return SQLCase(
         when_clauses=[(SQLBinaryOp(operator="IS", left=value, right=SQLNull()), SQLNull())],
         else_clause=parsed,
+    )
+
+
+def _quantity_literal_json(qty: Quantity) -> SQLLiteral:
+    """Return raw Quantity JSON while preserving integer vs decimal spelling."""
+    return SQLLiteral(
+        value=json.dumps(
+            {
+                "value": qty.value,
+                "unit": qty.unit,
+                "system": "http://unitsofmeasure.org",
+            }
+        )
     )
 
 
@@ -677,6 +736,47 @@ class OperatorsMixin:
         )
         return SQLFunctionCall(name=name, args=[list_sql, element_sql])
 
+    def _definitely_null_sql(self, translated: SQLExpression) -> bool:
+        if isinstance(translated, SQLNull) or (
+            isinstance(translated, SQLLiteral) and translated.value is None
+        ):
+            return True
+        if isinstance(translated, SQLCase):
+            if translated.else_clause is None or not self._definitely_null_sql(translated.else_clause):
+                return False
+            return all(
+                self._definitely_null_sql(result)
+                for _condition, result in translated.when_clauses
+            )
+        return False
+
+    def _definitely_null_ast(self, node: object) -> bool:
+        if isinstance(node, Literal) and node.value is None:
+            return True
+        if isinstance(node, BinaryExpression) and node.operator in {"as", "convert"}:
+            return self._definitely_null_ast(node.left)
+        return False
+
+    def _definitely_null_operand(self, node: object, translated: SQLExpression) -> bool:
+        return self._definitely_null_ast(node) or self._definitely_null_sql(translated)
+
+    def _interval_selector_is_untyped_null_interval(self, node: object) -> bool:
+        if not isinstance(node, Interval):
+            return False
+        bounds = [node.low, node.high]
+        return all(isinstance(bound, Literal) and bound.value is None for bound in bounds)
+
+    def _null_contains_container_returns_false(self, container_ast: object, element_ast: object) -> bool:
+        container_type = self._static_structural_type_name(container_ast)
+        if container_type and (
+            container_type.startswith("Interval<")
+            or container_type.startswith("List<")
+        ):
+            return True
+        # A null container cannot contain a known non-null element, regardless
+        # of whether the intended container is a list, interval, or string.
+        return True
+
     def _list_has_all_call(
         self,
         left_sql: SQLExpression,
@@ -690,6 +790,42 @@ class OperatorsMixin:
             else "CQLListHasAllEq"
         )
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
+
+    def _quantity_interval_point_arg(self, point: SQLExpression) -> SQLExpression:
+        """Preserve FHIR Quantity shape for Quantity interval membership."""
+        candidate = point.expression if isinstance(point, SQLCast) else point
+        if (
+            isinstance(candidate, SQLFunctionCall)
+            and candidate.name == "fhirpath_number"
+            and len(candidate.args) == 2
+            and isinstance(candidate.args[1], SQLLiteral)
+            and isinstance(candidate.args[1].value, str)
+        ):
+            path = candidate.args[1].value
+            if path.endswith(".valueQuantity.value"):
+                return SQLFunctionCall(
+                    name="fhirpath_text",
+                    args=[
+                        candidate.args[0],
+                        SQLLiteral(value=path[: -len(".value")]),
+                    ],
+                )
+        return self._ensure_interval_varchar(point)
+
+    @staticmethod
+    def _is_quantity_interval_sql(interval: SQLExpression) -> bool:
+        candidate = interval.expression if isinstance(interval, SQLCast) else interval
+        if isinstance(candidate, SQLInterval):
+            bounds = [candidate.low, candidate.high]
+        elif isinstance(candidate, SQLFunctionCall) and candidate.name == "intervalFromBounds":
+            bounds = list(candidate.args[:2])
+        else:
+            return False
+        for bound in bounds:
+            bound_candidate = bound.expression if isinstance(bound, SQLCast) else bound
+            if _is_quantity_expression(bound_candidate):
+                return True
+        return False
 
     def _list_equal_call(
         self,
@@ -721,6 +857,27 @@ class OperatorsMixin:
             if isinstance(operand.value, str):
                 return "String"
             return "Any"
+        if isinstance(operand, CodeSelector):
+            return "Code"
+        if isinstance(operand, InstanceExpression):
+            type_name = getattr(operand, "type", "")
+            bare = type_name.split(".")[-1] if "." in type_name else type_name
+            if bare in {"Code", "Concept", "ValueSet", "CodeSystem", "Vocabulary"}:
+                return bare
+            return type_name or "Any"
+        if isinstance(operand, Quantity):
+            return "Quantity"
+        if isinstance(operand, DateTimeLiteral):
+            value = str(getattr(operand, "value", "") or "")
+            if value.startswith("T"):
+                return "Time"
+            return "DateTime" if "T" in value else "Date"
+        if isinstance(operand, TimeLiteral):
+            return "Time"
+        if isinstance(operand, Interval):
+            return "Interval<Any>"
+        if isinstance(operand, TupleExpression):
+            return "Tuple"
         if isinstance(operand, ListExpression):
             return "List<Any>"
         if isinstance(operand, ExistsExpression):
@@ -729,27 +886,62 @@ class OperatorsMixin:
             meta = self.context.definition_meta.get(operand.name)
             if meta:
                 return meta.cql_type
+            param_info = self.context.parameters.get(operand.name)
+            if param_info and getattr(param_info, "cql_type", None):
+                return str(param_info.cql_type)
             ast_defs = getattr(self.context, "_definition_cql_asts", {})
             ast_def = ast_defs.get(operand.name)
             if ast_def is not None and ast_def is not operand:
                 return self._infer_static_cql_type_for_logical_operand(ast_def)
             return "Any"
         if isinstance(operand, FunctionRef):
-            boolean_functions = {
-                "toboolean",
-                "convertstoboolean",
-                "istrue",
-                "isfalse",
-                "alltrue",
-                "anytrue",
-                "allfalse",
-                "anyfalse",
+            function_return_types = {
+                "toboolean": "Boolean",
+                "convertstoboolean": "Boolean",
+                "convertstodate": "Boolean",
+                "convertstodatetime": "Boolean",
+                "convertstodecimal": "Boolean",
+                "convertstointeger": "Boolean",
+                "convertstolong": "Boolean",
+                "convertstoquantity": "Boolean",
+                "convertstoratio": "Boolean",
+                "convertstostring": "Boolean",
+                "convertstotime": "Boolean",
+                "istrue": "Boolean",
+                "isfalse": "Boolean",
+                "alltrue": "Boolean",
+                "anytrue": "Boolean",
+                "allfalse": "Boolean",
+                "anyfalse": "Boolean",
+                "tostring": "String",
+                "tointeger": "Integer",
+                "tolong": "Long",
+                "todecimal": "Decimal",
+                "todate": "Date",
+                "todatetime": "DateTime",
+                "totime": "Time",
+                "toquantity": "Quantity",
+                "toratio": "Ratio",
+                "toconcept": "Concept",
+                "date": "Date",
+                "datetime": "DateTime",
+                "time": "Time",
+                "now": "DateTime",
+                "timeofday": "Time",
+                "today": "Date",
             }
-            return "Boolean" if operand.name.lower() in boolean_functions else "Any"
+            return function_return_types.get(operand.name.lower(), "Any")
         if isinstance(operand, BinaryExpression):
             op = operand.operator.lower() if isinstance(operand.operator, str) else operand.operator
             if op == "as":
                 target = getattr(operand.right, "name", None)
+                if _normalize_cql_type_name(target) == "Any":
+                    return self._infer_static_cql_type_for_logical_operand(operand.left)
+                return target or "Any"
+            if op == "convert":
+                target = getattr(operand.right, "name", None)
+                if _normalize_cql_type_name(target) == "Any":
+                    return self._infer_static_cql_type_for_logical_operand(operand.left)
                 return target or "Any"
             if op in {
                 "=", "!=", "<>", "<", ">", "<=", ">=",
@@ -782,6 +974,56 @@ class OperatorsMixin:
         raise TranslationError(
             f"CQL logical operator '{operator}' requires Boolean operands; "
             f"got {inferred}"
+        )
+
+    def _is_static_string_operand(self, operand: object) -> bool:
+        """Return true when a statically known operand is String-compatible."""
+        if isinstance(operand, Literal) and operand.value is None:
+            return True
+        inferred = self._infer_static_cql_type_for_logical_operand(operand)
+        normalized = _normalize_cql_type_name(inferred)
+        if normalized in ("Any", "String"):
+            return True
+        if normalized.startswith("Choice<") and "String" in normalized:
+            return True
+        return False
+
+    def _validate_static_string_operand(self, operand: object, operator: str) -> None:
+        """Reject statically known non-String operands for CQL string operators."""
+        if self._is_static_string_operand(operand):
+            return
+        inferred = self._infer_static_cql_type_for_logical_operand(operand)
+        raise TranslationError(
+            f"CQL string operator '{operator}' requires String operands; got {inferred}"
+        )
+
+    def _validate_static_string_list_operand(self, operand: object, operator: str) -> None:
+        """Reject statically known non-List<String> operands for CQL Combine."""
+        if isinstance(operand, Literal) and operand.value is None:
+            return
+        if isinstance(operand, ListExpression):
+            for element in operand.elements:
+                self._validate_static_string_operand(element, operator)
+            return
+        if isinstance(operand, BinaryExpression) and operand.operator == "as":
+            target = getattr(operand, "right", None)
+            target_text = str(target)
+            if "List" in target_text and "String" not in target_text and "Any" not in target_text:
+                raise TranslationError(
+                    f"CQL string operator '{operator}' requires List<String> source; got {target_text}"
+                )
+            source = getattr(operand, "left", None)
+            if isinstance(source, ListExpression):
+                self._validate_static_string_list_operand(source, operator)
+            return
+        inferred = self._infer_static_cql_type_for_logical_operand(operand)
+        normalized = _normalize_cql_type_name(inferred)
+        if normalized in ("Any", "List<Any>"):
+            return
+        if normalized.startswith("List<") and ("String" in normalized or "Any" in normalized):
+            return
+        raise TranslationError(
+            f"CQL string operator '{operator}' requires List<String> source; got {inferred}"
         )
 
     def _is_known_named_type_target(self, type_name: str) -> bool:
@@ -1100,8 +1342,37 @@ class OperatorsMixin:
         """
         if _depth > 6:
             return False
+        static_type = self._static_structural_type_name(node)
+        if self._bare_cql_type_name(static_type) == "Quantity":
+            return True
         if isinstance(node, Quantity):
             return True
+        if isinstance(node, UnaryExpression):
+            op = node.operator.lower() if isinstance(node.operator, str) else node.operator
+            if op == "singleton from":
+                operand = node.operand
+                if isinstance(operand, ListExpression):
+                    return any(
+                        self._is_cql_quantity_expr(element, _depth + 1)
+                        for element in operand.elements
+                    )
+                return self._is_cql_quantity_expr(operand, _depth + 1)
+        if isinstance(node, ListExpression):
+            return False
+        if isinstance(node, Query):
+            sources = node.source if isinstance(node.source, list) else [node.source]
+            if node.return_clause and getattr(node.return_clause, "expression", None) is not None:
+                returned = node.return_clause.expression
+                if isinstance(returned, Identifier):
+                    for source in sources:
+                        if isinstance(source, QuerySource) and source.alias == returned.name:
+                            return self._is_cql_quantity_expr(source.expression, _depth + 1)
+                return self._is_cql_quantity_expr(returned, _depth + 1)
+            return any(
+                isinstance(source, QuerySource)
+                and self._is_cql_quantity_expr(source.expression, _depth + 1)
+                for source in sources
+            )
         # "as Quantity" cast
         if isinstance(node, BinaryExpression) and node.operator == "as":
             ts = node.right
@@ -1109,6 +1380,19 @@ class OperatorsMixin:
                 return True
             if isinstance(ts, Identifier) and ts.name == "Quantity":
                 return True
+        if isinstance(node, BinaryExpression) and node.operator == "convert":
+            ts = node.right
+            target_name = None
+            if isinstance(ts, NamedTypeSpecifier):
+                target_name = getattr(ts, "name", None)
+            elif isinstance(ts, Identifier):
+                target_name = getattr(ts, "name", None)
+            if target_name:
+                bare_target = target_name.split(".")[-1]
+                if bare_target == "Quantity":
+                    return True
+                if bare_target == "Any":
+                    return self._is_cql_quantity_expr(node.left, _depth + 1)
         # Arithmetic on Quantity: for +/- both operands must be Quantity
         # (DateTime + Quantity → DateTime, not Quantity per CQL §16.2).
         # For */ a single Quantity operand preserves Quantity type.
@@ -1130,6 +1414,8 @@ class OperatorsMixin:
                 return True
         # FunctionRef: check built-in aggregates and user-defined functions
         if isinstance(node, FunctionRef):
+            if node.name.lower() == "coalesce":
+                return any(self._is_cql_quantity_expr(arg, _depth + 1) for arg in (node.arguments or []))
             # Built-in aggregates (Max, Min, Sum) preserve the element type
             if node.name in ("Max", "Min", "Sum", "Avg"):
                 for arg in (node.arguments or []):
@@ -1170,6 +1456,8 @@ class OperatorsMixin:
                             return True
             # .value on a resource alias — recurse into source
             if path in ("value",) and node.source:
+                if self._is_cql_quantity_expr(node.source, _depth + 1):
+                    return False
                 return self._is_cql_quantity_expr(node.source, _depth + 1)
         return False
 
@@ -1194,6 +1482,134 @@ class OperatorsMixin:
         if isinstance(left, FunctionRef) and isinstance(right, FunctionRef):
             return True
         return False
+
+    def _is_cql_ratio_expr(self, node, _depth: int = 0) -> bool:
+        """Check if a CQL AST node is expected to evaluate to a Ratio."""
+        if _depth > 6:
+            return False
+        static_type = self._static_structural_type_name(node)
+        if self._bare_cql_type_name(static_type) == "Ratio":
+            return True
+        if isinstance(node, UnaryExpression):
+            op = node.operator.lower() if isinstance(node.operator, str) else node.operator
+            if op == "singleton from":
+                return self._is_cql_ratio_expr(node.operand, _depth + 1)
+        if isinstance(node, ListExpression):
+            return any(self._is_cql_ratio_expr(element, _depth + 1) for element in node.elements)
+        if isinstance(node, FunctionRef) and node.name.lower() == "toratio":
+            return True
+        if isinstance(node, BinaryExpression) and node.operator in ("as", "convert"):
+            target = node.right
+            target_name = None
+            if isinstance(target, NamedTypeSpecifier):
+                target_name = getattr(target, "name", None)
+            elif isinstance(target, Identifier):
+                target_name = getattr(target, "name", None)
+            if target_name:
+                bare_target = target_name.split(".")[-1]
+                if bare_target == "Ratio":
+                    return True
+                if bare_target == "Any":
+                    return self._is_cql_ratio_expr(node.left, _depth + 1)
+        if isinstance(node, Identifier):
+            meta = self.context.definition_meta.get(node.name)
+            if meta and (
+                getattr(meta, "sql_result_type", None) == "Ratio"
+                or self._bare_cql_type_name(getattr(meta, "cql_type", None)) == "Ratio"
+            ):
+                return True
+            ast_defs = getattr(self.context, "_definition_cql_asts", {})
+            ast_def = ast_defs.get(node.name)
+            if ast_def is not None and ast_def is not node:
+                return self._is_cql_ratio_expr(ast_def, _depth + 1)
+        return False
+
+    def _is_unsupported_ordered_comparison_operand(
+        self,
+        node,
+        sql_expr: SQLExpression,
+    ) -> bool:
+        """Return true for operands outside CQL's ordered comparison overloads."""
+        if _is_ratio_expression(sql_expr) or self._is_cql_ratio_expr(node):
+            return True
+        if self._is_fhir_interval_expression(sql_expr):
+            return True
+
+        static_type = self._static_structural_type_name(node)
+        if not static_type:
+            return False
+        bare_type = self._bare_cql_type_name(static_type) or static_type
+        if bare_type in {
+            "Ratio",
+            "Code",
+            "Concept",
+            "Vocabulary",
+            "ValueSet",
+            "CodeSystem",
+        }:
+            return True
+        return (
+            static_type.startswith("List<")
+            or static_type.startswith("Tuple ")
+            or static_type.startswith("Interval<")
+        )
+
+    @staticmethod
+    def _between_null_guard(*args: SQLExpression) -> SQLExpression:
+        checks = [
+            SQLUnaryOp(operator="IS NULL", operand=arg, prefix=False)
+            for arg in args
+        ]
+        guard = checks[0]
+        for check in checks[1:]:
+            guard = SQLBinaryOp(operator="OR", left=guard, right=check)
+        return guard
+
+    def _translate_between_expression(self, expr: BinaryExpression) -> Optional[SQLExpression]:
+        """Translate CQL between with explicit null-argument and interval rules."""
+        if not (
+            isinstance(expr.right, BinaryExpression)
+            and str(expr.right.operator).lower() == "and"
+        ):
+            return None
+
+        low_ast = expr.right.left
+        high_ast = expr.right.right
+        value_sql = self.translate(expr.left, usage=ExprUsage.SCALAR)
+        low_sql = self.translate(low_ast, usage=ExprUsage.SCALAR)
+        high_sql = self.translate(high_ast, usage=ExprUsage.SCALAR)
+
+        if self._is_fhir_interval_expression(value_sql):
+            inclusive_interval = SQLFunctionCall(
+                name="intervalFromBounds",
+                args=[
+                    SQLCast(expression=low_sql, target_type="VARCHAR"),
+                    SQLCast(expression=high_sql, target_type="VARCHAR"),
+                    SQLLiteral(value=True),
+                    SQLLiteral(value=True),
+                ],
+            )
+            result: SQLExpression = SQLFunctionCall(
+                name="intervalIncludedIn",
+                args=[value_sql, inclusive_interval],
+            )
+        else:
+            low_check = self.translate(
+                BinaryExpression(operator=">=", left=expr.left, right=low_ast),
+                usage=ExprUsage.BOOLEAN,
+            )
+            high_check = self.translate(
+                BinaryExpression(operator="<=", left=expr.left, right=high_ast),
+                usage=ExprUsage.BOOLEAN,
+            )
+            result = SQLBinaryOp(operator="AND", left=low_check, right=high_check)
+
+        return SQLCase(
+            when_clauses=[
+                (self._between_null_guard(value_sql, low_sql, high_sql), SQLNull())
+            ],
+            else_clause=result,
+        )
 
     def _translate_binary_expression(self, expr: BinaryExpression, boolean_context: bool = False) -> SQLExpression:
         """
@@ -1247,20 +1663,24 @@ class OperatorsMixin:
         # CQL `between` uses `and` as a bound separator, not as a logical
         # operator. Lower it before translating the synthetic right-side node.
         if operator == "between":
-            if isinstance(expr.right, BinaryExpression) and str(expr.right.operator).lower() == "and":
-                low_check = self.translate(
-                    BinaryExpression(operator=">=", left=expr.left, right=expr.right.left),
-                    usage=ExprUsage.BOOLEAN,
-                )
-                high_check = self.translate(
-                    BinaryExpression(operator="<=", left=expr.left, right=expr.right.right),
-                    usage=ExprUsage.BOOLEAN,
-                )
-                return SQLBinaryOp(
-                    operator="AND",
-                    left=low_check,
-                    right=high_check,
-                )
+            between_result = self._translate_between_expression(expr)
+            if between_result is not None:
+                return between_result
+
+        if operator == "&":
+            self._validate_static_string_operand(expr.left, operator)
+            self._validate_static_string_operand(expr.right, operator)
+
+        if operator == "+":
+            left_type = _normalize_cql_type_name(
+                self._infer_static_cql_type_for_logical_operand(expr.left)
+            )
+            right_type = _normalize_cql_type_name(
+                self._infer_static_cql_type_for_logical_operand(expr.right)
+            )
+            if "String" in {left_type, right_type}:
+                self._validate_static_string_operand(expr.left, operator)
+                self._validate_static_string_operand(expr.right, operator)
 
         if operator == "implies":
             self._validate_boolean_operand(expr.left, operator)
@@ -1314,6 +1734,21 @@ class OperatorsMixin:
             left = self.translate(expr.left, usage=ExprUsage.SCALAR)
             right = self.translate(expr.right, usage=ExprUsage.SCALAR)
 
+        if operator in {
+            "=", "!=", "<>", "~", "!~", "equivalent", "not equivalent",
+            "in", "contains", "includes", "included in",
+            "properly includes", "properly included in",
+            "union", "intersect", "except",
+        }:
+            def _is_query_list_source(node: object) -> bool:
+                source = self._definition_ast_for_identifier(node) or node
+                return isinstance(source, Query) and self._is_list_typed_ast(source)
+
+            if _is_query_list_source(expr.left):
+                left = _coerce_query_rows_to_list(left)
+            if _is_query_list_source(expr.right):
+                right = _coerce_query_rows_to_list(right)
+
         # CQL §12.3: between — `X between low and high` → `X >= low and X <= high`
         if operator == "between":
             if isinstance(right, SQLBinaryOp) and right.operator.upper() == "AND":
@@ -1342,15 +1777,41 @@ class OperatorsMixin:
                     target_name = self._type_specifier_name(expr.right)
                     self._ensure_known_type_specifier_target(expr.right, "as")
                 bare_target = target_name.split(".")[-1] if "." in target_name else target_name
+                strict_cast = bool(getattr(expr, "strict", False))
+
+                def _strict_cast_result(
+                    value: SQLExpression,
+                    type_check: Optional[SQLExpression] = None,
+                ) -> SQLExpression:
+                    if not strict_cast:
+                        return value
+                    check = type_check
+                    if check is None:
+                        check = self._translate_is_type_check(
+                            BinaryExpression(operator="is", left=expr.left, right=expr.right)
+                        )
+                    if isinstance(check, SQLLiteral) and check.value is True:
+                        return value
+                    failure = SQLFunctionCall(
+                        name="error",
+                        args=[SQLLiteral(value=f"CQL strict cast failed: value is not {target_name}")],
+                    )
+                    if isinstance(check, SQLLiteral) and check.value is False:
+                        return failure
+                    return SQLCase(
+                        when_clauses=[(check, value)],
+                        else_clause=failure,
+                    )
+
                 if (
                     isinstance(expr.right, ListTypeSpecifier)
                     and isinstance(expr.left, ListExpression)
                     and not expr.left.elements
                 ):
-                    return SQLCast(
+                    return _strict_cast_result(SQLCast(
                         expression=SQLArray(elements=[]),
                         target_type=_sql_list_type_for_cql_list_specifier(expr.right),
-                    )
+                    ))
                 primitive_targets = {
                     "Boolean", "boolean",
                     "Integer", "integer",
@@ -1361,12 +1822,12 @@ class OperatorsMixin:
                 }
                 if bare_target in primitive_targets:
                     if bare_target in ("Any", "any"):
-                        return left
+                        return _strict_cast_result(left)
                     if isinstance(expr.left, Literal):
                         literal_type = getattr(expr.left, "type", None)
                         if literal_type is not None and literal_type.lower() == bare_target.lower():
-                            return left
-                        return SQLNull()
+                            return _strict_cast_result(left, SQLLiteral(value=True))
+                        return _strict_cast_result(SQLNull(), SQLLiteral(value=False))
                     if isinstance(expr.left, FunctionRef):
                         function_return_types = {
                             "toboolean": "boolean",
@@ -1377,16 +1838,20 @@ class OperatorsMixin:
                         }
                         return_type = function_return_types.get(expr.left.name.lower())
                         if return_type is not None and return_type != bare_target.lower():
-                            return SQLNull()
+                            return _strict_cast_result(SQLNull(), SQLLiteral(value=False))
                         if return_type is not None:
-                            return left
+                            return _strict_cast_result(left, SQLLiteral(value=True))
 
                     if isinstance(expr.left, Identifier):
                         meta = self.context.definition_meta.get(expr.left.name)
                         meta_type = self._bare_cql_type_name(getattr(meta, "cql_type", None)) if meta else None
+                        if meta_type is None:
+                            symbol = self.context.lookup_symbol(expr.left.name)
+                            if symbol and getattr(symbol, "symbol_type", None) == "parameter":
+                                meta_type = self._bare_cql_type_name(getattr(symbol, "cql_type", None))
                         if meta_type and meta_type.lower() in {target.lower() for target in primitive_targets}:
                             if meta_type.lower() != bare_target.lower():
-                                return SQLNull()
+                                return _strict_cast_result(SQLNull(), SQLLiteral(value=False))
                             target_sql_type = {
                                 "boolean": "BOOLEAN",
                                 "integer": "INTEGER",
@@ -1395,26 +1860,28 @@ class OperatorsMixin:
                                 "string": "VARCHAR",
                             }.get(bare_target.lower())
                             if target_sql_type and bare_target.lower() != "string":
-                                return SQLCast(expression=left, target_type=target_sql_type, try_cast=True)
-                            return left
+                                return _strict_cast_result(
+                                    SQLCast(expression=left, target_type=target_sql_type, try_cast=True),
+                                )
+                            return _strict_cast_result(left)
 
                     static_source = self._static_structural_type_name(expr.left)
                     if static_source is not None:
                         if self._structural_type_conforms(static_source, target_name):
-                            return left
-                        return SQLNull()
+                            return _strict_cast_result(left, SQLLiteral(value=True))
+                        return _strict_cast_result(SQLNull(), SQLLiteral(value=False))
 
                     fhirpath_type_check = self._fhirpath_primitive_type_check(left, bare_target)
                     fhirpath_value = self._fhirpath_primitive_as_value(left, bare_target)
                     if fhirpath_type_check is not None and fhirpath_value is not None:
-                        return SQLCase(
+                        return _strict_cast_result(SQLCase(
                             when_clauses=[(fhirpath_type_check, fhirpath_value)],
                             else_clause=SQLNull(),
-                        )
+                        ), fhirpath_type_check)
 
                     cql_typed_value = self._cql_typed_value_as_value(left, bare_target)
                     if cql_typed_value is not None:
-                        return cql_typed_value
+                        return _strict_cast_result(cql_typed_value)
 
                     not_null = SQLBinaryOp(operator="IS NOT", left=left, right=SQLNull())
                     text_value = SQLCast(expression=left, target_type="VARCHAR")
@@ -1437,13 +1904,13 @@ class OperatorsMixin:
                             args=[text_value, SQLLiteral(value="^[+-]?[0-9]+$")],
                         )
                         can_cast = SQLBinaryOp(operator="AND", left=textual_primitive, right=integer_text)
-                        return SQLCase(
+                        return _strict_cast_result(SQLCase(
                             when_clauses=[(can_cast, SQLCast(expression=left, target_type=target_sql, try_cast=True))],
                             else_clause=SQLNull(),
-                        )
+                        ), can_cast)
 
                     if bare_target in ("Decimal", "decimal"):
-                        return SQLCase(
+                        return _strict_cast_result(SQLCase(
                             when_clauses=[
                                 (
                                     textual_primitive,
@@ -1451,7 +1918,7 @@ class OperatorsMixin:
                                 )
                             ],
                             else_clause=SQLNull(),
-                        )
+                        ), textual_primitive)
 
                     if bare_target in ("Boolean", "boolean"):
                         lowered = SQLFunctionCall(name="LOWER", args=[text_value])
@@ -1459,33 +1926,42 @@ class OperatorsMixin:
                         is_false = SQLBinaryOp(operator="=", left=lowered, right=SQLLiteral(value="false"))
                         bool_text = SQLBinaryOp(operator="OR", left=is_true, right=is_false)
                         can_cast = SQLBinaryOp(operator="AND", left=textual_primitive, right=bool_text)
-                        return SQLCase(
+                        return _strict_cast_result(SQLCase(
                             when_clauses=[(can_cast, SQLCast(expression=left, target_type="BOOLEAN", try_cast=True))],
                             else_clause=SQLNull(),
-                        )
+                        ), can_cast)
 
-                    return SQLCase(when_clauses=[(textual_primitive, left)], else_clause=SQLNull())
+                    return _strict_cast_result(
+                        SQLCase(when_clauses=[(textual_primitive, left)], else_clause=SQLNull()),
+                        textual_primitive,
+                    )
 
                 clinical_target = self._CLINICAL_CQL_TYPES.get(bare_target.lower())
                 if clinical_target is not None:
                     clinical_source = self._static_clinical_type(expr.left)
                     if clinical_source is not None:
                         if self._clinical_type_matches(clinical_source, clinical_target):
-                            return left
-                        return SQLNull()
+                            source_node = self._static_conversion_source_node(expr.left)
+                            if source_node is not None:
+                                return _strict_cast_result(
+                                    self.translate(source_node, usage=ExprUsage.SCALAR),
+                                    SQLLiteral(value=True),
+                                )
+                            return _strict_cast_result(left, SQLLiteral(value=True))
+                        return _strict_cast_result(SQLNull(), SQLLiteral(value=False))
                     static_source = self._static_structural_type_name(expr.left)
                     if static_source is not None:
-                        return SQLNull()
+                        return _strict_cast_result(SQLNull(), SQLLiteral(value=False))
                     if bare_target in ("Code", "code", "Concept", "concept"):
                         if self._extract_fhirpath_value_call(left) is not None:
-                            return left
+                            return _strict_cast_result(left)
                         runtime_check = self._clinical_json_type_check(left, bare_target)
                         if runtime_check is not None:
-                            return SQLCase(
+                            return _strict_cast_result(SQLCase(
                                 when_clauses=[(runtime_check, left)],
                                 else_clause=SQLNull(),
-                            )
-                        return SQLNull()
+                            ), runtime_check)
+                        return _strict_cast_result(SQLNull(), SQLLiteral(value=False))
 
                 if bare_target in ("Quantity", "quantity"):
                     type_check = self._translate_is_type_check(
@@ -1503,10 +1979,10 @@ class OperatorsMixin:
                         else_clause=SQLNull(),
                     )
                     result.result_type = "Quantity"
-                    return result
+                    return _strict_cast_result(result, type_check)
 
                 if isinstance(left, SQLFunctionCall) and left.name == "CQLMessage":
-                    return left
+                    return _strict_cast_result(left)
 
                 type_check = self._translate_is_type_check(
                     BinaryExpression(operator="is", left=expr.left, right=expr.right)
@@ -1515,10 +1991,10 @@ class OperatorsMixin:
                 source_node = self._definition_ast_for_identifier(expr.left)
                 if source_node is not None and self._static_structural_type_name(source_node):
                     as_value = self.translate(source_node, usage=ExprUsage.SCALAR)
-                return SQLCase(
+                return _strict_cast_result(SQLCase(
                     when_clauses=[(type_check, as_value)],
                     else_clause=SQLNull(),
-                )
+                ), type_check)
             return left
 
         # Handle convert expression: convert X to Y
@@ -1588,6 +2064,8 @@ class OperatorsMixin:
                     source_type_name == "Ratio" or _is_ratio_expression(left)
                 ):
                     return SQLFunctionCall(name="RatioToString", args=[left])
+                if target_type_name == "string" and not _static_type_supports_string_conversion(source_type_name):
+                    return SQLNull()
                 return SQLFunctionCall(conversion_function, [left])
             target = convert_type_map.get(target_type_name)
             if target:
@@ -1714,7 +2192,12 @@ class OperatorsMixin:
             right_is_interval = self._is_fhir_interval_expression(right)
             if right_is_interval:
                 return SQLFunctionCall(name="intervalIncludes", args=[left, right])
-            return SQLFunctionCall(name="intervalContains", args=[left, self._ensure_interval_varchar(right)])
+            point_arg = (
+                self._quantity_interval_point_arg(right)
+                if self._is_quantity_interval_sql(left)
+                else self._ensure_interval_varchar(right)
+            )
+            return SQLFunctionCall(name="intervalContains", args=[left, point_arg])
         if operator == "included in":
             if self._is_list_operands(left, right, expr):
                 left_is_list = self._is_single_list_expr(left, getattr(expr, 'left', None))
@@ -1756,9 +2239,20 @@ class OperatorsMixin:
                 if precision is not None:
                     return SQLFunctionCall(
                         name="intervalContainsPrecise",
-                        args=[r, self._ensure_interval_varchar(left), SQLLiteral(value=precision)],
+                        args=[
+                            r,
+                            self._quantity_interval_point_arg(left)
+                            if self._is_quantity_interval_sql(r)
+                            else self._ensure_interval_varchar(left),
+                            SQLLiteral(value=precision),
+                        ],
                     )
-                return SQLFunctionCall(name="intervalContains", args=[r, self._ensure_interval_varchar(left)])
+                point_arg = (
+                    self._quantity_interval_point_arg(left)
+                    if self._is_quantity_interval_sql(r)
+                    else self._ensure_interval_varchar(left)
+                )
+                return SQLFunctionCall(name="intervalContains", args=[r, point_arg])
             return SQLFunctionCall(name="intervalContains", args=[right, self._ensure_interval_varchar(left)])
         if operator == "properly includes":
             if self._is_list_operands(left, right, expr):
@@ -1805,18 +2299,23 @@ class OperatorsMixin:
                 precision_interval = self.translate(cql_right.right, usage=ExprUsage.SCALAR)
             right_for_interval = precision_interval if precision_interval is not None else right
             right_is_interval = self._is_fhir_interval_expression(right)
+            right_for_precision_is_interval = self._is_fhir_interval_expression(right_for_interval)
             if precision is not None:
                 left_interval = left if self._is_fhir_interval_expression(left) else self._point_as_interval(left)
                 right_interval = (
                     right_for_interval
-                    if self._is_fhir_interval_expression(right_for_interval)
+                    if right_for_precision_is_interval
                     else self._point_as_interval(right_for_interval)
                 )
                 includes = SQLFunctionCall(
                     name="intervalIncludesPrecise",
                     args=[left_interval, right_interval, SQLLiteral(value=precision)],
                 )
-                same = self._interval_same_at_precision(left_interval, right_interval, precision)
+                same = (
+                    self._interval_same_at_precision(left_interval, right_interval, precision)
+                    if right_for_precision_is_interval
+                    else self._point_same_as_interval_boundary_at_precision(left_interval, right_interval, precision)
+                )
                 return SQLBinaryOp(operator="AND", left=includes, right=SQLUnaryOp(operator="NOT", operand=same))
             if right_is_interval:
                 return SQLFunctionCall(name="intervalProperlyIncludes", args=[left, right])
@@ -1866,6 +2365,7 @@ class OperatorsMixin:
                 precision_interval = self.translate(cql_right.right, usage=ExprUsage.SCALAR)
             right_for_interval = precision_interval if precision_interval is not None else right
             if precision is not None:
+                left_for_precision_is_interval = self._is_fhir_interval_expression(left)
                 left_interval = left if self._is_fhir_interval_expression(left) else self._point_as_interval(left)
                 right_interval = (
                     right_for_interval
@@ -1876,13 +2376,27 @@ class OperatorsMixin:
                     name="intervalIncludesPrecise",
                     args=[right_interval, left_interval, SQLLiteral(value=precision)],
                 )
-                same = self._interval_same_at_precision(left_interval, right_interval, precision)
+                same = (
+                    self._interval_same_at_precision(left_interval, right_interval, precision)
+                    if left_for_precision_is_interval
+                    else self._point_same_as_interval_boundary_at_precision(right_interval, left_interval, precision)
+                )
                 return SQLBinaryOp(operator="AND", left=included, right=SQLUnaryOp(operator="NOT", operand=same))
             left_is_interval = self._is_fhir_interval_expression(left)
             right_is_interval = self._is_fhir_interval_expression(right)
             if left_is_interval:
                 l = self._unwrap_precision_wrapper(left)
                 r = self._unwrap_precision_wrapper(right) if right_is_interval else right
+                if _is_untyped_null_bound_interval(getattr(expr, "right", None)):
+                    r = SQLFunctionCall(
+                        name="intervalFromBounds",
+                        args=[
+                            SQLLiteral("__null__"),
+                            SQLLiteral("__null__"),
+                            SQLLiteral(expr.right.low_closed),
+                            SQLLiteral(expr.right.high_closed),
+                        ],
+                    )
                 return SQLFunctionCall(name="intervalProperlyIncludedIn", args=[l, r])
             if right_is_interval:
                 r = self._unwrap_precision_wrapper(right)
@@ -2070,6 +2584,20 @@ class OperatorsMixin:
                 args=[resource_arg, path_arg, SQLLiteral(vs_url_c)],
             )
 
+        if self._definitely_null_operand(expr.left, left):
+            if self._definitely_null_operand(expr.right, right):
+                return SQLNull()
+            if self._null_contains_container_returns_false(expr.left, expr.right):
+                return SQLLiteral(value=False)
+
+        if (
+            self._interval_selector_is_untyped_null_interval(expr.left)
+            and self._definitely_null_operand(expr.right, right)
+        ):
+            return SQLNull()
+        if self._interval_selector_is_untyped_null_interval(expr.left):
+            return SQLLiteral(value=False)
+
         # Detect list context by checking if left translated to a subquery
         # BUT first check if it's an interval reference (CTE producing interval)
         if isinstance(left, SQLSubquery) and self._is_fhir_interval_expression(left):
@@ -2079,7 +2607,12 @@ class OperatorsMixin:
             # Interval contains point
             return SQLFunctionCall(
                 name="intervalContains",
-                args=[left, self._ensure_interval_varchar(right)],
+                args=[
+                    left,
+                    self._quantity_interval_point_arg(right)
+                    if self._is_quantity_interval_sql(left)
+                    else self._ensure_interval_varchar(right),
+                ],
             )
         if self._is_list_operands(left, right, expr):
             return self._list_contains_call(left, right, expr.left, expr.right)
@@ -2111,7 +2644,12 @@ class OperatorsMixin:
         ):
             return SQLFunctionCall(
                 name="intervalContains",
-                args=[left, self._ensure_interval_varchar(right)],
+                args=[
+                    left,
+                    self._quantity_interval_point_arg(right)
+                    if self._is_quantity_interval_sql(left)
+                    else self._ensure_interval_varchar(right),
+                ],
             )
         # String contains: CQL 'left contains right' → contains(left, right)
         return SQLFunctionCall(name="system.contains", args=[left, right])
@@ -2169,6 +2707,14 @@ class OperatorsMixin:
                 value_expr = element.type
                 if isinstance(value_expr, Literal):
                     fields[element.name] = value_expr.value
+                elif element.name == "codes" and isinstance(value_expr, ListExpression):
+                    codes: list[dict[str, Any]] = []
+                    for item in value_expr.elements:
+                        code_value = self._static_clinical_value_object(item)
+                        if code_value is None or "code" not in code_value:
+                            return None
+                        codes.append(self._normalize_static_clinical_code(code_value))
+                    fields[element.name] = codes
             if bare == "Code" and fields.get("code"):
                 return self._normalize_static_clinical_code(fields)
             if bare == "Concept":
@@ -2226,6 +2772,14 @@ class OperatorsMixin:
         def _code_entries_from_ast(node) -> Optional[list[dict[str, Any]]]:
             if isinstance(node, Literal) and node.value is None:
                 return []
+            if isinstance(node, ListExpression):
+                entries: list[dict[str, Any]] = []
+                for item in node.elements:
+                    item_entries = _code_entries_from_ast(item)
+                    if item_entries is None:
+                        return None
+                    entries.extend(item_entries)
+                return entries
             if isinstance(node, CodeSelector):
                 system = self.context.codesystems.get(node.system, node.system)
                 entry = {"code": node.code, "system": system}
@@ -2269,9 +2823,21 @@ class OperatorsMixin:
                     return [code for code in fields["codes"] if isinstance(code, dict)]
             return None
 
-        def _string_code_from_ast(node) -> Optional[str]:
+        def _string_codes_from_ast(node) -> Optional[list[str]]:
             if isinstance(node, Literal) and isinstance(node.value, str):
-                return node.value
+                return [node.value]
+            if isinstance(node, Literal) and node.value is None:
+                return []
+            if isinstance(node, BinaryExpression) and node.operator == "as":
+                return _string_codes_from_ast(node.left)
+            if isinstance(node, ListExpression):
+                codes: list[str] = []
+                for item in node.elements:
+                    item_codes = _string_codes_from_ast(item)
+                    if item_codes is None:
+                        return None
+                    codes.extend(item_codes)
+                return codes
             return None
 
         def _normalize_code_entry(entry: dict[str, Any]) -> dict[str, Any]:
@@ -2300,9 +2866,20 @@ class OperatorsMixin:
                 result = SQLBinaryOp(operator="OR", left=result, right=expression)
             return result
 
-        # CQL §20.10: If the list argument is null, the result is null.
-        if isinstance(right, SQLNull) or (isinstance(right, SQLLiteral) and right.value is None):
-            return SQLNull()
+        def _is_definitely_null_operand(node: Any, translated: SQLExpression) -> bool:
+            if isinstance(translated, SQLNull) or (
+                isinstance(translated, SQLLiteral) and translated.value is None
+            ):
+                return True
+            if isinstance(node, Literal) and node.value is None:
+                return True
+            if isinstance(node, BinaryExpression) and node.operator == "as":
+                return _is_definitely_null_operand(node.left, translated)
+            return False
+
+        # CQL interval/list `in`: a null container/list argument returns false.
+        if self._definitely_null_operand(expr.right, right):
+            return SQLLiteral(value=False)
         # Do NOT short-circuit when left is null — list `in` has special
         # null semantics: null in list → true if list has null elements.
         # (This is handled by the list_has_null check below.)
@@ -2373,6 +2950,8 @@ class OperatorsMixin:
         if vs_name is not None:
             vs_url = self._resolve_valueset_identifier(vs_name)
         if vs_url:
+            if _is_definitely_null_operand(expr.left, left):
+                return SQLLiteral(value=False)
             static_code_entries = _code_entries_from_ast(expr.left)
             if static_code_entries is not None:
                 return _or_chain([
@@ -2382,16 +2961,19 @@ class OperatorsMixin:
                     )
                     for entry in static_code_entries
                 ])
-            static_string_code = _string_code_from_ast(expr.left)
-            if static_string_code is not None:
-                return SQLFunctionCall(
-                    name="in_valueset",
-                    args=[
-                        _synthetic_code_resource({"system": "", "code": static_string_code}),
-                        SQLLiteral("code"),
-                        SQLLiteral(vs_url),
-                    ],
-                )
+            static_string_codes = _string_codes_from_ast(expr.left)
+            if static_string_codes is not None:
+                return _or_chain([
+                    SQLFunctionCall(
+                        name="in_valueset",
+                        args=[
+                            _synthetic_code_resource({"system": "", "code": code}),
+                            SQLLiteral("code"),
+                            SQLLiteral(vs_url),
+                        ],
+                    )
+                    for code in static_string_codes
+                ])
             # If left is fhirpath_text(resource, path), extract resource and path
             # so in_valueset operates on the resource with the property path
             if (isinstance(left, SQLFunctionCall)
@@ -2437,6 +3019,8 @@ class OperatorsMixin:
 
         if isinstance(expr.right, Identifier) and expr.right.name in self.context.codesystems:
             codesystem_url = self.context.codesystems[expr.right.name]
+            if _is_definitely_null_operand(expr.left, left):
+                return SQLLiteral(value=False)
             static_code_entries = _code_entries_from_ast(expr.left)
             if static_code_entries is not None:
                 return SQLLiteral(
@@ -2445,9 +3029,9 @@ class OperatorsMixin:
                         for entry in static_code_entries
                     )
                 )
-            static_string_code = _string_code_from_ast(expr.left)
-            if static_string_code is not None:
-                return SQLLiteral(value=static_string_code != "")
+            static_string_codes = _string_codes_from_ast(expr.left)
+            if static_string_codes is not None:
+                return SQLLiteral(value=any(code != "" for code in static_string_codes))
             if (
                 isinstance(left, SQLFunctionCall)
                 and left.name in ("fhirpath_text", "fhirpath_date", "fhirpath_scalar", "fhirpath_json")
@@ -2456,7 +3040,7 @@ class OperatorsMixin:
                 resource_arg = left.args[0]
                 path_arg = left.args[1]
                 if isinstance(path_arg, SQLLiteral) and isinstance(path_arg.value, str):
-                    escaped_system = codesystem_url.replace("'", "''")
+                    escaped_system = escape_fhirpath_string_literal(codesystem_url)
                     path = path_arg.value
                     fhirpath_expr = (
                         f"({path}.coding.where(system='{escaped_system}').exists() "
@@ -2494,7 +3078,7 @@ class OperatorsMixin:
                             SQLLiteral(value=interval.high_closed),
                         ],
                     )
-                    point_str = SQLCast(expression=left, target_type="VARCHAR")
+                    point_str = self._quantity_interval_point_arg(left)
                     return SQLFunctionCall(name="intervalContains", args=[interval_expr, point_str])
 
                 # Generate BETWEEN syntax
@@ -2545,7 +3129,12 @@ class OperatorsMixin:
         if self._is_fhir_interval_expression(right):
             return SQLFunctionCall(
                 name="intervalContains",
-                args=[right, self._ensure_interval_varchar(left)],
+                args=[
+                    right,
+                    self._quantity_interval_point_arg(left)
+                    if self._is_quantity_interval_sql(right)
+                    else self._ensure_interval_varchar(left),
+                ],
             )
         # Otherwise, regular IN operator.
         # When the right side is fhirpath_text (returns only the first
@@ -2597,6 +3186,15 @@ class OperatorsMixin:
                 # CQL: both null → true, one null → null, both present → =
                 lv_is_null = SQLUnaryOp(operator="IS NULL", operand=lv, prefix=False)
                 rv_is_null = SQLUnaryOp(operator="IS NULL", operand=rv, prefix=False)
+                semantic_equal = self.translate(
+                    BinaryExpression(
+                        operator="=",
+                        left=le.type,
+                        right=re.type,
+                        strict=getattr(expr, "strict", False),
+                    ),
+                    usage=ExprUsage.BOOLEAN,
+                )
                 elem_cmp = SQLCase(
                     when_clauses=[
                         (SQLBinaryOp(operator="AND",
@@ -2608,7 +3206,7 @@ class OperatorsMixin:
                                      right=rv_is_null),
                          SQLNull()),
                     ],
-                    else_clause=SQLBinaryOp(operator="=", left=lv, right=rv),
+                    else_clause=semantic_equal,
                 )
                 comparisons.append(elem_cmp)
             else:
@@ -2624,7 +3222,7 @@ class OperatorsMixin:
                 result = SQLBinaryOp(operator="AND", left=result, right=c)
 
         if operator in ("!=", "not equal"):
-            result = SQLFunctionCall(name="NOT", args=[result])
+            result = SQLUnaryOp(operator="NOT", operand=result)
 
         return result
 
@@ -2909,6 +3507,118 @@ class OperatorsMixin:
             "millisecond": 9,
         }.get(str(precision).lower())
 
+    def _runtime_temporal_precision_guard(
+        self,
+        precision: str,
+        bounds: list[SQLExpression | tuple[SQLExpression | None, SQLExpression | None] | None],
+    ) -> SQLExpression | None:
+        required_digits = self._precision_digit_count(precision)
+        if required_digits is None:
+            return None
+
+        guard = None
+        for item in bounds:
+            peer = None
+            if isinstance(item, tuple):
+                bound, peer = item
+            else:
+                bound = item
+            if bound is None or isinstance(bound, (SQLNull, SQLLiteral)):
+                continue
+            text = SQLCast(expression=bound, target_type="VARCHAR")
+            without_offset = SQLFunctionCall(
+                name="regexp_replace",
+                args=[text, SQLLiteral(value=r"(Z|[+-]\d{2}:\d{2})$"), SQLLiteral(value="")],
+            )
+            digits = SQLFunctionCall(
+                name="regexp_replace",
+                args=[
+                    without_offset,
+                    SQLLiteral(value=r"[^0-9]"),
+                    SQLLiteral(value=""),
+                    SQLLiteral(value="g"),
+                ],
+            )
+            condition = SQLBinaryOp(
+                operator="AND",
+                left=SQLUnaryOp(operator="IS NOT NULL", operand=text, prefix=False),
+                right=SQLBinaryOp(
+                    operator="<",
+                    left=SQLFunctionCall(name="LENGTH", args=[digits]),
+                    right=SQLLiteral(value=required_digits),
+                ),
+            )
+            if peer is not None and not isinstance(peer, SQLLiteral):
+                condition = SQLBinaryOp(
+                    operator="AND",
+                    left=condition,
+                    right=SQLUnaryOp(
+                        operator="IS NOT NULL",
+                        operand=SQLCast(expression=peer, target_type="VARCHAR"),
+                        prefix=False,
+                    ),
+                )
+            guard = condition if guard is None else SQLBinaryOp(
+                operator="OR",
+                left=guard,
+                right=condition,
+            )
+        return guard
+
+    @staticmethod
+    def _interval_from_bounds_low_high(
+        interval_expr: SQLExpression,
+    ) -> tuple[SQLExpression | None, SQLExpression | None]:
+        candidate = interval_expr.expression if isinstance(interval_expr, SQLCast) else interval_expr
+        if isinstance(candidate, SQLInterval):
+            return candidate.low, candidate.high
+        if isinstance(candidate, SQLFunctionCall) and candidate.name == "intervalFromBounds" and len(candidate.args) >= 2:
+            return candidate.args[0], candidate.args[1]
+        if isinstance(candidate, SQLCase):
+            low_clauses = []
+            high_clauses = []
+            found_interval = False
+            for condition, result in candidate.when_clauses:
+                low, high = OperatorsMixin._interval_from_bounds_low_high(result)
+                if low is not None or high is not None:
+                    found_interval = True
+                low_clauses.append((condition, low if low is not None else SQLNull()))
+                high_clauses.append((condition, high if high is not None else SQLNull()))
+            low_else = None
+            high_else = None
+            if candidate.else_clause is not None:
+                low_else, high_else = OperatorsMixin._interval_from_bounds_low_high(candidate.else_clause)
+                if low_else is not None or high_else is not None:
+                    found_interval = True
+            if found_interval:
+                return (
+                    SQLCase(when_clauses=low_clauses, else_clause=low_else or SQLNull()),
+                    SQLCase(when_clauses=high_clauses, else_clause=high_else or SQLNull()),
+                )
+        return None, None
+
+    def _temporal_precision_guard_for_intervals(
+        self,
+        precision: str,
+        left_interval: SQLExpression,
+        right_interval: SQLExpression,
+        left_start: SQLExpression,
+        left_end: SQLExpression,
+        right_start: SQLExpression,
+        right_end: SQLExpression,
+    ) -> SQLExpression | None:
+        left_low_peer, left_high_peer = self._interval_from_bounds_low_high(left_interval)
+        right_low_peer, right_high_peer = self._interval_from_bounds_low_high(right_interval)
+        return self._runtime_temporal_precision_guard(
+            precision,
+            [
+                (left_start, left_high_peer or left_end),
+                (left_end, left_low_peer or left_start),
+                (right_start, right_high_peer or right_end),
+                (right_end, right_low_peer or right_start),
+            ],
+        )
+
     def _temporal_literal_digit_count(self, node: object) -> int | None:
         if not isinstance(node, (DateTimeLiteral, TimeLiteral)):
             return None
@@ -3002,6 +3712,20 @@ class OperatorsMixin:
                 left=SQLBinaryOp(operator="<=", left=left_start, right=right_end),
                 right=SQLBinaryOp(operator=">=", left=left_end, right=right_start),
             )
+            precision_guard = self._temporal_precision_guard_for_intervals(
+                precision,
+                left,
+                interval_expr,
+                left_start,
+                left_end_raw,
+                right_start,
+                right_end_raw,
+            )
+            if precision_guard is not None:
+                overlaps_result = SQLCase(
+                    when_clauses=[(precision_guard, SQLNull())],
+                    else_clause=overlaps_result,
+                )
             if extra_condition_ast:
                 extra_sql = self.translate(extra_condition_ast, boolean_context=True)
                 return SQLBinaryOp(operator="AND", left=overlaps_result, right=extra_sql)
@@ -3045,23 +3769,42 @@ class OperatorsMixin:
             left_end_raw_bound = SQLFunctionCall(name="intervalEnd", args=[left])
             right_start_raw = SQLFunctionCall(name="intervalStart", args=[interval_expr])
             right_end_raw_bound = SQLFunctionCall(name="intervalEnd", args=[interval_expr])
-            overlap_check = SQLFunctionCall(name="intervalOverlaps", args=[left, interval_expr])
+            left_start = self._ensure_date_cast(self._truncate_to_precision(left_start_raw, precision))
+            right_start = self._ensure_date_cast(self._truncate_to_precision(right_start_raw, precision))
+            left_end_raw = self._ensure_date_cast(self._truncate_to_precision(left_end_raw_bound, precision))
+            right_end_raw = self._ensure_date_cast(self._truncate_to_precision(right_end_raw_bound, precision))
             left_end = SQLFunctionCall(
                 name="COALESCE",
                 args=[
-                    self._ensure_date_cast(self._truncate_to_precision(left_end_raw_bound, precision)),
+                    left_end_raw,
                     SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE"),
                 ],
             )
             right_end = SQLFunctionCall(
                 name="COALESCE",
                 args=[
-                    self._ensure_date_cast(self._truncate_to_precision(right_end_raw_bound, precision)),
+                    right_end_raw,
                     SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE"),
                 ],
             )
+            overlap_check = SQLBinaryOp(
+                operator="AND",
+                left=SQLBinaryOp(operator="<=", left=left_start, right=right_end),
+                right=SQLBinaryOp(operator=">=", left=left_end, right=right_start),
+            )
             ends_after = SQLBinaryOp(operator=">", left=left_end, right=right_end)
             result = SQLBinaryOp(operator="AND", left=overlap_check, right=ends_after)
+            precision_guard = self._temporal_precision_guard_for_intervals(
+                precision,
+                left,
+                interval_expr,
+                left_start,
+                left_end_raw,
+                right_start,
+                right_end_raw,
+            )
+            if precision_guard is not None:
+                result = SQLCase(when_clauses=[(precision_guard, SQLNull())], else_clause=result)
             if extra_condition_ast:
                 extra_sql = self.translate(extra_condition_ast, boolean_context=True)
                 return SQLBinaryOp(operator="AND", left=result, right=extra_sql)
@@ -3099,11 +3842,42 @@ class OperatorsMixin:
             left_end_raw_bound = SQLFunctionCall(name="intervalEnd", args=[left])
             right_start_raw = SQLFunctionCall(name="intervalStart", args=[interval_expr])
             right_end_raw_bound = SQLFunctionCall(name="intervalEnd", args=[interval_expr])
-            overlap_check = SQLFunctionCall(name="intervalOverlaps", args=[left, interval_expr])
             left_start = self._ensure_date_cast(self._truncate_to_precision(left_start_raw, precision))
             right_start = self._ensure_date_cast(self._truncate_to_precision(right_start_raw, precision))
+            left_end_raw = self._ensure_date_cast(self._truncate_to_precision(left_end_raw_bound, precision))
+            right_end_raw = self._ensure_date_cast(self._truncate_to_precision(right_end_raw_bound, precision))
+            left_end = SQLFunctionCall(
+                name="COALESCE",
+                args=[
+                    left_end_raw,
+                    SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE"),
+                ],
+            )
+            right_end = SQLFunctionCall(
+                name="COALESCE",
+                args=[
+                    right_end_raw,
+                    SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE"),
+                ],
+            )
+            overlap_check = SQLBinaryOp(
+                operator="AND",
+                left=SQLBinaryOp(operator="<=", left=left_start, right=right_end),
+                right=SQLBinaryOp(operator=">=", left=left_end, right=right_start),
+            )
             starts_before = SQLBinaryOp(operator="<", left=left_start, right=right_start)
             result = SQLBinaryOp(operator="AND", left=overlap_check, right=starts_before)
+            precision_guard = self._temporal_precision_guard_for_intervals(
+                precision,
+                left,
+                interval_expr,
+                left_start,
+                left_end_raw,
+                right_start,
+                right_end_raw,
+            )
+            if precision_guard is not None:
+                result = SQLCase(when_clauses=[(precision_guard, SQLNull())], else_clause=result)
             if extra_condition_ast:
                 extra_sql = self.translate(extra_condition_ast, boolean_context=True)
                 return SQLBinaryOp(operator="AND", left=result, right=extra_sql)
@@ -3284,6 +4058,40 @@ class OperatorsMixin:
             ],
         )
         return SQLBinaryOp(operator="AND", left=starts_same, right=ends_same)
+
+    @staticmethod
+    def _point_same_as_interval_boundary_at_precision(
+        interval: SQLExpression,
+        point_interval: SQLExpression,
+        precision: str,
+    ) -> SQLExpression:
+        point = SQLCast(
+            expression=SQLFunctionCall(name="intervalStart", args=[point_interval]),
+            target_type="VARCHAR",
+        )
+        starts_same = SQLFunctionCall(
+            name="cqlSameAsP",
+            args=[
+                SQLCast(
+                    expression=SQLFunctionCall(name="intervalStart", args=[interval]),
+                    target_type="VARCHAR",
+                ),
+                point,
+                SQLLiteral(value=precision),
+            ],
+        )
+        ends_same = SQLFunctionCall(
+            name="cqlSameAsP",
+            args=[
+                SQLCast(
+                    expression=SQLFunctionCall(name="intervalEnd", args=[interval]),
+                    target_type="VARCHAR",
+                ),
+                point,
+                SQLLiteral(value=precision),
+            ],
+        )
+        return SQLBinaryOp(operator="OR", left=starts_same, right=ends_same)
 
     def _translate_before_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
@@ -3953,20 +4761,24 @@ class OperatorsMixin:
         ):
             return None
         precision = min(left_precision, right_precision)
-        def _rounded(operand: SQLExpression) -> SQLExpression:
-            decimal_operand = SQLCast(
-                expression=operand,
-                target_type="DECIMAL(38,8)",
-            )
-            return SQLFunctionCall(
-                name="system.round",
-                args=[decimal_operand, SQLLiteral(value=precision)],
-            )
-
+        delta = SQLFunctionCall(
+            name="ABS",
+            args=[
+                SQLBinaryOp(
+                    operator="-",
+                    left=SQLCast(expression=left, target_type="DECIMAL(38,8)"),
+                    right=SQLCast(expression=right, target_type="DECIMAL(38,8)"),
+                )
+            ],
+        )
+        tolerance = SQLCast(
+            expression=SQLLiteral(value=f"{0.5 * (10 ** -precision):.8f}"),
+            target_type="DECIMAL(38,8)",
+        )
         result: SQLExpression = SQLBinaryOp(
-            operator="=",
-            left=_rounded(left),
-            right=_rounded(right),
+            operator="<=",
+            left=delta,
+            right=tolerance,
         )
         if is_negated:
             return SQLUnaryOp(operator="NOT", operand=result)
@@ -4090,6 +4902,21 @@ class OperatorsMixin:
                             "display": parsed.get("display"),
                             "is_concept": True,
                         }
+            static_value = self._static_clinical_value_object(operand_ast)
+            if static_value:
+                if isinstance(static_value.get("codes"), list):
+                    return {
+                        "codes": static_value.get("codes", []),
+                        "display": static_value.get("display"),
+                        "is_concept": True,
+                    }
+                if static_value.get("code"):
+                    return {
+                        "code": static_value.get("code", ""),
+                        "codesystem": static_value.get("system", ""),
+                        "version": static_value.get("version"),
+                        "display": static_value.get("display"),
+                    }
             return None
 
         def _code_entries(code_info):
@@ -4312,6 +5139,47 @@ class OperatorsMixin:
         string_result = self._translate_string_equivalence(left, right, expr, is_negated)
         if string_result is not None:
             return string_result
+
+        # CQL §12.2: Ratio equivalence compares the represented ratio value,
+        # not the internal JSON/string representation.
+        left_is_ratio = _is_ratio_expression(left) or self._is_cql_ratio_expr(expr.left)
+        right_is_ratio = _is_ratio_expression(right) or self._is_cql_ratio_expr(expr.right)
+        if left_is_ratio or right_is_ratio:
+            cmp_result = SQLFunctionCall(
+                name="ratioCompare",
+                args=[
+                    SQLCast(expression=left, target_type="VARCHAR"),
+                    SQLCast(expression=right, target_type="VARCHAR"),
+                    SQLLiteral(value="~"),
+                ],
+            )
+            equiv_ratio = SQLCase(
+                when_clauses=[
+                    (
+                        SQLBinaryOp(
+                            operator="AND",
+                            left=SQLUnaryOp(operator="IS NULL", operand=left, prefix=False),
+                            right=SQLUnaryOp(operator="IS NULL", operand=right, prefix=False),
+                        ),
+                        SQLLiteral(value=True),
+                    ),
+                    (
+                        SQLBinaryOp(
+                            operator="OR",
+                            left=SQLUnaryOp(operator="IS NULL", operand=left, prefix=False),
+                            right=SQLUnaryOp(operator="IS NULL", operand=right, prefix=False),
+                        ),
+                        SQLLiteral(value=False),
+                    ),
+                ],
+                else_clause=SQLFunctionCall(
+                    name="COALESCE",
+                    args=[cmp_result, SQLLiteral(value=False)],
+                ),
+            )
+            if is_negated:
+                return SQLUnaryOp(operator="NOT", operand=equiv_ratio)
+            return equiv_ratio
 
         # CQL §12.2: Quantity equivalence — convert units and compare values.
         left_is_qty = _is_quantity_expression(left) or self._is_cql_quantity_expr(expr.left)
@@ -4805,6 +5673,16 @@ class OperatorsMixin:
         # Route <, <=, >, >=, = through precision-aware UDFs when operands are temporal.
         if operator in ("<", "<=", ">", ">=", "=", "!=", "<>"):
             if (
+                operator in ("<", "<=", ">", ">=")
+                and (
+                    self._is_unsupported_ordered_comparison_operand(expr.left, left)
+                    or self._is_unsupported_ordered_comparison_operand(expr.right, right)
+                    or self._is_list_operands(left, right, expr)
+                )
+            ):
+                return SQLNull()
+
+            if (
                 self._is_uncertain_between_expr(expr.left)
                 or self._is_uncertain_between_expr(expr.right)
                 or _is_uncertain_between_sql(left)
@@ -4857,6 +5735,24 @@ class OperatorsMixin:
                             else_clause=SQLLiteral(value=True),
                         )
                     return result
+
+        # CQL §12.1: Ratio equality compares numerator and denominator using
+        # Quantity equality. Keep this before quantity fallback because Ratio
+        # JSON is not itself a Quantity JSON object.
+        if operator in ("=", "!=", "<>"):
+            left_is_ratio = _is_ratio_expression(left) or self._is_cql_ratio_expr(expr.left)
+            right_is_ratio = _is_ratio_expression(right) or self._is_cql_ratio_expr(expr.right)
+            if left_is_ratio or right_is_ratio:
+                cmp_op = "!=" if operator in ("!=", "<>") else "=="
+                result = SQLFunctionCall(
+                    name="ratioCompare",
+                    args=[
+                        SQLCast(expression=left, target_type="VARCHAR"),
+                        SQLCast(expression=right, target_type="VARCHAR"),
+                        SQLLiteral(value=cmp_op),
+                    ],
+                )
+                return self._maybe_wrap_audit_comparison(result, operator, left, right)
 
         # Quantity comparison: use unit-aware quantity_compare when either
         # side is a Quantity expression (parse_quantity call or CASE with
@@ -5238,7 +6134,7 @@ class OperatorsMixin:
                 and isinstance(url_expr.value, str)
             ):
                 return None
-            escaped_url = url_expr.value.replace("'", "''")
+            escaped_url = escape_fhirpath_string_literal(url_expr.value)
             return SQLFunctionCall(
                 name="fhirpath_bool",
                 args=[
@@ -5337,6 +6233,12 @@ class OperatorsMixin:
         # Check for singleton from with component filter BEFORE translating operand
         if operator == "singleton from" and self._is_component_filter_query(expr.operand):
             return self._translate_component_filter_singleton(expr.operand)
+
+        if operator == "singleton from":
+            source_node = self._definition_ast_for_identifier(expr.operand) or expr.operand
+            if isinstance(source_node, Query) and self._is_list_typed_ast(source_node):
+                operand = _coerce_query_rows_to_list(self.translate(source_node, usage=ExprUsage.LIST))
+                return self._apply_singleton_from(operand)
 
         if operator == "not":
             self._validate_boolean_operand(expr.operand, operator)
@@ -5493,9 +6395,35 @@ class OperatorsMixin:
         # CQL §22.25/§22.26: step size depends on type
         # Integer: ±1, Decimal: ±10^-8, Long: ±1
         if operator == "predecessor of":
+            if isinstance(expr.operand, Quantity):
+                return SQLFunctionCall(name="predecessorOf", args=[_quantity_literal_json(expr.operand)])
+            if (
+                isinstance(expr.operand, UnaryExpression)
+                and expr.operand.operator.lower() == "singleton from"
+                and isinstance(expr.operand.operand, ListExpression)
+                and len(expr.operand.operand.elements) == 1
+                and isinstance(expr.operand.operand.elements[0], Quantity)
+            ):
+                return SQLFunctionCall(
+                    name="predecessorOf",
+                    args=[_quantity_literal_json(expr.operand.operand.elements[0])],
+                )
             return SQLFunctionCall(name="predecessorOf", args=[operand])
 
         if operator == "successor of":
+            if isinstance(expr.operand, Quantity):
+                return SQLFunctionCall(name="successorOf", args=[_quantity_literal_json(expr.operand)])
+            if (
+                isinstance(expr.operand, UnaryExpression)
+                and expr.operand.operator.lower() == "singleton from"
+                and isinstance(expr.operand.operand, ListExpression)
+                and len(expr.operand.operand.elements) == 1
+                and isinstance(expr.operand.operand.elements[0], Quantity)
+            ):
+                return SQLFunctionCall(
+                    name="successorOf",
+                    args=[_quantity_literal_json(expr.operand.operand.elements[0])],
+                )
             return SQLFunctionCall(name="successorOf", args=[operand])
 
         # Singleton from operator - extract single element from list

@@ -153,8 +153,16 @@ subpackage `__version__` constants must move together. Keep
 `pyproject.toml`, `fhir4ds.__version__`, `fhir4ds.cql.__version__`,
 `fhir4ds.dqm.__version__`, `fhir4ds.fhirpath.__version__`,
 `fhir4ds.fhirpath.duckdb.__version__`, `fhir4ds.viewdef.__version__`, and
-notebook install snippets aligned with the release target. Guard this with
-`fhir4ds/tests/test_version.py` and a wheel metadata/import check.
+notebook install snippets aligned with the release target. Public conformance
+facades that emit engine/translator version metadata, such as
+`conformance/scripts/run_cql_tests_runner.py`, should read the package version
+rather than hardcoding a release string. Guard this with
+`fhir4ds/tests/test_version.py`, a generated-metadata smoke check, and a wheel
+metadata/import check. Website and WASM release surfaces must move with the
+same target: homepage `PRODUCT_VERSION`, website tests, public install
+snippets, release notes, `web/wasm-demo/public/` wheel contents, and the copied
+`web/website/static/wasm-app/` snapshot. Guard those with the `web/wasm-demo`
+build and website typecheck/build.
 
 1. Implementation: `fhir4ds/fhirpath/engine/invocations/`
 2. Tests: `fhir4ds/fhirpath/tests/unit/`
@@ -211,6 +219,23 @@ remain in effect. Post-remediation status (2026-Q2):
   of relying on DuckDB numeric/string truthiness. Parser-internal `between ...
   and ...` bounds are the exception: lower `between` before validating logical
   operands so the separator `and` is not treated as a predicate.
+  Public direct logical macros must also guard their operands instead of
+  inheriting DuckDB truthiness, and no-Python/browser-style `logicalImplies`
+  must return SQL NULL for malformed Boolean text such as `'yes'`. Static
+  logical validation must classify clinical and complex operands (`Code`,
+  `Concept`, `Quantity`, `Interval`, `Tuple`) and typed parameters before SQL
+  generation so structured non-Boolean values cannot reach raw SQL `AND`/`OR`.
+  CQL-04 HISTORIAN fresh rerun added two more guardrails: `as Any` /
+  `as System.Any` must not erase a statically known non-Boolean source before
+  logical validation, and Patient-context `singleton from (query)` count/value
+  subqueries must remain correlated to `_pt.patient_id` so query
+  `let`/`where`/`return` logic cannot mix patients.
+  CQL-04 EXPLORER found the same erasure risk through `convert ... to Any` and
+  non-Boolean function results hidden by `as Any`. Logical operand inference
+  must classify CQL conversion/function return types such as `ToString`,
+  `ToInteger`, `ToQuantity`, `ToConcept`, temporal constructors, and
+  `ConvertsTo*` before SQL generation; only Boolean-returning functions may
+  flow into `and`, `or`, `xor`, `implies`, or unary `not`.
 - CQL comparison operators must dispatch through semantic operator paths before
   lowering to SQL. `between` is equivalent to `>=` and `<=`, so Quantity,
   temporal, and dynamic FHIR operands must still reach the unit-aware and
@@ -242,6 +267,24 @@ primitive values. Integer and Long literals must enforce their CQL ranges,
 including signed minima represented as unary negation. Decimal literal SQL must
 preserve authored precision when the parser kept `raw_str`.
 
+CQL-01 SKEPTIC found two primitive lexical fragility points. The CQL string
+escape table includes `\/` and ``\` ``; those must decode to `/` and backtick
+instead of preserving the backslash. Long literals use the uppercase `L` suffix
+from the official `LONGNUMBER` grammar; lowercase `l` after digits is invalid
+numeric-suffix junk and must not tokenize as `Long`.
+
+CQL-01 HISTORIAN found that scalar primitive parameters must preserve both
+compile-time defaults and declared CQL type metadata. Do not lower
+`parameter P Integer default 5` or supplied scalar bindings to an untyped
+`getvariable()` VARCHAR path before primitive `is`/`as` or arithmetic; defaults
+should compile as typed SQL expressions and required runtime scalar parameters
+should be cast according to their declared primitive type.
+
+CQL-01 EXPLORER found a fragile `Any` materialization boundary. Scalar
+primitive definitions asserted `as Any` or `as System.Any` must remain
+patient-scalar `value` projections in `definition_meta`; final population SQL
+must not reclassify them as resource-shaped CTEs and select `.resource`.
+
 CQL string-to-Integer/Long conversion accepts only the integer string grammar
 `^[+-]?[0-9]+$`. Decimal-looking strings such as `"1.0"` and `"1.5"` return
 null/false for `ToInteger`/`ConvertsToInteger` and `ToLong`/`ConvertsToLong`
@@ -263,6 +306,16 @@ FHIR choice values, SQL text shape is not type evidence: use FHIRPath
 materialized primitive definitions, preserve/infer `definition_meta.cql_type`
 and use that metadata for `is`/`as` instead of reclassifying all projected
 values as strings.
+
+CQL-05 HISTORIAN confirmed the `cast X as T` prefix is distinct from nullable
+`X as T`. The parser should preserve `BinaryExpression.strict=True` for
+`cast`, and translated strict casts must evaluate the same type predicate used
+by `is T`: matching values pass through, while mismatches raise a
+`CQL strict cast failed` DuckDB runtime error instead of returning SQL NULL.
+Keep this separate from `as`, which remains a null-returning type assertion.
+CQL-05 EXPLORER added that function inlining/substitution must preserve the
+same `BinaryExpression.strict` flag; otherwise `define function F(x Any): cast
+x as String` silently degrades to nullable `as` after inlining.
 
 The CQL lexer must reject no-whitespace junk after numeric literals, including
 `1LL`, `1.0L`, and `1day`. Whitespace-separated tokens are parsed by the query
@@ -312,6 +365,29 @@ a type assertion, not a conversion: exact matches pass through, `Vocabulary`
 accepts `ValueSet`/`CodeSystem`, and mismatches such as `Code as Concept` or
 `ValueSet as CodeSystem` must return SQL NULL.
 
+CQL-02 SKEPTIC found three clinical-type regression traps: declared clinical
+parameter types must feed the same static `is`/`as` path as definition metadata;
+`ToConcept(Code)` propagates `Code.display` to `Concept.display` and rejects
+non-Code JSON shapes such as Quantity; and `ToConcept(List<Code>)` must route to
+a list-aware helper/overload rather than `ToConcept(VARCHAR[])` binder errors.
+Static null Code/String/Concept membership in ValueSet or CodeSystem returns
+false, not SQL NULL or generic `IN` SQL.
+CQL-02 HISTORIAN rerun found the ValueSet `codesystems { ... }` declaration
+clause was missing. The CQL parser must accept one or more CodeSystem
+identifiers after a ValueSet id/version, reject empty or trailing-comma override
+lists, and preserve those overrides as structured `codesystems` entries in the
+runtime `System.ValueSet` JSON using the referenced CodeSystem id/name/version.
+CQL-02 EXPLORER found clinical assertion chains can erase concrete value shape
+if only the asserted supertype is tracked. `ValueSet as Vocabulary` and
+`CodeSystem as Vocabulary` must still satisfy downstream `is ValueSet` /
+`is CodeSystem` and `as ValueSet` / `as CodeSystem`, because the runtime value
+remains the original concrete subtype. Clinical aliases through `as Any` should
+inline static Code/Concept/ValueSet/CodeSystem definitions for direct
+translation instead of generating standalone patient-correlated CTE lookups.
+Static Concept instance equivalence must read `Concept { codes: { ... } }`
+lists and compare by Code system+code intersection, not route Concept JSON
+through FHIR resource-path predicates.
+
 ### CQL Temporal and Complex Conversion Boundaries
 CQL Date, DateTime, Time, Quantity, and Ratio conversion functions must stay
 spec-aware at the public DuckDB SQL surface. Do not rely on generic DuckDB
@@ -324,6 +400,15 @@ when numerator and denominator are valid Quantity objects with numeric values.
 Keep native-loaded and forced Python fallback DuckDB parity tests together when
 changing these helpers.
 
+CQL-03 SKEPTIC fresh rerun tightened this boundary further: timezone offsets
+past `+/-14:00`, including `+14:01`, must return false/NULL through
+`ConvertsToDateTime`, `ToDateTime`, `ConvertsToTime`, `ToTime`, and translated
+`convert` paths. JSON-shaped Quantity/Ratio internals require JSON-numeric
+Decimal `value` fields, not numeric-looking strings, and Ratio value/unit
+helpers must return NULL when numerator or denominator is not a valid Quantity.
+Keep Python fallback, native-loaded C++ registration, direct native SQL tests,
+and `test_temporal_complex_parity.py` aligned.
+
 CQL Date/DateTime/Time constructors are public temporal boundaries, not string
 formatting shortcuts. Runtime constructor output must be validated by the same
 temporal parser path used by public helper UDFs so invalid dynamic values such
@@ -334,6 +419,23 @@ precision including the `T` marker and milliseconds. Time-only quantity
 arithmetic is clock-domain arithmetic: preserve input precision and keep native
 C++ and Python fallback behavior aligned across midnight.
 
+CQL-03 HISTORIAN fresh rerun found that static DateTime constructor
+`timezoneOffset` lowering must treat the offset as a Decimal-hours component,
+not generic string formatting. Literal offsets near the boundary such as
+`13.999` must round/carry to a valid ISO `+14:00` suffix instead of emitting
+`+13:60`, and non-Decimal static offsets such as `true` or `'1'` must be
+rejected rather than silently coerced or ignored. Keep this covered in
+`test_temporal_complex_parity.py` and the CQL-03 fresh probe.
+
+CQL-03 EXPLORER fresh rerun found that expression-valued Date/DateTime/Time
+constructor components need the same type boundary as literals. Statically
+known Boolean/String component expressions such as `Date(2024, 1 = 1, 1)`,
+`Time(1 = 1, 0, 0)`, and `DateTime(..., 1 = 1)` must raise translation
+errors; runtime expressions with non-Integer components or non-numeric
+timezone offsets must return SQL NULL rather than relying on DuckDB Boolean or
+String casts. Keep native-loaded and forced Python fallback execution parity
+in `test_temporal_complex_parity.py`.
+
 CQL `ToQuantity` has multiple public shapes: strings such as `5 'mg'`,
 numeric Integer/Long/Decimal values that become unit `1`, and internal
 JSON-shaped Ratio values that divide numerator by denominator. Native-loaded
@@ -341,6 +443,53 @@ connections must shadow the legacy C++ `ToQuantity(VARCHAR)` with the Python
 conformance helper until the C++ surface implements the same overloads.
 `ConvertsToQuantity` over JSON-shaped values must require a finite Decimal
 `value`, not just the presence of a `value` key.
+
+CQL-06 SKEPTIC fresh rerun fixed conversion macro registration visibility:
+private helpers behind `ToDate`, `ToDateTime`, and `ToTime` may ignore duplicate
+registration/catalog conflicts, but unexpected registration failures must raise
+instead of leaving public macros pointed at missing helpers. Keep
+`test_conversion_check_parity.py`, `.temp/qa/cql06_skeptic_probe.py`, and full
+conformance aligned when changing conversion macro registration.
+
+CQL-06 HISTORIAN fresh rerun tightened Quantity/Ratio conversion checks:
+`ToQuantity` and `ConvertsToQuantity` must reject public Quantity strings whose
+decimal value exceeds the implementation `DECIMAL(38, 8)` range/scale, and
+`ConvertsToQuantity` must return true for valid Ratio JSON because
+`ToQuantity(Ratio)` is supported. Keep the strict Decimal guard at public
+conversion boundaries such as `ToQuantity`, `ConvertQuantity`,
+`ConvertsToQuantity`, and `ConvertsToRatio`; do not move it into generic
+`parse_quantity`, because translated measure arithmetic can produce
+intermediate Quantity JSON with more than 8 fractional digits before comparison.
+CMS832 is the DQM regression sentinel for that boundary.
+
+CQL-06 EXPLORER fresh rerun tightened String conversion checks:
+`ConvertsToString` and generic translated `ToString` must route through the
+spec-aware macro boundary and reject structural List/Tuple/JSON values rather
+than inheriting DuckDB `CAST(... AS VARCHAR)` behavior. Quantity and Ratio
+remain special cases that use `QuantityToString` and `RatioToString`.
+CQL-07 SKEPTIC fresh rerun extended this guard to statically known Interval and
+clinical Concept values. These are often transported as `VARCHAR` JSON after
+translation, but that transport shape is not String type evidence:
+`ToString(Interval[...])`, `convert Interval[...] to String`,
+`ToString(ToConcept(...))`, and `ConvertsToString(ToConcept(...))` must lower
+to NULL/false rather than serializing implementation JSON.
+CQL-07 HISTORIAN found the same scalar-alias boundary for conversion-check
+predicates. Static definition aliases used as arguments to `ConvertsTo*`,
+`CanConvertQuantity`, or `ConvertQuantity` must inline the original scalar AST
+when it has no retrieve/query dependency; otherwise Quantity/Ratio aliases can
+fall through to missing resource CTE lookups such as
+`SELECT sub.resource FROM "QuantityFromString"`. Keep
+`test_conversion_check_parity.py` and fresh CQL-07 probes covering static
+Quantity/Ratio aliases for `ConvertsToString`, `ConvertsToQuantity`, and
+`ConvertsToRatio`.
+CQL-07 EXPLORER found the conversion-function version of the Quantity alias
+boundary. Definitions produced by `ToQuantity(...)`, including through an
+inlined user-defined function, must preserve `Quantity` CQL type metadata and
+project scalar `value` columns so later `ToString(Q)` or `convert Q to String`
+routes through `QuantityToString` instead of serializing internal Quantity
+JSON. Keep `test_conversion_function_parity.py` population-SQL coverage and
+`.temp/qa/cql07_explorer_probe.py` aligned when changing conversion return-type
+inference or static definition inlining.
 
 CQL current-clock and precision Date/Time helpers are public compatibility
 surface. `TimeOfDay()` translation and `dateTimeTimeOfDay()` must return CQL
@@ -357,6 +506,16 @@ date-only arithmetic. In particular, one-argument `Time(hour)` is a constructor
 (`T12`), distinct from `time from <DateTime>` extraction, and fractional week
 quantities truncate to an integer week count before Date subtraction in both
 Python fallback and no-Python C++ surfaces.
+DateTime values with timezone offsets are normalized only for hour-or-finer
+precision comparisons; year/month/day precision compares local DateTime
+components. Time-only values with offsets are not DateTime values and must not
+be routed through DateTime timezone normalization, because midnight-adjacent
+times can otherwise underflow and Python fallback can raise instead of
+returning a row-resilient Boolean/NULL.
+Translated numeric component extraction must route through `dateComponent`
+rather than ad hoc string slicing. Timezone-suffixed values without millisecond
+precision, such as `@2024-01-01T10:00:00+05:00`, return SQL NULL for
+`millisecond from ...`; they must not slice the timezone offset and cast it.
 
 Only apply the static clinical `as` shortcut when the source expression has a
 known clinical type. Dynamic FHIR values such as `Observation.value as Concept`
@@ -372,6 +531,19 @@ clinical type inference must also flow through query `let`/`return` and
 `singleton from` aliases so clinical `is`/`as` does not fall through to FHIR
 `resourceType` probing for JSON-shaped CQL values.
 
+CQL list equivalence must preserve those clinical semantics after list
+transport. `List<Code>` and `List<Concept>` values produced by aliases,
+`singleton from`, or direct helper calls must not compare raw JSON display or
+version fields for `~`; route them through Code/Concept equivalence while
+leaving list equality/display-sensitive set operations on CQL equality. Also
+keep a Quantity list distinct from a scalar Quantity: `{ 1 'g' } = { 1000
+'mg' }` uses CQL list equality with unit-aware element comparison, while
+`singleton from { 1 'g' }` is the scalar Quantity case.
+`IndexOf` uses the same element equality boundary: incompatible Quantity units
+or clinical Code values whose equality is unknown return SQL NULL when no true
+match exists, not `-1`. Query-produced list sources for translated `IndexOf`
+must be folded into list values before calling `CQLIndexOf`.
+
 CQL interval operators must preserve Quantity shape at interval boundaries.
 Do not reduce Quantity bounds or points to bare numeric values before
 comparison; `Interval[1 'g', 2 'g'] contains 1500 'mg'` depends on the same
@@ -383,6 +555,17 @@ outputs such as `intervalExcept`, `intervalIntersect`, and `intervalUnion`
 remain interval expressions for downstream `contains`, `includes`, equality,
 and precision operators; translator dispatch must not fall through to generic
 DuckDB list/string functions for nested interval composition.
+Public `expand` and `expand_points` default the `per` step only when `per` is
+omitted or SQL NULL. A supplied malformed Quantity JSON `per`, including
+missing/non-numeric `value` or string/Boolean values, must return SQL NULL in
+Python fallback, native-loaded, and no-Python C++ surfaces.
+Typed null interval bounds are internal unbounded-bound markers, not public
+Start/End values. For closed null bounds, `start of` and `end of` must return
+the CQL minimum/maximum for the inferred point type, for example Integer
+`-2147483648`/`2147483647`, Date `0001-01-01`/`9999-12-31`, and Time
+`T00:00:00.000`/`T23:59:59.999`; open null bounds still return SQL NULL. Keep
+translated CQL, direct public helper calls, forced Python fallback,
+native-loaded registration, and no-Python/browser C++ aligned.
 
 ### DQM Population Attribution
 `MeasureEvaluator.summary_report()` must apply subject-based proportion
@@ -511,15 +694,36 @@ Do not broaden static CQL time literal parsing to accept `@T...Z` or `@T...+/-HH
 
 Quantity/scalar arithmetic must return SQL NULL when the scalar or Quantity value is NULL, or when dividing by zero. Do not emit Quantity JSON with a null `value`. One-argument `Log` should lower through `mathLn`, and Date/DateTime +/- Integer should lower through date quantity helper calls rather than binder-sensitive SQL interval literals.
 
+Translated numeric `HighBoundary`/`LowBoundary` must cast the public helper result through `VARCHAR` before the final numeric `TRY_CAST`. The Python default-precision helper macro can transport a DuckDB `UNION(VARCHAR, DOUBLE)`, and direct `TRY_CAST(HighBoundary(decimal) AS DOUBLE)` returns NULL even though the direct helper fetch displays a numeric boundary value.
+
 **Hardened in milestone review-30 (2026-Q2).** Boundary helper and temporal helper validation applies to direct public UDF calls, not only translated CQL. Reject malformed Date/DateTime bodies, non-finite numeric text, impossible offsets, colonless offsets, and unbounded exponent expansion. `Now()` must normalize DuckDB `CURRENT_TIMESTAMP` offsets from `-HH` to `-HH:00` before strict timezone parsing. Native `quantityToInterval` and date quantity helpers return NULL for invalid/empty/huge Quantity input, and date quantity arithmetic preserves date-only precision. Native `ToQuantity` numeric and Boolean overloads are required for C++-only/browser parity. Quantity/scalar `*` and `/` over FHIR `value[x]` must use `fhirpath_number`/`TRY_CAST`, not plain `CAST`; `Power()` and `^` route through `mathPower` with an outer numeric `TRY_CAST`.
 
-**Hardened in CQL-11 SKEPTIC (2026-Q2).** Arithmetic Part 2 public helpers must be parity-tested across native-loaded DuckDB registration, forced Python fallback registration, and C++-only/browser-style surfaces where functions/macros are registered. CQL `Round` ties round toward positive infinity, so direct `mathRound` must use `floor(x * 10^precision + 0.5)` behavior even for negative ties. `Power` and direct `mathPower` return NULL for NaN, infinity, or unrepresentable results. Quantity `mod` and truncated `div` with compatible units convert the right operand into the left operand unit before arithmetic and preserve the left operand unit. Direct `predecessorOf`/`successorOf` helpers return NULL at public SQL boundaries for row resilience, while translated static temporal underflow/overflow remains an invalid CQL expression for official conformance. Maximum/minimum `DateTime` and `Time` literals retain the CQL `T` marker and millisecond precision.
+**Hardened in CQL-11 SKEPTIC/HISTORIAN (2026-Q2).** Arithmetic Part 2 public helpers must be parity-tested across native-loaded DuckDB registration, forced Python fallback registration, and C++-only/browser-style surfaces where functions/macros are registered. Current CQL Reference `Round` examples require negative half ties to round away from zero (`Round(-0.5) = -1`), and null precision is defined as precision `0`; keep SQL macros, Python fallback `mathRound`, native C++ `mathRound`, and the local arithmetic conformance XML aligned to that normative text. `Power` and direct `mathPower` return NULL for NaN, infinity, or unrepresentable results. Quantity `mod` and truncated `div` with compatible units convert the right operand into the left operand unit before arithmetic and preserve the left operand unit. Direct `predecessorOf`/`successorOf` helpers return NULL at public SQL boundaries for row resilience, while translated static temporal underflow/overflow remains an invalid CQL expression for official conformance. Maximum/minimum `DateTime` and `Time` literals retain the CQL `T` marker and millisecond precision. Fresh CQL-11 SKEPTIC rerun also fixed Quantity predecessor/successor shape: integer-authored Quantity values step by 1, decimal-authored Quantity values step by `1e-8`, and numeric-string Quantity JSON returns SQL NULL across Python fallback, native-loaded, and no-Python C++ surfaces.
 
 **Hardened in CQL-11 HISTORIAN (2026-Q2).** Arithmetic Part 2 dynamic FHIR `value[x]` operands must use typed numeric projection (`fhirpath_number`) for numeric-only operations such as `div`, `Power`/`^`, `Round`, and `Truncate`; `fhirpath_text` plus SQL coercion can both binder-fail and incorrectly accept `valueString`. Apply CQL representational boundary rules in translation for static min/max cases: `-(minimum Integer)` and `-(minimum Long)` are NULL, `-(minimum Decimal)` is the positive maximum Decimal, and Decimal predecessor/successor at min/max is NULL. Static DateTime literal boundary underflow/overflow is invalid just like constructor boundary cases. Public helper parity also covers invalid time strings, unrepresentable `mathPower`, and DateTime precision with `+/-HH:MM` timezone suffixes, whose digits do not count as precision.
 
 **Hardened in CQL-11 EXPLORER (2026-Q2).** CQL Arithmetic Part 2 direct SQL macros are public compatibility surface: `Div(x, y)` must truncate toward zero for Decimal operands and return NULL on zero divisor. `minimum DateTime` and `maximum DateTime` use the official XML UTC boundary suffix `Z`. Predecessor/successor over Date, DateTime, and Time values is precision-aware and preserves lexical precision (`YYYY`, `YYYY-MM`, `YYYYT`, `YYYY-MMT`, `YYYY-MM-DDTHH`, `T12`, `T12:30`, etc.). DateTime marker forms are DateTime values, not numeric text. Mixed scalar/Quantity `mod` and `div` must convert scalar operands to unit `1` Quantity JSON before UDF dispatch; never emit `parse_quantity(<number>)`.
 
+**CQL-11 EXPLORER follow-up (2026-Q2).** `maximum Quantity` and
+`minimum Quantity` return exact DECIMAL-backed Quantity JSON with unit/code
+`1`; unsupported maximum/minimum types raise translation errors rather than SQL
+NULL. Query-source literal lists and single-Quantity `singleton from` lists must
+preserve raw Quantity JSON spelling so integer-authored Quantity
+predecessor/successor semantics survive aliases and singleton extraction.
+Public C++-only `predecessorOf/successorOf(VARCHAR)` treats numeric text as
+Decimal; typed Integer/Long still use the BIGINT overloads.
+
+**Hardened in CQL-13 SKEPTIC (2026-Q2).** Date/time `duration between` with
+uncertain operands must cap the high end at the requested precision, unlike
+`difference between` which counts crossed boundaries. The current CQL Reference
+example `months between @2012-01-02 and @2012` is `Interval[0, 10]`; the
+corresponding month `difference` remains `Interval[0, 11]`. Keep Python
+fallback, native-loaded registration, and no-Python/browser-style C++ helper
+tests together for `cqlDurationBetween` / `cqlDifferenceBetween`.
+
 **Hardened in CQL-14 EXPLORER (2026-Q2).** Date/DateTime/Time public quantity arithmetic helpers are row-resilient at malformed Quantity boundaries. Python fallback `dateAddQuantity` and `dateSubtractQuantity` must match no-Python/browser-style C++ behavior by returning SQL NULL for malformed JSON, missing `value`, null `value`, string or Boolean `value`, non-finite values, unsupported units, and huge values. Do not treat missing `value` as zero or coerce numeric strings. Valid arithmetic overflow remains an official invalid-expression error path for translated CQL conformance.
+
+**Verified in CQL-14 SKEPTIC (2026-Q2).** Current-clock and precision Date/Time operators need cross-runtime coverage even when no remediation is required. Keep translated `Now() = Now()`, `Today() = Today()`, `TimeOfDay() = TimeOfDay()`, time-only `same` comparisons, invalid `week` precision NULLs, timezone-normalized same-second checks, null-gap Time constructor behavior, and partial DateTime month subtraction aligned across forced Python, native-loaded, and no-Python/browser-style C++ surfaces.
 
 ### CQL Interval Operator Boundaries
 
@@ -550,6 +754,31 @@ same-boundary helpers also return NULL when the required boundary is missing.
 Keep forced Python fallback, native-loaded registration, and no-Python/browser
 C++ direct helper coverage aligned for these paths.
 
+**Hardened in CQL-16 SKEPTIC (2026-Q2).** Interval set/relationship helpers
+must continue to use effective boundaries after open-endpoint normalization.
+`Interval[1, 5) intersect Interval[5, 7]` is empty/NULL, not the point
+interval `[5, 5]`. `overlaps before` and `overlaps after` are built on the
+underlying `overlaps` relation; if temporal precision uncertainty or
+incompatible Quantity dimensions make `overlaps` SQL NULL, the directional
+overlap helper must propagate NULL rather than returning false. Keep direct
+helper, translated CQL, forced Python fallback, native-loaded, and no-Python
+C++ parity tests together.
+
+**Hardened in CQL-16 EXPLORER (2026-Q2).** Translated precision-qualified
+`overlaps`, `overlaps before`, and `overlaps after` over dynamic FHIR choice
+values must preserve precision uncertainty without replacing the optimized
+temporal decomposition that DQM relies on. Runtime values such as
+`Observation.effective` can be concrete Periods or scalar Date/DateTime strings;
+when decomposed bounds have fewer digits than the requested precision, the
+translated predicate returns SQL NULL before doing lexicographic ISO-date
+comparison. Partial temporal points such as `effectiveDateTime: "2014"`
+compared at day precision return SQL NULL, not false, while concrete Period
+values still evaluate normally across forced Python fallback, native-loaded
+registration, no-Python C++, and DQM. Guard finite paired endpoints using the
+raw `SQLInterval` / `intervalFromBounds` low/high expressions when available so
+active unbounded intervals with a null high endpoint do not become unknown only
+because their start has partial precision.
+
 **Fixed in Release 0.0.7 Domain 3 (2026-05-24).** Optimized translated
 temporal `overlaps` SQL must preserve unbounded low-bound semantics. When
 decomposing interval overlap to direct comparisons, coalesce null low bounds
@@ -565,6 +794,14 @@ native-loaded versus forced Python fallback parity checks.
 **Hardened in CQL-12 SKEPTIC (2026-Q2).** CQL string operators need explicit null/boundary handling across translated SQL, Python fallback registration, native-loaded DuckDB registration, and no-Python/browser-style macro surfaces. `Combine` and `CombineSep` return NULL when the non-null filtered list is empty. `Substring` returns NULL for null/negative/at-or-past-end starts and null/negative lengths; do not inherit DuckDB's empty-string slicing for invalid CQL boundaries. `StartsWith` and `EndsWith` are exact prefix/suffix checks, so translated CQL must call the public macros rather than `LIKE`; `%` and `_` are data, not wildcards. String bracket indexing routes through the public `Indexer` macro instead of list extraction so at-end/out-of-range string indexers return NULL. Deprecated Python string UDFs should return NULL for null search operands or invalid substring inputs instead of raising.
 
 **Hardened in CQL-12 HISTORIAN (2026-Q2).** CQL regex-backed string operators use single-line mode: unescaped `.` matches newline, and `^`/`$` provide whole-string anchoring when needed. DuckDB `Matches` and `SplitOnMatches` macros must pass regex option `s`, and `ReplaceMatches` must use `gs` for global single-line replacement while preserving CQL `$1` capture references and escaped literal dollars. Deprecated `stringMatches` should use `re.DOTALL` and return NULL for null patterns; deprecated string UDFs should keep row-level NULL resilience for null operands.
+
+**Hardened in CQL-12 EXPLORER (2026-Q2).** Query-produced `List<String>` values
+passed to `Combine` must be folded into a DuckDB list before invoking
+`Combine`/`CombineSep`; do not pass row subqueries directly to list macros. CQL
+strings embedded into generated FHIRPath predicates, especially
+`ext(element, url)`, must be escaped with FHIRPath backslash rules, not SQL quote
+doubling. An escaped quote inside a URL must remain literal and must not be able
+to inject `or true` or other predicate text into `extension.where(...)`.
 
 ### FHIRPath String Literal Unicode Escapes
 
@@ -625,6 +862,10 @@ native-loaded versus forced Python fallback parity checks.
 ### CQL Structural Type Operators
 
 **Fixed in CQL-05 SKEPTIC/HISTORIAN/EXPLORER structural audit (2026-05-17).** CQL `is`, `as`, and `convert` must validate unknown structural targets and treat `List<T>`, `Interval<T>`, `Choice<T...>`, and `Tuple { ... }` as first-class type specifiers. Static aliases should preserve exact List, Interval, Ratio, Date, DateTime, Time, and Tuple identity. `as Quantity` over FHIR values must preserve `parse_quantity`/Quantity shape for downstream unit-aware comparisons. Numeric fallback for optimized quantity CTEs must not ignore incompatible units when the dynamic side is a JSON Quantity object. `Message(..., 'Error', ...) as Interval<T>` preserves `CQLMessage`, dynamic `as Concept`/`as Code` keeps runtime CodeableConcept/Coding matching, and SQL CASE sources produced by choice `as` casts remain valid FHIRPath property-navigation sources. `Children()`/`Descendants()` use internal typed transport for primitive child items, including temporal and Long values, so downstream `is`/`as` and `List<T>` checks do not coerce strings or erase identity. `convert <Quantity> to String` shares the `QuantityToString` path used by `ToString(<Quantity>)`; `convert List<Code> to Concept` and `convert Concept to List<Code>` are registered DuckDB UDF surfaces. Forced Python fallback tests must directly register Python FHIRPath UDFs, assert `fhirpath_predicate` is absent, and keep choice-field `value.is/as(Type)` parity with native execution. `as Concept` over FHIR resource properties should preserve resource/path information for value-set and coding matching.
+
+Fresh CQL-05 SKEPTIC rerun (2026-05-30) added four guardrails: `convert ... to Any` must preserve the source runtime type for later `is`/`as` assertions; `ToQuantity(...)` SQL must be recognized as Quantity-shaped for nested `convert Quantity to String`; composite typed nulls such as `(null as List<Integer>) is List<Integer>` return false rather than SQL NULL; and `QuantityToString` must normalize JSON integer values to the CQL Quantity string pattern with at least one decimal digit, e.g. `5.0 'mg'`.
+
+Fresh CQL-05 EXPLORER rerun (2026-05-30) added two recursive/inlining guardrails: `Children()`/`Descendants()` translation must recursively wrap nested tuple/list Date, DateTime, Time, and Long values with `__fhir4ds_cql_type` transport markers before handing them to `cqlChildren`/`cqlDescendants`, and all function-inliner `BinaryExpression` cloning paths must preserve `strict=True` so `cast` remains exception-raising inside inlined functions.
 
 ## Asset Relocation Reference
 
@@ -755,6 +996,20 @@ registration. `CSVSource` rejects non-string `path`/`projection_sql` with
 `TypeError` and empty required strings with `ValueError`; projection/view shape
 errors still belong to `SchemaValidationError`.
 
+**Fixed in Release 0.0.8 Domain 8 (2026-06-07).** `FileSystemSource` follows
+the same public constructor boundary: non-string `path_pattern`/`format`
+arguments raise `TypeError`, and empty strings raise `ValueError`, before
+cloud-prefix checks, SQL literal quoting, or DuckDB registration.
+
+### DQM Configuration API Contract
+
+**Fixed in Release 0.0.8 Domain 8 (2026-06-07).** DQM run, HAPI
+materialization, and Mongo materialization config loaders wrap malformed JSON
+or YAML in `DQMConfigError` instead of leaking decoder internals. Nested
+`libraries` and `terminology` sections must be objects before reading
+`paths`/`valuesets`; malformed section shapes should raise `DQMConfigError`
+with the field name, not `AttributeError`.
+
 ### DQM Audit Evidence Boundary
 
 **Fixed in Release 0.0.6 Domain 9 (2026-05-20).** `AuditEngine.prune_evidence()`
@@ -764,12 +1019,38 @@ cell at a time must wrap the cell as `{col_name: cell}`. Passing the raw audit
 cell erases causal evidence and causes narratives/exports to report missing
 detail incorrectly.
 
+**Fixed in Release 0.0.8 Domain 9 (2026-06-07).** Multi-group DQM audit
+pruning must run only against the current group. Passing each group DataFrame
+through every `PopulationMap` group can compact evidence more than once and
+erase resource targets in the final findings. Materialized compact result JSON
+must also stay audit-free: HAPI and Mongo materialization should unwrap audit
+structs to their `result` value and keep supporting evidence columns only in
+the full audit JSON.
+
 ### Release Version Consistency
 
 **Fixed in Release 0.0.6 Domain 10 (2026-05-20).** Public subpackage
 `__version__` values in the unified namespace should match `fhir4ds.__version__`.
 Keep `fhir4ds/tests/test_version.py` release-neutral by comparing against the
 root package version rather than hardcoding the current version.
+
+**Fixed in Release 0.0.8 Domain 10 (2026-06-07).** Release metadata and public
+versions must also include `fhir4ds.cql.duckdb.__version__`, not only the root
+and major feature packages. Keep `pyproject.toml`, public subpackage
+`__version__` constants, notebook install snippets, wheel metadata, and the
+bundled-extension wheel contents aligned with the release target.
+
+**Fixed in Release 0.0.8 Hardening 14 (2026-06-07).** Conformance-facing
+version metadata is part of the release surface. The CQL tests-runner facade
+must emit `cqlTranslatorVersion` and `cqlEngineVersion` from
+`fhir4ds.__version__`, not a hardcoded prior release.
+
+**Fixed in Release 0.0.8 Hardening 17 (2026-06-07).** Website and WASM demo
+assets are part of the release surface. The homepage version badge, website
+tests, WASM integration docs, notebook docs, release notes, demo public wheel,
+and `web/website/static/wasm-app/` snapshot must all be refreshed for the
+target version. Keep `web/wasm-demo` build plus website typecheck/build in the
+release gate.
 
 ### HEDIS Continuous Enrollment Primitives
 

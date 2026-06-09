@@ -62,6 +62,10 @@ CQL_REQUIRED = {
     "intervalExcept",
     "intervalOnOrAfter",
     "intervalOnOrBefore",
+    "cqlSameAsP",
+    "cqlSameOrAfterP",
+    "cqlSameOrBeforeP",
+    "dateTimeSameAs",
     "cql_valueset_cache_clear",
     "cql_valueset_cache_add",
     "cql_valueset_cache_size",
@@ -184,6 +188,20 @@ def test_cql_browser_interval_and_boundary_udfs_run_without_python_fallback(cpp_
     )
     assert cpp_only_con.execute("SELECT HighBoundary('1.587', 8)").fetchone()[0] == "1.58799999"
     assert cpp_only_con.execute("SELECT LowBoundary('1.587', 8)").fetchone()[0] == "1.58700000"
+    assert cpp_only_con.execute("SELECT HighBoundary('1.587')").fetchone()[0] == "1.58799999"
+    assert cpp_only_con.execute("SELECT LowBoundary('1.587')").fetchone()[0] == "1.58700000"
+    assert cpp_only_con.execute("SELECT HighBoundary('2024')").fetchone()[0] == "2024"
+    assert cpp_only_con.execute("SELECT LowBoundary('2024')").fetchone()[0] == "2024"
+    assert (
+        cpp_only_con.execute("SELECT HighBoundary('2024-01-01T08')").fetchone()[0]
+        == "2024-01-01T08:59:59.999"
+    )
+    assert (
+        cpp_only_con.execute("SELECT LowBoundary('2024-01-01T08')").fetchone()[0]
+        == "2024-01-01T08:00:00.000"
+    )
+    assert cpp_only_con.execute("SELECT HighBoundary('T10:30')").fetchone()[0] == "T10:30:59.999"
+    assert cpp_only_con.execute("SELECT LowBoundary('T10:30')").fetchone()[0] == "T10:30:00.000"
     assert cpp_only_con.execute("SELECT HighBoundary('1e2', 3)").fetchone()[0] == "100.999"
     assert cpp_only_con.execute("SELECT LowBoundary('1e2', 3)").fetchone()[0] == "100.000"
     assert cpp_only_con.execute("SELECT HighBoundary('1e2', 0)").fetchone()[0] == "100"
@@ -199,6 +217,29 @@ def test_cql_browser_interval_and_boundary_udfs_run_without_python_fallback(cpp_
     assert (
         cpp_only_con.execute("SELECT LowBoundary('2024-01-01T10:30+05:00', 17)").fetchone()[0]
         == "2024-01-01T10:30:00.000+05:00"
+    )
+    assert (
+        cpp_only_con.execute(
+            "SELECT cqlSameAsP('2024-01-01T00:30:00+01:00',"
+            "'2024-01-01T00:30:00Z','day')"
+        ).fetchone()[0]
+        is True
+    )
+    assert (
+        cpp_only_con.execute(
+            "SELECT cqlSameAsP('2024-01-01T00:30:00+01:00',"
+            "'2023-12-31T23:30:00Z','second')"
+        ).fetchone()[0]
+        is True
+    )
+    assert cpp_only_con.execute("SELECT cqlSameAsP('T00:30:00+01:00','T00:30:00Z','hour')").fetchone()[0] is True
+    assert cpp_only_con.execute("SELECT cqlSameAsP('T00:30:00+01:00','T23:30:00Z','second')").fetchone()[0] is False
+    assert (
+        cpp_only_con.execute(
+            "SELECT dateTimeSameAs('2024-01-01T00:30:00+01:00',"
+            "'2024-01-01T00:30:00Z','day')"
+        ).fetchone()[0]
+        is True
     )
     assert cpp_only_con.execute("SELECT HighBoundary('2024-13', 8)").fetchone()[0] is None
     assert cpp_only_con.execute("SELECT HighBoundary('2024-01foo', 8)").fetchone()[0] is None
@@ -242,13 +283,17 @@ def test_cql_browser_interval_and_boundary_udfs_run_without_python_fallback(cpp_
         cpp_only_con.execute("SELECT dateAddQuantity('2024', '{\"value\":1,\"unit\":\"year\"}')").fetchone()[0]
         == "2025"
     )
+    assert cpp_only_con.execute("SELECT cqlDurationBetween('2024', '2025', 'bogus')").fetchone()[0] is None
+    assert cpp_only_con.execute("SELECT cqlDifferenceBetween('2024', '2025', 'bogus')").fetchone()[0] is None
     assert cpp_only_con.execute("SELECT quantityToInterval('not json')").fetchone()[0] is None
     assert cpp_only_con.execute("SELECT quantityToInterval('{}')").fetchone()[0] is None
     assert cpp_only_con.execute("SELECT quantityToInterval('{\"value\":null,\"unit\":\"day\"}')").fetchone()[0] is None
     assert json.loads(cpp_only_con.execute("SELECT ToQuantity(5)").fetchone()[0])["value"] == 5.0
     assert json.loads(cpp_only_con.execute("SELECT ToQuantity(0.1)").fetchone()[0])["value"] == 0.1
-    assert cpp_only_con.execute("SELECT mathRound('-2.5', '0')").fetchone()[0] == "-2"
-    assert cpp_only_con.execute("SELECT mathRound('-2.55', '1')").fetchone()[0] == "-2.5"
+    assert cpp_only_con.execute("SELECT mathRound('-0.5', '0')").fetchone()[0] == "-1"
+    assert cpp_only_con.execute("SELECT mathRound('-2.5', '0')").fetchone()[0] == "-3"
+    assert cpp_only_con.execute("SELECT mathRound('-2.55', '1')").fetchone()[0] == "-2.6"
+    assert cpp_only_con.execute("SELECT mathRound('3.1', NULL)").fetchone()[0] == "3"
     assert cpp_only_con.execute("SELECT mathPower('-2', '0.5')").fetchone()[0] is None
     assert cpp_only_con.execute("SELECT predecessorOf('2024-01-15T')").fetchone()[0] == "2024-01-14T"
     assert cpp_only_con.execute("SELECT successorOf('2024-01-15T')").fetchone()[0] == "2024-01-16T"
@@ -341,7 +386,7 @@ def test_cql_browser_interval_and_boundary_udfs_run_without_python_fallback(cpp_
     )
     assert (
         cpp_only_con.execute("SELECT cqlDurationBetween('2012-01-02', '2012', 'month')").fetchone()[0]
-        == '{"start":0,"end":11,"lowClosed":true,"highClosed":true}'
+        == '{"start":0,"end":10,"lowClosed":true,"highClosed":true}'
     )
     assert (
         cpp_only_con.execute("SELECT cqlDifferenceBetween('2012-01-02', '2012', 'month')").fetchone()[0]
@@ -391,6 +436,7 @@ def test_cql_browser_logical_and_list_udfs_run_without_python_fallback(cpp_only_
     assert cpp_only_con.execute("SELECT logicalAllTrue([true, true])").fetchone()[0] is True
     assert cpp_only_con.execute("SELECT logicalAnyFalse([true, false])").fetchone()[0] is True
     assert cpp_only_con.execute("SELECT logicalImplies(true, false)").fetchone()[0] is False
+    assert cpp_only_con.execute("SELECT logicalImplies('yes', 'false')").fetchone()[0] is None
     assert cpp_only_con.execute("SELECT jsonConcat(['a'], ['b'])").fetchone()[0] == ["a", "b"]
     assert cpp_only_con.execute("SELECT SingletonFrom([1])").fetchone()[0] == "1"
     assert cpp_only_con.execute("SELECT SingletonFrom([true])").fetchone()[0] == "true"

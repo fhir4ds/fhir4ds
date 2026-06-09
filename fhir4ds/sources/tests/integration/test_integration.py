@@ -23,6 +23,9 @@ from fhir4ds.sources import (
     CSVSource,
     ExistingTableSource,
     FileSystemSource,
+    MongoFhirServerSchema,
+    MongoFhirServerSource,
+    MongoResourceCollection,
     PostgresSource,
     PostgresTableMapping,
     SchemaValidationError,
@@ -92,12 +95,18 @@ class TestImports:
     def test_csv_source_importable(self):
         assert CSVSource is not None
 
+    def test_mongo_fhir_source_importable(self):
+        assert MongoFhirServerSource is not None
+        assert MongoFhirServerSchema is not None
+        assert MongoResourceCollection is not None
+
     def test_sources_module_has_all_attribute(self):
         all_names = sources.__all__
         for name in [
             "SourceAdapter", "SchemaValidationError", "FileSystemSource",
             "CloudCredentials", "PostgresSource", "PostgresTableMapping",
-            "ExistingTableSource", "CSVSource",
+            "MongoFhirServerSource", "MongoFhirServerSchema",
+            "MongoResourceCollection", "ExistingTableSource", "CSVSource",
         ]:
             assert name in all_names, f"'{name}' missing from fhir4ds.sources.__all__"
 

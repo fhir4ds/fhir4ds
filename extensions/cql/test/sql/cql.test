@@ -427,6 +427,12 @@ SELECT ratioValue('{"numerator": {"value": 5}, "denominator": {"value": 0}}');
 ----
 NULL
 
+# ratioValue rejects string-valued Quantity components
+query I
+SELECT ratioValue('{"numerator": {"value": "5", "unit": "mg"}, "denominator": {"value": 1, "unit": "mL"}}');
+----
+NULL
+
 # ratioNumeratorUnit
 query I
 SELECT ratioNumeratorUnit('{"numerator": {"value": 5, "unit": "mg"}, "denominator": {"value": 1, "unit": "mL"}}');
@@ -444,6 +450,17 @@ query I
 SELECT ratioNumeratorUnit('{"numerator": {"value": 5, "code": "mg"}, "denominator": {"value": 1, "code": "mL"}}');
 ----
 mg
+
+# ratio unit helpers require valid Quantity components
+query I
+SELECT ratioNumeratorUnit('{"numerator": {"unit": "mg"}, "denominator": {"value": 1, "unit": "mL"}}');
+----
+NULL
+
+query I
+SELECT ratioDenominatorUnit('{"numerator": {"value": 1, "unit": "mg"}, "denominator": {"unit": "mL"}}');
+----
+NULL
 
 # RatioToString
 query I
@@ -1191,6 +1208,18 @@ SELECT ToQuantity('5 ''not-a-unit''');
 ----
 NULL
 
+# ToQuantity: CQL Decimal scale is limited to 8
+query I
+SELECT ToQuantity('1.123456789 ''mg''');
+----
+NULL
+
+# ToQuantity: CQL Decimal range must be representable
+query I
+SELECT ToQuantity('1000000000000000000000000000000 ''mg''');
+----
+NULL
+
 # ToQuantity: CQL calendar duration keyword is valid
 query I
 SELECT ToQuantity('5 ''year''');
@@ -1209,15 +1238,39 @@ SELECT ToConcept('{"code":"123","system":"http://example.com"}');
 ----
 {"codes":[{"code":"123","system":"http://example.com"}]}
 
+# ToConcept: Code.display propagates to Concept.display
+query I
+SELECT ToConcept('{"code":"123","system":"http://example.com","display":"Display"}');
+----
+{"codes":[{"code":"123","system":"http://example.com","display":"Display"}],"display":"Display"}
+
 # ToConcept: flatten JSON array of codes
 query I
 SELECT ToConcept('[{"code":"x"},{"code":"y"}]');
 ----
 {"codes":[{"code":"x"},{"code":"y"}]}
 
+# ToConcept: list overload accepts List<Code>
+query I
+SELECT ToConcept(['{"code":"x"}', '{"code":"y","display":"Y"}']);
+----
+{"codes":[{"code":"x"},{"code":"y","display":"Y"}]}
+
+# ToConceptFromList: public list helper accepts List<Code>
+query I
+SELECT ToConceptFromList(['{"code":"x"}', '{"code":"y"}']);
+----
+{"codes":[{"code":"x"},{"code":"y"}]}
+
 # ToConcept: primitive JSON is not a Code
 query I
 SELECT ToConcept('"x"');
+----
+NULL
+
+# ToConcept: malformed Code-like Quantity object is not a Code
+query I
+SELECT ToConcept('{"value":5,"unit":"mg"}');
 ----
 NULL
 
@@ -1367,6 +1420,12 @@ NULL
 # logicalImplies: null → null = null
 query I
 SELECT logicalImplies(NULL, NULL);
+----
+NULL
+
+# logicalImplies: malformed Boolean text returns null
+query I
+SELECT logicalImplies('yes', 'false');
 ----
 NULL
 

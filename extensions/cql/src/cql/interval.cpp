@@ -563,7 +563,7 @@ static Optional<BoundValue> successor_bound(const BoundValue &value) {
 		result.qty_numeric = Optional<double>(*value.qty_numeric + 1e-8);
 		{
 			std::ostringstream oss;
-			oss << "{\"value\":" << *result.qty_numeric << ",\"unit\":\""
+			oss << "{\"value\":" << format_decimal_value(*result.qty_numeric) << ",\"unit\":\""
 			    << escapeJsonString(value.qty_unit) << "\"}";
 			result.raw_str = oss.str();
 		}
@@ -609,7 +609,7 @@ static Optional<BoundValue> predecessor_bound(const BoundValue &value) {
 		result.qty_numeric = Optional<double>(*value.qty_numeric - 1e-8);
 		{
 			std::ostringstream oss;
-			oss << "{\"value\":" << *result.qty_numeric << ",\"unit\":\""
+			oss << "{\"value\":" << format_decimal_value(*result.qty_numeric) << ",\"unit\":\""
 			    << escapeJsonString(value.qty_unit) << "\"}";
 			result.raw_str = oss.str();
 		}
@@ -653,6 +653,16 @@ static bool effective_interval_empty(const Interval &iv) {
 		return cmp == -2 || cmp > 0;
 	}
 	return false;
+}
+
+static bool interval_definitely_after(const Interval &left, const Interval &right) {
+	auto left_start = effective_start_bound(left);
+	auto right_end = effective_end_bound(right);
+	if (!left_start || !right_end) {
+		return false;
+	}
+	auto cmp = compare_interval_order_nullable(*left_start, *right_end);
+	return cmp && *cmp > 0;
 }
 
 // =====================================================================
@@ -909,6 +919,67 @@ bool Interval::meets_before(const Interval &other) const {
 
 bool Interval::meets_after(const Interval &other) const {
 return other.meets_before(*this);
+}
+
+Optional<bool> Interval::properly_contains_point_nullable(const BoundValue &point) const {
+	if (low) {
+		auto cmp = compare_interval_order_nullable(*low, point);
+		if (!cmp) {
+			return NullOpt<bool>();
+		}
+		if (*cmp >= 0) {
+			return Optional<bool>(false);
+		}
+	}
+	if (high) {
+		auto cmp = compare_interval_order_nullable(point, *high);
+		if (!cmp) {
+			return NullOpt<bool>();
+		}
+		if (*cmp >= 0) {
+			return Optional<bool>(false);
+		}
+	}
+	return Optional<bool>(true);
+}
+
+Optional<bool> Interval::meets_before_nullable(const Interval &other) const {
+	auto this_end = effective_end_bound(*this);
+	auto other_start = effective_start_bound(other);
+	if (!this_end || !other_start) {
+		if (interval_definitely_after(*this, other)) {
+			return Optional<bool>(false);
+		}
+		return NullOpt<bool>();
+	}
+	auto successor = successor_bound(*this_end);
+	if (!successor) {
+		return NullOpt<bool>();
+	}
+	auto cmp = compare_interval_order_nullable(*successor, *other_start);
+	if (!cmp) {
+		return NullOpt<bool>();
+	}
+	return Optional<bool>(*cmp == 0);
+}
+
+Optional<bool> Interval::meets_after_nullable(const Interval &other) const {
+	return other.meets_before_nullable(*this);
+}
+
+Optional<bool> Interval::meets_nullable(const Interval &other) const {
+	auto before = meets_before_nullable(other);
+	if (before && *before) {
+		return Optional<bool>(true);
+	}
+	auto after = meets_after_nullable(other);
+	if (after && *after) {
+		return Optional<bool>(true);
+	}
+	if (!before || !after) {
+		return NullOpt<bool>();
+	}
+	return Optional<bool>(false);
 }
 
 bool Interval::includes(const Interval &other) const {

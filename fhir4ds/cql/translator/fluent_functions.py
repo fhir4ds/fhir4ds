@@ -53,6 +53,7 @@ from ..translator.types import (
 )
 from ..translator.function_inliner import FunctionInliner, TranslationError
 from ..translator.fluent_function_loader import FluentFunctionLoader
+from ..translator.fhirpath_builder import escape_fhirpath_string_literal
 
 if TYPE_CHECKING:
     from ..translator.context import SQLTranslationContext
@@ -385,7 +386,8 @@ class FluentFunctionTranslator:
             url_arg = args[0]
             url_val = getattr(url_arg, 'value', None) if hasattr(url_arg, 'value') else None
             if url_val and isinstance(url_val, str):
-                fhirpath_expr = f"extension.where(url='{url_val}')"
+                escaped_url = escape_fhirpath_string_literal(url_val)
+                fhirpath_expr = f"extension.where(url='{escaped_url}')"
                 return SQLFunctionCall(
                     name="fhirpath_text",
                     args=[resource_expr, SQLLiteral(fhirpath_expr)],

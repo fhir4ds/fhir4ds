@@ -54,6 +54,78 @@ static ValueKind detect_kind(const std::string &s) {
 	return ValueKind::Unknown;
 }
 
+static Optional<bool> quantity_value_uses_decimal_step(const std::string &json) {
+	size_t key = json.find("\"value\"");
+	if (key == std::string::npos) return NullOpt<bool>();
+	size_t colon = json.find(':', key);
+	if (colon == std::string::npos) return NullOpt<bool>();
+	size_t pos = colon + 1;
+	while (pos < json.size() && std::isspace(static_cast<unsigned char>(json[pos]))) {
+		pos++;
+	}
+	if (pos >= json.size()) return NullOpt<bool>();
+	if (json[pos] == '"') return NullOpt<bool>();
+	if (json[pos] == '-' || json[pos] == '+') {
+		pos++;
+	}
+	bool saw_digit = false;
+	while (pos < json.size() && std::isdigit(static_cast<unsigned char>(json[pos]))) {
+		saw_digit = true;
+		pos++;
+	}
+	bool decimal_step = false;
+	if (pos < json.size() && json[pos] == '.') {
+		decimal_step = true;
+		pos++;
+		while (pos < json.size() && std::isdigit(static_cast<unsigned char>(json[pos]))) {
+			saw_digit = true;
+			pos++;
+		}
+	}
+	if (!saw_digit) return NullOpt<bool>();
+	if (pos < json.size() && (json[pos] == 'e' || json[pos] == 'E')) {
+		decimal_step = true;
+		pos++;
+		if (pos < json.size() && (json[pos] == '-' || json[pos] == '+')) {
+			pos++;
+		}
+		bool saw_exp_digit = false;
+		while (pos < json.size() && std::isdigit(static_cast<unsigned char>(json[pos]))) {
+			saw_exp_digit = true;
+			pos++;
+		}
+		if (!saw_exp_digit) return NullOpt<bool>();
+	}
+	return Optional<bool>(decimal_step);
+}
+
+static Optional<std::string> step_quantity_json(const std::string &value, int direction) {
+	auto decimal_step = quantity_value_uses_decimal_step(value);
+	if (!decimal_step) return NullOpt<std::string>();
+	auto q = parse_quantity_json(value);
+	if (!q) return NullOpt<std::string>();
+	q->value += direction * (decimal_step.value() ? 0.00000001 : 1.0);
+	if (q->code.empty()) {
+		q->code = "1";
+	}
+	auto formatted = format_quantity_json(*q);
+	return formatted ? formatted : NullOpt<std::string>();
+}
+
+Optional<int64_t> default_boundary_precision(const std::string &value) {
+	if (value.empty()) return NullOpt<int64_t>();
+	auto kind = detect_kind(value);
+	if (kind == ValueKind::Numeric) return Optional<int64_t>(8);
+	if (kind == ValueKind::Time) return Optional<int64_t>(9);
+	if (kind == ValueKind::DateTime) return Optional<int64_t>(17);
+	if (kind == ValueKind::Date) {
+		auto precision = cql_precision(value);
+		if (!precision) return NullOpt<int64_t>();
+		return precision;
+	}
+	return NullOpt<int64_t>();
+}
+
 // =====================================================================
 // Helper: parse time string to components
 // =====================================================================
@@ -830,11 +902,7 @@ Optional<std::string> predecessor_of(const std::string &value) {
 	auto kind = detect_kind(value);
 
 	if (!value.empty() && value[0] == '{') {
-		auto q = parse_quantity_json(value);
-		if (!q) return NullOpt<std::string>();
-		q->value -= 0.00000001;
-		auto formatted = format_quantity_json(*q);
-		return formatted ? formatted : NullOpt<std::string>();
+		return step_quantity_json(value, -1);
 	}
 
 	if (kind == ValueKind::Time) {
@@ -861,17 +929,8 @@ Optional<std::string> predecessor_of(const std::string &value) {
 	}
 
 	if (kind == ValueKind::Numeric) {
-		// Try integer first
-		if (value.find('.') == std::string::npos) {
-			char *end = NULL;
-			long long v = std::strtoll(value.c_str(), &end, 10);
-			if (end != value.c_str() && *end == '\0') {
-				std::ostringstream oss;
-				oss << (v - 1);
-				return Optional<std::string>(oss.str());
-			}
-		}
-		// Decimal: subtract 1e-8
+		// Public VARCHAR numeric helpers are decimal-valued. Typed Integer/Long
+		// predecessor uses the BIGINT overload registered in cql_extension.cpp.
 		char *end = NULL;
 		double d = std::strtod(value.c_str(), &end);
 		if (end != value.c_str() && *end == '\0') {
@@ -896,11 +955,7 @@ Optional<std::string> successor_of(const std::string &value) {
 	auto kind = detect_kind(value);
 
 	if (!value.empty() && value[0] == '{') {
-		auto q = parse_quantity_json(value);
-		if (!q) return NullOpt<std::string>();
-		q->value += 0.00000001;
-		auto formatted = format_quantity_json(*q);
-		return formatted ? formatted : NullOpt<std::string>();
+		return step_quantity_json(value, 1);
 	}
 
 	if (kind == ValueKind::Time) {
@@ -927,15 +982,8 @@ Optional<std::string> successor_of(const std::string &value) {
 	}
 
 	if (kind == ValueKind::Numeric) {
-		if (value.find('.') == std::string::npos) {
-			char *end = NULL;
-			long long v = std::strtoll(value.c_str(), &end, 10);
-			if (end != value.c_str() && *end == '\0') {
-				std::ostringstream oss;
-				oss << (v + 1);
-				return Optional<std::string>(oss.str());
-			}
-		}
+		// Public VARCHAR numeric helpers are decimal-valued. Typed Integer/Long
+		// successor uses the BIGINT overload registered in cql_extension.cpp.
 		char *end = NULL;
 		double d = std::strtod(value.c_str(), &end);
 		if (end != value.c_str() && *end == '\0') {

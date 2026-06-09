@@ -9,23 +9,23 @@ measures and verify their accuracy against official test cases.
 import json
 import os
 import sys
-import warnings
 import time
+import warnings
 from pathlib import Path
 
 # Ensure we can import fhir4ds and benchmarking
 sys.path.insert(0, os.getcwd())
 sys.path.insert(0, str(Path(__file__).parent))
-from conformance_log import log_run
+from conformance_log import log_run  # noqa: E402
 
 # Deeply-nested CQL libraries can exceed Python's default recursion limit
 sys.setrecursionlimit(8000)
 
-from fhir4ds.dqm.tests.conformance.cli import _discover_measures
-from fhir4ds.dqm.tests.conformance.database import BenchmarkDatabase
-from fhir4ds.dqm.tests.conformance.loader import load_test_suite
-from fhir4ds.dqm.tests.conformance.runner import run_measure
-from fhir4ds.dqm.tests.conformance.config import SKIP_ON_FAILURE, KNOWN_FAILURES
+from fhir4ds.dqm.tests.conformance.cli import _discover_measures  # noqa: E402
+from fhir4ds.dqm.tests.conformance.config import SKIP_ON_FAILURE  # noqa: E402
+from fhir4ds.dqm.tests.conformance.database import BenchmarkDatabase  # noqa: E402
+from fhir4ds.dqm.tests.conformance.loader import load_test_suite  # noqa: E402
+from fhir4ds.dqm.tests.conformance.runner import run_measure  # noqa: E402
 
 # Suppress UserWarnings (like unresolved CQL definition fallbacks) to prevent I/O spam
 warnings.simplefilter("ignore", UserWarning)
@@ -70,7 +70,7 @@ def main():
         "measure_discovery_ms",
         lambda: _discover_measures(suite=suite),
     )
-    
+
     # Filter out known bad measures
     configs = [c for c in configs if c.id not in SKIP_ON_FAILURE]
 
@@ -112,7 +112,7 @@ def main():
     passed_measures = 0
     total_patients = 0
     library_cache = {}
-    
+
     print(f"\nRunning {total_measures} measures...")
 
     for config in configs:
@@ -143,7 +143,7 @@ def main():
             accuracy = result.comparison.accuracy_pct if result.comparison else 0
             passed = (accuracy == 100.0)
             total_patients += result.patient_count
-            
+
             test_obj = {
                 "name": "Full Logic Accuracy",
                 "result": {

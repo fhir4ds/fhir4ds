@@ -19,7 +19,7 @@ from ...parser import (
     Join,
     ViewDefinition,
 )
-from ...types import ColumnType, JoinType
+from ...types import ColumnTag, ColumnType, JoinType
 from ...generator import SQLGenerator
 from ...errors import ValidationError
 from ...metadata import (
@@ -135,20 +135,19 @@ class TestColumnParsing:
             ("duckdb/type", "DATE"),
         ]
 
-    def test_column_with_plural_tags_alias(self):
-        """The documented tags example spelling is accepted as an alias."""
-        vd = parse_view_definition({
-            "resource": "Patient",
-            "select": [{
-                "column": [{
-                    "path": "birthDate",
-                    "name": "birth_date",
-                    "tags": [{"name": "ansi/type", "value": "DATE"}],
-                }]
-            }],
-        })
-
-        assert vd.select[0].column[0].tag[0].name == "ansi/type"
+    def test_column_with_plural_tags_alias_rejected(self):
+        """Official column metadata field is singular tag, not plural tags."""
+        with pytest.raises(ParseError, match="Unsupported field 'tags'"):
+            parse_view_definition({
+                "resource": "Patient",
+                "select": [{
+                    "column": [{
+                        "path": "birthDate",
+                        "name": "birth_date",
+                        "tags": [{"name": "ansi/type", "value": "DATE"}],
+                    }]
+                }],
+            })
 
     @pytest.mark.parametrize(
         "tag_value",
@@ -240,13 +239,14 @@ class TestColumnParsing:
                 }]
             })
 
-    def test_column_description_must_be_markdown_string(self):
+    @pytest.mark.parametrize("description", [5, None])
+    def test_column_description_must_be_markdown_string(self, description):
         """column.description is markdown metadata when present."""
         with pytest.raises(ParseError, match="description"):
             parse_view_definition({
                 "resource": "Patient",
                 "select": [{
-                    "column": [{"path": "id", "name": "id", "description": 5}]
+                    "column": [{"path": "id", "name": "id", "description": description}]
                 }]
             })
 
@@ -338,6 +338,26 @@ class TestSelectParsing:
                 }],
             })
 
+    def test_unionall_must_not_be_empty_when_present(self):
+        """Present select.unionAll must contain at least one branch."""
+        with pytest.raises(ParseError, match="unionAll"):
+            parse_view_definition({
+                "resource": "Patient",
+                "select": [{
+                    "column": [{"path": "id", "name": "id"}],
+                    "unionAll": [],
+                }],
+            })
+
+        with pytest.raises(ValueError, match="unionAll"):
+            ViewDefinition.from_dict({
+                "resource": "Patient",
+                "select": [{
+                    "column": [{"path": "id", "name": "id"}],
+                    "unionAll": [],
+                }],
+            })
+
     def test_view_definition_from_dict_validates_column_fields(self):
         """The public convenience constructor enforces the same column rules."""
         with pytest.raises(ValueError, match="sql-name"):
@@ -348,13 +368,14 @@ class TestSelectParsing:
                 }]
             })
 
-        with pytest.raises(ValueError, match="description"):
-            ViewDefinition.from_dict({
-                "resource": "Patient",
-                "select": [{
-                    "column": [{"path": "id", "name": "id", "description": 5}]
-                }]
-            })
+        for description in (5, None):
+            with pytest.raises(ValueError, match="description"):
+                ViewDefinition.from_dict({
+                    "resource": "Patient",
+                    "select": [{
+                        "column": [{"path": "id", "name": "id", "description": description}]
+                    }]
+                })
 
         with pytest.raises(ValueError, match="column"):
             ViewDefinition.from_dict({
@@ -484,8 +505,10 @@ class TestSelectParsing:
     @pytest.mark.parametrize("field,value", [
         ("forEach", 1),
         ("forEach", ""),
+        ("forEach", None),
         ("forEachOrNull", ["telecom"]),
         ("forEachOrNull", ""),
+        ("forEachOrNull", None),
     ])
     def test_select_iteration_fields_must_be_non_empty_strings(self, field, value):
         """forEach and forEachOrNull are optional string FHIRPath expressions."""
@@ -500,6 +523,7 @@ class TestSelectParsing:
 
     @pytest.mark.parametrize("repeat", [
         None,
+        [],
         "name",
         {"path": "name"},
         [1],
@@ -552,6 +576,15 @@ class TestSelectParsing:
                 }],
             })
 
+        with pytest.raises(ValueError, match="repeat"):
+            ViewDefinition.from_dict({
+                "resource": "Patient",
+                "select": [{
+                    "repeat": [],
+                    "column": [{"path": "$this", "name": "value"}],
+                }],
+            })
+
     def test_select_with_where(self):
         """Test parsing select with where clause."""
         vd = parse_view_definition('''
@@ -596,7 +629,7 @@ class TestConstantParsing:
         vd = parse_view_definition('''
         {
             "resource": "Patient",
-            "constants": [
+            "constant": [
                 {"name": "Female", "valueString": "female"}
             ],
             "select": [{
@@ -629,12 +662,27 @@ class TestConstantParsing:
         assert vd.constants[0].name == "Female"
         assert vd.constants[0].valueString == "female"
 
+    def test_plural_constants_alias_is_rejected(self):
+        """The SQL-on-FHIR JSON field is singular `constant`."""
+        with pytest.raises(ParseError, match="constants.*singular 'constant'"):
+            parse_view_definition({
+                "resource": "Patient",
+                "constants": [
+                    {"name": "Female", "valueString": "female"}
+                ],
+                "select": [{
+                    "column": [
+                        {"path": "id", "name": "patient_id"}
+                    ]
+                }]
+            })
+
     def test_constant_value_code(self):
         """Test parsing constant with code value."""
         vd = parse_view_definition('''
         {
             "resource": "Patient",
-            "constants": [
+            "constant": [
                 {"name": "StatusActive", "valueCode": "active"}
             ],
             "select": [{
@@ -652,7 +700,7 @@ class TestConstantParsing:
         vd = parse_view_definition('''
         {
             "resource": "Patient",
-            "constants": [
+            "constant": [
                 {"name": "MaxCount", "valueInteger": 10}
             ],
             "select": [{
@@ -670,7 +718,7 @@ class TestConstantParsing:
         vd = parse_view_definition('''
         {
             "resource": "Patient",
-            "constants": [
+            "constant": [
                 {"name": "IsActive", "valueBoolean": true}
             ],
             "select": [{
@@ -778,6 +826,22 @@ class TestConstantParsing:
                 }]
             })
 
+    def test_constant_rejects_duplicate_names(self):
+        """A ViewDefinition constant name must resolve to one value."""
+        with pytest.raises(ParseError, match="Duplicate constant name"):
+            parse_view_definition({
+                "resource": "Patient",
+                "constant": [
+                    {"name": "Duplicate", "valueString": "first"},
+                    {"name": "Duplicate", "valueString": "second"},
+                ],
+                "select": [{
+                    "column": [
+                        {"path": "id", "name": "patient_id"}
+                    ]
+                }]
+            })
+
     def test_constant_rejects_present_null_repeating_field(self):
         """A present repeating constant field must be an array, not JSON null."""
         with pytest.raises(ParseError, match="constant.*array"):
@@ -815,9 +879,13 @@ class TestConstantParsing:
         ("valueBoolean", "true"),
         ("valueCode", " bad "),
         ("valueDate", "2024-02-31"),
+        ("valueDateTime", "2024T00:00:00Z"),
+        ("valueDateTime", "2024-01T00:00:00Z"),
         ("valueDateTime", "2024-01-01T00:00:00"),
         ("valueDecimal", "1.2"),
         ("valueId", "bad/id"),
+        ("valueInstant", "2024T00:00:00Z"),
+        ("valueInstant", "2024-01T00:00:00Z"),
         ("valueInstant", "2024-01-01T00:00:00"),
         ("valueInteger", 2147483648),
         ("valueInteger64", 1234567890123),
@@ -1116,6 +1184,57 @@ class TestViewDefinitionParsing:
         round_tripped = parse_view_definition(vd.to_dict())
         assert round_tripped.to_dict() == vd.to_dict()
 
+    @pytest.mark.parametrize(
+        "field_name",
+        [
+            "resourceType",
+            "id",
+            "meta",
+            "url",
+            "version",
+            "status",
+            "title",
+            "description",
+        ],
+    )
+    def test_root_metadata_must_not_be_present_null(self, field_name):
+        """Strict JSON parsing rejects present null root metadata fields."""
+        data = {
+            "resource": "Patient",
+            field_name: None,
+            "select": [{
+                "column": [{"path": "id", "name": "id"}]
+            }],
+        }
+
+        with pytest.raises(ParseError, match=field_name):
+            parse_view_definition(data)
+
+        with pytest.raises(ValueError, match=field_name):
+            ViewDefinition.from_dict(data)
+
+    def test_direct_dataclass_none_root_metadata_still_means_omitted(self):
+        """Direct dataclass None remains the public API representation of absence."""
+        vd = ViewDefinition(
+            resource="Patient",
+            resourceType=None,
+            id=None,
+            meta=None,
+            url=None,
+            version=None,
+            status=None,
+            title=None,
+            description=None,
+            select=[Select(column=[Column(path="id", name="id")])],
+        )
+
+        serialized = vd.to_dict()
+
+        assert serialized == {
+            "resource": "Patient",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+
     def test_view_definition_to_dict_uses_official_json_field_names(self):
         """Serializer emits singular SQL-on-FHIR fields accepted by the parser."""
         vd = parse_view_definition({
@@ -1139,13 +1258,155 @@ class TestViewDefinitionParsing:
         assert "tags" not in serialized["select"][0]["column"][0]
         assert parse_view_definition(serialized).to_dict() == serialized
 
+    @pytest.mark.parametrize(
+        "kwargs, message",
+        [
+            ({"resource": ["Patient"]}, "ResourceType|string"),
+            ({"resource": "DefinitelyNotAResource"}, "ResourceType"),
+            ({"profile": None}, "profile"),
+            ({"meta": {"profile": "http://example.org/Profile"}}, "meta.profile"),
+            ({"fhirVersion": "4.0.1"}, "fhirVersion.*array"),
+            ({"fhirVersion": ["9.9.9"]}, "FHIRVersion"),
+        ],
+    )
+    def test_view_definition_to_dict_validates_root_logical_model_fields(self, kwargs, message):
+        """Serializer enforces root logical-model shape for direct dataclass input."""
+        base = {"resource": "Patient"}
+        base.update(kwargs)
+        vd = ViewDefinition(
+            **base,
+            select=[Select(column=[Column(path="id", name="id")])],
+        )
+
+        with pytest.raises(ValueError, match=message):
+            vd.to_dict()
+
+    @pytest.mark.parametrize(
+        "select_value, message",
+        [
+            ([], "non-empty"),
+            (None, "select"),
+            ({"column": []}, "select"),
+            ([{"column": []}], "Select objects"),
+        ],
+    )
+    def test_view_definition_to_dict_validates_select_shape(self, select_value, message):
+        """Serializer enforces ViewDefinition.select cardinality and item shape."""
+        vd = ViewDefinition(resource="Patient", select=select_value)
+
+        with pytest.raises(ValueError, match=message):
+            vd.to_dict()
+
+    @pytest.mark.parametrize(
+        "column, message",
+        [
+            (Column(path="", name="id"), "path"),
+            (Column(path="id", name="_bad"), "sql-name"),
+            (Column(path="id", name="id", description=5), "description"),
+            (Column(path="id", name="id", collection="false"), "collection"),
+        ],
+    )
+    def test_view_definition_to_dict_validates_column_fields(self, column, message):
+        """Serializer does not emit invalid direct Column objects."""
+        vd = ViewDefinition(resource="Patient", select=[Select(column=[column])])
+
+        with pytest.raises(ValueError, match=message):
+            vd.to_dict()
+
+    def test_view_definition_to_dict_retains_valid_root_where_description(self):
+        """Root where metadata is preserved after serializer validation."""
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[Select(column=[Column(path="id", name="id")])],
+            where=[{"path": "active", "description": "Only active patients"}],
+        )
+
+        assert vd.to_dict()["where"] == [
+            {"path": "active", "description": "Only active patients"}
+        ]
+
+    @pytest.mark.parametrize(
+        "where, message",
+        [
+            (None, "ViewDefinition.where"),
+            ([{"description": "missing path"}], "path"),
+            ([{"path": None}], "path"),
+            ([{"path": "active", "description": None}], "description"),
+            ([{"path": "active", "description": 5}], "description"),
+        ],
+    )
+    def test_view_definition_to_dict_validates_root_where_fields(self, where, message):
+        """Serializer does not emit invalid direct root where objects."""
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[Select(column=[Column(path="id", name="id")])],
+            where=where,
+        )
+
+        with pytest.raises(ValueError, match=message):
+            vd.to_dict()
+
+    @pytest.mark.parametrize(
+        "select, message",
+        [
+            (Select(column={"path": "id", "name": "id"}), "column"),
+            (Select(column=[{"path": "id", "name": "id"}]), "Column objects"),
+            (Select(select=None), "select"),
+            (Select(select=[{"column": []}]), "Select objects"),
+            (Select(unionAll=None), "unionAll"),
+            (Select(unionAll=[{"column": []}]), "Select objects"),
+            (Select(forEach=1), "forEach"),
+            (Select(repeat="name"), "repeat"),
+            (Select(repeat=[]), "repeat"),
+            (Select(forEach="name", forEachOrNull="telecom"), "forEach"),
+            (
+                Select(
+                    column=[Column(path="id", name="id")],
+                    select=[Select(where=[{"notPath": "active"}])],
+                ),
+                "path",
+            ),
+            (
+                Select(
+                    column=[Column(path="id", name="id")],
+                    select=[Select(where=[{"path": "active", "description": None}])],
+                ),
+                "description",
+            ),
+            (
+                Select(
+                    column=[Column(path="id", name="id")],
+                    select=[Select(where=[{"path": "active", "description": 5}])],
+                ),
+                "description",
+            ),
+        ],
+    )
+    def test_view_definition_to_dict_validates_nested_select_fields(self, select, message):
+        """Serializer validates direct Select container and iterator fields."""
+        vd = ViewDefinition(resource="Patient", select=[select])
+
+        with pytest.raises(ValueError, match=message):
+            vd.to_dict()
+
     def test_shareable_profile_enforces_required_metadata_and_column_types(self):
         """ShareableViewDefinition activates profile-specific cardinality rules."""
         with pytest.raises(ParseError, match="ShareableViewDefinition.*url"):
             parse_view_definition({
                 "meta": {"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
+                "status": "active",
                 "resource": "Patient",
                 "select": [{"column": [{"path": "id", "name": "id"}]}],
+            })
+
+        with pytest.raises(ParseError, match="ShareableViewDefinition.*status"):
+            parse_view_definition({
+                "meta": {"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
+                "url": "https://example.org/ViewDefinition/shareable",
+                "name": "shareable_patient",
+                "fhirVersion": ["4.0.1"],
+                "resource": "Patient",
+                "select": [{"column": [{"path": "id", "name": "id", "type": "id"}]}],
             })
 
         with pytest.raises(ParseError, match="Column.type"):
@@ -1153,6 +1414,7 @@ class TestViewDefinitionParsing:
                 "meta": {"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
                 "url": "https://example.org/ViewDefinition/shareable",
                 "name": "shareable_patient",
+                "status": "active",
                 "fhirVersion": ["4.0.1"],
                 "resource": "Patient",
                 "select": [{"column": [{"path": "id", "name": "id"}]}],
@@ -1162,6 +1424,7 @@ class TestViewDefinitionParsing:
             "meta": {"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
             "url": "https://example.org/ViewDefinition/shareable",
             "name": "shareable_patient",
+            "status": "active",
             "fhirVersion": ["4.0.1"],
             "resource": "Patient",
             "select": [{"column": [{"path": "id", "name": "id", "type": "id"}]}],
@@ -1170,9 +1433,19 @@ class TestViewDefinitionParsing:
 
     def test_tabular_profile_rejects_collections_and_complex_column_types(self):
         """TabularViewDefinition only permits scalar primitive columns."""
+        with pytest.raises(ParseError, match="TabularViewDefinition.*status"):
+            parse_view_definition({
+                "meta": {"profile": [TABULAR_VIEWDEFINITION_PROFILE]},
+                "resource": "Patient",
+                "select": [{
+                    "column": [{"path": "id", "name": "id", "type": "id"}]
+                }],
+            })
+
         with pytest.raises(ParseError, match="collection"):
             parse_view_definition({
                 "meta": {"profile": [TABULAR_VIEWDEFINITION_PROFILE]},
+                "status": "active",
                 "resource": "Patient",
                 "select": [{
                     "column": [{
@@ -1187,11 +1460,63 @@ class TestViewDefinitionParsing:
         with pytest.raises(ParseError, match="primitive"):
             parse_view_definition({
                 "meta": {"profile": [TABULAR_VIEWDEFINITION_PROFILE]},
+                "status": "active",
                 "resource": "Patient",
                 "select": [{
                     "column": [{"path": "name", "name": "name", "type": "HumanName"}]
                 }],
             })
+
+    def test_to_dict_validates_supported_profile_constraints(self):
+        """Direct serializers must not emit invalid profiled official JSON."""
+        shareable = ViewDefinition(
+            resource="Patient",
+            meta={"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
+            status="active",
+            select=[Select(column=[Column(path="id", name="id")])],
+        )
+        with pytest.raises(ValueError, match="ShareableViewDefinition.*url"):
+            shareable.to_dict()
+
+        missing_status = ViewDefinition(
+            resource="Patient",
+            meta={"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
+            url="https://example.org/ViewDefinition/shareable",
+            name="shareable_patient",
+            fhirVersion=["4.0.1"],
+            select=[Select(column=[Column(path="id", name="id", type="id")])],
+        )
+        with pytest.raises(ValueError, match="ShareableViewDefinition.*status"):
+            missing_status.to_dict()
+
+        tabular_missing_status = ViewDefinition(
+            resource="Patient",
+            meta={"profile": [TABULAR_VIEWDEFINITION_PROFILE]},
+            select=[Select(column=[Column(path="id", name="id", type="id")])],
+        )
+        with pytest.raises(ValueError, match="TabularViewDefinition.*status"):
+            tabular_missing_status.to_dict()
+
+        tabular = ViewDefinition(
+            resource="Patient",
+            meta={"profile": [TABULAR_VIEWDEFINITION_PROFILE]},
+            status="active",
+            select=[Select(column=[Column(path="name", name="name", type="HumanName")])],
+        )
+        with pytest.raises(ValueError, match="TabularViewDefinition.*primitive"):
+            tabular.to_dict()
+
+    def test_column_tag_to_dict_revalidates_direct_tag_objects(self):
+        """Direct serializer boundaries recheck required tag name/value fields."""
+        tag = ColumnTag("ansi/type", "DATE")
+        tag.name = None
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[Select(column=[Column(path="id", name="id", tag=[tag])])],
+        )
+
+        with pytest.raises(ValueError, match="Column.tag.name"):
+            vd.to_dict()
 
     def test_xml_view_definition_parse_error_is_explicit(self):
         """XML input is not silently treated as malformed JSON."""
@@ -1208,6 +1533,28 @@ class TestViewDefinitionParsing:
                     "column": [{"path": "id", "name": "id"}]
                 }]
             })
+
+        with pytest.raises(ParseError, match="canonical"):
+            parse_view_definition({
+                "resource": "Patient",
+                "profile": ["not a canonical with spaces"],
+                "select": [{
+                    "column": [{"path": "id", "name": "id"}]
+                }]
+            })
+
+    def test_profile_accepts_version_suffixed_canonical(self):
+        """profile canonical declarations may carry a FHIR canonical version suffix."""
+        profile = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient|7.0.0"
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "profile": [profile],
+            "select": [{
+                "column": [{"path": "id", "name": "id"}]
+            }]
+        })
+
+        assert vd.profile == [profile]
 
     def test_fhir_version_must_use_fhir_version_binding(self):
         """fhirVersion values come from the required FHIRVersion binding."""
@@ -1291,6 +1638,105 @@ class TestValidation:
 
         warnings = validate_view_definition(vd)
         assert any("forEach" in warning and "repeat" in warning for warning in warnings)
+
+    @pytest.mark.parametrize(
+        "vd, fragments",
+        [
+            (
+                ViewDefinition(
+                    resource="DefinitelyNotAResource",
+                    select=[Select(column=[Column(path="id", name="id")])],
+                ),
+                ("ViewDefinition.resource", "ResourceType"),
+            ),
+            (
+                ViewDefinition(
+                    resource="Patient",
+                    fhirVersion=["9.9.9"],
+                    select=[Select(column=[Column(path="id", name="id")])],
+                ),
+                ("ViewDefinition.fhirVersion", "FHIRVersion"),
+            ),
+            (
+                ViewDefinition(
+                    resource="Patient",
+                    name="_bad",
+                    select=[Select(column=[Column(path="id", name="id")])],
+                ),
+                ("ViewDefinition.name", "sql-name"),
+            ),
+            (
+                ViewDefinition(
+                    resource="Patient",
+                    select=[Select(column=[Column(path="id", name="_bad")])],
+                ),
+                ("Column.name", "sql-name"),
+            ),
+            (
+                ViewDefinition(
+                    resource="Patient",
+                    constants=[Constant(name="_bad", value="x", value_type="string")],
+                    select=[Select(column=[Column(path="id", name="id")])],
+                ),
+                ("Constant.name", "sql-name"),
+            ),
+        ],
+    )
+    def test_validate_warns_for_sof_vd10_binding_and_sql_name_constraints(self, vd, fragments):
+        """Permissive validation reports SOF-VD-10 constraints instead of raising."""
+        warning_text = "\n".join(validate_view_definition(vd))
+
+        for fragment in fragments:
+            assert fragment in warning_text
+
+    @pytest.mark.parametrize(
+        "vd, fragments",
+        [
+            (
+                ViewDefinition(
+                    resource="Patient",
+                    meta={"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
+                    status="active",
+                    select=[Select(column=[Column(path="id", name="id")])],
+                ),
+                ("ShareableViewDefinition", "ViewDefinition.url"),
+            ),
+            (
+                ViewDefinition(
+                    resource="Patient",
+                    meta={"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
+                    url="https://example.org/ViewDefinition/shareable",
+                    name="shareable_patient",
+                    fhirVersion=["4.0.1"],
+                    select=[Select(column=[Column(path="id", name="id", type="id")])],
+                ),
+                ("ShareableViewDefinition", "ViewDefinition.status"),
+            ),
+            (
+                ViewDefinition(
+                    resource="Patient",
+                    meta={"profile": [TABULAR_VIEWDEFINITION_PROFILE]},
+                    select=[Select(column=[Column(path="id", name="id", type="id")])],
+                ),
+                ("TabularViewDefinition", "ViewDefinition.status"),
+            ),
+            (
+                ViewDefinition(
+                    resource="Patient",
+                    meta={"profile": [TABULAR_VIEWDEFINITION_PROFILE]},
+                    status="active",
+                    select=[Select(column=[Column(path="name", name="name", type="HumanName")])],
+                ),
+                ("TabularViewDefinition", "primitive"),
+            ),
+        ],
+    )
+    def test_validate_warns_for_sof_vd12_supported_profile_constraints(self, vd, fragments):
+        """Permissive validation reports supported Shareable/Tabular constraints."""
+        warning_text = "\n".join(validate_view_definition(vd))
+
+        for fragment in fragments:
+            assert fragment in warning_text
 
 
 class TestCollectColumnNames:

@@ -1,6 +1,112 @@
 # ViewDefinition Agent Notes
 
 ## Known Fragile Areas
+- Release 0.0.8 Domain 5 SPECIALIST verified clean (2026-06-07):
+  Fresh composed ViewDefinition probing found no new issues across
+  `forEachOrNull` row preservation, nested `unionAll`, branch-local `where`,
+  constants, shared `source_table` resource filtering, native-loaded versus
+  forced Python fallback execution, and invalid `unionAll` parser/generator
+  boundaries. Keep `.temp/qa/domain5_specialist_probe.py`, full
+  ViewDefinition pytest, and `conformance/scripts/run_viewdef.py` aligned when
+  changing iterator, union, constant, or type/schema validation paths.
+- SOF-VD-12 EXPLORER fresh rerun verified clean (2026-06-01):
+  combined ShareableViewDefinition and TabularViewDefinition `meta.profile`
+  declarations with version suffixes still activate supported profile
+  constraints correctly, official JSON field names round-trip, XML input fails
+  with the explicit unsupported-format error, and unsupported top-level
+  `mapping` remains ignored and omitted. Metadata-heavy valid views execute
+  identically under native-loaded DuckDB FHIRPath and forced Python fallback.
+  Scratch probes under `.ai_loop/.temp` must prepend the repository root, not
+  `fhir4ds-private`, or they can import an installed package and report stale
+  ViewDefinition behavior.
+- SOF-VD-12 HISTORIAN fresh rerun fixed (2026-06-01): supported
+  ShareableViewDefinition and TabularViewDefinition profile activation must
+  include inherited CanonicalResource metadata constraints. The official
+  profile pages mark `ViewDefinition.status` as `1..1` with required
+  PublicationStatus binding, so parser, direct serializer/generator, and
+  permissive validator paths now reject or warn when a supported profiled
+  ViewDefinition omits `status`. Keep
+  `.ai_loop/.temp/qa/sof_vd12_historian_probe.py` and focused parser tests
+  aligned with profile metadata handling.
+- SOF-VD-12 SKEPTIC fresh rerun fixed (2026-06-01): supported
+  ShareableViewDefinition and TabularViewDefinition profile constraints must
+  be enforced consistently across parser, direct serializer, direct generator,
+  and permissive validator boundaries. `ViewDefinition.to_dict()` must not
+  emit official JSON for a direct dataclass whose `meta.profile` activates
+  Shareable required metadata/column-type rules or Tabular scalar primitive
+  column rules, and `validate_view_definition()` must warn for those same
+  direct-dataclass violations without raising. Keep
+  `test_to_dict_validates_supported_profile_constraints` and
+  `test_validate_warns_for_sof_vd12_supported_profile_constraints` aligned
+  when touching profile metadata handling.
+- SOF-VD-11 EXPLORER fresh rerun fixed (2026-06-01): iterator
+  fast paths must still enforce ViewDefinition column type declarations.
+  `forEach`/`forEachOrNull`/`repeat` contexts intentionally avoid the normal
+  `type().name` guard because unrolled JSON fragments can report
+  backend-dependent type names, but they still need portable physical JSON
+  shape guards. Direct `$this` numeric/Boolean projections must not build
+  mixed-type `COALESCE(..., VARCHAR)` SQL, and invalid declarations such as
+  integer iterator values declared as `string` or `%rowIndex` declared as
+  `string`/`boolean` must error instead of silently coercing. Keep
+  `sof_vd11_explorer_probe.py`, the iterator primitive regression in
+  `test_duckdb.py`, native/fallback parity, ViewDefinition conformance, and
+  full conformance aligned when touching `SQLGenerator.generate_column_expr()`
+  or iterator type guards.
+- SOF-VD-11 HISTORIAN fresh rerun fixed (2026-06-01): direct `%rowIndex`
+  columns are a ViewDefinition runner type boundary, not a raw DuckDB ordinal
+  leak. SQL-on-FHIR defines `%rowIndex` as integer, and a column declared with
+  `type: "integer"` must emit an `INTEGER` result under both native C++
+  FHIRPath registration and forced Python fallback. Keep focused `typeof(...)`
+  coverage with the official `row_index.json` examples because the generator
+  has a fast path that bypasses ordinary FHIRPath UDF casting.
+- SOF-VD-11 SKEPTIC fresh rerun fixed (2026-06-01): SQL-on-FHIR View Runner
+  official example/spec parity depends on native C++ FHIRPath preserving JSON
+  primitive metadata exactly like the forced Python fallback. `fn_boundary`
+  runner cases require JSON decimal scale (`1.0` -> precision 1), FHIR
+  `date`/`dateTime`/`time` boundary coercion, and typed column guards to agree
+  under both backends. `where.json` also depends on root-level
+  `where(criteria)` dispatch, not only chained `.where(criteria)`. Keep the
+  fresh SOF-VD-11 probe, `test_environment_type_parity.py`, ViewDefinition
+  runner regressions, local official spec_tests, and full conformance aligned;
+  rebuild/copy the bundled native extension before validating runner parity.
+- SOF-VD-10 EXPLORER fresh rerun fixed (2026-06-01): permissive
+  `validate_view_definition()` must warn for the same direct-dataclass
+  SQL-on-FHIR constraint violations that strict parser/generator paths reject,
+  without raising. Keep warnings aligned for ResourceType binding,
+  FHIRVersion binding, root `ViewDefinition.name`, `Column.name`, and
+  `Constant.name` `sql-name` violations. Strict parse/generation still fail
+  fast; direct dataclass `None` remains the omitted metadata representation.
+- SOF-VD-10 HISTORIAN fresh rerun verified clean (2026-06-01): Official
+  sql-name, sql-expressions, cardinality, ResourceType/FHIRVersion binding,
+  and local `expectError` fixture handling remained aligned across parser,
+  `ViewDefinition.from_dict()`, `to_dict()`, direct generator guards, and
+  DuckDB execution. Preserve the strict/permissive split: parse/generation
+  reject invalid official JSON and mutated direct dataclasses, while
+  `validate_view_definition()` returns warnings for direct-dataclass issues.
+  Keep native-loaded and forced Python fallback execution probes paired when
+  these constraint boundaries are touched.
+- SOF-VD-10 SKEPTIC fresh rerun fixed (2026-06-01): strict
+  `parse_view_definition()` / `ViewDefinition.from_dict()` must distinguish an
+  absent optional root metadata field from a present JSON null. Root
+  `resourceType`, `id`, `meta`, `url`, `version`, `status`, `title`, and
+  `description` are omitted when absent, but present null is invalid FHIR JSON
+  shape and must raise before dataclass construction. The parser now routes
+  those fields through `_parse_optional_root_metadata()` before shared metadata
+  validation; direct dataclass `None` still means omitted metadata.
+- SOF-VD-09 SKEPTIC fresh rerun fixed (2026-06-01): root
+  `ViewDefinition.where` is an official logical-model serialization boundary,
+  not just a parser/generator preflight concern. `ViewDefinition.to_dict()`
+  must route root `where` through the same `validate_where_conditions()` helper
+  as parser, `ViewDefinition.from_dict()`, `Select.to_dict()`, and
+  `SQLGenerator.generate()` so missing `path` or null/non-string
+  `description` cannot be emitted as official JSON.
+- SOF-VD-08 SKEPTIC fresh rerun fixed (2026-06-01): strict official JSON
+  parsing must reject a present empty `select.unionAll: []` instead of
+  normalizing it to absence. `unionAll` is a rowset-producing branch list; when
+  it appears, it must contain at least one selection structure, and FHIR JSON
+  empty repeating properties should be omitted. Keep parser and
+  `ViewDefinition.from_dict()` coverage aligned while preserving direct
+  dataclass `Select.unionAll=[]` as the default absent state.
 - Release 0.0.7 Domain 5 verified clean (2026-05-24): Fresh
   ViewDefinition domain testing found no new issues across `forEachOrNull`,
   nested select/unionAll, root/select `where`, constants, type columns, and
@@ -142,6 +248,29 @@
   node hits across paths, and preserve column evaluation against each repeated
   node. Keep parser/generator validation rejecting scalar JSON `repeat:
   "path"`; present `repeat` is a 0..* array field.
+- SOF-VD-07 SKEPTIC fresh rerun fixed (2026-06-01): a present empty
+  `select.repeat: []` is invalid FHIR JSON shape for the repeat directive and
+  must not be treated as repeat absence/default `$this`. Parser,
+  serializer, and direct SQL generator validation now share the central repeat
+  validator so empty repeat arrays fail before generated SQL can skip
+  `fhirpath_repeat`. Keep the fresh probe and parser/generator/repeat coverage
+  aligned with ViewDefinition conformance.
+- SOF-VD-07 HISTORIAN fresh rerun verified clean (2026-06-01): official
+  recursive repeat semantics remain aligned across parser,
+  `ViewDefinition.from_dict()`, `Select.to_dict()`, direct
+  `SQLGenerator.generate()`, native-loaded DuckDB, and forced Python fallback.
+  Keep coverage for multiple repeat FHIRPath expressions, duplicate path
+  union/de-duplication, `$this` traversal cycle guards, deep nested
+  QuestionnaireResponse-style trees, `%rowIndex`, and repeated-node column
+  context together with the empty-repeat rejection guard.
+- SOF-VD-07 EXPLORER fresh rerun verified clean (2026-06-01): repeat stayed
+  aligned across native-loaded DuckDB and forced Python fallback under edge
+  combinations: overlapping repeat paths with repeated-node `where`, nested
+  `forEachOrNull` below repeat, `%rowIndex` columns on repeated nodes,
+  `$this` self-traversal as a cycle-style guard, malformed direct
+  `fhirpath_repeat` path arrays, and deep raw JSON. Preserve `%rowIndex` as
+  the stable traversal-position signal; physical SQL row order may still need
+  an explicit sort by callers when a select-level filter is present.
 - SOF-VD-06 EXPLORER fixed (2026-05-20): `%rowIndex` is a
   ViewDefinition/FHIRPath environment variable, not only a standalone pseudo
   column. Columns and select `where` predicates inside `forEach`/
@@ -156,6 +285,28 @@
   the root input; expressions that mix root variables with current-focus paths
   or `%context` fail fast because the public DuckDB FHIRPath UDF accepts one
   JSON context input.
+- SOF-VD-06 SKEPTIC fresh rerun fixed (2026-06-01): strict parser/public
+  constructor input must distinguish absent iterator fields from present JSON
+  null. `select.forEach` and `select.forEachOrNull` are optional `0..1 string`
+  FHIRPath fields; absent means no iterator, while present null is invalid
+  official JSON and must raise before SQL generation. Direct dataclass
+  `Select(forEach=None)` / `Select(forEachOrNull=None)` still means omitted.
+- SOF-VD-06 HISTORIAN fresh rerun verified clean (2026-06-01): official
+  `forEach`/`forEachOrNull` semantics remain aligned across parser,
+  serializer/direct dataclass guard paths, SQL generation, native-loaded DuckDB,
+  and forced Python fallback. Keep row multiplication, empty `forEach`
+  suppression, `forEachOrNull` null-row preservation, nested column focus,
+  `%context` current-item routing, `%resource`/`%rootResource` root routing, and
+  `%rowIndex` substitution in where/column/child iterator expressions covered
+  together.
+- SOF-VD-06 EXPLORER fresh rerun verified clean (2026-06-01): iterator
+  composition remains aligned across native-loaded DuckDB and forced Python
+  fallback when parent `%rowIndex` is embedded in child iterator expressions
+  such as `%context.given[%rowIndex]`, sibling nested `forEachOrNull` null rows
+  are combined with sibling `forEach` row suppression, and top-level
+  `%rowIndex` evaluates to 0. Mixed current/root built-ins in one expression
+  should continue to fail fast until the DuckDB FHIRPath UDF surface supports
+  multiple JSON contexts.
 - SOF-VD-06 HISTORIAN fixed (2026-05-20): The SQL-on-FHIR
   `sql-expressions` constraint applies to all three iterator fields. Parser,
   `ViewDefinition.from_dict()`, direct dataclass validation, and generator
@@ -190,6 +341,14 @@
   union hoisting to iterator parents; default `$this` wrapper selects must
   still emit the union branch rows and combine parent columns with branch
   columns.
+- SOF-VD-05 EXPLORER fresh rerun fixed (2026-06-01): direct dataclass
+  serialization of recursive nested `select.where` must share parser/generator
+  validation. `Select.to_dict()` now routes non-empty `where` values through
+  `validate_where_conditions()` and rejects `where=None`, so malformed objects
+  such as missing `path` or non-string/null `description` cannot be emitted
+  under child selects. Keep serializer, parser/public constructor, and
+  generator direct-input guards aligned for recursive `select.select`
+  contentReference boundaries.
 - SOF-VD-04 EXPLORER fixed (2026-05-20): `collection=true` primitive
   typed columns must preserve the declared primitive element type in generated
   DuckDB output. `fhirpath()` returns `VARCHAR[]`, so generator collection
@@ -221,6 +380,30 @@
   `ViewDefinition.from_dict()`, and direct dataclass/generator guard paths must
   validate and preserve tags; database/type-hint tags are metadata unless an
   implementation explicitly handles them.
+- SOF-VD-04 SKEPTIC fresh rerun fixed (2026-05-31): column metadata uses the
+  singular official `tag` field only. Do not accept or canonicalize a plural
+  column-level `tags` alias at strict parser/public-constructor boundaries, and
+  revalidate `ColumnTag.name` / `ColumnTag.value` in serializer and direct
+  SQL-generator guard paths so mutated dataclass objects cannot emit invalid
+  official JSON or execute with malformed metadata.
+- SOF-VD-04 HISTORIAN fresh rerun fixed (2026-05-31): non-simple FHIRPath
+  column expressions such as `code.coding.where(...)` must still report
+  non-primitive JSON object/array results when `column.type` is unset or
+  primitive-incompatible. Keep the narrow expression guard in SQL generation:
+  simple navigation paths use full `type().name` checks, while non-simple
+  expressions only reject physically complex JSON results whose runtime type
+  names are absent or incompatible, preserving official primitive boundary
+  functions such as `lowBoundary()` / `highBoundary()`.
+- SOF-VD-04 EXPLORER fresh rerun fixed (2026-06-01): non-simple primitive
+  FHIRPath expressions with a declared `column.type` must not silently coerce
+  incompatible primitive values to NULL. When `type().name` reports a runtime
+  type for a non-simple expression, generated SQL now checks it against the
+  declared primitive type so cases like `'abc'` as `integer` or `1` as
+  `string` raise column type errors in native-loaded and forced Python
+  fallback execution. Keep temporal boundary functions in the compatibility
+  set: the conformance runner's `VARCHAR` resource transport can report
+  `String` for valid `dateTime`/`time` `lowBoundary()` and `highBoundary()`
+  outputs, while JSON transport reports the temporal System type directly.
 - Milestone code review finding (2026-05-20, OPEN): Public
   `ViewDefinition.from_dict()` must stay in lockstep with
   `parse_view_definition()` for root metadata and `where` parsing. It currently
@@ -259,6 +442,19 @@
   `column.description` must be markdown/string metadata when present. Generic
   SQL table identifier quoting remains separate from ViewDefinition output
   column sql-name validation.
+- SOF-VD-03 SKEPTIC fresh rerun fixed (2026-05-31): Parser and
+  `ViewDefinition.from_dict()` can be strict while direct dataclass
+  `SQLGenerator.generate()` and official `to_dict()` serialization bypass
+  select/column rules. Keep direct root `select` non-empty validation aligned
+  with parser cardinality, and keep `Column.to_dict()` / `Select.to_dict()` /
+  `ViewDefinition.to_dict()` from emitting invalid official JSON for empty root
+  select, missing/invalid `column.path`, invalid `column.name`, non-markdown
+  `column.description`, or non-Boolean `column.collection`.
+- SOF-VD-03 EXPLORER fresh rerun fixed (2026-05-31): Parser/public-constructor
+  input must reject a present JSON null `select.column.description`. Direct
+  dataclass `Column(description=None)` still means absent metadata, but parsed
+  official JSON must distinguish missing from present-null because
+  `column.description` is a `0..1 markdown` primitive.
 - SOF-VD-02 EXPLORER fixed (2026-05-20): Constant substitution must be
   FHIRPath-lexical, not regex-only. `%name` inside FHIRPath string literals is
   literal text, while `%name` outside literals is an external constant; string
@@ -286,9 +482,100 @@
   fallback casing for supported choices such as canonical and integer64.
 - SOF-VD-01 SKEPTIC fixed (2026-05-20): `ViewDefinition.resource` must remain a single required FHIR `ResourceType` code. Parser and generator now reject arrays and unknown resource codes; do not reintroduce array/multi-resource root support unless the SQL-on-FHIR logical model changes.
 - SOF-VD-01 SKEPTIC fixed (2026-05-20): `ViewDefinition.profile` and `ViewDefinition.fhirVersion` are logical-model declarations and must be parsed/preserved with validation even though they do not currently alter generated SQL.
+- SOF-VD-01 SKEPTIC fresh rerun (2026-05-31): `ViewDefinition.profile`
+  is a 0..* `canonical(StructureDefinition)` declaration, not an arbitrary
+  string list. Parser and direct generator guard paths must reject present
+  non-arrays, null arrays, non-string members, empty strings, and canonical
+  strings with whitespace while preserving valid version-suffixed canonical
+  URLs. The shared `validate_canonical_array()` helper is the guard for root
+  `profile`, `meta.profile`, serialization, and direct SQL generation.
+- SOF-VD-01 HISTORIAN fresh rerun (2026-05-31): `ViewDefinition.to_dict()`
+  is an official JSON serialization boundary, not a best-effort dump of direct
+  dataclass attributes. It must reuse the same root logical-model validators as
+  parser and SQL generation for `resource`, `profile`, `fhirVersion`, and
+  CanonicalResource metadata such as `meta.profile`; otherwise direct
+  dataclass construction can emit invalid ViewDefinition JSON even though
+  parser/generator reject it.
+- SOF-VD-02 SKEPTIC fresh rerun (2026-05-31): `ViewDefinition.constant` is the
+  singular official JSON field. Reject the legacy plural `constants` alias in
+  strict parser/public-constructor paths, reject duplicate constant names before
+  `%name` substitution, and keep direct `Constant` objects validated by the same
+  primitive `value[x]` allowlist/range/shape rules as parser dictionaries.
+  `resolve_constants_in_path()` must raise `ConstantResolutionError` for
+  undefined user constants while preserving built-in FHIRPath variables such as
+  `%resource`.
+- SOF-VD-02 HISTORIAN fresh rerun (2026-05-31): Verified clean after the fresh
+  SKEPTIC fixes. Parser, public constructor, serializer, direct dataclass
+  generator preflight, lexical resolver substitution, native-loaded DuckDB
+  execution, and forced Python fallback all preserve the current SQL-on-FHIR
+  constant contract for the singular `constant` array, `sql-name` names,
+  exactly-one primitive `value[x]`, undefined user constants, and built-in
+  `%resource`/`%rootResource`/`%rowIndex` pass-through. Keep official
+  `constant.json` and `constant_types.json` evidence paired with fresh probes.
+- SOF-VD-02 EXPLORER fresh rerun (2026-05-31): Constant FHIR primitive
+  validation must reject partial `dateTime`/`instant` strings that attach a
+  time component to an incomplete date, such as `2024T00:00:00Z` or
+  `2024-01T00:00:00Z`. `dateTime` values with a time component require a
+  complete `YYYY-MM-DD` date and timezone, and `instant` requires full date,
+  time, and timezone. Keep parser, `Constant.from_dict()`, `Constant.to_dict()`,
+  and direct `SQLGenerator` dataclass validation aligned.
 
 ## NOT A BUG Registry
 
+- SOF-VD-09 EXPLORER fresh rerun (2026-06-01): Root `where`
+  stays scoped to the root resource when projections use composed rowset
+  features. Fresh native-loaded and forced Python fallback probes verified
+  constants, exact singleton Boolean true filtering, false/empty/null/string/
+  numeric/multi-item non-inclusion, `where.description` retention, parser /
+  `to_dict()` / direct generator malformed-shape rejection, and root context
+  preservation through `forEach`, `forEachOrNull`, `repeat`, nested `select`,
+  and `unionAll`. Keep `fhirpath_json(...) = '[true]'` exactness and root
+  environment routing together when changing generated filter SQL.
+- SOF-VD-09 HISTORIAN fresh rerun (2026-06-01): Verified clean against
+  official SQL-on-FHIR v2 root `where` semantics. Root `where` predicates keep
+  only exact singleton Boolean true results (`fhirpath_json(...) = '[true]'`);
+  false, empty, missing/null, strings such as `'true'`, numeric literals, and
+  ordinary scalar values are row-exclusion signals rather than inclusion
+  signals. Constants and complex FHIRPath predicates resolve before SQL
+  generation, valid `where.description` metadata is retained, malformed
+  `where.path`/`where.description` is rejected at parser/serializer/direct
+  generator boundaries, and root filters stay scoped to the root resource even
+  when projections use `forEach`, `unionAll`, or branch-local `where`.
+- SOF-VD-08 HISTORIAN fresh rerun (2026-06-01): Verified clean against
+  official SQL-on-FHIR v2 `unionAll` semantics. `unionAll` concatenates branch
+  rowsets without de-duplicating, branch schemas must match by count/name/order/
+  declared FHIR type/collection flag, and nested `unionAll` composes like an
+  ordinary `select` rowset. Branch-local `where` filters stay branch scoped,
+  root/select filters wrap their own scope, and direct dataclass
+  `Select.unionAll=[]` remains the absent/default state even though present
+  official JSON `unionAll: []` is rejected.
+- SOF-VD-08 EXPLORER fresh rerun (2026-06-01): Verified clean with pathological
+  `unionAll` compositions across parser, serializer, direct dataclass,
+  SQL-generation, native-loaded DuckDB FHIRPath, and forced Python fallback.
+  Keep coverage for duplicate-preserving branches, scoped root/branch `where`,
+  `forEachOrNull` null-valued branch rows, nested `unionAll`, `repeat` branches,
+  malformed direct dataclass items, and branch schema mismatches together.
+- SOF-VD-07 EXPLORER fresh rerun (2026-06-01): SQL row order after
+  repeat-level filtering is not a conformance signal by itself. The repeat
+  generator provides `%rowIndex` for traversal position, and probes should
+  assert ordering-sensitive behavior through `%rowIndex` rather than relying
+  on unsorted physical DuckDB result order.
+- SOF-VD-05 SKEPTIC fresh rerun (2026-06-01): Fresh nested-select probes
+  verified parser, `to_dict()`, direct `SQLGenerator`, native-loaded DuckDB,
+  and forced Python fallback behavior for recursive `select.select`
+  contentReference semantics. Child selects inherit parent `forEach`/
+  `forEachOrNull` focus, no-iterator children default to `$this`, parent/child
+  and sibling rowsets compose by the SQL-on-FHIR recursive Cartesian model, and
+  an empty nested select under a column-bearing parent behaves as an identity
+  rowset. Preserve duplicate-name checks across parent/child select recursion.
+- SOF-VD-05 HISTORIAN fresh rerun (2026-06-01): Verified clean against the
+  official nested-select and multiple-select definitions. Recursive
+  `select.select` contentReference behavior is preserved through parser,
+  serializer, direct dataclass generation, native-loaded DuckDB execution, and
+  forced Python fallback. A parent `forEachOrNull` with no match produces a
+  null-preserved row, and child columns in that null row are SQL NULL even when
+  the child column is collection-valued; do not normalize those null-row
+  values to empty arrays.
 - SOF-VD-09 EXPLORER verified clean (2026-05-20): Root `where`
   predicates that produce empty/null, non-Boolean strings such as `"true"`,
   or multi-item Boolean collections such as `true | false` are not inclusion
@@ -312,6 +599,19 @@
 - SOF-VD-01 SKEPTIC (2026-05-20): With `SQLGenerator(source_table="resources")`, generated SQL must add a `json_extract_string(t.resource, '$.resourceType') = '<resource>'` filter. This preserves one ViewDefinition's single root resource type when several resource types share one physical table.
 - SOF-VD-01 HISTORIAN verified clean (2026-05-20): `profile` and `fhirVersion` are logical-model declarations parsed and preserved on `ViewDefinition`; they do not currently change generated SQL. Root resource execution still comes from `resource` plus the physical table/resourceType filter contract.
 - SOF-VD-01 EXPLORER verified clean (2026-05-20): A root `Patient` ViewDefinition over a shared mixed-resource table should filter out non-Patient rows while still allowing zero-or-more output rows per Patient. `forEachOrNull` preserving a Patient row with null nested columns is required behavior, not a leak from the resourceType filter.
+- SOF-VD-01 EXPLORER fresh rerun (2026-05-31): Parser input,
+  direct dataclass construction, `to_dict()`, `SQLGenerator(source_table=...)`,
+  and DuckDB execution all preserve the single-root-resource contract after the
+  SKEPTIC/HISTORIAN fixes. A shared mixed `resources` table must filter rows by
+  the validated `ViewDefinition.resource`, while `forEachOrNull` may still
+  produce a null-valued child row for a matching resource with no child
+  collection. Root `profile` and `fhirVersion` declarations remain
+  validated/preserved metadata and do not change row-producing SQL semantics.
+- SOF-VD-02 HISTORIAN fresh rerun (2026-05-31): It is expected that
+  SQL-on-FHIR built-in FHIRPath environment variables remain unresolved by the
+  user constant resolver. `%resource`, `%rootResource`, `%context`, `%rowIndex`,
+  and `%ucum` are runtime variables, while any other undefined `%name` is a
+  user constant error.
 
 ## Architecture
 
@@ -377,12 +677,36 @@
   paths need their own JSON-shape guard because they intentionally bypass
   normal path navigation and may point at a complex current focus.
 - SOF-VD-01 EXPLORER (2026-05-20): Keep root metadata validation centralized in `metadata.py`; parser and generator should consume shared ResourceType/FHIRVersion constants instead of drifting into separate allowlists.
+- SOF-VD-01 SKEPTIC fresh rerun (2026-05-31): Keep logical-model
+  root-field primitive/container validators centralized in `types.py`.
+  Parser, serializer, and direct generator guard paths must consume the same
+  helpers for `resource`, `profile`, `fhirVersion`, and CanonicalResource
+  metadata so direct dataclass construction cannot bypass strict JSON parsing.
+- SOF-VD-01 EXPLORER fresh rerun (2026-05-31): Keep the root-resource
+  execution contract end-to-end: strict parser/dataclass validation feeds one
+  validated `resource` code into the generator, shared-table SQL injects the
+  explicit `resourceType` predicate, and FHIRPath column/iterator execution
+  stays on the registered DuckDB UDF surface for both native and forced Python
+  fallback registrations.
 - SOF-VD-02 SKEPTIC (2026-05-20): Keep constant `name` and `value[x]` validation metadata centralized in `types.py` so parser and public convenience constructors enforce the same supported field set and exactly-one behavior.
+- SOF-VD-02 SKEPTIC fresh rerun (2026-05-31): Treat direct `Constant`
+  dataclass input and `Constant.to_dict()` as official logical-model
+  boundaries. They must reuse the same `types.py` value[x] metadata and
+  primitive validators as parser dictionaries. Constant resolver construction
+  must reject duplicate names, and undefined user constants must raise at the
+  resolver boundary; do not rely on downstream FHIRPath evaluation to discover
+  those errors.
 - SOF-VD-02 HISTORIAN (2026-05-20): Keep FHIR primitive constant value
   validation centralized before substitution. SQL generation should only consume
   parsed `Constant` objects through `ConstantResolver`; it must not rediscover
   `value[x]` fields or rely on DuckDB/FHIRPath coercion to reject invalid
   primitive constants later.
+- SOF-VD-02 HISTORIAN fresh rerun (2026-05-31): Treat `types.py` as the
+  constant value-choice metadata owner, `parser.py` and `Constant.to_dict()` as
+  logical-model boundaries, `constants.py` as the sole lexical substitution
+  boundary, and `generator.py` as a consumer of already validated `Constant`
+  objects. Do not add parallel constant allowlists or regex-only replacement in
+  generator code.
 - SOF-VD-02 EXPLORER (2026-05-20): Keep FHIRPath lexical scanning for
   constants centralized in `constants.py`; generator validation and substitution
   must share the same scanner so `%name` handling cannot drift between

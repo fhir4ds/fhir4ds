@@ -26,12 +26,23 @@ def registerStringMacros(con: "duckdb.DuckDBPyConnection") -> None:
     Note: Uses system. prefix to avoid shadowing DuckDB built-ins.
     """
     # Direct mappings (use system. prefix to avoid recursion)
-    con.execute("CREATE MACRO IF NOT EXISTS Length(s) AS system.length(s)")
+    con.execute(
+        "CREATE OR REPLACE MACRO Length(s) AS "
+        "CASE WHEN s IS NULL AND ends_with(typeof(s), '[]') THEN 0 "
+        "ELSE system.length(s) END"
+    )
     con.execute("CREATE MACRO IF NOT EXISTS Upper(s) AS system.upper(s)")
     con.execute("CREATE MACRO IF NOT EXISTS Lower(s) AS system.lower(s)")
 
     # Concat with NULL propagation (FHIRPath/CQL semantics)
-    con.execute("CREATE MACRO IF NOT EXISTS Concat(s1, s2) AS s1 || s2")
+    con.execute(
+        "CREATE OR REPLACE MACRO Concat(s1, s2) AS "
+        "CASE WHEN typeof(s1) NOT IN ('VARCHAR', '\"NULL\"') "
+        "OR typeof(s2) NOT IN ('VARCHAR', '\"NULL\"') "
+        "THEN error('CQL Concat requires String operands') "
+        "WHEN s1 IS NULL OR s2 IS NULL THEN NULL "
+        "ELSE s1 || s2 END"
+    )
 
     # String checking functions
     con.execute("CREATE MACRO IF NOT EXISTS StartsWith(s, prefix) AS system.starts_with(s, prefix)")
@@ -61,21 +72,22 @@ def registerStringMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # INDEX CONVERSION: CQL 0-based → DuckDB 1-based
     # ============================================
 
-    # Substring with index conversion: CQL uses 0-based, DuckDB uses 1-based
-    # CQL §17.7: if startIndex < 0 or > Length(s), result is null
-    # 2-argument version: Substring(s, start) -> from position to end
+    # Substring with index conversion: CQL uses 0-based, DuckDB uses 1-based.
+    # CQL defines both Substring(s, start) and Substring(s, start, length).
+    # DuckDB macros do not distinguish omitted defaults from explicit NULL, so
+    # use a sentinel outside CQL Integer range for the optional length.
     con.execute(
-        "CREATE MACRO IF NOT EXISTS Substring(s, start) AS "
+        "CREATE OR REPLACE MACRO Substring(s, start, len := -2147483649) AS "
         "CASE WHEN s IS NULL OR start IS NULL OR start < 0 OR start >= system.length(s) THEN NULL "
-        "ELSE system.substring(s, start + 1) END"
+        "WHEN len = -2147483649 THEN system.substring(s, start + 1) "
+        "WHEN len IS NULL OR len < 0 THEN NULL "
+        "ELSE system.substring(s, start + 1, len) END"
     )
 
-    # 3-argument version: SubstringLen(s, start, length)
+    # Backward-compatible alias used by older direct SQL checks.
     con.execute(
-        "CREATE MACRO IF NOT EXISTS SubstringLen(s, start, len) AS "
-        "CASE WHEN s IS NULL OR start IS NULL OR len IS NULL OR start < 0 OR len < 0 "
-        "OR start >= system.length(s) THEN NULL "
-        "ELSE system.substring(s, start + 1, len) END"
+        "CREATE OR REPLACE MACRO SubstringLen(s, start, len) AS "
+        "Substring(s, start, len)"
     )
 
     # NOTE: CQL IndexOf is a LIST operation (§20.13), not a string operation.
@@ -111,8 +123,12 @@ def registerStringMacros(con: "duckdb.DuckDBPyConnection") -> None:
 
     # Concatenate: CQL §17.1 — if any argument is null, result is null
     con.execute(
-        "CREATE MACRO IF NOT EXISTS Concatenate(s1, s2) AS "
-        "CASE WHEN s1 IS NULL OR s2 IS NULL THEN NULL ELSE s1 || s2 END"
+        "CREATE OR REPLACE MACRO Concatenate(s1, s2) AS "
+        "CASE WHEN typeof(s1) NOT IN ('VARCHAR', '\"NULL\"') "
+        "OR typeof(s2) NOT IN ('VARCHAR', '\"NULL\"') "
+        "THEN error('CQL Concatenate requires String operands') "
+        "WHEN s1 IS NULL OR s2 IS NULL THEN NULL "
+        "ELSE s1 || s2 END"
     )
 
     # LastPositionOf: CQL §17.7 — last position of pattern in string (0-based)

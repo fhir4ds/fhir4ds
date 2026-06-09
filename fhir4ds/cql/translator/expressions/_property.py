@@ -466,6 +466,16 @@ class PropertyMixin:
                     # This alias points to a CTE table reference
                     # Property access should use: alias.resource or alias.column_name
                     resource_col = SQLQualifiedIdentifier(parts=[table_alias, "resource"])
+                    source_ast = self.context._alias_source_asts.get(source_name)
+                    if self._static_tuple_field_type(source_ast, path):
+                        func_name = "fhirpath_bool" if boolean_context else "fhirpath_text"
+                        return SQLFunctionCall(
+                            name=func_name,
+                            args=[
+                                SQLIdentifier(name=table_alias),
+                                SQLLiteral(value=path),
+                            ],
+                        )
 
                     # Check if the CTE has a precomputed column for this path
                     if cte_name:
@@ -660,6 +670,16 @@ class PropertyMixin:
                 _ar_cte = getattr(symbol, 'cte_name', None) if symbol else None
                 if table_alias:
                     resource_col = SQLQualifiedIdentifier(parts=[table_alias, "resource"])
+                    source_ast = self.context._alias_source_asts.get(alias_name)
+                    if self._static_tuple_field_type(source_ast, path):
+                        func_name = "fhirpath_bool" if boolean_context else "fhirpath_text"
+                        return SQLFunctionCall(
+                            name=func_name,
+                            args=[
+                                SQLIdentifier(name=table_alias),
+                                SQLLiteral(value=path),
+                            ],
+                        )
                     if _ar_cte:
                         col_name = self.context.column_registry.lookup(_ar_cte, path)
                         if col_name:

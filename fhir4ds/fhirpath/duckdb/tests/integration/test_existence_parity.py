@@ -242,6 +242,52 @@ def test_parenthesized_logical_operators_are_valid_in_criteria(monkeypatch) -> N
         fallback.close()
 
 
+def test_existence_helpers_reject_invalid_arity_in_native_and_fallback(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "active": True,
+            "name": [{"family": "Smith"}, {"family": "Jones"}],
+            "telecom": [],
+        }
+    )
+    expressions = [
+        "name.empty(true)",
+        "name.count(true)",
+        "name.distinct(true)",
+        "name.isDistinct(true)",
+        "active.hasValue(true)",
+        "active.allTrue(false)",
+        "active.anyTrue(false)",
+        "active.allFalse(false)",
+        "active.anyFalse(false)",
+        "name.exists(family = 'Smith', family = 'Jones')",
+        "name.all()",
+        "name.all(family.exists(), family = 'Smith')",
+        "name.subsetOf()",
+        "name.subsetOf(name, telecom)",
+        "name.supersetOf()",
+        "name.supersetOf(name, telecom)",
+    ]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in expressions:
+            cpp = native.execute(
+                "SELECT fhirpath_is_valid(?), fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [expression, resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath_is_valid(?), fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [expression, resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp == py == (False, [], None, None)
+    finally:
+        native.close()
+        fallback.close()
+
+
 def test_boolean_aggregates_validate_full_collection_before_short_circuit(monkeypatch) -> None:
     expressions = [
         "true.combine('x').anyTrue()",

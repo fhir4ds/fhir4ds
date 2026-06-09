@@ -7,6 +7,7 @@ CodeableConcepts.
 
 import pytest
 
+from ...errors import ConstantResolutionError
 from ...types import Constant
 from ...constants import (
     resolve_constant,
@@ -191,12 +192,18 @@ class TestResolveConstantsInPath:
 
         assert result == "gender = 'female' and status = 'active'"
 
-    def test_unknown_constant_left_as_is(self):
-        """Test that unknown constant references are left unchanged."""
+    def test_unknown_constant_raises(self):
+        """Undefined user constant references fail explicitly."""
         constants = {}
-        result = resolve_constants_in_path("value = %UnknownConstant", constants)
 
-        assert result == "value = %UnknownConstant"
+        with pytest.raises(ConstantResolutionError, match="UnknownConstant"):
+            resolve_constants_in_path("value = %UnknownConstant", constants)
+
+    def test_builtin_fhirpath_variables_are_preserved(self):
+        """FHIRPath built-ins are not user-defined constants."""
+        result = resolve_constants_in_path("%resource.id & %context.id", {})
+
+        assert result == "%resource.id & %context.id"
 
     def test_constant_reference_inside_string_literal_is_not_resolved(self):
         """Percent-name text inside a FHIRPath string literal is not a constant."""
@@ -461,3 +468,32 @@ class TestEdgeCases:
                 "name": "BadPositive",
                 "valuePositiveInt": -1,
             })
+
+    def test_to_dict_rejects_invalid_constant_name(self):
+        """Direct Constant serialization validates constant.name."""
+        with pytest.raises(ValueError, match="sql-name"):
+            Constant(name="_bad", value="value", value_type="string").to_dict()
+
+    def test_to_dict_rejects_invalid_primitive_values(self):
+        """Direct Constant serialization validates value[x] shape."""
+        with pytest.raises(ValueError, match="valueInteger"):
+            Constant(name="BadInteger", value="1", value_type="integer").to_dict()
+
+        with pytest.raises(ValueError, match="valueDateTime"):
+            Constant(name="BadDateTime", value="2024T00:00:00Z", value_type="dateTime").to_dict()
+
+        with pytest.raises(ValueError, match="valueInstant"):
+            Constant(name="BadInstant", value="2024-01T00:00:00Z", value_type="instant").to_dict()
+
+    def test_to_dict_rejects_unsupported_value_type(self):
+        """Direct Constant serialization is limited to supported primitive choices."""
+        with pytest.raises(ValueError, match="Unsupported Constant.value_type"):
+            Constant(name="BadType", value="x", value_type="notatype").to_dict()
+
+    def test_resolver_rejects_duplicate_names_from_list(self):
+        """ConstantResolver construction cannot silently overwrite duplicates."""
+        with pytest.raises(ValueError, match="Duplicate constant name"):
+            ConstantResolver.from_list([
+                {"name": "Duplicate", "valueString": "first"},
+                {"name": "Duplicate", "valueString": "second"},
+            ])

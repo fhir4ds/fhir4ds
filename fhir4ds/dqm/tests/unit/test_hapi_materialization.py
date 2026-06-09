@@ -22,6 +22,8 @@ from fhir4ds.dqm.hapi_materialization import (
     _publish_measure_report_to_hapi,
     claim_pending_patients,
     enqueue_current_patients,
+    explain_patient_scope_plan,
+    load_materialization_config,
     materialization_sql,
     materialization_status,
     materialized_measure_hash,
@@ -107,6 +109,8 @@ def test_parse_materialization_config_resolves_paths_and_defaults(tmp_path):
             "max_attempts": 4,
             "retry_backoff_seconds": 2.5,
             "processing_timeout_seconds": 120,
+            "source_patient_pushdown": True,
+            "source_patient_pushdown_mode": "literal",
         },
         "retention": {
             "inactive_result_days": 90,
@@ -141,6 +145,8 @@ def test_parse_materialization_config_resolves_paths_and_defaults(tmp_path):
     assert config.max_attempts == 4
     assert config.retry_backoff_seconds == 2.5
     assert config.processing_timeout_seconds == 120
+    assert config.source_patient_pushdown is True
+    assert config.source_patient_pushdown_mode == "literal"
     assert config.hapi_schema.schema == "custom"
     assert config.hapi_schema.resource_table == "resources"
     assert config.hapi_schema.version_table == "versions"
@@ -227,6 +233,36 @@ def test_parse_materialization_config_rejects_invalid_hapi_valueset_policy():
         parse_materialization_config(raw)
 
 
+def test_load_materialization_config_wraps_invalid_json(tmp_path):
+    config_path = tmp_path / "hapi.json"
+    config_path.write_text("{")
+
+    with pytest.raises(DQMConfigError, match="Invalid JSON HAPI materialization config"):
+        load_materialization_config(config_path)
+
+
+def test_parse_materialization_config_rejects_non_object_libraries():
+    raw = {
+        "postgres": {"connection_string": "postgresql://hapi:hapi@localhost/hapi"},
+        "measures": [{"id": "CMS_TEST", "artifact_source": "hapi", "artifact_ref": "CMS_TEST"}],
+        "libraries": [],
+    }
+
+    with pytest.raises(DQMConfigError, match="'libraries' must be an object"):
+        parse_materialization_config(raw)
+
+
+def test_parse_materialization_config_rejects_non_object_terminology():
+    raw = {
+        "postgres": {"connection_string": "postgresql://hapi:hapi@localhost/hapi"},
+        "measures": [{"id": "CMS_TEST", "artifact_source": "hapi", "artifact_ref": "CMS_TEST"}],
+        "terminology": [],
+    }
+
+    with pytest.raises(DQMConfigError, match="'terminology' must be an object"):
+        parse_materialization_config(raw)
+
+
 def test_parse_materialization_config_requires_hapi_base_url_for_hapi_artifacts():
     raw = {
         "postgres": {"connection_string": "postgresql://hapi:hapi@localhost/hapi"},
@@ -259,6 +295,18 @@ def test_parse_materialization_config_rejects_unsafe_channel(tmp_path):
     }
 
     with pytest.raises(DQMConfigError, match="notification_channel"):
+        parse_materialization_config(raw, base_dir=tmp_path)
+
+
+def test_parse_materialization_config_rejects_invalid_pushdown_mode(tmp_path):
+    measure, _cql = _write_measure_files(tmp_path)
+    raw = {
+        "postgres": {"connection_string": "postgresql://hapi:hapi@localhost/hapi"},
+        "worker": {"source_patient_pushdown_mode": "batch_table"},
+        "measures": [{"path": str(measure)}],
+    }
+
+    with pytest.raises(DQMConfigError, match="source_patient_pushdown_mode"):
         parse_materialization_config(raw, base_dir=tmp_path)
 
 
@@ -810,6 +858,67 @@ def test_enqueue_current_patients_queues_from_decoded_view():
         "SELECT pg_notify(%s, %s)",
         ['custom_channel', '{"reason": "manual_patient_enqueue", "patient_count": 2}'],
     )
+
+
+def test_explain_patient_scope_plan_uses_postgres_decoded_view(monkeypatch):
+    import fhir4ds.dqm.hapi_materialization as hapi_materialization
+
+    executed: list[tuple[str, list[object]]] = []
+
+    class FakeCursor:
+        def fetchall(self):
+            return [("Index Scan using patient_ref_idx",), ("Filter: patient_ref",)]
+
+    class FakeConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def execute(self, sql, params=None):
+            executed.append((sql, list(params or [])))
+            return FakeCursor()
+
+    class FakePsycopg:
+        @staticmethod
+        def connect(connection_string):
+            assert connection_string == "postgresql://hapi:hapi@localhost/hapi"
+            return FakeConn()
+
+    monkeypatch.setattr(hapi_materialization, "require_psycopg", lambda: FakePsycopg)
+
+    lines = explain_patient_scope_plan(
+        HapiMaterializationConfig(
+            postgres_connection_string="postgresql://hapi:hapi@localhost/hapi",
+            hapi_schema=HapiPostgresSchema(
+                schema="hapi",
+                decoded_view="current_resources",
+            ),
+        ),
+        ["p2", "p1", "p1"],
+        analyze=True,
+    )
+
+    sql, params = executed[0]
+    assert "EXPLAIN (ANALYZE, BUFFERS)" in sql
+    assert 'FROM "hapi"."current_resources"' in sql
+    assert "patient_ref = ANY(%s::text[])" in sql
+    assert params == [["p1", "p2"]]
+    assert lines == ["Index Scan using patient_ref_idx", "Filter: patient_ref"]
+
+
+def test_explain_patient_scope_plan_validates_patient_ids():
+    config = HapiMaterializationConfig(
+        postgres_connection_string="postgresql://hapi:hapi@localhost/hapi",
+        hapi_schema=HapiPostgresSchema(decoded_view="current_resources"),
+    )
+
+    with pytest.raises(DQMConfigError, match="At least one patient id"):
+        explain_patient_scope_plan(config, [""])
+
+    with pytest.raises(DQMConfigError, match="patient_ids\\[0\\]"):
+        explain_patient_scope_plan(config, [object()])  # type: ignore[list-item]
 
 
 def test_hapi_cli_requires_nested_subcommand(capsys):

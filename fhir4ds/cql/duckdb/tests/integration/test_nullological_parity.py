@@ -178,6 +178,106 @@ define NotFalseOnTrue: true is not false
         cpp.close()
 
 
+def test_cql_boolean_coalesce_remains_boolean_for_predicates() -> None:
+    cql = """library BooleanCoalesce version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define ScalarFalse: Coalesce(null as Boolean, false) is false
+define ScalarTrue: Coalesce(null as Boolean, true) is true
+define ListFalse: Coalesce({null as Boolean, false, true}) is false
+define ListTrue: Coalesce({null as Boolean, true, false}) is true
+define StringTrueIsNotBoolean: Coalesce(null as String, 'true') is true
+define NumberOneIsNotBoolean: Coalesce(null as Integer, 1) is true
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "ScalarFalse": (True,),
+        "ScalarTrue": (True,),
+        "ListFalse": (True,),
+        "ListTrue": (True,),
+        "StringTrueIsNotBoolean": (False,),
+        "NumberOneIsNotBoolean": (False,),
+    }
+
+    direct_queries = {
+        'SELECT "Coalesce"(NULL, false)': (False,),
+        'SELECT "Coalesce"(NULL, true)': (True,),
+        'SELECT "Coalesce"([NULL::BOOLEAN, false])': (False,),
+        'SELECT "IsFalse"("Coalesce"([NULL::BOOLEAN, false]))': (True,),
+        'SELECT "IsTrue"("Coalesce"([NULL::BOOLEAN, true]))': (True,),
+        'SELECT "IsTrue"("Coalesce"(NULL, \'true\'))': (False,),
+        'SELECT "IsTrue"("Coalesce"(NULL, 1))': (False,),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_result in expected.items():
+            sql = translated[name].to_sql()
+            assert py.execute(f"SELECT {sql}").fetchone() == expected_result, name
+            assert cpp.execute(f"SELECT {sql}").fetchone() == expected_result, name
+        for sql, expected_result in direct_queries.items():
+            assert py.execute(sql).fetchone() == expected_result, sql
+            assert cpp.execute(sql).fetchone() == expected_result, sql
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_coalesce_quantity_results_use_quantity_comparison() -> None:
+    cql = """library QuantityCoalesce version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define LiteralQuantity: Coalesce({null as Quantity, 5 'mg'}) = 5 'mg'
+define QueryQuantity: Coalesce((from {null as Quantity, 5 'mg'} Q return Q)) = 5 'mg'
+define QueryQuantityConverted: Coalesce((from {null as Quantity, 5000 'mg'} Q return Q)) = 5 'g'
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "LiteralQuantity": (True,),
+        "QueryQuantity": (True,),
+        "QueryQuantityConverted": (True,),
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_result in expected.items():
+            sql = translated[name].to_sql()
+            assert "quantity_compare" in sql
+            assert py.execute(f"SELECT {sql}").fetchone() == expected_result, name
+            assert cpp.execute(f"SELECT {sql}").fetchone() == expected_result, name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_quantity_value_after_coalesce_is_numeric() -> None:
+    cql = """library QuantityValueCoalesce version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define function IndexQuantity(): Coalesce(null as Quantity, 5 'mg')
+define QuantityValueRatio: IndexQuantity().value / 0.9
+define QuantityValueMin: Min({IndexQuantity().value / 0.9, 1}) = 1
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "QuantityValueRatio": (5.555555555555555,),
+        "QuantityValueMin": (True,),
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_result in expected.items():
+            sql = translated[name].to_sql()
+            if name == "QuantityValueMin":
+                assert "list_min" in sql
+            assert py.execute(f"SELECT {sql}").fetchone() == expected_result, name
+            assert cpp.execute(f"SELECT {sql}").fetchone() == expected_result, name
+    finally:
+        py.close()
+        cpp.close()
+
+
 def test_cql_coalesce_rejects_invalid_scalar_arities_but_allows_list() -> None:
     invalid_bodies = [
         "define X: Coalesce()",
@@ -218,6 +318,52 @@ define FiveScalar: Coalesce(null, null, null, null, 'y')
         cpp.close()
 
 
+def test_cql_coalesce_single_query_list_overload_returns_first_non_null() -> None:
+    cql = """library QueryListCoalesce version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define StringQuery: (from {null as String, 'x'} V return V)
+define QueryListValue: Coalesce(StringQuery)
+define InlineQueryListValue: Coalesce((from {null as String, 'y'} V return V))
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "QueryListValue": ("x",),
+        "InlineQueryListValue": ("y",),
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_result in expected.items():
+            sql = translated[name].to_sql()
+            assert py.execute(f"SELECT {sql}").fetchone() == expected_result, name
+            assert cpp.execute(f"SELECT {sql}").fetchone() == expected_result, name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_direct_coalesce_rejects_invalid_scalar_arities() -> None:
+    invalid = [
+        'SELECT "Coalesce"(1)',
+        'SELECT "Coalesce"(NULL)',
+        'SELECT "Coalesce"(NULL, NULL, NULL, NULL, NULL, 1)',
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            for sql in invalid:
+                with pytest.raises(Exception, match="Coalesce scalar overload"):
+                    con.execute(sql).fetchone()
+            assert con.execute('SELECT "Coalesce"([NULL, 5])').fetchone() == (5,)
+            assert con.execute('SELECT "Coalesce"(NULL, NULL)').fetchone() == (None,)
+            assert con.execute('SELECT "Coalesce"(NULL, NULL, NULL, NULL, 5)').fetchone() == (5,)
+    finally:
+        py.close()
+        cpp.close()
+
+
 def test_cql_is_true_false_preserves_dynamic_fhir_boolean_values() -> None:
     cql = """library DynamicNullTruthiness version '1.0.0'
 using FHIR version '4.0.1'
@@ -226,6 +372,8 @@ define ActiveInfix: Patient.active is true
 define ActiveFunc: IsTrue(Patient.active)
 define NotActiveInfix: Patient.active is false
 define NotActiveFunc: IsFalse(Patient.active)
+define ActiveDefaultFalse: Coalesce(Patient.active, false) is false
+define ActiveDefaultTrue: Coalesce(Patient.active, true) is true
 """
     population_sql = CQLToSQLTranslator().translate_library_to_population_sql(
         parse_cql(cql),
@@ -234,13 +382,24 @@ define NotActiveFunc: IsFalse(Patient.active)
             "active_func": "ActiveFunc",
             "not_active_infix": "NotActiveInfix",
             "not_active_func": "NotActiveFunc",
+            "active_default_false": "ActiveDefaultFalse",
+            "active_default_true": "ActiveDefaultTrue",
         },
     )
     assert "fhirpath_bool" in population_sql
     assert " IS TRUE" not in population_sql
     assert " IS FALSE" not in population_sql
 
-    patient = json.dumps({"resourceType": "Patient", "id": "p1", "active": True})
+    patients = [
+        ("pfalse", {"resourceType": "Patient", "id": "pfalse", "active": False}),
+        ("pmissing", {"resourceType": "Patient", "id": "pmissing"}),
+        ("ptrue", {"resourceType": "Patient", "id": "ptrue", "active": True}),
+    ]
+    expected_rows = [
+        ("pfalse", False, False, True, True, True, False),
+        ("pmissing", False, False, False, False, True, True),
+        ("ptrue", True, True, False, False, False, True),
+    ]
     py = _python_only_connection()
     cpp = _cpp_connection()
     try:
@@ -248,8 +407,12 @@ define NotActiveFunc: IsFalse(Patient.active)
             con.execute(
                 "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
             )
-            con.execute("INSERT INTO resources VALUES ('p1', 'Patient', ?::JSON, 'p1')", [patient])
-            assert con.execute(population_sql).fetchone() == ("p1", True, True, False, False)
+            for patient_id, patient in patients:
+                con.execute(
+                    "INSERT INTO resources VALUES (?, 'Patient', ?::JSON, ?)",
+                    [patient_id, json.dumps(patient), patient_id],
+                )
+            assert con.execute(population_sql).fetchall() == expected_rows
     finally:
         py.close()
         cpp.close()

@@ -302,11 +302,12 @@ class FHIRPathEvaluator:
         if expr_stripped.lower().startswith('let '):
             return True
 
-        # All $variable references need built-in evaluator
-        # fhirpathpy only supports $this, $index, $total inside iteration contexts
-        # and throws KeyError when they're not set. Our implementation returns
-        # empty collection for undefined variables, which matches FHIRPath spec.
-        if expr_stripped.startswith('$'):
+        # Simple $variable and $variable.tail references need the wrapper so
+        # ViewDefinition iterator focus can be supplied from EvaluationContext.
+        # Compound expressions such as "$this = 'x'" should stay on the full
+        # FHIRPath evaluator; treating the whole expression as a variable name
+        # turns valid primitive-focus predicates into empty results.
+        if expr_stripped.startswith('$') and self._VARIABLE_EXPRESSION_RE.match(expr_stripped):
             return True
 
         return False

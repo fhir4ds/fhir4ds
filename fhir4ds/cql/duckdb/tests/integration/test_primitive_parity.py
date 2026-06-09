@@ -104,7 +104,7 @@ def test_cql_primitive_type_and_boundary_translation() -> None:
             continue
         raise AssertionError(f"Expected out-of-range primitive literal to fail: {invalid}")
 
-    for invalid in ["1LL", "1.0L", "1day"]:
+    for invalid in ["1LL", "1.0L", "1day", "1l"]:
         with pytest.raises(Exception):
             parse_expression(invalid)
 
@@ -144,6 +144,36 @@ def test_cql_primitive_duckdb_surface_matches_cpp_registration() -> None:
         assert py.execute("SELECT ToInteger(true)").fetchone() == (1,)
         assert py.execute("SELECT ConvertsToInteger('1.0')").fetchone() == (False,)
         assert py.execute("SELECT ConvertsToLong(true), ToLong(true)").fetchone() == (True, 1)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_primitive_string_escapes_match_spec_on_duckdb_backends() -> None:
+    header = "library Test version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n"
+    translated = translate_cql(
+        header
+        + "\n".join(
+            [
+                "define EscapedSlash: 'a\\/b'",
+                "define EscapedBacktick: 'a\\`b'",
+                "define UnknownEscapesRemainLiteral: 'a\\v\\0\\bb'",
+            ]
+        )
+    )
+
+    expected = {
+        "EscapedSlash": "a/b",
+        "EscapedBacktick": "a`b",
+        "UnknownEscapesRemainLiteral": "a\\v\\0\\bb",
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (value,)
+            assert cpp.execute(sql).fetchone() == (value,)
     finally:
         py.close()
         cpp.close()
@@ -288,6 +318,167 @@ def test_cql_primitive_as_type_assertions_execute_as_null_on_mismatch() -> None:
                 sql = f"SELECT {fhir_translated[name].to_sql()} FROM (SELECT ?::JSON AS O)"
                 assert py.execute(sql, [resource]).fetchone() == (expected_value,)
                 assert cpp.execute(sql, [resource]).fetchone() == (expected_value,)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_primitive_parameter_defaults_preserve_declared_type() -> None:
+    header = "library Test version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n"
+    translated = translate_cql(
+        header
+        + "\n".join(
+            [
+                "parameter P Integer default 5",
+                "parameter D Decimal default 1.2300",
+                "parameter S String default 'abc'",
+                "parameter N Integer default null",
+                "define PValue: P",
+                "define PIsInteger: P is Integer",
+                "define PIsString: P is String",
+                "define PAsInteger: P as Integer",
+                "define PAsString: P as String",
+                "define PPlusOne: P + 1",
+                "define DString: ToString(D)",
+                "define SIsString: S is String",
+                "define NIsAny: N is Any",
+            ]
+        )
+    )
+
+    expected = {
+        "PValue": 5,
+        "PIsInteger": True,
+        "PIsString": False,
+        "PAsInteger": 5,
+        "PAsString": None,
+        "PPlusOne": 6,
+        "DString": "1.2300",
+        "SIsString": True,
+        "NIsAny": False,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (value,)
+            assert cpp.execute(sql).fetchone() == (value,)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_primitive_runtime_parameters_preserve_declared_type_in_population_sql() -> None:
+    cql = """library Test version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+parameter P Integer
+define PPlusOne: P + 1
+define PIsInteger: P is Integer
+define PIsString: P is String
+"""
+    library = parse_cql(cql)
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        library,
+        output_columns={
+            "p_plus_one": "PPlusOne",
+            "p_is_integer": "PIsInteger",
+            "p_is_string": "PIsString",
+        },
+        parameters={"P": 5},
+    )
+    setup_sql = [
+        """
+        CREATE TABLE resources (
+            patient_ref VARCHAR,
+            resourceType VARCHAR,
+            id VARCHAR,
+            resource JSON
+        )
+        """,
+        """
+        INSERT INTO resources VALUES
+        ('p1', 'Patient', 'p1', '{"resourceType":"Patient","id":"p1"}'::JSON)
+        """,
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            for statement in setup_sql:
+                con.execute(statement)
+        assert py.execute(sql).fetchone() == ("p1", 6, True, False)
+        assert cpp.execute(sql).fetchone() == ("p1", 6, True, False)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_primitive_any_assertions_keep_scalar_definition_shape() -> None:
+    cql = """library Test version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+parameter PI Integer default 5
+parameter PD Decimal default 1.2300
+define I: PI
+define D: PD
+define IAlias: I
+define DAlias: D
+define AnyFromInteger: I as Any
+define AnyFromSystemInteger: I as System.Any
+define AnyThenInteger: (I as System.Any) as System.Integer
+define AnyThenString: (I as System.Any) as System.String
+define IntegerIsSystemInteger: I is System.Integer
+define IntegerAsSystemInteger: I as System.Integer
+define IntegerAsSystemLong: I as System.Long
+define AliasIsInteger: IAlias is Integer
+define AliasPlus: IAlias + 1
+define DecimalAliasString: ToString(DAlias)
+define NonNullIsSystemAny: I is System.Any
+"""
+    library = parse_cql(cql)
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        library,
+        output_columns={
+            "any_from_integer": "AnyFromInteger",
+            "any_from_system_integer": "AnyFromSystemInteger",
+            "any_then_integer": "AnyThenInteger",
+            "any_then_string": "AnyThenString",
+            "is_system_integer": "IntegerIsSystemInteger",
+            "as_system_integer": "IntegerAsSystemInteger",
+            "as_system_long": "IntegerAsSystemLong",
+            "alias_is_integer": "AliasIsInteger",
+            "alias_plus": "AliasPlus",
+            "decimal_alias_string": "DecimalAliasString",
+            "nonnull_is_system_any": "NonNullIsSystemAny",
+        },
+    )
+    setup_sql = [
+        """
+        CREATE TABLE resources (
+            patient_ref VARCHAR,
+            resourceType VARCHAR,
+            id VARCHAR,
+            resource JSON
+        )
+        """,
+        """
+        INSERT INTO resources VALUES
+        ('p1', 'Patient', 'p1', '{"resourceType":"Patient","id":"p1"}'::JSON)
+        """,
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            for statement in setup_sql:
+                con.execute(statement)
+        expected = ("p1", 5, 5, 5, None, True, 5, None, True, 6, "1.2300", True)
+        assert py.execute(sql).fetchone() == expected
+        assert cpp.execute(sql).fetchone() == expected
     finally:
         py.close()
         cpp.close()

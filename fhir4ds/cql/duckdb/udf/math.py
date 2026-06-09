@@ -23,6 +23,9 @@ _logger = logging.getLogger(__name__)
 
 
 _NUMBER_RE = re.compile(r"^[+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[eE][+-]?\d+)?$")
+_QUANTITY_VALUE_NUMBER_RE = re.compile(
+    r'"value"\s*:\s*([+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[eE][+-]?\d+)?)'
+)
 _TIME_ZONE_SUFFIX_RE = re.compile(r"(Z|[+-]\d{2}:\d{2})$")
 _MAX_DECIMAL_BOUNDARY_EXPONENT = 1000
 _CQL_LONG_MIN = -9223372036854775808
@@ -226,7 +229,10 @@ def mathRound(x: str | None, precision: str | None = "0") -> str | None:
         prec = 0
     multiplier = 10.0 ** prec
     shifted = value * multiplier
-    shifted = math.floor(shifted + 0.5)
+    if shifted >= 0:
+        shifted = math.floor(shifted + 0.5)
+    else:
+        shifted = math.ceil(shifted - 0.5)
     result = shifted / multiplier
     if prec <= 0:
         return _format_math_result(result)
@@ -471,6 +477,30 @@ def _step_temporal_string(value: str, direction: int) -> str | None:
     return f"{y:04d}-{mo:02d}-{d:02d}T{h:02d}:{mi:02d}:{s:02d}.{ms:03d}{suffix}"
 
 
+def _step_quantity_json(value: str, direction: int) -> str | None:
+    match = _QUANTITY_VALUE_NUMBER_RE.search(value)
+    if not match:
+        return None
+
+    raw_number = match.group(1)
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        current = Decimal(raw_number)
+    except InvalidOperation:
+        return None
+
+    from .quantity import _format_cql_quantity, _parse_quantity
+
+    parsed = _parse_quantity(value)
+    if not parsed or parsed.get("value") is None:
+        return None
+
+    unit = parsed.get("unit") or parsed.get("code") or "1"
+    step = Decimal("0.00000001") if ("." in raw_number or "e" in raw_number.lower()) else Decimal(1)
+    return _format_cql_quantity(current + direction * step, unit)
+
+
 def _step_value(x, direction: int) -> str | float | int | None:
     """Shared implementation for predecessorOf/successorOf.
 
@@ -492,16 +522,8 @@ def _step_value(x, direction: int) -> str | float | int | None:
         if x_stripped.startswith('T') or (len(x_stripped) >= 5 and x_stripped[2:3] == ':'):
             return _step_time_string(x_stripped, direction)
         # Quantity JSON
-        if x_stripped.startswith('{') and '"value"' in x_stripped:
-            import json as _json
-            try:
-                q = _json.loads(x_stripped)
-                v = q.get('value', 0)
-                q['value'] = float(Decimal(str(v)) + direction * Decimal("0.00000001"))
-                return _json.dumps(q)
-            except Exception as e:
-                _logger.debug("Unexpected error in UDF _step_value quantity parse: %s", e)
-                return None
+        if x_stripped.startswith('{'):
+            return _step_quantity_json(x_stripped, direction)
         # Date/datetime string
         stepped_temporal = _step_temporal_string(x_stripped, direction)
         if stepped_temporal is not None:
@@ -567,8 +589,12 @@ def highBoundary(value, precision: int | None = None) -> str | float | None:
     For Date/DateTime: fills to end of the precision period.
     For Time: fills to end of the precision period.
     """
-    if value is None or precision is None:
+    if value is None:
         return None
+    if precision is None:
+        precision = _default_boundary_precision(value)
+        if precision is None:
+            return None
     precision = int(precision)
 
     # Handle Decimal (DuckDB passes DECIMAL type as Python Decimal object)
@@ -690,8 +716,12 @@ def lowBoundary(value, precision: int | None = None) -> str | float | None:
     For Date/DateTime: fills to start of the precision period.
     For Time: fills to start of the precision period.
     """
-    if value is None or precision is None:
+    if value is None:
         return None
+    if precision is None:
+        precision = _default_boundary_precision(value)
+        if precision is None:
+            return None
     precision = int(precision)
 
     from decimal import Decimal as _Decimal
@@ -825,6 +855,35 @@ def cqlPrecision(value) -> int | None:
         return None
 
 
+def _default_boundary_precision(value) -> int | None:
+    """CQL default precision for HighBoundary/LowBoundary when omitted."""
+    from decimal import Decimal as _Decimal
+    from datetime import date, datetime
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float, _Decimal)):
+        return 8
+    if isinstance(value, datetime):
+        return 17
+    if isinstance(value, date):
+        return 8
+    if isinstance(value, str):
+        stripped = value.strip()
+        if _NUMBER_RE.fullmatch(stripped) and not _is_year_precision_date_string(stripped):
+            return 8
+        if _is_time_only_string(stripped):
+            return 9
+        normalized = stripped.replace(" ", "T")
+        if "T" in normalized:
+            return 17
+        if _validate_temporal_body(normalized, ""):
+            return sum(1 for c in normalized if c.isdigit())
+    return None
+
+
 def _message_condition_is_true(condition) -> bool:
     if isinstance(condition, bool):
         return condition
@@ -872,10 +931,32 @@ def registerMathUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("mathTruncate", mathTruncate, null_handling="special")
     con.create_function("predecessorOf", predecessorOf, null_handling="special")
     con.create_function("successorOf", successorOf, null_handling="special")
-    con.create_function("HighBoundary", highBoundary, null_handling="special")
-    con.create_function("LowBoundary", lowBoundary, null_handling="special")
+    con.create_function("__fhir4ds_py_HighBoundary", highBoundary, null_handling="special")
+    con.create_function("__fhir4ds_py_LowBoundary", lowBoundary, null_handling="special")
+    con.execute(
+        """
+        CREATE OR REPLACE TEMP MACRO HighBoundary(value, prec := NULL) AS
+        "__fhir4ds_py_HighBoundary"(value, prec)
+        """
+    )
+    con.execute(
+        """
+        CREATE OR REPLACE TEMP MACRO LowBoundary(value, prec := NULL) AS
+        "__fhir4ds_py_LowBoundary"(value, prec)
+        """
+    )
     con.create_function("CQLPrecision", cqlPrecision, null_handling="special")
-    con.create_function("CQLMessage", cqlMessage, null_handling="special")
+    try:
+        con.create_function("CQLMessage", cqlMessage, null_handling="special")
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "cqlmessage" not in msg or (
+            "not an scalar function" not in msg
+            and "already" not in msg
+            and "exists" not in msg
+        ):
+            raise
+        _logger.debug("Skipping CQLMessage UDF registration because macro already exists: %s", exc)
     con.execute(
         """
         CREATE OR REPLACE MACRO CQLMessage(source, condition, code, severity, message) AS

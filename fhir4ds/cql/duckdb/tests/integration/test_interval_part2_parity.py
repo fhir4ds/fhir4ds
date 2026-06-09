@@ -7,9 +7,9 @@ import json
 
 from fhir4ds.cql.duckdb import register
 from fhir4ds.cql.duckdb.extension import _register_python_supplements
-from fhir4ds.cql.parser import parse_expression
+from fhir4ds.cql.parser import parse_cql, parse_expression
 from fhir4ds.cql.parser.ast_nodes import BinaryExpression
-from fhir4ds.cql.translator import translate_cql
+from fhir4ds.cql.translator import CQLToSQLTranslator, translate_cql
 
 from .wasm_runtime_helpers import no_python_connection
 
@@ -45,6 +45,11 @@ def test_cql_interval_part2_expressions_parse_and_translate() -> None:
         "Interval[@2014, @2014] on or after Interval[@2014-06-01, @2014-06-02]",
         "Interval[@2014, @2014] on or before Interval[@2014-06-01, @2014-06-02]",
         "Interval[1 'g', 3 'g'] overlaps Interval[1 'cm', 2 'cm']",
+        "Interval[1, 5) intersect Interval[5, 7]",
+        "Interval[@2014, @2014] overlaps before day of Interval[@2014-06-01, @2014-06-02]",
+        "Interval[@2014-06-01, @2014-06-02] overlaps after day of Interval[@2014, @2014]",
+        "Interval[1 'g', 3 'g'] overlaps before Interval[1 'cm', 2 'cm']",
+        "Interval[1 'cm', 2 'cm'] overlaps after Interval[1 'g', 3 'g']",
     ]
     for expression in expressions:
         assert isinstance(parse_expression(expression), BinaryExpression)
@@ -61,8 +66,8 @@ def test_cql_interval_part2_expressions_parse_and_translate() -> None:
     assert "cqlSameOrAfterP" in str(translated["OnAfter"])
     assert "cqlSameOrBeforeP" in str(translated["OnBefore"])
     assert "intervalStart" in str(translated["Overlaps"])
-    assert "intervalOverlaps" in str(translated["OverlapsBefore"])
-    assert "intervalOverlaps" in str(translated["OverlapsAfter"])
+    assert "intervalStart" in str(translated["OverlapsBefore"])
+    assert "intervalEnd" in str(translated["OverlapsAfter"])
     assert translated["PartialYearOverlapsDayNull"].to_sql() == "NULL"
 
 
@@ -81,6 +86,12 @@ def test_cql_interval_part2_translated_sql_matches_cpp_registration() -> None:
         "DateTimeMeetsBefore": (True,),
         "MeetsAfter": (True,),
         "DateTimeMeetsAfter": (True,),
+        "MeetsNullLow": (None,),
+        "MeetsAfterNullHigh": (False,),
+        "TimeProperContainsUncertain": (None,),
+        "TimeProperInUncertain": (None,),
+        "TimeProperContainsPrecisionUncertain": (None,),
+        "TimeProperInPrecisionUncertain": (None,),
         "NotEqualCheck": (True,),
         "NotEquivalentCheck": (True,),
         "OnAfter": (True,),
@@ -94,6 +105,11 @@ def test_cql_interval_part2_translated_sql_matches_cpp_registration() -> None:
         "OnAfterPartialYearNull": (None,),
         "OnBeforePartialYearNull": (None,),
         "QuantityOverlapIncompatibleNull": (None,),
+        "IntersectHalfOpenEmpty": (None,),
+        "PartialYearOverlapsBeforeDayNull": (None,),
+        "PartialYearOverlapsAfterDayNull": (None,),
+        "QuantityOverlapsBeforeIncompatibleNull": (None,),
+        "QuantityOverlapsAfterIncompatibleNull": (None,),
     }
 
     py = _python_only_connection()
@@ -195,6 +211,16 @@ def test_cql_interval_part2_boundary_regressions_match_no_python_cpp() -> None:
             ('{"low": "5", "high": null, "lowClosed": true, "highClosed": false}',),
         ),
         (
+            "SELECT intervalIntersect(intervalFromBounds('1', '5', true, false), "
+            "intervalFromBounds('5', '7', true, true))",
+            (None,),
+        ),
+        (
+            "SELECT intervalIntersect(intervalFromBounds('1', '5', true, true), "
+            "intervalFromBounds('5', '7', true, true))",
+            ('{"low": "5", "high": "5", "lowClosed": true, "highClosed": true}',),
+        ),
+        (
             "SELECT intervalMeetsBefore(intervalFromBounds('1', '3', true, true), "
             "intervalFromBounds('3', '5', true, true))",
             (False,),
@@ -223,6 +249,37 @@ def test_cql_interval_part2_boundary_regressions_match_no_python_cpp() -> None:
             "SELECT intervalMeets(intervalFromBounds('2012-01-01T03', '2012-01-01T04', true, true), "
             "intervalFromBounds('2012-01-01T05', '2012-01-01T06', true, true))",
             (True,),
+        ),
+        (
+            "SELECT intervalMeets(intervalFromBounds('__null__', '5', false, true), "
+            "intervalFromBounds('__null__', '15', false, false))",
+            (None,),
+        ),
+        (
+            "SELECT intervalMeetsAfter(intervalFromBounds('__null__', '5', false, true), "
+            "intervalFromBounds('11', '__null__', true, false))",
+            (False,),
+        ),
+        (
+            "SELECT intervalProperlyContains("
+            "intervalFromBounds('T12:00:00.001', 'T21:59:59.999', true, true), 'T12:00:00')",
+            (None,),
+        ),
+        (
+            "SELECT intervalIncludesPrecise("
+            "intervalFromBounds('T12:00:00.001', 'T21:59:59.999', true, true), "
+            "intervalFromBounds('T12:00:00', 'T12:00:00', true, true), 'millisecond')",
+            (None,),
+        ),
+        (
+            "SELECT intervalOverlapsBefore(intervalFromBounds('2014', '2014', true, true), "
+            "intervalFromBounds('2014-06-01', '2014-06-02', true, true))",
+            (None,),
+        ),
+        (
+            "SELECT intervalOverlapsAfter(intervalFromBounds('2014-06-01', '2014-06-02', true, true), "
+            "intervalFromBounds('2014', '2014', true, true))",
+            (None,),
         ),
     ]
 
@@ -256,6 +313,20 @@ def test_cql_interval_part2_explorer_regressions_match_no_python_cpp() -> None:
             "'{\"value\":3,\"unit\":\"g\"}', true, true), "
             "intervalFromBounds('{\"value\":1,\"unit\":\"cm\"}', "
             "'{\"value\":2,\"unit\":\"cm\"}', true, true))",
+            (None,),
+        ),
+        (
+            "SELECT intervalOverlapsBefore(intervalFromBounds('{\"value\":1,\"unit\":\"g\"}', "
+            "'{\"value\":3,\"unit\":\"g\"}', true, true), "
+            "intervalFromBounds('{\"value\":1,\"unit\":\"cm\"}', "
+            "'{\"value\":2,\"unit\":\"cm\"}', true, true))",
+            (None,),
+        ),
+        (
+            "SELECT intervalOverlapsAfter(intervalFromBounds('{\"value\":1,\"unit\":\"cm\"}', "
+            "'{\"value\":2,\"unit\":\"cm\"}', true, true), "
+            "intervalFromBounds('{\"value\":1,\"unit\":\"g\"}', "
+            "'{\"value\":3,\"unit\":\"g\"}', true, true))",
             (None,),
         ),
     ]
@@ -292,6 +363,97 @@ def test_cql_interval_part2_explorer_regressions_match_no_python_cpp() -> None:
         cpp.close()
 
 
+def test_cql_interval_part2_dynamic_partial_fhir_points_keep_precision_uncertainty() -> None:
+    cql = """library CQL16DynamicPartial version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define Target: Interval[@2014-06-01, @2014-06-02]
+define DynOverlapsDay:
+  singleton from ([Observation] O return O.effective overlaps day of Target)
+define DynOverlapsBeforeDay:
+  singleton from ([Observation] O return O.effective overlaps before day of Target)
+define DynOverlapsAfterDay:
+  singleton from ([Observation] O return O.effective overlaps after day of Target)
+"""
+    population_sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql),
+        output_columns={
+            "overlaps_day": "DynOverlapsDay",
+            "overlaps_before_day": "DynOverlapsBeforeDay",
+            "overlaps_after_day": "DynOverlapsAfterDay",
+        },
+    )
+    rows = [
+        ("p1", "Patient", {"resourceType": "Patient", "id": "p1"}, "p1"),
+        ("p2", "Patient", {"resourceType": "Patient", "id": "p2"}, "p2"),
+        ("p3", "Patient", {"resourceType": "Patient", "id": "p3"}, "p3"),
+        (
+            "o1",
+            "Observation",
+            {
+                "resourceType": "Observation",
+                "id": "o1",
+                "subject": {"reference": "Patient/p1"},
+                "effectiveDateTime": "2014",
+            },
+            "p1",
+        ),
+        (
+            "o2",
+            "Observation",
+            {
+                "resourceType": "Observation",
+                "id": "o2",
+                "subject": {"reference": "Patient/p2"},
+                "effectivePeriod": {"start": "2014-05-31", "end": "2014-06-01"},
+            },
+            "p2",
+        ),
+        (
+            "o3",
+            "Observation",
+            {
+                "resourceType": "Observation",
+                "id": "o3",
+                "subject": {"reference": "Patient/p3"},
+                "effectivePeriod": {"start": "2014-06-02", "end": "2014-06-03"},
+            },
+            "p3",
+        ),
+    ]
+    expected = [
+        ("p1", None, None, None),
+        ("p2", True, True, False),
+        ("p3", True, False, True),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for con in (py, cpp, no_py):
+                con.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS resources (
+                      id VARCHAR,
+                      resourceType VARCHAR,
+                      resource JSON,
+                      patient_ref VARCHAR
+                    )
+                    """
+                )
+                con.execute("DELETE FROM resources")
+                for resource_id, resource_type, resource, patient_ref in rows:
+                    con.execute(
+                        "INSERT INTO resources VALUES (?, ?, ?::JSON, ?)",
+                        [resource_id, resource_type, json.dumps(resource), patient_ref],
+                    )
+                assert con.execute(population_sql).fetchall() == expected
+    finally:
+        py.close()
+        cpp.close()
+
+
 def _cql_interval_part2_library() -> str:
     return """library Interval2 version '1.0.0'
 using FHIR version '4.0.1'
@@ -307,10 +469,17 @@ define MeetsBefore: Interval[1, 3] meets before Interval[4, 6]
 define DateTimeMeetsBefore: Interval[DateTime(2012, 1, 5), DateTime(2012, 1, 25)] meets before Interval[DateTime(2012, 1, 26), DateTime(2012, 1, 28)]
 define MeetsAfter: Interval[4, 6] meets after Interval[1, 3]
 define DateTimeMeetsAfter: Interval[DateTime(2012, 1, 26), DateTime(2012, 1, 28)] meets after Interval[DateTime(2012, 1, 5), DateTime(2012, 1, 25)]
+define MeetsNullLow: Interval(null, 5] meets Interval(null, 15)
+define MeetsAfterNullHigh: Interval(null, 5] meets after Interval[11, null)
+define TimeProperContainsUncertain: Interval[@T12:00:00.001, @T21:59:59.999] properly includes @T12:00:00
+define TimeProperInUncertain: @T12:00:00 properly included in Interval[@T12:00:00.001, @T21:59:59.999]
+define TimeProperContainsPrecisionUncertain: Interval[@T12:00:00.001, @T21:59:59.999] properly includes millisecond of @T12:00:00
+define TimeProperInPrecisionUncertain: @T12:00:00 properly included in millisecond of Interval[@T12:00:00.001, @T21:59:59.999]
 define NotEqualCheck: Interval[1, 5] != Interval[1, 6]
 define NotEquivalentCheck: Interval[1, 5] !~ Interval[1, 6]
 define IntersectLowUnbounded: Interval[null as Integer, 5] intersect Interval[3, 7]
 define IntersectHighUnbounded: Interval[3, null as Integer] intersect Interval[1, 5]
+define IntersectHalfOpenEmpty: Interval[1, 5) intersect Interval[5, 7]
 define OnAfterOpen: Interval(3, 6] on or after Interval[1, 4]
 define OnBeforeOpen: Interval[1, 4) on or before Interval[3, 6]
 define OnAfter: Interval[@2024-02-01, @2024-02-28] on or after day of Interval[@2024-01-01, @2024-01-31]
@@ -321,7 +490,11 @@ define OverlapsAfter: Interval[@2024-01-15, @2024-02-15] overlaps after day of I
 define DateTimePointIncludedDay: @2014-06-01T12 included in day of Interval[@2014-06-01T00, @2014-06-01T01]
 define PartialYearIncludedDayNull: Interval[@2014, @2014] included in day of Interval[@2014-01-01, @2014-12-31]
 define PartialYearOverlapsDayNull: Interval[@2014, @2014] overlaps day of Interval[@2014-06-01, @2014-06-02]
+define PartialYearOverlapsBeforeDayNull: Interval[@2014, @2014] overlaps before day of Interval[@2014-06-01, @2014-06-02]
+define PartialYearOverlapsAfterDayNull: Interval[@2014-06-01, @2014-06-02] overlaps after day of Interval[@2014, @2014]
 define OnAfterPartialYearNull: Interval[@2014, @2014] on or after Interval[@2014-06-01, @2014-06-02]
 define OnBeforePartialYearNull: Interval[@2014, @2014] on or before Interval[@2014-06-01, @2014-06-02]
 define QuantityOverlapIncompatibleNull: Interval[1 'g', 3 'g'] overlaps Interval[1 'cm', 2 'cm']
+define QuantityOverlapsBeforeIncompatibleNull: Interval[1 'g', 3 'g'] overlaps before Interval[1 'cm', 2 'cm']
+define QuantityOverlapsAfterIncompatibleNull: Interval[1 'cm', 2 'cm'] overlaps after Interval[1 'g', 3 'g']
 """

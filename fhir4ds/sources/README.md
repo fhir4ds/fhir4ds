@@ -92,6 +92,35 @@ fhir4ds.attach(con, source)
 `res_encoding = 'JSON'`: inline `res_text_vc` by default, and uncompressed
 `res_text` large-object JSON when using the decoded view installed by
 `fhir4ds dqm hapi install`. Compressed `JSONC` rows fail clearly by default.
+The DQM materialization worker can temporarily scope the mounted source to the
+claimed Patient IDs; with the decoded view, that scope is pushed to PostgreSQL
+as a `patient_ref` predicate.
+
+### Mongo-Backed FHIR Server
+
+```python
+from fhir4ds.sources import MongoFhirServerSchema, MongoFhirServerSource
+
+source = MongoFhirServerSource(
+    connection_string="mongodb://readonly:pass@mongo.example.org:27017",
+    schema=MongoFhirServerSchema(
+        database_name="fhir",
+        resource_types=("Patient", "Observation", "Encounter"),
+    ),
+)
+fhir4ds.attach(con, source)
+```
+
+`MongoFhirServerSource` reads current resources through DuckDB's community
+`mongo` extension. The default layout targets Helix/icanbwell-style collections
+such as `Patient_4_0_0`, and the schema can be configured for custom collection
+names, shared collections, or wrapped FHIR resource documents.
+
+For HAPI-like DQM materialization, generated `MeasureReport` storage, and
+change-stream processing, use `fhir4ds dqm mongo ...`. Those features live in
+the DQM materialization worker; the source adapter itself remains read-only. The
+worker can also scope Mongo scans to the claimed Patient IDs for each queue
+batch.
 
 ### CSV Files
 

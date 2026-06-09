@@ -90,6 +90,21 @@ and the DQM performance report against `benchmarks/baselines/dqm_2025.json`
 flagged zero regressions. Keep the DQM baseline comparison and ad hoc
 1k/10k/50k loader probe together when changing ingestion or DQM critical paths.
 
+## Release 0.0.8 Domain 7 Benchmark Drift
+
+Fresh Domain 7 scale checks on 2026-06-07 again found no loader scaling cliff
+or Python heap growth, but the DQM comparison against the May 22 baseline
+flagged 7 timing regressions. CMS2 was the sentinel: current conformance output
+remained 47/47 accurate but grew to about 1.55 MB SQL and 11.6 s total time
+versus the checked-in 406 KB / 2.6 s baseline. Older local CMS2 artifacts near
+the baseline lack later semantic guardrails such as `CQLListContainsEq`,
+`CalculateAgeInYearsAt`, `ToDate`, `fhirpath_number`, and `CQLMessage`
+branches. `QA-004` was remediated by refreshing
+`benchmarks/baselines/dqm_2025.json` from the validated current DQM report,
+not by weakening thresholds. Future pre-release gates must still run
+`dqm_perf_report.py --fail-on-regression` against this refreshed baseline and
+must treat new major unexplained regressions as blockers.
+
 ## License
 
 Apache 2.0

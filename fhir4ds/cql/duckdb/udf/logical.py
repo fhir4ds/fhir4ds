@@ -11,6 +11,7 @@ import json
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Any
 
+import duckdb
 from duckdb import sqltypes
 
 if TYPE_CHECKING:
@@ -23,6 +24,8 @@ _COALESCE_RETURN_TYPE = getattr(sqltypes, "VARIANT", "VARCHAR")
 def _coalesce_return_value(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
+    if isinstance(value, bool) and _COALESCE_RETURN_TYPE != "VARCHAR" and hasattr(duckdb, "Value"):
+        return duckdb.Value(value, _COALESCE_RETURN_TYPE)
     return value
 
 
@@ -33,6 +36,11 @@ def Coalesce(*args: Any) -> Any:
             if value is not None:
                 return _coalesce_return_value(value)
         return None
+    if len(args) < 2 or len(args) > 5:
+        raise ValueError(
+            "Coalesce scalar overload requires 2 to 5 arguments; "
+            "use Coalesce([ ... ]) for list input"
+        )
     for arg in args:
         if arg is not None:
             return _coalesce_return_value(arg)
@@ -166,18 +174,26 @@ def logicalAnyFalse(values: List[bool | None] | None) -> bool | None:
 
 def registerLogicalUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     """Register all logical UDFs."""
+    def _create(name: str, fn: Any, **kwargs: Any) -> None:
+        try:
+            con.create_function(name, fn, **kwargs)
+        except (duckdb.CatalogException, duckdb.InvalidInputException, duckdb.NotImplementedException):
+            # SQL macros or the native extension may already provide the public
+            # name. Keep registering the rest of the logical surface.
+            return
+
     # Coalesce is variadic and type-preserving on DuckDB versions that expose
     # VARIANT. Older unsupported DuckDB fallback probes lack VARIANT, so use
     # VARCHAR there to keep registration and representative fallback UDFs alive.
-    con.create_function("Coalesce", Coalesce, return_type=_COALESCE_RETURN_TYPE, null_handling="special")
+    _create("Coalesce", Coalesce, return_type=_COALESCE_RETURN_TYPE, null_handling="special")
     # logicalCoalesce is the legacy string-returning JSON-list helper.
-    con.create_function("logicalCoalesce", logicalCoalesce, return_type="VARCHAR", null_handling="special")
-    con.create_function("logicalImplies", logicalImplies, null_handling="special")
+    _create("logicalCoalesce", logicalCoalesce, return_type="VARCHAR", null_handling="special")
+    _create("logicalImplies", logicalImplies, null_handling="special")
     # These list-returning functions need explicit types
-    con.create_function("logicalAllTrue", logicalAllTrue, return_type="BOOLEAN", null_handling="special")
-    con.create_function("logicalAnyTrue", logicalAnyTrue, return_type="BOOLEAN", null_handling="special")
-    con.create_function("logicalAllFalse", logicalAllFalse, return_type="BOOLEAN", null_handling="special")
-    con.create_function("logicalAnyFalse", logicalAnyFalse, return_type="BOOLEAN", null_handling="special")
+    _create("logicalAllTrue", logicalAllTrue, return_type="BOOLEAN", null_handling="special")
+    _create("logicalAnyTrue", logicalAnyTrue, return_type="BOOLEAN", null_handling="special")
+    _create("logicalAllFalse", logicalAllFalse, return_type="BOOLEAN", null_handling="special")
+    _create("logicalAnyFalse", logicalAnyFalse, return_type="BOOLEAN", null_handling="special")
 
 
 __all__ = [
