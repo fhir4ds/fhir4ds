@@ -27,6 +27,18 @@
   a local conformance harness, but it still accepts arbitrary runner request
   bodies.
 
+## CQL Named Type Target Boundaries
+
+- CQL `is`, nullable `as`, and strict `cast ... as` must accept valid FHIR R4
+  primitive, complex datatype, and resource names from generated FHIR type
+  metadata, including qualified targets such as `FHIR.Coding` and
+  `FHIR.instant`; unsupported names must still raise `TranslationError`.
+- Do not route FHIR complex datatypes through generic resourceType probing.
+  Direct FHIRPath extractions should guard against `type().name`; when native
+  FHIRPath reports `Coding` as an ambiguous complex container such as
+  `BackboneElement`, only use a narrow Coding JSON shape fallback so
+  JSON-looking string values are not treated as Coding evidence.
+
 ## Release 0.0.8 Domain 3 HISTORIAN Rerun
 
 - VERIFIED CLEAN on 2026-06-07. Fresh translated-execution probes covered CQL

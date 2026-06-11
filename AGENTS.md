@@ -164,6 +164,15 @@ snippets, release notes, `web/wasm-demo/public/` wheel contents, and the copied
 `web/website/static/wasm-app/` snapshot. Guard those with the `web/wasm-demo`
 build and website typecheck/build.
 
+Release 0.0.9 Domain 10 fix (2026-06-11): release-prep version drift must be
+closed across package metadata, all public subpackage `__version__` constants,
+notebook install snippets, website version assertions, WASM wheel filename
+references, the bundled `web/wasm-demo/public/` wheel, and the copied
+`web/website/static/wasm-app/` snapshot. Guard the fix with
+`fhir4ds/tests/test_version.py`, wheel metadata/import checks,
+`web/wasm-demo` build, and website typecheck/build before marking the release
+surface clean.
+
 1. Implementation: `fhir4ds/fhirpath/engine/invocations/`
 2. Tests: `fhir4ds/fhirpath/tests/unit/`
 3. DuckDB Registration: `fhir4ds/fhirpath/duckdb/udf.py`

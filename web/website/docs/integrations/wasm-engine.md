@@ -9,7 +9,7 @@ This is a "low-level" integration: you provide the UI and data management, and F
 To integrate the engine, you will need to host the following assets on your web server:
 
 1.  **DuckDB Extensions**: `fhirpath.duckdb_extension.wasm` and `cql.duckdb_extension.wasm`.
-2.  **Translator Wheel**: `fhir4ds_v2-0.0.8-py3-none-any.whl` (the CQL-to-SQL translation module for Pyodide).
+2.  **Translator Wheel**: `fhir4ds_v2-0.0.9-py3-none-any.whl` (the CQL-to-SQL translation module for Pyodide).
 
 You can find these files in the [FHIR4DS GitHub Repository](https://github.com/fhir4ds/fhir4ds/tree/main/web/wasm-demo/public).
 
@@ -103,11 +103,13 @@ Inside the **Web Worker**, you initialize Pyodide and install the FHIR4DS transl
 ```python
 # Inside the Pyodide worker
 import micropip
+# Load Pyodide-hosted binary packages that fhir4ds imports at module load.
+await pyodide.loadPackage(["duckdb", "orjson", "pyarrow"])
 await micropip.install([
     "antlr4-python3-runtime>=4.10",
     "python-dateutil>=2.8",
 ])
-await micropip.install("path/to/fhir4ds_v2-0.0.8-py3-none-any.whl", deps=False)
+await micropip.install("path/to/fhir4ds_v2-0.0.9-py3-none-any.whl", deps=False)
 
 from fhir4ds.cql.parser import parse_cql
 from fhir4ds.cql import CQLToSQLTranslator

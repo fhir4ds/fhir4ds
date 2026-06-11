@@ -455,6 +455,7 @@ from ...translator.expressions._utils import (
     BINARY_OPERATOR_MAP,
     UNARY_OPERATOR_MAP,
     _coerce_query_rows_to_list,
+    _is_fhir_r4_type_name,
     _is_list_returning_sql,
     _contains_sql_subquery,
     _ensure_scalar_body,
@@ -1035,6 +1036,8 @@ class OperatorsMixin:
             "Period", "Range", "Timing",
         }
         if bare in known or bare.lower() in {item.lower() for item in known}:
+            return True
+        if _is_fhir_r4_type_name(bare):
             return True
         registry = getattr(self.context, "profile_registry", None)
         if registry is not None:

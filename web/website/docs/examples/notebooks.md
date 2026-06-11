@@ -16,14 +16,14 @@ Try FHIR4DS in your browser using Google Colab. These notebooks demonstrate the 
 | **ViewDefinition** | SQL-on-FHIR v2 ViewDefinition generator. | [![Open In Colab](https://img.shields.io/badge/Open%20In%20Colab-F9AB00?logo=googlecolab&logoColor=white)](https://colab.research.google.com/github/fhir4ds/fhir4ds/blob/main/docs/notebooks/viewdef.ipynb) |
 | **DQM** | Measure evaluation and clinical audit trails. | [![Open In Colab](https://img.shields.io/badge/Open%20In%20Colab-F9AB00?logo=googlecolab&logoColor=white)](https://colab.research.google.com/github/fhir4ds/fhir4ds/blob/main/docs/notebooks/dqm.ipynb) |
 
-Each notebook begins with `pip install fhir4ds-v2==0.0.8` and imports from `fhir4ds`. No other setup is required.
+Each notebook begins with `pip install fhir4ds-v2==0.0.9` and imports from `fhir4ds`. No other setup is required.
 
 ## Local Usage
 
 To run these notebooks locally, install the package and launch Jupyter:
 
 ```bash
-pip install "fhir4ds-v2[measures]==0.0.8"
+pip install "fhir4ds-v2[measures]==0.0.9"
 jupyter notebook docs/notebooks/
 ```
 

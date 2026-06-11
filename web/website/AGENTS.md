@@ -22,7 +22,8 @@ The interactive demo is a standalone React application (`web/wasm-demo`) that is
   `web/wasm-demo/public/`; rebuild `web/wasm-demo`, copy `dist/` into
   `static/wasm-app/`, then run `npm run typecheck` and `npm run build` here.
 - **Pyodide install snippets**: examples that install the bundled wheel in
-  Pyodide must install pure-Python dependencies first and call
+  Pyodide must load Pyodide-hosted packages such as `duckdb`, `orjson`, and
+  `pyarrow`, install pure-Python dependencies first, and call
   `micropip.install(..., deps=False)` for the fhir4ds wheel. Without
   `deps=False`, micropip tries to install the native `duckdb` Python package
   and fails in browser environments.
@@ -58,6 +59,12 @@ exercise every translated SQL path. When the CQL WASM extension changes, also
 run `web/wasm-demo/tests/e2e/cms-measures.spec.ts`; quality-measure examples can
 fail from missing CQL UDF registrations even when the website shell and CQL
 playground examples pass.
+
+Playwright must serve and test the same origin. `PLAYWRIGHT_BASE_URL` controls
+both `use.baseURL` and the `webServer` host/port in `playwright.config.ts`;
+when port 3000 is already occupied, run with an alternate URL such as
+`PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001/ npm run test:e2e`. Do not let
+`reuseExistingServer` point tests at an unrelated local app.
 
 SMART OAuth popup callbacks must not rely solely on `window.opener`. The
 cross-origin isolation service worker applies COOP/COEP headers, and the EHR

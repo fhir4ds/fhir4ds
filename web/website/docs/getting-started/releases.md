@@ -7,6 +7,33 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.9
+*June 2026*
+
+Version 0.0.9 is a release-preparation hardening cycle focused on preserving
+the full conformance baseline while revalidating infrastructure domains,
+release metadata, public documentation, browser assets, and benchmark evidence.
+
+### Highlights
+
+- **Release Readiness Campaign**: Revalidates FHIRPath, CQL, SQL-on-FHIR
+  ViewDefinition, ingestion/source adapters, DQM audit evidence, installation,
+  and environment behavior across the scheduled 0.0.9 evolution loop.
+- **Version and Artifact Alignment**: Package metadata, public subpackage
+  versions, notebook snippets, website install references, and WASM translator
+  wheel references are aligned with `0.0.9`.
+- **Validation Gates**: The release-prep pipeline includes conformance,
+  package pytest, documentation audit, benchmark validation, and final scribe
+  handoff gates before completion.
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.9
+```
+
+---
+
 ## Version 0.0.8
 *June 2026*
 
