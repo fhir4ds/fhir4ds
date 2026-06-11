@@ -119,10 +119,10 @@ The unified engine is rigorously tested against official specifications.
 
 | Component | Unit Tests | Official Compliance |
 |-----------|------------|---------------------|
-| `fhir4ds.fhirpath` | ✅ Passing | 934/935 FHIRPath R4 (99.9%) |
-| `fhir4ds.cql` | ✅ Passing | 3044/3044 CQL Parsing (100%) |
-| `fhir4ds.viewdef` | ✅ Passing | 384/384 ViewDefinition v2 (100%) |
-| `fhir4ds.dqm` | ✅ Passing | N/A |
+| `fhir4ds.fhirpath` | ✅ Passing | 935/935 FHIRPath R4 (100%) |
+| `fhir4ds.cql` | ✅ Passing | 1706/1706 CQL (100%) |
+| `fhir4ds.viewdef` | ✅ Passing | 134/134 ViewDefinition v2 (100%) |
+| `fhir4ds.dqm` | ✅ Passing | 47/47 DQM QI-Core 2025 (100%) |
 
 ## Architecture
 

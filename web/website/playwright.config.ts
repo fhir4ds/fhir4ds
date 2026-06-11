@@ -1,5 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000/";
+const serverURL = new URL(baseURL);
+const serverHost = serverURL.hostname || "127.0.0.1";
+const serverPort = serverURL.port || (serverURL.protocol === "https:" ? "443" : "80");
+
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: false,
@@ -12,8 +17,8 @@ export default defineConfig({
     timeout: 10_000,
   },
   use: {
-    // baseUrl defaults to '/' for fhir4ds.com; serve runs on port 3000.
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000/",
+    // Keep this in sync with webServer so tests never reuse an unrelated app.
+    baseURL,
     trace: "on-first-retry",
     launchOptions: {
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -27,8 +32,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run serve -- --host 127.0.0.1 --port 3000",
-    url: process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000/",
+    command: `npm run serve -- --host ${serverHost} --port ${serverPort}`,
+    url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },

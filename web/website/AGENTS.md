@@ -59,6 +59,12 @@ run `web/wasm-demo/tests/e2e/cms-measures.spec.ts`; quality-measure examples can
 fail from missing CQL UDF registrations even when the website shell and CQL
 playground examples pass.
 
+Playwright must serve and test the same origin. `PLAYWRIGHT_BASE_URL` controls
+both `use.baseURL` and the `webServer` host/port in `playwright.config.ts`;
+when port 3000 is already occupied, run with an alternate URL such as
+`PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001/ npm run test:e2e`. Do not let
+`reuseExistingServer` point tests at an unrelated local app.
+
 SMART OAuth popup callbacks must not rely solely on `window.opener`. The
 cross-origin isolation service worker applies COOP/COEP headers, and the EHR
 round trip can sever the opener relationship before the popup returns to
