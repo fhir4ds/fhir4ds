@@ -61,6 +61,7 @@ from ...translator.types import (
     SQLExcept,
 )
 from ...translator.expressions._utils import (
+    _canonical_fhir_r4_type_name,
     _contains_sql_subquery,
     _ensure_scalar_body,
     _is_list_returning_sql,
@@ -2430,6 +2431,101 @@ class QueryMixin:
             return None
         return expr.args[0], path_arg.value
 
+    def _fhirpath_type_name_check(
+        self,
+        expr: SQLExpression,
+        bare_type: str,
+    ) -> Optional[SQLExpression]:
+        """Build a FHIRPath type().name check for direct FHIR value extracts."""
+        canonical_type = _canonical_fhir_r4_type_name(bare_type)
+        if canonical_type is None:
+            return None
+        extracted = self._extract_fhirpath_value_call(expr)
+        if extracted is None:
+            return None
+        resource_expr, path = extracted
+        type_name = SQLFunctionCall(
+            name="fhirpath_text",
+            args=[resource_expr, SQLLiteral(value=f"({path}).type().name")],
+        )
+        lowered = SQLFunctionCall(
+            name="LOWER",
+            args=[SQLCast(expression=type_name, target_type="VARCHAR")],
+        )
+        type_match = SQLBinaryOp(
+            operator="=",
+            left=lowered,
+            right=SQLLiteral(value=canonical_type.lower()),
+        )
+        shape_check = self._fhir_coding_shape_check(
+            SQLCast(expression=expr, target_type="VARCHAR"),
+            canonical_type,
+        )
+        if shape_check is not None:
+            ambiguous_complex_type = SQLBinaryOp(
+                operator="OR",
+                left=SQLBinaryOp(
+                    operator="=",
+                    left=lowered,
+                    right=SQLLiteral(value="element"),
+                ),
+                right=SQLBinaryOp(
+                    operator="=",
+                    left=lowered,
+                    right=SQLLiteral(value="backboneelement"),
+                ),
+            )
+            type_match = SQLBinaryOp(
+                operator="OR",
+                left=type_match,
+                right=SQLBinaryOp(
+                    operator="AND",
+                    left=ambiguous_complex_type,
+                    right=shape_check,
+                ),
+            )
+        return SQLBinaryOp(
+            operator="AND",
+            left=SQLBinaryOp(operator="IS NOT", left=type_name, right=SQLNull()),
+            right=type_match,
+        )
+
+    def _fhir_coding_shape_check(
+        self,
+        text_value: SQLExpression,
+        canonical_type: str,
+    ) -> Optional[SQLExpression]:
+        """Return a backend-parity fallback for native Coding reflection gaps."""
+        if canonical_type.lower() != "coding":
+            return None
+
+        def _json_string(path: str) -> SQLExpression:
+            return SQLFunctionCall(
+                name="json_extract_string",
+                args=[text_value, SQLLiteral(value=path)],
+            )
+
+        def _present(value: SQLExpression) -> SQLExpression:
+            return SQLBinaryOp(operator="IS NOT", left=value, right=SQLNull())
+
+        shape = SQLBinaryOp(
+            operator="OR",
+            left=_present(_json_string("$.system")),
+            right=_present(_json_string("$.code")),
+        )
+
+        is_json = SQLFunctionCall(
+            name="starts_with",
+            args=[
+                SQLFunctionCall(name="LTRIM", args=[text_value]),
+                SQLLiteral(value="{"),
+            ],
+        )
+        return SQLCase(
+            when_clauses=[(is_json, shape)],
+            else_clause=SQLLiteral(value=False),
+        )
+
     def _is_cql_structural_list_expr(self, expr: SQLExpression) -> bool:
         """Return true when SQL produces a Children()/Descendants() list."""
         if isinstance(expr, SQLCast):
@@ -2873,6 +2969,10 @@ class QueryMixin:
         clinical_runtime_check = self._clinical_json_type_check(resource_expr, bare_type)
         if clinical_runtime_check is not None:
             return clinical_runtime_check
+
+        fhirpath_type_check = self._fhirpath_type_name_check(resource_expr, bare_type)
+        if fhirpath_type_check is not None:
+            return fhirpath_type_check
 
         # Strip FHIR/CQL namespace prefix for type matching
         bare_type = type_name.split(".")[-1] if "." in type_name else type_name

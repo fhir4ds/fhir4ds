@@ -24,6 +24,12 @@ from ...translator.types import (
     SQLUnaryOp,
 )
 from ...translator.fhirpath_builder import escape_fhirpath_string_literal
+from ....fhirpath.duckdb.fhir_types_generated import FHIR_TYPES as _FHIR_R4_TYPES
+
+_FHIR_R4_TYPE_NAMES = frozenset(_FHIR_R4_TYPES)
+_FHIR_R4_TYPE_NAMES_BY_LOWER = {
+    type_name.lower(): type_name for type_name in _FHIR_R4_TYPE_NAMES
+}
 
 try:
     from ...translator.types import SQLList
@@ -70,6 +76,24 @@ def _is_list_returning_sql(node) -> bool:
             return _is_list_returning_sql(col.expr)
         return _is_list_returning_sql(col)
     return False
+
+
+def _is_fhir_r4_type_name(type_name: str | None) -> bool:
+    """Return True when *type_name* names a generated FHIR R4 type."""
+    if not type_name:
+        return False
+    bare = type_name.rsplit(".", 1)[-1]
+    return bare in _FHIR_R4_TYPE_NAMES or bare.lower() in _FHIR_R4_TYPE_NAMES_BY_LOWER
+
+
+def _canonical_fhir_r4_type_name(type_name: str | None) -> str | None:
+    """Return the generated FHIR R4 spelling for *type_name*, if known."""
+    if not type_name:
+        return None
+    bare = type_name.rsplit(".", 1)[-1]
+    if bare in _FHIR_R4_TYPE_NAMES:
+        return bare
+    return _FHIR_R4_TYPE_NAMES_BY_LOWER.get(bare.lower())
 
 
 def _coerce_query_rows_to_list(node):

@@ -118,6 +118,49 @@ def test_evaluator_loads_resolver_valuesets_once():
     assert resolver.calls == 2
 
 
+def test_compile_measure_accepts_fhir_coding_extension_assertion(tmp_path):
+    cql_path = tmp_path / "CodingMeasure.cql"
+    cql_path.write_text(
+        """library CodingMeasure version '1.0'
+
+using FHIR version '4.0.1'
+
+context Patient
+
+define "Initial Population":
+  exists (
+    Patient.extension E
+      where E.url = 'http://example.org/some-extension'
+      return E.value as FHIR.Coding
+  )
+"""
+    )
+    measure = {
+        "resourceType": "Measure",
+        "id": "coding-measure",
+        "library": ["http://example.org/Library/CodingMeasure"],
+        "group": [
+            {
+                "population": [
+                    {
+                        "code": {"coding": [{"code": "initial-population"}]},
+                        "criteria": {"expression": "Initial Population"},
+                    }
+                ]
+            }
+        ],
+    }
+
+    compiled = MeasureEvaluator(conn=None).compile_measure(
+        measure_bundle=measure,
+        cql_library_path=cql_path,
+    )
+
+    assert len(compiled.groups) == 1
+    assert "type().name" in compiled.groups[0].sql
+    assert "Compilation failed for group" not in compiled.groups[0].sql
+
+
 def _make_exclusion_pop_map() -> PopulationMap:
     return PopulationMap(
         measure_id="test-measure",

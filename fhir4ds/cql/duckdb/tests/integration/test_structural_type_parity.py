@@ -116,9 +116,138 @@ def test_cql_structural_type_rejects_unknown_targets() -> None:
         "5 is DefinitelyNotAType",
         "5 as DefinitelyNotAType",
         "convert 'x' to DefinitelyNotAType",
+        "5 as FHIR.DefinitelyNotAType",
     ]:
-        with pytest.raises(TranslationError, match="unknown type 'DefinitelyNotAType'"):
+        with pytest.raises(TranslationError, match=r"unknown type '(FHIR\.)?DefinitelyNotAType'"):
             translate_cql(header + f"define Bad: {expression}\n")
+
+
+def test_cql_fhir_datatype_targets_accept_extension_value_assertions() -> None:
+    translated = translate_cql(
+        """library FhirTypeTargets version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define "Extension Value As Coding":
+  singleton from (
+    Patient.extension E
+      where E.url = 'http://example.org/some-extension'
+      return E.value as FHIR.Coding
+  )
+define "Extension Value Is Coding":
+  exists (
+    Patient.extension E
+      where E.url = 'http://example.org/some-extension'
+        and (E.value is FHIR.Coding)
+  )
+define "Extension Value Cast Coding":
+  singleton from (
+    Patient.extension E
+      where E.url = 'http://example.org/some-extension'
+      return cast E.value as FHIR.Coding
+  )
+define "Extension Value As Instant":
+  singleton from (
+    Patient.extension E
+      where E.url = 'http://example.org/some-instant-extension'
+      return E.value as FHIR.instant
+  )
+define "Extension Value As Period":
+  singleton from (
+    Patient.extension E
+      where E.url = 'http://example.org/some-period-extension'
+      return E.value as FHIR.Period
+  )
+"""
+    )
+
+    assert set(translated) == {
+        "Extension Value As Coding",
+        "Extension Value Is Coding",
+        "Extension Value Cast Coding",
+        "Extension Value As Instant",
+        "Extension Value As Period",
+    }
+    coding_sql = translated["Extension Value As Coding"].to_sql()
+    assert "type().name" in coding_sql
+    assert "resourceType" not in coding_sql
+
+
+def test_cql_fhir_datatype_assertion_uses_runtime_fhir_type_name() -> None:
+    cql = """library RuntimeFhirTypeTargets version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define EncounterClassAsCoding: First([Encounter] E return E.class as FHIR.Coding)
+define ObservationValueStringAsCoding: First([Observation] O return O.value as FHIR.Coding)
+"""
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql),
+        output_columns={
+            "encounter_class_as_coding": "EncounterClassAsCoding",
+            "observation_value_string_as_coding": "ObservationValueStringAsCoding",
+        },
+    )
+    assert "type().name" in sql
+
+    rows = [
+        ("p1", "Patient", "p1", {"resourceType": "Patient", "id": "p1"}),
+        (
+            "p1",
+            "Encounter",
+            "e1",
+            {
+                "resourceType": "Encounter",
+                "id": "e1",
+                "subject": {"reference": "Patient/p1"},
+                "class": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                    "code": "AMB",
+                },
+            },
+        ),
+        (
+            "p1",
+            "Observation",
+            "o1",
+            {
+                "resourceType": "Observation",
+                "id": "o1",
+                "subject": {"reference": "Patient/p1"},
+                "valueString": '{"system":"http://loinc.org","code":"1234-5"}',
+            },
+        ),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            con.execute(
+                """
+                CREATE TABLE resources (
+                    patient_ref VARCHAR,
+                    resourceType VARCHAR,
+                    id VARCHAR,
+                    resource JSON
+                )
+                """
+            )
+            for patient_ref, resource_type, resource_id, resource in rows:
+                con.execute(
+                    "INSERT INTO resources VALUES (?, ?, ?, ?::JSON)",
+                    [patient_ref, resource_type, resource_id, json.dumps(resource)],
+                )
+
+        py_result = py.execute(sql).fetchone()
+        cpp_result = cpp.execute(sql).fetchone()
+        assert cpp_result == py_result
+        assert py_result == (
+            "p1",
+            '{"system":"http://terminology.hl7.org/CodeSystem/v3-ActCode","code":"AMB"}',
+            None,
+        )
+    finally:
+        py.close()
+        cpp.close()
 
 
 def test_cql_structural_strict_cast_differs_from_nullable_as() -> None:
