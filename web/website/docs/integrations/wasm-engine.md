@@ -103,6 +103,8 @@ Inside the **Web Worker**, you initialize Pyodide and install the FHIR4DS transl
 ```python
 # Inside the Pyodide worker
 import micropip
+# Load Pyodide-hosted binary packages that fhir4ds imports at module load.
+await pyodide.loadPackage(["duckdb", "orjson", "pyarrow"])
 await micropip.install([
     "antlr4-python3-runtime>=4.10",
     "python-dateutil>=2.8",

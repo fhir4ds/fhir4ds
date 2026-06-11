@@ -55,8 +55,9 @@ async function initPyodide() {
   const { loadPyodide } = await import(/* @vite-ignore */ `${PYODIDE_CDN}pyodide.mjs`);
   pyodide = await loadPyodide({ indexURL: PYODIDE_CDN });
 
-  // Only micropip is needed — fhir4ds-v2 is pure Python (no native deps)
-  await pyodide.loadPackage(["micropip"]);
+  // These are Pyodide-hosted packages imported by fhir4ds at module load.
+  // The fhir4ds wheel is installed with deps=False below, so load them explicitly.
+  await pyodide.loadPackage(["micropip", "duckdb", "orjson", "pyarrow"]);
 
   // Wheel filename is injected at build/dev time by vite.config.ts via `define`.
   // No runtime fetch needed — works in dev mode, build, and Docusaurus static hosting.
@@ -65,22 +66,22 @@ async function initPyodide() {
 
   console.log("[Pyodide Worker] Installing fhir4ds-v2 from:", wheelUrl);
 
-  // Install with deps=False because duckdb (a declared dependency) has no
-  // pure Python wheel and is already provided by DuckDB-WASM on the JS side.
-  // We install the required pure-Python deps separately first.
+  // Install with deps=False because native dependencies must come from
+  // Pyodide-hosted packages or DuckDB-WASM, not PyPI wheel resolution.
+  // We load Pyodide-hosted packages and install pure-Python deps separately first.
   pyodide.globals.set("__wheel_url__", wheelUrl);
   await pyodide.runPythonAsync(`
 import micropip
 
 # Install pure-Python runtime dependencies first.
-# duckdb is intentionally excluded — it's provided by DuckDB-WASM.
+# Pyodide-hosted binary packages are loaded via pyodide.loadPackage() before this block.
 await micropip.install([
     "antlr4-python3-runtime>=4.10",
     "python-dateutil>=2.8",
 ])
 
-# Install fhir4ds-v2 without auto-resolving deps to avoid the duckdb
-# dependency resolution failure (duckdb has no pure Python wheel).
+# Install fhir4ds-v2 without auto-resolving deps to avoid native dependency
+# resolution through PyPI wheels.
 await micropip.install(__wheel_url__, deps=False)
 `);
 

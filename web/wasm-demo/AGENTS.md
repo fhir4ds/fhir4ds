@@ -160,27 +160,31 @@ restore the previous user.
 
 ---
 
-## Why Pyodide Can't Install duckdb
+## Why the Pyodide Worker Uses `deps=False`
 
 `fhir4ds-v2` declares `duckdb~=X.Y.Z` as a Python dependency. Pyodide's `micropip` can only install **pure Python wheels**. DuckDB requires compiled C extensions and has no pure Python wheel on PyPI.
 
-**This is by design.** In the browser, DuckDB is provided by DuckDB-WASM (the JavaScript library). The Python-side `duckdb` package is not needed.
+**This is by design.** Browser query execution uses DuckDB-WASM (the JavaScript library), but the translator import graph still imports Python-side DuckDB-facing modules at package load. Load Pyodide-hosted binary packages with `pyodide.loadPackage(...)`; do not let `micropip` resolve them from PyPI.
 
 ### How This Is Handled
 
-1. **`fhir4ds/cql/__init__.py`** wraps `import duckdb` in `try/except ImportError` and installs a minimal stub. The `CQLToSQLTranslator` (used in the worker) never calls DuckDB — it only generates SQL strings. The stub satisfies the import without needing the real package.
+1. **`fhir4ds/cql/__init__.py`** wraps direct `import duckdb` in `try/except ImportError` and installs a minimal stub for translator-only paths. Other package initializers can still import `fhir4ds.fhirpath.duckdb` and require Pyodide-hosted binary packages.
 
-2. **`pyodide.worker.ts`** uses `micropip.install(wheel, deps=False)` to skip auto-resolution of the `duckdb` dependency. It manually installs only the pure-Python deps needed by the CQL translator.
+2. **`pyodide.worker.ts`** uses `micropip.install(wheel, deps=False)` to skip PyPI auto-resolution of native dependencies. It manually loads Pyodide-hosted packages such as `duckdb`, `orjson`, and `pyarrow`, then installs only the pure-Python deps needed by the CQL translator.
 
 **Do not** revert either of these changes. Both are required for the WASM demo to work.
 
 ### Pure-Python Deps for CQL Translation
 
 The worker manually installs:
+- `duckdb`, `orjson`, and `pyarrow` via `pyodide.loadPackage(...)` — imported by fhir4ds at module load
 - `antlr4-python3-runtime>=4.10` — required for CQL parsing
 - `python-dateutil>=2.8` — required for CQL date/time operations
 
-If new pure-Python dependencies are added to `fhir4ds-v2` that are needed in the CQL translation path, add them to the `micropip.install([...])` call in `src/workers/pyodide.worker.ts`.
+If new dependencies are added to `fhir4ds-v2` that are needed in the CQL
+translation path, load Pyodide-hosted packages with `pyodide.loadPackage([...])`
+and add pure-Python wheels to the `micropip.install([...])` call in
+`src/workers/pyodide.worker.ts`.
 
 ---
 

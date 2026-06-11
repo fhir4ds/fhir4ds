@@ -22,7 +22,8 @@ The interactive demo is a standalone React application (`web/wasm-demo`) that is
   `web/wasm-demo/public/`; rebuild `web/wasm-demo`, copy `dist/` into
   `static/wasm-app/`, then run `npm run typecheck` and `npm run build` here.
 - **Pyodide install snippets**: examples that install the bundled wheel in
-  Pyodide must install pure-Python dependencies first and call
+  Pyodide must load Pyodide-hosted packages such as `duckdb`, `orjson`, and
+  `pyarrow`, install pure-Python dependencies first, and call
   `micropip.install(..., deps=False)` for the fhir4ds wheel. Without
   `deps=False`, micropip tries to install the native `duckdb` Python package
   and fails in browser environments.
