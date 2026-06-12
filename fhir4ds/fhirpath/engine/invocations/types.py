@@ -53,7 +53,14 @@ def type_fn(ctx, coll):
 def is_fn(ctx, coll, type_info):
     model = ctx.get("model")
     if not coll:
-        return []
+        if (
+            isinstance(type_info, TypeInfo)
+            and type_info.namespace == TypeInfo.FHIR
+            and type_info.name
+            and type_info.name[0].islower()
+        ):
+            return []
+        return [False]
     if len(coll) > 1:
         raise FHIRPathError("is() requires a singleton input collection")
     if _is_any_type(type_info):

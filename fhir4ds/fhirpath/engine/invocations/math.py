@@ -53,6 +53,20 @@ def ensure_integer_singleton(x):
     return data
 
 
+def quantity_singleton(x):
+    data = util.parse_value(util.val_data_converted(x))
+    if isinstance(data, nodes.FP_Quantity):
+        return data
+
+    if not isinstance(data, list) or len(data) != 1:
+        return None
+
+    value = util.parse_value(util.val_data_converted(data[0]))
+    if isinstance(value, nodes.FP_Quantity):
+        return value
+    return None
+
+
 _FHIRPATH_INT32_MIN = -2147483648
 _FHIRPATH_INT32_MAX = 2147483647
 
@@ -217,11 +231,9 @@ def abs(ctx, x):
     if is_empty(x):
         return []
 
-    # Check if it's a Quantity
-    from ...engine.nodes import FP_Quantity
-    data = util.get_data(x[0]) if isinstance(x, list) and len(x) > 0 else x
-    if isinstance(data, FP_Quantity):
-        return FP_Quantity(Decimal(data.value).copy_abs(), data.unit)
+    quantity = quantity_singleton(x)
+    if quantity is not None:
+        return nodes.FP_Quantity(Decimal(quantity.value).copy_abs(), quantity.unit)
 
     num = ensure_number_singleton(x)
     result = Decimal(num).copy_abs()
@@ -233,6 +245,10 @@ def abs(ctx, x):
 def ceiling(ctx, x):
     if is_empty(x):
         return []
+    quantity = quantity_singleton(x)
+    if quantity is not None:
+        result = Decimal(quantity.value).to_integral_value(rounding="ROUND_CEILING")
+        return nodes.FP_Quantity(result, quantity.unit)
     num = ensure_number_singleton(x)
     return int(Decimal(num).to_integral_value(rounding="ROUND_CEILING"))
 
@@ -253,6 +269,10 @@ def exp(ctx, x):
 def floor(ctx, x):
     if is_empty(x):
         return []
+    quantity = quantity_singleton(x)
+    if quantity is not None:
+        result = Decimal(quantity.value).to_integral_value(rounding="ROUND_FLOOR")
+        return nodes.FP_Quantity(result, quantity.unit)
     num = ensure_number_singleton(x)
     return int(Decimal(num).to_integral_value(rounding="ROUND_FLOOR"))
 
@@ -298,7 +318,7 @@ def power(ctx, x, degree):
         return []
 
     if isinstance(base_raw, int) and isinstance(exponent_raw, int) and exponent_raw >= 0:
-        return int(pow(base_raw, exponent_raw))
+        return Decimal(pow(base_raw, exponent_raw))
 
     result = pow(num, num2)
     if isinstance(result, Decimal):
@@ -313,10 +333,18 @@ def rround(ctx, x, acc=None):
     if is_empty(x):
         return []
 
-    num = Decimal(ensure_number_singleton(x))
+    quantity = quantity_singleton(x)
+    if quantity is not None:
+        num = Decimal(quantity.value)
+    else:
+        num = Decimal(ensure_number_singleton(x))
+
     if acc is None:
         # FHIRPath §5.7.8 returns Decimal; omitted precision defaults to 0.
-        return num.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+        result = num.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+        if quantity is not None:
+            return nodes.FP_Quantity(result, quantity.unit)
+        return result
 
     if is_empty(acc):
         return []
@@ -329,7 +357,10 @@ def rround(ctx, x, acc=None):
 
     # Use ROUND_HALF_UP for spec-compliant rounding
     scaled = num * degree
-    return Decimal(scaled.quantize(Decimal('1'), rounding=ROUND_HALF_UP)) / degree
+    result = Decimal(scaled.quantize(Decimal('1'), rounding=ROUND_HALF_UP)) / degree
+    if quantity is not None:
+        return nodes.FP_Quantity(result, quantity.unit)
+    return result
 
 
 def sqrt(ctx, x):
@@ -346,5 +377,9 @@ def sqrt(ctx, x):
 def truncate(ctx, x):
     if is_empty(x):
         return []
+    quantity = quantity_singleton(x)
+    if quantity is not None:
+        result = Decimal(quantity.value).to_integral_value(rounding="ROUND_DOWN")
+        return nodes.FP_Quantity(result, quantity.unit)
     num = ensure_number_singleton(x)
     return int(Decimal(num).to_integral_value(rounding="ROUND_DOWN"))

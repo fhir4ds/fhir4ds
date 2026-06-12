@@ -124,6 +124,41 @@ def test_unicode_surrogate_pair_string_escapes_match_spec_and_backends() -> None
         py.close()
 
 
+def test_unpaired_unicode_surrogate_string_escapes_are_invalid_in_both_backends() -> None:
+    expressions = [
+        r"'\uD834'",
+        r"'\uDD1E'",
+        r"'\uD834\u0041'",
+        r"'\uD834x'",
+    ]
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        for expression in expressions:
+            query = """
+                SELECT
+                    fhirpath(?::JSON, ?),
+                    fhirpath_text(?::JSON, ?),
+                    fhirpath_json(?::JSON, ?),
+                    fhirpath_is_valid(?)
+            """
+            params = [
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                expression,
+            ]
+            assert cpp.execute(query, params).fetchone() == ([], None, None, False)
+            assert py.execute(query, params).fetchone() == ([], None, None, False)
+    finally:
+        cpp.close()
+        py.close()
+
+
 def test_double_backslash_string_escapes_match_spec_and_backends() -> None:
     cases = {
         r"'\\p'": r"\p",
@@ -356,6 +391,33 @@ def test_invalid_timezone_suffixed_date_literals_are_invalid_in_both_backends() 
         py.close()
 
 
+def test_datetime_timezone_offset_bounds_match_spec_and_backends() -> None:
+    valid_expressions = [
+        "@2016-02-29T23:59:59.123+14:00",
+        "@2016-02-29T23:59:59.123-14:00",
+        "@2016-02-29T23:59:59.123+13:59",
+    ]
+    invalid_expressions = [
+        "@2016-02-29T23:59:59.123+14:01",
+        "@2016-02-29T23:59:59.123-14:01",
+        "@2016-02-29T23:59:59.123+15:00",
+        "@2016-02-29T23:59:59.123-15:00",
+    ]
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        for expression in valid_expressions:
+            assert cpp.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (True,)
+            assert py.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (True,)
+        for expression in invalid_expressions:
+            assert cpp.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (False,)
+            assert py.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (False,)
+    finally:
+        cpp.close()
+        py.close()
+
+
 def test_integer_literal_range_matches_spec_and_backends() -> None:
     valid_cases = {
         "2147483647": ["2147483647"],
@@ -468,6 +530,68 @@ def test_partial_datetime_timezone_offsets_match_python_fallback() -> None:
             py_row = py.execute(
                 "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?)",
                 [RESOURCE, expression, RESOURCE, expression, RESOURCE, expression],
+            ).fetchone()
+            assert cpp_row == py_row == expected
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_partial_datetime_time_components_require_full_date_in_both_backends() -> None:
+    valid_expressions = ["@2014T", "@2014-01T", "@2014-01-25T", "@2014-01-25T14"]
+    invalid_expressions = [
+        "@2014T14",
+        "@2014T14:30",
+        "@2014T14:30:00Z",
+        "@2014-01T14",
+        "@2014-01T14:30",
+        "@2014-01T14:30:00+09:00",
+    ]
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        for expression in valid_expressions:
+            assert cpp.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (True,)
+            assert py.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (True,)
+
+        expected = ([], None, None, None, None, None, False)
+        for expression in invalid_expressions:
+            cpp_row = cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_date(?::JSON, ?), fhirpath_timestamp(?::JSON, ?), fhirpath_quantity(?::JSON, ?), fhirpath_is_valid(?)",
+                [
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    expression,
+                ],
+            ).fetchone()
+            py_row = py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_date(?::JSON, ?), fhirpath_timestamp(?::JSON, ?), fhirpath_quantity(?::JSON, ?), fhirpath_is_valid(?)",
+                [
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    expression,
+                ],
             ).fetchone()
             assert cpp_row == py_row == expected
     finally:

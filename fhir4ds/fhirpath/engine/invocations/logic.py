@@ -49,10 +49,9 @@ def xor_op(ctx, a, b):
 
 def implies_op(ctx, a, b):
     a_bool = _singleton_boolean(a)
+    b_bool = _singleton_boolean(b)
     if a_bool is False:
         return True
-
-    b_bool = _singleton_boolean(b)
     if a_bool is None:
         if b_bool is True:
             return True

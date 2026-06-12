@@ -115,6 +115,9 @@ def create_reduce_children(ctx, exclude_primitive_extensions):
         if isinstance(data, list):
             data = dict((i, data[i]) for i in range(0, len(data)))
 
+        if not isinstance(data, abc.Mapping) and isinstance(getattr(res, "_data", None), abc.Mapping):
+            data = res._data
+
         if isinstance(data, abc.Mapping):
             for prop in data.keys():
                 value = data[prop]
@@ -160,11 +163,23 @@ def create_reduce_children(ctx, exclude_primitive_extensions):
                         # If it is, we can use it
                         fullPath = f"{res.propName}.{prop[:-len(childPath)]}"
 
+                shadow_value = data.get(f"_{prop}") if isinstance(prop, str) else None
+
                 if isinstance(value, list):
-                    mapped = [create_node(n, childPath, propName=f"{fullPath}[{i}]", index=i) for i, n in enumerate(value)]
+                    shadow_items = shadow_value if isinstance(shadow_value, list) else []
+                    mapped = [
+                        create_node(
+                            n,
+                            childPath,
+                            _data=shadow_items[i] if i < len(shadow_items) else None,
+                            propName=f"{fullPath}[{i}]",
+                            index=i,
+                        )
+                        for i, n in enumerate(value)
+                    ]
                     acc = acc + mapped
                 else:
-                    acc.append(create_node(value, childPath, propName=fullPath))
+                    acc.append(create_node(value, childPath, _data=shadow_value, propName=fullPath))
         return acc
 
     return func

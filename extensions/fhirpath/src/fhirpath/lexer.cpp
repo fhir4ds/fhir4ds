@@ -217,17 +217,25 @@ static bool appendUnicodeEscape(std::string &out, const std::string &input, size
 	if (!valid_hex) {
 		out += 'u';
 		out += hex;
-		return false;
+		return true;
 	}
 
 	unsigned int cp = static_cast<unsigned int>(std::stoul(hex, nullptr, 16));
-	if (cp >= 0xD800 && cp <= 0xDBFF && pos + 6 <= input.size() &&
-	    input[pos] == '\\' && input[pos + 1] == 'u' && isHex4At(input, pos + 2)) {
-		unsigned int low = parseHex4At(input, pos + 2);
-		if (low >= 0xDC00 && low <= 0xDFFF) {
-			cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
-			pos += 6;
+	if (cp >= 0xD800 && cp <= 0xDBFF) {
+		if (pos + 6 <= input.size() && input[pos] == '\\' && input[pos + 1] == 'u' &&
+		    isHex4At(input, pos + 2)) {
+			unsigned int low = parseHex4At(input, pos + 2);
+			if (low >= 0xDC00 && low <= 0xDFFF) {
+				cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+				pos += 6;
+				appendUtf8(out, cp);
+				return true;
+			}
 		}
+		return false;
+	}
+	if (cp >= 0xDC00 && cp <= 0xDFFF) {
+		return false;
 	}
 	appendUtf8(out, cp);
 	return true;
@@ -535,7 +543,9 @@ Token Lexer::readString() {
 					for (int i = 0; i < 4 && !isAtEnd() && peek() != '\''; ++i) {
 						hex += advance();
 					}
-					appendUnicodeEscape(value, input_, pos_, hex);
+					if (!appendUnicodeEscape(value, input_, pos_, hex)) {
+						error_ = true;
+					}
 					break;
 				}
 				default:
@@ -573,6 +583,11 @@ Token Lexer::readNumber() {
 		} else {
 			number += advance();
 		}
+	}
+
+	if (!has_dot && !isAtEnd() && peek() == 'L') {
+		number += advance();
+		return {TokenType::Long, number, start};
 	}
 
 	return {has_dot ? TokenType::Decimal : TokenType::Integer, number, start};

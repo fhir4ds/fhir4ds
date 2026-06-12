@@ -17,6 +17,8 @@ import math
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import TYPE_CHECKING, Any, Union
 
+from ...engine.nodes import FP_Quantity
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -63,6 +65,18 @@ def _to_numeric(value: Any) -> Numeric | None:
     if isinstance(value, float):
         return value
     return None
+
+
+def _to_quantity(value: Any) -> FP_Quantity | None:
+    if isinstance(value, FP_Quantity):
+        return value
+    return None
+
+
+def _to_decimal(value: Any) -> Decimal:
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
 
 
 def _wrap_result(value: Any) -> list[Any]:
@@ -608,6 +622,10 @@ def abs_fn(value: Any) -> list[Any]:
     if _is_empty(value):
         return []
 
+    quantity = _to_quantity(value)
+    if quantity is not None:
+        return [FP_Quantity(_to_decimal(quantity.value).copy_abs(), quantity.unit)]
+
     num = _to_numeric(value)
     if num is None:
         return []
@@ -646,6 +664,11 @@ def ceiling(value: Any) -> list[Any]:
     if _is_empty(value):
         return []
 
+    quantity = _to_quantity(value)
+    if quantity is not None:
+        result = _to_decimal(quantity.value).to_integral_value(rounding="ROUND_CEILING")
+        return [FP_Quantity(result, quantity.unit)]
+
     num = _to_numeric(value)
     if num is None:
         return []
@@ -678,6 +701,11 @@ def floor(value: Any) -> list[Any]:
     if _is_empty(value):
         return []
 
+    quantity = _to_quantity(value)
+    if quantity is not None:
+        result = _to_decimal(quantity.value).to_integral_value(rounding="ROUND_FLOOR")
+        return [FP_Quantity(result, quantity.unit)]
+
     num = _to_numeric(value)
     if num is None:
         return []
@@ -692,10 +720,11 @@ def round_fn(value: Any, precision: Any = None) -> list[Any]:
     Rounds to the specified precision:
     - Empty collection returns empty
     - Default precision is 0 (round to integer)
-    - Returns Decimal if precision > 0, Integer if precision = 0
+    - Returns a Decimal-shaped result for numeric input
+    - Quantity input preserves the original unit
 
     Args:
-        value: Numeric value or empty.
+        value: Numeric or Quantity value, or empty.
         precision: Number of decimal places (default 0).
 
     Returns:
@@ -705,16 +734,21 @@ def round_fn(value: Any, precision: Any = None) -> list[Any]:
         >>> round_fn(3.456, 2)
         [3.46]
         >>> round_fn(3.5)
-        [4]
+        [4.0]
         >>> round_fn(3.4)
-        [3]
+        [3.0]
     """
     if _is_empty(value):
         return []
 
-    num = _to_numeric(value)
-    if num is None:
-        return []
+    quantity = _to_quantity(value)
+    if quantity is not None:
+        num = _to_decimal(quantity.value)
+    else:
+        raw_num = _to_numeric(value)
+        if raw_num is None:
+            return []
+        num = _to_decimal(raw_num)
 
     prec = 0
     if precision is not None:
@@ -728,12 +762,12 @@ def round_fn(value: Any, precision: Any = None) -> list[Any]:
 
     try:
         quant = Decimal("1").scaleb(-prec)
-        result = Decimal(str(num)).quantize(quant, rounding=ROUND_HALF_UP)
+        result = num.quantize(quant, rounding=ROUND_HALF_UP)
     except InvalidOperation:
         return []
 
-    if precision is None and prec == 0:
-        return [int(result)]
+    if quantity is not None:
+        return [FP_Quantity(result, quantity.unit)]
 
     return [float(result)]
 
@@ -782,8 +816,7 @@ def power(value: Any, exponent: Any) -> list[Any]:
     Raises a value to the specified power:
     - Empty collection propagates
     - Returns empty for negative base with non-integer exponent
-    - Integer ^ Integer -> Integer (if result is exact)
-    - Otherwise Decimal
+    - Always returns a Decimal-shaped result
 
     Args:
         value: Base value or empty.
@@ -794,11 +827,11 @@ def power(value: Any, exponent: Any) -> list[Any]:
 
     Example:
         >>> power(2, 3)
-        [8]
+        [8.0]
         >>> power(4, 0.5)
         [2.0]
         >>> power(-2, 3)
-        [-8]
+        [-8.0]
         >>> power(-2, 0.5)
         []
     """
@@ -821,10 +854,6 @@ def power(value: Any, exponent: Any) -> list[Any]:
         # Check for overflow
         if math.isinf(result):
             return []
-
-        # Return integer if both inputs are integers and result is exact
-        if isinstance(base_num, int) and isinstance(exp_num, int) and exp_num >= 0:
-            return [int(result)]
 
         return [result]
     except (ValueError, OverflowError):
@@ -983,6 +1012,11 @@ def trunc(value: Any) -> list[Any]:
     """
     if _is_empty(value):
         return []
+
+    quantity = _to_quantity(value)
+    if quantity is not None:
+        result = _to_decimal(quantity.value).to_integral_value(rounding="ROUND_DOWN")
+        return [FP_Quantity(result, quantity.unit)]
 
     num = _to_numeric(value)
     if num is None:

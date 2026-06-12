@@ -43,6 +43,18 @@ def _validate_regex(pattern: str, func_name: str) -> None:
         )
 
 
+def _regex_flags(flags: str = "", func_name: str = "matches") -> int:
+    invalid = sorted({ch for ch in flags if ch not in {"i", "m"}})
+    if invalid:
+        raise FHIRPathFunctionError(func_name, f"Invalid regex flags: {''.join(invalid)}")
+    compiled_flags = re.DOTALL
+    if "i" in flags:
+        compiled_flags |= re.IGNORECASE
+    if "m" in flags:
+        compiled_flags |= re.MULTILINE
+    return compiled_flags
+
+
 @lru_cache(maxsize=256)
 def _compile_regex(pattern: str, flags: int = 0) -> re.Pattern[str]:
     return re.compile(pattern, flags)
@@ -354,7 +366,7 @@ def replace(
     return _string_result(value.replace(pattern, replacement))
 
 
-def matches(collection: FHIRPathCollection, regex: str) -> FHIRPathCollection:
+def matches(collection: FHIRPathCollection, regex: str, flags: str = "") -> FHIRPathCollection:
     """
     Returns true if the string matches the given regular expression.
 
@@ -371,14 +383,14 @@ def matches(collection: FHIRPathCollection, regex: str) -> FHIRPathCollection:
         >>> matches(FHIRPathCollection(['123']), r'\\d+')
         FHIRPathCollection([True])
         >>> matches(FHIRPathCollection(['hello123']), r'\\d+')
-        FHIRPathCollection([False])
+        FHIRPathCollection([True])
     """
     value = _get_singleton_string(collection, "matches")
     if value is None:
         return FHIRPathCollection([])
     _validate_regex(regex, "matches")
     try:
-        result = _compile_regex(regex, re.DOTALL).fullmatch(value) is not None
+        result = _compile_regex(regex, _regex_flags(flags, "matches")).search(value) is not None
         return _bool_result(result)
     except re.error as e:
         raise FHIRPathFunctionError("matches", f"Invalid regular expression: {e}")
@@ -387,7 +399,8 @@ def matches(collection: FHIRPathCollection, regex: str) -> FHIRPathCollection:
 def replace_matches(
     collection: FHIRPathCollection,
     regex: str,
-    replacement: str
+    replacement: str,
+    flags: str = "",
 ) -> FHIRPathCollection:
     """
     Returns a string with all matches of the regex replaced.
@@ -409,11 +422,12 @@ def replace_matches(
     value = _get_singleton_string(collection, "replaceMatches")
     if value is None:
         return FHIRPathCollection([])
+    regex_flags = _regex_flags(flags, "replaceMatches")
     if regex == "":
         return _string_result(value)
     _validate_regex(regex, "replaceMatches")
     try:
-        result = _compile_regex(regex).sub(replacement, value)
+        result = _compile_regex(regex, regex_flags).sub(replacement, value)
         return _string_result(result)
     except re.error as e:
         raise FHIRPathFunctionError("replaceMatches", f"Invalid regular expression: {e}")

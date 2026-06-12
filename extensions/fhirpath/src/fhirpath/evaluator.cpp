@@ -1,5 +1,6 @@
 #include "fhirpath/evaluator.hpp"
 #include "shared/ucum_units.hpp"
+#include "utf8proc_wrapper.hpp"
 #include "yyjson.hpp"
 
 using namespace duckdb_yyjson; // NOLINT
@@ -13,6 +14,7 @@ using namespace duckdb_yyjson; // NOLINT
 #include <ctime>
 #include <functional>
 #include <iomanip>
+#include <initializer_list>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
@@ -82,6 +84,154 @@ static size_t utf8ByteToChar(const std::string &s, size_t byte_pos) {
 	return cp;
 }
 
+static int32_t readUtf8Codepoint(const std::string &s, size_t byte, int &char_bytes) {
+	char_bytes = 0;
+	int32_t cp = duckdb::Utf8Proc::UTF8ToCodepoint(s.c_str() + byte, char_bytes);
+	if (char_bytes <= 0 || byte + static_cast<size_t>(char_bytes) > s.size()) {
+		char_bytes = 1;
+		return static_cast<unsigned char>(s[byte]);
+	}
+	return cp;
+}
+
+static bool appendUtf8Codepoint(std::string &out, int32_t cp) {
+	char bytes[4];
+	int size = 0;
+	if (!duckdb::Utf8Proc::CodepointToUtf8(cp, size, bytes) || size <= 0) {
+		return false;
+	}
+	out.append(bytes, static_cast<size_t>(size));
+	return true;
+}
+
+static void appendUtf8Codepoints(std::string &out, std::initializer_list<int32_t> cps) {
+	for (auto cp : cps) {
+		appendUtf8Codepoint(out, cp);
+	}
+}
+
+static bool appendUppercaseExpansion(std::string &out, int32_t cp) {
+	switch (cp) {
+		case 0x00DF: appendUtf8Codepoints(out, {0x0053, 0x0053}); return true;
+		case 0x0149: appendUtf8Codepoints(out, {0x02BC, 0x004E}); return true;
+		case 0x01F0: appendUtf8Codepoints(out, {0x004A, 0x030C}); return true;
+		case 0x0390: appendUtf8Codepoints(out, {0x0399, 0x0308, 0x0301}); return true;
+		case 0x03B0: appendUtf8Codepoints(out, {0x03A5, 0x0308, 0x0301}); return true;
+		case 0x0587: appendUtf8Codepoints(out, {0x0535, 0x0552}); return true;
+		case 0x1E96: appendUtf8Codepoints(out, {0x0048, 0x0331}); return true;
+		case 0x1E97: appendUtf8Codepoints(out, {0x0054, 0x0308}); return true;
+		case 0x1E98: appendUtf8Codepoints(out, {0x0057, 0x030A}); return true;
+		case 0x1E99: appendUtf8Codepoints(out, {0x0059, 0x030A}); return true;
+		case 0x1E9A: appendUtf8Codepoints(out, {0x0041, 0x02BE}); return true;
+		case 0x1F50: appendUtf8Codepoints(out, {0x03A5, 0x0313}); return true;
+		case 0x1F52: appendUtf8Codepoints(out, {0x03A5, 0x0313, 0x0300}); return true;
+		case 0x1F54: appendUtf8Codepoints(out, {0x03A5, 0x0313, 0x0301}); return true;
+		case 0x1F56: appendUtf8Codepoints(out, {0x03A5, 0x0313, 0x0342}); return true;
+		case 0x1F80: appendUtf8Codepoints(out, {0x1F08, 0x0399}); return true;
+		case 0x1F81: appendUtf8Codepoints(out, {0x1F09, 0x0399}); return true;
+		case 0x1F82: appendUtf8Codepoints(out, {0x1F0A, 0x0399}); return true;
+		case 0x1F83: appendUtf8Codepoints(out, {0x1F0B, 0x0399}); return true;
+		case 0x1F84: appendUtf8Codepoints(out, {0x1F0C, 0x0399}); return true;
+		case 0x1F85: appendUtf8Codepoints(out, {0x1F0D, 0x0399}); return true;
+		case 0x1F86: appendUtf8Codepoints(out, {0x1F0E, 0x0399}); return true;
+		case 0x1F87: appendUtf8Codepoints(out, {0x1F0F, 0x0399}); return true;
+		case 0x1F88: appendUtf8Codepoints(out, {0x1F08, 0x0399}); return true;
+		case 0x1F89: appendUtf8Codepoints(out, {0x1F09, 0x0399}); return true;
+		case 0x1F8A: appendUtf8Codepoints(out, {0x1F0A, 0x0399}); return true;
+		case 0x1F8B: appendUtf8Codepoints(out, {0x1F0B, 0x0399}); return true;
+		case 0x1F8C: appendUtf8Codepoints(out, {0x1F0C, 0x0399}); return true;
+		case 0x1F8D: appendUtf8Codepoints(out, {0x1F0D, 0x0399}); return true;
+		case 0x1F8E: appendUtf8Codepoints(out, {0x1F0E, 0x0399}); return true;
+		case 0x1F8F: appendUtf8Codepoints(out, {0x1F0F, 0x0399}); return true;
+		case 0x1F90: appendUtf8Codepoints(out, {0x1F28, 0x0399}); return true;
+		case 0x1F91: appendUtf8Codepoints(out, {0x1F29, 0x0399}); return true;
+		case 0x1F92: appendUtf8Codepoints(out, {0x1F2A, 0x0399}); return true;
+		case 0x1F93: appendUtf8Codepoints(out, {0x1F2B, 0x0399}); return true;
+		case 0x1F94: appendUtf8Codepoints(out, {0x1F2C, 0x0399}); return true;
+		case 0x1F95: appendUtf8Codepoints(out, {0x1F2D, 0x0399}); return true;
+		case 0x1F96: appendUtf8Codepoints(out, {0x1F2E, 0x0399}); return true;
+		case 0x1F97: appendUtf8Codepoints(out, {0x1F2F, 0x0399}); return true;
+		case 0x1F98: appendUtf8Codepoints(out, {0x1F28, 0x0399}); return true;
+		case 0x1F99: appendUtf8Codepoints(out, {0x1F29, 0x0399}); return true;
+		case 0x1F9A: appendUtf8Codepoints(out, {0x1F2A, 0x0399}); return true;
+		case 0x1F9B: appendUtf8Codepoints(out, {0x1F2B, 0x0399}); return true;
+		case 0x1F9C: appendUtf8Codepoints(out, {0x1F2C, 0x0399}); return true;
+		case 0x1F9D: appendUtf8Codepoints(out, {0x1F2D, 0x0399}); return true;
+		case 0x1F9E: appendUtf8Codepoints(out, {0x1F2E, 0x0399}); return true;
+		case 0x1F9F: appendUtf8Codepoints(out, {0x1F2F, 0x0399}); return true;
+		case 0x1FA0: appendUtf8Codepoints(out, {0x1F68, 0x0399}); return true;
+		case 0x1FA1: appendUtf8Codepoints(out, {0x1F69, 0x0399}); return true;
+		case 0x1FA2: appendUtf8Codepoints(out, {0x1F6A, 0x0399}); return true;
+		case 0x1FA3: appendUtf8Codepoints(out, {0x1F6B, 0x0399}); return true;
+		case 0x1FA4: appendUtf8Codepoints(out, {0x1F6C, 0x0399}); return true;
+		case 0x1FA5: appendUtf8Codepoints(out, {0x1F6D, 0x0399}); return true;
+		case 0x1FA6: appendUtf8Codepoints(out, {0x1F6E, 0x0399}); return true;
+		case 0x1FA7: appendUtf8Codepoints(out, {0x1F6F, 0x0399}); return true;
+		case 0x1FA8: appendUtf8Codepoints(out, {0x1F68, 0x0399}); return true;
+		case 0x1FA9: appendUtf8Codepoints(out, {0x1F69, 0x0399}); return true;
+		case 0x1FAA: appendUtf8Codepoints(out, {0x1F6A, 0x0399}); return true;
+		case 0x1FAB: appendUtf8Codepoints(out, {0x1F6B, 0x0399}); return true;
+		case 0x1FAC: appendUtf8Codepoints(out, {0x1F6C, 0x0399}); return true;
+		case 0x1FAD: appendUtf8Codepoints(out, {0x1F6D, 0x0399}); return true;
+		case 0x1FAE: appendUtf8Codepoints(out, {0x1F6E, 0x0399}); return true;
+		case 0x1FAF: appendUtf8Codepoints(out, {0x1F6F, 0x0399}); return true;
+		case 0x1FB2: appendUtf8Codepoints(out, {0x1FBA, 0x0399}); return true;
+		case 0x1FB3: appendUtf8Codepoints(out, {0x0391, 0x0399}); return true;
+		case 0x1FB4: appendUtf8Codepoints(out, {0x0386, 0x0399}); return true;
+		case 0x1FB6: appendUtf8Codepoints(out, {0x0391, 0x0342}); return true;
+		case 0x1FB7: appendUtf8Codepoints(out, {0x0391, 0x0342, 0x0399}); return true;
+		case 0x1FBC: appendUtf8Codepoints(out, {0x0391, 0x0399}); return true;
+		case 0x1FC2: appendUtf8Codepoints(out, {0x1FCA, 0x0399}); return true;
+		case 0x1FC3: appendUtf8Codepoints(out, {0x0397, 0x0399}); return true;
+		case 0x1FC4: appendUtf8Codepoints(out, {0x0389, 0x0399}); return true;
+		case 0x1FC6: appendUtf8Codepoints(out, {0x0397, 0x0342}); return true;
+		case 0x1FC7: appendUtf8Codepoints(out, {0x0397, 0x0342, 0x0399}); return true;
+		case 0x1FCC: appendUtf8Codepoints(out, {0x0397, 0x0399}); return true;
+		case 0x1FD2: appendUtf8Codepoints(out, {0x0399, 0x0308, 0x0300}); return true;
+		case 0x1FD3: appendUtf8Codepoints(out, {0x0399, 0x0308, 0x0301}); return true;
+		case 0x1FD6: appendUtf8Codepoints(out, {0x0399, 0x0342}); return true;
+		case 0x1FD7: appendUtf8Codepoints(out, {0x0399, 0x0308, 0x0342}); return true;
+		case 0x1FE2: appendUtf8Codepoints(out, {0x03A5, 0x0308, 0x0300}); return true;
+		case 0x1FE3: appendUtf8Codepoints(out, {0x03A5, 0x0308, 0x0301}); return true;
+		case 0x1FE4: appendUtf8Codepoints(out, {0x03A1, 0x0313}); return true;
+		case 0x1FE6: appendUtf8Codepoints(out, {0x03A5, 0x0342}); return true;
+		case 0x1FE7: appendUtf8Codepoints(out, {0x03A5, 0x0308, 0x0342}); return true;
+		case 0x1FF2: appendUtf8Codepoints(out, {0x1FFA, 0x0399}); return true;
+		case 0x1FF3: appendUtf8Codepoints(out, {0x03A9, 0x0399}); return true;
+		case 0x1FF4: appendUtf8Codepoints(out, {0x038F, 0x0399}); return true;
+		case 0x1FF6: appendUtf8Codepoints(out, {0x03A9, 0x0342}); return true;
+		case 0x1FF7: appendUtf8Codepoints(out, {0x03A9, 0x0342, 0x0399}); return true;
+		case 0x1FFC: appendUtf8Codepoints(out, {0x03A9, 0x0399}); return true;
+		case 0xFB00: appendUtf8Codepoints(out, {0x0046, 0x0046}); return true;
+		case 0xFB01: appendUtf8Codepoints(out, {0x0046, 0x0049}); return true;
+		case 0xFB02: appendUtf8Codepoints(out, {0x0046, 0x004C}); return true;
+		case 0xFB03: appendUtf8Codepoints(out, {0x0046, 0x0046, 0x0049}); return true;
+		case 0xFB04: appendUtf8Codepoints(out, {0x0046, 0x0046, 0x004C}); return true;
+		case 0xFB05: appendUtf8Codepoints(out, {0x0053, 0x0054}); return true;
+		case 0xFB06: appendUtf8Codepoints(out, {0x0053, 0x0054}); return true;
+		case 0xFB13: appendUtf8Codepoints(out, {0x0544, 0x0546}); return true;
+		case 0xFB14: appendUtf8Codepoints(out, {0x0544, 0x0535}); return true;
+		case 0xFB15: appendUtf8Codepoints(out, {0x0544, 0x053B}); return true;
+		case 0xFB16: appendUtf8Codepoints(out, {0x054E, 0x0546}); return true;
+		case 0xFB17: appendUtf8Codepoints(out, {0x0544, 0x053D}); return true;
+		default: return false;
+	}
+}
+
+static void appendCaseMappedCodepoint(std::string &out, int32_t cp, bool upper) {
+	if (upper && appendUppercaseExpansion(out, cp)) {
+		return;
+	}
+	if (!upper && cp == 0x0130) {
+		appendUtf8Codepoints(out, {0x0069, 0x0307});
+		return;
+	}
+	int32_t mapped = upper ? duckdb::Utf8Proc::CodepointToUpper(cp) : duckdb::Utf8Proc::CodepointToLower(cp);
+	if (!appendUtf8Codepoint(out, mapped)) {
+		appendUtf8Codepoint(out, cp);
+	}
+}
+
 static bool hasReDoSRisk(const std::string &pattern) {
 	for (size_t i = 0; i < pattern.size(); ++i) {
 		if (pattern[i] != '(' || (i > 0 && pattern[i - 1] == '\\')) {
@@ -126,28 +276,79 @@ static bool hasReDoSRisk(const std::string &pattern) {
 	return false;
 }
 
-static std::string normalizeFHIRPathRegex(const std::string &pattern);
+static const std::string &utf8CodepointRegex() {
+	static const std::string utf8_codepoint =
+	    "(?:[\\x00-\\x7F]|[\\xC2-\\xDF][\\x80-\\xBF]|[\\xE0-\\xEF][\\x80-\\xBF]{2}|[\\xF0-\\xF4][\\x80-\\xBF]{3})";
+	return utf8_codepoint;
+}
 
-static void validateFHIRPathRegex(const std::string &pattern) {
+static std::string normalizeFHIRPathRegex(const std::string &pattern, bool multiline = false,
+                                          bool ignore_case = false);
+
+static std::regex_constants::syntax_option_type fhirpathRegexCompileOptions(const std::string &flags) {
+	std::regex_constants::syntax_option_type options = std::regex_constants::ECMAScript;
+	for (size_t i = 0; i < flags.size(); ++i) {
+		char flag = flags[i];
+		if (flag == 'i') {
+			options = options | std::regex_constants::icase;
+		} else if (flag == 'm') {
+			// Handled by normalizeFHIRPathRegex()/line-wise replacement below.
+		} else {
+			throw FHIRPathSpecError("FHIRPath: invalid regex flags");
+		}
+	}
+	return options;
+}
+
+static bool fhirpathRegexMultiline(const std::string &flags) {
+	return flags.find('m') != std::string::npos;
+}
+
+static bool fhirpathRegexIgnoreCase(const std::string &flags) {
+	return flags.find('i') != std::string::npos;
+}
+
+static bool hasLineAnchors(const std::string &pattern) {
+	bool in_bracket = false;
+	for (size_t i = 0; i < pattern.size(); ++i) {
+		if (pattern[i] == '\\' && i + 1 < pattern.size()) {
+			++i;
+			continue;
+		}
+		if (pattern[i] == '[') {
+			in_bracket = true;
+		} else if (pattern[i] == ']') {
+			in_bracket = false;
+		} else if (!in_bracket && (pattern[i] == '^' || pattern[i] == '$')) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static void validateFHIRPathRegex(const std::string &pattern, const std::string &flags = "") {
 	if (pattern.size() > 1000) {
 		throw FHIRPathSpecError("FHIRPath: regex pattern exceeds maximum length of 1000 characters");
 	}
 	if (hasReDoSRisk(pattern)) {
 		throw FHIRPathSpecError("FHIRPath: regex pattern contains nested quantifiers or quantified alternations");
 	}
-	std::string normalized = normalizeFHIRPathRegex(pattern);
+	auto options = fhirpathRegexCompileOptions(flags);
+	std::string normalized = normalizeFHIRPathRegex(pattern, fhirpathRegexMultiline(flags),
+	                                                fhirpathRegexIgnoreCase(flags));
 	static thread_local std::unordered_set<std::string> syntax_validated;
 	if (syntax_validated.size() >= 256) {
 		syntax_validated.clear();
 	}
-	if (syntax_validated.find(normalized) == syntax_validated.end()) {
+	std::string cache_key = normalized + "|" + flags;
+	if (syntax_validated.find(cache_key) == syntax_validated.end()) {
 		try {
-			std::regex syntax_probe(normalized, std::regex_constants::ECMAScript);
+			std::regex syntax_probe(normalized, options);
 			(void)syntax_probe;
 		} catch (const std::regex_error &e) {
 			throw FHIRPathSpecError(std::string("FHIRPath: invalid regular expression: ") + e.what());
 		}
-		syntax_validated.insert(normalized);
+		syntax_validated.insert(cache_key);
 	}
 }
 
@@ -172,12 +373,198 @@ static const std::regex &get_cached_regex(const std::string &pattern,
 	return result.first->second;
 }
 
-// std::regex operates over UTF-8 bytes. FHIRPath §5.6.9 requires single-line
-// regex behavior that allows Unicode characters, so an unescaped "." must
-// consume one UTF-8 code point rather than one byte.
-static std::string normalizeFHIRPathRegex(const std::string &pattern) {
-	static const std::string utf8_codepoint =
-	    "(?:[\\x00-\\x7F]|[\\xC2-\\xDF][\\x80-\\xBF]|[\\xE0-\\xEF][\\x80-\\xBF]{2}|[\\xF0-\\xF4][\\x80-\\xBF]{3})";
+static size_t findRegexCharacterClassEnd(const std::string &pattern, size_t start) {
+	size_t i = start + 1;
+	if (i >= pattern.size()) {
+		return std::string::npos;
+	}
+	if (pattern[i] == '^') {
+		++i;
+	}
+	if (i < pattern.size() && pattern[i] == ']') {
+		++i;
+	}
+	while (i < pattern.size()) {
+		if (pattern[i] == '\\' && i + 1 < pattern.size()) {
+			i += 2;
+			continue;
+		}
+		if (pattern[i] == ']') {
+			return i;
+		}
+		++i;
+	}
+	return std::string::npos;
+}
+
+static void appendRegexAlternativeLiteral(std::string &out, const std::string &literal) {
+	for (size_t i = 0; i < literal.size(); ++i) {
+		unsigned char c = static_cast<unsigned char>(literal[i]);
+		if (c < 0x80 && std::string(".^$|()[]{}*+?\\").find(static_cast<char>(c)) != std::string::npos) {
+			out += '\\';
+		}
+		out += literal[i];
+	}
+}
+
+static void addUniqueRegexTerm(std::vector<std::string> &terms, const std::string &term) {
+	if (term.empty()) {
+		return;
+	}
+	if (std::find(terms.begin(), terms.end(), term) == terms.end()) {
+		terms.push_back(term);
+	}
+}
+
+static std::string caseMappedRegexTerm(int32_t cp, bool upper) {
+	std::string mapped;
+	appendCaseMappedCodepoint(mapped, cp, upper);
+	return mapped;
+}
+
+static void addRegexCodepointTerms(std::vector<std::string> &terms, int32_t cp, const std::string &raw,
+                                   bool ignore_case) {
+	addUniqueRegexTerm(terms, raw);
+	if (!ignore_case || cp <= 0x7F) {
+		return;
+	}
+	addUniqueRegexTerm(terms, caseMappedRegexTerm(cp, true));
+	addUniqueRegexTerm(terms, caseMappedRegexTerm(cp, false));
+}
+
+static std::string positiveRegexCharacterClassMatcher(const std::string &ascii_body,
+                                                      const std::vector<std::string> &unicode_terms) {
+	std::string matcher;
+	matcher += "(?:";
+	bool first = true;
+	if (!ascii_body.empty()) {
+		matcher += "[";
+		matcher += ascii_body;
+		matcher += "]";
+		first = false;
+	}
+	for (size_t i = 0; i < unicode_terms.size(); ++i) {
+		if (!first) {
+			matcher += "|";
+		}
+		appendRegexAlternativeLiteral(matcher, unicode_terms[i]);
+		first = false;
+	}
+	matcher += ")";
+	return matcher;
+}
+
+struct RegexClassAtom {
+	std::string text;
+	int32_t cp;
+	bool single_codepoint;
+};
+
+static RegexClassAtom readRegexClassAtom(const std::string &pattern, size_t &i, size_t end) {
+	RegexClassAtom atom;
+	atom.cp = 0;
+	atom.single_codepoint = false;
+	if (pattern[i] == '\\' && i + 1 < end) {
+		atom.text = pattern.substr(i, 2);
+		i += 2;
+		return atom;
+	}
+	int char_bytes = 0;
+	atom.cp = readUtf8Codepoint(pattern, i, char_bytes);
+	atom.text = pattern.substr(i, static_cast<size_t>(char_bytes));
+	atom.single_codepoint = true;
+	i += static_cast<size_t>(char_bytes);
+	return atom;
+}
+
+static void appendRegexClassAtom(const RegexClassAtom &atom, std::string &ascii_body,
+                                 std::vector<std::string> &unicode_terms, bool ignore_case) {
+	if (atom.single_codepoint && atom.cp > 0x7F) {
+		addRegexCodepointTerms(unicode_terms, atom.cp, atom.text, ignore_case);
+	} else {
+		ascii_body += atom.text;
+	}
+}
+
+static void appendRegexClassRange(const RegexClassAtom &first, const RegexClassAtom &last,
+                                  std::string &ascii_body, std::vector<std::string> &unicode_terms,
+                                  bool ignore_case) {
+	if (!first.single_codepoint || !last.single_codepoint) {
+		appendRegexClassAtom(first, ascii_body, unicode_terms, ignore_case);
+		ascii_body += "-";
+		appendRegexClassAtom(last, ascii_body, unicode_terms, ignore_case);
+		return;
+	}
+	if (first.cp > last.cp) {
+		throw FHIRPathSpecError("FHIRPath: invalid regex character range");
+	}
+	if (first.cp <= 0x7F && last.cp <= 0x7F) {
+		ascii_body += first.text;
+		ascii_body += "-";
+		ascii_body += last.text;
+		return;
+	}
+	for (int32_t cp = first.cp; cp <= last.cp; ++cp) {
+		if (cp >= 0xD800 && cp <= 0xDFFF) {
+			continue;
+		}
+		std::string term;
+		if (!appendUtf8Codepoint(term, cp)) {
+			continue;
+		}
+		addRegexCodepointTerms(unicode_terms, cp, term, ignore_case);
+	}
+}
+
+static bool appendNormalizedRegexCharacterClass(std::string &normalized, const std::string &pattern, size_t start,
+                                                size_t &end_out, bool ignore_case) {
+	size_t end = findRegexCharacterClassEnd(pattern, start);
+	if (end == std::string::npos) {
+		return false;
+	}
+
+	bool negated = false;
+	size_t i = start + 1;
+	if (i < end && pattern[i] == '^') {
+		negated = true;
+		++i;
+	}
+
+	std::string ascii_body;
+	std::vector<std::string> unicode_terms;
+	while (i < end) {
+		RegexClassAtom atom = readRegexClassAtom(pattern, i, end);
+		if (i < end && pattern[i] == '-' && i + 1 < end) {
+			++i;
+			RegexClassAtom range_end = readRegexClassAtom(pattern, i, end);
+			appendRegexClassRange(atom, range_end, ascii_body, unicode_terms, ignore_case);
+		} else {
+			appendRegexClassAtom(atom, ascii_body, unicode_terms, ignore_case);
+		}
+	}
+
+	if (!negated && unicode_terms.empty()) {
+		return false;
+	}
+
+	std::string positive = positiveRegexCharacterClassMatcher(ascii_body, unicode_terms);
+	if (negated) {
+		normalized += "(?:(?!";
+		normalized += positive;
+		normalized += ")";
+		normalized += utf8CodepointRegex();
+		normalized += ")";
+	} else {
+		normalized += positive;
+	}
+	end_out = end;
+	return true;
+}
+
+// std::regex operates over UTF-8 bytes. FHIRPath §5.6.9 requires regex behavior
+// that allows Unicode characters, so codepoint-level constructs are expanded
+// before std::regex sees them.
+static std::string normalizeFHIRPathRegex(const std::string &pattern, bool multiline, bool ignore_case) {
 	std::string normalized;
 	bool in_bracket = false;
 	for (size_t i = 0; i < pattern.size(); ++i) {
@@ -186,13 +573,29 @@ static std::string normalizeFHIRPathRegex(const std::string &pattern) {
 			normalized += pattern[i + 1];
 			++i;
 		} else if (pattern[i] == '[') {
-			in_bracket = true;
-			normalized += pattern[i];
+			size_t class_end = std::string::npos;
+			if (appendNormalizedRegexCharacterClass(normalized, pattern, i, class_end, ignore_case)) {
+				i = class_end;
+			} else {
+				in_bracket = true;
+				normalized += pattern[i];
+			}
 		} else if (pattern[i] == ']') {
 			in_bracket = false;
 			normalized += pattern[i];
+		} else if (multiline && pattern[i] == '^' && !in_bracket) {
+			normalized += "(?:^|\\r\\n|\\r|\\n)";
+		} else if (multiline && pattern[i] == '$' && !in_bracket) {
+			normalized += "(?:$|(?=\\r\\n|\\r|\\n))";
 		} else if (pattern[i] == '.' && !in_bracket) {
-			normalized += utf8_codepoint;
+			normalized += utf8CodepointRegex();
+		} else if (ignore_case && !in_bracket && static_cast<unsigned char>(pattern[i]) >= 0x80) {
+			int char_bytes = 0;
+			int32_t cp = readUtf8Codepoint(pattern, i, char_bytes);
+			std::vector<std::string> terms;
+			addRegexCodepointTerms(terms, cp, pattern.substr(i, static_cast<size_t>(char_bytes)), true);
+			normalized += positiveRegexCharacterClassMatcher("", terms);
+			i += static_cast<size_t>(char_bytes - 1);
 		} else {
 			normalized += pattern[i];
 		}
@@ -207,6 +610,11 @@ static bool quantityValuesEqual(const FPValue &a, const FPValue &b);
 static bool isCalendarDurationUnit(const std::string &unit);
 static bool isUcumDurationUnit(const std::string &unit);
 static bool isSecondOrMillisecondDuration(const std::string &unit);
+static bool isMixedCalendarUcumYearMonthDuration(const std::string &left_unit,
+                                                 const std::string &right_unit);
+static std::string formatDecimalNumber(double value, const std::string &source_text);
+static std::string jsonNumberText(yyjson_val *val);
+static bool isNumericType(const FPValue &v);
 
 // --- Static helper functions (used throughout) ---
 
@@ -271,57 +679,317 @@ static bool isFHIRPathDecimalString(const std::string &s) {
 	return true;
 }
 
+static bool isFHIRPathLongDecimalString(const std::string &s) {
+	if (s.size() < 2 || s[s.size() - 1] != 'L') return false;
+	size_t pos = 0;
+	if (s[0] == '+' || s[0] == '-') {
+		if (s.size() == 2) return false;
+		pos = 1;
+	}
+	for (; pos + 1 < s.size(); ++pos) {
+		if (!std::isdigit(static_cast<unsigned char>(s[pos]))) return false;
+	}
+	return true;
+}
+
+static std::string stripLeadingIntegerZeros(std::string digits) {
+	size_t first_digit = digits.find_first_not_of('0');
+	if (first_digit == std::string::npos) return "0";
+	if (first_digit > 0) digits.erase(0, first_digit);
+	return digits;
+}
+
+static std::string addOneIntegerMagnitude(std::string digits) {
+	digits = stripLeadingIntegerZeros(digits);
+	bool carry = true;
+	for (int i = static_cast<int>(digits.size()) - 1; carry && i >= 0; --i) {
+		if (digits[static_cast<size_t>(i)] == '9') {
+			digits[static_cast<size_t>(i)] = '0';
+		} else {
+			digits[static_cast<size_t>(i)]++;
+			carry = false;
+		}
+	}
+	if (carry) digits.insert(digits.begin(), '1');
+	return digits;
+}
+
+static bool integerTextToInt64(const std::string &text, int64_t &out) {
+	if (text.empty()) return false;
+	bool negative = text[0] == '-';
+	size_t pos = (text[0] == '-' || text[0] == '+') ? 1 : 0;
+	if (pos == text.size()) return false;
+	std::string digits = text.substr(pos);
+	for (char ch : digits) {
+		if (!std::isdigit(static_cast<unsigned char>(ch))) return false;
+	}
+	digits = stripLeadingIntegerZeros(digits);
+	std::string limit = negative ? "9223372036854775808" : "9223372036854775807";
+	if (digits.size() > limit.size() || (digits.size() == limit.size() && digits > limit)) {
+		return false;
+	}
+	try {
+		out = std::stoll((negative ? "-" : "") + digits);
+		return true;
+	} catch (const std::exception &) {
+		return false;
+	}
+}
+
+static FPValue makeIntegralMathValueFromText(const std::string &text) {
+	int64_t int_value = 0;
+	if (integerTextToInt64(text, int_value)) {
+		return FPValue::FromInteger(int_value);
+	}
+	std::istringstream iss(text);
+	double decimal_value = 0.0;
+	iss >> decimal_value;
+	FPValue out = FPValue::FromDecimal(decimal_value);
+	out.source_text = text;
+	return out;
+}
+
+enum class IntegralMathOp {
+	Ceiling,
+	Floor,
+	Truncate
+};
+
+static bool integralTextFromDecimalSource(const std::string &source_text, IntegralMathOp op, std::string &out) {
+	if (source_text.empty() || source_text.find('e') != std::string::npos ||
+	    source_text.find('E') != std::string::npos) {
+		return false;
+	}
+	std::string text = source_text;
+	bool negative = false;
+	if (!text.empty() && (text[0] == '-' || text[0] == '+')) {
+		negative = text[0] == '-';
+		text.erase(0, 1);
+	}
+	size_t dot = text.find('.');
+	std::string int_part = dot == std::string::npos ? text : text.substr(0, dot);
+	std::string frac_part = dot == std::string::npos ? "" : text.substr(dot + 1);
+	if (int_part.empty()) int_part = "0";
+	for (char ch : int_part) {
+		if (!std::isdigit(static_cast<unsigned char>(ch))) return false;
+	}
+	bool has_nonzero_fraction = false;
+	for (char ch : frac_part) {
+		if (!std::isdigit(static_cast<unsigned char>(ch))) return false;
+		if (ch != '0') has_nonzero_fraction = true;
+	}
+	std::string magnitude = stripLeadingIntegerZeros(int_part);
+	if (has_nonzero_fraction) {
+		if (!negative && op == IntegralMathOp::Ceiling) {
+			magnitude = addOneIntegerMagnitude(magnitude);
+		} else if (negative && op == IntegralMathOp::Floor) {
+			magnitude = addOneIntegerMagnitude(magnitude);
+		}
+	}
+	out = (negative && magnitude != "0" ? "-" : "") + magnitude;
+	return true;
+}
+
+static bool decimalIdentityTextFromNumericValue(const FPValue &val, std::string &out) {
+	if (!isNumericType(val)) return false;
+	if (!val.source_text.empty()) {
+		out = val.source_text;
+	} else {
+		int64_t int_value = 0;
+		if (extractStrictInteger(val, int_value)) {
+			out = std::to_string(int_value);
+		} else if (val.type == FPValue::Type::Decimal) {
+			out = formatDecimalNumber(val.decimal_val, "");
+		} else if (val.type == FPValue::Type::JsonVal && val.json_val && yyjson_is_real(val.json_val)) {
+			out = jsonNumberText(val.json_val);
+		} else {
+			return false;
+		}
+	}
+	if (out.find('.') == std::string::npos && out.find('e') == std::string::npos &&
+	    out.find('E') == std::string::npos) {
+		out += ".0";
+	}
+	return true;
+}
+
 static bool fhirTypeIsA(const std::string &type_name, const std::string &parent_type) {
 	if (type_name == parent_type) return true;
 
 	static const std::unordered_map<std::string, std::string> hierarchy = {
 		{"Address", "Element"},
 		{"Age", "Quantity"},
+		{"Account", "DomainResource"},
+		{"ActivityDefinition", "DomainResource"},
+		{"AdverseEvent", "DomainResource"},
 		{"AllergyIntolerance", "DomainResource"},
 		{"Annotation", "Element"},
+		{"Appointment", "DomainResource"},
+		{"AppointmentResponse", "DomainResource"},
 		{"Attachment", "Element"},
+		{"AuditEvent", "DomainResource"},
 		{"BackboneElement", "Element"},
+		{"Basic", "DomainResource"},
+		{"Binary", "Resource"},
+		{"BiologicallyDerivedProduct", "DomainResource"},
+		{"BodyStructure", "DomainResource"},
 		{"Bundle", "Resource"},
+		{"CapabilityStatement", "DomainResource"},
 		{"CarePlan", "DomainResource"},
+		{"CareTeam", "DomainResource"},
+		{"CatalogEntry", "DomainResource"},
+		{"ChargeItem", "DomainResource"},
+		{"ChargeItemDefinition", "DomainResource"},
+		{"Claim", "DomainResource"},
+		{"ClaimResponse", "DomainResource"},
+		{"ClinicalImpression", "DomainResource"},
+		{"CodeSystem", "DomainResource"},
 		{"CodeableConcept", "Element"},
 		{"Coding", "Element"},
+		{"Communication", "DomainResource"},
+		{"CommunicationRequest", "DomainResource"},
+		{"CompartmentDefinition", "DomainResource"},
 		{"Composition", "DomainResource"},
+		{"ConceptMap", "DomainResource"},
 		{"Condition", "DomainResource"},
+		{"Consent", "DomainResource"},
 		{"ContactPoint", "Element"},
+		{"Contract", "DomainResource"},
 		{"Count", "Quantity"},
+		{"Coverage", "DomainResource"},
+		{"CoverageEligibilityRequest", "DomainResource"},
+		{"CoverageEligibilityResponse", "DomainResource"},
+		{"DetectedIssue", "DomainResource"},
+		{"Device", "DomainResource"},
+		{"DeviceDefinition", "DomainResource"},
+		{"DeviceMetric", "DomainResource"},
+		{"DeviceRequest", "DomainResource"},
+		{"DeviceUseStatement", "DomainResource"},
 		{"DiagnosticReport", "DomainResource"},
 		{"Distance", "Quantity"},
+		{"DocumentManifest", "DomainResource"},
 		{"DocumentReference", "DomainResource"},
 		{"DomainResource", "Resource"},
 		{"Dosage", "BackboneElement"},
 		{"Duration", "Quantity"},
+		{"EffectEvidenceSynthesis", "DomainResource"},
 		{"Encounter", "DomainResource"},
+		{"Endpoint", "DomainResource"},
+		{"EnrollmentRequest", "DomainResource"},
+		{"EnrollmentResponse", "DomainResource"},
+		{"EpisodeOfCare", "DomainResource"},
+		{"EventDefinition", "DomainResource"},
+		{"Evidence", "DomainResource"},
+		{"EvidenceVariable", "DomainResource"},
+		{"ExampleScenario", "DomainResource"},
+		{"ExplanationOfBenefit", "DomainResource"},
+		{"FamilyMemberHistory", "DomainResource"},
+		{"Flag", "DomainResource"},
+		{"Goal", "DomainResource"},
+		{"GraphDefinition", "DomainResource"},
+		{"Group", "DomainResource"},
+		{"GuidanceResponse", "DomainResource"},
+		{"HealthcareService", "DomainResource"},
 		{"Extension", "Element"},
 		{"HumanName", "Element"},
 		{"Identifier", "Element"},
+		{"ImagingStudy", "DomainResource"},
 		{"Immunization", "DomainResource"},
+		{"ImmunizationEvaluation", "DomainResource"},
+		{"ImmunizationRecommendation", "DomainResource"},
+		{"ImplementationGuide", "DomainResource"},
+		{"InsurancePlan", "DomainResource"},
+		{"Invoice", "DomainResource"},
+		{"Library", "DomainResource"},
+		{"Linkage", "DomainResource"},
+		{"List", "DomainResource"},
 		{"Location", "DomainResource"},
+		{"Measure", "DomainResource"},
+		{"MeasureReport", "DomainResource"},
+		{"Media", "DomainResource"},
 		{"Medication", "DomainResource"},
+		{"MedicationAdministration", "DomainResource"},
+		{"MedicationDispense", "DomainResource"},
+		{"MedicationKnowledge", "DomainResource"},
 		{"MedicationRequest", "DomainResource"},
+		{"MedicationStatement", "DomainResource"},
+		{"MedicinalProduct", "DomainResource"},
+		{"MedicinalProductAuthorization", "DomainResource"},
+		{"MedicinalProductContraindication", "DomainResource"},
+		{"MedicinalProductIndication", "DomainResource"},
+		{"MedicinalProductIngredient", "DomainResource"},
+		{"MedicinalProductInteraction", "DomainResource"},
+		{"MedicinalProductManufactured", "DomainResource"},
+		{"MedicinalProductPackaged", "DomainResource"},
+		{"MedicinalProductPharmaceutical", "DomainResource"},
+		{"MedicinalProductUndesirableEffect", "DomainResource"},
+		{"MessageDefinition", "DomainResource"},
+		{"MessageHeader", "DomainResource"},
 		{"Meta", "Element"},
+		{"MolecularSequence", "DomainResource"},
 		{"Money", "Quantity"},
+		{"NamingSystem", "DomainResource"},
 		{"Narrative", "Element"},
+		{"NutritionOrder", "DomainResource"},
 		{"Observation", "DomainResource"},
+		{"ObservationDefinition", "DomainResource"},
+		{"OperationDefinition", "DomainResource"},
 		{"OperationOutcome", "DomainResource"},
 		{"Organization", "DomainResource"},
+		{"OrganizationAffiliation", "DomainResource"},
+		{"Parameters", "Resource"},
 		{"Patient", "DomainResource"},
+		{"PaymentNotice", "DomainResource"},
+		{"PaymentReconciliation", "DomainResource"},
 		{"Period", "Element"},
+		{"Person", "DomainResource"},
+		{"PlanDefinition", "DomainResource"},
 		{"Practitioner", "DomainResource"},
+		{"PractitionerRole", "DomainResource"},
 		{"Procedure", "DomainResource"},
+		{"Provenance", "DomainResource"},
 		{"Quantity", "Element"},
+		{"Questionnaire", "DomainResource"},
+		{"QuestionnaireResponse", "DomainResource"},
 		{"Range", "Element"},
 		{"Ratio", "Element"},
 		{"Reference", "Element"},
+		{"RelatedPerson", "DomainResource"},
+		{"RequestGroup", "DomainResource"},
+		{"ResearchDefinition", "DomainResource"},
+		{"ResearchElementDefinition", "DomainResource"},
+		{"ResearchStudy", "DomainResource"},
+		{"ResearchSubject", "DomainResource"},
+		{"RiskAssessment", "DomainResource"},
+		{"RiskEvidenceSynthesis", "DomainResource"},
 		{"SampledData", "Element"},
+		{"Schedule", "DomainResource"},
+		{"SearchParameter", "DomainResource"},
 		{"ServiceRequest", "DomainResource"},
 		{"Signature", "Element"},
+		{"Slot", "DomainResource"},
 		{"Specimen", "DomainResource"},
+		{"SpecimenDefinition", "DomainResource"},
+		{"StructureDefinition", "DomainResource"},
+		{"StructureMap", "DomainResource"},
+		{"Subscription", "DomainResource"},
+		{"Substance", "DomainResource"},
+		{"SubstanceNucleicAcid", "DomainResource"},
+		{"SubstancePolymer", "DomainResource"},
+		{"SubstanceProtein", "DomainResource"},
+		{"SubstanceReferenceInformation", "DomainResource"},
+		{"SubstanceSourceMaterial", "DomainResource"},
+		{"SubstanceSpecification", "DomainResource"},
+		{"SupplyDelivery", "DomainResource"},
+		{"SupplyRequest", "DomainResource"},
+		{"Task", "DomainResource"},
+		{"TerminologyCapabilities", "DomainResource"},
+		{"TestReport", "DomainResource"},
+		{"TestScript", "DomainResource"},
 		{"Timing", "BackboneElement"},
+		{"ValueSet", "DomainResource"},
+		{"VerificationResult", "DomainResource"},
+		{"VisionPrescription", "DomainResource"},
 		{"canonical", "uri"},
 		{"code", "string"},
 		{"id", "string"},
@@ -346,22 +1014,15 @@ static bool fhirTypeIsA(const std::string &type_name, const std::string &parent_
 }
 
 static bool isKnownFHIRType(const std::string &type_name) {
-	static const std::unordered_set<std::string> known = {
-		"Address", "Age", "AllergyIntolerance", "Annotation", "Attachment",
-		"BackboneElement", "Bundle", "CarePlan", "CodeableConcept", "Coding",
-		"Composition", "Condition", "ContactPoint", "Count", "DiagnosticReport",
-		"Distance", "DocumentReference", "DomainResource", "Dosage", "Duration",
-		"Element", "Encounter", "Extension", "HumanName", "Identifier",
-		"Immunization", "Location", "Medication", "MedicationRequest", "Meta",
-		"Money", "Narrative", "Observation", "OperationOutcome", "Organization",
-		"Patient", "Period", "Practitioner", "Procedure", "Quantity", "Range",
-		"Ratio", "Reference", "Resource", "SampledData", "ServiceRequest",
-		"Signature", "Specimen", "Timing",
+	if (type_name.empty()) return false;
+	if (type_name == "Any" || type_name == "Resource" || type_name == "Element") return true;
+	static const std::unordered_set<std::string> primitives = {
 		"base64Binary", "boolean", "canonical", "code", "date", "dateTime",
 		"decimal", "id", "instant", "integer", "markdown", "oid", "positiveInt",
 		"string", "time", "unsignedInt", "uri", "url", "uuid", "xhtml"
 	};
-	return known.find(type_name) != known.end();
+	if (primitives.find(type_name) != primitives.end()) return true;
+	return fhirTypeIsA(type_name, "Resource") || fhirTypeIsA(type_name, "Element");
 }
 
 static std::string normalizeFHIRChoiceTypeName(const std::string &type_name) {
@@ -487,9 +1148,12 @@ struct DateTimeParts {
 };
 static DateTimeParts parseDateTimeParts(const std::string &s);
 static DateTimeParts parseTimeParts(const std::string &s);
+static bool parseTemporalWithFormat(const std::string &value, const std::string &format,
+                                    bool want_datetime, std::string &out);
 static int compareDateTimes(const std::string &a, const std::string &b,
                             FPValue::Type a_type, FPValue::Type b_type,
                             bool is_equivalence, bool is_equality);
+static std::string formatDecimalNumber(double value, const std::string &source_text = "");
 
 static std::string rawStringValue(const FPValue &v) {
 	if (v.type == FPValue::Type::String || v.type == FPValue::Type::Date ||
@@ -586,17 +1250,22 @@ static double convertQuantityToBase(double value, const std::string &unit, std::
 
 static std::string normalizeEquivalentString(const std::string &in) {
 	std::string out;
-	bool prev_ws = true;
-	for (char c : in) {
-		if (std::isspace(static_cast<unsigned char>(c))) {
-			if (!prev_ws) out += ' ';
-			prev_ws = true;
+	size_t byte = 0;
+	while (byte < in.size()) {
+		int char_bytes = 0;
+		int32_t cp = readUtf8Codepoint(in, byte, char_bytes);
+		bool white_space =
+		    (cp >= 0x0009 && cp <= 0x000D) || cp == 0x0020 || cp == 0x0085 ||
+		    cp == 0x00A0 || cp == 0x1680 || (cp >= 0x2000 && cp <= 0x200A) ||
+		    cp == 0x2028 || cp == 0x2029 || cp == 0x202F || cp == 0x205F ||
+		    cp == 0x3000;
+		if (white_space) {
+			out += ' ';
 		} else {
-			out += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-			prev_ws = false;
+			appendCaseMappedCodepoint(out, cp, true);
 		}
+		byte += static_cast<size_t>(char_bytes);
 	}
-	if (!out.empty() && out.back() == ' ') out.pop_back();
 	return out;
 }
 
@@ -607,6 +1276,152 @@ static std::string jsonNumberText(yyjson_val *val) {
 	std::string result(json);
 	free(json);
 	return result;
+}
+
+static std::string canonicalJsonNumberText(std::string text) {
+	if (text.empty()) return text;
+	bool negative = false;
+	if (text[0] == '+' || text[0] == '-') {
+		negative = text[0] == '-';
+		text = text.substr(1);
+	}
+
+	size_t exp_pos = text.find_first_of("eE");
+	int exponent = 0;
+	if (exp_pos != std::string::npos) {
+		try {
+			exponent = std::stoi(text.substr(exp_pos + 1));
+		} catch (const std::exception &) {
+			exponent = 0;
+		}
+		text = text.substr(0, exp_pos);
+	}
+
+	size_t dot = text.find('.');
+	std::string int_part = dot == std::string::npos ? text : text.substr(0, dot);
+	std::string frac_part = dot == std::string::npos ? std::string() : text.substr(dot + 1);
+	std::string digits = int_part + frac_part;
+	size_t first_non_zero = digits.find_first_not_of('0');
+	if (first_non_zero == std::string::npos) {
+		return "0";
+	}
+
+	int decimal_pos = static_cast<int>(int_part.size()) + exponent;
+	std::string normalized_int;
+	std::string normalized_frac;
+	if (decimal_pos <= 0) {
+		normalized_int = "0";
+		normalized_frac.assign(static_cast<size_t>(-decimal_pos), '0');
+		normalized_frac += digits;
+	} else if (decimal_pos >= static_cast<int>(digits.size())) {
+		normalized_int = digits;
+		normalized_int.append(static_cast<size_t>(decimal_pos - static_cast<int>(digits.size())), '0');
+	} else {
+		normalized_int = digits.substr(0, static_cast<size_t>(decimal_pos));
+		normalized_frac = digits.substr(static_cast<size_t>(decimal_pos));
+	}
+
+	first_non_zero = normalized_int.find_first_not_of('0');
+	normalized_int = first_non_zero == std::string::npos ? "0" : normalized_int.substr(first_non_zero);
+	while (!normalized_frac.empty() && normalized_frac.back() == '0') {
+		normalized_frac.pop_back();
+	}
+
+	std::string result = normalized_frac.empty() ? normalized_int : normalized_int + "." + normalized_frac;
+	if (result != "0" && negative) {
+		result.insert(result.begin(), '-');
+	}
+	return result;
+}
+
+static bool jsonNumbersEqual(yyjson_val *left, yyjson_val *right) {
+	if (!(left && right && yyjson_is_num(left) && yyjson_is_num(right))) return false;
+	return canonicalJsonNumberText(jsonNumberText(left)) == canonicalJsonNumberText(jsonNumberText(right));
+}
+
+static void splitCanonicalDecimalText(const std::string &input, bool &negative,
+                                      std::string &integer_part, std::string &fraction_part) {
+	std::string text = canonicalJsonNumberText(input);
+	negative = !text.empty() && text[0] == '-';
+	if (negative) {
+		text = text.substr(1);
+	}
+	size_t dot = text.find('.');
+	integer_part = dot == std::string::npos ? text : text.substr(0, dot);
+	fraction_part = dot == std::string::npos ? std::string() : text.substr(dot + 1);
+	if (integer_part.empty()) {
+		integer_part = "0";
+	}
+	while (!fraction_part.empty() && fraction_part.back() == '0') {
+		fraction_part.pop_back();
+	}
+	if (integer_part == "0" && fraction_part.empty()) {
+		negative = false;
+	}
+}
+
+static int compareUnsignedDecimalParts(const std::string &left_integer,
+                                       const std::string &left_fraction,
+                                       const std::string &right_integer,
+                                       const std::string &right_fraction) {
+	if (left_integer.size() < right_integer.size()) return -1;
+	if (left_integer.size() > right_integer.size()) return 1;
+	if (left_integer < right_integer) return -1;
+	if (left_integer > right_integer) return 1;
+
+	size_t max_fraction = std::max(left_fraction.size(), right_fraction.size());
+	for (size_t i = 0; i < max_fraction; ++i) {
+		char l = i < left_fraction.size() ? left_fraction[i] : '0';
+		char r = i < right_fraction.size() ? right_fraction[i] : '0';
+		if (l < r) return -1;
+		if (l > r) return 1;
+	}
+	return 0;
+}
+
+static int compareDecimalText(const std::string &left, const std::string &right) {
+	bool left_negative = false, right_negative = false;
+	std::string left_integer, left_fraction, right_integer, right_fraction;
+	splitCanonicalDecimalText(left, left_negative, left_integer, left_fraction);
+	splitCanonicalDecimalText(right, right_negative, right_integer, right_fraction);
+
+	if (left_negative != right_negative) {
+		return left_negative ? -1 : 1;
+	}
+
+	int cmp = compareUnsignedDecimalParts(left_integer, left_fraction, right_integer, right_fraction);
+	return left_negative ? -cmp : cmp;
+}
+
+static bool numericTextForComparison(const FPValue &v, std::string &out) {
+	if (!isNumericType(v)) return false;
+	if (!v.source_text.empty()) {
+		out = v.source_text;
+		return true;
+	}
+	if (v.type == FPValue::Type::Integer) {
+		out = std::to_string(v.int_val);
+		return true;
+	}
+	if (v.type == FPValue::Type::Decimal) {
+		out = formatDecimalNumber(v.decimal_val, v.source_text);
+		return true;
+	}
+	if (v.type == FPValue::Type::JsonVal && v.json_val && yyjson_is_num(v.json_val)) {
+		out = jsonNumberText(v.json_val);
+		return true;
+	}
+	return false;
+}
+
+static bool quantityValueTextForComparison(const FPValue &v, std::string &out) {
+	if (v.type != FPValue::Type::Quantity) return false;
+	if (!v.source_text.empty()) {
+		out = v.source_text;
+		return true;
+	}
+	out = formatDecimalNumber(v.quantity_value, v.source_text);
+	return true;
 }
 
 static int decimalPlacesFromNumberText(std::string text) {
@@ -647,7 +1462,7 @@ static bool jsonNumbersEquivalent(yyjson_val *left, yyjson_val *right) {
 		double scale = std::pow(10.0, cmp_prec);
 		return std::round(l_num * scale) == std::round(r_num * scale);
 	}
-	return (l_num == r_num) || std::abs(l_num - r_num) < 1e-10;
+	return jsonNumbersEqual(left, right);
 }
 
 static bool jsonValueAsQuantity(yyjson_val *val, FPValue &out) {
@@ -694,13 +1509,34 @@ static bool jsonValueAsQuantity(yyjson_val *val, FPValue &out) {
 	return true;
 }
 
+static bool fpValueAsQuantity(const FPValue &v, FPValue &out);
+
+static bool numericValueAsUnitQuantity(const FPValue &v, FPValue &out) {
+	if (!isNumericType(v)) return false;
+	out = FPValue();
+	out.type = FPValue::Type::Quantity;
+	out.quantity_value = getNumericValue(v);
+	out.quantity_unit = "1";
+	if (!v.source_text.empty()) {
+		out.source_text = v.source_text;
+	} else if (v.type == FPValue::Type::Integer) {
+		out.source_text = std::to_string(v.int_val);
+	} else if (v.type == FPValue::Type::Decimal) {
+		out.source_text = formatDecimalNumber(v.decimal_val, v.source_text);
+	} else if (v.type == FPValue::Type::JsonVal && v.json_val && yyjson_is_num(v.json_val)) {
+		out.source_text = jsonNumberText(v.json_val);
+	}
+	return true;
+}
+
+static bool valueAsEqualityQuantity(const FPValue &v, FPValue &out) {
+	if (fpValueAsQuantity(v, out)) return true;
+	return numericValueAsUnitQuantity(v, out);
+}
+
 static int quantityEqualState(const FPValue &left, const FPValue &right) {
-	bool mixed_calendar_ucum =
-	    (isCalendarDurationUnit(left.quantity_unit) && isUcumDurationUnit(right.quantity_unit)) ||
-	    (isUcumDurationUnit(left.quantity_unit) && isCalendarDurationUnit(right.quantity_unit));
-	if (mixed_calendar_ucum &&
-	    !(isSecondOrMillisecondDuration(left.quantity_unit) && isSecondOrMillisecondDuration(right.quantity_unit))) {
-		return 0;
+	if (isMixedCalendarUcumYearMonthDuration(left.quantity_unit, right.quantity_unit)) {
+		return -1;
 	}
 	std::string left_base, right_base;
 	convertQuantityToBase(left.quantity_value, left.quantity_unit, left_base);
@@ -709,18 +1545,22 @@ static int quantityEqualState(const FPValue &left, const FPValue &right) {
 	return quantityValuesEqual(left, right) ? 1 : 0;
 }
 
-static bool quantitiesEquivalent(const FPValue &left, const FPValue &right) {
+static int quantityEquivalentState(const FPValue &left, const FPValue &right) {
 	std::string left_base, right_base;
 	double left_conv = convertQuantityToBase(left.quantity_value, left.quantity_unit, left_base);
 	double right_conv = convertQuantityToBase(right.quantity_value, right.quantity_unit, right_base);
-	if (left_base != right_base) return false;
+	if (left_base != right_base) return -1;
 	int left_dp = countDecimalPlaces(left);
 	int right_dp = countDecimalPlaces(right);
 	double left_scale = (left.quantity_value != 0) ? left_conv / left.quantity_value : 1.0;
 	double right_scale = (right.quantity_value != 0) ? right_conv / right.quantity_value : 1.0;
 	double left_half = 0.5 * std::pow(10.0, -left_dp) * std::abs(left_scale);
 	double right_half = 0.5 * std::pow(10.0, -right_dp) * std::abs(right_scale);
-	return std::abs(left_conv - right_conv) < std::max(left_half, right_half);
+	return std::abs(left_conv - right_conv) < std::max(left_half, right_half) ? 1 : 0;
+}
+
+static bool quantitiesEquivalent(const FPValue &left, const FPValue &right) {
+	return quantityEquivalentState(left, right) == 1;
 }
 
 static int jsonValuesEqualState(yyjson_val *left, yyjson_val *right) {
@@ -729,6 +1569,17 @@ static int jsonValuesEqualState(yyjson_val *left, yyjson_val *right) {
 	FPValue left_quantity, right_quantity;
 	if (jsonValueAsQuantity(left, left_quantity) && jsonValueAsQuantity(right, right_quantity)) {
 		return quantityEqualState(left_quantity, right_quantity);
+	}
+	bool left_is_quantity = jsonValueAsQuantity(left, left_quantity);
+	bool right_is_quantity = jsonValueAsQuantity(right, right_quantity);
+	if (left_is_quantity || right_is_quantity) {
+		FPValue left_fp = FPValue::FromJson(left);
+		FPValue right_fp = FPValue::FromJson(right);
+		if (!left_is_quantity) left_is_quantity = numericValueAsUnitQuantity(left_fp, left_quantity);
+		if (!right_is_quantity) right_is_quantity = numericValueAsUnitQuantity(right_fp, right_quantity);
+		if (left_is_quantity && right_is_quantity) {
+			return quantityEqualState(left_quantity, right_quantity);
+		}
 	}
 
 	if (yyjson_is_null(left) || yyjson_is_null(right)) {
@@ -740,11 +1591,7 @@ static int jsonValuesEqualState(yyjson_val *left, yyjson_val *right) {
 	}
 	if (yyjson_is_num(left) || yyjson_is_num(right)) {
 		if (!(yyjson_is_num(left) && yyjson_is_num(right))) return 0;
-		double left_num = yyjson_get_num(left);
-		double right_num = yyjson_get_num(right);
-		double diff = std::abs(left_num - right_num);
-		double maxval = std::max(std::abs(left_num), std::abs(right_num));
-		return ((left_num == right_num) || diff < 1e-10 || (maxval > 0 && diff / maxval < 1e-10)) ? 1 : 0;
+		return jsonNumbersEqual(left, right) ? 1 : 0;
 	}
 	if (yyjson_is_str(left) || yyjson_is_str(right)) {
 		return (yyjson_is_str(left) && yyjson_is_str(right) &&
@@ -784,56 +1631,74 @@ static int jsonValuesEqualState(yyjson_val *left, yyjson_val *right) {
 	return yyjson_equals(left, right) ? 1 : 0;
 }
 
-static bool jsonValuesEquivalent(yyjson_val *left, yyjson_val *right) {
-	if (!left || !right) return left == right;
+static int jsonValuesEquivalentState(yyjson_val *left, yyjson_val *right) {
+	if (!left || !right) return left == right ? 1 : 0;
 
 	FPValue left_quantity, right_quantity;
 	if (jsonValueAsQuantity(left, left_quantity) && jsonValueAsQuantity(right, right_quantity)) {
-		return quantitiesEquivalent(left_quantity, right_quantity);
+		return quantityEquivalentState(left_quantity, right_quantity);
+	}
+	bool left_is_quantity = jsonValueAsQuantity(left, left_quantity);
+	bool right_is_quantity = jsonValueAsQuantity(right, right_quantity);
+	if (left_is_quantity || right_is_quantity) {
+		FPValue left_fp = FPValue::FromJson(left);
+		FPValue right_fp = FPValue::FromJson(right);
+		if (!left_is_quantity) left_is_quantity = numericValueAsUnitQuantity(left_fp, left_quantity);
+		if (!right_is_quantity) right_is_quantity = numericValueAsUnitQuantity(right_fp, right_quantity);
+		if (left_is_quantity && right_is_quantity) {
+			return quantityEquivalentState(left_quantity, right_quantity);
+		}
 	}
 
 	if (yyjson_is_null(left) || yyjson_is_null(right)) {
-		return yyjson_is_null(left) && yyjson_is_null(right);
+		return yyjson_is_null(left) && yyjson_is_null(right) ? 1 : 0;
 	}
 	if (yyjson_is_bool(left) || yyjson_is_bool(right)) {
-		return yyjson_is_bool(left) && yyjson_is_bool(right) &&
-		       yyjson_get_bool(left) == yyjson_get_bool(right);
+		return (yyjson_is_bool(left) && yyjson_is_bool(right) &&
+		        yyjson_get_bool(left) == yyjson_get_bool(right)) ? 1 : 0;
 	}
 	if (yyjson_is_num(left) || yyjson_is_num(right)) {
-		if (!(yyjson_is_num(left) && yyjson_is_num(right))) return false;
-		return jsonNumbersEquivalent(left, right);
+		if (!(yyjson_is_num(left) && yyjson_is_num(right))) return 0;
+		return jsonNumbersEquivalent(left, right) ? 1 : 0;
 	}
 	if (yyjson_is_str(left) || yyjson_is_str(right)) {
-		return yyjson_is_str(left) && yyjson_is_str(right) &&
-		       normalizeEquivalentString(yyjson_get_str(left)) ==
-		           normalizeEquivalentString(yyjson_get_str(right));
+		return (yyjson_is_str(left) && yyjson_is_str(right) &&
+		        normalizeEquivalentString(yyjson_get_str(left)) ==
+		            normalizeEquivalentString(yyjson_get_str(right))) ? 1 : 0;
 	}
 	if (yyjson_is_arr(left) || yyjson_is_arr(right)) {
-		if (!(yyjson_is_arr(left) && yyjson_is_arr(right))) return false;
+		if (!(yyjson_is_arr(left) && yyjson_is_arr(right))) return 0;
 		size_t left_size = yyjson_arr_size(left);
 		size_t right_size = yyjson_arr_size(right);
-		if (left_size != right_size) return false;
+		if (left_size != right_size) return 0;
 		std::vector<bool> matched(right_size, false);
 		size_t li, lmax, ri, rmax;
 		yyjson_val *lval, *rval;
 		yyjson_arr_foreach(left, li, lmax, lval) {
 			bool found = false;
+			bool saw_empty = false;
 			size_t current = 0;
 			yyjson_arr_foreach(right, ri, rmax, rval) {
-				if (!matched[current] && jsonValuesEquivalent(lval, rval)) {
+				if (matched[current]) {
+					++current;
+					continue;
+				}
+				int state = jsonValuesEquivalentState(lval, rval);
+				if (state == 1) {
 					matched[current] = true;
 					found = true;
 					break;
 				}
+				if (state < 0) saw_empty = true;
 				++current;
 			}
-			if (!found) return false;
+			if (!found) return saw_empty ? -1 : 0;
 		}
-		return true;
+		return 1;
 	}
 	if (yyjson_is_obj(left) || yyjson_is_obj(right)) {
-		if (!(yyjson_is_obj(left) && yyjson_is_obj(right))) return false;
-		if (yyjson_obj_size(left) != yyjson_obj_size(right)) return false;
+		if (!(yyjson_is_obj(left) && yyjson_is_obj(right))) return 0;
+		if (yyjson_obj_size(left) != yyjson_obj_size(right)) return 0;
 		yyjson_obj_iter iter;
 		yyjson_obj_iter_init(left, &iter);
 		yyjson_val *key;
@@ -841,13 +1706,21 @@ static bool jsonValuesEquivalent(yyjson_val *left, yyjson_val *right) {
 			const char *key_str = yyjson_get_str(key);
 			yyjson_val *left_value = yyjson_obj_iter_get_val(key);
 			yyjson_val *right_value = yyjson_obj_get(right, key_str);
-			if (!right_value || !jsonValuesEquivalent(left_value, right_value)) {
-				return false;
+			if (!right_value) {
+				return 0;
+			}
+			int state = jsonValuesEquivalentState(left_value, right_value);
+			if (state != 1) {
+				return state;
 			}
 		}
-		return true;
+		return 1;
 	}
-	return yyjson_equals(left, right);
+	return yyjson_equals(left, right) ? 1 : 0;
+}
+
+static bool jsonValuesEquivalent(yyjson_val *left, yyjson_val *right) {
+	return jsonValuesEquivalentState(left, right) == 1;
 }
 
 static bool isCalendarDurationUnit(const std::string &unit) {
@@ -871,6 +1744,20 @@ static bool isSecondOrMillisecondDuration(const std::string &unit) {
 	       unit == "s" || unit == "ms";
 }
 
+static bool isYearOrMonthDuration(const std::string &unit) {
+	return unit == "year" || unit == "years" || unit == "month" || unit == "months" ||
+	       unit == "'a'" || unit == "'mo'" || unit == "a" || unit == "mo";
+}
+
+static bool isMixedCalendarUcumYearMonthDuration(const std::string &left_unit,
+                                                 const std::string &right_unit) {
+	bool mixed_calendar_ucum =
+	    (isCalendarDurationUnit(left_unit) && isUcumDurationUnit(right_unit)) ||
+	    (isUcumDurationUnit(left_unit) && isCalendarDurationUnit(right_unit));
+	return mixed_calendar_ucum &&
+	       isYearOrMonthDuration(left_unit) && isYearOrMonthDuration(right_unit);
+}
+
 static bool isMixedCalendarUcumDurationAboveSeconds(const std::string &left_unit,
                                                     const std::string &right_unit) {
 	bool mixed_calendar_ucum =
@@ -892,11 +1779,7 @@ static bool quantityValuesEqual(const FPValue &a, const FPValue &b) {
 		return std::abs(a.quantity_value - b.quantity_value) < 1e-10;
 	}
 
-	bool mixed_calendar_ucum =
-	    (isCalendarDurationUnit(a.quantity_unit) && isUcumDurationUnit(b.quantity_unit)) ||
-	    (isUcumDurationUnit(a.quantity_unit) && isCalendarDurationUnit(b.quantity_unit));
-	if (mixed_calendar_ucum &&
-	    !(isSecondOrMillisecondDuration(a.quantity_unit) && isSecondOrMillisecondDuration(b.quantity_unit))) {
+	if (isMixedCalendarUcumYearMonthDuration(a.quantity_unit, b.quantity_unit)) {
 		return false;
 	}
 
@@ -920,6 +1803,11 @@ static bool fpValuesEqual(const FPValue &a, const FPValue &b) {
 	auto at = effectiveType(a);
 	auto bt = effectiveType(b);
 
+	if (a.type == FPValue::Type::JsonVal && b.type == FPValue::Type::JsonVal &&
+	    a.json_val && b.json_val && yyjson_is_num(a.json_val) && yyjson_is_num(b.json_val)) {
+		return jsonNumbersEqual(a.json_val, b.json_val);
+	}
+
 	// Both numeric: compare by value (1 == 1.0)
 	if (isNumericType(a) && isNumericType(b)) {
 		double an = getNumericValue(a);
@@ -930,7 +1818,9 @@ static bool fpValuesEqual(const FPValue &a, const FPValue &b) {
 	}
 
 	FPValue qa, qb;
-	if (fpValueAsQuantity(a, qa) && fpValueAsQuantity(b, qb)) {
+	FPValue tmp;
+	if ((fpValueAsQuantity(a, tmp) || fpValueAsQuantity(b, tmp)) &&
+	    valueAsEqualityQuantity(a, qa) && valueAsEqualityQuantity(b, qb)) {
 		return quantityValuesEqual(qa, qb);
 	}
 
@@ -1242,6 +2132,18 @@ FPCollection Evaluator::eval(const ASTNode &node, const FPCollection &input, yyj
 		}
 		return {FPValue::FromInteger(ival)};
 	}
+	case NodeType::LongLiteral: {
+		int64_t ival = node_value_get<int64_t>(node.value);
+		std::string source = node.value.string_val;
+		if (source == "9223372036854775808L") {
+			throw FHIRPathSpecError("Long literal out of range");
+		}
+		FPValue v = FPValue::FromInteger(ival);
+		if (!source.empty() && source[source.size() - 1] == 'L') {
+			v.source_text = source.substr(0, source.size() - 1) + ".0";
+		}
+		return {v};
+	}
 	case NodeType::DecimalLiteral: {
 		auto v = FPValue::FromDecimal(node_value_get<double>(node.value));
 		v.source_text = node.value.string_val;
@@ -1419,17 +2321,22 @@ FPCollection Evaluator::evalMemberAccess(const ASTNode &node, const FPCollection
 	FPCollection result;
 	const auto &field_name = node.name;
 
-	std::function<void(yyjson_val*, const std::string&, const std::string&)> add_flattened =
-		[&](yyjson_val *v, const std::string &fname, const std::string &ftype) {
+	std::function<void(yyjson_val*, const std::string&, const std::string&, yyjson_val*)> add_flattened =
+		[&](yyjson_val *v, const std::string &fname, const std::string &ftype, yyjson_val *shadow) {
 			if (yyjson_is_arr(v)) {
 				size_t idx, max; yyjson_val *elem;
 				yyjson_arr_foreach(v, idx, max, elem) {
-					add_flattened(elem, fname, ftype);
+					yyjson_val *shadow_elem = nullptr;
+					if (shadow && yyjson_is_arr(shadow)) {
+						shadow_elem = yyjson_arr_get(shadow, idx);
+					}
+					add_flattened(elem, fname, ftype, shadow_elem);
 				}
 			} else if (!yyjson_is_null(v)) {
 				// FHIRPath §2.1.1: null values from navigation produce empty collections.
 				// Skip null JSON values to maintain consistency across all existence functions.
 				FPValue fpv = FPValue::FromJson(v);
+				if (shadow && yyjson_is_obj(shadow)) fpv.primitive_shadow = shadow;
 				if (yyjson_is_num(v)) fpv.source_text = jsonNumberText(v);
 				if (!fname.empty()) fpv.field_name = fname;
 				if (!ftype.empty()) fpv.fhir_type = ftype;
@@ -1444,6 +2351,14 @@ FPCollection Evaluator::evalMemberAccess(const ASTNode &node, const FPCollection
 
 		yyjson_val *val = item.json_val;
 
+		if (item.primitive_shadow && yyjson_is_obj(item.primitive_shadow)) {
+			yyjson_val *shadow_child = yyjson_obj_get(item.primitive_shadow, field_name.c_str());
+			if (shadow_child) {
+				add_flattened(shadow_child, field_name, infer_fhir_type(field_name), nullptr);
+			}
+			continue;
+		}
+
 		if (yyjson_is_obj(val)) {
 			// FHIRPath type-qualified access: if field_name matches resourceType, return the object itself
 			yyjson_val *rt = yyjson_obj_get(val, "resourceType");
@@ -1454,7 +2369,9 @@ FPCollection Evaluator::evalMemberAccess(const ASTNode &node, const FPCollection
 
 			yyjson_val *child = yyjson_obj_get(val, field_name.c_str());
 			if (child) {
-				add_flattened(child, field_name, infer_fhir_type(field_name));
+				std::string shadow_name = "_" + field_name;
+				yyjson_val *shadow = yyjson_obj_get(val, shadow_name.c_str());
+				add_flattened(child, field_name, infer_fhir_type(field_name), shadow);
 			} else {
 				// Check for choice types (e.g., value[x] pattern)
 				if (field_name.size() > 0) {
@@ -1471,7 +2388,9 @@ FPCollection Evaluator::evalMemberAccess(const ASTNode &node, const FPCollection
 								std::string choice_type = key_s.substr(prefix.size());
 								yyjson_val *choice_val = yyjson_obj_iter_get_val(key);
 								if (choice_val) {
-									add_flattened(choice_val, field_name, choice_type);
+									std::string shadow_name = "_" + key_s;
+									yyjson_val *shadow = yyjson_obj_get(val, shadow_name.c_str());
+									add_flattened(choice_val, field_name, choice_type, shadow);
 								}
 								break;
 							}
@@ -1486,7 +2405,9 @@ FPCollection Evaluator::evalMemberAccess(const ASTNode &node, const FPCollection
 				if (yyjson_is_obj(elem)) {
 					yyjson_val *child = yyjson_obj_get(elem, field_name.c_str());
 					if (child) {
-						add_flattened(child, field_name, infer_fhir_type(field_name));
+						std::string shadow_name = "_" + field_name;
+						yyjson_val *shadow = yyjson_obj_get(elem, shadow_name.c_str());
+						add_flattened(child, field_name, infer_fhir_type(field_name), shadow);
 					}
 				}
 			}
@@ -1657,9 +2578,12 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 	if (name == "not" && arg_count != 0) {
 		throw FHIRPathSpecError("not() takes no arguments");
 	}
-	if ((name == "skip" || name == "take" || name == "combine" || name == "intersect" ||
+	if ((name == "skip" || name == "take" || name == "intersect" ||
 	     name == "exclude" || name == "union") && arg_count != 1) {
 		throw FHIRPathSpecError(name + "() takes exactly 1 argument");
+	}
+	if (name == "combine" && !(arg_count == 1 || arg_count == 2)) {
+		throw FHIRPathSpecError("combine() takes 1 or 2 arguments");
 	}
 	if ((name == "indexOf" || name == "startsWith" || name == "endsWith" || name == "contains") &&
 	    arg_count != 1) {
@@ -1668,14 +2592,17 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 	if (name == "substring" && !(arg_count == 1 || arg_count == 2)) {
 		throw FHIRPathSpecError("substring() takes 1 or 2 arguments");
 	}
-	if ((name == "upper" || name == "lower" || name == "length" || name == "toChars") && arg_count != 0) {
+	if ((name == "upper" || name == "lower" || name == "trim" || name == "length" || name == "toChars") && arg_count != 0) {
 		throw FHIRPathSpecError(name + "() takes no arguments");
 	}
-	if (name == "matches" && arg_count != 1) {
-		throw FHIRPathSpecError("matches() takes exactly 1 argument");
+	if (name == "matches" && !(arg_count == 1 || arg_count == 2)) {
+		throw FHIRPathSpecError("matches() takes 1 or 2 arguments");
 	}
-	if ((name == "replace" || name == "replaceMatches") && arg_count != 2) {
+	if (name == "replace" && arg_count != 2) {
 		throw FHIRPathSpecError(name + "() takes exactly 2 arguments");
+	}
+	if (name == "replaceMatches" && !(arg_count == 2 || arg_count == 3)) {
+		throw FHIRPathSpecError("replaceMatches() takes 2 or 3 arguments");
 	}
 	if (name == "iif" && !(arg_count == 2 || arg_count == 3)) {
 		throw FHIRPathSpecError("iif() takes 2 or 3 arguments");
@@ -1701,8 +2628,11 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 	if ((name == "toBoolean" || name == "toInteger") && arg_count != 0) {
 		throw FHIRPathSpecError(name + "() takes no arguments");
 	}
-	if ((name == "toDecimal" || name == "toDate" || name == "toDateTime") && arg_count != 0) {
+	if (name == "toDecimal" && arg_count != 0) {
 		throw FHIRPathSpecError(name + "() takes no arguments");
+	}
+	if ((name == "toDate" || name == "toDateTime") && arg_count > 1) {
+		throw FHIRPathSpecError(name + "() takes at most 1 argument");
 	}
 	if ((name == "toString" || name == "toTime" ||
 	     name == "convertsToString" || name == "convertsToTime") && arg_count != 0) {
@@ -1714,8 +2644,11 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 	if ((name == "convertsToBoolean" || name == "convertsToInteger") && arg_count != 0) {
 		throw FHIRPathSpecError(name + "() takes no arguments");
 	}
-	if ((name == "convertsToDecimal" || name == "convertsToDate" || name == "convertsToDateTime") && arg_count != 0) {
+	if (name == "convertsToDecimal" && arg_count != 0) {
 		throw FHIRPathSpecError(name + "() takes no arguments");
+	}
+	if ((name == "convertsToDate" || name == "convertsToDateTime") && arg_count > 1) {
+		throw FHIRPathSpecError(name + "() takes at most 1 argument");
 	}
 	if ((name == "abs" || name == "ceiling" || name == "exp" || name == "floor" ||
 	     name == "ln" || name == "sqrt" || name == "truncate") && arg_count != 0) {
@@ -1741,7 +2674,7 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 	// Singleton Enforcement (FHIRPath 5.2, 5.3, 5.4)
 	if (input.size() > 1) {
 		if (name == "indexOf" || name == "substring" || name == "startsWith" || name == "endsWith" || 
-		    name == "contains" || name == "upper" || name == "lower" || name == "replace" || 
+		    name == "contains" || name == "upper" || name == "lower" || name == "trim" || name == "replace" ||
 		    name == "matches" || name == "replaceMatches" || name == "length" || name == "toChars" ||
 		    name == "abs" || name == "ceiling" || name == "exp" || name == "floor" || name == "ln" || 
 		    name == "log" || name == "power" || name == "round" || name == "sqrt" || name == "truncate" ||
@@ -1813,10 +2746,30 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 		return fn_toString(input);
 	}
 	if (name == "toDate") {
-		return fn_toDate(input);
+		std::string format;
+		if (!node.children.empty() && !input.empty() && effectiveType(input[0]) == FPValue::Type::String) {
+			FPCollection arg_ctx = outer_input ? *outer_input : input;
+			auto arg = evalArgIsolated(*node.children[0], arg_ctx, doc);
+			if (arg.empty()) return {};
+			if (arg.size() > 1 || effectiveType(arg[0]) != FPValue::Type::String) {
+				throw FHIRPathSpecError("toDate() format argument must be a single String");
+			}
+			format = toString(arg[0]);
+		}
+		return fn_toDate(input, format);
 	}
 	if (name == "toDateTime") {
-		return fn_toDateTime(input);
+		std::string format;
+		if (!node.children.empty() && !input.empty() && effectiveType(input[0]) == FPValue::Type::String) {
+			FPCollection arg_ctx = outer_input ? *outer_input : input;
+			auto arg = evalArgIsolated(*node.children[0], arg_ctx, doc);
+			if (arg.empty()) return {};
+			if (arg.size() > 1 || effectiveType(arg[0]) != FPValue::Type::String) {
+				throw FHIRPathSpecError("toDateTime() format argument must be a single String");
+			}
+			format = toString(arg[0]);
+		}
+		return fn_toDateTime(input, format);
 	}
 	if (name == "toBoolean") {
 		return fn_toBoolean(input);
@@ -1824,7 +2777,8 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 	if (name == "toQuantity") {
 		std::string to_unit;
 		if (!node.children.empty()) {
-			auto arg = evalArgIsolated(*node.children[0], input, doc);
+			FPCollection arg_ctx = outer_input ? *outer_input : input;
+			auto arg = evalArgIsolated(*node.children[0], arg_ctx, doc);
 			if (arg.empty()) return {};
 			if (arg.size() > 1 || effectiveType(arg[0]) != FPValue::Type::String) {
 				throw FHIRPathSpecError("toQuantity() unit argument must be a single String");
@@ -1859,7 +2813,26 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 			throw FHIRPathSpecError("trace() name argument must be a single String");
 		}
 		if (node.children.size() == 2) {
-			(void)evalArgIsolated(*node.children[1], input, doc);
+			auto saved_chain_vars = chain_defined_vars_;
+			auto saved_defined_vars = defined_variables_;
+			int64_t saved_index = index_context_;
+			try {
+				for (size_t i = 0; i < input.size(); i++) {
+					chain_defined_vars_ = saved_chain_vars;
+					defined_variables_ = saved_defined_vars;
+					index_context_ = static_cast<int64_t>(i);
+					FPCollection single = {input[i]};
+					(void)evalArgIsolated(*node.children[1], single, doc);
+				}
+			} catch (const std::exception &) {
+				chain_defined_vars_ = saved_chain_vars;
+				defined_variables_ = saved_defined_vars;
+				index_context_ = saved_index;
+				throw;
+			}
+			chain_defined_vars_ = saved_chain_vars;
+			defined_variables_ = saved_defined_vars;
+			index_context_ = saved_index;
 		}
 		return fn_trace(input);
 	}
@@ -1898,10 +2871,30 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 		return fn_convertsToString(input);
 	}
 	if (name == "convertsToDate") {
-		return fn_convertsToDate(input);
+		std::string format;
+		if (!node.children.empty() && !input.empty() && effectiveType(input[0]) == FPValue::Type::String) {
+			FPCollection arg_ctx = outer_input ? *outer_input : input;
+			auto arg = evalArgIsolated(*node.children[0], arg_ctx, doc);
+			if (arg.empty()) return {};
+			if (arg.size() > 1 || effectiveType(arg[0]) != FPValue::Type::String) {
+				throw FHIRPathSpecError("convertsToDate() format argument must be a single String");
+			}
+			format = toString(arg[0]);
+		}
+		return fn_convertsToDate(input, format);
 	}
 	if (name == "convertsToDateTime") {
-		return fn_convertsToDateTime(input);
+		std::string format;
+		if (!node.children.empty() && !input.empty() && effectiveType(input[0]) == FPValue::Type::String) {
+			FPCollection arg_ctx = outer_input ? *outer_input : input;
+			auto arg = evalArgIsolated(*node.children[0], arg_ctx, doc);
+			if (arg.empty()) return {};
+			if (arg.size() > 1 || effectiveType(arg[0]) != FPValue::Type::String) {
+				throw FHIRPathSpecError("convertsToDateTime() format argument must be a single String");
+			}
+			format = toString(arg[0]);
+		}
+		return fn_convertsToDateTime(input, format);
 	}
 	if (name == "convertsToTime") {
 		return fn_convertsToTime(input);
@@ -1909,7 +2902,8 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 	if (name == "convertsToQuantity") {
 		std::string to_unit;
 		if (!node.children.empty()) {
-			auto arg = evalArgIsolated(*node.children[0], input, doc);
+			FPCollection arg_ctx = outer_input ? *outer_input : input;
+			auto arg = evalArgIsolated(*node.children[0], arg_ctx, doc);
 			if (arg.empty()) return {};
 			if (arg.size() > 1 || effectiveType(arg[0]) != FPValue::Type::String) {
 				throw FHIRPathSpecError("convertsToQuantity() unit argument must be a single String");
@@ -2822,7 +3816,12 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 		auto arg = evalArgIsolated(*node.children[0], string_arg_ctx, doc);
 
 		if (name == "matches") {
-			return fn_matches(input, arg);
+			FPCollection flags;
+			if (node.children.size() >= 2) {
+				flags = evalArgIsolated(*node.children[1], string_arg_ctx, doc);
+				return fn_matches(input, arg, &flags);
+			}
+			return fn_matches(input, arg, nullptr);
 		}
 		if (name == "matchesFull") {
 			if (arg.empty()) return {};
@@ -2865,9 +3864,23 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 			if (effectiveType(sub_col[0]) != FPValue::Type::String) {
 				throw FHIRPathSpecError("replaceMatches() requires a String substitution argument");
 			}
+			std::string flags_text;
+			if (node.children.size() >= 3) {
+				auto flags_col = evalArgIsolated(*node.children[2], string_arg_ctx, doc);
+				if (flags_col.empty()) return {};
+				if (flags_col.size() > 1) {
+					throw FHIRPathSpecError("replaceMatches() requires a single flags argument");
+				}
+				if (effectiveType(flags_col[0]) != FPValue::Type::String) {
+					throw FHIRPathSpecError("replaceMatches() requires a String flags argument");
+				}
+				flags_text = toString(flags_col[0]);
+			}
 			std::string pattern = toString(arg[0]);
 			if (!pattern.empty()) {
-				validateFHIRPathRegex(pattern);
+				validateFHIRPathRegex(pattern, flags_text);
+			} else {
+				fhirpathRegexCompileOptions(flags_text);
 			}
 			if (input.empty()) return {};
 			if (input.size() > 1) {
@@ -2880,7 +3893,35 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 			std::string sub = toString(sub_col[0]);
 			if (pattern.empty()) return {FPValue::FromString(s)};
 			try {
-				const auto &re = get_cached_regex(normalizeFHIRPathRegex(pattern));
+				auto options = fhirpathRegexCompileOptions(flags_text);
+				if (fhirpathRegexMultiline(flags_text) && hasLineAnchors(pattern)) {
+					const auto &line_re = get_cached_regex(
+					    normalizeFHIRPathRegex(pattern, false, fhirpathRegexIgnoreCase(flags_text)), options);
+					std::string result;
+					size_t start = 0;
+					while (start <= s.size()) {
+						size_t end = start;
+						while (end < s.size() && s[end] != '\r' && s[end] != '\n') {
+							++end;
+						}
+						result += std::regex_replace(s.substr(start, end - start), line_re, sub);
+						if (end >= s.size()) {
+							break;
+						}
+						if (s[end] == '\r' && end + 1 < s.size() && s[end + 1] == '\n') {
+							result += "\r\n";
+							start = end + 2;
+						} else {
+							result += s.substr(end, 1);
+							start = end + 1;
+						}
+					}
+					return {FPValue::FromString(result)};
+				}
+				const auto &re = get_cached_regex(
+				    normalizeFHIRPathRegex(pattern, fhirpathRegexMultiline(flags_text),
+				                           fhirpathRegexIgnoreCase(flags_text)),
+				    options);
 				return {FPValue::FromString(std::regex_replace(s, re, sub))};
 			} catch (const std::regex_error &e) {
 				throw FHIRPathSpecError(std::string("replaceMatches() invalid regular expression: ") + e.what());
@@ -2911,22 +3952,28 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 				eval_ctx.push_back(FPValue::FromJson(resource_context_));
 			}
 			auto coll_arg = evalArgIsolated(*node.children[0], eval_ctx, doc);
-			if (name == "combine") return fn_combine(input, coll_arg);
+			if (name == "combine") {
+				if (node.children.size() == 2) {
+					auto preserve_arg = evalArgIsolated(*node.children[1], eval_ctx, doc);
+					if (preserve_arg.empty()) return {};
+					if (preserve_arg.size() > 1 || effectiveType(preserve_arg[0]) != FPValue::Type::Boolean) {
+						throw FHIRPathSpecError("combine() preserveOrder argument must be a single Boolean");
+					}
+				}
+				return fn_combine(input, coll_arg);
+			}
 			if (name == "intersect") return fn_intersect(input, coll_arg);
 			if (name == "exclude") return fn_exclude(input, coll_arg);
 			return fn_union(input, coll_arg);
 		}
 		if (name == "subsetOf") {
-			// Evaluate argument against root resource context
-			FPCollection root_ctx;
-			if (resource_context_) root_ctx.push_back(FPValue::FromJson(resource_context_));
-			auto subset_arg = evalArgIsolated(*node.children[0], root_ctx, doc);
+			FPCollection arg_ctx = outer_input ? *outer_input : input;
+			auto subset_arg = evalArgIsolated(*node.children[0], arg_ctx, doc);
 			return fn_subsetOf(input, subset_arg);
 		}
 		if (name == "supersetOf") {
-			FPCollection root_ctx;
-			if (resource_context_) root_ctx.push_back(FPValue::FromJson(resource_context_));
-			auto superset_arg = evalArgIsolated(*node.children[0], root_ctx, doc);
+			FPCollection arg_ctx = outer_input ? *outer_input : input;
+			auto superset_arg = evalArgIsolated(*node.children[0], arg_ctx, doc);
 			return fn_supersetOf(input, superset_arg);
 		}
 
@@ -3252,7 +4299,7 @@ FPCollection Evaluator::fn_contains_fn(const FPCollection &input, const FPCollec
 	return {FPValue::FromBoolean(s.find(sub) != std::string::npos)};
 }
 
-FPCollection Evaluator::fn_matches(const FPCollection &input, const FPCollection &arg) {
+FPCollection Evaluator::fn_matches(const FPCollection &input, const FPCollection &arg, const FPCollection *flags) {
 	if (arg.empty()) {
 		return {};
 	}
@@ -3263,7 +4310,17 @@ FPCollection Evaluator::fn_matches(const FPCollection &input, const FPCollection
 		throw FHIRPathSpecError("matches() requires a String regex argument");
 	}
 	std::string pattern = toString(arg[0]);
-	validateFHIRPathRegex(pattern);
+	std::string flags_text;
+	if (flags && !flags->empty()) {
+		if (flags->size() > 1) {
+			throw FHIRPathSpecError("matches() requires a single flags argument");
+		}
+		if (effectiveType((*flags)[0]) != FPValue::Type::String) {
+			throw FHIRPathSpecError("matches() requires a String flags argument");
+		}
+		flags_text = toString((*flags)[0]);
+	}
+	validateFHIRPathRegex(pattern, flags_text);
 	if (input.empty()) {
 		return {};
 	}
@@ -3274,10 +4331,11 @@ FPCollection Evaluator::fn_matches(const FPCollection &input, const FPCollection
 		throw FHIRPathSpecError("matches() requires a String input");
 	}
 	try {
-			std::string s = toString(input[0]);
-			std::string dotall_pattern = normalizeFHIRPathRegex(pattern);
-		const auto &re2 = get_cached_regex(dotall_pattern);
-		return {FPValue::FromBoolean(std::regex_match(s, re2))};
+		std::string s = toString(input[0]);
+		std::string normalized_pattern = normalizeFHIRPathRegex(pattern, fhirpathRegexMultiline(flags_text),
+		                                                        fhirpathRegexIgnoreCase(flags_text));
+		const auto &re2 = get_cached_regex(normalized_pattern, fhirpathRegexCompileOptions(flags_text));
+		return {FPValue::FromBoolean(std::regex_search(s, re2))};
 	} catch (const std::regex_error &e) {
 		throw FHIRPathSpecError(std::string("matches() invalid regular expression: ") + e.what());
 	}
@@ -3438,78 +4496,14 @@ FPCollection Evaluator::fn_upper(const FPCollection &input) {
 		throw FHIRPathSpecError("upper() requires a String input");
 	}
 	std::string s = toString(input[0]);
-	// Unicode-aware uppercase: iterate code points, case-map, re-encode.
 	std::string result;
 	result.reserve(s.size());
 	size_t byte = 0;
 	while (byte < s.size()) {
-		unsigned char c = static_cast<unsigned char>(s[byte]);
-		uint32_t cp;
-		size_t char_bytes;
-		if (c < 0x80) {
-			cp = c; char_bytes = 1;
-		} else if (c < 0xE0) {
-			cp = ((c & 0x1F) << 6) | (static_cast<unsigned char>(s[byte+1]) & 0x3F);
-			char_bytes = 2;
-		} else if (c < 0xF0) {
-			cp = ((c & 0x0F) << 12) | ((static_cast<unsigned char>(s[byte+1]) & 0x3F) << 6)
-			     | (static_cast<unsigned char>(s[byte+2]) & 0x3F);
-			char_bytes = 3;
-		} else {
-			cp = ((c & 0x07) << 18) | ((static_cast<unsigned char>(s[byte+1]) & 0x3F) << 12)
-			     | ((static_cast<unsigned char>(s[byte+2]) & 0x3F) << 6)
-			     | (static_cast<unsigned char>(s[byte+3]) & 0x3F);
-			char_bytes = 4;
-		}
-		// Simple Unicode case mapping for common ranges (Latin-1 Supplement, Latin Extended-A)
-		uint32_t upper_cp = cp;
-		if (cp == 0x00DF) {
-			// German sharp s uppercases to two code points.
-			result += "SS";
-			byte += char_bytes;
-			continue;
-		}
-		if (cp >= 0x0061 && cp <= 0x007A) upper_cp = cp - 32;            // a-z → A-Z
-		else if (cp >= 0x00E0 && cp <= 0x00F6) upper_cp = cp - 32;      // à-ö → À-Ö
-		else if (cp >= 0x00F8 && cp <= 0x00FE) upper_cp = cp - 32;      // ø-þ → Ø-Þ
-		else if (cp == 0x00FF) upper_cp = 0x0178;                         // ÿ → Ÿ
-		else if (cp == 0x0131) upper_cp = 0x0049;                         // dotless ı → I
-		else if (cp >= 0x0101 && cp <= 0x012F && (cp & 1) == 1) upper_cp = cp - 1; // Latin Ext-A lowercase
-		else if (cp >= 0x0133 && cp <= 0x0137 && (cp & 1) == 1) upper_cp = cp - 1;
-		else if (cp >= 0x013A && cp <= 0x0148 && (cp & 1) == 0) upper_cp = cp - 1;
-		else if (cp == 0x014B) upper_cp = 0x014A;
-		else if (cp >= 0x014D && cp <= 0x0177 && (cp & 1) == 1) upper_cp = cp - 1;
-		else if (cp >= 0x017A && cp <= 0x017E && (cp & 1) == 0) upper_cp = cp - 1;
-		else if (cp == 0x03AC) upper_cp = 0x0386;                         // ά → Ά
-		else if (cp == 0x03AD) upper_cp = 0x0388;                         // έ → Έ
-		else if (cp == 0x03AE) upper_cp = 0x0389;                         // ή → Ή
-		else if (cp == 0x03AF) upper_cp = 0x038A;                         // ί → Ί
-		else if (cp == 0x03CC) upper_cp = 0x038C;                         // ό → Ό
-		else if (cp == 0x03CD) upper_cp = 0x038E;                         // ύ → Ύ
-		else if (cp == 0x03CE) upper_cp = 0x038F;                         // ώ → Ώ
-		else if (cp == 0x03CA) upper_cp = 0x03AA;                         // ϊ → Ϊ
-		else if (cp == 0x03CB) upper_cp = 0x03AB;                         // ϋ → Ϋ
-		else if (cp == 0x03C2) upper_cp = 0x03A3;                         // ς → Σ (final sigma)
-		else if (cp >= 0x03B1 && cp <= 0x03C9) upper_cp = cp - 32;      // Greek α-ω → Α-Ω
-		else if (cp >= 0x0430 && cp <= 0x044F) upper_cp = cp - 32;      // Russian а-я → А-Я
-		else if (cp == 0x0451) upper_cp = 0x0401;                         // ё → Ё
-		// Re-encode code point to UTF-8
-		if (upper_cp < 0x80) {
-			result += static_cast<char>(upper_cp);
-		} else if (upper_cp < 0x800) {
-			result += static_cast<char>(0xC0 | (upper_cp >> 6));
-			result += static_cast<char>(0x80 | (upper_cp & 0x3F));
-		} else if (upper_cp < 0x10000) {
-			result += static_cast<char>(0xE0 | (upper_cp >> 12));
-			result += static_cast<char>(0x80 | ((upper_cp >> 6) & 0x3F));
-			result += static_cast<char>(0x80 | (upper_cp & 0x3F));
-		} else {
-			result += static_cast<char>(0xF0 | (upper_cp >> 18));
-			result += static_cast<char>(0x80 | ((upper_cp >> 12) & 0x3F));
-			result += static_cast<char>(0x80 | ((upper_cp >> 6) & 0x3F));
-			result += static_cast<char>(0x80 | (upper_cp & 0x3F));
-		}
-		byte += char_bytes;
+		int char_bytes = 0;
+		int32_t cp = readUtf8Codepoint(s, byte, char_bytes);
+		appendCaseMappedCodepoint(result, cp, true);
+		byte += static_cast<size_t>(char_bytes);
 	}
 	return {FPValue::FromString(result)};
 }
@@ -3527,77 +4521,14 @@ FPCollection Evaluator::fn_lower(const FPCollection &input) {
 		throw FHIRPathSpecError("lower() requires a String input");
 	}
 	std::string s = toString(input[0]);
-	// Unicode-aware lowercase: iterate code points, case-map, re-encode.
 	std::string result;
 	result.reserve(s.size());
 	size_t byte = 0;
 	while (byte < s.size()) {
-		unsigned char c = static_cast<unsigned char>(s[byte]);
-		uint32_t cp;
-		size_t char_bytes;
-		if (c < 0x80) {
-			cp = c; char_bytes = 1;
-		} else if (c < 0xE0) {
-			cp = ((c & 0x1F) << 6) | (static_cast<unsigned char>(s[byte+1]) & 0x3F);
-			char_bytes = 2;
-		} else if (c < 0xF0) {
-			cp = ((c & 0x0F) << 12) | ((static_cast<unsigned char>(s[byte+1]) & 0x3F) << 6)
-			     | (static_cast<unsigned char>(s[byte+2]) & 0x3F);
-			char_bytes = 3;
-		} else {
-			cp = ((c & 0x07) << 18) | ((static_cast<unsigned char>(s[byte+1]) & 0x3F) << 12)
-			     | ((static_cast<unsigned char>(s[byte+2]) & 0x3F) << 6)
-			     | (static_cast<unsigned char>(s[byte+3]) & 0x3F);
-			char_bytes = 4;
-		}
-		// Simple Unicode case mapping for common ranges
-		uint32_t lower_cp = cp;
-		if (cp == 0x0130) {
-			// Unicode simple lower for dotted capital I expands to i + combining dot.
-			result += "i";
-			result += "\xCC\x87";
-			byte += char_bytes;
-			continue;
-		}
-		if (cp >= 0x0041 && cp <= 0x005A) lower_cp = cp + 32;            // A-Z → a-z
-		else if (cp >= 0x00C0 && cp <= 0x00D6) lower_cp = cp + 32;      // À-Ö → à-ö
-		else if (cp >= 0x00D8 && cp <= 0x00DE) lower_cp = cp + 32;      // Ø-Þ → ø-þ
-		else if (cp == 0x0178) lower_cp = 0x00FF;                         // Ÿ → ÿ
-		else if (cp >= 0x0100 && cp <= 0x012E && (cp & 1) == 0) lower_cp = cp + 1; // Latin Ext-A uppercase
-		else if (cp >= 0x0132 && cp <= 0x0136 && (cp & 1) == 0) lower_cp = cp + 1;
-		else if (cp >= 0x0139 && cp <= 0x0147 && (cp & 1) == 1) lower_cp = cp + 1;
-		else if (cp == 0x014A) lower_cp = 0x014B;
-		else if (cp >= 0x014C && cp <= 0x0176 && (cp & 1) == 0) lower_cp = cp + 1;
-		else if (cp >= 0x0179 && cp <= 0x017D && (cp & 1) == 1) lower_cp = cp + 1;
-		else if (cp == 0x0386) lower_cp = 0x03AC;                         // Ά → ά
-		else if (cp == 0x0388) lower_cp = 0x03AD;                         // Έ → έ
-		else if (cp == 0x0389) lower_cp = 0x03AE;                         // Ή → ή
-		else if (cp == 0x038A) lower_cp = 0x03AF;                         // Ί → ί
-		else if (cp == 0x038C) lower_cp = 0x03CC;                         // Ό → ό
-		else if (cp == 0x038E) lower_cp = 0x03CD;                         // Ύ → ύ
-		else if (cp == 0x038F) lower_cp = 0x03CE;                         // Ώ → ώ
-		else if (cp == 0x03AA) lower_cp = 0x03CA;                         // Ϊ → ϊ
-		else if (cp == 0x03AB) lower_cp = 0x03CB;                         // Ϋ → ϋ
-		else if (cp >= 0x0391 && cp <= 0x03A9) lower_cp = cp + 32;      // Greek Α-Ω → α-ω
-		else if (cp >= 0x0410 && cp <= 0x042F) lower_cp = cp + 32;      // Russian А-Я → а-я
-		else if (cp == 0x0401) lower_cp = 0x0451;                         // Ё → ё
-		// Re-encode code point to UTF-8
-		if (lower_cp < 0x80) {
-			result += static_cast<char>(lower_cp);
-		} else if (lower_cp < 0x800) {
-			result += static_cast<char>(0xC0 | (lower_cp >> 6));
-			result += static_cast<char>(0x80 | (lower_cp & 0x3F));
-		} else if (lower_cp < 0x10000) {
-			result += static_cast<char>(0xE0 | (lower_cp >> 12));
-			result += static_cast<char>(0x80 | ((lower_cp >> 6) & 0x3F));
-			result += static_cast<char>(0x80 | (lower_cp & 0x3F));
-		} else {
-			result += static_cast<char>(0xF0 | (lower_cp >> 18));
-			result += static_cast<char>(0x80 | ((lower_cp >> 12) & 0x3F));
-			result += static_cast<char>(0x80 | ((lower_cp >> 6) & 0x3F));
-			result += static_cast<char>(0x80 | (lower_cp & 0x3F));
-		}
-		byte += char_bytes;
+		int char_bytes = 0;
+		int32_t cp = readUtf8Codepoint(s, byte, char_bytes);
+		appendCaseMappedCodepoint(result, cp, false);
+		byte += static_cast<size_t>(char_bytes);
 	}
 	return {FPValue::FromString(result)};
 }
@@ -3672,7 +4603,11 @@ FPCollection Evaluator::fn_toDecimal(const FPCollection &input) {
 			return {val};
 		}
 		if (val.type == FPValue::Type::Integer) {
-			return {FPValue::FromDecimal(static_cast<double>(val.int_val))};
+			FPValue out = FPValue::FromDecimal(static_cast<double>(val.int_val));
+			if (!val.source_text.empty()) {
+				out.source_text = val.source_text;
+			}
+			return {out};
 		}
 		auto t = effectiveType(val);
 		if (t == FPValue::Type::Boolean) {
@@ -3687,7 +4622,9 @@ FPCollection Evaluator::fn_toDecimal(const FPCollection &input) {
 			return {};
 		}
 		std::string s = toString(val);
-		if (!isFHIRPathDecimalString(s)) return {};
+		bool string_long = isFHIRPathLongDecimalString(s);
+		if (!isFHIRPathDecimalString(s) && !string_long) return {};
+		if (string_long) s = s.substr(0, s.size() - 1);
 		size_t idx = 0;
 		double d = std::stod(s, &idx);
 		if (idx != s.size()) return {};
@@ -3716,7 +4653,7 @@ FPCollection Evaluator::fn_toString(const FPCollection &input) {
 	return {FPValue::FromString(toString(input[0]))};
 }
 
-FPCollection Evaluator::fn_toDate(const FPCollection &input) {
+FPCollection Evaluator::fn_toDate(const FPCollection &input, const std::string &format) {
 	if (input.empty()) {
 		return {};
 	}
@@ -3735,6 +4672,14 @@ FPCollection Evaluator::fn_toDate(const FPCollection &input) {
 	}
 	if (t != FPValue::Type::String) return {};
 	std::string s = toString(input[0]);
+	if (!format.empty()) {
+		std::string parsed;
+		if (parseTemporalWithFormat(s, format, false, parsed)) {
+			FPValue v; v.type = FPValue::Type::Date; v.string_val = parsed;
+			return {v};
+		}
+		return {};
+	}
 	DateTimeParts dp = parseDateTimeParts(s);
 	if (dp.valid && dp.precision >= 1) {
 		auto tpos = s.find('T');
@@ -3745,7 +4690,7 @@ FPCollection Evaluator::fn_toDate(const FPCollection &input) {
 	return {};
 }
 
-FPCollection Evaluator::fn_toDateTime(const FPCollection &input) {
+FPCollection Evaluator::fn_toDateTime(const FPCollection &input, const std::string &format) {
 	if (input.empty()) {
 		return {};
 	}
@@ -3760,6 +4705,14 @@ FPCollection Evaluator::fn_toDateTime(const FPCollection &input) {
 	}
 	if (t != FPValue::Type::String) return {};
 	std::string s = toString(input[0]);
+	if (!format.empty()) {
+		std::string parsed;
+		if (parseTemporalWithFormat(s, format, true, parsed)) {
+			FPValue v; v.type = FPValue::Type::DateTime; v.string_val = parsed;
+			return {v};
+		}
+		return {};
+	}
 	// Validate using parseDateTimeParts for strict format checking
 	DateTimeParts dp = parseDateTimeParts(s);
 	if (dp.valid) {
@@ -3833,6 +4786,11 @@ FPCollection Evaluator::fn_toQuantity(const FPCollection &input, const std::stri
 		v.type = FPValue::Type::Quantity;
 		v.quantity_value = getNumericValue(val);
 		v.quantity_unit = "1";
+		if (val.type == FPValue::Type::Integer) {
+			v.source_text = std::to_string(val.int_val);
+		} else if (!val.source_text.empty()) {
+			v.source_text = val.source_text;
+		}
 		return finish_quantity(v);
 	}
 	if (t == FPValue::Type::Decimal) {
@@ -3840,6 +4798,7 @@ FPCollection Evaluator::fn_toQuantity(const FPCollection &input, const std::stri
 		v.type = FPValue::Type::Quantity;
 		v.quantity_value = getNumericValue(val);
 		v.quantity_unit = "1";
+		v.source_text = formatDecimalNumber(v.quantity_value, val.source_text);
 		return finish_quantity(v);
 	}
 	if (t == FPValue::Type::Boolean) {
@@ -3912,24 +4871,53 @@ FPCollection Evaluator::fn_toQuantity(const FPCollection &input, const std::stri
 	return {};
 }
 
+static FPValue makeQuantityMathResult(const FPValue &quantity, double value, const std::string &source_text = "") {
+	FPValue v;
+	v.type = FPValue::Type::Quantity;
+	v.quantity_value = value;
+	v.quantity_unit = quantity.quantity_unit;
+	v.source_text = source_text;
+	if (!v.source_text.empty()) {
+		std::size_t dot = v.source_text.find('.');
+		if (dot != std::string::npos) {
+			while (v.source_text.size() > dot && v.source_text.back() == '0') {
+				v.source_text.pop_back();
+			}
+			if (!v.source_text.empty() && v.source_text.back() == '.') {
+				v.source_text.pop_back();
+			}
+		}
+		if (v.source_text == "-0" || v.source_text.empty()) {
+			v.source_text = "0";
+		}
+	}
+	return v;
+}
+
 FPCollection Evaluator::fn_abs(const FPCollection &input) {
 	if (input.empty()) {
 		return {};
 	}
 	auto &val = input[0];
-	if (val.type == FPValue::Type::Quantity) {
-		FPValue v;
-		v.type = FPValue::Type::Quantity;
-		v.quantity_value = std::abs(val.quantity_value);
-		v.quantity_unit = val.quantity_unit;
-		return {v};
+	FPValue quantity;
+	if (fpValueAsQuantity(val, quantity)) {
+		return {makeQuantityMathResult(quantity, std::abs(quantity.quantity_value))};
 	}
 	if (isNumericType(val)) {
-		double n = getNumericValue(val);
 		auto et = effectiveType(val);
 		if (et == FPValue::Type::Integer) {
-			return {FPValue::FromInteger(static_cast<int64_t>(std::abs(n)))};
+			int64_t n = 0;
+			if (val.type == FPValue::Type::Integer) {
+				n = val.int_val;
+			} else if (val.type == FPValue::Type::JsonVal && val.json_val && yyjson_is_int(val.json_val)) {
+				n = yyjson_get_sint(val.json_val);
+			}
+			if (n == LLONG_MIN) {
+				return {};
+			}
+			return {FPValue::FromInteger(n < 0 ? -n : n)};
 		}
+		double n = getNumericValue(val);
 		auto result = FPValue::FromDecimal(std::abs(n));
 		if (val.type == FPValue::Type::Decimal && !val.source_text.empty()) {
 			if (val.source_text[0] == '-') {
@@ -3948,8 +4936,24 @@ FPCollection Evaluator::fn_ceiling(const FPCollection &input) {
 		return {};
 	}
 	auto &val = input[0];
+	FPValue quantity;
+	if (fpValueAsQuantity(val, quantity)) {
+		return {makeQuantityMathResult(quantity, std::ceil(quantity.quantity_value))};
+	}
 	if (isNumericType(val)) {
+		std::string exact_text;
+		if (!val.source_text.empty() &&
+		    integralTextFromDecimalSource(val.source_text, IntegralMathOp::Ceiling, exact_text)) {
+			return {makeIntegralMathValueFromText(exact_text)};
+		}
+		int64_t int_value = 0;
+		if (extractStrictInteger(val, int_value)) {
+			return {FPValue::FromInteger(int_value)};
+		}
 		double n = getNumericValue(val);
+		if (n > static_cast<double>(INT64_MAX) || n < static_cast<double>(INT64_MIN)) {
+			return {};
+		}
 		return {FPValue::FromInteger(static_cast<int64_t>(std::ceil(n)))};
 	}
 	throw FHIRPathSpecError("ceiling() requires a numeric input");
@@ -3960,8 +4964,24 @@ FPCollection Evaluator::fn_floor(const FPCollection &input) {
 		return {};
 	}
 	auto &val = input[0];
+	FPValue quantity;
+	if (fpValueAsQuantity(val, quantity)) {
+		return {makeQuantityMathResult(quantity, std::floor(quantity.quantity_value))};
+	}
 	if (isNumericType(val)) {
+		std::string exact_text;
+		if (!val.source_text.empty() &&
+		    integralTextFromDecimalSource(val.source_text, IntegralMathOp::Floor, exact_text)) {
+			return {makeIntegralMathValueFromText(exact_text)};
+		}
+		int64_t int_value = 0;
+		if (extractStrictInteger(val, int_value)) {
+			return {FPValue::FromInteger(int_value)};
+		}
 		double n = getNumericValue(val);
+		if (n > static_cast<double>(INT64_MAX) || n < static_cast<double>(INT64_MIN)) {
+			return {};
+		}
 		return {FPValue::FromInteger(static_cast<int64_t>(std::floor(n)))};
 	}
 	throw FHIRPathSpecError("floor() requires a numeric input");
@@ -4058,8 +5078,18 @@ FPCollection Evaluator::fn_round(const FPCollection &input, const FPCollection *
 		return {};
 	}
 	auto &val = input[0];
+	FPValue quantity;
+	if (fpValueAsQuantity(val, quantity)) {
+		FPValue dec_val = FPValue::FromDecimal(quantity.quantity_value);
+		dec_val.source_text = quantity.source_text;
+		FPCollection rounded = fn_round({dec_val}, precision);
+		if (rounded.empty()) {
+			return {};
+		}
+		return {makeQuantityMathResult(quantity, rounded[0].decimal_val, rounded[0].source_text)};
+	}
 	if (isNumericType(val)) {
-		if (val.type == FPValue::Type::Decimal && !val.source_text.empty()) {
+		if (!val.source_text.empty()) {
 			std::string text = roundDecimalSourceText(val.source_text, prec);
 			std::istringstream iss(text);
 			double rounded_value = 0.0;
@@ -4150,17 +5180,28 @@ FPCollection Evaluator::fn_power(const FPCollection &input, const FPCollection &
 	if (base == 0.0 && exp == 0.0) {
 		return {};
 	}
+	int64_t exact_exp = 0;
+	if (extractStrictInteger(expVal, exact_exp)) {
+		if (exact_exp == 0) {
+			auto one = FPValue::FromDecimal(1.0);
+			one.source_text = "1.0";
+			return {one};
+		}
+		if (exact_exp == 1) {
+			std::string exact_text;
+			if (decimalIdentityTextFromNumericValue(baseVal, exact_text)) {
+				std::istringstream iss(exact_text);
+				double exact_value = 0.0;
+				iss >> exact_value;
+				auto out = FPValue::FromDecimal(exact_value);
+				out.source_text = exact_text;
+				return {out};
+			}
+		}
+	}
 	double result = std::pow(base, exp);
 	if (std::isnan(result) || std::isinf(result)) {
 		return {};
-	}
-	if (effectiveType(baseVal) == FPValue::Type::Integer &&
-	    effectiveType(expVal) == FPValue::Type::Integer &&
-	    exp >= 0.0 &&
-	    result >= static_cast<double>(INT64_MIN) &&
-	    result <= static_cast<double>(INT64_MAX) &&
-	    std::floor(result) == result) {
-		return {FPValue::FromInteger(static_cast<int64_t>(result))};
 	}
 	return {FPValue::FromDecimal(result)};
 }
@@ -4185,8 +5226,25 @@ FPCollection Evaluator::fn_truncate(const FPCollection &input) {
 		return {};
 	}
 	auto &val = input[0];
+	FPValue quantity;
+	if (fpValueAsQuantity(val, quantity)) {
+		double raw_quantity = quantity.quantity_value;
+		if (raw_quantity > static_cast<double>(INT64_MAX) || raw_quantity < static_cast<double>(INT64_MIN)) {
+			return {};
+		}
+		return {makeQuantityMathResult(quantity, static_cast<int64_t>(raw_quantity))};
+	}
 	if (!isNumericType(val)) {
 		throw FHIRPathSpecError("truncate() requires a numeric input");
+	}
+	std::string exact_text;
+	if (!val.source_text.empty() &&
+	    integralTextFromDecimalSource(val.source_text, IntegralMathOp::Truncate, exact_text)) {
+		return {makeIntegralMathValueFromText(exact_text)};
+	}
+	int64_t int_value = 0;
+	if (extractStrictInteger(val, int_value)) {
+		return {FPValue::FromInteger(int_value)};
 	}
 	double raw = getNumericValue(val);
 	if (raw > static_cast<double>(INT64_MAX) || raw < static_cast<double>(INT64_MIN)) {
@@ -4252,6 +5310,23 @@ FPCollection Evaluator::fn_extension(const FPCollection &input, const FPCollecti
 
 	FPCollection result;
 	for (const auto &item : input) {
+		if (item.primitive_shadow && yyjson_is_obj(item.primitive_shadow)) {
+			yyjson_val *extensions = yyjson_obj_get(item.primitive_shadow, "extension");
+			if (extensions && yyjson_is_arr(extensions)) {
+				size_t idx2, max2;
+				yyjson_val *ext;
+				yyjson_arr_foreach(extensions, idx2, max2, ext) {
+					yyjson_val *url_val = yyjson_obj_get(ext, "url");
+					if (url_val && yyjson_is_str(url_val)) {
+						if (target_url == yyjson_get_str(url_val)) {
+							result.push_back(FPValue::FromJson(ext));
+						}
+					}
+				}
+			}
+			continue;
+		}
+
 		// For JSON objects, look at direct extension field
 		if (item.type == FPValue::Type::JsonVal && item.json_val && yyjson_is_obj(item.json_val)) {
 			yyjson_val *extensions = yyjson_obj_get(item.json_val, "extension");
@@ -4319,18 +5394,14 @@ FPCollection Evaluator::fn_repeat(const ASTNode &projection, const FPCollection 
 	FPCollection work = input;
 
 	size_t iterations = 0;
-	int64_t repeat_idx = 0;
 	while (!work.empty()) {
 		FPCollection next;
 		for (const auto &item : work) {
 			FPCollection single_col = {item};
-			int64_t old_index = index_context_;
-			index_context_ = repeat_idx;
 			auto saved_chain = chain_defined_vars_;
 			chain_defined_vars_.clear();
 			auto projected = eval(projection, single_col, doc);
 			chain_defined_vars_ = saved_chain;
-			index_context_ = old_index;
 			for (const auto &p : projected) {
 				bool is_seen = false;
 				for (const auto &s : seen) {
@@ -4345,7 +5416,6 @@ FPCollection Evaluator::fn_repeat(const ASTNode &projection, const FPCollection 
 					next.push_back(p);
 				}
 			}
-			++repeat_idx;
 		}
 		work = next;
 		if (++iterations > 1000 || result.size() > 10000) {
@@ -4635,7 +5705,7 @@ static DateTimeParts parseDateTimeParts(const std::string &s) {
 			}
 			int tz_h = std::atoi(s.substr(pos + 1, 2).c_str());
 			int tz_m = std::atoi(s.substr(pos + 4, 2).c_str());
-			if (tz_h < 0 || tz_h > 23 || tz_m < 0 || tz_m > 59) {
+			if (tz_h > 14 || tz_m > 59 || (tz_h == 14 && tz_m != 0)) {
 				p.valid = false;
 				return false;
 			}
@@ -4717,6 +5787,261 @@ static DateTimeParts parseDateTimeParts(const std::string &s) {
 	}
 
 	return p;
+}
+
+static bool readFormatDigits(const std::string &s, size_t &pos, int min_len, int max_len, int &out) {
+	size_t start = pos;
+	while (pos < s.size() && static_cast<int>(pos - start) < max_len &&
+	       std::isdigit(static_cast<unsigned char>(s[pos]))) {
+		pos++;
+	}
+	if (static_cast<int>(pos - start) < min_len) {
+		return false;
+	}
+	out = std::atoi(s.substr(start, pos - start).c_str());
+	return true;
+}
+
+static bool readFormatAmPm(const std::string &s, size_t &pos, bool &is_pm) {
+	std::string upper = s.substr(pos, 2);
+	std::transform(upper.begin(), upper.end(), upper.begin(), [](unsigned char c) {
+		return static_cast<char>(std::toupper(c));
+	});
+	if (upper == "AM" || upper == "PM") {
+		is_pm = upper == "PM";
+		pos += 2;
+		return true;
+	}
+	if (pos < s.size()) {
+		char c = static_cast<char>(std::toupper(static_cast<unsigned char>(s[pos])));
+		if (c == 'A' || c == 'P') {
+			is_pm = c == 'P';
+			pos++;
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool readFormatTimezone(const std::string &s, size_t &pos, std::string &out) {
+	if (pos >= s.size()) {
+		return false;
+	}
+	if (s[pos] == 'Z') {
+		out = "Z";
+		pos++;
+		return true;
+	}
+	if (s[pos] != '+' && s[pos] != '-') {
+		return false;
+	}
+	char sign = s[pos++];
+	int hour = 0;
+	int minute = 0;
+	if (!readFormatDigits(s, pos, 2, 2, hour)) {
+		return false;
+	}
+	if (pos < s.size() && s[pos] == ':') {
+		pos++;
+	}
+	if (!readFormatDigits(s, pos, 2, 2, minute)) {
+		return false;
+	}
+	if (hour > 14 || minute > 59 || (hour == 14 && minute != 0)) {
+		return false;
+	}
+	std::ostringstream oss;
+	oss << sign << std::setw(2) << std::setfill('0') << hour << ":"
+	    << std::setw(2) << std::setfill('0') << minute;
+	out = oss.str();
+	return true;
+}
+
+static int daysInMonthFor(int year, int month) {
+	static const int days[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+	if (month < 1 || month > 12) {
+		return 0;
+	}
+	if (month == 2 && (year % 4 == 0) && (year % 100 != 0 || year % 400 == 0)) {
+		return 29;
+	}
+	return days[month];
+}
+
+static std::string formatDatePart(int year, int month, int day) {
+	std::ostringstream oss;
+	if (month == 0) {
+		oss << std::setw(4) << std::setfill('0') << year;
+	} else if (day == 0) {
+		oss << std::setw(4) << std::setfill('0') << year << "-"
+		    << std::setw(2) << std::setfill('0') << month;
+	} else {
+		oss << std::setw(4) << std::setfill('0') << year << "-"
+		    << std::setw(2) << std::setfill('0') << month << "-"
+		    << std::setw(2) << std::setfill('0') << day;
+	}
+	return oss.str();
+}
+
+static bool parseTemporalWithFormat(const std::string &value, const std::string &format,
+                                    bool want_datetime, std::string &out) {
+	if (value.empty() || format.empty()) {
+		return false;
+	}
+
+	int year = 0;
+	int month = 0;
+	int day = 0;
+	int hour = -1;
+	int hour12 = -1;
+	int minute = -1;
+	int second = -1;
+	std::string fraction;
+	std::string timezone;
+	bool has_ampm = false;
+	bool is_pm = false;
+	size_t pos = 0;
+	size_t fpos = 0;
+
+	while (fpos < format.size()) {
+		if (format.compare(fpos, 4, "yyyy") == 0) {
+			if (!readFormatDigits(value, pos, 4, 4, year)) return false;
+			fpos += 4;
+		 } else if (format.compare(fpos, 2, "yy") == 0) {
+			int yy = 0;
+			if (!readFormatDigits(value, pos, 2, 2, yy)) return false;
+			year = yy <= 49 ? 2000 + yy : 1900 + yy;
+			fpos += 2;
+		} else if (format.compare(fpos, 2, "MM") == 0) {
+			if (!readFormatDigits(value, pos, 2, 2, month)) return false;
+			fpos += 2;
+		} else if (format[fpos] == 'M') {
+			if (!readFormatDigits(value, pos, 1, 2, month)) return false;
+			fpos += 1;
+		} else if (format.compare(fpos, 2, "dd") == 0) {
+			if (!readFormatDigits(value, pos, 2, 2, day)) return false;
+			fpos += 2;
+		} else if (format[fpos] == 'd') {
+			if (!readFormatDigits(value, pos, 1, 2, day)) return false;
+			fpos += 1;
+		} else if (format.compare(fpos, 2, "HH") == 0) {
+			if (!readFormatDigits(value, pos, 2, 2, hour)) return false;
+			fpos += 2;
+		} else if (format[fpos] == 'H') {
+			if (!readFormatDigits(value, pos, 1, 2, hour)) return false;
+			fpos += 1;
+		} else if (format.compare(fpos, 2, "hh") == 0) {
+			if (!readFormatDigits(value, pos, 2, 2, hour12)) return false;
+			fpos += 2;
+		} else if (format[fpos] == 'h') {
+			if (!readFormatDigits(value, pos, 1, 2, hour12)) return false;
+			fpos += 1;
+		} else if (format.compare(fpos, 2, "mm") == 0) {
+			if (!readFormatDigits(value, pos, 2, 2, minute)) return false;
+			fpos += 2;
+		} else if (format[fpos] == 'm') {
+			if (!readFormatDigits(value, pos, 1, 2, minute)) return false;
+			fpos += 1;
+		} else if (format.compare(fpos, 2, "ss") == 0) {
+			if (!readFormatDigits(value, pos, 2, 2, second)) return false;
+			fpos += 2;
+		} else if (format[fpos] == 's') {
+			if (!readFormatDigits(value, pos, 1, 2, second)) return false;
+			fpos += 1;
+		} else if (format[fpos] == 'S') {
+			size_t start = fpos;
+			while (fpos < format.size() && format[fpos] == 'S') {
+				fpos++;
+			}
+			size_t width = fpos - start;
+			if (pos + width > value.size()) return false;
+			for (size_t i = 0; i < width; ++i) {
+				if (!std::isdigit(static_cast<unsigned char>(value[pos + i]))) return false;
+			}
+			fraction = value.substr(pos, width);
+			pos += width;
+		} else if (format[fpos] == 'a') {
+			if (!readFormatAmPm(value, pos, is_pm)) return false;
+			has_ampm = true;
+			fpos += 1;
+		} else if (format[fpos] == 'Z') {
+			if (!readFormatTimezone(value, pos, timezone)) return false;
+			fpos += 1;
+		} else if (std::string("yMdHhmsaSz").find(format[fpos]) != std::string::npos) {
+			return false;
+		} else {
+			if (pos >= value.size() || value[pos] != format[fpos]) return false;
+			pos++;
+			fpos++;
+		}
+	}
+	if (pos != value.size() || year == 0 || year < 1 || year > 9999) {
+		return false;
+	}
+	if (month != 0 && (month < 1 || month > 12)) {
+		return false;
+	}
+	if (day != 0 && (month == 0 || day < 1 || day > daysInMonthFor(year, month))) {
+		return false;
+	}
+
+	std::string date_part = formatDatePart(year, month, day);
+	bool has_time = hour >= 0 || hour12 >= 0 || minute >= 0 || second >= 0 || !fraction.empty() || !timezone.empty();
+	if (!want_datetime && !has_time) {
+		DateTimeParts p = parseDateTimeParts(date_part);
+		if (!p.valid) return false;
+		out = date_part;
+		return true;
+	}
+	if (!want_datetime) {
+		if (month == 0 || day == 0) return false;
+		if (hour12 >= 0) {
+			if (!has_ampm || hour12 < 1 || hour12 > 12) return false;
+			hour = (hour12 % 12) + (is_pm ? 12 : 0);
+		}
+		if (hour < 0 || hour > 23) return false;
+		if (minute > 59 || second > 59 || minute < -1 || second < -1) return false;
+		if (second >= 0 && minute < 0) return false;
+		if (!fraction.empty() && second < 0) return false;
+		DateTimeParts p = parseDateTimeParts(date_part);
+		if (!p.valid) return false;
+		out = date_part;
+		return true;
+	}
+	if (!has_time) {
+		out = date_part + "T";
+		DateTimeParts p = parseDateTimeParts(out);
+		return p.valid;
+	}
+	if (month == 0 || day == 0) {
+		return false;
+	}
+	if (hour12 >= 0) {
+		if (!has_ampm || hour12 < 1 || hour12 > 12) return false;
+		hour = (hour12 % 12) + (is_pm ? 12 : 0);
+	}
+	if (hour < 0 || hour > 23) return false;
+	if (minute > 59 || second > 59 || minute < -1 || second < -1) return false;
+	if (second >= 0 && minute < 0) return false;
+	if (!fraction.empty() && second < 0) return false;
+
+	std::ostringstream oss;
+	oss << date_part << "T" << std::setw(2) << std::setfill('0') << hour;
+	if (minute >= 0) {
+		oss << ":" << std::setw(2) << std::setfill('0') << minute;
+	}
+	if (second >= 0) {
+		oss << ":" << std::setw(2) << std::setfill('0') << second;
+	}
+	if (!fraction.empty()) {
+		oss << "." << fraction;
+	}
+	if (!timezone.empty()) {
+		oss << timezone;
+	}
+	out = oss.str();
+	DateTimeParts p = parseDateTimeParts(out);
+	return p.valid;
 }
 
 static DateTimeParts parseTimeParts(const std::string &s) {
@@ -4917,11 +6242,11 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		bool l_val;
 		bool l_has = collectionIsBool(left, l_val);
 
-		if (l_has && !l_val) return {FPValue::FromBoolean(true)};  // false implies X = true
-
 		auto right = eval(*node.children[1], input, doc);
 		bool r_val;
 		bool r_has = collectionIsBool(right, r_val);
+
+		if (l_has && !l_val) return {FPValue::FromBoolean(true)};  // false implies X = true
 
 		if (!l_has) {
 			// {} implies true = true, {} implies false/empty = empty
@@ -4993,12 +6318,8 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 	// Convert JSON Quantity objects to FPValue::Quantity for comparison
 	auto maybeConvertQuantity = [](FPCollection &col) {
 		if (col.size() == 1 && col[0].type == FPValue::Type::JsonVal) {
-			double val; std::string unit;
-			if (tryJsonToQuantity(col[0], val, unit)) {
-				FPValue q;
-				q.type = FPValue::Type::Quantity;
-				q.quantity_value = val;
-				q.quantity_unit = unit;
+			FPValue q;
+			if (fpValueAsQuantity(col[0], q)) {
 				col[0] = q;
 			}
 		}
@@ -5015,29 +6336,25 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 	// Equality
 	if (op == "=" || op == "~" || op == "!=" || op == "!~") {
 		bool is_equiv = (op == "~" || op == "!~");
-		auto valuesEquivalent = [this](const FPValue &lv, const FPValue &rv) -> bool {
+		auto valuesEquivalentState = [this](const FPValue &lv, const FPValue &rv) -> int {
 			FPValue lq, rq;
-			if (fpValueAsQuantity(lv, lq) && fpValueAsQuantity(rv, rq)) {
-				std::string l_base, r_base;
-				double l_conv = convertQuantityToBase(lq.quantity_value, lq.quantity_unit, l_base);
-				double r_conv = convertQuantityToBase(rq.quantity_value, rq.quantity_unit, r_base);
-				if (l_base != r_base) return false;
-				int l_dp = countDecimalPlaces(lq);
-				int r_dp = countDecimalPlaces(rq);
-				double l_scale = (lq.quantity_value != 0) ? l_conv / lq.quantity_value : 1.0;
-				double r_scale = (rq.quantity_value != 0) ? r_conv / rq.quantity_value : 1.0;
-				double l_half = 0.5 * std::pow(10.0, -l_dp) * std::abs(l_scale);
-				double r_half = 0.5 * std::pow(10.0, -r_dp) * std::abs(r_scale);
-				return std::abs(l_conv - r_conv) < std::max(l_half, r_half);
+			FPValue tmp;
+			if ((fpValueAsQuantity(lv, tmp) || fpValueAsQuantity(rv, tmp)) &&
+			    valueAsEqualityQuantity(lv, lq) && valueAsEqualityQuantity(rv, rq)) {
+				return quantityEquivalentState(lq, rq);
+			}
+			if (lv.type == FPValue::Type::JsonVal && rv.type == FPValue::Type::JsonVal &&
+			    lv.json_val && rv.json_val && yyjson_is_num(lv.json_val) && yyjson_is_num(rv.json_val)) {
+				return jsonNumbersEquivalent(lv.json_val, rv.json_val) ? 1 : 0;
 			}
 			if (isDateTimeType(lv) && isDateTimeType(rv)) {
 				auto lt = effectiveType(lv);
 				auto rt = effectiveType(rv);
-				if (isDateVsDateTimePair(lt, rt)) return false;
+				if (isDateVsDateTimePair(lt, rt)) return 0;
 				bool l_is_time = (lt == FPValue::Type::Time);
 				bool r_is_time = (rt == FPValue::Type::Time);
-				if (l_is_time != r_is_time) return false;
-				return compareDateTimes(this->toString(lv), this->toString(rv), lt, rt, true, false) == 0;
+				if (l_is_time != r_is_time) return 0;
+				return compareDateTimes(this->toString(lv), this->toString(rv), lt, rt, true, false) == 0 ? 1 : 0;
 			}
 			if (isNumericType(lv) && isNumericType(rv)) {
 				double l_num = getNumericValue(lv);
@@ -5052,21 +6369,21 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				             : std::max(l_prec, r_prec);
 				if (cmp_prec > 0) {
 					double scale = std::pow(10.0, cmp_prec);
-					return std::round(l_num * scale) == std::round(r_num * scale);
+					return std::round(l_num * scale) == std::round(r_num * scale) ? 1 : 0;
 				}
-				return (l_num == r_num) || std::abs(l_num - r_num) < 1e-10;
+				return ((l_num == r_num) || std::abs(l_num - r_num) < 1e-10) ? 1 : 0;
 			}
 			if (lv.type == FPValue::Type::JsonVal && rv.type == FPValue::Type::JsonVal &&
 			    ((lv.json_val && (yyjson_is_obj(lv.json_val) || yyjson_is_arr(lv.json_val))) ||
 			     (rv.json_val && (yyjson_is_obj(rv.json_val) || yyjson_is_arr(rv.json_val))))) {
-				return jsonValuesEquivalent(lv.json_val, rv.json_val);
+				return jsonValuesEquivalentState(lv.json_val, rv.json_val);
 			}
 			if (effectiveType(lv) == FPValue::Type::String && effectiveType(rv) == FPValue::Type::String) {
 				return normalizeEquivalentString(this->toString(lv)) ==
-				       normalizeEquivalentString(this->toString(rv));
+				       normalizeEquivalentString(this->toString(rv)) ? 1 : 0;
 			}
-			if (effectiveType(lv) != effectiveType(rv)) return false;
-			return this->toString(lv) == this->toString(rv);
+			if (effectiveType(lv) != effectiveType(rv)) return 0;
+			return this->toString(lv) == this->toString(rv) ? 1 : 0;
 		};
 		auto valuesEqualState = [this](const FPValue &lv, const FPValue &rv) -> int {
 			// Return 1 for true, 0 for false, and -1 for empty/indeterminate.
@@ -5087,13 +6404,11 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			}
 
 			FPValue lq, rq;
-			if (fpValueAsQuantity(lv, lq) && fpValueAsQuantity(rv, rq)) {
-				bool mixed_calendar_ucum =
-				    (isCalendarDurationUnit(lq.quantity_unit) && isUcumDurationUnit(rq.quantity_unit)) ||
-				    (isUcumDurationUnit(lq.quantity_unit) && isCalendarDurationUnit(rq.quantity_unit));
-				if (mixed_calendar_ucum &&
-				    !(isSecondOrMillisecondDuration(lq.quantity_unit) && isSecondOrMillisecondDuration(rq.quantity_unit))) {
-					return 0;
+			FPValue tmp;
+			if ((fpValueAsQuantity(lv, tmp) || fpValueAsQuantity(rv, tmp)) &&
+			    valueAsEqualityQuantity(lv, lq) && valueAsEqualityQuantity(rv, rq)) {
+				if (isMixedCalendarUcumYearMonthDuration(lq.quantity_unit, rq.quantity_unit)) {
+					return -1;
 				}
 				std::string l_base, r_base;
 				convertQuantityToBase(lq.quantity_value, lq.quantity_unit, l_base);
@@ -5122,14 +6437,26 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				bool all_match = true;
 				for (size_t i = 0; i < left.size(); ++i) {
 					bool found = false;
+					bool saw_empty = false;
 					for (size_t j = 0; j < right.size(); ++j) {
-						if (!matched[j] && valuesEquivalent(left[i], right[j])) {
+						if (matched[j]) {
+							continue;
+						}
+						int state = valuesEquivalentState(left[i], right[j]);
+						if (state == 1) {
 							matched[j] = true;
 							found = true;
 							break;
 						}
+						if (state < 0) {
+							saw_empty = true;
+						}
 					}
-					if (!found) { all_match = false; break; }
+					if (!found) {
+						if (saw_empty) return {};
+						all_match = false;
+						break;
+					}
 				}
 				return {FPValue::FromBoolean(op == "~" ? all_match : !all_match)};
 			} else {
@@ -5177,9 +6504,13 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				}
 			}
 		} else if (isNumericType(lv) && isNumericType(rv)) {
-			double l_num = getNumericValue(lv);
-			double r_num = getNumericValue(rv);
-			if (is_equiv) {
+			if (lv.type == FPValue::Type::JsonVal && rv.type == FPValue::Type::JsonVal &&
+			    lv.json_val && rv.json_val && yyjson_is_num(lv.json_val) && yyjson_is_num(rv.json_val)) {
+				is_eq = is_equiv ? jsonNumbersEquivalent(lv.json_val, rv.json_val)
+				                 : jsonNumbersEqual(lv.json_val, rv.json_val);
+			} else if (is_equiv) {
+				double l_num = getNumericValue(lv);
+				double r_num = getNumericValue(rv);
 				// Equivalence: compare at the precision of the least precise value
 				int l_prec = 0, r_prec = 0;
 				std::string ls = toString(lv), rs = toString(rv);
@@ -5196,47 +6527,58 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 					is_eq = (l_num == r_num) || std::abs(l_num - r_num) < 1e-10;
 				}
 			} else {
+				double l_num = getNumericValue(lv);
+				double r_num = getNumericValue(rv);
 				double diff = std::abs(l_num - r_num);
 				double maxval = std::max(std::abs(l_num), std::abs(r_num));
 				is_eq = (l_num == r_num) || diff < 1e-10 || (maxval > 0 && diff / maxval < 1e-10);
 			}
-		} else if (lv.type == FPValue::Type::Quantity && rv.type == FPValue::Type::Quantity) {
-			bool mixed_calendar_ucum =
-			    (isCalendarDurationUnit(lv.quantity_unit) && isUcumDurationUnit(rv.quantity_unit)) ||
-			    (isUcumDurationUnit(lv.quantity_unit) && isCalendarDurationUnit(rv.quantity_unit));
-			if (!is_equiv && mixed_calendar_ucum &&
-			    !(isSecondOrMillisecondDuration(lv.quantity_unit) && isSecondOrMillisecondDuration(rv.quantity_unit))) {
+		} else if ([&]() -> bool {
+			FPValue lq, rq, tmp;
+			if (!((fpValueAsQuantity(lv, tmp) || fpValueAsQuantity(rv, tmp)) &&
+			      valueAsEqualityQuantity(lv, lq) && valueAsEqualityQuantity(rv, rq))) {
+				return false;
+			}
+			if (!is_equiv && isMixedCalendarUcumYearMonthDuration(lq.quantity_unit, rq.quantity_unit)) {
+				if (op == "=" || op == "!=") {
+					return true;
+				}
 				is_eq = false;
-			} else {
-				std::string l_base, r_base;
-				double l_conv = convertQuantityToBase(lv.quantity_value, lv.quantity_unit, l_base);
-				double r_conv = convertQuantityToBase(rv.quantity_value, rv.quantity_unit, r_base);
-				if (l_base == r_base) {
-					if (is_equiv) {
-						// Equivalence: compare with precision tolerance
-						int l_dp = countDecimalPlaces(lv);
-						int r_dp = countDecimalPlaces(rv);
-						// Get the scale factor to convert precision from original units
-						double l_scale = (lv.quantity_value != 0) ? l_conv / lv.quantity_value : 1.0;
-						double r_scale = (rv.quantity_value != 0) ? r_conv / rv.quantity_value : 1.0;
-						double l_half = 0.5 * std::pow(10.0, -l_dp) * std::abs(l_scale);
-						double r_half = 0.5 * std::pow(10.0, -r_dp) * std::abs(r_scale);
-						double tolerance = std::max(l_half, r_half);
-						is_eq = (std::abs(l_conv - r_conv) < tolerance);
-					} else {
-						is_eq = quantityValuesEqual(lv, rv);
-					}
-				} else {
-					// Incompatible units: return empty for = and !=
-					if (op == "=" || op == "!=") return {};
-					is_eq = false;
+				return true;
+			}
+			if (is_equiv) {
+				int state = quantityEquivalentState(lq, rq);
+				if (state < 0) {
+					return true;
+				}
+				is_eq = state == 1;
+				return true;
+			}
+			int state = quantityEqualState(lq, rq);
+			if (state < 0) {
+				return true;
+			}
+			is_eq = state == 1;
+			return true;
+		}()) {
+			FPValue lq, rq, tmp;
+			bool has_quantity_pair =
+			    (fpValueAsQuantity(lv, tmp) || fpValueAsQuantity(rv, tmp)) &&
+			    valueAsEqualityQuantity(lv, lq) && valueAsEqualityQuantity(rv, rq);
+			if (has_quantity_pair) {
+				if ((!is_equiv && isMixedCalendarUcumYearMonthDuration(lq.quantity_unit, rq.quantity_unit)) ||
+				    (is_equiv && quantityEquivalentState(lq, rq) < 0) ||
+				    (!is_equiv && quantityEqualState(lq, rq) < 0)) {
+					return {};
 				}
 			}
 		} else if (lv.type == FPValue::Type::JsonVal && rv.type == FPValue::Type::JsonVal &&
 		           ((lv.json_val && (yyjson_is_obj(lv.json_val) || yyjson_is_arr(lv.json_val))) ||
 		            (rv.json_val && (yyjson_is_obj(rv.json_val) || yyjson_is_arr(rv.json_val))))) {
 			if (is_equiv) {
-				is_eq = jsonValuesEquivalent(lv.json_val, rv.json_val);
+				int state = jsonValuesEquivalentState(lv.json_val, rv.json_val);
+				if (state < 0) return {};
+				is_eq = state == 1;
 			} else {
 				int state = jsonValuesEqualState(lv.json_val, rv.json_val);
 				if (state < 0) return {};
@@ -5284,6 +6626,16 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		// Quantity comparison with unit conversion
 		if (lv.type == FPValue::Type::Quantity && rv.type == FPValue::Type::Quantity) {
 			if (isMixedCalendarUcumDurationAboveSeconds(lv.quantity_unit, rv.quantity_unit)) return {};
+			if (lv.quantity_unit == rv.quantity_unit) {
+				std::string l_text, r_text;
+				if (quantityValueTextForComparison(lv, l_text) && quantityValueTextForComparison(rv, r_text)) {
+					int cmp = compareDecimalText(l_text, r_text);
+					if (op == "<") return {FPValue::FromBoolean(cmp < 0)};
+					if (op == ">") return {FPValue::FromBoolean(cmp > 0)};
+					if (op == "<=") return {FPValue::FromBoolean(cmp <= 0)};
+					return {FPValue::FromBoolean(cmp >= 0)};
+				}
+			}
 			std::string l_base, r_base;
 			double l_conv = convertQuantityToBase(lv.quantity_value, lv.quantity_unit, l_base);
 			double r_conv = convertQuantityToBase(rv.quantity_value, rv.quantity_unit, r_base);
@@ -5304,6 +6656,14 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 
 		// Numeric comparison
 		if (isNumericType(lv) && isNumericType(rv)) {
+			std::string l_text, r_text;
+			if (numericTextForComparison(lv, l_text) && numericTextForComparison(rv, r_text)) {
+				int cmp = compareDecimalText(l_text, r_text);
+				if (op == "<") return {FPValue::FromBoolean(cmp < 0)};
+				if (op == ">") return {FPValue::FromBoolean(cmp > 0)};
+				if (op == "<=") return {FPValue::FromBoolean(cmp <= 0)};
+				return {FPValue::FromBoolean(cmp >= 0)};
+			}
 			double l_num = getNumericValue(lv);
 			double r_num = getNumericValue(rv);
 			if (op == "<") return {FPValue::FromBoolean(l_num < r_num)};
@@ -5540,6 +6900,13 @@ FPCollection Evaluator::evalUnaryOp(const ASTNode &node, const FPCollection &inp
 	    node_value_get<int64_t>(node.children[0]->value) == 2147483648LL) {
 		return {FPValue::FromInteger(-2147483647LL - 1LL)};
 	}
+	if (node.op == "-" && !node.children.empty() &&
+	    node.children[0]->type == NodeType::LongLiteral &&
+	    node.children[0]->value.string_val == "9223372036854775808L") {
+		FPValue v = FPValue::FromInteger(LLONG_MIN);
+		v.source_text = "-9223372036854775808.0";
+		return {v};
+	}
 	auto operand = eval(*node.children[0], input, doc);
 	if (operand.empty()) {
 		return {};
@@ -5550,13 +6917,17 @@ FPCollection Evaluator::evalUnaryOp(const ASTNode &node, const FPCollection &inp
 	if (node.op == "-") {
 		auto et = effectiveType(operand[0]);
 		if (et == FPValue::Type::Integer) {
-			double result = -getNumericValue(operand[0]);
-			constexpr double INT32_MIN_D = -2147483648.0;
-			constexpr double INT32_MAX_D = 2147483647.0;
-			if (result < INT32_MIN_D || result > INT32_MAX_D) {
-				return {FPValue::FromDecimal(result)};
+			int64_t value = 0;
+			if (operand[0].type == FPValue::Type::Integer) {
+				value = operand[0].int_val;
+			} else if (operand[0].type == FPValue::Type::JsonVal && operand[0].json_val &&
+			           yyjson_is_int(operand[0].json_val)) {
+				value = yyjson_get_sint(operand[0].json_val);
 			}
-			return {FPValue::FromInteger(static_cast<int64_t>(result))};
+			if (value == LLONG_MIN) {
+				return {};
+			}
+			return {FPValue::FromInteger(-value)};
 		}
 		if (et == FPValue::Type::Decimal) {
 			auto result = FPValue::FromDecimal(-getNumericValue(operand[0]));
@@ -5625,6 +6996,63 @@ bool Evaluator::isCriteriaTrue(const FPCollection &collection, const std::string
 	throw FHIRPathSpecError(function_name + "() criteria must evaluate to a single Boolean value");
 }
 
+static std::string stripTrailingFixedZeros(std::string s) {
+	std::size_t dot = s.find('.');
+	if (dot != std::string::npos) {
+		while (!s.empty() && s.back() == '0') s.pop_back();
+		if (!s.empty() && s.back() == '.') s.pop_back();
+	}
+	if (s == "-0" || s.empty()) return "0";
+	return s;
+}
+
+static std::string formatQuantityNumber(double value) {
+	if (std::isnan(value) || std::isinf(value)) {
+		std::ostringstream special;
+		special << value;
+		return special.str();
+	}
+	if (value == std::floor(value) && std::abs(value) < 1e15) {
+		std::ostringstream integer;
+		integer << static_cast<int64_t>(value);
+		return integer.str();
+	}
+	std::ostringstream oss;
+	oss << value;
+	std::string s = oss.str();
+	if (s.find('e') == std::string::npos && s.find('E') == std::string::npos) {
+		return s;
+	}
+	std::ostringstream fixed;
+	fixed << std::fixed << std::setprecision(15) << value;
+	return stripTrailingFixedZeros(fixed.str());
+}
+
+static std::string formatDecimalNumber(double value, const std::string &source_text) {
+	if (!source_text.empty() &&
+	    source_text.find('e') == std::string::npos &&
+	    source_text.find('E') == std::string::npos) {
+		return source_text;
+	}
+	if (std::isnan(value) || std::isinf(value)) {
+		std::ostringstream special;
+		special << value;
+		return special.str();
+	}
+	std::ostringstream oss;
+	oss << std::setprecision(17) << value;
+	std::string s = oss.str();
+	if (s.find('e') == std::string::npos && s.find('E') == std::string::npos) {
+		if (s.find('.') == std::string::npos) s += ".0";
+		return s;
+	}
+	std::ostringstream fixed;
+	fixed << std::fixed << std::setprecision(15) << value;
+	s = stripTrailingFixedZeros(fixed.str());
+	if (s.find('.') == std::string::npos) s += ".0";
+	return s;
+}
+
 std::string Evaluator::toString(const FPValue &val) const {
 	switch (val.type) {
 	case FPValue::Type::String:
@@ -5639,9 +7067,7 @@ std::string Evaluator::toString(const FPValue &val) const {
 		// Otherwise use high-precision output (17 significant digits) to preserve
 		// double precision for computed results, per CQL spec requirement of
 		// at least 18 digits of precision for Decimal values.
-		if (!val.source_text.empty()) {
-			return val.source_text;
-		}
+		if (!val.source_text.empty()) return formatDecimalNumber(val.decimal_val, val.source_text);
 		std::ostringstream oss;
 		oss << std::setprecision(17) << val.decimal_val;
 		std::string s = oss.str();
@@ -5654,7 +7080,6 @@ std::string Evaluator::toString(const FPValue &val) const {
 	case FPValue::Type::Boolean:
 		return val.bool_val ? "true" : "false";
 	case FPValue::Type::Quantity: {
-		std::ostringstream oss;
 		std::string u = val.quantity_unit;
 		static const char* keyword_units[] = {
 			"year", "years", "month", "months", "week", "weeks", "day", "days",
@@ -5669,12 +7094,8 @@ std::string Evaluator::toString(const FPValue &val) const {
 		std::string num_str;
 		if (!val.source_text.empty()) {
 			num_str = val.source_text;
-		} else if (val.quantity_value == std::floor(val.quantity_value) && std::abs(val.quantity_value) < 1e15) {
-			oss << static_cast<int64_t>(val.quantity_value);
-			num_str = oss.str();
 		} else {
-			oss << val.quantity_value;
-			num_str = oss.str();
+			num_str = formatQuantityNumber(val.quantity_value);
 		}
 		if (is_keyword) {
 			return num_str + " " + u;
@@ -5791,9 +7212,7 @@ std::string Evaluator::jsonValToString(yyjson_val *val) const {
 		return std::to_string(yyjson_get_sint(val));
 	}
 	if (yyjson_is_real(val)) {
-		std::ostringstream oss;
-		oss << yyjson_get_real(val);
-		return oss.str();
+		return formatDecimalNumber(yyjson_get_real(val), jsonNumberText(val));
 	}
 	if (yyjson_is_bool(val)) {
 		return yyjson_get_bool(val) ? "true" : "false";
@@ -5896,7 +7315,9 @@ FPCollection Evaluator::fn_convertsToDecimal(const FPCollection &input) {
 	if (t == FPValue::Type::Boolean) return {FPValue::FromBoolean(true)};
 	if (t == FPValue::Type::String) {
 		std::string s = toString(val);
-		if (!isFHIRPathDecimalString(s)) return {FPValue::FromBoolean(false)};
+		bool string_long = isFHIRPathLongDecimalString(s);
+		if (!isFHIRPathDecimalString(s) && !string_long) return {FPValue::FromBoolean(false)};
+		if (string_long) s = s.substr(0, s.size() - 1);
 		try {
 			size_t pos;
 			double d = std::stod(s, &pos);
@@ -5931,7 +7352,7 @@ FPCollection Evaluator::fn_convertsToString(const FPCollection &input) {
 	return {FPValue::FromBoolean(false)};
 }
 
-FPCollection Evaluator::fn_convertsToDate(const FPCollection &input) {
+FPCollection Evaluator::fn_convertsToDate(const FPCollection &input, const std::string &format) {
 	if (input.empty() || input.size() != 1) return {};
 	auto &val = input[0];
 	auto t = effectiveType(val);
@@ -5939,6 +7360,10 @@ FPCollection Evaluator::fn_convertsToDate(const FPCollection &input) {
 	if (t == FPValue::Type::DateTime) return {FPValue::FromBoolean(true)};
 	if (t == FPValue::Type::String) {
 		std::string s = toString(val);
+		if (!format.empty()) {
+			std::string parsed;
+			return {FPValue::FromBoolean(parseTemporalWithFormat(s, format, false, parsed))};
+		}
 		// Check if it looks like a date or datetime (any precision with valid date part)
 		if (s.size() >= 4 && std::isdigit(static_cast<unsigned char>(s[0]))) {
 			DateTimeParts p = parseDateTimeParts(s);
@@ -5950,7 +7375,7 @@ FPCollection Evaluator::fn_convertsToDate(const FPCollection &input) {
 	return {FPValue::FromBoolean(false)};
 }
 
-FPCollection Evaluator::fn_convertsToDateTime(const FPCollection &input) {
+FPCollection Evaluator::fn_convertsToDateTime(const FPCollection &input, const std::string &format) {
 	if (input.empty() || input.size() != 1) return {};
 	auto &val = input[0];
 	auto t = effectiveType(val);
@@ -5958,6 +7383,10 @@ FPCollection Evaluator::fn_convertsToDateTime(const FPCollection &input) {
 	if (t == FPValue::Type::Date) return {FPValue::FromBoolean(true)};
 	if (t == FPValue::Type::String) {
 		std::string s = toString(val);
+		if (!format.empty()) {
+			std::string parsed;
+			return {FPValue::FromBoolean(parseTemporalWithFormat(s, format, true, parsed))};
+		}
 		if (s.size() >= 4 && std::isdigit(static_cast<unsigned char>(s[0]))) {
 			DateTimeParts p = parseDateTimeParts(s);
 			if (p.valid) return {FPValue::FromBoolean(true)};
@@ -6039,7 +7468,10 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 	if (!isKnownTypeSpecifier(ns, target)) {
 		throw FHIRPathSpecError("Unknown type: " + type_name);
 	}
-	if (input.empty()) return {};
+	if (input.empty()) {
+		if (ns == "FHIR" && isFHIRPrimitiveTypeName(target)) return {};
+		return {FPValue::FromBoolean(false)};
+	}
 	if (input.size() > 1) {
 		throw FHIRPathSpecError("is() requires a singleton input collection");
 	}
@@ -6672,6 +8104,28 @@ FPCollection Evaluator::fn_precision(const FPCollection &input) {
 FPCollection Evaluator::fn_children(const FPCollection &input) {
 	FPCollection result;
 	for (const auto &item : input) {
+		if (item.primitive_shadow && yyjson_is_obj(item.primitive_shadow)) {
+			yyjson_obj_iter iter;
+			yyjson_obj_iter_init(item.primitive_shadow, &iter);
+			yyjson_val *key;
+			while ((key = yyjson_obj_iter_next(&iter))) {
+				const char *key_str = yyjson_get_str(key);
+				if (!key_str || key_str[0] == '_') continue;
+				if (std::string(key_str) == "resourceType") continue;
+				yyjson_val *val = yyjson_obj_iter_get_val(key);
+				if (!val) continue;
+				if (yyjson_is_arr(val)) {
+					size_t idx2, max2;
+					yyjson_val *elem;
+					yyjson_arr_foreach(val, idx2, max2, elem) {
+						result.push_back(FPValue::FromJson(elem));
+					}
+				} else {
+					result.push_back(FPValue::FromJson(val));
+				}
+			}
+			continue;
+		}
 		if (item.type != FPValue::Type::JsonVal || !item.json_val) continue;
 		yyjson_val *obj = item.json_val;
 		if (yyjson_is_obj(obj)) {
@@ -6684,14 +8138,27 @@ FPCollection Evaluator::fn_children(const FPCollection &input) {
 				if (std::string(key_str) == "resourceType") continue; // skip meta
 				yyjson_val *val = yyjson_obj_iter_get_val(key);
 				if (!val) continue;
+				std::string shadow_name = "_" + std::string(key_str);
+				yyjson_val *shadow = yyjson_obj_get(obj, shadow_name.c_str());
 				if (yyjson_is_arr(val)) {
 					size_t idx2, max2;
 					yyjson_val *elem;
 					yyjson_arr_foreach(val, idx2, max2, elem) {
-						result.push_back(FPValue::FromJson(elem));
+						FPValue child = FPValue::FromJson(elem);
+						if (shadow && yyjson_is_arr(shadow)) {
+							yyjson_val *shadow_elem = yyjson_arr_get(shadow, idx2);
+							if (shadow_elem && yyjson_is_obj(shadow_elem)) {
+								child.primitive_shadow = shadow_elem;
+							}
+						}
+						result.push_back(child);
 					}
 				} else {
-					result.push_back(FPValue::FromJson(val));
+					FPValue child = FPValue::FromJson(val);
+					if (shadow && yyjson_is_obj(shadow)) {
+						child.primitive_shadow = shadow;
+					}
+					result.push_back(child);
 				}
 			}
 		} else if (yyjson_is_arr(obj)) {

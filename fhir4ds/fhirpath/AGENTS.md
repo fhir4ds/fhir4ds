@@ -2,6 +2,559 @@
 
 ## Known Fragile Areas
 
+- **FHIRPath FP-15 HISTORIAN fresh §6.3 empty `is` inputs (2026-06-12):**
+  **FIXED:** Current HL7 FHIRPath §6.3 says ordinary empty `is` inputs are
+  non-matching and should return false rather than empty. Python
+  `types.is_fn()` and native `Evaluator::fn_isType()` now return false for
+  arbitrary missing paths such as `missing is Integer` and `missing.is(Integer)`
+  after type-specifier validation, while preserving R4 fixture behavior where
+  absent FHIR primitive paths such as `Observation.issued is instant` remain
+  empty. DuckDB Python fallback value[x] assertion helpers now use FHIR
+  hierarchy matching for `is` (`uri` satisfies `string`) while preserving exact
+  primitive choice behavior for `as`. Guard with
+  `.temp/qa/fp15_historian_fresh_probe.py`, `test_type_parity.py`,
+  `test_environment_type_parity.py`, native `fhirpath.test`, FHIRPath R4
+  conformance, and full conformance; rebuild/copy the bundled native extension
+  after touching native type code.
+- **FHIRPath FP-15 SKEPTIC fresh §6.3 type operators (2026-06-12):**
+  **FIXED:** Type-specifier validation must derive from the complete R4 model
+  hierarchy, not the legacy short valid-type list. Fresh probing found
+  `CodeSystem`, `QuestionnaireResponse`, `Binary`, and `Parameters` rejected as
+  unknown in `ofType()`/`is`/`as` chains even though they are valid R4 resource
+  types in `type2Parent.json`. Python `TypeInfo.VALID_FHIR_TYPES` now widens
+  from the R4 hierarchy metadata, and native `isKnownFHIRType()` reuses
+  `fhirTypeIsA()` for resource/datatype names while keeping a primitive-name
+  root set. The same pass fixed the DuckDB Python fallback wrapper losing
+  choice-type semantics after source expressions such as
+  `entry.resource.ofType(Observation).value.is(Integer)` and
+  `.value.as(Integer)`. Guard with `.temp/qa/fp15_skeptic_fresh_probe.py`,
+  `test_type_parity.py`, native `fhirpath.test`, and full conformance; rebuild
+  and copy `fhirpath.duckdb_extension` after native type changes.
+- **FHIRPath FP-14 EXPLORER fresh §6.2 comparison verification (2026-06-12):**
+  **VERIFIED CLEAN:** A fresh 37-expression native C++ vs forced Python
+  fallback probe matched current source behavior for `>`, `<`, `<=`, and `>=`
+  over exact large Long/Decimal/JSON numeric values, same-unit and converted
+  FHIR Quantity paths, resource-backed Date/DateTime paths with timezone
+  offsets, lexical Unicode String ordering, empty propagation, multi-item
+  row resilience, and statically invalid Boolean/literal-multi-item
+  comparisons. Keep `.temp/qa/fp14_explorer_fresh_probe.py` pinned to the
+  repository root on `sys.path`; otherwise a stale installed `fhir4ds` package
+  can mimic pre-fix FP-14 native/fallback drift.
+- **FHIRPath FP-14 HISTORIAN fresh §6.2 resource-backed DateTime comparison (2026-06-12):**
+  **FIXED:** Forced Python fallback comparison over FHIR `dateTime` resource
+  paths must normalize both operands when both carry timezone offsets. Fresh
+  native-vs-fallback probing found `effectiveDateTime > issued` over
+  `2015-02-04T10:00:00+01:00` and `2015-02-04T09:30:00Z` returned true in
+  fallback but false natively. Correct ordering is false because the left
+  instant is 09:00Z and the right instant is 09:30Z. Fallback comparison now
+  materializes typed FHIR `dateTime`/`instant`/`date`/`time` resource strings
+  as `FP_DateTime`/`FP_Date`/`FP_Time` before typechecking, so same-type
+  resource temporal paths reach `FP_TimeBase.compare()` instead of Python
+  string ordering. Guard with `.temp/qa/fp14_historian_fresh_probe.py` and
+  `test_comparison_parity.py` when changing `FP_TimeBase.compare()` or
+  resource-backed temporal type materialization.
+- **FHIRPath FP-14 SKEPTIC fresh §6.2 comparison exact numeric ordering (2026-06-12):**
+  **FIXED:** Native C++ comparison must not order Integer/Long/Decimal,
+  JSON numeric paths, or same-unit Quantity values through binary `double`.
+  Adjacent same-type comparable values above 2^53 must preserve authored/JSON
+  decimal text, e.g. `9223372036854775806L < 9223372036854775807L`,
+  `9007199254740992.0 < 9007199254740993.0`, `bigA < bigB`,
+  `9007199254740992 'mg' < 9007199254740993 'mg'`, and
+  `valueQuantity < component.valueQuantity`. Native now compares canonical
+  decimal text for numeric operands and same-unit Quantity operands, preserves
+  integer Quantity literal source text, and uses source-preserving JSON
+  Quantity materialization in comparison. Guard with
+  `.temp/qa/fp14_skeptic_fresh_probe.py`, `test_comparison_parity.py`, and
+  native `extensions/fhirpath/test/sql/fhirpath.test`; rebuild/copy the
+  bundled extension after future native comparison changes.
+- **FHIRPath FP-13 EXPLORER fresh §6.1 equality/equivalence (2026-06-12):**
+  **FIXED:** Forced Python fallback Quantity equivalence must compare
+  converted quantities using tolerance derived from each operand's original
+  precision, not the precision of already-converted base values. Otherwise
+  `Observation.value ~ 83.9 'kg'` for `185 '[lb_av]'` drifts from native and
+  the §6.1 least-granular Quantity equivalence rule. Native C++ JSON numeric
+  equality/equivalence must also avoid `yyjson_get_num()`/`double` for exact
+  Integer/Long-sized JSON values: `9007199254740992` and
+  `9007199254740993` are distinct for `=`, `!=`, `~`, and `!~`, including
+  inside complex objects and arrays. Guard with
+  `.temp/qa/fp13_explorer_fresh_probe.py`, `test_equality_parity.py`, and
+  native `extensions/fhirpath/test/sql/fhirpath.test`; rebuild/copy the
+  bundled extension after future native equality changes.
+- **FHIRPath FP-13 HISTORIAN fresh §6.1 equality/equivalence (2026-06-12):**
+  **FIXED:** Numeric primitives compare as implicit Quantity unit `1` for §6.1
+  examples such as `23 = 23 '1'` and `23 ~ 23 '1'`, including resource-backed
+  FHIR Quantity values with UCUM code `1` and ordered multi-item collections.
+  Quantity equivalence over non-commensurable dimensions such as
+  `1 'cm' ~ 1 's'` returns empty/NULL, while supported commensurable UCUM
+  units such as `[lb_av]` versus `kg` route through the canonical Quantity base
+  conversion table. Guard with `.temp/qa/fp13_historian_fresh_probe.py`,
+  `test_equality_parity.py`, native `fhirpath.test`, and the official R4
+  `Observation.value !~ 185 'kg'` sentinel; rebuild and copy the bundled
+  extension after native equality changes.
+- **FHIRPath FP-13 SKEPTIC fresh §6.1 equality/equivalence (2026-06-12):**
+  **FIXED:** String equivalence now maps Unicode White_Space code points
+  one-for-one to ASCII spaces without collapsing or trimming and uses Unicode
+  case folding/case mapping in both fallback and native paths. Quantity
+  equality now returns empty only for mixed calendar-vs-UCUM year/month
+  equality, while definite week/day/hour/minute/second/millisecond durations
+  compare through normal unit conversion. Guard with
+  `.temp/qa/fp13_skeptic_fresh_probe.py`,
+  `test_equality_parity.py`, and native `fhirpath.test`; rebuild and copy the
+  bundled native extension after C++ equality changes.
+- **FHIRPath FP-12 EXPLORER primitive metadata tree navigation (2026-06-12):**
+  **FIXED:** Fresh §5.8 probing found `children()` / `descendants()` did not
+  expose FHIR primitive sibling metadata such as `_birthDate.extension` or
+  `_given.extension` when evaluating the primitive element itself. This means
+  `birthDate.children().where(url = ...).valueString` and
+  `name.given.children().where(url = ...).valueString` returned empty even though
+  §5.8 notes primitive datatype children can include extensions. Native C++
+  additionally missed nested primitive `name.given.extension(url)` because it
+  only checked root-level shadow fields. Python now carries primitive `_data`
+  through `children()` and primitive member navigation. Native now carries a
+  primitive shadow pointer on `FPValue`, zips child arrays with `_field` arrays,
+  and uses that shadow for primitive `children()` and nested `extension(url)`.
+  Guard with `.temp/qa/fp12_explorer_fresh_probe.py`,
+  `test_tree_utility_parity.py`, and native `fhirpath.test`; rebuild/copy the
+  bundled extension after native primitive-navigation changes.
+- **FHIRPath FP-12 SKEPTIC fresh trace projection scoping (2026-06-12):**
+  **FIXED:** Current HL7 FHIRPath §5.9 defines `trace(name, projection)` as a
+  scoped function whose projection is evaluated for each input item with
+  `$this` and `$index`, while returning the original input collection. Fresh
+  native-vs-forced-fallback probing found both paths evaluated the projection
+  once over the whole input collection, so
+  `name.trace('names', given.single()).given.count() = 2` failed for two name
+  elements that each had one `given`. Python `trace_fn` now evaluates the
+  projection per item, restores `$index`/vars/chain scope, and flattens the
+  diagnostic projection only for trace logging. Native C++ mirrors that
+  per-item projection validation and restores evaluator scope before returning
+  the unchanged input. Guard with `.temp/qa/fp12_skeptic_fresh_probe.py` and
+  `test_tree_utility_parity.py`; rebuild/copy the bundled extension after
+  native trace changes.
+- **FHIRPath FP-11 EXPLORER fresh native large Long/Decimal math (2026-06-12):**
+  **FIXED:** Fresh §5.7 Math probing found native C++ still routed
+  Long-sized inputs for `ceiling()`, `floor()`, `truncate()`, `round()`, and
+  `power()` through binary `double` conversion. This corrupts values around
+  max Long, e.g. `9223372036854775807L.ceiling()` returns
+  `-9223372036854775808`, `9223372036854774785L.ceiling()` returns
+  `9223372036854774784`, and `9223372036854775807L.power(1).toString()`
+  renders scientific notation instead of exact Decimal-shaped text. Native now
+  derives integral math results from preserved numeric `source_text`, returns
+  exact `Integer` values when they fit, and preserves Decimal-shaped source
+  text for `power(..., 0)` / `power(..., 1)`. Guard with
+  `.temp/qa/fp11_explorer_fresh_probe.py`, native/fallback
+  `test_math_parity.py`, and native `fhirpath.test` coverage.
+- **FHIRPath FP-11 HISTORIAN fresh §5.7 Math boundary issues (2026-06-12):**
+  **FIXED:** Fresh native-vs-forced-fallback probing found three current Math
+  compliance defects: native C++ `9223372036854775807L.abs()` returns
+  `-9223372036854775808` due to integer absolute-value overflow/rounding;
+  forced Python fallback does not treat resource-backed FHIR Quantity JSON as
+  Quantity for `abs()`, `ceiling()`, `floor()`, `round()`, and `truncate()`;
+  and forced fallback `2.power(3).toString()` returns `"8"` instead of the
+  Decimal-shaped `"8.0"`. Native now handles Integer/Long `abs()` and unary
+  negation without `double` conversion for representable values, fallback
+  Quantity detection routes through `util.parse_value(...)`, and fallback
+  Decimal `toString()` appends `.0` when needed. Guard with
+  `.temp/qa/fp11_historian_fresh_probe.py` plus `test_math_parity.py`,
+  `test_math.py`, conversion parity, and native sqllogictest coverage.
+- **FHIRPath FP-11 SKEPTIC fresh current §5.7 Math Quantity/power semantics (2026-06-12):**
+  **FIXED:** Current HL7 FHIRPath §5.7 says `ceiling()`, `floor()`,
+  `round([precision])`, and `truncate()` accept Quantity and return Quantity
+  with the same unit, and `power()` always returns Decimal. Native C++,
+  forced Python fallback, and direct math helpers now preserve Quantity units
+  for the Quantity-capable functions and return Decimal-shaped results for
+  `power()` integer powers such as `2.power(3)`. Guard with
+  `.temp/qa/fp11_skeptic_fresh_probe.py`, `test_math_parity.py`,
+  `test_math.py`, and native `fhirpath.test`; rebuild/copy the bundled
+  extension after future native math changes.
+- **Milestone code review after FP-01 through FP-10 (2026-06-12):**
+  **OPEN REVIEW FINDINGS:** Native regex class range normalization expands
+  mixed ASCII-to-Unicode ranges such as `[a-😀]` into huge alternations, making
+  a short valid user regex slow and invalid natively while forced fallback
+  returns a valid match. Native delimited identifiers still ignore failed
+  surrogate escape validation in `readDelimitedIdentifier()`, unlike string
+  literals. Native direct FHIR type specifier coverage remains split between
+  `fhirTypeIsA()` and `isKnownFHIRType()`, leaving resource types such as
+  `CodeSystem`, `QuestionnaireResponse`, `Binary`, and `Parameters` invalid
+  for direct `ofType(<resource>)` filters. The lower-level
+  `duckdb.functions.string.substring()` API still returns empty collection for
+  negative in-range lengths while the engine/UDF path now returns `""`.
+  Track details in `.ai_loop/code_review_findings.md` as `REV-001` through
+  `REV-004`.
+- **FHIRPath FP-10 ARCHITECT Unicode regex `i` flag (2026-06-12):**
+  **FIXED:** Native `std::regex_constants::icase` is byte/locale-oriented for
+  UTF-8 and does not match forced Python fallback on ordinary Unicode
+  case-insensitive regex behavior. Architect probing found
+  `upper.matches('é', 'i')`, `upper.matches('[é]', 'i')`, and
+  `upper.matches('^[é-ë]$', 'i')` over `É` false natively while fallback
+  returns true. Native regex normalization now adds grouped original,
+  uppercase, and lowercase variants for non-ASCII literals/classes/ranges when
+  the FHIRPath `i` flag is present, while keeping `std::regex` `icase` for
+  ASCII behavior.
+- **FHIRPath FP-10 ARCHITECT Unicode regex class ranges (2026-06-12):**
+  **FIXED:** The first FP-10 EXPLORER remediation made native regex character
+  classes scalar-aware for non-ASCII literals and negated classes, but
+  architect probing found Unicode ranges still split incorrectly:
+  `ecirc.matches('^[é-ë]$')` returns false natively while forced fallback
+  returns true, and `ecirc.replaceMatches('[é-ë]', 'x')` leaves `ê`
+  unchanged. The native class normalizer must treat non-ASCII range endpoints
+  as scalar ranges; it now parses class atoms and expands ranges with any
+  non-ASCII endpoint into grouped whole-codepoint alternatives while preserving
+  compact pure-ASCII ranges.
+- **FHIRPath FP-10 EXPLORER fresh Unicode regex character classes (2026-06-12):**
+  **FIXED:** Current HL7 FHIRPath §5.6 String Manipulation says regex
+  functions operate on strings that are sequences of Unicode scalar values and
+  allow Unicode characters. Fresh native-vs-forced-fallback probing found the
+  native C++ `std::regex` path still interprets non-ASCII literals inside
+  character classes as UTF-8 bytes: `accent.matches('^[é]$')` and
+  `emoji.matches('^[😀]$')` return false natively while fallback returns true;
+  `replaceMatches('[é]', 'x')` returns `xx` and
+  `replaceMatches('[😀]', 'x')` returns `xxxx` natively while fallback returns
+  `x`. Guard/fix with `.temp/qa/fp10_explorer_fresh_probe.py` and
+  `test_string_transform_parity.py`; native `normalizeFHIRPathRegex()` now
+  rewrites character classes into codepoint-aware regex fragments, including
+  whole-codepoint alternatives for positive non-ASCII literals and a negative
+  lookahead plus the shared UTF-8 codepoint matcher for negated classes.
+- **FHIRPath FP-10 HISTORIAN fresh Unicode upper/lower case mapping (2026-06-12):**
+  **FIXED:** Current HL7 FHIRPath §5.6.6/§5.6.7 says `upper()` and
+  `lower()` convert all characters in a singleton string to upper/lower case.
+  Fresh native-vs-forced-fallback probing found native C++ still relied on a
+  limited hand-written Unicode range table: `ẞ.lower()`, `ﬃ.upper()`,
+  `𐐨.upper()`, `ա.upper()`, `ა.upper()`, and `ƀ.upper()` were left unchanged
+  while the Python fallback returned Unicode case mappings. Native now decodes
+  UTF-8 scalar values, uses DuckDB's vendored `utf8proc` for one-to-one Unicode
+  case mappings, and keeps explicit full-case uppercase expansions such as
+  ligatures and `ß -> SS`. Guard with `.temp/qa/fp10_historian_fresh_probe.py`,
+  `test_string_transform_parity.py`, and native sqllogictest assertions;
+  rebuild/copy the bundled extension after future native `fn_upper()` /
+  `fn_lower()` edits.
+- **FHIRPath FP-10 SKEPTIC fresh regex transform semantics and flags (2026-06-12):**
+  **FIXED:** Current HL7 FHIRPath String Manipulation defines
+  `matches(regex, [flags])` as regex search behavior and allows optional
+  `i`/`m` flags for both `matches()` and `replaceMatches()`. Fresh native
+  DuckDB/C++ and forced Python fallback probing found both paths using
+  obsolete full-string `matches()` semantics and rejecting valid flagged calls
+  such as `url.matches('library', 'i')`, `line.matches('^second', 'm')`, and
+  `s.replaceMatches('abc', 'X', 'i')`. Python fallback now uses regex search,
+  validates only `i`/`m` flag characters, and threads flags through sparse
+  `fhirpath_is_valid()` checks. Native C++ mirrors that behavior, including
+  multiline anchor handling for `replaceMatches()` without consuming line
+  separators. Guard with `.temp/qa/fp10_skeptic_fresh_probe.py`,
+  `test_string_transform_parity.py`, Python unit string tests, and native
+  `extensions/fhirpath/test/sql/fhirpath.test`; rebuild/copy the bundled
+  extension after native regex edits.
+- **FHIRPath FP-09 EXPLORER fresh Python fallback negative substring length (2026-06-12):**
+  **FIXED:** HL7 FHIRPath §5.6.2 says `substring(start, length)` returns the
+  empty string when `length` is zero or negative, provided `start` itself is
+  in range. Fresh native-vs-forced-fallback probing found the Python fallback
+  leaking Python negative-slice semantics for sufficiently negative lengths:
+  `s.substring(1, -4)` over `abcdef` returns `bc` in fallback while native
+  returns `''`. Python fallback now returns `""` before slicing whenever the
+  validated `length <= 0`. Guard with `.temp/qa/fp09_explorer_fresh_probe.py`
+  and focused cases in `test_string_search_parity.py` when changing
+  `fhir4ds/fhirpath/engine/invocations/strings.py::substring`.
+- **FHIRPath FP-08 EXPLORER fresh resource-backed Decimal `toString()` (2026-06-12):**
+  **FIXED:** Current HL7 FHIRPath §5.5.8 Decimal `toString()` uses decimal
+  digit notation, not scientific notation. Fresh native DuckDB/C++ and forced
+  Python fallback probing found resource-backed JSON Decimal values emitting
+  `1e-06` through both paths, with native also emitting `1e+15` for a large
+  JSON decimal. Python fallback now converts float primitives through
+  `Decimal(str(value))` and formats Decimals with fixed notation; native C++
+  uses `formatDecimalNumber()` for JSON real/Decimal stringification. The same
+  pass fixed native max-Long `toQuantity().toString()` precision by preserving
+  integer source text before Quantity stringification. Guard with
+  `.temp/qa/fp08_explorer_fresh_probe.py` and
+  `test_conversion_parity.py::test_json_decimal_to_string_uses_plain_decimal_not_scientific_notation`
+  when changing JSON numeric stringification, Decimal `toString()`,
+  Integer/Long `toQuantity()`, or public DuckDB wrapper serialization.
+- **FHIRPath FP-08 HISTORIAN fresh Quantity string formatting (2026-06-12):**
+  **FIXED:** Current HL7 FHIRPath §5.5.8 Quantity `toString()` uses a
+  decimal digit representation, not scientific notation. Fresh native and
+  forced Python fallback probing found converted quantities rendering as
+  `1e-06 'kg'`, `1e+15 'g'`, or `2E+2 'cm'` depending on path. Python
+  `FP_Quantity.__str__` now formats `Decimal` values with fixed notation
+  while preserving trailing Decimal scale for official conformance cases, and
+  native C++ Quantity `toString()` falls back to fixed notation when default
+  double streaming would emit an exponent. Guard with
+  `.temp/qa/fp08_historian_fresh_probe.py`,
+  `test_conversion_parity.py::test_quantity_to_string_uses_plain_decimal_not_scientific_notation`,
+  and native `extensions/fhirpath/test/sql/fhirpath.test`; rebuild/copy the
+  bundled extension after native formatting edits.
+- **FHIRPath FP-07 EXPLORER fresh dynamic format and Long boundary issues (2026-06-12):**
+  **FIXED:** Current HL7 FHIRPath §5.5.4/§5.5.5 optional `format : string`
+  arguments are ordinary FHIRPath argument expressions. Fresh native DuckDB/C++
+  probing found `rawDate.toDate(dateFmt)`,
+  `rawDateTime.toDateTime(dateTimeFmt)`, and scoped
+  `items.select(rawDate.toDate(dateFmt))` returning empty because native
+  evaluates the format argument against the source string instead of the outer
+  invocation focus. Native now evaluates format arguments against the outer
+  focus for sourced String inputs and ignores the format argument for
+  non-String Date/DateTime inputs. The same pass found §4.1/§5.5.6 Long
+  boundary drift: fallback accepted positive out-of-range
+  `9223372036854775808L`, native rejected valid signed-minimum
+  `-9223372036854775808L`, and native max-Long `toDecimal()` text lost exact
+  decimal surface through binary double formatting. Fallback now rejects
+  out-of-range Long literals, native accepts unary signed-minimum Long through
+  a parser sentinel, and Long literal `toDecimal()` preserves exact text via
+  `source_text`. Guard with `.temp/qa/fp07_explorer_fresh_probe.py` and
+  focused native/fallback conversion parity tests.
+- **FHIRPath FP-07 HISTORIAN fresh string Long Decimal conversion (2026-06-12):**
+  **FIXED:** Current HL7 FHIRPath §5.5.6 examples explicitly include
+  `'42L'.toDecimal()` and `'42L'.convertsToDecimal()` as successful string
+  Decimal conversions, distinct from the Long literal `42L`. Fresh native
+  DuckDB/C++ and forced Python fallback probing found both paths returning
+  empty/false for the string form while accepting the literal form. Python
+  fallback and native C++ now recognize optional sign + digits + uppercase `L`
+  for String inputs to `toDecimal()` / `convertsToDecimal()`, strip the suffix
+  before Decimal parsing, and preserve rejection for malformed forms such as
+  `1LL`, `1.0L`, lowercase `1l`, exponent notation, and whitespace-padded
+  strings. Guard with `.temp/qa/fp07_historian_fresh_probe.py` and focused
+  native/fallback parity tests when changing Decimal conversion.
+- **FHIRPath FP-07 SKEPTIC fresh Date/DateTime format and Long Decimal conversion (2026-06-12):**
+  **FIXED:** Current HL7 FHIRPath §5.5.4 and §5.5.5 define optional
+  `format : string` parameters for `toDate()`, `convertsToDate()`,
+  `toDateTime()`, and `convertsToDateTime()`. Python fallback now accepts
+  one optional String format argument, parses required current format tokens
+  such as `yyyy`, `MM`, `dd`, `HH`, `mm`, `ss`, `S`, `a`, and `Z`, and ignores
+  the format for non-string Date/DateTime inputs. Current §5.5.6 also includes
+  Long inputs for Decimal conversion and examples such as `42L.toDecimal()`;
+  the Python parser now recognizes uppercase Long literals, the fallback
+  Integer range precheck skips valid uppercase Long suffixes before applying
+  int32 bounds, and malformed suffixes such as `1LL`, `1.0L`, and `1l` remain
+  row-resilient invalid expressions. Guard with
+  `.temp/qa/fp07_skeptic_fresh_probe.py` and native/fallback parity tests in
+  `test_conversion_parity.py`.
+- **FHIRPath FP-06 EXPLORER fresh iif/Boolean/Integer conversion rerun (2026-06-12):**
+  **VERIFIED CLEAN:** Fresh §5.5.1-§5.5.3 probing matched native DuckDB/C++
+  and forced Python fallback public UDFs across 46 composed expressions. The
+  matrix covered lazy `iif()` branches, singleton non-Boolean criteria such as
+  `0`/`0.0`/strings, `$index` preservation through `select(iif(...))`,
+  Boolean string/integer/decimal representations, strict Integer string
+  grammar and int32 bounds, resource-backed multi-item row resilience, invalid
+  conversion arity, unary precedence for `-1.convertsToInteger()`, and the
+  FP-06 SKEPTIC/HISTORIAN result-wrapper fixes. Keep
+  `.temp/qa/fp06_explorer_fresh_probe.py` and
+  `test_conversion_parity.py` aligned when touching `iif()`, `toBoolean()`,
+  `convertsToBoolean()`, `toInteger()`, `convertsToInteger()`, or public
+  DuckDB wrapper row-resilience.
+- **FHIRPath FP-06 HISTORIAN fresh fallback out-of-range Integer literal row resilience (2026-06-12):**
+  **FIXED:** Fresh §5.5.3 probing found forced Python DuckDB fallback result
+  UDFs throwing `FHIRPathSyntaxError` for `2147483648.toInteger()` while the
+  native DuckDB/C++ public result wrappers return empty/NULL with
+  `fhirpath_is_valid=false`. The expression uses an out-of-range Integer
+  literal, so it is invalid, but non-strict public fallback result wrappers
+  should remain row-resilient like native. The fallback row-resilience helper
+  now includes `_has_out_of_range_integer_literal()`, while
+  `fhirpath_is_valid()` still reports false. Guard with
+  `.temp/qa/fp06_historian_fresh_probe.py` and focused conversion parity tests.
+- **FHIRPath FP-06 HISTORIAN native invalid-expression result wrapper row resilience (2026-06-12):**
+  **FIXED:** Fresh retry probing found native DuckDB result UDFs throwing for
+  invalid parser/lexer expressions in the FP-06 boundary, including
+  `-2147483649.toInteger()`, while the forced Python fallback returned
+  empty/NULL with `fhirpath_is_valid=false`. The same shared wrapper class
+  covered invalid surrogate string literals such as `'\uD834'`. Native
+  `EvaluateFhirpath()` now returns an empty collection when `GetOrCompile()`
+  yields no AST, preserving `fhirpath_is_valid()` as the validity signal.
+  Guard with `.temp/qa/fp06_historian_fresh_probe.py`,
+  `test_conversion_parity.py`, `test_literal_parity.py`, and native
+  `extensions/fhirpath/test/sql/fhirpath.test`; rebuild/copy the bundled
+  extension after native wrapper edits.
+- **FHIRPath FP-06 SKEPTIC fresh iif numeric-zero singleton fallback (2026-06-12):**
+  **FIXED:** FHIRPath §5.5.1 explicitly states `iif(0, 'true', 'false')`
+  returns the true branch because numeric `0` is a non-empty singleton, not
+  Boolean `false`. Fresh native DuckDB/C++ and forced Python fallback probing
+  found the fallback returning the false branch for `iif(0, ...)`,
+  `iif(0.0, ...)`, and `iif(0.toInteger(), ...)`, while native returned the
+  spec-expected true branch. The root was Python singleton Boolean helper
+  equality checks (`x == False` / `val == False`) conflating numeric zero with
+  the Boolean singleton `false`; `is_true()` now uses Boolean identity checks
+  so non-Boolean singleton truthiness is handled deliberately. Guard with
+  `.temp/qa/fp06_skeptic_fresh_probe.py` and
+  `test_conversion_parity.py`.
+- **SPEC milestone code review after FP-01 through FP-05 (2026-06-12):**
+  **OPEN REVIEW FINDINGS:** `REV-FP-001` public native result-UDF invalid
+  parse row-resilience was remediated during FP-06 HISTORIAN by returning
+  empty collections from `EvaluateFhirpath()` when `GetOrCompile(...)` fails.
+  Native delimited identifiers still ignore failed surrogate escape validation
+  because `readDelimitedIdentifier()` does not check
+  `appendUnicodeEscape(...)`. FP-04's native R4 hierarchy expansion remains
+  split from
+  `isKnownFHIRType()`, leaving direct type specifiers such as
+  `CodeSystem`, `QuestionnaireResponse`, `Binary`, and `Parameters`
+  rejected despite hierarchy entries. Track the remaining `REV-FP-002` and
+  `REV-FP-003` in the milestone `code_review_findings.md`; add parity tests
+  for delimited identifier escapes and direct `ofType(<resource>)` coverage
+  before closing.
+- **FHIRPath FP-05 EXPLORER fresh subsetting/combining rerun (2026-06-11):**
+  **VERIFIED CLEAN:** Fresh §5.3/§5.4 EXPLORER probing matched native
+  DuckDB/C++ and forced Python fallback across 43 expressions covering
+  `[index]`, `single()`, `first()`, `last()`, `tail()`, `skip(num)`,
+  `take(num)`, `intersect(other)`, `exclude(other)`, `union(other)`/`|`,
+  and `combine(other, preserveOrder)`. Coverage emphasized pathological
+  argument shapes, dynamic scoped arguments inside `select()`, empty and
+  negative count/index boundaries, duplicate-retaining `combine()`/`exclude()`,
+  duplicate-removing `union()`/`intersect()`, and resource-backed `value[x]`
+  paths. Keep `.temp/qa/fp05_explorer_fresh_probe.py` aligned with
+  `test_collection_operator_parity.py` when changing FP-05 evaluator behavior.
+- **FHIRPath FP-05 HISTORIAN fresh subsetting/combining rerun (2026-06-11):**
+  **VERIFIED CLEAN:** Fresh §5.3/§5.4 probing matched native DuckDB/C++ and
+  forced Python fallback across 52 expressions covering `[index]`, `single()`,
+  `first()`, `last()`, `tail()`, `skip(num)`, `take(num)`,
+  `intersect(other)`, `exclude(other)`, `union(other)`/`|`, and current
+  `combine(other, preserveOrder)`. Coverage included invalid index/count
+  literal types, multi-item singleton row resilience, duplicate-preserving
+  `exclude()`/`combine()`, equality-backed set counts, and scoped
+  `select(left.<set-fn>(right))` argument context. Keep
+  `.temp/qa/fp05_historian_fresh_probe.py` root-pinned to the workspace on
+  `sys.path`; launching probes from `.temp/qa` can otherwise import an
+  installed stale package instead of the current source tree.
+- **FHIRPath FP-05 SKEPTIC fresh `combine(..., preserveOrder)` gap (2026-06-11):**
+  **FIXED:** Current HL7 FHIRPath §5.4 defines
+  `combine(other : collection, [preserveOrder : Boolean]) : collection`, with
+  `combine(B, true)` preserving input order while still retaining duplicates.
+  Fresh native DuckDB/C++ and forced Python fallback probing found
+  `ints.combine(otherInts, true)` returning empty/NULL with
+  `fhirpath_is_valid=false`. Python core and native C++ now allow one or two
+  arguments for `combine()`, validate the optional argument as a singleton
+  Boolean when present, preserve duplicate-retaining append behavior, and keep
+  exact one-argument arity for `union()`, `intersect()`, and `exclude()`.
+  Guard with `.temp/qa/fp05_skeptic_fresh_probe.py`,
+  `test_collection_operator_parity.py`, and native sqllogictest assertions;
+  rebuild/copy the bundled extension after native evaluator changes.
+- **FHIRPath FP-04 EXPLORER native R4 resource hierarchy gap (2026-06-11):**
+  **FIXED:** Fresh §5.2 probing found native DuckDB/C++ dropping valid R4
+  resource subclasses from `ofType(Resource)` and `ofType(DomainResource)`.
+  The Python fallback includes resources such as `Questionnaire`,
+  `QuestionnaireResponse`, `ValueSet`, and `CodeSystem` via the generated R4
+  hierarchy, while native relied on a smaller embedded hierarchy table. Native
+  `fhirTypeIsA()` now covers the missing R4 resource parent relationships and
+  `isKnownFHIRType()` includes the generated R4 type-specifier names needed by
+  `ofType()`. Keep `.temp/qa/fp04_explorer_fresh_probe.py`,
+  `test_filter_projection_parity.py`, and native sqllogictest assertions
+  aligned when changing native `fhirTypeIsA()`, `isKnownFHIRType()`, or
+  `fn_isType()` resource subtype behavior; rebuild/copy the bundled extension
+  after native evaluator edits.
+- **FHIRPath FP-04 HISTORIAN fresh filtering/projection rerun (2026-06-11):**
+  **VERIFIED CLEAN:** Fresh §5.2 probing matched native DuckDB/C++ and forced
+  Python fallback across 24 expressions covering strict singleton-Boolean
+  `where(criteria)`, `select(projection)` flattening and `$index`, recursive
+  projection-only `repeat(projection)` de-duplication, no repeat-local
+  `$index`, `ofType(type)` subtype/type-specifier validation, and
+  `defineVariable()` non-leakage from `select()`/`repeat()` projections.
+  Keep `.temp/qa/fp04_historian_fresh_probe.py` and
+  `test_filter_projection_parity.py` aligned when changing §5.2 evaluator
+  scope, type validation, or public native/fallback UDF wrappers.
+- **FHIRPath FP-04 SKEPTIC fresh repeat `$index` scoping (2026-06-11):**
+  **FIXED:** FHIRPath §5.2 defines `repeat(projection)` as a scoped function
+  that sets `$this` for each queued item; unlike `where()` and `select()`, it
+  does not set `$index` and the spec notes `$index` is undefined/not set during
+  repeat iteration. Native C++ and forced Python fallback previously assigned a
+  repeat-local counter, making `a.repeat($index)` unbounded in fallback and
+  dependent on the native infinite-loop guard. `repeat()` now preserves any
+  outer scoped `$index` without replacing it, so top-level `a.repeat($index)`
+  is empty while `a.select($this.repeat($index))` can see the outer select
+  index. Keep `.temp/qa/fp04_skeptic_fresh_probe.py`,
+  `test_filter_projection_parity.py`, and native sqllogictest assertions
+  aligned after future scoped-function edits; rebuild/copy the bundled
+  extension after native evaluator changes.
+- **FHIRPath FP-03 EXPLORER composed existence rerun (2026-06-11):**
+  **VERIFIED CLEAN:** Fresh EXPLORER probing found no new §5.1 defects after
+  the SKEPTIC/HISTORIAN fixes. Native DuckDB/C++ and forced Python fallback
+  matched across 32 composed expressions covering vacuous empty defaults,
+  nested `exists(criteria)`/`all(criteria)`, Boolean aggregate validation,
+  scoped `subsetOf()`/`supersetOf()` arguments, structural JSON equality,
+  compatible Quantity equality, numeric/string de-duplication, and invalid
+  existence-helper arities. Keep `.temp/qa/fp03_explorer_fresh_probe.py` and
+  `test_existence_parity.py` aligned when changing §5.1 dispatch or
+  equality-backed set semantics.
+- **FHIRPath FP-03 SKEPTIC scoped `subsetOf()`/`supersetOf()` argument context (2026-06-11):**
+  **FIXED:** Fresh FP-03 SKEPTIC probing found native DuckDB/C++
+  evaluating `subsetOf()` and `supersetOf()` argument expressions against the
+  root resource instead of the current scoped item inside `select()`,
+  `exists(criteria)`, and `all(criteria)`. Cases such as
+  `groups.select(left.subsetOf(right))` and
+  `groups.all(right.supersetOf(left))` diverged from the forced Python
+  fallback and from FHIRPath scoped-function semantics. Native
+  `Evaluator::evalFunction()` now evaluates those arguments against
+  `outer_input` when present, matching other ordinary function arguments.
+  Guard this with `.temp/qa/fp03_skeptic_fresh_probe.py`,
+  `test_existence_parity.py::test_set_comparison_arguments_use_scoped_focus_in_native_and_fallback`,
+  and native sqllogictest assertions when changing set-comparison argument
+  evaluation; rebuild/copy the bundled extension after native evaluator edits.
+- **FHIRPath FP-02 EXPLORER `implies` RHS singleton evaluation (2026-06-11):**
+  **FIXED:** Fresh FP-02 EXPLORER probing found both native DuckDB/C++ and
+  forced Python fallback short-circuiting `false implies <rhs>` before applying
+  FHIRPath §4.5 singleton Boolean evaluation to `<rhs>`. Constant and dynamic
+  multi-item RHS expressions such as `false implies (1 | 2)` and
+  `false implies arr` returned `true`; per §4.2 Boolean logic, operands are
+  evaluated as Booleans using §4.5 first. Python `logic.implies_op()` and
+  native `Evaluator::evalBinaryOp()` now coerce the RHS before applying the
+  false-LHS truth-table return, so multi-item RHS collections signal an
+  evaluation error and public DuckDB UDFs return empty/NULL.
+  Keep `.temp/qa/fp02_explorer_fresh_probe.py`,
+  `test_boolean_logic_parity.py`, and native sqllogictest assertions aligned
+  when touching `implies` evaluation.
+- **FHIRPath FP-02 HISTORIAN native `trim()` invocation arity (2026-06-11):**
+  **FIXED:** Fresh FP-02 HISTORIAN probing found native DuckDB/C++
+  accepting argument-bearing `trim()` invocations such as `s.trim(1)` and
+  `s.trim({})`, returning the trimmed string with `fhirpath_is_valid=true`.
+  The forced Python fallback returns row-resilient empty results but also
+  reports validity true. HL7 FHIRPath defines the string function signature as
+  `trim() : String`, so `trim` is now exact-zero-arity in native validation
+  and fallback `fhirpath_is_valid()`. Keep
+  `.temp/qa/fp02_historian_fresh_probe.py`,
+  `test_string_transform_parity.py`, and native sqllogictest assertions
+  aligned after future string-function invocation changes; rebuild/copy the
+  bundled extension after native evaluator edits.
+- **FHIRPath FP-02 SKEPTIC function invocation fallback row resilience (2026-06-11):**
+  **FIXED:** Fresh FP-02 SKEPTIC probing found the forced Python DuckDB
+  fallback `fhirpath()` list UDF leaking `NotImplementedError` for unknown
+  function invocations such as `unknownFunction()`, while native C++ returns
+  the public row-resilient empty result and `fhirpath_is_valid()` returns
+  false. `fhirpath_scalar()` now returns an empty collection for
+  `NotImplementedError` in non-strict mode while preserving strict-mode
+  propagation. Keep `.temp/qa/fp02_skeptic_diff_probe.py` and focused
+  `test_operator_parity.py` native/fallback coverage aligned when touching
+  fallback public UDF exception handling for function invocation errors.
+- **FHIRPath FP-01 EXPLORER partial DateTime literal row resilience (2026-06-11):**
+  **FIXED:** Fresh EXPLORER probing found forced Python fallback SQL UDFs throwing
+  `FHIRPathSyntaxError` for invalid partial DateTime literals with time
+  components after only a year or year-month, such as `@2014T14` and
+  `@2014-01T14:30`, while the native DuckDB extension returned public
+  empty/NULL results and `fhirpath_is_valid=false`. FHIRPath §4.1 allows a
+  bare trailing `T` to mark partial DateTime values at year/year-month/full-date
+  precision, but time components require a full date before `T`. Fallback
+  `_has_invalid_partial_datetime_time_literal()` now classifies that invalid
+  literal class, and public fallback SQL wrappers return native-matching
+  empty/NULL results instead of throwing. Keep
+  `.temp/qa/fp01_explorer_fresh_probe.py` and
+  `test_literal_parity.py` aligned when touching fallback temporal prechecks
+  or public row-resilient wrappers.
+- **FHIRPath FP-01 HISTORIAN unpaired Unicode surrogate string escapes (2026-06-11):**
+  **FIXED:** FHIRPath §4.1 String literal escapes require UTF-16 surrogate
+  escape code units to be paired into a valid Unicode scalar value. Fresh
+  FP-01 HISTORIAN probing found both native DuckDB and forced Python fallback
+  reporting `fhirpath_is_valid("'\\uD834'") = true`; native result UDFs then
+  throw DuckDB invalid-unicode errors and fallback scalar/text UDFs throw
+  Python-to-C++ cast errors. Python `_unescape_fhirpath_string()` and native
+  `appendUnicodeEscape()` now reject unpaired high/low surrogate code units
+  while preserving existing malformed non-surrogate escape behavior such as
+  `\u005` becoming `u005`. Keep `.temp/qa/fp01_historian_fresh_probe.py`,
+  `test_literal_parity.py`, and `extensions/fhirpath/test/sql/fhirpath.test`
+  aligned; rebuild/copy the bundled extension after native lexer changes.
+- **FHIRPath FP-01 SKEPTIC DateTime timezone offset bounds (2026-06-11):**
+  **FIXED:** FHIRPath §4.1 DateTime literals are FHIR/ISO-style temporal
+  literals and the FHIR R4 `dateTime` primitive regex allows timezone offsets
+  only through `13:59` or exactly `14:00`. Fresh FP-01 SKEPTIC probing found
+  native DuckDB and forced Python fallback both accepting
+  `@2016-02-29T23:59:59.123+14:01` and
+  `@2016-02-29T23:59:59.123-14:01` as valid. Python `FP_DateTime.__new__`
+  and native C++ `parseDateTimeParts()` now reject offset hours past 14 and
+  reject nonzero minutes at hour 14, while preserving result-UDF
+  row-resilience for malformed temporal literals. Keep
+  `.temp/qa/fp01_skeptic_probe.py`, `test_literal_parity.py`, and
+  `extensions/fhirpath/test/sql/fhirpath.test` aligned after future DateTime
+  literal changes; rebuild and copy the bundled native extension after C++
+  evaluator changes.
 - **FHIRPath Section 5.1 native C++ arity validation (Domain 1 SKEPTIC, 2026-06-07):**
   **FIXED:** Native DuckDB/C++ FHIRPath now rejects invalid Section 5.1 helper
   arities in parity with the forced Python fallback. Ordinary helper dispatch
@@ -328,11 +881,12 @@
   **FIXED:** §5.7 math functions need exact signature validation, concrete
   numeric type errors, dynamic argument focus, and result type preservation
   across native C++ and forced Python fallback. Guard wrong-arity calls such as
-  `1.abs(2)`, `10.log()`, `2.power(3, 4)`, and `2.sqrt(1)`; incompatible
-  constants such as `'2.5'.sqrt()`, `true.abs()`, and `5 'mg'.ceiling()` must
-  make `fhirpath_is_valid=false` while public result UDFs remain row-resilient.
-  Sourced `p.log(base)` evaluates `base` in the outer resource focus, and
-  integer `2.power(3)` materializes as Integer (`8`), not Decimal (`8.0`).
+  `1.abs(2)`, `10.log()`, `2.power(3, 4)`, and `2.sqrt(1)`;
+  incompatible constants such as `'2.5'.sqrt()` and `true.abs()` must make
+  `fhirpath_is_valid=false` while public result UDFs remain row-resilient.
+  Sourced `p.log(base)` evaluates `base` in the outer resource focus.
+  Superseding current §5.7 behavior from 2026-06-12: `ceiling()`, `floor()`,
+  `round()`, and `truncate()` accept Quantity, and `power()` returns Decimal.
   Keep coverage in `test_math_parity.py` and rebuild/copy the bundled
   extension after native math changes.
 - **FHIRPath FP-10 EXPLORER Unicode case mapping (2026-05-24):**
@@ -435,6 +989,14 @@
   `convertsToTime(value)` convenience forms. Keep
   `test_conversion_parity.py::test_fp08_conversion_signatures_and_singleton_errors_match_fallback`
   and native sqllogictest coverage aligned.
+- **FHIRPath FP-08 dynamic Quantity unit arguments (2026-06-12):** **FIXED:**
+  Native C++ `toQuantity([unit])` and `convertsToQuantity([unit])` resolve
+  dynamic unit arguments such as `targetUnit` against the outer invocation
+  context, matching forced Python fallback behavior for sibling unit paths.
+  Guard `value.toQuantity(targetUnit)`,
+  `quantityText.toQuantity(targetUnit)`, and
+  `items.select(quantityText.toQuantity(targetUnit))` across native and forced
+  fallback paths.
 - **FHIRPath Section 5.5 Date/DateTime/Decimal conversion (FP-07 SKEPTIC rerun, 2026-05-24):**
   **FIXED:** FP-07 conversion functions must keep exact zero-argument
   signatures across native C++ and forced Python fallback. Guard invalid forms
@@ -624,8 +1186,8 @@
 - **FHIRPath §6.7 hour-precision Time arithmetic (FP-18 HISTORIAN, 2026-05-17):** **FIXED:** The Python fallback `FP_TimeBase._plus_time()` must handle hour-only `Time` precision explicitly. More precise units convert down to hours with truncation before addition (`@T12 + 61 minutes -> T13`, `@T12 + 59 minutes -> T12`), and `Time` arithmetic must reject date units such as days/months/years (`@T12 + 1 day` returns empty/invalid). Native C++ already followed this rule; keep native and forced Python fallback parity in `test_arithmetic_parity.py`.
 - **FHIRPath §6.7 Date/Time arithmetic (FP-18 SKEPTIC, 2026-05-17):** **FIXED:** Native C++ and forced Python fallback must reject definite UCUM year/month quantities (`1 'a'`, `1 'mo'`) in date/time arithmetic, reject time-based units on `Date` values below day precision, preserve explicit DateTime timezone offsets at every time precision, avoid adding `+00:00` to no-timezone DateTimes, and convert more-precise quantities down to partial `Time` precision instead of promoting the result. Regression cases: `@2016 + 1 'a'` returns empty/invalid, `@2016-02-29 + 23 hours` returns empty/invalid, `@T12:34 + 30 seconds` remains `T12:34`, `@T00:00:00 - 1 millisecond` remains `T00:00:00`, and FHIR temporal path values such as `effectiveDateTime + 1 second` and `effectiveTime + 750 milliseconds` work in both native and forced fallback.
 - **FHIRPath §6.6 Math/Quantity arithmetic parity (FP-18 SKEPTIC, 2026-05-17):** **FIXED:** Native C++ and forced Python fallback public DuckDB arithmetic must agree on `div`, `mod`, 32-bit integer overflow, and compatible Quantity operations. Decimal `div` may return integer-shaped output, decimal `mod` must preserve rounded source text instead of binary double artifacts, 32-bit integer overflow promotes to Decimal at the public surface, compatible Quantity `+`/`-`/`*` canonicalize through base units, and compatible same-dimension Quantity `/` returns dimensionless Quantity `1 '1'` rather than a bare Decimal. Guard the official R4 `testQuantity11` shape and public parity cases in `test_arithmetic_parity.py`; rebuild and copy the bundled extension after native arithmetic changes.
-- **FHIRPath §6.5 Boolean truth tables and precedence (FP-17 HISTORIAN, 2026-05-17):** **VERIFIED CLEAN:** Native C++ and forced Python fallback public DuckDB UDFs agree on the full `and`/`or`/`xor`/`implies`/`not()` three-valued truth tables, singleton non-Boolean truthiness, `and` binding tighter than `or`/`xor`, left-associative `or`/`xor` and `implies`, multi-item operand row resilience, and the intentional `false implies <expr>` short-circuit. Regression coverage lives in `test_boolean_logic_parity.py`.
-- **FHIRPath §6.5 multi-item Boolean operands (FP-17 SKEPTIC, 2026-05-17):** **FIXED:** Boolean operators must run singleton Boolean evaluation before applying three-valued truth tables. A multi-item operand is a semantic error that public DuckDB UDFs convert to empty/NULL; it must not be treated like empty just because another operand determines the truth-table result. Regression cases: `arr or true`, `arr and false`, and `arr implies true` where `arr` has multiple items. The spec-permitted `false implies <expr>` short-circuit remains intentional.
+- **FHIRPath §6.5 Boolean truth tables and precedence (FP-17 HISTORIAN, 2026-05-17; corrected FP-02 EXPLORER, 2026-06-11):** **FIXED:** Native C++ and forced Python fallback public DuckDB UDFs agree on the full `and`/`or`/`xor`/`implies`/`not()` three-valued truth tables, singleton non-Boolean truthiness, `and` binding tighter than `or`/`xor`, left-associative `or`/`xor` and `implies`, and multi-item operand row resilience. `false implies <rhs>` may return `true` only after `<rhs>` has passed §4.5 singleton Boolean evaluation; multi-item RHS collections such as `false implies arr` are errors. Regression coverage lives in `test_boolean_logic_parity.py`.
+- **FHIRPath §6.5 multi-item Boolean operands (FP-17 SKEPTIC, 2026-05-17; corrected FP-02 EXPLORER, 2026-06-11):** **FIXED:** Boolean operators must run singleton Boolean evaluation before applying three-valued truth tables. A multi-item operand is a semantic error that public DuckDB UDFs convert to empty/NULL; it must not be treated like empty just because another operand determines the truth-table result. Regression cases: `arr or true`, `arr and false`, `arr implies true`, and `false implies arr` where `arr` has multiple items.
 - **FHIRPath §6.4 membership singleton errors (FP-16 EXPLORER, 2026-05-17):** **FIXED:** Strict/core evaluation must raise when `in` receives a multi-item left operand or `contains` receives a multi-item right operand. Public DuckDB UDFs intentionally catch those semantic errors and return empty/NULL for row resilience, so keep both direct core tests and native-vs-forced-fallback public UDF parity tests. Guard cases: `a in one` and `one contains a` where `a` has multiple items.
 - **FHIRPath §6.4 collection operators with FHIR Quantity paths (FP-16 HISTORIAN, 2026-05-17):** **FIXED:** Native C++ `fpValuesEqual()` now materializes Quantity-like JSON path values before collection membership/de-duplication, matching ordinary `=` behavior and the forced Python fallback. Guard cases: `value = component.value`, `value in component.value`, `component.value contains value`, `(value | component.value).count()`, and `value.union(component.value).count()` where `Observation.valueQuantity` is `1 cm` and `component.valueQuantity` is `10 mm`. Rebuild and copy the bundled `fhirpath.duckdb_extension` after touching this helper.
 - **FHIRPath §6.4 membership/containership equality (FP-16 SKEPTIC, 2026-05-17):** **FIXED:** `in` and `contains` route item matching through FHIRPath `=` semantics, not raw host-language equality. Temporal values are the sharp edge: `@2012 in @2012`, `@T10:30:31.0 in @T10:30:31`, and timezone-equivalent DateTimes must be true in both native C++ and forced Python fallback, matching `|`/`union()` de-duplication. Regression coverage lives in `test_collection_operator_parity.py`.
@@ -639,6 +1201,55 @@
 
 ## NOT A BUG Registry
 
+- **FHIRPath FP-12 HISTORIAN fresh rerun (2026-06-12):**
+  **VERIFIED CLEAN:** Fresh §5.8/§5.9 probing against the current source tree
+  matched bundled native DuckDB/C++ and forced Python fallback behavior for
+  `children()`, `descendants()`, `trace(name, [projection])`, `now()`,
+  `timeOfDay()`, and `today()`. The rerun independently covered the
+  2026-06-12 trace projection fix: optional projection is evaluated once per
+  input item with `$this`/`$index`, but `trace()` still returns the original
+  input and restores surrounding scope. Preserve parity for split primitive
+  extension hiding in tree navigation, `descendants() = repeat(children())`
+  de-duplication, deep traversal, invalid utility signatures, and same-expression
+  determinism of current-time helpers. Evidence lives in
+  `.temp/qa/fp12_historian_fresh_probe.py` and
+  `test_tree_utility_parity.py`.
+
+- **FHIRPath Section 5.6.1-5.6.5 HISTORIAN fresh rerun (FP-09, 2026-06-12):**
+  **VERIFIED CLEAN:** Fresh 66-expression probing matched bundled native
+  DuckDB/C++ and forced Python fallback behavior for `indexOf(substring)`,
+  `substring(start[, length])`, `startsWith(prefix)`, `endsWith(suffix)`, and
+  string-function `contains(substring)`. Preserve current behavior for empty
+  String search terms, empty input/argument collections, Unicode scalar-value
+  indexing over emoji and combining marks, dynamic sibling-field argument focus
+  inside and outside `select()`, runtime row-resilient type/cardinality errors,
+  and the string `.contains()` versus collection `contains` operator split.
+  Guard with `.temp/qa/fp09_historian_fresh_probe.py` and
+  `test_string_search_parity.py`.
+- **FHIRPath Section 5.6.1-5.6.5 SKEPTIC fresh rerun (FP-09, 2026-06-12):**
+  **VERIFIED CLEAN:** A fresh native DuckDB/C++ vs forced Python fallback
+  probe covered string search functions `indexOf(substring)`,
+  `substring(start[, length])`, `startsWith(prefix)`, `endsWith(suffix)`, and
+  string-function `contains(substring)`. Preserve the distinction between
+  expression validity and runtime evaluation: dynamic resource-backed
+  non-String/non-Integer arguments such as `s.indexOf(badTerm)` return
+  row-resilient empty/NULL outputs but keep `fhirpath_is_valid()` true, while
+  statically invalid calls such as `s.substring(1.5)` remain invalid. Keep
+  Unicode scalar-value indexing and function/operator `contains`
+  disambiguation guarded by `.temp/qa/fp09_skeptic_fresh_probe.py` and
+  `test_string_search_parity.py`.
+- **FHIRPath Section 5.1 HISTORIAN fresh rerun (FP-03, 2026-06-11):**
+  **VERIFIED CLEAN:** A fresh 36-expression matrix found no additional
+  defects after the FP-03 SKEPTIC scoped `subsetOf()`/`supersetOf()` fix.
+  Native DuckDB, forced Python fallback, and direct Python wrappers matched
+  for `empty()`, `exists([criteria])`, `all(criteria)`, `allTrue()`,
+  `anyTrue()`, `allFalse()`, `anyFalse()`, `subsetOf()`, `supersetOf()`,
+  `count()`, `distinct()`, and `isDistinct()`. Preserve coverage for vacuous
+  empty defaults, strict Boolean criteria, full Boolean aggregate validation,
+  scoped set-comparison arguments, structural JSON equality, compatible
+  Quantity equality, and public wrapper row resilience. Evidence lives in
+  `.temp/qa/fp03_historian_fresh_probe.py` and
+  `test_existence_parity.py`.
 - **Release 0.0.8 Domain 2 ARCHAEOLOGIST rerun (2026-06-07):**
   **VERIFIED CLEAN:** Fresh native C++ vs forced Python fallback probes found no
   defects across lazy `iif()` branch evaluation, `$index` scoping inside

@@ -235,3 +235,41 @@ def test_unary_operators_enforce_singleton_after_dot_precedence(
     finally:
         cpp.close()
         py.close()
+
+
+def test_unknown_function_invocation_is_row_resilient_in_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expression = "unknownFunction()"
+    expected = ([], None, None, None, None, False)
+
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        query = """
+            SELECT
+                fhirpath(?::JSON, ?),
+                fhirpath_text(?::JSON, ?),
+                fhirpath_json(?::JSON, ?),
+                fhirpath_bool(?::JSON, ?),
+                fhirpath_number(?::JSON, ?),
+                fhirpath_is_valid(?)
+        """
+        params = [
+            RESOURCE,
+            expression,
+            RESOURCE,
+            expression,
+            RESOURCE,
+            expression,
+            RESOURCE,
+            expression,
+            RESOURCE,
+            expression,
+            expression,
+        ]
+        assert cpp.execute(query, params).fetchone() == expected
+        assert py.execute(query, params).fetchone() == expected
+    finally:
+        cpp.close()
+        py.close()

@@ -421,3 +421,39 @@ def test_membership_and_distinct_use_quantity_equality_for_compatible_units(monk
     finally:
         native.close()
         fallback.close()
+
+
+def test_set_comparison_arguments_use_scoped_focus_in_native_and_fallback(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "groups": [
+                {"left": [1, 2], "right": [1, 2, 3]},
+                {"left": [1, 4], "right": [1, 2, 3]},
+            ],
+        }
+    )
+    expressions = {
+        "groups.select(left.subsetOf(right))": (["true", "false"], "[true,false]", True),
+        "groups.exists(left.subsetOf(right))": (["true"], "[true]", True),
+        "groups.all(right.supersetOf(left))": (["false"], "[false]", False),
+        "groups.exists(right.supersetOf(left).not())": (["true"], "[true]", True),
+        "groups.select(right.supersetOf(left))": (["true", "false"], "[true,false]", True),
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expressions.items():
+            cpp = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp == py == expected
+    finally:
+        native.close()
+        fallback.close()

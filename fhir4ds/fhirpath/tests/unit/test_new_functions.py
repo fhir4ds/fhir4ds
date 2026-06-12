@@ -379,21 +379,20 @@ class TestIntegration:
 
 
 # ---------------------------------------------------------------------------
-# QA-003: matches() must do full-string matching (FHIRPath §5.7.2)
+# QA-003: matches() must use regex search semantics (FHIRPath String Manipulation)
 # ---------------------------------------------------------------------------
 
-class TestMatchesFullString:
-    """Regression tests for QA-003: matches() must match the *entire* string."""
+class TestMatchesSearchSemantics:
+    """Regression tests for QA-003: matches() searches within the string."""
 
-    def test_partial_match_returns_false(self) -> None:
-        """'hello world'.matches('hello') must be false (partial match)."""
-        assert matches({}, ["hello world"], "hello") is False
+    def test_partial_match_returns_true(self) -> None:
+        assert matches({}, ["hello world"], "hello") is True
 
     def test_exact_match_returns_true(self) -> None:
         assert matches({}, ["hello"], "hello") is True
 
-    def test_prefix_pattern_without_wildcard_returns_false(self) -> None:
-        assert matches({}, ["hello"], "hel") is False
+    def test_prefix_pattern_without_wildcard_returns_true(self) -> None:
+        assert matches({}, ["hello"], "hel") is True
 
     def test_wildcard_matches_full_string(self) -> None:
         assert matches({}, ["hello"], "hel.*") is True
@@ -404,16 +403,19 @@ class TestMatchesFullString:
     def test_digit_pattern_full_match(self) -> None:
         assert matches({}, ["123-456"], r"\d{3}-\d{3}") is True
 
-    def test_digit_pattern_partial_returns_false(self) -> None:
-        assert matches({}, ["123-456-789"], r"\d{3}-\d{3}") is False
+    def test_digit_pattern_partial_returns_true(self) -> None:
+        assert matches({}, ["123-456-789"], r"\d{3}-\d{3}") is True
 
     def test_empty_collection_returns_empty(self) -> None:
         assert matches({}, [], "hello") == []
 
-    def test_empty_regex_returns_empty(self) -> None:
-        # Empty regex matches only empty string (FHIRPath matches uses fullmatch)
-        assert matches({}, ["hello"], "") is False
+    def test_empty_regex_matches(self) -> None:
+        assert matches({}, ["hello"], "") is True
         assert matches({}, [""], "") is True
+
+    def test_flags(self) -> None:
+        assert matches({}, ["Library"], "library", "i") is True
+        assert matches({}, ["first\nsecond"], "^second", "m") is True
 
     def test_dotall_flag_matches_newlines(self) -> None:
         """The dot should match newlines (DOTALL behaviour)."""

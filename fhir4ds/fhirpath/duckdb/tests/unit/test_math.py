@@ -11,6 +11,8 @@ Tests the math functions module following FHIRPath semantics:
 import math
 import pytest
 
+from fhir4ds.fhirpath.engine.nodes import FP_Quantity
+
 from ...functions.math import (
     # Arithmetic operators
     add,
@@ -376,6 +378,13 @@ class TestAbs:
         """Abs of empty returns empty"""
         assert abs_fn([]) == []
 
+    def test_abs_quantity(self):
+        """Abs of Quantity preserves unit"""
+        result = abs_fn(FP_Quantity(-3.5, "'mg'"))
+        assert len(result) == 1
+        assert result[0].value == 3.5
+        assert result[0].unit == "'mg'"
+
 
 class TestCeiling:
     """Tests for FHIRPath ceiling() function."""
@@ -395,6 +404,13 @@ class TestCeiling:
         """Ceiling of empty returns empty"""
         assert ceiling([]) == []
 
+    def test_ceiling_quantity(self):
+        """Ceiling of Quantity preserves unit"""
+        result = ceiling(FP_Quantity(1.1, "'mg'"))
+        assert len(result) == 1
+        assert result[0].value == 2
+        assert result[0].unit == "'mg'"
+
 
 class TestFloor:
     """Tests for FHIRPath floor() function."""
@@ -413,6 +429,13 @@ class TestFloor:
     def test_floor_empty(self):
         """Floor of empty returns empty"""
         assert floor([]) == []
+
+    def test_floor_quantity(self):
+        """Floor of Quantity preserves unit"""
+        result = floor(FP_Quantity(-1.1, "'mg'"))
+        assert len(result) == 1
+        assert result[0].value == -2
+        assert result[0].unit == "'mg'"
 
 
 class TestRound:
@@ -451,6 +474,13 @@ class TestRound:
         """Round returns empty when precision cannot be represented"""
         assert round_fn(1.23, 100) == []
 
+    def test_round_quantity(self):
+        """Round of Quantity preserves unit"""
+        result = round_fn(FP_Quantity(1.55, "'mg'"), 1)
+        assert len(result) == 1
+        assert float(result[0].value) == pytest.approx(1.6)
+        assert result[0].unit == "'mg'"
+
 
 class TestSqrt:
     """Tests for FHIRPath sqrt() function."""
@@ -481,10 +511,10 @@ class TestPower:
     """Tests for FHIRPath power() function."""
 
     def test_power_integer_exponent(self):
-        """Power with integer exponent"""
-        assert power(2, 3) == [8]
-        assert power(5, 0) == [1]
-        assert power(2, 1) == [2]
+        """Power with integer exponent returns Decimal-shaped result"""
+        assert power(2, 3) == [8.0]
+        assert power(5, 0) == [1.0]
+        assert power(2, 1) == [2.0]
 
     def test_power_decimal_exponent(self):
         """Power with decimal exponent"""
@@ -493,8 +523,8 @@ class TestPower:
 
     def test_power_negative_base_integer_exp(self):
         """Negative base with integer exponent"""
-        assert power(-2, 3) == [-8]
-        assert power(-2, 2) == [4]
+        assert power(-2, 3) == [-8.0]
+        assert power(-2, 2) == [4.0]
 
     def test_power_negative_base_noninteger_exp(self):
         """Negative base with non-integer exponent returns empty"""
@@ -621,6 +651,13 @@ class TestTrunc:
     def test_trunc_empty(self):
         """Trunc of empty returns empty"""
         assert trunc([]) == []
+
+    def test_trunc_quantity(self):
+        """Trunc of Quantity preserves unit"""
+        result = trunc(FP_Quantity(-1.56, "'mg'"))
+        assert len(result) == 1
+        assert result[0].value == -1
+        assert result[0].unit == "'mg'"
 
 
 # ==============================================================================

@@ -10,6 +10,7 @@ namespace fhirpath {
 enum class NodeType {
 	// Literals
 	IntegerLiteral,
+	LongLiteral,
 	DecimalLiteral,
 	StringLiteral,
 	BooleanLiteral,

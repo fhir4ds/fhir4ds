@@ -86,18 +86,18 @@ def is_true(x, singleton_non_boolean=False):
       non-strict callers explicitly request singleton Boolean truthiness
     - Multi-item collection -> semantic error (cannot convert to boolean)
     """
-    if x == True:
+    if x is True:
         return True
-    if x == False:
+    if x is False:
         return False
     if isinstance(x, list):
         if len(x) == 0:
             return False  # Empty collection is false
         if len(x) == 1:
             val = get_data(x[0])
-            if val == True:
+            if val is True:
                 return True
-            if val == False:
+            if val is False:
                 return False
             if singleton_non_boolean:
                 return True

@@ -40,6 +40,22 @@ BUNDLE = json.dumps(
     }
 )
 
+R4_RESOURCE_BUNDLE = json.dumps(
+    {
+        "resourceType": "Bundle",
+        "entry": [
+            {"resource": {"resourceType": "Patient", "id": "pat"}},
+            {"resource": {"resourceType": "Observation", "id": "obs"}},
+            {"resource": {"resourceType": "Questionnaire", "id": "que"}},
+            {"resource": {"resourceType": "QuestionnaireResponse", "id": "qr"}},
+            {"resource": {"resourceType": "ValueSet", "id": "vs"}},
+            {"resource": {"resourceType": "CodeSystem", "id": "cs"}},
+            {"resource": {"resourceType": "Binary", "id": "bin"}},
+            {"resource": {"resourceType": "Parameters", "id": "par"}},
+        ],
+    }
+)
+
 DUPLICATE_CHILDREN = json.dumps(
     {
         "resourceType": "Questionnaire",
@@ -113,6 +129,33 @@ def test_oftype_matches_fhir_supertypes_in_native_and_fallback(monkeypatch: pyte
         fallback.close()
 
 
+def test_oftype_resource_supertypes_cover_generated_r4_resources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cases = {
+        "entry.resource.ofType(Resource).id": (
+            ["pat", "obs", "que", "qr", "vs", "cs", "bin", "par"],
+            '["pat","obs","que","qr","vs","cs","bin","par"]',
+        ),
+        "entry.resource.ofType(DomainResource).id": (
+            ["pat", "obs", "que", "qr", "vs", "cs"],
+            '["pat","obs","que","qr","vs","cs"]',
+        ),
+        "entry.resource.ofType(Questionnaire).id": (["que"], '["que"]'),
+        "entry.resource.ofType(ValueSet).id": (["vs"], '["vs"]'),
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            assert _json_result(native, R4_RESOURCE_BUNDLE, expression) == expected
+            assert _json_result(fallback, R4_RESOURCE_BUNDLE, expression) == expected
+    finally:
+        native.close()
+        fallback.close()
+
+
 def test_oftype_missing_type_argument_invalid_in_native_and_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     expression = "entry.resource.ofType()"
 
@@ -170,7 +213,8 @@ def test_index_context_is_scoped_for_filter_projection_fallback(monkeypatch: pyt
     cases = {
         "item.select(linkId) | $index": (["a", "b"], '["a","b"]'),
         "item.where($index = 0).linkId | $index": (["a"], '["a"]'),
-        "item.repeat(iif($index = 0, item, {})).linkId": (["a.1"], '["a.1"]'),
+        "item.repeat($index)": ([], None),
+        "item.select(item.repeat($index))": (["0"], "[0]"),
     }
 
     native = _connection()

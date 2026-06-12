@@ -95,13 +95,11 @@ def repeat_macro(ctx, data, expr):
     old_index = ctx.get("$index", missing)
     saved_vars = dict(ctx.get("vars", {}))
     old_chain = ctx.get("_chain_defined_vars", missing)
-    idx = 0
 
     try:
         while len(items) != 0:
             next = items[0]
             items = items[1:]
-            ctx["$index"] = idx
             ctx["vars"] = dict(saved_vars)
             if old_chain is not missing:
                 ctx["_chain_defined_vars"] = set(old_chain)
@@ -112,7 +110,6 @@ def repeat_macro(ctx, data, expr):
             if len(lres) > 0:
                 res = res + lres
                 items = items + lres
-            idx += 1
     finally:
         ctx["vars"] = saved_vars
         if old_chain is missing:

@@ -38,7 +38,7 @@ literal
         : '{' '}'                                               #nullLiteral
         | ('true' | 'false')                                    #booleanLiteral
         | STRING                                                #stringLiteral
-        | NUMBER                                                #numberLiteral
+        | (NUMBER | LONGNUMBER)                                 #numberLiteral
         | DATETIME                                              #dateTimeLiteral
         | TIME                                                  #timeLiteral
         | quantity                                              #quantityLiteral
@@ -155,6 +155,10 @@ NUMBER
         : [0-9]+('.' [0-9]+)?
         ;
 
+LONGNUMBER
+        : [0-9]+ 'L'
+        ;
+
 // Pipe whitespace to the HIDDEN channel to support retrieving source text through the parser.
 WS
         : [ \r\n\t]+ -> channel(HIDDEN)
@@ -179,5 +183,4 @@ fragment UNICODE
 fragment HEX
         : [0-9a-fA-F]
         ;
-
 

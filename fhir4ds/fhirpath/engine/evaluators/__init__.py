@@ -18,6 +18,8 @@ def boolean_literal(ctx, parentData, node):
 
 def number_literal(ctx, parentData, node):
     text = node["text"]
+    if text.endswith("L"):
+        return [int(text[:-1])]
 
     # Check if the number has a decimal point - if so, it's a Decimal
     # Otherwise, it's an Integer
@@ -257,19 +259,19 @@ def _unescape_fhirpath_string(value):
             hex_value = value[i + 2 : i + 6]
             if len(hex_value) == 4 and re.fullmatch(r"[0-9a-fA-F]{4}", hex_value):
                 code_unit = int(hex_value, 16)
-                if (
-                    0xD800 <= code_unit <= 0xDBFF
-                    and i + 12 <= len(value)
-                    and value[i + 6 : i + 8] == r"\u"
-                ):
-                    low_hex = value[i + 8 : i + 12]
-                    if len(low_hex) == 4 and re.fullmatch(r"[0-9a-fA-F]{4}", low_hex):
-                        low_unit = int(low_hex, 16)
-                        if 0xDC00 <= low_unit <= 0xDFFF:
-                            code_point = 0x10000 + ((code_unit - 0xD800) << 10) + (low_unit - 0xDC00)
-                            result.append(chr(code_point))
-                            i += 12
-                            continue
+                if 0xD800 <= code_unit <= 0xDBFF:
+                    if i + 12 <= len(value) and value[i + 6 : i + 8] == r"\u":
+                        low_hex = value[i + 8 : i + 12]
+                        if len(low_hex) == 4 and re.fullmatch(r"[0-9a-fA-F]{4}", low_hex):
+                            low_unit = int(low_hex, 16)
+                            if 0xDC00 <= low_unit <= 0xDFFF:
+                                code_point = 0x10000 + ((code_unit - 0xD800) << 10) + (low_unit - 0xDC00)
+                                result.append(chr(code_point))
+                                i += 12
+                                continue
+                    raise FHIRPathError("Invalid Unicode surrogate escape in string literal")
+                if 0xDC00 <= code_unit <= 0xDFFF:
+                    raise FHIRPathError("Invalid Unicode surrogate escape in string literal")
                 result.append(chr(code_unit))
                 i += 6
             else:
@@ -391,6 +393,10 @@ def create_reduce_member_invocation(model, key):
                     toAdd_ = res.data.get(f"_{field_name}")
                     if toAdd is not None or toAdd_ is not None:
                         childPath += potential_type
+        elif isinstance(res._data, abc.Mapping):
+            toAdd = res._data.get(key)
+            if key == "extension":
+                childPath = "Extension"
         else:
             if key == "length":
                 toAdd = len(res.data)

@@ -341,10 +341,10 @@ class TestMatches:
         assert result.is_singleton
         assert result.singleton_value is True
 
-    def test_matches_partial_false(self) -> None:
-        """Test that matches requires the whole string to match."""
+    def test_matches_partial_true(self) -> None:
+        """Test that matches searches within the string."""
         result = matches(FHIRPathCollection(["hello123"]), r"\d+")
-        assert result.singleton_value is False
+        assert result.singleton_value is True
 
     def test_matches_dotall(self) -> None:
         """Test that dot matches newline for FHIRPath single-line regex mode."""
@@ -371,6 +371,11 @@ class TestMatches:
         """Test matches on empty collection."""
         result = matches(FHIRPathCollection([]), r"\d+")
         assert result.is_empty
+
+    def test_matches_flags(self) -> None:
+        """Test current FHIRPath i/m regex flags."""
+        assert matches(FHIRPathCollection(["Library"]), "library", "i").singleton_value is True
+        assert matches(FHIRPathCollection(["first\nsecond"]), "^second", "m").singleton_value is True
 
     def test_matches_invalid_regex_raises(self) -> None:
         """Test matches with invalid regex raises error."""
@@ -418,6 +423,11 @@ class TestReplaceMatches:
         """Test empty regex leaves the input unchanged."""
         result = replace_matches(FHIRPathCollection(["abc"]), "", "x")
         assert result.singleton_value == "abc"
+
+    def test_replace_matches_flags(self) -> None:
+        """Test current FHIRPath i/m regex flags."""
+        result = replace_matches(FHIRPathCollection(["Abc abc"]), "abc", "X", "i")
+        assert result.singleton_value == "X X"
 
     def test_replace_matches_rejects_redos_pattern(self) -> None:
         """Test replaceMatches rejects quantified alternations before regex evaluation."""

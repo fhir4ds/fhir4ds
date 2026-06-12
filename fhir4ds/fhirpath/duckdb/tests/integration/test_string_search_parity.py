@@ -86,6 +86,7 @@ def test_string_search_functions_match_cpp() -> None:
         "s.substring(99)",
         "s.substring(-1)",
         "s.substring(1, -1)",
+        "s.substring(1, -4)",
         "s.startsWith('ab')",
         "s.startsWith('bc')",
         "s.startsWith('')",
@@ -253,6 +254,7 @@ def test_string_search_arguments_resolve_in_outer_focus(
             "num": 123,
             "terms": ["a", "b"],
             "lens": [1, 2],
+            "negLen": -4,
             "decLen": 1.5,
         }
     )
@@ -266,6 +268,7 @@ def test_string_search_arguments_resolve_in_outer_focus(
         "s.indexOf(num)",
         "s.indexOf(terms)",
         "s.substring(1, lens)",
+        "s.substring(1, negLen)",
         "s.substring(1, decLen)",
     ]
 
@@ -278,6 +281,7 @@ def test_string_search_arguments_resolve_in_outer_focus(
             )
         assert _all_public_outputs(native, resource, "s.indexOf(term)")[4] == 2.0
         assert _all_public_outputs(native, resource, "s.substring(start, length)")[1] == "cde"
+        assert _all_public_outputs(native, resource, "s.substring(1, negLen)")[1] == ""
         assert _all_public_outputs(native, resource, "s.startsWith(prefix)")[3] is True
         assert _all_public_outputs(native, resource, "s.endsWith(suffix)")[3] is True
         assert _all_public_outputs(native, resource, "s.contains(term)")[3] is True

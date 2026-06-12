@@ -60,6 +60,49 @@ def test_decimal_string_does_not_convert_to_integer() -> None:
         con.close()
 
 
+def test_out_of_range_integer_literals_are_row_resilient_in_fallback(monkeypatch) -> None:
+    expressions = [
+        "2147483648.toInteger()",
+        "2147483648.convertsToInteger()",
+        "-2147483649.toInteger()",
+        "-2147483649.convertsToInteger()",
+    ]
+    expected = ([], None, None, None, None, False)
+    query = """
+        SELECT
+            fhirpath(?::JSON, ?),
+            fhirpath_json(?::JSON, ?),
+            fhirpath_text(?::JSON, ?),
+            fhirpath_number(?::JSON, ?),
+            fhirpath_bool(?::JSON, ?),
+            fhirpath_is_valid(?)
+    """
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression in expressions:
+            params = [
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                expression,
+            ]
+            assert con.execute(query, params).fetchone() == expected
+            assert fallback.execute(query, params).fetchone() == expected
+    finally:
+        con.close()
+        fallback.close()
+
+
 def test_boolean_and_integer_converts_reject_arguments(monkeypatch) -> None:
     resource = json.dumps(
         {
@@ -116,6 +159,9 @@ def test_fp06_iif_and_conversion_signature_edges_match_python_fallback() -> None
         "iif(true, 'safe', (1|2).toInteger())": (["safe"], '["safe"]', True),
         "iif(false, (1|2).toInteger(), 'safe')": (["safe"], '["safe"]', True),
         "iif({}, 'yes', 'no')": (["no"], '["no"]', True),
+        "iif(0, 'yes', 'no')": (["yes"], '["yes"]', True),
+        "iif(0.0, 'yes', 'no')": (["yes"], '["yes"]', True),
+        "iif(0.toInteger(), 'yes', 'no')": (["yes"], '["yes"]', True),
     }
 
     con = _connection()
@@ -377,14 +423,7 @@ def test_date_datetime_conversions_reject_invalid_native_coercions(monkeypatch) 
 
 
 def test_fp07_converters_reject_arguments_in_native_and_fallback(monkeypatch) -> None:
-    resource = json.dumps(
-        {
-            "resourceType": "Observation",
-            "decimalInt": "42",
-            "validDate": "2015-02-04",
-            "validDateTime": "2015-02-04T14:34:28",
-        }
-    )
+    resource = json.dumps({"resourceType": "Observation", "id": "fp07"})
     expressions = [
         "'1'.toDecimal(2)",
         "'2015'.toDate(2)",
@@ -392,9 +431,10 @@ def test_fp07_converters_reject_arguments_in_native_and_fallback(monkeypatch) ->
         "'1'.convertsToDecimal(2)",
         "'2015'.convertsToDate(2)",
         "'2015'.convertsToDateTime(2)",
-        "convertsToDecimal(decimalInt)",
-        "convertsToDate(validDate)",
-        "convertsToDateTime(validDateTime)",
+        "'2015'.toDate('yyyy','MM')",
+        "'2015'.toDateTime('yyyy','MM')",
+        "'2015'.convertsToDate('yyyy','MM')",
+        "'2015'.convertsToDateTime('yyyy','MM')",
     ]
 
     con = _connection()
@@ -411,12 +451,180 @@ def test_fp07_converters_reject_arguments_in_native_and_fallback(monkeypatch) ->
         fallback.close()
 
 
+def test_fp07_temporal_format_argument_conversions_match_native_and_fallback(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "dateText": "15-01-2024",
+            "dateBasic": "20240115",
+            "dateMonth": "2024-01",
+            "dateFmt": "dd-MM-yyyy",
+            "dtText": "15-01-2024 23:30:05.123",
+            "dtTz": "2024/01/15 23:30:05 -0500",
+            "dtFmt": "yyyy/MM/dd HH:mm:ss Z",
+            "bogusFmt": "bogus",
+            "items": [
+                {
+                    "dateText": "15-01-2024",
+                    "dateFmt": "dd-MM-yyyy",
+                    "dtTz": "2024/01/15 23:30:05 -0500",
+                    "dtFmt": "yyyy/MM/dd HH:mm:ss Z",
+                }
+            ],
+        }
+    )
+    cases = {
+        "dateText.toDate('dd-MM-yyyy')": (
+            ["2024-01-15"],
+            "2024-01-15",
+            '["2024-01-15"]',
+            None,
+            "2024-01-15",
+            None,
+            True,
+        ),
+        "dateText.convertsToDate('dd-MM-yyyy')": (
+            ["true"],
+            "true",
+            "[true]",
+            True,
+            None,
+            None,
+            True,
+        ),
+        "dateBasic.toDate('yyyyMMdd')": (
+            ["2024-01-15"],
+            "2024-01-15",
+            '["2024-01-15"]',
+            None,
+            "2024-01-15",
+            None,
+            True,
+        ),
+        "dateMonth.toDate('yyyy-MM')": (
+            ["2024-01"],
+            "2024-01",
+            '["2024-01"]',
+            None,
+            "2024-01",
+            None,
+            True,
+        ),
+        "dtText.toDateTime('dd-MM-yyyy HH:mm:ss.SSS')": (
+            ["2024-01-15T23:30:05.123"],
+            "2024-01-15T23:30:05.123",
+            '["2024-01-15T23:30:05.123"]',
+            None,
+            "2024-01-15",
+            "2024-01-15T23:30:05.123",
+            True,
+        ),
+        "dtText.convertsToDateTime('dd-MM-yyyy HH:mm:ss.SSS')": (
+            ["true"],
+            "true",
+            "[true]",
+            True,
+            None,
+            None,
+            True,
+        ),
+        "dtTz.toDateTime('yyyy/MM/dd HH:mm:ss Z')": (
+            ["2024-01-15T23:30:05-05:00"],
+            "2024-01-15T23:30:05-05:00",
+            '["2024-01-15T23:30:05-05:00"]',
+            None,
+            "2024-01-15",
+            "2024-01-15T23:30:05-05:00",
+            True,
+        ),
+        "dateText.toDate(dateFmt)": (
+            ["2024-01-15"],
+            "2024-01-15",
+            '["2024-01-15"]',
+            None,
+            "2024-01-15",
+            None,
+            True,
+        ),
+        "dtTz.toDateTime(dtFmt)": (
+            ["2024-01-15T23:30:05-05:00"],
+            "2024-01-15T23:30:05-05:00",
+            '["2024-01-15T23:30:05-05:00"]',
+            None,
+            "2024-01-15",
+            "2024-01-15T23:30:05-05:00",
+            True,
+        ),
+        "items.select(dateText.toDate(dateFmt))": (
+            ["2024-01-15"],
+            "2024-01-15",
+            '["2024-01-15"]',
+            None,
+            "2024-01-15",
+            None,
+            True,
+        ),
+        "items.select(dtTz.toDateTime(dtFmt))": (
+            ["2024-01-15T23:30:05-05:00"],
+            "2024-01-15T23:30:05-05:00",
+            '["2024-01-15T23:30:05-05:00"]',
+            None,
+            "2024-01-15",
+            "2024-01-15T23:30:05-05:00",
+            True,
+        ),
+        "@2015-02-04.toDateTime(bogusFmt)": (
+            ["2015-02-04T"],
+            "2015-02-04T",
+            '["2015-02-04T"]',
+            None,
+            "2015-02-04",
+            "2015-02-04T",
+            True,
+        ),
+    }
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases.items():
+            query = """
+                SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?),
+                       fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?),
+                       fhirpath_date(?::JSON, ?), fhirpath_timestamp(?::JSON, ?),
+                       fhirpath_is_valid(?)
+            """
+            params = [
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                expression,
+            ]
+            assert con.execute(query, params).fetchone() == expected
+            assert fallback.execute(query, params).fetchone() == expected
+    finally:
+        con.close()
+        fallback.close()
+
+
 def test_fp07_temporal_literal_conversions_match_native_and_fallback(monkeypatch) -> None:
     cases = {
         "@2015.toDate()": (["2015"], "2015", "2015", None, True),
         "@2015-02-04.toDateTime()": (["2015-02-04T"], "2015-02-04T", "2015-02-04", "2015-02-04T", True),
         "@2015-02-04T14.toDate()": (["2015-02-04"], "2015-02-04", "2015-02-04", None, True),
         "@2015-02-04T14.toDateTime()": (["2015-02-04T14"], "2015-02-04T14", "2015-02-04", "2015-02-04T14", True),
+        "@2015-02-04.toDateTime('bogus')": (["2015-02-04T"], "2015-02-04T", "2015-02-04", "2015-02-04T", True),
+        "@2015-02-04.toDate('bogus')": (["2015-02-04"], "2015-02-04", "2015-02-04", None, True),
     }
 
     con = _connection()
@@ -451,6 +659,37 @@ def test_fp07_decimal_rejects_temporal_and_multi_item_edges(monkeypatch) -> None
     cases = {
         "@2015.toDecimal()": ([], None, None, None, True),
         "@2015.convertsToDecimal()": (["false"], "false", "[false]", False, True),
+        "42L.toDecimal()": (["42.0"], "42.0", "[42.0]", None, True),
+        "42L.convertsToDecimal()": (["true"], "true", "[true]", True, True),
+        "'42L'.toDecimal()": (["42.0"], "42.0", "[42.0]", None, True),
+        "'42L'.convertsToDecimal()": (["true"], "true", "[true]", True, True),
+        "'+42L'.toDecimal()": (["42.0"], "42.0", "[42.0]", None, True),
+        "'-42L'.toDecimal()": (["-42.0"], "-42.0", "[-42.0]", None, True),
+        "'1LL'.toDecimal()": ([], None, None, None, True),
+        "'1.0L'.toDecimal()": ([], None, None, None, True),
+        "'1l'.toDecimal()": ([], None, None, None, True),
+        "2147483648L.toDecimal()": (["2147483648.0"], "2147483648.0", "[2147483648.0]", None, True),
+        "2147483648L.convertsToDecimal()": (["true"], "true", "[true]", True, True),
+        "9223372036854775807L.toDecimal()": (
+            ["9223372036854775807.0"],
+            "9223372036854775807.0",
+            "[9223372036854775807.0]",
+            None,
+            True,
+        ),
+        "9223372036854775807L.convertsToDecimal()": (["true"], "true", "[true]", True, True),
+        "(-9223372036854775808L).toDecimal()": (
+            ["-9223372036854775808.0"],
+            "-9223372036854775808.0",
+            "[-9223372036854775808.0]",
+            None,
+            True,
+        ),
+        "(-9223372036854775808L).convertsToDecimal()": (["true"], "true", "[true]", True, True),
+        "9223372036854775808L.toDecimal()": ([], None, None, None, False),
+        "2147483648LL.toDecimal()": ([], None, None, None, False),
+        "1.0L.toDecimal()": ([], None, None, None, False),
+        "1l.toDecimal()": ([], None, None, None, False),
         "(1|2).toDecimal()": ([], None, None, None, False),
     }
 
@@ -673,6 +912,160 @@ def test_quantity_conversion_unit_argument_matches_python_fallback(monkeypatch) 
         fallback.close()
 
 
+def test_quantity_conversion_dynamic_unit_argument_uses_outer_context(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "valueQuantity": {
+                "value": 5,
+                "unit": "mg",
+                "system": "http://unitsofmeasure.org",
+                "code": "mg",
+            },
+            "targetUnit": "g",
+            "badTargetUnit": "s",
+            "quantityText": "1 'kg'",
+            "items": [
+                {"quantityText": "1 'kg'", "targetUnit": "g"},
+                {"quantityText": "1000 'mg'", "targetUnit": "g"},
+            ],
+        }
+    )
+    cases = {
+        "value.toQuantity(targetUnit)": (
+            ["0.005 'g'"],
+            "0.005 'g'",
+            '[{"value":0.005,"unit":"g"}]',
+            None,
+            "0.005 'g'",
+            True,
+        ),
+        "value.convertsToQuantity(targetUnit)": (["true"], "true", "[true]", True, None, True),
+        "value.convertsToQuantity(badTargetUnit)": (["false"], "false", "[false]", False, None, True),
+        "quantityText.toQuantity(targetUnit)": (
+            ["1000 'g'"],
+            "1000 'g'",
+            '[{"value":1000,"unit":"g"}]',
+            None,
+            "1000 'g'",
+            True,
+        ),
+        "quantityText.convertsToQuantity(targetUnit)": (["true"], "true", "[true]", True, None, True),
+        "items.select(quantityText.toQuantity(targetUnit))": (
+            ["1000 'g'", "1 'g'"],
+            "1000 'g'",
+            '[{"value":1000,"unit":"g"},{"value":1,"unit":"g"}]',
+            None,
+            "1000 'g'",
+            True,
+        ),
+        "items.select(quantityText.convertsToQuantity(targetUnit))": (
+            ["true", "true"],
+            "true",
+            "[true,true]",
+            True,
+            None,
+            True,
+        ),
+    }
+    query = """
+        SELECT
+          fhirpath(?::JSON, ?),
+          fhirpath_text(?::JSON, ?),
+          fhirpath_json(?::JSON, ?),
+          fhirpath_bool(?::JSON, ?),
+          fhirpath_quantity(?::JSON, ?),
+          fhirpath_is_valid(?)
+    """
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases.items():
+            params = [
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                expression,
+            ]
+            assert con.execute(query, params).fetchone() == expected
+            assert fallback.execute(query, params).fetchone() == expected
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_quantity_to_string_uses_plain_decimal_not_scientific_notation(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "smallQuantityText": "1 'mg'",
+            "largeQuantityText": "1000000000000000 'g'",
+            "items": [
+                {"quantityText": "2 'm'", "targetUnit": "cm"},
+                {"quantityText": "1 'mg'", "targetUnit": "kg"},
+            ],
+        }
+    )
+    cases = {
+        "smallQuantityText.toQuantity('kg').toString()": (
+            ["0.000001 'kg'"],
+            "0.000001 'kg'",
+            '["0.000001 \'kg\'"]',
+            True,
+        ),
+        "largeQuantityText.toQuantity().toString()": (
+            ["1000000000000000 'g'"],
+            "1000000000000000 'g'",
+            '["1000000000000000 \'g\'"]',
+            True,
+        ),
+        "items.select(quantityText.toQuantity(targetUnit).toString())": (
+            ["200 'cm'", "0.000001 'kg'"],
+            "200 'cm'",
+            '["200 \'cm\'","0.000001 \'kg\'"]',
+            True,
+        ),
+    }
+    query = """
+        SELECT
+          fhirpath(?::JSON, ?),
+          fhirpath_text(?::JSON, ?),
+          fhirpath_json(?::JSON, ?),
+          fhirpath_is_valid(?)
+    """
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases.items():
+            params = [
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                expression,
+            ]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py
+            assert cpp == expected
+    finally:
+        con.close()
+        fallback.close()
+
+
 def test_resource_quantity_conversion_surfaces_match_python_fallback(monkeypatch) -> None:
     resource = json.dumps(
         {
@@ -707,6 +1100,65 @@ def test_resource_quantity_conversion_surfaces_match_python_fallback(monkeypatch
           fhirpath_text(?::JSON, ?),
           fhirpath_bool(?::JSON, ?),
           fhirpath_quantity(?::JSON, ?),
+          fhirpath_is_valid(?)
+    """
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases.items():
+            params = [
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                expression,
+            ]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py
+            assert cpp == expected
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_json_decimal_to_string_uses_plain_decimal_not_scientific_notation(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "smallDecimal": 0.000001,
+            "largeDecimal": 1000000000000000.0,
+        }
+    )
+    cases = {
+        "smallDecimal.toString()": (["0.000001"], "0.000001", "[\"0.000001\"]", None, True),
+        "largeDecimal.toString()": (
+            ["1000000000000000.0"],
+            "1000000000000000.0",
+            "[\"1000000000000000.0\"]",
+            None,
+            True,
+        ),
+        "9223372036854775807L.toQuantity().toString()": (
+            ["9223372036854775807 '1'"],
+            "9223372036854775807 '1'",
+            "[\"9223372036854775807 '1'\"]",
+            None,
+            True,
+        ),
+    }
+    query = """
+        SELECT
+          fhirpath(?::JSON, ?),
+          fhirpath_text(?::JSON, ?),
+          fhirpath_json(?::JSON, ?),
+          fhirpath_bool(?::JSON, ?),
           fhirpath_is_valid(?)
     """
 
