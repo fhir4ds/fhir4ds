@@ -112,6 +112,8 @@ if TYPE_CHECKING:
 
 COMPONENT_CODE_TO_COLUMN = get_code_to_column_mapping()
 
+from ...translator.expressions._refstrategy import _RefKind, _RefStrategy  # noqa: E402
+
 class ExpressionTranslator(
     TemporalMixin, QueryMixin, OperatorsMixin,
     FunctionsMixin, PropertyMixin, CoreMixin, ListsMixin,
@@ -473,6 +475,59 @@ class ExpressionTranslator(
                 if not isinstance(expr_ast, (_Retrieve, _Query)):
                     return "value"
         return "resource"
+
+    def _classify_definition_ref(
+        self,
+        name: str,
+        usage: ExprUsage,
+        meta: Optional[DefinitionMeta],
+    ) -> "_RefStrategy":
+        """Single source of truth for how to resolve a CTE reference.
+
+        Both ``_build_promoted_definition_lookup`` (promoted defines) and the
+        inline ``symbol_type == "definition"`` branch of
+        ``_translate_identifier`` (non-promoted defines) must call this.
+        Consolidating the decision here eliminates the parity-bug class where
+        one path learns a lesson (e.g. "boolean defines need EXISTS") and the
+        other path misses it.
+
+        Returns a strategy describing the safe SQL shape. Callers are still
+        free to substitute a JOIN-tracked reference (Path B does this for
+        LIST-context references when a ``query_builder`` is active).
+        """
+        # Determine if this define is "boolean-like": drops rows when false,
+        # so its CTE carries only ``patient_id`` (no value/resource column).
+        # Two ways to learn this: from populated meta, or via forward-ref AST
+        # inspection when meta isn't populated yet.
+        is_boolean_scalar = (
+            meta is not None
+            and meta.shape == RowShape.PATIENT_SCALAR
+            and not meta.has_resource
+            and meta.cql_type == "Boolean"
+        ) or (meta is None and self._is_forward_ref_boolean(name))
+
+        # BOOLEAN/EXISTS usage: EXISTS is the safe form. It works regardless
+        # of shape — for real scalars (First/Last) it's true whenever the
+        # scalar is non-null; for boolean defines it tracks row presence.
+        if usage in (ExprUsage.BOOLEAN, ExprUsage.EXISTS):
+            return _RefStrategy(kind=_RefKind.EXISTS)
+
+        # Non-BOOLEAN usage on a boolean-like define: must still use EXISTS,
+        # because the CTE has no value/resource column to project.
+        if is_boolean_scalar:
+            return _RefStrategy(kind=_RefKind.EXISTS)
+
+        # SCALAR or LIST usage on a non-boolean define: correlated subquery.
+        # Pick the projection column.
+        if meta and meta.has_resource:
+            col = "resource"
+        elif meta and not meta.has_resource and meta.cql_type != "Boolean":
+            col = meta.value_column or "value"
+        else:
+            col = self._get_definition_value_column(name)
+
+        kind = _RefKind.CORRELATED_SCALAR if usage == ExprUsage.SCALAR else _RefKind.CORRELATED_LIST
+        return _RefStrategy(kind=kind, column=col)
 
     def _trace_source_column(self, name: str, _visited: set | None = None) -> str:
         """Trace through Query sources to determine if a definition produces resources.

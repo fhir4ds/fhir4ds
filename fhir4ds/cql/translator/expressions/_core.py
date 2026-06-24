@@ -49,6 +49,7 @@ from ...parser.ast_nodes import (
 from ...translator.context import ExprUsage, RowShape, DefinitionMeta
 from ...translator.function_inliner import ParameterPlaceholder
 from ...translator.placeholder import RetrievePlaceholder
+from ...translator.expressions._refstrategy import _RefKind, _RefStrategy
 from ...translator.types import (
     PRECEDENCE,
     SQLAlias,
@@ -469,48 +470,22 @@ class CoreMixin:
 
     def _build_promoted_definition_lookup(self, name: str, usage: ExprUsage) -> SQLExpression:
         """Build a correlated subquery lookup for a promoted global definition.
-        
-        Ensures that definitions are translated once as CTEs and referenced via 
-        lightweight lookups rather than inline expansion.
+
+        Ensures that definitions are translated once as CTEs and referenced via
+        lightweight lookups rather than inline expansion. Classification of the
+        reference shape (EXISTS vs correlated subquery, which column) is
+        delegated to ``_classify_definition_ref`` so it stays in sync with the
+        inline definition-reference branch of ``_translate_identifier``.
         """
         meta = self.context.definition_meta.get(name)
+        strategy = self._classify_definition_ref(name, usage, meta)
+
+        if strategy.kind == _RefKind.EXISTS:
+            return self._build_correlated_exists(name)
+
         _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
-
-        # 1. BOOLEAN/EXISTS context: return EXISTS (...)
-        # Only use EXISTS if the CTE actually drops rows when false/empty.
-        # Boolean defines (PATIENT_SCALAR + Boolean + no resource) and Collection
-        # defines drop rows; EXISTS is meaningful for them.
-        # "Real" scalars (First(), Last(), etc.) always return 1 row with a value
-        # column, so EXISTS would be a tautology — must use SELECT col instead.
-        # Note: boolean defines share PATIENT_SCALAR shape with real scalars, so
-        # the boolean case must be excluded from is_scalar before the EXISTS guard.
-        is_boolean_scalar = (
-            meta is not None
-            and meta.shape == RowShape.PATIENT_SCALAR
-            and not meta.has_resource
-            and meta.cql_type == "Boolean"
-        )
-        is_scalar = (meta is None or meta.is_scalar) and not is_boolean_scalar
-        if usage in (ExprUsage.BOOLEAN, ExprUsage.EXISTS) and not is_scalar:
-            return self._build_correlated_exists(name)
-        if is_boolean_scalar:
-            # Promoted boolean define referenced outside boolean context (e.g.
-            # inside CASE WHEN via a path that lost the boolean_context flag, or
-            # as a scalar value). EXISTS is the only safe reference because the
-            # CTE has no value/resource column.
-            return self._build_correlated_exists(name)
-
-        # 2. LIST/SCALAR context: return (SELECT col FROM "CTE" WHERE patient_id = ...)
-        # Narrow to the appropriate column
-        if meta and meta.has_resource:
-            col = "resource"
-        elif meta and not meta.has_resource and meta.cql_type != "Boolean":
-            col = meta.value_column or "value"
-        else:
-            col = self._get_definition_value_column(name)
-
         select = SQLSelect(
-            columns=[SQLQualifiedIdentifier(parts=["sub", col])],
+            columns=[SQLQualifiedIdentifier(parts=["sub", strategy.column])],
             from_clause=SQLAlias(
                 expr=SQLIdentifier(name=name, quoted=True),
                 alias="sub",
@@ -521,12 +496,18 @@ class CoreMixin:
                 right=SQLQualifiedIdentifier(parts=[_outer_pid_alias, "patient_id"]),
             )
         )
-        
-        # If scalar context OR scalar definition, add LIMIT 1
-        if usage == ExprUsage.SCALAR or is_scalar:
+
+        # LIMIT 1 whenever the caller wants a scalar OR the underlying define is
+        # patient-scalar shape (one row per patient by construction). The
+        # classifier already route Booleans to EXISTS, so reaching here means
+        # the define genuinely has a value/resource column.
+        is_patient_scalar = meta is not None and meta.shape == RowShape.PATIENT_SCALAR
+        if strategy.kind == _RefKind.CORRELATED_SCALAR or is_patient_scalar:
             select.limit = 1
 
         res = SQLSubquery(query=select)
+        if meta and meta.sql_result_type:
+            res.result_type = meta.sql_result_type
         return res
 
     def _translate_identifier(self, ident: Identifier, usage: ExprUsage = ExprUsage.LIST) -> SQLExpression:
@@ -695,88 +676,24 @@ class CoreMixin:
                 return self._parameter_reference_expression(name, symbol.cql_type)
             elif symbol.symbol_type == "definition":
                 # Reference to a named expression - generate subquery reference to CTE
-                # The definition will be available as a CTE in the final SQL
-                # For SCALAR/BOOLEAN/EXISTS context, register JOIN with query builder
-                # Fetch meta here so it's available for LIST context too.
+                # The definition will be available as a CTE in the final SQL.
+                # Classification (EXISTS vs correlated subquery, which column) is
+                # delegated to _classify_definition_ref so this path stays in sync
+                # with _build_promoted_definition_lookup.
                 meta = self.context.definition_meta.get(name)
-                if usage in (ExprUsage.SCALAR, ExprUsage.BOOLEAN, ExprUsage.EXISTS):
+                strategy = self._classify_definition_ref(name, usage, meta)
 
-                    if usage in (ExprUsage.BOOLEAN, ExprUsage.EXISTS):
-                        # FIX: Always use EXISTS subquery for BOOLEAN/EXISTS context CTE references.
-                        # JOIN aliases (j1.resource IS NOT NULL) are only valid in the same SELECT scope
-                        # where the JOIN is added, but this reference may appear inside nested subqueries
-                        # where the alias is not visible. Using EXISTS is safer and works in all contexts.
-                        return self._build_correlated_exists(name)
-
-                    elif usage == ExprUsage.SCALAR:
-                        # Check if RESOURCE_ROWS is used in SCALAR context - emit warning
-                        if meta and meta.shape == RowShape.RESOURCE_ROWS:
-                            self.context.warnings.add_semantics(
-                                message="RESOURCE_ROWS used in SCALAR context - using LIMIT 1 or correlated subquery",
-                                definition=name,
-                                suggestion="Use First() or Last() for explicit single-value selection"
-                            )
-                        # FIX: Always use correlated subquery for SCALAR context CTE references.
-                        # JOIN aliases (j1.resource) are only valid in the same SELECT scope where
-                        # the JOIN is added, but this reference may appear inside nested subqueries
-                        # (e.g., WHERE clause of a First/Last query) where the alias is not visible.
-                        # Using a subquery is safer and works in all contexts.
-                        # For boolean definitions (PATIENT_SCALAR, no resource, Boolean type), use EXISTS check
-                        if meta and meta.shape == RowShape.PATIENT_SCALAR and not meta.has_resource and meta.cql_type == "Boolean":
-                            return self._build_correlated_exists(name)
-                        # Forward reference: infer if definition is boolean from CQL AST
-                        if not meta:
-                            if self._is_forward_ref_boolean(name):
-                                return self._build_correlated_exists(name)
-                        # Determine the outer patient_id alias for correlation.
-                        # Use resource_alias (e.g., query loop alias) or patient_alias
-                        # to avoid broken "p.patient_id" refs inside CTE definitions.
-                        _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
-
-                        # For CTEs with value column (scalars), select value
-                        if meta and not meta.has_resource:
-                            subq = SQLSubquery(query=SQLSelect(
-                                columns=[SQLQualifiedIdentifier(parts=["sub", meta.value_column or "value"])],
-                                from_clause=SQLAlias(
-                                    expr=SQLIdentifier(name=name, quoted=True),
-                                    alias="sub",
-                                ),
-                                where=SQLBinaryOp(
-                                    operator="=",
-                                    left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                                    right=SQLQualifiedIdentifier(parts=[_outer_pid_alias, "patient_id"]),
-                                ),
-                                limit=1
-                            ))
-                            if meta.sql_result_type:
-                                subq.result_type = meta.sql_result_type
-                            return subq
-                        # For other types, use meta-aware or forward-reference-aware column
-                        col = self._get_definition_value_column(name)
-                        subq = SQLSubquery(query=SQLSelect(
-                            columns=[SQLQualifiedIdentifier(parts=["sub", col])],
-                            from_clause=SQLAlias(
-                                expr=SQLIdentifier(name=name, quoted=True),
-                                alias="sub",
-                            ),
-                            where=SQLBinaryOp(
-                                operator="=",
-                                left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                                right=SQLQualifiedIdentifier(parts=[_outer_pid_alias, "patient_id"]),
-                            ),
-                            limit=1
-                        ))
-                        if meta and meta.sql_result_type:
-                            subq.result_type = meta.sql_result_type
-                        return subq
-
-                # Check if the referenced definition IS boolean, regardless of how WE're using it.
-                # This handles: define Denominator: "Initial Population"
-                # where Initial Population is Boolean but Denominator uses it as a value reference.
-                if meta and meta.shape == RowShape.PATIENT_SCALAR and meta.cql_type == "Boolean":
-                    # This definition evaluates to true/false per patient.
-                    # Even in LIST/SCALAR context, the right pattern is EXISTS/JOIN.
-                    if self.context.query_builder:
+                if strategy.kind == _RefKind.EXISTS:
+                    # EXISTS strategy covers both BOOLEAN/EXISTS usage and any
+                    # reference (LIST/SCALAR) to a boolean-like define. When a
+                    # query_builder is active AND the meta says PATIENT_SCALAR
+                    # Boolean, prefer a JOIN with `alias.patient_id IS NOT NULL`
+                    # over a correlated EXISTS subquery — same semantics, lets
+                    # the planner reuse the JOIN for any other reference site.
+                    if (self.context.query_builder
+                            and meta is not None
+                            and meta.shape == RowShape.PATIENT_SCALAR
+                            and meta.cql_type == "Boolean"):
                         alias = self.context.query_builder.track_cte_reference(
                             name, usage=ExprUsage.BOOLEAN, shape=meta.shape
                         )
@@ -785,33 +702,49 @@ class CoreMixin:
                             left=SQLQualifiedIdentifier(parts=[alias, "patient_id"]),
                             right=SQLNull(),
                         )
-                    else:
-                        return self._build_correlated_exists(name)
+                    return self._build_correlated_exists(name)
 
-                # LIST context - use existing logic
+                if usage == ExprUsage.SCALAR:
+                    # Diagnostic: RESOURCE_ROWS defines referenced as scalars
+                    # are almost always a user mistake (no ORDER BY → row choice
+                    # is unspecified). Only emitted from this path because
+                    # promoted RESOURCE_ROWS defines are an established pattern.
+                    if meta and meta.shape == RowShape.RESOURCE_ROWS:
+                        self.context.warnings.add_semantics(
+                            message="RESOURCE_ROWS used in SCALAR context - using LIMIT 1 or correlated subquery",
+                            definition=name,
+                            suggestion="Use First() or Last() for explicit single-value selection"
+                        )
+                    # SCALAR always wants a single value: emit a LIMIT-1 subquery.
+                    _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
+                    subq = SQLSubquery(query=SQLSelect(
+                        columns=[SQLQualifiedIdentifier(parts=["sub", strategy.column])],
+                        from_clause=SQLAlias(
+                            expr=SQLIdentifier(name=name, quoted=True),
+                            alias="sub",
+                        ),
+                        where=SQLBinaryOp(
+                            operator="=",
+                            left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
+                            right=SQLQualifiedIdentifier(parts=[_outer_pid_alias, "patient_id"]),
+                        ),
+                        limit=1
+                    ))
+                    if meta and meta.sql_result_type:
+                        subq.result_type = meta.sql_result_type
+                    return subq
+
+                # LIST context on a non-boolean define. Prefer JOIN tracking
+                # when a query_builder is active and the CTE has a resource
+                # column; fall through to a correlated subquery otherwise.
                 if self.context.query_builder:
                     self.context.query_builder.track_cte_reference(name)
-                # Check if this CTE is already being tracked for JOIN conversion
-                if self.context.query_builder:
                     ref = self.context.query_builder.get_cte_reference(name)
-                    if ref:
-                        # Only short-circuit to column reference when the CTE has a
-                        # resource column; otherwise fall through to subquery so that
-                        # definitions which produce only patient_id (boolean/scalar
-                        # results) are handled correctly.
-                        if meta and meta.has_resource:
-                            return SQLQualifiedIdentifier(parts=[ref.alias, "resource"])
+                    if ref and meta and meta.has_resource:
+                        return SQLQualifiedIdentifier(parts=[ref.alias, "resource"])
 
-                # Narrow to the appropriate column so that scalar usage
-                # does not receive the whole row as a DuckDB STRUCT.
-                if meta and meta.has_resource:
-                    val_col = "resource"
-                elif meta and not meta.has_resource and meta.cql_type != "Boolean":
-                    val_col = meta.value_column or "value"
-                else:
-                    val_col = "*"
                 subquery = SQLSubquery(query=SQLSelect(
-                    columns=[SQLIdentifier(name=val_col)],
+                    columns=[SQLIdentifier(name=strategy.column)],
                     from_clause=SQLIdentifier(name=name, quoted=True)
                 ))
                 return subquery
