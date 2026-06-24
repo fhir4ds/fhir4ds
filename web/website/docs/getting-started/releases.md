@@ -33,6 +33,9 @@ release artifact surface.
   types whose primary code path is not `code`.
 - **FHIRPath Engine Hardening**: Choice-type `as()` and `is()` parity for
   `value[x]` on Parameters resources; bundled native extension refreshed.
+  `is()` on empty collections now correctly returns the empty collection
+  per FHIRPath §5.1, fixing a long-standing edge-case that blocked the
+  pytest gate.
 - **Release-Surface Alignment**: Package metadata, public subpackage
   versions, landing-page version, WASM wheel reference, install snippets,
   and release notes are aligned with `0.0.10`.
@@ -40,6 +43,18 @@ release artifact surface.
   release validation, documentation audit, benchmark validation, and final
   scribe handoff gates before completion. All four conformance suites
   (ViewDefinition, FHIRPath, CQL, DQM) remain at 100%.
+
+### Known Limitations
+
+- **Cross-library define references**: ``A."PatientAge"`` in a CQL library
+  that uses ``include`` to reference another library still generates
+  ``SELECT * FROM "A.PatientAge"`` rather than a correlated scalar
+  subquery, producing a binder error in scalar contexts. An initial fix
+  was reverted during 0.0.10 release-prep because it intercepted CTE
+  creation paths and regressed DQM conformance on CMS0334 and CMS190.
+  Tracked as a follow-up for 0.0.11; the existing multi-library CQL
+  pattern continues to work where cross-library defines are consumed as
+  query sources rather than scalar values.
 
 ### Upgrade
 
