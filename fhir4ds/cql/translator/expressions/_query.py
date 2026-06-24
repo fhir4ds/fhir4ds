@@ -3508,7 +3508,7 @@ class QueryMixin:
                 if _bb_done is not None:
                     return _bb_done
 
-                source_expr = self.translate(_src0_expr, usage=ExprUsage.SCALAR)
+                source_expr = self.translate(_src0_expr, usage=ExprUsage.LIST)
                 source_expr = self._preserve_quantity_literals_in_array(
                     source_expr,
                     _src0_expr,
@@ -3946,7 +3946,7 @@ class QueryMixin:
                         node, _pp_base, source_alias,
                     )
                 else:
-                    source_expr = self.translate(source_expr_node, usage=ExprUsage.SCALAR)
+                    source_expr = self.translate(source_expr_node, usage=ExprUsage.LIST)
                     source_expr = self._preserve_quantity_literals_in_array(
                         source_expr,
                         source_expr_node,
@@ -3980,7 +3980,7 @@ class QueryMixin:
                     if _method_done is not None:
                         return _method_done
 
-                    source_expr = self.translate(source_expr_node, usage=ExprUsage.SCALAR)
+                    source_expr = self.translate(source_expr_node, usage=ExprUsage.LIST)
                     source_expr = self._preserve_quantity_literals_in_array(
                         source_expr,
                         source_expr_node,

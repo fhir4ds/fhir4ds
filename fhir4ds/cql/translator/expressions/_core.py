@@ -1101,8 +1101,9 @@ class CoreMixin:
             logger.debug("Definition '%s' from inlined library '%s' passed through as SQL identifier", name, _inlining_lib)
         return SQLIdentifier(name=name)
 
-    def _translate_qualified_identifier(self, qi: QualifiedIdentifier, boolean_context: bool = False) -> SQLExpression:
+    def _translate_qualified_identifier(self, qi: QualifiedIdentifier, usage: ExprUsage = ExprUsage.LIST) -> SQLExpression:
         """Translate a CQL qualified identifier (e.g., Library.Function) to SQL."""
+        boolean_context = usage in (ExprUsage.BOOLEAN, ExprUsage.EXISTS)
         parts = qi.parts
 
         if not parts:
@@ -1148,17 +1149,18 @@ class CoreMixin:
                             from_clause=SQLIdentifier(name=full_name, quoted=True),
                         )
                     )
-                # This is a reference to a definition in an included library
-                # Return a proper subquery to the CTE
-                # Track CTE reference for JOIN optimization
+                # This is a reference to a definition in an included library.
+                # Same usage-aware pattern as the cross-library branch in
+                # _translate_property: BOOLEAN/EXISTS -> EXISTS, SCALAR ->
+                # correlated scalar subquery + LIMIT 1, LIST -> SELECT *.
+                # Note: must catch BOTH BOOLEAN and EXISTS (the old code used
+                # `boolean_context` which derived True for both).
                 if self.context.query_builder:
                     self.context.query_builder.track_cte_reference(full_name)
-                if boolean_context:
-                    # Use correlated EXISTS for boolean context
+                meta = self.context.get_definition_meta(full_name)
+                if usage in (ExprUsage.BOOLEAN, ExprUsage.EXISTS):
                     return self._build_correlated_exists(full_name)
-                else:
-                    # Check if this CTE is already being tracked for JOIN conversion
-                    meta = self.context.get_definition_meta(full_name)
+                if usage == ExprUsage.SCALAR:
                     if self.context.query_builder:
                         ref = self.context.query_builder.get_cte_reference(full_name)
                         if ref:
@@ -1166,27 +1168,36 @@ class CoreMixin:
                                 return SQLQualifiedIdentifier(parts=[ref.alias, "resource"])
                             elif meta and (meta.is_scalar or (not meta.has_resource and meta.cql_type != "Boolean")):
                                 return SQLQualifiedIdentifier(parts=[ref.alias, meta.value_column])
-
-                    # For non-resource CTEs with value column, select only value column
-                    if meta and not meta.has_resource and meta.cql_type != "Boolean":
-                        return SQLSubquery(query=SQLSelect(
-                            columns=[SQLQualifiedIdentifier(parts=["sub", meta.value_column or "value"])],
-                            from_clause=SQLAlias(
-                                expr=SQLIdentifier(name=full_name, quoted=True),
-                                alias="sub",
-                            ),
-                            where=SQLBinaryOp(
-                                operator="=",
-                                left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
-                            ),
-                            limit=1
-                        ))
+                    strategy = self._classify_definition_ref(full_name, usage, meta)
+                    if strategy.kind == _RefKind.EXISTS:
+                        return self._build_correlated_exists(full_name)
+                    _outer_pid_alias = (
+                        self.context.resource_alias
+                        or self.context.patient_alias
+                        or "_pt"
+                    )
                     subquery = SQLSubquery(query=SQLSelect(
-                        columns=[SQLIdentifier(name="*")],
-                        from_clause=SQLIdentifier(name=full_name, quoted=True)
+                        columns=[SQLQualifiedIdentifier(parts=["sub", strategy.column])],
+                        from_clause=SQLAlias(
+                            expr=SQLIdentifier(name=full_name, quoted=True),
+                            alias="sub",
+                        ),
+                        where=SQLBinaryOp(
+                            operator="=",
+                            left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
+                            right=SQLQualifiedIdentifier(parts=[_outer_pid_alias, "patient_id"]),
+                        ),
+                        limit=1,
                     ))
+                    if meta and meta.sql_result_type:
+                        subquery.result_type = meta.sql_result_type
                     return subquery
+                # usage == LIST (default): SELECT * identity passthrough.
+                subquery = SQLSubquery(query=SQLSelect(
+                    columns=[SQLIdentifier(name="*")],
+                    from_clause=SQLIdentifier(name=full_name, quoted=True)
+                ))
+                return subquery
             return SQLIdentifier(name=first)
 
         # Check if this is a valueset reference
