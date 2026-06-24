@@ -478,10 +478,26 @@ class CoreMixin:
 
         # 1. BOOLEAN/EXISTS context: return EXISTS (...)
         # Only use EXISTS if the CTE actually drops rows when false/empty.
-        # Boolean definitions (no resource, Boolean type) and Collection definitions drop rows.
-        # Scalar definitions (e.g. First(), Last()) always return 1 row per patient with NULL resource.
-        is_scalar = meta is None or meta.is_scalar
+        # Boolean defines (PATIENT_SCALAR + Boolean + no resource) and Collection
+        # defines drop rows; EXISTS is meaningful for them.
+        # "Real" scalars (First(), Last(), etc.) always return 1 row with a value
+        # column, so EXISTS would be a tautology — must use SELECT col instead.
+        # Note: boolean defines share PATIENT_SCALAR shape with real scalars, so
+        # the boolean case must be excluded from is_scalar before the EXISTS guard.
+        is_boolean_scalar = (
+            meta is not None
+            and meta.shape == RowShape.PATIENT_SCALAR
+            and not meta.has_resource
+            and meta.cql_type == "Boolean"
+        )
+        is_scalar = (meta is None or meta.is_scalar) and not is_boolean_scalar
         if usage in (ExprUsage.BOOLEAN, ExprUsage.EXISTS) and not is_scalar:
+            return self._build_correlated_exists(name)
+        if is_boolean_scalar:
+            # Promoted boolean define referenced outside boolean context (e.g.
+            # inside CASE WHEN via a path that lost the boolean_context flag, or
+            # as a scalar value). EXISTS is the only safe reference because the
+            # CTE has no value/resource column.
             return self._build_correlated_exists(name)
 
         # 2. LIST/SCALAR context: return (SELECT col FROM "CTE" WHERE patient_id = ...)
