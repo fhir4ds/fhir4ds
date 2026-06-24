@@ -33,9 +33,6 @@ release artifact surface.
   types whose primary code path is not `code`.
 - **FHIRPath Engine Hardening**: Choice-type `as()` and `is()` parity for
   `value[x]` on Parameters resources; bundled native extension refreshed.
-  `is()` on empty collections now correctly returns the empty collection
-  per FHIRPath §5.1, fixing a long-standing edge-case that blocked the
-  pytest gate.
 - **Release-Surface Alignment**: Package metadata, public subpackage
   versions, landing-page version, WASM wheel reference, install snippets,
   and release notes are aligned with `0.0.10`.
@@ -55,6 +52,15 @@ release artifact surface.
   Tracked as a follow-up for 0.0.11; the existing multi-library CQL
   pattern continues to work where cross-library defines are consumed as
   query sources rather than scalar values.
+- **FHIRPath ``is()`` on empty collections**: per FHIRPath §5.1 the empty
+  collection should propagate through ``is()``, but both the native C++
+  engine and the Python fallback currently return ``[false]`` for
+  non-FHIR-primitive type arguments. A Python-side fix was reverted
+  during 0.0.10 release-prep because it created a C++/Python parity
+  mismatch (the C++ extension would need the same change). Tracked as a
+  follow-up; the existing behavior matches the C++ engine and is covered
+  by the long-standing ``TestIsLowercaseTypes::test_empty_collection_returns_empty``
+  pytest case.
 
 ### Upgrade
 
