@@ -7558,9 +7558,16 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 				const char *actual_type = fhirFieldType(val.field_name);
 				if (target == "string") {
 					if (exact) {
-						// Exact (as/ofType): only match if the actual field type IS string
-						// Subtypes like code, id, uri should NOT match
+						// Exact (as/ofType): only match if the actual field type IS string.
+						// Subtypes like code, id, uri should NOT match.
 						if (actual_type && std::string(actual_type) == "string") return {FPValue::FromBoolean(true)};
+						// Choice-type resolution may set fhir_type even when field metadata is absent.
+						// Lowercase before comparing so canonical "String" suffix from infer_fhir_type matches.
+						if (!val.fhir_type.empty()) {
+							std::string fhir_type = val.fhir_type;
+							for (auto &c : fhir_type) c = std::tolower(static_cast<unsigned char>(c));
+							return {FPValue::FromBoolean(fhir_type == "string")};
+						}
 						if (!actual_type) return {FPValue::FromBoolean(true)}; // No field info, assume string
 						return {FPValue::FromBoolean(false)};
 					}

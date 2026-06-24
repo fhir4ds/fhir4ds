@@ -350,6 +350,8 @@ def test_uri_reference_and_media_type_shapes_match_cpp(monkeypatch) -> None:
                 "Parameters.parameter[0].value.type().name",
                 "Parameters.parameter[0].value.is(uri)",
                 "Parameters.parameter[0].value.is(string)",
+                "Parameters.parameter[0].value.as(uri)",
+                "Parameters.parameter[0].value.as(string)",
                 "Parameters.parameter[1].value.type().name",
             ],
         ),
