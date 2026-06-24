@@ -1148,45 +1148,56 @@ class CoreMixin:
                             from_clause=SQLIdentifier(name=full_name, quoted=True),
                         )
                     )
-                # This is a reference to a definition in an included library
-                # Return a proper subquery to the CTE
-                # Track CTE reference for JOIN optimization
+                # This is a reference to a definition in an included library.
+                # Route through _classify_definition_ref so the resolution
+                # strategy matches what local defines use — historically this
+                # path emitted `SELECT * FROM "A.X"` for any case the inline
+                # branches below did not catch, producing binder errors
+                # (subquery returns 2 columns - expected 1).
                 if self.context.query_builder:
                     self.context.query_builder.track_cte_reference(full_name)
-                if boolean_context:
-                    # Use correlated EXISTS for boolean context
-                    return self._build_correlated_exists(full_name)
-                else:
-                    # Check if this CTE is already being tracked for JOIN conversion
-                    meta = self.context.get_definition_meta(full_name)
-                    if self.context.query_builder:
-                        ref = self.context.query_builder.get_cte_reference(full_name)
-                        if ref:
-                            if meta and meta.has_resource:
-                                return SQLQualifiedIdentifier(parts=[ref.alias, "resource"])
-                            elif meta and (meta.is_scalar or (not meta.has_resource and meta.cql_type != "Boolean")):
-                                return SQLQualifiedIdentifier(parts=[ref.alias, meta.value_column])
+                meta = self.context.get_definition_meta(full_name)
+                # Cross-library defines arrive here without a usage flag; map
+                # boolean_context to the closest ExprUsage and let the
+                # classifier pick EXISTS vs correlated subquery.
+                from ...translator.context import ExprUsage as _EU
+                usage = _EU.BOOLEAN if boolean_context else _EU.SCALAR
+                strategy = self._classify_definition_ref(full_name, usage, meta)
 
-                    # For non-resource CTEs with value column, select only value column
-                    if meta and not meta.has_resource and meta.cql_type != "Boolean":
-                        return SQLSubquery(query=SQLSelect(
-                            columns=[SQLQualifiedIdentifier(parts=["sub", meta.value_column or "value"])],
-                            from_clause=SQLAlias(
-                                expr=SQLIdentifier(name=full_name, quoted=True),
-                                alias="sub",
-                            ),
-                            where=SQLBinaryOp(
-                                operator="=",
-                                left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
-                            ),
-                            limit=1
-                        ))
-                    subquery = SQLSubquery(query=SQLSelect(
-                        columns=[SQLIdentifier(name="*")],
-                        from_clause=SQLIdentifier(name=full_name, quoted=True)
-                    ))
-                    return subquery
+                if strategy.kind == _RefKind.EXISTS:
+                    return self._build_correlated_exists(full_name)
+
+                # Check if this CTE is already being tracked for JOIN conversion.
+                # JOIN-tracked references short-circuit to alias.column when the
+                # query_builder has already established the alias.
+                if self.context.query_builder:
+                    ref = self.context.query_builder.get_cte_reference(full_name)
+                    if ref:
+                        if meta and meta.has_resource:
+                            return SQLQualifiedIdentifier(parts=[ref.alias, "resource"])
+                        elif meta and (meta.is_scalar or (not meta.has_resource and meta.cql_type != "Boolean")):
+                            return SQLQualifiedIdentifier(parts=[ref.alias, meta.value_column])
+
+                # Default: correlated subquery with proper patient-id correlation,
+                # column projection, and LIMIT 1 (cross-library defines are
+                # scalar references into per-patient CTEs).
+                _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
+                subquery = SQLSubquery(query=SQLSelect(
+                    columns=[SQLQualifiedIdentifier(parts=["sub", strategy.column])],
+                    from_clause=SQLAlias(
+                        expr=SQLIdentifier(name=full_name, quoted=True),
+                        alias="sub",
+                    ),
+                    where=SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=[_outer_pid_alias, "patient_id"]),
+                    ),
+                    limit=1
+                ))
+                if meta and meta.sql_result_type:
+                    subquery.result_type = meta.sql_result_type
+                return subquery
             return SQLIdentifier(name=first)
 
         # Check if this is a valueset reference

@@ -47,6 +47,7 @@ from ...parser.ast_nodes import (
 from ...translator.context import ExprUsage, RowShape, DefinitionMeta
 from ...translator.function_inliner import ParameterPlaceholder
 from ...translator.placeholder import RetrievePlaceholder
+from ...translator.expressions._refstrategy import _RefKind
 from ...translator.types import (
     PRECEDENCE,
     SQLAlias,
@@ -430,22 +431,39 @@ class PropertyMixin:
                 if resolved is not None:
                     return SQLLiteral(value=resolved)
 
-                # This is a reference to a definition in an included library
-                # Treat as a qualified identifier: LibraryName.DefinitionName
+                # This is a reference to a definition in an included library.
+                # Treat as a qualified identifier: LibraryName.DefinitionName.
+                # Route through _classify_definition_ref so cross-library
+                # references resolve the same way local defines do — emitting
+                # a correlated subquery with column projection, patient-id
+                # correlation, and LIMIT 1. Historically this branch emitted
+                # `SELECT * FROM "Lib.Name"` which raised
+                # `Binder Error: Subquery returns 2 columns - expected 1`.
                 full_name = f"{source_name}.{path}"
-                # Return a subquery to the CTE
-                # Note: The CTE will be created from the included library's definitions
-                # during the optimization phases. We generate the reference now and
-                # trust that the CTE will exist at execution time.
-                if boolean_context:
-                    # Use correlated EXISTS for boolean context
+                usage = ExprUsage.BOOLEAN if boolean_context else ExprUsage.SCALAR
+                meta = self.context.get_definition_meta(full_name)
+                strategy = self._classify_definition_ref(full_name, usage, meta)
+
+                if strategy.kind == _RefKind.EXISTS:
                     return self._build_correlated_exists(full_name)
-                else:
-                    subquery = SQLSubquery(query=SQLSelect(
-                        columns=[SQLIdentifier(name="*")],
-                        from_clause=SQLIdentifier(name=full_name, quoted=True)
-                    ))
-                    return subquery
+
+                _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
+                subquery = SQLSubquery(query=SQLSelect(
+                    columns=[SQLQualifiedIdentifier(parts=["sub", strategy.column])],
+                    from_clause=SQLAlias(
+                        expr=SQLIdentifier(name=full_name, quoted=True),
+                        alias="sub",
+                    ),
+                    where=SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=[_outer_pid_alias, "patient_id"]),
+                    ),
+                    limit=1
+                ))
+                if meta and meta.sql_result_type:
+                    subquery.result_type = meta.sql_result_type
+                return subquery
 
         # Check if source is an alias with a stored SQL expression
         if isinstance(source, Identifier):
