@@ -7,6 +7,48 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.10
+*June 2026*
+
+Version 0.0.10 is a release-preparation cycle focused on translator correctness
+for production CDS workflows and full release-readiness validation across
+package metadata, public docs, conformance baselines, benchmarks, and the
+release artifact surface.
+
+### Highlights
+
+- **Translator Correctness**: Fixes a binder error when a CQL `case ... when`
+  expression references a previously-defined boolean define; the translator
+  now emits `EXISTS` against the boolean CTE instead of selecting a
+  non-existent `value` column. `if ... then ... else` conditions benefit
+  from the same fix.
+- **Definition-Reference Consolidation**: The two parallel code paths that
+  resolved promoted vs non-promoted definition references are now unified
+  through `_classify_definition_ref`, closing a class of parity bugs and
+  making the EXISTS-vs-correlated-subquery decision a single source of truth.
+- **MedicationStatement Retrieve Fix**: `[MedicationStatement: "X"]` now
+  resolves against `medicationCodeableConcept` (and the `medicationReference`
+  choice-type alternative) instead of silently falling back to the
+  non-existent `code` field. A full audit added 16 more FHIR R4 resource
+  types whose primary code path is not `code`.
+- **FHIRPath Engine Hardening**: Choice-type `as()` and `is()` parity for
+  `value[x]` on Parameters resources; bundled native extension refreshed.
+- **Release-Surface Alignment**: Package metadata, public subpackage
+  versions, landing-page version, WASM wheel reference, install snippets,
+  and release notes are aligned with `0.0.10`.
+- **Validation Gates**: The release-prep pipeline includes code review,
+  release validation, documentation audit, benchmark validation, and final
+  scribe handoff gates before completion. All four conformance suites
+  (ViewDefinition, FHIRPath, CQL, DQM) remain at 100%.
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.10
+```
+
+---
+
 ## Version 0.0.9
 *June 2026*
 
