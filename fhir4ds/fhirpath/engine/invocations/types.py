@@ -53,14 +53,12 @@ def type_fn(ctx, coll):
 def is_fn(ctx, coll, type_info):
     model = ctx.get("model")
     if not coll:
-        if (
-            isinstance(type_info, TypeInfo)
-            and type_info.namespace == TypeInfo.FHIR
-            and type_info.name
-            and type_info.name[0].islower()
-        ):
-            return []
-        return [False]
+        # FHIRPath §5.1 empty-collection propagation: any function whose
+        # input is the empty collection returns the empty collection. Must
+        # stay in lockstep with the C++ fn_isType in
+        # extensions/fhirpath/src/fhirpath/evaluator.cpp — the parity
+        # invariant is enforced by test_type_parity.py.
+        return []
     if len(coll) > 1:
         raise FHIRPathError("is() requires a singleton input collection")
     if _is_any_type(type_info):

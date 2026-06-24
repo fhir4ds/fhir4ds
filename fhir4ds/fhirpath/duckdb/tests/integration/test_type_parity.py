@@ -138,10 +138,13 @@ def test_type_operator_supertypes_match_python_fallback(monkeypatch) -> None:
 
 
 def test_empty_input_is_returns_false_as_returns_empty(monkeypatch) -> None:
+    # FHIRPath §5.1: empty-collection propagation requires is() to return
+    # the empty collection when the input is empty, regardless of the type
+    # argument. Native C++ fn_isType and Python is_fn must agree.
     resource = json.dumps({"resourceType": "Patient"})
     expectations = {
-        "missing is Integer": (["false"], "false", False, True),
-        "missing.is(Integer)": (["false"], "false", False, True),
+        "missing is Integer": ([], None, None, True),
+        "missing.is(Integer)": ([], None, None, True),
         "missing as Integer": ([], None, None, True),
         "missing.as(Integer)": ([], None, None, True),
     }

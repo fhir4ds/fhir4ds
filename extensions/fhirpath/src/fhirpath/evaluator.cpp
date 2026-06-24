@@ -7469,8 +7469,11 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 		throw FHIRPathSpecError("Unknown type: " + type_name);
 	}
 	if (input.empty()) {
-		if (ns == "FHIR" && isFHIRPrimitiveTypeName(target)) return {};
-		return {FPValue::FromBoolean(false)};
+		// FHIRPath §5.1 empty-collection propagation: any function whose
+		// input is the empty collection returns the empty collection.
+		// Previously this returned [false] for System/complex types, which
+		// violated the rule and broke `is(Integer)` on empty input.
+		return {};
 	}
 	if (input.size() > 1) {
 		throw FHIRPathSpecError("is() requires a singleton input collection");
