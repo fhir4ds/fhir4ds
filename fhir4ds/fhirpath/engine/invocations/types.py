@@ -53,11 +53,14 @@ def type_fn(ctx, coll):
 def is_fn(ctx, coll, type_info):
     model = ctx.get("model")
     if not coll:
-        # FHIRPath empty-collection propagation: any function whose input is
-        # the empty collection returns the empty collection (§5.1). The previous
-        # branch returned [False] for System/complex types, which violated the
-        # rule and broke `is(Integer)` on empty input.
-        return []
+        if (
+            isinstance(type_info, TypeInfo)
+            and type_info.namespace == TypeInfo.FHIR
+            and type_info.name
+            and type_info.name[0].islower()
+        ):
+            return []
+        return [False]
     if len(coll) > 1:
         raise FHIRPathError("is() requires a singleton input collection")
     if _is_any_type(type_info):
