@@ -17,6 +17,16 @@ release artifact surface.
 
 ### Highlights
 
+- **Cross-Library Define References**: ``A."PatientAge"`` in a CQL library
+  that uses ``include`` to reference another library now translates
+  correctly in every usage context. The translator emits a correlated
+  scalar subquery with ``LIMIT 1`` for SCALAR contexts (closing the
+  binder error that previously affected ``case``/``if`` conditions),
+  ``EXISTS`` for BOOLEAN contexts, and identity passthrough for LIST/query
+  sources. Covered by `test_cross_library_reference.py` (5 cases) and
+  `test_definition_ref_parity.py` (2 cases). The usage-aware translation
+  strategy avoids the CTE-creation interception that caused an earlier
+  draft of this fix to be reverted during release-prep.
 - **Translator Correctness**: Fixes a binder error when a CQL `case ... when`
   expression references a previously-defined boolean define; the translator
   now emits `EXISTS` against the boolean CTE instead of selecting a
@@ -31,8 +41,15 @@ release artifact surface.
   choice-type alternative) instead of silently falling back to the
   non-existent `code` field. A full audit added 16 more FHIR R4 resource
   types whose primary code path is not `code`.
+- **FHIRPath ``is()`` Empty-Collection Parity**: ``is()`` now propagates the
+  empty collection per FHIRPath §5.1 on both the native C++ engine
+  (`fn_isType`) and the Python fallback (`invocations/types.py`), resolving
+  the long-standing `TestIsLowercaseTypes::test_empty_collection_returns_empty`
+  case. Both paths now return the empty collection instead of ``[false]``
+  for non-FHIR-primitive type arguments.
 - **FHIRPath Engine Hardening**: Choice-type `as()` and `is()` parity for
-  `value[x]` on Parameters resources; bundled native extension refreshed.
+  `value[x]` on Parameters resources; bundled native extension refreshed
+  (11.1 MB → 11.5 MB).
 - **Release-Surface Alignment**: Package metadata, public subpackage
   versions, landing-page version, WASM wheel reference, install snippets,
   and release notes are aligned with `0.0.10`.
@@ -41,26 +58,15 @@ release artifact surface.
   scribe handoff gates before completion. All four conformance suites
   (ViewDefinition, FHIRPath, CQL, DQM) remain at 100%.
 
-### Known Limitations
+### Conformance
 
-- **Cross-library define references**: ``A."PatientAge"`` in a CQL library
-  that uses ``include`` to reference another library still generates
-  ``SELECT * FROM "A.PatientAge"`` rather than a correlated scalar
-  subquery, producing a binder error in scalar contexts. An initial fix
-  was reverted during 0.0.10 release-prep because it intercepted CTE
-  creation paths and regressed DQM conformance on CMS0334 and CMS190.
-  Tracked as a follow-up for 0.0.11; the existing multi-library CQL
-  pattern continues to work where cross-library defines are consumed as
-  query sources rather than scalar values.
-- **FHIRPath ``is()`` on empty collections**: per FHIRPath §5.1 the empty
-  collection should propagate through ``is()``, but both the native C++
-  engine and the Python fallback currently return ``[false]`` for
-  non-FHIR-primitive type arguments. A Python-side fix was reverted
-  during 0.0.10 release-prep because it created a C++/Python parity
-  mismatch (the C++ extension would need the same change). Tracked as a
-  follow-up; the existing behavior matches the C++ engine and is covered
-  by the long-standing ``TestIsLowercaseTypes::test_empty_collection_returns_empty``
-  pytest case.
+| Suite | Passed | Total | Rate |
+|-------|-------:|------:|-----:|
+| ViewDefinition v2 | 134 | 134 | 100.0% |
+| FHIRPath R4 | 935 | 935 | 100.0% |
+| CQL | 1,706 | 1,706 | 100.0% |
+| DQM QI-Core 2025 | 47 | 47 | 100.0% |
+| Overall | 2,822 | 2,822 | 100.0% |
 
 ### Upgrade
 
