@@ -212,6 +212,39 @@ def test_one_sided_datetime_timezone_policy_matches_native(monkeypatch) -> None:
         fallback.close()
 
 
+def test_resource_backed_datetime_timezone_comparisons_match_native(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "effectiveDateTime": "2015-02-04T10:00:00+01:00",
+            "issued": "2015-02-04T09:30:00Z",
+        }
+    )
+    cases = {
+        "effectiveDateTime < issued": (["true"], "[true]", True, True),
+        "effectiveDateTime > issued": (["false"], "[false]", False, True),
+        "effectiveDateTime <= issued": (["true"], "[true]", True, True),
+        "effectiveDateTime >= issued": (["false"], "[false]", False, True),
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            native_result = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            fallback_result = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native_result == fallback_result == expected, expression
+    finally:
+        native.close()
+        fallback.close()
+
+
 def test_fhir_quantity_path_comparisons_match_python_fallback(monkeypatch) -> None:
     resource = json.dumps(
         {
@@ -304,6 +337,57 @@ def test_fhir_quantity_unit_only_path_comparisons_match_python_fallback(monkeypa
             ],
         ).fetchone()
         assert native_result == fallback_result == (["true"], "[true]", True)
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_large_exact_numeric_and_quantity_comparisons_match_python_fallback(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "bigA": 9007199254740992,
+            "bigB": 9007199254740993,
+            "valueQuantity": {
+                "value": 9007199254740992,
+                "unit": "mg",
+                "code": "mg",
+                "system": "http://unitsofmeasure.org",
+            },
+            "component": [
+                {
+                    "valueQuantity": {
+                        "value": 9007199254740993,
+                        "unit": "mg",
+                        "code": "mg",
+                        "system": "http://unitsofmeasure.org",
+                    }
+                }
+            ],
+        }
+    )
+    cases = {
+        "9223372036854775806L < 9223372036854775807L": (["true"], "[true]", True, True),
+        "9223372036854775807L <= 9223372036854775806L": (["false"], "[false]", False, True),
+        "9007199254740992.0 < 9007199254740993.0": (["true"], "[true]", True, True),
+        "bigA < bigB": (["true"], "[true]", True, True),
+        "9007199254740992 'mg' < 9007199254740993 'mg'": (["true"], "[true]", True, True),
+        "valueQuantity < component.valueQuantity": (["true"], "[true]", True, True),
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            native_result = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            fallback_result = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native_result == fallback_result == expected, expression
     finally:
         native.close()
         fallback.close()

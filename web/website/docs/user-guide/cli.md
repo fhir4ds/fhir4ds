@@ -13,10 +13,12 @@ better run from scripts, scheduled jobs, or CI than from notebooks.
 fhir4ds --help
 ```
 
-The current CLI surface focuses on Digital Quality Measure evaluation:
+The current CLI surface covers Digital Quality Measure evaluation and a local
+CQL conformance facade:
 
 ```bash
 fhir4ds dqm --help
+fhir4ds cql-server --help
 ```
 
 ## DQM Commands
@@ -97,6 +99,25 @@ Depending on the output config, each measure directory can include:
 
 For full output details, see [Digital Quality Measures](./quality/dqm) and
 [Source-to-DQM Production Recipes](/docs/examples/dqm-recipes).
+
+## CQL Facade Command
+
+The `cql-server` command serves the local FHIR R4 `$cql` facade used by the
+`cqframework/cql-tests-runner` conformance harness. It is intended for local
+test execution against expression-only requests.
+
+```bash
+fhir4ds cql-server --host 127.0.0.1 --port 8080 --base-path /fhir
+```
+
+The server accepts requests at `/$cql` and at the configured base path, such as
+`/fhir/$cql`. Use `--python-udfs` to force Python UDF registration instead of
+preferring bundled native extensions, and `--debug` to include diagnostics in
+responses.
+
+See [CQL Tests Runner Facade](/docs/integrations/cql-tests-runner-facade) for
+the supported request shape, result serialization matrix, and runner harness
+command.
 
 ## HAPI Materialization
 

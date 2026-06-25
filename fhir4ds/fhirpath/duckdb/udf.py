@@ -25,8 +25,10 @@ import pyarrow.compute as pc
 
 from .evaluator import (
     FHIRPathEvaluator,
+    _has_invalid_partial_datetime_time_literal,
     _has_invalid_timezone_literal,
     _has_out_of_range_integer_literal,
+    _has_out_of_range_long_literal,
     _is_unary_minus_context,
     _strip_comments_for_precheck,
 )
@@ -40,10 +42,40 @@ _STRICT_MODE = os.environ.get("FHIRPATH_STRICT_MODE") == "1"
 
 _VALID_BOOL_STRINGS = frozenset({"true", "false"})
 _RECURSION_LIMIT_LOCK = threading.RLock()
+_MALFORMED_LONG_SUFFIX_RE = re.compile(
+    r"(?<![A-Za-z0-9_.])(?P<number>\d+(?:\.\d+)?)(?P<suffix>[A-Za-z_]\w*)"
+)
 
 # Cache compiled expressions for reuse
 # This is shared across all UDF invocations
 _EXPRESSION_CACHE_SIZE = 1024
+
+
+def _is_row_resilient_invalid_literal(expression: object) -> bool:
+    if not isinstance(expression, str):
+        return False
+    stripped = expression.strip()
+    return (
+        _has_invalid_partial_datetime_time_literal(stripped)
+        or _has_out_of_range_integer_literal(stripped)
+        or _has_out_of_range_long_literal(stripped)
+        or _has_malformed_long_literal_suffix(stripped)
+    )
+
+
+def _has_malformed_long_literal_suffix(expression: str) -> bool:
+    text = _strip_comments_for_precheck(expression)
+    text = re.sub(r"'(?:\\.|[^\\'])*'", "S", text)
+    text = re.sub(r"`(?:\\.|[^\\`])*`", "I", text)
+    text = re.sub(r"@[T0-9:.\-+Z]+", "D", text)
+    for match in _MALFORMED_LONG_SUFFIX_RE.finditer(text):
+        suffix = match.group("suffix")
+        if not suffix or suffix[0] not in {"L", "l"}:
+            continue
+        if suffix == "L" and "." not in match.group("number"):
+            continue
+        return True
+    return False
 
 
 def _json_max_nesting_depth(resource: str) -> int:
@@ -231,6 +263,10 @@ def _get_compiled_evaluator(expression: str) -> FHIRPathEvaluator:
         raise FHIRPathSyntaxError(
             f"Invalid FHIRPath expression: integer literal out of range in '{expression}'"
         )
+    if _has_out_of_range_long_literal(stripped):
+        raise FHIRPathSyntaxError(
+            f"Invalid FHIRPath expression: long literal out of range in '{expression}'"
+        )
     # Reject unbalanced parentheses and brackets
     if not _has_balanced_delimiters(stripped):
         raise FHIRPathSyntaxError(
@@ -394,9 +430,10 @@ _FHIRPATH_STRING_SEARCH_ARITY = {
     "contains": (1, 1),
     "upper": (0, 0),
     "lower": (0, 0),
+    "trim": (0, 0),
     "replace": (2, 2),
-    "matches": (1, 1),
-    "replaceMatches": (2, 2),
+    "matches": (1, 2),
+    "replaceMatches": (2, 3),
     "length": (0, 0),
     "toChars": (0, 0),
 }
@@ -407,10 +444,11 @@ _FHIRPATH_STRING_ARG_TYPES = {
     "endsWith": ("String",),
     "contains": ("String",),
     "replace": ("String", "String"),
-    "matches": ("String",),
-    "replaceMatches": ("String", "String"),
+    "matches": ("String", "String"),
+    "replaceMatches": ("String", "String", "String"),
 }
 _FHIRPATH_REGEX_ARG_INDEXES = {"matches": (0,), "replaceMatches": (0,)}
+_FHIRPATH_REGEX_FLAG_ARG_INDEX = {"matches": 1, "replaceMatches": 2}
 _FHIRPATH_MATH_ARITY = {
     "abs": (0, 0),
     "ceiling": (0, 0),
@@ -1100,6 +1138,18 @@ def _has_invalid_string_regex_literals(expression: str) -> bool:
         args = _split_call_args_original(expression, match.end() - 1)
         if args is None:
             return True
+        compile_flags = 0
+        flags_index = _FHIRPATH_REGEX_FLAG_ARG_INDEX.get(func_name)
+        if flags_index is not None and flags_index < len(args):
+            flags_signature = _simple_literal_signature(args[flags_index])
+            if flags_signature is None or flags_signature[0] != "String":
+                continue
+            try:
+                from ..engine.invocations.strings import _regex_flags
+
+                compile_flags = _regex_flags(str(flags_signature[1]))
+            except FHIRPathError:
+                return True
         for index in regex_indexes:
             if index >= len(args):
                 continue
@@ -1109,7 +1159,7 @@ def _has_invalid_string_regex_literals(expression: str) -> bool:
             try:
                 from ..engine.invocations.strings import _compile_regex
 
-                _compile_regex(str(signature[1]))
+                _compile_regex(str(signature[1]), compile_flags)
             except FHIRPathError:
                 return True
     return False
@@ -1229,6 +1279,20 @@ _CHOICE_ASSERTION_METHOD_RE = re.compile(
 )
 _CHOICE_ASSERTION_INFIX_RE = re.compile(
     r"^\s*(?P<path>[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s+" r"(?P<op>is|as)\s+(?P<type>`?[\w.]+`?)\s*$",
+    re.IGNORECASE,
+)
+_TRAILING_CHOICE_ASSERTION_METHOD_RE = re.compile(
+    r"^\s*(?P<source>.+)\.(?P<base>[A-Za-z_]\w*)\."
+    r"(?P<op>is|as)\(\s*(?P<type>`?[\w.]+`?)\s*\)\s*$",
+    re.IGNORECASE,
+)
+_TRAILING_CHOICE_ASSERTION_INFIX_RE = re.compile(
+    r"^\s*(?P<source>.+)\.(?P<base>[A-Za-z_]\w*)\s+"
+    r"(?P<op>is|as)\s+(?P<type>`?[\w.]+`?)\s*$",
+    re.IGNORECASE,
+)
+_OFTYPE_TYPE_CHAIN_RE = re.compile(
+    r"\.ofType\([^)]*\).*(?:\.(?:is|as)\(|\s+(?:is|as)\s+)",
     re.IGNORECASE,
 )
 
@@ -1393,6 +1457,52 @@ def _choice_type_suffix(type_name: str) -> str | None:
     }.get(bare.lower(), bare[:1].upper() + bare[1:])
 
 
+_CHOICE_SUFFIX_TO_FHIR_TYPE = {
+    "Base64Binary": "base64Binary",
+    "Boolean": "boolean",
+    "Canonical": "canonical",
+    "Code": "code",
+    "Date": "date",
+    "DateTime": "dateTime",
+    "Decimal": "decimal",
+    "Id": "id",
+    "Instant": "instant",
+    "Integer": "integer",
+    "Integer64": "integer64",
+    "Markdown": "markdown",
+    "Oid": "oid",
+    "PositiveInt": "positiveInt",
+    "String": "string",
+    "Time": "time",
+    "UnsignedInt": "unsignedInt",
+    "Uri": "uri",
+    "Url": "url",
+    "Uuid": "uuid",
+    "Xhtml": "xhtml",
+}
+
+
+def _choice_suffix_to_fhir_type(suffix: str) -> str:
+    return _CHOICE_SUFFIX_TO_FHIR_TYPE.get(suffix, suffix)
+
+
+def _choice_field_is_type(base_name: str, field_name: str, requested_type: str) -> bool:
+    requested_suffix = _choice_type_suffix(requested_type)
+    if requested_suffix is None or not field_name.startswith(base_name):
+        return False
+    actual_suffix = field_name[len(base_name):]
+    if not actual_suffix:
+        return False
+    if actual_suffix == requested_suffix:
+        return True
+
+    from ..engine.nodes import TypeInfo
+
+    actual_fhir_type = _choice_suffix_to_fhir_type(actual_suffix)
+    requested_fhir_type = _choice_suffix_to_fhir_type(requested_suffix)
+    return TypeInfo.is_type(actual_fhir_type, requested_fhir_type)
+
+
 def _resolve_choice_type_assertion(resource_dict: dict, expression: str) -> list | None:
     """Resolve simple choice-type ``is``/``as`` expressions missed by fallback evaluation."""
     match = _CHOICE_ASSERTION_METHOD_RE.fullmatch(
@@ -1419,14 +1529,128 @@ def _resolve_choice_type_assertion(resource_dict: dict, expression: str) -> list
         return [False] if op == "is" else []
     target_field = f"{base_name}{suffix}"
     if target_field not in field_names:
-        return [False] if op == "is" else []
+        if op == "is":
+            for field_name in field_names:
+                if (
+                    resource_dict.get(field_name) is not None
+                    and _choice_field_is_type(base_name, field_name, match.group("type"))
+                ):
+                    return [True]
+            return [False]
+        return []
 
-    val = resource_dict.get(target_field)
     if op == "is":
-        return [val is not None]
+        for field_name in field_names:
+            if (
+                resource_dict.get(field_name) is not None
+                and _choice_field_is_type(base_name, field_name, match.group("type"))
+            ):
+                return [True]
+        return [False]
+    val = resource_dict.get(target_field)
     if val is None:
         return []
     return [val]
+
+
+def _resolve_trailing_choice_type_assertion(resource_dict: dict, expression: str) -> list | None:
+    """Resolve choice ``is``/``as`` after an evaluated source expression.
+
+    fhirpathpy can resolve ``entry.resource.ofType(Observation).value`` to the
+    primitive value but loses the FHIR choice field name before ``is``/``as`` is
+    applied. Re-evaluate the parent expression and apply singleton choice
+    semantics only when exactly one concrete choice value is present.
+    """
+    match = _TRAILING_CHOICE_ASSERTION_METHOD_RE.fullmatch(
+        expression
+    ) or _TRAILING_CHOICE_ASSERTION_INFIX_RE.fullmatch(expression)
+    if not match:
+        return None
+
+    base_name = match.group("base")
+    field_names = _get_choice_type_lookup().get(base_name)
+    if not field_names:
+        return None
+
+    suffix = _choice_type_suffix(match.group("type"))
+    if suffix is None:
+        target_field = None
+    else:
+        target_field = f"{base_name}{suffix}"
+        if target_field not in field_names:
+            target_field = None
+
+    try:
+        parents = _evaluate_raw_items(resource_dict, match.group("source").strip())
+    except (
+        FHIRPathError,
+        NotImplementedError,
+        ValueError,
+        TypeError,
+        KeyError,
+        AttributeError,
+        IndexError,
+    ):
+        return None
+
+    concrete_values = []
+    concrete_fields = []
+    target_values = []
+    for parent in parents:
+        if not isinstance(parent, dict):
+            continue
+        for field_name in field_names:
+            value = parent.get(field_name)
+            if value is None:
+                continue
+            concrete_values.append(value)
+            concrete_fields.append(field_name)
+            if field_name == target_field:
+                target_values.append(value)
+
+    op = match.group("op").lower()
+    if not concrete_values:
+        return [False] if op == "is" else []
+    if len(concrete_values) > 1:
+        return None
+
+    if op == "is":
+        return [_choice_field_is_type(base_name, concrete_fields[0], match.group("type"))]
+    if target_values:
+        return target_values[:1]
+    return []
+
+
+def _resolve_choice_type_assertion_any(resource_dict: dict, expression: str) -> list | None:
+    result = _resolve_choice_type_assertion(resource_dict, expression)
+    if result is not None:
+        return result
+    return _resolve_trailing_choice_type_assertion(resource_dict, expression)
+
+
+def _resolve_core_type_chain(resource_dict: dict, expression: str) -> list | None:
+    """Use the core evaluator for composed type chains the fallback wrapper loses."""
+    if not _OFTYPE_TYPE_CHAIN_RE.search(expression):
+        return None
+    try:
+        from .. import evaluate as core_evaluate
+
+        result = core_evaluate(resource_dict, expression)
+    except (
+        FHIRPathError,
+        NotImplementedError,
+        ValueError,
+        TypeError,
+        KeyError,
+        AttributeError,
+        IndexError,
+    ):
+        return None
+    return result if isinstance(result, list) else [result]
+
+
+def _needs_type_chain_rescue(result: object) -> bool:
+    return result is None or result == [] or result == [False]
 
 
 def fhirpath_udf(
@@ -1498,17 +1722,25 @@ def fhirpath_udf(
                 results.append(None)
                 continue
 
+            if _is_row_resilient_invalid_literal(expression):
+                results.append([])
+                continue
+
             # Get cached evaluator and evaluate
             evaluator = _get_compiled_evaluator(expression)
             result = evaluator.evaluate(resource_dict)
 
-            choice_assertion = _resolve_choice_type_assertion(resource_dict, expression)
+            choice_assertion = _resolve_choice_type_assertion_any(resource_dict, expression)
             if choice_assertion is not None:
                 result = choice_assertion
             if not result and isinstance(resource_dict, dict):
                 result = _resolve_choice_type(resource_dict, expression)
             if not result and isinstance(resource_dict, dict):
                 result = _resolve_choice_oftype(resource_dict, expression)
+            if _needs_type_chain_rescue(result):
+                core_result = _resolve_core_type_chain(resource_dict, expression)
+                if core_result is not None:
+                    result = core_result
 
             # Convert result to list for Arrow
             if result is None:
@@ -1663,12 +1895,14 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         temporal_result = _evaluate_literal_temporal_arithmetic(expression)
         if temporal_result is not None:
             return temporal_result
+        if _is_row_resilient_invalid_literal(expression):
+            return []
 
         # Get cached evaluator and evaluate
         evaluator = _get_compiled_evaluator(expression)
         result = evaluator.evaluate(resource_dict)
 
-        choice_assertion = _resolve_choice_type_assertion(resource_dict, expression)
+        choice_assertion = _resolve_choice_type_assertion_any(resource_dict, expression)
         if choice_assertion is not None:
             result = choice_assertion
 
@@ -1677,6 +1911,10 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
             result = _resolve_choice_type(resource_dict, expression)
         if not result and isinstance(resource_dict, dict):
             result = _resolve_choice_oftype(resource_dict, expression)
+        if _needs_type_chain_rescue(result):
+            core_result = _resolve_core_type_chain(resource_dict, expression)
+            if core_result is not None:
+                result = core_result
 
         # Convert result to list of strings for DuckDB
         if result is None:
@@ -1727,8 +1965,9 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         _logger.warning("FHIRPath scalar evaluation error for '%s'", expression)
         return []
     except NotImplementedError:
-        # Unimplemented functions should be visible to users
-        raise
+        if _STRICT_MODE:
+            raise
+        return []
     except (ValueError, TypeError, KeyError, AttributeError, IndexError, OverflowError) as e:
         _logger.warning("FHIRPath scalar evaluation failed for '%s': %s", expression, e)
         if _STRICT_MODE:
@@ -1829,7 +2068,11 @@ def fhirpath_is_valid_udf(expression: str | None) -> bool:
         return False
     if _has_invalid_timezone_literal(stripped):
         return False
+    if _has_invalid_partial_datetime_time_literal(stripped):
+        return False
     if _has_out_of_range_integer_literal(stripped):
+        return False
+    if _has_out_of_range_long_literal(stripped):
         return False
     if not _has_balanced_delimiters(stripped):
         return False
@@ -2025,16 +2268,22 @@ def fhirpath_bool_udf(resource: str | None, expression: str | None) -> bool | No
         temporal_result = _evaluate_literal_temporal_arithmetic(expression)
         if temporal_result is not None:
             result = temporal_result
+        elif _is_row_resilient_invalid_literal(expression):
+            return None
         else:
             evaluator = _get_compiled_evaluator(expression)
             result = evaluator.evaluate(resource_dict)
-            choice_assertion = _resolve_choice_type_assertion(resource_dict, expression)
+            choice_assertion = _resolve_choice_type_assertion_any(resource_dict, expression)
             if choice_assertion is not None:
                 result = choice_assertion
             if not result and isinstance(resource_dict, dict):
                 result = _resolve_choice_type(resource_dict, expression)
             if not result and isinstance(resource_dict, dict):
                 result = _resolve_choice_oftype(resource_dict, expression)
+            if _needs_type_chain_rescue(result):
+                core_result = _resolve_core_type_chain(resource_dict, expression)
+                if core_result is not None:
+                    result = core_result
 
         if isinstance(result, list):
             result_items = result
@@ -2119,17 +2368,23 @@ def fhirpath_number_udf(resource: str | None, expression: str | None) -> float |
         temporal_result = _evaluate_literal_temporal_arithmetic(expression)
         if temporal_result is not None:
             result = temporal_result
+        elif _is_row_resilient_invalid_literal(expression):
+            return None
         else:
             evaluator = _get_compiled_evaluator(expression)
             result = evaluator.evaluate(resource_dict)
 
-            choice_assertion = _resolve_choice_type_assertion(resource_dict, expression)
+            choice_assertion = _resolve_choice_type_assertion_any(resource_dict, expression)
             if choice_assertion is not None:
                 result = choice_assertion
             if not result and isinstance(resource_dict, dict):
                 result = _resolve_choice_type(resource_dict, expression)
             if not result and isinstance(resource_dict, dict):
                 result = _resolve_choice_oftype(resource_dict, expression)
+            if _needs_type_chain_rescue(result):
+                core_result = _resolve_core_type_chain(resource_dict, expression)
+                if core_result is not None:
+                    result = core_result
     except FHIRPathSyntaxError:
         raise
     except (NotImplementedError, FHIRPathError):
@@ -2184,17 +2439,23 @@ def fhirpath_json_udf(resource: str | None, expression: str | None) -> str | Non
         temporal_result = _evaluate_literal_temporal_arithmetic(expression)
         if temporal_result is not None:
             result = temporal_result
+        elif _is_row_resilient_invalid_literal(expression):
+            return None
         else:
             evaluator = _get_compiled_evaluator(expression)
             result = evaluator.evaluate(resource_dict)
 
-            choice_assertion = _resolve_choice_type_assertion(resource_dict, expression)
+            choice_assertion = _resolve_choice_type_assertion_any(resource_dict, expression)
             if choice_assertion is not None:
                 result = choice_assertion
             if not result and isinstance(resource_dict, dict):
                 result = _resolve_choice_type(resource_dict, expression)
             if not result and isinstance(resource_dict, dict):
                 result = _resolve_choice_oftype(resource_dict, expression)
+            if _needs_type_chain_rescue(result):
+                core_result = _resolve_core_type_chain(resource_dict, expression)
+                if core_result is not None:
+                    result = core_result
 
         if result is None or (isinstance(result, list) and len(result) == 0):
             return None
@@ -2373,17 +2634,23 @@ def _evaluate_raw_items(resource: str | dict | None, expression: str | None) -> 
     temporal_result = _evaluate_literal_temporal_arithmetic(expression)
     if temporal_result is not None:
         result: object = temporal_result
+    elif _is_row_resilient_invalid_literal(expression):
+        return []
     else:
         evaluator = _get_compiled_evaluator(expression)
         result = evaluator.evaluate(resource_dict)
 
-        choice_assertion = _resolve_choice_type_assertion(resource_dict, expression)
+        choice_assertion = _resolve_choice_type_assertion_any(resource_dict, expression)
         if choice_assertion is not None:
             result = choice_assertion
         if not result and isinstance(resource_dict, dict):
             result = _resolve_choice_type(resource_dict, expression)
         if not result and isinstance(resource_dict, dict):
             result = _resolve_choice_oftype(resource_dict, expression)
+        if _needs_type_chain_rescue(result):
+            core_result = _resolve_core_type_chain(resource_dict, expression)
+            if core_result is not None:
+                result = core_result
 
     if result is None:
         return []

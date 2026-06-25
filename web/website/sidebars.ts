@@ -92,6 +92,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'integrations/cql-tests-runner-facade',
+          label: 'CQL Tests Runner Facade',
+        },
+        {
+          type: 'doc',
           id: 'integrations/wasm-engine',
           label: 'WASM Engine',
         },

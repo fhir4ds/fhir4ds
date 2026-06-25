@@ -34,6 +34,23 @@ def _validate_regex(pattern: str) -> None:
         )
 
 
+def _regex_flags(flags: str | None = "") -> int:
+    """Convert FHIRPath regex flags to Python re flags."""
+    if flags is None:
+        flags = ""
+    if not isinstance(flags, str):
+        raise FHIRPathError("Regex flags must be a string")
+    invalid = sorted({ch for ch in flags if ch not in {"i", "m"}})
+    if invalid:
+        raise FHIRPathError(f"Invalid regex flags: {''.join(invalid)}")
+    compiled_flags = re.DOTALL
+    if "i" in flags:
+        compiled_flags |= re.IGNORECASE
+    if "m" in flags:
+        compiled_flags |= re.MULTILINE
+    return compiled_flags
+
+
 @functools.lru_cache(maxsize=256)
 def _compile_regex(pattern: str, flags: int = 0) -> re.Pattern:
     """Cache compiled regex patterns to avoid recompilation."""
@@ -102,7 +119,7 @@ def substring(ctx, coll, start, length=None):
 
     start = int(start)
     if start < 0:
-        # FHIRPath §5.6.3: "If start lies outside the length of the string,
+        # FHIRPath §5.6.2: "If start lies outside the length of the string,
         # the function returns an empty collection."
         return []
     if start >= len(string):
@@ -111,7 +128,11 @@ def substring(ctx, coll, start, length=None):
     if length is None or length == []:
         return string[start:]
 
-    return string[start : start + int(length)]
+    length = int(length)
+    if length <= 0:
+        return ""
+
+    return string[start : start + length]
 
 
 def starts_with(ctx, coll, prefix):
@@ -224,17 +245,14 @@ def join(ctx, coll, separator=""):
     return separator.join(stringValues)
 
 
-def matches(ctx, coll, regex):
-    """FHIRPath matches() — full-string regex match (FHIRPath §5.7.2).
-
-    Returns true only when the *entire* string matches the given regex.
-    """
+def matches(ctx, coll, regex, flags=""):
+    """FHIRPath matches() uses regex search semantics."""
     if not coll or util.is_empty(regex) or regex is None:
         return []
 
     string = ensure_string_singleton(coll)
-    valid = _compile_regex(regex, re.DOTALL)
-    return re.fullmatch(valid, string) is not None
+    valid = _compile_regex(regex, _regex_flags(flags))
+    return valid.search(string) is not None
 
 
 def replace(ctx, coll, regex, repl):
@@ -252,10 +270,11 @@ def replace(ctx, coll, regex, repl):
     return string.replace(regex, repl)
 
 
-def replace_matches(ctx, coll, regex, repl):
+def replace_matches(ctx, coll, regex, repl, flags=""):
     string = ensure_string_singleton(coll)
-    if isinstance(regex, list) or isinstance(repl, list):
+    if isinstance(regex, list) or isinstance(repl, list) or isinstance(flags, list):
         return []
+    _regex_flags(flags)
 
     # Empty regex should return the original string unchanged
     if regex == "":
@@ -265,7 +284,7 @@ def replace_matches(ctx, coll, regex, repl):
     # Using \g<N> avoids ambiguity: $0 → \g<0> (full match), $1 → \g<1>, etc.
     repl = re.sub(r"\$(\d+)", r"\\g<\1>", repl)
 
-    valid = _compile_regex(regex)
+    valid = _compile_regex(regex, _regex_flags(flags))
     return re.sub(valid, repl, string)
 
 

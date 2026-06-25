@@ -10,6 +10,39 @@ This file holds code to hande the FHIRPath Math functions.
 """
 DATETIME_NODES_LIST = (nodes.FP_Date, nodes.FP_DateTime, nodes.FP_Time)
 
+_CALENDAR_DURATION_UNITS = {
+    "year", "years", "month", "months", "week", "weeks", "day", "days",
+    "hour", "hours", "minute", "minutes", "second", "seconds",
+    "millisecond", "milliseconds",
+}
+_UCUM_DURATION_UNITS = {"'a'", "'mo'", "'wk'", "'d'", "'h'", "'min'", "'s'", "'ms'", "a", "mo", "wk", "d", "h", "min", "s", "ms"}
+_YEAR_MONTH_CALENDAR_UNITS = {"year", "years", "month", "months"}
+_YEAR_MONTH_UCUM_UNITS = {"'a'", "'mo'", "a", "mo"}
+
+
+def _is_numeric_value(value):
+    return isinstance(value, (int, float, Decimal)) and not isinstance(value, bool)
+
+
+def _numeric_to_unit_quantity(value):
+    return nodes.FP_Quantity(Decimal(str(value)), "'1'")
+
+
+def _coerce_numeric_quantity_pair(left, right):
+    if isinstance(left, nodes.FP_Quantity) and _is_numeric_value(right):
+        return left, _numeric_to_unit_quantity(right)
+    if _is_numeric_value(left) and isinstance(right, nodes.FP_Quantity):
+        return _numeric_to_unit_quantity(left), right
+    return left, right
+
+
+def _mixed_calendar_ucum_year_month(left_unit, right_unit):
+    return (
+        left_unit in _YEAR_MONTH_CALENDAR_UNITS and right_unit in _YEAR_MONTH_UCUM_UNITS
+    ) or (
+        left_unit in _YEAR_MONTH_UCUM_UNITS and right_unit in _YEAR_MONTH_CALENDAR_UNITS
+    )
+
 
 def equality(ctx, x, y):
     # FHIRPath §6.1.3: If either or both operands are empty, the result is empty (null propagation)
@@ -30,24 +63,13 @@ def equality(ctx, x, y):
 
     a = util.parse_value(x[0])
     b = util.parse_value(y[0])
+    a, b = _coerce_numeric_quantity_pair(a, b)
 
-    # Calendar duration keywords and definite UCUM duration units above seconds
-    # are explicitly unequal for equality (=), not incomparable/empty.
+    # §6.1: calendar years/months are not equal to definite UCUM years/months;
+    # equality is indeterminate/empty. Other time-valued units are comparable.
     if isinstance(a, nodes.FP_Quantity) and isinstance(b, nodes.FP_Quantity):
-        _ucum_duration = {"'a'", "'mo'", "'wk'", "'d'", "'h'", "'min'", "a", "mo", "wk", "d", "h", "min"}
-        _cal_duration = {
-            "year", "years", "month", "months", "week", "weeks", "day", "days",
-            "hour", "hours", "minute", "minutes",
-        }
-        if (a.unit in _ucum_duration and b.unit in _cal_duration) or \
-           (a.unit in _cal_duration and b.unit in _ucum_duration):
-            if not ctx.get("strict_mode"):
-                return False
-            _ucum_ym = {"'a'", "'mo'", "a", "mo"}
-            _cal_ym = {"year", "years", "month", "months"}
-            if (a.unit in _ucum_ym and b.unit in _cal_ym) or \
-               (a.unit in _cal_ym and b.unit in _ucum_ym):
-                return None
+        if _mixed_calendar_ucum_year_month(a.unit, b.unit):
+            return None
 
     if (
         isinstance(a, nodes.FP_Quantity)
@@ -127,7 +149,7 @@ def _complex_equality(ctx, a, b):
 
 
 def normalize_string(s):
-    return " ".join(s.lower().split())
+    return "".join(" " if ch.isspace() else ch.casefold() for ch in s)
 
 
 def decimal_places(a):
@@ -147,6 +169,35 @@ def is_equivalent(a, b):
         return round_to_decimal_places(a, 0) == round_to_decimal_places(b, 0)
     else:
         return round_to_decimal_places(a, precision) == round_to_decimal_places(b, precision)
+
+
+def _quantity_equivalence_half_width(quantity, base_value):
+    value = Decimal(str(quantity.value))
+    if value == 0:
+        scale = Decimal("1")
+    else:
+        scale = abs(Decimal(str(base_value)) / value)
+    return Decimal("0.5") * (Decimal("10") ** -decimal_places(quantity.value)) * scale
+
+
+def _quantities_equivalent(left, right):
+    if left.unit == right.unit:
+        return is_equivalent(left.value, right.value)
+
+    l_base = _quantity_base(left)
+    r_base = _quantity_base(right)
+    if l_base is None or r_base is None:
+        return None
+    l_value, l_unit = l_base
+    r_value, r_unit = r_base
+    if l_unit != r_unit:
+        return None
+
+    tolerance = max(
+        _quantity_equivalence_half_width(left, l_value),
+        _quantity_equivalence_half_width(right, r_value),
+    )
+    return abs(l_value - r_value) < tolerance
 
 
 def equivalence(ctx, x, y):
@@ -191,7 +242,8 @@ def equivalence(ctx, x, y):
     b = util.get_data(y[0])
 
     if type(a) in DATETIME_NODES_LIST or type(b) in DATETIME_NODES_LIST:
-        return datetime_equality(ctx, x, y)
+        result = datetime_equality(ctx, x, y)
+        return False if result is None else result
 
     if isinstance(a, str) and isinstance(b, str):
         return normalize_string(a) == normalize_string(b)
@@ -201,47 +253,50 @@ def equivalence(ctx, x, y):
 
     x_val = util.parse_value(x[0])
     y_val = util.parse_value(y[0])
+    x_val, y_val = _coerce_numeric_quantity_pair(x_val, y_val)
 
     if isinstance(x_val, nodes.FP_Quantity) and isinstance(y_val, nodes.FP_Quantity):
-        if x_val.unit == y_val.unit:
-            return x_val.deep_equal(y_val)
-
-        l_base = _quantity_base(x_val)
-        r_base = _quantity_base(y_val)
-        if l_base is None or r_base is None:
-            return x_val.deep_equal(y_val)
-        l_value, l_unit = l_base
-        r_value, r_unit = r_base
-        if l_unit != r_unit:
-            return False
-        return is_equivalent(l_value, r_value)
+        return _quantities_equivalent(x_val, y_val)
 
     if isinstance(a, (abc.Mapping, list)) and isinstance(b, (abc.Mapping, list)):
 
         def deep_equal(a, b):
             a_quantity = util.parse_value(a)
             b_quantity = util.parse_value(b)
+            a_quantity, b_quantity = _coerce_numeric_quantity_pair(a_quantity, b_quantity)
             if isinstance(a_quantity, nodes.FP_Quantity) and isinstance(b_quantity, nodes.FP_Quantity):
-                return equivalence(ctx, [a_quantity], [b_quantity]) is True
+                return _quantities_equivalent(a_quantity, b_quantity)
 
             if isinstance(a, abc.Mapping) and isinstance(b, abc.Mapping):
                 if a.keys() != b.keys():
                     return False
-                return all(deep_equal(a[key], b[key]) for key in a)
+                for key in a:
+                    result = deep_equal(a[key], b[key])
+                    if result is None:
+                        return None
+                    if result is False:
+                        return False
+                return True
             elif isinstance(a, list) and isinstance(b, list):
                 if len(a) != len(b):
                     return False
                 matched = [False] * len(b)
+                saw_empty = False
                 for left in a:
                     found = False
                     for idx, right in enumerate(b):
                         if matched[idx]:
                             continue
-                        if deep_equal(left, right):
+                        result = deep_equal(left, right)
+                        if result is True:
                             matched[idx] = True
                             found = True
                             break
+                        if result is None:
+                            saw_empty = True
                     if not found:
+                        if saw_empty:
+                            return None
                         return False
                 return True
             elif isinstance(a, str) and isinstance(b, str):
@@ -263,32 +318,14 @@ def equivalence(ctx, x, y):
 
 def _quantity_base(q):
     unit = q.unit
-    if len(unit) >= 2 and unit[0] == "'" and unit[-1] == "'":
-        unit = unit[1:-1]
-
-    table = {
-        "ug": ("g", Decimal("0.000001")),
-        "mg": ("g", Decimal("0.001")),
-        "g": ("g", Decimal("1")),
-        "kg": ("g", Decimal("1000")),
-        "mm": ("m", Decimal("0.001")),
-        "cm": ("m", Decimal("0.01")),
-        "m": ("m", Decimal("1")),
-        "km": ("m", Decimal("1000")),
-        "ms": ("s", Decimal("0.001")),
-        "s": ("s", Decimal("1")),
-        "min": ("s", Decimal("60")),
-        "h": ("s", Decimal("3600")),
-        "d": ("s", Decimal("86400")),
-        "wk": ("s", Decimal("604800")),
-        "1": ("1", Decimal("1")),
-        "%": ("1", Decimal("0.01")),
-    }
-    converted = table.get(unit)
-    if not converted:
+    clean_unit = nodes.FP_Quantity._strip_unit_quotes(unit)
+    if (
+        unit not in nodes.FP_Quantity._ucum_base_conversion_factor
+        and clean_unit not in nodes.FP_Quantity._ucum_base_conversion_factor
+    ):
         return None
-    base_unit, factor = converted
-    return Decimal(str(q.value)) * factor, base_unit
+    converted = nodes.FP_Quantity.conv_unit_to_base(q.unit, q.value)
+    return Decimal(str(converted.value)), converted.unit
 
 
 def datetime_equality(ctx, x, y):
@@ -324,13 +361,13 @@ def unequal(ctx, a, b):
 
 def equival(ctx, a, b):
     equivalence_result = equivalence(ctx, a, b)
-    return util.arraify(equivalence_result, instead_none=False)
+    return util.arraify(equivalence_result)
 
 
 def unequival(ctx, a, b):
     equivalence_result = equivalence(ctx, a, b)
     unequivalence_result = None if equivalence_result is None else not equivalence_result
-    return util.arraify(unequivalence_result, instead_none=True)
+    return util.arraify(unequivalence_result)
 
 
 def check_length(value):
@@ -358,6 +395,17 @@ def _get_comparison_data(value):
         type_info = value.get_type_info()
         type_name = type_info.name if type_info else None
         if isinstance(value.data, str):
+            if type_name in {"dateTime", "instant"}:
+                parsed = nodes.FP_DateTime(value.data)
+                if parsed is None and nodes.FP_Date(value.data):
+                    parsed = nodes.FP_DateTime(value.data + "T")
+                return parsed if parsed is not None else value.data
+            if type_name == "date":
+                parsed = nodes.FP_Date(value.data)
+                return parsed if parsed is not None else value.data
+            if type_name == "time":
+                parsed = nodes.FP_Time(value.data)
+                return parsed if parsed is not None else value.data
             if type_name in {"integer", "integer64", "unsignedInt", "positiveInt"}:
                 try:
                     return int(value.data)

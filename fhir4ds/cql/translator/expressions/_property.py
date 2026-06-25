@@ -47,6 +47,7 @@ from ...parser.ast_nodes import (
 from ...translator.context import ExprUsage, RowShape, DefinitionMeta
 from ...translator.function_inliner import ParameterPlaceholder
 from ...translator.placeholder import RetrievePlaceholder
+from ...translator.expressions._refstrategy import _RefKind
 from ...translator.types import (
     PRECEDENCE,
     SQLAlias,
@@ -225,13 +226,17 @@ class PropertyMixin:
             ],
         )
 
-    def _translate_property(self, prop: Property, boolean_context: bool = False) -> SQLExpression:
+    def _translate_property(self, prop: Property, usage: ExprUsage = ExprUsage.LIST) -> SQLExpression:
         """Translate a CQL property access to SQL (using fhirpath UDFs).
 
-        This method uses shape-aware handling:
-        - PATIENT_SCALAR sources use simple fhirpath calls
-        - RESOURCE_ROWS sources use list_apply to apply fhirpath to each element
+        ``usage`` propagates from the dispatcher (the legacy boolean_context
+        only carried one bit; usage carries four states — LIST, SCALAR,
+        BOOLEAN, EXISTS — which the cross-library branch needs to distinguish
+        scalar references from query-source positions). Internal helpers
+        below this point still take ``boolean_context`` as a bool; we derive
+        it once here so they don't all need to change.
         """
+        boolean_context = usage in (ExprUsage.BOOLEAN, ExprUsage.EXISTS)
         path = prop.path
         source = prop.source
 
@@ -433,19 +438,44 @@ class PropertyMixin:
                 # This is a reference to a definition in an included library
                 # Treat as a qualified identifier: LibraryName.DefinitionName
                 full_name = f"{source_name}.{path}"
-                # Return a subquery to the CTE
-                # Note: The CTE will be created from the included library's definitions
-                # during the optimization phases. We generate the reference now and
-                # trust that the CTE will exist at execution time.
-                if boolean_context:
-                    # Use correlated EXISTS for boolean context
+                # Cross-library define reference. Behavior depends on usage:
+                # - BOOLEAN/EXISTS: emit EXISTS (truth test).
+                # - SCALAR: emit correlated scalar subquery + LIMIT 1.
+                # - LIST: preserve legacy SELECT * (query source / identity
+                #   passthrough). Mutating this path regressed DQM (revert 06544fbf).
+                if usage in (ExprUsage.BOOLEAN, ExprUsage.EXISTS):
                     return self._build_correlated_exists(full_name)
-                else:
+                if usage == ExprUsage.SCALAR:
+                    meta = self.context.get_definition_meta(full_name)
+                    strategy = self._classify_definition_ref(full_name, usage, meta)
+                    if strategy.kind == _RefKind.EXISTS:
+                        return self._build_correlated_exists(full_name)
+                    _outer_pid_alias = (
+                        self.context.resource_alias
+                        or self.context.patient_alias
+                        or "_pt"
+                    )
                     subquery = SQLSubquery(query=SQLSelect(
-                        columns=[SQLIdentifier(name="*")],
-                        from_clause=SQLIdentifier(name=full_name, quoted=True)
+                        columns=[SQLQualifiedIdentifier(parts=["sub", strategy.column])],
+                        from_clause=SQLAlias(
+                            expr=SQLIdentifier(name=full_name, quoted=True),
+                            alias="sub",
+                        ),
+                        where=SQLBinaryOp(
+                            operator="=",
+                            left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
+                            right=SQLQualifiedIdentifier(parts=[_outer_pid_alias, "patient_id"]),
+                        ),
+                        limit=1,
                     ))
+                    if meta and meta.sql_result_type:
+                        subquery.result_type = meta.sql_result_type
                     return subquery
+                # usage == LIST (default): SELECT * identity passthrough.
+                return SQLSubquery(query=SQLSelect(
+                    columns=[SQLIdentifier(name="*")],
+                    from_clause=SQLIdentifier(name=full_name, quoted=True)
+                ))
 
         # Check if source is an alias with a stored SQL expression
         if isinstance(source, Identifier):

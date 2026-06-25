@@ -37,6 +37,7 @@ struct FPValue {
 	Type type;
 
 	yyjson_val *json_val = nullptr;
+	yyjson_val *primitive_shadow = nullptr;
 	std::string string_val;
 	int64_t int_val = 0;
 	double decimal_val = 0.0;
@@ -143,7 +144,7 @@ private:
 	FPCollection fn_startsWith(const FPCollection &input, const FPCollection &arg);
 	FPCollection fn_endsWith(const FPCollection &input, const FPCollection &arg);
 	FPCollection fn_contains_fn(const FPCollection &input, const FPCollection &arg);
-	FPCollection fn_matches(const FPCollection &input, const FPCollection &arg);
+	FPCollection fn_matches(const FPCollection &input, const FPCollection &arg, const FPCollection *flags);
 	FPCollection fn_replace(const FPCollection &input, const FPCollection &pattern, const FPCollection &substitution);
 	FPCollection fn_substring(const FPCollection &input, const FPCollection &start, const FPCollection *length);
 	FPCollection fn_length(const FPCollection &input);
@@ -153,8 +154,8 @@ private:
 	FPCollection fn_toInteger(const FPCollection &input);
 	FPCollection fn_toDecimal(const FPCollection &input);
 	FPCollection fn_toString(const FPCollection &input);
-	FPCollection fn_toDate(const FPCollection &input);
-	FPCollection fn_toDateTime(const FPCollection &input);
+	FPCollection fn_toDate(const FPCollection &input, const std::string &format = "");
+	FPCollection fn_toDateTime(const FPCollection &input, const std::string &format = "");
 	FPCollection fn_toBoolean(const FPCollection &input);
 	FPCollection fn_toQuantity(const FPCollection &input, const std::string &to_unit = "");
 	FPCollection fn_abs(const FPCollection &input);
@@ -190,8 +191,8 @@ private:
 	FPCollection fn_convertsToInteger(const FPCollection &input);
 	FPCollection fn_convertsToDecimal(const FPCollection &input);
 	FPCollection fn_convertsToString(const FPCollection &input);
-	FPCollection fn_convertsToDate(const FPCollection &input);
-	FPCollection fn_convertsToDateTime(const FPCollection &input);
+	FPCollection fn_convertsToDate(const FPCollection &input, const std::string &format = "");
+	FPCollection fn_convertsToDateTime(const FPCollection &input, const std::string &format = "");
 	FPCollection fn_convertsToTime(const FPCollection &input);
 	FPCollection fn_convertsToQuantity(const FPCollection &input, const std::string &to_unit = "");
 	FPCollection fn_lowBoundary(const FPCollection &input, const FPCollection *precision_arg);

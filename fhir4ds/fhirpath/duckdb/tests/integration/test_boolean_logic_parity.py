@@ -100,6 +100,7 @@ def test_multi_item_boolean_operands_return_empty_in_native_and_fallback(
         "arr or t",
         "arr and f",
         "arr implies t",
+        "f implies arr",
         "t implies arr",
         "arr xor t",
         "arr.not()",
@@ -208,7 +209,7 @@ def test_boolean_logic_truth_tables_native_and_fallback(
         ("t or f and f", "[true]", True),
         ("t xor t or t", "[true]", True),
         ("f implies f implies f", "[false]", False),
-        ("f implies arr", "[true]", True),
+        ("f implies s", "[true]", True),
     ],
 )
 def test_boolean_logic_singleton_precedence_and_short_circuit_parity(
@@ -240,6 +241,53 @@ def test_boolean_logic_singleton_precedence_and_short_circuit_parity(
             [resource, expression, resource, expression, resource, expression],
         ).fetchone()
         assert native_result == fallback_result == (expected_text, expected_json, expected_bool)
+    finally:
+        native.close()
+        fallback.close()
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "false implies (1 | 2)",
+        "false implies iif(true, 1 | 2, 3)",
+        "false implies iif(false, 1, 2 | 3)",
+    ],
+)
+def test_implies_rejects_multi_item_rhs_before_false_short_circuit(
+    expression: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "f": False,
+            "arr": [1, 2],
+        }
+    )
+
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        query = """
+            SELECT
+                fhirpath(?::JSON, ?),
+                fhirpath_json(?::JSON, ?),
+                fhirpath_bool(?::JSON, ?),
+                fhirpath_is_valid(?)
+        """
+        params = [
+            resource,
+            expression,
+            resource,
+            expression,
+            resource,
+            expression,
+            expression,
+        ]
+        native_result = native.execute(query, params).fetchone()
+        fallback_result = fallback.execute(query, params).fetchone()
+        assert native_result == fallback_result == ([], None, None, False)
     finally:
         native.close()
         fallback.close()

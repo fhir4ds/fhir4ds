@@ -135,6 +135,30 @@ def _has_invalid_timezone_literal(expression: str) -> bool:
     return False
 
 
+def _has_invalid_partial_datetime_time_literal(expression: str) -> bool:
+    """Return true when partial year/year-month DateTimes include a time."""
+    text = _strip_comments_for_precheck(expression)
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == "'":
+            i = _skip_quoted_for_precheck(text, i, "'")
+            continue
+        if ch == "`":
+            i = _skip_quoted_for_precheck(text, i, "`")
+            continue
+        if ch == "@":
+            token, i = _scan_temporal_token(text, i)
+            if re.fullmatch(
+                r"@\d{4}(?:-\d{2})?T\d{2}(?::\d{2}(?::\d{2}(?:\.\d+)?)?)?(?:Z|[+-]\d{2}:\d{2})?",
+                token,
+            ):
+                return True
+            continue
+        i += 1
+    return False
+
+
 def _is_unary_minus_context(expression: str, minus_pos: int) -> bool:
     j = minus_pos - 1
     while j >= 0 and expression[j].isspace():
@@ -182,6 +206,9 @@ def _has_out_of_range_integer_literal(expression: str) -> bool:
             while i < len(text) and text[i].isdigit():
                 i += 1
             continue
+        if i < len(text) and text[i] == "L":
+            i += 1
+            continue
 
         lookahead = i
         while lookahead < len(text) and text[lookahead].isspace():
@@ -205,6 +232,53 @@ def _has_out_of_range_integer_literal(expression: str) -> bool:
             and value == 2147483648
         )
         if value > 2147483647 and not unary_min:
+            return True
+    return False
+
+
+def _has_out_of_range_long_literal(expression: str) -> bool:
+    """Return true if a Long literal exceeds FHIRPath's signed 64-bit range."""
+    text = _strip_comments_for_precheck(expression)
+    i = 0
+    long_max = 9223372036854775807
+    long_min_magnitude = 9223372036854775808
+    while i < len(text):
+        ch = text[i]
+        if ch == "'":
+            i = _skip_quoted_for_precheck(text, i, "'")
+            continue
+        if ch == "`":
+            i = _skip_quoted_for_precheck(text, i, "`")
+            continue
+        if ch == "@":
+            _token, i = _scan_temporal_token(text, i)
+            continue
+        if not ch.isdigit():
+            i += 1
+            continue
+        if i > 0 and (text[i - 1].isalnum() or text[i - 1] in "_."):
+            i += 1
+            continue
+
+        start = i
+        while i < len(text) and text[i].isdigit():
+            i += 1
+
+        if i >= len(text) or text[i] != "L":
+            continue
+        i += 1
+
+        value = int(text[start : i - 1])
+        minus_pos = start - 1
+        while minus_pos >= 0 and text[minus_pos].isspace():
+            minus_pos -= 1
+        unary_min = (
+            minus_pos >= 0
+            and text[minus_pos] == "-"
+            and _is_unary_minus_context(text, minus_pos)
+            and value == long_min_magnitude
+        )
+        if value > long_max and not unary_min:
             return True
     return False
 
@@ -404,9 +478,17 @@ class FHIRPathEvaluator:
             raise FHIRPathSyntaxError(
                 f"Invalid FHIRPath expression: invalid timezone placement in '{expression}'"
             )
+        if _has_invalid_partial_datetime_time_literal(stripped):
+            raise FHIRPathSyntaxError(
+                f"Invalid FHIRPath expression: partial DateTime time requires full date in '{expression}'"
+            )
         if _has_out_of_range_integer_literal(stripped):
             raise FHIRPathSyntaxError(
                 f"Invalid FHIRPath expression: integer literal out of range in '{expression}'"
+            )
+        if _has_out_of_range_long_literal(stripped):
+            raise FHIRPathSyntaxError(
+                f"Invalid FHIRPath expression: long literal out of range in '{expression}'"
             )
         # Strip string literals and delimited identifiers before checking (they
         # can contain escaped token-looking text such as `omega\u03A9`).
@@ -419,6 +501,8 @@ class FHIRPathEvaluator:
         invalid_token = None
         for m in self._INVALID_TOKEN_RE.finditer(no_strings):
             if m.group(2) in self._TIME_QUANTITY_UNITS:
+                continue
+            if m.group(2) == "L" and "." not in m.group(1):
                 continue
             invalid_token = m
             break

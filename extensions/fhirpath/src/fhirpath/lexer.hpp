@@ -8,6 +8,7 @@ namespace fhirpath {
 enum class TokenType {
 	// Literals
 	Integer,
+	Long,
 	Decimal,
 	String,
 	Boolean,

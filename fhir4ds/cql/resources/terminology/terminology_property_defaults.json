@@ -6,6 +6,7 @@
     "MedicationRequest": "medicationCodeableConcept",
     "MedicationAdministration": "medicationCodeableConcept",
     "MedicationDispense": "medicationCodeableConcept",
+    "MedicationStatement": "medicationCodeableConcept",
     "Medication": "code",
     "DiagnosticReport": "code",
     "ServiceRequest": "code",
@@ -19,11 +20,28 @@
     "AllergyIntolerance": "code",
     "Device": "type",
     "Encounter": "type",
+    "BodyStructure": "morphology",
+    "CarePlan": "category",
+    "CareTeam": "category",
+    "Composition": "type",
+    "Consent": "category",
+    "DetectedIssue": "category",
+    "DocumentReference": "type",
+    "EpisodeOfCare": "type",
+    "FamilyMemberHistory": "condition",
+    "ImagingStudy": "procedureCode",
+    "Library": "type",
+    "Measure": "type",
+    "PlanDefinition": "type",
+    "ResearchStudy": "category",
+    "Specimen": "type",
+    "SupplyRequest": "category",
     "_default": "code",
     "_medication_reference_alternatives": {
         "_comment": "For medication[x] choice types, when the primary path is a CodeableConcept, also check if a Reference to a Medication resource is used and resolve its code.",
         "MedicationRequest": { "reference_property": "medicationReference", "target_type": "Medication", "target_code_property": "code" },
         "MedicationAdministration": { "reference_property": "medicationReference", "target_type": "Medication", "target_code_property": "code" },
-        "MedicationDispense": { "reference_property": "medicationReference", "target_type": "Medication", "target_code_property": "code" }
+        "MedicationDispense": { "reference_property": "medicationReference", "target_type": "Medication", "target_code_property": "code" },
+        "MedicationStatement": { "reference_property": "medicationReference", "target_type": "Medication", "target_code_property": "code" }
     }
 }

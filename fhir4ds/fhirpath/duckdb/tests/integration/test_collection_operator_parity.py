@@ -42,6 +42,8 @@ def test_collection_operators_match_cpp() -> None:
     expressions = [
         "a | b",
         "a.combine(b)",
+        "a.combine(b, true)",
+        "a.combine(b, false)",
         "a.union(b)",
         "one in a",
         "3 in a",
@@ -84,6 +86,42 @@ def test_collection_operators_match_cpp() -> None:
             assert cpp == py
     finally:
         con.close()
+
+
+def test_combine_preserve_order_optional_argument_matches_python_fallback(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "a": ["zero", "one"],
+            "b": ["two", "three"],
+            "ints": [1],
+        }
+    )
+    cases = {
+        "a.combine(b, true)": (["zero", "one", "two", "three"], '["zero","one","two","three"]', True),
+        "a.combine(b, false)": (["zero", "one", "two", "three"], '["zero","one","two","three"]', True),
+        "a.combine(b, {})": ([], None, True),
+        "a.combine(b, ints)": ([], None, True),
+        "a.combine(b, 'true')": ([], None, False),
+        "a.combine(b, 1)": ([], None, False),
+        "a.combine(b, true | false)": ([], None, False),
+        "a.combine(b, true, false)": ([], None, False),
+    }
+
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            query = (
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), "
+                "fhirpath_is_valid(?)"
+            )
+            params = [resource, expression, resource, expression, expression]
+            assert cpp.execute(query, params).fetchone() == expected, expression
+            assert py.execute(query, params).fetchone() == expected, expression
+    finally:
+        cpp.close()
+        py.close()
 
 
 def test_subsetting_integer_arguments_reject_non_integers_in_both_backends(monkeypatch) -> None:
@@ -151,7 +189,6 @@ def test_subsetting_and_combining_exact_arity_in_both_backends(monkeypatch) -> N
         "a.union()",
         "a.intersect()",
         "a.exclude()",
-        "a.combine(b, ints)",
         "a.union(b, ints)",
         "a.intersect(b, ints)",
         "a.exclude(b, ints)",

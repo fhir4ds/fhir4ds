@@ -227,7 +227,7 @@ def test_descendants_matches_repeat_children_for_split_primitive_json(monkeypatc
             ).fetchone()
             assert native_row == fallback_row
 
-        no_split_descendants = native.execute(
+        primitive_extension_descendants = native.execute(
             "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?)",
             [
                 resource,
@@ -236,7 +236,80 @@ def test_descendants_matches_repeat_children_for_split_primitive_json(monkeypatc
                 "descendants().where($this = 'midday').count()",
             ],
         ).fetchone()
-        assert no_split_descendants == (["0"], "[0]")
+        assert primitive_extension_descendants == (["1"], "[1]")
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_primitive_extension_metadata_is_visible_to_tree_navigation(monkeypatch: pytest.MonkeyPatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p1",
+            "birthDate": "1970-01-01",
+            "_birthDate": {
+                "extension": [
+                    {
+                        "url": "http://example.org/fhir/StructureDefinition/birth-note",
+                        "valueString": "midday",
+                    }
+                ]
+            },
+            "name": [
+                {
+                    "given": ["Ann"],
+                    "_given": [
+                        {
+                            "extension": [
+                                {
+                                    "url": "http://example.org/fhir/StructureDefinition/given-note",
+                                    "valueString": "alias",
+                                }
+                            ]
+                        }
+                    ],
+                    "family": "Able",
+                }
+            ],
+        }
+    )
+    expressions = [
+        (
+            "birthDate.children().where(url = 'http://example.org/fhir/StructureDefinition/birth-note').valueString",
+            (["midday"], '["midday"]', True),
+        ),
+        (
+            "birthDate.descendants().where($this = 'midday').count()",
+            (["1"], "[1]", True),
+        ),
+        (
+            "name.given.extension('http://example.org/fhir/StructureDefinition/given-note').valueString",
+            (["alias"], '["alias"]', True),
+        ),
+        (
+            "name.given.children().where(url = 'http://example.org/fhir/StructureDefinition/given-note').valueString",
+            (["alias"], '["alias"]', True),
+        ),
+        (
+            "name.given.descendants().where($this = 'alias').count()",
+            (["1"], "[1]", True),
+        ),
+    ]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expressions:
+            native_row = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone()
+            fallback_row = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native_row == fallback_row == expected
     finally:
         native.close()
         fallback.close()
@@ -341,6 +414,39 @@ def test_trace_projection_is_validated_in_native_and_fallback(monkeypatch: pytes
             [multi_given_resource, expression, multi_given_resource, expression, expression],
         ).fetchone()
         assert native_row == fallback_row == ([], None, True)
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_trace_projection_is_scoped_per_item_in_native_and_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p1",
+            "name": [
+                {"given": ["Ann"], "family": "Able"},
+                {"given": ["Bob"], "family": "Baker"},
+            ],
+        }
+    )
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in [
+            "name.trace('names', given.single()).given.count() = 2",
+            "name.trace('idx', $index.single()).given.count() = 2",
+        ]:
+            native_row = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone()
+            fallback_row = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native_row == fallback_row == (["true"], "[true]", True)
     finally:
         native.close()
         fallback.close()

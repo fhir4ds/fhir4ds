@@ -21,6 +21,13 @@ def _load_json(filename: str):
         return json.load(f)
 
 
+_VALID_FHIR_TYPES = (
+    set(_load_json("valid_fhir_types.json"))
+    | set(_load_json("type2Parent.json"))
+    | set(_load_json("fhir_type_hierarchy.json"))
+)
+
+
 # Time regex - NO timezone allowed for Time literals per FHIRPath spec
 # Time literals are @T14, @T14:34, @T14:34:28, @T14:34:28.123
 # Time with timezone (Z or offset) should be an error
@@ -346,9 +353,22 @@ class FP_Quantity(FP_Type):
 
     def __init__(self, value, unit):
         super().__init__()
-        self.asStr = f"{value} {unit}"
+        self.asStr = f"{self._format_quantity_number(value)} {unit}"
         self.value = value
         self.unit = unit
+
+    @staticmethod
+    def _format_quantity_number(value):
+        if isinstance(value, Decimal):
+            return format(value, "f")
+        if isinstance(value, float):
+            text = str(value)
+            if "e" in text.lower():
+                text = format(Decimal(text), "f")
+                if "." in text:
+                    text = text.rstrip("0").rstrip(".")
+                return "0" if text in {"", "-0"} else text
+        return str(value)
 
     def __str__(self):
         return self.asStr
@@ -374,9 +394,16 @@ class FP_Quantity(FP_Type):
             if self.unit == other.unit:
                 return self.value == other.value
             if self.unit in self._years_and_months and other.unit in self._years_and_months:
-                if self.unit == "'a'" or other.unit == "'a'":
-                    return False
-                return self._compare_years_and_months(other)
+                mixed_calendar_ucum = (
+                    self.unit in self._calendar_duration_units
+                    and other.unit in self._ucum_duration_units
+                ) or (
+                    self.unit in self._ucum_duration_units
+                    and other.unit in self._calendar_duration_units
+                )
+                if mixed_calendar_ucum:
+                    return None
+                return self._compare_years_and_months(other, year_units=["'a'", "year", "years"])
             elif self.unit in self._weeks_days_and_time and other.unit in self._weeks_days_and_time:
                 self_value_in_seconds = self.value * self.datetime_multipliers[self.unit]
                 other_value_in_seconds = other.value * self.datetime_multipliers[other.unit]
@@ -1282,9 +1309,9 @@ class FP_DateTime(FP_TimeBase):
         if timezone and timezone != "Z":
             tz_body = timezone[1:]
             tz_hour, tz_minute = tz_body.split(":")
-            if not (0 <= int(tz_hour) <= 23):
-                return None
-            if not (0 <= int(tz_minute) <= 59):
+            tz_hour_int = int(tz_hour)
+            tz_minute_int = int(tz_minute)
+            if tz_hour_int > 14 or tz_minute_int > 59 or (tz_hour_int == 14 and tz_minute_int != 0):
                 return None
 
         return super(FP_DateTime, cls).__new__(cls)
@@ -1616,8 +1643,10 @@ class TypeInfo:
     # Mapping from FHIR primitive types to System types
     FHIR_TO_SYSTEM_TYPE = {v: k for k, v in SYSTEM_TO_FHIR_TYPE.items()}
 
-    # Loaded from models/r4/valid_fhir_types.json
-    VALID_FHIR_TYPES = set(_load_json("valid_fhir_types.json"))
+    # Loaded from generated R4 model metadata. The legacy valid_fhir_types.json
+    # is intentionally widened with the full hierarchy tables so type
+    # specifier validation cannot drift from subtype matching.
+    VALID_FHIR_TYPES = _VALID_FHIR_TYPES
 
     @staticmethod
     def get_valid_types():

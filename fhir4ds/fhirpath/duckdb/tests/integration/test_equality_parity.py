@@ -66,6 +66,14 @@ def test_equality_and_equivalence_match_cpp() -> None:
         "s = s2",
         "s ~ s2",
         "s !~ s2",
+        "23 = 23 '1'",
+        "23 != 23 '1'",
+        "23 ~ 23 '1'",
+        "23 !~ 23 '1'",
+        "23 = 24 '1'",
+        "23 != 24 '1'",
+        "23 ~ 23.4 '1'",
+        "23 !~ 23.4 '1'",
         "empty ~ {}",
         "{} = {}",
         "{} != {}",
@@ -81,6 +89,8 @@ def test_equality_and_equivalence_match_cpp() -> None:
         "1 'mg' = 1 'mg'",
         "1 'mg' = 0.001 'g'",
         "1 'mg' ~ 0.001 'g'",
+        "1 'cm' ~ 1 's'",
+        "1 'cm' !~ 1 's'",
         "1 'mg' != 2 'mg'",
         "arr = 1",
         "arr != 1",
@@ -112,7 +122,7 @@ def test_multi_item_equivalence_uses_item_equivalence_in_native_and_fallback(mon
         {
             "resourceType": "Observation",
             "stringsA": ["alpha beta", "Gamma"],
-            "stringsB": [" gamma ", "ALPHA\tBETA"],
+            "stringsB": ["GAMMA", "ALPHA\tBETA"],
         }
     )
     expressions = {
@@ -142,13 +152,62 @@ def test_multi_item_equivalence_uses_item_equivalence_in_native_and_fallback(mon
         fallback.close()
 
 
+def test_string_equivalence_normalizes_case_and_whitespace_without_collapse(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "nbspLeft": "alpha\u00a0beta",
+            "spaceRight": "ALPHA beta",
+        }
+    )
+    expressions = {
+        "'a  b' ~ 'a b'": False,
+        "'a  b' !~ 'a b'": True,
+        "' a' ~ 'a'": False,
+        "' a' !~ 'a'": True,
+        "'a\tb' ~ 'A b'": True,
+        "nbspLeft ~ spaceRight": True,
+        "'É' ~ 'é'": True,
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expressions.items():
+            cpp = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp == py
+            assert cpp[1] is expected
+    finally:
+        native.close()
+        fallback.close()
+
+
 def test_calendar_duration_equality_shape_in_forced_python_fallback(monkeypatch) -> None:
     resource = "{}"
     expressions = {
-        "1 year = 1 'a'": False,
-        "1 year != 1 'a'": True,
-        "1 day = 1 'd'": False,
-        "1 day != 1 'd'": True,
+        "1 year = 1 'a'": None,
+        "1 year != 1 'a'": None,
+        "1 month = 1 'mo'": None,
+        "1 month != 1 'mo'": None,
+        "1 year ~ 1 'a'": True,
+        "1 year !~ 1 'a'": False,
+        "1 'cm' ~ 1 's'": None,
+        "1 'cm' !~ 1 's'": None,
+        "1 year = 12 months": True,
+        "1 'a' = 12 'mo'": True,
+        "1 week = 1 'wk'": True,
+        "7 days = 1 'wk'": True,
+        "1 day = 1 'd'": True,
+        "1 day != 1 'd'": False,
+        "1 hour = 60 'min'": True,
+        "1 minute = 60 's'": True,
         "1 second = 1 's'": True,
         "1 millisecond = 1 'ms'": True,
     }
@@ -243,8 +302,8 @@ def test_complex_equivalence_recurses_through_child_equivalence(monkeypatch) -> 
     resource = json.dumps(
         {
             "resourceType": "Patient",
-            "objA": {"given": ["Alpha  Beta"], "family": "SMITH"},
-            "objB": {"family": "smith", "given": [" alpha beta "]},
+            "objA": {"given": ["Alpha\tBeta"], "family": "SMITH"},
+            "objB": {"family": "smith", "given": ["alpha beta"]},
             "arrA": [{"family": "SMITH"}, {"family": "Jones"}],
             "arrB": [{"family": "jones"}, {"family": "smith"}],
             "nestedA": {"coding": [{"code": "A"}, {"code": "B"}]},
@@ -283,6 +342,12 @@ def test_resource_quantity_multi_item_equivalence_uses_quantity_semantics(monkey
     resource = json.dumps(
         {
             "resourceType": "Observation",
+            "valueQuantity": {
+                "value": 185,
+                "unit": "lbs",
+                "code": "[lb_av]",
+                "system": "http://unitsofmeasure.org",
+            },
             "component": [
                 {"valueQuantity": {"value": 1, "unit": "cm", "code": "cm"}},
                 {"valueQuantity": {"value": 2, "unit": "cm", "code": "cm"}},
@@ -302,12 +367,129 @@ def test_resource_quantity_multi_item_equivalence_uses_quantity_semantics(monkey
     fallback = _python_fallback_connection(monkeypatch)
     try:
         for expression, expected in {
+            "Observation.value = 185 '[lb_av]'": True,
+            "Observation.value != 185 'kg'": True,
+            "Observation.value ~ 185 '[lb_av]'": True,
+            "Observation.value ~ 83.9 'kg'": True,
+            "Observation.value !~ 83.9 'kg'": False,
+            "Observation.value ~ 185 'kg'": False,
+            "Observation.value !~ 185 'kg'": True,
             "component.value ~ referenceRange.high": True,
             "component.value !~ referenceRange.high": False,
             "component.value = referenceRange.high": False,
             "(1 'cm' | 2 'cm') = (1 'g' | 2 'cm')": None,
             "(1 'cm' | 2 'cm') != (1 'g' | 2 'cm')": None,
         }.items():
+            cpp = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp == py
+            assert cpp[1] is expected
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_numeric_values_compare_with_unit_one_quantities(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "component": [
+                {
+                    "valueQuantity": {
+                        "value": 23,
+                        "unit": "1",
+                        "code": "1",
+                        "system": "http://unitsofmeasure.org",
+                    }
+                },
+                {
+                    "valueQuantity": {
+                        "value": 24,
+                        "unit": "1",
+                        "code": "1",
+                        "system": "http://unitsofmeasure.org",
+                    }
+                },
+            ],
+        }
+    )
+    expressions = {
+        "23 = 23 '1'": True,
+        "23 != 23 '1'": False,
+        "23 ~ 23 '1'": True,
+        "23 !~ 23 '1'": False,
+        "23 = 24 '1'": False,
+        "23 != 24 '1'": True,
+        "23 ~ 23.4 '1'": True,
+        "23 !~ 23.4 '1'": False,
+        "23 = 23 'cm'": None,
+        "23 != 23 'cm'": None,
+        "component[0].value = 23": True,
+        "component[0].value != 23": False,
+        "component[0].value ~ 23": True,
+        "component[0].value !~ 23": False,
+        "component.value = (23 | 24)": True,
+        "component.value != (23 | 24)": False,
+        "component.value ~ (24 | 23)": True,
+        "component.value !~ (24 | 23)": False,
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expressions.items():
+            cpp = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp == py
+            assert cpp[1] is expected
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_large_json_numbers_compare_exactly_in_native_and_fallback(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "a": 9007199254740992,
+            "b": 9007199254740993,
+            "objA": {"value": 9007199254740992},
+            "objB": {"value": 9007199254740993},
+            "arrA": [9007199254740992, 9007199254740994],
+            "arrB": [9007199254740992, 9007199254740995],
+        }
+    )
+    expressions = {
+        "a = b": False,
+        "a != b": True,
+        "a ~ b": False,
+        "a !~ b": True,
+        "objA = objB": False,
+        "objA != objB": True,
+        "objA ~ objB": False,
+        "objA !~ objB": True,
+        "arrA = arrB": False,
+        "arrA != arrB": True,
+        "arrA ~ arrB": False,
+        "arrA !~ arrB": True,
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expressions.items():
             cpp = native.execute(
                 "SELECT fhirpath(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)",
                 [resource, expression, resource, expression, resource, expression],
@@ -381,7 +563,7 @@ def test_complex_equality_recurses_into_decimal_and_quantity_children(monkeypatc
                 }
             },
             "nestedA": {
-                "coding": [{"code": "Alpha  Beta", "rank": 1.24}, {"code": "Z", "rank": 2}],
+                "coding": [{"code": "Alpha\tBeta", "rank": 1.24}, {"code": "Z", "rank": 2}],
                 "dose": {
                     "value": 1,
                     "unit": "cm",
@@ -409,8 +591,8 @@ def test_complex_equality_recurses_into_decimal_and_quantity_children(monkeypatc
         "rangeA !~ rangeB": False,
         "rangeA = rangeBad": None,
         "rangeA != rangeBad": None,
-        "rangeA ~ rangeBad": False,
-        "rangeA !~ rangeBad": True,
+        "rangeA ~ rangeBad": None,
+        "rangeA !~ rangeBad": None,
         "nestedA ~ nestedB": True,
         "nestedA !~ nestedB": False,
     }

@@ -137,6 +137,51 @@ def test_type_operator_supertypes_match_python_fallback(monkeypatch) -> None:
         fallback.close()
 
 
+def test_empty_input_is_returns_false_as_returns_empty(monkeypatch) -> None:
+    # FHIRPath §5.1: empty-collection propagation requires is() to return
+    # the empty collection when the input is empty, regardless of the type
+    # argument. Native C++ fn_isType and Python is_fn must agree.
+    resource = json.dumps({"resourceType": "Patient"})
+    expectations = {
+        "missing is Integer": ([], None, None, True),
+        "missing.is(Integer)": ([], None, None, True),
+        "missing as Integer": ([], None, None, True),
+        "missing.as(Integer)": ([], None, None, True),
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expectations.items():
+            native_row = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            fallback_row = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native_row == fallback_row == expected
+
+        observation = json.dumps({"resourceType": "Observation", "status": "final"})
+        for expression in [
+            "Observation.issued is instant",
+            "Observation.issued.is(instant)",
+        ]:
+            native_row = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [observation, expression, observation, expression, observation, expression, expression],
+            ).fetchone()
+            fallback_row = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [observation, expression, observation, expression, observation, expression, expression],
+            ).fetchone()
+            assert native_row == fallback_row == ([], None, None, True)
+    finally:
+        native.close()
+        fallback.close()
+
+
 def test_type_specifier_errors_match_python_fallback(monkeypatch) -> None:
     resource = json.dumps({"resourceType": "Patient", "arr": [1, 2]})
     expressions = [
@@ -421,6 +466,119 @@ def test_choice_type_assertion_public_surfaces_match_fallback(monkeypatch) -> No
             assert _surfaces(native, resource, expression) == _surfaces(
                 fallback, resource, expression
             )
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_choice_type_assertion_after_resource_oftype_matches_fallback(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Bundle",
+            "entry": [
+                {
+                    "resource": {
+                        "resourceType": "Observation",
+                        "id": "obs",
+                        "valueInteger": 5,
+                    }
+                }
+            ],
+        }
+    )
+    expressions = [
+        "entry.resource.ofType(Observation).value.is(Integer)",
+        "entry.resource.ofType(Observation).value.as(Integer)",
+    ]
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in expressions:
+            assert _surfaces(native, resource, expression) == _surfaces(
+                fallback, resource, expression
+            )
+        assert native.execute(
+            "SELECT fhirpath_bool(?::JSON, 'entry.resource.ofType(Observation).value.is(Integer)')",
+            [resource],
+        ).fetchone() == (True,)
+        assert fallback.execute(
+            "SELECT fhirpath_bool(?::JSON, 'entry.resource.ofType(Observation).value.is(Integer)')",
+            [resource],
+        ).fetchone() == (True,)
+        assert native.execute(
+            "SELECT fhirpath_text(?::JSON, 'entry.resource.ofType(Observation).value.as(Integer)')",
+            [resource],
+        ).fetchone() == ("5",)
+        assert fallback.execute(
+            "SELECT fhirpath_text(?::JSON, 'entry.resource.ofType(Observation).value.as(Integer)')",
+            [resource],
+        ).fetchone() == ("5",)
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_valid_r4_resource_type_specifiers_match_fallback(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Bundle",
+            "entry": [
+                {
+                    "resource": {
+                        "resourceType": "CodeSystem",
+                        "id": "cs",
+                        "status": "active",
+                        "content": "complete",
+                    }
+                },
+                {
+                    "resource": {
+                        "resourceType": "QuestionnaireResponse",
+                        "id": "qr",
+                        "status": "completed",
+                    }
+                },
+                {
+                    "resource": {
+                        "resourceType": "Binary",
+                        "id": "bin",
+                        "contentType": "text/plain",
+                    }
+                },
+                {
+                    "resource": {
+                        "resourceType": "Parameters",
+                        "id": "params",
+                        "parameter": [{"name": "n", "valueInteger": 7}],
+                    }
+                },
+            ],
+        }
+    )
+    expressions = {
+        "entry.resource.ofType(CodeSystem).id": ["cs"],
+        "entry.resource.ofType(QuestionnaireResponse).id": ["qr"],
+        "entry.resource.ofType(Binary).id": ["bin"],
+        "entry.resource.ofType(Parameters).id": ["params"],
+        "entry.resource.ofType(CodeSystem).single() is DomainResource": ["true"],
+        "entry.resource.ofType(Binary).single() is Resource": ["true"],
+        "entry.resource.ofType(Parameters).single().as(Resource).id": ["params"],
+    }
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expressions.items():
+            assert _surfaces(native, resource, expression) == _surfaces(
+                fallback, resource, expression
+            )
+            assert native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, expression],
+            ).fetchone() == (expected, True)
+            assert fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, expression],
+            ).fetchone() == (expected, True)
     finally:
         native.close()
         fallback.close()

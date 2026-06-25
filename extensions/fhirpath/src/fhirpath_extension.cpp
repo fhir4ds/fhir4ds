@@ -847,7 +847,7 @@ static fhirpath::FPCollection EvaluateFhirpath(FhirpathState &state, const char 
 	}
 	auto ast = GetOrCompile(state, expr_str);
 	if (!ast) {
-		throw std::runtime_error("Invalid FHIRPath expression: " + expr_str);
+		return {};
 	}
 
 	yyjson_doc *doc = yyjson_read(json_data, json_len, 0);

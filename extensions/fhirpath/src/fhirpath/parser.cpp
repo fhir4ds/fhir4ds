@@ -1,4 +1,5 @@
 #include "fhirpath/parser.hpp"
+#include <climits>
 #include <stdexcept>
 
 namespace fhirpath {
@@ -20,6 +21,17 @@ static int64_t parseIntegerLiteralToken(const Token &tok) {
 		throw std::runtime_error("Integer literal out of range at position " + std::to_string(tok.position));
 	}
 	return value;
+}
+
+static int64_t parseLongLiteralToken(const Token &tok) {
+	std::string text = tok.text;
+	if (!text.empty() && text[text.size() - 1] == 'L') {
+		text = text.substr(0, text.size() - 1);
+	}
+	if (text == "9223372036854775808") {
+		return LLONG_MIN;
+	}
+	return std::stoll(text);
 }
 
 ASTNodePtr Parser::parse(const std::string &expression) {
@@ -382,7 +394,7 @@ ASTNodePtr Parser::parsePrimaryExpression() {
 	}
 
 	// Literal values
-	if (check(TokenType::Integer) || check(TokenType::Decimal) || check(TokenType::String) ||
+	if (check(TokenType::Integer) || check(TokenType::Long) || check(TokenType::Decimal) || check(TokenType::String) ||
 	    check(TokenType::True_) || check(TokenType::False_) || check(TokenType::Date) ||
 	    check(TokenType::DateTime) || check(TokenType::Time)) {
 		return parseLiteral();
@@ -477,16 +489,24 @@ ASTNodePtr Parser::parseLiteral() {
 			std::string unit = current().text;
 			advance();
 			node->value = QuantityValue {std::stod(tok.text), unit};
+			node->value.string_val = tok.text;
 		} else if (isTimeUnitKeyword(current().type)) {
 			node->type = NodeType::QuantityLiteral;
 			std::string unit = current().text;
 			advance();
 			node->value = QuantityValue {std::stod(tok.text), unit};
+			node->value.string_val = tok.text;
 		} else {
 			node->type = NodeType::IntegerLiteral;
 			node->value = parseIntegerLiteralToken(tok);
 			node->value.string_val = tok.text;
 		}
+		break;
+	}
+	case TokenType::Long: {
+		node->type = NodeType::LongLiteral;
+		node->value = parseLongLiteralToken(tok);
+		node->value.string_val = tok.text;
 		break;
 	}
 	case TokenType::Decimal: {

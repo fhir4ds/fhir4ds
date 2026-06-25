@@ -56,6 +56,14 @@ def test_math_functions_match_cpp() -> None:
         "d.floor()",
         "p.truncate()",
         "d.truncate()",
+        "(1.1 'mg').ceiling()",
+        "(-1.1 'mg').ceiling()",
+        "(1.9 'mg').floor()",
+        "(-1.1 'mg').floor()",
+        "(1.56 'mg').truncate()",
+        "(-1.56 'mg').truncate()",
+        "(1.55 'mg').round(1)",
+        "(-1.55 'mg').round(1)",
         "p.round()",
         "p.round(1)",
         "p.round(0)",
@@ -150,6 +158,60 @@ def test_round_omitted_precision_returns_decimal_like_explicit_zero(monkeypatch)
         "1.round(0).type().name": (["Decimal"], "Decimal", '["Decimal"]'),
         "1.round() is Decimal": (["true"], "true", "[true]"),
         "1.round() is Integer": (["false"], "false", "[false]"),
+        "9223372036854775807L.abs()": (
+            ["9223372036854775807"],
+            "9223372036854775807",
+            "[9223372036854775807]",
+        ),
+        "9223372036854775807L.ceiling()": (
+            ["9223372036854775807"],
+            "9223372036854775807",
+            "[9223372036854775807]",
+        ),
+        "9223372036854775807L.floor()": (
+            ["9223372036854775807"],
+            "9223372036854775807",
+            "[9223372036854775807]",
+        ),
+        "9223372036854775807L.truncate()": (
+            ["9223372036854775807"],
+            "9223372036854775807",
+            "[9223372036854775807]",
+        ),
+        "9223372036854775807L.round().toString()": (
+            ["9223372036854775807.0"],
+            "9223372036854775807.0",
+            '["9223372036854775807.0"]',
+        ),
+        "9223372036854775807L.power(1).toString()": (
+            ["9223372036854775807.0"],
+            "9223372036854775807.0",
+            '["9223372036854775807.0"]',
+        ),
+        "9223372036854774785L.ceiling()": (
+            ["9223372036854774785"],
+            "9223372036854774785",
+            "[9223372036854774785]",
+        ),
+        "9223372036854775806.5.floor()": (
+            ["9223372036854775806"],
+            "9223372036854775806",
+            "[9223372036854775806]",
+        ),
+        "9223372036854775806.5.ceiling()": (
+            ["9223372036854775807"],
+            "9223372036854775807",
+            "[9223372036854775807]",
+        ),
+        "(-9223372036854775807L).abs()": (
+            ["9223372036854775807"],
+            "9223372036854775807",
+            "[9223372036854775807]",
+        ),
+        "2.power(3).type().name": (["Decimal"], "Decimal", '["Decimal"]'),
+        "2.power(3) is Decimal": (["true"], "true", "[true]"),
+        "2.power(3) is Integer": (["false"], "false", "[false]"),
+        "2.power(3).toString()": (["8.0"], "8.0", '["8.0"]'),
     }
 
     cpp = _cpp_connection()
@@ -197,18 +259,64 @@ def test_round_preserves_decimal_source_text_for_high_precision_and_ties(monkeyp
         py.close()
 
 
-def test_only_abs_accepts_quantity_math_input_in_cpp_and_fallback(monkeypatch) -> None:
+def test_quantity_math_input_matches_current_spec_in_cpp_and_fallback(monkeypatch) -> None:
     resource = json.dumps({"resourceType": "Observation"})
     cases = {
         "(-5.5 'mg').abs()": (["5.5 'mg'"], "5.5 'mg'", '[{"value":5.5,"unit":"mg"}]'),
-        "(-5.5 'mg').ceiling()": ([], None, None),
-        "(-5.5 'mg').floor()": ([], None, None),
-        "(-5.5 'mg').truncate()": ([], None, None),
-        "(-5.55 'mg').round(1)": ([], None, None),
+        "(1.1 'mg').ceiling()": (["2 'mg'"], "2 'mg'", '[{"value":2,"unit":"mg"}]'),
+        "(-1.1 'mg').ceiling()": (["-1 'mg'"], "-1 'mg'", '[{"value":-1,"unit":"mg"}]'),
+        "(1.9 'mg').floor()": (["1 'mg'"], "1 'mg'", '[{"value":1,"unit":"mg"}]'),
+        "(-1.1 'mg').floor()": (["-2 'mg'"], "-2 'mg'", '[{"value":-2,"unit":"mg"}]'),
+        "(1.56 'mg').truncate()": (["1 'mg'"], "1 'mg'", '[{"value":1,"unit":"mg"}]'),
+        "(-1.56 'mg').truncate()": (["-1 'mg'"], "-1 'mg'", '[{"value":-1,"unit":"mg"}]'),
+        "(1.55 'mg').round(1)": (["1.6 'mg'"], "1.6 'mg'", '[{"value":1.6,"unit":"mg"}]'),
+        "(-1.55 'mg').round(1)": (["-1.6 'mg'"], "-1.6 'mg'", '[{"value":-1.6,"unit":"mg"}]'),
+        "(1 'mg').round()": (["1 'mg'"], "1 'mg'", '[{"value":1,"unit":"mg"}]'),
         "(5.5 'mg').ln()": ([], None, None),
         "(5.5 'mg').log(10)": ([], None, None),
         "(5.5 'mg').power(2)": ([], None, None),
         "(5.5 'mg').sqrt()": ([], None, None),
+    }
+
+    cpp = _cpp_connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            cpp_result = cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py_result = py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp_result == py_result == expected, expression
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_resource_backed_quantity_math_matches_current_spec_in_cpp_and_fallback(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "quantity": {
+                "value": 1.55,
+                "unit": "mg",
+                "system": "http://unitsofmeasure.org",
+                "code": "mg",
+            },
+        }
+    )
+    cases = {
+        "quantity.abs()": (["1.55 'mg'"], "1.55 'mg'", '[{"value":1.55,"unit":"mg"}]'),
+        "quantity.ceiling()": (["2 'mg'"], "2 'mg'", '[{"value":2,"unit":"mg"}]'),
+        "quantity.floor()": (["1 'mg'"], "1 'mg'", '[{"value":1,"unit":"mg"}]'),
+        "quantity.truncate()": (["1 'mg'"], "1 'mg'", '[{"value":1,"unit":"mg"}]'),
+        "quantity.round(1)": (["1.6 'mg'"], "1.6 'mg'", '[{"value":1.6,"unit":"mg"}]'),
+        "quantity.sqrt()": ([], None, None),
+        "quantity.log(2)": ([], None, None),
+        "quantity.power(2)": ([], None, None),
     }
 
     cpp = _cpp_connection()
@@ -235,7 +343,6 @@ def test_math_incompatible_constants_and_dynamic_arguments_match_fallback(monkey
         "'2.5'.sqrt()",
         "true.abs()",
         "5 'mg'.sqrt()",
-        "5 'mg'.ceiling()",
     ]
 
     cpp = _cpp_connection()
@@ -271,7 +378,7 @@ def test_math_incompatible_constants_and_dynamic_arguments_match_fallback(monkey
             "SELECT fhirpath(?::JSON, '2.power(3)'), fhirpath_text(?::JSON, '2.power(3)'), fhirpath_json(?::JSON, '2.power(3)')",
             [resource, resource, resource],
         ).fetchone()
-        assert cpp_power == py_power == (["8"], "8", "[8]")
+        assert cpp_power == py_power == (["8.0"], "8.0", "[8.0]")
     finally:
         cpp.close()
         py.close()
