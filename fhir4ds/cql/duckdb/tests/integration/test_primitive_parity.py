@@ -221,9 +221,9 @@ def test_cql_primitive_power_operator_returns_spec_typed_result() -> None:
     assert "AS BIGINT" in translated["LongPower"].to_sql(), (
         f"2L^3L should target BIGINT per spec; got {translated['LongPower'].to_sql()!r}"
     )
-    # Decimal^Decimal keeps DOUBLE
-    assert "AS DOUBLE" in translated["DecimalPower"].to_sql(), (
-        f"2.5^2.0 should target DOUBLE per spec; got {translated['DecimalPower'].to_sql()!r}"
+    # Decimal^Decimal uses DECIMAL(38, 8) so overflow returns NULL per spec
+    assert "AS DECIMAL(38, 8)" in translated["DecimalPower"].to_sql(), (
+        f"2.5^2.0 should target DECIMAL(38, 8) for overflow detection; got {translated['DecimalPower'].to_sql()!r}"
     )
 
     # Runtime overflow check: 2^31 exceeds Integer max -> NULL
