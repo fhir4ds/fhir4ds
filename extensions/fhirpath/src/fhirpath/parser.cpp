@@ -149,27 +149,15 @@ ASTNodePtr Parser::parseAndExpression() {
 	return left;
 }
 
-// membershipExpression: inequalityExpression (('in' | 'contains') inequalityExpression)*
+// membershipExpression: equalityExpression (('in' | 'contains') equalityExpression)*
+//
+// Per FHIRPath §6.8 operator precedence table, the order from HIGHER to LOWER
+// is: #07 '|' (union) > #08 '<','>','<=','>=' (comparison) > #09 '=','~','!=','!~'
+// (equality) > #10 'in','contains' (membership). So membership (lower) wraps
+// equality (higher), equality wraps inequality, and inequality wraps union.
 ASTNodePtr Parser::parseMembershipExpression() {
-	auto left = parseInequalityExpression();
-	while (check(TokenType::In) || check(TokenType::Contains)) {
-		std::string op = current().text;
-		advance();
-		auto right = parseInequalityExpression();
-		auto node = std::make_shared<ASTNode>();
-		node->type = NodeType::BinaryOp;
-		node->op = op;
-		node->children = {left, right};
-		left = node;
-	}
-	return left;
-}
-
-// inequalityExpression: equalityExpression (('<' | '>' | '<=' | '>=') equalityExpression)*
-ASTNodePtr Parser::parseInequalityExpression() {
 	auto left = parseEqualityExpression();
-	while (check(TokenType::Less) || check(TokenType::Greater) || check(TokenType::LessEqual) ||
-	       check(TokenType::GreaterEqual)) {
+	while (check(TokenType::In) || check(TokenType::Contains)) {
 		std::string op = current().text;
 		advance();
 		auto right = parseEqualityExpression();
@@ -182,10 +170,35 @@ ASTNodePtr Parser::parseInequalityExpression() {
 	return left;
 }
 
-// equalityExpression: unionExpression (('=' | '!=' | '~' | '!~') unionExpression)*
+// equalityExpression: inequalityExpression (('=' | '!=' | '~' | '!~') inequalityExpression)*
+//
+// §6.8: equality (#09) is LOWER precedence than comparison (#08), so equality
+// is the OUTER parse and inequality is the INNER. (~ and !~ are lexed as
+// TokenType::Equals and TokenType::NotEquals respectively — see lexer.cpp —
+// so checking those two token types covers all four equality operators.)
 ASTNodePtr Parser::parseEqualityExpression() {
-	auto left = parseUnionExpression();
+	auto left = parseInequalityExpression();
 	while (check(TokenType::Equals) || check(TokenType::NotEquals)) {
+		std::string op = current().text;
+		advance();
+		auto right = parseInequalityExpression();
+		auto node = std::make_shared<ASTNode>();
+		node->type = NodeType::BinaryOp;
+		node->op = op;
+		node->children = {left, right};
+		left = node;
+	}
+	return left;
+}
+
+// inequalityExpression: unionExpression (('<' | '>' | '<=' | '>=') unionExpression)*
+//
+// §6.8: comparison (#08) is HIGHER precedence than equality (#09), so
+// inequality wraps union (which is #07, higher still).
+ASTNodePtr Parser::parseInequalityExpression() {
+	auto left = parseUnionExpression();
+	while (check(TokenType::Less) || check(TokenType::Greater) || check(TokenType::LessEqual) ||
+	       check(TokenType::GreaterEqual)) {
 		std::string op = current().text;
 		advance();
 		auto right = parseUnionExpression();

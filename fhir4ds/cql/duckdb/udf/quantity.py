@@ -193,6 +193,119 @@ _CQL_DEFINITE_DURATION_DAYS = {
 
 _DURATION_NOT_APPLICABLE = object()
 
+# Sentinel for "this is not a cross-unit offset-temperature comparison".
+_OFFSET_NOT_APPLICABLE = object()
+
+# UCUM and pint aliases that all refer to offset-temperature units. Used by
+# `_compare_offset_temperature` to detect when explicit Cel<->[degF]
+# conversion is required (pint refuses with "Ambiguous operation with
+# offset unit"). Keys are canonical lowercased UCUM codes / aliases; the
+# value is a canonical symbol used in the conversion table below.
+_OFFSET_TEMPERATURE_ALIASES = {
+    "cel": "Cel",
+    "degc": "Cel",
+    "degree_celsius": "Cel",
+    "celsius": "Cel",
+    "[degf]": "[degF]",
+    "degf": "[degF]",
+    "degree_fahrenheit": "[degF]",
+    "fahrenheit": "[degF]",
+    "k": "K",
+    "kelvin": "K",
+}
+
+
+def _to_kelvin(value: float, unit: str) -> float | None:
+    """Convert a temperature value in `unit` to Kelvin."""
+    if unit == "Cel":
+        return value + 273.15
+    if unit == "[degF]":
+        return (value - 32.0) * 5.0 / 9.0 + 273.15
+    if unit == "K":
+        return value
+    return None
+
+
+def _compare_offset_temperature(q1_dict: dict, q2_dict: dict, op: str):
+    """Compare two quantities when at least one is an offset-temperature unit.
+
+    Returns `_OFFSET_NOT_APPLICABLE` when neither operand is an offset-
+    temperature unit (caller should fall through to the standard pint path),
+    or when both operands are in the SAME unit (the standard path handles
+    same-unit comparison correctly). Otherwise performs explicit conversion
+    to Kelvin and compares magnitudes, returning True/False per `op`.
+
+    Per CQL §Equal/§Equivalent (Quantity), comparison is performed after
+    converting to a common unit. Pint refuses cross-unit offset-temperature
+    conversion with "Ambiguous operation with offset unit"; the native C++
+    quantity.cpp handles this internally, so the Python fallback must too
+    or cross-unit temperature comparisons will silently return None.
+    """
+    code1 = (q1_dict.get("code") or "").strip()
+    code2 = (q2_dict.get("code") or "").strip()
+    if not code1 or not code2:
+        return _OFFSET_NOT_APPLICABLE
+
+    canon1 = _OFFSET_TEMPERATURE_ALIASES.get(code1.lower())
+    canon2 = _OFFSET_TEMPERATURE_ALIASES.get(code2.lower())
+    if canon1 is None and canon2 is None:
+        return _OFFSET_NOT_APPLICABLE
+    # Only handle offset-temperature; if only one operand is offset-temperature
+    # and the other is not, units are genuinely incompatible -> return None
+    # (do not raise; spec requires null for incompatible units).
+    if canon1 is None or canon2 is None:
+        return None
+    # Same unit -> explicit comparison. Pint refuses even same-unit offset
+    # comparison (`pint_q2.to(pint_q1.units)` raises "Ambiguous operation
+    # with offset unit" for degC/degF), so we cannot fall through to the
+    # standard pint path. Compare magnitudes directly.
+    if canon1 == canon2:
+        v1s = q1_dict.get("value")
+        v2s = q2_dict.get("value")
+        if v1s is None or v2s is None or isinstance(v1s, (str, bool)) or isinstance(v2s, (str, bool)):
+            return None
+        try:
+            v1 = float(v1s)
+            v2 = float(v2s)
+        except (TypeError, ValueError):
+            return None
+    else:
+        v1s = q1_dict.get("value")
+        v2s = q2_dict.get("value")
+        if v1s is None or v2s is None or isinstance(v1s, (str, bool)) or isinstance(v2s, (str, bool)):
+            return None
+        try:
+            k1 = _to_kelvin(float(v1s), canon1)
+            k2 = _to_kelvin(float(v2s), canon2)
+        except (TypeError, ValueError):
+            return None
+        if k1 is None or k2 is None:
+            return None
+        v1 = k1
+        v2 = k2
+
+    if op == ">":
+        return v1 > v2
+    if op == "<":
+        return v1 < v2
+    if op == ">=":
+        return v1 >= v2
+    if op == "<=":
+        return v1 <= v2
+    if op == "==":
+        return v1 == v2
+    if op == "!=":
+        return v1 != v2
+    if op in ("~", "!~"):
+        # Equivalence uses least-precision operand rounding. For temperatures
+        # both operands are typically Decimal-scale; use a tight tolerance
+        # consistent with the existing pint-based ~ path.
+        tolerance = 1e-8
+        if op == "~":
+            return abs(v1 - v2) <= tolerance
+        return abs(v1 - v2) > tolerance
+    return None
+
 
 def _get_ureg():
     """Lazy-load UnitRegistry (thread-safe singleton) with UCUM aliases."""
@@ -288,7 +401,12 @@ def _is_valid_quantity_unit(unit: str | None) -> bool:
     try:
         ureg(_ucum_to_pint_unit(unit))
         return True
-    except (UndefinedUnitError, ValueError, TypeError):
+    except (UndefinedUnitError, ValueError, TypeError, AssertionError):
+        # pint's internal parser raises bare AssertionError on some malformed
+        # unit strings (e.g. the single-codepoint degree-Celsius ``℃`` U+2103).
+        # The CQL §ConvertsToQuantity / §ConvertsToRatio / §CanConvertQuantity
+        # contracts require returning False for invalid units rather than
+        # leaking the assertion through the public UDF surface.
         return False
 
 
@@ -408,6 +526,16 @@ def _parse_quantity(value: str | None) -> dict | None:
             or not isinstance(raw_value, (int, float))
         ):
             quantity_value = None
+        elif isinstance(quantity_value, int) and not isinstance(quantity_value, bool):
+            # CQL §Types/Quantity: structured type Quantity { value Decimal,
+            # unit String }. The serialized JSON must always present `value`
+            # as Decimal/float, never as Integer. Without this normalization
+            # the Python fallback diverges from the native C++ UDF for
+            # integer-valued Quantity literals like `5 'mg'` or `1 year`
+            # (Python emits `"value":5`, native emits `"value":5.0`).
+            # bool is excluded because Python `True`/`False` are subclasses
+            # of int; a Boolean `value` is invalid per spec.
+            quantity_value = float(quantity_value)
 
         code = data.get("code") or data.get("unit") or "1"
         result = {
@@ -467,6 +595,36 @@ def _format_quantity(pint_q) -> str | None:
         return orjson.dumps(result).decode("utf-8")
     except (TypeError, ValueError, AttributeError) as e:
         _logger.warning("_format_quantity failed: %s", e)
+        return None
+
+
+def _format_quantity_with_code(pint_q, code: str) -> str | None:
+    """Format pint Quantity back to FHIR Quantity JSON, preserving the
+    provided UCUM ``code`` string verbatim for both ``unit`` and ``code``
+    fields.
+
+    CQL Quantity arithmetic preserves the operand unit code as authored
+    (CQL §09-b-cqlreference Sum/Subtract; LHS-preservation rule documented
+    in ``fhir4ds/cql/AGENTS.md``). Routing the result back through
+    :func:`_pint_to_ucum_unit` would normalize case (e.g. ``ml`` -> ``mL``)
+    and lose the original authoring, diverging from the C++ extension which
+    preserves the input code. Use this helper whenever the original operand
+    code is known.
+    """
+    if pint_q is None:
+        return None
+
+    try:
+        value = float(pint_q.magnitude)
+        result = {
+            "value": value,
+            "unit": code,
+            "code": code,
+            "system": "http://unitsofmeasure.org",
+        }
+        return orjson.dumps(result).decode("utf-8")
+    except (TypeError, ValueError, AttributeError) as e:
+        _logger.warning("_format_quantity_with_code failed: %s", e)
         return None
 
 
@@ -661,6 +819,17 @@ def quantityCompare(q1_json: str | None, q2_json: str | None, op: str) -> bool |
     if duration_result is not _DURATION_NOT_APPLICABLE:
         return duration_result
 
+    # CQL §Equal/§Equivalent (Quantity): comparison is performed after
+    # converting to a common unit. Offset-temperature units (Cel/[degF])
+    # require non-linear conversion (degF = degC * 9/5 + 32) which pint
+    # refuses with "Ambiguous operation with offset unit". The native C++
+    # quantity.cpp handles this internally; the Python fallback must do the
+    # same so cross-unit temperature comparisons return correct True/False
+    # instead of None.
+    offset_result = _compare_offset_temperature(q1_dict, q2_dict, op)
+    if offset_result is not _OFFSET_NOT_APPLICABLE:
+        return offset_result
+
     pint_q1 = _quantity_to_pint(q1_dict)
     pint_q2 = _quantity_to_pint(q2_dict)
 
@@ -729,7 +898,9 @@ def quantityAdd(q1_json: str | None, q2_json: str | None) -> str | None:
             return None
         result_unit = _ucum_to_pint_unit(result_code)
         result = pint_q1.to(result_unit) + pint_q2.to(result_unit)
-        return _format_quantity(result)
+        # Preserve the original result unit code (CQL §09-b Sum preserves
+        # LHS or most-granular unit; pint round-trip would normalize case).
+        return _format_quantity_with_code(result, result_code)
     except (DimensionalityError, UndefinedUnitError, ValueError) as e:
         _logger.warning("UDF quantityAdd failed: %s", e)
         return None
@@ -761,7 +932,10 @@ def quantitySubtract(q1_json: str | None, q2_json: str | None) -> str | None:
         # Convert q2 to q1's units and subtract
         pint_q2_converted = pint_q2.to(pint_q1.units)
         result = pint_q1 - pint_q2_converted
-        return _format_quantity(result)
+        # Preserve the original LHS unit code (CQL §09-b Subtract preserves
+        # LHS unit; pint round-trip would normalize case).
+        lhs_code = q1_dict.get("code") or "1"
+        return _format_quantity_with_code(result, lhs_code)
     except (DimensionalityError, UndefinedUnitError, ValueError) as e:
         _logger.warning("UDF quantitySubtract failed: %s", e)
         return None

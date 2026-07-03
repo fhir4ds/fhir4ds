@@ -111,7 +111,12 @@ def equality(ctx, x, y):
         if not (a_numeric and b_numeric):
             return None  # incompatible types → empty
 
-    return a == b
+    # Compare the unwrapped values, not the original ResourceNode-wrapped
+    # operands. ``util.get_data`` materializes raw JSON floats to ``Decimal``
+    # so authored decimal digits survive; otherwise ResourceNode.__eq__ would
+    # compare a binary float against a Decimal literal and silently return
+    # False for §6.1.1-equal values such as ``probabilityDecimal = 123.45``.
+    return a_raw == b_raw
 
 
 def _complex_equality(ctx, a, b):
@@ -200,12 +205,103 @@ def _quantities_equivalent(left, right):
     return abs(l_value - r_value) < tolerance
 
 
+def _is_implicitly_equivalent_pair(a, b):
+    """Check whether two single-item values are implicitly convertible to
+    the same type per FHIRPath §5.5 conversion table.
+
+    Returns True if the types are the same OR if an implicit conversion
+    exists between them. Returns False if only an Explicit conversion
+    exists (e.g. Boolean<->Integer/Decimal/String, Decimal/Integer<->
+    String), in which case §6.1.2 requires the result to be `false`
+    (not auto-coerced).
+    """
+    # Unwrap ResourceNode to get the underlying data type.
+    a_raw = util.get_data(a) if hasattr(a, 'data') else a
+    b_raw = util.get_data(b) if hasattr(b, 'data') else b
+
+    # Date/DateTime/Time: per §5.5 Date<->DateTime is Implicit; DateTime<->
+    # Date is Explicit but Date->DateTime is Implicit. Treat the FP_TimeBase
+    # family as compatible (the existing datetime_equality path handles
+    # precision mismatch). Time is NOT compatible with Date/DateTime.
+    a_is_temporal = isinstance(a_raw, DATETIME_NODES_LIST)
+    b_is_temporal = isinstance(b_raw, DATETIME_NODES_LIST)
+    if a_is_temporal or b_is_temporal:
+        # Time vs Date/DateTime is not implicitly convertible (no
+        # conversion path in §5.5 table between Time and Date/DateTime).
+        a_is_time = isinstance(a_raw, nodes.FP_Time)
+        b_is_time = isinstance(b_raw, nodes.FP_Time)
+        if a_is_time != b_is_time:
+            return False
+        return True
+
+    # FP_Quantity vs FP_Quantity or numeric vs FP_Quantity: Implicit.
+    a_parsed = util.parse_value(a_raw)
+    b_parsed = util.parse_value(b_raw)
+    a_is_qty = isinstance(a_parsed, nodes.FP_Quantity)
+    b_is_qty = isinstance(b_parsed, nodes.FP_Quantity)
+    if a_is_qty or b_is_qty:
+        # Numeric <-> Quantity is Implicit per §5.5; Quantity <->
+        # Quantity is same-type. The downstream _quantities_equivalent
+        # / _coerce_numeric_quantity_pair paths handle this.
+        a_is_numeric = isinstance(a_raw, (int, float, Decimal)) and not isinstance(a_raw, bool)
+        b_is_numeric = isinstance(b_raw, (int, float, Decimal)) and not isinstance(b_raw, bool)
+        if a_is_qty and b_is_qty:
+            return True
+        if a_is_qty and b_is_numeric:
+            return True
+        if b_is_qty and a_is_numeric:
+            return True
+        # Quantity vs String/Boolean/Date/... not implicitly convertible.
+        return False
+
+    # Boolean: §5.5 says Boolean -> Integer/Decimal/String/Quantity are all
+    # Explicit-only. Two Booleans are same-type. Boolean vs anything else
+    # (without Quantity promotion above) returns False.
+    a_is_bool = isinstance(a_raw, bool)
+    b_is_bool = isinstance(b_raw, bool)
+    if a_is_bool or b_is_bool:
+        # Only same-type (bool==bool) is allowed.
+        return a_is_bool and b_is_bool
+
+    # Numeric (int/float/Decimal): Integer<->Decimal is Implicit.
+    a_is_numeric = isinstance(a_raw, (int, float, Decimal))
+    b_is_numeric = isinstance(b_raw, (int, float, Decimal))
+    if a_is_numeric and b_is_numeric:
+        return True
+
+    # String: String<->Integer/Decimal/Boolean/Date/DateTime/Time are all
+    # Explicit per §5.5 (String is Explicit in every From column). Only
+    # String==String is implicitly equivalent.
+    a_is_str = isinstance(a_raw, str)
+    b_is_str = isinstance(b_raw, str)
+    if a_is_str or b_is_str:
+        return a_is_str and b_is_str
+
+    # Mappings/lists: complex-type equivalence; defer to deep_equal.
+    if isinstance(a_raw, (abc.Mapping, list)) or isinstance(b_raw, (abc.Mapping, list)):
+        return isinstance(a_raw, (abc.Mapping, list)) and isinstance(b_raw, (abc.Mapping, list))
+
+    # Fallback: same Python type allowed.
+    return type(a_raw) == type(b_raw)
+
+
 def equivalence(ctx, x, y):
     if util.is_empty(x) and util.is_empty(y):
         return True
 
     if util.is_empty(x) or util.is_empty(y):
         return False
+
+    # FP-13 EXPLORER (2026-06-29): Per §6.1.2 "they must be of the same
+    # type (or implicitly convertible to the same type)" combined with
+    # the §5.5 conversion table. Boolean<->Integer/Decimal/String and
+    # Decimal/Integer<->String are Explicit-only conversions; the
+    # operands are NOT implicitly convertible, so the result is `false`
+    # (not auto-coerced). Single-item check; multi-item delegates below
+    # recurse through equivalence() which re-checks each pair.
+    if len(x) == 1 and len(y) == 1:
+        if not _is_implicitly_equivalent_pair(x[0], y[0]):
+            return False
 
     if len(x) > 1 or len(y) > 1:
         def flatten_items(items):
@@ -247,6 +343,17 @@ def equivalence(ctx, x, y):
 
     if isinstance(a, str) and isinstance(b, str):
         return normalize_string(a) == normalize_string(b)
+
+    # FP-13 EXPLORER (2026-06-29): Per §5.5 Decimal/Integer<->Quantity is
+    # Implicit; route Decimal-vs-Quantity pairs through the Quantity path
+    # BEFORE the Decimal-only path below, which would crash on FP_Quantity
+    # inputs to is_equivalent().
+    x_val_early = util.parse_value(x[0])
+    y_val_early = util.parse_value(y[0])
+    if isinstance(x_val_early, nodes.FP_Quantity) or isinstance(y_val_early, nodes.FP_Quantity):
+        x_val_early, y_val_early = _coerce_numeric_quantity_pair(x_val_early, y_val_early)
+        if isinstance(x_val_early, nodes.FP_Quantity) and isinstance(y_val_early, nodes.FP_Quantity):
+            return _quantities_equivalent(x_val_early, y_val_early)
 
     if isinstance(a, Decimal) or isinstance(b, Decimal):
         return is_equivalent(a, b)

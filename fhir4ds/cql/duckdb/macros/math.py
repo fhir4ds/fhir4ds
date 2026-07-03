@@ -50,18 +50,27 @@ def registerMathMacros(con: "duckdb.DuckDBPyConnection") -> None:
 
     # Other math functions
     con.execute("CREATE OR REPLACE MACRO Sqrt(x) AS TRY(system.sqrt(x))")
+    # CQL v1.5.3 §16.6 Exp: "If the result of the operation cannot be
+    # represented, the result is null." Reinforced by section header:
+    # "operations that cause arithmetic overflow or underflow ... will
+    # result in null, rather than a run-time error." So return NULL on
+    # overflow (e.g. Exp(710), Exp(1000)), not a runtime error.
     con.execute(
         "CREATE OR REPLACE MACRO Exp(x) AS "
         "CASE "
         "WHEN x IS NULL THEN NULL "
         "WHEN isfinite(TRY(system.exp(CAST(x AS DOUBLE)))) THEN system.exp(x) "
-        "ELSE error('Exp results in overflow (positive infinity)') END"
+        "ELSE NULL END"
     )
+    # CQL v1.5.3 §16.12 Ln: "If the result of the operation cannot be
+    # represented, the result is null." Ln(0) is -infinity (cannot be
+    # represented) and Ln(negative) is undefined; both return NULL per
+    # spec, not runtime errors.
     con.execute(
         "CREATE OR REPLACE MACRO Ln(x) AS "
         "CASE "
         "WHEN x IS NULL THEN NULL "
-        "WHEN TRY_CAST(x AS DOUBLE) = 0 THEN error('Ln(0) results in negative infinity') "
+        "WHEN TRY_CAST(x AS DOUBLE) = 0 THEN NULL "
         "WHEN TRY_CAST(x AS DOUBLE) < 0 THEN NULL "
         "WHEN isfinite(TRY(system.ln(CAST(x AS DOUBLE)))) THEN system.ln(x) "
         "ELSE NULL END"

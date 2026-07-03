@@ -22,6 +22,21 @@ from .fhir_types_generated import (
     TYPE_HIERARCHY,
 )
 
+# FP-15 EXPLORER iteration 1 (2026-06-29) QA-001 §6.3.1 / FHIR R4:
+# The generated TYPE_HIERARCHY at fhir_types_generated.py is built from a
+# hand-curated ~22-resource subset in scripts/build_fhir_types.py. This
+# omits ~125 of 148 concrete FHIR R4 resource types (Account, AuditEvent,
+# Appointment, ActivityDefinition, etc.), causing `Account is Resource`
+# to incorrectly return false in the Python fallback. The canonical,
+# complete FHIR R4 hierarchy is in models/r4/type2Parent.json (209
+# entries) — load it here so the model passed to is_fn/is_type sees
+# every resource's parent chain. Merge order: type2Parent first
+# (canonical R4), then the legacy fhir_type_hierarchy overrides
+# (preserves intentional primitive-subtype mappings like uri->string).
+from ..engine.nodes import _load_json as _engine_load_json
+
+_CANONICAL_R4_TYPE_PARENT = _engine_load_json("type2Parent.json")
+
 _FHIRPATH_PRIMITIVE_PARENTS = {
     # The generated FHIR type hierarchy stops at uri, but the FHIRPath type
     # surface treats uri and its subtypes as string-compatible primitives.
@@ -92,7 +107,14 @@ def build_fhir_model() -> Dict[str, Any]:
     model["path2Type"].update(_get_common_path_to_type_mappings())
 
     # Build type2Parent from TYPE_HIERARCHY
+    # FP-15 EXPLORER iteration 1 (2026-06-29) QA-001 §6.3.1 / FHIR R4:
+    # Layer the canonical R4 hierarchy (from models/r4/type2Parent.json,
+    # 209 entries) UNDER the legacy generated hierarchy so the engine sees
+    # every concrete resource type's parent chain (Account→DomainResource,
+    # AuditEvent→DomainResource, etc.). The generated TYPE_HIERARCHY and
+    # primitive overrides take precedence on conflict.
     model["type2Parent"] = {
+        **_CANONICAL_R4_TYPE_PARENT,
         **TYPE_HIERARCHY,
         **_FHIRPATH_PRIMITIVE_PARENTS,
     }

@@ -657,3 +657,110 @@ define ToConceptConcept: ToConcept(CA)
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_clinical_equivalence_with_null_operand_is_spec_strict() -> None:
+    """CQL 1.5.3 §Equivalent (Code/Concept) — “this operator will always return
+    true or false, even if either or both of its arguments are null, or contain
+    null components.” A null operand must NOT propagate NULL through the
+    equivalence result.
+
+    Regression coverage for an issue where ``(null as Code)`` translated to a
+    runtime JSON-shape CASE wrapper that always returned NULL, defeating the
+    existing ``isinstance(resource_expr, SQLNull)`` guard at the equivalence
+    call site.
+    """
+    cql = """library ClinicalNullEquiv version '1.0.0'
+using FHIR version '4.0.1'
+codesystem LOINC: 'http://loinc.org'
+code "Sys": '8480-6' from LOINC display 'Systolic'
+concept "BP": { "Sys" } display 'BP'
+context Patient
+define CodeEquivNullRight: Code { code: '8480-6', system: 'S' } ~ (null as Code)
+define CodeEquivNullLeft: (null as Code) ~ Code { code: '8480-6', system: 'S' }
+define ConceptEquivNullRight: "BP" ~ (null as Concept)
+define ConceptEquivNullLeft: (null as Concept) ~ "BP"
+define CodeNotEquivNullRight: Code { code: '8480-6', system: 'S' } !~ (null as Code)
+define CodeNotEquivNullLeft: (null as Code) !~ Code { code: '8480-6', system: 'S' }
+define ConceptNotEquivNullRight: "BP" !~ (null as Concept)
+"""
+    translated = translate_cql(cql)
+    expected_scalars = {
+        "CodeEquivNullRight": False,
+        "CodeEquivNullLeft": False,
+        "ConceptEquivNullRight": False,
+        "ConceptEquivNullLeft": False,
+        "CodeNotEquivNullRight": True,
+        "CodeNotEquivNullLeft": True,
+        "ConceptNotEquivNullRight": True,
+    }
+
+    py = _python_valueset_connection()
+    cpp = _cpp_valueset_connection()
+    try:
+        for name, expected in expected_scalars.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (expected,), name
+            assert cpp.execute(sql).fetchone() == (expected,), name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_clinical_equivalence_folds_define_alias_operands_cql02_explorer() -> None:
+    """CQL-02 EXPLORER fresh run (2026-06-30) found that clinical equivalence
+    involving a top-level ``define`` alias wrapping a Code/Concept literal
+    was not folded at translation time. The translator emitted a generic SQL
+    CASE whose final ELSE arm was raw JSON string equality, so a Code JSON
+    shape (``{"code":...,"system":...}``) was compared against a Concept JSON
+    shape (``{"codes":[...]}``) and always evaluated to False.
+
+    Spec citation: CQL 1.5.3 Appendix B > Clinical Operators > Equivalent —
+    ``~(left Code, right Concept) Boolean`` and ``~(left Concept, right Code)
+    Boolean`` are explicit signatures; Concept equivalence is a non-empty
+    intersection of the codes in each Concept.
+
+    Regression coverage for the define-alias path (the named path
+    ``"Systolic" ~ "Blood Pressure"`` is already covered by
+    ``test_cql_clinical_type_translation_is_spec_strict``).
+    """
+    cql = """library Cql02ExplorerDefineAlias version '1.0.0'
+using FHIR version '4.0.1'
+codesystem LOINC: 'http://loinc.org'
+context Patient
+define C: Code '8480-6' from LOINC
+define Conc: Concept { codes: { Code '8480-6' from LOINC } }
+define Disjoint: Concept { codes: { Code '9999-9' from LOINC } }
+define CodeEquivConcept: C ~ Conc
+define ConceptEquivCode: Conc ~ C
+define CodeEquivDisjointConcept: C ~ Disjoint
+define CodeNotEquivDisjointConcept: C !~ Disjoint
+define CodeEquivCode_Same: Code '8480-6' from LOINC ~ Code '8480-6' from LOINC
+define ConceptEquivConcept_Same: Conc ~ Conc
+"""
+    translated = translate_cql(cql)
+
+    # Translation-time folding: the generated SQL should be the literal TRUE/FALSE
+    assert translated["CodeEquivConcept"].to_sql() == "TRUE"
+    assert translated["ConceptEquivCode"].to_sql() == "TRUE"
+    assert translated["CodeEquivDisjointConcept"].to_sql() == "FALSE"
+    assert translated["CodeNotEquivDisjointConcept"].to_sql() == "TRUE"
+    assert translated["CodeEquivCode_Same"].to_sql() == "TRUE"
+    assert translated["ConceptEquivConcept_Same"].to_sql() == "TRUE"
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name in (
+            "CodeEquivConcept",
+            "ConceptEquivCode",
+            "CodeEquivDisjointConcept",
+            "CodeNotEquivDisjointConcept",
+            "CodeEquivCode_Same",
+            "ConceptEquivConcept_Same",
+        ):
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == cpp.execute(sql).fetchone(), name
+    finally:
+        py.close()
+        cpp.close()

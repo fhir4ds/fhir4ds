@@ -444,3 +444,162 @@ define UnionBetween:
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_incompatible_primitive_equality_returns_null_not_runtime_error() -> None:
+    """CQL §9 Equal signature is =<T>(left T, right T); comparing operands of
+    incompatible primitive types (e.g. String vs Integer) has no defined value.
+
+    Previously the translator emitted raw DuckDB `x = y` SQL that raised a
+    ConversionException at execution. The fix mirrors the existing
+    `_static_equivalence_incompatible` guard used by `~` and lowers the
+    comparison to NULL for CQL's three-valued logic.
+    """
+    cql = """library IncompatibleEquality version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define EqStringVsInt: 'foo' = 5
+define NeStringVsInt: 'foo' <> 5
+define EqStringVsBool: 'foo' = true
+define EqIntVsBool: 1 = true
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "EqStringVsInt": None,
+        "NeStringVsInt": None,
+        "EqStringVsBool": None,
+        "EqIntVsBool": None,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            assert cpp.execute(sql).fetchone() == (expected_value,)
+            assert py.execute(sql).fetchone() == (expected_value,)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_incompatible_primitive_ordered_comparison_returns_null_not_runtime_error() -> None:
+    """CQL §9 Greater/Less/GreaterOrEqual/LessOrEqual/Between signatures are
+    >T(left T, right T) etc.; comparing operands of incompatible primitive
+    types (e.g. String vs Integer) has no defined value.
+
+    Regression coverage for CQL-09 EXPLORER QA-001: the prior SKEPTIC fix
+    only added the `_static_equivalence_incompatible` guard for `=`/`!=`/`<>`.
+    EXPLORER confirmed the same DuckDB ConversionException leak affects the
+    ordered-comparison operators (`<`, `<=`, `>`, `>=`) and `between`. Both
+    backends must now return NULL instead of raising.
+    """
+    cql = """library IncompatibleOrdered version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define StrGtInt: 'foo' > 5
+define StrLtInt: 'foo' < 5
+define StrGeInt: 'foo' >= 5
+define StrLeInt: 'foo' <= 5
+define StrBetween: 'foo' between 1 and 5
+define BoolGtStr: true > 'foo'
+define BoolLtStr: true < 'foo'
+define IntLtBool: 5 < false
+define IntGtBool: 5 > false
+define IntBetweenStr: 5 between 'a' and 'b'
+define StrBetweenStrBound: 'a' between 1 and 'z'
+define BoolBetween: true between 1 and 5
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "StrGtInt": None,
+        "StrLtInt": None,
+        "StrGeInt": None,
+        "StrLeInt": None,
+        "StrBetween": None,
+        "BoolGtStr": None,
+        "BoolLtStr": None,
+        "IntLtBool": None,
+        "IntGtBool": None,
+        "IntBetweenStr": None,
+        "StrBetweenStrBound": None,
+        "BoolBetween": None,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            assert cpp.execute(sql).fetchone() == (expected_value,), (
+                name,
+                "cpp",
+                cpp.execute(sql).fetchone(),
+                "expected",
+                expected_value,
+            )
+            assert py.execute(sql).fetchone() == (expected_value,), (
+                name,
+                "py",
+                py.execute(sql).fetchone(),
+                "expected",
+                expected_value,
+            )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_chained_binary_equality_emits_parenthesized_sql() -> None:
+    """CQL grammar supports nested binary equality (left-associative). The
+    CQL parser correctly accepts `((1 = 1) = true) = ((2 = 2) = true)`.
+
+    Regression coverage for CQL-09 EXPLORER QA-003: the translator previously
+    emitted `SELECT 1 = 1 = TRUE = 2 = 2 = TRUE` which DuckDB rejects with
+    `ParserException: syntax error at or near "="`. DuckDB comparison
+    operators are non-associative and require parens for chains. Fix added
+    a `_child_parent_precedence` helper on `SQLBinaryOp` that passes
+    `self.precedence + 1` to children when the operator is non-associative
+    (=, !=, <>, <, <=, >, >=, LIKE, IN, etc.) so they parenthesize.
+    """
+    cql = """library ChainedEquality version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define ChainEq: ((1 = 1) = true) = ((2 = 2) = true)
+define NestedNeq: (1 != 2) != (3 != 4)
+define NestedGtChain: (1 > 0) = (2 > 1)
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "ChainEq": True,
+        "NestedNeq": False,
+        "NestedGtChain": True,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            # The SQL must be valid DuckDB syntax (no parser exception).
+            assert cpp.execute(sql).fetchone() == (expected_value,), (
+                name,
+                "cpp",
+                cpp.execute(sql).fetchone(),
+                "expected",
+                expected_value,
+            )
+            assert py.execute(sql).fetchone() == (expected_value,), (
+                name,
+                "py",
+                py.execute(sql).fetchone(),
+                "expected",
+                expected_value,
+            )
+        # Explicit assertion on the SQL shape for ChainEq to lock the fix:
+        # the comparison operators must be parenthesized.
+        chain_sql = translated["ChainEq"].to_sql()
+        assert chain_sql.count("(") >= 4 and chain_sql.count(")") >= 4, (
+            "ChainEq SQL must parenthesize nested comparisons: ",
+            chain_sql,
+        )
+    finally:
+        py.close()
+        cpp.close()

@@ -257,3 +257,70 @@ def test_repeat_returns_only_new_projection_results_in_native_and_fallback(monke
     finally:
         native.close()
         fallback.close()
+
+
+def test_oftype_fhir_primitive_subtypes_match_native_and_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FHIRPath §5.2.4: ofType does NOT match primitive subtypes.
+
+    Per the R4 baseline (`testFHIRPathAsFunction16` analogue), `id` is a
+    primitive subtype of `string`, but `ofType(string)` must NOT include
+    `id`-typed values. The fallback's previous value-based inference
+    returned `string` for any str-typed value, masking the actual field
+    type and producing parity violations versus the native C++ path.
+    """
+    patient = json.dumps({"resourceType": "Patient", "id": "example", "gender": "male"})
+    cases = {
+        # gender is type `code` — must NOT match `string` or `id`
+        "gender.ofType(string)": ([], None),
+        "gender.ofType(FHIR.string)": ([], None),
+        "gender.ofType(code)": (["male"], '["male"]'),
+        "gender.ofType(FHIR.code)": (["male"], '["male"]'),
+        "gender.ofType(id)": ([], None),
+        # id is type `id` — must match exactly, not via parent `string`
+        "id.ofType(string)": ([], None),
+        "id.ofType(FHIR.string)": ([], None),
+        "id.ofType(id)": (["example"], '["example"]'),
+        "id.ofType(FHIR.id)": (["example"], '["example"]'),
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            assert _json_result(native, patient, expression) == expected, expression
+            assert _json_result(fallback, patient, expression) == expected, expression
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_oftype_qualified_fhir_namespace_matches_native_and_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FHIRPath §5.2.4: qualified `FHIR.<primitive>` ofType must match choice values.
+
+    `Observation.valueDecimal` carries a decimal value; both the unqualified
+    `decimal` and the qualified `FHIR.decimal` specifiers must match. The
+    fallback previously failed the qualified form because raw values passed
+    through `_resolve_choice_oftype` were typed with the `System` namespace,
+    tripping the namespace-distinct branch in `is_exact_type`.
+    """
+    observation = json.dumps({"resourceType": "Observation", "valueDecimal": 1.5})
+    cases = {
+        "value.ofType(decimal)": (["1.5"], "[1.5]"),
+        "value.ofType(FHIR.decimal)": (["1.5"], "[1.5]"),
+        "value.ofType(integer)": ([], None),
+        "value.ofType(FHIR.integer)": ([], None),
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            assert _json_result(native, observation, expression) == expected, expression
+            assert _json_result(fallback, observation, expression) == expected, expression
+    finally:
+        native.close()
+        fallback.close()

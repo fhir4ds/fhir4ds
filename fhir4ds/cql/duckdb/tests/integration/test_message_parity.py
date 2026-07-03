@@ -52,8 +52,6 @@ def test_cql_message_rejects_statically_invalid_signature_operands() -> None:
     invalid_cases = [
         ("define BadConditionInteger: Message('src', 1, 'E', 'Error', 'boom')", "condition argument must be Boolean"),
         ("define BadConditionString: Message('src', 'true', 'E', 'Error', 'boom')", "condition argument must be Boolean"),
-        ("define BadCodeInteger: Message('src', true, 5, 'Warning', 'boom')", "code argument must be String"),
-        ("define BadCodeBoolean: Message('src', true, false, 'Warning', 'boom')", "code argument must be String"),
         ("define BadSeverityInteger: Message('src', true, 'E', 5, 'boom')", "severity argument must be String"),
         ("define BadSeverityBoolean: Message('src', true, 'E', true, 'boom')", "severity argument must be String"),
         ("define BadMessageInteger: Message('src', true, 'E', 'Warning', 5)", "message argument must be String"),
@@ -68,6 +66,59 @@ context Patient
 {definition}
 """
             )
+
+
+def test_cql_message_accepts_integer_code_token_per_spec() -> None:
+    """CQL §13.1: 'code ... is a token (like a string or integer)'."""
+    for definition in [
+        "define IntCode: Message('src', false, 5, 'Warning', 'boom')",
+        "define LongCode: Message('src', false, 5L, 'Warning', 'boom')",
+        "define DecimalCode: Message('src', false, 5.0, 'Warning', 'boom')",
+    ]:
+        translated = translate_cql(
+            f"""library IntCodeLib version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+{definition}
+"""
+        )
+        name = definition.split(":")[0].split()[-1]
+        assert translated[name].to_sql() == "'src'", name
+
+
+def test_cql_message_rejects_more_than_five_arguments_per_spec_cql22_historian() -> None:
+    """CQL §13.1 Message signature is fixed at 5 args (source, condition,
+    code, severity, message). More than 5 args must be rejected rather than
+    silently truncated.
+    """
+    for definition in [
+        "define AritySix: Message('src', true, 'C', 'Error', 'm', 'extra')",
+        "define AritySeven: Message('src', true, 'C', 'Error', 'm', 'extra', 'more')",
+    ]:
+        with pytest.raises(TranslationError, match="at most 5 arguments"):
+            translate_cql(
+                f"""library TooManyArgs version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+{definition}
+"""
+            )
+
+
+def test_cql_message_accepts_four_argument_form_per_spec_cql22_historian() -> None:
+    """CQL §13.1: 'If no severity is supplied, a default severity of Message
+    is assumed.' The 4-arg form (no severity) must translate and return source.
+    """
+    translated = translate_cql(
+        """library FourArg version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define FourArgTrue: Message('src', true, 'C', 'm')
+define FourArgFalse: Message('src', false, 'C', 'm')
+"""
+    )
+    assert translated["FourArgTrue"].to_sql() == "'src'"
+    assert translated["FourArgFalse"].to_sql() == "'src'"
 
 
 def test_cql_message_translated_sql_matches_cpp_registration() -> None:
@@ -186,6 +237,42 @@ define NullCodeAndMessage: Message('src', true, null as String, 'Error', null as
             for name in ("NullCode", "NullMessage", "NullCodeAndMessage"):
                 with pytest.raises(duckdb.Error):
                     con.execute(f"SELECT {translated[name].to_sql()}").fetchone()
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_message_integer_code_runtime_raises_per_spec() -> None:
+    """CQL §13.1: 'code ... is a token (like a string or integer)'.
+
+    Integer code with Error severity must raise at runtime on both the
+    Python-fallback and C++-backed connections, with the integer code
+    stringified into the error message.
+    """
+    translated = translate_cql(
+        """library MessageIntCode version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define IntCodeError: Message('src', true, 42, 'Error', 'boom')
+define IntCodePassthrough: Message('src', false, 42, 'Warning', 'warn')
+"""
+    )
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            # False condition + Warning severity: integer code passes through
+            # unchanged; result equals source.
+            assert con.execute(
+                f"SELECT {translated['IntCodePassthrough'].to_sql()}"
+            ).fetchone() == ("src",)
+            # True condition + Error severity: integer code is stringified
+            # into the runtime error message ("42: boom").
+            with pytest.raises(duckdb.Error) as exc_info:
+                con.execute(f"SELECT {translated['IntCodeError'].to_sql()}").fetchone()
+            assert "42" in str(exc_info.value)
+            assert "boom" in str(exc_info.value)
     finally:
         py.close()
         cpp.close()

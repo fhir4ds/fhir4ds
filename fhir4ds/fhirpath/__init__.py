@@ -86,14 +86,21 @@ def apply_parsed_path(resource, parsedPath, context=None, model=None, options=No
 
         if isinstance(node, list):
             res = []
-            for item in data:
-                # Filter out intenal representation of primitive extensions
-                i = visit(item)
-                if isinstance(i, dict):
-                    keys = list(i.keys())
-                    if keys == ["extension"]:
-                        continue
-                res.append(i)
+            for item in node:
+                # Filter out internal representation of primitive extensions.
+                # Only ResourceNode items at the top of the evaluator result
+                # (i.e. shadow-only nodes the evaluator synthesised from
+                # `_field` primitive-extension data) should be filtered out.
+                # Plain dict items inside the tree (e.g. the contents of a
+                # `_given` array on a FHIR split-representation) must pass
+                # through unchanged so the caller sees the raw FHIR JSON.
+                # Mirrors the returnRawData branch's ResourceNode guard.
+                if isinstance(item, ResourceNode):
+                    if isinstance(item.data, dict):
+                        keys = list(item.data.keys())
+                        if keys == ["extension"]:
+                            continue
+                res.append(visit(item))
             return res
 
         if isinstance(data, dict) and not isinstance(data, FP_Type):

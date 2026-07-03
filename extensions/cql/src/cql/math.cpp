@@ -65,8 +65,14 @@ Optional<std::string> math_exp(const std::string &x) {
 	double val;
 	if (!parse_double(x, val)) return NullOpt<std::string>();
 	double result = std::exp(val);
+	// CQL v1.5.3 §16.6 Exp: "If the result of the operation cannot be
+	// represented, the result is null." Reinforced by section header:
+	// "operations that cause arithmetic overflow or underflow ... will
+	// result in null, rather than a run-time error." So we return NULL
+	// (NullOpt) when the result overflows to infinity (e.g. Exp(710),
+	// Exp(1000), Exp(1e5)), instead of raising a runtime error.
 	if (std::isinf(result)) {
-		throw std::runtime_error("Exp(" + x + ") results in overflow (positive infinity)");
+		return NullOpt<std::string>();
 	}
 	return Optional<std::string>(format_result(result));
 }
@@ -77,8 +83,11 @@ Optional<std::string> math_exp(const std::string &x) {
 Optional<std::string> math_ln(const std::string &x) {
 	double val;
 	if (!parse_double(x, val)) return NullOpt<std::string>();
+	// CQL v1.5.3 §16.12 Ln: "If the result of the operation cannot be
+	// represented, the result is null." Ln(0) is -infinity and cannot be
+	// represented, so return NULL rather than raising a runtime error.
 	if (val == 0) {
-		throw std::runtime_error("Ln(0) results in negative infinity");
+		return NullOpt<std::string>();
 	}
 	if (val < 0) return NullOpt<std::string>();
 	return Optional<std::string>(format_result(std::log(val)));

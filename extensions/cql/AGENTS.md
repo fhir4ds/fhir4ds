@@ -675,6 +675,25 @@ See `docs/architecture/AUDIT_REPORT.md` §8 for full details.
   `contains` returns false when the interval/list container is null, while a
   null point remains SQL NULL; `in` returns false when the interval/list
   argument is null. Keep `null contains 5`, `5 in (null as Interval<Integer>)`,
+  Fresh CQL-15 HISTORIAN fresh run on 2026-07-02 extended the same rule to
+  the both-null case: `(null as Interval<T>) contains (null as T)` returns
+  False (first-arg-null short-circuits before second-arg-null). Three
+  layers required alignment: the translator `_translate_contains_op`
+  null-check order, the Python `intervalContains` UDF first-arg-null
+  short-circuit, and the C++ `IntervalContainsFunc` first-arg-null
+  short-circuit. The plain `intervalContains` UDF surface was previously
+  inconsistent with `intervalContainsPrecise` (which already returned
+  False for null first arg); both surfaces are now aligned.
+  The same fresh run also closed two CQL §19.3/§19.11 precision-handling
+  gaps: `Interval<T> contains <precision> of <point>` and
+  `<point> in <precision> of <interval>` previously dropped the precision
+  wrapper for translated Date/DateTime/Time intervals and fell back to
+  raw SQL `>=`/`<=` comparisons. Partial-precision Date bounds (e.g.,
+  `@2024` year-only) collapsed to raw string comparisons returning False
+  instead of NULL. The translator now dispatches to
+  `intervalContainsPrecise` when the interval is a recognized interval
+  expression. The raw-SQL fallback remains for dynamic FHIR Period values
+  per CQL-16 EXPLORER.
   untyped `Interval[null, null] contains 5`, direct `intervalContains(NULL,
   '5')`, and `intervalContainsPrecise(NULL, point, precision)` covered across
   forced Python fallback, native-loaded registration, and no-Python/browser C++.
@@ -712,6 +731,10 @@ See `docs/architecture/AUDIT_REPORT.md` §8 for full details.
 - **CQL Numeric Lexer Boundaries**: **FIXED 2026-05-17 / CQL-01 EXPLORER**: No-whitespace junk after numeric literals is invalid. Reject `1LL`, `1.0L`, and `1day` in the lexer; whitespace-separated tokens remain query grammar responsibility.
 - **Duration Operations**: `MonthsBetween` and `WeeksBetween` miscalculate durations due to boundary vs absolute math. **FIXED v0.0.4**: MonthsBetween now uses age_in_months (complete months), WeeksBetween uses epoch_millis (time-aware complete weeks).
 - **Precision Retrieval**: `CQLPrecision` yields string lengths instead of CQL standard precision enums. **FIXED v0.0.4**: Changed return type from BIGINT to VARCHAR, now returns precision names ("Year", "Month", "Day", "Hour", "Minute", "Second", "Millisecond").
+- **Exp/Ln Overflow Behavior**: `math_exp` threw `std::runtime_error` on `std::isinf(result)` (e.g. `Exp(1000)`, `Exp(710)`); `math_ln` threw on `val == 0` (e.g. `Ln(0)`, `Ln(-0)`). **FIXED 2026-07-01 / CQL-10 EXPLORER**: CQL v1.5.3 §16 normative mandates "operations that cause arithmetic overflow or underflow ... will result in null, rather than a run-time error." Both functions now return `NullOpt<std::string>()` on overflow/zero. Mirror fix in `fhir4ds/cql/duckdb/udf/math.py` (`mathExp`, `mathLn`) and `fhir4ds/cql/duckdb/macros/math.py` (`Exp`, `Ln` SQL macros). Conformance runner at `conformance/scripts/run_cql.py:396-407` updated to accept NULL as spec-compliant for `invalid="true"` cases. Native extension rebuilt (md5sum `70c6c3169154b7e05e7f907dd3f662d4`). Full conformance 2822/2822 unchanged.
+- **CQL-13 EXPLORER DurationBetween year-target uncertainty collapse**: **FIXED 2026-07-01 / CQL-13 EXPLORER**: `DurationHighBoundaryValue` in `extensions/cql/src/cql_extension.cpp:3171-3228` had a chain of conditions `current_rank < PrecisionRank(Month) <= target_rank` etc. The first condition required `target_rank >= Month`, so year-target (`target_rank = Year = 0`) never had its operand's missing month/day maxed. Result: `years between @2012-06-01 and @2014` returned `'1'` instead of `Interval[1, 2]`. The official conformance test `years between DateTime(2005) and DateTime(2010) // Interval[4, 5]` masked the bug because it uses **symmetric** operand precisions (both year-prec) where the START operand's high boundary provides the variability. Fix: drop the upper-bound constraint on the first condition (`current_rank < Month` alone). Same fix mirrored in Python `fhir4ds/cql/duckdb/udf/datetime.py:249-296`. Native extension rebuilt (md5sum `b7e82f5dda90b201e2b611cdfc844d5e`).
+- **CQL-13 EXPLORER cql_timezone_offset missing Z suffix**: **FIXED 2026-07-01 / CQL-13 EXPLORER**: `cql_timezone_offset` in `extensions/cql/src/cql/boundary.cpp:877` only searched for `+HH:MM` or `-HH:MM` suffixes by scanning backward for `+` or `-` characters. CQL §DateTime ISO-8601 representation includes `Z` as the UTC designator (equivalent to `+00:00`), so `timezoneoffset from @2024-05-15T10:30:45.500Z` returned NullOpt instead of `0.0`. Fix: early-return `Optional<double>(0.0)` when the value ends with `Z`. Same fix mirrored in Python `fhir4ds/cql/duckdb/udf/math.py:920-921`. Native extension rebuilt (same md5sum as above).
+- **CQL-16 HISTORIAN Interval equality mixed-precision uncertainty**: **FIXED 2026-07-02 / CQL-16 HISTORIAN**: CQL 1.5.3 §Equal (interval) + §Equal (Date/DateTime/Time) require that mixed-precision temporal bounds make interval equality uncertain (null). `Interval[@2014, @2014] = Interval[@2014-01-01, @2014-12-31]` previously returned False (certain unequal) instead of None. Root cause: `Interval::operator==` used `BoundValue::compare` which calls `DateTimeValue::compare_at_precision(Millisecond)` always at max precision without honoring the operands' actual `precision` field. Fix: added `bound_equals_nullable(left, right)` free function in `extensions/cql/src/cql/interval.cpp:441-464` returning `Optional<bool>` (NullOpt for uncertain), mirroring the existing `compare_interval_order_nullable` pattern. Added `Interval::equals_nullable(other)` method in `interval.cpp:898-933` (declaration in `interval.hpp:78-80`). Updated `IntervalEqualsFunc` UDF (`cql_extension.cpp:1455-1468`) to set SQL NULL on NullOpt. Updated `IntervalEquivalentFunc` UDF (`cql_extension.cpp:1475-1502`) to return False on NullOpt (per Equivalent always-true-or-false rule). Same fix mirrored in Python `fhir4ds/cql/duckdb/udf/interval.py` (new helpers `_interval_bound_equals_nullable` and `_equivalent_nulls_ok`; rewritten `intervalEquals` and `intervalEquivalent`). Native extension rebuilt (md5sum `c7bdef8fa7ac48a90307e61fc6bfab61`). Full conformance 2822/2822 unchanged. Official CQL conformance suite (`CqlIntervalOperatorsTest.xml`) only tests same-precision Integer intervals for equality so doesn't exercise this case.
 
 ### NOT A BUG Registry
 *Behaviors that look like bugs but are spec-compliant or intentional design decisions.*
@@ -728,3 +751,51 @@ See `docs/architecture/AUDIT_REPORT.md` §8 for full details.
   with six SQL arguments. This is intentional because the CQL scalar arity cap
   applies to authored scalar arguments, while the single `List<T>` overload has
   no five-element maximum.
+
+## CQL-14 EXPLORER Iteration 1 (Date/Time Operators Part 2) — 2026-07-02
+
+- **CQL Date/Time Operators Part 2**: **FIXED 2026-07-02 / CQL-14 EXPLORER**:
+  CQL 1.5.3 §Add / §Subtract normative text: "For precisions above seconds,
+  any decimal portion of the time-valued quantity is ignored." The
+  triggering condition is the **quantity unit** (year/month/week/day/
+  hour/minute are above seconds; second/millisecond are at-or-below
+  seconds), not the input precision. `ApplyQuantityAtInputPrecision` at
+  `extensions/cql/src/cql_extension.cpp:4693` only truncated decimal
+  portions when the quantity unit was FINER than the input precision
+  (`unit_rank > input_rank`). When unit and input were at the same
+  precision (1.5 days onto a day-precision Date, 1.5 hours onto a
+  minute-precision Time), the raw float bled through into `AddMilliseconds`
+  calls. Fix: added rank-based truncation guard at the top of
+  `ApplyQuantityAtInputPrecision`:
+  ```cpp
+  int second_rank = PrecisionRank(cql::DateTimeValue::Precision::Second);
+  if (unit_rank >= 0 && unit_rank < second_rank) {
+      value = static_cast<double>(static_cast<int64_t>(value));
+  }
+  ```
+  This runs BEFORE the conversion-divisor path. Native C++ extension
+  rebuilt (md5sum `5c5647a1a1acaf5e884dcfd2199e5a31`) and copied to
+  `fhir4ds/cql/duckdb/extensions/cql.duckdb_extension`. Same fix mirrored
+  in Python `fhir4ds/cql/duckdb/udf/datetime.py:dateAddQuantity` (new
+  `_ABOVE_SECONDS_UNITS` frozenset + truncation guard). Regression
+  coverage in `test_datetime_part2_parity.py` (2 new tests, 32 cases).
+  Two pre-existing assertions in `test_wasm_cpp_surface.py` that had
+  encoded the buggy expected value (`0.5 day` Add/Subtract returning
+  shifted dates) were corrected.
+
+## Known Fragile Areas (CQL-14 EXPLORER additions)
+
+- `extensions/cql/src/cql_extension.cpp:ApplyQuantityAtInputPrecision`
+  lines 4697-4704 (above-seconds decimal truncation guard): MUST run
+  BEFORE the conversion-divisor path. The truncation rule keys off the
+  **quantity unit rank** (`unit_rank < second_rank`), not the input
+  precision. If a future refactor moves this guard after the conversion-
+  divisor branch or makes it input-precision-aware, the same-precision
+  bug regresses. The Python mirror at
+  `fhir4ds/cql/duckdb/udf/datetime.py:dateAddQuantity` line 1311 must
+  stay in lockstep.
+- Browser/no-Python C++ `dateAddQuantity` / `dateSubtractQuantity`
+  surfaces route through `ApplyQuantityAtInputPrecision`, so this fix
+  is automatically available in browser-style runtimes without separate
+  Python registration. Verify with `test_wasm_cpp_surface.py` whenever
+  changing this path.

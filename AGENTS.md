@@ -396,6 +396,26 @@ translation instead of generating standalone patient-correlated CTE lookups.
 Static Concept instance equivalence must read `Concept { codes: { ... } }`
 lists and compare by Code system+code intersection, not route Concept JSON
 through FHIR resource-path predicates.
+CQL-02 EXPLORER fresh rerun (2026-06-30) found that clinical equivalence
+(`~`/`!~`) and clinical equality (`=`/`!=`) over **top-level define aliases
+wrapping inline clinical literals** (e.g., `define C: Code 'x' from CS`
+followed by `define Test: C ~ Concept { codes: { ... } }`) was not folded at
+translation time. The `_static_clinical_value_object` and `_resolve_code_ref`
+helpers in `fhir4ds/cql/translator/expressions/_operators.py` only consulted
+`context.get_code` (which sees named `code`/`concept` DECLARATIONS), not
+`context.expression_definitions` (which stores top-level define bodies). With
+no static value resolved, the translator emitted a generic SQL CASE whose
+final ELSE arm was raw JSON string equality, comparing a Code JSON shape
+(`{"code":...,"system":...}`) against a Concept JSON shape
+(`{"codes":[...]}`) which always evaluates to False. Both helpers now fall
+back to `self._definition_source_ast(name, node)` and recurse on the
+definition's CQL AST when `get_code` returns None. The fix is general — it
+covers any top-level define whose body is a CodeSelector or Concept
+InstanceExpression, including through `QualifiedIdentifier` (library-qualified
+define references). Regression coverage in
+`test_clinical_type_parity.py::test_cql_clinical_equivalence_folds_define_alias_operands_cql02_explorer`.
+Keep this parity-tested on native-loaded and forced Python fallback
+registrations.
 
 ### CQL Temporal and Complex Conversion Boundaries
 CQL Date, DateTime, Time, Quantity, and Ratio conversion functions must stay
@@ -552,6 +572,24 @@ keep a Quantity list distinct from a scalar Quantity: `{ 1 'g' } = { 1000
 or clinical Code values whose equality is unknown return SQL NULL when no true
 match exists, not `-1`. Query-produced list sources for translated `IndexOf`
 must be folded into list values before calling `CQLIndexOf`.
+
+CQL-19 SKEPTIC fresh rerun (2026-07-02) found one translation gap: the
+symbolic form of the union operator (`|`) per CQL §20.29 ("the union operator
+can also be invoked with the symbolic operator (|)") must route through the
+same `_translate_union_op` dispatcher as the keyword `union` form. The CQL
+parser emits `BinaryExpression(operator="|", ...)` for the symbolic form and
+`BinaryExpression(operator="union", ...)` for the keyword form; the
+translator's binary-expression dispatch must accept BOTH operator strings at
+every dispatch site that handles union (currently three: the main
+`_translate_union_op` dispatch in `_operators.py`, `_temporal_list_ast_kind`
+type inference in `_operators.py`, and `_translate_first_last_with_window`'s
+union-source detection in `_lists.py`). Audit pattern for similar symbolic-
+form coverage gaps: `grep -rn "TokenType\." fhir4ds/cql/parser/parser.py`
+finds every symbolic-token binary-expression emission, then
+`grep -rn 'operator == "' fhir4ds/cql/translator/` confirms every emitted
+operator string has a translator match. Future CQL symbolic operators added
+to the parser MUST have a matching translator dispatch entry, or they will
+fall through to SQL pass-through and produce BinderExceptions at execution.
 
 CQL interval operators must preserve Quantity shape at interval boundaries.
 Do not reduce Quantity bounds or points to bare numeric values before
@@ -788,6 +826,36 @@ raw `SQLInterval` / `intervalFromBounds` low/high expressions when available so
 active unbounded intervals with a null high endpoint do not become unknown only
 because their start has partial precision.
 
+**Hardened in CQL-16 SKEPTIC iter 1 fresh run (2026-07-02).** Interval algebra
+functions (`intervalIntersect`, `intervalExcept`) must route bound comparisons
+through `_compare_interval_values` (Python) — NOT through `_normalize_for_compare`
+followed by direct Python `<` / `>`. `_normalize_for_compare` deliberately
+returns the original dicts when pint raises `DimensionalityError` for
+incompatible Quantity dimensions (e.g. `Interval[1 'g', 3 'g'] intersect
+Interval[1 'cm', 2 'cm']`); direct `<` / `>` then crashes with `TypeError`.
+Sibling `intervalOverlaps` and `intervalUnion` were already immune via
+`_precision_aware_compare`'s dict guard (line 1121-1122); the bug was isolated
+to `intervalIntersect` and `intervalExcept`. C++ mirror: `Interval::except_of`
+must explicitly check `BoundValue::compare` for -2 (incomparable) BEFORE
+calling `Interval::overlaps`, because `overlaps` returns `false` on uncertainty
+and `except_of` otherwise falls into the "no overlap → return a" branch,
+returning interval1 unchanged instead of NULL. The C++ `Interval::intersect`
+was already correct (returns NullOpt on compare -2 at line 1276). When fixing
+any interval algebra comparison-safety bug, audit ALL sibling functions in the
+family. Coverage: `test_cql_interval_part2_set_ops_incompatible_quantity_dimensions_null_cql16_skeptic`
+(4 cases × 3 backends: Python fallback, native C++ with shadowing, no-Python
+C++). Keep forced Python fallback, native-loaded registration, no-Python C++,
+and full conformance parity-tested together.
+
+**Out-of-scope followup from CQL-16 SKEPTIC (2026-07-02).** `intervalMeets` on
+Quantity intervals currently returns False instead of the spec-required True
+for `Interval[1 'g', 3 'g'] meets Interval[4 'g', 6 'g']` (end1=3, succ(3)=4,
+start2=4 → meets). Root cause: `_successor_for_bound` returns None for Quantity
+bounds. Per CQL §Predecessor/Successor: "For Quantity values, the successor is
+equivalent to adding 1 if the quantity is an integer, and the minimum precision
+value for the Decimal type if the quantity is a decimal." This is a pre-existing
+gap not in CQL-16 chunk scope; flagged for future Quantity-successor work.
+
 **Fixed in Release 0.0.7 Domain 3 (2026-05-24).** Optimized translated
 temporal `overlaps` SQL must preserve unbounded low-bound semantics. When
 decomposing interval overlap to direct comparisons, coalesce null low bounds
@@ -840,6 +908,70 @@ to inject `or true` or other predicate text into `extension.where(...)`.
 
 **Refined in FP-04 EXPLORER filtering/projection audit (2026-05-16).** The exported Python helper API in `fhir4ds/fhirpath/duckdb/functions/filter.py` must follow the same §5.2 semantics as the core engine and DuckDB UDFs. Keep `where()` strict to singleton Boolean criteria, propagate direct-helper `select()`/`repeat()` evaluator errors as `FHIRPathError`, keep helper `repeat()` projection-only with FHIRPath equality de-duplication, and resolve helper `of_type()` resource supertypes through model `type2Parent` metadata rather than exact Python-type checks.
 
+### FHIRPath §6.3 Type Operators: Quantity Profile Subtype Rejection
+
+**Fixed in FP-15 SKEPTIC iter 1 (2026-06-29).** Native C++ `fn_isType` at
+`extensions/fhirpath/src/fhirpath/evaluator.cpp:8845` had an over-permissive
+branch that treated ANY Quantity literal as matching the FHIR R4 profiles
+`Age` and `Duration`. FHIR R4 defines `Age`, `Distance`, `Duration`, `Count`,
+`Money`, and `SimpleQuantity` as profiles on `Quantity` that require specific
+UCUM unit categories (e.g., Age uses calendar `a`/`yr` units; Duration uses
+`s`/`min`/`h`/`d`/`wk`). A bare Quantity literal like `5 'mg'` (mass) is NOT
+an Age or Duration. The pre-fix code inconsistently rejected `Distance`,
+`Count`, `Money` (correct) but accepted `Age` and `Duration` (wrong).
+
+Surgical fix at evaluator.cpp:8845-8851 removed `Age` and `Duration` from the
+over-permissive branch; only `target == "Quantity"` now matches a literal
+Quantity. The FHIR profiles must be matched via FHIR model metadata (not yet
+implemented for runtime Quantity literals — future work).
+
+Spec citations: FHIRPath v2.0.0 §6.3.1 ("is returns true if the type of the
+left operand is the type specified, or a subclass thereof"); §4.1.8 (Quantity
+literal is `System.Quantity`); FHIR R4 (Age/Distance/Duration/Count/Money/
+SimpleQuantity are profiles with specific UCUM unit constraints).
+
+Regression coverage: `test_quantity_literal_fhir_profile_subtypes_reject_in_both_backends_fp15_skeptic`
+(10 cases) and `test_is_as_type_specifier_form_parity_fp15_skeptic` (15 paired
+cases) in `fhir4ds/fhirpath/duckdb/tests/integration/test_type_parity.py`.
+After native changes, rebuild and copy the bundled `fhirpath.duckdb_extension`.
+
+### FHIRPath §6.4 Collections: |, in, contains
+
+**Verified CLEAN in FP-16 SKEPTIC iter 1 (2026-06-29).** A 148-case
+hypothesis-driven probe across 5 rounds (53 + 29 is_valid + 37 + 29 cases)
+targeting all 8 orchestrator-briefed §6.4 bug classes produced 0 new
+non-terminal CRITICAL/HIGH/MEDIUM issues. The §6.4 surface is well-
+hardened across native C++ and Python fallback paths. Coverage:
+empty handling (10 cases), multi-item needle (4 cases), mixed-type
+membership (9 cases), Quantity cross-unit membership (7 cases incl.
+FP-13 HISTORIAN offset-temperature carry-over re-verified:
+`0 'Cel' in (32 '[degF]' | 100 '[degF]')` → false in both backends
+because equality returns empty per the offset-temperature guard, and
+"empty equality" means "not a member" per §6.4.2 definition),
+Date/DateTime/Time precision-aware membership (4 cases), ResourceNode
+unwrap (5 cases), union dedup semantic equality (10 cases — `(1 | 1.0).count() = 1`,
+`(1 'g' | 1000 'mg').count() = 1`, `({} | 1).count() = 1`), union
+order unspecified but dedup correct (4 cases), plus 37 pathological
+stress cases (Unicode/emoji, 1000-item collections, polymorphic
+choice-types, nested unions, iif needles, resource-typed collections)
+and 29 final edge cases (Decimal precision 1.0 vs 1.00000, singleton
+Date/Time equality with Z/no-tz variants, composed where() filters,
+negation interaction, subtree identity). The `fhirpath_is_valid`
+precheck `_has_invalid_membership_literal_unions` (udf.py:929-950)
+correctly detects statically-known multi-item needles
+(`(1 | 2) in ...` → `is_valid=false`) in 29/29 cases. All 8
+pre-test SKEPTIC hypotheses (H1-H8) empirically REJECTED.
+Implementation cross-check: Python `fhir4ds/fhirpath/engine/invocations/
+collections.py:336-367` (`contains_impl`/`contains`/`inn`) and
+`combining.py:9-10` (`union_op`); native `extensions/fhirpath/src/
+fhirpath/evaluator.cpp:7305-7332` (`in`/`contains` in `evalBinaryOp`)
+and `6521-6540` (`fn_union`). Both backends correctly implement
+spec-mandated empty-collection semantics, multi-item needle rejection,
+and equality-based dedup/membership. No source changes, no new
+regression tests (surface already spec-compliant), no native C++
+rebuild. Full conformance 2822/2822 unchanged. Probes:
+`/mnt/d/fhir4ds/.temp/qa/fp16_skeptic_2026_06_29/probe{,2,3,4,5}.py`.
+
 ### FHIRPath Subsetting Integer Arguments and `intersect()` Equality
 
 **Fixed in FP-05 SKEPTIC subsetting/combining audit (2026-05-16).** The indexer, `skip(num)`, and `take(num)` require Integer arguments; do not coerce strings, booleans, decimals, or JSON numeric reals through `int()`/`toNumber()`. Public DuckDB wrappers convert those type errors to empty/NULL instead of selecting data. `intersect(other)` must use FHIRPath `=` equality, matching `union()`/`distinct()`, so compatible quantities such as `1 'cm'` and `10 'mm'` intersect as one value. After C++ subsetting changes, rebuild and copy the bundled `fhirpath.duckdb_extension`.
@@ -867,6 +999,45 @@ to inject `or true` or other predicate text into `extension.where(...)`.
 ### FHIRPath Direct Math Helper Semantics
 
 **Fixed in FP-11 HISTORIAN math audit (2026-05-17).** Exported direct helpers in `fhir4ds/fhirpath/duckdb/functions/math.py` are public enough to keep aligned with §5.7 semantics, not only with Python built-ins. `round_fn()` uses FHIRPath half-away-from-zero rounding, rejects non-Integer or negative precision, and avoids Python's bankers-rounding behavior.
+
+**Fixed in FP-11 SKEPTIC iter 1 (2026-06-28).** Native C++ Quantity
+`+`/`-`/`*`/`/` arithmetic at
+`extensions/fhirpath/src/fhirpath/evaluator.cpp:7107-7166` used `double`
+arithmetic and produced a result FPValue with empty `source_text`, causing
+the `.value` projection at `evaluator.cpp:2646-2669` to leak raw binary64
+noise (e.g. `(0.1 'mg' + 0.2 'mg').value` returned `0.30000000000000004`
+instead of `0.3`). This was the deferred §5.7 root cause from FP-08
+SKEPTIC. The surgical fix introduces a reusable helper
+`normalizeQuantityArithmeticSourceText(double &value, bool
+apply_integral_normalize = true)` at `evaluator.cpp:2125` that mirrors
+FP-08 SKEPTIC's precision-15 shortest-round-trip mask AND re-parses the
+shortest text back to `double` via `strtod` to re-anchor to the
+nearest-double matching Python's `float(Decimal('0.3'))`. The re-parse
+step is critical: `float(Decimal('0.3'))` is `0x3FD3333333333333` but
+`0.1 + 0.2` (binary64 arithmetic) is `0x3FD3333333333334` — 1 ULP larger.
+The helper is applied at all 8 Quantity arithmetic result sites at
+`evaluator.cpp:7216/7230/7244/7251/7266/7273/7289/7303`. The
+`apply_integral_normalize=true` parameter (default, used for `+`/`-`)
+mirrors Python's `_normalize_quantity_value` integral-quantize rule;
+`apply_integral_normalize=false` (used for `*`/`/`) mirrors Python's
+`__mul__`/`__truediv__` non-normalizing behavior. The general lesson:
+every native C++ Decimal-producing arithmetic path on FHIRPath Quantity
+values MUST both (a) populate source_text with shortest-round-trip text,
+AND (b) re-anchor the double field to `strtod(source_text)` so that
+`toNumber()` (which ignores source_text) returns the same double as the
+Python fallback. Audit pattern: `grep -n "quantity_value ="
+extensions/fhirpath/src/fhirpath/evaluator.cpp` returns all
+Decimal-producing Quantity sites; each one without a matching
+`source_text = normalizeQuantityArithmeticSourceText(...)` call is a
+binary64-drift leak candidate. Spec citations: FHIRPath v2.0.0 §5.7.1
+(arithmetic on Quantity operands requires Decimal semantics), §4.1.4
+(System.Decimal is "rational number with implicit precision" — not
+binary64 noise), §4.1.8 (Quantity.value is Decimal). Regression
+coverage: `test_arithmetic_parity.py::
+test_quantity_arithmetic_value_no_binary64_drift_fp11_skeptic` and
+`test_quantity_arithmetic_no_binary64_drift_dot_value_fp11_skeptic`. After
+native changes, rebuild and copy the bundled
+`fhirpath.duckdb_extension` to dev and user install paths.
 
 ### CQL Structural Type Operators
 

@@ -371,3 +371,69 @@ define BadAnd: P and true
 
     with pytest.raises(TranslationError, match="requires Boolean operands"):
         CQLToSQLTranslator().translate_library(parse_cql(cql))
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        # Binary arithmetic operands must be rejected per CQL §Logical.
+        # Spec citation: CQL 1.5.3 Appendix B — And/Or/Xor/Implies/Not
+        # require Boolean operands; binary arithmetic yields Integer/Long/
+        # Decimal/Quantity per CQL §Types/§Arithmetic, never Boolean.
+        "1 + 1 and true",
+        "5 - 2 or false",
+        "2 * 3 xor true",
+        "10 div 2 implies true",
+        "7 mod 3 and false",
+        "2 ^ 3 or true",
+        "5.5 + 1.5 and true",
+        "(1 + 1) and true",
+        "(1 + 2) and (3 * 4)",
+        "not (1 + 1)",
+        "not (5 mod 2)",
+        "(5 > 3) and (1 + 1)",
+        "0 - 1 or false",
+    ],
+)
+def test_cql_logical_operators_reject_binary_arithmetic_operands(
+    expression: str,
+) -> None:
+    cql = f"""
+library CQL04LogicalInvalidArithmeticOperand version '1.0.0'
+
+define Result: {expression}
+"""
+
+    with pytest.raises(TranslationError, match="requires Boolean operands"):
+        CQLToSQLTranslator().translate_library(parse_cql(cql))
+
+
+def test_cql_logical_operators_accept_comparison_and_logical_sub_expressions() -> (
+    None
+):
+    """Positive controls: comparison/logical sub-expressions are Boolean and
+    must still be accepted as logical operands (guards against an over-broad
+    rejection of BinaryExpression operands)."""
+    cql = """
+library CQL04LogicalBooleanBinaryOperands version '1.0.0'
+
+define A: (5 > 3) and (4 < 2)
+define B: (5 > 3) or (4 < 2)
+define C: (5 > 3) xor (4 < 2)
+define D: (5 > 3) implies (4 < 2)
+define E: not (5 > 3)
+"""
+
+    translated = CQLToSQLTranslator().translate_library(parse_cql(cql))
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        expected = {"A": False, "B": True, "C": True, "D": False, "E": False}
+        for name, expected_value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (expected_value,), name
+            assert cpp.execute(sql).fetchone() == (expected_value,), name
+    finally:
+        py.close()
+        cpp.close()

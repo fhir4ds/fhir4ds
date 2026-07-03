@@ -123,6 +123,12 @@ def test_cql_interval_part3_translated_sql_matches_cpp_registration() -> None:
         "DecimalClosedSize": ("4.00000001",),
         "DecimalOpenSize": ("4.0",),
         "DecimalOpenPointFrom": ("1.00000001",),
+        # CQL-17 SKEPTIC QA-001: Size(null as Interval<T>) must return null
+        # per CQL §19.18 ("If the argument is null, the result is null"),
+        # NOT 0 (which is the List Size semantics from §12.4).
+        "SizeTypedNullInterval": (None,),
+        # List Size of null list still returns 0 per CQL §12.4 (unchanged).
+        "SizeTypedNullList": (0,),
     }
 
     py = _python_only_connection()
@@ -422,4 +428,169 @@ define DecimalOpenWidth: width of Interval[1.0, 5.0)
 define DecimalClosedSize: Size(Interval[1.0, 5.0])
 define DecimalOpenSize: Size(Interval[1.0, 5.0))
 define DecimalOpenPointFrom: point from Interval(1.0, 1.00000002)
+define SizeTypedNullInterval: Size(null as Interval<Integer>)
+define SizeTypedNullList: Size(null as List<Integer>)
 """
+
+
+def test_cql_interval_part3_historian_size_temporal_raises_per_spec() -> None:
+    """CQL-17 HISTORIAN regression: Size must raise on Date/DateTime/Time.
+
+    Spec: CQL v1.5.3 §19.18 Size cross-references §19.25 Width which says
+    "this operator is not defined" for date/time intervals. Both backends
+    must raise InvalidInputException to preserve backend parity.
+
+    Previously C++ silently returned null while Python raised ValueError.
+    """
+    import pytest  # local import to avoid module-level dep
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for sql in [
+            "SELECT interval_size('{\"low\":\"2024-01-01\",\"high\":\"2024-12-31\","
+            "\"lowClosed\":true,\"highClosed\":true}')",
+            "SELECT interval_size('{\"low\":\"2024-01-01T00:00:00\","
+            "\"high\":\"2024-12-31T23:59:59\",\"lowClosed\":true,\"highClosed\":true}')",
+            "SELECT interval_size('{\"low\":\"T00:00:00\",\"high\":\"T23:59:59\","
+            "\"lowClosed\":true,\"highClosed\":true}')",
+        ]:
+            with pytest.raises(Exception):
+                py.execute(sql).fetchone()
+            with pytest.raises(Exception):
+                cpp.execute(sql).fetchone()
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part3_historian_size_quantity_includes_system_per_spec() -> None:
+    """CQL-17 HISTORIAN regression: Size on Quantity intervals must include
+    the UCUM ``system`` field on both backends.
+
+    Previously Python omitted ``"system":"http://unitsofmeasure.org"`` while
+    C++ included it, producing divergent JSON shapes for the same Size call.
+    """
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        sql = (
+            "SELECT interval_size(intervalFromBounds("
+            "'{\"value\":1.0,\"unit\":\"g\"}', "
+            "'{\"value\":5.0,\"unit\":\"g\"}', true, true))"
+        )
+        py_r = py.execute(sql).fetchone()[0]
+        cpp_r = cpp.execute(sql).fetchone()[0]
+
+        # Parse both JSON strings to compare semantically.
+        import json as _json
+        py_obj = _json.loads(py_r)
+        cpp_obj = _json.loads(cpp_r)
+        assert py_obj.get("system") == "http://unitsofmeasure.org", py_obj
+        assert cpp_obj.get("system") == "http://unitsofmeasure.org", cpp_obj
+        assert py_obj.get("value") == cpp_obj.get("value")
+        assert py_obj.get("unit") == cpp_obj.get("unit")
+        assert py_obj.get("code") == cpp_obj.get("code")
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part3_explorer_pointfrom_time_returns_time_string_per_spec() -> None:
+    """CQL-17 EXPLORER regression: ``point from Interval[@T..., @T...]`` must
+    return a Time-formatted string (``'T12:30:00'``), NOT a raw
+    millisecond-since-midnight integer (``'45000000'``).
+
+    Spec: CQL v1.5.3 §19.22 Point From: "If the argument is a unit interval,
+    the operator returns the point value." For a Time-typed interval the
+    point value is a Time, not an int.
+
+    Previously the Python UDF ``pointFrom`` at
+    ``fhir4ds/cql/duckdb/udf/interval.py:775-802`` parsed Time bounds to
+    integer ms via ``_parse_interval_bound:366`` and then formatted via
+    ``_format_adjusted_bound_for_raw`` which has no Time-string
+    round-trip path, returning the int as-is via ``str(formatted)``. The
+    C++ extension used ``start_string()`` / ``end_string()`` which
+    preserve raw lexical forms, returning the correct Time string. The
+    WASM/browser runtime (which uses only C++ UDFs) was correct; the
+    Python runtime (conformance suite, batch CLI) returned raw ints.
+    """
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            cases = [
+                '{"low":"T00:00:00","high":"T00:00:00","lowClosed":true,"highClosed":true}',
+                '{"low":"T12:30:00","high":"T12:30:00","lowClosed":true,"highClosed":true}',
+                '{"low":"T23:59:59.999","high":"T23:59:59.999","lowClosed":true,"highClosed":true}',
+                '{"low":"T05:00","high":"T05:00","lowClosed":true,"highClosed":true}',
+            ]
+            for raw_iv in cases:
+                sql = "SELECT pointFrom(?)"
+                py_r = py.execute(sql, [raw_iv]).fetchone()
+                cpp_r = cpp.execute(sql, [raw_iv]).fetchone()
+                no_py_r = no_py.execute(sql, [raw_iv]).fetchone()
+                # All three backends must agree.
+                assert py_r == cpp_r == no_py_r, (
+                    f"pointFrom divergence on {raw_iv}: "
+                    f"py={py_r} cpp={cpp_r} no_py={no_py_r}"
+                )
+                # Result must be a Time string, not a raw int.
+                result = py_r[0]
+                assert isinstance(result, str) and (
+                    result.startswith("T") or ":" in result
+                ), f"pointFrom({raw_iv}) returned non-Time result {result!r}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part3_explorer_long_minmax_width_size_exact_per_spec() -> None:
+    """CQL-17 EXPLORER regression: Width/Size of Long MIN..MAX interval must
+    return exact integer values, not float approximations.
+
+    Spec: CQL v1.5.3 §19.25 Width / §19.18 Size on Integer/Long intervals
+    return the same type as the point type (Integer/Long). For
+    ``Interval[-9223372036854775808L, 9223372036854775807L]``:
+      - Width = ``9223372036854775807 - (-9223372036854775808) = 2^64 - 1``
+      - Size  = ``Width + 1 = 2^64``
+
+    Previously the C++ extension classified Long MIN..MAX bounds as Decimal
+    (the cutoff `d <= 9.22e18` was too narrow; INT64_MAX ~ 9.223372036854776e18
+    exceeds it). The bound was then stored as double, lost precision in
+    width/size arithmetic, and returned ``"18446744073709551616.0"`` (off by
+    one for width). The WASM/browser runtime (C++ only) produced the wrong
+    value; the Python runtime (Python UDF supplements) produced the correct
+    value, masking the bug from conformance.
+    """
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            raw_iv = (
+                '{"low":"-9223372036854775808","high":"9223372036854775807",'
+                '"lowClosed":true,"highClosed":true}'
+            )
+            # Width = 2^64 - 1
+            expected_width = "18446744073709551615"
+            # Size = 2^64
+            expected_size = "18446744073709551616"
+
+            for sql, expected in [
+                ("SELECT intervalWidth(?)", expected_width),
+                ("SELECT interval_size(?)", expected_size),
+            ]:
+                py_r = py.execute(sql, [raw_iv]).fetchone()
+                cpp_r = cpp.execute(sql, [raw_iv]).fetchone()
+                no_py_r = no_py.execute(sql, [raw_iv]).fetchone()
+                # All three must agree on the integer-formatted string.
+                assert py_r == cpp_r == no_py_r, (
+                    f"divergence on {sql}: py={py_r} cpp={cpp_r} no_py={no_py_r}"
+                )
+                # Result must be the exact expected integer (no .0 suffix).
+                assert py_r[0] == expected, (
+                    f"{sql} returned {py_r[0]!r}, expected {expected!r}"
+                )
+    finally:
+        py.close()
+        cpp.close()

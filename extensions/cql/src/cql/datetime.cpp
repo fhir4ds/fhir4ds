@@ -293,7 +293,10 @@ std::string DateTimeValue::to_string() const {
 	snprintf(buf, sizeof(buf), "%04d", year);
 	oss << buf;
 	if (!has_time && precision == Precision::Year) {
-		oss << "T";
+		// CQL §9 Date: "@2014 represents some day in the year 2014" — year-precision
+		// dates serialize as the canonical 4-digit year YYYY, not "YYYYT".
+		// The "T" is only a date/time separator (e.g. "YYYY-MM-DDTHH:mm:ss").
+		// Note: the parser still accepts "YYYYT" for backward compatibility.
 		return oss.str();
 	}
 

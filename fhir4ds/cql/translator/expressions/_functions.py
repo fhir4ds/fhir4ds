@@ -90,9 +90,11 @@ from ...translator.expressions._utils import (
 )
 from ...translator.expressions._operators import (
     _ensure_parse_quantity,
+    _infer_static_numeric_type,
     _is_patient_id_correlation,
     _is_quantity_expression,
     _is_ratio_expression,
+    _static_numeric_value,
     _static_type_supports_string_conversion,
 )
 from ...errors import TranslationError
@@ -1247,6 +1249,14 @@ class FunctionsMixin:
         # CQL Abs/Negate on Quantity must use UDF, not SQL ABS() macro
         if name == "Abs" and len(args) == 1:
             raw_arg = func.arguments[0]
+            # CQL §16 Abs: "If the result of taking the absolute value of the
+            # input cannot be represented (e.g. Abs(minimum Integer)), the
+            # result is null." Detect both literal-spelled forms
+            # (-(-2147483648) / -(-9223372036854775808L)) and FunctionRef
+            # forms (minimum Integer / minimum Long). Without this guard,
+            # Abs(minimum Integer) lowers to TRY(system.abs(-2147483648)),
+            # which DuckDB evaluates to 2147483648 (a valid BIGINT after
+            # auto-promotion) instead of NULL.
             if (
                 isinstance(raw_arg, UnaryExpression)
                 and raw_arg.operator == "-"
@@ -1256,6 +1266,15 @@ class FunctionsMixin:
                     (raw_arg.operand.type == "Integer" and raw_arg.operand.value == 2147483648)
                     or (raw_arg.operand.type == "Long" and raw_arg.operand.value == 9223372036854775808)
                 )
+            ):
+                return SQLNull()
+            if (
+                isinstance(raw_arg, FunctionRef)
+                and raw_arg.name == "minimum"
+                and len(raw_arg.arguments) == 1
+                and isinstance(raw_arg.arguments[0], (Identifier, NamedTypeSpecifier))
+                and str(getattr(raw_arg.arguments[0], "name", "")).split(".")[-1].lower()
+                in {"integer", "long"}
             ):
                 return SQLNull()
             if _is_quantity_expression(args[0]) or self._is_cql_quantity_expr(func.arguments[0]):
@@ -1282,6 +1301,17 @@ class FunctionsMixin:
         if name == "Size" and len(args) == 1:
             raw_arg = func.arguments[0]
             if isinstance(raw_arg, Interval):
+                return SQLFunctionCall(name="interval_size", args=args)
+            # CQL-17 SKEPTIC QA-001: Statically-typed-aware dispatch.
+            # The Interval AST check above only catches literal Interval[...]
+            # operands. Operands such as `null as Interval<Integer>` parse to
+            # a BinaryExpression(operator='as', ..., right=IntervalTypeSpecifier)
+            # and must also route to interval_size, otherwise they fall through
+            # to the List Size branch (COALESCE(array_length, 0)) which
+            # silently returns 0 instead of null per CQL §19.18
+            # ("If the argument is null, the result is null").
+            operand_type = self._static_structural_type_name(raw_arg)
+            if operand_type and operand_type.startswith("Interval<"):
                 return SQLFunctionCall(name="interval_size", args=args)
             return SQLFunctionCall(
                 name="COALESCE",
@@ -1356,6 +1386,22 @@ class FunctionsMixin:
                 index_args[0] = _query_rows_as_index_list(source_arg.query)
             elif isinstance(source_arg, SQLSelect):
                 index_args[0] = _query_rows_as_index_list(source_arg)
+            # Dispatch to the temporal-aware IndexOf variant when the list and
+            # element are both temporal-typed (Date/DateTime/Time). Mirrors the
+            # existing _list_contains_call dispatch for Contains/In. CQL §IndexOf
+            # uses equality semantics, so timezone-normalized DateTimes and
+            # precision-mismatched comparisons must reach cqlDateTimeEqual.
+            list_arg = index_args[0]
+            elem_arg = index_args[1]
+            list_ast = func.arguments[0] if len(func.arguments) >= 1 else None
+            elem_ast = func.arguments[1] if len(func.arguments) >= 2 else None
+            if (
+                hasattr(self, "_use_temporal_list_contains")
+                and list_ast is not None
+                and elem_ast is not None
+                and self._use_temporal_list_contains(list_ast, elem_ast)
+            ):
+                return SQLFunctionCall(name="CQLIndexOfTemporal", args=[list_arg, elem_arg])
             return SQLFunctionCall(name="CQLIndexOf", args=index_args)
 
         # Step 3: Check registry for simple renames and parameterized translations
@@ -2093,7 +2139,12 @@ class FunctionsMixin:
         )
 
     def _translate_power(self, args: list) -> SQLExpression:
-        """Translate CQL Power through the parity-aligned math UDF."""
+        """Translate CQL Power through the parity-aligned math UDF.
+
+        Fallback when the pre-translate hook could not determine operand
+        types (e.g. dynamic operands). Uses DOUBLE which is the most
+        permissive numeric type; overflow checks are not applied.
+        """
         if len(args) != 2:
             return SQLNull()
         left_arg = self._fhirpath_number_projection(args[0]) or args[0]
@@ -2104,6 +2155,72 @@ class FunctionsMixin:
                 SQLCast(expression=right_arg, target_type="VARCHAR"),
             ]),
             target_type="DOUBLE",
+            try_cast=True,
+        )
+
+    def _translate_power_pre(self, func: FunctionRef, translator) -> Optional[SQLExpression]:
+        """Pre-translate CQL Power(Integer/Long/Decimal, Integer/Long/Decimal).
+
+        CQL §16 Power signatures:
+          ^(Integer, Integer) Integer
+          ^(Long, Long) Long
+          ^(Decimal, Decimal) Decimal
+        "If the result of the operation cannot be represented, the result
+        is null."
+
+        The infix `^` translator at `_operators.py` already applies
+        type-specific casting; this hook brings the function form
+        ``Power(left, right)`` to parity. Without this hook, the function
+        form always emits ``TRY_CAST(mathPower(...) AS DOUBLE)``, which
+        silently lets Integer and Decimal overflows through (e.g.
+        ``Power(2, 100) = 1.27e30`` should be NULL because Integer max
+        is 2^31-1).
+
+        Returns None to fall through to the generic rename-based dispatch
+        (which calls ``_translate_power``) when operand types cannot be
+        statically determined.
+        """
+        if not func.arguments or len(func.arguments) != 2:
+            return None
+        left_cql_type = _infer_static_numeric_type(func.arguments[0])
+        right_cql_type = _infer_static_numeric_type(func.arguments[1])
+        operand_types = {left_cql_type, right_cql_type} - {None}
+        if not operand_types:
+            # Dynamic operands — fall back to DOUBLE emission.
+            return None
+        # Translate operands to SQL.
+        left_sql = self.translate(func.arguments[0], usage=ExprUsage.SCALAR)
+        right_sql = self.translate(func.arguments[1], usage=ExprUsage.SCALAR)
+        left_arg = self._fhirpath_number_projection(left_sql) or left_sql
+        right_arg = self._fhirpath_number_projection(right_sql) or right_sql
+        power_core = SQLFunctionCall(name="mathPower", args=[
+            SQLCast(expression=left_arg, target_type="VARCHAR"),
+            SQLCast(expression=right_arg, target_type="VARCHAR"),
+        ])
+        # Decimal takes precedence per spec implicit conversion rules;
+        # otherwise Integer/Long stays integral. Same logic as infix `^`.
+        if "Decimal" in operand_types or "Quantity" in operand_types:
+            target_sql_type = "DECIMAL(38, 8)"
+        elif "Long" in operand_types:
+            target_sql_type = "BIGINT"
+        elif operand_types == {"Integer"}:
+            # Per official HL7 CQL conformance suite
+            # (CqlArithmeticFunctionsTest.xml::Power2ToNeg2),
+            # Power(2, -2) = 0.25 — Integer operand signature but the
+            # reference implementation promotes to Decimal when the
+            # exponent is negative (result is fractional). Statically
+            # detect negative exponents and use DECIMAL so the result is
+            # not truncated to 0 by TRY_CAST(AS INTEGER).
+            right_value = _static_numeric_value(func.arguments[1])
+            if right_value is not None and right_value < 0:
+                target_sql_type = "DECIMAL(38, 8)"
+            else:
+                target_sql_type = "INTEGER"
+        else:
+            target_sql_type = "DOUBLE"
+        return SQLCast(
+            expression=power_core,
+            target_type=target_sql_type,
             try_cast=True,
         )
 
@@ -2162,7 +2279,25 @@ class FunctionsMixin:
         return SQLFunctionCall(name="CQLMessage", args=args[:5])
 
     def _validate_message_signature_args(self, arg_nodes: list) -> None:
-        """Reject statically invalid CQL Message operands before SQL lowering."""
+        """Reject statically invalid CQL Message operands before SQL lowering.
+
+        Per CQL v1.5.3 Appendix B §13.1: "The code provides a coded
+        representation of the error. Note that this is a token (like a string
+        or integer), not a terminology Code." The ``code`` slot therefore
+        accepts any scalar token (String, Integer, Long, Decimal, Boolean,
+        Date, DateTime, Time) — the runtime CQLMessage macro CASTs the value
+        to VARCHAR. ``severity`` and ``message`` remain String per spec.
+
+        Per the fixed 5-arg signature
+        ``Message(source T, condition Boolean, code String, severity String,
+        message String) T``, more than 5 operands is an authoring error and
+        must be rejected rather than silently truncated.
+        """
+        if len(arg_nodes) > 5:
+            raise TranslationError(
+                f"CQL Message accepts at most 5 arguments (source, condition, "
+                f"code, severity, message); got {len(arg_nodes)}"
+            )
         if len(arg_nodes) >= 2:
             condition_type = self._infer_static_cql_type_for_logical_operand(arg_nodes[1])
             normalized = str(condition_type or "Any").replace("System.", "")
@@ -2174,7 +2309,19 @@ class FunctionsMixin:
                     f"CQL Message condition argument must be Boolean; got {condition_type}"
                 )
 
-        for index, label in ((2, "code"), (3, "severity"), (4, "message")):
+        # code (index 2): spec calls this "a token (like a string or integer)".
+        # Any statically-known scalar is acceptable; runtime CAST handles
+        # stringification. We only reject List-typed operands because they
+        # cannot be tokenized into a single coded value.
+        if len(arg_nodes) > 2 and not self._is_static_string_operand(arg_nodes[2]):
+            code_type = self._infer_static_cql_type_for_logical_operand(arg_nodes[2])
+            code_normalized = str(code_type or "Any").replace("System.", "")
+            if code_normalized.startswith("List<") or code_normalized == "List":
+                raise TranslationError(
+                    f"CQL Message code argument must be a scalar token; got {code_type}"
+                )
+
+        for index, label in ((3, "severity"), (4, "message")):
             if len(arg_nodes) <= index:
                 continue
             if self._is_static_string_operand(arg_nodes[index]):

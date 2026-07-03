@@ -132,11 +132,17 @@ def test_environment_variable_edges_match_cpp(monkeypatch) -> None:
             ).fetchone()
             assert cpp == py, expression
 
-        assert con.execute("SELECT fhirpath_is_valid('%unknown')").fetchone() == (False,)
-        assert fallback.execute("SELECT fhirpath_is_valid('%unknown')").fetchone() == (False,)
+        # Per FHIRPath §9, syntactically-valid env var forms (%name,
+        # %`name`, %'name') that reference an undefined env var are runtime
+        # semantic errors, not syntax errors. The `fhirpath_is_valid` UDF
+        # validates expression syntax, so these must report True. The
+        # evaluation-time error surfaces via the row-resilient UDF wrappers
+        # (fhirpath/fhirpath_text/fhirpath_json all return empty/NULL above).
+        assert con.execute("SELECT fhirpath_is_valid('%unknown')").fetchone() == (True,)
+        assert fallback.execute("SELECT fhirpath_is_valid('%unknown')").fetchone() == (True,)
         for expression in ["%`vs-foo`", "%`ext-foo`", "%factory", "%terminologies"]:
-            assert con.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (False,)
-            assert fallback.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (False,)
+            assert con.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (True,)
+            assert fallback.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (True,)
     finally:
         con.close()
         fallback.close()
@@ -157,7 +163,7 @@ def test_external_constants_allow_hidden_tokens_after_percent(monkeypatch) -> No
             "http://hl7.org/fhir/ValueSet/administrative-gender",
             True,
         ),
-        "% 'unknown'": ([], None, False),
+        "% 'unknown'": ([], None, True),
     }
 
     con = _connection()
@@ -629,6 +635,80 @@ def test_define_variable_rejects_invalid_call_shapes_in_cpp_and_fallback(monkeyp
                 [resource, expression, resource, expression, resource, expression, expression],
             ).fetchone()
             assert cpp == py == ([], None, None, False), expression
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_is_valid_accepts_undefined_env_var_forms_fp20_skeptic(monkeypatch) -> None:
+    """Per FHIRPath §9 backward-compat note, syntactically-valid env var forms
+    (`%name`, `` %`name` ``, `` %'name' ``) that reference an undefined env var
+    must still report as syntactically valid via ``fhirpath_is_valid``.
+
+    The spec says "Attempting to access an undefined environment variable will
+    result in an error" — but this is a *runtime semantic* error, not a syntax
+    error. The ``fhirpath_is_valid`` UDF validates expression syntax, not
+    runtime evaluability, so these expressions must report ``True``.
+
+    Reproducer for FP-20 SKEPTIC QA-001 fix in
+    ``fhir4ds/fhirpath/duckdb/udf.py:fhirpath_is_valid_udf`` (Python) and
+    ``extensions/fhirpath/src/fhirpath_extension.cpp:FhirpathIsValidFunction``
+    (C++). Both backends previously returned ``False`` because they conflated
+    the runtime "undefined environment variable" exception with syntactic
+    invalidity.
+    """
+    # Syntactically-valid forms that should report is_valid=True even when
+    # the env var is undefined at validation time.
+    valid_forms = [
+        "%ucum",                      # spec §9 mandatory UCUM URL (defined)
+        "%context",                   # spec §9 mandatory original-node (defined)
+        "%resource",                  # FHIR ext (defined)
+        "%rootResource",              # FHIR ext (defined)
+        "%sct",                       # FHIR ext terminology URL (defined)
+        "%loinc",                     # FHIR ext terminology URL (defined)
+        "%undefined-var",             # simple ident form (undefined at runtime)
+        "%'us-zip'",                  # spec §9 backward-compat STRING form
+        "%`us-zip`",                  # spec §9 BACKTICK form
+        "%'my-var'",                  # string form (undefined)
+        "%`my-var`",                  # backtick form (undefined)
+        "%`my env var`",              # backtick with spaces (undefined)
+    ]
+    # Syntactically-invalid forms that should still report is_valid=False
+    # in both backends. Note: `%1var` is rejected by the Python fallback
+    # parser (per §8.6 simple identifiers cannot start with a digit), but
+    # the C++ lexer is more permissive (implementation extension). The
+    # `%`-alone case is similarly accepted by the C++ lexer (empty env var
+    # name) but rejected by Python. Both are §8.6 lexer-permissiveness
+    # side discoveries, not §9 env var issues, and are not exercised here.
+    invalid_forms = [
+        "%'unclosed",                 # malformed: unterminated string
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = duckdb.connect(config={"allow_unsigned_extensions": True})
+    assert register_fhirpath(fallback) is False
+    try:
+        for expression in valid_forms:
+            cpp = con.execute(
+                "SELECT fhirpath_is_valid(?)", [expression]
+            ).fetchone()[0]
+            py = fallback.execute(
+                "SELECT fhirpath_is_valid(?)", [expression]
+            ).fetchone()[0]
+            assert cpp is True, f"native is_valid should be True for {expression!r}, got {cpp}"
+            assert py is True, f"fallback is_valid should be True for {expression!r}, got {py}"
+            assert cpp == py, f"parity diff on {expression!r}: native={cpp} fallback={py}"
+        for expression in invalid_forms:
+            cpp = con.execute(
+                "SELECT fhirpath_is_valid(?)", [expression]
+            ).fetchone()[0]
+            py = fallback.execute(
+                "SELECT fhirpath_is_valid(?)", [expression]
+            ).fetchone()[0]
+            assert cpp is False, f"native is_valid should be False for {expression!r}, got {cpp}"
+            assert py is False, f"fallback is_valid should be False for {expression!r}, got {py}"
+            assert cpp == py, f"parity diff on {expression!r}: native={cpp} fallback={py}"
     finally:
         con.close()
         fallback.close()

@@ -300,3 +300,75 @@ define QuantityAliasIsQuantity: QuantityAlias is Quantity
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_tostring_decimal_trims_trailing_zeros_per_spec_cql07_historian() -> None:
+    """CQL 1.5.3 §ToString Table 9-G defines Decimal format as (-)?#0.0# and
+    mandates that "The result of any ToString must be round-trippable back to
+    the source value." DuckDB's CAST(decimal AS VARCHAR) emits all declared
+    scale digits (e.g., DECIMAL(38,8) renders 0.1 as '0.10000000'), violating
+    both rules. The ToString macro must trim trailing zeros while preserving
+    at least one fractional digit.
+    """
+    expressions = [
+        # (sql, expected_string)
+        ("SELECT ToString(CAST(0.1 AS DECIMAL(38,8)))", "0.1"),
+        ("SELECT ToString(CAST(0 AS DECIMAL(38,8)))", "0.0"),
+        ("SELECT ToString(CAST(100 AS DECIMAL(38,8)))", "100.0"),
+        ("SELECT ToString(CAST(-3.14 AS DECIMAL(38,8)))", "-3.14"),
+        ("SELECT ToString(CAST(1.5 AS DECIMAL(38,8)))", "1.5"),
+        ("SELECT ToString(CAST(-0.5 AS DECIMAL(38,8)))", "-0.5"),
+        ("SELECT ToString(CAST(0.00000001 AS DECIMAL(38,8)))", "0.00000001"),
+        ("SELECT ToString(CAST(123456789.12345678 AS DECIMAL(38,8)))", "123456789.12345678"),
+        # Through the CQL translator surface (ToString composed with ToDecimal)
+        ("SELECT ToString(ToDecimal('3.14'))", "3.14"),
+        ("SELECT ToString(ToDecimal('0'))", "0.0"),
+        ("SELECT ToString(ToDecimal('5'))", "5.0"),
+        ("SELECT ToString(ToDecimal('-3.14'))", "-3.14"),
+        ("SELECT ToString(ToDecimal('0.00000001'))", "0.00000001"),
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for sql, expected in expressions:
+            py_result = py.execute(sql).fetchone()[0]
+            cpp_result = cpp.execute(sql).fetchone()[0]
+            assert py_result == expected, f"PY {sql}: {py_result!r} != {expected!r}"
+            assert cpp_result == expected, f"CPP {sql}: {cpp_result!r} != {expected!r}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_tostring_decimal_round_trips_per_spec_cql07_historian() -> None:
+    """CQL §ToString: "The result of any ToString must be round-trippable
+    back to the source value." Verify ToDecimal(ToString(x)) preserves the
+    value for all Decimal inputs.
+    """
+    cql = """library RoundTrip version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define FromZero: ToDecimal(ToString(ToDecimal('0')))
+define FromPi: ToDecimal(ToString(ToDecimal('3.14')))
+define FromNeg: ToDecimal(ToString(ToDecimal('-2.5')))
+define FromSmall: ToDecimal(ToString(ToDecimal('0.00000001')))
+define FromInt: ToDecimal(ToString(ToDecimal('42')))
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "FromZero": "0.00000000",
+        "FromPi": "3.14000000",
+        "FromNeg": "-2.50000000",
+        "FromSmall": "0.00000001",
+        "FromInt": "42.00000000",
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}::VARCHAR"
+            assert py.execute(sql).fetchone()[0] == expected_value, name
+            assert cpp.execute(sql).fetchone()[0] == expected_value, name
+    finally:
+        py.close()
+        cpp.close()

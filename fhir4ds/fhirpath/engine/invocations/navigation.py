@@ -221,8 +221,125 @@ def _descendant_repeat_key(item):
     if isinstance(data, (int, float, Decimal)) and not isinstance(data, bool):
         return ("number", str(Decimal(str(data)).normalize()))
     if isinstance(data, (dict, list)):
-        return ("json", json.dumps(data, sort_keys=True, separators=(",", ":"), default=str))
+        # FP-12 EXPLORER (2026-06-29): The standard `json.dumps` and
+        # `orjson.dumps` both serialize nested structures recursively
+        # (orjson has an internal depth cap around ~500; json.dumps
+        # consumes one Python stack frame per nesting level). For deeply
+        # nested resources (>= ~200 deep), each call to
+        # `_descendant_repeat_key` for an item at depth N pushes past
+        # Python's default 1000-frame recursion limit. The native C++
+        # `descendants()` uses an iterative work-queue with a 50000-
+        # descendant safety cap, so the Python fallback must mirror that
+        # capacity.
+        #
+        # Iteratively serialize the structure with explicit stack to avoid
+        # all Python recursion. Mirrors the canonical form used by the
+        # prior `json.dumps(data, sort_keys=True, separators=(",", ":"),
+        # default=str)` for backward compatibility on shallow structures.
+        return ("json", _iterative_canonical_json(data))
     return (type(data).__name__, str(data))
+
+
+def _iterative_canonical_json(data):
+    """Iteratively serialize to canonical JSON without Python-level recursion.
+
+    Produces output identical to
+        json.dumps(data, sort_keys=True, separators=(",", ":"), default=str)
+    but uses an explicit stack so deeply nested data does not blow Python's
+    recursion limit. Mirrors orjson's output for shallow inputs and remains
+    correct for arbitrary depth.
+    """
+    # `out` is a flat list of fragment strings, indexed by slot.
+    # Slot 0 is reserved for the top-level result.
+    # For each container (dict/list), we allocate child slots for each value
+    # plus an assembly task that runs after all children complete.
+    out = ["__PLACEHOLDER__"]
+    # Frame: a dict with keys indicating the kind of work.
+    #   {"kind": "value", "obj": <obj>, "slot": <int>}
+    #   {"kind": "assemble_dict", "keys": [...], "child_slots": [...], "slot": <int>}
+    #   {"kind": "assemble_list", "child_slots": [...], "slot": <int>}
+    stack = [{"kind": "value", "obj": data, "slot": 0}]
+
+    while stack:
+        frame = stack.pop()
+        kind = frame["kind"]
+
+        if kind == "assemble_dict":
+            keys = frame["keys"]
+            child_slots = frame["child_slots"]
+            slot = frame["slot"]
+            parts = []
+            for i, k in enumerate(keys):
+                parts.append(json.dumps(k) + ":" + out[child_slots[i]])
+            out[slot] = "{" + ",".join(parts) + "}"
+            continue
+
+        if kind == "assemble_list":
+            child_slots = frame["child_slots"]
+            slot = frame["slot"]
+            parts = [out[cs] for cs in child_slots]
+            out[slot] = "[" + ",".join(parts) + "]"
+            continue
+
+        # kind == "value"
+        obj = frame["obj"]
+        slot = frame["slot"]
+
+        if obj is None:
+            out[slot] = "null"
+        elif obj is True:
+            out[slot] = "true"
+        elif obj is False:
+            out[slot] = "false"
+        elif isinstance(obj, str):
+            out[slot] = json.dumps(obj)
+        elif isinstance(obj, bool):  # defensive; True/False handled above
+            out[slot] = "true" if obj else "false"
+        elif isinstance(obj, Decimal):
+            out[slot] = json.dumps(str(obj))
+        elif isinstance(obj, (int, float)):
+            out[slot] = json.dumps(obj)
+        elif isinstance(obj, dict):
+            keys = sorted(obj.keys(), key=lambda k: str(k))
+            child_slots = []
+            for _ in keys:
+                child_slots.append(len(out))
+                out.append("__PLACEHOLDER__")
+            # Push assembly task first (LIFO: runs last).
+            stack.append({
+                "kind": "assemble_dict",
+                "keys": keys,
+                "child_slots": child_slots,
+                "slot": slot,
+            })
+            # Push children in reverse so they run in key order.
+            for i in range(len(keys) - 1, -1, -1):
+                stack.append({
+                    "kind": "value",
+                    "obj": obj[keys[i]],
+                    "slot": child_slots[i],
+                })
+        elif isinstance(obj, list):
+            child_slots = []
+            for _ in obj:
+                child_slots.append(len(out))
+                out.append("__PLACEHOLDER__")
+            stack.append({
+                "kind": "assemble_list",
+                "child_slots": child_slots,
+                "slot": slot,
+            })
+            for i in range(len(obj) - 1, -1, -1):
+                stack.append({
+                    "kind": "value",
+                    "obj": obj[i],
+                    "slot": child_slots[i],
+                })
+        else:
+            # Fallback — match default=str
+            out[slot] = json.dumps(str(obj))
+
+    return out[0]
 
 
 def get_resource_key(ctx, coll):

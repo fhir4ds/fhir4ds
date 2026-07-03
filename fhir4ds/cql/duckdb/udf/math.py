@@ -266,28 +266,39 @@ def mathSqrt(x: str | None) -> str | None:
 def mathExp(x: str | None) -> str | None:
     """CQL Exp(x) (§16.6).
 
-    If the result overflows (positive infinity), raise a runtime error.
+    Per CQL v1.5.3 §16.6: "If the result of the operation cannot be
+    represented, the result is null." Reinforced by the section header:
+    "operations that cause arithmetic overflow or underflow ... will
+    result in null, rather than a run-time error." So we return None when
+    the result overflows to infinity (e.g. Exp(710), Exp(1000), Exp(1e5)),
+    instead of raising a runtime error.
     """
     value = _parse_math_number(x)
     if value is None:
         return None
     try:
         result = math.exp(value)
-    except OverflowError as exc:
-        raise ValueError(f"Exp({x}) results in overflow (positive infinity)") from exc
+    except OverflowError:
+        # math.exp raises OverflowError only for results that overflow to
+        # infinity; spec §16.6 mandates NULL on unrepresentable results.
+        return None
     return _format_math_result(result)
 
 
 def mathLn(x: str | None) -> str | None:
     """CQL Ln(x) - natural logarithm (§16.12).
 
-    Ln(0) results in negative infinity. Negative inputs are undefined.
+    Per CQL v1.5.3 §16.12: "If the result of the operation cannot be
+    represented, the result is null." Ln(0) is -infinity and cannot be
+    represented, so return None rather than raising a runtime error.
+    Negative inputs are also undefined and return None.
     """
     value = _parse_math_number(x)
     if value is None:
         return None
     if value == 0:
-        raise ValueError("Ln(0) results in negative infinity")
+        # Ln(0) is -infinity; spec §16.12 mandates NULL.
+        return None
     if value < 0:
         return None
     return _format_math_result(math.log(value))
@@ -902,11 +913,19 @@ def cqlMessage(source, condition, code, severity, message) -> str:
 
 
 def cqlTimezoneOffset(value) -> float | None:
-    """CQL §18.12: Extract timezone offset in decimal hours from a datetime string."""
+    """CQL §18.12: Extract timezone offset in decimal hours from a datetime string.
+
+    Per CQL §DateTime ISO-8601 representation, ``Z`` is the UTC designator
+    and is equivalent to ``+00:00``. The extractor must therefore return
+    ``0.0`` for ``Z``-suffixed values, not None.
+    """
     if value is None:
         return None
     import re
     s = str(value)
+    # CQL §DateTime: ``Z`` is the UTC designator (equivalent to +00:00).
+    if s.endswith("Z"):
+        return 0.0
     m = re.search(r'([+-])(\d{2}):(\d{2})$', s)
     if not m:
         return None

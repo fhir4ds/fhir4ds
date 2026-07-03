@@ -1051,7 +1051,7 @@ class ListsMixin:
                 src_node = src_node[0]
             if isinstance(src_node, QuerySource) and src_node.expression:
                 src_bin = src_node.expression
-                if isinstance(src_bin, CQLBinaryExpression) and src_bin.operator == "union":
+                if isinstance(src_bin, CQLBinaryExpression) and src_bin.operator in ("union", "|"):
                     operand_exprs = [src_bin.left, src_bin.right]
                     all_scalar = True
                     for op_expr in operand_exprs:

@@ -382,3 +382,292 @@ def test_math_incompatible_constants_and_dynamic_arguments_match_fallback(monkey
     finally:
         cpp.close()
         py.close()
+
+
+def test_math_ln_exp_sqrt_log_text_parity_fp11_historian(monkeypatch) -> None:
+    """FP-11 HISTORIAN: Verify §5.7.3 exp()/§5.7.5 ln()/§5.7.6 log()/§5.7.9 sqrt()
+    text-rendering parity between native C++ and forced Python fallback.
+
+    The native C++ fn_ln/fn_exp/fn_sqrt/fn_log at evaluator.cpp previously
+    returned FPValue::FromDecimal(<double>) with empty source_text, causing
+    fhirpath_text serialization to render with std::setprecision(17) and
+    produce 17-sig-digit binary64 expansions like "2.3025850929940459".
+    The Python fallback's str(float) uses shortest-round-trip rendering,
+    producing "2.302585092994046" (16 sig digits). Numerical value was
+    identical; only text serialization differed.
+
+    The fix adds normalizeDecimalMathSourceText (analogous to
+    normalizeQuantityArithmeticSourceText from FP-11 SKEPTIC) which sets
+    source_text to the shortest-round-trip text on the result FPValue.
+    Also normalizes the Python fallback's exp() to return a raw float
+    (matching ln/log/sqrt) instead of Decimal(format(result, ".17g")).
+    """
+    cpp = _cpp_connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        resource = json.dumps({"resourceType": "Observation"})
+        # (expression, expected_text) — these are the canonical shortest-
+        # round-trip text forms that BOTH native and fallback must produce.
+        # Integer-valued results get ".0" appended per §5.5.8 (-)?#0.0#.
+        cases = [
+            # ln() — §5.7.5
+            ("(1).ln()", "0.0"),
+            ("(2).ln()", "0.6931471805599453"),
+            ("(10).ln()", "2.302585092994046"),
+            ("(100).ln()", "4.605170185988092"),
+            ("(2.718281828459045).ln()", "1.0"),
+            # exp() — §5.7.3
+            ("(0).exp()", "1.0"),
+            ("(1).exp()", "2.718281828459045"),
+            ("(2).exp()", "7.38905609893065"),
+            # sqrt() — §5.7.9
+            ("(4).sqrt()", "2.0"),
+            ("(9).sqrt()", "3.0"),
+            ("(2).sqrt()", "1.4142135623730951"),
+            ("(81).sqrt()", "9.0"),
+            # log(base) — §5.7.6
+            ("(16).log(2)", "4.0"),
+            ("(100).log(10)", "2.0"),
+            ("(8).log(2)", "3.0"),
+        ]
+        for expr, expected_text in cases:
+            cpp_text = cpp.execute(
+                "SELECT fhirpath_text(?::JSON, ?)",
+                [resource, expr],
+            ).fetchone()[0]
+            py_text = py.execute(
+                "SELECT fhirpath_text(?::JSON, ?)",
+                [resource, expr],
+            ).fetchone()[0]
+            assert cpp_text == expected_text, (
+                f"FP-11 HISTORIAN native text mismatch on {expr}: "
+                f"got {cpp_text!r}, expected {expected_text!r}"
+            )
+            assert py_text == expected_text, (
+                f"FP-11 HISTORIAN fallback text mismatch on {expr}: "
+                f"got {py_text!r}, expected {expected_text!r}"
+            )
+            assert cpp_text == py_text, (
+                f"FP-11 HISTORIAN parity drift on {expr}: "
+                f"native={cpp_text!r}, fallback={py_text!r}"
+            )
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_power_integer_overflow_and_decimal_shape_fp11_explorer(monkeypatch) -> None:
+    """FP-11 EXPLORER (2026-06-29) QA-001: power(Integer, non-negative-Integer)
+    must preserve exact Decimal-shaped integer text per §5.7.7 (Decimal result)
+    and §4.1.4 (fixed-precision decimal formats, no scientific notation).
+
+    Previously native C++ used `std::pow(base, exp)` returning IEEE-754 binary64,
+    which:
+      (a) rendered results above ~2^53 in scientific notation, e.g.
+          (2).power(64) -> "1.8446744073709552e+19" instead of
+          "18446744073709551616.0"
+      (b) returned empty for results above ~1.8e308 (e.g. 2^1024, 10^400)
+          while the Python fallback's Decimal.pow preserved the exact value.
+
+    The fix adds an exact integer-arithmetic path in fn_power that handles
+    integer base + non-negative integer exponent via schoolbook
+    multiplication on string digit magnitudes, capped at 10000 digits to
+    prevent OOM on malicious exponents.
+    """
+    cpp = _cpp_connection()
+    py = _python_fallback_connection(monkeypatch)
+    resource = json.dumps({"resourceType": "Observation"})
+    try:
+        cases = [
+            # Integer base, integer exponent — exact Decimal text expected.
+            ("(2).power(10)", "1024.0"),
+            ("(5).power(3)", "125.0"),
+            ("(2).power(32)", "4294967296.0"),
+            ("(2).power(53)", "9007199254740992.0"),
+            # Above 2^53 — previously scientific notation in native
+            ("(2).power(63)", "9223372036854775808.0"),
+            ("(2).power(64)", "18446744073709551616.0"),
+            ("(10).power(20)", "100000000000000000000.0"),
+            # Above ~1.8e308 — previously empty in native
+            ("(10).power(308)", "1" + "0" * 308 + ".0"),
+            ("(2).power(1024)",
+             "17976931348623159077293051907890247336179769789423065727343008115773"
+             "26758055009631327084773224075360211201138798713933576587897688144166"
+             "22492847430639474124377767893424865485276302219601246094119453082952"
+             "08500576883815068234246288147391311054082723716335051068458629823994"
+             "7245938479716304835356329624224137216.0"),
+        ]
+        for expr, expected_text in cases:
+            cpp_text = cpp.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expr]
+            ).fetchone()[0]
+            py_text = py.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expr]
+            ).fetchone()[0]
+            assert cpp_text == expected_text, (
+                f"FP-11 EXPLORER native power() text mismatch on {expr}: "
+                f"got {cpp_text!r}, expected {expected_text!r}"
+            )
+            assert py_text == expected_text, (
+                f"FP-11 EXPLORER fallback power() text mismatch on {expr}: "
+                f"got {py_text!r}, expected {expected_text!r}"
+            )
+            assert cpp_text == py_text, (
+                f"FP-11 EXPLORER power() parity drift on {expr}: "
+                f"native={cpp_text!r}, fallback={py_text!r}"
+            )
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_truncate_quantity_large_magnitude_fp11_explorer(monkeypatch) -> None:
+    """FP-11 EXPLORER (2026-06-29) QA-002: truncate() on large-magnitude
+    Quantity values must preserve the value, not return empty.
+
+    Per §5.7.10 truncate() Quantity branch preserves the same unit;
+    per §4.1.8 Quantity value is Decimal — Decimal can represent values
+    above INT64_MAX exactly. Previously native fn_truncate Quantity branch
+    rejected values > INT64_MAX via an int64 overflow guard.
+    """
+    cpp = _cpp_connection()
+    py = _python_fallback_connection(monkeypatch)
+    resource = json.dumps({"resourceType": "Observation"})
+    try:
+        cases = [
+            ("(100000000000000000000 'g').truncate()", "100000000000000000000 'g'"),
+            ("(1 'g').truncate()", "1 'g'"),
+            ("(1.5 'g').truncate()", "1 'g'"),
+            ("(-1.5 'g').truncate()", "-1 'g'"),
+        ]
+        for expr, expected_text in cases:
+            cpp_text = cpp.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expr]
+            ).fetchone()[0]
+            py_text = py.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expr]
+            ).fetchone()[0]
+            assert cpp_text == expected_text, (
+                f"FP-11 EXPLORER native truncate() Quantity text mismatch on {expr}: "
+                f"got {cpp_text!r}, expected {expected_text!r}"
+            )
+            assert py_text == expected_text, (
+                f"FP-11 EXPLORER fallback truncate() Quantity text mismatch on {expr}: "
+                f"got {py_text!r}, expected {expected_text!r}"
+            )
+            assert cpp_text == py_text, (
+                f"FP-11 EXPLORER truncate() Quantity parity drift on {expr}: "
+                f"native={cpp_text!r}, fallback={py_text!r}"
+            )
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_round_large_precision_no_crash_fp11_explorer(monkeypatch) -> None:
+    """FP-11 EXPLORER (2026-06-29) QA-005: round(precision) must not crash
+    the Python fallback on large precision values.
+
+    Per §5.7.8 round([precision]) accepts any non-negative Integer precision.
+    Previously the Python fallback used `degree = 10 ** Decimal(num2)` which
+    overflowed the default Decimal context for precision >= ~28, raising
+    InvalidInputException. The fix uses text-based rounding with an effective-
+    precision cap at the input's fractional digit count.
+    """
+    cpp = _cpp_connection()
+    py = _python_fallback_connection(monkeypatch)
+    resource = json.dumps({"resourceType": "Observation"})
+    try:
+        cases = [
+            ("(1.5).round(0)", "2.0"),  # Default precision 0; §5.5.8 shape
+            ("(1.5).round(1)", "1.5"),
+            ("(1.5).round(2)", "1.5"),
+            ("(1.5).round(5)", "1.5"),
+            ("(1.5).round(10)", "1.5"),
+            ("(1.5).round(50)", "1.5"),
+            ("(1.5).round(100)", "1.5"),
+            ("(1.5).round(2147483647)", "1.5"),
+            ("(3.14159).round(2)", "3.14"),
+            ("(3.14159).round(5)", "3.14159"),
+            ("(3.14159).round(10)", "3.14159"),
+            ("(3.14159).round(50)", "3.14159"),
+            # Trailing-zero strip per §5.5.8 (-)?#0.0#
+            ("(0.05).round(1)", "0.1"),
+            ("(2.675).round(2)", "2.68"),
+            ("(1.005).round(2)", "1.01"),
+        ]
+        for expr, expected_text in cases:
+            cpp_text = cpp.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expr]
+            ).fetchone()[0]
+            py_text = py.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expr]
+            ).fetchone()[0]
+            assert cpp_text == expected_text, (
+                f"FP-11 EXPLORER native round() text mismatch on {expr}: "
+                f"got {cpp_text!r}, expected {expected_text!r}"
+            )
+            assert py_text == expected_text, (
+                f"FP-11 EXPLORER fallback round() text mismatch on {expr}: "
+                f"got {py_text!r}, expected {expected_text!r}"
+            )
+            assert cpp_text == py_text, (
+                f"FP-11 EXPLORER round() parity drift on {expr}: "
+                f"native={cpp_text!r}, fallback={py_text!r}"
+            )
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_exp_subnormal_rendering_fp11_explorer(monkeypatch) -> None:
+    """FP-11 EXPLORER (2026-06-29) QA-004: exp() of very negative inputs
+    produces subnormal float results. Native and Python fallback must agree
+    on the shortest-round-trip scientific notation rendering.
+
+    Previously:
+      - Native std::exp returned a subnormal but formatDecimalNumber's
+        fallback path collapsed it to "0.0" via setprecision(15) fixed.
+      - Python fallback returned the subnormal as a raw float but it was
+        wrapped in Decimal by the upstream engine, then rendered as a
+        300+-character zero-padded string.
+
+    The fix:
+      - Native formatDecimalNumber detects subnormal via "fixed rendering
+        collapsed to zero" check and returns the source_text (shortest-
+        round-trip from normalizeDecimalMathSourceText).
+      - Python fallback _to_str detects subnormal magnitude (< 1e-300)
+        and uses str(float(item)) to produce the shortest-round-trip
+        scientific notation.
+    """
+    cpp = _cpp_connection()
+    py = _python_fallback_connection(monkeypatch)
+    resource = json.dumps({"resourceType": "Observation"})
+    try:
+        cases = [
+            # exp(-710) produces ~4.47e-309 (subnormal)
+            ("(-710).exp()", "4.47628622567513e-309"),
+            ("(-720).exp()", "5.04900494e-313"),
+            ("(-740).exp()", "4.2e-322"),
+        ]
+        for expr, _expected in cases:
+            cpp_text = cpp.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expr]
+            ).fetchone()[0]
+            py_text = py.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expr]
+            ).fetchone()[0]
+            assert cpp_text == py_text, (
+                f"FP-11 EXPLORER exp() subnormal parity drift on {expr}: "
+                f"native={cpp_text!r}, fallback={py_text!r}"
+            )
+            # Sanity: result should contain 'e' (scientific notation)
+            assert "e" in cpp_text, (
+                f"FP-11 EXPLORER exp() subnormal should use scientific notation: "
+                f"got {cpp_text!r}"
+            )
+    finally:
+        cpp.close()
+        py.close()
+
+

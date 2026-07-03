@@ -235,9 +235,12 @@ def test_interval_contains_after(closed_interval):
 
 
 def test_interval_contains_null_interval():
-    """Test contains with null interval — CQL 3VL: null input → null output."""
+    """CQL §19.3 Contains: "If the first argument is null, the result is false."
+
+    Null first arg short-circuits to False BEFORE second-arg-null → null.
+    """
     result = intervalContains(None, "2024-06-15")
-    assert result is None
+    assert result is False
 
 
 def test_interval_contains_null_point(closed_interval):
@@ -247,9 +250,11 @@ def test_interval_contains_null_point(closed_interval):
 
 
 def test_interval_contains_both_null():
-    """Test contains with both null — CQL 3VL: null input → null output."""
+    """CQL §19.3 Contains: first-arg-null short-circuits to False even when
+    the second arg is also null.
+    """
     result = intervalContains(None, None)
-    assert result is None
+    assert result is False
 
 
 # ========================================

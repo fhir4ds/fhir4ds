@@ -1094,7 +1094,32 @@ class CQLParser:
             return UnaryExpression(operator="not", operand=operand)
 
         if self.match_and_advance(TokenType.MINUS):
+            # CQL §Types/Ratio + §ToString RatioOverload example uses a
+            # negative-numerator Ratio literal: `-0.1 'mg':0.1 'mg'`. The
+            # naive parse path consumes the leading MINUS here, then parses
+            # `0.1 'mg':0.1 'mg'` as a positive Ratio, and wraps the whole
+            # Ratio in UnaryExpression('-', ...). Ratio has no negation
+            # operator, so this fails at execution. Detect the ratio-
+            # literal pattern (numeric [unit] COLON ...) and propagate the
+            # sign through the numerator by recording it on a parser
+            # thread-local that `_maybe_parse_ratio_literal` reads.
             operand = self.parse_unary_expression()
+            if isinstance(operand, FunctionRef) and operand.name == "ToRatio":
+                # The sign was dropped from the numerator; re-apply it.
+                if (len(operand.arguments) == 1
+                        and isinstance(operand.arguments[0], Literal)
+                        and isinstance(operand.arguments[0].value, str)
+                        and operand.arguments[0].value):
+                    literal_val = operand.arguments[0].value
+                    # Ratio literal text format: "<num> '<unit>':<den> '<unit>'"
+                    # Only negate if not already negative.
+                    if not literal_val.startswith("-"):
+                        negated = "-" + literal_val
+                        operand.arguments[0] = Literal(
+                            value=negated,
+                            type=operand.arguments[0].type,
+                        )
+                        return operand
             return UnaryExpression(operator="-", operand=operand)
 
         # Unary plus - just return the operand (no-op)
@@ -1514,9 +1539,30 @@ class CQLParser:
                 unit_token = self.advance()
                 unit = unit_token.value
                 return self._maybe_parse_ratio_literal(Quantity(value=value, unit=unit))
+            # CQL §Types/Ratio: bare numeric ratio literal (e.g. `1:8`).
+            # A bare numeric with no unit is treated as a Quantity with the
+            # default UCUM unit '1' (CQL §Types/Quantity) so that the ratio
+            # literal form `<quantity>:<quantity>` is accepted.
+            #
+            # If `_maybe_parse_ratio_literal` does not commit to a Ratio
+            # (e.g. because the token after COLON cannot start a Quantity,
+            # such as the `Result` identifier in an aggregate-clause
+            # `starting 1: <body>`), fall back to the plain Integer Literal
+            # so the caller's context-specific parser handles the COLON.
+            if self.match(TokenType.COLON):
+                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, unit="1"))
+                if isinstance(ratio, FunctionRef):
+                    return ratio
+                return Literal(value=value, type="Integer")
             return Literal(value=value, type="Integer")
         elif token.type == TokenType.LONG:
             value = int(token.value)
+            # CQL §Types/Ratio: bare numeric ratio literal.
+            if self.match(TokenType.COLON):
+                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, unit="1"))
+                if isinstance(ratio, FunctionRef):
+                    return ratio
+                return Literal(value=value, type="Long")
             return Literal(value=value, type="Long")
         elif token.type == TokenType.DECIMAL:
             value = float(token.value)
@@ -1549,6 +1595,12 @@ class CQLParser:
                         f"Decimal literal '{token.value}' exceeds maximum 28 integer digits "
                         f"(CQL §2.3)"
                     )
+            # CQL §Types/Ratio: bare numeric ratio literal.
+            if self.match(TokenType.COLON):
+                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, unit="1"))
+                if isinstance(ratio, FunctionRef):
+                    return ratio
+                return Literal(value=value, type="Decimal", raw_str=token.value)
             return Literal(value=value, type="Decimal", raw_str=token.value)
         elif token.type == TokenType.STRING:
             return Literal(value=token.value, type="String")
@@ -1562,11 +1614,53 @@ class CQLParser:
             raise ParseError(f"Unexpected literal type: {token.type}")
 
     def _maybe_parse_ratio_literal(self, numerator: Quantity) -> Union[Quantity, FunctionRef]:
-        """Parse CQL ratio literal syntax: ``<quantity>:<quantity>``."""
+        """Parse CQL ratio literal syntax: ``<quantity>:<quantity>``.
+
+        CQL §Types/Ratio: ``structured type Ratio { numerator Quantity,
+        denominator Quantity }``. Both components are Quantity values; a
+        bare numeric (Integer/Long/Decimal) denominator is promoted to a
+        Quantity with the default UCUM unit '1' (CQL §Types/Quantity).
+
+        To avoid ambiguity with other COLON uses (notably the CQL aggregate
+        clause ``starting <expr>: <body>``), only commit to the Ratio
+        interpretation when the token immediately after COLON can begin a
+        Quantity literal — i.e., a numeric (INTEGER/LONG/DECIMAL) or a
+        string-delimited UCUM unit. Otherwise, leave the COLON in the
+        token stream and return the numerator unchanged so the caller's
+        context-specific parser handles it.
+        """
         if not self.match(TokenType.COLON):
             return numerator
-        self.advance()
+        # Peek at the token *after* the COLON. Only commit to Ratio if it
+        # can start a Quantity literal. This prevents the aggregate clause
+        # `starting 1: <expr>` from being misparsed as `1:<expr>` Ratio.
+        next_token = self.peek(1)  # token after the COLON
+        if next_token.type not in (
+            TokenType.INTEGER, TokenType.LONG, TokenType.DECIMAL,
+            TokenType.MINUS, TokenType.PLUS,  # signed numeric
+            TokenType.STRING,  # UCUM unit like `'mg'`
+        ):
+            return numerator
+        self.advance()  # consume COLON
+        # CQL §Types/Ratio: denominator Quantity may be signed (negative).
+        # `parse_literal()` does not accept a leading MINUS/PLUS, so detect
+        # the sign here and apply it to the parsed numeric Quantity. This
+        # mirrors the numerator sign-propagation in parse_unary_expression
+        # (HISTORIAN CQL-03 fix) and covers spec examples such as `1:-8`,
+        # `1 'mg':-8 'mg'`, `-1.5 'mg':-2.5 'mg'`.
+        sign = 1
+        if self.match_and_advance(TokenType.MINUS):
+            sign = -1
+        elif self.match_and_advance(TokenType.PLUS):
+            sign = 1
         denominator = self.parse_literal()
+        # A bare numeric Literal denominator is valid as a Ratio component
+        # (spec example `1:8`). Promote it to a default-unit Quantity.
+        if isinstance(denominator, Literal) and isinstance(denominator.value, (int, float)):
+            denominator = Quantity(value=denominator.value * sign, unit="1")
+        elif sign == -1 and isinstance(denominator, Quantity):
+            # Signed Quantity literal denominator (e.g., `-8 'mg'`).
+            denominator = Quantity(value=denominator.value * sign, unit=denominator.unit)
         if not isinstance(denominator, Quantity):
             raise ParseError("Expected Quantity after ':' in Ratio literal")
 

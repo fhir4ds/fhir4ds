@@ -109,6 +109,133 @@ def test_cql_primitive_type_and_boundary_translation() -> None:
             parse_expression(invalid)
 
 
+def test_cql_primitive_negate_of_minimum_returns_null_per_spec() -> None:
+    """CQL §16 Negate: -(minimum Integer) and -(minimum Long) must be NULL.
+
+    The spec example explicitly references -(minimum Integer) returning null
+    when the negation cannot be represented. This must also hold for
+    literal-spelled minima (e.g. ``-(-2147483648)``) since they represent
+    the same value.
+    """
+    header = "library Test version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n"
+    translated = translate_cql(
+        header
+        + "\n".join(
+            [
+                "define NegateMinIntFunction: -(minimum Integer)",
+                "define NegateMinIntLiteral: -(-2147483648)",
+                "define NegateMinLongFunction: -(minimum Long)",
+                "define NegateMinLongLiteral: -(-9223372036854775808L)",
+            ]
+        )
+    )
+    for name in ("NegateMinIntFunction", "NegateMinIntLiteral",
+                 "NegateMinLongFunction", "NegateMinLongLiteral"):
+        assert translated[name].to_sql() == "NULL", (
+            f"{name} should translate to NULL per CQL §16 Negate spec; got "
+            f"{translated[name].to_sql()!r}"
+        )
+
+
+def test_cql_primitive_abs_of_minimum_returns_null_per_spec() -> None:
+    """CQL §16 Abs: Abs(minimum Integer) and Abs(minimum Long) must be NULL.
+
+    The spec example explicitly references ``Abs(minimum Integer)`` returning
+    null when the absolute value cannot be represented. This must hold for
+    both the ``minimum Integer`` FunctionRef form and the literal-spelled
+    ``Abs(-2147483648)`` form, because they represent the same value. Without
+    the FunctionRef guard, DuckDB auto-promotes ``abs(-2147483648)`` to a
+    valid BIGINT (2147483648) and ``TRY()`` sees no error, leaking the
+    out-of-range Integer value through.
+    """
+    header = "library Test version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n"
+    translated = translate_cql(
+        header
+        + "\n".join(
+            [
+                "define AbsMinIntFunction: Abs(minimum Integer)",
+                "define AbsMinIntLiteral: Abs(-2147483648)",
+                "define AbsMinLongFunction: Abs(minimum Long)",
+                "define AbsMinLongLiteral: Abs(-9223372036854775808L)",
+                "define AbsPosInt: Abs(-5)",
+                "define AbsPosLong: Abs(-5L)",
+                "define AbsDecimal: Abs(-5.5)",
+            ]
+        )
+    )
+
+    # All four minimum-extreme forms must lower to NULL at translation time.
+    for name in ("AbsMinIntFunction", "AbsMinIntLiteral",
+                 "AbsMinLongFunction", "AbsMinLongLiteral"):
+        assert translated[name].to_sql() == "NULL", (
+            f"{name} should translate to NULL per CQL §16 Abs spec; got "
+            f"{translated[name].to_sql()!r}"
+        )
+
+    # Positive forms must still execute correctly on both backends.
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        expected = {"AbsPosInt": 5, "AbsPosLong": 5, "AbsDecimal": Decimal("5.5")}
+        for name, value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (value,)
+            assert cpp.execute(sql).fetchone() == (value,)
+
+        # And the four minimum-extreme NULLs must execute to NULL on both.
+        for name in ("AbsMinIntFunction", "AbsMinIntLiteral",
+                     "AbsMinLongFunction", "AbsMinLongLiteral"):
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (None,), (
+                f"{name} should execute to NULL on Python fallback"
+            )
+            assert cpp.execute(sql).fetchone() == (None,), (
+                f"{name} should execute to NULL on native C++ backend"
+            )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_primitive_power_operator_returns_spec_typed_result() -> None:
+    """CQL §16 Power: ^(Integer,Integer) Integer, ^(Long,Long) Long, etc.
+
+    Integer overflow must yield NULL. Decimal operands keep DOUBLE typing.
+    """
+    header = "library Test version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n"
+    translated = translate_cql(
+        header
+        + "\n".join(
+            [
+                "define IntPower: 2^3",
+                "define LongPower: 2L^3L",
+                "define DecimalPower: 2.5^2.0",
+            ]
+        )
+    )
+    # Integer^Integer must cast to INTEGER (so overflow returns NULL at runtime)
+    assert "AS INTEGER" in translated["IntPower"].to_sql(), (
+        f"2^3 should target INTEGER per spec; got {translated['IntPower'].to_sql()!r}"
+    )
+    # Long^Long must cast to BIGINT
+    assert "AS BIGINT" in translated["LongPower"].to_sql(), (
+        f"2L^3L should target BIGINT per spec; got {translated['LongPower'].to_sql()!r}"
+    )
+    # Decimal^Decimal keeps DOUBLE
+    assert "AS DOUBLE" in translated["DecimalPower"].to_sql(), (
+        f"2.5^2.0 should target DOUBLE per spec; got {translated['DecimalPower'].to_sql()!r}"
+    )
+
+    # Runtime overflow check: 2^31 exceeds Integer max -> NULL
+    overflow_sql = translate_cql(header + "define Overflow: 2^31")["Overflow"].to_sql()
+    cpp_con = _cpp_connection()
+    try:
+        row = cpp_con.execute(f"SELECT ({overflow_sql}) AS v").fetchone()
+        assert row[0] is None, f"2^31 should overflow Integer and return NULL; got {row[0]!r}"
+    finally:
+        cpp_con.close()
+
+
 def test_cql_primitive_duckdb_surface_matches_cpp_registration() -> None:
     expressions = [
         'SELECT "And"(true, false)',

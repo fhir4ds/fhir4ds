@@ -8,28 +8,38 @@ from decimal import Decimal, InvalidOperation
 from datetime import date, datetime, time
 from typing import TYPE_CHECKING
 
-from .quantity import is_valid_quantity_object, quantityConvert, toQuantity
+from .quantity import is_valid_quantity_object, quantityConvert, toQuantity, _format_cql_quantity
 
 if TYPE_CHECKING:
     import duckdb
 
 
 _BOOL_STRINGS = {"true", "false", "t", "f", "yes", "no", "y", "n", "1", "0"}
-_INTEGER_STRING_RE = re.compile(r"^[+-]?\d+$")
-_DECIMAL_STRING_RE = re.compile(r"^[+-]?\d+(?:\.\d{1,8})?$")
+# CQL §Formatting Strings defines ``0`` and ``#`` placeholders as ASCII
+# digits. The CQL lexer only accepts ASCII ``[0-9]`` for numeric literals
+# and ISO-8601 (referenced by CQL for date/time) is ASCII-only. Python's
+# ``\d`` regex class and ``int()`` / ``Decimal()`` constructors accept
+# Unicode decimal digits (Arabic-Indic, Devanagari, full-width, etc.),
+# so we MUST compile these regexes with re.ASCII to reject pathological
+# Unicode-digit strings like ``'٢٠٢٤-٠١-٠١'`` that real Mideast FHIR data
+# can carry.
+_INTEGER_STRING_RE = re.compile(r"^[+-]?\d+$", re.ASCII)
+_DECIMAL_STRING_RE = re.compile(r"^[+-]?\d+(?:\.\d{1,8})?$", re.ASCII)
 _DUCKDB_DECIMAL_INTEGER_DIGITS = 30
 _DUCKDB_DECIMAL_SCALE = 8
-_DATE_RE = re.compile(r"^(?P<year>\d{4})(?:-(?P<month>\d{2})(?:-(?P<day>\d{2}))?)?$")
+_DATE_RE = re.compile(r"^(?P<year>\d{4})(?:-(?P<month>\d{2})(?:-(?P<day>\d{2}))?)?$", re.ASCII)
 _DATETIME_RE = re.compile(
     r"^(?P<year>\d{4})(?:-(?P<month>\d{2})(?:-(?P<day>\d{2})"
     r"(?:T(?P<hour>\d{2})(?::(?P<minute>\d{2})(?::(?P<second>\d{2})"
-    r"(?:\.(?P<millisecond>\d{1,3}))?)?)?(?P<tz>Z|[+-]\d{2}:\d{2})?)?)?)?$"
+    r"(?:\.(?P<millisecond>\d{1,3}))?)?)?(?P<tz>Z|[+-]\d{2}:\d{2})?)?)?)?$",
+    re.ASCII,
 )
 _TIME_RE = re.compile(
     r"^T?(?P<hour>\d{2})(?::(?P<minute>\d{2})(?::(?P<second>\d{2})"
-    r"(?:\.(?P<millisecond>\d{1,3}))?)?)?(?P<tz>Z|[+-]\d{2}:\d{2})?$"
+    r"(?:\.(?P<millisecond>\d{1,3}))?)?)?(?P<tz>Z|[+-]\d{2}:\d{2})?$",
+    re.ASCII,
 )
-_TZ_RE = re.compile(r"^(?P<sign>[+-])(?P<hour>\d{2}):(?P<minute>\d{2})$")
+_TZ_RE = re.compile(r"^(?P<sign>[+-])(?P<hour>\d{2}):(?P<minute>\d{2})$", re.ASCII)
 
 
 def _as_text(value) -> str | None:
@@ -393,7 +403,44 @@ def ToRatio(value) -> str | None:
         return None
     if not ConvertsToRatio(text):
         return None
-    return json.dumps(data, separators=(",", ":"))
+    # CQL-07 EXPLORER (2026-07-01): Normalize JSON-object Ratio input through
+    # the same _format_cql_quantity canonicalization path used by
+    # _parse_ratio_text for text input. Without this, JSON input is echoed
+    # verbatim and lacks the `code`/`system` fields the text-input path
+    # produces, breaking the ToString(ToRatio(x)) round-trip invariant for
+    # JSON input.
+    numerator = _normalize_quantity_object(data.get("numerator"))
+    denominator = _normalize_quantity_object(data.get("denominator"))
+    if numerator is None or denominator is None:
+        return None
+    normalized = {"numerator": numerator, "denominator": denominator}
+    return json.dumps(normalized, separators=(",", ":"))
+
+
+def _normalize_quantity_object(value) -> dict | None:
+    """Render a Quantity-shaped dict through _format_cql_quantity so its
+    serialized form matches the canonical form produced by toQuantity for
+    text input (i.e., contains `value`, `unit`, `code`, and `system` keys).
+
+    Accepts a dict or a JSON-string-encoded dict. Returns None when the input
+    is not a valid CQL Quantity shape.
+    """
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError):
+            return None
+    if not is_valid_quantity_object(value):
+        return None
+    unit = value.get("unit") or value.get("code") or "1"
+    quantity_value = value.get("value")
+    formatted = _format_cql_quantity(quantity_value, unit)
+    if formatted is None:
+        return None
+    try:
+        return json.loads(formatted)
+    except (TypeError, ValueError):
+        return None
 
 
 def registerConversionCheckUdfs(con: "duckdb.DuckDBPyConnection") -> None:

@@ -607,34 +607,57 @@ class SQLBinaryOp(SQLExpression):
     right: SQLExpression
     precedence: int = 5  # Default to multiplicative
 
+    # SQL comparison operators that DuckDB treats as non-associative —
+    # `1 = 1 = TRUE` is a syntax error in DuckDB. When a SQLBinaryOp with
+    # one of these operators appears as a child of another same-precedence
+    # SQLBinaryOp, the child must be parenthesized. Surfaced by CQL-09
+    # EXPLORER QA-003 (chained CQL equality `((1=1)=true)=((2=2)=true)`
+    # emitted unparenthesized SQL `1 = 1 = TRUE = 2 = 2 = TRUE`).
+    _NON_ASSOCIATIVE_OPS = frozenset({
+        "=", "!=", "<>", "<", "<=", ">", ">=", "LIKE", "NOT LIKE", "IN", "NOT IN",
+    })
+
     def __post_init__(self):
         # Set precedence based on operator
         op_upper = self.operator.upper()
         if op_upper in PRECEDENCE:
             self.precedence = PRECEDENCE[op_upper]
 
+    def _child_parent_precedence(self) -> int:
+        """Precedence value to pass to children when recursing in to_sql().
+
+        For non-associative operators (DuckDB comparison ops), children at
+        the same precedence must be parenthesized — achieved by passing
+        `self.precedence + 1` so the child's `needs_parentheses` check
+        (`self.precedence < parent_precedence`) returns True.
+        """
+        if self.operator.upper() in self._NON_ASSOCIATIVE_OPS:
+            return self.precedence + 1
+        return self.precedence
+
     def to_sql(self, parent_precedence: int = 0) -> str:
-        left_sql = self.left.to_sql(self.precedence)
+        child_parent_prec = self._child_parent_precedence()
+        left_sql = self.left.to_sql(child_parent_prec)
 
         # Handle BETWEEN specially - right side should be "low AND high"
         if self.operator.upper() == "BETWEEN":
             # If right is a __between_args__ function, expand it
             if isinstance(self.right, SQLFunctionCall) and self.right.name == "__between_args__":
                 if len(self.right.args) >= 2:
-                    low_sql = self.right.args[0].to_sql(self.precedence)
-                    high_sql = self.right.args[1].to_sql(self.precedence)
+                    low_sql = self.right.args[0].to_sql(child_parent_prec)
+                    high_sql = self.right.args[1].to_sql(child_parent_prec)
                     result = f"{left_sql} BETWEEN {low_sql} AND {high_sql}"
                     if self.needs_parentheses(parent_precedence):
                         return f"({result})"
                     return result
             # Otherwise, use the standard format
-            right_sql = self.right.to_sql(self.precedence)
+            right_sql = self.right.to_sql(child_parent_prec)
             result = f"{left_sql} BETWEEN {right_sql}"
             if self.needs_parentheses(parent_precedence):
                 return f"({result})"
             return result
 
-        right_sql = self.right.to_sql(self.precedence)
+        right_sql = self.right.to_sql(child_parent_prec)
 
         result = f"{left_sql} {self.operator} {right_sql}"
 

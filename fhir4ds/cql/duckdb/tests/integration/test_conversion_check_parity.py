@@ -191,3 +191,94 @@ def test_cql_conversion_private_helper_registration_does_not_swallow_unexpected_
         conversion_macros._create_private_function(BrokenConnection(), "__broken", lambda value: value)
 
     conversion_macros._create_private_function(DuplicateConnection(), "__duplicate", lambda value: value)
+
+
+def test_cql_conversion_check_rejects_unicode_digits_per_spec_cql06_explorer() -> None:
+    """CQL spec format strings use ASCII digit placeholders ``0`` and ``#``.
+
+    The CQL grammar's lexer only accepts ASCII digits ``[0-9]`` for numeric
+    literals, and the conversion operator format strings
+    (``(+|-)?#0(.0#)?`` for ToDecimal/ToQuantity,
+    ``(+|-)?#0`` for ToInteger/ToLong, ``YYYY``/``MM``/``DD``/``hh``/``mm``/``ss``
+    for ToDate/ToDateTime/ToTime) inherit the ASCII-digit requirement.
+
+    Python's ``\\d`` regex character class and ``int()``/``Decimal()``
+    constructors accept Unicode decimal digits (Arabic-Indic ``\\u0660-9``,
+    Devanagari ``\\u0966-9``, full-width ``\\uFF10-9``, etc.), so they would
+    incorrectly return ``True`` for inputs like ``'\\u0661\\u0662\\u0663'``
+    that should be rejected per CQL §Formatting Strings.
+
+    Reproducer for CQL-06 EXPLORER (HIGH severity, ASCII-digit guard).
+    """
+    cases = [
+        # ConvertsToInteger — Arabic-Indic digits (Middle East clinical data)
+        ("SELECT ConvertsToInteger('١٢٣')", False),  # '١٢٣'
+        ("SELECT ConvertsToInteger('१२३')", False),  # '१२३' Devanagari
+        ("SELECT ConvertsToInteger('１２３')", False),  # '１２３' full-width
+        # ConvertsToLong
+        ("SELECT ConvertsToLong('١٢٣')", False),
+        # ConvertsToDecimal
+        ("SELECT ConvertsToDecimal('１２.３４')", False),  # '１２.３４'
+        ("SELECT ConvertsToDecimal('١.٥')", False),  # '١.٥'
+        # ConvertsToDate — Arabic-Indic year/month/day
+        ("SELECT ConvertsToDate('٢٠٢٤-٠١-٠١')", False),  # '٢٠٢٤-٠١-٠١'
+        # ConvertsToDateTime — full-width digits
+        ("SELECT ConvertsToDateTime('٢٠٢٤-٠١-٠١T١٢:٣٠')", False),
+        # ConvertsToTime — Devanagari
+        ("SELECT ConvertsToTime('१२:३०')", False),  # '१२:३०'
+        # Sanity: ASCII digits still accepted
+        ("SELECT ConvertsToInteger('123')", True),
+        ("SELECT ConvertsToDecimal('12.34')", True),
+        ("SELECT ConvertsToDate('2024-01-01')", True),
+        ("SELECT ConvertsToTime('12:30')", True),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in cases:
+            assert py.execute(expression).fetchone() == (expected,), expression
+            assert cpp.execute(expression).fetchone() == (expected,), expression
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_converts_to_quantity_does_not_leak_pint_assertion_error_cql06_explorer() -> None:
+    """Quantity unit validation must return False, not raise, on bad units.
+
+    Pint's internal parser raises ``AssertionError`` for some malformed unit
+    strings (e.g. the single-codepoint degree-Celsius ``\\u2103``). The
+    ``_is_valid_quantity_unit`` helper in ``udf/quantity.py`` previously
+    caught only ``UndefinedUnitError``, ``ValueError``, and ``TypeError``,
+    so the assertion leaked through the public ``ConvertsToQuantity`` /
+    ``ConvertsToRatio`` / ``ConvertQuantity`` / ``CanConvertQuantity``
+    surface, violating the CQL §ConvertsToQuantity contract
+    ("If the input string is not formatted correctly ... the result is false").
+
+    Reproducer for CQL-06 EXPLORER (MEDIUM severity, defensive programming).
+    """
+    # Use DuckDB's e-escape string syntax to embed Unicode literals without
+    # shell-escape or SQL-quote ambiguity. The pattern "5 '<UNIT>'" with
+    # <UNIT> = U+2103 is what triggers pint's AssertionError.
+    celsius_unit = "℃"
+    cases = [
+        # Single-codepoint degree-Celsius triggers pint internal assertion
+        ("SELECT ConvertsToQuantity(?)", [f"5 '{celsius_unit}'"]),
+        # ConvertQuantity / CanConvertQuantity must also not raise
+        ("SELECT CanConvertQuantity(?, 'g')", [f"5 '{celsius_unit}'"]),
+        # ConvertsToRatio path with bad unit in numerator
+        ("SELECT ConvertsToRatio(?)", [f"5 '{celsius_unit}':1 'mg'"]),
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for sql, params in cases:
+            # Must complete without raising; result is False (bad unit).
+            py_row = py.execute(sql, params).fetchone()
+            cpp_row = cpp.execute(sql, params).fetchone()
+            assert py_row == cpp_row, sql
+            assert py_row[0] is False, sql
+    finally:
+        py.close()
+        cpp.close()

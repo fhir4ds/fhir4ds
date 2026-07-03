@@ -36,11 +36,30 @@ def registerConversionMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "OR starts_with(typeof(x), 'MAP') "
         "OR typeof(x) = 'JSON'"
     )
+    # CQL §ToString Table 9-G defines the Decimal string representation
+    # format as (-)?#0.0# — at least one digit before AND after the decimal
+    # point, with optional trailing digits. §ToString also states: "The
+    # result of any ToString must be round-trippable back to the source
+    # value." DuckDB's CAST(decimal AS VARCHAR) emits all declared scale
+    # digits (e.g., DECIMAL(38,8) renders 0.1 as '0.10000000'), violating
+    # both rules. Normalize DECIMAL inputs by trimming trailing zeros
+    # while preserving at least one fractional digit (so 5.0 stays '5.0',
+    # not '5'). Mirrors the trailing-zero trim already performed by
+    # QuantityToString below.
     con.execute(f"""
         CREATE OR REPLACE MACRO ToString(x) AS
         CASE
             WHEN x IS NULL THEN NULL
             WHEN {structural_type_guard} THEN NULL
+            WHEN starts_with(typeof(x), 'DECIMAL') THEN
+                CASE
+                    WHEN ends_with(
+                        regexp_replace(CAST(x AS VARCHAR), '0+$', ''),
+                        '.'
+                    )
+                    THEN regexp_replace(CAST(x AS VARCHAR), '0+$', '') || '0'
+                    ELSE regexp_replace(CAST(x AS VARCHAR), '0+$', '')
+                END
             WHEN typeof(x) = 'VARCHAR'
                 AND regexp_full_match(
                     CAST(x AS VARCHAR),

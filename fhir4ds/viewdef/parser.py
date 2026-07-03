@@ -479,6 +479,37 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
             )
         selects.append(_parse_select(sel))
 
+    # SQL-on-FHIR v2 ValidateColumns algorithm: a duplicate column name in the
+    # effective output schema is a hard "Column Already Defined" error. The
+    # effective schema counts each select's direct columns, its nested selects'
+    # effective schemas, and only the first unionAll branch's effective schema
+    # (subsequent branches must match the first by name/order/type, so they do
+    # not contribute additional names). The parser already enforces the
+    # analogous hard rejection for duplicate Constant.name; enforce the same
+    # boundary here so parse_view_definition() does not return a spec-invalid
+    # ViewDefinition. This mirrors SQLGenerator._collect_select_output_schema.
+    def _effective_output_names(select: "Select") -> List[str]:
+        names: List[str] = [col.name for col in select.column]
+        for nested in select.select:
+            names.extend(_effective_output_names(nested))
+        if select.unionAll:
+            names.extend(_effective_output_names(select.unionAll[0]))
+        return names
+
+    seen_column_names: set[str] = set()
+    duplicate_column_names: set[str] = set()
+    for sel in selects:
+        for name in _effective_output_names(sel):
+            if name in seen_column_names:
+                duplicate_column_names.add(name)
+            seen_column_names.add(name)
+    if duplicate_column_names:
+        raise ParseError(
+            f"Duplicate column names across select tree: "
+            f"{sorted(duplicate_column_names)}. Column names must be unique "
+            f"per the SQL-on-FHIR v2 specification."
+        )
+
     # Parse constants. SQL-on-FHIR uses the singular JSON field `constant`.
     constants = []
     if 'constants' in data:

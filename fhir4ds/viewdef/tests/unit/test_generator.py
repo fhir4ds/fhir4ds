@@ -8,7 +8,7 @@ import pytest
 
 from ...parser import parse_view_definition, Column, Constant, Select, ViewDefinition
 from ...generator import SQLGenerator
-from ...errors import ValidationError
+from ...errors import ParseError, ValidationError
 from ...metadata import SHAREABLE_VIEWDEFINITION_PROFILE, TABULAR_VIEWDEFINITION_PROFILE
 from ...types import ColumnTag
 
@@ -172,20 +172,23 @@ class TestColumnExpression:
         assert "''test''" in expr
 
     def test_direct_column_path_must_not_be_empty(self):
-        """Direct dataclass construction cannot bypass required column.path."""
-        gen = SQLGenerator()
-        col = Column(path="", name="id")
+        """Direct dataclass construction rejects empty column.path.
 
-        with pytest.raises(ValidationError, match="path"):
-            gen.generate_column_expr(col, "t.resource")
+        SOF-VD-03 SKEPTIC fix (2026-07-03): Column.__post_init__ now
+        enforces non-empty path at construction time. The generator
+        boundary remains, but invalid Columns cannot be constructed.
+        """
+        with pytest.raises(ValueError, match="path"):
+            Column(path="", name="id")
 
     def test_direct_column_collection_must_be_boolean(self):
-        """Direct dataclass construction cannot bypass boolean collection shape."""
-        gen = SQLGenerator()
-        col = Column(path="id", name="id", collection="false")
+        """Direct dataclass construction rejects non-boolean collection.
 
-        with pytest.raises(ValidationError, match="collection"):
-            gen.generate_column_expr(col, "t.resource")
+        SOF-VD-03 SKEPTIC fix (2026-07-03): Column.__post_init__ now
+        enforces boolean collection at construction time.
+        """
+        with pytest.raises(ValueError, match="collection"):
+            Column(path="id", name="id", collection="false")
 
     def test_direct_column_tag_must_be_structured(self):
         """Direct dataclass construction cannot bypass tag shape checks."""
@@ -426,25 +429,33 @@ class TestFullQueryGeneration:
             SQLGenerator().generate(tabular)
 
     @pytest.mark.parametrize(
-        "constant, message",
+        "kwargs, message",
         [
-            (Constant(name="_bad", value="x", value_type="string"), "sql-name"),
-            (Constant(name="Good", value=None, value_type="string"), "no value"),
-            (Constant(name="BadInteger", value="1", value_type="integer"), "valueInteger"),
-            (Constant(name="BadDateTime", value="2024T00:00:00Z", value_type="dateTime"), "valueDateTime"),
-            (Constant(name="BadInstant", value="2024-01T00:00:00Z", value_type="instant"), "valueInstant"),
-            (Constant(name="BadType", value="x", value_type="notatype"), "Unsupported"),
+            ({"name": "_bad", "value": "x", "value_type": "string"}, "sql-name"),
+            ({"name": "Good", "value": None, "value_type": "string"}, "no value"),
+            ({"name": "BadInteger", "value": "1", "value_type": "integer"}, "valueInteger"),
+            ({"name": "BadDateTime", "value": "2024T00:00:00Z", "value_type": "dateTime"}, "valueDateTime"),
+            ({"name": "BadInstant", "value": "2024-01T00:00:00Z", "value_type": "instant"}, "valueInstant"),
+            ({"name": "BadType", "value": "x", "value_type": "notatype"}, "Unsupported"),
         ],
     )
-    def test_direct_view_definition_constants_are_validated(self, constant, message):
-        """Generator validates direct dataclass Constant name/value requirements."""
-        vd = ViewDefinition(
-            resource="Patient",
-            constants=[constant],
-            select=[Select(column=[Column(path="id", name="id")])],
-        )
+    def test_direct_view_definition_constants_are_validated(self, kwargs, message):
+        """Direct Constant construction validates spec invariants.
 
-        with pytest.raises(ValidationError, match=message):
+        Per SOF-VD-02 SKEPTIC fresh rerun (2026-07-03), the Constant
+        dataclass enforces name/value_type/value invariants at construction
+        via __post_init__, matching the pattern used by sibling dataclasses
+        (Column, ColumnTag, Join). The previous "construct invalid then
+        rely on generator" pattern is no longer reachable because the
+        constructor now raises first.
+        """
+        with pytest.raises((ValueError, ValidationError), match=message):
+            constant = Constant(**kwargs)
+            vd = ViewDefinition(
+                resource="Patient",
+                constants=[constant],
+                select=[Select(column=[Column(path="id", name="id")])],
+            )
             SQLGenerator().generate(vd)
 
     def test_direct_view_definition_duplicate_constants_are_rejected(self):
@@ -540,20 +551,40 @@ class TestFullQueryGeneration:
         assert "%missing" in sql
 
     def test_duplicate_column_name_across_sibling_and_unionall_branch_rejected(self):
-        """unionAll branch columns cannot collide with sibling output columns."""
-        vd = parse_view_definition({
-            "resource": "Patient",
-            "select": [
-                {"column": [{"path": "id", "name": "dup"}]},
-                {
-                    "unionAll": [
-                        {"column": [{"path": "gender", "name": "dup"}]},
-                        {"column": [{"path": "active", "name": "dup"}]},
-                    ]
-                },
-            ],
-        })
+        """unionAll branch columns cannot collide with sibling output columns.
 
+        Per SQL-on-FHIR v2 ValidateColumns, this is a hard parser-level
+        "Column Already Defined" error (SOF-VD-03 HISTORIAN fix). The parser
+        rejects before SQL generation; the direct-dataclass path is still
+        caught by SQLGenerator._validate_unique_output_names.
+        """
+        # Parser path: parse_view_definition rejects spec-invalid duplicates.
+        with pytest.raises(ParseError, match="Duplicate column names"):
+            parse_view_definition({
+                "resource": "Patient",
+                "select": [
+                    {"column": [{"path": "id", "name": "dup"}]},
+                    {
+                        "unionAll": [
+                            {"column": [{"path": "gender", "name": "dup"}]},
+                            {"column": [{"path": "active", "name": "dup"}]},
+                        ]
+                    },
+                ],
+            })
+
+        # Generator direct-dataclass guard remains the safety net for manually
+        # constructed ViewDefinitions that bypass the parser.
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[
+                Select(column=[Column(path="id", name="dup")]),
+                Select(unionAll=[
+                    Select(column=[Column(path="gender", name="dup")]),
+                    Select(column=[Column(path="active", name="dup")]),
+                ]),
+            ],
+        )
         with pytest.raises(ValidationError, match="Duplicate column names"):
             SQLGenerator().generate(vd)
 
@@ -577,25 +608,47 @@ class TestFullQueryGeneration:
         assert "UNION ALL" in sql
 
     def test_sibling_unionall_output_name_collision_rejected(self):
-        """Separate sibling unionAll rowsets cannot project the same output name."""
-        vd = parse_view_definition({
-            "resource": "Patient",
-            "select": [
-                {
-                    "unionAll": [
-                        {"column": [{"path": "gender", "name": "value"}]},
-                        {"column": [{"path": "active", "name": "value"}]},
-                    ]
-                },
-                {
-                    "unionAll": [
-                        {"column": [{"path": "id", "name": "value"}]},
-                        {"column": [{"path": "birthDate", "name": "value"}]},
-                    ]
-                },
-            ],
-        })
+        """Separate sibling unionAll rowsets cannot project the same output name.
 
+        Per SQL-on-FHIR v2 ValidateColumns, this is a hard parser-level
+        "Column Already Defined" error (SOF-VD-03 HISTORIAN fix). The parser
+        rejects before SQL generation; the direct-dataclass path is still
+        caught by SQLGenerator._validate_unique_output_names.
+        """
+        # Parser path.
+        with pytest.raises(ParseError, match="Duplicate column names"):
+            parse_view_definition({
+                "resource": "Patient",
+                "select": [
+                    {
+                        "unionAll": [
+                            {"column": [{"path": "gender", "name": "value"}]},
+                            {"column": [{"path": "active", "name": "value"}]},
+                        ]
+                    },
+                    {
+                        "unionAll": [
+                            {"column": [{"path": "id", "name": "value"}]},
+                            {"column": [{"path": "birthDate", "name": "value"}]},
+                        ]
+                    },
+                ],
+            })
+
+        # Direct-dataclass generator guard remains the safety net.
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[
+                Select(unionAll=[
+                    Select(column=[Column(path="gender", name="value")]),
+                    Select(column=[Column(path="active", name="value")]),
+                ]),
+                Select(unionAll=[
+                    Select(column=[Column(path="id", name="value")]),
+                    Select(column=[Column(path="birthDate", name="value")]),
+                ]),
+            ],
+        )
         with pytest.raises(ValidationError, match="Duplicate column names"):
             SQLGenerator().generate(vd)
 

@@ -457,3 +457,47 @@ def test_set_comparison_arguments_use_scoped_focus_in_native_and_fallback(monkey
     finally:
         native.close()
         fallback.close()
+
+
+def test_bare_exists_no_arg_matches_count_gt_zero_in_native_and_fallback(monkeypatch) -> None:
+    """FHIRPath §5.1.2: no-arg ``exists()`` is equivalent to ``count() > 0``.
+
+    Previously native C++ silently returned an empty collection ``[]`` for
+    the bare form (without a source) while the forced Python fallback
+    returned ``[true]`` on a non-empty focus. This case locks down the fix
+    across both backends and on empty/non-empty/criteria forms.
+    """
+    resource = json.dumps({"resourceType": "Patient", "vals": [1, 2, 3]})
+
+    expressions = {
+        # Bare no-source no-arg form must mirror count() > 0.
+        # Tuple is (fhirpath list, fhirpath_json, fhirpath_bool).
+        "exists()": (["true"], "[true]", True),
+        "{}.exists()": (["false"], "[false]", False),
+        "(1).exists()": (["true"], "[true]", True),
+        "(1 | 2).exists()": (["true"], "[true]", True),
+        # Resource-backed method form must keep working
+        "vals.exists()": (["true"], "[true]", True),
+        "vals.exists($this > 2)": (["true"], "[true]", True),
+        "vals.exists($this > 10)": (["false"], "[false]", False),
+        # No-arg form on missing resource path returns false (not empty)
+        "missing.exists()": (["false"], "[false]", False),
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expressions.items():
+            cpp = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp == py == expected, expression
+    finally:
+        native.close()
+        fallback.close()
+

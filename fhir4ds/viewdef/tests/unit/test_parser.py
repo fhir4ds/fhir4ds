@@ -262,10 +262,16 @@ class TestColumnParsing:
             })
 
     def test_generator_rejects_direct_column_name_bypass(self):
-        """Direct dataclass construction still cannot bypass sql-name."""
-        col = Column(path="id", name="_bad")
-        with pytest.raises(ValidationError, match="sql-name"):
-            SQLGenerator().generate_column_expr(col, "t.resource")
+        """Direct dataclass construction rejects sql-name violations.
+
+        SOF-VD-03 SKEPTIC fix (2026-07-03): Column.__post_init__ now enforces
+        the sql-name invariant at construction time, matching the
+        Constant.__post_init__ pattern. The generator boundary is still
+        protected, but invalid Columns cannot be constructed in the first
+        place.
+        """
+        with pytest.raises(ValueError, match="sql-name"):
+            Column(path="id", name="_bad")
 
 
 class TestSelectParsing:
@@ -448,6 +454,36 @@ class TestSelectParsing:
 
         assert vd.where == [{"path": "active = true"}]
         assert "active = true" in SQLGenerator().generate(vd)
+
+    def test_from_dict_preserves_typed_parse_error_per_spec_sof_vd01_historian(self):
+        """SOF-VD-01 HISTORIAN QA-001: ViewDefinition.from_dict is a public
+        convenience wrapper around parse_view_definition and must preserve
+        typed exception information. GLOBAL_RULES.md "No Silent Fallbacks:
+        Fail fast with typed exceptions." SQLOnFHIRError subclasses ValueError,
+        so callers can still catch either form."""
+        # An invalid ResourceType code raises ParseError from the parser.
+        # from_dict must propagate the typed ParseError, not wrap it as a
+        # generic ValueError that erases the exception type.
+        with pytest.raises(ParseError, match="ResourceType"):
+            ViewDefinition.from_dict({
+                "resource": "FooBar",
+                "status": "active",
+                "select": [{"column": [{"path": "id", "name": "id"}]}],
+            })
+
+        # Typed ParseError must also be catchable as ValueError (because
+        # SQLOnFHIRError inherits from ValueError) for backward compatibility
+        # with existing callers.
+        with pytest.raises(ValueError, match="ResourceType"):
+            ViewDefinition.from_dict({
+                "resource": "FooBar",
+                "status": "active",
+                "select": [{"column": [{"path": "id", "name": "id"}]}],
+            })
+
+        # Non-dict input still raises ValueError directly (pre-existing behavior).
+        with pytest.raises(ValueError, match="expects a dictionary"):
+            ViewDefinition.from_dict("not a dict")
 
     def test_nested_select(self):
         """Test parsing nested select structures."""
@@ -1298,20 +1334,26 @@ class TestViewDefinitionParsing:
             vd.to_dict()
 
     @pytest.mark.parametrize(
-        "column, message",
+        "kwargs, message",
         [
-            (Column(path="", name="id"), "path"),
-            (Column(path="id", name="_bad"), "sql-name"),
-            (Column(path="id", name="id", description=5), "description"),
-            (Column(path="id", name="id", collection="false"), "collection"),
+            ({"path": "", "name": "id"}, "path"),
+            ({"path": "id", "name": "_bad"}, "sql-name"),
+            ({"path": "id", "name": "id", "description": 5}, "description"),
+            ({"path": "id", "name": "id", "collection": "false"}, "collection"),
         ],
     )
-    def test_view_definition_to_dict_validates_column_fields(self, column, message):
-        """Serializer does not emit invalid direct Column objects."""
-        vd = ViewDefinition(resource="Patient", select=[Select(column=[column])])
+    def test_view_definition_to_dict_validates_column_fields(self, kwargs, message):
+        """Direct Column construction rejects spec violations.
 
+        SOF-VD-03 SKEPTIC fix (2026-07-03): Column.__post_init__ now enforces
+        path/name/description/collection invariants at construction time
+        using the canonical validate_column_fields/validate_optional_boolean
+        helpers, matching the Constant.__post_init__ pattern added by
+        SOF-VD-02 SKEPTIC. Previously, direct construction deferred these
+        checks to to_dict()/SQLGenerator._validate_column_shape.
+        """
         with pytest.raises(ValueError, match=message):
-            vd.to_dict()
+            Column(**kwargs)
 
     def test_view_definition_to_dict_retains_valid_root_where_description(self):
         """Root where metadata is preserved after serializer validation."""
@@ -1666,16 +1708,39 @@ class TestValidation:
                 ("ViewDefinition.name", "sql-name"),
             ),
             (
+                # SOF-VD-03 SKEPTIC fresh rerun (2026-07-03): the Column
+                # dataclass now enforces path/name/description/collection
+                # invariants in __post_init__, so we mutate a valid Column
+                # to exercise the permissive warning path that still
+                # surfaces sql-name violations for dataclasses constructed
+                # before validation tightened.
                 ViewDefinition(
                     resource="Patient",
-                    select=[Select(column=[Column(path="id", name="_bad")])],
+                    select=[
+                        Select(
+                            column=[
+                                (lambda c: (setattr(c, "name", "_bad"), c)[1])(
+                                    Column(path="id", name="placeholder")
+                                )
+                            ]
+                        )
+                    ],
                 ),
                 ("Column.name", "sql-name"),
             ),
             (
+                # SOF-VD-02 SKEPTIC fresh rerun (2026-07-03): the Constant
+                # dataclass enforces name/value invariants in __post_init__,
+                # so we mutate a valid Constant to exercise the permissive
+                # warning path that still surfaces sql-name violations for
+                # dataclasses constructed before validation tightened.
                 ViewDefinition(
                     resource="Patient",
-                    constants=[Constant(name="_bad", value="x", value_type="string")],
+                    constants=[
+                        (lambda c: (setattr(c, "name", "_bad"), c)[1])(
+                            Constant(name="Placeholder", value="x", value_type="string")
+                        )
+                    ],
                     select=[Select(column=[Column(path="id", name="id")])],
                 ),
                 ("Constant.name", "sql-name"),
@@ -1737,6 +1802,213 @@ class TestValidation:
 
         for fragment in fragments:
             assert fragment in warning_text
+
+
+class TestDuplicateColumnNameRejectionPerSpecSofVd03Historian:
+    """SQL-on-FHIR v2 ValidateColumns algorithm step 2.1: a duplicate column
+    name in the effective output schema is a hard "Column Already Defined"
+    error. The parser and ViewDefinition.to_dict() must reject spec-invalid
+    duplicates at the logical-model boundary, not defer to SQL generation.
+
+    Backing fix: SOF-VD-03 HISTORIAN iter 1 (2026-07-03).
+    """
+
+    BASE = {
+        "resource": "Patient",
+    }
+
+    def _expect_dup_rejected(self, select_list):
+        with pytest.raises(ParseError, match="Duplicate column names"):
+            parse_view_definition({**self.BASE, "select": select_list})
+
+    def test_duplicate_within_single_select_rejected_at_parser(self):
+        self._expect_dup_rejected([{
+            "column": [
+                {"path": "id", "name": "dup"},
+                {"path": "active", "name": "dup"},
+            ]
+        }])
+
+    def test_duplicate_across_sibling_selects_rejected_at_parser(self):
+        self._expect_dup_rejected([
+            {"column": [{"path": "id", "name": "id"}]},
+            {"forEach": "address",
+             "column": [{"path": "postalCode", "name": "id"}]},
+        ])
+
+    def test_duplicate_in_nested_select_rejected_at_parser(self):
+        self._expect_dup_rejected([{
+            "column": [{"path": "id", "name": "x"}],
+            "select": [{"forEach": "address",
+                        "column": [{"path": "postalCode", "name": "x"}]}],
+        }])
+
+    def test_duplicate_between_parent_and_unionall_branch_rejected_at_parser(self):
+        self._expect_dup_rejected([
+            {"column": [{"path": "id", "name": "dup"}]},
+            {"unionAll": [
+                {"column": [{"path": "gender", "name": "dup"}]},
+                {"column": [{"path": "active", "name": "dup"}]},
+            ]},
+        ])
+
+    def test_duplicate_between_two_sibling_unionall_rowsets_rejected_at_parser(self):
+        self._expect_dup_rejected([
+            {"unionAll": [
+                {"column": [{"path": "gender", "name": "value"}]},
+                {"column": [{"path": "active", "name": "value"}]},
+            ]},
+            {"unionAll": [
+                {"column": [{"path": "id", "name": "value"}]},
+                {"column": [{"path": "birthDate", "name": "value"}]},
+            ]},
+        ])
+
+    def test_matching_unionall_branch_names_within_one_rowset_are_allowed(self):
+        """unionAll branch schemas must match by name -- not a duplicate."""
+        vd = parse_view_definition({**self.BASE, "select": [{
+            "unionAll": [
+                {"column": [{"path": "gender", "name": "value"}]},
+                {"column": [{"path": "active", "name": "value"}]},
+            ]
+        }]})
+        assert len(vd.select[0].unionAll) == 2
+
+    def test_distinct_names_within_and_across_selects_are_allowed(self):
+        vd = parse_view_definition({**self.BASE, "select": [
+            {"column": [{"path": "id", "name": "id"},
+                        {"path": "active", "name": "active"}]},
+            {"forEach": "address",
+             "column": [{"path": "postalCode", "name": "zip"}]},
+        ]})
+        assert len(vd.select) == 2
+
+    def test_to_dict_rejects_direct_dataclass_duplicate_columns(self):
+        """Serializer boundary stays aligned with parser."""
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[Select(column=[
+                Column(path="id", name="dup"),
+                Column(path="active", name="dup"),
+            ])],
+        )
+        with pytest.raises(ValueError, match="Duplicate column names"):
+            vd.to_dict()
+
+    def test_to_dict_allows_matching_unionall_branch_names(self):
+        """Serializer must not flag matching unionAll branch schemas."""
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[Select(unionAll=[
+                Select(column=[Column(path="gender", name="value")]),
+                Select(column=[Column(path="active", name="value")]),
+            ])],
+        )
+        data = vd.to_dict()
+        assert "unionAll" in data["select"][0]
+
+
+class TestWhitespaceFhirPathRejectionPerSpecSofVd03Explorer:
+    """SQL-on-FHIR v2 ViewDefinition: required FHIRPath string fields
+    (``column.path``, ``select.forEach``, ``select.forEachOrNull``,
+    ``where.path``) are 1..1 / 0..1 FHIRPath expressions. FHIRPath 3 lexical
+    grammar requires at least one expression token; whitespace-only strings
+    are not valid FHIRPath expressions and must be rejected at the
+    logical-model boundary, not deferred to SQL generation.
+
+    Backing fix: SOF-VD-03 EXPLORER iter 1 (2026-07-03).
+    """
+
+    BASE = {"resource": "Patient"}
+
+    @pytest.mark.parametrize("whitespace", ["   ", "\t", "\n", "\t \n", "\r"])
+    def test_parser_rejects_whitespace_column_path(self, whitespace: str):
+        """column.path 1..1 FHIRPath -- whitespace-only is rejected."""
+        with pytest.raises(ParseError, match="path"):
+            parse_view_definition({
+                **self.BASE,
+                "select": [{"column": [{"path": whitespace, "name": "id"}]}],
+            })
+
+    @pytest.mark.parametrize("whitespace", ["   ", "\t", "\n"])
+    def test_parser_rejects_whitespace_for_each(self, whitespace: str):
+        """select.forEach 0..1 FHIRPath -- whitespace-only is rejected."""
+        with pytest.raises(ParseError, match="forEach"):
+            parse_view_definition({
+                **self.BASE,
+                "select": [{
+                    "forEach": whitespace,
+                    "column": [{"path": "id", "name": "id"}],
+                }],
+            })
+
+    @pytest.mark.parametrize("whitespace", ["   ", "\t", "\n"])
+    def test_parser_rejects_whitespace_for_each_or_null(self, whitespace: str):
+        """select.forEachOrNull 0..1 FHIRPath -- whitespace-only is rejected."""
+        with pytest.raises(ParseError, match="forEachOrNull"):
+            parse_view_definition({
+                **self.BASE,
+                "select": [{
+                    "forEachOrNull": whitespace,
+                    "column": [{"path": "id", "name": "id"}],
+                }],
+            })
+
+    @pytest.mark.parametrize("whitespace", ["   ", "\t", "\n"])
+    def test_parser_rejects_whitespace_where_path(self, whitespace: str):
+        """where.path 1..1 FHIRPath -- whitespace-only is rejected at root."""
+        with pytest.raises(ParseError, match="path"):
+            parse_view_definition({
+                **self.BASE,
+                "select": [{"column": [{"path": "id", "name": "id"}]}],
+                "where": [{"path": whitespace}],
+            })
+
+    @pytest.mark.parametrize("whitespace", ["   ", "\t", "\n"])
+    def test_parser_rejects_whitespace_where_path_in_select(self, whitespace: str):
+        """where.path 1..1 FHIRPath -- whitespace-only is rejected in nested select."""
+        with pytest.raises(ParseError, match="path"):
+            parse_view_definition({
+                **self.BASE,
+                "select": [{
+                    "column": [{"path": "id", "name": "id"}],
+                    "where": [{"path": whitespace}],
+                }],
+            })
+
+    @pytest.mark.parametrize("whitespace", ["   ", "\t", "\n"])
+    def test_direct_column_construction_rejects_whitespace_path(self, whitespace: str):
+        """Direct Column dataclass construction also rejects whitespace path."""
+        with pytest.raises(ValueError, match="path"):
+            Column(path=whitespace, name="id")
+
+    def test_parser_still_accepts_path_with_internal_whitespace(self):
+        """Paths with non-whitespace content surrounded by whitespace are fine.
+
+        FHIRPath grammar allows whitespace between tokens; only truly
+        whitespace-only strings are invalid.
+        """
+        vd = parse_view_definition({
+            **self.BASE,
+            "select": [{
+                "column": [{"path": "  id  ", "name": "id"}],
+            }],
+        })
+        # The validated value preserves the original non-empty string.
+        assert vd.select[0].column[0].path == "  id  "
+
+    def test_parser_still_accepts_complex_fhirpath_with_whitespace_tokens(self):
+        """Complex FHIRPath expressions with internal whitespace are still valid."""
+        vd = parse_view_definition({
+            **self.BASE,
+            "select": [{
+                "column": [{
+                    "path": "name.where(use = 'official').given",
+                    "name": "given_name",
+                }],
+            }],
+        })
+        assert vd.select[0].column[0].path == "name.where(use = 'official').given"
 
 
 class TestCollectColumnNames:

@@ -53,6 +53,9 @@ static Optional<double> to_base(double value, const std::string &unit) {
 	if (unit == "[degF]" || unit == "degF") {
 		return (value - 32.0) * 5.0 / 9.0; // Fahrenheit to Celsius
 	}
+	if (unit == "K") {
+		return value - 273.15; // Kelvin to Celsius
+	}
 
 	return value * it->second.factor;
 }
@@ -68,6 +71,9 @@ static Optional<double> from_base(double base_value, const std::string &target_u
 	// Special handling for temperature
 	if (target_unit == "[degF]" || target_unit == "degF") {
 		return base_value * 9.0 / 5.0 + 32.0; // Celsius to Fahrenheit
+	}
+	if (target_unit == "K") {
+		return base_value + 273.15; // Celsius to Kelvin
 	}
 
 	if (it->second.factor == 0.0) {
@@ -585,6 +591,77 @@ Optional<std::string> quantity_convert(const std::string &q_json, const std::str
 // Phase 6: New quantity operations
 // =====================================================================
 
+// Reduce a compound unit produced by multiply/divide of dimensional UCUM
+// units to its canonical UCUM form. Handles the common single-base
+// exponent-arithmetic pattern (e.g., `cm * cm` -> `cm2`, `m3 / m2` -> `m`,
+// `cm2 / cm` -> `cm`). Returns the reduced code, or the pint-display-name
+// compound form if no known reduction applies (preserving parity with the
+// Python fallback for cases like `m * s` -> `meter * second`).
+//
+// CQL §Divide: "12 'cm2' / 3 'cm' ... the result will have a unit of 'cm'".
+// CQL §Multiply: "12 'cm' * 3 'cm' -> cm2".
+// Without this reducer the native C++ UDFs emit raw `code1 * code2` or
+// `code1/code2` strings, diverging from the spec and from the Python
+// fallback which uses a UCUM library (pint).
+static std::string reduce_dimensional_unit(
+    const std::string &code1, const std::string &code2, bool is_divide
+) {
+	// Parse "<base><exp>" into base and exponent. exp defaults to 1.
+	auto parse_exp = [](const std::string &code, std::string &base_out, int &exp_out) -> bool {
+		base_out.clear();
+		exp_out = 1;
+		if (code.empty()) {
+			return false;
+		}
+		// Walk digits off the end of the code.
+		size_t digit_start = code.size();
+		while (digit_start > 0 && std::isdigit(static_cast<unsigned char>(code[digit_start - 1]))) {
+			digit_start--;
+		}
+		base_out = code.substr(0, digit_start);
+		if (digit_start < code.size()) {
+			try {
+				exp_out = std::stoi(code.substr(digit_start));
+			} catch (...) {
+				return false;
+			}
+		}
+		// Require base to be non-empty and a known UCUM unit (avoid matching
+		// arbitrary alpha strings like "abc123").
+		const auto &table = GetUnitTable();
+		if (base_out.empty() || table.find(base_out) == table.end()) {
+			return false;
+		}
+		return true;
+	};
+
+	std::string base1, base2;
+	int exp1 = 1, exp2 = 1;
+	if (!parse_exp(code1, base1, exp1) || !parse_exp(code2, base2, exp2)) {
+		// Could not parse one side as <base><exp>; fall back to the
+		// backend-specific compound form (multiply uses pint display names,
+		// divide uses raw UCUM codes) to preserve parity with the Python
+		// fallback (pint) behavior for mixed-base operations.
+		return is_divide ? (code1 + "/" + code2)
+		                 : (pint_display_unit(code1) + " * " + pint_display_unit(code2));
+	}
+	if (base1 != base2) {
+		// Different bases; cannot reduce. Fall back to backend-specific
+		// compound form to preserve parity with Python fallback (pint).
+		return is_divide ? (code1 + "/" + code2)
+		                 : (pint_display_unit(code1) + " * " + pint_display_unit(code2));
+	}
+	int new_exp = is_divide ? (exp1 - exp2) : (exp1 + exp2);
+	if (new_exp == 0) {
+		// Bases cancel.
+		return "1";
+	}
+	if (new_exp == 1) {
+		return base1;
+	}
+	return base1 + std::to_string(new_exp);
+}
+
 Optional<std::string> quantity_multiply(const std::string &q1_json, const std::string &q2_json) {
 	auto q1 = parse_quantity_json(q1_json);
 	auto q2 = parse_quantity_json(q2_json);
@@ -600,10 +677,12 @@ Optional<std::string> quantity_multiply(const std::string &q1_json, const std::s
 		result.code = code2;
 	} else if (code2 == "1") {
 		result.code = code1;
-	} else if (code1 == code2 && code1 == "cm") {
-		result.code = "cm2";
+	} else if (code1 == code2) {
+		// Same-base multiply: reduce via exponent arithmetic.
+		// e.g. cm * cm -> cm2; m * m -> m2; m2 * m -> m3.
+		result.code = reduce_dimensional_unit(code1, code2, /*is_divide=*/false);
 	} else {
-		result.code = pint_display_unit(code1) + " * " + pint_display_unit(code2);
+		result.code = reduce_dimensional_unit(code1, code2, /*is_divide=*/false);
 	}
 	result.system = q1->system;
 	return format_quantity_json(result);
@@ -626,7 +705,10 @@ Optional<std::string> quantity_divide(const std::string &q1_json, const std::str
 	} else if (code1 == code2) {
 		result.code = "1";
 	} else {
-		result.code = code1 + "/" + code2;
+		// Compound-unit division: reduce via exponent arithmetic.
+		// CQL §Divide example: 12 'cm2' / 3 'cm' -> 'cm'.
+		// e.g. cm2 / cm -> cm; m3 / m2 -> m; m3 / m -> m2.
+		result.code = reduce_dimensional_unit(code1, code2, /*is_divide=*/true);
 	}
 	result.system = q1->system;
 	return format_quantity_json(result);

@@ -107,7 +107,7 @@ def _skip_quoted_for_precheck(expression: str, start: int, quote: str) -> int:
 
 def _scan_temporal_token(expression: str, start: int) -> tuple[str, int]:
     i = start + 1
-    while i < len(expression) and expression[i] in "0123456789T:.-+Z":
+    while i < len(expression) and expression[i] in "0123456789TW:.-+Z":
         i += 1
     return expression[start:i], i
 
@@ -153,6 +153,36 @@ def _has_invalid_partial_datetime_time_literal(expression: str) -> bool:
                 r"@\d{4}(?:-\d{2})?T\d{2}(?::\d{2}(?::\d{2}(?:\.\d+)?)?)?(?:Z|[+-]\d{2}:\d{2})?",
                 token,
             ):
+                return True
+            continue
+        i += 1
+    return False
+
+
+def _has_invalid_week_date_literal(expression: str) -> bool:
+    """Return true for ISO 8601 week-date literals rejected by FHIRPath §4.1.5.
+
+    FHIRPath §4.1.5 Date: "The Date literal is a subset of ISO8601: [...]
+    Week dates and ordinal dates are not allowed." The underlying fhirpathpy
+    parser accepts these tokens, so the validity precheck must reject them
+    explicitly to match native C++ behavior and the spec.
+    """
+    text = _strip_comments_for_precheck(expression)
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == "'":
+            i = _skip_quoted_for_precheck(text, i, "'")
+            continue
+        if ch == "`":
+            i = _skip_quoted_for_precheck(text, i, "`")
+            continue
+        if ch == "@":
+            token, i = _scan_temporal_token(text, i)
+            # ISO 8601 week date forms: @YYYY-Www, @YYYY-Www-D, @YYYY-Www-N
+            # (e.g. @2015-W01-1, @2015-W01, @2015-W53-7, @2015-W). Also catches
+            # malformed trailing-W tokens (@2015-W) that the parser accepts.
+            if re.fullmatch(r"@\d{4}-W\d{0,2}(?:-\d)?", token):
                 return True
             continue
         i += 1
@@ -481,6 +511,10 @@ class FHIRPathEvaluator:
         if _has_invalid_partial_datetime_time_literal(stripped):
             raise FHIRPathSyntaxError(
                 f"Invalid FHIRPath expression: partial DateTime time requires full date in '{expression}'"
+            )
+        if _has_invalid_week_date_literal(stripped):
+            raise FHIRPathSyntaxError(
+                f"Invalid FHIRPath expression: ISO 8601 week dates are not allowed (FHIRPath §4.1.5) in '{expression}'"
             )
         if _has_out_of_range_integer_literal(stripped):
             raise FHIRPathSyntaxError(

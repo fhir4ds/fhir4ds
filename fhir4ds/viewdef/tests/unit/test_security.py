@@ -156,10 +156,11 @@ class TestColumnNameSanitization:
         assert 'as "patient_id"' in result
 
     def test_malicious_column_name_rejected(self):
-        gen = SQLGenerator()
-        col = Column(path="id", name="x; DROP TABLE patients--")
-        with pytest.raises(ValidationError, match="Invalid SQL identifier"):
-            gen.generate_column_expr(col, "resource")
+        # SOF-VD-03 SKEPTIC fix (2026-07-03): Column.__post_init__ now
+        # enforces sql-name at construction time, so malicious names are
+        # rejected before reaching the generator boundary.
+        with pytest.raises(ValueError, match="sql-name"):
+            Column(path="id", name="x; DROP TABLE patients--")
 
     def test_collection_column_name_is_quoted(self):
         gen = SQLGenerator()

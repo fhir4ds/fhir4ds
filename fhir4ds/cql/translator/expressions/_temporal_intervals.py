@@ -662,6 +662,139 @@ class IntervalMixin:
                     return True
         return False
 
+    def _is_typed_list_expr(self, sql_expr: SQLExpression) -> bool:
+        """Return True when the operand is a *typed* SQL list expression whose
+        element type is statically known to DuckDB. Used by the union translator
+        to route typed list operands through ``list_concat`` (preserving the
+        element type) instead of falling through to ``jsonConcat`` (which
+        returns ``VARCHAR[]`` and would raise BinderException when mixed with
+        typed CASE arms). See CQL-19 HISTORIAN iter 1 QA-001.
+        """
+        from ...translator.types import SQLArray, SQLCast, SQLFunctionCall, SQLCase
+        # A bare SQLArray is untyped (DuckDB infers element type per call site).
+        if isinstance(sql_expr, SQLArray):
+            return False
+        # SQLCast with target_type ending in '[]' is a typed list (e.g., the
+        # optimizer emits CAST([] AS INTEGER[]) for `({} as List<Integer>)`).
+        if isinstance(sql_expr, SQLCast) and sql_expr.target_type.endswith("[]"):
+            return True
+        # list_concat / list_distinct / Distinct preserve their input element
+        # type, so they are typed list expressions.
+        if isinstance(sql_expr, SQLFunctionCall) and sql_expr.name in (
+            "list_concat", "list_distinct", '"Distinct"',
+            "CQLListDistinctEq", "Tail", "Skip", "Take",
+        ):
+            return True
+        # SQLCase that wraps a SQLArray in its THEN arm is the runtime
+        # type-assertion shape produced by `(<list> as List<T>)` casts. The
+        # array carries the typed element so list_concat preserves it.
+        if isinstance(sql_expr, SQLCase) and sql_expr.when_clauses:
+            for _cond, result in sql_expr.when_clauses:
+                if isinstance(result, SQLArray):
+                    return True
+            # `(null as List<T>)` lowers to SQLCase with all-NULL arms. The
+            # static type is still list-typed even though DuckDB cannot infer
+            # the element type from NULL arms. We treat this as typed so the
+            # union translator can route through list_concat (which handles
+            # NULL lists as empty per CQL §20.29).
+            all_null_arms = (
+                all(isinstance(result, SQLNull) for _cond, result in sql_expr.when_clauses)
+                and isinstance(sql_expr.else_clause, SQLNull)
+            )
+            if all_null_arms:
+                return True
+        return False
+
+    def _typed_empty_array_for(self, sql_expr: SQLExpression):
+        """Return a typed empty-array SQL expression with the same element
+        type as ``sql_expr`` (or ``None`` if the element type cannot be
+        inferred). Used to COALESCE nullable typed-list operands in list
+        union so runtime NULL lists are treated as empty per CQL §20.29.
+        See CQL-19 HISTORIAN iter 1 QA-001.
+        """
+        from ...translator.types import SQLArray, SQLCast, SQLFunctionCall, SQLCase
+        # SQLCast([], 'INTEGER[]') → reuse the same target_type
+        if isinstance(sql_expr, SQLCast) and sql_expr.target_type.endswith("[]"):
+            return SQLCast(
+                expression=SQLArray(elements=[]),
+                target_type=sql_expr.target_type,
+                try_cast=sql_expr.try_cast,
+            )
+        # SQLCase wrapping a SQLArray: derive typed-empty from the wrapped
+        # SQLArray's inferred element type. We re-cast the empty array to
+        # the same SQL type by sampling a non-empty array's inferred type.
+        if isinstance(sql_expr, SQLCase) and sql_expr.when_clauses:
+            for _cond, result in sql_expr.when_clauses:
+                if isinstance(result, SQLArray) and result.elements:
+                    # Infer the element SQL type from the first element.
+                    first = result.elements[0]
+                    target_type = self._sql_array_type_for_element(first)
+                    if target_type is not None:
+                        return SQLCast(
+                            expression=SQLArray(elements=[]),
+                            target_type=target_type,
+                        )
+                # `({1, 2} as List<Integer>)` lowers to SQLCase with THEN arm
+                # being a SQLArray — handle the empty-then case by re-casting.
+                if isinstance(result, SQLCast) and result.target_type.endswith("[]"):
+                    return SQLCast(
+                        expression=SQLArray(elements=[]),
+                        target_type=result.target_type,
+                    )
+            # All-null-arms CASE: cannot infer element type from NULL.
+            return None
+        # Bare SQLArray with elements: derive from first element.
+        if isinstance(sql_expr, SQLArray) and sql_expr.elements:
+            target_type = self._sql_array_type_for_element(sql_expr.elements[0])
+            if target_type is not None:
+                return SQLCast(
+                    expression=SQLArray(elements=[]),
+                    target_type=target_type,
+                )
+        return None
+
+    def _sql_array_type_for_element(self, element) -> Optional[str]:
+        """Return the SQL array type string (e.g., 'INTEGER[]') for a given
+        SQL scalar element, or None if it cannot be inferred."""
+        from ...translator.types import SQLLiteral
+        if isinstance(element, SQLLiteral):
+            value = element.value
+            if isinstance(value, bool):
+                return "BOOLEAN[]"
+            if isinstance(value, int):
+                return "INTEGER[]"
+            if isinstance(value, float):
+                return "DOUBLE[]"
+            if isinstance(value, str):
+                return "VARCHAR[]"
+        return None
+
+    def _is_static_null_case(self, sql_expr: SQLExpression) -> bool:
+        """Return True when ``sql_expr`` is a SQLCase whose evaluation is
+        statically NULL (e.g., `CASE WHEN FALSE THEN NULL ELSE NULL END`
+        produced by `(null as List<T>)`). Used by the union translator to
+        short-circuit both-null-typed-list unions to an empty list.
+        See CQL-19 HISTORIAN iter 1 QA-001.
+        """
+        from ...translator.types import SQLCase, SQLLiteral, SQLNull
+        if not isinstance(sql_expr, SQLCase):
+            return False
+        # Must have at least one when_clause and an else_clause.
+        if not sql_expr.when_clauses:
+            return False
+        # All when_clauses conditions must be statically FALSE (e.g., literal
+        # FALSE) and all results must be NULL. Else must also be NULL.
+        for cond, result in sql_expr.when_clauses:
+            cond_is_false = (
+                isinstance(cond, SQLLiteral) and cond.value is False
+            )
+            result_is_null = isinstance(result, SQLNull)
+            if not (cond_is_false and result_is_null):
+                return False
+        if not isinstance(sql_expr.else_clause, SQLNull):
+            return False
+        return True
+
     def _extract_interval_bounds(
         self,
         sql_expr: SQLExpression,

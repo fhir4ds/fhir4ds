@@ -270,3 +270,96 @@ define InvalidCtor: {expression}
 """
     with pytest.raises(ValueError):
         translate_cql(cql)
+
+
+def test_cql_datetime_part1_explorer_year_target_duration_uncertainty() -> None:
+    """CQL-13 EXPLORER: years-target duration_high_boundary for year-precision
+    operand must max month/day so the maximum whole-year count is returned.
+
+    Per CQL §DurationBetween: when operands have different precision, the
+    result is an interval representing the possible values. The official
+    conformance test
+    ``years between DateTime(2005) and DateTime(2010) // Interval[4, 5]``
+    already exercises the symmetric year-vs-year case; this regression
+    covers the asymmetric day-precision-start vs year-precision-end case.
+    """
+    cql = """library DateTime1ExplorerYearTarget version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define DurationYearsAsymmetric: years between @2012-06-01 and @2014
+define DurationYearsAsymmetricReverse: years between @2014 and @2012-06-01
+define DifferenceYearsAsymmetric: difference in years between @2012-06-01 and @2014
+define DurationMonthsAsymmetric: months between @2012-06-01 and @2014
+define DifferenceMonthsAsymmetric: difference in months between @2012-06-01 and @2014
+define DurationDaysAsymmetric: days between @2012-06-01 and @2014
+"""
+    translated = translate_cql(cql)
+    expected = {
+        # min: start_high (2012-06-01T23:59:59.999) -> end_low (2014-01-01) = 1 year
+        # max: start_low (2012-06-01T00:00:00) -> end_high (2014-12-01) = 2 years
+        "DurationYearsAsymmetric": '{"start":1,"end":2,"lowClosed":true,"highClosed":true}',
+        "DurationYearsAsymmetricReverse": '{"start":-2,"end":-1,"lowClosed":true,"highClosed":true}',
+        # difference counts crossed boundaries; min=max=2
+        "DifferenceYearsAsymmetric": "2",
+        # months: from Jun 1 2012 to Jan 1 2014 = 18 whole months;
+        #         from Jun 1 2012 to Dec 1 2014 = 30 whole months
+        "DurationMonthsAsymmetric": '{"start":18,"end":30,"lowClosed":true,"highClosed":true}',
+        # difference months: crossed boundaries 19..30
+        "DifferenceMonthsAsymmetric": '{"start":19,"end":30,"lowClosed":true,"highClosed":true}',
+        # days: from Jun 1 2012 to Dec 31 2014 = 943 days max
+        "DurationDaysAsymmetric": '{"start":578,"end":943,"lowClosed":true,"highClosed":true}',
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (expected_value,), (
+                f"Python mismatch for {name}"
+            )
+            assert cpp.execute(sql).fetchone() == (expected_value,), (
+                f"C++ mismatch for {name}"
+            )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_datetime_part1_explorer_timezoneoffset_from_z_suffix() -> None:
+    """CQL-13 EXPLORER: timezoneoffset from @...Z must return 0.0.
+
+    Per CQL §DateTime ISO-8601 representation, ``Z`` is the UTC designator
+    and is equivalent to ``+00:00``. The extractor must therefore return
+    ``0.0`` for ``Z``-suffixed values, not null.
+    """
+    cql = """library DateTime1ExplorerZSuffix version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define TimeZoneOffsetFromZ: timezoneoffset from @2024-05-15T10:30:45.500Z
+define TimeZoneOffsetFromZNoMs: timezoneoffset from @2024-05-15T10:30:45Z
+define TimeZoneOffsetFromPlusZero: timezoneoffset from @2024-05-15T10:30:45.500+00:00
+define TimeZoneOffsetFromMinusZero: timezoneoffset from @2024-05-15T10:30:45.500-00:00
+define TimeZoneOffsetNoOffset: timezoneoffset from @2024-05-15T10:30:45.500
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "TimeZoneOffsetFromZ": 0.0,
+        "TimeZoneOffsetFromZNoMs": 0.0,
+        "TimeZoneOffsetFromPlusZero": 0.0,
+        "TimeZoneOffsetFromMinusZero": 0.0,
+        "TimeZoneOffsetNoOffset": None,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (expected_value,), (
+                f"Python mismatch for {name}"
+            )
+            assert cpp.execute(sql).fetchone() == (expected_value,), (
+                f"C++ mismatch for {name}"
+            )
+    finally:
+        py.close()
+        cpp.close()
