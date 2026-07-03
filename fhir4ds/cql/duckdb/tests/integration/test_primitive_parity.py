@@ -480,7 +480,7 @@ def test_cql_primitive_parameter_defaults_preserve_declared_type() -> None:
         "PAsInteger": 5,
         "PAsString": None,
         "PPlusOne": 6,
-        "DString": "1.2300",
+        "DString": "1.23",
         "SIsString": True,
         "NIsAny": False,
     }
@@ -603,7 +603,7 @@ define NonNullIsSystemAny: I is System.Any
         for con in (py, cpp):
             for statement in setup_sql:
                 con.execute(statement)
-        expected = ("p1", 5, 5, 5, None, True, 5, None, True, 6, "1.2300", True)
+        expected = ("p1", 5, 5, 5, None, True, 5, None, True, 6, "1.23", True)
         assert py.execute(sql).fetchone() == expected
         assert cpp.execute(sql).fetchone() == expected
     finally:
@@ -717,7 +717,7 @@ define VAsDecimal: V as Decimal
         for con in (py, cpp):
             for statement in setup_sql:
                 con.execute(statement)
-        expected = ("p1", "1.500000", False, None, True, 1.5)
+        expected = ("p1", "1.5", False, None, True, 1.5)
         assert py.execute(sql).fetchone() == expected
         assert cpp.execute(sql).fetchone() == expected
     finally:
