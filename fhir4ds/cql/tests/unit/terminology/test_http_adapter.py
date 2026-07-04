@@ -287,3 +287,219 @@ def test_client_called_with_timeout_kwarg_only():
         adapter.expand("http://example.org/ValueSet/Foo")
 
     mock_factory.assert_called_once_with(timeout=2.0)
+
+
+# ----------------------------------------------------------------------
+# Circuit breaker
+# ----------------------------------------------------------------------
+
+
+class _FailingClient:
+    """Client that raises on every request, for breaker failure tests."""
+
+    def __init__(self, records: list[tuple[str, str, dict]]):
+        self._records = records
+
+    def __enter__(self) -> "_FailingClient":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def get(self, url: str, params: dict | None = None) -> _MockResponse:
+        self._records.append(("GET", url, params or {}))
+        raise RuntimeError("simulated sidecar down")
+
+    def post(self, url: str, json: dict | None = None) -> _MockResponse:
+        self._records.append(("POST", url, json or {}))
+        raise RuntimeError("simulated sidecar down")
+
+
+def test_circuit_breaker_starts_closed():
+    """Fresh adapter has breaker closed; calls go through to the client."""
+    payload = _expand_payload(
+        [{"system": "http://snomed.info/sct", "code": "73211009"}]
+    )
+    response = _MockResponse(payload)
+    records: list[tuple[str, str, dict]] = []
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    assert adapter._consecutive_failures == 0
+    assert adapter._tripped_until == 0.0
+    with patch.object(adapter, "_client", return_value=_MockClient(response, records)):
+        refs = adapter.expand("http://example.org/ValueSet/Foo")
+    assert len(refs) == 1
+    # Success resets counters (they were already 0).
+    assert adapter._consecutive_failures == 0
+    assert len(records) == 1
+
+
+def test_circuit_breaker_trips_after_threshold():
+    """N consecutive failures trip the breaker."""
+    adapter = HTTPTerminologyEndpoint(
+        "http://localhost:8001/fhir",
+        breaker_threshold=3,
+        breaker_cooldown_seconds=60.0,
+    )
+    records: list[tuple[str, str, dict]] = []
+    with patch.object(adapter, "_client", return_value=_FailingClient(records)):
+        for _ in range(3):
+            with pytest.raises(RuntimeError, match="simulated sidecar down"):
+                adapter.expand("http://example.org/ValueSet/Foo")
+    # Three failures reach the threshold — breaker should be tripped.
+    assert adapter._consecutive_failures == 3
+    assert adapter._tripped_until > 0.0
+    # All three calls reached the client.
+    assert len(records) == 3
+
+
+def test_circuit_breaker_fast_returns_empty_when_open():
+    """Once tripped, expand() returns [] without calling _client."""
+    adapter = HTTPTerminologyEndpoint(
+        "http://localhost:8001/fhir",
+        breaker_threshold=2,
+        breaker_cooldown_seconds=60.0,
+    )
+    records: list[tuple[str, str, dict]] = []
+    with patch.object(adapter, "_client", return_value=_FailingClient(records)):
+        for _ in range(2):
+            with pytest.raises(RuntimeError):
+                adapter.expand("http://example.org/ValueSet/Foo")
+    assert adapter._tripped_until > 0.0
+
+    # Breaker is now open — a new expand() must short-circuit to []
+    # WITHOUT touching the client.
+    records_before = len(records)
+    refs = adapter.expand("http://example.org/ValueSet/Foo")
+    assert refs == []
+    assert len(records) == records_before  # no new client call
+
+
+def test_circuit_breaker_half_open_after_cooldown():
+    """After cooldown, one probe call is allowed (half-open)."""
+    adapter = HTTPTerminologyEndpoint(
+        "http://localhost:8001/fhir",
+        breaker_threshold=2,
+        breaker_cooldown_seconds=60.0,
+    )
+    records: list[tuple[str, str, dict]] = []
+    with patch.object(adapter, "_client", return_value=_FailingClient(records)):
+        for _ in range(2):
+            with pytest.raises(RuntimeError):
+                adapter.expand("http://example.org/ValueSet/Foo")
+    assert adapter._tripped_until > 0.0
+
+    # Force the cooldown to elapse by rewinding the trip timestamp.
+    import time as _time
+
+    adapter._tripped_until = _time.monotonic() - 0.001
+
+    # Now a probe call is permitted. Give it a healthy response so the
+    # probe succeeds and closes the breaker.
+    response = _MockResponse(_expand_payload([]))
+    with patch.object(adapter, "_client", return_value=_MockClient(response, records)):
+        refs = adapter.expand("http://example.org/ValueSet/Foo")
+    assert refs == []
+    assert adapter._consecutive_failures == 0  # reset on success
+    assert adapter._tripped_until == 0.0
+
+
+def test_circuit_breaker_resets_on_success():
+    """A single success resets the failure counter even before tripping."""
+    adapter = HTTPTerminologyEndpoint(
+        "http://localhost:8001/fhir",
+        breaker_threshold=4,
+        breaker_cooldown_seconds=60.0,
+    )
+    records: list[tuple[str, str, dict]] = []
+    # Two failures (below threshold).
+    with patch.object(adapter, "_client", return_value=_FailingClient(records)):
+        for _ in range(2):
+            with pytest.raises(RuntimeError):
+                adapter.expand("http://example.org/ValueSet/Foo")
+    assert adapter._consecutive_failures == 2
+
+    # A single success resets the counter.
+    response = _MockResponse(_expand_payload([]))
+    with patch.object(adapter, "_client", return_value=_MockClient(response, records)):
+        adapter.expand("http://example.org/ValueSet/Foo")
+    assert adapter._consecutive_failures == 0
+    assert adapter._tripped_until == 0.0
+
+
+# ----------------------------------------------------------------------
+# Health probe (is_healthy)
+# ----------------------------------------------------------------------
+
+
+class _ProbeMockClient:
+    """Mock client used for is_healthy() tests. Records the probe URL."""
+
+    def __init__(self, response: _MockResponse):
+        self._response = response
+        self.probe_url: str | None = None
+
+    def __enter__(self) -> "_ProbeMockClient":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def get(self, url: str, params: dict | None = None) -> _MockResponse:
+        self.probe_url = url
+        return self._response
+
+
+def test_is_healthy_returns_true_for_200():
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    import httpx as _httpx_mod
+
+    probe_client = _ProbeMockClient(_MockResponse({"resourceType": "CapabilityStatement"}, status_code=200))
+    with patch.object(_httpx_mod, "Client", return_value=probe_client):
+        assert adapter.is_healthy() is True
+    assert probe_client.probe_url == "http://localhost:8001/fhir/metadata"
+
+
+def test_is_healthy_returns_false_for_500():
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    import httpx as _httpx_mod
+
+    probe_client = _ProbeMockClient(_MockResponse({}, status_code=500))
+    with patch.object(_httpx_mod, "Client", return_value=probe_client):
+        assert adapter.is_healthy() is False
+
+
+def test_is_healthy_returns_false_on_timeout():
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    import httpx as _httpx_mod
+
+    class _TimeoutClient:
+        def __enter__(self) -> "_TimeoutClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def get(self, url: str, params: dict | None = None) -> _MockResponse:
+            raise httpx.ReadTimeout("read timed out")
+
+    with patch.object(_httpx_mod, "Client", return_value=_TimeoutClient()):
+        # Must not raise — failure swallowed and reported as False.
+        assert adapter.is_healthy() is False
+
+
+def test_is_healthy_returns_false_on_connection_refused():
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    import httpx as _httpx_mod
+
+    class _ConnRefusedClient:
+        def __enter__(self) -> "_ConnRefusedClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def get(self, url: str, params: dict | None = None) -> _MockResponse:
+            raise httpx.ConnectError("connection refused")
+
+    with patch.object(_httpx_mod, "Client", return_value=_ConnRefusedClient()):
+        assert adapter.is_healthy() is False

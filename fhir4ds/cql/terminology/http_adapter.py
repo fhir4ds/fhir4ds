@@ -10,11 +10,21 @@ Invariant INV-6 (bounded HTTP timeouts):
     Every ``httpx.Client`` is constructed with ``timeout=self._timeout``
     where ``self._timeout`` is always a finite float. Never ``None``,
     never a positional argument.
+
+Circuit breaker:
+    Tracks consecutive failures per-instance. After ``breaker_threshold``
+    failures in a row, subsequent calls are short-circuited (returning
+    ``[]`` for protocol methods) for ``breaker_cooldown_seconds``. Once
+    the cooldown elapses, a single half-open probe call is permitted; a
+    success closes the breaker, a failure re-trips it. The breaker is
+    NOT thread-safe — assume single-threaded use. Multiple threads
+    sharing one endpoint instance need an external lock.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Optional
 
 from ..duckdb.udf.system_resolver import SystemResolver
@@ -29,6 +39,10 @@ _logger = logging.getLogger(__name__)
 # ".../fhir/fhir/ValueSet/$expand" 404s against a real sidecar.
 _VALUESET_EXPAND_PATH = "/ValueSet/$expand"
 _CODESYSTEM_SEARCH_PATH = "/CodeSystem/$search"
+
+# Default probe timeout for is_healthy() — short and bounded so factory
+# startup validation never blocks for long on an unreachable sidecar.
+_HEALTH_PROBE_TIMEOUT_SECONDS = 2.0
 
 
 class HTTPTerminologyEndpoint:
@@ -47,9 +61,26 @@ class HTTPTerminologyEndpoint:
             slash. Trailing slashes are stripped automatically.
         timeout_seconds: Bounded HTTP timeout for every request. Defaults
             to 5.0 seconds. Must be a finite positive float.
+        breaker_threshold: Consecutive failures before the circuit breaker
+            trips. Once tripped, protocol methods short-circuit to ``[]``
+            for ``breaker_cooldown_seconds``. Defaults to 5. NOT thread-safe.
+        breaker_cooldown_seconds: Seconds the breaker stays tripped before
+            a half-open probe call is permitted. Defaults to 60.0.
+
+    Thread safety:
+        The circuit breaker state is mutable and unprotected. Assume
+        single-threaded use. Multiple threads sharing one instance need
+        an external lock.
     """
 
-    def __init__(self, base_url: str, timeout_seconds: float = 5.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        timeout_seconds: float = 5.0,
+        *,
+        breaker_threshold: int = 5,
+        breaker_cooldown_seconds: float = 60.0,
+    ) -> None:
         if not base_url:
             raise ValueError("base_url is required for HTTPTerminologyEndpoint")
         if timeout_seconds is None or timeout_seconds <= 0:
@@ -59,10 +90,50 @@ class HTTPTerminologyEndpoint:
         # Strip trailing slash so path join produces clean URLs.
         self._base_url = base_url.rstrip("/")
         self._timeout = float(timeout_seconds)
+        self._breaker_threshold = int(breaker_threshold)
+        self._breaker_cooldown_seconds = float(breaker_cooldown_seconds)
+        # Breaker state — single-threaded only (see class docstring).
+        self._consecutive_failures: int = 0
+        self._tripped_until: float = 0.0
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Circuit breaker helpers (single-threaded — see class docstring).
+    # ------------------------------------------------------------------
+
+    def _is_breaker_open(self, now: float) -> bool:
+        """Return True when the breaker is fully open (skip the call).
+
+        Once the cooldown elapses, returns False so a single half-open
+        probe call is permitted. The probe either trips the breaker
+        again (failure) or closes it (success).
+        """
+        if self._consecutive_failures < self._breaker_threshold:
+            return False
+        if now >= self._tripped_until:
+            # Cooldown elapsed — half-open: allow one probe call.
+            return False
+        return True
+
+    def _on_call_success(self) -> None:
+        """Reset failure counters on a successful call (closes breaker)."""
+        self._consecutive_failures = 0
+        self._tripped_until = 0.0
+
+    def _on_call_failure(self) -> None:
+        """Increment failure counters and trip the breaker when threshold met."""
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= self._breaker_threshold:
+            self._tripped_until = time.monotonic() + self._breaker_cooldown_seconds
+            _logger.error(
+                "terminology circuit breaker tripped after %d consecutive failures; "
+                "fast-failing subsequent calls for %.1fs",
+                self._consecutive_failures,
+                self._breaker_cooldown_seconds,
+            )
 
     @staticmethod
     def _require_httpx():
@@ -184,22 +255,58 @@ class HTTPTerminologyEndpoint:
     # ------------------------------------------------------------------
 
     def expand(self, valueset_url: str) -> list[CodeRef]:
-        """GET <base_url>/ValueSet/$expand?url=<valueset_url>."""
-        url = f"{self._base_url}{_VALUESET_EXPAND_PATH}"
-        with self._client() as client:
-            response = client.get(url, params={"url": valueset_url})
-            response.raise_for_status()
-            payload = response.json()
-        return self._contains_to_coderefs(self._parse_contains(payload))
+        """GET <base_url>/ValueSet/$expand?url=<valueset_url>.
+
+        Short-circuits to ``[]`` when the circuit breaker is open.
+        """
+        now = time.monotonic()
+        if self._is_breaker_open(now):
+            _logger.warning(
+                "terminology circuit breaker open; skipping expand() call "
+                "(failures=%d, cooldown_remaining=%.1fs)",
+                self._consecutive_failures,
+                max(0.0, self._tripped_until - now),
+            )
+            return []
+        try:
+            url = f"{self._base_url}{_VALUESET_EXPAND_PATH}"
+            with self._client() as client:
+                response = client.get(url, params={"url": valueset_url})
+                response.raise_for_status()
+                payload = response.json()
+            result = self._contains_to_coderefs(self._parse_contains(payload))
+            self._on_call_success()
+            return result
+        except Exception:
+            self._on_call_failure()
+            raise
 
     def expand_intensional(self, value_set: dict) -> list[CodeRef]:
-        """POST <base_url>/ValueSet/$expand with an intensional ValueSet body."""
-        url = f"{self._base_url}{_VALUESET_EXPAND_PATH}"
-        with self._client() as client:
-            response = client.post(url, json=value_set)
-            response.raise_for_status()
-            payload = response.json()
-        return self._contains_to_coderefs(self._parse_contains(payload))
+        """POST <base_url>/ValueSet/$expand with an intensional ValueSet body.
+
+        Short-circuits to ``[]`` when the circuit breaker is open.
+        """
+        now = time.monotonic()
+        if self._is_breaker_open(now):
+            _logger.warning(
+                "terminology circuit breaker open; skipping expand_intensional() call "
+                "(failures=%d, cooldown_remaining=%.1fs)",
+                self._consecutive_failures,
+                max(0.0, self._tripped_until - now),
+            )
+            return []
+        try:
+            url = f"{self._base_url}{_VALUESET_EXPAND_PATH}"
+            with self._client() as client:
+                response = client.post(url, json=value_set)
+                response.raise_for_status()
+                payload = response.json()
+            result = self._contains_to_coderefs(self._parse_contains(payload))
+            self._on_call_success()
+            return result
+        except Exception:
+            self._on_call_failure()
+            raise
 
     def search_text(
         self,
@@ -208,18 +315,36 @@ class HTTPTerminologyEndpoint:
         *,
         mode: str = "hybrid",
     ) -> list[SearchResult]:
-        """GET <base_url>/CodeSystem/$search?<query, category, mode>."""
-        url = f"{self._base_url}{_CODESYSTEM_SEARCH_PATH}"
-        params = {
-            "query": query,
-            "category": category,
-            "mode": mode,
-        }
-        with self._client() as client:
-            response = client.get(url, params=params)
-            response.raise_for_status()
-            payload = response.json()
-        return self._search_payload_to_results(payload, mode=mode)
+        """GET <base_url>/CodeSystem/$search?<query, category, mode>.
+
+        Short-circuits to ``[]`` when the circuit breaker is open.
+        """
+        now = time.monotonic()
+        if self._is_breaker_open(now):
+            _logger.warning(
+                "terminology circuit breaker open; skipping search_text() call "
+                "(failures=%d, cooldown_remaining=%.1fs)",
+                self._consecutive_failures,
+                max(0.0, self._tripped_until - now),
+            )
+            return []
+        try:
+            url = f"{self._base_url}{_CODESYSTEM_SEARCH_PATH}"
+            params = {
+                "query": query,
+                "category": category,
+                "mode": mode,
+            }
+            with self._client() as client:
+                response = client.get(url, params=params)
+                response.raise_for_status()
+                payload = response.json()
+            result = self._search_payload_to_results(payload, mode=mode)
+            self._on_call_success()
+            return result
+        except Exception:
+            self._on_call_failure()
+            raise
 
     def search_batch(
         self,
@@ -232,8 +357,43 @@ class HTTPTerminologyEndpoint:
         medterm4ds does not yet expose a native batch $search endpoint,
         so this is a sequential loop. Phase 4 may add a true batch
         endpoint; the Protocol signature is stable either way.
+
+        Note: the breaker is checked per-query inside ``search_text``;
+        ``search_batch`` itself does not wrap the loop, so an open
+        breaker short-circuits each sub-call to ``[]`` without raising.
         """
         results: list[list[SearchResult]] = []
         for query, category in queries:
             results.append(self.search_text(query, category, mode=mode))
         return results
+
+    # ------------------------------------------------------------------
+    # Health probe
+    # ------------------------------------------------------------------
+
+    def is_healthy(self) -> bool:
+        """Probe the sidecar with a lightweight ``GET /metadata`` request.
+
+        Returns ``True`` if the sidecar responds with HTTP < 500, ``False``
+        otherwise. Never raises — failures (timeouts, connection refused,
+        unexpected exceptions) are caught and logged at ``WARNING``.
+
+        Useful for factory startup validation, pre-flight checks before
+        heavy operations, and periodic health monitoring. Bounded by a
+        short independent timeout so it never blocks for long on an
+        unreachable sidecar.
+        """
+        try:
+            httpx = self._require_httpx()
+            url = f"{self._base_url}/metadata"
+            with httpx.Client(timeout=_HEALTH_PROBE_TIMEOUT_SECONDS) as client:
+                response = client.get(url)
+            return response.status_code < 500
+        except Exception as e:  # broad: probe must never raise
+            _logger.warning(
+                "terminology health probe failed for %s: %s: %s",
+                self._base_url,
+                type(e).__name__,
+                e,
+            )
+            return False

@@ -25,15 +25,25 @@ Env vars:
         medterm4ds DuckDB path (in_process mode).
     ``FHIR4DS_TERMINOLOGY_SEARCH_INDEX_DIR``:
         Prebuilt search-index directory (in_process mode).
+    ``FHIR4DS_TERMINOLOGY_PROBE``:
+        Opt-in startup health probe (default ``false``). When ``true``
+        and mode is ``http`` or ``in_process``, the factory calls
+        ``endpoint.is_healthy()`` after construction and logs the
+        result. The endpoint is ALWAYS returned — the probe is
+        informational, not gating. The circuit breaker handles ongoing
+        failures gracefully.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Optional
 
 from .endpoint import TerminologyEndpoint
 from .types import TerminologyConfig
+
+_logger = logging.getLogger(__name__)
 
 
 def get_terminology_endpoint(
@@ -63,6 +73,8 @@ def get_terminology_endpoint(
     if cfg.mode == "disabled":
         return None
 
+    probe_requested = _probe_from_env()
+
     if cfg.mode == "http":
         if not cfg.url:
             raise ValueError(
@@ -79,7 +91,10 @@ def get_terminology_endpoint(
                 "httpx is required for HTTP terminology mode. "
                 "Install with: pip install 'fhir4ds-v2[terminology]'"
             ) from e
-        return HTTPTerminologyEndpoint(cfg.url, cfg.timeout_seconds)
+        endpoint: TerminologyEndpoint = HTTPTerminologyEndpoint(cfg.url, cfg.timeout_seconds)
+        if probe_requested:
+            _run_probe(endpoint, cfg.url)
+        return endpoint
 
     if cfg.mode == "in_process":
         # Lazy adapter import.
@@ -93,15 +108,58 @@ def get_terminology_endpoint(
                 "medterm4ds is a sibling-repo install — install it alongside "
                 "fhir4ds-v2[terminology]. See the medterm4ds README."
             ) from e
-        return InProcessTerminologyEndpoint(
+        endpoint = InProcessTerminologyEndpoint(
             medterm4ds_db_path=cfg.medterm4ds_db_path,
             search_index_dir=cfg.search_index_dir,
         )
+        if probe_requested:
+            probe_label = cfg.medterm4ds_db_path or "medterm4ds:default"
+            _run_probe(endpoint, probe_label)
+        return endpoint
 
     raise ValueError(
         f"Unknown terminology mode: {cfg.mode!r}. "
         "Valid modes: 'disabled', 'http', 'in_process'."
     )
+
+
+def _probe_from_env() -> bool:
+    """Read ``FHIR4DS_TERMINOLOGY_PROBE`` (case-insensitive).
+
+    Returns True only for the literal string ``"true"`` (case-insensitive).
+    All other values (unset, ``"false"``, ``"0"``, garbage) return False.
+    Default-off behavior preserves existing factory semantics.
+    """
+    raw = os.getenv("FHIR4DS_TERMINOLOGY_PROBE", "false")
+    return raw.strip().lower() == "true"
+
+
+def _run_probe(endpoint: TerminologyEndpoint, label: str) -> None:
+    """Probe the endpoint and log the result. Informational, not gating.
+
+    The endpoint is ALWAYS returned by the caller regardless of probe
+    outcome — silently downgrading would violate "no surprise" and the
+    user's explicit choice of mode. The circuit breaker handles ongoing
+    failures gracefully.
+    """
+    try:
+        healthy = bool(endpoint.is_healthy())
+    except Exception as e:  # defensive: probe contract says never raise
+        _logger.error(
+            "terminology probe raised for %s (endpoint still returned): %s: %s",
+            label,
+            type(e).__name__,
+            e,
+        )
+        return
+    if not healthy:
+        _logger.error(
+            "terminology endpoint unhealthy for %s — endpoint still returned; "
+            "the circuit breaker will fast-fail subsequent failed calls",
+            label,
+        )
+    else:
+        _logger.info("terminology endpoint healthy for %s", label)
 
 
 def _config_from_env() -> TerminologyConfig:

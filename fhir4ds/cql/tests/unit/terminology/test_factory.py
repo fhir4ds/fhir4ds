@@ -130,3 +130,74 @@ def test_env_invalid_timeout_falls_back_to_default(monkeypatch: pytest.MonkeyPat
     endpoint = get_terminology_endpoint()
     assert endpoint is not None
     assert getattr(endpoint, "_timeout") == 5.0
+
+
+# ----------------------------------------------------------------------
+# Health probe (FHIR4DS_TERMINOLOGY_PROBE)
+# ----------------------------------------------------------------------
+
+
+def test_factory_probes_when_env_var_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FHIR4DS_TERMINOLOGY_PROBE=true => factory calls is_healthy() and returns endpoint."""
+    monkeypatch.setenv("FHIR4DS_TERMINOLOGY_MODE", "http")
+    monkeypatch.setenv("FHIR4DS_TERMINOLOGY_URL", "http://sidecar:8001")
+    monkeypatch.setenv("FHIR4DS_TERMINOLOGY_PROBE", "true")
+
+    # Patch is_healthy on the adapter class — verified called, returns True.
+    from fhir4ds.cql.terminology.http_adapter import HTTPTerminologyEndpoint
+
+    called = {"count": 0}
+
+    def _fake_healthy(self):
+        called["count"] += 1
+        return True
+
+    monkeypatch.setattr(HTTPTerminologyEndpoint, "is_healthy", _fake_healthy)
+    endpoint = get_terminology_endpoint()
+    assert endpoint is not None
+    assert called["count"] == 1
+
+
+def test_factory_logs_but_returns_endpoint_when_unhealthy(
+    monkeypatch: pytest.MonkeyPatch, caplog
+) -> None:
+    """Probe unhealthy => factory logs ERROR but still returns the endpoint."""
+    monkeypatch.setenv("FHIR4DS_TERMINOLOGY_MODE", "http")
+    monkeypatch.setenv("FHIR4DS_TERMINOLOGY_URL", "http://sidecar:8001")
+    monkeypatch.setenv("FHIR4DS_TERMINOLOGY_PROBE", "true")
+
+    from fhir4ds.cql.terminology.http_adapter import HTTPTerminologyEndpoint
+
+    def _fake_healthy(self):
+        return False
+
+    monkeypatch.setattr(HTTPTerminologyEndpoint, "is_healthy", _fake_healthy)
+
+    import logging
+
+    with caplog.at_level(logging.ERROR, logger="fhir4ds.cql.terminology.factory"):
+        endpoint = get_terminology_endpoint()
+
+    # Critical: endpoint is still returned, not None.
+    assert endpoint is not None
+    assert any("unhealthy" in rec.message.lower() for rec in caplog.records)
+
+
+def test_factory_skips_probe_when_env_var_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default behavior: FHIR4DS_TERMINOLOGY_PROBE unset/false => is_healthy not called."""
+    monkeypatch.setenv("FHIR4DS_TERMINOLOGY_MODE", "http")
+    monkeypatch.setenv("FHIR4DS_TERMINOLOGY_URL", "http://sidecar:8001")
+    monkeypatch.delenv("FHIR4DS_TERMINOLOGY_PROBE", raising=False)
+
+    from fhir4ds.cql.terminology.http_adapter import HTTPTerminologyEndpoint
+
+    called = {"count": 0}
+
+    def _fake_healthy(self):
+        called["count"] += 1
+        return True
+
+    monkeypatch.setattr(HTTPTerminologyEndpoint, "is_healthy", _fake_healthy)
+    endpoint = get_terminology_endpoint()
+    assert endpoint is not None
+    assert called["count"] == 0  # probe not invoked

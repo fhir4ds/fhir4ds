@@ -226,3 +226,72 @@ def test_expand_degrades_to_empty_on_helper_error(monkeypatch: pytest.MonkeyPatc
 
     adapter = InProcessTerminologyEndpoint()
     assert adapter.expand("http://example.org/ValueSet/Foo") == []
+
+
+# ----------------------------------------------------------------------
+# Circuit breaker (mirror HTTP tests at smaller scale)
+# ----------------------------------------------------------------------
+
+
+def test_in_process_circuit_breaker_trips_and_short_circuits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After threshold failures, breaker trips and subsequent calls return []."""
+    _install_medterm4ds_stub(monkeypatch)
+    fake_helpers = types.ModuleType("medterm4ds.apps.fhir_api_helpers")
+    fake_helpers.expand_url_pattern = MagicMock(side_effect=RuntimeError("boom"))
+    fake_apps = types.ModuleType("medterm4ds.apps")
+    monkeypatch.setitem(sys.modules, "medterm4ds.apps", fake_apps)
+    monkeypatch.setitem(sys.modules, "medterm4ds.apps.fhir_api_helpers", fake_helpers)
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint(
+        breaker_threshold=2,
+        breaker_cooldown_seconds=60.0,
+    )
+    # Two failures (each returns [] and increments the failure counter).
+    assert adapter.expand("http://example.org/ValueSet/Foo") == []
+    assert adapter.expand("http://example.org/ValueSet/Bar") == []
+    assert adapter._consecutive_failures == 2
+    assert adapter._tripped_until > 0.0
+
+    # Breaker open: the third call short-circuits before reaching the
+    # medterm4ds helper.
+    call_count_before = fake_helpers.expand_url_pattern.call_count
+    assert adapter.expand("http://example.org/ValueSet/Baz") == []
+    assert fake_helpers.expand_url_pattern.call_count == call_count_before
+
+
+def test_in_process_is_healthy_with_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A constructed adapter with an engine advertises health."""
+    engine = _install_medterm4ds_stub(monkeypatch)
+    # Engine is a MagicMock — it auto-exposes arbitrary attrs, but we
+    # want to test the explicit surface the probe checks for.
+    engine.search_codes = MagicMock()
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    assert adapter.is_healthy() is True
+
+
+def test_in_process_is_healthy_returns_false_without_engine_surface(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Engine missing the discovery surface => is_healthy returns False."""
+    _install_medterm4ds_stub(monkeypatch)
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    # Replace the engine with a bare object that has none of the
+    # discovery surface attrs the probe looks for.
+    adapter._engine = object()
+    assert adapter.is_healthy() is False

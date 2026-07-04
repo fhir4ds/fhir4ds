@@ -7,11 +7,22 @@ having ``fhir4ds`` installed does NOT require ``medterm4ds``.
 The module body itself only imports stdlib + fhir4ds internals; the
 factory only imports this module when the user explicitly opts into
 ``in_process`` mode.
+
+Circuit breaker:
+    Tracks consecutive failures per-instance. After ``breaker_threshold``
+    failures in a row, subsequent calls are short-circuited (returning
+    ``[]``) for ``breaker_cooldown_seconds``. The in_process adapter
+    catches underlying exceptions and returns ``[]`` by contract; the
+    breaker is fed via an internal instrumented call wrapper so failure
+    counting still works. The breaker is NOT thread-safe — assume
+    single-threaded use. Multiple threads sharing one endpoint instance
+    need an external lock.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Optional
 
 from ..duckdb.udf.system_resolver import SystemResolver
@@ -46,17 +57,30 @@ class InProcessTerminologyEndpoint:
         medterm4ds_db_path: Optional path to a medterm4ds DuckDB file.
             When ``None`` medterm4ds's own default discovery applies.
         search_index_dir: Optional directory of prebuilt search indexes.
+        breaker_threshold: Consecutive failures before the circuit breaker
+            trips. Once tripped, protocol methods short-circuit to ``[]``
+            for ``breaker_cooldown_seconds``. Defaults to 5. NOT thread-safe.
+        breaker_cooldown_seconds: Seconds the breaker stays tripped before
+            a half-open probe call is permitted. Defaults to 60.0.
 
     Raises:
         ImportError: ``medterm4ds`` is not installed. The factory wraps
             this in a clearer install hint, but the same error is raised
             here for callers that construct the adapter directly.
+
+    Thread safety:
+        The circuit breaker state is mutable and unprotected. Assume
+        single-threaded use. Multiple threads sharing one instance need
+        an external lock.
     """
 
     def __init__(
         self,
         medterm4ds_db_path: Optional[str] = None,
         search_index_dir: Optional[str] = None,
+        *,
+        breaker_threshold: int = 5,
+        breaker_cooldown_seconds: float = 60.0,
     ) -> None:
         # Lazy import — INV-1 / INV-3: top-level `import fhir4ds` must
         # never pull medterm4ds. Only opt-in callers pay this cost.
@@ -73,6 +97,11 @@ class InProcessTerminologyEndpoint:
 
         self._medterm4ds_db_path = medterm4ds_db_path
         self._search_index_dir = search_index_dir
+        self._breaker_threshold = int(breaker_threshold)
+        self._breaker_cooldown_seconds = float(breaker_cooldown_seconds)
+        # Breaker state — single-threaded only (see class docstring).
+        self._consecutive_failures: int = 0
+        self._tripped_until: float = 0.0
 
         # Construct the shared engine. LocalDuckDBEngine accepts the
         # same kwargs medterm4ds's own CLI uses; we forward only the
@@ -89,6 +118,35 @@ class InProcessTerminologyEndpoint:
             # so a medterm4ds version that doesn't accept these kwargs
             # still works. Phase 1 favors robustness over strictness.
             self._engine = LocalDuckDBEngine()
+
+    # ------------------------------------------------------------------
+    # Circuit breaker helpers (single-threaded — see class docstring).
+    # ------------------------------------------------------------------
+
+    def _is_breaker_open(self, now: float) -> bool:
+        """Return True when the breaker is fully open (skip the call)."""
+        if self._consecutive_failures < self._breaker_threshold:
+            return False
+        if now >= self._tripped_until:
+            return False
+        return True
+
+    def _on_call_success(self) -> None:
+        """Reset failure counters on a successful call."""
+        self._consecutive_failures = 0
+        self._tripped_until = 0.0
+
+    def _on_call_failure(self) -> None:
+        """Increment failure counters and trip the breaker when threshold met."""
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= self._breaker_threshold:
+            self._tripped_until = time.monotonic() + self._breaker_cooldown_seconds
+            _logger.error(
+                "terminology circuit breaker tripped after %d consecutive failures; "
+                "fast-failing subsequent calls for %.1fs",
+                self._consecutive_failures,
+                self._breaker_cooldown_seconds,
+            )
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -148,7 +206,19 @@ class InProcessTerminologyEndpoint:
         Implements the same three modes as the HTTP adapter (plain
         canonical, ``fhir_vs`` shorthand, filter) by delegating to
         medterm4ds's FHIR $expand logic.
+
+        Short-circuits to ``[]`` when the circuit breaker is open.
         """
+        now = time.monotonic()
+        if self._is_breaker_open(now):
+            _logger.warning(
+                "terminology circuit breaker open; skipping expand() call "
+                "(failures=%d, cooldown_remaining=%.1fs)",
+                self._consecutive_failures,
+                max(0.0, self._tripped_until - now),
+            )
+            return []
+
         # Imported lazily so module load stays cheap and isolated. If
         # the helper symbol drifts between medterm4ds releases the
         # resolver fallback path degrades to "no codes" gracefully.
@@ -162,6 +232,7 @@ class InProcessTerminologyEndpoint:
                 "in_process.expand returns [] for %s",
                 valueset_url,
             )
+            self._on_call_failure()
             return []
 
         try:
@@ -173,6 +244,7 @@ class InProcessTerminologyEndpoint:
             _logger.warning(
                 "in_process expand failed for %s: %s", valueset_url, e
             )
+            self._on_call_failure()
             return []
 
         refs: list[CodeRef] = []
@@ -182,10 +254,24 @@ class InProcessTerminologyEndpoint:
             )
             if ref is not None:
                 refs.append(ref)
+        self._on_call_success()
         return refs
 
     def expand_intensional(self, value_set: dict) -> list[CodeRef]:
-        """Expand an intensional ValueSet via medterm4ds's compose-walk."""
+        """Expand an intensional ValueSet via medterm4ds's compose-walk.
+
+        Short-circuits to ``[]`` when the circuit breaker is open.
+        """
+        now = time.monotonic()
+        if self._is_breaker_open(now):
+            _logger.warning(
+                "terminology circuit breaker open; skipping expand_intensional() call "
+                "(failures=%d, cooldown_remaining=%.1fs)",
+                self._consecutive_failures,
+                max(0.0, self._tripped_until - now),
+            )
+            return []
+
         try:
             from medterm4ds.apps.fhir_api_helpers import (  # type: ignore
                 expand_intensional,
@@ -195,6 +281,7 @@ class InProcessTerminologyEndpoint:
                 "medterm4ds expand_intensional helper unavailable; "
                 "in_process.expand_intensional returns []"
             )
+            self._on_call_failure()
             return []
 
         try:
@@ -204,6 +291,7 @@ class InProcessTerminologyEndpoint:
             ) else []
         except Exception as e:  # pragma: no cover - medterm4ds drift guard
             _logger.warning("in_process expand_intensional failed: %s", e)
+            self._on_call_failure()
             return []
 
         refs: list[CodeRef] = []
@@ -213,6 +301,7 @@ class InProcessTerminologyEndpoint:
             )
             if ref is not None:
                 refs.append(ref)
+        self._on_call_success()
         return refs
 
     def search_text(
@@ -222,7 +311,20 @@ class InProcessTerminologyEndpoint:
         *,
         mode: str = "hybrid",
     ) -> list[SearchResult]:
-        """Search terminology names via medterm4ds discovery service."""
+        """Search terminology names via medterm4ds discovery service.
+
+        Short-circuits to ``[]`` when the circuit breaker is open.
+        """
+        now = time.monotonic()
+        if self._is_breaker_open(now):
+            _logger.warning(
+                "terminology circuit breaker open; skipping search_text() call "
+                "(failures=%d, cooldown_remaining=%.1fs)",
+                self._consecutive_failures,
+                max(0.0, self._tripped_until - now),
+            )
+            return []
+
         # Imported lazily so module load stays cheap and isolated.
         # Re-imported on every call so tests that monkeypatch
         # medterm4ds.services.discovery.search_names take effect.
@@ -241,6 +343,7 @@ class InProcessTerminologyEndpoint:
             )
         except Exception as e:  # pragma: no cover - medterm4ds drift guard
             _logger.warning("in_process search_text failed for %r: %s", query, e)
+            self._on_call_failure()
             return []
 
         results: list[SearchResult] = []
@@ -265,6 +368,7 @@ class InProcessTerminologyEndpoint:
                     index_version=getattr(r, "index_version", None),
                 )
             )
+        self._on_call_success()
         return results
 
     def search_batch(
@@ -273,8 +377,57 @@ class InProcessTerminologyEndpoint:
         *,
         mode: str = "hybrid",
     ) -> list[list[SearchResult]]:
-        """Sequential per-query loop over ``search_text``."""
+        """Sequential per-query loop over ``search_text``.
+
+        Note: the breaker is checked per-query inside ``search_text``.
+        """
         return [self.search_text(q, cat, mode=mode) for q, cat in queries]
+
+    # ------------------------------------------------------------------
+    # Health probe
+    # ------------------------------------------------------------------
+
+    def is_healthy(self) -> bool:
+        """Probe the underlying medterm4ds engine without going through HTTP.
+
+        Returns ``True`` when the adapter has a usable engine, ``False``
+        otherwise. Never raises — failures are caught and logged at
+        ``WARNING``.
+
+        For the in_process adapter the simplest stable probe is to
+        confirm the engine is present and exposes the
+        ``search_codes``/``search_names`` service entry points the
+        protocol methods rely on. Catching "data not loaded" without
+        false positives across medterm4ds versions is risky; instead
+        we probe the surface we actually use.
+        """
+        try:
+            engine = getattr(self, "_engine", None)
+            if engine is None:
+                _logger.warning(
+                    "in_process terminology probe: engine not constructed"
+                )
+                return False
+            # The protocol methods call search_names / expand_* against
+            # this engine. If the engine advertises neither of the
+            # common discovery surfaces, downstream calls will fail.
+            if not (
+                hasattr(engine, "search_codes")
+                or hasattr(engine, "search_names")
+                or hasattr(engine, "lookup_code")
+            ):
+                _logger.warning(
+                    "in_process terminology probe: engine missing discovery surface"
+                )
+                return False
+            return True
+        except Exception as e:  # broad: probe must never raise
+            _logger.warning(
+                "in_process terminology probe failed: %s: %s",
+                type(e).__name__,
+                e,
+            )
+            return False
 
 
 # ----------------------------------------------------------------------

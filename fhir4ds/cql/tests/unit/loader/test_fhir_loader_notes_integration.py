@@ -160,14 +160,25 @@ def test_load_resources_batch_with_pipeline_loads_derived(mock_medterm4ds):
     assert types_dict.get("Condition") == 2
 
 
-def test_load_resource_pipeline_does_not_raise_on_disabled_pipeline():
-    """When medterm4ds is unavailable, the loader still loads the source."""
-    # No mock installed — medterm4ds import will fail. extract_conditions
-    # catches and caches _DISABLED_SENTINEL, returns [].
+def test_load_resource_pipeline_does_not_raise_on_disabled_pipeline(monkeypatch):
+    """When medterm4ds is unavailable, the loader still loads the source.
+
+    Forces medterm4ds to be unimportable by poisoning sys.modules — otherwise
+    the test is environment-dependent (passes when medterm4ds isn't installed,
+    fails when it is). The disabled-pipeline contract must hold regardless.
+    """
+    # Poison sys.modules so `import medterm4ds` raises ImportError. NotesPipeline
+    # catches this once, caches _DISABLED_SENTINEL, and extract_conditions()
+    # returns [] for every subsequent call.
+    monkeypatch.setitem(sys.modules, "medterm4ds", None)
+    # Also clear any cached pipeline state on the class so the sentinel gets
+    # re-evaluated under our poisoned import.
+    NotesPipeline._DISABLED_SENTINEL = None if hasattr(NotesPipeline, "_DISABLED_SENTINEL") else None
+
     pipeline = NotesPipeline(NotesPipelineConfig())
     con = duckdb.connect(":memory:")
     loader = FHIRDataLoader(con, notes_pipeline=pipeline)
     # Should not raise; source resource still loaded.
     loader.load_resource(_observation())
     count = con.execute("SELECT COUNT(*) FROM resources").fetchone()[0]
-    assert count == 1
+    assert count == 1, f"expected only source resource, got {count} (medterm4ds may be installed)"
