@@ -6,7 +6,7 @@ import logging
 import re
 import threading
 from pathlib import Path
-from typing import Union, List, Optional, Any
+from typing import Union, List, Optional, Any, TYPE_CHECKING
 from urllib.parse import urlparse
 from weakref import WeakKeyDictionary, WeakSet
 try:
@@ -15,6 +15,14 @@ except ImportError:
     duckdb = None  # type: ignore[assignment]
 
 from fhir4ds.sources.base import quote_identifier
+
+if TYPE_CHECKING:  # pragma: no cover - import-time only
+    # Forward-import AutoCoder and NotesPipeline only for type checkers —
+    # never imported at runtime to preserve the loader's zero-dep default.
+    # Both are passed in by callers; we never construct one inside the
+    # loader.
+    from .auto_coder import AutoCoder
+    from .notes_pipeline import NotesPipeline
 
 _logger = logging.getLogger(__name__)
 
@@ -133,6 +141,8 @@ class FHIRDataLoader:
         con: duckdb.DuckDBPyConnection,
         table_name: str = "resources",
         create_table: bool = True,
+        auto_coder: "Optional[AutoCoder]" = None,
+        notes_pipeline: "Optional[NotesPipeline]" = None,
     ):
         if con is None:
             raise TypeError("Expected a DuckDB connection for 'con', got None")
@@ -147,6 +157,18 @@ class FHIRDataLoader:
             )
         self.table_name = table_name
         self._quoted_table_name = quote_identifier(table_name)
+        # Optional Phase 2 auto-coder. With ``auto_coder=None`` (default),
+        # loader behavior is byte-identical to pre-Phase-2 (INV-1).
+        # Stored on the instance so all entry points (load_resource,
+        # load_resources, load_bundle/load_file/load_ndjson/load_directory/
+        # load_from_url which delegate) get the augmentation hook for free.
+        self._auto_coder = auto_coder
+        # Optional Phase 4 notes pipeline. With ``notes_pipeline=None``
+        # (default), loader behavior is byte-identical to pre-Phase-4
+        # (INV-1 / Phase 4 SCOPE REDUCTION invariant). When set, the
+        # loader appends derived Conditions alongside each source
+        # resource via ``notes_pipeline.extract_conditions(resource)``.
+        self._notes_pipeline = notes_pipeline
         # Share one mutable cache per DuckDB connection so repeated FHIRDataLoader
         # instances update the same _in_valueset_python closure in-place.
         with _CACHE_LOCK:
@@ -256,6 +278,12 @@ class FHIRDataLoader:
             raise TypeError(
                 f"Expected dict, got {type(resource).__name__}"
             )
+        # Phase 2 augmentation hook — runs BEFORE validate/serialize so the
+        # auto-coder can append Codings to text-only CodeableConcepts. With
+        # ``self._auto_coder is None`` (the default) this branch is skipped
+        # entirely and behavior is byte-identical to pre-Phase-2 (INV-1).
+        if self._auto_coder is not None:
+            self._auto_coder.augment_resource(resource)
         resource_type, resource_id = _validate_resource_identity(resource)
         patient_ref = self._extract_patient_ref(resource)
         resource_json = _serialize_resource(resource)
@@ -270,6 +298,38 @@ class FHIRDataLoader:
             f"INSERT INTO {self._quoted_table_name} VALUES (?, ?, ?, ?)",
             [resource_id, resource_type, resource_json, patient_ref],
         )
+
+        # Phase 4 notes-pipeline hook — runs AFTER the source resource is
+        # loaded so derived Conditions join the same batch. With
+        # ``self._notes_pipeline is None`` (default) this branch is
+        # skipped entirely and behavior is byte-identical to pre-Phase-4.
+        # ``extract_conditions`` NEVER raises (Phase 4 INV-3) and returns
+        # ``[]`` for Condition source resources (Phase 4 INV-4) so batch
+        # loads cannot enter an infinite loop.
+        if self._notes_pipeline is not None:
+            derived = self._notes_pipeline.extract_conditions(resource)
+            for derived_resource in derived or []:
+                if not isinstance(derived_resource, dict):
+                    continue
+                try:
+                    d_type, d_id = _validate_resource_identity(derived_resource)
+                    d_patient_ref = self._extract_patient_ref(derived_resource)
+                    d_json = _serialize_resource(derived_resource)
+                except (TypeError, ValueError) as exc:
+                    _logger.warning(
+                        "Skipping invalid derived Condition from %s/%s: %s",
+                        resource_type, resource_id, exc,
+                    )
+                    continue
+                if d_id is not None and d_type is not None:
+                    self.con.execute(
+                        f"DELETE FROM {self._quoted_table_name} WHERE id = ? AND resourceType = ?",
+                        [d_id, d_type],
+                    )
+                self.con.execute(
+                    f"INSERT INTO {self._quoted_table_name} VALUES (?, ?, ?, ?)",
+                    [d_id, d_type, d_json, d_patient_ref],
+                )
 
     def load_resources(self, resources: list[dict]) -> int:
         """Load multiple FHIR resources in a single batch.
@@ -304,6 +364,12 @@ class FHIRDataLoader:
         for resource in resources:
             if not isinstance(resource, dict):
                 raise TypeError(f"Expected dict, got {type(resource).__name__}")
+            # Phase 2 augmentation hook — runs BEFORE validate/serialize so
+            # the auto-coder can append Codings. With ``self._auto_coder
+            # is None`` (the default) this branch is skipped entirely and
+            # behavior is byte-identical to pre-Phase-2 (INV-1).
+            if self._auto_coder is not None:
+                self._auto_coder.augment_resource(resource)
             resource_type, resource_id = _validate_resource_identity(resource)
             patient_ref = self._extract_patient_ref(resource)
             resource_json = _serialize_resource(resource)
@@ -319,6 +385,35 @@ class FHIRDataLoader:
                     dedup_count += 1
                 seen[key] = len(rows)
             rows.append(row)
+
+            # Phase 4 notes-pipeline hook (batch path). With
+            # ``self._notes_pipeline is None`` (default) this branch is
+            # skipped entirely and behavior is byte-identical to
+            # pre-Phase-4. ``extract_conditions`` NEVER raises (Phase 4
+            # INV-3) so a single bad resource cannot poison the batch.
+            if self._notes_pipeline is not None:
+                derived_list = self._notes_pipeline.extract_conditions(resource)
+                for derived_resource in derived_list or []:
+                    if not isinstance(derived_resource, dict):
+                        continue
+                    try:
+                        d_type, d_id = _validate_resource_identity(derived_resource)
+                        d_patient_ref = self._extract_patient_ref(derived_resource)
+                        d_json = _serialize_resource(derived_resource)
+                    except (TypeError, ValueError) as exc:
+                        _logger.warning(
+                            "Skipping invalid derived Condition from %s/%s: %s",
+                            resource_type, resource_id, exc,
+                        )
+                        continue
+                    d_row = (d_id, d_type, d_json, d_patient_ref)
+                    if d_id is not None:
+                        d_key = (d_id, d_type)
+                        if d_key in seen:
+                            rows[seen[d_key]] = None  # type: ignore[assignment]
+                            dedup_count += 1
+                        seen[d_key] = len(rows)
+                    rows.append(d_row)
 
         # Filter out replaced duplicates
         final_rows = [r for r in rows if r is not None]

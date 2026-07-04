@@ -4605,3 +4605,123 @@ zero parity diffs:
   because it runs from the project root, which Python implicitly adds
   to `sys.path`. This does not affect any conformance suite or any
   consumer using `pip install -e .`.
+
+## medterm4ds Phase 1 — Terminology Abstraction (Foundation)
+
+**Implemented:** 2026-07-03, target version 0.0.11.
+**FDD:** `docs/architecture/plans/FEATURE_MEDTERM4DS_PHASE1_TERMINOLOGY.md`.
+
+### Architecture
+
+- New subpackage `fhir4ds/cql/terminology/` exposes a structural
+  `TerminologyEndpoint` Protocol with two adapters
+  (`HTTPTerminologyEndpoint` for the medterm4ds sidecar,
+  `InProcessTerminologyEndpoint` for in-process calls) and an
+  env-driven `get_terminology_endpoint()` factory.
+- `DependencyResolver` gained an optional `terminology_endpoint=` kwarg
+  (default `None`). On a local lookup miss, if an endpoint is configured,
+  the resolver calls `endpoint.expand(url)` and synthesizes a
+  `ResolvedValueSet` with `provenance="terminology_endpoint"` and
+  `source_path=None`.
+
+### Integration Notes (initial fragile areas)
+
+1. **Zero-dependency import invariant.** `import fhir4ds` and
+   `import fhir4ds.cql.terminology` MUST NOT pull `httpx` or
+   `medterm4ds`. Adapter modules are imported only inside the factory
+   body. The `__init__.py` re-exports only the Protocol, dataclasses,
+   and the factory function reference — never the adapters. Test
+   coverage lives in `test_import_isolation.py`.
+2. **Env-var laziness.** `factory.py` reads `FHIR4DS_TERMINOLOGY_*` only
+   when `get_terminology_endpoint()` is called — never at module import.
+   Tested in `test_env_laziness.py`.
+3. **`ResolvedValueSet.source_path` is now `Optional[Path]`.** It is
+   `None` for endpoint-resolved values. `loader.load_valuesets()` only
+   reads `codes` so this is safe at the loader boundary. Future
+   consumers MUST check `provenance` before dereferencing `source_path`.
+4. **Failure-mode scoping (INV-8).** Endpoint exceptions in the
+   resolver fallback path are swallowed and logged at WARNING. This
+   applies ONLY to `DependencyResolver.resolve_valueset`. Direct callers
+   of `endpoint.expand()` should let exceptions propagate.
+5. **medterm4ds symbol drift.** `InProcessTerminologyEndpoint` lazily
+   imports `medterm4ds.apps.fhir_api_helpers.expand_url_pattern` /
+   `expand_intensional` and `medterm4ds.services.discovery.search_names`.
+   If these symbols drift between medterm4ds releases the adapter
+   degrades to empty results with a WARNING — it does NOT crash the
+   resolver. Verify symbol stability at Phase 2 / Phase 3 time.
+6. **Phase 1.5 deferred.** Plumbing `terminology_endpoint=` through
+   `evaluate_measure(...)` and removing `terminologyEndpoint` from
+   `_UNSUPPORTED_TOP_LEVEL` in `fhir_server/parameters.py` is explicitly
+   out of Phase 1 scope. Phase 1.5 task will own that work.
+
+## medterm4ds Phase 2 — Auto-Coding Loader
+
+**Implemented:** 2026-07-03, target version 0.0.11.
+**FDD:** `docs/architecture/plans/FEATURE_MEDTERM4DS_PHASE2_AUTOCODING.md`.
+
+### Architecture
+
+- New module `fhir4ds/cql/loader/auto_coder.py` exposes `AutoCoder`,
+  `AutoCoderConfig`, and `augment_resource()`. The AutoCoder runs
+  text-only `CodeableConcept.text` through a Phase 1
+  `TerminologyEndpoint.search_batch`, takes the top-k ranked
+  `SearchResult` matches, and writes them back as Codings on the
+  same CodeableConcept — each carrying the structured
+  `autocoding_extension` and `userSelected=False`.
+- New module `fhir4ds/cql/loader/autocoding_extension.py` owns the
+  canonical URL
+  `http://fhir4ds.org/fhir/StructureDefinition/autocoding` plus
+  builder/parser/predicate for the 6-field extension (engine,
+  engine-version, search-mode, score, match-grade, index-version).
+- New module `fhir4ds/cql/loader/category.py` owns the
+  resource-type → category map and the NFKC text normalizer.
+- `FHIRDataLoader.__init__` gained `auto_coder: Optional[AutoCoder] = None`
+  (TYPE_CHECKING forward-quoted — zero runtime dependency). When
+  non-None, `augment_resource(resource)` fires at the top of both
+  `load_resource` and `load_resources`, BEFORE validate/serialize.
+  With `auto_coder=None` (the default), behavior is byte-identical
+  to pre-Phase-2 (INV-1 regression enforced by tests).
+- The `autocoding_cache` DuckDB table lives in the same connection
+  as the `resources` table (one transactional scope). PK is
+  `(text_hash, category, search_mode, index_version)` so an
+  index refresh changes the key and forces fresh searches (INV-8).
+  The cache stores the FULL pre-filter `result_json` so threshold /
+  top_k changes do not invalidate cache entries.
+
+### Integration Notes (initial fragile areas)
+
+1. **Opt-in / zero-behavior-change default.** With `auto_coder=None`
+   (the default), `FHIRDataLoader` is byte-identical to pre-Phase-2.
+   This is enforced by `test_inv1_*` regression tests. Reviewers: any
+   edit to `load_resource` / `load_resources` MUST preserve the
+   `if self._auto_coder is not None:` guard pattern.
+2. **Never raise from augment_resource (INV-9).** A bad resource MUST
+   NOT break the load pipeline. `augment_resource` wraps every internal
+   call in try/except Exception, logs WARNING, and returns the resource
+   unchanged. Reviewers: do NOT narrow this exception clause — it is
+   load-bearing.
+3. **Cache stores FULL pre-filter result_json.** Threshold and top_k
+   are applied AFTER cache lookup. If you change this, threshold/top_k
+   changes will silently invalidate cache entries and break INV-7.
+4. **Index-version probe-and-pin.** When
+   `AutoCoderConfig.index_version=None` (default), the AutoCoder does
+   a one-shot `endpoint.search_text("diabetes", "condition", mode=...)`
+   probe at first cache miss and pins the version for the rest of the
+   run. The probe is best-effort; on failure, "unknown" is pinned.
+5. **v1 path walker limitations.** The dotted-path walker is
+   dict-only; list-valued intermediates (e.g. `BodyStructure.image[]`)
+   return None and the resource is skipped silently. Phase 4 NER
+   pipeline will introduce list-aware path resolution.
+6. **Top-level plumbing deferred (Phase 2.5).** Wiring `auto_coder=`
+   through `evaluate_measure(...)` and `execute_cql(...)` is out of
+   Phase 2 scope, mirroring Phase 1's deferral pattern. Callers
+   construct `FHIRDataLoader` directly with the `auto_coder=` kwarg.
+7. **Cache row growth.** `autocoding_cache` grows unbounded across
+   runs. Acceptable for batch backfill. LRU eviction is a Phase 5
+   streaming-readiness concern.
+8. **Zero-dep guarantee preserved.** `AutoCoder` imports only stdlib
+   at runtime (`hashlib`, `json`, `logging`, `dataclasses`, `math`,
+   `typing`). The `TerminologyEndpoint` Protocol is imported only
+   under `TYPE_CHECKING`. No `httpx`, no `medterm4ds` in the loader
+   runtime path. Tested in `test_import_isolation.py` (Phase 1) +
+   zero-dep smoke check in the FDD validation commands.

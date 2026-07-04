@@ -1089,6 +1089,21 @@ class FunctionsMixin:
             arg = self._translate_structural_traversal_arg(func.arguments[0])
             return SQLFunctionCall(name="cqlDescendants", args=[arg])
 
+        # Phase 3 (medterm4ds subsumption): CQL §20.4 ``Descendents(Code)`` —
+        # when a closure table is loaded AND the argument statically resolves
+        # to a code reference, emit a SQL list of (system, code) pairs pulled
+        # from the closure table. When no closure table is loaded, fall
+        # through to the existing identity macro (preserves the byte-identical
+        # baseline — INV-1).
+        if (
+            name.lower() == "descendents"
+            and len(func.arguments) == 1
+            and getattr(self.context, "closure_table_loaded", False)
+        ):
+            list_result = self._translate_descendents_closure(func.arguments[0])
+            if list_result is not None:
+                return list_result
+
         # Step 2: Translate arguments. Literal/static definition aliases used
         # as conversion inputs should keep their scalar expression shape instead
         # of becoming patient-correlated CTE lookups.
@@ -1526,6 +1541,66 @@ class FunctionsMixin:
         else:
             logger.debug("Function '%s' from inlined library '%s' passed through to SQL", name, _inlining_lib)
         return SQLFunctionCall(name=name, args=args)
+
+    # ------------------------------------------------------------------
+    # Phase 3 (medterm4ds subsumption): closure-aware Descendents(Code).
+    # ------------------------------------------------------------------
+    def _translate_descendents_closure(self, code_arg_node) -> Optional[SQLExpression]:
+        """Emit a SQL list literal of descendant (system, code) pairs.
+
+        Returns ``None`` when ``code_arg_node`` does not statically resolve
+        to a code reference (caller falls back to the identity macro).
+
+        The returned SQL selects from ``terminology_closure`` and shapes the
+        output as a list of JSON structs so it composes with the rest of the
+        CQL ``Code`` / ``Concept`` machinery. Reflexive rows (the seed itself
+        being a descendant of itself) are inserted by the closure builder, so
+        the seed code is always present in the result set.
+        """
+        from ...translator.expressions._operators import (
+            _operand_is_type_specifier,
+        )
+
+        if _operand_is_type_specifier(code_arg_node):
+            return None
+
+        # Reuse the inline code-ref resolver from _operators.
+        code_info = self._resolve_code_ref_inline(code_arg_node)
+        if not code_info:
+            return None
+        entries = self._code_entries_static(code_info)
+        if not entries:
+            return None
+
+        from ...duckdb.udf.system_resolver import SystemResolver
+        from ..types import SQLRaw
+
+        # Build a UNION ALL of SELECTs across every seed code (Concept fan-out).
+        # Each branch returns descendant (system, code) pairs from the closure
+        # table; the outer query wraps them into a JSON list.
+        parts: list[str] = []
+        for entry in entries:
+            sys_url = entry.get("codesystem", "") or entry.get("system", "")
+            sys_n = SystemResolver.normalize(sys_url) or sys_url
+            code = entry.get("code", "")
+            # Use SQLLiteral.to_sql() for proper single-quote escaping (matches
+            # the pattern in _translate_code_is_op). Defense-in-depth: avoids
+            # the fragile manual chr(39)+chr(39) f-string pattern.
+            sys_sql = SQLLiteral(value=sys_n).to_sql()
+            code_sql = SQLLiteral(value=code).to_sql()
+            parts.append(
+                "SELECT _tc.descendant_system AS system, _tc.descendant_code AS code "
+                "FROM terminology_closure _tc "
+                f"WHERE _tc.ancestor_system = {sys_sql} "
+                f"AND _tc.ancestor_code = {code_sql}"
+            )
+        union = " UNION ALL ".join(parts)
+        # Wrap into a list of structs to match the CQL ``list<Code>`` shape.
+        sql = (
+            "(SELECT list(struct_pack(system := _d.system, code := _d.code)) "
+            f"FROM ({union}) _d)"
+        )
+        return SQLRaw(raw_sql=sql)
 
     # ── Aggregate pre-translate strategy ──────────────────────────────────
     def _translate_aggregate_pre(self, func: FunctionRef, translator) -> Optional[SQLExpression]:

@@ -570,8 +570,18 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
 
     # ============================================
     # Descendents - CQL §20.4: returns null for null input
-    # Full implementation would recursively collect all child properties;
-    # for null input, result is null.
+    #
+    # Phase 3 (medterm4ds subsumption) status:
+    #   This identity macro is preserved UNCHANGED so that conformance tests
+    #   that exercise ``descendents`` without a populated closure table
+    #   continue to pass byte-for-byte (INV-1: zero regression). When a
+    #   caller runs ``build_closure_table(...)`` and sets
+    #   ``closure_table_loaded=True`` on the translation context, the
+    #   translator intercepts ``Descendents(Code)`` in
+    #   ``_translate_function_ref`` and emits a SQL list pulled from the
+    #   ``terminology_closure`` table — this macro is NOT consulted in that
+    #   path. The macro continues to handle the structural-traversal form
+    #   ``(null).descendents()`` for null input.
     # ============================================
     con.execute(
         "CREATE MACRO IF NOT EXISTS descendents(x) AS "

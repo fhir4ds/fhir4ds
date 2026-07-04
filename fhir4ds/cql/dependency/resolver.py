@@ -1,13 +1,21 @@
 """Dependency resolver for CQL libraries and FHIR resources."""
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Set
+from typing import List, Optional, Dict, Any, Set, TYPE_CHECKING
 import json
 import base64
 import logging
 import re
 
 _logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    # Structural Protocol — only needed for type annotations. Never
+    # imported at runtime (avoids a circular import through the
+    # terminology subpackage, and keeps `import fhir4ds` cheap).
+    from ..terminology.endpoint import TerminologyEndpoint
 
 from .types import (
     DependencyType,
@@ -49,9 +57,14 @@ class DependencyResolver:
         self,
         paths: List[Path],
         cache_parsed: bool = True,
+        terminology_endpoint: "Optional[TerminologyEndpoint]" = None,
     ):
         self.paths = [Path(p) for p in paths]
         self.cache_parsed = cache_parsed
+        # Optional terminology endpoint used as a fallback when
+        # ``resolve_valueset`` cannot find a local match. ``None``
+        # preserves existing behavior exactly (INV-2).
+        self._terminology_endpoint = terminology_endpoint
 
         # Indexes
         self._libraries: Dict[str, ResolvedLibrary] = {}
@@ -330,8 +343,52 @@ class DependencyResolver:
         return None
 
     def resolve_valueset(self, url: str) -> Optional[ResolvedValueSet]:
-        """Resolve a valueset by URL."""
-        return self._valuesets.get(url)
+        """Resolve a valueset by URL.
+
+        Strategy:
+            1. Local index lookup (existing behavior, unchanged when
+               ``terminology_endpoint is None`` — INV-2).
+            2. On miss, if a :class:`TerminologyEndpoint` is configured,
+               call ``endpoint.expand(url)``. On success synthesize a
+               :class:`ResolvedValueSet` with
+               ``provenance="terminology_endpoint"`` and
+               ``source_path=None``.
+
+        Failure-mode scoping (INV-8):
+            Any exception from the endpoint is caught and degraded to a
+            WARNING log + ``None`` return. This graceful-degradation
+            contract applies ONLY to this fallback path. Direct callers
+            of ``endpoint.expand()`` should let exceptions propagate.
+        """
+        vs = self._valuesets.get(url)
+        if vs is not None:
+            return vs
+
+        if self._terminology_endpoint is None:
+            return None
+
+        try:
+            codes = self._terminology_endpoint.expand(url)
+        except Exception as e:  # INV-8: degrade to None + WARNING.
+            _logger.warning(
+                "terminology endpoint expand failed for %s: %s", url, e
+            )
+            return None
+
+        if not codes:
+            return None
+
+        return ResolvedValueSet(
+            url=url,
+            version=None,
+            name=None,
+            source_path=None,
+            codes=[
+                {"system": c.system, "code": c.code, "display": c.display}
+                for c in codes
+            ],
+            provenance="terminology_endpoint",
+        )
 
     def resolve_measure(self, url: str) -> Optional[ResolvedMeasure]:
         """Resolve a measure by URL."""

@@ -201,6 +201,8 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         _resolving_stack: Optional[Set[tuple]] = None,
         audit_mode: bool = False,
         audit_expressions: bool = True,
+        closure_loaded: bool = False,
+        terminology_endpoint: Optional[Any] = None,
     ) -> None:
         """
         Initialize the translator.
@@ -216,6 +218,16 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             audit_mode: If True, emit audit structs wrapping boolean results.
             audit_expressions: If False with audit_mode=True, only add _audit_item
                 to retrieve CTEs without wrapping expressions (population-only audit).
+            closure_loaded: Phase 3 (medterm4ds). When True, the translator's
+                ``SQLTranslationContext.closure_table_loaded`` flag is set so
+                ``~``, ``is`` and ``Descendents`` route through the
+                ``terminology_closure`` table. Default False preserves
+                byte-identical SQL output (INV-1).
+            terminology_endpoint: Phase 1.5 (medterm4ds) optional Phase 1
+                ``TerminologyEndpoint`` Protocol implementation. When supplied,
+                stored on the translator as ``self.terminology_endpoint`` for
+                use by future retrieve-time ValueSet expansion hooks. ``None``
+                (the default) preserves existing behavior byte-for-byte.
         """
         from .model_config import ModelConfig, DEFAULT_MODEL_CONFIG
         self._model_config = model_config or DEFAULT_MODEL_CONFIG
@@ -262,6 +274,15 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 self._context.set_audit_expressions(False)
         if connection:
             self._context.set_connection(connection)
+        if closure_loaded:
+            # Phase 3: opt-in flag for closure-table-aware SQL emission.
+            self._context.set_closure_table_loaded(True)
+
+        # Phase 1.5: optional terminology endpoint stored on the translator for
+        # future retrieve-time ValueSet expansion. ``None`` preserves existing
+        # behavior (INV-2). Typed as ``Any`` here to avoid importing the
+        # TerminologyEndpoint Protocol at runtime (zero-dep default, INV-1).
+        self.terminology_endpoint: Optional[Any] = terminology_endpoint
             
         # Initialize FHIR Schema Registry (Layer 1: base schema)
         from .fhir_schema import FHIRSchemaRegistry

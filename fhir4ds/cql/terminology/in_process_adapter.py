@@ -1,0 +1,307 @@
+"""In-process adapter for the terminology endpoint abstraction.
+
+Calls ``medterm4ds`` services directly without going through HTTP.
+``medterm4ds`` is imported lazily inside ``__init__`` so that simply
+having ``fhir4ds`` installed does NOT require ``medterm4ds``.
+
+The module body itself only imports stdlib + fhir4ds internals; the
+factory only imports this module when the user explicitly opts into
+``in_process`` mode.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, Optional
+
+from ..duckdb.udf.system_resolver import SystemResolver
+from .system_mappings import SOURCE_MNEMONIC_TO_URL
+from .types import CodeRef, SearchResult
+
+_logger = logging.getLogger(__name__)
+
+# ----------------------------------------------------------------------
+# medterm4ds source-mnemonic -> FHIR canonical URL translation.
+#
+# The map now lives in its canonical home at
+# :mod:`fhir4ds.cql.terminology.system_mappings` so it can be shared
+# with Phase 4's notes-pipeline without private-import coupling. The
+# backward-compat alias below keeps existing internal references working.
+# ----------------------------------------------------------------------
+
+#: Backward-compat alias for code that pre-dates the system_mappings
+#: refactor. New code should import ``SOURCE_MNEMONIC_TO_URL`` from
+#: :mod:`fhir4ds.cql.terminology.system_mappings`.
+_SOURCE_MNEMONIC_TO_URL: dict[str, str] = SOURCE_MNEMONIC_TO_URL
+
+
+class InProcessTerminologyEndpoint:
+    """Terminology adapter that calls ``medterm4ds`` in-process.
+
+    Holds a single shared ``DiscoveryEngine`` so the underlying DuckDB
+    connection and search indexes are constructed once per adapter
+    instance.
+
+    Args:
+        medterm4ds_db_path: Optional path to a medterm4ds DuckDB file.
+            When ``None`` medterm4ds's own default discovery applies.
+        search_index_dir: Optional directory of prebuilt search indexes.
+
+    Raises:
+        ImportError: ``medterm4ds`` is not installed. The factory wraps
+            this in a clearer install hint, but the same error is raised
+            here for callers that construct the adapter directly.
+    """
+
+    def __init__(
+        self,
+        medterm4ds_db_path: Optional[str] = None,
+        search_index_dir: Optional[str] = None,
+    ) -> None:
+        # Lazy import — INV-1 / INV-3: top-level `import fhir4ds` must
+        # never pull medterm4ds. Only opt-in callers pay this cost.
+        try:
+            from medterm4ds.engines.base import DiscoveryEngine  # type: ignore
+            from medterm4ds.engines.local_duckdb import (  # type: ignore
+                LocalDuckDBEngine,
+            )
+        except ImportError as e:  # pragma: no cover - exercised via factory tests
+            raise ImportError(
+                "medterm4ds is required for InProcessTerminologyEndpoint. "
+                "Install medterm4ds alongside fhir4ds-v2[terminology]."
+            ) from e
+
+        self._medterm4ds_db_path = medterm4ds_db_path
+        self._search_index_dir = search_index_dir
+
+        # Construct the shared engine. LocalDuckDBEngine accepts the
+        # same kwargs medterm4ds's own CLI uses; we forward only the
+        # paths the caller actually supplied.
+        engine_kwargs: dict[str, Any] = {}
+        if medterm4ds_db_path is not None:
+            engine_kwargs["db_path"] = medterm4ds_db_path
+        if search_index_dir is not None:
+            engine_kwargs["search_index_dir"] = search_index_dir
+        try:
+            self._engine: DiscoveryEngine = LocalDuckDBEngine(**engine_kwargs)
+        except TypeError:
+            # Engine signature drift: fall back to no-kwargs construction
+            # so a medterm4ds version that doesn't accept these kwargs
+            # still works. Phase 1 favors robustness over strictness.
+            self._engine = LocalDuckDBEngine()
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_system(system: Any) -> Optional[str]:
+        """Normalize a system value to its FHIR canonical URL (INV-5).
+
+        Two-pass normalization:
+        1. If ``system`` is a medterm4ds source mnemonic
+           (``SNOMEDCT_US``, ``RXNORM``, ``LNC``, ...), expand it to its
+           FHIR canonical URL. medterm4ds exposes ``code.source`` as a
+           UMLS mnemonic, not a URL, so without this pass CodeRef.system
+           would silently fail to join against valueset_codes rows that
+           use ``http://snomed.info/sct``.
+        2. Flow the result through ``SystemResolver.normalize`` so OID
+           and SNOMED module URL variants also reduce to canonical form.
+        Unknown mnemonics pass through unchanged with a DEBUG log line.
+        """
+        if system is None:
+            return None
+        s = str(system)
+        mapped = _SOURCE_MNEMONIC_TO_URL.get(s)
+        if mapped is None:
+            # Heuristic: medterm4ds source mnemonics are typically ALL-CAPS
+            # with no scheme. If it looks like a mnemonic (ALL-CAPS, no
+            # colon/slash) but isn't in the map, log for visibility.
+            if s.isupper() and "/" not in s and ":" not in s and len(s) > 2:
+                _logger.debug(
+                    "Unknown medterm4ds source mnemonic %r — passing through "
+                    "unchanged; add to _SOURCE_MNEMONIC_TO_URL if a FHIR "
+                    "canonical URL exists.",
+                    s,
+                )
+            mapped = s
+        return SystemResolver.normalize(mapped)
+
+    @classmethod
+    def _to_coderef(cls, system: Any, code: Any, display: Any) -> Optional[CodeRef]:
+        normalized_system = cls._normalize_system(system)
+        if normalized_system is None or code is None:
+            return None
+        return CodeRef(
+            system=normalized_system,
+            code=str(code),
+            display=str(display) if display is not None else None,
+        )
+
+    # ------------------------------------------------------------------
+    # Protocol surface
+    # ------------------------------------------------------------------
+
+    def expand(self, valueset_url: str) -> list[CodeRef]:
+        """Expand a ValueSet canonical URL via medterm4ds.
+
+        Implements the same three modes as the HTTP adapter (plain
+        canonical, ``fhir_vs`` shorthand, filter) by delegating to
+        medterm4ds's FHIR $expand logic.
+        """
+        # Imported lazily so module load stays cheap and isolated. If
+        # the helper symbol drifts between medterm4ds releases the
+        # resolver fallback path degrades to "no codes" gracefully.
+        try:
+            from medterm4ds.apps.fhir_api_helpers import (  # type: ignore
+                expand_url_pattern,
+            )
+        except ImportError:
+            _logger.warning(
+                "medterm4ds expand_url_pattern helper unavailable; "
+                "in_process.expand returns [] for %s",
+                valueset_url,
+            )
+            return []
+
+        try:
+            expanded = expand_url_pattern(self._engine, valueset_url, count=1000)
+            contains = expanded.get("expansion", {}).get("contains", []) if isinstance(
+                expanded, dict
+            ) else []
+        except Exception as e:  # pragma: no cover - medterm4ds drift guard
+            _logger.warning(
+                "in_process expand failed for %s: %s", valueset_url, e
+            )
+            return []
+
+        refs: list[CodeRef] = []
+        for item in contains:
+            ref = self._to_coderef(
+                item.get("system"), item.get("code"), item.get("display")
+            )
+            if ref is not None:
+                refs.append(ref)
+        return refs
+
+    def expand_intensional(self, value_set: dict) -> list[CodeRef]:
+        """Expand an intensional ValueSet via medterm4ds's compose-walk."""
+        try:
+            from medterm4ds.apps.fhir_api_helpers import (  # type: ignore
+                expand_intensional,
+            )
+        except ImportError:
+            _logger.warning(
+                "medterm4ds expand_intensional helper unavailable; "
+                "in_process.expand_intensional returns []"
+            )
+            return []
+
+        try:
+            expanded = expand_intensional(self._engine, value_set, count=1000)
+            contains = expanded.get("expansion", {}).get("contains", []) if isinstance(
+                expanded, dict
+            ) else []
+        except Exception as e:  # pragma: no cover - medterm4ds drift guard
+            _logger.warning("in_process expand_intensional failed: %s", e)
+            return []
+
+        refs: list[CodeRef] = []
+        for item in contains:
+            ref = self._to_coderef(
+                item.get("system"), item.get("code"), item.get("display")
+            )
+            if ref is not None:
+                refs.append(ref)
+        return refs
+
+    def search_text(
+        self,
+        query: str,
+        category: str,
+        *,
+        mode: str = "hybrid",
+    ) -> list[SearchResult]:
+        """Search terminology names via medterm4ds discovery service."""
+        # Imported lazily so module load stays cheap and isolated.
+        # Re-imported on every call so tests that monkeypatch
+        # medterm4ds.services.discovery.search_names take effect.
+        from medterm4ds.services.discovery import (  # type: ignore
+            search_names,
+        )
+
+        # Category maps to medterm4ds source filter (e.g. "condition" -> SNOMEDCT_US).
+        sources = _category_to_sources(category)
+        try:
+            raw_results = search_names(
+                query,
+                engine=self._engine,
+                sources=sources,
+                limit=25,
+            )
+        except Exception as e:  # pragma: no cover - medterm4ds drift guard
+            _logger.warning("in_process search_text failed for %r: %s", query, e)
+            return []
+
+        results: list[SearchResult] = []
+        for r in raw_results:
+            code_obj = getattr(r, "code", None)
+            system = getattr(code_obj, "source", None) if code_obj is not None else None
+            ref = self._to_coderef(
+                system,
+                getattr(code_obj, "code", None),
+                getattr(r, "name", None),
+            )
+            if ref is None:
+                continue
+            results.append(
+                SearchResult(
+                    system=ref.system,
+                    code=ref.code,
+                    display=ref.display,
+                    score=float(getattr(r, "score", 0.0)),
+                    match_grade=str(getattr(r, "match_grade", "ambiguous")),
+                    search_mode=mode,
+                    index_version=getattr(r, "index_version", None),
+                )
+            )
+        return results
+
+    def search_batch(
+        self,
+        queries: list[tuple[str, str]],
+        *,
+        mode: str = "hybrid",
+    ) -> list[list[SearchResult]]:
+        """Sequential per-query loop over ``search_text``."""
+        return [self.search_text(q, cat, mode=mode) for q, cat in queries]
+
+
+# ----------------------------------------------------------------------
+# Category mapping
+# ----------------------------------------------------------------------
+
+# Coarse category -> medterm4ds source mnemonic. This is intentionally
+# permissive: unknown categories fall through to None, which medterm4ds
+# interprets as "all sources".
+_CATEGORY_TO_SOURCES: dict[str, tuple[str, ...]] = {
+    "condition": ("SNOMEDCT_US",),
+    "medication": ("RXNORM",),
+    "lab": ("LNC",),
+    "loinc": ("LNC",),
+    "snomed": ("SNOMEDCT_US",),
+    "rxnorm": ("RXNORM",),
+    "icd10": ("ICD10CM",),
+    "icd10cm": ("ICD10CM",),
+}
+
+
+def _category_to_sources(category: str) -> Optional[tuple[str, ...]]:
+    """Map a coarse category hint to medterm4ds source mnemonics.
+
+    Returns ``None`` for unknown categories — medterm4ds interprets
+    ``None`` as "search all sources".
+    """
+    if not category:
+        return None
+    return _CATEGORY_TO_SOURCES.get(category.lower())

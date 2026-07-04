@@ -561,6 +561,18 @@ from ...translator.fhirpath_builder import (
 )
 
 
+def _operand_is_type_specifier(node: Any) -> bool:
+    """Phase 3 helper: True when ``node`` is a CQL NamedTypeSpecifier.
+
+    Used by the ``is``-operator branch to distinguish the type-check form
+    (``Order is MedicationRequest``) from the code-vs-code subsumption form
+    (``Code 'X' from S is Code 'Y' from S``). The type-check form must stay
+    routed through the existing type-check translator; the code-vs-code form
+    routes through the closure table when loaded.
+    """
+    return isinstance(node, NamedTypeSpecifier)
+
+
 def _is_quantity_expression(expr: SQLExpression) -> bool:
     """Check if an SQL expression is likely a Quantity value.
 
@@ -2241,6 +2253,19 @@ class OperatorsMixin:
             return self._translate_contains_op(operator, left, right, expr, boolean_context)
         if operator == "in":
             return self._translate_in_op(operator, left, right, expr, boolean_context)
+        # Phase 3 (medterm4ds subsumption): intercept code-vs-code `is` and
+        # `is not` BEFORE the type-check / `is null` fallthrough at line 2244.
+        # CQL §5.6 between two code-typed operands means "the left code is a
+        # member of the right code's subsumption closure" (directional). When
+        # no closure table is loaded, we fall back to a literal
+        # (system, code) equality (preserving the pre-Phase-3 intent for
+        # case-sensitive code equality that previously collapsed to IS NULL).
+        if operator in ("is", "is not") and not _operand_is_type_specifier(
+            expr.right
+        ):
+            code_is_result = self._translate_code_is_op(expr, negated=(operator == "is not"))
+            if code_is_result is not None:
+                return code_is_result
         if operator.startswith("is"):
             # IS NULL / IS NOT NULL
             if operator == "is null" or operator == "is":
@@ -5354,6 +5379,141 @@ class OperatorsMixin:
             return False
         return True
 
+    def _translate_code_is_op(self, expr, *, negated: bool) -> Optional[SQLExpression]:
+        """Phase 3: code-vs-code ``is`` / ``is not`` operator.
+
+        Returns ``None`` if either operand does not statically resolve to a
+        code reference (the caller falls through to the existing
+        ``IS NULL`` / ``IS NOT NULL`` behavior). When both resolve:
+
+        * Closure table loaded: emit
+          ``EXISTS (... ancestor=Y, descendant=X ...)`` per FDD §3d.
+        * Closure table NOT loaded: emit literal
+          ``(X_sys, X_code) = (Y_sys, Y_code)`` (or ``!=`` for negated).
+
+        Direction (INV-6): right subsumes left. The reflexive row inserted
+        by the closure builder means ``X is X`` returns True.
+        """
+        left_info = self._resolve_code_ref_inline(expr.left)
+        right_info = self._resolve_code_ref_inline(expr.right)
+        if not left_info or not right_info:
+            return None
+
+        left_entries = self._code_entries_static(left_info)
+        right_entries = self._code_entries_static(right_info)
+        if not left_entries or not right_entries:
+            return None
+
+        from ...duckdb.udf.system_resolver import SystemResolver
+
+        # Build a disjunction across every (left, right) entry pair (Concept
+        # operands may carry multiple codes). Singleton-vs-singleton is the
+        # overwhelmingly common case.
+        ors: List[SQLExpression] = []
+        for le in left_entries:
+            for re_ in right_entries:
+                l_sys = SystemResolver.normalize(le.get("codesystem", "")) or le.get(
+                    "codesystem", ""
+                )
+                l_code = le.get("code", "")
+                r_sys = SystemResolver.normalize(re_.get("codesystem", "")) or re_.get(
+                    "codesystem", ""
+                )
+                r_code = re_.get("code", "")
+
+                l_sys_lit = SQLLiteral(value=l_sys)
+                l_code_lit = SQLLiteral(value=l_code)
+                r_sys_lit = SQLLiteral(value=r_sys)
+                r_code_lit = SQLLiteral(value=r_code)
+
+                if getattr(self.context, "closure_table_loaded", False):
+                    # Direction: right subsumes left (ancestor=Y, descendant=X).
+                    l_sys_sql = l_sys_lit.to_sql()
+                    l_code_sql = l_code_lit.to_sql()
+                    r_sys_sql = r_sys_lit.to_sql()
+                    r_code_sql = r_code_lit.to_sql()
+                    pair_match: SQLExpression = SQLRaw(
+                        raw_sql=(
+                            "EXISTS (SELECT 1 FROM terminology_closure _tc "
+                            f"WHERE _tc.ancestor_system = {r_sys_sql} "
+                            f"AND _tc.ancestor_code = {r_code_sql} "
+                            f"AND _tc.descendant_system = {l_sys_sql} "
+                            f"AND _tc.descendant_code = {l_code_sql})"
+                        )
+                    )
+                else:
+                    # Literal-match fallback: (L_sys, L_code) = (R_sys, R_code).
+                    pair_match = SQLBinaryOp(
+                        operator="AND",
+                        left=SQLBinaryOp(operator="=", left=l_sys_lit, right=r_sys_lit),
+                        right=SQLBinaryOp(operator="=", left=l_code_lit, right=r_code_lit),
+                    )
+                ors.append(pair_match)
+
+        if not ors:
+            return None
+        result: SQLExpression = ors[0]
+        for next_clause in ors[1:]:
+            result = SQLBinaryOp(operator="OR", left=result, right=next_clause)
+        if negated:
+            result = SQLUnaryOp(operator="NOT", operand=result)
+        return result
+
+    def _resolve_code_ref_inline(self, operand_ast) -> Optional[dict]:
+        """Phase 3 inline code-ref resolver used by ``_translate_code_is_op``.
+
+        This is a thin wrapper around the existing
+        :meth:`_static_clinical_value_object` so the ``is`` operator can
+        statically resolve both CodeSelector and Identifier-with-Code-def
+        operands. Returns ``None`` when the operand is not a compile-time
+        code reference (query alias, runtime parameter, etc.).
+        """
+        if isinstance(operand_ast, CodeSelector):
+            system_url = self.context.codesystems.get(
+                operand_ast.system, operand_ast.system
+            )
+            return {
+                "code": operand_ast.code,
+                "codesystem": system_url,
+                "display": operand_ast.display,
+            }
+        if isinstance(operand_ast, Identifier):
+            if self.context.is_alias(operand_ast.name):
+                return None
+            info = self.context.get_code(operand_ast.name)
+            if info is not None:
+                return info
+        static_value = self._static_clinical_value_object(operand_ast)
+        if static_value:
+            if isinstance(static_value.get("codes"), list):
+                return {
+                    "codes": static_value.get("codes", []),
+                    "display": static_value.get("display"),
+                    "is_concept": True,
+                }
+            if static_value.get("code"):
+                return {
+                    "code": static_value.get("code", ""),
+                    "codesystem": static_value.get("system", ""),
+                    "version": static_value.get("version"),
+                    "display": static_value.get("display"),
+                }
+        return None
+
+    @staticmethod
+    def _code_entries_static(code_info: Optional[dict]) -> List[dict]:
+        """Mirror of the inline ``_code_entries`` from the equivalence path,
+        exposed as a static helper for ``_translate_code_is_op``.
+        """
+        if not isinstance(code_info, dict):
+            return []
+        if code_info.get("is_concept") or isinstance(code_info.get("codes"), list):
+            entries = code_info.get("codes") or []
+            return [entry for entry in entries if isinstance(entry, dict)]
+        if code_info.get("code"):
+            return [code_info]
+        return []
+
     def _translate_equivalence_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
         is_negated = operator == "!~"
@@ -5504,11 +5664,93 @@ class OperatorsMixin:
             left_keys = {_code_key(code) for code in left_codes}
             return any(_code_key(code) in left_keys for code in right_codes)
 
+        def _emit_closure_aware_codes_equivalent(
+            left_info, right_info, negated: bool
+        ) -> SQLExpression:
+            """Phase 3: emit SQL that OR's literal match with bidirectional
+            closure membership. Falls back to the byte-identical literal
+            SQLLiteral form when no closure table is loaded.
+            """
+            left_entries = _code_entries(left_info)
+            right_entries = _code_entries(right_info)
+            if not left_entries or not right_entries:
+                return SQLLiteral(value=negated)
+
+            # Build disjunction of (literal OR closure-EXISTS) over every
+            # (left_code, right_code) pair. For singleton-vs-singleton (the
+            # overwhelmingly common case), this is a single OR-of-3.
+            from ...duckdb.udf.system_resolver import SystemResolver
+
+            ors: list[SQLExpression] = []
+            for le in left_entries:
+                for re_ in right_entries:
+                    l_sys, l_code = _code_key(le)
+                    r_sys, r_code = _code_key(re_)
+                    l_sys_n = SystemResolver.normalize(l_sys) or l_sys
+                    r_sys_n = SystemResolver.normalize(r_sys) or r_sys
+                    l_sys_sql = SQLLiteral(value=l_sys_n).to_sql()
+                    l_code_sql = SQLLiteral(value=l_code).to_sql()
+                    r_sys_sql = SQLLiteral(value=r_sys_n).to_sql()
+                    r_code_sql = SQLLiteral(value=r_code).to_sql()
+
+                    l_sys_lit = SQLLiteral(value=l_sys_n)
+                    l_code_lit = SQLLiteral(value=l_code)
+                    r_sys_lit = SQLLiteral(value=r_sys_n)
+                    r_code_lit = SQLLiteral(value=r_code)
+
+                    # Literal match: (L_sys, L_code) = (R_sys, R_code)
+                    literal_match = SQLBinaryOp(
+                        operator="AND",
+                        left=SQLBinaryOp(operator="=", left=l_sys_lit, right=r_sys_lit),
+                        right=SQLBinaryOp(operator="=", left=l_code_lit, right=r_code_lit),
+                    )
+
+                    # Bidirectional closure: L subsumes R OR R subsumes L.
+                    l_anc_r = SQLRaw(
+                        raw_sql=(
+                            "EXISTS (SELECT 1 FROM terminology_closure _tc "
+                            f"WHERE _tc.ancestor_system = {l_sys_sql} "
+                            f"AND _tc.ancestor_code = {l_code_sql} "
+                            f"AND _tc.descendant_system = {r_sys_sql} "
+                            f"AND _tc.descendant_code = {r_code_sql})"
+                        )
+                    )
+                    r_anc_l = SQLRaw(
+                        raw_sql=(
+                            "EXISTS (SELECT 1 FROM terminology_closure _tc "
+                            f"WHERE _tc.ancestor_system = {r_sys_sql} "
+                            f"AND _tc.ancestor_code = {r_code_sql} "
+                            f"AND _tc.descendant_system = {l_sys_sql} "
+                            f"AND _tc.descendant_code = {l_code_sql})"
+                        )
+                    )
+                    pair_match = SQLBinaryOp(
+                        operator="OR",
+                        left=SQLBinaryOp(operator="OR", left=literal_match, right=l_anc_r),
+                        right=r_anc_l,
+                    )
+                    ors.append(pair_match)
+
+            if not ors:
+                return SQLLiteral(value=negated)
+            result: SQLExpression = ors[0]
+            for next_clause in ors[1:]:
+                result = SQLBinaryOp(operator="OR", left=result, right=next_clause)
+            if negated:
+                result = SQLUnaryOp(operator="NOT", operand=result)
+            return result
+
         # QA-010: When both sides are compile-time code references,
         # compare directly instead of routing through the terminology translator.
         _left_code = _resolve_code_ref(expr.left)
         _right_code = _resolve_code_ref(expr.right)
         if _left_code and _right_code:
+            # Phase 3: route through the closure table when populated so
+            # subsumption is honored; otherwise byte-identical fallback.
+            if getattr(self.context, "closure_table_loaded", False):
+                return _emit_closure_aware_codes_equivalent(
+                    _left_code, _right_code, is_negated
+                )
             _match = _codes_equivalent(_left_code, _right_code)
             return SQLLiteral(value=_match != is_negated)
 

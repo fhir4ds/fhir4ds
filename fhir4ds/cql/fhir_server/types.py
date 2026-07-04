@@ -125,6 +125,7 @@ class CQLRequest:
 
     expression: str
     parameters: tuple[InputParameter, ...] = ()
+    terminology_endpoint_url: str | None = None
 
 
 @dataclass(frozen=True)

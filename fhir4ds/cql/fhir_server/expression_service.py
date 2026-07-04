@@ -46,7 +46,10 @@ def evaluate_cql_request(request: CQLRequest, config: CQLServerConfig | None = N
     try:
         conn = duckdb.connect()
         register_udfs(conn, use_cpp_extensions=config.use_cpp_extensions)
-        translator = CQLToSQLTranslator(connection=conn)
+        translator = CQLToSQLTranslator(
+            connection=conn,
+            terminology_endpoint=_build_endpoint(request.terminology_endpoint_url),
+        )
         sql = translator.translate_library_to_sql(library, final_definition="return")
         rows = conn.execute(sql).fetchall()
         if not rows:
@@ -89,6 +92,22 @@ def _synthetic_library(request: CQLRequest, config: CQLServerConfig) -> str:
         )
     lines.extend(['define "return":', f"  {request.expression}"])
     return "\n".join(lines)
+
+
+def _build_endpoint(url: str | None) -> Any:
+    """Build a TerminologyEndpoint from the FHIR ``terminologyEndpoint`` URL.
+
+    Imported lazily so the zero-dep default is preserved (``httpx`` and the
+    adapter modules are only imported when a caller actually supplies a
+    URL). Returns ``None`` for ``disabled`` or absent URLs.
+    """
+    if not url:
+        return None
+    # Import directly from http_adapter (NOT from terminology/__init__) so the
+    # adapter module's own lazy httpx import keeps `import fhir4ds` cheap.
+    from fhir4ds.cql.terminology.http_adapter import HTTPTerminologyEndpoint
+
+    return HTTPTerminologyEndpoint(url)
 
 
 def _diagnostics(message: str, debug: bool, expression: str) -> str:

@@ -28,13 +28,28 @@ class ResolvedLibrary:
 
 @dataclass
 class ResolvedValueSet:
-    """A resolved ValueSet with expansion."""
+    """A resolved ValueSet with expansion.
+
+    Attributes:
+        url: Canonical ValueSet URL.
+        source_path: Filesystem path the ValueSet was loaded from. May be
+            ``None`` when ``provenance != "local_file"`` (e.g. when the
+            ValueSet was expanded on demand from a terminology endpoint).
+        version: Optional ValueSet version.
+        name: Optional ValueSet name.
+        codes: List of ``{"system", "code", "display"}`` dicts. This is
+            the only field consumed by ``loader.load_valuesets()``.
+        provenance: Origin marker. ``"local_file"`` (default) for files
+            indexed by :class:`DependencyResolver`; ``"terminology_endpoint"``
+            for on-demand expansions returned by a TerminologyEndpoint.
+    """
     url: str
-    source_path: Path
+    source_path: Optional[Path]
     version: Optional[str] = None
     name: Optional[str] = None
     codes: List[Dict[str, str]] = field(default_factory=list)
     # Each code: {"system": "...", "code": "...", "display": "..."}
+    provenance: str = "local_file"
 
 
 @dataclass

@@ -72,6 +72,11 @@ from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
 from .paths import get_resource_path
 
+if TYPE_CHECKING:
+    # Structural Protocol — only needed for type annotations. Imported under
+    # TYPE_CHECKING so the default `import fhir4ds` path stays zero-dep.
+    from .terminology.endpoint import TerminologyEndpoint
+
 _logger = logging.getLogger(__name__)
 
 __version__ = "0.0.10"
@@ -289,6 +294,8 @@ def evaluate_measure(
     verbose: bool = False,
     include_paths: Optional[List[str]] = None,
     audit_mode: str = "none",
+    terminology_endpoint: Optional["TerminologyEndpoint"] = None,
+    closure_loaded: bool = False,
 ) -> Any:
     """
     Evaluate a CQL measure against all patients in a single query.
@@ -314,6 +321,18 @@ def evaluate_measure(
                       Used to resolve include statements in the main library.
         audit_mode: Controls audit granularity: "none" (default), "population",
                    or "full".
+        terminology_endpoint: Optional Phase 1 medterm4ds terminology endpoint
+                   (a ``TerminologyEndpoint`` Protocol implementation such as
+                   ``HTTPTerminologyEndpoint``). When supplied, ValueSet
+                   expansion falls back to the endpoint for URLs that are not
+                   found locally. ``None`` (the default) preserves the
+                   existing local-only resolution path byte-for-byte.
+        closure_loaded: Phase 3 medterm4ds subsumption flag. When ``True``,
+                   the generated SQL routes ``~``, ``is`` and ``Descendents``
+                   operators through the ``terminology_closure`` DuckDB table
+                   (which the caller must have already loaded via
+                   ``build_closure_table``). Default ``False`` preserves the
+                   existing literal-match SQL output byte-for-byte.
 
     Returns:
         DuckDB relation with one row per patient and columns per output_columns.
@@ -430,6 +449,8 @@ def evaluate_measure(
         connection=conn,
         audit_mode=audit_mode in {"population", "full"},
         audit_expressions=audit_mode == "full",
+        closure_loaded=closure_loaded,
+        terminology_endpoint=terminology_endpoint,
     )
 
     # Set up library loader if include_paths provided
@@ -489,6 +510,8 @@ def evaluate_measure_legacy(
     dependencies: Optional[List[Path]] = None,
     connection=None,
     verbose: bool = False,
+    terminology_endpoint: Optional["TerminologyEndpoint"] = None,
+    closure_loaded: bool = False,
 ) -> "pandas.DataFrame":
     """
     Legacy high-level API: Evaluate a CQL measure against FHIR data.
@@ -503,6 +526,15 @@ def evaluate_measure_legacy(
         dependencies: Paths to dependent CQL libraries and ValueSet resources.
         connection: Optional existing DuckDB connection.
         verbose: If True, print generated SQL.
+        terminology_endpoint: Optional Phase 1 medterm4ds terminology endpoint.
+                   When supplied, the ``DependencyResolver`` falls back to the
+                   endpoint for ValueSet URLs that are not found in
+                   ``dependencies``. ``None`` preserves existing behavior.
+        closure_loaded: Phase 3 medterm4ds subsumption flag. When ``True``,
+                   generated SQL routes ``~``, ``is`` and ``Descendents``
+                   through the ``terminology_closure`` table (which the caller
+                   must have already loaded). Default ``False`` preserves the
+                   existing literal-match SQL output byte-for-byte.
 
     Returns:
         DataFrame with one row per patient, one column per define.
@@ -533,7 +565,14 @@ def evaluate_measure_legacy(
     register_udfs(connection)
 
     # Set up resolver
-    resolver = DependencyResolver(paths=dependencies) if dependencies else None
+    resolver = (
+        DependencyResolver(
+            paths=dependencies,
+            terminology_endpoint=terminology_endpoint,
+        )
+        if dependencies
+        else None
+    )
 
     # Load CQL
     if isinstance(cql_source, Path) or (isinstance(cql_source, str) and cql_source.endswith(".cql")):
@@ -568,7 +607,11 @@ def evaluate_measure_legacy(
             loader.load_valuesets(valuesets)
 
     # Translate using the new translator
-    translator = CQLToSQLTranslator(connection=connection)
+    translator = CQLToSQLTranslator(
+        connection=connection,
+        closure_loaded=closure_loaded,
+        terminology_endpoint=terminology_endpoint,
+    )
     sql = translator.translate_library_to_population_sql(
         library=library,
         output_columns=None,  # Include all definitions
