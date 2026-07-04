@@ -69,15 +69,18 @@ def medterm4ds_url() -> str:
 def test_phase1_expand_valueset_via_http(medterm4ds_url: str) -> None:
     """HTTPTerminologyEndpoint.expand() returns CodeRefs from real medterm4ds.
 
-    URL choice: ``http://snomed.info/sct?fhir_vs=isa/73211009`` is the
+    URL choice: ``http://snomed.info/sct/73211009?fhir_vs=isa`` is the
     FHIR R4 intensional ValueSet form for "descendents of Diabetes
-    Mellitus (SNOMED 73211009)". medterm4ds' ``fhir_api.py`` documents
-    this exact ``?fhir_vs=isa/<code>`` pattern as supported.
+    Mellitus (SNOMED 73211009)". medterm4ds's ``_expand_url_pattern``
+    expects the SNOMED code in the path and the mode in the query —
+    NOT the older ``?fhir_vs=isa/<code>`` form.
     """
     from fhir4ds.cql.terminology.http_adapter import HTTPTerminologyEndpoint
 
-    endpoint = HTTPTerminologyEndpoint(base_url=medterm4ds_url)
-    codes = endpoint.expand("http://snomed.info/sct?fhir_vs=isa/73211009")
+    # Use a longer timeout than the 5s default — SNOMED hierarchy expansion
+    # is a heavy operation that legitimately takes 10-30s on a cold cache.
+    endpoint = HTTPTerminologyEndpoint(base_url=medterm4ds_url, timeout_seconds=60.0)
+    codes = endpoint.expand("http://snomed.info/sct/73211009?fhir_vs=isa")
 
     assert isinstance(codes, list)
     if len(codes) == 0:
@@ -111,7 +114,7 @@ def test_phase2_autocoder_loads_and_codes(medterm4ds_url: str) -> None:
         min_match_grade="probable",  # loosen to ensure hits
         top_k=3,
     )
-    auto_coder = AutoCoder(endpoint=endpoint, config=config, duckdb_connection=conn)
+    auto_coder = AutoCoder(endpoint, conn, config=config)
     loader = FHIRDataLoader(conn, auto_coder=auto_coder)
 
     resource = {
@@ -167,7 +170,8 @@ def test_phase3_closure_table_built_and_subsumption_works(medterm4ds_url: str) -
     from fhir4ds.cql.terminology.closure import build_closure_table
     from fhir4ds.cql.terminology.http_adapter import HTTPTerminologyEndpoint
 
-    endpoint = HTTPTerminologyEndpoint(base_url=medterm4ds_url)
+    # Longer timeout for SNOMED hierarchy expansion on a cold cache.
+    endpoint = HTTPTerminologyEndpoint(base_url=medterm4ds_url, timeout_seconds=60.0)
     conn = duckdb.connect(":memory:")
 
     cql_source = """

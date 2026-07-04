@@ -14,7 +14,11 @@ Env vars:
     ``FHIR4DS_TERMINOLOGY_MODE``:
         ``disabled`` (default) | ``http`` | ``in_process``.
     ``FHIR4DS_TERMINOLOGY_URL``:
-        Sidecar base URL (HTTP mode).
+        Sidecar **FHIR root** URL for HTTP mode — the URL at which the
+        server's FHIR R4 API begins. For medterm4ds this is typically
+        ``http://127.0.0.1:8001/fhir`` (dev sidecar) or
+        ``http://127.0.0.1:7860/fhir`` (Docker container). Adapter
+        paths are joined directly, so do NOT include a trailing slash.
     ``FHIR4DS_TERMINOLOGY_TIMEOUT``:
         HTTP timeout in seconds (default ``5.0``).
     ``FHIR4DS_TERMINOLOGY_DB``:

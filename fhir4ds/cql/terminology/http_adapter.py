@@ -22,9 +22,13 @@ from .types import CodeRef, SearchResult
 
 _logger = logging.getLogger(__name__)
 
-# FHIR R4 paths on a medterm4ds sidecar.
-_VALUESET_EXPAND_PATH = "/fhir/ValueSet/$expand"
-_CODESYSTEM_SEARCH_PATH = "/fhir/CodeSystem/$search"
+# FHIR R4 paths relative to the sidecar's FHIR root. The caller provides
+# the FHIR root as `base_url` (e.g. "http://127.0.0.1:8001/fhir"), and
+# these paths are joined directly — so they must NOT include the FHIR
+# prefix themselves. Doubling the prefix here would produce
+# ".../fhir/fhir/ValueSet/$expand" 404s against a real sidecar.
+_VALUESET_EXPAND_PATH = "/ValueSet/$expand"
+_CODESYSTEM_SEARCH_PATH = "/CodeSystem/$search"
 
 
 class HTTPTerminologyEndpoint:
@@ -35,8 +39,12 @@ class HTTPTerminologyEndpoint:
     ``CodeSystem $search`` extension.
 
     Args:
-        base_url: Sidecar root URL (e.g. ``http://127.0.0.1:8001``).
-            Trailing slashes are stripped.
+        base_url: Sidecar **FHIR root** URL — i.e. the URL at which the
+            server's FHIR R4 API begins (e.g. ``http://127.0.0.1:8001/fhir``
+            or ``http://127.0.0.1:7860/fhir`` for the medterm4ds Docker
+            container). Adapter paths like ``/ValueSet/$expand`` are
+            joined directly to this base, so do NOT include a trailing
+            slash. Trailing slashes are stripped automatically.
         timeout_seconds: Bounded HTTP timeout for every request. Defaults
             to 5.0 seconds. Must be a finite positive float.
     """
@@ -176,7 +184,7 @@ class HTTPTerminologyEndpoint:
     # ------------------------------------------------------------------
 
     def expand(self, valueset_url: str) -> list[CodeRef]:
-        """GET /fhir/ValueSet/$expand?url=<valueset_url>."""
+        """GET <base_url>/ValueSet/$expand?url=<valueset_url>."""
         url = f"{self._base_url}{_VALUESET_EXPAND_PATH}"
         with self._client() as client:
             response = client.get(url, params={"url": valueset_url})
@@ -185,7 +193,7 @@ class HTTPTerminologyEndpoint:
         return self._contains_to_coderefs(self._parse_contains(payload))
 
     def expand_intensional(self, value_set: dict) -> list[CodeRef]:
-        """POST /fhir/ValueSet/$expand with an intensional ValueSet body."""
+        """POST <base_url>/ValueSet/$expand with an intensional ValueSet body."""
         url = f"{self._base_url}{_VALUESET_EXPAND_PATH}"
         with self._client() as client:
             response = client.post(url, json=value_set)
@@ -200,7 +208,7 @@ class HTTPTerminologyEndpoint:
         *,
         mode: str = "hybrid",
     ) -> list[SearchResult]:
-        """GET /fhir/CodeSystem/$search?<query, category, mode>."""
+        """GET <base_url>/CodeSystem/$search?<query, category, mode>."""
         url = f"{self._base_url}{_CODESYSTEM_SEARCH_PATH}"
         params = {
             "query": query,

@@ -57,9 +57,13 @@ class _StubEndpoint:
 
     def expand(self, valueset_url: str) -> List[CodeRef]:
         self.calls.append(("expand", valueset_url))
-        # SNOMED ?fhir_vs=isa/{code}
-        if "?fhir_vs=isa/" in valueset_url:
-            code = valueset_url.rsplit("/", 1)[-1]
+        # SNOMED URL form: http://snomed.info/sct/{code}?fhir_vs=isa
+        # (code in path, mode in query — matches medterm4ds's
+        # _expand_url_pattern parser.)
+        if "snomed.info/sct/" in valueset_url and "fhir_vs=isa" in valueset_url:
+            # Pull code from the path between /sct/ and ?
+            path_part = valueset_url.split("snomed.info/sct/", 1)[-1]
+            code = path_part.split("?", 1)[0]
             if f"http://snomed.info/sct|{code}" in self.fail_seeds:
                 raise RuntimeError(f"stub failure for SNOMED {code}")
             return list(self.snomed.get(code, []))
@@ -157,7 +161,7 @@ def test_empty_ast_noop(con):
 
 
 def test_descendents_snomed_fastpath(con):
-    """Descendents(Code) routes through SNOMED ``?fhir_vs=isa/`` fast-path."""
+    """Descendents(Code) routes through SNOMED ``/sct/{code}?fhir_vs=isa`` fast-path."""
     cql = """
     library Diab version '1.0'
     using FHIR version '4.0.1'
@@ -182,7 +186,7 @@ def test_descendents_snomed_fastpath(con):
     # Confirm the URL form.
     expand_calls = [c for c in endpoint.calls if c[0] == "expand"]
     assert len(expand_calls) == 1
-    assert expand_calls[0][1] == "http://snomed.info/sct?fhir_vs=isa/73211009"
+    assert expand_calls[0][1] == "http://snomed.info/sct/73211009?fhir_vs=isa"
     # Confirm rows.
     rows = con.execute(
         "SELECT ancestor_code, descendant_code FROM terminology_closure "

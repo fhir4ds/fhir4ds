@@ -81,8 +81,8 @@ class _MockClient:
 
 
 def test_constructor_strips_trailing_slash():
-    adapter = HTTPTerminologyEndpoint("http://localhost:8001/", timeout_seconds=3.0)
-    assert adapter._base_url == "http://localhost:8001"
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir/", timeout_seconds=3.0)
+    assert adapter._base_url == "http://localhost:8001/fhir"
 
 
 def test_constructor_requires_base_url():
@@ -92,15 +92,15 @@ def test_constructor_requires_base_url():
 
 def test_constructor_requires_finite_timeout():
     with pytest.raises(ValueError, match="positive float"):
-        HTTPTerminologyEndpoint("http://localhost:8001", timeout_seconds=0)
+        HTTPTerminologyEndpoint("http://localhost:8001/fhir", timeout_seconds=0)
     with pytest.raises(ValueError, match="positive float"):
-        HTTPTerminologyEndpoint("http://localhost:8001", timeout_seconds=-1)
+        HTTPTerminologyEndpoint("http://localhost:8001/fhir", timeout_seconds=-1)
 
 
 def test_constructor_rejects_none_timeout():
     """INV-6: no infinite hangs."""
     with pytest.raises(ValueError, match="positive float"):
-        HTTPTerminologyEndpoint("http://localhost:8001", timeout_seconds=None)  # type: ignore[arg-type]
+        HTTPTerminologyEndpoint("http://localhost:8001/fhir", timeout_seconds=None)  # type: ignore[arg-type]
 
 
 # ----------------------------------------------------------------------
@@ -114,7 +114,7 @@ def test_expand_invokes_get_with_canonical_url():
     )
     response = _MockResponse(payload)
     records: list[tuple[str, str, dict]] = []
-    adapter = HTTPTerminologyEndpoint("http://localhost:8001", timeout_seconds=5.0)
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir", timeout_seconds=5.0)
     with patch.object(adapter, "_client", return_value=_MockClient(response, records)):
         refs = adapter.expand("http://example.org/ValueSet/Foo")
     assert refs == [CodeRef("http://snomed.info/sct", "73211009", "Diabetes")]
@@ -139,7 +139,7 @@ def test_expand_normalizes_snomed_module_url():
     )
     response = _MockResponse(payload)
     records: list[tuple[str, str, dict]] = []
-    adapter = HTTPTerminologyEndpoint("http://localhost:8001")
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
     with patch.object(adapter, "_client", return_value=_MockClient(response, records)):
         refs = adapter.expand("http://example.org/ValueSet/Foo")
     assert len(refs) == 1
@@ -150,7 +150,7 @@ def test_expand_empty_payload_returns_empty_list():
     payload = _expand_payload([])
     response = _MockResponse(payload)
     records: list[tuple[str, str, dict]] = []
-    adapter = HTTPTerminologyEndpoint("http://localhost:8001")
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
     with patch.object(adapter, "_client", return_value=_MockClient(response, records)):
         assert adapter.expand("http://example.org/ValueSet/Empty") == []
 
@@ -165,7 +165,7 @@ def test_expand_skips_entries_missing_system_or_code():
     )
     response = _MockResponse(payload)
     records: list[tuple[str, str, dict]] = []
-    adapter = HTTPTerminologyEndpoint("http://localhost:8001")
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
     with patch.object(adapter, "_client", return_value=_MockClient(response, records)):
         refs = adapter.expand("http://example.org/ValueSet/Foo")
     assert len(refs) == 1
@@ -183,7 +183,7 @@ def test_expand_intensional_posts_value_set_body():
     )
     response = _MockResponse(payload)
     records: list[tuple[str, str, dict]] = []
-    adapter = HTTPTerminologyEndpoint("http://localhost:8001")
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
     body = {"resourceType": "ValueSet", "compose": {"include": []}}
     with patch.object(adapter, "_client", return_value=_MockClient(response, records)):
         refs = adapter.expand_intensional(body)
@@ -212,7 +212,7 @@ def test_search_text_returns_search_results():
     )
     response = _MockResponse(payload)
     records: list[tuple[str, str, dict]] = []
-    adapter = HTTPTerminologyEndpoint("http://localhost:8001")
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
     with patch.object(adapter, "_client", return_value=_MockClient(response, records)):
         results = adapter.search_text("diabetes", "condition", mode="hybrid")
     assert len(results) == 1
@@ -229,7 +229,7 @@ def test_search_batch_loops_over_queries():
     payload = _search_bundle([])
     response = _MockResponse(payload)
     records: list[tuple[str, str, dict]] = []
-    adapter = HTTPTerminologyEndpoint("http://localhost:8001")
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
     with patch.object(adapter, "_client", return_value=_MockClient(response, records)):
         results = adapter.search_batch([("diabetes", "condition"), ("metformin", "medication")])
     assert len(results) == 2
@@ -246,7 +246,7 @@ def test_search_batch_loops_over_queries():
 def test_client_passes_explicit_timeout():
     """Every httpx.Client constructor must receive a non-None timeout (INV-6)."""
     captured: dict[str, Any] = {}
-    adapter = HTTPTerminologyEndpoint("http://localhost:8001", timeout_seconds=4.5)
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir", timeout_seconds=4.5)
 
     # httpx is imported lazily inside _client(); patch the real httpx
     # module attribute since the adapter no longer keeps it at module
@@ -278,7 +278,7 @@ def test_client_passes_explicit_timeout():
 
 def test_client_called_with_timeout_kwarg_only():
     """Verify httpx.Client is constructed with keyword timeout= (INV-6)."""
-    adapter = HTTPTerminologyEndpoint("http://localhost:8001", timeout_seconds=2.0)
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir", timeout_seconds=2.0)
     import httpx as _httpx_mod
 
     mock_client = MagicMock()

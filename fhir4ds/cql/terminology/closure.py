@@ -231,13 +231,16 @@ def _expand_seed(
 ) -> List[Any]:
     """Expand a single seed code via the endpoint.
 
-    SNOMED uses the ``?fhir_vs=isa/{code}`` URL form (Phase 1 fast-path).
+    SNOMED uses the ``http://snomed.info/sct/{code}?fhir_vs=isa`` URL
+    form (code in path, mode in query) — this is the pattern
+    medterm4ds's ``_expand_url_pattern`` actually parses. The older
+    ``?fhir_vs=isa/{code}`` form is rejected with HTTP 400.
     All other code systems go through ``expand_intensional`` with a
     ``concept is-a <code>`` filter.
     """
     normalized_system = SystemResolver.normalize(system) or system
     if _is_snomed(normalized_system):
-        url = f"{_SNOMED_PREFIX}?fhir_vs=isa/{code}"
+        url = f"{_SNOMED_PREFIX}/{code}?fhir_vs=isa"
         return list(endpoint.expand(url))
 
     value_set = {
