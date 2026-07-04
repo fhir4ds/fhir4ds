@@ -51,21 +51,24 @@ def medterm4ds_url() -> str:
     url = os.environ.get("MEDTERM4DS_TEST_URL")
     if not url:
         pytest.skip("MEDTERM4DS_TEST_URL not set; skipping live medterm4ds tests")
-    # Sidecar may be briefly unresponsive while warming models or processing
-    # a heavy prior request (SNOMED expand, NER pipeline). Probe with retries
-    # and a generous per-attempt timeout before declaring it unreachable.
+    # Sidecar may be briefly unresponsive on first request while warming models.
+    # Use the dedicated /health endpoint (added by medterm4ds team after the
+    # event-loop-blocking issue) — it runs on a separate worker and responds
+    # in <5ms even when $expand/$extract are pegging CPU on the main worker.
+    # Fall back to /fhir/metadata for sidecars that don't expose /health.
     import time
+    base = url.rstrip("/").removesuffix("/fhir")
     last_err: Exception | None = None
     for attempt in range(4):
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                r = client.get(url.rstrip("/") + "/metadata")
-                if r.status_code >= 500:
-                    raise RuntimeError(f"sidecar unhealthy: HTTP {r.status_code}")
-            return url.rstrip("/")
-        except Exception as e:  # noqa: BLE001 - retry, then skip
-            last_err = e
-            time.sleep(2.0)
+        for probe_path in ("/health", "/fhir/metadata"):
+            try:
+                with httpx.Client(timeout=5.0) as client:
+                    r = client.get(base + probe_path)
+                    if r.status_code < 500:
+                        return url.rstrip("/")
+            except Exception as e:  # noqa: BLE001 - try next probe, then retry
+                last_err = e
+        time.sleep(2.0)
     pytest.skip(
         f"medterm4ds sidecar not reachable at {url} after 4 attempts: {last_err}"
     )

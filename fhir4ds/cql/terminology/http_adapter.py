@@ -44,6 +44,63 @@ _CODESYSTEM_SEARCH_PATH = "/CodeSystem/$search"
 # startup validation never blocks for long on an unreachable sidecar.
 _HEALTH_PROBE_TIMEOUT_SECONDS = 2.0
 
+# Extension URL used by medterm4ds to carry the match-grade enum on each
+# $search hit. The same URL is reused by fhir4ds's autocoding extension
+# downstream, so any consumer that already understands our extension
+# shape understands the sidecar's response too.
+_MATCH_GRADE_URL = "http://fhir4ds.org/fhir/StructureDefinition/match-grade"
+
+
+def _extract_score(resource: dict, search_meta: dict | None) -> float:
+    """Pull the relevance score from one of three locations."""
+    for src in (search_meta, resource):
+        if not isinstance(src, dict):
+            continue
+        raw = src.get("score")
+        if raw is not None:
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                return 0.0
+    return 0.0
+
+
+def _extract_match_grade(resource: dict, search_meta: dict | None) -> str:
+    """Pull match-grade from one of four locations.
+
+    Order:
+        1. Top-level ``matchGrade`` on resource (FHIR standard).
+        2. Top-level ``match_grade`` snake_case on resource.
+        3. ``search.extension[]`` value where url matches ``_MATCH_GRADE_URL``.
+        4. Fallback ``"ambiguous"`` so callers see "unranked" rather than crash.
+    """
+    if isinstance(resource, dict):
+        for key in ("matchGrade", "match_grade"):
+            v = resource.get(key)
+            if isinstance(v, str) and v:
+                return v
+    if isinstance(search_meta, dict):
+        ext = search_meta.get("extension")
+        if isinstance(ext, list):
+            for entry in ext:
+                if (
+                    isinstance(entry, dict)
+                    and entry.get("url") == _MATCH_GRADE_URL
+                    and isinstance(entry.get("valueCode"), str)
+                ):
+                    return entry["valueCode"]
+    return "ambiguous"
+
+
+def _extract_search_mode(resource: dict, search_meta: dict | None, default: str) -> str:
+    """Pull the search mode (lexical/hybrid/semantic) from one of three locations."""
+    if isinstance(search_meta, dict) and isinstance(search_meta.get("mode"), str):
+        return search_meta["mode"]
+    if isinstance(resource, dict) and isinstance(resource.get("searchMode"), str):
+        return resource["searchMode"]
+    return default
+
+
 
 class HTTPTerminologyEndpoint:
     """Terminology adapter that talks to a medterm4ds HTTP sidecar.
@@ -235,17 +292,34 @@ class HTTPTerminologyEndpoint:
             code = resource.get("code")
             if system is None or code is None:
                 continue
+
+            # Search metadata (score, mode, match-grade) can live in either:
+            # (a) Standard FHIR Bundle entry: entry.search.{score, mode, extension}
+            # (b) medterm4ds shape: nested inside resource.search.{...}
+            # (c) Flat legacy shape: top-level on resource.{score, matchGrade, searchMode}
+            # Try all three; first hit wins.
+            entry_search = entry.get("search") if isinstance(entry, dict) else None
+            inner_search = resource.get("search")
+            search_meta = entry_search if isinstance(entry_search, dict) else None
+            if search_meta is None and isinstance(inner_search, dict):
+                search_meta = inner_search
+
+            score = _extract_score(resource, search_meta)
+            match_grade = _extract_match_grade(resource, search_meta)
+            search_mode = _extract_search_mode(resource, search_meta, mode)
+            index_version = resource.get("indexVersion") or (
+                search_meta.get("indexVersion") if search_meta else None
+            )
+
             results.append(
                 SearchResult(
                     system=system,
                     code=str(code),
                     display=resource.get("display") or resource.get("name"),
-                    score=float(resource.get("score", 0.0)),
-                    match_grade=str(
-                        resource.get("matchGrade", resource.get("match_grade", "ambiguous"))
-                    ),
-                    search_mode=str(resource.get("searchMode", mode)),
-                    index_version=resource.get("indexVersion"),
+                    score=score,
+                    match_grade=match_grade,
+                    search_mode=search_mode,
+                    index_version=index_version,
                 )
             )
         return results
