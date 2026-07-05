@@ -84,16 +84,43 @@ class InProcessTerminologyEndpoint:
     ) -> None:
         # Lazy import — INV-1 / INV-3: top-level `import fhir4ds` must
         # never pull medterm4ds. Only opt-in callers pay this cost.
+        #
+        # The published medterm4ds wheel (0.0.1) exposes the engine via
+        # ``medterm4ds.LocalDuckDBEngine`` (top-level re-export) and
+        # ``medterm4ds.engines.duckdb.engine.LocalDuckDBEngine`` (full
+        # path). The earlier ``medterm4ds.engines.local_duckdb`` path
+        # was renamed when the duckdb module was reorganized into a
+        # subpackage. We try the canonical paths in order and fall back
+        # to the legacy path so a medterm4ds version that still uses
+        # the old layout keeps working.
         try:
             from medterm4ds.engines.base import DiscoveryEngine  # type: ignore
-            from medterm4ds.engines.local_duckdb import (  # type: ignore
-                LocalDuckDBEngine,
-            )
         except ImportError as e:  # pragma: no cover - exercised via factory tests
             raise ImportError(
                 "medterm4ds is required for InProcessTerminologyEndpoint. "
                 "Install medterm4ds alongside fhir4ds-v2[terminology]."
             ) from e
+        try:
+            # Preferred: top-level re-export (stable since 0.0.1).
+            from medterm4ds import LocalDuckDBEngine  # type: ignore
+        except ImportError:
+            try:
+                # Full path on the renamed layout.
+                from medterm4ds.engines.duckdb.engine import (  # type: ignore
+                    LocalDuckDBEngine,
+                )
+            except ImportError:
+                try:
+                    # Legacy path — medterm4ds pre-rename.
+                    from medterm4ds.engines.local_duckdb import (  # type: ignore
+                        LocalDuckDBEngine,
+                    )
+                except ImportError as e:  # pragma: no cover
+                    raise ImportError(
+                        "Could not import LocalDuckDBEngine from medterm4ds. "
+                        "medterm4ds is required for InProcessTerminologyEndpoint. "
+                        "Install medterm4ds alongside fhir4ds-v2[terminology]."
+                    ) from e
 
         self._medterm4ds_db_path = medterm4ds_db_path
         self._search_index_dir = search_index_dir
@@ -103,21 +130,40 @@ class InProcessTerminologyEndpoint:
         self._consecutive_failures: int = 0
         self._tripped_until: float = 0.0
 
-        # Construct the shared engine. LocalDuckDBEngine accepts the
-        # same kwargs medterm4ds's own CLI uses; we forward only the
-        # paths the caller actually supplied.
-        engine_kwargs: dict[str, Any] = {}
-        if medterm4ds_db_path is not None:
-            engine_kwargs["db_path"] = medterm4ds_db_path
-        if search_index_dir is not None:
-            engine_kwargs["search_index_dir"] = search_index_dir
+        # Construct the shared engine. The published medterm4ds wheel
+        # exposes ``connect(db_path=...)`` as the stable public entry
+        # point — it provisions the cache, builds/loads indexes, and
+        # returns a Terminology whose ``.engine`` is a DiscoveryEngine
+        # we can drive. Constructing LocalDuckDBEngine directly was the
+        # older pattern but the published 0.0.1 wheel changed its
+        # signature to require a DuckDB connection, so going through
+        # ``connect()`` is the supported path.
         try:
-            self._engine: DiscoveryEngine = LocalDuckDBEngine(**engine_kwargs)
+            import medterm4ds as _m  # type: ignore
+            term = _m.connect(db_path=medterm4ds_db_path)
+            # Terminology.engine is a LocalDuckDBEngine (subclass of
+            # DiscoveryEngine via the runtime-checkable Protocol).
+            self._engine = term.engine
         except TypeError:
-            # Engine signature drift: fall back to no-kwargs construction
-            # so a medterm4ds version that doesn't accept these kwargs
-            # still works. Phase 1 favors robustness over strictness.
-            self._engine = LocalDuckDBEngine()
+            # Older medterm4ds: ``connect()`` may not accept db_path
+            # as kwarg. Fall back to direct engine construction.
+            engine_kwargs: dict[str, Any] = {}
+            if medterm4ds_db_path is not None:
+                engine_kwargs["db_path"] = medterm4ds_db_path
+            if search_index_dir is not None:
+                engine_kwargs["search_index_dir"] = search_index_dir
+            try:
+                self._engine = LocalDuckDBEngine(**engine_kwargs)
+            except TypeError:
+                # Engine signature drift: fall back to no-kwargs construction
+                # so a medterm4ds version that doesn't accept these kwargs
+                # still works. Phase 1 favors robustness over strictness.
+                self._engine = LocalDuckDBEngine()
+        except ImportError as e:  # pragma: no cover - exercised via factory tests
+            raise ImportError(
+                "medterm4ds is required for InProcessTerminologyEndpoint. "
+                "Install medterm4ds alongside fhir4ds-v2[terminology]."
+            ) from e
 
     # ------------------------------------------------------------------
     # Circuit breaker helpers (single-threaded — see class docstring).
