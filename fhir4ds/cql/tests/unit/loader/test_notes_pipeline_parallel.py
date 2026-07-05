@@ -20,7 +20,7 @@ from fhir4ds.cql.loader.notes_pipeline import (
     NotesPipelineConfig,
     _init_worker,
     _worker_extract_fragments,
-    _WORKER_ENGINE,
+    _WORKER_EXTRACT_FN,
     _WORKER_EXTRACT_KWARGS,
 )
 
@@ -76,17 +76,15 @@ def test_init_worker_has_no_self_closure():
 
 def test_worker_returns_per_fragment_grouping(monkeypatch):
     """Worker output shape: outer list = fragments, inner = concepts."""
-    @dataclass
-    class _Engine:
-        def extract(self, text, **kw):
-            return [_MockConcept(
-                code="C-1", source="SNOMEDCT_US",
-                display=text[:10], matched_text=text,
-                span_start=0, span_end=len(text),
-            )]
+    def _fake_extract(text, **kw):
+        return [_MockConcept(
+            code="C-1", source="SNOMEDCT_US",
+            display=text[:10], matched_text=text,
+            span_start=0, span_end=len(text),
+        )]
 
     monkeypatch.setattr(
-        "fhir4ds.cql.loader.notes_pipeline._WORKER_ENGINE", _Engine()
+        "fhir4ds.cql.loader.notes_pipeline._WORKER_EXTRACT_FN", _fake_extract
     )
     monkeypatch.setattr(
         "fhir4ds.cql.loader.notes_pipeline._WORKER_EXTRACT_KWARGS",
@@ -109,18 +107,15 @@ def test_worker_returns_per_fragment_grouping(monkeypatch):
 
 def test_worker_converts_dataclass_to_dict():
     """Worker output is plain dicts, not dataclasses."""
-    @dataclass
-    class _MockEngine:
-        def extract(self, text, **kw):
-            return [_MockConcept(
-                code="X", source="S", display="D", matched_text="m",
-            )]
+    def _fake_extract(text, **kw):
+        return [_MockConcept(
+            code="X", source="S", display="D", matched_text="m",
+        )]
 
-    # Use the global engine; this test sets it directly.
     import fhir4ds.cql.loader.notes_pipeline as np_mod
-    original_engine = np_mod._WORKER_ENGINE
+    original_fn = np_mod._WORKER_EXTRACT_FN
     original_kwargs = np_mod._WORKER_EXTRACT_KWARGS
-    np_mod._WORKER_ENGINE = _MockEngine()
+    np_mod._WORKER_EXTRACT_FN = _fake_extract
     np_mod._WORKER_EXTRACT_KWARGS = {"format": "codes"}
     try:
         @dataclass
@@ -135,20 +130,18 @@ def test_worker_converts_dataclass_to_dict():
         # Pickle round-trip must succeed (process-boundary safety)
         pickle.loads(pickle.dumps(out[0][0]))
     finally:
-        np_mod._WORKER_ENGINE = original_engine
+        np_mod._WORKER_EXTRACT_FN = original_fn
         np_mod._WORKER_EXTRACT_KWARGS = original_kwargs
 
 
 def test_worker_handles_engine_failure():
     """If medterm4ds.extract raises, worker returns empty fragment list."""
-    @dataclass
-    class _BadEngine:
-        def extract(self, text, **kw):
-            raise RuntimeError("boom")
+    def _bad_extract(text, **kw):
+        raise RuntimeError("boom")
 
     import fhir4ds.cql.loader.notes_pipeline as np_mod
-    original_engine = np_mod._WORKER_ENGINE
-    np_mod._WORKER_ENGINE = _BadEngine()
+    original_fn = np_mod._WORKER_EXTRACT_FN
+    np_mod._WORKER_EXTRACT_FN = _bad_extract
     np_mod._WORKER_EXTRACT_KWARGS = {"format": "codes"}
     try:
         @dataclass
@@ -161,7 +154,7 @@ def test_worker_handles_engine_failure():
         )
         assert out == [[]]
     finally:
-        np_mod._WORKER_ENGINE = original_engine
+        np_mod._WORKER_EXTRACT_FN = original_fn
 
 
 # ── extract_kwargs centralization ────────────────────────────────────
@@ -200,17 +193,15 @@ def test_parallel_dispatch_with_mocked_engine(monkeypatch):
     test doesn't fork (which would break the monkeypatched medterm4ds
     module reference).
     """
-    @dataclass
-    class _MockEngine:
-        def extract(self, text, **kw):
-            return [_MockConcept(
-                code="C-1", source="SNOMEDCT_US",
-                display=text[:5], matched_text=text,
-                span_start=0, span_end=len(text),
-            )]
+    def _fake_extract(text, **kw):
+        return [_MockConcept(
+            code="C-1", source="SNOMEDCT_US",
+            display=text[:5], matched_text=text,
+            span_start=0, span_end=len(text),
+        )]
 
     fake_module = types.ModuleType("medterm4ds")
-    fake_module.connect = lambda: _MockEngine()
+    fake_module.extract = _fake_extract
     fake_module.__index_version__ = "v1"
     monkeypatch.setitem(sys.modules, "medterm4ds", fake_module)
 

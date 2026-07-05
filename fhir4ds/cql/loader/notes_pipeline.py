@@ -91,11 +91,8 @@ WORKER_MEMORY_BUDGET_BYTES = 5 * (1024 ** 3)
 # copy after ``spawn`` or ``fork``.
 # ----------------------------------------------------------------------
 
-#: Per-worker medterm4ds engine handle. Set by ``_init_worker``.
-_WORKER_ENGINE: Any = None
-
 #: Per-worker extract kwargs (frozen at pool-init time). Set by
-#: ``_init_worker``. Read by ``_extract_one_to_dicts``.
+#: ``_init_worker``. Read by ``_worker_extract_fragments``.
 _WORKER_EXTRACT_KWARGS: dict = {}
 
 
@@ -671,14 +668,23 @@ def _safe_getattr(obj: Any, name: str) -> Any:
 
 
 def _init_worker(extract_kwargs: dict) -> None:
-    """Pool initializer: lazily import medterm4ds and cache the engine.
+    """Pool initializer: import medterm4ds and pre-warm the NLP pipeline.
 
-    Runs once per worker process. Sets the module globals
-    ``_WORKER_ENGINE`` and ``_WORKER_EXTRACT_KWARGS`` so subsequent
-    calls to :func:`_worker_extract_fragments` can read them without
-    closing over the parent's state.
+    Runs once per worker process. Sets the module global
+    ``_WORKER_EXTRACT_KWARGS`` so subsequent calls to
+    :func:`_worker_extract_fragments` can read them without closing
+    over the parent's state.
+
+    Note: ``medterm4ds.connect()`` returns a :class:`Terminology` object
+    for code lookup (ancestors, descendants, mapping) — it does NOT
+    expose ``extract()``. The NER extraction entry point is the
+    module-level :func:`medterm4ds.extract` function. We import the
+    module and pin a reference to its ``extract`` callable; the first
+    call triggers the lazy load of GLiNER + medspaCy + BM25 + SapBERT +
+    FAISS (~30s cold, ~0s warm), then subsequent calls reuse the
+    cached pipeline.
     """
-    global _WORKER_ENGINE, _WORKER_EXTRACT_KWARGS
+    global _WORKER_EXTRACT_KWARGS
     try:
         import medterm4ds  # type: ignore[import-not-found]
     except ImportError as exc:  # pragma: no cover - exercised when extra missing
@@ -686,14 +692,18 @@ def _init_worker(extract_kwargs: dict) -> None:
             "medterm4ds is required for parallel NotesPipeline. Install with: "
             "pip install 'fhir4ds-v2[ner]'  (which pulls medterm4ds[extraction])"
         ) from exc
-    # medterm4ds.connect() loads medspaCy + SapBERT eagerly on first
-    # call (~30s cold, ~0s warm). Per-worker, this is a one-time cost.
-    connect = getattr(medterm4ds, "connect", None)
-    if callable(connect):
-        _WORKER_ENGINE = connect()
-    else:
-        _WORKER_ENGINE = medterm4ds  # fall back to module-as-engine
+    # Pin the module-level extract function. ``connect()`` is the
+    # terminology-lookup API (returns Terminology without .extract);
+    # we want the NER extraction API.
+    global _WORKER_EXTRACT_FN
+    _WORKER_EXTRACT_FN = medterm4ds.extract
     _WORKER_EXTRACT_KWARGS = dict(extract_kwargs)
+
+
+#: Per-worker extract function (set by ``_init_worker``). Module-level
+#: :func:`medterm4ds.extract`; not the ``Terminology`` object from
+#: :func:`medterm4ds.connect`.
+_WORKER_EXTRACT_FN: Any = None
 
 
 def _worker_extract_fragments(
@@ -715,16 +725,13 @@ def _worker_extract_fragments(
         return an empty outer list so a single bad resource cannot
         poison the batch.
     """
-    if _WORKER_ENGINE is None:
+    if _WORKER_EXTRACT_FN is None:
         return []
     _resource, fragments = payload
-    extract_fn = getattr(_WORKER_ENGINE, "extract", None)
-    if extract_fn is None:
-        extract_fn = _WORKER_ENGINE  # module-as-engine fallback
     out: list[list[dict]] = []
     for fragment in fragments:
         try:
-            concepts = extract_fn(fragment.text, **_WORKER_EXTRACT_KWARGS)
+            concepts = _WORKER_EXTRACT_FN(fragment.text, **_WORKER_EXTRACT_KWARGS)
         except Exception:  # pragma: no cover - defensive
             out.append([])
             continue
