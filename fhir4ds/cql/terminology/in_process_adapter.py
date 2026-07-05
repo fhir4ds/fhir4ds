@@ -138,12 +138,20 @@ class InProcessTerminologyEndpoint:
         # older pattern but the published 0.0.1 wheel changed its
         # signature to require a DuckDB connection, so going through
         # ``connect()`` is the supported path.
+        #
+        # We keep references to BOTH ``term`` (the Terminology facade)
+        # and ``term.engine`` (the DiscoveryEngine). expand() goes
+        # through the facade (Option B per the medterm4ds team —
+        # ``term.expand_url(url)`` returns a flat list of CodeRefs);
+        # search_text / search_batch drive the engine directly because
+        # the facade does not expose them.
+        self._terminology: Any = None
         try:
             import medterm4ds as _m  # type: ignore
-            term = _m.connect(db_path=medterm4ds_db_path)
+            self._terminology = _m.connect(db_path=medterm4ds_db_path)
             # Terminology.engine is a LocalDuckDBEngine (subclass of
             # DiscoveryEngine via the runtime-checkable Protocol).
-            self._engine = term.engine
+            self._engine = self._terminology.engine
         except TypeError:
             # Older medterm4ds: ``connect()`` may not accept db_path
             # as kwarg. Fall back to direct engine construction.
@@ -253,6 +261,13 @@ class InProcessTerminologyEndpoint:
         canonical, ``fhir_vs`` shorthand, filter) by delegating to
         medterm4ds's FHIR $expand logic.
 
+        Preferred path: ``Terminology.expand_url(url)`` (Option B from
+        the medterm4ds team — flat list of CodeRefs). Falls back to
+        ``medterm4ds.apps.fhir_api.expand_url_pattern`` (Option A —
+        FHIR ValueSet payload) for older medterm4ds versions, then to
+        the legacy ``medterm4ds.apps.fhir_api_helpers.expand_url_pattern``
+        for the pre-rename layout.
+
         Short-circuits to ``[]`` when the circuit breaker is open.
         """
         now = time.monotonic()
@@ -265,35 +280,96 @@ class InProcessTerminologyEndpoint:
             )
             return []
 
-        # Imported lazily so module load stays cheap and isolated. If
-        # the helper symbol drifts between medterm4ds releases the
-        # resolver fallback path degrades to "no codes" gracefully.
+        # Preferred: Terminology facade (Option B).
+        if self._terminology is not None and hasattr(
+            self._terminology, "expand_url"
+        ):
+            try:
+                mt_refs = self._terminology.expand_url(valueset_url)
+            except Exception as e:  # pragma: no cover - medterm4ds drift guard
+                _logger.warning(
+                    "in_process expand_url failed for %s: %s", valueset_url, e
+                )
+                self._on_call_failure()
+                return []
+            refs: list[CodeRef] = []
+            for mt_ref in mt_refs or []:
+                # medterm4ds CodeRef has (source, code). ``source`` is a
+                # UMLS mnemonic (SNOMEDCT_US); _to_coderef runs it
+                # through _normalize_system to expand to the FHIR
+                # canonical URL (http://snomed.info/sct).
+                ref = self._to_coderef(
+                    getattr(mt_ref, "source", None),
+                    getattr(mt_ref, "code", None),
+                    getattr(mt_ref, "display", None),
+                )
+                if ref is not None:
+                    refs.append(ref)
+            self._on_call_success()
+            return refs
+
+        # Fallback A: medterm4ds.apps.fhir_api.expand_url_pattern
+        # (FHIR ValueSet payload). Used when the Terminology facade is
+        # unavailable (older medterm4ds) but the new helper module exists.
         try:
-            from medterm4ds.apps.fhir_api_helpers import (  # type: ignore
+            from medterm4ds.apps.fhir_api import (  # type: ignore
                 expand_url_pattern,
             )
         except ImportError:
+            expand_url_pattern = None  # type: ignore[assignment]
+
+        if expand_url_pattern is not None:
+            try:
+                expanded = expand_url_pattern(self._engine, valueset_url, count=1000)
+                contains = (
+                    expanded.get("expansion", {}).get("contains", [])
+                    if isinstance(expanded, dict)
+                    else []
+                )
+            except Exception as e:  # pragma: no cover - medterm4ds drift guard
+                _logger.warning(
+                    "in_process expand failed for %s: %s", valueset_url, e
+                )
+                self._on_call_failure()
+                return []
+            refs = []
+            for item in contains:
+                ref = self._to_coderef(
+                    item.get("system"), item.get("code"), item.get("display")
+                )
+                if ref is not None:
+                    refs.append(ref)
+            self._on_call_success()
+            return refs
+
+        # Fallback B: legacy pre-rename helper. Returns [] if neither
+        # fallback is available so callers degrade gracefully.
+        try:
+            from medterm4ds.apps.fhir_api_helpers import (  # type: ignore
+                expand_url_pattern as _legacy,
+            )
+        except ImportError:
             _logger.warning(
-                "medterm4ds expand_url_pattern helper unavailable; "
+                "medterm4ds expand_url helper unavailable; "
                 "in_process.expand returns [] for %s",
                 valueset_url,
             )
             self._on_call_failure()
             return []
-
         try:
-            expanded = expand_url_pattern(self._engine, valueset_url, count=1000)
-            contains = expanded.get("expansion", {}).get("contains", []) if isinstance(
-                expanded, dict
-            ) else []
+            expanded = _legacy(self._engine, valueset_url, count=1000)
+            contains = (
+                expanded.get("expansion", {}).get("contains", [])
+                if isinstance(expanded, dict)
+                else []
+            )
         except Exception as e:  # pragma: no cover - medterm4ds drift guard
             _logger.warning(
                 "in_process expand failed for %s: %s", valueset_url, e
             )
             self._on_call_failure()
             return []
-
-        refs: list[CodeRef] = []
+        refs = []
         for item in contains:
             ref = self._to_coderef(
                 item.get("system"), item.get("code"), item.get("display")

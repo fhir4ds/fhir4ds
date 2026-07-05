@@ -19,8 +19,21 @@ def _install_medterm4ds_stub(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     """Install a fake ``medterm4ds`` package in ``sys.modules``.
 
     Returns the engine mock so individual tests can program return values.
+
+    The stub mirrors the published medterm4ds API surface:
+    - ``medterm4ds.connect(db_path=...)`` returns a Terminology facade.
+    - The Terminology facade exposes ``.engine`` (the DiscoveryEngine)
+      and ``.expand_url(url)`` (returns ``list[medterm4ds.CodeRef]``).
+    - ``LocalDuckDBEngine`` is also exposed for backward-compat tests
+      of the direct-construction fallback path.
     """
     engine = MagicMock(name="DiscoveryEngine")
+
+    # Mock Terminology facade. Tests that program expand() will rebind
+    # ``terminology.expand_url`` to control the return value.
+    terminology = MagicMock(name="Terminology")
+    terminology.engine = engine
+    terminology.expand_url = MagicMock(return_value=[])
 
     fake_pkg = types.ModuleType("medterm4ds")
     engines_pkg = types.ModuleType("medterm4ds.engines")
@@ -38,6 +51,11 @@ def _install_medterm4ds_stub(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     services_discovery.search_names = _fake_search_names
     services_pkg.search_names = _fake_search_names
 
+    # Top-level connect(): returns the mock Terminology.
+    fake_pkg.connect = MagicMock(return_value=terminology)
+    # Expose Terminology and CodeRef on the fake package too.
+    fake_pkg.Terminology = terminology
+
     fake_pkg.engines = engines_pkg
     engines_pkg.base = base_mod
     engines_pkg.local_duckdb = local_mod
@@ -51,6 +69,10 @@ def _install_medterm4ds_stub(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     monkeypatch.setitem(sys.modules, "medterm4ds.services", services_pkg)
     monkeypatch.setitem(sys.modules, "medterm4ds.services.discovery", services_discovery)
 
+    # Stash the terminology mock on the engine so tests that only grab
+    # the engine return value can still reach the terminology via
+    # ``engine.terminology`` if needed.
+    engine.terminology = terminology
     return engine
 
 
@@ -151,37 +173,30 @@ def test_search_batch_loops(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_expand_uses_medterm4ds_helper(monkeypatch: pytest.MonkeyPatch) -> None:
-    """expand() should call into medterm4ds's expand logic."""
-    _install_medterm4ds_stub(monkeypatch)
+    """expand() should delegate to Terminology.expand_url (Option B)."""
+    engine = _install_medterm4ds_stub(monkeypatch)
+    terminology = engine.terminology  # mock Terminology facade
 
-    # Provide the lazily-imported fhir_api_helpers module.
-    fake_helpers = types.ModuleType("medterm4ds.apps.fhir_api_helpers")
-    fake_helpers.expand_url_pattern = MagicMock(
-        return_value={
-            "expansion": {
-                "contains": [
-                    {"system": "http://snomed.info/sct", "code": "73211009"}
-                ]
-            }
-        }
-    )
-    fake_apps = types.ModuleType("medterm4ds.apps")
-    fake_core = types.ModuleType("medterm4ds.core")
-    fake_core_helpers = types.ModuleType("medterm4ds.core.fhir_helpers")
-    fake_core_helpers.build_valueset_expand = MagicMock(return_value={})
-    monkeypatch.setitem(sys.modules, "medterm4ds.apps", fake_apps)
-    monkeypatch.setitem(sys.modules, "medterm4ds.apps.fhir_api_helpers", fake_helpers)
-    monkeypatch.setitem(sys.modules, "medterm4ds.core", fake_core)
-    monkeypatch.setitem(sys.modules, "medterm4ds.core.fhir_helpers", fake_core_helpers)
+    # Program expand_url to return a list of medterm4ds-style CodeRef
+    # objects. medterm4ds.CodeRef has (source, code) — source is the
+    # UMLS mnemonic; the adapter normalizes it to the FHIR canonical URL.
+    mt_coderef = MagicMock()
+    mt_coderef.source = "SNOMEDCT_US"
+    mt_coderef.code = "73211009"
+    mt_coderef.display = None
+    terminology.expand_url = MagicMock(return_value=[mt_coderef])
 
     from fhir4ds.cql.terminology.in_process_adapter import (
         InProcessTerminologyEndpoint,
     )
 
     adapter = InProcessTerminologyEndpoint()
-    refs = adapter.expand("http://snomed.info/sct?fhir_vs=isa/73211009")
+    refs = adapter.expand("http://snomed.info/sct/73211009?fhir_vs=isa")
+    # Adapter normalized SNOMEDCT_US → http://snomed.info/sct.
     assert refs == [CodeRef("http://snomed.info/sct", "73211009", None)]
-    fake_helpers.expand_url_pattern.assert_called_once()
+    terminology.expand_url.assert_called_once_with(
+        "http://snomed.info/sct/73211009?fhir_vs=isa"
+    )
 
 
 def test_expand_intensional_uses_medterm4ds_helper(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -237,12 +252,9 @@ def test_in_process_circuit_breaker_trips_and_short_circuits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """After threshold failures, breaker trips and subsequent calls return []."""
-    _install_medterm4ds_stub(monkeypatch)
-    fake_helpers = types.ModuleType("medterm4ds.apps.fhir_api_helpers")
-    fake_helpers.expand_url_pattern = MagicMock(side_effect=RuntimeError("boom"))
-    fake_apps = types.ModuleType("medterm4ds.apps")
-    monkeypatch.setitem(sys.modules, "medterm4ds.apps", fake_apps)
-    monkeypatch.setitem(sys.modules, "medterm4ds.apps.fhir_api_helpers", fake_helpers)
+    engine = _install_medterm4ds_stub(monkeypatch)
+    terminology = engine.terminology  # mock Terminology facade
+    terminology.expand_url = MagicMock(side_effect=RuntimeError("boom"))
 
     from fhir4ds.cql.terminology.in_process_adapter import (
         InProcessTerminologyEndpoint,
@@ -259,10 +271,10 @@ def test_in_process_circuit_breaker_trips_and_short_circuits(
     assert adapter._tripped_until > 0.0
 
     # Breaker open: the third call short-circuits before reaching the
-    # medterm4ds helper.
-    call_count_before = fake_helpers.expand_url_pattern.call_count
+    # Terminology facade.
+    call_count_before = terminology.expand_url.call_count
     assert adapter.expand("http://example.org/ValueSet/Baz") == []
-    assert fake_helpers.expand_url_pattern.call_count == call_count_before
+    assert terminology.expand_url.call_count == call_count_before
 
 
 def test_in_process_is_healthy_with_engine(monkeypatch: pytest.MonkeyPatch) -> None:
