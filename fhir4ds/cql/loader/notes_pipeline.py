@@ -69,6 +69,35 @@ _ENGINE_NAME = "medterm4ds-ner"
 #: out of the same hash space as any future fhir4ds synthesizer.
 _ID_SALT = "fhir4ds-phase4-derived-condition"
 
+#: Type alias for the per-resource return shape: one derived Condition
+#: per dict, a list of them per source resource.
+DerivedConditions = list[dict]
+
+#: Empirical per-worker memory budget for medspaCy + SapBERT
+#: (audit QA-005). Used by :meth:`NotesPipeline._extract_batch_parallel`
+#: to emit a WARNING when ``workers * budget`` exceeds available
+#: virtual memory. Not a hard gate — the user explicitly opts into
+#: ``workers`` and may have pre-warmed medspaCy or be on a machine
+#: with swap. Override by lowering ``workers``.
+WORKER_MEMORY_BUDGET_BYTES = 5 * (1024 ** 3)
+
+# ----------------------------------------------------------------------
+# Multiprocessing worker globals (Step 5)
+#
+# Workers MUST be module-level functions and MUST NOT close over ``self``
+# (which would pickle the parent's DuckDB connection — fork-unsafe).
+# Configuration travels via these module globals, populated by the Pool
+# initializer. They are process-local: each worker process gets its own
+# copy after ``spawn`` or ``fork``.
+# ----------------------------------------------------------------------
+
+#: Per-worker medterm4ds engine handle. Set by ``_init_worker``.
+_WORKER_ENGINE: Any = None
+
+#: Per-worker extract kwargs (frozen at pool-init time). Set by
+#: ``_init_worker``. Read by ``_extract_one_to_dicts``.
+_WORKER_EXTRACT_KWARGS: dict = {}
+
 
 @dataclass(frozen=True)
 class NotesPipelineConfig:
@@ -98,6 +127,32 @@ class NotesPipelineConfig:
             on derived Conditions. Default ``"unconfirmed"``.
         clinical_status: Default ``clinicalStatus.coding[0].code`` on
             derived Conditions. Default ``"active"``.
+        batch_size: Number of resources processed per call to
+            :meth:`extract_conditions_batch`. Default ``1`` preserves
+            today's per-resource code path byte-for-byte. Larger values
+            enable batch-aware chunking and (when ``workers > 1``)
+            parallel extraction via :class:`multiprocessing.Pool`.
+        workers: Size of the multiprocessing pool used when
+            ``batch_size > 1`` and ``len(resources) >=
+            parallel_threshold``. Default ``1`` preserves single-process
+            behavior. Each worker loads its own medterm4ds engine
+            (~5 GB for medspaCy + SapBERT); on a 16 GB machine,
+            ``workers=2`` is the practical max. On Windows,
+            ``multiprocessing`` uses ``spawn`` (not ``fork``) — workers
+            re-import ``medterm4ds`` from scratch. User code calling
+            :class:`NotesPipeline` from a script MUST guard the entry
+            point with ``if __name__ == "__main__":`` to avoid recursive
+            worker imports on Windows.
+        parallel_threshold: Minimum input size required before the
+            multiprocessing pool is used. Below this threshold the
+            pipeline uses synchronous mode regardless of ``workers`` —
+            the cold medspaCy warm-up cost (~30s per worker) outweighs
+            the per-text savings for small batches. Default ``200``,
+            tuned for cold-start; users with pre-warmed medspaCy may
+            lower it to ``0``. An INFO log line is emitted when the
+            threshold fires AND ``workers > 1`` (when ``workers == 1``
+            the user has explicitly chosen sync mode, so no diagnostic
+            is needed).
     """
 
     note_paths: dict[str, list[str]] = field(default_factory=lambda: dict(DEFAULT_NOTE_PATHS))
@@ -109,6 +164,9 @@ class NotesPipelineConfig:
     include_historical: bool = False
     verification_status: str = "unconfirmed"
     clinical_status: str = "active"
+    batch_size: int = 1
+    workers: int = 1
+    parallel_threshold: int = 200
 
 
 class NotesPipeline:
@@ -269,12 +327,84 @@ class NotesPipeline:
             )
             return []
 
+    def extract_conditions_batch(
+        self, resources: list[dict]
+    ) -> list[DerivedConditions]:
+        """Batch-aware extraction. Returns one list of derived Conditions
+        per input resource, preserving input order.
+
+        Execution strategy is governed by ``self._config.batch_size``,
+        ``self._config.workers``, and ``self._config.parallel_threshold``:
+
+        - ``batch_size == 1`` or ``workers == 1``: chunks the input by
+          ``batch_size`` and loops synchronously, calling
+          :meth:`extract_conditions` per chunk. Byte-identical to
+          today's per-resource path.
+        - ``batch_size > 1`` and ``workers > 1`` and
+          ``len(resources) >= parallel_threshold``: dispatches to
+          :meth:`_extract_batch_parallel` which uses a
+          :class:`multiprocessing.Pool`. Falls back to synchronous
+          chunked mode on any failure.
+
+        INV-3 / INV-A4 preserved through the batch boundary: a single
+        bad resource does not break the batch.
+
+        Example::
+
+            >>> batch = pipeline.extract_conditions_batch([r1, r2, r3])
+            >>> len(batch) == 3
+            >>> batch[0]  # list of Conditions derived from r1
+            [{'resourceType': 'Condition', 'id': '...', ...}, ...]
+
+        Args:
+            resources: List of FHIR R4 resource dicts.
+
+        Returns:
+            One list of derived Condition dicts per input resource.
+            Outer length always equals ``len(resources)``; inner
+            length may be zero.
+        """
+        if not resources:
+            return []
+        batch_size = max(1, int(self._config.batch_size))
+        workers = max(1, int(self._config.workers))
+        threshold = max(0, int(self._config.parallel_threshold))
+        if batch_size == 1 or workers == 1 or len(resources) < threshold:
+            if workers > 1 and len(resources) < threshold:
+                _logger.info(
+                    "NotesPipeline.extract_conditions_batch: len=%d < "
+                    "parallel_threshold=%d; using synchronous mode.",
+                    len(resources), threshold,
+                )
+            results: list[DerivedConditions] = []
+            for i in range(0, len(resources), batch_size):
+                chunk = resources[i : i + batch_size]
+                for resource in chunk:
+                    results.append(self.extract_conditions(resource))
+            return results
+        # Parallel path
+        try:
+            return self._extract_batch_parallel(resources)
+        except Exception as exc:
+            _logger.warning(
+                "NotesPipeline.extract_conditions_batch parallel path failed "
+                "(%s); falling back to synchronous mode.",
+                exc,
+            )
+            return [
+                self.extract_conditions(r) for r in resources
+            ]
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _call_medterm4ds(self, text: str) -> list[Any]:
-        """Invoke the cached ``medterm4ds.extract`` with pipeline kwargs."""
+    def _extract_kwargs(self) -> dict:
+        """Build the medterm4ds.extract kwargs dict from the config.
+
+        Centralized so :meth:`_call_medterm4ds` (sync) and the Pool
+        initializer (parallel) build the identical kwargs.
+        """
         kwargs: dict[str, Any] = {"format": "codes"}
         if self._config.categories is not None:
             kwargs["categories"] = list(self._config.categories)
@@ -285,7 +415,114 @@ class NotesPipeline:
         kwargs["include_negated"] = self._config.include_negated
         kwargs["include_uncertain"] = self._config.include_uncertain
         kwargs["include_historical"] = self._config.include_historical
-        return self._extract_fn(text, **kwargs)
+        return kwargs
+
+    def _extract_batch_parallel(
+        self, resources: list[dict]
+    ) -> list[DerivedConditions]:
+        """Parallel extraction via :class:`multiprocessing.Pool`.
+
+        Step 5 of the FDD. Workers are module-level functions
+        (:func:`_init_worker`, :func:`_worker_extract_fragments`);
+        they read configuration from module globals populated by the
+        Pool initializer. Workers convert medterm4ds concepts to plain
+        dicts at the process boundary (defensive picklability) and
+        group them per-fragment so the parent can rebuild Conditions
+        with full fragment context.
+
+        On any failure, raises so :meth:`extract_conditions_batch` can
+        fall back to synchronous mode.
+        """
+        if not resources:
+            return []
+        import os
+        # Bounded worker count. ``os.cpu_count()`` returns None on
+        # exotic platforms; fall back to 1.
+        cpu = os.cpu_count() or 1
+        actual_workers = max(1, min(int(self._config.workers), cpu))
+
+        # Optional memory-pressure warning (INV-A8). ``psutil`` is NOT
+        # a fhir4ds dependency; the warning is best-effort.
+        try:
+            import psutil  # type: ignore[import-not-found]
+            available = psutil.virtual_memory().available
+            if actual_workers * WORKER_MEMORY_BUDGET_BYTES > available:
+                _logger.warning(
+                    "NotesPipeline parallel mode: workers=%d × ~5GB exceeds "
+                    "available virtual memory %d bytes; consider lowering "
+                    "workers or pre-warming medspaCy.",
+                    actual_workers, available,
+                )
+        except ImportError:
+            pass  # psutil is optional — silent skip.
+
+        # Pre-compute text fragments in the parent. Workers receive the
+        # already-extracted fragments so they don't have to import the
+        # fhir4ds text extractor (cleaner process boundary, smaller
+        # pickled payload).
+        payloads: list[tuple[dict, list]] = []
+        for resource in resources:
+            if not isinstance(resource, dict):
+                payloads.append((resource, []))
+                continue
+            # INV-4 mirrored: never derive Conditions from Conditions.
+            if resource.get("resourceType") == "Condition":
+                payloads.append((resource, []))
+                continue
+            try:
+                fragments = extract_note_texts(resource, self._config.note_paths)
+            except Exception as exc:  # pragma: no cover - defensive
+                _logger.warning(
+                    "extract_note_texts raised on %r: %s; treating as 0 fragments.",
+                    resource.get("resourceType") if isinstance(resource, dict) else None,
+                    exc,
+                )
+                fragments = []
+            payloads.append((resource, fragments))
+
+        # Build kwargs once (centralized in :meth:`_extract_kwargs`).
+        extract_kwargs = self._extract_kwargs()
+
+        # Dispatch via multiprocessing.Pool. ``spawn`` (Windows) and
+        # ``fork`` (POSIX) both work because workers are module-level
+        # functions with no closure over ``self``.
+        from multiprocessing import Pool
+        with Pool(
+            actual_workers,
+            initializer=_init_worker,
+            initargs=(extract_kwargs,),
+        ) as pool:
+            chunksize = max(1, len(payloads) // (actual_workers * 4))
+            worker_results = pool.map(
+                _worker_extract_fragments, payloads, chunksize=chunksize,
+            )
+
+        # Build derived Conditions in the PARENT process. This keeps
+        # ``_build_condition`` (which reads ``self._config``) on the
+        # right side of the process boundary — workers never reference
+        # ``self``. The deterministic id (INV-6) is computed in the
+        # parent so the hash is identical to the sync path.
+        results: list[DerivedConditions] = []
+        for (resource, fragments), fragment_concepts in zip(payloads, worker_results):
+            conditions: list[dict] = []
+            # fragment_concepts is list[list[dict]] — outer per fragment,
+            # inner per concept. ``zip(fragments, fragment_concepts)``
+            # is safe because workers preserve outer length.
+            for fragment, concepts in zip(fragments, fragment_concepts):
+                for concept in concepts or []:
+                    cond = self._build_condition(concept, fragment, resource)
+                    if cond is not None:
+                        conditions.append(cond)
+            results.append(conditions)
+        return results
+
+    def _call_medterm4ds(self, text: str) -> list[Any]:
+        """Invoke the cached ``medterm4ds.extract`` with pipeline kwargs.
+
+        Delegates to :meth:`_extract_kwargs` so the sync and parallel
+        paths build identical kwargs (audit QA-002).
+        """
+        return self._extract_fn(text, **self._extract_kwargs())
 
     def _build_condition(
         self,
@@ -421,6 +658,95 @@ def _safe_getattr(obj: Any, name: str) -> Any:
     if isinstance(obj, dict):
         return obj.get(name)
     return getattr(obj, name, None)
+
+
+# ----------------------------------------------------------------------
+# Multiprocessing worker functions (Step 5)
+#
+# These are module-level functions — NOT methods. They MUST NOT close
+# over ``self`` (which would pickle the parent's DuckDB connection —
+# fork-unsafe). Configuration is delivered via the Pool initializer
+# into module globals (``_WORKER_ENGINE``, ``_WORKER_EXTRACT_KWARGS``).
+# ----------------------------------------------------------------------
+
+
+def _init_worker(extract_kwargs: dict) -> None:
+    """Pool initializer: lazily import medterm4ds and cache the engine.
+
+    Runs once per worker process. Sets the module globals
+    ``_WORKER_ENGINE`` and ``_WORKER_EXTRACT_KWARGS`` so subsequent
+    calls to :func:`_worker_extract_fragments` can read them without
+    closing over the parent's state.
+    """
+    global _WORKER_ENGINE, _WORKER_EXTRACT_KWARGS
+    try:
+        import medterm4ds  # type: ignore[import-not-found]
+    except ImportError as exc:  # pragma: no cover - exercised when extra missing
+        raise ImportError(
+            "medterm4ds is required for parallel NotesPipeline. Install with: "
+            "pip install 'fhir4ds-v2[ner]'  (which pulls medterm4ds[extraction])"
+        ) from exc
+    # medterm4ds.connect() loads medspaCy + SapBERT eagerly on first
+    # call (~30s cold, ~0s warm). Per-worker, this is a one-time cost.
+    connect = getattr(medterm4ds, "connect", None)
+    if callable(connect):
+        _WORKER_ENGINE = connect()
+    else:
+        _WORKER_ENGINE = medterm4ds  # fall back to module-as-engine
+    _WORKER_EXTRACT_KWARGS = dict(extract_kwargs)
+
+
+def _worker_extract_fragments(
+    payload: tuple[dict, list],
+) -> list[list[dict]]:
+    """Worker function: extract concepts for one resource, grouped by fragment.
+
+    Args:
+        payload: ``(resource, fragments)`` tuple where ``fragments`` is
+            the pre-computed list of :class:`NoteText` entries from the
+            parent (avoids re-running the text extractor in workers).
+
+    Returns:
+        Per-fragment list of concept **dicts** (post-boundary
+        conversion). Outer length always equals ``len(fragments)``;
+        inner length may be zero. medterm4ds's ``ExtractedConcept``
+        dataclass is converted to plain dicts here so the result is
+        unconditionally picklable. Never raises — worker failures
+        return an empty outer list so a single bad resource cannot
+        poison the batch.
+    """
+    if _WORKER_ENGINE is None:
+        return []
+    _resource, fragments = payload
+    extract_fn = getattr(_WORKER_ENGINE, "extract", None)
+    if extract_fn is None:
+        extract_fn = _WORKER_ENGINE  # module-as-engine fallback
+    out: list[list[dict]] = []
+    for fragment in fragments:
+        try:
+            concepts = extract_fn(fragment.text, **_WORKER_EXTRACT_KWARGS)
+        except Exception:  # pragma: no cover - defensive
+            out.append([])
+            continue
+        fragment_out: list[dict] = []
+        for concept in concepts or []:
+            if isinstance(concept, dict):
+                fragment_out.append(concept)
+            else:
+                # Convert dataclass-like to dict at the process boundary
+                fragment_out.append({
+                    "code": _safe_getattr(concept, "code"),
+                    "display": _safe_getattr(concept, "display"),
+                    "source": _safe_getattr(concept, "source"),
+                    "confidence": _safe_getattr(concept, "confidence"),
+                    "match_grade": _safe_getattr(concept, "match_grade"),
+                    "matched_text": _safe_getattr(concept, "matched_text"),
+                    "span_start": _safe_getattr(concept, "span_start"),
+                    "span_end": _safe_getattr(concept, "span_end"),
+                    "status": _safe_getattr(concept, "status"),
+                })
+        out.append(fragment_out)
+    return out
 
 
 def _normalize_system(source: Any) -> Optional[str]:

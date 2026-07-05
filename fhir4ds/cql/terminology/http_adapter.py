@@ -17,13 +17,17 @@ Circuit breaker:
     ``[]`` for protocol methods) for ``breaker_cooldown_seconds``. Once
     the cooldown elapses, a single half-open probe call is permitted; a
     success closes the breaker, a failure re-trips it. The breaker is
-    NOT thread-safe — assume single-threaded use. Multiple threads
-    sharing one endpoint instance need an external lock.
+    thread-safe under an internal ``threading.Lock`` (FDD Step 4 / INV-A5);
+    safe for use by :meth:`HTTPTerminologyEndpoint.search_batch`'s
+    internal thread pool. Callers using their own threads on the same
+    instance remain supported but should not also call ``search_batch``
+    concurrently — that path is untested.
 """
 
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import Any, Optional
 
@@ -49,6 +53,11 @@ _HEALTH_PROBE_TIMEOUT_SECONDS = 2.0
 # downstream, so any consumer that already understands our extension
 # shape understands the sidecar's response too.
 _MATCH_GRADE_URL = "http://fhir4ds.org/fhir/StructureDefinition/match-grade"
+
+# Cap on concurrent HTTP calls in search_batch. Most medterm4ds sidecars
+# handle ~8 concurrent requests before saturating the SapBERT inference
+# pool; raising this risks sidecar backpressure. (FDD Step 4 / audit S3.)
+HTTP_SEARCH_BATCH_MAX_WORKERS = 8
 
 
 def _extract_score(resource: dict, search_meta: dict | None) -> float:
@@ -120,14 +129,17 @@ class HTTPTerminologyEndpoint:
             to 5.0 seconds. Must be a finite positive float.
         breaker_threshold: Consecutive failures before the circuit breaker
             trips. Once tripped, protocol methods short-circuit to ``[]``
-            for ``breaker_cooldown_seconds``. Defaults to 5. NOT thread-safe.
+            for ``breaker_cooldown_seconds``. Defaults to 5.
         breaker_cooldown_seconds: Seconds the breaker stays tripped before
             a half-open probe call is permitted. Defaults to 60.0.
 
     Thread safety:
-        The circuit breaker state is mutable and unprotected. Assume
-        single-threaded use. Multiple threads sharing one instance need
-        an external lock.
+        The circuit breaker state is mutable and protected by an
+        internal ``threading.Lock`` (FDD Step 4 / INV-A5). Safe for
+        use by :meth:`search_batch`'s internal thread pool. Callers
+        using their own threads on the same instance are also
+        supported but should not also call ``search_batch``
+        concurrently — that combined path is untested.
     """
 
     def __init__(
@@ -149,16 +161,19 @@ class HTTPTerminologyEndpoint:
         self._timeout = float(timeout_seconds)
         self._breaker_threshold = int(breaker_threshold)
         self._breaker_cooldown_seconds = float(breaker_cooldown_seconds)
-        # Breaker state — single-threaded only (see class docstring).
+        # Breaker state — guarded by ``self._lock`` (FDD Step 4 / INV-A5).
         self._consecutive_failures: int = 0
         self._tripped_until: float = 0.0
+        # ``threading.Lock`` (not RLock) — every acquisition is a single
+        # critical section, no recursive entry needed. Stdlib only.
+        self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
     # ------------------------------------------------------------------
-    # Circuit breaker helpers (single-threaded — see class docstring).
+    # Circuit breaker helpers (thread-safe under ``self._lock``).
     # ------------------------------------------------------------------
 
     def _is_breaker_open(self, now: float) -> bool:
@@ -167,29 +182,52 @@ class HTTPTerminologyEndpoint:
         Once the cooldown elapses, returns False so a single half-open
         probe call is permitted. The probe either trips the breaker
         again (failure) or closes it (success).
+
+        Acquires ``self._lock`` for the duration of the reads so a
+        concurrent :meth:`_on_call_failure` cannot leave us reading a
+        torn counter/cooldown pair.
         """
-        if self._consecutive_failures < self._breaker_threshold:
+        failures, tripped_until = self._breaker_snapshot()
+        if failures < self._breaker_threshold:
             return False
-        if now >= self._tripped_until:
+        if now >= tripped_until:
             # Cooldown elapsed — half-open: allow one probe call.
             return False
         return True
 
+    def _breaker_snapshot(self) -> tuple[int, float]:
+        """Snapshot ``(failures, tripped_until)`` under the lock.
+
+        Use this for log/diagnostic reads so the values are a
+        consistent pair — calling ``self._consecutive_failures`` and
+        ``self._tripped_until`` separately can produce a torn read
+        when a concurrent failure trips the breaker between the two
+        attribute reads (audit QA-001).
+        """
+        with self._lock:
+            return self._consecutive_failures, self._tripped_until
+
     def _on_call_success(self) -> None:
         """Reset failure counters on a successful call (closes breaker)."""
-        self._consecutive_failures = 0
-        self._tripped_until = 0.0
+        with self._lock:
+            self._consecutive_failures = 0
+            self._tripped_until = 0.0
 
     def _on_call_failure(self) -> None:
         """Increment failure counters and trip the breaker when threshold met."""
-        self._consecutive_failures += 1
-        if self._consecutive_failures >= self._breaker_threshold:
-            self._tripped_until = time.monotonic() + self._breaker_cooldown_seconds
+        with self._lock:
+            self._consecutive_failures += 1
+            tripped = self._consecutive_failures >= self._breaker_threshold
+            if tripped:
+                self._tripped_until = time.monotonic() + self._breaker_cooldown_seconds
+                failure_count = self._consecutive_failures
+                cooldown = self._breaker_cooldown_seconds
+        if tripped:
             _logger.error(
                 "terminology circuit breaker tripped after %d consecutive failures; "
                 "fast-failing subsequent calls for %.1fs",
-                self._consecutive_failures,
-                self._breaker_cooldown_seconds,
+                failure_count,
+                cooldown,
             )
 
     @staticmethod
@@ -335,11 +373,12 @@ class HTTPTerminologyEndpoint:
         """
         now = time.monotonic()
         if self._is_breaker_open(now):
+            failures, tripped_until = self._breaker_snapshot()
             _logger.warning(
                 "terminology circuit breaker open; skipping expand() call "
                 "(failures=%d, cooldown_remaining=%.1fs)",
-                self._consecutive_failures,
-                max(0.0, self._tripped_until - now),
+                failures,
+                max(0.0, tripped_until - now),
             )
             return []
         try:
@@ -362,11 +401,12 @@ class HTTPTerminologyEndpoint:
         """
         now = time.monotonic()
         if self._is_breaker_open(now):
+            failures, tripped_until = self._breaker_snapshot()
             _logger.warning(
                 "terminology circuit breaker open; skipping expand_intensional() call "
                 "(failures=%d, cooldown_remaining=%.1fs)",
-                self._consecutive_failures,
-                max(0.0, self._tripped_until - now),
+                failures,
+                max(0.0, tripped_until - now),
             )
             return []
         try:
@@ -395,11 +435,12 @@ class HTTPTerminologyEndpoint:
         """
         now = time.monotonic()
         if self._is_breaker_open(now):
+            failures, tripped_until = self._breaker_snapshot()
             _logger.warning(
                 "terminology circuit breaker open; skipping search_text() call "
                 "(failures=%d, cooldown_remaining=%.1fs)",
-                self._consecutive_failures,
-                max(0.0, self._tripped_until - now),
+                failures,
+                max(0.0, tripped_until - now),
             )
             return []
         try:
@@ -426,20 +467,56 @@ class HTTPTerminologyEndpoint:
         *,
         mode: str = "hybrid",
     ) -> list[list[SearchResult]]:
-        """Run search_text per query.
+        """Run search_text per query, concurrently when beneficial.
 
-        medterm4ds does not yet expose a native batch $search endpoint,
-        so this is a sequential loop. Phase 4 may add a true batch
-        endpoint; the Protocol signature is stable either way.
+        For ``len(queries) <= 1`` or when the breaker is open at
+        submission time, runs sequentially (today's behavior —
+        byte-identical results). For larger batches, dispatches via
+        :class:`concurrent.futures.ThreadPoolExecutor` with
+        ``max_workers=min(HTTP_SEARCH_BATCH_MAX_WORKERS, len(queries))``.
+
+        Thread safety (FDD Step 4 / INV-A5):
+            The circuit breaker state is guarded by ``self._lock`` so
+            concurrent failures from in-flight HTTP calls correctly
+            increment ``_consecutive_failures`` without torn writes.
+            If the breaker trips mid-flight, remaining futures still
+            execute (already submitted) but their results are dropped
+            if the breaker is open at result-collection time.
+
+        medterm4ds does not yet expose a native batch $search endpoint;
+        Phase 7 of the medterm4ds distribution plan may add one. The
+        Protocol signature is stable either way.
 
         Note: the breaker is checked per-query inside ``search_text``;
         ``search_batch`` itself does not wrap the loop, so an open
         breaker short-circuits each sub-call to ``[]`` without raising.
         """
-        results: list[list[SearchResult]] = []
-        for query, category in queries:
-            results.append(self.search_text(query, category, mode=mode))
-        return results
+        if len(queries) <= 1:
+            # Small batch — sequential is faster (no thread overhead).
+            return [
+                self.search_text(query, category, mode=mode)
+                for query, category in queries
+            ]
+        # Parallel dispatch. ``concurrent.futures`` is stdlib, imported
+        # lazily so the module remains import-isolation clean.
+        import concurrent.futures
+        max_workers = min(HTTP_SEARCH_BATCH_MAX_WORKERS, len(queries))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(self.search_text, query, category, mode=mode)
+                for query, category in queries
+            ]
+            results: list[list[SearchResult]] = []
+            for future in futures:
+                try:
+                    results.append(future.result())
+                except Exception as exc:  # pragma: no cover - defensive
+                    _logger.warning(
+                        "search_batch: query raised %s: %s; returning [] for that query.",
+                        type(exc).__name__, exc,
+                    )
+                    results.append([])
+            return results
 
     # ------------------------------------------------------------------
     # Health probe

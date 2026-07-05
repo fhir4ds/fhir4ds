@@ -357,19 +357,48 @@ class FHIRDataLoader:
         if not resources:
             return 0
 
+        # Phase 2 augmentation pre-pass (FDD Step 3). When an AutoCoder
+        # is configured, run its batch-aware augmentation once over the
+        # entire input list BEFORE the row-build loop. With
+        # ``batch_size=1`` (the default), ``augment_resources`` delegates
+        # to ``augment_resource`` per resource — byte-identical to the
+        # pre-feature code path. ``augment_resources`` MUST NOT raise
+        # (INV-9 propagated through the batch boundary).
+        if self._auto_coder is not None:
+            self._auto_coder.augment_resources(resources)
+
+        # Phase 4 notes-pipeline pre-pass (FDD Step 3). When a
+        # NotesPipeline is configured, run its batch-aware extraction
+        # once. The returned list-of-lists is indexed by input position
+        # so the row-build loop can attach derived Conditions to the
+        # right source resource. ``extract_conditions_batch`` MUST NOT
+        # raise (INV-3 / INV-A4 propagated through the batch boundary).
+        derived_per_resource: list[list[dict]] | None = None
+        if self._notes_pipeline is not None:
+            derived_per_resource = self._notes_pipeline.extract_conditions_batch(
+                resources
+            )
+            # Defensive: batch contract is len(out) == len(resources).
+            # If a future bug returns a different shape, fall back to
+            # per-resource extraction so the load still completes.
+            if derived_per_resource is None or len(derived_per_resource) != len(resources):
+                _logger.warning(
+                    "extract_conditions_batch returned shape %r; falling "
+                    "back to per-resource extraction.",
+                    None if derived_per_resource is None else len(derived_per_resource),
+                )
+                derived_per_resource = [
+                    self._notes_pipeline.extract_conditions(r) for r in resources
+                ]
+
         # Build rows and deduplicate: last-write-wins for same (id, resourceType)
         seen: dict[tuple[str, str], int] = {}
         rows: list[tuple] = []
         dedup_count = 0
-        for resource in resources:
+        for index, resource in enumerate(resources):
             if not isinstance(resource, dict):
                 raise TypeError(f"Expected dict, got {type(resource).__name__}")
-            # Phase 2 augmentation hook — runs BEFORE validate/serialize so
-            # the auto-coder can append Codings. With ``self._auto_coder
-            # is None`` (the default) this branch is skipped entirely and
-            # behavior is byte-identical to pre-Phase-2 (INV-1).
-            if self._auto_coder is not None:
-                self._auto_coder.augment_resource(resource)
+            # Phase 2 augmentation already ran in the pre-pass above.
             resource_type, resource_id = _validate_resource_identity(resource)
             patient_ref = self._extract_patient_ref(resource)
             resource_json = _serialize_resource(resource)
@@ -386,13 +415,13 @@ class FHIRDataLoader:
                 seen[key] = len(rows)
             rows.append(row)
 
-            # Phase 4 notes-pipeline hook (batch path). With
-            # ``self._notes_pipeline is None`` (default) this branch is
-            # skipped entirely and behavior is byte-identical to
-            # pre-Phase-4. ``extract_conditions`` NEVER raises (Phase 4
-            # INV-3) so a single bad resource cannot poison the batch.
-            if self._notes_pipeline is not None:
-                derived_list = self._notes_pipeline.extract_conditions(resource)
+            # Phase 4 notes-pipeline hook (batch path). Derived
+            # Conditions were extracted in the pre-pass above; this loop
+            # just serializes and inserts them. ``extract_conditions``
+            # NEVER raises (Phase 4 INV-3) so a single bad resource
+            # cannot poison the batch.
+            if derived_per_resource is not None:
+                derived_list = derived_per_resource[index]
                 for derived_resource in derived_list or []:
                     if not isinstance(derived_resource, dict):
                         continue

@@ -129,6 +129,19 @@ class AutoCoderConfig:
             a resource type appears here, the override takes precedence
             over :data:`RESOURCE_TYPE_TO_CATEGORY` (e.g. to remap
             ``Observation`` to ``vital``).
+        batch_size: Number of resources processed per call to
+            :meth:`AutoCoder.augment_resources`. Default ``1`` preserves
+            the per-resource code path byte-for-byte. Larger values
+            enable batch-aware cache lookups and (when ``workers > 1``)
+            parallel augmentation. See the execution-strategy matrix in
+            :doc:`FEATURE_BATCH_AUGMENTATION </plans/FEATURE_BATCH_AUGMENTATION.md>`.
+        workers: Size of the multiprocessing pool used by
+            :meth:`AutoCoder.augment_resources` when ``batch_size > 1``
+            and the input size exceeds ``parallel_threshold``. Default
+            ``1`` preserves today's single-process behavior. Bounded at
+            runtime by ``os.cpu_count()``. Each worker loads its own
+            medterm4ds engine (~5 GB for medspaCy + SapBERT); on a
+            16 GB machine, ``workers=2`` is the practical max.
     """
 
     enabled: bool = True
@@ -141,6 +154,8 @@ class AutoCoderConfig:
         default_factory=lambda: dict(DEFAULT_PATHS)
     )
     category_overrides: dict[str, str] = field(default_factory=dict)
+    batch_size: int = 1
+    workers: int = 1
 
 
 class AutoCoder:
@@ -187,8 +202,6 @@ class AutoCoder:
         self._cache_enabled = False
         self._ensure_cache_table()
 
-    # ── public API ──────────────────────────────────────────────────
-
     def augment_resource(self, resource: dict) -> dict:
         """Augment ``resource`` in place with auto-coded Codings.
 
@@ -220,7 +233,101 @@ class AutoCoder:
             )
         return resource
 
+    def augment_resources(self, resources: list[dict]) -> None:
+        """Batch-aware augmentation. Mutates each resource in place.
+
+        Execution strategy is governed by ``self._config.batch_size``
+        and ``self._config.workers``:
+
+        - ``batch_size == 1``: delegates to :meth:`augment_resource`
+          per resource (byte-identical to today's per-resource path).
+        - ``batch_size > 1, workers == 1``: chunks the input by
+          ``batch_size`` and loops synchronously, calling
+          :meth:`augment_resource` per resource. Same code path as
+          per-resource, just amortizes Python overhead.
+        - ``batch_size > 1, workers > 1``: dispatches to
+          :meth:`_augment_batch_parallel` which uses a
+          :class:`multiprocessing.Pool` (Step 6 of the FDD). When the
+          parallel path is unavailable or the input is too small, falls
+          back to synchronous chunked mode.
+
+        INV-9 is preserved through the batch boundary: a single bad
+        resource does not break the batch.
+
+        Args:
+            resources: List of FHIR R4 resource dicts. Mutated in place.
+        """
+        if not resources:
+            return
+        batch_size = max(1, int(self._config.batch_size))
+        workers = max(1, int(self._config.workers))
+        if batch_size == 1 or workers == 1:
+            for resource in resources:
+                self.augment_resource(resource)
+            return
+        # batch_size > 1 AND workers > 1.
+        #
+        # FDD Step 6 (multiprocessing for AutoCoder) is deferred per
+        # ``FEATURE_BATCH_AUGMENTATION.md`` §Step 6: "Lower priority
+        # (Phase 2 is less CPU-bound than Phase 4). Skip if Step 5
+        # surfaces problems that warrant deferring." Step 5 surfaced
+        # the DuckDB-shared-connection hazard; we defer.
+        #
+        # The cross-resource parallel win for AutoCoder is captured by
+        # Step 4's HTTP thread pool in ``search_batch`` (FDD §Step 4),
+        # which runs concurrently inside each per-resource
+        # ``augment_resource`` call. No separate AutoCoder-side pool
+        # is needed in the common (HTTP endpoint) case. The in-process
+        # endpoint case remains single-threaded per resource, but each
+        # SapBERT call releases the GIL so a future thread pool could
+        # still help — that's future work.
+        #
+        # For now: dispatch synchronously to preserve correctness.
+        #
+        # Audit QA-004: the NotImplementedError branch exists only to
+        # distinguish "Step 6 deferred" (today) from "Step 6 broken"
+        # (future). If Step 6 is ever implemented, drop this branch
+        # and let real failures surface via the generic Exception catch.
+        try:
+            self._augment_batch_parallel(resources)
+        except NotImplementedError:
+            # Expected — the pool is deferred. Synchronous chunked mode.
+            for resource in resources:
+                self.augment_resource(resource)
+        except Exception as exc:  # noqa: BLE001 - INV-9-style: never poison the batch
+            _logger.warning(
+                "AutoCoder.augment_resources parallel path failed (%s); "
+                "falling back to synchronous mode.",
+                exc,
+            )
+            for resource in resources:
+                self.augment_resource(resource)
+
     # ── internals ───────────────────────────────────────────────────
+
+    def _augment_batch_parallel(self, resources: list[dict]) -> None:
+        """Parallel batch augmentation (FDD Step 6 — DEFERRED).
+
+        The original plan called for a thread pool here. Step 5 surfaced
+        a DuckDB-shared-connection hazard that applies equally to
+        threads: DuckDB ``Connection`` objects cannot be safely shared
+        across concurrent ``execute()`` calls (per DuckDB Python docs).
+        Workers would need to call ``con.cursor()`` per thread, which
+        would require non-trivial AutoCoder refactoring.
+
+        Per FDD §Step 6: "Skip if Step 5 surfaces problems that warrant
+        deferring." We defer. The cross-resource parallel win for
+        AutoCoder is captured by Step 4's HTTP thread pool in
+        :meth:`HTTPTerminologyEndpoint.search_batch`, which runs
+        concurrently inside each per-resource ``augment_resource`` call.
+
+        Raises ``NotImplementedError`` so :meth:`augment_resources`
+        falls back to synchronous chunked mode.
+        """
+        raise NotImplementedError(
+            "AutoCoder parallel batch deferred (see FDD §Step 6). Step 4's "
+            "HTTP thread pool captures the cross-resource parallel win."
+        )
 
     def _augment_resource_inner(self, resource: dict) -> None:
         if not isinstance(resource, dict):
