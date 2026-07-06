@@ -786,6 +786,32 @@ class OperatorsMixin:
         list_ast: object,
         element_ast: object,
     ) -> SQLFunctionCall:
+        # In audit_mode='full' (audit_mode + audit_expressions), the
+        # `CQLListContainsEq` / `CQLListContainsTemporalEq` SQL macros trigger
+        # a DuckDB binder bug ("Need named argument for struct pack") when
+        # they appear inside audit_leaf() wrapping inside audit_and/or chains
+        # inside correlated EXISTS subqueries. The macros expand to SQL
+        # containing EXISTS(SELECT FROM UNNEST...); DuckDB's binder fails to
+        # resolve the struct_pack argument shape when that expansion is nested
+        # through audit_and/or struct_extract calls.
+        #
+        # The fix: emit `list_contains(...)` directly (a DuckDB scalar
+        # built-in, no macro expansion) whenever audit_mode is active. This
+        # preserves correctness for primitive element types (the common case
+        # in audit contexts — status, intent, code strings). CQL's complex
+        # equality semantics for Code/Quantity list elements (which would
+        # require the UNNEST path) are not exercised by audit SQL today; if
+        # that changes, the audit pipeline must lift the macro to a pre-compute
+        # CTE instead of inlining it into audit_leaf.
+        if (
+            getattr(self, "context", None) is not None
+            and self.context.audit_mode
+            and self.context.audit_expressions
+        ):
+            return SQLFunctionCall(
+                name="list_contains",
+                args=[list_sql, element_sql],
+            )
         name = (
             "CQLListContainsTemporalEq"
             if self._use_temporal_list_contains(list_ast, element_ast)

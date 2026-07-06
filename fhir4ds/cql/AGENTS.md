@@ -4725,3 +4725,451 @@ zero parity diffs:
    under `TYPE_CHECKING`. No `httpx`, no `medterm4ds` in the loader
    runtime path. Tested in `test_import_isolation.py` (Phase 1) +
    zero-dep smoke check in the FDD validation commands.
+
+## Iteration 1 Domain 3 SKEPTIC (Interval / List Translation) — 2026-07-04
+
+- `QA-001` RESOLVED (HIGH). Fluent-form `X.distinct()` previously
+  lowered to DuckDB's native `ARRAY_DISTINCT`, which (a) did NOT
+  preserve first-occurrence order and (b) silently dropped NULL
+  elements. CQL §22 / Appendix B and the official
+  `CqlListOperatorsTest.xml` (lines 119–159) require both order
+  preservation and NULL preservation. The function form `distinct X`
+  correctly lowered to the `"Distinct"` macro (alias for
+  `CQLListDistinctEq`).
+- Fix location: `fhir4ds/cql/translator/expressions/_lists.py:544-545`
+  (method-form `.distinct()` dispatch). Changed from
+  `SQLFunctionCall(name="ARRAY_DISTINCT", ...)` to
+  `SQLFunctionCall(name='"Distinct"', ...)`, matching the function-form
+  path in `_translate_distinct_expression` (`_lists.py:908,946-947`).
+- Why CI missed it: the official CQL conformance suite only exercises
+  the function form; no test in `CqlListOperatorsTest.xml` uses
+  `.distinct()` fluent syntax. Real-world CQL measures frequently use
+  fluent style.
+- Regression tests:
+  `fhir4ds/cql/tests/unit/test_sql_structure.py::TestFluentDistinctMacroEmission::test_fluent_distinct_uses_distinct_macro`
+  and
+  `::test_fluent_distinct_matches_function_form`.
+- Residual risk: the function-form dispatch in
+  `fhir4ds/cql/translator/functions.py:286-287` still references
+  `array_distinct` as a defensive fallback, but the upstream
+  function-form translator overrides it with the `"Distinct"` macro
+  before SQL emission. Do NOT delete the override without verifying
+  that fallback path is unreachable.
+- Future maintainers: if you add a new list operator with both fluent
+  and function forms, ensure BOTH dispatch paths route to the
+  spec-compliant macro. The two paths live in different files
+  (`expressions/_lists.py` for fluent method form,
+  `expressions/_operators.py` / `_functions.py` for function form).
+
+### NOT A BUG Registry additions (Domain 3 SKEPTIC iter 1)
+
+- `intervalContains` / `intervalIncludes` correctly honor
+  `lowClosed`/`highClosed`. Boundary points are included only when
+  the relevant closed flag is true.
+- `intervalMeets` correctly distinguishes share-a-point (False) from
+  immediate-successor (True). Open-high + closed-low at the same
+  point value correctly registers as a meet (because the open-high
+  interval's effective end is the predecessor).
+- `intervalOverlaps` correctly returns False for two intervals that
+  share only an open boundary point.
+- `intervalProperlyIncludes` returns False for self-inclusion and
+  True for proper subsets including the case where one boundary is
+  shared (per CQL §19.6 formal definition: `IncludedIn(B, A) and
+  (start(A) <> start(B) or end(A) <> end(B))`).
+- `AgeInYearsAt` correctly handles Feb 29 birthdays. Per CQL
+  Appendix H, in non-leap years the anniversary is Feb 28; in leap
+  years it remains Feb 29. Existing test
+  `fhir4ds/cql/duckdb/tests/test_age_udfs.py:218-224` covers this.
+- `Parameter "MP" Interval<DateTime> default Interval[@s, @e)`
+  preserves `highClosed=FALSE` through population SQL generation
+  (historical QA-003 fix is intact).
+- `end of Interval[@s, @e)` correctly emits `intervalEnd(...)`,
+  which returns the predecessor of the open-high bound (e.g.,
+  `Interval[..., @2024-12-31T)` end = `2024-12-30T`).
+
+## Iteration 2 Domain 4 ARCHAEOLOGIST (eCQM IPP/Denom/Numer/Excl flow) — 2026-07-05
+
+- **QA-002 (HIGH, OPEN)**: `Encounter.period during "Measurement Period"`
+  silently returns FALSE when the encounter's period starts exactly at
+  `MP.start` (e.g. `2026-01-01T00:00:00`). Root cause:
+  `fhir4ds/cql/duckdb/udf/interval.py:1129-1169` `_precision_aware_compare`
+  returns `None` when comparing two DateTimes with identical wall-clock
+  value but different precisions. The translator's CAST-through-TIMESTAMP
+  for parameter-sourced MP bounds produces `.000` ms precision
+  (`'2026-01-01T00:00:00.000'`), while FHIR `Period` bounds and inline
+  interval literals retain raw second precision (`'2026-01-01T00:00:00'`).
+  `intervalIncludes` (interval.py:1837-1838) then propagates None as
+  NULL → falsy in WHERE. Per CQL §18 the comparison must occur at the
+  coarser precision and return 0 (equal). Adjacent function
+  `intervalProperlyIncludes` (interval.py:2003-2052) uses
+  `_normalize_for_compare` which DOES handle the format difference
+  correctly — two divergent comparison code paths in the same UDF file,
+  same dispatch-path-inconsistency shape as QA-001. **Real-world impact**:
+  every patient with an encounter admitted on Jan 1 of the MP year is
+  silently dropped from the Initial Population. The 47/47 DQM conformance
+  baseline does NOT detect this because the fixtures have no
+  boundary-timed encounters. Reproducer:
+  `fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/iter2/probe_h2_zero_width.py`.
+
+- **QA-003 (MEDIUM, OPEN)**: `exists from O.code C where C.code = '...'`
+  over a FHIR CodeableConcept returns False when the inner code matches.
+  Equivalent `exists (O.code.coding C where C.code = '...')` returns
+  True. The where-clause on `C.code` (where C is a CodeableConcept-typed
+  alias from the `exists from` source) does not resolve to
+  `coding[].code` per FHIRPath navigation. Not exercised by CMS eCQM
+  fixtures (grep returned no matches) but is spec-valid CQL. Reproducer:
+  `fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/iter2/probe_h1_verify.py`.
+
+- **QA-004 (LOW, OPEN)**: `exists from [Resource].field C where ...`
+  emits SQL referencing the resource type name as a column
+  (`fhirpath_text("Observation", 'code.code')` → Binder Error
+  "Referenced column 'Observation' not found"). Internal SQL Binder
+  Error rather than typed CQL error. Not used by CMS fixtures.
+
+### Known Fragile Areas additions (Domain 4 ARCHAEOLOGIST iter 2)
+
+- `fhir4ds/cql/duckdb/udf/interval.py:1129-1169` (`_precision_aware_compare`)
+  and `interval.py:1805-1852` (`intervalIncludes`): when comparing two
+  temporal interval bounds with identical wall-clock time but different
+  precisions (ms vs second), `_precision_aware_compare` returns None
+  (uncertain) instead of 0 (equal-at-coarser-precision) per CQL §18.
+  `intervalIncludes` propagates this None as NULL, silently excluding
+  boundary-coincident inner intervals from inclusion results. **UPDATE
+  (iter-2 FIX):** this is INTENDED behavior per the official CQL
+  conformance test `CqlIntervalOperatorsTest.xml::DateTimeIncludedInNull`
+  (lines 914-918), which explicitly expects `null` for
+  `Interval[@2017-09-01T00:00:00, @2017-09-01T00:00:00] included in
+  Interval[@2017-09-01T00:00:00.000, @2017-12-30T23:59:59.999]`. An
+  initial fix attempt that truncated the finer-precision operand to the
+  coarser precision (returning certain-equal) caused 4 official CQL
+  conformance tests to fail (`DateTimeIncludedInNull`,
+  `DateTimeOverlapsPrecisionLeftPossiblyStartsDuringRight`,
+  `DateTimeOverlapsPrecisioLeftPossiblyEndsDuringRight`,
+  `DateTimeOverlapsPrecisionLeftPossiblyStartsAndEndsDuringRight`). The
+  fix was reverted. The adjacent function `intervalProperlyIncludes`
+  (interval.py:2003-2052) uses a DIFFERENT comparison helper
+  (`_normalize_for_compare`) — two divergent comparison paths in the
+  same file is the same dispatch-path-inconsistency shape that caused
+  QA-001. Authors needing boundary-inclusive behavior should use
+  explicit precision (`included in day of`) or align MP bound precision
+  with FHIR Period bound precision.
+- `fhir4ds/cql/translator/expressions/_operators.py:2395-2396,
+  4548-4552` (`_translate_during_op` dispatch): `X during Y` is lowered
+  to `intervalIncludes(Y, X)` when `X` is an interval. This dispatch
+  inherits any `intervalIncludes` defect silently. QA-002 surfaces here
+  as population mis-attribution for boundary-timed encounters. **UPDATE
+  (iter-2 FIX):** per spec test `DateTimeIncludedInNull`, the
+  NULL-propagation is correct; the dispatch is not defective.
+- `fhir4ds/cql/translator/expressions/_property.py:240-258` (`_translate_property`
+  Retrieve-source guard): the CQL form `[Resource].field` as a query
+  source (`exists from [Observation].code C where C.code = 'X'`) is
+  spec-valid (CQL §11) but not implemented. The parser produces
+  `Property(source=Retrieve(type='Observation'), path='code')`, and the
+  translator previously emitted `fhirpath_text("Observation", '...')` —
+  treating the resource type name as a scalar column. This caused an
+  opaque DuckDB Binder Error at execution. An early guard now raises a
+  typed `TranslationError` with an actionable message recommending the
+  rewrite `exists ([Resource] R where R.field ...)`. The deeper fix
+  (correct retrieve-then-navigate translation) requires the same FHIR
+  R4 `CodeableConcept.code` shortcut machinery as QA-003 (DEFERRED).
+
+### NOT A BUG Registry additions (Domain 4 ARCHAEOLOGIST iter 2)
+
+- QA-002: `intervalIncludes` returns NULL when temporal bounds share
+  identical wall-clock time but differ in precision (e.g.
+  `2026-01-01T00:00:00.000` ms vs `2026-01-01T00:00:00` second).
+  Per the official CQL conformance test
+  `CqlIntervalOperatorsTest.xml::DateTimeIncludedInNull` (lines
+  914-918), this is the spec-correct behavior — comparison at coarser
+  precision returns `null` when precisions differ, regardless of
+  whether the finer-precision components are zero. The CQL spec text
+  "comparison performed at the coarsest precision" (§18) is implemented
+  strictly: any precision mismatch yields uncertainty. Authors needing
+  boundary-inclusive behavior must use explicit precision (`included in
+  day of`) or align bound precisions.
+- FHIR R4 `id` regex `[A-Za-z0-9\-\.]{1,64}` is correctly enforced by
+  `FHIRDataLoader.load_resource` — underscores are spec-forbidden in
+  FHIR ids. Initial probe attempts using `<resource>.id` values like
+  `p_vs`, `num_only` correctly raised `ValueError`. Not a bug.
+- Patient with NO resources at all still appears as a row in the
+  evaluate_measure output with all population memberships False —
+  correct per CQL patient-context semantics.
+- NULL/missing `subject.reference` on Observation correctly does not
+  match any Encounter in a `with`/`such that` join — correct.
+- Integer value for `Encounter.status` (wrong FHIR type) correctly
+  compares False to the string `'finished'` and does not crash —
+  graceful type-mismatch handling.
+- Duplicate resource IDs in loader input: loader silently accepts both
+  (last-write-wins). This is implementation-defined behavior per FHIR
+  spec (IDs SHOULD be unique but the loader is not the enforcement
+  boundary). No crash, no data corruption beyond the documented
+  last-write-wins.
+- Measurement Period parameter default `Interval[@2026-01-01T, @2027-01-01T)`
+  is correctly preserved as `lowClosed=True, highClosed=False` through
+  to the SQL emission (`intervalFromBounds(..., TRUE, FALSE)`).
+  Point-in-interval semantics at MP boundaries are correct
+  (`@2026-01-01T in MP = True`, `@2027-01-01T in MP = False`,
+  `@2026-12-31T23:59:59 in MP = True`).
+- `Encounter.period.start in "Measurement Period"` (point-in-interval
+  form) correctly returns True for boundary-coincident starts. The
+  QA-002 NULL-return is specific to interval-during-interval
+  (`Encounter.period during "Measurement Period"`), not
+  point-in-interval.
+
+## Known Fragile Areas (Iteration 4 / Domain 6 EXPLORER additions)
+
+The following surfaces in `fhir4ds/cql/loader/` were probed in
+iteration 4. All five QA findings (QA-006..QA-010) were RESOLVED in
+the iter-4 FIX phase; this section documents the resolved fragility
+so engineers understand the now-enforced contracts.
+
+- `fhir4ds/cql/loader/notes_pipeline.py` (`extract_conditions_batch`)
+  — **RESOLVED (QA-006, HIGH)**. The method now raises `TypeError`
+  for non-list inputs (strings, dicts, generators) at entry, matching
+  the `FHIRDataLoader.load_resources` contract. Previously
+  silent-string-iteration returned N empty lists, masking caller bugs.
+
+- `fhir4ds/cql/loader/notes_pipeline.py` (`NotesPipelineConfig`) and
+  `fhir4ds/cql/loader/auto_coder.py` (`AutoCoderConfig`) — **RESOLVED
+  (QA-007, MEDIUM)**. Both frozen dataclasses now have
+  `__post_init__` validation that raises `ValueError` for non-positive
+  `workers` or `batch_size` (and negative `parallel_threshold` on
+  `NotesPipelineConfig`). Previously the runtime `max(1, ...)` clamp
+  silently discarded user intent with no warning.
+
+- `fhir4ds/cql/loader/fhir_loader.py` (`load_bundle`) — **RESOLVED
+  (QA-008, MEDIUM)**. `Bundle.type` is now validated as 1..1 per
+  FHIR R4 (https://hl7.org/fhir/R4/bundle-definitions.html#Bundle.type)
+  with required binding to the BundleType value set. Missing, empty,
+  non-string, or unknown codes raise `ValueError`. The 9 valid codes
+  (`document`, `message`, `transaction`, `transaction-response`,
+  `batch`, `batch-response`, `history`, `searchset`, `collection`)
+  are encoded in the module-level `_FHIR_BUNDLE_TYPES` frozenset.
+  **NOTE**: callers passing typeless Bundles to `load_bundle`,
+  `load_file`, or `load_from_url` must now supply a valid `type`.
+  The transaction/batch `entry.request` requirement (FHIR R4 §http)
+  is NOT enforced; the loader treats all bundle types uniformly as
+  resource collections.
+
+- `fhir4ds/cql/loader/fhir_loader.py` (`load_ndjson`) — **RESOLVED
+  (QA-009, MEDIUM)**. `strict=True` now validates per-line FHIR shape
+  (object type, `resourceType` presence/pattern, `id` pattern, JSON
+  serializability) with line-number attribution, symmetric with
+  `strict=False`'s warn-and-skip path. Error messages include the
+  1-based line number (e.g. `"Invalid FHIR resource at line 2 in
+  <path>: ..."`). Previously strict=True only validated JSON syntax
+  per-line and deferred FHIR validity to `load_resources`, which
+  raised with no line attribution.
+
+- `fhir4ds/cql/loader/fhir_loader.py` (`load_resources` dedup loop)
+  — **RESOLVED (QA-010, LOW)**. The dedup overwrite now logs at
+  WARNING (was DEBUG) for both source-source duplicate ids and
+  cross-source/derived Condition collisions. Last-write-wins
+  semantics are unchanged.
+
+## NOT A BUG Registry (Iteration 4 / Domain 6 EXPLORER additions)
+
+- `_validate_resource_identity` regex rejections (id=0 int, id=False
+  bool, id > 64 chars, lowercase/non-ASCII resourceType) are correct
+  per FHIR R4 id pattern `[A-Za-z0-9-.]{1,64}` and resourceType
+  pattern `^[A-Z][A-Za-z0-9]*$`. NOT A BUG.
+
+- `load_from_url` rejecting `file://`, `ftp://`, and empty URL
+  schemes (only `http`/`https` permitted) is intentional
+  defense-in-depth. NOT A BUG.
+
+- 2MB NDJSON line loads successfully (resource JSON ~2MB stored in
+  DuckDB JSON column). No size cap required at the loader layer;
+  DuckDB handles arbitrary-length JSON. NOT A BUG.
+
+- Duplicate ids within a single NDJSON file (strict=True) correctly
+  apply last-write-wins per FHIR R4 id-uniqueness guidance (FHIR
+  ids SHOULD be unique but the loader is not the enforcement
+  boundary). NOT A BUG (matches the pre-existing 2026-06-07 ruling
+  in this AGENTS.md).
+
+- `patient_ref` extraction iteration order (`subject`, then `patient`,
+  then `beneficiary`) is deterministic; `subject` winning when both
+  `subject` and `patient` are present is intentional and matches
+  FHIR R4 patient-compartment conventions. NOT A BUG.
+
+## Iteration 5 / Domain 7 SPECIALIST (Performance and Scale) — 2026-07-05
+
+QA personality SPECIALIST; Spec Compliance Verifier. Probed throughput,
+memory behavior, and scaling across the loader, ViewDefinition, parallel
+augmentation, native vs fallback, and connection pooling surfaces.
+Artifacts under
+`fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/iter5/` (six probes,
+six results JSON). All measurements ran on DuckDB 1.5.2 + Python 3.10.12
+under WSL2 (filesystem timing is noisier than native Linux — ratios
+across N are the load-bearing signal, not absolute ms).
+
+**Finding: NO scaling cliffs, NO memory leaks, NO regressions.** Domain 7
+audit returns CLEAN. Details below — linear scaling is intentional and
+correct per `SPEC_QA_DOMAINS.md` Domain 7 rule ("Do not flag linear
+slowdown as a bug").
+
+### Measurements
+
+1. `FHIRDataLoader.load_ndjson` scaling (1k→5k→10k patients + 3x obs +
+   1x cond per patient, 5k/25k/50k total resources):
+   - best T = 3.82s / 19.12s / 38.34s
+   - T/resource ratio = 1.00 / 0.99 across both steps (perfectly linear)
+   - peak MB = 9.7 / 48.2 / 96.7 (linear in resource count, no spike)
+   - 6x repeated 1k load: per-iter peak = 9.68 MB x 6 (growth ratio 1.00,
+     no leak).
+
+2. ViewDefinition SQL generation + execution scaling (patient/obs/cond
+   views over 1k/5k/10k patients):
+   - SQL gen flat at ~1.1 ms across all sizes (no parser cliff)
+   - SQL exec patient: 16/55/103 ms — T/row ratio 0.93, 1.04 (linear)
+   - SQL exec observation (3k/15k/30k rows): 41/187/383 ms — T/row
+     ratio 1.14, 1.05 (linear; mild WSL2 noise on the 1k→5k step)
+   - SQL exec condition (with `forEach` on coding): 17/44/85 ms — T/row
+     ratio 1.29, 1.07 (linear)
+   - exec peak MB < 0.5 in all cases (no memory pressure).
+
+3. Parallel augmentation knobs (commit 524c23d8): `load_resources`
+   scaling with augmentation DISABLED matches the load_ndjson scaling
+   to within 0.4% — the pre-augment / pre-extract refactor added
+   no measurable overhead to the production-default (workers=1,
+   batch_size=1) path. 89/89 batch+parallel pytest suite passing
+   (`test_auto_coder_batch.py`, `test_auto_coder_parallel.py`,
+   `test_notes_pipeline_batch.py`, `test_notes_pipeline_parallel.py`,
+   `test_http_adapter_parallel.py`).
+
+4. C++ extension vs Python fallback (5 representative FHIRPath queries,
+   1k-patient fixture): all 5 first-row outputs **MATCH** (parity
+   verified). Timing for both paths within 10% across all queries (the
+   C++ path does not dominate for these simple queries because the
+   DuckDB function dispatch overhead is the bottleneck, not the path
+   logic). No correctness divergence between paths.
+
+5. Concurrent DuckDB connections (each thread opens own `:memory:`
+   conn, loads 1k resources):
+   - 2 threads: 1.96x speedup (near-perfect linear)
+   - 4 threads: 3.20x speedup (graceful degradation)
+   - 8 threads: 4.34x speedup (some GIL/contention, but no cliff)
+   - No deadlocks, no errors, no lock exceptions. Peak MB at 4 threads
+     = 38.78 (4x the 1-thread ~9.7 MB — exactly proportional).
+
+6. Repeated ViewDefinition execution on a persistent connection
+   (N=5000, 8 iterations): per-iter peak = 4.70/9.40/9.40/9.40/9.40/
+   9.40/9.40/9.40 MB. Current-after-gc flat at 4.70 MB across all 8
+   iterations. **No leak.** Growth ratio 1.00 (last/first).
+
+7. DQM perf report vs `benchmarks/baselines/dqm_2025.json`: total
+   measured time 63,174 ms vs 60,857 ms baseline = **+3.8% (1.038x)**.
+   Median measure total 639 ms vs 678 ms baseline = **-5.7% (faster)**.
+   Zero scripted timing regressions, zero accuracy regressions, 47/47
+   measures pass. This is dramatically better than the 0.0.10 campaign
+   result of +19.4% (which was attributed to WSL2 noise and is the
+   expected band for this environment).
+
+### Conclusion
+
+Domain 7 is CLEAN for 0.0.11. The iter-4 frozen-dataclass `__post_init__`
+validation cost is NOT measurable (configs are constructed once per
+loader, not per resource; the two isinstance + comparison checks are
+~ns). The iter-4 frozenset Bundle type lookup is O(1). The
+batch_size/workers knobs introduced in commit 524c23d8 do not regress
+the default (serial) path and the parallel path's contentions are
+graceful under GIL.
+
+## Iteration 6 / Domain 8 SKEPTIC (Error Handling, Robustness, API Contract) — 2026-07-05
+
+Five issues filed (see evolution.json). SKEPTIC hypothesis-driven pass
+over public API entry points and the medterm4ds integration surface.
+All five RESOLVED in iter-6 FIX phase.
+
+### Known Fragile Areas (Iteration 6 additions)
+
+- `fhir4ds/__init__.py:24` and six sibling `__init__.py` files: every
+  `__version__` string must be hand-bumped at release time. As of
+  iter-6 FIX they all now report `0.0.11` matching `pyproject.toml`
+  (QA-011 RESOLVED). Future release engineer: bump all 7 files in
+  lockstep with `pyproject.toml`. Consolidation to a single
+  `fhir4ds/_version.py` source of truth remains a recommended
+  follow-up to prevent recurrence. The pip-installed
+  `fhir4ds-v2==0.0.10` site-packages copy is replaced during the
+  Release Engineer artifact gate.
+- `fhir4ds/cql/loader/fhir_loader.py:571` (`load_file` JSON parse):
+  now wraps `json.JSONDecodeError` into
+  `ValueError("Malformed JSON in <path>: ...")` (QA-012 RESOLVED),
+  symmetric with the sibling `load_ndjson:616-622` wrap. Keep the two
+  paths symmetric when touching either.
+- `fhir4ds/cql/loader/fhir_loader.py:300-308`
+  (`FHIRDataLoader.load_resource`): now wraps closed-connection
+  errors into `ConnectionException("Cannot load FHIR resource: DuckDB
+  connection is closed")` (QA-015 RESOLVED), symmetric with the
+  `cql/__init__.py:384-389` `evaluate_measure` wrap pattern.
+- `fhir4ds/core.py:285-302` (`fhir4ds.register`): same closed-
+  connection wrap pattern (QA-015 RESOLVED) —
+  `ConnectionException("Cannot register fhir4ds UDFs: DuckDB
+  connection is closed")`. The guard runs after the TypeError
+  isinstance check but before any `con.execute` so the closed
+  connection no longer leaks the raw DuckDB message.
+- `fhir4ds/cql/terminology/factory.py:72-78`
+  (`get_terminology_endpoint` entry): now type-validates `config`
+  and raises `TypeError("config must be a TerminologyConfig or None,
+  got <type>")` for non-`TerminologyConfig` inputs (QA-013 RESOLVED).
+  Docstring `Raises:` section updated.
+- `fhir4ds/cql/terminology/http_adapter.py:155-165`
+  (`HTTPTerminologyEndpoint.__init__`): now validates `base_url`
+  shape via `urllib.parse.urlparse` and rejects non-`http(s)` schemes
+  or missing `netloc` with `ValueError("base_url must be an http(s)
+  URL with host, got <url>")` (QA-014 RESOLVED). Common typos
+  (`localhost:8001/fhir` missing scheme, `ftp://`, plain strings) are
+  caught at construction instead of being deferred to the first
+  network call.
+
+### NOT A BUG Registry (Iteration 6 additions)
+
+- `fhir4ds.viewdef.generate_view_sql` and `parse_view_definition`
+  raise typed `ParseError` / `ValidationError` / `TypeError` with
+  actionable messages across all probed malformed input shapes
+  (truncated JSON, missing `resource`, missing `select`, non-str/dict
+  input, None). The viewdef parser path is well-typed and need not be
+  touched.
+- `fhir4ds.cql.parse_cql` raises `TypeError` (non-str), `ValueError`
+  (empty string), and `ParseError` (syntactically invalid CQL with
+  line/column attribution). The CQL parser path is well-typed.
+- `fhir4ds.cql.evaluate_measure` validates `audit_mode`,
+  `library_path` (existence, file-vs-dir), and `output_columns` /
+  `patient_ids` types, all with actionable messages. The closed-
+  connection path correctly wraps into "Cannot evaluate measure:
+  DuckDB connection is closed". The CQL evaluator path is well-typed.
+
+### Architecture Invariants (Iteration 6 / Domain 8 SKEPTIC additions)
+
+- **INV-8 (typed exceptions on public surfaces)**: every public entry
+  point in `fhir4ds`, `fhir4ds.cql`, `fhir4ds.cql.terminology`, and
+  `fhir4ds.cql.loader.FHIRDataLoader` must raise typed fhir4ds
+  exceptions (`TypeError`, `ValueError`, `ConnectionException` with
+  fhir4ds-namespaced messages) on bad input. Raw stdlib exceptions
+  (`json.JSONDecodeError`, `AttributeError`) and raw DuckDB messages
+  (`duckdb.ConnectionException: Connection Error: Connection already
+  closed!`) must never leak from these surfaces. The closed-connection
+  wrap pattern established by `evaluate_measure` is now applied at
+  `register` and `load_resource` as well — keep the pattern when
+  adding new public entry points.
+- **INV-9 (fail-fast construction)**: constructors accepting URLs
+  (`HTTPTerminologyEndpoint`, future `*Endpoint` classes) must
+  validate scheme + host at `__init__` time, not defer to the first
+  network call. Use `urllib.parse.urlparse` and reject schemes
+  outside the documented set (`http`, `https`) or missing `netloc`.
+- **INV-10 (release version lockstep)**: every public `__init__.py`
+  `__version__` string must equal `pyproject.toml`'s `version` at
+  commit time. The pre-release pytest at `fhir4ds/tests/test_version.py`
+  enforces this; failure is a release blocker. Consolidation to a
+  single `fhir4ds/_version.py` source of truth remains a recommended
+  follow-up.
+
+### Architecture Verdict (Iteration 6 / Domain 8 — Architect phase)
+
+All 5 RESOLVED issues verified minimal, correct, and consistent with
+existing patterns. QA-011 version drift catch is high-value. No new
+drift. No new findings. Structural health: SOUND. ARCH-001, ARCH-002,
+ARCH-004 (LOW) remain OPEN as pre-existing iter-1/2/4 follow-ups,
+unchanged by iter-6.
+

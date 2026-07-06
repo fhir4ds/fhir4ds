@@ -7,7 +7,7 @@ test.describe("Landing page", () => {
     await page.goto(".");
     await expect(page).toHaveTitle(/FHIR for Data Science/);
     await expect(page.getByRole("heading", { level: 1, name: "FHIR for Data Science" })).toBeVisible();
-    await expect(page.getByText("v0.0.10")).toBeVisible();
+    await expect(page.getByText("v0.0.11")).toBeVisible();
 
     // Hero secondary line
     await expect(page.getByText("Production-Scale FHIR Analytics. Running Anywhere.")).toBeVisible();

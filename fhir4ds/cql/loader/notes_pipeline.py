@@ -165,6 +165,33 @@ class NotesPipelineConfig:
     workers: int = 1
     parallel_threshold: int = 200
 
+    def __post_init__(self) -> None:
+        """Validate non-negative performance knobs at construction.
+
+        Per GLOBAL_RULES "No Silent Fallbacks": the runtime ``max(1, ...)``
+        clamp in :meth:`NotesPipeline.extract_conditions_batch` would
+        otherwise discard user intent silently. The dataclass is frozen,
+        so a misconfigured value cannot be fixed post-construction — the
+        caller MUST be told at construction time. Raises ``ValueError``
+        for any non-positive ``workers`` or ``batch_size`` so the user
+        sees the misconfiguration immediately.
+        """
+        if not isinstance(self.workers, int) or self.workers < 1:
+            raise ValueError(
+                f"NotesPipelineConfig.workers must be a positive int (>=1), "
+                f"got {self.workers!r}"
+            )
+        if not isinstance(self.batch_size, int) or self.batch_size < 1:
+            raise ValueError(
+                f"NotesPipelineConfig.batch_size must be a positive int (>=1), "
+                f"got {self.batch_size!r}"
+            )
+        if not isinstance(self.parallel_threshold, int) or self.parallel_threshold < 0:
+            raise ValueError(
+                f"NotesPipelineConfig.parallel_threshold must be a non-negative int, "
+                f"got {self.parallel_threshold!r}"
+            )
+
 
 class NotesPipeline:
     """Orchestrates free-text → derived Condition extraction.
@@ -361,6 +388,10 @@ class NotesPipeline:
             Outer length always equals ``len(resources)``; inner
             length may be zero.
         """
+        if not isinstance(resources, list):
+            raise TypeError(
+                f"Expected list of FHIR resource dicts, got {type(resources).__name__}"
+            )
         if not resources:
             return []
         batch_size = max(1, int(self._config.batch_size))

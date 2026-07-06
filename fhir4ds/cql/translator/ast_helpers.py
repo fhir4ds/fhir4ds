@@ -1695,7 +1695,7 @@ class ASTHelpersMixin:
                     f"operator := 'exists', "
                     f"threshold := \'{escaped_right}\', "
                     f"trace := CAST(['{escaped_cte}'] AS VARCHAR[])"
-                    f")) END FROM {quoted} AS _sub WHERE _sub.patient_id = p.patient_id), "
+                    f")) END FROM {quoted} AS _sub WHERE _sub.patient_id = _pt.patient_id), "
                     f"[])"
                 )
             elif p.startswith('<CMP_EVIDENCE:'):
@@ -1709,7 +1709,7 @@ class ASTHelpersMixin:
                     f'COALESCE('
                     f'(SELECT {alias}._cmp_result.evidence '
                     f'FROM "{precte_name}" AS {alias} '
-                    f'WHERE {alias}.patient_id = p.patient_id), '
+                    f'WHERE {alias}.patient_id = _pt.patient_id), '
                     f'[])'
                 )
             elif p.startswith('<BOOL_EVIDENCE:'):
@@ -1722,7 +1722,7 @@ class ASTHelpersMixin:
                     f'COALESCE('
                     f'(SELECT {alias}._audit_result.evidence '
                     f'FROM "{bool_cte}" AS {alias} '
-                    f'WHERE {alias}.patient_id = p.patient_id), '
+                    f'WHERE {alias}.patient_id = _pt.patient_id), '
                     f'[])'
                 )
             else:

@@ -90,6 +90,47 @@ def test_constructor_requires_base_url():
         HTTPTerminologyEndpoint("", timeout_seconds=3.0)
 
 
+# ----------------------------------------------------------------------
+# QA-014: HTTPTerminologyEndpoint validates base_url shape at
+# construction (fail-fast). Common typos must be caught here, not
+# deferred to the first network call where httpx throws an opaque
+# protocol error far from the construction site.
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "not-a-url",          # plain string, no scheme
+        "ftp://example",      # wrong scheme
+        "localhost:8001",     # missing scheme — common typo
+        "//example.com/fhir", # scheme-relative, no scheme
+        "http://",            # no host
+        "https:///fhir",      # no host
+    ],
+)
+def test_qa014_constructor_rejects_malformed_base_url(bad_url):
+    """Non-URL / wrong-scheme base_url must raise at construction."""
+    with pytest.raises(ValueError, match="base_url must be an http\\(s\\) URL") as exc:
+        HTTPTerminologyEndpoint(bad_url, timeout_seconds=3.0)
+    # The invalid URL must be echoed back so the operator can see the typo.
+    assert bad_url in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "good_url",
+    [
+        "http://localhost:8001/fhir",
+        "https://example.com/fhir",
+        "http://127.0.0.1:7860/fhir",
+    ],
+)
+def test_qa014_constructor_accepts_well_formed_base_url(good_url):
+    """Positive control: well-formed http(s) URLs must construct cleanly."""
+    adapter = HTTPTerminologyEndpoint(good_url, timeout_seconds=3.0)
+    assert adapter._base_url == good_url.rstrip("/")
+
+
 def test_constructor_requires_finite_timeout():
     with pytest.raises(ValueError, match="positive float"):
         HTTPTerminologyEndpoint("http://localhost:8001/fhir", timeout_seconds=0)

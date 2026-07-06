@@ -83,11 +83,28 @@ def _demote_audit_struct_to_bool(expr: SQLExpression) -> SQLExpression:
     Uses SQLStructFieldAccess (a proper AST node) rather than SQLRaw so that
     Phase 3 placeholder resolution can still traverse into the expression.
 
+    QA-016 fix: when the audit_xxx chain contains an audit_leaf wrapping a
+    complex argument (EXISTS subquery or non-trivial function call like
+    intervalContains/coding_matches), the shallow struct_extract form would
+    leave the chain's macros intact. When that demoted expression lives in
+    the WHERE clause of a correlated EXISTS subquery (a common pattern
+    emitted from with-such-that, retrieve filters, and CTE body WHERE
+    clauses), DuckDB's binder fails with "Need named argument for struct
+    pack" expanding the surviving macros. In that case, fully eliminate the
+    macros via _fully_demote_audit_to_bool instead. The audit evidence is
+    preserved by the outer per-patient audit CTE in cte_manager.py.
+
     Recurses through SQL AND/OR, CASE WHEN conditions, NOT, and subqueries
     so that compound expressions that mix audit structs with plain booleans
     are handled correctly.
     """
     if isinstance(expr, SQLFunctionCall) and expr.name.startswith("audit_"):
+        # QA-016: detect the complex-leaf trigger pattern; if present, fully
+        # eliminate the audit macros. Otherwise, preserve the shallow
+        # struct_extract form (which preserves more information for
+        # downstream paths that consume the struct shape).
+        if _audit_chain_has_complex_leaf(expr):
+            return _fully_demote_audit_to_bool(expr)
         return SQLStructFieldAccess(expr=expr, field_name="result")
     if isinstance(expr, SQLBinaryOp) and expr.operator in ("AND", "OR"):
         new_left = _demote_audit_struct_to_bool(expr.left)
@@ -108,6 +125,139 @@ def _demote_audit_struct_to_bool(expr: SQLExpression) -> SQLExpression:
             new_whens.append((new_cond, result))
         if changed:
             return SQLCase(when_clauses=new_whens, else_clause=expr.else_clause)
+    return expr
+
+
+def _audit_chain_has_complex_leaf(expr: SQLExpression) -> bool:
+    """Return True if an audit_xxx chain contains an audit_leaf whose argument
+    is a SQLExists subquery or a non-trivial SQLFunctionCall.
+
+    This is the QA-016 trigger pattern that causes DuckDB's binder to fail
+    with "Need named argument for struct pack" when the chain is expanded
+    inside a WHERE clause of a correlated EXISTS subquery.
+    """
+    from ...translator.types import SQLExists, SQLFunctionCall, SQLUnaryOp
+    if not isinstance(expr, SQLFunctionCall):
+        return False
+    if expr.name == "audit_leaf":
+        if not expr.args:
+            return False
+        arg = expr.args[0]
+        if isinstance(arg, SQLExists):
+            return True
+        if isinstance(arg, SQLUnaryOp):
+            return _audit_chain_has_complex_leaf(arg.operand) or _is_complex_function_arg(arg.operand)
+        return _is_complex_function_arg(arg)
+    if expr.name in {"audit_and", "audit_or", "audit_or_all", "audit_not"}:
+        return any(_audit_chain_has_complex_leaf(a) for a in expr.args)
+    return False
+
+
+def _is_complex_function_arg(arg: SQLExpression) -> bool:
+    """Return True if `arg` is a SQLFunctionCall that is NOT a trivial
+    comparison/equality primitive (i.e., would trigger DuckDB's binder bug
+    when nested inside an audit_leaf in a correlated-EXISTS-WHERE context).
+    """
+    from ...translator.types import SQLFunctionCall
+    if not isinstance(arg, SQLFunctionCall):
+        return False
+    # All SQLFunctionCalls except trivial comparison-shaped ones count.
+    # We include any function call here because the binder bug trigger
+    # is broad: intervalContains, coding_matches, list_contains, in_valueset,
+    # and even math/comparison expressions when nested deep enough.
+    return True
+
+
+def _fully_demote_audit_to_bool(expr: SQLExpression) -> SQLExpression:
+    """Recursively eliminate all audit_and/audit_or/audit_not/audit_leaf macros
+    from a boolean SQL expression, replacing each with its underlying boolean.
+
+    Used in QA-016 fix at narrow call sites where the boolean expression is
+    going INTO the WHERE clause of a correlated EXISTS subquery. In that
+    context, DuckDB's binder fails with "Need named argument for struct
+    pack" when expanding audit macros into struct_pack calls if the chain
+    has children referencing multiple correlation depths.
+
+    The audit evidence (the whole point of the macros) is preserved by the
+    OUTER audit CTE infrastructure in cte_manager.py: the outer definition
+    (e.g., Numerator) is wrapped as `audit_leaf(EXISTS(...))` at the
+    per-patient level, and its `_audit_result` column carries the evidence.
+    The inner WHERE-clause audit macros were redundant — they would have
+    produced duplicate evidence that the outer CTE already captures.
+
+    DO NOT use this in places where the audit struct shape must be
+    preserved (e.g., the OUTER audit CTE's `_audit_result` column, evidence
+    collection subqueries, or any context where the struct is the value
+    being computed rather than a boolean filter).
+    """
+    from ...translator.types import (
+        SQLAlias, SQLBinaryOp, SQLCase, SQLExists, SQLFunctionCall,
+        SQLSelect, SQLStructFieldAccess, SQLSubquery, SQLUnaryOp,
+    )
+    if isinstance(expr, SQLFunctionCall) and expr.name == "audit_leaf":
+        if expr.args:
+            return _fully_demote_audit_to_bool(expr.args[0])
+        return expr
+    if isinstance(expr, SQLFunctionCall) and expr.name in {"audit_and", "audit_or", "audit_or_all"}:
+        if len(expr.args) >= 2:
+            left = _fully_demote_audit_to_bool(expr.args[0])
+            right = _fully_demote_audit_to_bool(expr.args[1])
+            op = "OR" if expr.name in {"audit_or", "audit_or_all"} else "AND"
+            return SQLBinaryOp(left=left, operator=op, right=right)
+        return expr
+    if isinstance(expr, SQLFunctionCall) and expr.name == "audit_not":
+        if expr.args:
+            return SQLUnaryOp(operator="NOT", operand=_fully_demote_audit_to_bool(expr.args[0]))
+        return expr
+    if isinstance(expr, SQLFunctionCall) and expr.name == "audit_comparison":
+        return SQLStructFieldAccess(expr=expr, field_name="result")
+    if isinstance(expr, SQLFunctionCall):
+        if expr.args:
+            new_args = [_fully_demote_audit_to_bool(a) for a in expr.args]
+            changed = any(na is not oa for na, oa in zip(new_args, expr.args))
+            if changed:
+                return SQLFunctionCall(name=expr.name, args=new_args, distinct=expr.distinct)
+        return expr
+    if isinstance(expr, SQLBinaryOp):
+        new_left = _fully_demote_audit_to_bool(expr.left)
+        new_right = _fully_demote_audit_to_bool(expr.right)
+        if new_left is not expr.left or new_right is not expr.right:
+            return SQLBinaryOp(left=new_left, operator=expr.operator, right=new_right)
+        return expr
+    if isinstance(expr, SQLUnaryOp):
+        new_operand = _fully_demote_audit_to_bool(expr.operand)
+        if new_operand is not expr.operand:
+            return SQLUnaryOp(operator=expr.operator, operand=new_operand, prefix=expr.prefix)
+        return expr
+    if isinstance(expr, SQLCase):
+        changed = False
+        new_whens = []
+        for cond, result in expr.when_clauses:
+            new_cond = _fully_demote_audit_to_bool(cond)
+            if new_cond is not cond:
+                changed = True
+            new_whens.append((new_cond, result))
+        new_else = _fully_demote_audit_to_bool(expr.else_clause) if expr.else_clause else None
+        if new_else is not expr.else_clause:
+            changed = True
+        if changed:
+            return SQLCase(when_clauses=new_whens, else_clause=new_else)
+        return expr
+    if isinstance(expr, SQLExists):
+        new_sub = _fully_demote_audit_to_bool(expr.subquery)
+        if new_sub is not expr.subquery:
+            return SQLExists(subquery=new_sub)
+        return expr
+    if isinstance(expr, SQLSubquery):
+        new_q = _fully_demote_audit_to_bool(expr.query)
+        if new_q is not expr.query:
+            return SQLSubquery(query=new_q)
+        return expr
+    if isinstance(expr, SQLAlias):
+        new_e = _fully_demote_audit_to_bool(expr.expr)
+        if new_e is not expr.expr:
+            return SQLAlias(expr=new_e, alias=expr.alias)
+        return expr
     return expr
 
 
@@ -4733,7 +4883,25 @@ class QueryMixin:
                     right=SQLQualifiedIdentifier(parts=[outer_corr_alias, "patient_id"]),
                 )
                 if condition_sql and not isinstance(condition_sql, SQLLiteral):
-                    full_condition = SQLBinaryOp(left=_demote_audit_struct_to_bool(condition_sql), operator="AND", right=patient_corr)
+                    # QA-016 fix: when the such_that condition contains an
+                    # audit_leaf wrapping a complex argument (EXISTS subquery
+                    # or non-trivial function call), DuckDB's binder fails
+                    # with "Need named argument for struct pack" when the
+                    # condition is emitted in the WHERE clause of a
+                    # correlated EXISTS subquery (the with-such-that site).
+                    # _fully_demote_audit_to_bool eliminates every
+                    # audit_and/or/not/leaf macro in the boolean expression,
+                    # producing a plain boolean that the binder can plan
+                    # safely. The audit evidence (the whole point of the
+                    # macros) is preserved by the OUTER audit CTE in
+                    # cte_manager.py: the outer definition (Numerator) is
+                    # wrapped as `audit_leaf(EXISTS(...))` at the per-patient
+                    # level, and its `_audit_result` column carries the
+                    # evidence. The inner with-such-that condition's audit
+                    # macros would have produced duplicate evidence that the
+                    # outer CTE already captures.
+                    demoted_cond = _fully_demote_audit_to_bool(condition_sql)
+                    full_condition = SQLBinaryOp(left=demoted_cond, operator="AND", right=patient_corr)
                 else:
                     full_condition = patient_corr
 

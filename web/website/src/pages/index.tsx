@@ -7,7 +7,7 @@ import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
-const PRODUCT_VERSION = '0.0.10';
+const PRODUCT_VERSION = '0.0.11';
 const SQL_EXECUTION_MEAN_ALL_MEASURES = '~3.9ms';
 const SQL_EXECUTION_MEAN_SHARED_MEASURES = '~6.9ms';
 const JAVA_EXECUTION_MEAN_SHARED_MEASURES = '~936ms';

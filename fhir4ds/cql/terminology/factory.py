@@ -64,11 +64,21 @@ def get_terminology_endpoint(
         in disabled mode.
 
     Raises:
+        TypeError: ``config`` is not ``None`` and not a
+            :class:`TerminologyConfig`. A plain ``dict`` (a reasonable
+            user mistake given the rest of the API) is rejected with an
+            actionable message instead of leaking an internal
+            ``AttributeError``.
         ValueError: ``mode=http`` without a URL, or unknown mode.
         ImportError: Required optional dependency (``httpx`` or
             ``medterm4ds``) is not installed. The install hint points
             users at the right ``pip install`` command.
     """
+    if config is not None and not isinstance(config, TerminologyConfig):
+        raise TypeError(
+            "config must be a TerminologyConfig or None, "
+            f"got {type(config).__name__}"
+        )
     cfg = config if config is not None else _config_from_env()
     if cfg.mode == "disabled":
         return None

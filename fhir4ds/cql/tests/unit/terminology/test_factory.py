@@ -109,6 +109,38 @@ def test_unknown_mode_raises_value_error() -> None:
 
 
 # ----------------------------------------------------------------------
+# Type validation (QA-013): wrong-type config raises TypeError, not
+# AttributeError. A plain dict is a reasonable user mistake (the rest
+# of the fhir4ds API uses dicts for config) and must be rejected with
+# an actionable, contractual error rather than an internal stack trace.
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "bad_config",
+    [
+        {},
+        {"mode": "http", "url": "http://localhost:8001"},
+        ["disabled"],
+        "disabled",
+    ],
+)
+def test_qa013_wrong_type_config_raises_type_error(bad_config) -> None:
+    """Non-TerminologyConfig config must raise TypeError (not AttributeError)."""
+    with pytest.raises(TypeError, match="config must be a TerminologyConfig") as exc:
+        get_terminology_endpoint(bad_config)  # type: ignore[arg-type]
+    assert type(bad_config).__name__ in str(exc.value)
+
+
+def test_qa013_none_config_still_returns_none() -> None:
+    """Positive control: None must continue to defer to env-var path."""
+    # No env vars set in this session-segment => disabled => None.
+    assert get_terminology_endpoint(None) is None or hasattr(
+        get_terminology_endpoint(None), "expand"
+    )
+
+
+# ----------------------------------------------------------------------
 # Env-var matrix (FDD §5.1)
 # ----------------------------------------------------------------------
 

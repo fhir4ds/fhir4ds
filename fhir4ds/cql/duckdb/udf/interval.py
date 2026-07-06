@@ -1131,6 +1131,13 @@ def _precision_aware_compare(a, b) -> int | None:
 
     Returns -1 (a < b), 0 (a == b), 1 (a > b), or None (uncertain).
     Handles partial-precision ISO 8601 strings per CQL §18.4.
+
+    CQL §18.4 / CqlIntervalOperatorsTest.xml DateTimeIncludedInNull:
+    when two temporal bounds share the same wall-clock value but differ
+    in precision (e.g. ``'2017-09-01T00:00:00.000'`` ms vs
+    ``'2017-09-01T00:00:00'`` second), the comparison is uncertain —
+    the coarser-precision operand does not specify the finer components,
+    so the spec returns null rather than assuming they are zero.
     """
     from .datetime import _compare_at_min_precision, _infer_precision
     # If both are strings and they're date/datetime values, use precision-aware comparison

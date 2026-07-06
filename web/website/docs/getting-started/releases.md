@@ -7,6 +7,76 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.11
+*July 2026*
+
+Version 0.0.11 is a release-preparation cycle focused on translator
+correctness for production CDS workflows, hardening of the data-ingestion
+and notes-pipeline surfaces, and full audit-mode SQL emission across the
+CMS measure suite. The release preserves the **100% conformance baseline**
+across all four suites.
+
+### Highlights
+
+- **CQL Fluent `.distinct()` (QA-001, HIGH)**: Fluent-form `X.distinct()`
+  now dispatches to the same order-preserving, NULL-retaining
+  `"Distinct"` macro as the function form `distinct X`. Previously the
+  fluent form translated to DuckDB native `ARRAY_DISTINCT`, which silently
+  dropped NULLs and reordered elements — a spec violation that the
+  function-form-only conformance corpus could not catch.
+- **SQL-on-FHIR v2 `forEachOrNull` (QA-005, HIGH)**: `forEachOrNull` now
+  preserves parent rows when the target path is absent, and nested
+  `forEach` correctly preserves the parent row's identity through the
+  iteration. Aligns the iterator semantics end-to-end with the spec.
+- **FHIRDataLoader / NotesPipeline Hardening (QA-006..010)**: Strict input
+  validation across the loader and notes-pipeline workers — Bundle.type
+  attribution, NDJSON strict-line attribution, malformed-URL/JSON guards,
+  and parallel-augmentation (`batch_size`/`workers`) knobs were validated
+  not to regress the default serial path.
+- **Public `__version__` Alignment (QA-011, HIGH)**: All 7 public
+  `__init__.py` files (`fhir4ds`, `fhir4ds.fhirpath`,
+  `fhir4ds.fhirpath.duckdb`, `fhir4ds.cql`, `fhir4ds.cql.duckdb`,
+  `fhir4ds.viewdef`, `fhir4ds.dqm`) bumped 0.0.10 → 0.0.11. Wheel METADATA
+  reports Version: 0.0.11.
+- **Typed Exception Surfaces (QA-012..015)**: Closed connections,
+  malformed URLs, and malformed JSON now raise typed package exceptions
+  instead of leaking decoder/attribute/connection errors.
+- **`audit_mode='full'` SQL Emission (QA-016, HIGH)**: A major audit SQL
+  emission refactor fixed an unbound `p` alias and malformed `struct_pack`
+  that had prevented full-audit SQL from running on 4 of 5 sampled CMS
+  measures. Full audit mode now works on CMS135, CMS165, CMS71, and CMS996.
+- **DQM Evidence Pruning (QA-017..019)**: Multi-group DQM evidence pruning
+  preserves group-local causal resource targets; the new
+  `evidence_captured` flag lets callers distinguish full-evidence vs
+  summary-only reports; the conformance runner now accepts an `--audit`
+  flag for explicit evidence-mode gating.
+- **Release-Surface Alignment**: Package metadata, public subpackage
+  versions, notebook `%pip install` snippets, landing-page version, WASM
+  demo fallback wheel name, and these release notes are aligned with
+  `0.0.11`.
+- **Validation Gates**: The release-prep pipeline includes code review,
+  release validation, documentation audit (notebook execution + stale-data
+  sweep), benchmark validation, and final scribe handoff gates before
+  completion. All four conformance suites remain at 100%.
+
+### Conformance
+
+| Suite | Passed | Total | Rate |
+|-------|-------:|------:|-----:|
+| ViewDefinition v2 | 134 | 134 | 100.0% |
+| FHIRPath R4 | 935 | 935 | 100.0% |
+| CQL | 1,706 | 1,706 | 100.0% |
+| DQM QI-Core 2025 | 47 | 47 | 100.0% |
+| Overall | 2,822 | 2,822 | 100.0% |
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.11
+```
+
+---
+
 ## Version 0.0.10
 *June 2026*
 

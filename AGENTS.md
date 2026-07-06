@@ -173,6 +173,26 @@ references, the bundled `web/wasm-demo/public/` wheel, and the copied
 `web/wasm-demo` build, and website typecheck/build before marking the release
 surface clean.
 
+Release 0.0.11 Domain 10 verification (2026-07-05, HISTORIAN iter-8): clean
+install / clean import / binary health verified CLEAN. Candidate wheel
+`fhir4ds_v2-0.0.11-py3-none-any.whl` (10,398,155 bytes) ships both native
+extensions (`cql.duckdb_extension` 11,249,246 bytes;
+`fhirpath.duckdb_extension` 11,567,614 bytes — ELF 64-bit LSB shared object,
+x86-64, valid BuildID, linked against libstdc++/libm/libc). All 7 public
+`__init__.py` files report `0.0.11` matching `pyproject.toml`. In a fresh
+venv with bare `pip install fhir4ds-v2`, `import fhir4ds` succeeds and
+`fhir4ds.__version__ == '0.0.11'`; `register(con)` returns
+`{'fhirpath_cpp': True, 'cql_cpp': True}`; calling `register(con)` twice
+is idempotent. `pip check` is clean. Native C++ path and forced Python
+fallback path produce byte-identical output across 9 representative FHIRPath
+cases (navigation, `where()`, missing path -> empty, boolean singleton,
+equality true/false/empty). Fallback is *never* silent: when forced via
+`duckdb.__version__="0.0.0-forced-python-fallback"`, `register()` correctly
+returns `{'fhirpath_cpp': False, 'cql_cpp': False}`. Note (not a fhir4ds
+bug): `import fhir4ds.dqm` requires `pandas`, which is in the optional
+`[measures]` extra because `evaluate_measure` returns DataFrames; top-level
+`import fhir4ds` is unaffected.
+
 1. Implementation: `fhir4ds/fhirpath/engine/invocations/`
 2. Tests: `fhir4ds/fhirpath/tests/unit/`
 3. DuckDB Registration: `fhir4ds/fhirpath/duckdb/udf.py`
@@ -1330,3 +1350,16 @@ aligned between `FHIRDataLoader` registration and the DuckDB clinical macro
 module. `singleton from` may return NULL or raise for multi-item inputs
 depending on the translated/direct surface, but it must never silently pick an
 arbitrary element.
+
+## Iteration 6 / Domain 8 SKEPTIC (Error Handling) — 2026-07-05
+
+QA-011 (HIGH): `__version__` strings in 7 `__init__.py` files are stale
+at `0.0.10` while `pyproject.toml` targets `0.0.11`. Files:
+`fhir4ds/__init__.py:24`, `fhir4ds/cql/__init__.py:82`,
+`fhir4ds/cql/duckdb/__init__.py:10`, `fhir4ds/fhirpath/__init__.py:18`,
+`fhir4ds/fhirpath/duckdb/__init__.py:21`, `fhir4ds/dqm/__init__.py:34`,
+`fhir4ds/viewdef/__init__.py:27`. Release blocker — every release bump
+must hand-edit all 7 sites. Recommend consolidating to
+`fhir4ds/_version.py` source of truth + a pytest that asserts
+`fhir4ds.__version__ == importlib.metadata.version('fhir4ds-v2')`.
+

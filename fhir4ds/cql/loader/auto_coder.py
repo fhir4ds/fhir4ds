@@ -157,6 +157,27 @@ class AutoCoderConfig:
     batch_size: int = 1
     workers: int = 1
 
+    def __post_init__(self) -> None:
+        """Validate non-negative performance knobs at construction.
+
+        Mirrors :meth:`NotesPipelineConfig.__post_init__`: the runtime
+        ``max(1, ...)`` clamp in :meth:`AutoCoder.augment_resources`
+        would otherwise discard user intent silently. The dataclass is
+        frozen, so the caller MUST be told at construction time.
+        Raises ``ValueError`` for any non-positive ``workers`` or
+        ``batch_size``.
+        """
+        if not isinstance(self.workers, int) or self.workers < 1:
+            raise ValueError(
+                f"AutoCoderConfig.workers must be a positive int (>=1), "
+                f"got {self.workers!r}"
+            )
+        if not isinstance(self.batch_size, int) or self.batch_size < 1:
+            raise ValueError(
+                f"AutoCoderConfig.batch_size must be a positive int (>=1), "
+                f"got {self.batch_size!r}"
+            )
+
 
 class AutoCoder:
     """Augment FHIR resources with auto-coded Codings.

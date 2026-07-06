@@ -35,6 +35,20 @@ _VALUESET_UDF_REGISTERED_CONNECTIONS = WeakSet()
 _FHIR_RESOURCE_TYPE_RE = re.compile(r"^[A-Z][A-Za-z0-9]*$")
 _FHIR_ID_RE = re.compile(r"^[A-Za-z0-9\-.]{1,64}$")
 
+#: FHIR R4 Bundle.type is 1..1, code, required binding to BundleType.
+#: Source: https://hl7.org/fhir/R4/valueset-bundle-type.html
+_FHIR_BUNDLE_TYPES: frozenset[str] = frozenset({
+    "document",
+    "message",
+    "transaction",
+    "transaction-response",
+    "batch",
+    "batch-response",
+    "history",
+    "searchset",
+    "collection",
+})
+
 
 def _validate_resource_identity(resource: dict) -> tuple[str, str | None]:
     resource_type = resource.get("resourceType")
@@ -273,11 +287,24 @@ class FHIRDataLoader:
         Raises:
             TypeError: If resource is not a dict.
             ValueError: If resource lacks a valid 'resourceType' field.
+            duckdb.ConnectionException: If the underlying connection is
+                closed (mirrors the ``evaluate_measure`` wrap pattern so
+                callers get an actionable fhir4ds-typed message instead
+                of the raw DuckDB string).
         """
         if not isinstance(resource, dict):
             raise TypeError(
                 f"Expected dict, got {type(resource).__name__}"
             )
+        # Closed-connection guard (QA-015). Mirrors cql/__init__.py:384-389.
+        try:
+            self.con.execute("SELECT 1").fetchone()
+        except duckdb.ConnectionException:
+            raise duckdb.ConnectionException(
+                "Cannot load FHIR resource: DuckDB connection is closed"
+            ) from None
+        except duckdb.Error:
+            pass  # connection is alive, other DuckDB errors are expected
         # Phase 2 augmentation hook — runs BEFORE validate/serialize so the
         # auto-coder can append Codings to text-only CodeableConcepts. With
         # ``self._auto_coder is None`` (the default) this branch is skipped
@@ -406,8 +433,18 @@ class FHIRDataLoader:
             if resource_id is not None:
                 key = (resource_id, resource_type)
                 if key in seen:
-                    _logger.debug(
-                        "Duplicate resource %s/%s — keeping latest",
+                    # Distinguish source-source dedup (a repeat of the
+                    # same input row, last-write-wins per FHIR R4 id
+                    # uniqueness) from cross-source/derived collisions
+                    # (a derived Condition sharing a source resource's
+                    # ``(id, resourceType)``). Both are logged WARNING
+                    # rather than DEBUG so silent data corruption is
+                    # surfaced (loader "no silent corruption" contract,
+                    # QA-010). Realistic collision likelihood is low
+                    # (sha256-derived ids) but the warning costs nothing.
+                    _logger.warning(
+                        "Duplicate resource %s/%s — overwriting earlier "
+                        "row in the same batch (last-write-wins).",
                         resource_type, resource_id,
                     )
                     rows[seen[key]] = None  # type: ignore[assignment]
@@ -439,6 +476,16 @@ class FHIRDataLoader:
                     if d_id is not None:
                         d_key = (d_id, d_type)
                         if d_key in seen:
+                            # Cross-source/derived collision (QA-010):
+                            # the derived Condition's deterministic id
+                            # matched an earlier row. Surface this as a
+                            # WARNING so silent overwrites are debuggable.
+                            _logger.warning(
+                                "Derived Condition %s/%s collides with an "
+                                "earlier resource in the same batch — "
+                                "overwriting earlier row.",
+                                d_type, d_id,
+                            )
                             rows[seen[d_key]] = None  # type: ignore[assignment]
                             dedup_count += 1
                         seen[d_key] = len(rows)
@@ -475,7 +522,9 @@ class FHIRDataLoader:
 
         Raises:
             TypeError: If bundle is not a dict.
-            ValueError: If bundle is not a FHIR Bundle resource.
+            ValueError: If bundle is not a FHIR Bundle resource, or if
+                Bundle.type is missing/invalid (FHIR R4 requires 1..1
+                Bundle.type with required binding to BundleType).
         """
         if not isinstance(bundle, dict):
             raise TypeError(
@@ -483,6 +532,24 @@ class FHIRDataLoader:
             )
         if bundle.get("resourceType") != "Bundle":
             raise ValueError("Expected a FHIR Bundle resource")
+
+        # FHIR R4: Bundle.type is 1..1, code, required binding to
+        # BundleType, IsModifier=true. Reject missing or unknown types
+        # per the loader's fail-fast contract (GLOBAL_RULES "No Silent
+        # Fallbacks"). See:
+        # https://hl7.org/fhir/R4/bundle-definitions.html#Bundle.type
+        bundle_type = bundle.get("type")
+        if not isinstance(bundle_type, str) or not bundle_type:
+            raise ValueError(
+                "Bundle.type is required (FHIR R4 1..1 cardinality) but "
+                f"got {bundle_type!r}"
+            )
+        if bundle_type not in _FHIR_BUNDLE_TYPES:
+            raise ValueError(
+                f"Bundle.type {bundle_type!r} is not a valid FHIR R4 "
+                f"BundleType code. Expected one of: "
+                f"{sorted(_FHIR_BUNDLE_TYPES)}"
+            )
 
         entries = bundle.get("entry") or []
         if not isinstance(entries, list):
@@ -512,9 +579,21 @@ class FHIRDataLoader:
 
         Automatically detects if it's a Bundle or single resource.
         Returns the number of resources loaded.
+
+        Raises:
+            ValueError: If the file contains malformed JSON. The error
+                message includes the file path so the operator can
+                locate the bad file in multi-file ``load_directory``
+                runs (mirrors the ``load_ndjson`` per-line attribution).
+            TypeError: If the JSON value is not a JSON object.
         """
         path = Path(path) if not isinstance(path, Path) else path
-        data = json.loads(path.read_text())
+        try:
+            data = json.loads(path.read_text())
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"Malformed JSON in {path}: {e}"
+            ) from e
         if not isinstance(data, dict):
             raise TypeError(
                 f"FHIR JSON file {path} must contain an object resource or Bundle, "
@@ -536,12 +615,20 @@ class FHIRDataLoader:
 
         Args:
             path: Path to the NDJSON file.
-            strict: If True (default), raise on malformed JSON to prevent
-                partial loads. If False, skip bad lines with a warning and
+            strict: If True (default), raise on malformed JSON or invalid
+                FHIR resources to prevent partial loads. Per-line errors
+                include the line number so the operator can locate the
+                bad row. If False, skip bad lines with a warning and
                 continue loading valid resources.
 
         Raises:
-            ValueError: If strict=True and any line contains malformed JSON.
+            ValueError: If strict=True and any line contains malformed
+                JSON or an invalid FHIR resource (e.g. missing
+                ``resourceType``, NaN/Infinity values, malformed
+                ``resourceType``/``id``). Error message includes the
+                1-based line number.
+            TypeError: If strict=True and a line is valid JSON but not a
+                JSON object.
         """
         import logging
         _logger = logging.getLogger("fhir4ds.loader")
@@ -563,20 +650,31 @@ class FHIRDataLoader:
                             line_num, path, e,
                         )
                         continue
-                    if not strict:
-                        try:
-                            if not isinstance(resource, dict):
-                                raise TypeError(
-                                    f"Expected dict, got {type(resource).__name__}"
-                                )
-                            _validate_resource_identity(resource)
-                            _serialize_resource(resource)
-                        except (TypeError, ValueError) as e:
-                            _logger.warning(
-                                "Skipping invalid FHIR resource at line %d in %s: %s",
-                                line_num, path, e,
+                    # Per-line FHIR validation. Symmetric for both
+                    # strict=True (raise with line attribution) and
+                    # strict=False (warn + skip). Previously strict=True
+                    # only validated JSON syntax per-line and deferred
+                    # FHIR validity to ``load_resources``, which raised
+                    # with no line attribution on large files.
+                    try:
+                        if not isinstance(resource, dict):
+                            raise TypeError(
+                                f"Expected JSON object for FHIR resource, "
+                                f"got {type(resource).__name__}"
                             )
-                            continue
+                        _validate_resource_identity(resource)
+                        _serialize_resource(resource)
+                    except (TypeError, ValueError) as e:
+                        if strict:
+                            raise ValueError(
+                                f"Invalid FHIR resource at line {line_num} "
+                                f"in {path}: {e}"
+                            ) from e
+                        _logger.warning(
+                            "Skipping invalid FHIR resource at line %d in %s: %s",
+                            line_num, path, e,
+                        )
+                        continue
                     resources.append(resource)
 
         return self.load_resources(resources)

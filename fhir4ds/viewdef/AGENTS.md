@@ -1,6 +1,60 @@
 # ViewDefinition Agent Notes
 
 ## Known Fragile Areas
+- SOF-VD-05 HISTORIAN iter 3 fixed (2026-07-05): `forEachOrNull`
+  with a nested `forEach` was dropping the parent row when the outer
+  collection was empty. Per SQL-on-FHIR v2 Process(S, N) algorithm step 3
+  (https://build.fhir.org/ig/FHIR/sql-on-fhir-v2/StructureDefinition-ViewDefinition.html),
+  when `foci` is empty and `forEachOrNull` is defined, the implementation
+  MUST emit one row binding ALL columns from `ValidateColumns(V, [])` (including
+  columns produced by nested `forEach` / nested `select`) to null. The
+  generator already emitted `LEFT JOIN LATERAL` for the outer `forEachOrNull`
+  to preserve the parent NULL row, but the inner `forEach` still emitted
+  `CROSS JOIN LATERAL` which evaluated `fhirpath(NULL_alias, 'childPath')`
+  -> empty collection -> CROSS JOIN with empty -> 0 rows -> the parent's
+  preserved NULL row was eliminated. Fix in `fhir4ds/viewdef/generator.py`
+  (`_process_selects` forEach branch threads `null_preserve_var`) and
+  `fhir4ds/viewdef/unnest.py` (`generate_foreach_unnest` gains a
+  `null_preserve_var` parameter). When set, the unnest subquery short-circuits
+  the unnest when the enclosing forEachOrNull alias IS NULL (gating the
+  VALUES row on `null_preserve_var IS NOT NULL`) and UNION ALLs a single
+  synthetic NULL row produced only when the enclosing alias IS NULL. This
+  preserves the parent NULL row ONLY when the enclosing forEachOrNull's foci
+  is itself empty (Process(S, N) step 3), while keeping ordinary INNER JOIN
+  semantics for non-empty wrapper foci (a contact with empty telecom is
+  still dropped per Process(S, N) step 2). `_generate_single_resource` also
+  tracks forEachOrNull unnest aliases across UNION ALL alternatives and
+  suppresses the null row in non-first alternatives that share the same
+  wrapper forEachOrNull path, so the spec's "emit one null row total" rule
+  holds across union branches. Pre-existing test
+  `test_nested_foreach_under_foreachornull_keeps_inner_semantics` was
+  updated to reflect the spec-mandated `(patient-2, None)` row that the
+  previous buggy behavior silently dropped. Three new regression tests in
+  `TestForeachOrNullNestedForeachSpecSofVd05Historian` (B3a outer-empty,
+  B3a outer-non-empty control, mixed partial-contact scenario). Post-fix:
+  ViewDefinition pytest 1058/1058. Probe at
+  `/mnt/d/fhir4ds/fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/iter3/probe_b3_simplified.py`.
+  Keep coverage aligned when touching `generate_foreach_unnest` or
+  `_generate_single_resource` UNION ALL handling.
+- SOF-VD-05 HISTORIAN ARCH-003 follow-up (iter 3, 2026-07-05): the same
+  parent-row-drop bug shape that QA-005 fixed for nested `forEach` also
+  existed for nested `repeat` under an enclosing `forEachOrNull`.
+  `generate_repeat_unnest` (`fhir4ds/viewdef/unnest.py`) emitted an
+  unconditional CROSS JOIN LATERAL against `fhirpath_repeat`, which
+  eliminated the parent's preserved NULL row when the outer
+  forEachOrNull's foci was empty (Process(S, N) step 3 violation). Fix
+  mirrors QA-005 exactly: `generate_repeat_unnest` gained a
+  `null_preserve_var` parameter; when set, the source VALUES row is
+  gated on `{null_preserve_var} IS NOT NULL` and a synthetic NULL row
+  is UNION ALLed only when `{null_preserve_var} IS NULL`.
+  `_process_selects` repeat branch (`fhir4ds/viewdef/generator.py`)
+  threads `null_preserve_var` into the call. `_collect_foreachornull_paths`
+  did NOT need extension because it tracks forEachOrNull *wrappers*
+  (the dedup unit), not inner unnests; `repeat` is a consumer of the
+  null-preserving var just like nested `forEach`. Three regression
+  tests in `TestForeachOrNullNestedRepeatSpecSofVd05Architect`. Post-fix:
+  ViewDefinition pytest 1061/1061. Probe at
+  `/mnt/d/fhir4ds/fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/iter3/probe_arch003.py`.
 - SOF-VD-04 SKEPTIC fresh rerun verified clean (2026-07-03): 38-assertion /
   10-battery hypothesis-driven probe targeted collection default false +
   bool-only invariant, multi-value non-collection error, type URI handling
@@ -721,6 +775,15 @@
 
 ## NOT A BUG Registry
 
+- SOF-VD-05 HISTORIAN iter 3 (2026-07-05): String constants substituted into
+  `forEach` paths produce literal-string foci, not navigation. Per FHIRPath
+  `%Const` substitutes the constant's *value* into the expression — a string
+  constant becomes a FHIRPath string literal `'name'`, not the bare
+  navigation path `name`. forEach over a literal string is not navigation;
+  this is a fundamental FHIRPath limitation, not a fhir4ds bug. The spec's
+  only constant example (`code=%bp_code` in a where predicate) substitutes
+  into a comparison, which is the intended use. Direct dataclass / parser /
+  generator paths all behave consistently with this FHIRPath semantic.
 - SOF-VD-09 EXPLORER fresh rerun (2026-06-01): Root `where`
   stays scoped to the root resource when projections use composed rowset
   features. Fresh native-loaded and forced Python fallback probes verified

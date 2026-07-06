@@ -30,6 +30,7 @@ import logging
 import threading
 import time
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from ..duckdb.udf.system_resolver import SystemResolver
 from .types import CodeRef, SearchResult
@@ -152,6 +153,16 @@ class HTTPTerminologyEndpoint:
     ) -> None:
         if not base_url:
             raise ValueError("base_url is required for HTTPTerminologyEndpoint")
+        # Fail-fast URL validation (QA-014). Deferred failure at first
+        # network call surfaces opaque httpx errors far from the
+        # construction site. Reject non-URL / wrong-scheme inputs here so
+        # common typos (``localhost:8001/fhir`` missing scheme, ``ftp://``,
+        # plain strings) are caught with an actionable message.
+        parsed = urlparse(base_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError(
+                f"base_url must be an http(s) URL with host, got {base_url!r}"
+            )
         if timeout_seconds is None or timeout_seconds <= 0:
             raise ValueError(
                 "timeout_seconds must be a positive float (INV-6: no infinite hangs)"

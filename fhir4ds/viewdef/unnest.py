@@ -25,50 +25,123 @@ def generate_foreach_unnest(
     resource_var: str,
     alias: str,
     path_sql: str | None = None,
+    null_preserve_var: str | None = None,
 ) -> str:
-    """Generate CROSS JOIN LATERAL with UNNEST for forEach.
+    """Generate JOIN LATERAL with UNNEST for forEach.
 
-    Creates a SQL fragment that unnests a FHIRPath array expression
-    using CROSS JOIN LATERAL, which means rows without matching
-    elements are excluded from the result.
+    Creates a SQL fragment that unnests a FHIRPath array expression.
+
+    By default (``null_preserve_var=None``) a CROSS JOIN LATERAL is
+    emitted (inner join), so rows without matching elements are
+    excluded from the result — the SQL-on-FHIR v2 ``forEach``
+    inner-join semantics.
+
+    When ``null_preserve_var`` is set to the alias of an enclosing
+    ``forEachOrNull`` unnest, the JOIN is rewritten so it preserves
+    that enclosing context's NULL row only when the enclosing
+    forEachOrNull's foci is empty (``null_preserve_var IS NULL``).
+    Per SQL-on-FHIR v2 Process(S, N) step 3, when the outer
+    forEachOrNull's foci is empty the entire selection structure
+    emits exactly ONE null row — including columns produced by nested
+    forEach. When the outer foci is non-empty, the inner forEach
+    keeps ordinary INNER JOIN semantics so child collections that are
+    empty still drop their own focus row.
 
     Args:
         path: FHIRPath expression that returns an array
         resource_var: Variable/expression holding the FHIR resource
         alias: Alias name for the unnested element
+        null_preserve_var: When set to the enclosing forEachOrNull
+            unnest alias, preserve the parent's NULL row only when
+            that alias is NULL (spec Process(S, N) step 3).
 
     Returns:
-        SQL fragment for CROSS JOIN LATERAL UNNEST
-
-    Example:
-        >>> generate_foreach_unnest('name', 't.resource', 'name_elem')
-        "CROSS JOIN LATERAL (\\n    SELECT json_extract(jarr, '$[' || CAST(idx AS VARCHAR) || ']') as name_elem, idx as name_elem__row_index\\n    FROM (VALUES (fhirpath(t.resource, 'name'), fhirpath_json(t.resource, 'name'))) v(arr, jarr)\\n    CROSS JOIN UNNEST(range(len(arr))) AS u(idx)\\n    ORDER BY idx\\n) as name_elem_table"
+        SQL fragment for the JOIN LATERAL UNNEST.
     """
     table_alias = f"{alias}_table"
     path_arg = _fhirpath_path_argument(path, path_sql)
+    if null_preserve_var is None:
+        return (
+            f"CROSS JOIN LATERAL (\n"
+            f"    SELECT json_extract(jarr, '$[' || CAST(idx AS VARCHAR) || ']') as {alias}, "
+            f"idx as {alias}__row_index\n"
+            f"    FROM (VALUES (fhirpath({resource_var}, {path_arg}), "
+            f"fhirpath_json({resource_var}, {path_arg}))) v(arr, jarr)\n"
+            f"    CROSS JOIN UNNEST(range(len(arr))) AS u(idx)\n"
+            f"    ORDER BY idx\n"
+            f") as {table_alias}"
+        )
+    # null-preserving mode: when the enclosing forEachOrNull preserves a
+    # parent NULL row (its unnest alias is NULL), this forEach must NOT
+    # eliminate that NULL row. Per SQL-on-FHIR v2 Process(S, N) step 3,
+    # when the outer forEachOrNull's foci is empty the entire selection
+    # structure emits exactly ONE null row — including columns produced
+    # by nested forEach.
+    #
+    # When the enclosing alias is non-NULL (a real focus element),
+    # ordinary INNER JOIN semantics apply and an empty child collection
+    # drops the focus row per Process(S, N) step 2.
+    #
+    # Implementation: emit CROSS JOIN LATERAL against a subquery that
+    # uses the enclosing unnest alias as its resource. The subquery
+    # short-circuits the unnest when the enclosing alias is NULL by
+    # gating the source VALUES row on ``{null_preserve_var} IS NOT
+    # NULL``, then UNION ALLs a single synthetic NULL row produced only
+    # when the enclosing alias is NULL. The result:
+    #   * enclosing alias NULL  → 1 synthetic NULL row (preserves parent).
+    #   * enclosing alias non-NULL, child non-empty → N unnested rows.
+    #   * enclosing alias non-NULL, child empty → 0 rows (parent dropped,
+    #     INNER JOIN semantics).
     return (
         f"CROSS JOIN LATERAL (\n"
         f"    SELECT json_extract(jarr, '$[' || CAST(idx AS VARCHAR) || ']') as {alias}, "
         f"idx as {alias}__row_index\n"
-        f"    FROM (VALUES (fhirpath({resource_var}, {path_arg}), "
+        f"    FROM (\n"
+        f"        SELECT * FROM (VALUES (fhirpath({resource_var}, {path_arg}), "
         f"fhirpath_json({resource_var}, {path_arg}))) v(arr, jarr)\n"
+        f"        WHERE {null_preserve_var} IS NOT NULL\n"
+        f"    ) v\n"
         f"    CROSS JOIN UNNEST(range(len(arr))) AS u(idx)\n"
-        f"    ORDER BY idx\n"
+        f"    UNION ALL\n"
+        f"    SELECT NULL, NULL WHERE {null_preserve_var} IS NULL\n"
+        f"    ORDER BY {alias}__row_index\n"
         f") as {table_alias}"
     )
 
 
-def generate_repeat_unnest(paths: list, resource_var: str, alias: str) -> str:
+def generate_repeat_unnest(
+    paths: list,
+    resource_var: str,
+    alias: str,
+    null_preserve_var: str | None = None,
+) -> str:
     """Generate CROSS JOIN LATERAL with UNNEST for repeat traversal.
 
     Creates a SQL fragment using the ``fhirpath_repeat`` UDF for recursive
     traversal per SQL-on-FHIR v2 §Select.repeat.  Like forEach, rows without
     matching elements are excluded from the result.
 
+    By default (``null_preserve_var=None``) a CROSS JOIN LATERAL is
+    emitted (inner join), so rows without matching elements are
+    excluded from the result — the SQL-on-FHIR v2 ``repeat``
+    inner-join semantics, mirroring ``generate_foreach_unnest``.
+
+    When ``null_preserve_var`` is set to the alias of an enclosing
+    ``forEachOrNull`` unnest, the JOIN is rewritten so it preserves
+    that enclosing context's NULL row only when the enclosing
+    forEachOrNull's foci is empty (``null_preserve_var IS NULL``).
+    Per SQL-on-FHIR v2 Process(S, N) step 3, when the outer
+    forEachOrNull's foci is empty the entire selection structure
+    emits exactly ONE null row — including columns produced by nested
+    ``repeat``. This mirrors the QA-005 fix for nested ``forEach``.
+
     Args:
         paths: List of FHIRPath path strings for repeat traversal.
         resource_var: Variable/expression holding the FHIR resource.
         alias: Alias name for the unnested element.
+        null_preserve_var: When set to the enclosing forEachOrNull
+            unnest alias, preserve the parent's NULL row only when
+            that alias is NULL (spec Process(S, N) step 3).
 
     Returns:
         SQL fragment for CROSS JOIN LATERAL UNNEST of repeat results.
@@ -76,11 +149,38 @@ def generate_repeat_unnest(paths: list, resource_var: str, alias: str) -> str:
     import json
     paths_literal = json.dumps(paths).replace("'", "''")
     table_alias = f"{alias}_table"
+    if null_preserve_var is None:
+        return (
+            f"CROSS JOIN LATERAL (\n"
+            f"    SELECT unnest(arr) as {alias}, "
+            f"unnest(range(len(arr))) as {alias}__row_index\n"
+            f"    FROM (VALUES (fhirpath_repeat({resource_var}, '{paths_literal}'))) v(arr)\n"
+            f") as {table_alias}"
+        )
+    # null-preserving mode (mirrors generate_foreach_unnest). When the
+    # enclosing forEachOrNull preserves a parent NULL row (its unnest
+    # alias is NULL), this repeat must NOT eliminate that NULL row. Per
+    # SQL-on-FHIR v2 Process(S, N) step 3, when the outer forEachOrNull's
+    # foci is empty the entire selection structure emits exactly ONE null
+    # row — including columns produced by nested ``repeat``.
+    #
+    # When the enclosing alias is non-NULL (a real focus element),
+    # ordinary INNER JOIN semantics apply and an empty child collection
+    # drops the focus row per Process(S, N) step 2.
+    #
+    # Implementation: gate the source VALUES row on
+    # ``{null_preserve_var} IS NOT NULL``, then UNION ALL a single
+    # synthetic NULL row produced only when the enclosing alias is NULL.
     return (
         f"CROSS JOIN LATERAL (\n"
         f"    SELECT unnest(arr) as {alias}, "
         f"unnest(range(len(arr))) as {alias}__row_index\n"
-        f"    FROM (VALUES (fhirpath_repeat({resource_var}, '{paths_literal}'))) v(arr)\n"
+        f"    FROM (\n"
+        f"        SELECT * FROM (VALUES (fhirpath_repeat({resource_var}, '{paths_literal}'))) v(arr)\n"
+        f"        WHERE {null_preserve_var} IS NOT NULL\n"
+        f"    ) v\n"
+        f"    UNION ALL\n"
+        f"    SELECT NULL, NULL WHERE {null_preserve_var} IS NULL\n"
         f") as {table_alias}"
     )
 

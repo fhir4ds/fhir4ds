@@ -611,7 +611,7 @@ class CTEManagerMixin:
                                 f'COALESCE(\n'
                                 f'  (SELECT __pre._cmp_result\n'
                                 f'   FROM "{precte_name}" AS __pre\n'
-                                f'   WHERE __pre.patient_id = p.patient_id),\n'
+                                f'   WHERE __pre.patient_id = _pt.patient_id),\n'
                                 f'  audit_leaf(false)\n'
                                 f')'
                             )
@@ -619,7 +619,7 @@ class CTEManagerMixin:
                             # Main audit CTE: simple EXISTS lookup on the pre-compute result
                             lookup = SQLRaw(
                                 f'EXISTS (SELECT 1 FROM "{precte_name}" AS __pre'
-                                f' WHERE __pre.patient_id = p.patient_id)'
+                                f' WHERE __pre.patient_id = _pt.patient_id)'
                             )
                             audit_expr = SQLFunctionCall(name="audit_leaf", args=[lookup])
                     else:
