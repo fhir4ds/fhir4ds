@@ -2006,14 +2006,10 @@ class FunctionsMixin:
                 if _is_numeric_expr(a):
                     return a
                 if isinstance(a, SQLFunctionCall) and a.name in ('fhirpath_text', 'fhirpath_scalar'):
-                    trimmed = SQLFunctionCall(name="LTRIM", args=[a])
-                    is_json = SQLFunctionCall(name="starts_with", args=[trimmed, SQLLiteral(value="{")])
-                    json_value = SQLFunctionCall(name="json_extract_string", args=[a, SQLLiteral(value="$.value")])
+                    # cql_quantity_value is a SQL macro defined in clinical.py;
+                    # using it here keeps the emitted SQL DRY and audit-safe.
                     return SQLCast(
-                        expression=SQLCase(
-                            when_clauses=[(is_json, json_value)],
-                            else_clause=a,
-                        ),
+                        expression=SQLFunctionCall(name="cql_quantity_value", args=[a]),
                         target_type="DOUBLE",
                         try_cast=True,
                     )

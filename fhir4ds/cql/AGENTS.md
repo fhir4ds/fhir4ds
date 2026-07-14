@@ -5173,3 +5173,37 @@ drift. No new findings. Structural health: SOUND. ARCH-001, ARCH-002,
 ARCH-004 (LOW) remain OPEN as pre-existing iter-1/2/4 follow-ups,
 unchanged by iter-6.
 
+## Known Fragile Areas (BENCH-001 Option D — disambiguation macros)
+
+- `fhir4ds/cql/duckdb/macros/clinical.py:50-89` (`cql_value_is_period`,
+  `cql_value_is_range`, `cql_value_is_interval_like`,
+  `cql_quantity_value`): These four SQL macros encapsulate the inline
+  `CASE WHEN starts_with(LTRIM(R), '{') THEN json_extract_string(R,
+  '$.start') IS NOT NULL ... ELSE FALSE END` disambiguation blocks that
+  `_translate_is_type_check` historically emitted for CQL `is
+  Interval<DateTime>`, `is Interval<Quantity>`, `is Period`, `is Range`
+  (and the Quantity `$.value` extraction used by arithmetic/comparison
+  coercion). The inline-CASE emission pattern is DEPRECATED. Any new
+  type-disambiguation need MUST be added as a SQL macro here and
+  referenced via `SQLFunctionCall`, NOT emitted as an inline CASE at
+  the translation site. SQL macros are globally resolvable from any
+  scope, including audit pre-compute CTEs that copy expression
+  fragments verbatim — inline LATERAL-alias hoisting (Option A/C)
+  breaks because the alias dangles in the copied scope. Registration
+  flows through `registerClinicalMacros` → `register_all_macros` so
+  both the native C++ extension path (`extension.py:237`) and the
+  forced Python fallback path (`core.py:241`) see them.
+- `fhir4ds/cql/translator/expressions/_query.py:3254-3375` (the four
+  `is`-type-check branches): All four branches now emit
+  `SQLFunctionCall(name="cql_value_is_interval_like"/etc., ...)`. If a
+  future refactor re-introduces inline CASE emission here, CMS2
+  noaudit SQL will balloon back to ~1.55 MB and the regression test at
+  `fhir4ds/cql/tests/integration/test_cms2_disambiguation_macros.py`
+  will catch it.
+- `fhir4ds/cql/translator/expressions/_operators.py:6925-6933` and
+  `:7009-7017`, and `fhir4ds/cql/translator/expressions/_functions.py:
+  2004-2012` (Quantity `$.value` extraction): These three sites now
+  emit `SQLFunctionCall(name="cql_quantity_value", ...)`. Same
+  rationale: inline CASE bloats SQL and risks audit-scope alias
+  dangling.
+

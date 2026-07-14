@@ -6927,15 +6927,12 @@ class OperatorsMixin:
                     number_projection = self._fhirpath_number_projection(expr)
                     if number_projection is not None:
                         return number_projection
-                    # Handle Quantity JSON objects by extracting $.value first
-                    trimmed = SQLFunctionCall(name="LTRIM", args=[expr])
-                    is_json = SQLFunctionCall(name="starts_with", args=[trimmed, SQLLiteral(value="{")])
-                    json_value = SQLFunctionCall(name="json_extract_string", args=[expr, SQLLiteral(value="$.value")])
+                    # Handle Quantity JSON objects by extracting $.value first.
+                    # cql_quantity_value is a SQL macro defined in clinical.py;
+                    # using it here keeps the emitted SQL DRY and audit-safe
+                    # (the macro is globally resolvable from any scope).
                     return SQLCast(
-                        expression=SQLCase(
-                            when_clauses=[(is_json, json_value)],
-                            else_clause=expr,
-                        ),
+                        expression=SQLFunctionCall(name="cql_quantity_value", args=[expr]),
                         target_type="DOUBLE",
                         try_cast=True,
                     )
@@ -7014,14 +7011,10 @@ class OperatorsMixin:
                 if number_projection is not None:
                     return number_projection
                 if isinstance(expr, SQLFunctionCall) and expr.name in _QUANTITY_JSON_UDFS:
-                    trimmed = SQLFunctionCall(name="LTRIM", args=[expr])
-                    is_json = SQLFunctionCall(name="starts_with", args=[trimmed, SQLLiteral(value="{")])
-                    json_value = SQLFunctionCall(name="json_extract_string", args=[expr, SQLLiteral(value="$.value")])
+                    # cql_quantity_value is a SQL macro defined in clinical.py;
+                    # using it here keeps the emitted SQL DRY and audit-safe.
                     return SQLCast(
-                        expression=SQLCase(
-                            when_clauses=[(is_json, json_value)],
-                            else_clause=expr,
-                        ),
+                        expression=SQLFunctionCall(name="cql_quantity_value", args=[expr]),
                         target_type="DOUBLE",
                         try_cast=True,
                     )

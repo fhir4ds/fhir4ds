@@ -3254,157 +3254,43 @@ class QueryMixin:
         if _interval_type == "datetime":
             # Period JSON: {"start": "...", "end": "..."} or internal CQL
             # interval JSON: {"low": "...", "high": "..."}.
-            # Use CASE WHEN to guard json_extract_string — DuckDB doesn't
-            # short-circuit AND, so bare strings would crash json_extract.
-            is_json = SQLFunctionCall(
-                name="starts_with",
-                args=[
-                    SQLFunctionCall(name="LTRIM", args=[resource_expr]),
-                    SQLLiteral(value="{"),
-                ],
-            )
-            has_start_or_end = SQLBinaryOp(
-                operator="OR",
-                left=SQLBinaryOp(
-                    operator="IS NOT",
-                    left=SQLFunctionCall(
-                        name="json_extract_string",
-                        args=[resource_expr, SQLLiteral(value="$.start")],
-                    ),
-                    right=SQLNull(),
-                ),
-                right=SQLBinaryOp(
-                    operator="IS NOT",
-                    left=SQLFunctionCall(
-                        name="json_extract_string",
-                        args=[resource_expr, SQLLiteral(value="$.end")],
-                    ),
-                    right=SQLNull(),
-                ),
-            )
-            has_low_or_high = SQLBinaryOp(
-                operator="OR",
-                left=SQLBinaryOp(
-                    operator="IS NOT",
-                    left=SQLFunctionCall(
-                        name="json_extract_string",
-                        args=[resource_expr, SQLLiteral(value="$.low")],
-                    ),
-                    right=SQLNull(),
-                ),
-                right=SQLBinaryOp(
-                    operator="IS NOT",
-                    left=SQLFunctionCall(
-                        name="json_extract_string",
-                        args=[resource_expr, SQLLiteral(value="$.high")],
-                    ),
-                    right=SQLNull(),
-                ),
-            )
-            return SQLCase(
-                when_clauses=[(
-                    is_json,
-                    SQLBinaryOp(operator="OR", left=has_start_or_end, right=has_low_or_high),
-                )],
-                else_clause=SQLLiteral(value=False),
+            # Emit a SQL macro call (cql_value_is_interval_like) instead of
+            # the inline CASE — the macro is globally resolvable from any
+            # scope, including audit pre-compute CTEs that copy expression
+            # fragments verbatim. See clinical.py for the macro definition.
+            return SQLFunctionCall(
+                name="cql_value_is_interval_like",
+                args=[resource_expr],
             )
         if _interval_type == "quantity":
             # Range JSON: {"low": {...}, "high": {...}}
-            is_json = SQLFunctionCall(
-                name="starts_with",
-                args=[
-                    SQLFunctionCall(name="LTRIM", args=[resource_expr]),
-                    SQLLiteral(value="{"),
-                ],
+            # cql_value_is_range uses CASE WHEN to guard json_extract_string
+            # — DuckDB doesn't short-circuit AND, so bare strings would
+            # crash json_extract. The CASE ELSE FALSE matches the prior
+            # ``is_json AND has_low_or_high`` semantics for all inputs
+            # (NULL → FALSE in both).
+            return SQLFunctionCall(
+                name="cql_value_is_range",
+                args=[resource_expr],
             )
-            has_low_or_high = SQLBinaryOp(
-                operator="OR",
-                left=SQLBinaryOp(
-                    operator="IS NOT",
-                    left=SQLFunctionCall(
-                        name="json_extract_string",
-                        args=[resource_expr, SQLLiteral(value="$.low")],
-                    ),
-                    right=SQLNull(),
-                ),
-                right=SQLBinaryOp(
-                    operator="IS NOT",
-                    left=SQLFunctionCall(
-                        name="json_extract_string",
-                        args=[resource_expr, SQLLiteral(value="$.high")],
-                    ),
-                    right=SQLNull(),
-                ),
-            )
-            return SQLBinaryOp(operator="AND", left=is_json, right=has_low_or_high)
 
         # --- Strategy 2: Complex data types without resourceType ---
         if bare_type in ("Period", "period"):
-            # Period JSON: {"start": "...", "end": "..."}
-            # Use CASE WHEN to guard json_extract_string — DuckDB doesn't
-            # short-circuit AND, so bare date strings would crash json_extract.
-            is_json = SQLFunctionCall(
-                name="starts_with",
-                args=[
-                    SQLFunctionCall(name="LTRIM", args=[resource_expr]),
-                    SQLLiteral(value="{"),
-                ],
-            )
-            has_start_or_end = SQLBinaryOp(
-                operator="OR",
-                left=SQLBinaryOp(
-                    operator="IS NOT",
-                    left=SQLFunctionCall(
-                        name="json_extract_string",
-                        args=[resource_expr, SQLLiteral(value="$.start")],
-                    ),
-                    right=SQLNull(),
-                ),
-                right=SQLBinaryOp(
-                    operator="IS NOT",
-                    left=SQLFunctionCall(
-                        name="json_extract_string",
-                        args=[resource_expr, SQLLiteral(value="$.end")],
-                    ),
-                    right=SQLNull(),
-                ),
-            )
-            return SQLCase(
-                when_clauses=[(is_json, has_start_or_end)],
-                else_clause=SQLLiteral(value=False),
+            # Period JSON: {"start": "...", "end": "..."}.
+            # cql_value_is_period uses CASE WHEN to guard json_extract_string
+            # — DuckDB doesn't short-circuit AND, so bare date strings would
+            # crash json_extract.
+            return SQLFunctionCall(
+                name="cql_value_is_period",
+                args=[resource_expr],
             )
 
         if bare_type in ("Range", "range"):
-            # Range JSON: {"low": {...}, "high": {...}}
-            is_json = SQLFunctionCall(
-                name="starts_with",
-                args=[
-                    SQLFunctionCall(name="LTRIM", args=[resource_expr]),
-                    SQLLiteral(value="{"),
-                ],
-            )
-            has_low_or_high = SQLBinaryOp(
-                operator="OR",
-                left=SQLBinaryOp(
-                    operator="IS NOT",
-                    left=SQLFunctionCall(
-                        name="json_extract_string",
-                        args=[resource_expr, SQLLiteral(value="$.low")],
-                    ),
-                    right=SQLNull(),
-                ),
-                right=SQLBinaryOp(
-                    operator="IS NOT",
-                    left=SQLFunctionCall(
-                        name="json_extract_string",
-                        args=[resource_expr, SQLLiteral(value="$.high")],
-                    ),
-                    right=SQLNull(),
-                ),
-            )
-            return SQLCase(
-                when_clauses=[(is_json, has_low_or_high)],
-                else_clause=SQLLiteral(value=False),
+            # Range JSON: {"low": {...}, "high": {...}}.
+            # cql_value_is_range uses CASE WHEN to guard json_extract_string.
+            return SQLFunctionCall(
+                name="cql_value_is_range",
+                args=[resource_expr],
             )
 
         if bare_type in ("Quantity", "quantity"):
