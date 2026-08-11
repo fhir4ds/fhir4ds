@@ -1,0 +1,30 @@
+{
+  "transactionTime": "2026-08-10T12:53:44Z",
+  "request": "/publishers/childrens/$bulk-publish",
+  "output": [
+    {
+      "type": "Location",
+      "url": "/publishers/childrens/output/Location.ndjson"
+    },
+    {
+      "type": "HealthcareService",
+      "url": "/publishers/childrens/output/HealthcareService.ndjson"
+    },
+    {
+      "type": "Practitioner",
+      "url": "/publishers/childrens/output/Practitioner.ndjson"
+    },
+    {
+      "type": "PractitionerRole",
+      "url": "/publishers/childrens/output/PractitionerRole.ndjson"
+    },
+    {
+      "type": "Schedule",
+      "url": "/publishers/childrens/output/Schedule.ndjson"
+    },
+    {
+      "type": "Slot",
+      "url": "/publishers/childrens/output/Slot.ndjson"
+    }
+  ]
+}

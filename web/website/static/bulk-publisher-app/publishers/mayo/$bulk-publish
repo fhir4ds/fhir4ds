@@ -1,0 +1,30 @@
+{
+  "transactionTime": "2026-08-10T12:53:44Z",
+  "request": "/publishers/mayo/$bulk-publish",
+  "output": [
+    {
+      "type": "Location",
+      "url": "/publishers/mayo/output/Location.ndjson"
+    },
+    {
+      "type": "HealthcareService",
+      "url": "/publishers/mayo/output/HealthcareService.ndjson"
+    },
+    {
+      "type": "Practitioner",
+      "url": "/publishers/mayo/output/Practitioner.ndjson"
+    },
+    {
+      "type": "PractitionerRole",
+      "url": "/publishers/mayo/output/PractitionerRole.ndjson"
+    },
+    {
+      "type": "Schedule",
+      "url": "/publishers/mayo/output/Schedule.ndjson"
+    },
+    {
+      "type": "Slot",
+      "url": "/publishers/mayo/output/Slot.ndjson"
+    }
+  ]
+}

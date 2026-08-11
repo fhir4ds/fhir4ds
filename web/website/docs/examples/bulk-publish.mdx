@@ -1,0 +1,79 @@
+---
+id: bulk-publish
+title: Bulk Publish Demo
+sidebar_label: Bulk Publish
+description: Browser-side consumer of a FHIR Bulk Publish feed — built with FHIR4DS-WASM + DuckDB-WASM. All execution is client-side.
+---
+
+import BrowserOnly from '@docusaurus/BrowserOnly';
+import BulkPublishDemo, {
+  IntroDiagram,
+  ConnectBlock,
+  ExploreBlock,
+  ResourceDiagram,
+  TranslateBlock,
+  QueryBlock,
+  ProductionBlock,
+} from '@site/src/components/BulkPublishDemo';
+
+# Bulk Publish + FHIR4DS Demo
+
+This live demo runs a browser-side consumer of a FHIR Bulk Publish feed end-to-end. FHIR4DS-WASM ingests the published NDJSON, normalizes the schema with a SQL-on-FHIR v2 ViewDefinition, and runs every query client-side via DuckDB-WASM. No server infrastructure is required and patient location never leaves the device.
+
+<BrowserOnly>
+  {() => <IntroDiagram />}
+</BrowserOnly>
+
+:::note
+First load takes ~10 seconds for Pyodide to bring up FHIR4DS + DuckDB-WASM. If the page asks for geolocation permission, that's so the **Production** section can filter slots near you.
+:::
+
+<BulkPublishDemo>
+
+## Connect to a Bulk Publish endpoint
+
+SMART Scheduling Links introduces a third flavor of FHIR bulk data alongside Export and Submit: **Bulk Publish**. A provider hosts a `$bulk-publish` URL that returns a manifest pointing at NDJSON files of `Slot`, `Schedule`, `Location`, and — in this extended version — `Practitioner`, `PractitionerRole`, and `HealthcareService` resources.
+
+The demo defaults to a public synthetic endpoint. Connect to load it into the in-browser DuckDB.
+
+<BrowserOnly>
+  {() => <ConnectBlock />}
+</BrowserOnly>
+
+## Browse the raw published FHIR resources
+
+Each line in the published NDJSON is one FHIR resource. `Slot` resources carry the `booking-deep-link` extension from the SMART Scheduling Links spec. `Schedule` resources vary in how they reference practitioners — some go through `PractitionerRole`, some point at `Practitioner` directly, some route through `HealthcareService`. Page through to see the shapes.
+
+<BrowserOnly>
+  {() => <ResourceDiagram />}
+</BrowserOnly>
+
+<BrowserOnly>
+  {() => <ExploreBlock />}
+</BrowserOnly>
+
+## From ViewDefinition to a flat queryable table
+
+FHIR4DS takes a **SQL-on-FHIR v2 ViewDefinition** — a portable JSON spec for flattening FHIR resources — and translates it to DuckDB SQL. The result is a flat table we can query with standard SQL; no FHIRPath knowledge required downstream. The translation runs entirely in your browser via WebAssembly.
+
+<BrowserOnly>
+  {() => <TranslateBlock />}
+</BrowserOnly>
+
+## Filter the materialized table with plain SQL
+
+Once the flattened slots view exists, querying is just SQL. Adjust the filters and watch the `WHERE` clause update in real time; the query executes in your browser against the materialized view. The cross-schema normalization (practitioner + location data joined across the four variants) ran once at ingest — these queries never see it.
+
+<BrowserOnly>
+  {() => <QueryBlock />}
+</BrowserOnly>
+
+## The same engine, as a patient-facing app
+
+Strip away the educational panels and this is what ships: a multi-provider scheduling search running entirely in the browser. Same DuckDB-WASM engine, same cross-schema federation, same sub-100ms queries. Patient location never leaves the device — the haversine distance computation runs client-side against the published `Location.position` data.
+
+<BrowserOnly>
+  {() => <ProductionBlock />}
+</BrowserOnly>
+
+</BulkPublishDemo>

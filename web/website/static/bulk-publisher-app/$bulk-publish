@@ -1,0 +1,26 @@
+{
+  "transactionTime": "2026-08-10T12:53:44Z",
+  "request": "/$bulk-publish",
+  "output": [
+    {
+      "type": "BulkPublishManifest",
+      "url": "/publishers/allina/$bulk-publish"
+    },
+    {
+      "type": "BulkPublishManifest",
+      "url": "/publishers/childrens/$bulk-publish"
+    },
+    {
+      "type": "BulkPublishManifest",
+      "url": "/publishers/mayo/$bulk-publish"
+    },
+    {
+      "type": "BulkPublishManifest",
+      "url": "/publishers/hennepin/$bulk-publish"
+    },
+    {
+      "type": "BulkPublishManifest",
+      "url": "/publishers/fairview/$bulk-publish"
+    }
+  ]
+}

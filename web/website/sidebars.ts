@@ -191,6 +191,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'examples/bulk-publish',
+          label: 'Bulk Publish',
+        },
+        {
+          type: 'doc',
           id: 'examples/notebooks',
           label: 'Notebooks',
         },

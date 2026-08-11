@@ -1,0 +1,1404 @@
+.bulk-publish-demo-app {
+  /* Design tokens for child widgets — kept dark to match the existing
+     demo's interior styling (slots table, SQL panel, etc.). The wrapper
+     itself does NOT set a background, color, font, or color-scheme so it
+     inherits from Docusaurus's page theme. Without this, the demo reads
+     as a dark box floating on the page. */
+  --bg: transparent;
+  --bg-elev: #131c30;
+  --bg-elev-2: #1c2741;
+  /* Concrete dark color for text/icons rendered on accent-colored backgrounds
+     (the Book button, Connect button, Regenerate button). Do NOT use var(--bg)
+     here — that's transparent now that the wrapper inherits from Docusaurus. */
+  --on-accent: #0b1220;
+  --border: #2c3957;
+  --border-soft: #1f2940;
+  --text: inherit;
+  --text-muted: #94a3b8;
+  --text-faint: #64748b;
+  --accent: #38bdf8;
+  --accent-soft: rgba(56, 189, 248, 0.12);
+  --accent-line: rgba(56, 189, 248, 0.35);
+  --good: #5fed83;
+  --good-soft: rgba(95, 237, 131, 0.15);
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  line-height: 1.55;
+  box-sizing: border-box;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+}
+
+.bulk-publish-demo-app *,
+.bulk-publish-demo-app *::before,
+.bulk-publish-demo-app *::after {
+  box-sizing: border-box;
+}
+
+/* ─── Page shell ────────────────────────────────────────────────────── */
+
+.app {
+  /* Let the demo fill the Docusaurus markdown content area. The docs chrome
+     already constrains width and provides its own padding; we just add a
+     little top margin so the status pill isn't flush with the page intro. */
+  width: 100%;
+  margin: 0;
+  padding: 1.5rem 0 4rem;
+}
+
+@media (max-width: 900px) {
+  .app {
+    padding: 1rem 0 2rem;
+  }
+}
+
+/* Deprecated: the standalone demo used a two-column layout with a sticky
+   SectionNav on the right. In the Docusaurus embed we use the docs page's
+   own ToC and the SectionNav is gone. Rules kept harmless in case any
+   downstream markup still references .app__layout. */
+.app__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  gap: 3rem;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .app__layout {
+    grid-template-columns: 1fr;
+  }
+  .app__nav {
+    display: none;
+  }
+}
+
+.app__main {
+  min-width: 0;
+}
+
+.app__nav {
+  position: sticky;
+  top: 2rem;
+  font-size: 0.82rem;
+}
+
+.app__nav ol {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0 1rem;
+  border-left: 1px solid var(--border);
+}
+
+.app__nav li {
+  margin: 0;
+}
+
+.app__nav a {
+  display: block;
+  padding: 0.4rem 0.75rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  margin-left: -1px;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.app__nav a:hover {
+  color: var(--text);
+}
+
+.app__nav a.is-active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.app__nav__number {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-faint);
+  margin-right: 0.4rem;
+}
+
+.app__nav a.is-active .app__nav__number {
+  color: var(--accent);
+}
+
+.app__nav__title {
+  font-size: 0.9rem;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  margin-left: 1rem;
+}
+
+/* ─── Hero ──────────────────────────────────────────────────────────── */
+
+.app__hero {
+  margin-bottom: 3.5rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.app__hero-eyebrow {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.app__hero-title {
+  font-size: 2.2rem;
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0 0 1rem;
+  letter-spacing: -0.02em;
+}
+
+.app__hero-lede {
+  font-size: 1.05rem;
+  color: var(--text-muted);
+  margin: 0 0 1.5rem;
+  line-height: 1.6;
+  /* Match the widget content area (1.25rem padding on each side, same as
+     .widget). Keeps prose and tables left-aligned to the same column. */
+  padding: 0 1.25rem;
+}
+
+.app__hero-lede code {
+  background: var(--bg-elev);
+  color: var(--accent);
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+}
+
+.app__hero-status {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.app__hero-status .ok {
+  color: var(--good);
+  font-weight: 600;
+}
+
+.app__hero-status .pending {
+  color: var(--warn);
+}
+
+.app__error-banner {
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid var(--bad);
+  color: var(--bad);
+  padding: 0.75rem 1rem;
+  border-radius: 0.4rem;
+  font-size: 0.85rem;
+  margin-bottom: 2rem;
+}
+
+/* ─── Section ───────────────────────────────────────────────────────── */
+
+.section {
+  margin-bottom: 4rem;
+  scroll-margin-top: 1.5rem;
+}
+
+.section__header {
+  margin-bottom: 1.5rem;
+}
+
+.section__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.section__number {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.25rem;
+  font-weight: 600;
+}
+
+.section__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+
+.section__title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.section__body {
+}
+
+/* Prose paragraphs inside a section body. Same horizontal padding as the
+   widget content area, so prose text aligns with table content. */
+.section__body > p {
+  color: var(--text-muted);
+  font-size: 1rem;
+  margin: 0 0 0.85rem;
+  line-height: 1.6;
+  padding: 0 1.25rem;
+}
+
+.section__body > p:last-child {
+  margin-bottom: 1.25rem;
+}
+
+.section__body > p strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.section__body > p code {
+  background: var(--bg-elev);
+  color: var(--accent);
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+  font-family: var(--mono);
+}
+
+/* The first .widget inside the section body is the interactive surface. */
+.section__body > .widget {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 0.6rem;
+  overflow: hidden;
+}
+
+/* ─── Generic widget helpers ───────────────────────────────────────── */
+
+.widget {
+  padding: 1.25rem;
+}
+
+.widget--pending {
+  color: var(--text-muted);
+  padding: 2rem 1.25rem;
+  text-align: center;
+}
+
+.widget__pending {
+  color: var(--text-muted);
+  padding: 1rem 0;
+  text-align: center;
+}
+
+.widget__error {
+  background: rgba(248, 113, 113, 0.08);
+  border-left: 3px solid var(--bad);
+  color: var(--bad);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.82rem;
+  margin: 0.5rem 0;
+  font-family: var(--mono);
+  border-radius: 0 0.25rem 0.25rem 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ─── §1 Connect ───────────────────────────────────────────────────── */
+
+.gen-location-row {
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem 1.25rem;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: 0.5rem;
+}
+
+.gen-location-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 0.85rem;
+}
+
+.gen-location-controls {
+  display: flex;
+  gap: 0.6rem;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.preset-row {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.preset-button {
+  background: var(--bg-elev-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.3rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.preset-button:hover:not(:disabled) {
+  background: var(--border);
+  color: var(--text);
+}
+
+.preset-button--active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+
+.preset-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.proxy-row {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.proxy-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.proxy-label code {
+  font-family: var(--mono);
+  background: var(--bg);
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.2rem;
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.proxy-hint {
+  color: var(--text-faint);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.7rem;
+}
+
+.proxy-warning {
+  font-size: 0.72rem;
+  color: var(--warn);
+  padding: 0.4rem 0.6rem;
+  background: rgba(251, 191, 36, 0.06);
+  border-left: 2px solid var(--warn);
+  border-radius: 0 0.2rem 0.2rem 0;
+}
+
+.proxy-warning code {
+  font-family: var(--mono);
+  color: var(--warn);
+}
+
+.connect-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.connect-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.3rem;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  min-width: 0;
+}
+
+.connect-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.connect-button {
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  border-radius: 0.3rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.connect-button:hover:not(:disabled) {
+  background: #50c5f5;
+}
+
+.connect-button:disabled {
+  background: var(--bg-elev-2);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+/* ─── Publisher roster ─────────────────────────────────────────────── */
+
+.roster {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.roster--empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 0.5rem 0;
+}
+
+.roster--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.5rem;
+}
+
+.roster__item {
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.35rem;
+  background: var(--bg);
+  border-left: 3px solid var(--text-faint);
+  font-size: 0.8rem;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.roster__item--loading {
+  border-left-color: var(--warn);
+  background: rgba(251, 191, 36, 0.05);
+}
+
+.roster__item--ready {
+  border-left-color: var(--good);
+  background: var(--good-soft);
+}
+
+.roster__item--pending {
+  border-left-color: var(--text-faint);
+  background: var(--bg);
+}
+
+.roster__name {
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--text);
+}
+
+.roster__status {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  margin-top: 0.15rem;
+}
+
+/* ─── §2 Raw data browser ──────────────────────────────────────────── */
+
+.raw-controls {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.raw-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.raw-control select,
+.raw-control input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.25rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  text-transform: none;
+  letter-spacing: 0;
+  min-width: 110px;
+}
+
+.raw-pager {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.raw-pager button {
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.8rem;
+}
+
+.raw-pager button:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.raw-pager button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.raw-pager__count {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.raw-viewer {
+  border: 1px solid var(--border-soft);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* ─── JSON viewer ──────────────────────────────────────────────────── */
+
+.json-viewer {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text);
+  overflow: auto;
+  white-space: pre;
+}
+
+.tok-key {
+  color: #93c5fd;
+}
+
+.tok-str {
+  color: #86efac;
+}
+
+.tok-num {
+  color: #fbbf24;
+}
+
+.tok-bool {
+  color: #c4b5fd;
+}
+
+.tok-null {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+/* ─── §3 Translation ───────────────────────────────────────────────── */
+
+.translation-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border-soft);
+  margin: -1.25rem -1.25rem 1rem -1.25rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+@media (max-width: 700px) {
+  .translation-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.translation-panel {
+  background: var(--bg-elev);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.translation-panel__title {
+  padding: 0.6rem 1rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+}
+
+.translation-panel__hint {
+  color: var(--text-faint);
+  font-weight: 400;
+  font-family: var(--mono);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.7rem;
+}
+
+.translation-panel__code {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--text);
+  overflow: auto;
+  max-height: 320px;
+  background: var(--bg);
+  flex: 1;
+  white-space: pre;
+}
+
+.translation-output {
+  margin-top: 1rem;
+}
+
+.translation-output__title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+.translation-output__count {
+  color: var(--text-faint);
+  font-family: var(--mono);
+}
+
+/* Audit table — shows lat/lon source per Location */
+.audit-table-wrap {
+  border: 1px solid var(--border-soft);
+  border-radius: 0.4rem;
+  overflow: auto;
+  max-height: 360px;
+}
+
+.audit-table code {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--accent);
+}
+
+.audit-row--fallback {
+  background: rgba(251, 191, 36, 0.05);
+}
+
+.audit-row--fallback:hover {
+  background: rgba(251, 191, 36, 0.1) !important;
+}
+
+.source-tag {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.2rem;
+  font-size: 0.72rem;
+  font-family: var(--mono);
+  background: var(--good-soft);
+  color: var(--good);
+  white-space: nowrap;
+}
+
+.source-tag--fallback {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--warn);
+}
+
+/* ─── Simple table (used in multiple sections) ─────────────────────── */
+
+.simple-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.simple-table th,
+.simple-table td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+
+.simple-table th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--bg-elev-2);
+  position: sticky;
+  top: 0;
+}
+
+.simple-table tbody tr:hover {
+  background: rgba(56, 189, 248, 0.04);
+}
+
+.simple-table td a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* ─── Collapsible callout ──────────────────────────────────────────── */
+
+.callout {
+  margin-top: 1.5rem;
+  border-top: 1px dashed var(--border);
+  padding-top: 1rem;
+}
+
+.callout__toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: inherit;
+}
+
+.callout__toggle:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+.callout__caret {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.callout__body {
+  margin-top: 1rem;
+  padding: 0 0.25rem;
+}
+
+.callout__title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.5rem;
+}
+
+.callout__intro {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 0.75rem;
+  line-height: 1.6;
+}
+
+.callout__intro code {
+  background: var(--bg);
+  color: var(--accent);
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+  font-family: var(--mono);
+}
+
+.callout__code {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  padding: 0.75rem 1rem;
+  border-radius: 0.4rem;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  max-height: 480px;
+  white-space: pre;
+}
+
+/* ─── LocationField (used in §4 and §5) ───────────────────────────── */
+
+/* ─── §4 Query ─────────────────────────────────────────────────────── */
+
+.location-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 240px;
+}
+
+.location-field__form {
+  display: flex;
+  gap: 0.35rem;
+  align-items: stretch;
+}
+
+.location-field__input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.25rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  min-width: 0;
+}
+
+.location-field__input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.location-field__submit,
+.location-field__geo {
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.65rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.location-field__submit:hover:not(:disabled),
+.location-field__geo:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.location-field__submit:disabled,
+.location-field__geo:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.location-field__geo {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.location-field__geo:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.25);
+}
+
+.location-field__resolved {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--good-soft);
+  border: 1px solid rgba(95, 237, 131, 0.35);
+  border-radius: 0.25rem;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.82rem;
+}
+
+.location-field__resolved--compact {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.78rem;
+}
+
+.location-field__label {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.location-field__source {
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.location-field__clear {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.3rem;
+}
+
+.location-field__clear:hover {
+  color: var(--bad);
+}
+
+.location-field__error {
+  color: var(--bad);
+  font-size: 0.75rem;
+  margin-top: 0.15rem;
+}
+
+/* In §4 search controls, make the location field take more horizontal space */
+.raw-control--wide {
+  flex: 1 1 240px;
+}
+
+/* In §5 production grid, the wide location field */
+.production__field--wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 600px) {
+  .production__field--wide {
+    grid-column: span 1;
+  }
+}
+
+
+
+.query-controls {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.query-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 1 1 auto;
+  min-width: 200px;
+}
+
+.query-group__label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.query-group__fields {
+  display: flex;
+  align-items: end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.query-controls .raw-control select,
+.query-controls .raw-control input {
+  min-width: 100px;
+}
+
+.query-sql-panel {
+  margin-bottom: 1rem;
+}
+
+.query-sql-panel__title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.query-sql-panel__running {
+  color: var(--accent);
+  font-family: var(--mono);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-size: 0.7rem;
+}
+
+.query-sql-panel__code {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  padding: 0.75rem 1rem;
+  border-radius: 0.4rem;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  line-height: 1.5;
+  overflow: auto;
+  max-height: 260px;
+  white-space: pre;
+}
+
+.query-results__title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.timing-badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 0.25rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.results-scroll {
+  overflow: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 0.4rem;
+  max-height: 480px;
+}
+
+/* ─── Regenerate near location prompt ──────────────────────────────── */
+
+.regenerate-prompt {
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: 0.5rem;
+}
+
+.regenerate-prompt p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 0.75rem;
+  line-height: 1.5;
+}
+
+.regenerate-prompt strong {
+  color: var(--text);
+}
+
+.regenerate-button {
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.3rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: inherit;
+}
+
+.regenerate-button:hover:not(:disabled) {
+  background: #50c5f5;
+}
+
+.regenerate-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ─── §5 Production ────────────────────────────────────────────────── */
+
+.production {
+  padding: 1.5rem;
+  background: linear-gradient(180deg, var(--bg-elev) 0%, var(--bg-elev-2) 100%);
+}
+
+.production__search {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.production__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.production__field label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.production__field select,
+.production__field input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.3rem;
+  font-family: inherit;
+  font-size: 0.88rem;
+}
+
+.production__field select:focus,
+.production__field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.production__meta {
+  font-size: 0.9rem;
+  color: var(--text);
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.production__meta-light {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.production__results {
+  max-height: 600px;
+  overflow: auto;
+}
+
+.slot-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.slot-card {
+  display: grid;
+  grid-template-columns: 130px 1fr auto;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 0.4rem;
+  align-items: center;
+}
+
+@media (max-width: 600px) {
+  .slot-card {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+}
+
+.slot-card__time {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.slot-card__provider {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin-bottom: 0.15rem;
+}
+
+.slot-card__specialty {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.2rem;
+  font-weight: 600;
+}
+
+.slot-card__prac {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.slot-card__location {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.slot-card__meta {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  margin-top: 0.15rem;
+  text-transform: capitalize;
+}
+
+.slot-card__distance {
+  color: var(--text-muted);
+}
+
+.slot-card__book {
+  background: var(--accent);
+  color: var(--on-accent);
+  text-decoration: none;
+  padding: 0.45rem 0.85rem;
+  border-radius: 0.3rem;
+  font-weight: 600;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.slot-card__book:hover {
+  background: #50c5f5;
+}
+
+/* ─── Mermaid diagrams ──────────────────────────────────────────────── */
+
+.mermaid-container {
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border-soft);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin: 1.5rem 0;
+  overflow: auto;
+  text-align: center;
+}
+
+.mermaid-container svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-container .nodeLabel,
+.mermaid-container .edgeLabel {
+  color: #e6ecf5 !important;
+}
+
+.mermaid-container .edgeLabel {
+  background-color: #0b1220 !important;
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* Mermaid renders edge labels as SVG <text> elements whose color is driven
+   by the `fill` attribute, not CSS `color`. Without this override the labels
+   inherit mermaid's default primaryTextColor from the rendered SVG and end
+   up invisible against the dark container background. The ID-prefixed rule
+   (#mmd-... .edgeLabel) sets background-color but not text color, so we add
+   explicit `fill` on the text element + `background-color` on the
+   foreignObject wrapper for the HTML-labels case. The `!important` is
+   required to beat the ID selector's specificity. */
+.mermaid-container .edgeLabel,
+.mermaid-container .edgeLabels text,
+.mermaid-container g.edgeLabel text,
+.mermaid-container span.edgeLabel,
+.mermaid-container span.edgeLabel p {
+  fill: #e6ecf5 !important;
+  color: #e6ecf5 !important;
+  background-color: #0b1220 !important;
+}
+
+.mermaid-container .labelBkg {
+  background-color: #0b1220 !important;
+}
+
+/* Edge label connector lines inherit mermaid's lineColor (green) which can
+   also fade out — pin them to a readable accent. */
+.mermaid-container .flowchart .edgePath .path,
+.mermaid-container .edgePath path {
+  stroke: #5fed83;
+  stroke-width: 1.5px;
+}
+
+.mermaid-fallback {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 1rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  overflow: auto;
+}
+
+/* ─── Footer ───────────────────────────────────────────────────────── */
+
+.app__footer {
+  margin-top: 4rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-soft);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.app__footer a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.app__footer a:hover {
+  text-decoration: underline;
+}

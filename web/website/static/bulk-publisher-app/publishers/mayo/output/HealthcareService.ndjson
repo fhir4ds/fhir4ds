@@ -1,0 +1,14 @@
+{"resourceType":"HealthcareService","id":"mayo-loc-1-svc-dermatology","location":[{"reference":"Location/mayo-loc-1"}]}
+{"resourceType":"HealthcareService","id":"mayo-loc-1-svc-orthopedics","location":[{"reference":"Location/mayo-loc-1"}]}
+{"resourceType":"HealthcareService","id":"mayo-loc-1-svc-primary-care","location":[{"reference":"Location/mayo-loc-1"}]}
+{"resourceType":"HealthcareService","id":"mayo-loc-2-svc-cardiology","location":[{"reference":"Location/mayo-loc-2"}]}
+{"resourceType":"HealthcareService","id":"mayo-loc-2-svc-orthopedics","location":[{"reference":"Location/mayo-loc-2"}]}
+{"resourceType":"HealthcareService","id":"mayo-loc-2-svc-dermatology","location":[{"reference":"Location/mayo-loc-2"}]}
+{"resourceType":"HealthcareService","id":"mayo-loc-2-svc-primary-care","location":[{"reference":"Location/mayo-loc-2"}]}
+{"resourceType":"HealthcareService","id":"mayo-loc-3-svc-orthopedics","location":[{"reference":"Location/mayo-loc-3"}]}
+{"resourceType":"HealthcareService","id":"mayo-loc-3-svc-cardiology","location":[{"reference":"Location/mayo-loc-3"}]}
+{"resourceType":"HealthcareService","id":"mayo-loc-3-svc-dermatology","location":[{"reference":"Location/mayo-loc-3"}]}
+{"resourceType":"HealthcareService","id":"mayo-loc-3-svc-primary-care","location":[{"reference":"Location/mayo-loc-3"}]}
+{"resourceType":"HealthcareService","id":"mayo-loc-4-svc-cardiology","location":[{"reference":"Location/mayo-loc-4"}]}
+{"resourceType":"HealthcareService","id":"mayo-loc-4-svc-primary-care","location":[{"reference":"Location/mayo-loc-4"}]}
+{"resourceType":"HealthcareService","id":"mayo-loc-4-svc-orthopedics","location":[{"reference":"Location/mayo-loc-4"}]}
