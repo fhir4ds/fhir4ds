@@ -150,6 +150,728 @@ See `docs/architecture/AUDIT_REPORT.md` §7 for full details.
 
 ### Known Fragile Areas (Found by QA - 2026-04-30)
 
+- **FHIRPath FP-20 HISTORIAN iteration 1 §9 Environment Variables + §10
+  Types/Reflection + §11 Type Safety + §12 Formal Specifications
+  (2026-06-30):** **1 NATIVE DEFECT RESOLVED, 1 INTENDED.** Fresh
+  HISTORIAN systematic spec-walkthrough with 236 cases across 4 probe
+  files walked every normative rule from FHIRPath v2.0.0 §9-§12 plus
+  FHIR R4 datatype-hierarchy knowledge at the public DuckDB UDF
+  boundary comparing bundled native C++ extension vs forced Python
+  fallback through all 5 UDF wrappers + `fhirpath_is_valid`.
+
+  **(QA-001 MEDIUM §11 / FHIR R4 RESOLVED):** Native C++
+  `Evaluator::fn_isType` at
+  `extensions/fhirpath/src/fhirpath/evaluator.cpp:8793-9012` returned
+  `false` for `<FHIR primitive> is Element`. Per FHIR R4
+  (https://hl7.org/fhir/R4/datatypes.html) every primitive datatype
+  (boolean/integer/decimal/string/date/dateTime/time/code/id/etc.)
+  inherits from `Element`; per FHIRPath §6.3.1 `is` returns true if
+  the type of the left operand is the type specified, or a subclass
+  thereof. 11 distinct reproducer cases confirmed:
+  `valueInteger/valueDecimal/valueString/valueBoolean/valueDate/
+  valueDateTime/valueTime/active/birthDate/gender/id is Element` all
+  returned cpp=False vs py=True. `valueQuantity is Element` correctly
+  True in both (Quantity handled via `fhirTypeIsA` path); `Patient is
+  Element` correctly False in both (resources inherit from
+  DomainResource → Resource, NOT from Element per FHIR R4). Root
+  cause: C++ FHIR primitive branches at evaluator.cpp:8904+
+  (`target == "boolean"|"integer"|"decimal"|"string"|"date"|
+  "dateTime"|"time"`) returned strict equality without consulting
+  primitive → Element hierarchy. `fhirTypeIsA()` table at lines
+  874-1067 correctly models complex-type parents but does not include
+  primitive → Element mappings.
+
+  Surgical fix at evaluator.cpp inside `if (is_fhir)` primitive block
+  (around line 8921): added fallthrough check
+  `if (!exact && target == "Element" && (t == Boolean|Integer|Decimal|
+  String|Date|DateTime|Time)) return true;`. Two scope gates: (a)
+  `!exact` preserves `as Element` parity with Python fallback (both
+  currently return empty for `as Element` on a primitive — Python has
+  a separate latent `as Element` bug flagged as follow-up debt, not
+  in FP-20 scope); (b) effective-type check ensures resource objects
+  (effective type JsonVal) do NOT match — `Patient is Element`
+  correctly remains false because resources inherit from
+  DomainResource → Resource, not Element.
+
+  2 new regression tests in
+  `fhir4ds/fhirpath/duckdb/tests/integration/test_type_parity.py`:
+  `test_fhir_primitive_is_element_root_subtype_fp20_historian` (17
+  cases covering primitives, complex types, resources) and
+  `test_as_element_on_primitive_preserves_empty_parity_fp20_historian`
+  (2 cases asserting `as Element` continues to return NULL in both
+  backends — parity preservation sentinel). Native C++ extension
+  rebuilt (md5sum `8d418a00bc9f78f8bb860ef35a621b0f`) and copied to
+  both package and user install paths. Post-fix: HISTORIAN probe4
+  §11.4 0 diffs (was 1 diff / 7 cases); targeted `is Element` parity
+  matrix 11/11 clean (was 0/11); FHIRPath duckdb integration 437/437
+  pass (was 435, +2 new tests); full conformance 2822/2822 unchanged
+  (ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706, DQM
+  47/47).
+
+  **(QA-002 LOW §9 INTENDED):** C++ lexer at
+  `extensions/fhirpath/src/fhirpath/lexer.cpp:368` reads
+  `%vs-administrative-gender` (simple-identifier form with hyphens)
+  as a single env var token; Python parser tokenizes as `%vs` +
+  arithmetic. 6 reproducer cases. Backtick and string forms work in
+  both backends. Official R4 conformance tests use the backtick form.
+  Carry-over from prior FP-20 SKEPTIC NOT A BUG Registry —
+  HISTORIAN re-confirmed via direct parser AST inspection showing
+  Python parses `%vs-administrative-gender` as
+  `((%vs) - administrative) - gender` AdditiveExpression tree.
+  Aligning either direction has costs exceeding benefit (C++ change
+  would be breaking; Python change requires touching external
+  fhirpathpy or our ANTLR grammar — risky and outside FP-20 scope).
+
+  **Architecture Drift Log (FP-20 HISTORIAN additions):**
+  - (LOW, follow-up debt) Python fallback `as Element` on a FHIR
+    primitive returns empty
+    (`fhir4ds/fhirpath/engine/invocations/types.py:as_fn`). Per FHIR
+    R4, primitives ARE Elements, so `valueInteger as Element` should
+    return the integer value (not empty). The C++ side now also
+    returns empty for `as Element` (preserved via the `!exact` gate)
+    to maintain parity. Fixing it requires coordinating with the
+    in-repo engine's `TypeInfo.is_()` path AND removing the `!exact`
+    gate in the C++ fix. Deferred to a future §11 / TypeInfo-focused
+    chunk. Does not affect any production code path (`as Element` is
+    not used in fhir4ds, CQL translator, ViewDefinition, or DQM).
+
+  **NOT A BUG Registry (FP-20 HISTORIAN additions):**
+  - Hyphenated env var simple-identifier form (`%vs-administrative-
+    gender`): C++ lexer permissively accepts hyphens; Python parser
+    correctly tokenizes as `%var` + arithmetic. Re-confirmation of
+    the FP-20 SKEPTIC §8.6 lexer-permissiveness discovery. Backtick
+    form `` %`name` `` and string form `%'name'` are the spec-
+    compliant ways to reference env vars with hyphens; both work
+    correctly in both backends.
+
+  Probes: `/mnt/d/fhir4ds/.temp/qa/fp20_historian_2026_06_30/probe.py`
+  (125 cases / 19 spec-rule groups), `probe2.py` (26 cases / bug-class
+  confirmation), `probe3.py` (12 cases parser-AST diagnostic),
+  `probe4.py` (73 cases / 9 deeper §10-§12 edge groups).
+
+- **FHIRPath FP-20 SKEPTIC iteration 1 §9 Environment Variables + §10
+  Types/Reflection + §11 Type Safety + §12 Formal Specifications
+  (2026-06-30):** **1 NATIVE DEFECT RESOLVED, 1 DEFERRED.** Fresh
+  SKEPTIC hypothesis-driven probe with 95+ expressions across 5 probe
+  files tested every orchestrator-briefed §9-§12 item at the public
+  DuckDB UDF boundary comparing bundled native C++ extension vs forced
+  Python fallback through all 5 UDF wrappers + `fhirpath_is_valid`.
+
+  **(QA-001 LOW §9 RESOLVED):** Native C++ `FhirpathIsValidFunction`
+  at `extensions/fhirpath/src/fhirpath_extension.cpp:1819-1884`
+  returned False for syntactically-valid env var forms `%'name'`
+  (string form per §9 backward-compat note) and `` %`name` ``
+  (backtick form). The is_valid UDF compiled + evaluated the
+  expression against a minimal test resource and returned False on
+  ANY runtime exception, conflating the runtime "undefined
+  environment variable" error with syntactic invalidity. Per
+  GLOBAL_RULES invariant, is_valid validates expression validity,
+  not runtime evaluability. Reproducer:
+  `SELECT fhirpath_is_valid(%'us-zip')` returned False; should return
+  True. Also affected `%undefined-var` (simple-identifier form of an
+  undefined env var). Root cause: evaluator throws
+  `FHIRPathSpecError("Undefined variable: " + ...)` at
+  `evaluator.cpp:2817` for any env var not in the hardcoded list
+  (only `%ucum`/`%context`/`%resource`/`%rootResource`/`%sct`/`%loinc`/
+  `%vs-administrative-gender`/`%ext-patient-birthTime`); the is_valid
+  UDF's inner catch block then returned False unconditionally.
+
+  Surgical fix at
+  `extensions/fhirpath/src/fhirpath_extension.cpp:FhirpathIsValidFunction`
+  inner catch (around line 1862): now checks
+  `e.what().rfind("Undefined variable:", 0) == 0` and returns true
+  for that case (the expression is syntactically valid; the error is
+  a runtime semantic). Mirrors the existing
+  `_is_valid_empty_result_error` pattern in the Python UDF.
+
+  Native C++ extension rebuilt (md5sum
+  `d8097c25ea1c01c92e85cf14bf16c7b7`) and copied to both package and
+  user install paths. Post-fix: FP-20 probe P3 is_valid matrix 14/14
+  spec-correct (was 8/14); FHIRPath duckdb integration 435/435 pass
+  (was 434, +1 new test); full conformance 2822/2822 unchanged.
+
+  **(QA-002 LOW §3.2/§5.2 DEFERRED — out of FP-20 scope):** Choice-
+  type prefix-match heuristic at
+  `extensions/fhirpath/src/fhirpath/evaluator.cpp:2958-2981`
+  incorrectly treats `referenceRange` as a choice-type variant of
+  `reference` because 'R' is uppercase. Reproducer:
+  `%resource.descendants().reference` on a Patient with
+  `contained[0].referenceRange` returns `[referenceRange[0]]` instead
+  of empty. Both backends have the same bug (parity match). R4
+  conformance passes 935/935 because patient-example.xml has no
+  fields matching the prefix heuristic. Deferred to a future §3.2
+  polymorphic items / §5.2 navigation chunk.
+
+  **NOT A BUG Registry (FP-20 SKEPTIC additions):**
+  - `%sctvsn` (SNOMED CT version) rejection: Core FHIRPath v2.0.0 §9
+    only mandates `%ucum` and `%context`. `%sctvsn` is a FHIR-spec
+    extension (FHIR §9.1.7), outside the chunk's authoritative spec
+    scope.
+  - `type()` returning `{name, namespace}` instead of full
+    SimpleTypeInfo/ClassInfo/ListTypeInfo/TupleTypeInfo: §10.2 is STU
+    ("Standard for Trial Use"). Partial implementation is defensible;
+    native and fallback agree.
+  - `%us-zip` (hyphen in simple identifier) accepted by C++ lexer:
+    §8.6 lexer-permissiveness side discovery, not a §9 env var issue.
+    C++ lexer at `lexer.cpp:368` accepts hyphens inside simple
+    identifier env var names; Python fhirpathpy parser does too. Both
+    backends consistently accept this non-standard form.
+
+- **FHIRPath FP-18 SKEPTIC iteration 1 §6.6 Math Operations + §6.7
+  Date/Time Arithmetic (2026-06-30):** **4 NATIVE DEFECTS RESOLVED,
+  1 INTENDED.** Fresh SKEPTIC hypothesis-driven probe with 135
+  expressions across 3 rounds (53 + 47 + 35 cases) at the public
+  DuckDB UDF boundary comparing bundled native C++ extension vs
+  forced Python fallback through all 5 UDF wrappers.
+
+  **(QA-001 HIGH §4.1.4 RESOLVED):** Native C++ Integer*Integer
+  overflow-to-Decimal lost precision via `setprecision(17)` scientific
+  notation. Reproducer: `2000000000 * 2000000000` returned native
+  `'4e+18'` vs fallback `'4000000000000000000.0'`. Root cause:
+  pure Integer+Integer overflow path at `evaluator.cpp:8067` promoted
+  to Decimal via `FPValue::FromDecimal(result)` without source_text.
+  Surgical fix at `evaluator.cpp:8080` routes Integer*Integer overflow
+  through `tryIntegerArithmeticText` for exact magnitude via
+  schoolbook multiplication on string digits. Same binary64-drift bug
+  class as FP-14 EXPLORER QA-001.
+
+  **(QA-002 MEDIUM §4.1.4 RESOLVED):** Native Decimal*Decimal
+  collapsed trailing-zero precision. Reproducer: `2.5 * 4.0` returned
+  native `'10.0'` vs fallback `'10.00'`. Root cause:
+  `decimalWithScaleText` lambda at `evaluator.cpp:8041-8044` stripped
+  trailing zeros past `dot + 2`. Surgical fix removed the strip AND
+  extended `tryIntegerArithmeticText` at `evaluator.cpp:6027-6097` to
+  track operand fractional digit counts and produce scale-aware
+  output (sum for `*`, max for `+`/`-`).
+
+  **(QA-003 HIGH §4.1.8 / FP-11 SKEPTIC regression RESOLVED):** Native
+  Quantity*scalar with `apply_integral_normalize=false` dropped the
+  required `.0` decimal point for integer-valued products. Reproducer:
+  `5.0 'g' * 3` returned native `'15 \'g\''` vs fallback `'15.0 \'g\''`.
+  Root cause: `normalizeQuantityArithmeticSourceText` at
+  `evaluator.cpp:2289-2296` fell through to `formatDecimalNumber` which
+  returned source_text directly (e.g. `'5'` not `'5.0'`). FP-11
+  SKEPTIC comment at line 7880-7883 documented intent to preserve
+  `1.0` rendering but implementation didn't match. Surgical fix added
+  `preserve_decimal_point` parameter at `evaluator.cpp:2240-2307`;
+  scalar Quantity*number paths at line 7973-7990 pass it based on
+  Quantity operand source_text. Also propagated source_text through
+  unary minus on Quantity at `evaluator.cpp:8149-8162`. The
+  `%g` shortest-round-trip loop was also updated to prefer
+  `%.0f` integer rendering for integer-valued doubles within int64
+  range (avoids `5e+01` scientific form for value 50).
+
+  **(QA-004 LOW §5.5.8 RESOLVED):** Native fhirpath_json Quantity
+  serialization used `%.15g` scientific notation for tiny/large
+  doubles. Reproducer: `3 'cm' * 12 'cm2'` returned native
+  `'[{"value":3.6e-05,"unit":"m.m2"}]'` vs fallback
+  `'[{"value":0.000036,"unit":"m.m2"}]'`. Surgical fix at
+  `fhirpath_extension.cpp` `FhirpathJsonFunction` Quantity branch
+  (line ~1459): integer-valued quantity_value renders as integer text
+  (mirroring Python `_to_native` `int(value)` conversion);
+  non-integer doubles convert scientific-to-decimal within orjson's
+  decimal range (`1e-5 <= |v| < 1e16`) and normalize `e-0N`/`E` to
+  orjson's `e-N`/`e` format.
+
+  **(QA-005 LOW §4.1.7 INTENDED):** Native DateTime arithmetic
+  preserves input Z literal form; fallback normalizes to `+00:00`.
+  Per §4.1.7 "Z is allowed as a synonym for the zero (+00:00) UTC
+  offset" — both forms spec-equivalent.
+
+  Native C++ extension rebuilt and copied to both package and user
+  install paths. 31 new regression tests in
+  `fhir4ds/fhirpath/duckdb/tests/integration/test_arithmetic_parity.py`:
+  `test_multiplication_precision_preservation_fp18_skeptic` (15 cases),
+  `test_decimal_arithmetic_preserves_scale_fp18_skeptic` (3 cases),
+  `test_quantity_arithmetic_json_serialization_fp18_skeptic_architect`
+  (6 cases),
+  `test_quantity_scalar_mult_preserves_decimal_authored_form_fp18_skeptic_architect`
+  (7 cases). Post-fix: FHIRPath integration 410/410 (was 379, +31
+  new); full conformance 2822/2822 unchanged. Probes:
+  `/mnt/d/fhir4ds/.temp/qa/fp18_skeptic_2026_06_30/probe{,2,3}.py`,
+  `architect_probe.py`.
+
+  **Architecture Drift Log (FP-18 SKEPTIC additions):**
+  - (LOW, deferred) Decimal Quantity * scalar where the Quantity has
+    non-zero fractional digits (e.g. `3.14 'g' * 100`) preserves full
+    scale in Python (`314.00 'g'`) but only preserves single-decimal
+    in native (`314.0 'g'`). The current
+    `normalizeQuantityArithmeticSourceText` only preserves the
+    presence of a decimal point, not the full operand scale.
+    Numerically equivalent under §6.1.1; deferred because full Decimal
+    scale tracking through Quantity arithmetic requires either porting
+    Python's Decimal module to C++ or using GMP.
+
+  **NOT A BUG Registry (FP-18 SKEPTIC additions):**
+  - DateTime Z offset preservation vs +00:00 normalization: per §4.1.7
+    both are spec-equivalent UTC offset synonyms.
+
+- **FHIRPath FP-16 HISTORIAN iteration 1 §6.4 Collections systematic
+  spec-walkthrough (2026-06-29):** **VERIFIED CLEAN.** A fresh
+  HISTORIAN systematic spec-walkthrough enumerated every normative
+  rule from FHIRPath v2.0.0 §6.4.1 (`|`/`union()`), §6.4.2 (`in`
+  membership), §6.4.3 (`contains` containership) at the public DuckDB
+  UDF boundary comparing bundled native C++ extension vs forced
+  Python fallback through all 5 UDF wrappers. 209 distinct cases ×
+  5 wrappers = ~700+ parity cells across 9+ spec-rule groups. All
+  cases parity-clean. Independent verification of the prior FP-16
+  SKEPTIC clean-run; no native code changes, no native rebuild.
+  Coverage: union dedup using §6.1 equality (Integer≡Decimal, UCUM
+  commensurable, Date≠DateTime, Time precision-mergeable, Boolean≠
+  Integer, negative-zero equivalence, Decimal arithmetic equality
+  intact, Unicode/emoji/NUL byte byte-for-byte dedup); `in` empty-
+  propagation rules (LHS empty→empty, RHS empty→false, missing-path
+  variants); `contains` empty-propagation rules (RHS empty→empty,
+  LHS empty→false); converse property exhaustive verification
+  (`(a in b) = (b contains a)` across 9 type dimensions); singleton
+  enforcement (literal multi-item LHS/RHS statically rejected by
+  `fhirpath_is_valid`, resource-path runtime error via row-resilience);
+  FP-13 HISTORIAN cross-unit temperature carry-over verified intact
+  (`0 'Cel' in (32 '[degF]' | 100 '[degF]')` returns false in both
+  backends because §6.1 equality returns empty per offset-temperature
+  guard, and "empty equality" means "not a member" per §6.4.2);
+  15 spec-anchor value verifications proved every documented spec
+  example produces its spec-defined output. **0 non-terminal
+  CRITICAL/HIGH/MEDIUM issues.** No source changes, no new regression
+  tests (surface already has comprehensive coverage in 11 named tests
+  in `test_collection_operator_parity.py` covering 100+ parametrized
+  cases). Full conformance 2822/2822 unchanged. Probes:
+  `/mnt/d/fhir4ds/.temp/qa/fp16_historian_2026_06_29/probe.py`
+  (79 cases), `probe2.py` (57 deep edges), `probe3.py` (30 eval +
+  30 validity), `probe_spec.py` (15 anchors + 25 validity pairs),
+  `probe_singleton.py` (11 validity + 45 eval singleton cells).
+
+- **FHIRPath FP-14 EXPLORER iteration 1 §6.2 Comparison Decimal
+  arithmetic adjacent-integer parity (2026-06-29):** **RESOLVED
+  (1 native defect).** Fresh EXPLORER pathological-input fuzz of 261
+  expressions across 3 rounds (152 + 53 + 56 cases) targeting all
+  orchestrator-briefed vectors (extreme Decimal magnitudes, NaN/Infinity
+  edges, multi-byte Unicode strings, polymorphic choice-types, deeply
+  nested comparison chains, timezone edges, composed comparisons with
+  iif/where/implies, very large strings, integer overflow in comparison,
+  mixed-type comparison edges) found 1 HIGH-severity native defect in
+  the Decimal arithmetic path that feeds §6.2 comparison. Native C++
+  Decimal +/- at `evaluator.cpp` ~7800+ used binary64 `double` via
+  `getNumericValue(lv) + getNumericValue(rv)`; at the 2^53 boundary,
+  `9007199254740992.0 + 1.0` rounded back to `9007199254740992.0`
+  because binary64 cannot represent `9007199254740993`. The Python
+  fallback uses Decimal arithmetic preserving exact digits. Reproducer
+  (3 forms): `(2).power(53) < (2).power(53) + 1` returned `false` in
+  native vs `true` in fallback; same for `(2).power(63)` and other
+  adjacent-integer arithmetic cases above 2^53. Note: raw Decimal
+  literal comparison `9007199254740992.0 < 9007199254740993.0` worked
+  correctly (returns `true` in both) because the §6.2 comparison path
+  uses `numericTextForComparison` + `compareDecimalText`. The defect
+  was specifically in the Decimal arithmetic path producing the operand.
+
+  Root cause: same binary64-drift bug class documented across FP-07/
+  FP-08/FP-11 SKEPTIC/HISTORIAN/EXPLORER (6th instance). FP-11 SKEPTIC
+  added `normalizeQuantityArithmeticSourceText` to mask binary64 noise
+  at Quantity +/-/*/ sites (evaluator.cpp 7657-7735) but did NOT apply
+  equivalent treatment to the plain Decimal arithmetic path. The mask
+  approach also does NOT address the fundamental issue: binary64 cannot
+  represent adjacent integers above 2^53. The mask only rounds shortest-
+  round-trip; for `(2).power(53) + 1` both operands already round-trip
+  identically so the mask has no effect.
+
+  Surgical fix: added `tryIntegerArithmeticText` helper at evaluator.cpp
+  after the existing `multiplyIntegerMagnitudes` helper (near line
+  5907). Added supporting schoolbook helpers `addIntegerMagnitudes` and
+  `subtractIntegerMagnitudes`. The helper performs exact text-based
+  integer arithmetic on operands whose source_text represents a pure
+  integer (fractional part is empty or all-zeros), returns Decimal-
+  shaped source text (e.g. "9007199254740993.0"), and is capped at
+  10000 digits to prevent OOM. Mirrors the FP-11 EXPLORER
+  `powerIntegerExactText` pattern (QA-001) for +/-/* on integer-valued
+  Decimal operands. The fix is wired into the Decimal arithmetic path
+  before the binary64 fallback, but is gated on at least one operand
+  being non-Integer type to preserve the existing int32-promote-on-
+  overflow semantics for pure Integer+Integer arithmetic.
+
+  1 new regression test (17 cases) added to
+  `fhir4ds/fhirpath/duckdb/tests/integration/test_comparison_parity.py::
+  test_decimal_arithmetic_feeding_comparison_preserves_adjacent_integers_fp14_explorer`.
+  Native C++ extension rebuilt and copied to package + user install
+  paths (md5sum `24f083eac762b21ddaefc396805842e4`). Post-fix:
+  EXPLORER probe round 3 56/56 (was 53/56); rounds 1+2 unchanged;
+  full FHIRPath integration 371/371 (was 370 + 1 new test); FP-14
+  SKEPTIC fix intact; FP-13 HISTORIAN fix intact; full conformance
+  2822/2822 unchanged. Same binary64-drift bug class as FP-07/FP-08/
+  FP-11 SKEPTIC/HISTORIAN/EXPLORER — the lesson is unchanged: every
+  native C++ Decimal-producing arithmetic path on FHIRPath values
+  needs an audit for source_text preservation AND for binary64 noise
+  masking AND (now) for adjacent-integer preservation above 2^53. The
+  mask approach used at Quantity sites is insufficient for cases where
+  binary64 cannot represent adjacent integers; text-based integer
+  arithmetic is required for those. Audit pattern: `grep -n
+  "getNumericValue" extensions/fhirpath/src/fhirpath/evaluator.cpp`
+  returns all numeric-value extraction sites; each arithmetic use of
+  getNumericValue on operands that may have integer-valued source_text
+  is a candidate for the tryIntegerArithmeticText fast-path. Probe
+  artifacts: `/mnt/d/fhir4ds/.temp/qa/fp14_explorer_2026_06_29/probe.py`
+  (152 cases / 15 groups), `probe_round2.py` (53 cases / 7 groups),
+  `probe_round3.py` (56 cases / 7 groups), `diag_power_arith.py`
+  (root-cause diagnostic).
+
+- **FHIRPath FP-14 SKEPTIC iteration 1 §6.2 Comparison cross-unit
+  temperature parity (2026-06-29):** **RESOLVED (1 native defect).**
+  Fresh SKEPTIC hypothesis-driven probe of 89 cases across 9 hypothesis
+  groups found 1 HIGH-severity native defect in §6.2 comparison: the
+  operator path at `evaluator.cpp:7539-7559` lacked the
+  `isOffsetTemperatureUnit` guard that FP-13 HISTORIAN added to §6.1
+  equality at 5 sites. Reproducer: `1 'Cel' < 33.8 '[degF]'` returned
+  `False` native vs `NULL` fallback (must be `NULL`); same defect on
+  `>`, `<=`, `>=`, and reverse-argument forms. Root cause: UCUM table
+  marks `[degF]` with sentinel factor -1.0; the multiplicative-only
+  `convertQuantityToBase` path at line 7570-7572 computed nonsense
+  instead of either the correct affine conversion
+  (degF = degC × 9/5 + 32) or empty. Surgical fix added the same
+  `isOffsetTemperatureUnit` guard at line 7540-7558, mirroring the
+  FP-13 HISTORIAN equality fix pattern at line 7290-7294. The
+  unit-difference gate (`lv.quantity_unit != rv.quantity_unit && ...`)
+  preserves same-unit passthrough (1 'Cel' < 2 'Cel') via the existing
+  decimal-text fast-path at line 7559-7567. Native extension rebuilt
+  and copied. Post-fix: SKEPTIC probe 89/89 (was 81/89); FP-13
+  HISTORIAN equality fix intact; FHIRPath pytest 1498/1498 (was 1497,
+  +1 new test); full conformance 2822/2822 unchanged. Same offset-
+  temperature bug class as FP-08 EXPLORER (convertQuantityUnit),
+  FP-13 HISTORIAN (§6.1 equality) — the lesson is unchanged: any
+  cross-unit conversion edge requires explicit category/dimension
+  validation, not just base-unit equality. **Known design debt
+  (LOW priority):** the flat `ucum_units.hpp` table cannot represent
+  offset-based conversions; the surgical `isOffsetTemperatureUnit`
+  guard is the workaround.
+
+- **FHIRPath FP-13 HISTORIAN iteration 1 §6.1 Equality cross-unit
+  temperature parity (2026-06-29):** **RESOLVED (1 native defect).**
+  Fresh HISTORIAN systematic spec-walkthrough of 231 cases found 1
+  HIGH-severity native defect: cross-unit temperature equality
+  returned wrong Booleans instead of empty. `1 'Cel' = 33.8 '[degF]'`
+  returned `False` native vs `NULL` fallback. Root cause: FP-08
+  EXPLORER added `isOffsetTemperatureUnit` guard to `convertQuantityUnit`
+  (evaluator.cpp:2010, the toQuantity(unit) conversion path) but
+  missed the equality operator path. Surgical fix added the same
+  guard at 4 sites in evaluator.cpp: (1) forward declaration at line
+  653; (2) `quantityEqualState` at line 1598 (returns -1/empty for
+  JSON path `=`); (3) `quantityEquivalentState` at line 1622 (returns
+  -1/empty for JSON path `~`); (4) `quantityValuesEqual` at line 1867
+  (returns false for distinct/isDistinct/subsetOf/supersetOf —
+  matches Python fallback's distinct() behavior); (5)
+  `valuesEqualState` lambda at line 7240 (returns -1/empty for main
+  `=` operator path). `valuesEquivalentState` lambda at line 7166
+  already calls `quantityEquivalentState` so is automatically covered.
+  Native extension rebuilt and copied. Post-fix: HISTORIAN probe
+  231/231 (was 230/231); FHIRPath pytest 369/369; full conformance
+  2822/2822 unchanged. Same offset-temperature bug class as FP-08
+  EXPLORER (convertQuantityUnit) — the lesson is unchanged: any
+  cross-unit conversion edge requires explicit category/dimension
+  validation, not just base-unit equality. **Known design debt
+  (LOW priority):** the §6.2 comparison operator path at line
+  7460-7480 still lacks this guard (QA-002 deferred to FP-14).
+
+- **FHIRPath FP-11 EXPLORER iteration 1 §5.7.7/§5.7.10/§5.7.3 Math
+  pathological-input parity (2026-06-29):** **RESOLVED (3 native
+  defects):** Fresh EXPLORER fuzz of 127 pathological expressions
+  across 12 vector groups found 3 native C++ defects in §5.7 Math.
+  (1) `fn_power` at `evaluator.cpp:5817` used `std::pow` returning
+  binary64, producing scientific notation for results above 2^53 and
+  empty for results above ~1.8e308. Fix: added `multiplyIntegerMagnitudes`
+  helper at line 5818 and `powerIntegerExactText` helper at line 5853;
+  exact-integer path in `fn_power` at line 5926 for non-negative integer
+  exponents on integer bases (capped at 10000 digits to prevent OOM).
+  (2) `fn_truncate` Quantity branch at line 5851-5856 rejected large-
+  magnitude Quantity values via int64 overflow guard. Fix at line
+  5971-5990: routes through `integralTextFromDecimalSource` when
+  source_text is available.
+  (3) `formatDecimalNumber` at line 7885 collapsed subnormal values to
+  `'0.0'` via `setprecision(15) << std::fixed`. Fix: added subnormal
+  branch checking `abs(value) < 1e-300` returning source_text (shortest-
+  round-trip from `normalizeDecimalMathSourceText`) when it round-trips.
+  Uses `strtod` instead of `std::stod` (which throws `std::out_of_range`
+  for subnormals). Also added integer-valued re-rendering in
+  `normalizeDecimalMathSourceText` at line 2304-2336 to convert
+  `"-1e+01"` to `"-10"` for log/exp/ln/sqrt integer-valued results.
+  Native extension rebuilt and copied. Post-fix: EXPLORER probe 125/127
+  (was 113/127); FHIRPath pytest 1490/1490 (+4 new tests); full
+  conformance 2822/2822 unchanged. Same binary64-drift bug class as
+  prior FP-07/FP-08/FP-11 SKEPTIC/HISTORIAN. Probe artifact:
+  `/mnt/d/fhir4ds/.temp/qa/fp11_explorer_2026_06_29/probe.py`.
+
+- **FHIRPath FP-11 HISTORIAN iteration 1 §5.7.3/§5.7.5/§5.7.6/§5.7.9
+  Math text-rendering parity (2026-06-28):** **RESOLVED:** Native C++
+  `fn_ln`/`fn_exp`/`fn_sqrt`/`fn_log` (both inline `if (name == ...)`
+  at `evaluator.cpp:3950/3967/3983` AND standalone
+  `Evaluator::fn_ln`/`fn_log`/`fn_sqrt` at
+  `evaluator.cpp:5721/5736/5806`) returned `FPValue::FromDecimal(<double>)`
+  with empty `source_text`. The `toString` path at
+  `evaluator.cpp:7596-7610` fell back to `std::setprecision(17)` rendering,
+  producing 17-sig-digit binary64 expansions like `"2.3025850929940459"`.
+  Python fallback `ln`/`log`/`sqrt` returned raw `float` (16 sig digits
+  via `str()`); `exp` used `Decimal(format(result, ".17g"))` (17 sig digits).
+  Numerical value identical between paths; divergence observable only via
+  `fhirpath_text`. Same binary64-drift bug class as FP-07/FP-08/FP-11
+  SKEPTIC. Surgical fix: new reusable helper
+  `normalizeDecimalMathSourceText(double&)` at `evaluator.cpp:2235`
+  produces shortest-round-trip text via precision 1..17 search (mirrors
+  Python `str(float)`), appends `.0` for integer-valued results per
+  §5.5.8 `(-)?#0.0#`, and does NOT re-parse the double (unlike
+  `normalizeQuantityArithmeticSourceText`) because `std::log`/`exp`/`sqrt`
+  already produce the same IEEE 754 nearest-double as Python
+  `math.log`/`exp`/`sqrt`. Applied at 6 native call sites
+  (`evaluator.cpp:3959/3980/4003/5734/5758/5824`). Python fallback
+  `exp()` at `fhir4ds/fhirpath/engine/invocations/math.py:288` normalized
+  to return raw `result`. Native extension rebuilt and copied. Post-fix:
+  HISTORIAN probe 193/193, FP-11 SKEPTIC probe 92/92 unchanged, FHIRPath
+  pytest 1486/1486 (+1 new regression test, 15 cases), full conformance
+  2822/2822 unchanged. Rebuild/copy `fhirpath.duckdb_extension` after
+  future changes to native §5.7 Decimal-returning math paths.
+
+- **FHIRPath FP-09 EXPLORER iteration 1 §5.6 string-search
+  embedded-NUL truncation (2026-06-28):** **RESOLVED:** Native C++
+  truncated JSON strings at embedded U+0000 NUL bytes. Input
+  `{"s":"a b"}` (3 code points) produced `s.length()=1`,
+  `s.indexOf('b')=-1`, `s.substring(1,1)={}`, `s.endsWith('b')=false`,
+  `s.contains('b')=false` in native, while the Python fallback correctly
+  returned 3, 2, ' ', true, true. Root cause: `yyjson_get_str()`
+  returns a NUL-terminated `const char*`, and the implicit
+  `std::string(const char*)` constructor stops at the first NUL byte.
+  Spec citations: FHIRPath §5.6.1-§5.6.5 (String Manipulation operates on
+  full Unicode content), FHIR R4 string datatype ("sequence of Unicode
+  characters"), RFC 8259 §7 (control chars U+0000-U+001F must be escaped
+  but ` ` is valid JSON). Surgical fix: added inline helper
+  `yyjsonStringToStd(yyjson_val*)` at evaluator.cpp forward-declarations
+  block (uses `yyjson_get_str()` + `yyjson_get_len()`); applied at 3
+  §5.6-relevant call sites: `jsonValToString()` line 7541 (PRIMARY —
+  covers all search functions via `toString()`), `rawStringValue()`
+  lines 1165-1166, `isDateTimeType()` line 1119. The other 45
+  `yyjson_get_str` sites handle resourceType/reference/URL/code metadata
+  where NUL bytes are not valid FHIR data — deferred to a later audit
+  chunk. 2 new regression tests in
+  `fhir4ds/fhirpath/duckdb/tests/integration/test_string_search_parity.py`
+  (`test_string_search_embedded_nul_byte_parity`,
+  `test_string_search_other_control_chars_preserved`). Native extension
+  rebuilt and copied to dev, package, and user-install paths.
+  Post-fix: 8/8 string-search parity tests pass (was 6/6), 1480/1480
+  FHIRPath pytest pass (was 1478), full conformance 2822/2822 unchanged.
+  Reproducer:
+  `/mnt/d/fhir4ds/.temp/qa/fp09_explorer_iter1_2026_06_28/post_fix_verify.py`.
+
+- **FHIRPath FP-08 SKEPTIC iteration 1 fresh rerun §5.5.7
+  toQuantity(unit) binary64 noise propagation (2026-06-28):**
+  **RESOLVED:** Native `(0.1 'g' + 0.2 'g').toQuantity('mg')` returned
+  `"300.00000000000006 'mg'"` while the Python fallback returned
+  `"300 'mg'"`. Root cause: native Quantity arithmetic at
+  `extensions/fhirpath/src/fhirpath/evaluator.cpp:6940-6998` uses
+  `double` not `Decimal`, producing binary64 noise like
+  `0.30000000000000004` which then propagated through
+  `convertQuantityUnit` (`evaluator.cpp:1883-1955`). The prior FP-08
+  EXPLORER fix to `convertQuantityUnit` only normalized the final
+  rendered value at precision 17 (the shortest round-trip for noisy
+  doubles). Surgical fix at `evaluator.cpp:1920`: cap the shortest-
+  round-trip search at precision 15 (IEEE 754 double's guaranteed-
+  unique significant digits) and add a `%.15g` fallback render for
+  values that don't round-trip at 1..15. Spec citations: §5.5.7
+  toQuantity unit conversion, §4.1.4 System.Decimal ("rational number
+  with implicit precision" — not binary64 noise), §4.1.8 Quantity
+  value is Decimal. The §5.7 root cause (native Quantity `+`/`-`/`*`
+  using `double` not `Decimal`) is deferred to FP-11 SKEPTIC; the
+  §5.5.7 boundary is now parity-clean but the underlying
+  `(0.1 'g' + 0.2 'g').value` still returns `0.30000000000000004`.
+  1 new regression test added in
+  `fhir4ds/fhirpath/duckdb/tests/integration/test_conversion_parity.py::
+  test_arithmetic_result_quantity_conversion_uses_decimal_not_binary64_fp08_skeptic`
+  (9 cases covering +, *, -, direct literal regression). Native C++
+  extension rebuilt and copied to both package and user install paths.
+  Full conformance 2822/2822 unchanged.
+
+- **FHIRPath FP-08 HISTORIAN §5.5.7 toQuantity String-decimal precision
+  drift (2026-06-28):**
+  **RESOLVED:** Native `fn_toQuantity` String→Quantity branch at
+  `extensions/fhirpath/src/fhirpath/evaluator.cpp:fn_toQuantity`
+  (around line 4935-5007) constructed the output `FPValue` without
+  setting `source_text`. As a result, `'0.0'.toQuantity().toString()`
+  returned `"0 '1'"` (stripping the trailing `.0`) instead of
+  `"0.0 '1'"`. Spec violations: §5.5.7 String→Quantity regex parses
+  value as Decimal; §4.1.4 mandates fixed-precision decimal formats;
+  §5.5.8 Quantity toString format `(-)?#0.0# (('«unit»')|(«unit»))`
+  requires at least one fractional digit. Surgical fix captures the
+  parsed numeric substring into `num_text` BEFORE the unit-parse loop
+  advances `idx` (without this, `idx` would point past the unit suffix
+  and `s.substr(num_start, idx - num_start)` would grab number+
+  whitespace+unit), applies the same Python-`Decimal(str)` normalization
+  that FP-07 SKEPTIC established for `fn_toDecimal` (drop leading `+`,
+  collapse leading zeros in the integer part), and assigns
+  `v.source_text = num_text`. Same binary64-drift bug class as FP-07
+  SKEPTIC/HISTORIAN/EXPLORER (toDecimal branches) — String-decimal
+  branch was the missed sibling for the Quantity path. 1 regression
+  test added in
+  `fhir4ds/fhirpath/duckdb/tests/integration/test_conversion_parity.py::
+  test_string_decimal_to_quantity_preserves_precision_fp08_historian`
+  (6 parametrized cases: `'0.0'`, `'5.5'`, `'-5.5'`, `'+5'`, `'00.5'`,
+  `'3.14159265'`). Native C++ extension rebuilt and copied to both
+  package and user install paths. Full conformance 2822/2822 unchanged.
+
+- **FHIRPath FP-07 HISTORIAN §5.5.6 toDecimal Integer-effective-type
+  precision drift (2026-06-28):**
+  **RESOLVED:** Native `fn_toDecimal` at
+  `extensions/fhirpath/src/fhirpath/evaluator.cpp:4669-4671` Integer
+  effective-type branch (for JsonVal-wrapped FHIR integer primitives)
+  returned `FPValue::FromDecimal(getNumericValue(val))` without setting
+  `source_text`. As a result, large JSON integers above 2^53 lost
+  precision through binary double conversion AND produced scientific
+  notation in downstream `toString()`. Reproducers:
+  `9223372036854775807.toDecimal().toString()` returned
+  `['9.2233720368547758e+18']` native vs `['9223372036854775807.0']`
+  fallback; `-9223372036854775808.toDecimal().toString()` returned
+  `['-9.2233720368547758e+18']` native vs
+  `['-9223372036854775808.0']` fallback;
+  `9007199254740993.toDecimal().toString()` returned
+  `['9007199254740992.0']` native (rounded down to nearest binary64-
+  representable integer) vs `['9007199254740993.0']` fallback (exact).
+  Spec violations: §5.5.6 Integer/Long promotion to Decimal, §4.1.4
+  fixed-precision decimal formats, §5.5.8 Decimal toString uses decimal
+  digit notation. Single-branch surgical fix sets `source_text` from
+  canonical JSON integer text via existing `jsonNumberText(val.json_val)`
+  helper, appending `.0` for Decimal surface per §4.1.8. Same binary64-
+  drift bug class as FP-13 EXPLORER (equality), FP-14 SKEPTIC
+  (comparison), and prior FP-07 SKEPTIC (Decimal-effective-type +
+  String branches of fn_toDecimal) — Integer-effective-type branch was
+  the third missed sibling. All four Decimal-producing surfaces in
+  `fn_toDecimal` (native-literal Decimal, JsonVal-Decimal, JsonVal-
+  Integer, String) now preserve canonical text. 1 regression test
+  added in
+  `fhir4ds/fhirpath/duckdb/tests/integration/test_conversion_parity.py::
+  test_fhir_integer_primitive_to_decimal_preserves_exact_text_fp07_historian`.
+  Probe artifacts: `.temp/qa/fp07_historian_2026_06_28/probe.py`
+  (116 cases), `deep_probe.py` (68 cases). Native extension rebuilt
+  and copied. Full conformance 2822/2822 unchanged.
+- **FHIRPath FP-07 SKEPTIC §5.5.6 toDecimal FHIR-decimal-JsonVal gap +
+  binary64 precision drift (2026-06-28):**
+  **RESOLVED:** Native `fn_toDecimal` at
+  `extensions/fhirpath/src/fhirpath/evaluator.cpp:4647` had two HIGH-severity
+  defects. (1) It lacked a branch for `effectiveType(val)==Decimal` when
+  the input is a JsonVal-wrapped FHIR decimal primitive, so
+  `Observation.valueDecimal.toDecimal()` returned empty in native C++ while
+  the forced Python fallback returned `[1.5]`. The check
+  `if (t != FPValue::Type::String) return {};` was an under-reach: it
+  correctly rejected Date/DateTime/Time/Quantity but also rejected Decimal
+  effective type. Sanity check: `Observation.valueDecimal.convertsToDecimal()`
+  returned `[true]` in both paths (so converts-to worked while to did not).
+  (2) It parsed String→Decimal via `std::stod` (IEEE 754 binary64), losing
+  decimal precision per §4.1.4 "implementations should use fixed-precision
+  decimal formats". Reproducer: `'3.14159265'.toDecimal().toString()` returned
+  `['3.1415926500000002']` in native vs `['3.14159265']` in fallback (same
+  for `'0.1'`, `'123456789.123456789'`, etc.). Fix added an explicit Decimal
+  effective-type branch (mirrors Integer branch but pulls canonical text via
+  `jsonNumberText()`) and preserves the parsed String source_text on the
+  output Decimal, normalized to drop leading '+' and collapse leading zeros
+  to match Python's `Decimal(str)` formatting. Two regression tests added in
+  `fhir4ds/fhirpath/duckdb/tests/integration/test_conversion_parity.py`:
+  `test_fhir_decimal_primitive_to_decimal_matches_fallback_fp07_skeptic` and
+  `test_string_to_decimal_preserves_precision_fp07_skeptic`. Probe artifact
+  `.temp/qa/fp07_skeptic/probe.py` covers 122 §5.5.4-§5.5.6 cases.
+- **FHIRPath FP-05 HISTORIAN §5.3 nested-array indexer parity drift
+  (2026-06-28):**
+  **DEFERRED:** `Evaluator::evalMemberAccess` uses an `add_flattened`
+  lambda at `extensions/fhirpath/src/fhirpath/evaluator.cpp:2324-2345`
+  that recursively flattens nested JSON arrays during member access.
+  The recursion is intended to support FHIR R4 `array<primitive>`
+  flattening (e.g. `Patient.name.given` from `[{given:["John","Q"]}]`
+  to `["John","Q"]`), but produces divergent behavior vs the forced
+  Python fallback when the input data has a non-FHIR nested-array
+  field such as `{"resourceType":"Observation","matrix":[["x","y"],["z"]]}`:
+  `matrix[0]` → native `['x']` (recurses into inner array), fallback
+  `['["x","y"]']` (treats inner array as a single element); same
+  divergence on `matrix.count()` (native 3, fallback 2) and
+  `matrix.first()`/`last()`/`tail()` and on the `[index]` operator.
+  Deferred because FHIRPath §2.1.1 mandates flat collections (spec is
+  silent on collections-of-collections), FHIR R4 forbids nested-array
+  resource JSON, and aligning native with fallback requires coordinated
+  changes plus new parity tests for a case that cannot occur with
+  conformant FHIR resources. Revisit only if FHIR R5 introduces
+  nested-array primitives or the engine is repurposed for non-FHIR
+  JSON. Probe artifacts: `.temp/qa/fp05_historian_iteration_probe.py`,
+  `.temp/qa/fp05_historian_edge_probe.py`. Full conformance 2822/2822
+  unchanged. No native code change required for this iteration.
+- **FHIRPath FP-05 HISTORIAN §5.3/§5.4 exhaustive verification
+  (2026-06-28):**
+  **VERIFIED CLEAN:** A systematic HISTORIAN pass across all 11 §5.3/§5.4
+  functions (`[index]`, `single`, `first`, `last`, `tail`, `skip`,
+  `take`, `intersect`, `exclude`, `union`/`|`, `combine`) verified every
+  normative rule with 115+ targeted test cases comparing native C++ vs
+  forced Python fallback. Coverage included in-range/out-of-range/
+  negative/non-integer index types, `single()` row-resilience vs
+  literal-union static invalidity, empty/singleton first/last/tail,
+  integer-only `skip`/`take` with negative/zero/extreme/empty/
+  non-integer arguments, dedup-vs-preserve-duplicates semantics,
+  Quantity/temporal/Integer≡Decimal/complex-object equality, 2-arg
+  `combine(other, preserveOrder)` extension, scoped `select()` chains,
+  and resource-backed `Patient.name`/`identifier` paths. Result: 0
+  parity diffs, 0 validity diffs, 0 native/fallback exceptions on
+  FHIR-conformant inputs. The prior FP-05 SKEPTIC `combine(other,
+  preserveOrder)` fix remains intact. Existing 8 collection-operator
+  parity tests pass. Full conformance 2822/2822 unchanged.
+- **FHIRPath FP-03 HISTORIAN §5.1 Existence exhaustive verification
+  (2026-06-28):**
+  **VERIFIED CLEAN:** A systematic HISTORIAN pass across all 12 §5.1
+  functions confirmed full native C++ vs forced Python fallback parity
+  with 148 targeted test cases (77 iteration + 71 deep). Every normative
+  rule from FHIRPath §5.1 was verified: vacuous truth on
+  `all`/`allTrue`/`allFalse` empty inputs, false-on-empty for
+  `anyTrue`/`anyFalse`, `subsetOf`/`supersetOf` empty-input asymmetry
+  per spec, `count()` Integer-return (0 for empty), `distinct()` `=`
+  semantics (1 'g' vs 1000 'mg' remain distinct), `isDistinct()` empty
+  -> true (0 = 0). Coverage extended to resource-backed paths,
+  `$index`/`$this` scope in criteria, composed select/where/distinct/
+  count chains, Boolean-aggregate non-Boolean-item errors, and 9
+  invalid arity cases. Result: 0 parity diffs, 0 validity diffs, 0
+  exceptions. The prior FP-03 SKEPTIC fix (bare no-arg `exists()`
+  dispatch in `Evaluator::evalFunction()`) remains intact. Existing
+  14/14 existence parity tests pass. Full conformance 2822/2822
+  unchanged. Probe artifacts: `.temp/qa/fp03_historian_iteration_probe.py`
+  and `.temp/qa/fp03_historian_deep_probe.py`. No code changes required.
+- **FHIRPath FP-03 SKEPTIC fresh §5.1.2 bare `exists()` silent failure
+  (2026-06-27):**
+  **FIXED:** `Evaluator::evalFunction()` previously had no dispatch
+  branch for `name == "exists"` in the bare no-source no-arg form.
+  Because `parser.cpp:456-468` parses bare `exists()` (without
+  `source.exists(...)`) as `NodeType::FunctionCall` rather than
+  `NodeType::ExistsCall`, the function fell through to the
+  unknown-function return-empty `{}` at evaluator.cpp:4117. Public
+  `fhirpath_is_valid()` reported True because the parser accepts the
+  bare form, making the silent failure invisible to validity-based
+  probes. Per FHIRPath §5.1.2, no-arg `exists()` must mirror
+  `count() > 0`. Fix added `if (name == "exists") { return
+  evalExists(node, input, doc); }` right after the `where` dispatch in
+  `evalFunction()`. `evalExists` already handles both no-arg and
+  1-arg cases. Guard with `.temp/qa/fp03_skeptic_fresh_probe.py`,
+  `test_existence_parity.py::test_bare_exists_no_arg_matches_count_gt_zero_in_native_and_fallback`,
+  and the new native sqllogictest assertions for `exists()` bare,
+  `{}`-method, `(1)`-literal, and missing-path forms. Rebuild and
+  copy `fhirpath.duckdb_extension` after future `evalFunction`
+  dispatch changes.
+- **FHIRPath FP-15 HISTORIAN iter 1 §6.3 Types FHIR primitive hierarchy
+  + SimpleQuantity (2026-06-29):** **2 NATIVE DEFECTS RESOLVED.**
+  (QA-001 HIGH §6.3.1 / FHIR R4) Native C++ at
+  `extensions/fhirpath/src/fhirpath/evaluator.cpp:8793` over-permissive
+  `is FHIR.string` matching — treated any JSON-string-encoded FHIR
+  primitive as a subtype of `string`. Per FHIR R4 only `id`/`code`/`uri`/
+  `url`/`canonical`/`oid`/`uuid`/`markdown` are valid string-subtypes;
+  `date`/`dateTime`/`instant`/`time` are sibling primitives under Element.
+  Reproducer: `Patient.birthDate is FHIR.string` returned `[true]` native
+  vs `[false]` fallback. Surgical fix at evaluator.cpp:8775-8819
+  restricts the non-exact `is FHIR.string` branch to actual string-subtypes
+  via `fhirTypeIsA(actual_type, "string")`. (QA-003 LOW §6.3.1 / FHIR R4)
+  `SimpleQuantity` was missing from the C++ `fhirTypeIsA` hierarchy table
+  at evaluator.cpp:874-1062 — native rejected `X is SimpleQuantity` and
+  `X as SimpleQuantity` as invalid type specifiers while the Python
+  fallback accepted them. Surgical fix at evaluator.cpp:1028-1032 added
+  `{"SimpleQuantity", "Quantity"}`. Native extension rebuilt (md5sum
+  `e71c25424b22072e831d386fc5e477ec`) and copied to both package and
+  user install paths. Post-fix: HISTORIAN probe 0 diffs for both
+  categories; FHIRPath pytest 376/376 (+3 new tests); full conformance
+  2822/2822 unchanged. Rebuild/copy `fhirpath.duckdb_extension` after
+  future native hierarchy-table or `is FHIR.string` matching edits.
 - **FHIRPath FP-15 HISTORIAN fresh §6.3 empty `is` inputs (2026-06-12):**
   **FIXED:** Native `Evaluator::fn_isType()` must validate type specifiers
   before empty-input short-circuiting. Ordinary missing-path checks such as
@@ -355,6 +1077,34 @@ See `docs/architecture/AUDIT_REPORT.md` §7 for full details.
   validated `length <= 0`. Keep native/fallback parity coverage in
   `.temp/qa/fp09_explorer_fresh_probe.py` and `test_string_search_parity.py`;
   no native evaluator change was needed for this defect.
+- **FHIRPath FP-08 SKEPTIC §5.5.7 toQuantity + §5.5.9 toTime native
+  over-permissiveness (2026-06-28):**
+  **FIXED:** Native C++ `fn_toQuantity` String-bare-keyword path at
+  `extensions/fhirpath/src/fhirpath/evaluator.cpp:4974-4986` previously
+  accepted trailing junk after a calendar duration keyword by capturing
+  the entire `s.substr(idx)` as unit_str (with trailing-whitespace trim).
+  Per §5.5.7 spec regex full-match implication, `'4 days extra'`,
+  `'4 day extra'`, `'4 year extra'`, `'4 d extra'`, and `'4 days '`
+  (trailing whitespace) must all be rejected. Fix: removed trailing-
+  whitespace trim; added `if (!isBareDurationKeyword(unit_str)) return {};`
+  after the existing `isBareDurationCode` check. Native C++ `fn_toTime`
+  and `fn_convertsToTime` at evaluator.cpp:7856-7886 and 7540-7568
+  previously accepted malformed time strings with trailing colon because
+  the check_pos advancement used lenient `if (check_pos+2 <= s.size())
+  check_pos += 2;` which advanced past `:` even when 2 digits weren't
+  present. Per §5.5.9 format `hh:mm:ss.fff`, colons must be followed by
+  exactly 2 digits. Fix: replaced with strict digit-presence verification
+  at each step; also added dangling-`.` rejection. Applied symmetrically
+  to BOTH fn_toTime and fn_convertsToTime. 68-case post-fix probe shows
+  0 native↔fallback diffs; 31/31 conversion parity tests pass; full
+  conformance 2822/2822 unchanged. Native C++ extension rebuilt and
+  copied to both package (`fhir4ds/fhirpath/duckdb/extensions/`) and
+  user install (`~/.duckdb/extensions/v1.5.2/linux_amd64/`) paths.
+  Same native-over-permissive-on-regex bug class as the FP-07 EXPLORER
+  Python-fallback inverse (Unicode-digit `\d` over-acceptance) — the
+  lesson is symmetric: any spec-text regex implies full-match, so both
+  native and Python fallback parsers must enforce strict full-match
+  semantics, not tolerant trim-then-accept.
 - **FHIRPath FP-08 EXPLORER fresh resource-backed Decimal `toString()` (2026-06-12):**
   **FIXED:** Native C++ `Evaluator::jsonValToString()` and Decimal
   `Evaluator::toString()` must not use default stream formatting for JSON real
@@ -1020,8 +1770,9 @@ See `docs/architecture/AUDIT_REPORT.md` §7 for full details.
 - **FHIRPath §6.7 Date/Time Arithmetic**: **FIXED 2026-05-17 / FP-18 SKEPTIC**: Native `fn_dateArith()` must validate units by operand type and by calendar-vs-definite duration semantics. Definite year/month UCUM quantities (`'a'`, `'mo'`) are execution errors, `Date` arithmetic does not accept hour/minute/second/millisecond units, and partial `Time` values must not gain precision when a more precise quantity is added/subtracted. Also keep native temporal arithmetic over FHIR JSON strings aligned with Python fallback by recognizing date/dateTime/time-shaped string values for arithmetic. Regression coverage lives in `fhir4ds/fhirpath/duckdb/tests/integration/test_arithmetic_parity.py` and `extensions/fhirpath/test/sql/fhirpath.test`; rebuild and copy `fhirpath.duckdb_extension` after changing this path.
 - **FHIRPath §6.6 Math/Quantity Arithmetic Parity**: **FIXED 2026-05-17 / FP-18 SKEPTIC**: Native C++ and forced Python fallback public DuckDB arithmetic must agree on `div`, `mod`, 32-bit integer overflow, and compatible Quantity operations. Keep `div` integer-shaped when appropriate, preserve decimal `mod` source text so binary double artifacts do not leak, promote 32-bit integer overflow to Decimal at the public surface, canonicalize compatible Quantity `+`/`-`/`*` through base units, and return dimensionless Quantity `1 '1'` for compatible same-dimension Quantity `/` rather than a bare Decimal. Regression coverage lives in `fhir4ds/fhirpath/duckdb/tests/integration/test_arithmetic_parity.py`; rebuild and copy `fhirpath.duckdb_extension` after native arithmetic changes.
 - **FHIRPath §6.5 Boolean Operand Singleton Errors**: **FIXED 2026-05-17 / FP-17 SKEPTIC, corrected 2026-06-11 / FP-02 EXPLORER**: Native `collectionIsBool()` must throw `FHIRPathSpecError` when asked to convert a multi-item collection, not return `false` as though the operand were empty/unknown. Otherwise `arr or true`, `arr and false`, `arr implies true`, and `false implies arr` leak concrete results instead of public UDF empty/NULL resilience. `false implies <rhs>` may return true only after `<rhs>` has passed singleton Boolean evaluation. Regression coverage lives in `fhir4ds/fhirpath/duckdb/tests/integration/test_boolean_logic_parity.py`; rebuild and copy `fhirpath.duckdb_extension` after touching this path.
-- **FHIRPath §6.4 Membership Singleton Errors**: **FIXED 2026-05-17 / FP-16 EXPLORER**: Native `evalBinaryOp()` must throw `FHIRPathSpecError` when `in` has a multi-item left operand or `contains` has a multi-item right operand. Public UDF materialization catches `FHIRPathSpecError` and returns empty/NULL by design, so public DuckDB parity alone will not prove strict compliance. Keep direct/core regression coverage and rebuild/copy `fhirpath.duckdb_extension` after touching this path.
-- **FHIR Quantity Path Equality in Collection Operators**: **FIXED 2026-05-17 / FP-16 HISTORIAN**: `fpValuesEqual()` is the native helper behind `|`, `union()`, `intersect()`, `exclude()`, `in`, `contains`, `distinct()`, and related set-style functions. It must materialize Quantity-like JSON values before raw `yyjson_equals()` checks, or FHIR Quantity paths that are equal under ordinary `=` (`1 cm` vs `10 mm`) will still fail membership/de-duplication. Regression coverage lives in `fhir4ds/fhirpath/duckdb/tests/integration/test_collection_operator_parity.py`; rebuild and copy `fhirpath.duckdb_extension` after native helper changes.
+- **FHIRPath §6.4 Membership Singleton Errors**: **FIXED 2026-05-17 / FP-16 EXPLORER, VERIFIED CLEAN 2026-06-29 / FP-16 SKEPTIC iter 1 fresh run**: Native `evalBinaryOp()` must throw `FHIRPathSpecError` when `in` has a multi-item left operand or `contains` has a multi-item right operand. Public UDF materialization catches `FHIRPathSpecError` and returns empty/NULL by design, so public DuckDB parity alone will not prove strict compliance. Keep direct/core regression coverage and rebuild/copy `fhirpath.duckdb_extension` after touching this path. The FP-16 SKEPTIC fresh probe (148 cases across 5 rounds) confirmed the multi-item needle rejection is intact in both native C++ and Python fallback, including for statically-known multi-item literal-union needles (`(1 | 2) in ...` → `fhirpath_is_valid=false` via `_has_invalid_membership_literal_unions` precheck in `udf.py:929-950`) and for runtime-only multi-item cases (`nums in nums` → empty via row-resilient wrapper). Empty-collection semantics per §6.4.2/§6.4.3 (LHS empty → empty for `in`; RHS empty → `false` for `in`; RHS empty → empty for `contains`; LHS empty → `false` for `contains`) all correct in both backends.
+- **FHIR Quantity Path Equality in Collection Operators**: **FIXED 2026-05-17 / FP-16 HISTORIAN, VERIFIED CLEAN 2026-06-29 / FP-16 SKEPTIC iter 1 fresh run**: `fpValuesEqual()` is the native helper behind `|`, `union()`, `intersect()`, `exclude()`, `in`, `contains`, `distinct()`, and related set-style functions. It must materialize Quantity-like JSON values before raw `yyjson_equals()` checks, or FHIR Quantity paths that are equal under ordinary `=` (`1 cm` vs `10 mm`) will still fail membership/de-duplication. Regression coverage lives in `fhir4ds/fhirpath/duckdb/tests/integration/test_collection_operator_parity.py`; rebuild and copy `fhirpath.duckdb_extension` after native helper changes. The FP-16 SKEPTIC fresh probe re-verified UCUM cross-unit membership (`1 'g' in (1000 'mg' | 2 'g')` → true in both backends), Quantity literal union dedup (`(1 'g' | 1000 'mg').count() = 1`), and the FP-13 HISTORIAN offset-temperature equality carry-over (`0 'Cel' in (32 '[degF]' | 100 '[degF]')` → false in both backends because equality returns empty per the offset-temperature guard, and "empty equality" means "not a member" per §6.4.2 definition).
+- **FP-16 §6.4 Collections (SKEPTIC iter 1 fresh run, 2026-06-29)**: 148-case hypothesis-driven probe across 5 rounds (53 + 29 is_valid + 37 + 29 cases) targeting all 8 orchestrator-briefed §6.4 bug classes produced **0 new non-terminal CRITICAL/HIGH/MEDIUM issues**. The §6.4 surface (`|` union, `in` membership, `contains` containership) is well-hardened across native C++ and Python fallback. Coverage: empty handling (10 cases), multi-item needle (4 cases), mixed-type membership (9 cases), Quantity cross-unit membership (7 cases incl. offset-temperature carry-over), Date/Time precision-aware membership (4 cases), ResourceNode unwrap (5 cases), union dedup semantic equality (10 cases), union order unspecified but dedup correct (4 cases), plus 37 pathological stress cases (Unicode/emoji, large collections, polymorphic choice-types, nested unions) and 29 final edge cases (Decimal precision 1.0 vs 1.00000, singleton Date/Time equality, composed where() filters, negation interaction). Implementation cross-check: Python `fhir4ds/fhirpath/engine/invocations/collections.py:336-367` and `combining.py:9-10`; native `extensions/fhirpath/src/fhirpath/evaluator.cpp:7305-7332` and `6521-6540`. No source changes, no new regression tests, no native rebuild. Full conformance 2822/2822 unchanged. Probes: `.temp/qa/fp16_skeptic_2026_06_29/probe{,2,3,4,5}.py`.
 - **FP-15 EXPLORER Type Operator Sweep**: **VERIFIED CLEAN 2026-05-17**: Fresh probes over §6.3 `is`/`as` operator and function forms confirmed native C++ parity with the forced Python fallback for resource and complex supertypes, primitive exact `as()` behavior, backtick-qualified type specifiers, invalid namespaces/types, wrong arity, empty input, and multi-item singleton resilience. Guard with `fhir4ds/fhirpath/duckdb/tests/integration/test_type_parity.py`, `fhir4ds/fhirpath/tests/unit/test_conformance_regressions.py`, and the native SQL `fhirpath.test` suite.
 - **Qualified Type Specifier Namespace Validation**: **FIXED 2026-05-17 / FP-15 HISTORIAN**: Native C++ and Python fallback must reject FHIR-qualified System primitive aliases such as `FHIR.Boolean` and `FHIR.Integer` as unresolved type specifiers. Do not reject `System.Patient`; the official R4 conformance suite expects it to resolve as a non-matching type so `Patient.is(System.Patient).not()` is true. Native `fn_isType()` must validate type specifiers before empty-input short-circuiting so `fhirpath_is_valid()` catches wrong namespaces even when the validation resource lacks the left-side field. Preserve unqualified choice-type suffix matching (`value.ofType(Integer)`) through `fhir_type` metadata.
 - **Type Specifier Validation and `as` Supertype Semantics**: **FIXED 2026-05-17 / FP-15 SKEPTIC**: Native C++ `is`/`as` must reject unknown or missing type specifiers and `is()`/`as()` wrong arity instead of returning false/empty with `fhirpath_is_valid=true`. `is` and `as` throw singleton errors internally for multi-item input; public UDF wrappers convert those row-level errors to empty/NULL. `as` accepts FHIR resource/complex supertypes such as `Patient as DomainResource` and `name.first() as Element`, but primitive FHIR casts remain exact for R4 conformance (`gender.as(string)` empty, `gender.as(code)` succeeds). Keep native and forced Python fallback parity coverage in `test_type_parity.py`; rebuild and copy the bundled extension after touching this path.
@@ -1208,3 +1959,21 @@ See `docs/architecture/AUDIT_REPORT.md` §7 for full details.
 - **Nested JSON arrays**: Divergence on invalid FHIR-shaped data such as `{"nested":[[{"v":1}],[{"v":2}]]}` is not release-blocking. FHIR resources do not model arrays of arrays directly; public behavior is only guaranteed for valid FHIR JSON shapes and documented resilience behavior on malformed/invalid rows.
 - **FP-06 EXPLORER no-new-bug verification (2026-05-16)**: Public DuckDB UDFs returning empty/NULL for multi-item conversion errors is intentional row-level resilience outside strict mode. Strict Python core evaluation remains the conformance surface for semantic errors such as non-Boolean `iif` criteria, while non-strict public wrapper parity must be checked against both native C++ and forced Python fallback.
 - **FP-12 HISTORIAN current-time backend policy (2026-05-17)**: Native DuckDB and forced Python fallback may use different timestamp sources/precision for `now()`, `today()`, and `timeOfDay()` (for example UTC native vs local Python around midnight). This is not a spec bug as long as each function returns the required type/shape and remains deterministic within a single expression.
+- **FP-12 EXPLORER (2026-06-29) native decimal-primitive text rendering in
+  FastText/FastList paths**: `FastPathLookup` at `fhirpath_extension.cpp`
+  line ~513 and `JsonValueToOwnedString` at line ~757 previously rendered
+  JSON decimal primitives via `std::to_string(yyjson_get_real(value))`
+  which uses `setprecision(6) << std::fixed` by the C++ standard
+  ([string.conversions]), producing `'12.500000'` for `12.5`. The Python
+  fallback uses shortest-round-trip rendering (`'12.5'`), and the non-fast-
+  path `Evaluator::jsonValToString` correctly uses
+  `formatDecimalNumber(yyjson_get_real(val), jsonNumberText(val))`. The
+  fix at both native sites replaces `std::to_string(yyjson_get_real(x))`
+  with `yyjson_val_write(x, 0, nullptr)` to extract the original JSON
+  text, matching both the Python fallback and the fhirpath_json UDF
+  wrapper (which already used `yyjson_val_write` directly). The bug was
+  latent through 935/935 R4 conformance because official fixtures exercise
+  `valueQuantity.value` via `fhirpath_json` (not `fhirpath_text`). After
+  future FastPath or JsonValueToOwnedString changes, audit for any new
+  `std::to_string(yyjson_get_real(...))` patterns and replace with
+  `yyjson_val_write`. Probe: `.temp/qa/fp12_explorer_2026_06_29/probe.py`.

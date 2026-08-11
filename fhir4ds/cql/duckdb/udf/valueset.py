@@ -543,6 +543,7 @@ def createValuesetMembershipUdf(
 
             # Use extractCodes which handles arrays (e.g. Encounter.type)
             codes = extractCodes(resource, path)
+            ambiguous = False
             for system, code in codes:
                 # Normalize system (OID → URL, SNOMED module → base)
                 norm_system = _normalize_system(system)
@@ -551,9 +552,43 @@ def createValuesetMembershipUdf(
                 # Also try the original system in case cache has unnormalized entries
                 if norm_system != system and (system, code) in vs_codes:
                     return True
+                # CQL §In (Valueset) String overload: when the source code has no
+                # system (the only way a bare CQL String code can be encoded),
+                # spec says: "if the given valueset contains a code with an
+                # equivalent code element, the result is true." If multiple
+                # distinct non-empty systems contain the code, the operation is
+                # ambiguous (spec mandates a run-time error). We implement this
+                # by scanning the cache: if only one distinct non-empty system
+                # (or only empty-system entries) match the code, return True;
+                # if multiple distinct non-empty systems match, mark ambiguous
+                # and continue (the function returns None below instead of
+                # silently returning False).
+                if not system:
+                    distinct_systems = {
+                        cached_system
+                        for cached_system, cached_code in vs_codes
+                        if cached_code == code and cached_system
+                    }
+                    if len(distinct_systems) <= 1:
+                        # 0 distinct non-empty systems: still need empty/None
+                        # entry to match (preserves prior behavior for caches
+                        # that store ("", code) entries).
+                        # 1 distinct non-empty system: unambiguous match per spec.
+                        if distinct_systems or ("", code) in vs_codes or (None, code) in vs_codes:
+                            return True
+                    else:
+                        ambiguous = True
                 # Also match on code alone when valueset entry has no system
                 if ("", code) in vs_codes or (None, code) in vs_codes:
                     return True
+
+            # CQL §In (Valueset) String overload ambiguity: source code had no
+            # system but appeared in multiple distinct non-empty systems in the
+            # valueset cache. Spec mandates a run-time error; we surface this as
+            # SQL NULL (three-valued logic uncertainty) rather than silently
+            # returning False, so callers can detect the ambiguity.
+            if ambiguous:
+                return None
 
             # Fallback: QICore negation profiles (e.g. MedicationNotRequested) may
             # express the intended valueset via the qicore-notDoneValueSet extension

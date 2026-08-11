@@ -7,6 +7,96 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.11
+*August 2026*
+
+Version 0.0.11 introduces the **medterm4ds integration** — a three-phase
+pipeline that adds terminology services, auto-coding, and clinical NER to
+fhir4ds. The release also ships a spec-compliance sweep across the
+translator and the data-ingestion surfaces. Conformance holds at **2822/2822**
+across all four suites.
+
+### medterm4ds integration
+
+The integration lands in three opt-in phases, each gated behind an install
+extra so the core `import fhir4ds` path stays zero-dependency.
+
+- **Phase 1 — Terminology Service** (`pip install 'fhir4ds-v2[terminology]'`):
+  an env-driven factory (`fhir4ds.cql.terminology.factory.get_terminology_endpoint`)
+  builds a `TerminologyEndpoint` from `FHIR4DS_TERMINOLOGY_*` env vars or an
+  explicit `TerminologyConfig`. Two modes: `http` (any FHIR R4 terminology
+  server, including the medterm4ds sidecar) and `in_process` (medterm4ds
+  embedded directly — no HTTP hop). The endpoint exposes `expand()`,
+  `search_text()`, `search_batch()`, plus a per-instance circuit breaker
+  for transient failures and a system-URL normalizer that expands UMLS
+  mnemonics (`SNOMEDCT_US`) to FHIR canonical URLs (`http://snomed.info/sct`).
+  See the [Terminology Service docs](../user-guide/terminology/terminology-service.md).
+
+- **Phase 2 — Auto-Coding** (same extra): `fhir4ds.cql.loader.auto_coder.AutoCoder`
+  augments text-only `CodeableConcept`s (e.g. `Condition.code.text`) with
+  coded `Coding`s drawn from the terminology endpoint's top-k matches. The
+  original `text` is preserved, existing `coding[]` is never overwritten,
+  every derived `Coding` carries `userSelected=False` and a structured
+  autocoding extension (`engine="medterm4ds"`, index version pinned). Cache
+  keys are deterministic — re-running on the same input produces
+  byte-identical output. See the
+  [Auto-Coding docs](../user-guide/terminology/autocoding.md).
+
+- **Phase 4 — Clinical Notes Pipeline** (`pip install 'fhir4ds-v2[ner]'`):
+  `fhir4ds.cql.loader.notes_pipeline.NotesPipeline.extract_conditions()`
+  derives FHIR Condition resources from free-text note paths on
+  `ClinicalImpression`, `DocumentReference`, `Encounter`, and friends via
+  `medterm4ds.extract()` (medspaCy + GLiNER + SapBERT cascade). Each
+  derived Condition carries a `derived-from-text` extension with source
+  reference, note path, and span offsets for full audit. Deterministic IDs
+  (sha256 of `(source_ref, span_start, span_end, system, code)`) make
+  re-runs byte-identical. The heavy ML deps (medspaCy, transformers, torch)
+  are owned transitively by `medterm4ds[extraction]` — fhir4ds never
+  imports them directly. See the
+  [Notes Pipeline docs](../user-guide/terminology/notes-pipeline.md).
+
+medterm4ds is now declared as a normal PyPI dependency in the
+`[terminology]` and `[ner]` extras — no sibling-repo install, no
+`--find-links` pinning. The published wheel (medterm4ds 0.0.1 on PyPI)
+exposes the canonical surface this release targets.
+
+### Additional hardening
+
+A spec-compliance sweep across the translator and data-ingestion surfaces
+closed 19 release-gate findings (QA-001 through QA-019) without altering
+the public API: fluent-form CQL `.distinct()` now matches the function
+form's NULL-preserving semantics; SQL-on-FHIR v2 `forEachOrNull` preserves
+parent rows through nested iteration; the FHIR data loader and notes
+pipeline gained strict input validation (Bundle.type attribution, NDJSON
+strict-line attribution, malformed-URL/JSON guards); closed-connection /
+malformed-URL / malformed-JSON errors now raise typed package exceptions
+instead of leaking decoder/attribute/connection errors; `audit_mode='full'`
+SQL emission now runs on 4 of 5 sampled CMS measures (CMS135, CMS165,
+CMS71, CMS996) where it previously broke. Public `__version__` is aligned
+across all 7 subpackage `__init__.py` files.
+
+### Conformance
+
+| Suite | Passed | Total | Rate |
+|-------|-------:|------:|-----:|
+| ViewDefinition v2 | 134 | 134 | 100.0% |
+| FHIRPath R4 | 935 | 935 | 100.0% |
+| CQL | 1,706 | 1,706 | 100.0% |
+| DQM QI-Core 2025 | 47 | 47 | 100.0% |
+| Overall | 2,822 | 2,822 | 100.0% |
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.11
+```
+
+For the terminology tier: `pip install 'fhir4ds-v2[terminology]'`. For
+clinical-notes NER: `pip install 'fhir4ds-v2[ner]'` (pulls
+`medterm4ds[extraction]` transitively).
+
+---
+
 ## Version 0.0.10
 *June 2026*
 
@@ -289,6 +379,40 @@ Version 0.0.5 continues the **100% Compliance Milestone** — every conformance 
 
 ```bash
 pip install fhir4ds-v2==0.0.5
+```
+
+---
+
+## Version 0.0.4
+*May 2026*
+
+Version 0.0.4 marks the **100% Compliance Milestone** — every test suite now passes at 100%, totaling 2,821 tests across CQL, FHIRPath, ViewDefinition, and DQM.
+
+### Highlights
+
+- **100% Spec Compliance**: All test suites now pass at 100% — CQL (1,706/1,706), FHIRPath (935/935), ViewDefinition (134/134), and DQM (46/46 measures).
+- **CQL Gap Closure**: Resolved remaining 2 CQL spec tests — `RolledOutIntervals` (DuckDB correlated UNNEST workaround) and `IntegerIntervalProperlyIncludedInNullBoundaries` (spec ambiguity resolved).
+- **DQM Full Pass Rate**: All 46 QI-Core 2025 CMS eCQMs now pass. 4 measures have documented upstream test data accuracy gaps (CMS135, CMS145, CMS157, CMS1017) that affect all conformant engines equally.
+- **ReactiveEvaluator API Update**: `ReactiveEvaluator` constructor now accepts `measure_bundle` and `cql_library_path` parameters, aligning with the `MeasureEvaluator` API.
+- **Interval JSON Handling**: Fixed precision comparisons to correctly handle interval JSON in CQL temporal operations.
+
+### Bug Fixes
+
+- **CQL**: Fixed interval JSON parsing in precision comparisons (affected CMS157 and related temporal tests).
+- **CQL**: Prevented parser loop and enforced inline recursion limit for deeply nested expressions.
+- **CQL**: Fixed `RolledOutIntervals` — implemented alternative approach avoiding DuckDB correlated UNNEST limitation.
+- **DQM**: Fixed CMS157 test data — corrected measurement period alignment with encounter dates.
+
+### API Changes
+
+- **`ReactiveEvaluator.__init__`**: Parameters changed from `(con, measure, adapter)` to `(con, measure_bundle, cql_library_path, adapter)`.
+- **Version Bump**: All `fhir4ds` packages bumped to version `0.0.4`.
+- **WASM Assets**: Updated translator wheel to `fhir4ds_v2-0.0.4-py3-none-any.whl`.
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.4
 ```
 
 ---

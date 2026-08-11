@@ -363,6 +363,85 @@ def test_cql_interval_part2_explorer_regressions_match_no_python_cpp() -> None:
         cpp.close()
 
 
+def test_cql_interval_part2_set_ops_incompatible_quantity_dimensions_null_cql16_skeptic() -> None:
+    """CQL §9.3 / §19.12 / §19.15: set ops on intervals with incompatible
+    quantity dimensions must return NULL, not raise.
+
+    Regression for CQL-16 SKEPTIC QA-001/QA-002: intervalIntersect and
+    intervalExcept crashed with TypeError because _normalize_for_compare
+    returns the original dicts when pint raises DimensionalityError, then
+    `l1 > l2` / `h1 < l2` failed on non-orderable dicts. The no-Python
+    C++ path had a parallel bug in Interval::except_of, which returned
+    interval1 unchanged when BoundValue::compare returned -2.
+    """
+    cases = [
+        # Intersect of intervals with incompatible quantity dimensions
+        (
+            "SELECT intervalIntersect("
+            "intervalFromBounds('{\"value\":1,\"unit\":\"g\"}', '{\"value\":3,\"unit\":\"g\"}', true, true), "
+            "intervalFromBounds('{\"value\":1,\"unit\":\"cm\"}', '{\"value\":2,\"unit\":\"cm\"}', true, true))",
+            None,
+        ),
+        # Except of intervals with incompatible quantity dimensions
+        (
+            "SELECT intervalExcept("
+            "intervalFromBounds('{\"value\":1,\"unit\":\"g\"}', '{\"value\":3,\"unit\":\"g\"}', true, true), "
+            "intervalFromBounds('{\"value\":1,\"unit\":\"cm\"}', '{\"value\":2,\"unit\":\"cm\"}', true, true))",
+            None,
+        ),
+        # Sanity: compatible units still work for intersect
+        (
+            "SELECT intervalIntersect("
+            "intervalFromBounds('{\"value\":1,\"unit\":\"g\"}', '{\"value\":3,\"unit\":\"g\"}', true, true), "
+            "intervalFromBounds('{\"value\":2,\"unit\":\"g\"}', '{\"value\":5,\"unit\":\"g\"}', true, true))",
+            {"low": {"value": 2, "unit": "g"}, "high": {"value": 3, "unit": "g"},
+             "lowClosed": True, "highClosed": True},
+        ),
+        # Sanity: compatible units still work for except
+        (
+            "SELECT intervalExcept("
+            "intervalFromBounds('{\"value\":1,\"unit\":\"g\"}', '{\"value\":5,\"unit\":\"g\"}', true, true), "
+            "intervalFromBounds('{\"value\":2,\"unit\":\"g\"}', '{\"value\":4,\"unit\":\"g\"}', true, true))",
+            # iv2 splits iv1 → null per spec ("if second is properly contained within the first
+            # and does not start or end it, this operator returns null")
+            None,
+        ),
+    ]
+
+    def _norm(row):
+        """Compare parsed JSON structures; Python uses spaced json.dumps,
+        C++ serializes compactly."""
+        if row is None:
+            return None
+        val = row[0] if isinstance(row, tuple) else row
+        if val is None:
+            return None
+        if isinstance(val, str) and val.strip().startswith("{"):
+            try:
+                return json.loads(val)
+            except (json.JSONDecodeError, TypeError):
+                return val
+        return val
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for sql, expected in cases:
+                assert _norm(py.execute(sql).fetchone()) == expected, (
+                    f"PY mismatch for {sql}"
+                )
+                assert _norm(cpp.execute(sql).fetchone()) == expected, (
+                    f"CPP mismatch for {sql}"
+                )
+                assert _norm(no_py.execute(sql).fetchone()) == expected, (
+                    f"NO_PY mismatch for {sql}"
+                )
+    finally:
+        py.close()
+        cpp.close()
+
+
 def test_cql_interval_part2_dynamic_partial_fhir_points_keep_precision_uncertainty() -> None:
     cql = """library CQL16DynamicPartial version '1.0.0'
 using FHIR version '4.0.1'
@@ -449,6 +528,191 @@ define DynOverlapsAfterDay:
                         [resource_id, resource_type, json.dumps(resource), patient_ref],
                     )
                 assert con.execute(population_sql).fetchall() == expected
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part2_mixed_precision_equality_uncertain_per_spec_cql16_historian() -> None:
+    """CQL 1.5.3 §Equal (interval) + §Equal (Date/DateTime/Time).
+
+    For Date, DateTime, or Time values, if one input has a value for a
+    precision and the other does not, comparison stops and the result is
+    null. For interval types, equality uses Start/End semantics, so
+    mixed-precision temporal bounds make interval equality uncertain.
+
+    Regression for CQL-16 HISTORIAN QA-001: `intervalEquals` and the
+    translator-routed `!=` previously returned False/True (certain) for
+    `Interval[@2014, @2014] = Interval[@2014-01-01, @2014-12-31]` instead
+    of None (uncertain). `intervalEquivalent` and `!~` correctly returned
+    False/True per Equivalent's always-true-or-false rule (uncertain maps
+    to False, NOT False maps to True).
+    """
+    direct_cases = [
+        # Year-prec vs day-prec Date interval equality → NULL (uncertain)
+        (
+            "SELECT intervalEquals(intervalFromBounds('2014', '2014', true, true), "
+            "intervalFromBounds('2014-01-01', '2014-12-31', true, true))",
+            (None,),
+        ),
+        # Year-prec vs month-prec → NULL
+        (
+            "SELECT intervalEquals(intervalFromBounds('2014', '2014', true, true), "
+            "intervalFromBounds('2014-01', '2014-12', true, true))",
+            (None,),
+        ),
+        # Same year-precision: certain True
+        (
+            "SELECT intervalEquals(intervalFromBounds('2014', '2014', true, true), "
+            "intervalFromBounds('2014', '2014', true, true))",
+            (True,),
+        ),
+        # Different year: certain False
+        (
+            "SELECT intervalEquals(intervalFromBounds('2013', '2014', true, true), "
+            "intervalFromBounds('2014', '2014', true, true))",
+            (False,),
+        ),
+        # Same-precision Integer intervals still certain
+        (
+            "SELECT intervalEquals(intervalFromBounds('1', '5', true, true), "
+            "intervalFromBounds('1', '5', true, true))",
+            (True,),
+        ),
+        # Mixed-precision equivalent → False (always-true-or-false rule)
+        (
+            "SELECT intervalEquivalent(intervalFromBounds('2014', '2014', true, true), "
+            "intervalFromBounds('2014-01-01', '2014-12-31', true, true))",
+            (False,),
+        ),
+        # Spec example: null-high equivalent
+        (
+            "SELECT intervalEquivalent(intervalFromBounds('1', '__null__', true, true), "
+            "intervalFromBounds('1', '__null__', true, true))",
+            (True,),
+        ),
+        # Both intervals NULL → True (equivalent)
+        (
+            "SELECT intervalEquivalent(NULL, NULL)",
+            (True,),
+        ),
+        # One NULL → False (not equivalent)
+        (
+            "SELECT intervalEquivalent(NULL, "
+            "intervalFromBounds('1', '5', true, true))",
+            (False,),
+        ),
+        # Semantic equality via Start/End: Interval[1, 6] = Interval(0, 6]
+        (
+            "SELECT intervalEquals(intervalFromBounds('1', '6', true, true), "
+            "intervalFromBounds('0', '6', false, true))",
+            (True,),
+        ),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for sql, expected in direct_cases:
+                assert py.execute(sql).fetchone() == expected, (
+                    f"PY mismatch for {sql}"
+                )
+                assert cpp.execute(sql).fetchone() == expected, (
+                    f"CPP mismatch for {sql}"
+                )
+                assert no_py.execute(sql).fetchone() == expected, (
+                    f"NO_PY mismatch for {sql}"
+                )
+    finally:
+        py.close()
+        cpp.close()
+
+    # End-to-end via translator: != and !~ for mixed-precision Date intervals
+    cql = """library CQL16HistorianMixedPrecision version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define MixedPrecisionEqual: Interval[@2014, @2014] = Interval[@2014-01-01, @2014-12-31]
+define MixedPrecisionNotEqual: Interval[@2014, @2014] != Interval[@2014-01-01, @2014-12-31]
+define MixedPrecisionEquivalent: Interval[@2014, @2014] ~ Interval[@2014-01-01, @2014-12-31]
+define MixedPrecisionNotEquivalent: Interval[@2014, @2014] !~ Interval[@2014-01-01, @2014-12-31]
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "MixedPrecisionEqual": (None,),
+        "MixedPrecisionNotEqual": (None,),
+        "MixedPrecisionEquivalent": (False,),
+        "MixedPrecisionNotEquivalent": (True,),
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expr in translated.items():
+                sql = f"SELECT {expr.to_sql()}"
+                py_result = py.execute(sql).fetchone()
+                cpp_result = cpp.execute(sql).fetchone()
+                no_py_result = no_py.execute(sql).fetchone()
+                assert py_result == cpp_result == no_py_result, name
+                assert py_result == expected[name], name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part2_meets_precision_applied_symmetrically_cql16_explorer() -> None:
+    """CQL-16 EXPLORER QA-001: meets <precision> of / meets before <precision> of /
+    meets after <precision> of must apply precision truncation to BOTH operands.
+
+    Per CQL 1.5.3 §Meets: "If precision is specified and the point type is a
+    Date, DateTime, or Time type, comparisons used in the operation are
+    performed at the specified precision." The translator previously truncated
+    only the right operand (parser desugars ``day of X`` to ``day precision of
+    X``), leaving the left operand at full DateTime precision and producing
+    wrong answers when iv1's bounds were finer than the requested precision.
+    """
+    cql = """library CQL16ExplorerMeetsPrecision version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define MeetsDayAsymmetric: Interval[@2024-01-01T12:34, @2024-01-01T17:00] meets day of Interval[@2024-01-02T08:00, @2024-01-02T09:00]
+define MeetsBeforeDayAsymmetric: Interval[@2024-01-01T12:34, @2024-01-01T17:00] meets before day of Interval[@2024-01-02T08:00, @2024-01-02T09:00]
+define MeetsAfterDayAsymmetric: Interval[@2024-01-02T08:00, @2024-01-02T09:00] meets after day of Interval[@2024-01-01T12:34, @2024-01-01T17:00]
+define MeetsHourExplicit: Interval[@T03:30, @T04:30] meets hour of Interval[@T05:00, @T06:00]
+define MeetsDayControl: Interval[@2024-01-01, @2024-01-01] meets day of Interval[@2024-01-02, @2024-01-02]
+define MeetsBeforeYear: Interval[@2014, @2014] meets before year of Interval[@2015, @2015]
+define MeetsDayDisjoint: Interval[@2024-01-01T12:34, @2024-01-01T17:00] meets day of Interval[@2024-01-10T08:00, @2024-01-10T09:00]
+define MeetsDayOverlap: Interval[@2024-01-01T12:34, @2024-01-02T17:00] meets day of Interval[@2024-01-02T08:00, @2024-01-02T09:00]
+define MeetsYearVsDayUncertain: Interval[@2024, @2024] meets day of Interval[@2024-01-02T08:00, @2024-01-02T09:00]
+define MeetsNoPrecision: Interval[1, 3] meets Interval[4, 6]
+define MeetsBeforeNoPrecision: Interval[1, 3] meets before Interval[4, 6]
+define MeetsAfterNoPrecision: Interval[4, 6] meets after Interval[1, 3]
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "MeetsDayAsymmetric": (True,),
+        "MeetsBeforeDayAsymmetric": (True,),
+        "MeetsAfterDayAsymmetric": (True,),
+        "MeetsHourExplicit": (True,),
+        "MeetsDayControl": (True,),
+        "MeetsBeforeYear": (True,),
+        "MeetsDayDisjoint": (False,),
+        "MeetsDayOverlap": (False,),
+        "MeetsYearVsDayUncertain": (None,),
+        "MeetsNoPrecision": (True,),
+        "MeetsBeforeNoPrecision": (True,),
+        "MeetsAfterNoPrecision": (True,),
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expr in translated.items():
+                sql = f"SELECT {expr.to_sql()}"
+                py_result = py.execute(sql).fetchone()
+                cpp_result = cpp.execute(sql).fetchone()
+                no_py_result = no_py.execute(sql).fetchone()
+                assert py_result == cpp_result == no_py_result, name
+                assert py_result == expected[name], name
     finally:
         py.close()
         cpp.close()

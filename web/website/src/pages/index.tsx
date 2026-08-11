@@ -7,7 +7,7 @@ import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
-const PRODUCT_VERSION = '0.0.10';
+const PRODUCT_VERSION = '0.0.11';
 const SQL_EXECUTION_MEAN_ALL_MEASURES = '~3.9ms';
 const SQL_EXECUTION_MEAN_SHARED_MEASURES = '~6.9ms';
 const JAVA_EXECUTION_MEAN_SHARED_MEASURES = '~936ms';
@@ -61,6 +61,11 @@ function InteractiveSnippet() {
       title: 'Flattening',
       code: `view = {\n    "resource": "Observation",\n    "select": [\n        {"column": [{"path": "id", "name": "id"}]},\n        {"forEach": "component", "column": [...]}\n    ]\n}\nsql = fhir4ds.generate_view_sql(view)`,
       desc: 'Flatten complex FHIR resources using SQL-on-FHIR v2 ViewDefinitions.'
+    },
+    {
+      title: 'Terminology',
+      code: `from fhir4ds.cql.terminology import (\n    TerminologyConfig,\n    get_terminology_endpoint,\n)\n\n# Env-driven: FHIR4DS_TERMINOLOGY_MODE, _URL, _DB, ...\nendpoint = get_terminology_endpoint()\n\n# Expand a ValueSet (SNOMED descendants of Diabetes)\nrefs = endpoint.expand(\n    "http://snomed.info/sct?fhir_vs=isa/73211009"\n)\n# → [CodeRef("http://snomed.info/sct", "73211009", ...), ...]`,
+      desc: 'Expand ValueSets and auto-code text-only concepts via medterm4ds — HTTP or in-process.'
     }
   ];
 
@@ -157,12 +162,19 @@ const FEATURES: Feature[] = [
     ),
   },
   {
-    icon: '📐',
-    title: 'SQL-on-FHIR v2',
+    icon: '📚',
+    title: 'Terminology-Aware',
     description: (
       <>
-        Flatten complex resources into analytical tables using portable 
-        ViewDefinitions. 100% compliant with the HL7 specification.
+        Expand ValueSets, auto-code text-only concepts, and derive Conditions
+        from clinical notes via medterm4ds — over HTTP or embedded in-process.
+        <br />
+        <Link
+          to="/docs/user-guide/terminology/terminology-service"
+          style={{fontSize: '0.85rem', fontWeight: 600, display: 'inline-block', marginTop: '0.5rem'}}
+        >
+          Learn more →
+        </Link>
       </>
     ),
   },
@@ -330,12 +342,28 @@ function Hero() {
             FHIR for Data Science
           </Heading>
           <span className={styles.versionBadge}>v{PRODUCT_VERSION}</span>
+          <Link
+            to="/docs/user-guide/terminology/terminology-service"
+            style={{
+              background: 'rgba(95, 237, 131, 0.12)',
+              border: '1px solid rgba(95, 237, 131, 0.4)',
+              color: 'rgb(95, 237, 131)',
+              padding: '0.2rem 0.75rem',
+              borderRadius: '20px',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              textDecoration: 'none',
+              transition: 'background 0.15s ease',
+            }}
+          >
+            New in 0.0.11: Terminology &amp; Clinical NLP →
+          </Link>
         </div>
         <p style={{fontSize: '1.35rem', fontWeight: 600, color: '#e2e8f0', margin: '0.4rem 0 0.6rem'}}>
           Production-Scale FHIR Analytics. Running Anywhere.
         </p>
         <p className="hero__subtitle" style={{fontSize: '1.1rem', fontWeight: 400, color: '#94a3b8', marginBottom: '2rem', maxWidth: '800px', margin: '0 auto 2rem'}}>
-          The first SQL-native clinical reasoning engine. Translate CQL to DuckDB SQL 
+          The first SQL-native clinical reasoning engine. Translate CQL to DuckDB SQL
           for blazing fast, auditable population health analytics with zero server infrastructure.
         </p>
         <div style={{display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap'}}>

@@ -363,6 +363,29 @@ SELECT fhirpath_number('{"resourceType":"Patient","name":[{"given":["John","Jame
 ----
 2.0
 
+# FP-03 SKEPTIC regression: bare no-source `exists()` must mirror count() > 0.
+# Previously the bundled native extension silently returned an empty
+# collection for the bare form. See evaluator.cpp evalFunction `name == "exists"`.
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","name":[{"given":["John"]}]}', 'exists()');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient"}', 'exists()');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient"}', 'missing.exists()');
+----
+false
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","name":[{"given":["John"]}]}', 'name.exists()');
+----
+true
+
 # =====================================================================
 # Malformed JSON handling (should return NULL, not crash)
 # =====================================================================

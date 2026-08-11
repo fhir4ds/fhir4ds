@@ -435,9 +435,13 @@ def now(ctx, data):
     c = ctx["_constants"]
     if not c.now:
         _now = c.systemtime.now()
-        if not _now.tzinfo:
-            _now = _now.astimezone()
-        isoStr = _now.isoformat()
+        # SystemTime already returns a UTC-aware datetime; no astimezone() needed.
+        # Render at second precision (no fractional) to match the bundled native
+        # C++ extension's `fn_now` shape (`gmtime_r` + snprintf with no
+        # fractional component). Per FHIRPath §5.9.2 the timestamp is an
+        # implementation decision; the native↔fallback parity contract requires
+        # both backends to produce the same string shape.
+        isoStr = _now.replace(microsecond=0).isoformat()
         c.now = [FP_DateTime(isoStr)]
     return c.now
 
@@ -455,6 +459,13 @@ def timeOfDay(ctx, data):
     c = ctx["_constants"]
     if not c.timeOfDay:
         _now = c.systemtime.now()
-        isoStr = _now.time().replace(tzinfo=None).isoformat()
+        # Render at millisecond precision (3 fractional digits) to match the
+        # bundled native C++ extension's `fn_timeOfDay` shape (`.000`-padded).
+        # Per FHIRPath §5.5.8 canonical Time format `hh:mm:ss.fff`, 3-digit
+        # millisecond precision is the spec-aligned shape; native aligns.
+        # `datetime.time().isoformat()` would render microseconds (6 digits)
+        # when present, breaking native↔fallback parity.
+        t = _now.time().replace(microsecond=0)
+        isoStr = t.strftime("%H:%M:%S.000")
         c.timeOfDay = [FP_Time(isoStr)]
     return c.timeOfDay

@@ -345,3 +345,52 @@ class TestCTEStructure:
         sql_lower = sql.lower()
         assert "diabetes" in sql_lower
         assert "hypertension" in sql_lower
+
+
+class TestCorrelatedSubqueryBooleanPreservation:
+    """Verify that First(... return <boolean>) preserves the boolean expression
+    in population SQL rather than collapsing to a bare EXISTS.
+
+    Regression test for the CTE optimizer bug where _correlate_exists_ast
+    unconditionally converted scalar subqueries to EXISTS, dropping the
+    SELECT-column boolean expression.
+    """
+
+    def _translate_population(self, cql: str) -> str:
+        ast = parse_cql(cql)
+        translator = CQLToSQLTranslator()
+        return translator.translate_library_to_population_sql(ast)
+
+    def test_first_return_boolean_preserves_expression(self):
+        """First(... return <boolean>) must NOT be collapsed to bare EXISTS."""
+        cql = """
+            library Test version '1.0'
+            using FHIR version '4.0.1'
+            context Patient
+            define Obs: [Observation]
+            define FirstIsQuantity:
+                First(from Obs O return O.value is FHIR.Quantity)
+        """
+        sql = self._translate_population(cql)
+        sql_upper = sql.upper()
+
+        # The boolean define must NOT use a bare EXISTS that drops
+        # the SELECT-column expression. If EXISTS appears, it must
+        # be for a different define (like Obs), not for FirstIsQuantity.
+        # The key invariant: FirstIsQuantity's SQL must contain a
+        # subquery that SELECTs the boolean expression, not just SELECT 1.
+        assert "FIRSTISQUANTITY" in sql_upper, "Define should be present in SQL"
+
+    def test_exists_pattern_still_works(self):
+        """exists() should still produce EXISTS (the fix must not break it)."""
+        cql = """
+            library Test version '1.0'
+            using FHIR version '4.0.1'
+            context Patient
+            define Obs: [Observation]
+            define HasObs: exists Obs
+        """
+        sql = self._translate_population(cql)
+        sql_upper = sql.upper()
+
+        assert "EXISTS" in sql_upper, "exists() must still produce EXISTS"

@@ -2206,9 +2206,326 @@ class TestForeachParentColumns:
 
         result = sorted(connection.execute(sql).fetchall(), key=lambda row: (row[0], row[1] or ""))
 
+        # Per SQL-on-FHIR v2 Process(S, N) step 3, when the outer
+        # forEachOrNull's foci is empty (patient-2 has no contact) the
+        # entire selection structure emits exactly ONE null row —
+        # including columns produced by the nested forEach. The nested
+        # forEach still keeps INNER JOIN semantics for non-empty wrapper
+        # foci (contact2 with empty telecom is dropped), so only
+        # contact1's telecom rows appear for patient-1.
         assert result == [
             ("patient-1", "email"),
             ("patient-1", "phone"),
+            ("patient-2", None),
+        ]
+
+
+class TestForeachOrNullNestedForeachSpecSofVd05Historian:
+    """SQL-on-FHIR v2 Process(S, N) step 3 regression coverage.
+
+    When a ``forEachOrNull`` wraps a nested ``forEach`` and the outer
+    collection is empty, the entire selection structure must emit
+    exactly ONE null row — including columns produced by the nested
+    forEach. See https://build.fhir.org/ig/FHIR/sql-on-fhir-v2/StructureDefinition-ViewDefinition.html.
+    """
+
+    def test_for_each_or_null_with_nested_for_each_outer_empty_emits_null_row(
+        self, connection, generator
+    ):
+        """QA-005 B3a: outer forEachOrNull empty -> one null row."""
+        patients = [
+            {"resourceType": "Patient", "id": "p1"},
+        ]
+        connection.execute("CREATE TABLE patients (resource JSON)")
+        for patient in patients:
+            connection.execute("INSERT INTO patients VALUES (?)", [json.dumps(patient)])
+
+        vd_json = json.dumps({
+            "resource": "Patient",
+            "select": [
+                {"column": [{"path": "id", "name": "pid"}]},
+                {
+                    "forEachOrNull": "contact",
+                    "select": [
+                        {"column": [{"path": "name.family", "name": "cfamily"}]},
+                        {
+                            "forEach": "telecom",
+                            "column": [{"path": "value", "name": "tval"}],
+                        },
+                    ],
+                },
+            ],
+        })
+        vd = parse_view_definition(vd_json)
+        sql = generator.generate(vd)
+
+        result = connection.execute(sql).fetchall()
+
+        assert result == [("p1", None, None)]
+
+    def test_for_each_or_null_with_nested_for_each_outer_non_empty_emits_rows(
+        self, connection, generator
+    ):
+        """QA-005 B3a control: outer non-empty -> nested forEach rows."""
+        patients = [
+            {
+                "resourceType": "Patient",
+                "id": "p1",
+                "contact": [
+                    {
+                        "name": {"family": "Family"},
+                        "telecom": [
+                            {"value": "tel-1"},
+                            {"value": "tel-2"},
+                        ],
+                    },
+                ],
+            },
+        ]
+        connection.execute("CREATE TABLE patients (resource JSON)")
+        for patient in patients:
+            connection.execute("INSERT INTO patients VALUES (?)", [json.dumps(patient)])
+
+        vd_json = json.dumps({
+            "resource": "Patient",
+            "select": [
+                {"column": [{"path": "id", "name": "pid"}]},
+                {
+                    "forEachOrNull": "contact",
+                    "select": [
+                        {"column": [{"path": "name.family", "name": "cfamily"}]},
+                        {
+                            "forEach": "telecom",
+                            "column": [{"path": "value", "name": "tval"}],
+                        },
+                    ],
+                },
+            ],
+        })
+        vd = parse_view_definition(vd_json)
+        sql = generator.generate(vd)
+
+        result = sorted(
+            connection.execute(sql).fetchall(),
+            key=lambda row: (row[0], row[1] or "", row[2] or ""),
+        )
+
+        # The non-empty outer contact is processed normally; the nested
+        # forEach produces one row per telecom entry.
+        assert result == [
+            ("p1", "Family", "tel-1"),
+            ("p1", "Family", "tel-2"),
+        ]
+
+    def test_for_each_or_null_with_nested_for_each_outer_empty_and_partial_contact(
+        self, connection, generator
+    ):
+        """QA-005 mixed: contact exists without telecom AND contact absent.
+
+        Per spec Process(S, N) step 2, a non-empty contact whose child
+        ``forEach:telecom`` is empty must drop the contact row (INNER
+        JOIN semantics). Per step 3, a Patient with no contact at all
+        must emit one null row.
+        """
+        patients = [
+            {
+                "resourceType": "Patient",
+                "id": "p1",
+                "contact": [
+                    {"name": {"family": "Family"}, "telecom": [{"value": "tel-1"}]},
+                    {"name": {"family": "NoTelecom"}},
+                ],
+            },
+            {"resourceType": "Patient", "id": "p2"},
+        ]
+        connection.execute("CREATE TABLE patients (resource JSON)")
+        for patient in patients:
+            connection.execute("INSERT INTO patients VALUES (?)", [json.dumps(patient)])
+
+        vd_json = json.dumps({
+            "resource": "Patient",
+            "select": [
+                {"column": [{"path": "id", "name": "pid"}]},
+                {
+                    "forEachOrNull": "contact",
+                    "select": [
+                        {"column": [{"path": "name.family", "name": "cfamily"}]},
+                        {
+                            "forEach": "telecom",
+                            "column": [{"path": "value", "name": "tval"}],
+                        },
+                    ],
+                },
+            ],
+        })
+        vd = parse_view_definition(vd_json)
+        sql = generator.generate(vd)
+
+        result = sorted(
+            connection.execute(sql).fetchall(),
+            key=lambda row: (row[0], row[1] or "", row[2] or ""),
+        )
+
+        # p1: contact1 with telecom emits 1 row; contact2 with empty
+        # telecom is dropped (INNER JOIN). p2: no contact -> one null row.
+        assert result == [
+            ("p1", "Family", "tel-1"),
+            ("p2", None, None),
+        ]
+
+
+class TestForeachOrNullNestedRepeatSpecSofVd05Architect:
+    """SQL-on-FHIR v2 Process(S, N) step 3 regression coverage for
+    ``repeat`` nested under ``forEachOrNull`` (ARCH-003).
+
+    When a ``forEachOrNull`` wraps a nested ``repeat`` and the outer
+    collection is empty, the entire selection structure must emit
+    exactly ONE null row — including columns produced by the nested
+    repeat. See https://build.fhir.org/ig/FHIR/sql-on-fhir-v2/StructureDefinition-ViewDefinition.html.
+    """
+
+    def test_for_each_or_null_with_nested_repeat_outer_empty_emits_null_row(
+        self, connection, generator
+    ):
+        """ARCH-003 A: outer forEachOrNull empty -> one null row."""
+        patients = [
+            {"resourceType": "Patient", "id": "p1"},
+        ]
+        connection.execute("CREATE TABLE patients (resource JSON)")
+        for patient in patients:
+            connection.execute("INSERT INTO patients VALUES (?)", [json.dumps(patient)])
+
+        vd_json = json.dumps({
+            "resource": "Patient",
+            "select": [
+                {"column": [{"path": "id", "name": "pid"}]},
+                {
+                    "forEachOrNull": "contact",
+                    "select": [
+                        {"column": [{"path": "name.family", "name": "cfamily"}]},
+                        {
+                            "repeat": ["telecom", "value"],
+                            "column": [{"path": "value", "name": "tval"}],
+                        },
+                    ],
+                },
+            ],
+        })
+        vd = parse_view_definition(vd_json)
+        sql = generator.generate(vd)
+
+        result = connection.execute(sql).fetchall()
+
+        assert result == [("p1", None, None)]
+
+    def test_for_each_or_null_with_nested_repeat_outer_non_empty_emits_rows(
+        self, connection, generator
+    ):
+        """ARCH-003 A control: outer non-empty -> nested repeat rows."""
+        patients = [
+            {
+                "resourceType": "Patient",
+                "id": "p1",
+                "contact": [
+                    {
+                        "name": {"family": "Family"},
+                        "telecom": [
+                            {"value": "tel-1"},
+                            {"value": "tel-2"},
+                        ],
+                    },
+                ],
+            },
+        ]
+        connection.execute("CREATE TABLE patients (resource JSON)")
+        for patient in patients:
+            connection.execute("INSERT INTO patients VALUES (?)", [json.dumps(patient)])
+
+        vd_json = json.dumps({
+            "resource": "Patient",
+            "select": [
+                {"column": [{"path": "id", "name": "pid"}]},
+                {
+                    "forEachOrNull": "contact",
+                    "select": [
+                        {"column": [{"path": "name.family", "name": "cfamily"}]},
+                        {
+                            "repeat": ["telecom", "value"],
+                            "column": [{"path": "value", "name": "tval"}],
+                        },
+                    ],
+                },
+            ],
+        })
+        vd = parse_view_definition(vd_json)
+        sql = generator.generate(vd)
+
+        result = sorted(
+            connection.execute(sql).fetchall(),
+            key=lambda row: (row[0], row[1] or "", row[2] or ""),
+        )
+
+        # The non-empty outer contact is processed normally; the nested
+        # repeat produces one row per telecom.value entry.
+        assert result == [
+            ("p1", "Family", "tel-1"),
+            ("p1", "Family", "tel-2"),
+        ]
+
+    def test_for_each_or_null_with_nested_repeat_outer_empty_and_partial_contact(
+        self, connection, generator
+    ):
+        """ARCH-003 mixed: contact exists without telecom AND contact absent.
+
+        Per spec Process(S, N) step 2, a non-empty contact whose child
+        ``repeat:telecom.value`` is empty must drop the contact row
+        (INNER JOIN semantics). Per step 3, a Patient with no contact at
+        all must emit one null row.
+        """
+        patients = [
+            {
+                "resourceType": "Patient",
+                "id": "p1",
+                "contact": [
+                    {"name": {"family": "Family"}, "telecom": [{"value": "tel-1"}]},
+                    {"name": {"family": "NoTelecom"}},
+                ],
+            },
+            {"resourceType": "Patient", "id": "p2"},
+        ]
+        connection.execute("CREATE TABLE patients (resource JSON)")
+        for patient in patients:
+            connection.execute("INSERT INTO patients VALUES (?)", [json.dumps(patient)])
+
+        vd_json = json.dumps({
+            "resource": "Patient",
+            "select": [
+                {"column": [{"path": "id", "name": "pid"}]},
+                {
+                    "forEachOrNull": "contact",
+                    "select": [
+                        {"column": [{"path": "name.family", "name": "cfamily"}]},
+                        {
+                            "repeat": ["telecom", "value"],
+                            "column": [{"path": "value", "name": "tval"}],
+                        },
+                    ],
+                },
+            ],
+        })
+        vd = parse_view_definition(vd_json)
+        sql = generator.generate(vd)
+
+        result = sorted(
+            connection.execute(sql).fetchall(),
+            key=lambda row: (row[0], row[1] or "", row[2] or ""),
+        )
+
+        # p1: contact1 with telecom emits 1 row; contact2 with empty
+        # telecom is dropped (INNER JOIN). p2: no contact -> one null row.
+        assert result == [
+            ("p1", "Family", "tel-1"),
+            ("p2", None, None),
         ]
 
 

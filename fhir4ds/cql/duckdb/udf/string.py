@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 import logging
 import re as _re
 
+from ...errors import UnsupportedFeatureError
+
 _logger = logging.getLogger(__name__)
 
 # Maximum regex pattern length to accept (guard against excessively large patterns)
@@ -30,27 +32,55 @@ _REDOS_PATTERNS = _re.compile(
 )
 
 
-def _compile_cql_regex(pattern: str) -> _re.Pattern | None:
+class CQLRegexPatternRejected(UnsupportedFeatureError):
+    """Raised when a CQL regex pattern is rejected by the ReDoS guard.
+
+    Aligned with CQL §17 (Matches / ReplaceMatches / SplitOnMatches): the spec
+    only authorizes a null result when an input argument is null. Returning
+    null for a syntactically valid pattern would silently mask the rejection
+    as a null-input result; instead, raise a typed error so the rejection is
+    visible to callers and downstream boolean logic does not propagate a
+    misleading null.
+    """
+
+
+def _compile_cql_regex(pattern: str) -> _re.Pattern:
+    """Compile a CQL regex pattern.
+
+    Raises:
+        CQLRegexPatternRejected: if the pattern is rejected by the ReDoS guard
+            or exceeds the maximum accepted length.
+        re.error: if the pattern is syntactically invalid.
+    """
     if len(pattern) > _MAX_REGEX_LENGTH:
-        _logger.warning("CQL regex pattern exceeds max length (%d)", len(pattern))
-        return None
+        raise CQLRegexPatternRejected(
+            message=(
+                f"CQL regex pattern exceeds maximum supported length "
+                f"({_MAX_REGEX_LENGTH} characters)"
+            ),
+            feature_name="Matches",
+        )
     if _REDOS_PATTERNS.search(pattern):
-        _logger.warning("CQL regex pattern rejected (potential ReDoS)")
-        return None
-    try:
-        return _re.compile(pattern, flags=_re.DOTALL)
-    except _re.error as e:
-        _logger.warning("CQL regex compilation failed: %s", e)
-        return None
+        raise CQLRegexPatternRejected(
+            message=(
+                "CQL regex pattern rejected (potential ReDoS); rewrite without "
+                "nested quantifiers or quantified alternations"
+            ),
+            feature_name="Matches",
+        )
+    return _re.compile(pattern, flags=_re.DOTALL)
 
 
 def cqlRegexMatches(s: str | None, pattern: str | None) -> bool | None:
-    """CQL Matches() regex helper using partial, single-line matching."""
+    """CQL Matches() regex helper using partial, single-line matching.
+
+    Returns None only when an input argument is null (per CQL §17). Raises
+    CQLRegexPatternRejected when the pattern is rejected by the ReDoS guard
+    so the rejection is visible rather than masked as a null-input result.
+    """
     if s is None or pattern is None:
         return None
     regex = _compile_cql_regex(pattern)
-    if regex is None:
-        return None
     return regex.search(s) is not None
 
 
@@ -59,29 +89,47 @@ def cqlRegexReplaceMatches(
     pattern: str | None,
     replacement: str | None,
 ) -> str | None:
-    """CQL ReplaceMatches() regex helper with Java-style replacement text."""
+    """CQL ReplaceMatches() regex helper with Java-style replacement text.
+
+    Returns None only when an input argument is null (per CQL §17). Raises
+    CQLRegexPatternRejected when the pattern is rejected by the ReDoS guard
+    or when the substitution references a group that the pattern does not
+    capture. Per CQL §17 ReplaceMatches: "If any argument is null, the
+    result is null." Returning None for a syntactically valid pattern with
+    a bad backreference would silently mask the rejection as a null-input
+    result and propagate misleadingly through downstream boolean logic.
+    """
     if s is None or pattern is None or replacement is None:
         return None
     regex = _compile_cql_regex(pattern)
-    if regex is None:
-        return None
     python_replacement = _cql_replacement_to_python(replacement)
     try:
         return regex.sub(python_replacement, s)
     except _re.error as e:
-        _logger.warning("CQL regex replacement failed: %s", e)
-        return None
+        # re.error here means the substitution string references a group
+        # that the pattern does not capture (e.g. '$1' with pattern 'a'
+        # that has no capture group). Per CQL §17, None is authorized
+        # only when an input argument is null. Raise a typed error so the
+        # rejection is visible rather than masked as a null-input result.
+        raise CQLRegexPatternRejected(
+            message=(
+                f"CQL ReplaceMatches substitution is invalid: {e}"
+            ),
+            feature_name="ReplaceMatches",
+        ) from e
 
 
 def cqlRegexSplitOnMatches(s: str | None, pattern: str | None) -> list[str] | None:
-    """CQL SplitOnMatches() regex helper using Matches() regex semantics."""
+    """CQL SplitOnMatches() regex helper using Matches() regex semantics.
+
+    Returns None only when an input argument is null (per CQL §17). Raises
+    CQLRegexPatternRejected when the pattern is rejected by the ReDoS guard.
+    """
     if s is None or pattern is None:
         return None
     if pattern == "":
         return list(s)
     regex = _compile_cql_regex(pattern)
-    if regex is None:
-        return None
     return regex.split(s)
 
 

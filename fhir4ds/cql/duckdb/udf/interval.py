@@ -794,6 +794,20 @@ def pointFrom(interval: str | None) -> str | None:
     elif cmp_low != cmp_high:
         return None
 
+    # CQL-17 EXPLORER QA-001: When the raw bound is a Time string (e.g.
+    # 'T12:30:00'), the parser converts it to integer ms-since-midnight at
+    # `_parse_interval_bound:366`. `_format_adjusted_bound_for_raw` then
+    # receives an int and returns it as-is via str(), losing the Time form.
+    # Detect this case and return the raw Time string directly to match the
+    # C++ extension's `start_string()` / `end_string()` behavior.
+    low_raw = iv.get("low_raw")
+    if isinstance(low_raw, str) and low_raw:
+        rl = low_raw.strip()
+        if rl.startswith('T') or rl.startswith('t') or (
+            len(rl) >= 5 and rl[2:3] == ':' and rl[:2].isdigit()
+        ):
+            return low_raw
+
     formatted = _format_adjusted_bound_for_raw(low, iv.get("low_raw"))
     if isinstance(formatted, (date, datetime)):
         return formatted.isoformat()
@@ -903,6 +917,26 @@ def interval_size(interval: str | None) -> str | None:
             "The Size operator is not defined for date/time intervals. "
             "Use 'duration in' instead (CQL §19.18)."
         )
+    # CQL-17 HISTORIAN QA-001: Check the raw JSON bounds for time strings
+    # (parsed to ms integers by _parse_interval). Width already has this
+    # check at lines 847-860; Size was missing it. Time intervals parse to
+    # integer ms so the datetime check above doesn't catch them.
+    try:
+        raw = orjson.loads(interval)
+        raw_low = raw.get("low") or raw.get("start")
+        if isinstance(raw_low, str):
+            rl = raw_low.strip()
+            if rl.startswith('T') or rl.startswith('t') or (
+                len(rl) >= 5 and rl[2:3] == ':' and rl[:2].isdigit()
+            ):
+                raise ValueError(
+                    "The Size operator is not defined for time intervals. "
+                    "Use 'duration in' instead (CQL §19.18)."
+                )
+    except ValueError:
+        raise
+    except Exception as e:
+        _logger.debug("Unexpected error in UDF interval_size time-string detection: %s", e)
 
     low_q = _quantity_json(low)
     high_q = _quantity_json(high)
@@ -917,11 +951,16 @@ def interval_size(interval: str | None) -> str | None:
                 return None
             high_converted = high_pint.to(low_pint.units)
             unit = (low_parsed or {}).get("code") or (low_parsed or {}).get("unit") or "1"
+            # CQL-17 HISTORIAN QA-002: Include the UCUM system field to match
+            # the C++ extension's format_quantity_json output and preserve
+            # backend parity for Size on Quantity intervals.
+            system = (low_parsed or {}).get("system") or "http://unitsofmeasure.org"
             import json as _json
             return _json.dumps({
                 "value": float(high_converted.magnitude - low_pint.magnitude + 1e-8),
                 "unit": unit,
                 "code": unit,
+                "system": system,
             })
         except Exception as e:
             _logger.debug("Unexpected error in UDF interval_size quantity comparison: %s", e)
@@ -947,10 +986,12 @@ def intervalContains(interval: str | None, point: str | None) -> bool | None:
     (interval in interval) and point-in-interval checks.  When *point* is
     actually an interval JSON string, delegate to ``intervalIncludes``.
 
-    Null inputs return null per CQL three-valued logic.
+    CQL §19.3 Contains: "If the first argument is null, the result is
+    **false**. If the second argument is null, the result is null."
     """
+    # CQL §19.3: null first arg → False (short-circuits before second-arg-null)
     if interval is None:
-        return None
+        return False
     if point is None:
         return None
 
@@ -1090,6 +1131,13 @@ def _precision_aware_compare(a, b) -> int | None:
 
     Returns -1 (a < b), 0 (a == b), 1 (a > b), or None (uncertain).
     Handles partial-precision ISO 8601 strings per CQL §18.4.
+
+    CQL §18.4 / CqlIntervalOperatorsTest.xml DateTimeIncludedInNull:
+    when two temporal bounds share the same wall-clock value but differ
+    in precision (e.g. ``'2017-09-01T00:00:00.000'`` ms vs
+    ``'2017-09-01T00:00:00'`` second), the comparison is uncertain —
+    the coarser-precision operand does not specify the finer components,
+    so the spec returns null rather than assuming they are zero.
     """
     from .datetime import _compare_at_min_precision, _infer_precision
     # If both are strings and they're date/datetime values, use precision-aware comparison
@@ -1865,32 +1913,91 @@ def _bounds_equal(left: Any, right: Any, *, nulls_equivalent: bool) -> bool | No
     return left_norm == right_norm
 
 
+def _interval_bound_equals_nullable(
+    iv1: dict, iv2: dict, side: str
+) -> bool | None:
+    """Precision-aware interval bound equality for temporal bounds.
+
+    Per CQL 1.5.3 §Equal (Date/DateTime/Time): if one input has a value for
+    a precision and the other does not, comparison stops and the result is
+    null. For interval equality (which uses Start/End semantics), this means
+    mixed-precision temporal bounds make the equality uncertain (null).
+
+    ``side`` is "low" or "high". The comparison uses the authored raw
+    temporal string when both bounds are closed authored temporal values,
+    so that year/month/day/etc. precision is preserved. Falls back to
+    ``_bounds_equal`` for non-temporal or open-boundary cases.
+    """
+    raw_key = f"{side}_raw"
+    closed_key = f"{side}_closed"
+    open_key = f"{side}_was_open"
+    raw1 = _authored_closed_temporal_raw(iv1, raw_key, closed_key, open_key)
+    raw2 = _authored_closed_temporal_raw(iv2, raw_key, closed_key, open_key)
+    if raw1 is not None and raw2 is not None:
+        cmp = _precision_aware_compare(raw1, raw2)
+        if cmp is None:
+            return None
+        return cmp == 0
+    # Fall back to semantic bound equality for non-temporal / open-bound cases.
+    if side == "low":
+        left = _effective_start(iv1)
+        right = _effective_start(iv2)
+    else:
+        left = _effective_end(iv1)
+        right = _effective_end(iv2)
+    return _bounds_equal(left, right, nulls_equivalent=False)
+
+
 def intervalEquals(interval1: str | None, interval2: str | None) -> bool | None:
-    """CQL interval equality using semantic Start/End boundaries."""
+    """CQL interval equality using semantic Start/End boundaries.
+
+    Per CQL 1.5.3 §Equal (interval) + §Equal (Date/DateTime/Time),
+    mixed-precision temporal bounds make the equality uncertain (null).
+    """
     if interval1 is None or interval2 is None:
         return None
-    left = _interval_effective_bounds(interval1)
-    right = _interval_effective_bounds(interval2)
-    if left is None or right is None:
+    iv1 = _parse_interval(interval1)
+    iv2 = _parse_interval(interval2)
+    if not iv1 or not iv2:
         return None
-    starts_equal = _bounds_equal(left[0], right[0], nulls_equivalent=False)
-    ends_equal = _bounds_equal(left[1], right[1], nulls_equivalent=False)
+    starts_equal = _interval_bound_equals_nullable(iv1, iv2, "low")
+    ends_equal = _interval_bound_equals_nullable(iv1, iv2, "high")
     if starts_equal is None or ends_equal is None:
         return None
     return starts_equal and ends_equal
 
 
 def intervalEquivalent(interval1: str | None, interval2: str | None) -> bool:
-    """CQL interval equivalence using semantic Start/End boundaries."""
+    """CQL interval equivalence using semantic Start/End boundaries.
+
+    Per CQL §Equivalent, always returns true or false (never null).
+    Mixed-precision temporal bounds map uncertain → False.
+    """
     if interval1 is None or interval2 is None:
         return interval1 is None and interval2 is None
-    left = _interval_effective_bounds(interval1)
-    right = _interval_effective_bounds(interval2)
-    if left is None or right is None:
+    iv1 = _parse_interval(interval1)
+    iv2 = _parse_interval(interval2)
+    if not iv1 or not iv2:
         return False
-    starts_equal = _bounds_equal(left[0], right[0], nulls_equivalent=True)
-    ends_equal = _bounds_equal(left[1], right[1], nulls_equivalent=True)
+    starts_equal = _interval_bound_equals_nullable(iv1, iv2, "low")
+    ends_equal = _interval_bound_equals_nullable(iv1, iv2, "high")
+    # Per Equivalent spec: null-bounds (closed-null high or low) count as
+    # equivalent. Otherwise uncertain → False per always-true-or-false rule.
+    if not _equivalent_nulls_ok(iv1, iv2, "low"):
+        starts_equal = False
+    if not _equivalent_nulls_ok(iv1, iv2, "high"):
+        ends_equal = False
     return bool(starts_equal and ends_equal)
+
+
+def _equivalent_nulls_ok(iv1: dict, iv2: dict, side: str) -> bool:
+    """Return True if the side's bounds are mutually null (or both non-null)."""
+    raw_key = f"{side}_raw"
+    raw1 = iv1.get(raw_key)
+    raw2 = iv2.get(raw_key)
+    n1 = raw1 == "__null__" or raw1 is None
+    n2 = raw2 == "__null__" or raw2 is None
+    return n1 == n2
 
 
 def intervalIncludedInPrecise(interval1: str | None, interval2: str | None, precision: str | None) -> bool | None:
@@ -2204,11 +2311,17 @@ def intervalIntersect(interval1: str | None, interval2: str | None) -> str | Non
             new_low_raw = raw2_low
             new_low_closed = iv2["low_closed"]
     else:
-        l1, l2 = _normalize_for_compare(iv1["low"], iv2["low"])
-        if l1 > l2:
+        # CQL §9.3 / §19.15: incompatible quantity dimensions must yield NULL.
+        # Use _compare_interval_values (not _normalize_for_compare) so pint
+        # DimensionalityError / non-orderable dict bounds propagate to NULL
+        # instead of raising TypeError on `>` / `<`.
+        low_cmp = _compare_interval_values(iv1["low"], iv2["low"])
+        if low_cmp is None:
+            return None
+        if low_cmp > 0:
             new_low_raw = raw1_low
             new_low_closed = iv1["low_closed"]
-        elif l2 > l1:
+        elif low_cmp < 0:
             new_low_raw = raw2_low
             new_low_closed = iv2["low_closed"]
         else:
@@ -2236,11 +2349,15 @@ def intervalIntersect(interval1: str | None, interval2: str | None) -> str | Non
             new_high_raw = raw2_high
             new_high_closed = iv2["high_closed"]
     else:
-        h1, h2 = _normalize_for_compare(iv1["high"], iv2["high"])
-        if h1 < h2:
+        # See low_cmp note: route through _compare_interval_values so
+        # incompatible quantity dimensions return NULL instead of crashing.
+        high_cmp = _compare_interval_values(iv1["high"], iv2["high"])
+        if high_cmp is None:
+            return None
+        if high_cmp < 0:
             new_high_raw = raw1_high
             new_high_closed = iv1["high_closed"]
-        elif h2 < h1:
+        elif high_cmp > 0:
             new_high_raw = raw2_high
             new_high_closed = iv2["high_closed"]
         else:
@@ -2251,10 +2368,12 @@ def intervalIntersect(interval1: str | None, interval2: str | None) -> str | Non
     new_low_parsed = _parse_interval_bound(new_low_raw)
     new_high_parsed = _parse_interval_bound(new_high_raw)
     if new_low_parsed is not None and new_high_parsed is not None:
-        nl, nh = _normalize_for_compare(new_low_parsed, new_high_parsed)
-        if nl > nh:
+        valid_cmp = _compare_interval_values(new_low_parsed, new_high_parsed)
+        if valid_cmp is None:
             return None
-        if nl == nh and not (new_low_closed and new_high_closed):
+        if valid_cmp > 0:
+            return None
+        if valid_cmp == 0 and not (new_low_closed and new_high_closed):
             return None
 
     return _json.dumps({
@@ -2442,6 +2561,21 @@ def intervalExcept(interval1: str | None, interval2: str | None) -> str | None:
     high1 = iv1["high"]
     low2 = iv2["low"]
     high2 = iv2["high"]
+
+    # CQL §9.3 / §19.12: incompatible quantity dimensions must yield NULL.
+    # The downstream _normalize_for_compare path returns the original dicts
+    # when pint raises DimensionalityError, which then crashes on `<` / `>`.
+    # Short-circuit any cross-bound comparison that would be non-orderable.
+    for a, b in (
+        (low1, low2),
+        (low1, high2),
+        (high1, low2),
+        (high1, high2),
+    ):
+        if a is None or b is None:
+            continue
+        if _compare_interval_values(a, b) is None:
+            return None
 
     # Check if intervals overlap
     overlap = False
@@ -2789,20 +2923,32 @@ def _expand_points_impl(interval_or_list, per) -> str | None:
         if isinstance(iv, dict):
             val = iv.get("low") or iv.get("start")
             if val is not None:
-                # Try to preserve original type
-                try:
-                    ival = int(val)
-                    if str(ival) == str(val):
-                        points.append(ival)
+                # CQL §19.10 Expand (interval overload) returns a list of
+                # points at the per-precision. Temporal points (Date,
+                # DateTime, Time) must remain strings — a year-precision date
+                # like "2024" must NOT be coerced to integer 2024 (that would
+                # change the type from Date to Integer). Only numeric
+                # expansions should attempt int/float coercion.
+                val_is_temporal = isinstance(val, str) and (
+                    # Date / DateTime / Time shapes
+                    re.match(r"^\d{4}(-\d{2}(-\d{2}(T\d{2}(:\d{2}(:\d{2}?)?)?)?)?)?$", val)
+                    or val.startswith("T")
+                )
+                if not val_is_temporal:
+                    # Try to preserve original numeric type
+                    try:
+                        ival = int(val)
+                        if str(ival) == str(val):
+                            points.append(ival)
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+                    try:
+                        fval = float(val)
+                        points.append(fval)
                         continue
-                except (ValueError, TypeError):
-                    pass
-                try:
-                    fval = float(val)
-                    points.append(fval)
-                    continue
-                except (ValueError, TypeError):
-                    pass
+                    except (ValueError, TypeError):
+                        pass
                 points.append(val)
         else:
             points.append(iv)
@@ -3008,6 +3154,24 @@ def _expand_impl(interval_or_list, per) -> str | None:
     if not intervals:
         return "[]"
 
+    # CQL §19.10 Expand: an interval with null bounds (e.g.,
+    # Interval[null, null]) is not a usable interval. Both null and empty-list
+    # are spec-permissive ("implementations are allowed to not return results
+    # for such an interval"); we align with the native C++ extension which
+    # returns null when both bounds are null. A list of intervals where SOME
+    # elements have null bounds continues to exclude those elements (spec:
+    # "If the list of intervals contains nulls, they will be excluded").
+    if len(intervals) == 1:
+        only = intervals[0]
+        low_raw = only.get("low") or only.get("start")
+        high_raw = only.get("high") or only.get("end")
+        # Translator may emit JSON null OR the sentinel string "__null__"
+        # (used by intervalFromBounds to represent CQL null bounds).
+        low_is_null = low_raw is None or low_raw == "__null__"
+        high_is_null = high_raw is None or high_raw == "__null__"
+        if low_is_null and high_is_null:
+            return None
+
     result = []
     for iv in intervals:
         low_raw = iv.get("low") or iv.get("start")
@@ -3049,9 +3213,12 @@ def _expand_single_interval(
             low_parsed, high_parsed, low_closed, high_closed, step_value, step_unit
         )
     # Check for time values first: they are parsed as millis (integers) but raw values are time strings.
+    # Use _is_time_like_string so hour-only time strings like 'T10' (no colon) are correctly
+    # dispatched to _expand_time. The previous ':' in raw_str check missed hour-precision
+    # bounds, causing the spec example `expand { Interval[@T10, @T12] } per hour` to return
+    # [] on the Python fallback while the C++ extension correctly returned 3 intervals.
     if isinstance(low_parsed, (int, float)) and not isinstance(low_parsed, bool):
-        raw_str = str(low_raw) if low_raw is not None else ""
-        if ':' in raw_str and '-' not in raw_str:
+        if _is_time_like_string(low_raw):
             return _expand_time(low_raw, high_raw, low_parsed, high_parsed,
                                 low_closed, high_closed, step_value, step_unit)
     if isinstance(low_parsed, (date, datetime)):
@@ -3077,9 +3244,10 @@ def _expand_single_interval(
         return _expand_numeric(low_parsed, high_parsed, low_closed, high_closed,
                                step_value, is_int=False)
     else:
-        # Could be time (stored as millis) — check if raw values look like times
-        raw_str = str(low_raw)
-        if ':' in raw_str and '-' not in raw_str:
+        # Could be time (stored as millis) — check if raw values look like times.
+        # Use _is_time_like_string so hour-only bounds like 'T10' are correctly
+        # dispatched (consistent with the int-millis branch above).
+        if _is_time_like_string(low_raw):
             if step_unit is not None and not _is_temporal_expand_unit(step_unit):
                 return []
             return _expand_time(low_raw, high_raw, low_parsed, high_parsed,
@@ -3232,9 +3400,31 @@ def _expand_temporal(low_raw, high_raw, low_parsed, high_parsed,
         end = _sub_step(end)
 
     def _format_dt(dt):
+        # CQL §19.10 Expand: "If the interval boundaries are more precise
+        # than the per quantity, the more precise values will be truncated
+        # to the precision specified by the per quantity." Format the
+        # resulting point at the per-precision, not the input precision.
         if isinstance(dt, datetime):
-            return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+            if td_unit == "years":
+                return dt.strftime("%Y")
+            elif td_unit == "months":
+                return dt.strftime("%Y-%m")
+            elif td_unit == "days":
+                return dt.strftime("%Y-%m-%d")
+            elif td_unit == "hours":
+                return dt.strftime("%Y-%m-%dT%H")
+            elif td_unit == "minutes":
+                return dt.strftime("%Y-%m-%dT%H:%M")
+            elif td_unit == "seconds":
+                return dt.strftime("%Y-%m-%dT%H:%M:%S")
+            else:  # milliseconds
+                return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{dt.microsecond // 1000:03d}"
         elif isinstance(dt, date):
+            if td_unit == "years":
+                return dt.strftime("%Y")
+            elif td_unit == "months":
+                return dt.strftime("%Y-%m")
+            # weeks/days for date-typed input
             return dt.strftime("%Y-%m-%d")
         return str(dt)
 
@@ -3313,12 +3503,25 @@ def _expand_time(low_raw, high_raw, low_parsed_millis, high_parsed_millis,
 
     start_ms = int(low_parsed_millis)
     end_ms = int(high_parsed_millis)
-    # Open bounds: exclude the exact boundary, not the step.
-    # Per CQL expand semantics, we include unit intervals that fit within the bounds.
+    # Open bounds: exclude any partition whose START is not strictly inside the
+    # interval. Per CQL §19.25 Expand: "contribute all the intervals of size per
+    # that start on or after the lower boundary and end on or before the upper
+    # boundary". For an open low boundary, partitions whose start equals the low
+    # are excluded (low value itself is not contained); we advance start_ms to
+    # the next partition boundary. For an open high boundary, partitions whose
+    # start equals the high are excluded; we use strict `current < end_ms` in
+    # the loop instead of `<=`.
     if not low_closed:
-        start_ms += 1  # exclude exact low boundary
-    if not high_closed:
-        end_ms -= 1  # exclude exact high boundary
+        # Advance to the start of the next partition (partition aligned to step_ms).
+        # If start_ms is already on a partition boundary, advance to the next one;
+        # otherwise round up to the next boundary.
+        remainder = start_ms % step_ms
+        if remainder == 0:
+            start_ms = start_ms + step_ms
+        else:
+            start_ms = ((start_ms // step_ms) + 1) * step_ms
+    # Note: high-closed vs high-open distinction is handled in the while-loop
+    # condition below (`<=` for closed, `<` for open).
 
     def _ms_to_time(ms, rank):
         h = ms // 3600000
@@ -3337,7 +3540,9 @@ def _expand_time(low_raw, high_raw, low_parsed_millis, high_parsed_millis,
     result = []
     current = start_ms
     max_items = 10000
-    while current <= end_ms and len(result) < max_items:
+    # Use strict < for open high (partition start must be strictly inside the
+    # interval); <= for closed high (partition start may equal the closed high).
+    while ((current < end_ms) if not high_closed else (current <= end_ms)) and len(result) < max_items:
         iv_end = current + step_ms - 1
         if iv_end > end_ms:
             iv_end = end_ms

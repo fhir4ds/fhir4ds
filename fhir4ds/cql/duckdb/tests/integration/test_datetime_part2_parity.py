@@ -268,3 +268,146 @@ define SameDayOrBeforeOffsetLocal:
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_datetime_part2_explorer_decimal_quantity_truncation_above_seconds() -> None:
+    """CQL §Add / §Subtract: "For precisions above seconds, any decimal
+    portion of the time-valued quantity is ignored."
+
+    The triggering condition is the quantity UNIT (year/month/week/day/
+    hour/minute are above seconds; second/millisecond are at-or-below),
+    not the input precision. So `1.5 days` should always become 1 day,
+    `1.5 hours` should always become 1 hour, regardless of whether the
+    input is Date, DateTime, or Time.
+
+    Regression coverage for CQL-14 EXPLORER QA-001 (2026-07-02):
+    fhir4ds/cql/duckdb/udf/datetime.py:dateAddQuantity previously only
+    truncated decimal portions when the quantity unit was FINER than
+    the input precision. The Time-only path had no truncation at all,
+    and the equal-precision DateTime path inherited the float through
+    to Python's timedelta. Native C++ extension had the same bug at
+    extensions/cql/src/cql_extension.cpp:ApplyQuantityAtInputPrecision.
+    """
+    cases = [
+        # (sql, expected_value)
+        # Time-only path: above-seconds decimal must truncate
+        (
+            "SELECT dateAddQuantity('T12:00', "
+            "'{\"value\": 1.5, \"unit\": \"hour\", "
+            "\"system\": \"http://unitsofmeasure.org\"}')",
+            "T13:00",
+        ),
+        (
+            "SELECT dateAddQuantity('T12:00:00', "
+            "'{\"value\": 1.5, \"unit\": \"minute\", "
+            "\"system\": \"http://unitsofmeasure.org\"}')",
+            "T12:01:00",
+        ),
+        # Date path: same-precision decimal must truncate
+        (
+            "SELECT dateAddQuantity('2024-01-15', "
+            "'{\"value\": 1.5, \"unit\": \"day\"}')",
+            "2024-01-16",
+        ),
+        (
+            "SELECT dateAddQuantity('2024-01-15', "
+            "'{\"value\": 2.5, \"unit\": \"day\"}')",
+            "2024-01-17",
+        ),
+        (
+            "SELECT dateAddQuantity('2024-01-15', "
+            "'{\"value\": 1.5, \"unit\": \"week\"}')",
+            "2024-01-22",
+        ),
+        # DateTime path: same-precision decimal must truncate
+        (
+            "SELECT dateAddQuantity('2024-01-15T12:00:00', "
+            "'{\"value\": 1.5, \"unit\": \"day\"}')",
+            "2024-01-16T12:00:00",
+        ),
+        (
+            "SELECT dateAddQuantity('2024-01-15T12', "
+            "'{\"value\": 1.5, \"unit\": \"hour\"}')",
+            "2024-01-15T13",
+        ),
+        # Subtract path: same rules apply
+        (
+            "SELECT dateSubtractQuantity('2024-01-15', "
+            "'{\"value\": 1.5, \"unit\": \"day\"}')",
+            "2024-01-14",
+        ),
+        (
+            "SELECT dateSubtractQuantity('2024-01-15', "
+            "'{\"value\": 2.5, \"unit\": \"day\"}')",
+            "2024-01-13",
+        ),
+        (
+            "SELECT dateSubtractQuantity('T12:00', "
+            "'{\"value\": 1.5, \"unit\": \"hour\"}')",
+            "T11:00",
+        ),
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con_name, con in (("python", py), ("cpp", cpp)):
+            for sql, expected in cases:
+                actual = con.execute(sql).fetchone()[0]
+                assert actual == expected, (
+                    f"[{con_name}] {sql} -> {actual!r}; expected {expected!r}"
+                )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_datetime_part2_explorer_integer_quantity_unaffected() -> None:
+    """Regression guard: integer-valued Quantity arithmetic must be
+    unaffected by the decimal-truncation fix."""
+    cases = [
+        (
+            "SELECT dateAddQuantity('2024-01-15', "
+            "'{\"value\": 1, \"unit\": \"day\"}')",
+            "2024-01-16",
+        ),
+        (
+            "SELECT dateSubtractQuantity('2024-01-15', "
+            "'{\"value\": 7, \"unit\": \"day\"}')",
+            "2024-01-08",
+        ),
+        # CQL §Add spec examples
+        (
+            "SELECT dateAddQuantity('2024', "
+            "'{\"value\": 24, \"unit\": \"month\"}')",
+            "2026",
+        ),
+        (
+            "SELECT dateAddQuantity('2024', "
+            "'{\"value\": 18, \"unit\": \"month\"}')",
+            "2025",
+        ),
+        # Year-precision Subtract spec example
+        (
+            "SELECT dateSubtractQuantity('2014T', "
+            "'{\"value\": 25, \"unit\": \"month\"}')",
+            "2012T",
+        ),
+        # Leap-day arithmetic
+        (
+            "SELECT dateSubtractQuantity('2020-02-29', "
+            "'{\"value\": 1, \"unit\": \"year\"}')",
+            "2019-02-28",
+        ),
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con_name, con in (("python", py), ("cpp", cpp)):
+            for sql, expected in cases:
+                actual = con.execute(sql).fetchone()[0]
+                assert actual == expected, (
+                    f"[{con_name}] {sql} -> {actual!r}; expected {expected!r}"
+                )
+    finally:
+        py.close()
+        cpp.close()

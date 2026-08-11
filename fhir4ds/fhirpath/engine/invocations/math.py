@@ -134,6 +134,17 @@ def minus(ctx, xs_, ys_):
     if util.is_number(x) and util.is_number(y):
         return _numeric_arithmetic_result(x, y, x - y)
 
+    # FHIRPath §5.5 conversion table: Integer/Decimal → Quantity (unit '1')
+    # is implicit. When one operand is a Quantity and the other is a plain
+    # numeric scalar, convert the scalar to a unit-'1' Quantity and dispatch
+    # to the Quantity ± Quantity path so that mismatched UCUM dimensions
+    # yield empty (per §6.6 "Implementations that do not support complete
+    # UCUM functionality may return empty") rather than a hard type error.
+    if isinstance(x, nodes.FP_Quantity) and util.is_number(y):
+        y = nodes.FP_Quantity(nodes.FP_Quantity._normalize_quantity_value(y), "1")
+    elif isinstance(y, nodes.FP_Quantity) and util.is_number(x):
+        x = nodes.FP_Quantity(nodes.FP_Quantity._normalize_quantity_value(x), "1")
+
     if isinstance(x, nodes.FP_Quantity) and isinstance(y, nodes.FP_Quantity):
         return _quantity_add_or_sub(x, y, -1)
 
@@ -149,24 +160,57 @@ def minus(ctx, xs_, ys_):
 
 
 def mul(ctx, x, y):
+    # FP-18 HISTORIAN QA-002 (2026-06-30): Per §6.6, math operators require
+    # operands to be Integer/Decimal/Quantity. Boolean is NOT implicitly
+    # convertible to Integer/Decimal (§5.5 conversion table — Explicit only).
+    # util.is_number correctly excludes bool; without this guard Python's
+    # `isinstance(True, int) == True` would silently coerce `true * 2 = 2`.
+    # The `plus`/`minus` paths already raise FHIRPathError via fallthrough;
+    # `mul` was missing the same guard.
     if util.is_number(x) and util.is_number(y):
         return _numeric_arithmetic_result(x, y, x * y)
-    return x * y
+    if isinstance(x, nodes.FP_Quantity) or isinstance(y, nodes.FP_Quantity):
+        return x * y
+    raise FHIRPathError("Cannot " + str(x) + " * " + str(y))
 
 
 def div(ctx, x, y):
+    # FP-18 HISTORIAN QA-002 (2026-06-30): Same Boolean-coercion guard as
+    # `mul`. Per §6.6 + §5.5, Boolean→Integer/Decimal is Explicit only.
+    if not (util.is_number(x) and util.is_number(y)) and not (
+        isinstance(x, nodes.FP_Quantity) or isinstance(y, nodes.FP_Quantity)
+    ):
+        raise FHIRPathError("Cannot " + str(x) + " / " + str(y))
     if y == 0:
         return []
-    return x / y
+    # FP-18 HISTORIAN QA-003 (2026-06-30): Per §6.6.2 "The result of a
+    # division is always Decimal, even if the inputs are both Integer".
+    # Decimal division may produce a whole-number Decimal like Decimal('3')
+    # which serializes without a decimal point; force at least one decimal
+    # place per §5.5.8 format (-)?#0.0#.
+    result = x / y
+    if isinstance(result, Decimal) and result == result.to_integral_value():
+        return result.quantize(Decimal("0.1"))
+    return result
 
 
 def intdiv(ctx, x, y):
+    # FP-18 HISTORIAN QA-002 (2026-06-30): Boolean-coercion guard.
+    if not (util.is_number(x) and util.is_number(y)) and not (
+        isinstance(x, nodes.FP_Quantity) or isinstance(y, nodes.FP_Quantity)
+    ):
+        raise FHIRPathError("Cannot " + str(x) + " div " + str(y))
     if y == 0:
         return []
     return int(x / y)
 
 
 def mod(ctx, x, y):
+    # FP-18 HISTORIAN QA-002 (2026-06-30): Boolean-coercion guard.
+    if not (util.is_number(x) and util.is_number(y)) and not (
+        isinstance(x, nodes.FP_Quantity) or isinstance(y, nodes.FP_Quantity)
+    ):
+        raise FHIRPathError("Cannot " + str(x) + " mod " + str(y))
     if y == 0:
         return []
 
@@ -212,6 +256,17 @@ def plus(ctx, xs_, ys_):
 
     if util.is_number(x) and util.is_number(y):
         return _numeric_arithmetic_result(x, y, x + y)
+
+    # FHIRPath §5.5 conversion table: Integer/Decimal → Quantity (unit '1')
+    # is implicit. When one operand is a Quantity and the other is a plain
+    # numeric scalar, convert the scalar to a unit-'1' Quantity and dispatch
+    # to the Quantity ± Quantity path so that mismatched UCUM dimensions
+    # yield empty (per §6.6 "Implementations that do not support complete
+    # UCUM functionality may return empty") rather than a hard type error.
+    if isinstance(x, nodes.FP_Quantity) and util.is_number(y):
+        y = nodes.FP_Quantity(nodes.FP_Quantity._normalize_quantity_value(y), "1")
+    elif isinstance(y, nodes.FP_Quantity) and util.is_number(x):
+        x = nodes.FP_Quantity(nodes.FP_Quantity._normalize_quantity_value(x), "1")
 
     if isinstance(x, nodes.FP_Quantity) and isinstance(y, nodes.FP_Quantity):
         return _quantity_add_or_sub(x, y, 1)
@@ -263,7 +318,16 @@ def exp(ctx, x):
         return []
     if math.isinf(result) or math.isnan(result):
         return []
-    return Decimal(format(result, ".17g"))
+    # FP-11 HISTORIAN (2026-06-28): Return raw float (consistent with
+    # ln/log/sqrt siblings) so the result serializes via Python's
+    # shortest-round-trip `str(float)` rendering, matching the native C++
+    # `normalizeDecimalMathSourceText` precision-15 shortest-round-trip
+    # source_text. Previously this returned `Decimal(format(result, ".17g"))`
+    # which produced 17-sig-digit text and diverged from the §5.7.3 native
+    # rendering on non-trivial results. The numerical value is unchanged;
+    # only the toString shape is normalized across all four §5.7 Decimal-
+    # returning math functions (exp/ln/log/sqrt).
+    return result
 
 
 def floor(ctx, x):
@@ -353,11 +417,112 @@ def rround(ctx, x, acc=None):
     if num2 < 0:
         raise FHIRPathError("round() precision must be >= 0")
 
-    degree = 10 ** Decimal(num2)
+    # FP-11 EXPLORER (2026-06-29): The previous implementation used
+    # `degree = 10 ** Decimal(num2)` then `num * degree` and
+    # `scaled.quantize(Decimal('1'), ...) / degree`. For large precision
+    # values (e.g. 50, 100, INT_MAX), `10 ** Decimal(num2)` overflowed the
+    # default Decimal context, raising InvalidOperation through DuckDB.
+    # Per FHIRPath §5.7.8 round([precision]) accepts any non-negative
+    # Integer precision. The text-based rounding below avoids the
+    # intermediate Decimal power entirely and mirrors the native C++
+    # `roundDecimalSourceText` algorithm:
+    # 1. Decompose num into sign/int-part/frac-part digit strings.
+    # 2. Keep the first `num2` fractional digits.
+    # 3. If the next fractional digit is >= 5, ROUND_HALF_UP carry.
+    # 4. Reassemble as Decimal text and quantize to exactly num2 fractional
+    #    digits.
+    # Cap the effective precision at len(frac_part) since padding beyond
+    # that doesn't change the mathematical value (Decimal('1.5') and
+    # Decimal('1.5000') are mathematically equal; their toString differs
+    # but is preserved by Python's Decimal defaults for normal precision).
+    # This avoids O(precision) memory blow-up for malicious INT_MAX
+    # precision values while still producing the spec-correct rounded
+    # result.
+    sign_str, digits, exp = num.as_tuple()
+    # Build a plain decimal digit string with explicit decimal point.
+    # digits is a tuple of decimal digits; exp is the power of 10.
+    digit_str = ''.join(str(d) for d in digits) if digits else '0'
+    if exp >= 0:
+        int_part = digit_str + ('0' * exp)
+        frac_part = ''
+    else:
+        point_pos = len(digit_str) + exp
+        if point_pos <= 0:
+            int_part = '0'
+            frac_part = ('0' * (-point_pos)) + digit_str
+        else:
+            int_part = digit_str[:point_pos]
+            frac_part = digit_str[point_pos:]
+    int_part = int_part.lstrip('0') or '0'
 
-    # Use ROUND_HALF_UP for spec-compliant rounding
-    scaled = num * degree
-    result = Decimal(scaled.quantize(Decimal('1'), rounding=ROUND_HALF_UP)) / degree
+    # FP-11 EXPLORER (2026-06-29): Cap effective precision at the input's
+    # actual fractional digit count when the requested precision exceeds
+    # it. Padding beyond that doesn't change the mathematical value; only
+    # the toString shape gains trailing zeros. Without this cap, malicious
+    # INT_MAX precision values would materialize multi-gigabyte zero-
+    # padded strings. The cap is bounded by len(frac_part) which is itself
+    # bounded by the input's Decimal precision (typically 28 digits).
+    effective_precision = num2 if num2 <= len(frac_part) else len(frac_part)
+
+    # If the precision is at least the existing fractional digit count,
+    # the number is already rounded. Construct the Decimal from the input
+    # digits directly, stripping trailing zeros to match native
+    # normalizeRoundedDecimalText per §5.5.8 (-)?#0.0# (trailing zeros
+    # optional). Decimal('0.10').round(2) -> Decimal('0.1') to match
+    # native '0.1'.
+    if effective_precision >= len(frac_part):
+        rounded_int = int_part
+        rounded_frac = frac_part.rstrip('0')
+        if not rounded_frac:
+            rounded_frac = '0'
+        negative = sign_str != 0
+        is_zero = rounded_int == '0' and all(c == '0' for c in rounded_frac)
+        sign_prefix = '-' if negative and not is_zero else ''
+        result_text = sign_prefix + rounded_int + '.' + rounded_frac
+        result = Decimal(result_text)
+        if quantity is not None:
+            return nodes.FP_Quantity(result, quantity.unit)
+        return result
+
+    # Truncate to effective_precision fractional digits, then ROUND_HALF_UP.
+    kept_frac = frac_part[:effective_precision]
+    next_digit = frac_part[effective_precision]
+    combined = int_part + kept_frac
+    if not combined:
+        combined = '0'
+    digit_list = list(combined)
+    if next_digit >= '5':
+        i = len(digit_list) - 1
+        carry = True
+        while i >= 0 and carry:
+            if digit_list[i] == '9':
+                digit_list[i] = '0'
+                i -= 1
+            else:
+                digit_list[i] = chr(ord(digit_list[i]) + 1)
+                carry = False
+        if carry:
+            digit_list.insert(0, '1')
+    rounded_digits = ''.join(digit_list)
+    # Split back into int/frac parts of correct length.
+    int_len = len(int_part)
+    if len(rounded_digits) > int_len + effective_precision:
+        int_len = len(rounded_digits) - effective_precision
+    rounded_int = rounded_digits[:int_len] or '0'
+    rounded_frac = rounded_digits[int_len:]
+    # Pad to effective_precision digits, then strip trailing zeros to match
+    # native normalizeRoundedDecimalText per §5.5.8 (-)?#0.0# (trailing
+    # zeros optional). If everything strips, use '0' to preserve a Decimal
+    # fractional digit per spec.
+    rounded_frac = rounded_frac + ('0' * (effective_precision - len(rounded_frac)))
+    rounded_frac = rounded_frac.rstrip('0')
+    if not rounded_frac:
+        rounded_frac = '0'
+    rounded_int = rounded_int.lstrip('0') or '0'
+    negative = sign_str != 0
+    is_zero = rounded_int == '0' and all(c == '0' for c in rounded_frac)
+    result_text = ('-' if negative and not is_zero else '') + rounded_int + '.' + rounded_frac
+    result = Decimal(result_text)
     if quantity is not None:
         return nodes.FP_Quantity(result, quantity.unit)
     return result

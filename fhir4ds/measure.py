@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import duckdb
+    from fhir4ds.cql.terminology.endpoint import TerminologyEndpoint
 
 
 def evaluate_measure(
@@ -18,6 +19,8 @@ def evaluate_measure(
     output_columns: dict[str, str] | None = None,
     parameters: dict[str, Any] | None = None,
     audit_mode: str = "none",
+    terminology_endpoint: "TerminologyEndpoint | None" = None,
+    closure_loaded: bool = False,
     **kwargs: Any,
 ) -> Any:
     """
@@ -38,6 +41,14 @@ def evaluate_measure(
         Controls audit granularity: ``"none"`` (default), ``"population"``
         (lightweight evidence from retrieve CTEs), or ``"full"`` (expression-
         level wrapping for maximum evidence detail).
+    terminology_endpoint : TerminologyEndpoint, optional
+        Phase 1 medterm4ds terminology endpoint for ValueSet expansion
+        fallback. ``None`` (the default) preserves local-only resolution.
+    closure_loaded : bool, optional
+        Phase 3 medterm4ds subsumption flag. When ``True``, generated SQL
+        routes ``~``, ``is`` and ``Descendents`` through the
+        ``terminology_closure`` table (which the caller must have loaded).
+        Default ``False`` preserves byte-identical SQL output.
     **kwargs
         Additional keyword arguments passed through to the underlying evaluator
         (e.g. ``verbose``, ``patient_ids``, ``include_paths``).
@@ -62,6 +73,8 @@ def evaluate_measure(
         "conn": conn,
         "parameters": parameters or {},
         "audit_mode": audit_mode,
+        "terminology_endpoint": terminology_endpoint,
+        "closure_loaded": closure_loaded,
     }
     # Preserve None semantics: None means "all definitions"
     if output_columns is not None:

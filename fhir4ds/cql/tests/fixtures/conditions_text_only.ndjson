@@ -1,0 +1,10 @@
+{"resourceType":"Condition","id":"cond-text-01","subject":{"reference":"Patient/p1"},"code":{"text":"Type 2 Diabetes Mellitus"}}
+{"resourceType":"Condition","id":"cond-text-02","subject":{"reference":"Patient/p2"},"code":{"text":"Essential Hypertension"}}
+{"resourceType":"Condition","id":"cond-text-03","subject":{"reference":"Patient/p3"},"code":{"text":"Atrial Fibrillation"}}
+{"resourceType":"Condition","id":"cond-mixed-01","subject":{"reference":"Patient/p4"},"code":{"text":"Asthma","coding":[{"system":"http://snomed.info/sct","code":"195967001","display":"Asthma (disorder)"}]}}
+{"resourceType":"Condition","id":"cond-mixed-02","subject":{"reference":"Patient/p5"},"code":{"text":"Migraine","coding":[{"system":"http://snomed.info/sct","code":"37796009"}]}}
+{"resourceType":"Condition","id":"cond-coded-01","subject":{"reference":"Patient/p6"},"code":{"coding":[{"system":"http://snomed.info/sct","code":"73211009","display":"Diabetes mellitus"}]}}
+{"resourceType":"Condition","id":"cond-coded-02","subject":{"reference":"Patient/p7"},"code":{"coding":[{"system":"http://hl7.org/fhir/sid/icd-10-cm","code":"I10"}]}}
+{"resourceType":"Condition","id":"cond-empty-01","subject":{"reference":"Patient/p8"},"code":{"text":""}}
+{"resourceType":"Condition","id":"cond-dup-01","subject":{"reference":"Patient/p9"},"code":{"text":"Type 2 Diabetes Mellitus"}}
+{"resourceType":"Patient","id":"p1","name":[{"family":"Doe","given":["Jane"]}]}

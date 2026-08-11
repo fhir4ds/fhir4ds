@@ -1,0 +1,26 @@
+{
+  "transactionTime": "2026-08-10T12:53:44Z",
+  "request": "/publishers/fairview/$bulk-publish",
+  "output": [
+    {
+      "type": "Location",
+      "url": "/publishers/fairview/output/Location.ndjson"
+    },
+    {
+      "type": "HealthcareService",
+      "url": "/publishers/fairview/output/HealthcareService.ndjson"
+    },
+    {
+      "type": "Practitioner",
+      "url": "/publishers/fairview/output/Practitioner.ndjson"
+    },
+    {
+      "type": "Schedule",
+      "url": "/publishers/fairview/output/Schedule.ndjson"
+    },
+    {
+      "type": "Slot",
+      "url": "/publishers/fairview/output/Slot.ndjson"
+    }
+  ]
+}

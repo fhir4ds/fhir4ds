@@ -257,6 +257,20 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "_cql_except_items "
         "WHERE NOT CQLListContainsEq(right_lst, _cql_except_item)), left_lst[1:0]) END"
     )
+    # Temporal-aware variant: same shape as CQLListExceptEq but uses the
+    # temporal contains variant so same-instant DateTimes with different
+    # timezones are recognized as set-equal (CQL §Except uses equality
+    # semantics, and §Equal (DateTime) compares by normalized instant).
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListExceptTemporalEq(left_lst, right_lst) AS "
+        "CASE WHEN left_lst IS NULL THEN NULL "
+        "WHEN right_lst IS NULL THEN CQLListDistinctEq(left_lst) "
+        "ELSE COALESCE((SELECT list(_cql_except_item ORDER BY _cql_except_pos) "
+        "FROM (SELECT unnest(CQLListDistinctEq(left_lst)) AS _cql_except_item, "
+        "generate_subscripts(CQLListDistinctEq(left_lst), 1) AS _cql_except_pos) "
+        "_cql_except_items "
+        "WHERE NOT CQLListContainsTemporalEq(right_lst, _cql_except_item)), left_lst[1:0]) END"
+    )
     con.execute(
         "CREATE OR REPLACE MACRO CQLListIntersectEq(left_lst, right_lst) AS "
         "CASE WHEN left_lst IS NULL OR right_lst IS NULL THEN NULL "
@@ -265,6 +279,19 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "generate_subscripts(CQLListDistinctEq(left_lst), 1) AS _cql_intersect_pos) "
         "_cql_intersect_items "
         "WHERE CQLListContainsEq(right_lst, _cql_intersect_item)), left_lst[1:0]) END"
+    )
+    # Temporal-aware variant: same shape as CQLListIntersectEq but uses the
+    # temporal contains variant so same-instant DateTimes with different
+    # timezones are recognized as common (CQL §Intersect uses equality
+    # semantics, and §Equal (DateTime) compares by normalized instant).
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListIntersectTemporalEq(left_lst, right_lst) AS "
+        "CASE WHEN left_lst IS NULL OR right_lst IS NULL THEN NULL "
+        "ELSE COALESCE((SELECT list(_cql_intersect_item ORDER BY _cql_intersect_pos) "
+        "FROM (SELECT unnest(CQLListDistinctEq(left_lst)) AS _cql_intersect_item, "
+        "generate_subscripts(CQLListDistinctEq(left_lst), 1) AS _cql_intersect_pos) "
+        "_cql_intersect_items "
+        "WHERE CQLListContainsTemporalEq(right_lst, _cql_intersect_item)), left_lst[1:0]) END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO CQLListHasAllEq(left_lst, right_lst) AS "
@@ -435,6 +462,28 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "WHERE CQLListElementEqual(_cql_index_item, elem) IS NULL) THEN NULL "
         "ELSE -1 END"
     )
+    # Temporal-aware variant: same shape as CQLIndexOf but uses
+    # CQLListTemporalElementEqual so DateTimes with different timezone
+    # offsets are compared by normalized instant, and precision-mismatched
+    # DateTimes correctly yield NULL (uncertain equality) rather than -1.
+    # CQL §IndexOf uses equality semantics.
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLIndexOfTemporal(lst, elem) AS "
+        "CASE WHEN lst IS NULL OR elem IS NULL THEN NULL "
+        "WHEN EXISTS (SELECT 1 "
+        "FROM (SELECT unnest(lst) AS _cql_index_item, "
+        "generate_subscripts(lst, 1) AS _cql_index_pos) _cql_index_items "
+        "WHERE CQLListTemporalElementEqual(_cql_index_item, elem) IS TRUE) "
+        "THEN (SELECT MIN(_cql_index_pos) - 1 "
+        "FROM (SELECT unnest(lst) AS _cql_index_item, "
+        "generate_subscripts(lst, 1) AS _cql_index_pos) _cql_index_items "
+        "WHERE CQLListTemporalElementEqual(_cql_index_item, elem) IS TRUE) "
+        "WHEN EXISTS (SELECT 1 "
+        "FROM (SELECT unnest(lst) AS _cql_index_item, "
+        "generate_subscripts(lst, 1) AS _cql_index_pos) _cql_index_items "
+        "WHERE CQLListTemporalElementEqual(_cql_index_item, elem) IS NULL) THEN NULL "
+        "ELSE -1 END"
+    )
 
     # ============================================
     # Combine - CQL §20.4: concatenate a list of strings into one string
@@ -521,8 +570,18 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
 
     # ============================================
     # Descendents - CQL §20.4: returns null for null input
-    # Full implementation would recursively collect all child properties;
-    # for null input, result is null.
+    #
+    # Phase 3 (medterm4ds subsumption) status:
+    #   This identity macro is preserved UNCHANGED so that conformance tests
+    #   that exercise ``descendents`` without a populated closure table
+    #   continue to pass byte-for-byte (INV-1: zero regression). When a
+    #   caller runs ``build_closure_table(...)`` and sets
+    #   ``closure_table_loaded=True`` on the translation context, the
+    #   translator intercepts ``Descendents(Code)`` in
+    #   ``_translate_function_ref`` and emits a SQL list pulled from the
+    #   ``terminology_closure`` table — this macro is NOT consulted in that
+    #   path. The macro continues to handle the structural-traversal form
+    #   ``(null).descendents()`` for null input.
     # ============================================
     con.execute(
         "CREATE MACRO IF NOT EXISTS descendents(x) AS "

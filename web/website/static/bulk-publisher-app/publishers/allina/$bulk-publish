@@ -1,0 +1,30 @@
+{
+  "transactionTime": "2026-08-10T12:53:44Z",
+  "request": "/publishers/allina/$bulk-publish",
+  "output": [
+    {
+      "type": "Location",
+      "url": "/publishers/allina/output/Location.ndjson"
+    },
+    {
+      "type": "HealthcareService",
+      "url": "/publishers/allina/output/HealthcareService.ndjson"
+    },
+    {
+      "type": "Practitioner",
+      "url": "/publishers/allina/output/Practitioner.ndjson"
+    },
+    {
+      "type": "PractitionerRole",
+      "url": "/publishers/allina/output/PractitionerRole.ndjson"
+    },
+    {
+      "type": "Schedule",
+      "url": "/publishers/allina/output/Schedule.ndjson"
+    },
+    {
+      "type": "Slot",
+      "url": "/publishers/allina/output/Slot.ndjson"
+    }
+  ]
+}

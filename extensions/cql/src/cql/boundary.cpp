@@ -877,6 +877,12 @@ Optional<int64_t> cql_precision(const std::string &value) {
 Optional<double> cql_timezone_offset(const std::string &value) {
 	if (value.empty()) return NullOpt<double>();
 
+	// CQL §DateTime ISO-8601 representation: Z is the UTC designator
+	// (equivalent to +00:00). Return 0.0 for Z-suffixed values.
+	if (value[value.size() - 1] == 'Z') {
+		return Optional<double>(0.0);
+	}
+
 	// Search for +HH:MM or -HH:MM at end
 	for (int i = static_cast<int>(value.size()) - 1; i >= 0; i--) {
 		if (value[i] == '+' || value[i] == '-') {

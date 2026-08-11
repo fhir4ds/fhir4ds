@@ -12,9 +12,9 @@ _logger = logging.getLogger(__name__)
 # This file holds code to hande the FHIRPath Existence functions (5.1 in the
 # specification).
 
-intRegex = re.compile(r"^[+-]?\d+$")
-numRegex = re.compile(r"^[+-]?\d+(\.\d+)?$")
-longDecimalStringRegex = re.compile(r"^[+-]?\d+L$")
+intRegex = re.compile(r"^[+-]?[0-9]+$")
+numRegex = re.compile(r"^[+-]?[0-9]+(\.[0-9]+)?$")
+longDecimalStringRegex = re.compile(r"^[+-]?[0-9]+L$")
 
 
 def _read_digits(value, pos, min_len, max_len):
@@ -371,7 +371,17 @@ def to_integer(ctx, coll):
     return []
 
 
-quantity_regex = re.compile(r"^((\+|-)?\d+(\.\d+)?)\s*(('[^']+')|([a-zA-Z]+))?$")
+# FP-08 EXPLORER (2026-06-28): use explicit ASCII `[0-9]` rather than `\d`
+# because Python's `re` module treats `\d` as Unicode-aware (matching
+# full-width U+FF10-U+FF19, Arabic-Indic U+0660-U+0669, Devanagari
+# U+0966-U+096F, etc.), while the FHIRPath ANTLR grammar DIGIT fragment is
+# the ASCII-only `[0-9]`. Native C++ `fn_toQuantity` uses
+# `std::isdigit((unsigned char)...)` (ASCII-only) and rejects these inputs,
+# producing a silent native↔fallback asymmetry. Same Python-re-Unicode
+# trap as FP-07 EXPLORER (numRegex/intRegex/longDecimalStringRegex) — the
+# `quantity_regex` was the explicitly-noted out-of-scope sibling that
+# §5.5.7 now owns.
+quantity_regex = re.compile(r"^((\+|-)?[0-9]+(\.[0-9]+)?)\s*(('[^']+')|([a-zA-Z]+))?$")
 quantity_regex_map = {"value": 1, "unit": 5, "time": 6}
 
 
@@ -408,15 +418,21 @@ def to_quantity(ctx, coll, to_unit=None):
                     result = nodes.FP_Quantity(Decimal(value), unit or "'1'")
                 elif nodes.FP_Quantity.timeUnitsToUCUM.get(time) and len(time) > 2:
                     result = nodes.FP_Quantity(Decimal(value), time)
-                elif nodes.FP_Quantity.timeUnitsToUCUM.get(time.lower()) and len(time) > 2:
-                    result = nodes.FP_Quantity(Decimal(value), time.lower())
-                elif time and time.lower() not in {
-                    unit.strip("'") for unit in nodes.FP_Quantity.mapUCUMCodeToTimeUnits
-                } and not (
-                    nodes.FP_Quantity.timeUnitsToUCUM.get(time)
-                    or nodes.FP_Quantity.timeUnitsToUCUM.get(time.lower())
-                ):
-                    result = nodes.FP_Quantity(Decimal(value), f"'{time}'")
+                # FP-08 EXPLORER (2026-06-28): the prior
+                # `elif nodes.FP_Quantity.timeUnitsToUCUM.get(time.lower())`
+                # branch was removed because FHIRPath is case-sensitive (§8.7)
+                # and §8.5 defines calendar duration keywords as lowercase
+                # only (`year`/`years`/`month`/`months`/...). Uppercase or
+                # mixed-case variants like `'1 YEAR'`, `'1 Year'`,
+                # `'1 YEARS'`, `'1 DAYS'` must be rejected to match native
+                # C++ `isBareDurationKeyword` (evaluator.cpp:1869-1875) which
+                # already does case-sensitive lookup.
+                # FHIRPath §5.5.7: the `time` regex group `[a-zA-Z]+` is for
+                # calendar duration keywords only (per spec examples
+                # `'4 days'`, `'10 \\'mg[Hg]\\''`). Bare UCUM codes must be
+                # single-quoted via the `unit` group. Any unmatched alpha
+                # sequence (e.g. '0xFF', '4 abc') must be rejected to match
+                # native C++ behavior.
 
         if result and to_unit and result.unit != to_unit:
             converted = nodes.FP_Quantity.conv_unit_to(result.unit, result.value, to_unit)
@@ -534,10 +550,18 @@ def to_time(ctx, coll):
     if ln == 1:
         value = util.get_data(coll[0])
 
-        timeObject = nodes.FP_Time(value)
+        # FHIRPath §5.5.9 toTime(): "If the input collection contains a single
+        # item, this function will return a single time if: the item is a Time
+        # [or] the item is a String and is convertible to a Time." An FP_Time
+        # input must passthrough unchanged; only String inputs go through the
+        # FP_Time(string) constructor.
+        if isinstance(value, nodes.FP_Time):
+            rtn.append(value)
+        else:
+            timeObject = nodes.FP_Time(value)
 
-        if timeObject:
-            rtn.append(timeObject)
+            if timeObject:
+                rtn.append(timeObject)
 
     return util.get_data(rtn[0]) if rtn else []
 

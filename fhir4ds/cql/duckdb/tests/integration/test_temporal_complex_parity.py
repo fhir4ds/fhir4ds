@@ -272,3 +272,358 @@ def test_temporal_constructors_reject_non_integer_expression_components() -> Non
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_temporal_equivalence_normalizes_timezone_per_spec() -> None:
+    """CQL §Equivalent (Date, DateTime, Time): the comparison is performed
+    in the same way as it is for equality, except that precision-mismatch
+    returns false (rather than null). For DateTimes with different timezone
+    offsets but the same instant, the equivalence must be True (same as =).
+
+    Regression: previously the ~ operator used raw VARCHAR string comparison
+    and did not normalize timezone offsets, so
+    @2024-01-01T10:00:00+00:00 ~ @2024-01-01T12:00:00+02:00 returned False
+    while = returned True.
+    """
+    cases = {
+        # Same instant, different TZ offsets: ~ must match = (True)
+        "@2024-01-01T10:00:00+00:00 ~ @2024-01-01T12:00:00+02:00": True,
+        "@2024-01-01T10:00:00+00:00 !~ @2024-01-01T12:00:00+02:00": False,
+        # Different instants: False
+        "@2024-01-01T10:00:00+00:00 ~ @2024-01-01T10:00:00+05:00": False,
+        # Same literal form: True
+        "@2024-01-01T10:00:00+00:00 ~ @2024-01-01T10:00:00+00:00": True,
+        # Precision-mismatch equivalence: False (not NULL) per spec
+        "@2014 ~ @2014-01": False,
+        "@2012-01-01 ~ @2012-01-01T12": False,
+        # Same precision: True
+        "@2014-01-15 ~ @2014-01-15": True,
+        "@2014-01-15 ~ @2014-01-16": False,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in cases.items():
+            sql = _translated_definition_sql(expression)
+            assert py.execute(sql).fetchone() == (expected,), expression
+            assert cpp.execute(sql).fetchone() == (expected,), expression
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_negative_ratio_literal_propagates_sign_into_numerator() -> None:
+    """CQL §Types/Ratio + §ToString RatioOverload example uses a negative-
+    numerator Ratio literal: `-0.1 'mg':0.1 'mg'`. Previously the parser
+    consumed the leading `-` as a unary negation of the WHOLE Ratio (which
+    has no negation operator), causing a DuckDB Binder Error. After the
+    fix, the sign is propagated into the numerator.
+
+    Regression: parse_expression("-0.1 'mg':0.1 'mg'") previously returned
+    UnaryExpression('-', FunctionRef("ToRatio", [Literal("0.1 'mg':0.1 'mg'")]));
+    now returns FunctionRef("ToRatio", [Literal("-0.1 'mg':0.1 'mg'")]).
+    """
+    from fhir4ds.cql.parser import parse_expression
+    from fhir4ds.cql.parser.ast_nodes import FunctionRef, UnaryExpression
+
+    # Decimal Quantity with units, negative numerator
+    ast = parse_expression("-0.1 'mg':0.1 'mg'")
+    assert isinstance(ast, FunctionRef), type(ast).__name__
+    assert ast.name == "ToRatio"
+    assert len(ast.arguments) == 1
+    literal = ast.arguments[0]
+    assert literal.value == "-0.1 'mg':0.1 'mg'", literal.value
+
+    # Integer Ratio, negative numerator
+    ast2 = parse_expression("-5:5")
+    assert isinstance(ast2, FunctionRef), type(ast2).__name__
+    assert ast2.arguments[0].value == "-5 '1':5 '1'", ast2.arguments[0].value
+
+    # Regression: positive Ratio literal must still parse correctly
+    ast3 = parse_expression("1:8")
+    assert isinstance(ast3, FunctionRef)
+    assert ast3.arguments[0].value == "1 '1':8 '1'", ast3.arguments[0].value
+
+    # Regression: standalone negative Quantity uses UnaryExpression path
+    ast4 = parse_expression("-5 'mg'")
+    assert isinstance(ast4, UnaryExpression)
+    assert ast4.operator == "-"
+
+    # Regression: standalone negative Integer
+    ast5 = parse_expression("-5")
+    assert isinstance(ast5, UnaryExpression)
+    assert ast5.operator == "-"
+
+    # End-to-end execution: negative Ratio runs without Binder Error
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        sql = _translated_definition_sql("-0.1 'mg':0.1 'mg'")
+        py_result = json.loads(py.execute(sql).fetchone()[0])
+        cpp_result = json.loads(cpp.execute(sql).fetchone()[0])
+        assert py_result == cpp_result
+        assert py_result["numerator"]["value"] == -0.1
+        assert py_result["denominator"]["value"] == 0.1
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_quantity_json_value_is_always_decimal_per_spec() -> None:
+    """CQL §Types/Quantity: structured type Quantity { value Decimal,
+    unit String }. Integer-valued Quantity literals must serialize `value`
+    as Decimal/float on BOTH backends, never as Integer. Without this the
+    Python fallback diverges from the native C++ UDF for literals like
+    `5 'mg'` or `1 year` (Python emits `"value":5`, native emits
+    `"value":5.0`).
+    """
+    cases = [
+        "5 'mg'",
+        "1 year",
+        "10 'cm'",
+        "1 'wk'",
+        "12 months",
+        "1 day",
+        "1 hour",
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression in cases:
+            sql = _translated_definition_sql(expression)
+            py_result = json.loads(py.execute(sql).fetchone()[0])
+            cpp_result = json.loads(cpp.execute(sql).fetchone()[0])
+            # `value` must be float on both backends
+            assert isinstance(py_result["value"], float), (expression, py_result)
+            assert isinstance(cpp_result["value"], float), (expression, cpp_result)
+            # Cross-backend parity
+            assert py_result == cpp_result, (expression, py_result, cpp_result)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_quantity_compound_unit_arithmetic_reduces_per_spec() -> None:
+    """CQL §Divide: "12 'cm2' / 3 'cm' ... the result will have a unit of
+    'cm'". CQL §Multiply: "12 'cm' * 3 'cm' -> cm2". Native C++ UDFs must
+    reduce compound units via exponent arithmetic, matching the Python
+    fallback (which uses a UCUM library).
+
+    Regression: previously the native C++ backend emitted raw `cm2/cm`,
+    `meter * meter`, `m3/m2`, etc. for compound-unit arithmetic, while the
+    Python fallback correctly reduced to canonical UCUM forms.
+    """
+    cases = [
+        # (expression, expected_unit_substring)
+        ("12 'cm2' / 3 'cm'", '"unit":"cm"'),
+        ("10 'm' * 2 'm'", '"unit":"m2"'),
+        ("6 'm3' / 2 'm2'", '"unit":"m"'),
+        ("6 'm3' / 2 'm'", '"unit":"m2"'),
+        ("5 'cm' * 3 'cm'", '"unit":"cm2"'),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected_unit_substring in cases:
+            sql = _translated_definition_sql(expression)
+            py_result = py.execute(sql).fetchone()[0]
+            cpp_result = cpp.execute(sql).fetchone()[0]
+            assert expected_unit_substring in py_result, (expression, py_result)
+            assert expected_unit_substring in cpp_result, (expression, cpp_result)
+            # Cross-backend parity
+            assert py_result == cpp_result, (expression, py_result, cpp_result)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_temporal_arithmetic_boundary_overflow_remains_invalid_per_official_conformance() -> None:
+    """CQL official conformance suite (CqlDateTimeOperatorsTest.xml)
+    declares `DateTime(2005, 10, 10) + 8000 years` and
+    `DateTime(2005, 10, 10) - 2005 years` as `invalid="true"` — the
+    expected behavior is a translation/evaluation error, not SQL NULL.
+
+    This confirms CQL-11 SKEPTIC AGENTS.md note: "translated static
+    temporal boundary underflow/overflow remains invalid for official
+    CQL conformance." Although CQL §Add prose says "If the result cannot
+    be represented, the result is null", the official test suite marks
+    such cases as invalid expressions.
+
+    CQL-03 EXPLORER QA-003 initially proposed returning NULL for runtime
+    boundary overflow, but verification against the official suite showed
+    this regresses DateTimeAddInvalidYears / DateTimeSubtractInvalidYears.
+    The current behavior (Python ValueError that surfaces as a DuckDB
+    InvalidInputException) is therefore INTENDED — it preserves official
+    conformance. Both surfaces (cpp and py) raise consistently.
+
+    Regression: ensure non-overflow arithmetic still works on both surfaces.
+    """
+    sane_cases = [
+        ("@2024-01-15 + 1 year", "2025-01-15"),
+        ("@2024-01-15 + 1 month", "2024-02-15"),
+        ("@9999-12-31 + 0 years", "9999-12-31"),  # zero delta OK
+        ("@0001-01-01 - 0 days", "0001-01-01"),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected_prefix in sane_cases:
+            sql = _translated_definition_sql(expression)
+            py_result = py.execute(sql).fetchone()[0]
+            cpp_result = cpp.execute(sql).fetchone()[0]
+            assert py_result is not None and py_result.startswith(expected_prefix), (
+                expression,
+                py_result,
+            )
+            assert cpp_result is not None and cpp_result.startswith(expected_prefix), (
+                expression,
+                cpp_result,
+            )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_ratio_literal_with_negative_denominator_parses_per_spec() -> None:
+    """CQL §Types/Ratio: both numerator and denominator are Quantity
+    components, and Quantity values are signed Decimals. Negative
+    denominators are valid.
+
+    Regression coverage for CQL-03 EXPLORER QA-002: the parser previously
+    raised `ParseError: Unexpected literal type: TokenType.MINUS` for
+    Ratio literals with a negative denominator like `1:-8` or
+    `1 'mg':-8 'mg'`. The HISTORIAN CQL-03 fix only handled leading-minus
+    numerators (`-1:8`); negative denominators (MINUS appearing after
+    COLON) fell through. Both surfaces must produce identical Ratio JSON
+    including the negative denominator value.
+    """
+    cases = [
+        ("1:-8", -8),
+        ("-1:-8", -8),
+        ("1 'mg':-8 'mg'", -8),
+        ("5:-0", 0),  # negative zero denominator
+        ("-0:-0", 0),
+        ("-1.5 'mg':-2.5 'mg'", -2.5),
+        ("1:+8", 8),  # explicit plus
+        ("1:8", 8),  # positive control
+        ("-1:8", 8),  # negative numerator (HISTORIAN-covered)
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected_denominator_value in cases:
+            sql = _translated_definition_sql(expression)
+            py_result = json.loads(py.execute(sql).fetchone()[0])
+            cpp_result = json.loads(cpp.execute(sql).fetchone()[0])
+            assert py_result["denominator"]["value"] == expected_denominator_value, (
+                expression,
+                py_result,
+            )
+            assert cpp_result["denominator"]["value"] == expected_denominator_value, (
+                expression,
+                cpp_result,
+            )
+            assert py_result == cpp_result, (expression, py_result, cpp_result)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_cross_unit_temperature_comparison_returns_correct_boolean_per_spec() -> None:
+    """CQL §Equal (Quantity): "comparison is performed in the same way as
+    for equality, except that ... the values are compared after converting
+    to a common unit." Cross-unit temperature comparison (Cel vs [degF])
+    requires non-linear conversion (degF = degC * 9/5 + 32) which pint
+    refuses with "Ambiguous operation with offset unit".
+
+    Regression coverage for CQL-03 EXPLORER QA-001: the Python fallback
+    previously returned None for cross-unit temperature comparisons
+    because pint's offset-unit conversion fails. The native C++ UDF
+    handles the conversion internally. Both backends must return correct
+    True/False for canonical temperatures (0degC = 32degF, 100degC =
+    212degF).
+
+    NOTE: native C++ has a known binary64 precision limitation for
+    non-canonical temperatures (e.g., 1degC = 33.8degF may return False
+    due to floating-point rounding in the single-step Cel conversion).
+    This test focuses on canonical temperatures that round cleanly.
+    """
+    canonical_cases = [
+        ("0 'Cel' = 32 '[degF]'", True),
+        ("100 'Cel' = 212 '[degF]'", True),
+        ("37 'Cel' = 98.6 '[degF]'", True),
+        ("0 'Cel' ~ 32 '[degF]'", True),
+        ("100 'Cel' ~ 212 '[degF]'", True),
+        ("32 '[degF]' = 0 'Cel'", True),
+        ("212 '[degF]' = 100 'Cel'", True),
+        ("1 'Cel' = 1 'Cel'", True),
+        ("1 'Cel' = 2 'Cel'", False),
+        ("1 'Cel' < 2 'Cel'", True),
+        ("1 'Cel' > 2 'Cel'", False),
+        ("1 'Cel' = 1 'mg'", None),  # incompatible units
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in canonical_cases:
+            sql = _translated_definition_sql(expression)
+            py_result = py.execute(sql).fetchone()[0]
+            cpp_result = cpp.execute(sql).fetchone()[0]
+            assert py_result == expected, (expression, "py", py_result, "expected", expected)
+            assert cpp_result == expected, (expression, "cpp", cpp_result, "expected", expected)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_cross_unit_cel_kelvin_comparison_returns_correct_boolean_per_spec() -> None:
+    """CQL §Equal/§Equivalent (Quantity): cross-unit temperature comparison
+    Cel<->K (Kelvin) requires non-linear affine conversion (K = Cel + 273.15).
+
+    Regression coverage for CQL-09 EXPLORER QA-002: the native C++ UCUM
+    table previously did not include `K`, so Cel<->K cross-unit comparisons
+    returned None (incompatible units) while the Python fallback (pint +
+    `_compare_offset_temperature`) explicitly handled Cel<->K via Kelvin
+    affine conversion. Parity drift on 3 canonical cases. Fix: added `K`
+    entry to `extensions/cql/src/include/shared/ucum_units.hpp` and
+    extended `to_base`/`from_base` in `extensions/cql/src/cql/quantity.cpp`
+    with the affine Kelvin<->Celsius conversion (matching the existing
+    Cel<->degF handling).
+
+    NOTE: same binary64 precision limitation as Cel<->degF - non-canonical
+    temperatures (e.g., 1 'Cel' = 274.15 'K' may return False due to
+    floating-point rounding). This test focuses on canonical temperatures
+    that round cleanly.
+    """
+    canonical_cases = [
+        ("0 'Cel' = 273.15 'K'", True),
+        ("0 'Cel' ~ 273.15 'K'", True),
+        ("273.15 'K' = 0 'Cel'", True),
+        ("100 'Cel' = 373.15 'K'", True),
+        ("0 'Cel' between 272 'K' and 274 'K'", True),
+        ("0 'Cel' > 272 'K'", True),
+        ("0 'Cel' < 274 'K'", True),
+        ("0 'Cel' = 272 'K'", False),
+        ("1 'K' = 1 'K'", True),  # same-unit short-circuit
+        ("1 'K' > 0 'K'", True),
+        ("1 'K' = 1 'mg'", None),  # genuinely incompatible units
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in canonical_cases:
+            sql = _translated_definition_sql(expression)
+            py_result = py.execute(sql).fetchone()[0]
+            cpp_result = cpp.execute(sql).fetchone()[0]
+            assert py_result == expected, (expression, "py", py_result, "expected", expected)
+            assert cpp_result == expected, (expression, "cpp", cpp_result, "expected", expected)
+    finally:
+        py.close()
+        cpp.close()

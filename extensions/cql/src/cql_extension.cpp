@@ -1169,8 +1169,12 @@ static void IntervalContainsFunc(DataChunk &args, ExpressionState &state, Vector
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
 		auto b_idx = b_data.sel->get_index(i);
+		// CQL §19.3 Contains: "If the first argument is null, the result
+		// is false. If the second argument is null, the result is null."
+		// Null first arg short-circuits to false BEFORE null second arg
+		// short-circuits to null.
 		if (!a_data.validity.RowIsValid(a_idx)) {
-			result_mask.SetInvalid(i);
+			result_data[i] = false;
 			continue;
 		}
 		if (!b_data.validity.RowIsValid(b_idx)) {
@@ -1455,7 +1459,12 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalEqualsFunc, {
 		result_mask.SetInvalid(i);
 		continue;
 	}
-	result_data[i] = (*iv1 == *iv2);
+	auto eq = iv1->equals_nullable(*iv2);
+	if (!eq.has_value()) {
+		result_mask.SetInvalid(i);
+		continue;
+	}
+	result_data[i] = eq.value();
 })
 
 static void IntervalEquivalentFunc(DataChunk &args, ExpressionState &state, Vector &result) {
@@ -1478,7 +1487,14 @@ static void IntervalEquivalentFunc(DataChunk &args, ExpressionState &state, Vect
 		}
 		auto iv1 = cql::Interval::parse(a_vals[a_idx].GetString());
 		auto iv2 = cql::Interval::parse(b_vals[b_idx].GetString());
-		result_data[i] = (iv1 && iv2) ? (*iv1 == *iv2) : false;
+		if (!iv1 || !iv2) {
+			result_data[i] = false;
+			continue;
+		}
+		// Per CQL §Equivalent: always returns true or false (never null).
+		// Uncertain precision → False.
+		auto eq = iv1->equals_nullable(*iv2);
+		result_data[i] = eq.has_value() ? eq.value() : false;
 	}
 }
 
@@ -1848,6 +1864,14 @@ static void IntervalFromBoundsFunc(DataChunk &args, ExpressionState &state, Vect
 DEFINE_ONE_STR_STR_UDF(IntervalSizeFunc, {
 	auto iv = cql::Interval::parse(a_str);
 	if (!iv || !iv->low || !iv->high) { result_mask.SetInvalid(i); continue; }
+	// CQL-17 HISTORIAN QA-001: Size is not defined for Date/Time/DateTime
+	// intervals per CQL v1.5.3 §19.18 (cross-references §19.25 Width).
+	// Raise to match Python-fallback behavior and preserve backend parity
+	// (GLOBAL_RULES.md mandates identical semantic results across backends).
+	if (iv->bound_type == cql::BoundType::DateTime || iv->bound_type == cql::BoundType::Time) {
+		throw InvalidInputException("The Size operator is not defined for date/time intervals. "
+		                            "Use 'duration in' instead (CQL §19.18).");
+	}
 	auto size = iv->size_string();
 	if (!size) { result_mask.SetInvalid(i); continue; }
 	result_data[i] = StringVector::AddString(result, *size);
@@ -2038,8 +2062,17 @@ static cql::Optional<double> QuantityValueInUnit(const std::string &quantity_jso
 }
 
 static cql::Optional<std::string> FormatExpandQuantity(double value, const std::string &unit) {
+	// CQL §9 Decimal: "CQL supports positive and negative decimal values with
+	// a precision of 28 and a scale of 8." Round to 8 decimal places to remove
+	// IEEE 754 floating-point drift accumulated during quantity expand
+	// (e.g., 1 + 3999*0.001 = 4.9990000000000006 should format as 4.999).
+	// This mirrors the Python fallback's Decimal-based accumulation.
+	double rounded = std::round(value * 1e8) / 1e8;
+	if (rounded == 0.0) {
+		rounded = 0.0;  // normalize -0.0 to 0.0
+	}
 	cql::ParsedQuantity quantity;
-	quantity.value = value;
+	quantity.value = rounded;
 	quantity.code = unit;
 	quantity.system = "http://unitsofmeasure.org";
 	quantity.precision = 8;
@@ -2077,14 +2110,26 @@ ExpandQuantityInterval(const cql::Interval &iv, const ExpandStep &step) {
 	if (end + 1e-12 < start) {
 		return result;
 	}
-	double current = start;
-	while (current <= end + 1e-10 && result.size() < MAX_EXPAND_POINTS) {
+	// CQL §19.10 Expand: use index-based value computation (start + n*step)
+	// instead of repeated accumulation (current += step_value) to avoid IEEE
+	// 754 floating-point drift. e.g., for Interval[1 'g', 5 'g'] per 1 'mg',
+	// step_value = 0.001 g; repeated accumulation produces 1.0019999999999998
+	// instead of the clean 1.002 produced by 1 + 2*0.001.
+	int64_t n = 0;
+	while (true) {
+		if (n >= static_cast<int64_t>(MAX_EXPAND_POINTS)) {
+			break;
+		}
+		double current = start + static_cast<double>(n) * step_value;
+		if (current > end + 1e-10) {
+			break;
+		}
 		auto quantity = FormatExpandQuantity(current, unit);
 		if (!quantity) {
 			return cql::NullOpt<std::vector<ExpandedInterval>>();
 		}
 		result.push_back({*quantity, *quantity, false});
-		current += step_value;
+		n++;
 	}
 	return result;
 }
@@ -3176,8 +3221,21 @@ static cql::DateTimeValue DurationHighBoundaryValue(const std::string &value,
 	int current_rank = PrecisionRank(out.precision);
 	int target_rank = PrecisionRank(unit_precision);
 
-	if (!out.is_time && current_rank < PrecisionRank(cql::DateTimeValue::Precision::Month) &&
-	    target_rank >= PrecisionRank(cql::DateTimeValue::Precision::Month)) {
+	// When the operand lacks month precision (year-only), max the month
+	// to December and zero finer components. This applies for ANY target
+	// precision (year-or-finer) because the operand's missing month is
+	// uncertain and must be maxed to give the highest possible duration.
+	// Day is zeroed to 1 so that no partial-month period is counted as
+	// whole for month-or-finer target precisions.
+	//
+	// For year-target duration with a year-precision operand, the uncertain
+	// month/day must be maxed (month=December, day=1) so the year count
+	// reflects the maximum possible whole years. For example,
+	// years between @2012-06-01 and @2014 is Interval[1, 2], not 1.
+	// The official conformance test
+	// `years between DateTime(2005) and DateTime(2010) // Interval[4, 5]`
+	// exercises this path.
+	if (!out.is_time && current_rank < PrecisionRank(cql::DateTimeValue::Precision::Month)) {
 		out.month = 12;
 		out.day = 1;
 		out.hour = 0;
@@ -4139,6 +4197,7 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 			continue;
 		}
 		bool found = false;
+		bool ambiguous = false;
 		{
 			std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
 			for (const auto &code : codes) {
@@ -4151,6 +4210,44 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 					found = true;
 					break;
 				}
+				// CQL §In (Valueset) String overload: when the source code has
+				// no system (bare CQL String code translated to a synthetic
+				// resource), spec says "if the given valueset contains a code
+				// with an equivalent code element, the result is true." Scan
+				// cache for any entry matching this code value. If only one
+				// distinct non-empty system (or only empty-system entries)
+				// contain it, return true. If multiple distinct non-empty
+				// systems contain it, the operation is ambiguous per spec →
+				// surface as NULL (uncertain) rather than silent False.
+				if (code.system.empty()) {
+					auto vs_it = g_valueset_cache.find(url_str);
+					if (vs_it != g_valueset_cache.end()) {
+						const std::string suffix = "|" + code.code;
+						std::unordered_set<std::string> distinct_systems;
+						bool empty_system_match = false;
+						for (const auto &entry : vs_it->second) {
+							if (entry.size() > suffix.size() && entry.compare(entry.size() - suffix.size(), suffix.size(), suffix) == 0) {
+								std::string sys = entry.substr(0, entry.size() - suffix.size());
+								if (sys.empty()) {
+									empty_system_match = true;
+								} else {
+									distinct_systems.insert(sys);
+								}
+							} else if (entry == code.code) {
+								// Cache entry with no system separator at all
+								empty_system_match = true;
+							}
+						}
+						if (distinct_systems.size() <= 1) {
+							if (!distinct_systems.empty() || empty_system_match) {
+								found = true;
+								break;
+							}
+						} else {
+							ambiguous = true;
+						}
+					}
+				}
 				// Also check code-only match (empty system)
 				if (cql::in_valueset(code.code, "", url_str, g_valueset_cache)) {
 					found = true;
@@ -4158,7 +4255,15 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 				}
 			}
 		}
-		result_data[i] = found;
+		if (found) {
+			result_data[i] = true;
+		} else if (ambiguous) {
+			// Multi-system String-overload ambiguity per CQL §In (Valueset):
+			// surface as NULL (three-valued logic uncertainty).
+			result_mask.SetInvalid(i);
+		} else {
+			result_data[i] = false;
+		}
 		UpdateValuesetProfile(profile_enabled, path_str, url_str, 0, 0, 0, 0, 0, found ? 1 : 0, found ? 0 : 1);
 	}
 }
@@ -4681,6 +4786,15 @@ static cql::DateTimeValue ApplyQuantityAtInputPrecision(const cql::DateTimeValue
                                                         std::string unit) {
 	int input_rank = PrecisionRank(dt.precision);
 	int unit_rank = UnitPrecisionRank(unit);
+	// CQL §Add / §Subtract: "For precisions above seconds, any decimal
+	// portion of the time-valued quantity is ignored." The triggering
+	// condition is the quantity unit (year/month/week/day/hour/minute
+	// are above seconds; second/millisecond are at-or-below seconds),
+	// not the input precision. Truncate toward zero before any branching.
+	int second_rank = PrecisionRank(cql::DateTimeValue::Precision::Second);
+	if (unit_rank >= 0 && unit_rank < second_rank) {
+		value = static_cast<double>(static_cast<int64_t>(value));
+	}
 	double effective_value = value;
 	std::string effective_unit = LowerAscii(unit);
 	if (unit_rank > input_rank) {

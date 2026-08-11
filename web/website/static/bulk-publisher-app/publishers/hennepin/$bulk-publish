@@ -1,0 +1,26 @@
+{
+  "transactionTime": "2026-08-10T12:53:44Z",
+  "request": "/publishers/hennepin/$bulk-publish",
+  "output": [
+    {
+      "type": "Location",
+      "url": "/publishers/hennepin/output/Location.ndjson"
+    },
+    {
+      "type": "HealthcareService",
+      "url": "/publishers/hennepin/output/HealthcareService.ndjson"
+    },
+    {
+      "type": "Practitioner",
+      "url": "/publishers/hennepin/output/Practitioner.ndjson"
+    },
+    {
+      "type": "Schedule",
+      "url": "/publishers/hennepin/output/Schedule.ndjson"
+    },
+    {
+      "type": "Slot",
+      "url": "/publishers/hennepin/output/Slot.ndjson"
+    }
+  ]
+}

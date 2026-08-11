@@ -250,3 +250,73 @@ class TestColumnTypePreservation:
         """Test Column description."""
         col = Column(path="id", name="id", description="Patient identifier")
         assert col.description == "Patient identifier"
+
+
+class TestDirectColumnValidationPerSpecSofVd03Skeptic:
+    """SOF-VD-03 SKEPTIC fresh rerun (2026-07-03).
+
+    Direct Column dataclass construction must validate spec-defined fields
+    via ``__post_init__``, matching the validation pattern used by sibling
+    dataclasses ``Constant``, ``ColumnTag``, and ``Join``. SQL-on-FHIR
+    requires column.path (1..1 non-empty FHIRPath), column.name (1..1
+    sql-name), column.description (0..1 markdown string), and
+    column.collection (boolean). Previously, direct construction deferred
+    these checks to ``to_dict()`` and ``SQLGenerator._validate_column_shape``.
+    """
+
+    def test_direct_construct_rejects_empty_name(self):
+        """Column(name='') must raise ValueError at construction."""
+        with pytest.raises(ValueError, match="name"):
+            Column(path="id", name="")
+
+    def test_direct_construct_rejects_empty_path(self):
+        """Column(path='') must raise ValueError at construction."""
+        with pytest.raises(ValueError, match="path"):
+            Column(path="", name="id")
+
+    @pytest.mark.parametrize("bad_name", ["_bad", "bad-name", "bad.name", "9bad", "bad name"])
+    def test_direct_construct_rejects_invalid_sql_name(self, bad_name: str):
+        """All sql-name violations are rejected at construction."""
+        with pytest.raises(ValueError, match="sql-name"):
+            Column(path="id", name=bad_name)
+
+    @pytest.mark.parametrize("bad_description", [5, 1.5, [], {"k": "v"}])
+    def test_direct_construct_rejects_non_string_description(self, bad_description):
+        """Non-string description is rejected at construction."""
+        with pytest.raises(ValueError, match="description"):
+            Column(path="id", name="id", description=bad_description)
+
+    @pytest.mark.parametrize("bad_collection", ["false", "true", 0, 1, "yes"])
+    def test_direct_construct_rejects_non_boolean_collection(self, bad_collection):
+        """Non-boolean collection is rejected at construction."""
+        with pytest.raises(ValueError, match="collection"):
+            Column(path="id", name="id", collection=bad_collection)
+
+    def test_direct_construct_accepts_valid_column(self):
+        """A spec-compliant Column still constructs normally."""
+        col = Column(path="id", name="patient_id")
+        assert col.path == "id"
+        assert col.name == "patient_id"
+        assert col.collection is False
+        assert col.description is None
+
+    def test_direct_construct_accepts_optional_description(self):
+        """Column(description=None) means omitted metadata."""
+        col = Column(path="id", name="id", description=None)
+        assert col.description is None
+        # Round-trip: omitted description does not appear in to_dict().
+        assert "description" not in col.to_dict()
+
+    def test_direct_construct_round_trips_to_dict(self):
+        """A directly constructed valid Column serializes correctly."""
+        col = Column(
+            path="id",
+            name="patient_id",
+            description="Patient identifier",
+        )
+        out = col.to_dict()
+        assert out == {
+            "path": "id",
+            "name": "patient_id",
+            "description": "Patient identifier",
+        }

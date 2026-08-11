@@ -99,6 +99,7 @@ from ...translator.types import (
     SQLUnion,
     SQLIntersect,
     SQLExcept,
+    _is_null_expression,
 )
 
 _AUDIT_MACRO_NAMES = frozenset({"audit_and", "audit_or", "audit_or_all", "audit_not", "audit_leaf", "audit_comparison", "audit_breadcrumb", "compact_audit"})
@@ -114,6 +115,49 @@ _CQL_INTEGER_MIN = -2147483648
 _CQL_INTEGER_MAX = 2147483647
 _CQL_LONG_MIN = -9223372036854775808
 _CQL_LONG_MAX = 9223372036854775807
+
+
+def _infer_static_numeric_type(node: Any) -> Optional[str]:
+    """Statically infer the numeric CQL type of a literal-ish expression.
+
+    Limited to literals and unary +/- of literals so callers (e.g. Power
+    operand typing) can pick the correct result type per CQL §16 without
+    needing the full inference engine. Returns one of ``"Integer"``,
+    ``"Long"``, ``"Decimal"`` or ``None`` when the type is not statically
+    determinable.
+    """
+    if isinstance(node, Literal):
+        if isinstance(node.value, bool):
+            return None
+        name = getattr(node, "type", None)
+        if name is None:
+            return None
+        return str(name).split(".")[-1]
+    if isinstance(node, UnaryExpression) and node.operator in {"+", "-"}:
+        return _infer_static_numeric_type(node.operand)
+    return None
+
+
+def _static_numeric_value(node: Any) -> Optional[float]:
+    """Statically evaluate a literal-ish numeric expression to a Python float.
+
+    Returns None when the value cannot be statically determined. Used by
+    Power translation to detect negative-Integer exponents (which per the
+    official CQL conformance suite produce Decimal results even for
+    Integer operand signatures — e.g. ``Power(2, -2) = 0.25``).
+    """
+    if isinstance(node, Literal):
+        if isinstance(node.value, bool):
+            return None
+        if isinstance(node.value, (int, float)):
+            return float(node.value)
+        return None
+    if isinstance(node, UnaryExpression) and node.operator in {"+", "-"}:
+        inner = _static_numeric_value(node.operand)
+        if inner is None:
+            return None
+        return -inner if node.operator == "-" else inner
+    return None
 
 
 def _sql_list_type_for_cql_list_specifier(specifier: ListTypeSpecifier) -> str:
@@ -517,6 +561,18 @@ from ...translator.fhirpath_builder import (
 )
 
 
+def _operand_is_type_specifier(node: Any) -> bool:
+    """Phase 3 helper: True when ``node`` is a CQL NamedTypeSpecifier.
+
+    Used by the ``is``-operator branch to distinguish the type-check form
+    (``Order is MedicationRequest``) from the code-vs-code subsumption form
+    (``Code 'X' from S is Code 'Y' from S``). The type-check form must stay
+    routed through the existing type-check translator; the code-vs-code form
+    routes through the closure table when loaded.
+    """
+    return isinstance(node, NamedTypeSpecifier)
+
+
 def _is_quantity_expression(expr: SQLExpression) -> bool:
     """Check if an SQL expression is likely a Quantity value.
 
@@ -707,7 +763,7 @@ class OperatorsMixin:
             name = node.name.lower()
             if name in {"skip", "take", "tail", "distinct", "sort"} and node.arguments:
                 return self._temporal_list_ast_kind(node.arguments[0])
-        if isinstance(node, BinaryExpression) and node.operator == "union":
+        if isinstance(node, BinaryExpression) and node.operator in ("union", "|"):
             left_kind = self._temporal_list_ast_kind(node.left)
             right_kind = self._temporal_list_ast_kind(node.right)
             return left_kind if left_kind and left_kind == right_kind else None
@@ -730,6 +786,32 @@ class OperatorsMixin:
         list_ast: object,
         element_ast: object,
     ) -> SQLFunctionCall:
+        # In audit_mode='full' (audit_mode + audit_expressions), the
+        # `CQLListContainsEq` / `CQLListContainsTemporalEq` SQL macros trigger
+        # a DuckDB binder bug ("Need named argument for struct pack") when
+        # they appear inside audit_leaf() wrapping inside audit_and/or chains
+        # inside correlated EXISTS subqueries. The macros expand to SQL
+        # containing EXISTS(SELECT FROM UNNEST...); DuckDB's binder fails to
+        # resolve the struct_pack argument shape when that expansion is nested
+        # through audit_and/or struct_extract calls.
+        #
+        # The fix: emit `list_contains(...)` directly (a DuckDB scalar
+        # built-in, no macro expansion) whenever audit_mode is active. This
+        # preserves correctness for primitive element types (the common case
+        # in audit contexts — status, intent, code strings). CQL's complex
+        # equality semantics for Code/Quantity list elements (which would
+        # require the UNNEST path) are not exercised by audit SQL today; if
+        # that changes, the audit pipeline must lift the macro to a pre-compute
+        # CTE instead of inlining it into audit_leaf.
+        if (
+            getattr(self, "context", None) is not None
+            and self.context.audit_mode
+            and self.context.audit_expressions
+        ):
+            return SQLFunctionCall(
+                name="list_contains",
+                args=[list_sql, element_sql],
+            )
         name = (
             "CQLListContainsTemporalEq"
             if self._use_temporal_list_contains(list_ast, element_ast)
@@ -791,6 +873,48 @@ class OperatorsMixin:
             else "CQLListHasAllEq"
         )
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
+
+    def _list_except_call(
+        self,
+        left_sql: SQLExpression,
+        right_sql: SQLExpression,
+        left_ast: object,
+        right_ast: object,
+    ) -> SQLFunctionCall:
+        name = (
+            "CQLListExceptTemporalEq"
+            if self._use_temporal_list_list_op(left_ast, right_ast)
+            else "CQLListExceptEq"
+        )
+        return SQLFunctionCall(name=name, args=[left_sql, right_sql])
+
+    def _list_intersect_call(
+        self,
+        left_sql: SQLExpression,
+        right_sql: SQLExpression,
+        left_ast: object,
+        right_ast: object,
+    ) -> SQLFunctionCall:
+        name = (
+            "CQLListIntersectTemporalEq"
+            if self._use_temporal_list_list_op(left_ast, right_ast)
+            else "CQLListIntersectEq"
+        )
+        return SQLFunctionCall(name=name, args=[left_sql, right_sql])
+
+    def _list_index_of_call(
+        self,
+        list_sql: SQLExpression,
+        element_sql: SQLExpression,
+        list_ast: object,
+        element_ast: object,
+    ) -> SQLFunctionCall:
+        name = (
+            "CQLIndexOfTemporal"
+            if self._use_temporal_list_contains(list_ast, element_ast)
+            else "CQLIndexOf"
+        )
+        return SQLFunctionCall(name=name, args=[list_sql, element_sql])
 
     def _quantity_interval_point_arg(self, point: SQLExpression) -> SQLExpression:
         """Preserve FHIR Quantity shape for Quantity interval membership."""
@@ -957,10 +1081,57 @@ class OperatorsMixin:
                 "contains", "is",
             } or (isinstance(op, str) and op.startswith("same ")):
                 return "Boolean"
+            # CQL-04 HISTORIAN QA-001: binary arithmetic operators
+            # (+,-,*,/,div,mod,^) yield Integer/Long/Decimal/Quantity (or
+            # Date/DateTime/Time for +/-). Mirror inference.py:1306-1333 so
+            # that arithmetic expressions used as logical operands do not
+            # bypass _validate_boolean_operand via the fall-through path
+            # (which returns "Any" when _infer_cql_type is unavailable on
+            # the ExpressionTranslator mixin stack). Without this, expressions
+            # such as `1 + 1 and true` translated to raw SQL `1 + 1 AND TRUE`,
+            # inheriting DuckDB numeric truthiness.
+            if op in ("+", "-"):
+                left_type = self._infer_static_cql_type_for_logical_operand(operand.left)
+                right_type = self._infer_static_cql_type_for_logical_operand(operand.right)
+                if left_type in ("Date", "DateTime", "Time"):
+                    return left_type
+                if right_type in ("Date", "DateTime", "Time"):
+                    return right_type
+                if left_type == "Quantity" or right_type == "Quantity":
+                    return "Quantity"
+                if "Decimal" in (left_type, right_type):
+                    return "Decimal"
+                if "Long" in (left_type, right_type):
+                    return "Long"
+                if "Integer" in (left_type, right_type):
+                    return "Integer"
+                return "Any"
+            if op in ("*", "/", "div", "mod", "^"):
+                left_type = self._infer_static_cql_type_for_logical_operand(operand.left)
+                right_type = self._infer_static_cql_type_for_logical_operand(operand.right)
+                if left_type == "Quantity" or right_type == "Quantity":
+                    return "Quantity"
+                if "Decimal" in (left_type, right_type) or op == "/":
+                    return "Decimal"
+                if "Long" in (left_type, right_type):
+                    return "Long"
+                if "Integer" in (left_type, right_type):
+                    return "Integer"
+                return "Any"
         if isinstance(operand, UnaryExpression):
             op = operand.operator.lower() if isinstance(operand.operator, str) else operand.operator
             if op in {"not", "is null", "is not null", "is true", "is false", "exists"}:
                 return "Boolean"
+            # CQL-04 SKEPTIC QA-001: unary +/-/predecessor of/successor of
+            # preserve the operand's static type. Mirror inference.py:1378-1379
+            # so that logical-operand validation does not bypass non-Boolean
+            # numeric/quantity operands via the fall-through path (which
+            # returns "Any" when _infer_cql_type is unavailable on the
+            # ExpressionTranslator mixin stack). Without this, expressions
+            # such as `-1 and true` translated to raw SQL `-1 AND TRUE`,
+            # inheriting DuckDB numeric truthiness.
+            if op in {"+", "-", "predecessor of", "successor of"}:
+                return self._infer_static_cql_type_for_logical_operand(operand.operand)
         infer = getattr(self, "_infer_cql_type", None)
         return infer(operand) if infer else "Any"
 
@@ -1956,6 +2127,14 @@ class OperatorsMixin:
                     if static_source is not None:
                         return _strict_cast_result(SQLNull(), SQLLiteral(value=False))
                     if bare_target in ("Code", "code", "Concept", "concept"):
+                        # CQL §As: "If the argument is null, the result is null."
+                        # When the source is statically null, skip the runtime
+                        # JSON shape-check wrapper (which would otherwise produce
+                        # a non-NULL CASE that defeats downstream null-guards in
+                        # Code/Concept equivalence — see _translate_equivalence_op
+                        # line ~5028 `isinstance(resource_expr, SQLNull)` guard).
+                        if _is_null_expression(left):
+                            return _strict_cast_result(SQLNull(), SQLLiteral(value=True))
                         if self._extract_fhirpath_value_call(left) is not None:
                             return _strict_cast_result(left)
                         runtime_check = self._clinical_json_type_check(left, bare_target)
@@ -2069,6 +2248,21 @@ class OperatorsMixin:
                     return SQLFunctionCall(name="RatioToString", args=[left])
                 if target_type_name == "string" and not _static_type_supports_string_conversion(source_type_name):
                     return SQLNull()
+                # CQL §9 Convert + Table 9-E: same-type conversions are identity
+                # ("N/A" cells). ToQuantity has no Quantity self-overload per the
+                # CQL ToQuantity spec, so routing an existing Quantity through
+                # ToQuantity silently returns NULL. Return the source unchanged
+                # for any case where the static source type already conforms to
+                # the target type. Comparison is case-insensitive because
+                # ``target_type_name`` is lowercased while ``source_type_name``
+                # preserves CQL casing.
+                if source_type_name is not None and (
+                    source_type_name.lower() == target_type_name.lower()
+                    or self._structural_type_conforms(
+                        source_type_name.lower(), target_type_name
+                    )
+                ):
+                    return left
                 return SQLFunctionCall(conversion_function, [left])
             target = convert_type_map.get(target_type_name)
             if target:
@@ -2085,6 +2279,19 @@ class OperatorsMixin:
             return self._translate_contains_op(operator, left, right, expr, boolean_context)
         if operator == "in":
             return self._translate_in_op(operator, left, right, expr, boolean_context)
+        # Phase 3 (medterm4ds subsumption): intercept code-vs-code `is` and
+        # `is not` BEFORE the type-check / `is null` fallthrough at line 2244.
+        # CQL §5.6 between two code-typed operands means "the left code is a
+        # member of the right code's subsumption closure" (directional). When
+        # no closure table is loaded, we fall back to a literal
+        # (system, code) equality (preserving the pre-Phase-3 intent for
+        # case-sensitive code equality that previously collapsed to IS NULL).
+        if operator in ("is", "is not") and not _operand_is_type_specifier(
+            expr.right
+        ):
+            code_is_result = self._translate_code_is_op(expr, negated=(operator == "is not"))
+            if code_is_result is not None:
+                return code_is_result
         if operator.startswith("is"):
             # IS NULL / IS NOT NULL
             if operator == "is null" or operator == "is":
@@ -2122,19 +2329,57 @@ class OperatorsMixin:
             return SQLFunctionCall(name="TRUNC", args=[safe_div])
 
         if operator == "^":
+            # CQL §16 Power: ^(Integer,Integer) Integer, ^(Long,Long) Long,
+            # ^(Decimal,Decimal) Decimal. "If the result of the operation
+            # cannot be represented, the result is null."
             left_arg = self._fhirpath_number_projection(left) or left
             right_arg = self._fhirpath_number_projection(right) or right
+            power_core = SQLFunctionCall(name="mathPower", args=[
+                SQLCast(expression=left_arg, target_type="VARCHAR"),
+                SQLCast(expression=right_arg, target_type="VARCHAR"),
+            ])
+            # Determine result type from CQL operand types when statically known.
+            left_cql_type = _infer_static_numeric_type(expr.left)
+            right_cql_type = _infer_static_numeric_type(expr.right)
+            operand_types = {left_cql_type, right_cql_type} - {None}
+            # Decimal takes precedence per spec implicit conversion rules;
+            # otherwise Integer/Long stays integral.
+            if "Decimal" in operand_types or "Quantity" in operand_types:
+                # CQL §16 Power Decimal overload: result must fit in Decimal
+                # range. Use DECIMAL(38, 8) (the implementation's standard
+                # Decimal width) so TRY_CAST returns NULL on overflow
+                # (e.g. Power(10.0, 100.0) = 1e100 cannot be represented).
+                target_sql_type = "DECIMAL(38, 8)"
+            elif "Long" in operand_types:
+                target_sql_type = "BIGINT"
+            elif operand_types == {"Integer"}:
+                # CQL §16 Power Integer overload: ^Integer,Integer) Integer.
+                # However, the official HL7 CQL conformance suite
+                # (CqlArithmeticFunctionsTest.xml::Power2ToNeg2) expects
+                # Power(2, -2) = 0.25 — a Decimal result, because raising
+                # an Integer to a negative exponent yields a fraction. The
+                # reference implementation promotes to Decimal in that case.
+                # Statically detect negative exponents and use DECIMAL so
+                # the result is not truncated to 0 by TRY_CAST(AS INTEGER).
+                right_value = _static_numeric_value(expr.right)
+                if right_value is not None and right_value < 0:
+                    target_sql_type = "DECIMAL(38, 8)"
+                else:
+                    target_sql_type = "INTEGER"
+            else:
+                target_sql_type = "DOUBLE"
             return SQLCast(
-                expression=SQLFunctionCall(name="mathPower", args=[
-                    SQLCast(expression=left_arg, target_type="VARCHAR"),
-                    SQLCast(expression=right_arg, target_type="VARCHAR"),
-                ]),
-                target_type="DOUBLE",
+                expression=power_core,
+                target_type=target_sql_type,
                 try_cast=True,
             )
 
         # List set operators
-        if operator == "union":
+        # CQL v1.5.3 §20.29: the union operator can also be invoked with the
+        # symbolic operator (|). The parser emits operator == "|" for the
+        # symbolic form; route it through the same dispatcher so list and
+        # interval union semantics are preserved.
+        if operator == "union" or operator == "|":
             return self._translate_union_op(operator, left, right, expr)
         if operator == "intersect":
             return self._translate_intersect_op(operator, left, right, expr)
@@ -2144,7 +2389,7 @@ class OperatorsMixin:
                     return left
                 if isinstance(left, SQLNull):
                     return SQLNull()
-                return SQLFunctionCall(name="CQLListExceptEq", args=[left, right])
+                return self._list_except_call(left, right, expr.left, expr.right)
             # Row-producing operands -> SQL EXCEPT set operation
             left_is_rows = isinstance(left, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect))
             right_is_rows = isinstance(right, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect))
@@ -2164,7 +2409,7 @@ class OperatorsMixin:
             if left_is_interval or right_is_interval:
                 return SQLFunctionCall(name="intervalExcept", args=[left, right])
             # Fallback: CQL except for literal lists
-            return SQLFunctionCall(name="CQLListExceptEq", args=[left, right])
+            return self._list_except_call(left, right, expr.left, expr.right)
 
         # Interval operators - call UDFs
         if operator == "overlaps":
@@ -2195,6 +2440,36 @@ class OperatorsMixin:
             right_is_interval = self._is_fhir_interval_expression(right)
             if right_is_interval:
                 return SQLFunctionCall(name="intervalIncludes", args=[left, right])
+            # CQL §19.12 Includes: "For the point-interval overload, this
+            # operator is a synonym for the contains operator." Detect the
+            # precision-of wrapper for point-interval includes and dispatch
+            # to intervalContainsPrecise so partial-precision Date/DateTime/
+            # Time uncertainty propagates to NULL rather than collapsing to
+            # raw string comparison.
+            cql_right_inc = getattr(expr, 'right', None)
+            if (
+                cql_right_inc is not None
+                and hasattr(cql_right_inc, 'operator')
+                and cql_right_inc.operator == 'precision of'
+                and hasattr(cql_right_inc.left, 'value')
+            ):
+                precision = str(cql_right_inc.left.value).lower()
+                point_sql_inc = self.translate(cql_right_inc.right, usage=ExprUsage.SCALAR)
+                point_sql_inc = (
+                    self._unwrap_precision_wrapper(point_sql_inc)
+                    if self._is_fhir_interval_expression(point_sql_inc)
+                    else point_sql_inc
+                )
+                return SQLFunctionCall(
+                    name="intervalContainsPrecise",
+                    args=[
+                        left,
+                        self._quantity_interval_point_arg(point_sql_inc)
+                        if self._is_quantity_interval_sql(left)
+                        else self._ensure_interval_varchar(point_sql_inc),
+                        SQLLiteral(value=precision),
+                    ],
+                )
             point_arg = (
                 self._quantity_interval_point_arg(right)
                 if self._is_quantity_interval_sql(left)
@@ -2261,8 +2536,17 @@ class OperatorsMixin:
             if self._is_list_operands(left, right, expr):
                 left_is_list = self._is_single_list_expr(left, getattr(expr, 'left', None))
                 right_is_list = self._is_single_list_expr(right, getattr(expr, 'right', None))
-                left_is_null = isinstance(left, SQLNull) or (isinstance(left, SQLLiteral) and left.value is None)
-                right_is_null = isinstance(right, SQLNull) or (isinstance(right, SQLLiteral) and right.value is None)
+                left_is_null = isinstance(left, SQLNull) or (isinstance(left, SQLLiteral) and left.value is None) or self._is_static_null_case(left)
+                right_is_null = isinstance(right, SQLNull) or (isinstance(right, SQLLiteral) and right.value is None) or self._is_static_null_case(right)
+                # CQL §20 List Properly Includes: "For the list-list overload, if
+                # either argument is null, the result is null." Detect typed-null
+                # list operands (translated to `CASE WHEN FALSE THEN NULL ELSE
+                # NULL END`) so the array_length comparison does not silently
+                # short-circuit to FALSE.
+                if left_is_list and left_is_null:
+                    return SQLNull()
+                if right_is_list and right_is_null:
+                    return SQLNull()
                 if left_is_null:
                     return SQLNull()
                 if right_is_null and right_is_list:
@@ -2327,8 +2611,17 @@ class OperatorsMixin:
             if self._is_list_operands(left, right, expr):
                 left_is_list = self._is_single_list_expr(left, getattr(expr, 'left', None))
                 right_is_list = self._is_single_list_expr(right, getattr(expr, 'right', None))
-                left_is_null = isinstance(left, SQLNull) or (isinstance(left, SQLLiteral) and left.value is None)
-                right_is_null = isinstance(right, SQLNull) or (isinstance(right, SQLLiteral) and right.value is None)
+                left_is_null = isinstance(left, SQLNull) or (isinstance(left, SQLLiteral) and left.value is None) or self._is_static_null_case(left)
+                right_is_null = isinstance(right, SQLNull) or (isinstance(right, SQLLiteral) and right.value is None) or self._is_static_null_case(right)
+                # CQL §20 List Properly Included In: "For the list-list overload,
+                # if either argument is null, the result is null." Detect typed-
+                # null list operands (translated to `CASE WHEN FALSE THEN NULL
+                # ELSE NULL END`) so the array_length comparison does not
+                # silently short-circuit to FALSE.
+                if left_is_list and left_is_null:
+                    return SQLNull()
+                if right_is_list and right_is_null:
+                    return SQLNull()
                 if right_is_null:
                     return SQLNull()
                 if left_is_null and left_is_list:
@@ -2483,15 +2776,15 @@ class OperatorsMixin:
         if operator == "meets":
             left = self._ensure_resource_to_interval(left, expr.left)
             right = self._ensure_resource_to_interval(right, expr.right)
-            return SQLFunctionCall(name="intervalMeets", args=[left, right])
+            return self._translate_meets_op("intervalMeets", left, right, expr)
         if operator == "meets before":
             left = self._ensure_resource_to_interval(left, expr.left)
             right = self._ensure_resource_to_interval(right, expr.right)
-            return SQLFunctionCall(name="intervalMeetsBefore", args=[left, right])
+            return self._translate_meets_op("intervalMeetsBefore", left, right, expr)
         if operator == "meets after":
             left = self._ensure_resource_to_interval(left, expr.left)
             right = self._ensure_resource_to_interval(right, expr.right)
-            return SQLFunctionCall(name="intervalMeetsAfter", args=[left, right])
+            return self._translate_meets_op("intervalMeetsAfter", left, right, expr)
         if operator == "starts":
             return self._translate_starts_op(operator, left, right, expr)
         if operator == "ends":
@@ -2587,11 +2880,15 @@ class OperatorsMixin:
                 args=[resource_arg, path_arg, SQLLiteral(vs_url_c)],
             )
 
+        # CQL §19.3 Contains: "If the first argument is null, the result is
+        # false. If the second argument is null, the result is null."
+        # First-arg-null short-circuit MUST fire before second-arg-null so
+        # `(null as Interval<T>) contains (null as T)` → False, not null.
         if self._definitely_null_operand(expr.left, left):
-            if self._definitely_null_operand(expr.right, right):
-                return SQLNull()
             if self._null_contains_container_returns_false(expr.left, expr.right):
                 return SQLLiteral(value=False)
+            if self._definitely_null_operand(expr.right, right):
+                return SQLNull()
 
         if (
             self._interval_selector_is_untyped_null_interval(expr.left)
@@ -2600,6 +2897,38 @@ class OperatorsMixin:
             return SQLNull()
         if self._interval_selector_is_untyped_null_interval(expr.left):
             return SQLLiteral(value=False)
+
+        # CQL §19.3 Contains precision: "Interval<T> contains <precision> of
+        # <point>" — dispatch to intervalContainsPrecise for partial-precision
+        # Date/DateTime/Time uncertainty propagation. Parser emits
+        # BinaryExpression(operator='precision of', left=Literal(unit),
+        # right=<point>) as the right operand of contains.
+        cql_right_contains = getattr(expr, 'right', None)
+        if (
+            cql_right_contains is not None
+            and hasattr(cql_right_contains, 'operator')
+            and cql_right_contains.operator == 'precision of'
+            and hasattr(cql_right_contains.left, 'value')
+        ):
+            precision = str(cql_right_contains.left.value).lower()
+            point_expr = self.translate(cql_right_contains.right, usage=ExprUsage.SCALAR)
+            # Strip any precision-wrapper that the point translator may have
+            # added (defensive — usually a no-op for plain points).
+            point_sql = (
+                self._unwrap_precision_wrapper(point_expr)
+                if self._is_fhir_interval_expression(point_expr)
+                else point_expr
+            )
+            return SQLFunctionCall(
+                name="intervalContainsPrecise",
+                args=[
+                    left,
+                    self._quantity_interval_point_arg(point_sql)
+                    if self._is_quantity_interval_sql(left)
+                    else self._ensure_interval_varchar(point_sql),
+                    SQLLiteral(value=precision),
+                ],
+            )
 
         # Detect list context by checking if left translated to a subquery
         # BUT first check if it's an interval reference (CTE producing interval)
@@ -2672,6 +3001,18 @@ class OperatorsMixin:
                 return None
             info = self.context.get_code(node.name)
             if info is None:
+                # CQL-02 EXPLORER QA-001/QA-002 fix: when the Identifier is a
+                # top-level `define` whose body is a statically-known clinical
+                # literal (Code selector or Concept instance), recurse on the
+                # definition's CQL AST so equivalence/equality can fold at
+                # translation time. Without this, `define C: Code 'x' from CS`
+                # followed by `define Test: C ~ <other Code/Concept>` falls
+                # through to a generic SQL CASE that compares raw JSON shapes
+                # (Code {code,system,...} != Concept {codes:[...]}) and
+                # silently returns False instead of the spec-correct result.
+                source_ast = self._definition_source_ast(node.name, node)
+                if source_ast is not None:
+                    return self._static_clinical_value_object(source_ast)
                 return None
             if info.get("is_concept") or isinstance(info.get("codes"), list):
                 value = {
@@ -2689,6 +3030,12 @@ class OperatorsMixin:
         if isinstance(node, QualifiedIdentifier) and node.parts:
             info = self.context.get_code(node.parts[-1])
             if info is None:
+                # CQL-02 EXPLORER QA-001/QA-002 fix (QualifiedIdentifier path):
+                # resolve library-qualified define references whose body is a
+                # statically-known clinical literal.
+                source_ast = self._definition_source_ast(node.parts[-1], node)
+                if source_ast is not None:
+                    return self._static_clinical_value_object(source_ast)
                 return None
             if info.get("is_concept") or isinstance(info.get("codes"), list):
                 value = {
@@ -2816,10 +3163,30 @@ class OperatorsMixin:
             if isinstance(node, InstanceExpression):
                 bare = self._bare_cql_type_name(node.type)
                 fields: dict[str, Any] = {}
+                # CQL-21 HISTORIAN QA-001 fix: Concept { codes: { Code {...} } }
+                # parses the codes field as a ListExpression of Code
+                # InstanceExpressions (not Literal). The prior Literal-only
+                # guard skipped ListExpression values, leaving fields['codes']
+                # unset, so the function returned None and the translator fell
+                # through to generic JSON translation producing a non-FHIR
+                # {codes:[...]} shape that the in_valueset UDF cannot navigate.
+                # The fix recurses into each Code in the ListExpression.
                 for element in node.elements:
                     value_expr = element.type
                     if isinstance(value_expr, Literal):
                         fields[element.name] = value_expr.value
+                    elif (
+                        bare == "Concept"
+                        and element.name == "codes"
+                        and isinstance(value_expr, ListExpression)
+                    ):
+                        codes_list: list[dict[str, Any]] = []
+                        for item in value_expr.elements:
+                            item_entries = _code_entries_from_ast(item)
+                            if item_entries is None:
+                                return None
+                            codes_list.extend(item_entries)
+                        fields[element.name] = codes_list
                 if bare == "Code" and fields.get("code"):
                     return [fields]
                 if bare == "Concept" and isinstance(fields.get("codes"), list):
@@ -2907,6 +3274,31 @@ class OperatorsMixin:
                     extra_condition_ast = BinaryExpression(operator="and", left=extra_condition_ast, right=cond)
 
             interval_expr = self.translate(actual_interval_ast, usage=ExprUsage.SCALAR)
+            # CQL §19.11 In precision: dispatch to intervalContainsPrecise
+            # when the interval is a recognized interval expression so that
+            # partial-precision Date/DateTime/Time bounds propagate
+            # uncertainty to NULL rather than collapsing to raw string
+            # comparison (e.g., `@2024-06-15 in day of Interval[@2024,
+            # @2024]` must return NULL, not False). The raw-SQL fallback
+            # below remains for query-source / dynamic FHIR Period values
+            # that are not statically recognized intervals.
+            if self._is_fhir_interval_expression(interval_expr) or (
+                isinstance(interval_expr, SQLFunctionCall)
+                and interval_expr.name == "intervalFromBounds"
+            ):
+                left_for_precise = (
+                    self._quantity_interval_point_arg(left)
+                    if self._is_quantity_interval_sql(interval_expr)
+                    else self._ensure_interval_varchar(left)
+                )
+                in_precise = SQLFunctionCall(
+                    name="intervalContainsPrecise",
+                    args=[interval_expr, left_for_precise, SQLLiteral(value=precision)],
+                )
+                if extra_condition_ast:
+                    extra_sql = self.translate(extra_condition_ast, boolean_context=True)
+                    return SQLBinaryOp(operator="AND", left=in_precise, right=extra_sql)
+                return in_precise
             left_truncated = self._ensure_date_cast(
                 self._truncate_to_precision(left, precision))
 
@@ -3034,7 +3426,29 @@ class OperatorsMixin:
                 )
             static_string_codes = _string_codes_from_ast(expr.left)
             if static_string_codes is not None:
-                return SQLLiteral(value=any(code != "" for code in static_string_codes))
+                # CQL 1.5.3 §In (Codesystem) — String overload: "if the given
+                # code system contains a code with an equivalent code element,
+                # the result is true." Without a runtime terminology service
+                # for CodeSystem membership (unlike ValueSet's in_valueset
+                # UDF), the translator cannot know whether the codesystem
+                # contains the given code. Previously this returned TRUE for
+                # any non-empty string, masking the membership check entirely.
+                # Per GLOBAL_RULES.md §CQL Translator Invariants ("Do not use
+                # silent fallbacks that mask schema, context, or translation
+                # errors"), raise a TranslationError so the missing capability
+                # is surfaced rather than silently producing wrong results.
+                # Null/empty-string inputs return False per the spec's
+                # "If the code argument is null, the result is false" rule.
+                if all(code == "" for code in static_string_codes):
+                    return SQLLiteral(value=False)
+                raise TranslationError(
+                    f"String 'in CodeSystem' membership for "
+                    f"{expr.right.name!r} ({codesystem_url!r}) is unsupported: "
+                    f"CQL requires a terminology service to verify code "
+                    f"membership in an externally-defined code system. "
+                    f"Use a Code-typed operand or supply the code system "
+                    f"definition at translation time."
+                )
             if (
                 isinstance(left, SQLFunctionCall)
                 and left.name in ("fhirpath_text", "fhirpath_date", "fhirpath_scalar", "fhirpath_json")
@@ -3400,6 +3814,48 @@ class OperatorsMixin:
                 args=[SQLFunctionCall(name="list_concat", args=[left, right])],
             )
 
+        # Case 6a: Both operands are typed list expressions (e.g., from CQL
+        # `({} as List<Integer>)` or `(null as List<Integer>)`). Use
+        # list_concat + Distinct directly to preserve the typed element type.
+        # Falling through to the jsonConcat fallback would return VARCHAR[],
+        # mixing with the typed CASE arms and raising BinderException.
+        # CQL §20.29: null in list union is treated as empty list. We wrap
+        # each operand in COALESCE(<expr>, <typed-empty-array>) so runtime
+        # NULL lists are treated as empty (preserving the typed element).
+        # See CQL-19 HISTORIAN iter 1 QA-001.
+        if (self._is_typed_list_expr(left) and self._is_typed_list_expr(right)
+                and not left_is_rows and not right_is_rows):
+            left_typed_empty = self._typed_empty_array_for(left)
+            right_typed_empty = self._typed_empty_array_for(right)
+            # Both-NULL-typed-list case: CQL §20.29 says null is treated as
+            # empty list, so both-null = empty list. We need to return a
+            # typed empty array (or empty untyped SQLArray; the surrounding
+            # context will accept it). The pre-existing test
+            # `UnionNullBoth` exercises this.
+            if left_typed_empty is None and right_typed_empty is None:
+                # Try to detect that both operands lower to runtime NULL
+                # (e.g., SQLCase with all-NULL arms). If so, return empty.
+                if self._is_static_null_case(left) and self._is_static_null_case(right):
+                    return SQLArray([])
+            if left_typed_empty is not None and right_typed_empty is not None:
+                left_safe = SQLFunctionCall(
+                    name="COALESCE", args=[left, left_typed_empty]
+                )
+                right_safe = SQLFunctionCall(
+                    name="COALESCE", args=[right, right_typed_empty]
+                )
+                return SQLFunctionCall(
+                    name='"Distinct"',
+                    args=[SQLFunctionCall(name="list_concat", args=[left_safe, right_safe])],
+                )
+            # If we cannot infer the typed empty array, fall back to list_concat
+            # directly. (Both-null literal case is already handled by the
+            # early-return at line 3577.)
+            return SQLFunctionCall(
+                name='"Distinct"',
+                args=[SQLFunctionCall(name="list_concat", args=[left, right])],
+            )
+
         # Case 6b: One array literal, one list expression → use list_concat.
         # CQL §20.29: null in list union is treated as empty list.
         # Use CASE WHEN IS NULL to handle runtime null accumulator (e.g., first iteration
@@ -3467,7 +3923,7 @@ class OperatorsMixin:
     def _translate_intersect_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
         if self._is_list_operands(left, right, expr):
-            return SQLFunctionCall(name="CQLListIntersectEq", args=[left, right])
+            return self._list_intersect_call(left, right, expr.left, expr.right)
         # Row-producing operands -> SQL INTERSECT set operation
         left_is_rows = isinstance(left, (SQLSelect, SQLSubquery, SQLUnion, SQLIntersect))
         right_is_rows = isinstance(right, (SQLSelect, SQLSubquery, SQLUnion, SQLIntersect))
@@ -3486,7 +3942,7 @@ class OperatorsMixin:
             # Use intervalIntersect UDF for type-safe comparison of interval bounds
             return SQLFunctionCall(name="intervalIntersect", args=[left, right])
         # Fallback: CQL intersect for literal lists.
-        return SQLFunctionCall(name="CQLListIntersectEq", args=[left, right])
+        return self._list_intersect_call(left, right, expr.left, expr.right)
 
     @staticmethod
     def _precision_digit_count(precision: str) -> int | None:
@@ -3740,6 +4196,132 @@ class OperatorsMixin:
             return decomposed
 
         return SQLFunctionCall(name="intervalOverlaps", args=[left, right])
+
+    def _translate_meets_op(
+        self, udf_name: str, left: SQLExpression, right: SQLExpression, expr
+    ) -> SQLExpression:
+        """Translate ``meets`` / ``meets before`` / ``meets after`` operators.
+
+        CQL 1.5.3 §Meets: "If precision is specified and the point type is a
+        Date, DateTime, or Time type, comparisons used in the operation are
+        performed at the specified precision."
+
+        When the CQL author writes ``X meets day of Y``, the parser desugars
+        ``day of Y`` to ``day precision of Y`` (a BinaryExpression with
+        operator ``"precision of"``). The desugared right operand is then
+        translated by ``_truncate_to_precision`` to truncate Y to day
+        precision. Without a symmetric truncation on the left operand, the
+        emitted ``intervalMeets(left_full_precision, right_truncated)`` call
+        compares a full-precision DateTime end against a date-only start,
+        yielding wrong answers (CQL-16 EXPLORER QA-001).
+
+        This helper detects the ``precision of`` wrapper, truncates BOTH
+        interval operands' Start/End bounds to the specified precision,
+        rebuilds interval JSON via ``intervalFromBounds``, and forwards to
+        the existing ``intervalMeets`` / ``intervalMeetsBefore`` /
+        ``intervalMeetsAfter`` UDFs. Mirrors the pattern used by
+        ``_translate_overlaps_op`` / ``_translate_overlaps_after_op`` /
+        ``_translate_overlaps_before_op``.
+        """
+        # No precision wrapper on the right operand: simple UDF call.
+        if not (
+            isinstance(expr.right, BinaryExpression)
+            and expr.right.operator == "precision of"
+        ):
+            return SQLFunctionCall(name=udf_name, args=[left, right])
+
+        precision = getattr(expr.right.left, "value", "day")
+        if isinstance(precision, str):
+            precision = precision.lower()
+        actual_interval_ast = expr.right.right
+        # Strip extra AND-conditions inside the precision-of wrapper (parser
+        # workaround shared with the overlaps handlers).
+        extra_conditions = []
+        while (
+            isinstance(actual_interval_ast, BinaryExpression)
+            and actual_interval_ast.operator == "and"
+        ):
+            extra_conditions.append(actual_interval_ast.right)
+            actual_interval_ast = actual_interval_ast.left
+        extra_condition_ast = None
+        for cond in reversed(extra_conditions):
+            if extra_condition_ast is None:
+                extra_condition_ast = cond
+            else:
+                extra_condition_ast = BinaryExpression(
+                    operator="and", left=extra_condition_ast, right=cond
+                )
+
+        # CQL-16 EXPLORER QA-001: when either interval's literal bounds are
+        # already at coarser precision than the requested comparison, the
+        # spec-compliant result is NULL (uncertain). Mirrors overlaps behavior.
+        if self._overlap_literal_under_precision(
+            expr.left, actual_interval_ast, precision
+        ):
+            result: SQLExpression = SQLNull()
+            if extra_condition_ast:
+                extra_sql = self.translate(extra_condition_ast, boolean_context=True)
+                return SQLBinaryOp(operator="AND", left=result, right=extra_sql)
+            return result
+
+        interval_expr = self.translate(actual_interval_ast, usage=ExprUsage.SCALAR)
+
+        # Truncate BOTH sides to the requested precision. intervalStart /
+        # intervalEnd extract the effective boundary points (closed/open
+        # aware); _truncate_to_precision reduces them to the precision;
+        # intervalFromBounds rebuilds interval JSON for the UDF call.
+        left_start = SQLFunctionCall(name="intervalStart", args=[left])
+        left_end = SQLFunctionCall(name="intervalEnd", args=[left])
+        right_start = SQLFunctionCall(name="intervalStart", args=[interval_expr])
+        right_end = SQLFunctionCall(name="intervalEnd", args=[interval_expr])
+
+        left_start_trunc = self._truncate_to_precision(left_start, precision)
+        left_end_trunc = self._truncate_to_precision(left_end, precision)
+        right_start_trunc = self._truncate_to_precision(right_start, precision)
+        right_end_trunc = self._truncate_to_precision(right_end, precision)
+
+        # Preserve original closedness flags for each side. We rebuild the
+        # interval JSON with the original lowClosed/highClosed booleans so
+        # intervalMeets' successor/predecessor logic still applies correctly
+        # after the precision-truncated bounds.
+        def _rebuild_interval(start_trunc, end_trunc, original_iv):
+            low_closed = True
+            high_closed = True
+            if isinstance(original_iv, SQLInterval):
+                low_closed = original_iv.low_closed
+                high_closed = original_iv.high_closed
+            elif isinstance(original_iv, SQLFunctionCall) and original_iv.name == "intervalFromBounds":
+                # intervalFromBounds(low, high, lowClosed, highClosed)
+                if len(original_iv.args) >= 4:
+                    low_closed_arg = original_iv.args[2]
+                    high_closed_arg = original_iv.args[3]
+                    if isinstance(low_closed_arg, SQLLiteral):
+                        low_closed = bool(low_closed_arg.value)
+                    if isinstance(high_closed_arg, SQLLiteral):
+                        high_closed = bool(high_closed_arg.value)
+            return SQLFunctionCall(
+                name="intervalFromBounds",
+                args=[
+                    start_trunc,
+                    end_trunc,
+                    SQLLiteral(value=low_closed),
+                    SQLLiteral(value=high_closed),
+                ],
+            )
+
+        left_truncated = _rebuild_interval(left_start_trunc, left_end_trunc, left)
+        right_truncated = _rebuild_interval(
+            right_start_trunc, right_end_trunc, interval_expr
+        )
+
+        meets_result = SQLFunctionCall(
+            name=udf_name, args=[left_truncated, right_truncated]
+        )
+
+        if extra_condition_ast:
+            extra_sql = self.translate(extra_condition_ast, boolean_context=True)
+            return SQLBinaryOp(operator="AND", left=meets_result, right=extra_sql)
+        return meets_result
 
     def _translate_overlaps_after_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
@@ -4823,6 +5405,141 @@ class OperatorsMixin:
             return False
         return True
 
+    def _translate_code_is_op(self, expr, *, negated: bool) -> Optional[SQLExpression]:
+        """Phase 3: code-vs-code ``is`` / ``is not`` operator.
+
+        Returns ``None`` if either operand does not statically resolve to a
+        code reference (the caller falls through to the existing
+        ``IS NULL`` / ``IS NOT NULL`` behavior). When both resolve:
+
+        * Closure table loaded: emit
+          ``EXISTS (... ancestor=Y, descendant=X ...)`` per FDD §3d.
+        * Closure table NOT loaded: emit literal
+          ``(X_sys, X_code) = (Y_sys, Y_code)`` (or ``!=`` for negated).
+
+        Direction (INV-6): right subsumes left. The reflexive row inserted
+        by the closure builder means ``X is X`` returns True.
+        """
+        left_info = self._resolve_code_ref_inline(expr.left)
+        right_info = self._resolve_code_ref_inline(expr.right)
+        if not left_info or not right_info:
+            return None
+
+        left_entries = self._code_entries_static(left_info)
+        right_entries = self._code_entries_static(right_info)
+        if not left_entries or not right_entries:
+            return None
+
+        from ...duckdb.udf.system_resolver import SystemResolver
+
+        # Build a disjunction across every (left, right) entry pair (Concept
+        # operands may carry multiple codes). Singleton-vs-singleton is the
+        # overwhelmingly common case.
+        ors: List[SQLExpression] = []
+        for le in left_entries:
+            for re_ in right_entries:
+                l_sys = SystemResolver.normalize(le.get("codesystem", "")) or le.get(
+                    "codesystem", ""
+                )
+                l_code = le.get("code", "")
+                r_sys = SystemResolver.normalize(re_.get("codesystem", "")) or re_.get(
+                    "codesystem", ""
+                )
+                r_code = re_.get("code", "")
+
+                l_sys_lit = SQLLiteral(value=l_sys)
+                l_code_lit = SQLLiteral(value=l_code)
+                r_sys_lit = SQLLiteral(value=r_sys)
+                r_code_lit = SQLLiteral(value=r_code)
+
+                if getattr(self.context, "closure_table_loaded", False):
+                    # Direction: right subsumes left (ancestor=Y, descendant=X).
+                    l_sys_sql = l_sys_lit.to_sql()
+                    l_code_sql = l_code_lit.to_sql()
+                    r_sys_sql = r_sys_lit.to_sql()
+                    r_code_sql = r_code_lit.to_sql()
+                    pair_match: SQLExpression = SQLRaw(
+                        raw_sql=(
+                            "EXISTS (SELECT 1 FROM terminology_closure _tc "
+                            f"WHERE _tc.ancestor_system = {r_sys_sql} "
+                            f"AND _tc.ancestor_code = {r_code_sql} "
+                            f"AND _tc.descendant_system = {l_sys_sql} "
+                            f"AND _tc.descendant_code = {l_code_sql})"
+                        )
+                    )
+                else:
+                    # Literal-match fallback: (L_sys, L_code) = (R_sys, R_code).
+                    pair_match = SQLBinaryOp(
+                        operator="AND",
+                        left=SQLBinaryOp(operator="=", left=l_sys_lit, right=r_sys_lit),
+                        right=SQLBinaryOp(operator="=", left=l_code_lit, right=r_code_lit),
+                    )
+                ors.append(pair_match)
+
+        if not ors:
+            return None
+        result: SQLExpression = ors[0]
+        for next_clause in ors[1:]:
+            result = SQLBinaryOp(operator="OR", left=result, right=next_clause)
+        if negated:
+            result = SQLUnaryOp(operator="NOT", operand=result)
+        return result
+
+    def _resolve_code_ref_inline(self, operand_ast) -> Optional[dict]:
+        """Phase 3 inline code-ref resolver used by ``_translate_code_is_op``.
+
+        This is a thin wrapper around the existing
+        :meth:`_static_clinical_value_object` so the ``is`` operator can
+        statically resolve both CodeSelector and Identifier-with-Code-def
+        operands. Returns ``None`` when the operand is not a compile-time
+        code reference (query alias, runtime parameter, etc.).
+        """
+        if isinstance(operand_ast, CodeSelector):
+            system_url = self.context.codesystems.get(
+                operand_ast.system, operand_ast.system
+            )
+            return {
+                "code": operand_ast.code,
+                "codesystem": system_url,
+                "display": operand_ast.display,
+            }
+        if isinstance(operand_ast, Identifier):
+            if self.context.is_alias(operand_ast.name):
+                return None
+            info = self.context.get_code(operand_ast.name)
+            if info is not None:
+                return info
+        static_value = self._static_clinical_value_object(operand_ast)
+        if static_value:
+            if isinstance(static_value.get("codes"), list):
+                return {
+                    "codes": static_value.get("codes", []),
+                    "display": static_value.get("display"),
+                    "is_concept": True,
+                }
+            if static_value.get("code"):
+                return {
+                    "code": static_value.get("code", ""),
+                    "codesystem": static_value.get("system", ""),
+                    "version": static_value.get("version"),
+                    "display": static_value.get("display"),
+                }
+        return None
+
+    @staticmethod
+    def _code_entries_static(code_info: Optional[dict]) -> List[dict]:
+        """Mirror of the inline ``_code_entries`` from the equivalence path,
+        exposed as a static helper for ``_translate_code_is_op``.
+        """
+        if not isinstance(code_info, dict):
+            return []
+        if code_info.get("is_concept") or isinstance(code_info.get("codes"), list):
+            entries = code_info.get("codes") or []
+            return [entry for entry in entries if isinstance(entry, dict)]
+        if code_info.get("code"):
+            return [code_info]
+        return []
+
     def _translate_equivalence_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
         is_negated = operator == "!~"
@@ -4872,7 +5589,32 @@ class OperatorsMixin:
                 # Skip query aliases — they shadow code definitions
                 if self.context.is_alias(operand_ast.name):
                     return None
-                return self.context.get_code(operand_ast.name)
+                info = self.context.get_code(operand_ast.name)
+                if info is not None:
+                    return info
+                # CQL-02 EXPLORER QA-001 fix: top-level `define X: <clinical literal>`
+                # was not resolved by get_code (which only sees `code "X": ...`
+                # declarations). Fall back to the definition's CQL AST so the
+                # equivalence operator can fold static Code/Concept comparisons
+                # at translation time.
+                source_ast = self._definition_source_ast(operand_ast.name, operand_ast)
+                if source_ast is not None:
+                    static_value = self._static_clinical_value_object(source_ast)
+                    if static_value:
+                        if isinstance(static_value.get("codes"), list):
+                            return {
+                                "codes": static_value.get("codes", []),
+                                "display": static_value.get("display"),
+                                "is_concept": True,
+                            }
+                        if static_value.get("code"):
+                            return {
+                                "code": static_value.get("code", ""),
+                                "codesystem": static_value.get("system", ""),
+                                "version": static_value.get("version"),
+                                "display": static_value.get("display"),
+                            }
+                return None
             if isinstance(operand_ast, QualifiedIdentifier) and len(operand_ast.parts) >= 2:
                 # Library-qualified code ref: QICoreCommon."confirmed" → look up "confirmed"
                 code_name = operand_ast.parts[-1]
@@ -4948,11 +5690,93 @@ class OperatorsMixin:
             left_keys = {_code_key(code) for code in left_codes}
             return any(_code_key(code) in left_keys for code in right_codes)
 
+        def _emit_closure_aware_codes_equivalent(
+            left_info, right_info, negated: bool
+        ) -> SQLExpression:
+            """Phase 3: emit SQL that OR's literal match with bidirectional
+            closure membership. Falls back to the byte-identical literal
+            SQLLiteral form when no closure table is loaded.
+            """
+            left_entries = _code_entries(left_info)
+            right_entries = _code_entries(right_info)
+            if not left_entries or not right_entries:
+                return SQLLiteral(value=negated)
+
+            # Build disjunction of (literal OR closure-EXISTS) over every
+            # (left_code, right_code) pair. For singleton-vs-singleton (the
+            # overwhelmingly common case), this is a single OR-of-3.
+            from ...duckdb.udf.system_resolver import SystemResolver
+
+            ors: list[SQLExpression] = []
+            for le in left_entries:
+                for re_ in right_entries:
+                    l_sys, l_code = _code_key(le)
+                    r_sys, r_code = _code_key(re_)
+                    l_sys_n = SystemResolver.normalize(l_sys) or l_sys
+                    r_sys_n = SystemResolver.normalize(r_sys) or r_sys
+                    l_sys_sql = SQLLiteral(value=l_sys_n).to_sql()
+                    l_code_sql = SQLLiteral(value=l_code).to_sql()
+                    r_sys_sql = SQLLiteral(value=r_sys_n).to_sql()
+                    r_code_sql = SQLLiteral(value=r_code).to_sql()
+
+                    l_sys_lit = SQLLiteral(value=l_sys_n)
+                    l_code_lit = SQLLiteral(value=l_code)
+                    r_sys_lit = SQLLiteral(value=r_sys_n)
+                    r_code_lit = SQLLiteral(value=r_code)
+
+                    # Literal match: (L_sys, L_code) = (R_sys, R_code)
+                    literal_match = SQLBinaryOp(
+                        operator="AND",
+                        left=SQLBinaryOp(operator="=", left=l_sys_lit, right=r_sys_lit),
+                        right=SQLBinaryOp(operator="=", left=l_code_lit, right=r_code_lit),
+                    )
+
+                    # Bidirectional closure: L subsumes R OR R subsumes L.
+                    l_anc_r = SQLRaw(
+                        raw_sql=(
+                            "EXISTS (SELECT 1 FROM terminology_closure _tc "
+                            f"WHERE _tc.ancestor_system = {l_sys_sql} "
+                            f"AND _tc.ancestor_code = {l_code_sql} "
+                            f"AND _tc.descendant_system = {r_sys_sql} "
+                            f"AND _tc.descendant_code = {r_code_sql})"
+                        )
+                    )
+                    r_anc_l = SQLRaw(
+                        raw_sql=(
+                            "EXISTS (SELECT 1 FROM terminology_closure _tc "
+                            f"WHERE _tc.ancestor_system = {r_sys_sql} "
+                            f"AND _tc.ancestor_code = {r_code_sql} "
+                            f"AND _tc.descendant_system = {l_sys_sql} "
+                            f"AND _tc.descendant_code = {l_code_sql})"
+                        )
+                    )
+                    pair_match = SQLBinaryOp(
+                        operator="OR",
+                        left=SQLBinaryOp(operator="OR", left=literal_match, right=l_anc_r),
+                        right=r_anc_l,
+                    )
+                    ors.append(pair_match)
+
+            if not ors:
+                return SQLLiteral(value=negated)
+            result: SQLExpression = ors[0]
+            for next_clause in ors[1:]:
+                result = SQLBinaryOp(operator="OR", left=result, right=next_clause)
+            if negated:
+                result = SQLUnaryOp(operator="NOT", operand=result)
+            return result
+
         # QA-010: When both sides are compile-time code references,
         # compare directly instead of routing through the terminology translator.
         _left_code = _resolve_code_ref(expr.left)
         _right_code = _resolve_code_ref(expr.right)
         if _left_code and _right_code:
+            # Phase 3: route through the closure table when populated so
+            # subsumption is honored; otherwise byte-identical fallback.
+            if getattr(self.context, "closure_table_loaded", False):
+                return _emit_closure_aware_codes_equivalent(
+                    _left_code, _right_code, is_negated
+                )
             _match = _codes_equivalent(_left_code, _right_code)
             return SQLLiteral(value=_match != is_negated)
 
@@ -5139,6 +5963,45 @@ class OperatorsMixin:
             if left_types and right_types and left_types.isdisjoint(right_types):
                 return SQLLiteral(value=is_negated)
 
+        # CQL §Equivalent (Date, DateTime, Time): "the comparison is performed
+        # in the same way as it is for equality, except that if one input has
+        # a value for a given precision and the other does not, the comparison
+        # stops and the result is false, rather than null."
+        #
+        # Route Date/DateTime/Time equivalence through the same precision-aware
+        # `cqlDateTimeEqual` UDF that `=` uses, then convert any NULL (uncertain)
+        # result to False (per spec: equivalence "always returns true or false").
+        # This must run BEFORE the string-equivalence fall-through because
+        # DateTime literals translate to SQLLiteral(VARCHAR), which would
+        # otherwise be misclassified as String operands and compared with raw
+        # string equality (no timezone normalization).
+        if (
+            (self._is_temporal_cql_expr(expr.left) or self._is_temporal_cql_expr(expr.right))
+            and not (
+                self._is_timeofday_cql_expr(expr.left)
+                or self._is_timeofday_cql_expr(expr.right)
+            )
+        ):
+            cmp_result = SQLFunctionCall(
+                name="cqlDateTimeEqual",
+                args=[
+                    SQLCast(expression=left, target_type="VARCHAR"),
+                    SQLCast(expression=right, target_type="VARCHAR"),
+                ],
+            )
+            equiv_temporal = SQLCase(
+                when_clauses=[
+                    (
+                        SQLUnaryOp(operator="IS NULL", operand=cmp_result, prefix=False),
+                        SQLLiteral(value=False),
+                    ),
+                ],
+                else_clause=cmp_result,
+            )
+            if is_negated:
+                return SQLUnaryOp(operator="NOT", operand=equiv_temporal)
+            return equiv_temporal
+
         string_result = self._translate_string_equivalence(left, right, expr, is_negated)
         if string_result is not None:
             return string_result
@@ -5220,6 +6083,46 @@ class OperatorsMixin:
             if is_negated:
                 return SQLUnaryOp(operator="NOT", operand=equiv_qty)
             return equiv_qty
+
+        # CQL §Equivalent (Date, DateTime, Time): "the comparison is performed
+        # in the same way as it is for equality, except that if one input has
+        # a value for a given precision and the other does not, the comparison
+        # stops and the result is false, rather than null."
+        #
+        # Route Date/DateTime/Time equivalence through the same precision-aware
+        # `cqlDateTimeEqual` UDF that `=` uses, then convert any NULL (uncertain)
+        # result to False (per spec: equivalence "always returns true or false").
+        # This fixes the previous fall-through that used raw VARCHAR equality,
+        # which did not perform same-instant timezone normalization for
+        # DateTimes with different offsets (e.g.,
+        # @2024-01-01T10:00:00+00:00 ~ @2024-01-01T12:00:00+02:00 must be True).
+        if (
+            (self._is_temporal_cql_expr(expr.left) or self._is_temporal_cql_expr(expr.right))
+            and not (
+                self._is_timeofday_cql_expr(expr.left)
+                or self._is_timeofday_cql_expr(expr.right)
+            )
+        ):
+            cmp_result = SQLFunctionCall(
+                name="cqlDateTimeEqual",
+                args=[
+                    SQLCast(expression=left, target_type="VARCHAR"),
+                    SQLCast(expression=right, target_type="VARCHAR"),
+                ],
+            )
+            # Equivalence is null-safe: NULL (uncertain) -> False, never NULL.
+            equiv_temporal = SQLCase(
+                when_clauses=[
+                    (
+                        SQLUnaryOp(operator="IS NULL", operand=cmp_result, prefix=False),
+                        SQLLiteral(value=False),
+                    ),
+                ],
+                else_clause=cmp_result,
+            )
+            if is_negated:
+                return SQLUnaryOp(operator="NOT", operand=equiv_temporal)
+            return equiv_temporal
 
         equiv_case = SQLCase(
             when_clauses=[
@@ -5739,6 +6642,21 @@ class OperatorsMixin:
                         )
                     return result
 
+        # CQL §9 Equal/Greater/Less/<et al>: =<T>(left T, right T) and
+        # >T(left T, right T) require compatible operand types. When both
+        # operands are statically-known primitive literals of incompatible
+        # types (e.g. 'foo' > 5, 'foo' = 5, true > 'foo'), the comparison
+        # has no defined value — emit NULL (matching how the spec's three-
+        # valued logic treats undefined equality/ordering) instead of
+        # letting DuckDB raise a runtime ConversionException. Mirrors
+        # _static_equivalence_incompatible. The ordered-comparison
+        # extension (>, <, >=, <=) was added by CQL-09 EXPLORER QA-001
+        # after SKEPTIC's initial =/!=/<> guard proved incomplete.
+        if operator in ("=", "!=", "<>", "<", "<=", ">", ">=") and self._static_equivalence_incompatible(
+            expr.left, expr.right
+        ):
+            return self._maybe_wrap_audit_comparison(SQLNull(), operator, left, right)
+
         # CQL §12.1: Ratio equality compares numerator and denominator using
         # Quantity equality. Keep this before quantity fallback because Ratio
         # JSON is not itself a Quantity JSON object.
@@ -6009,15 +6927,12 @@ class OperatorsMixin:
                     number_projection = self._fhirpath_number_projection(expr)
                     if number_projection is not None:
                         return number_projection
-                    # Handle Quantity JSON objects by extracting $.value first
-                    trimmed = SQLFunctionCall(name="LTRIM", args=[expr])
-                    is_json = SQLFunctionCall(name="starts_with", args=[trimmed, SQLLiteral(value="{")])
-                    json_value = SQLFunctionCall(name="json_extract_string", args=[expr, SQLLiteral(value="$.value")])
+                    # Handle Quantity JSON objects by extracting $.value first.
+                    # cql_quantity_value is a SQL macro defined in clinical.py;
+                    # using it here keeps the emitted SQL DRY and audit-safe
+                    # (the macro is globally resolvable from any scope).
                     return SQLCast(
-                        expression=SQLCase(
-                            when_clauses=[(is_json, json_value)],
-                            else_clause=expr,
-                        ),
+                        expression=SQLFunctionCall(name="cql_quantity_value", args=[expr]),
                         target_type="DOUBLE",
                         try_cast=True,
                     )
@@ -6096,14 +7011,10 @@ class OperatorsMixin:
                 if number_projection is not None:
                     return number_projection
                 if isinstance(expr, SQLFunctionCall) and expr.name in _QUANTITY_JSON_UDFS:
-                    trimmed = SQLFunctionCall(name="LTRIM", args=[expr])
-                    is_json = SQLFunctionCall(name="starts_with", args=[trimmed, SQLLiteral(value="{")])
-                    json_value = SQLFunctionCall(name="json_extract_string", args=[expr, SQLLiteral(value="$.value")])
+                    # cql_quantity_value is a SQL macro defined in clinical.py;
+                    # using it here keeps the emitted SQL DRY and audit-safe.
                     return SQLCast(
-                        expression=SQLCase(
-                            when_clauses=[(is_json, json_value)],
-                            else_clause=expr,
-                        ),
+                        expression=SQLFunctionCall(name="cql_quantity_value", args=[expr]),
                         target_type="DOUBLE",
                         try_cast=True,
                     )
@@ -6155,9 +7066,31 @@ class OperatorsMixin:
 
         # CQL §12.1/§12.2: List equality requires element type compatibility.
         # DuckDB implicitly coerces [1,2,3] = ['1','2','3'] to true; CQL does not.
+        # Per CQL §Equal, however, Integer/Long and Decimal are all numeric and
+        # compare by value (1 = 1.0 is true); only non-numeric type mismatches
+        # (e.g. String vs Integer) are certain inequality. Map Python literal
+        # types to CQL categories before the disjointness check so that
+        # {1} = {1.0} does NOT short-circuit to FALSE here — it must reach the
+        # runtime CQLListEqualEq macro which performs DECIMAL-cast comparison.
         if sql_op in ("=", "!=") and isinstance(left, SQLArray) and isinstance(right, SQLArray):
-            left_types = {type(e.value).__name__ for e in left.elements if isinstance(e, SQLLiteral)}
-            right_types = {type(e.value).__name__ for e in right.elements if isinstance(e, SQLLiteral)}
+            def _cql_numeric_category(py_type_name: str) -> str:
+                # bool is a Python int subclass but CQL Boolean is non-numeric.
+                if py_type_name == "bool":
+                    return "bool"
+                if py_type_name in ("int", "float"):
+                    return "numeric"
+                return py_type_name
+
+            left_types = {
+                _cql_numeric_category(type(e.value).__name__)
+                for e in left.elements
+                if isinstance(e, SQLLiteral)
+            }
+            right_types = {
+                _cql_numeric_category(type(e.value).__name__)
+                for e in right.elements
+                if isinstance(e, SQLLiteral)
+            }
             if left_types and right_types and left_types.isdisjoint(right_types):
                 result = SQLLiteral(value=(sql_op == "!="))
                 return self._maybe_wrap_audit_comparison(result, operator, left, right)
@@ -6302,37 +7235,54 @@ class OperatorsMixin:
                 "the maximum value allowed for the type"
             )
 
-        if operator == "is null":
-            operand = self.translate(expr.operand, boolean_context=False)
-            return SQLUnaryOp(operator="IS NULL", operand=operand, prefix=False)
-
-        if operator == "is not null":
-            operand = self.translate(expr.operand, boolean_context=False)
-            return SQLUnaryOp(operator="IS NOT NULL", operand=operand, prefix=False)
-
-        if operator == "is true":
-            operand = self.translate(expr.operand, boolean_context=True)
-            return SQLFunctionCall(name="IsTrue", args=[operand])
-
-        if operator == "is false":
-            operand = self.translate(expr.operand, boolean_context=True)
-            return SQLFunctionCall(name="IsFalse", args=[operand])
-
-        if operator == "is not true":
-            operand = self.translate(expr.operand, boolean_context=True)
-            return SQLUnaryOp(
-                operator="NOT",
-                operand=SQLFunctionCall(name="IsTrue", args=[operand]),
-                prefix=True,
+        # CQL §Nullological Operators (Developer's Guide): the infix null-test
+        # and boolean-test operators (`is null`, `is not null`, `is true`,
+        # `is false`, `is not true`, `is not false`) are equivalent to their
+        # function-call forms (`IsNull`, `IsNotNull`, `IsTrue`, `IsFalse`) per
+        # Translation Semantics Table 6-F. The function-call path already
+        # inlines static `define` aliases (see `static_inline_functions` in
+        # `_translate_function_call`); apply the same inlining here so that
+        # `MyVal is true` (where `define MyVal: true`) emits `IsTrue(TRUE)`
+        # rather than treating the alias as a resource retrieve.
+        if operator in {
+            "is null", "is not null",
+            "is true", "is false",
+            "is not true", "is not false",
+        }:
+            operand_node = self._static_conversion_source_node(expr.operand)
+            # Boolean-test operators must keep boolean_context=True so that
+            # dynamic FHIR Boolean fields continue to project through
+            # `fhirpath_bool` (not `fhirpath_text`). Null-test operators do
+            # not require Boolean projection.
+            is_boolean_test = operator in {
+                "is true", "is false", "is not true", "is not false"
+            }
+            translate_source = operand_node if operand_node is not None else expr.operand
+            operand = self.translate(
+                translate_source,
+                boolean_context=is_boolean_test,
             )
 
-        if operator == "is not false":
-            operand = self.translate(expr.operand, boolean_context=True)
-            return SQLUnaryOp(
-                operator="NOT",
-                operand=SQLFunctionCall(name="IsFalse", args=[operand]),
-                prefix=True,
-            )
+            if operator == "is null":
+                return SQLUnaryOp(operator="IS NULL", operand=operand, prefix=False)
+            if operator == "is not null":
+                return SQLUnaryOp(operator="IS NOT NULL", operand=operand, prefix=False)
+            if operator == "is true":
+                return SQLFunctionCall(name="IsTrue", args=[operand])
+            if operator == "is false":
+                return SQLFunctionCall(name="IsFalse", args=[operand])
+            if operator == "is not true":
+                return SQLUnaryOp(
+                    operator="NOT",
+                    operand=SQLFunctionCall(name="IsTrue", args=[operand]),
+                    prefix=True,
+                )
+            if operator == "is not false":
+                return SQLUnaryOp(
+                    operator="NOT",
+                    operand=SQLFunctionCall(name="IsFalse", args=[operand]),
+                    prefix=True,
+                )
 
         operand = self.translate(expr.operand, boolean_context=False)
 
@@ -6351,6 +7301,15 @@ class OperatorsMixin:
                             value="99999999999999999999.99999999",
                             raw_sql="99999999999999999999.99999999",
                         )
+            # CQL §16 Negate: "If the result of negating the argument cannot be
+            # represented (e.g. -(minimum Integer)), the result is null." Detect a
+            # folded SQL literal whose value is exactly the type minimum (which
+            # happens when the source is a literal-spelled minimum like
+            # `-(-2147483648)` after parser-level unary folding).
+            if isinstance(operand, SQLLiteral) and isinstance(operand.value, int) and not isinstance(operand.value, bool):
+                v = operand.value
+                if v == -2147483648 or v == -9223372036854775808:
+                    return SQLNull()
             return SQLUnaryOp(operator="-", operand=operand, prefix=True)
 
         if operator == "+":
@@ -6411,6 +7370,18 @@ class OperatorsMixin:
                     name="predecessorOf",
                     args=[_quantity_literal_json(expr.operand.operand.elements[0])],
                 )
+            # CQL-11 EXPLORER QA-001: CQL §22.25 Predecessor: "If the result
+            # cannot be represented (e.g. predecessor of (minimum Integer)),
+            # the result is null." The FunctionRef form is special-cased
+            # above (line ~6580); mirror the same guard for the literal-
+            # spelled form. DuckDB silently promotes INTEGER to BIGINT during
+            # execution, so `predecessorOf(-2147483648)` returns -2147483649
+            # (a valid BIGINT, but not a valid CQL Integer). The Long check
+            # also runs as a defense-in-depth even though BIGINT cannot
+            # represent _CQL_LONG_MIN - 1.
+            if isinstance(operand, SQLLiteral) and isinstance(operand.value, int) and not isinstance(operand.value, bool):
+                if operand.value == _CQL_INTEGER_MIN or operand.value == _CQL_LONG_MIN:
+                    return SQLNull()
             return SQLFunctionCall(name="predecessorOf", args=[operand])
 
         if operator == "successor of":
@@ -6427,6 +7398,15 @@ class OperatorsMixin:
                     name="successorOf",
                     args=[_quantity_literal_json(expr.operand.operand.elements[0])],
                 )
+            # CQL-11 EXPLORER QA-001: CQL §22.26 Successor: "If the result
+            # cannot be represented (e.g. successor of (maximum Integer)),
+            # the result is null." Mirror the FunctionRef guard for the
+            # literal-spelled form. DuckDB silently promotes INTEGER to
+            # BIGINT, so `successorOf(2147483647)` returns 2147483648 (a
+            # valid BIGINT, but not a valid CQL Integer).
+            if isinstance(operand, SQLLiteral) and isinstance(operand.value, int) and not isinstance(operand.value, bool):
+                if operand.value == _CQL_INTEGER_MAX or operand.value == _CQL_LONG_MAX:
+                    return SQLNull()
             return SQLFunctionCall(name="successorOf", args=[operand])
 
         # Singleton from operator - extract single element from list

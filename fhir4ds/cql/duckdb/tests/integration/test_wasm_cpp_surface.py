@@ -261,8 +261,8 @@ def test_cql_browser_interval_and_boundary_udfs_run_without_python_fallback(cpp_
         cpp_only_con.execute(
             "SELECT dateAddQuantity('2024-01-01T00:00:00', '{\"value\":0.5,\"unit\":\"day\"}')"
         ).fetchone()[0]
-        == "2024-01-01T12:00:00"
-    )
+        == "2024-01-01T00:00:00"
+    )  # CQL §Add: 0.5 day truncates to 0 days (above-seconds decimals ignored)
     assert (
         cpp_only_con.execute("SELECT dateAddQuantity('2024-02-31', '{\"value\":1,\"unit\":\"day\"}')").fetchone()[0]
         is None
@@ -374,8 +374,8 @@ def test_cql_browser_interval_and_boundary_udfs_run_without_python_fallback(cpp_
     assert cpp_only_con.execute("SELECT cqlSameAsP('2024-01-01', '2024-01-01', 'bogus')").fetchone()[0] is None
     assert (
         cpp_only_con.execute("SELECT dateSubtractQuantity('2024-01-01', '{\"value\":0.5,\"unit\":\"day\"}')").fetchone()[0]
-        == "2023-12-31"
-    )
+        == "2024-01-01"
+    )  # CQL §Subtract: 0.5 day truncates to 0 days (above-seconds decimals ignored)
     assert (
         cpp_only_con.execute("SELECT dateSubtractQuantity('2024-01-15', '{\"value\":1.5,\"unit\":\"week\"}')").fetchone()[0]
         == "2024-01-08"

@@ -638,3 +638,171 @@ def test_malformed_literal_edges_match_python_fallback() -> None:
             assert cpp == py
     finally:
         con.close()
+
+
+def test_iso8601_week_date_literals_are_invalid_in_both_backends() -> None:
+    """FHIRPath §4.1.5: "Week dates and ordinal dates are not allowed."
+
+    Native C++ rejects ISO 8601 week-date forms directly in the lexer. The
+    Python fallback must report the same validity signal via
+    ``fhirpath_is_valid`` and return row-resilient empty results from the
+    public UDFs. The underlying fhirpathpy parser accepts these tokens, so
+    the static precheck in the fallback is the source of truth.
+    """
+    expressions = [
+        "@2015-W01-1",
+        "@2015-W01",
+        "@2015-W53-7",
+        "@2015-W",
+        "@2015-W00",
+    ]
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        for expression in expressions:
+            query = """
+                SELECT
+                    fhirpath(?::JSON, ?),
+                    fhirpath_text(?::JSON, ?),
+                    fhirpath_json(?::JSON, ?),
+                    fhirpath_is_valid(?)
+            """
+            params = [
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                expression,
+            ]
+            assert cpp.execute(query, params).fetchone() == ([], None, None, False)
+            assert py.execute(query, params).fetchone() == ([], None, None, False)
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_valid_calendar_duration_keywords_remain_valid_after_week_date_fix() -> None:
+    """The week-date precheck must not affect ``week``/``weeks`` Quantity units.
+
+    Regression guard: the temporal-token scanner was extended to include ``W``
+    so it can recognize ISO 8601 week dates. The Quantity literals ``1 week``
+    and ``4 weeks`` use the calendar-duration keyword spelled with lowercase
+    ``w`` and must remain valid.
+    """
+    expressions = ["1 week", "4 weeks", "52 weeks", "0 weeks", "1 year", "2 days"]
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        for expression in expressions:
+            assert cpp.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (True,)
+            assert py.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (True,)
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_quantity_literal_member_access_matches_backends() -> None:
+    """Quantity literals expose ``.value`` (Decimal) and ``.unit`` (String).
+
+    FHIRPath §4.1.8 defines a Quantity as having a ``value`` component of type
+    Decimal and a ``unit`` element of type String. Resource-backed FHIR
+    ``Quantity`` JSON objects already expose ``value``/``unit``/``code``/
+    ``system`` through the regular JSON member-access path in both backends,
+    but Quantity literals (``5 'mg'``) previously lost member access in native
+    C++ (silent empty) and produced wrong values in the forced Python fallback
+    (every key returned the value). This guard ensures Quantity literals expose
+    ``value`` and ``unit`` consistently across native and fallback, and that
+    ``.code``/``.system`` return empty (literals carry no UCUM/namespace
+    metadata per §4.1.8).
+    """
+    cases = [
+        # (expression, native_expected, fallback_expected)
+        ("5 'mg'.value", "5.0", "5.0"),
+        ("5 'mg'.unit", "'mg'", "'mg'"),
+        ("5.5 'mg'.value", "5.5", "5.5"),
+        ("5.5 'mg'.unit", "'mg'", "'mg'"),
+        ("1 year.value", "1.0", "1.0"),
+        ("1 year.unit", "year", "year"),
+    ]
+    empty_member_cases = [
+        # §4.1.8: literals expose only value+unit; code/system are not present.
+        "5 'mg'.code",
+        "5 'mg'.system",
+    ]
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        for expression, _, _ in cases:
+            assert cpp.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (True,)
+            assert py.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (True,)
+            cpp_text = cpp.execute(
+                "SELECT fhirpath_text(?::JSON, ?)",
+                [RESOURCE, expression],
+            ).fetchone()[0]
+            py_text = py.execute(
+                "SELECT fhirpath_text(?::JSON, ?)",
+                [RESOURCE, expression],
+            ).fetchone()[0]
+            assert cpp_text == py_text, (
+                f"{expression}: native={cpp_text!r} fallback={py_text!r}"
+            )
+        for expression in empty_member_cases:
+            # Both backends must agree these members are absent on literals.
+            cpp_result = cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_is_valid(?)",
+                [RESOURCE, expression, expression],
+            ).fetchone()
+            py_result = py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_is_valid(?)",
+                [RESOURCE, expression, expression],
+            ).fetchone()
+            assert cpp_result == py_result, (
+                f"{expression}: native={cpp_result!r} fallback={py_result!r}"
+            )
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_quantity_literal_value_and_unit_member_equality() -> None:
+    """Quantity-literal member values participate in equality like ordinary values.
+
+    Regression guard: after restoring member access on Quantity literals,
+    ``5 'mg'.value = 5`` and ``5 'mg'.value = 5.0`` must both return true
+    (Decimal trailing-zero equality per §6.1.1), and ``5 'mg'.unit = 'mg'``
+    must compare the bare UCUM unit text against the literal string. The unit
+    member returns the bare UCUM code (``mg``) or calendar duration keyword
+    (``year``) — matching the §5.5.8 Quantity toString shape for each unit kind.
+    """
+    cases = [
+        ("5 'mg'.value = 5", True),
+        ("5 'mg'.value = 5.0", True),
+        ("5 'mg'.unit = 'mg'", True),
+        ("1 year.unit = 'year'", True),
+    ]
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        for expression, expected in cases:
+            assert cpp.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (True,)
+            cpp_bool = cpp.execute(
+                "SELECT fhirpath_bool(?::JSON, ?)",
+                [RESOURCE, expression],
+            ).fetchone()[0]
+            py_bool = py.execute(
+                "SELECT fhirpath_bool(?::JSON, ?)",
+                [RESOURCE, expression],
+            ).fetchone()[0]
+            assert cpp_bool == py_bool == expected, (
+                f"{expression}: native={cpp_bool!r} fallback={py_bool!r} expected={expected!r}"
+            )
+    finally:
+        cpp.close()
+        py.close()
+

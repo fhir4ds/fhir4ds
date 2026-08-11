@@ -1,6 +1,259 @@
 # ViewDefinition Agent Notes
 
 ## Known Fragile Areas
+- SOF-VD-05 HISTORIAN iter 3 fixed (2026-07-05): `forEachOrNull`
+  with a nested `forEach` was dropping the parent row when the outer
+  collection was empty. Per SQL-on-FHIR v2 Process(S, N) algorithm step 3
+  (https://build.fhir.org/ig/FHIR/sql-on-fhir-v2/StructureDefinition-ViewDefinition.html),
+  when `foci` is empty and `forEachOrNull` is defined, the implementation
+  MUST emit one row binding ALL columns from `ValidateColumns(V, [])` (including
+  columns produced by nested `forEach` / nested `select`) to null. The
+  generator already emitted `LEFT JOIN LATERAL` for the outer `forEachOrNull`
+  to preserve the parent NULL row, but the inner `forEach` still emitted
+  `CROSS JOIN LATERAL` which evaluated `fhirpath(NULL_alias, 'childPath')`
+  -> empty collection -> CROSS JOIN with empty -> 0 rows -> the parent's
+  preserved NULL row was eliminated. Fix in `fhir4ds/viewdef/generator.py`
+  (`_process_selects` forEach branch threads `null_preserve_var`) and
+  `fhir4ds/viewdef/unnest.py` (`generate_foreach_unnest` gains a
+  `null_preserve_var` parameter). When set, the unnest subquery short-circuits
+  the unnest when the enclosing forEachOrNull alias IS NULL (gating the
+  VALUES row on `null_preserve_var IS NOT NULL`) and UNION ALLs a single
+  synthetic NULL row produced only when the enclosing alias IS NULL. This
+  preserves the parent NULL row ONLY when the enclosing forEachOrNull's foci
+  is itself empty (Process(S, N) step 3), while keeping ordinary INNER JOIN
+  semantics for non-empty wrapper foci (a contact with empty telecom is
+  still dropped per Process(S, N) step 2). `_generate_single_resource` also
+  tracks forEachOrNull unnest aliases across UNION ALL alternatives and
+  suppresses the null row in non-first alternatives that share the same
+  wrapper forEachOrNull path, so the spec's "emit one null row total" rule
+  holds across union branches. Pre-existing test
+  `test_nested_foreach_under_foreachornull_keeps_inner_semantics` was
+  updated to reflect the spec-mandated `(patient-2, None)` row that the
+  previous buggy behavior silently dropped. Three new regression tests in
+  `TestForeachOrNullNestedForeachSpecSofVd05Historian` (B3a outer-empty,
+  B3a outer-non-empty control, mixed partial-contact scenario). Post-fix:
+  ViewDefinition pytest 1058/1058. Probe at
+  `/mnt/d/fhir4ds/fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/iter3/probe_b3_simplified.py`.
+  Keep coverage aligned when touching `generate_foreach_unnest` or
+  `_generate_single_resource` UNION ALL handling.
+- SOF-VD-05 HISTORIAN ARCH-003 follow-up (iter 3, 2026-07-05): the same
+  parent-row-drop bug shape that QA-005 fixed for nested `forEach` also
+  existed for nested `repeat` under an enclosing `forEachOrNull`.
+  `generate_repeat_unnest` (`fhir4ds/viewdef/unnest.py`) emitted an
+  unconditional CROSS JOIN LATERAL against `fhirpath_repeat`, which
+  eliminated the parent's preserved NULL row when the outer
+  forEachOrNull's foci was empty (Process(S, N) step 3 violation). Fix
+  mirrors QA-005 exactly: `generate_repeat_unnest` gained a
+  `null_preserve_var` parameter; when set, the source VALUES row is
+  gated on `{null_preserve_var} IS NOT NULL` and a synthetic NULL row
+  is UNION ALLed only when `{null_preserve_var} IS NULL`.
+  `_process_selects` repeat branch (`fhir4ds/viewdef/generator.py`)
+  threads `null_preserve_var` into the call. `_collect_foreachornull_paths`
+  did NOT need extension because it tracks forEachOrNull *wrappers*
+  (the dedup unit), not inner unnests; `repeat` is a consumer of the
+  null-preserving var just like nested `forEach`. Three regression
+  tests in `TestForeachOrNullNestedRepeatSpecSofVd05Architect`. Post-fix:
+  ViewDefinition pytest 1061/1061. Probe at
+  `/mnt/d/fhir4ds/fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/iter3/probe_arch003.py`.
+- SOF-VD-04 SKEPTIC fresh rerun verified clean (2026-07-03): 38-assertion /
+  10-battery hypothesis-driven probe targeted collection default false +
+  bool-only invariant, multi-value non-collection error, type URI handling
+  for primitive/non-primitive, type mismatch reporting, tag 0..* with
+  required name/value, and `__post_init__` patterns. All 8 SKEPTIC
+  hypotheses empirically rejected. Notable confirmations: `Column.__post_init__`
+  (added by SOF-VD-03 SKEPTIC 2026-07-03) enforces all spec invariants at
+  construction; `forEachOrNull` null-row correctly projects SQL NULL for
+  child collection columns (preserves SOF-VD-05 HISTORIAN invariant); tags
+  with whitespace-only name/value correctly rejected; non-collection multi-
+  value path raises typed runtime error at execution. Two informational
+  observations (not bugs): `_URI_RE = r"^\S*$"` matches empty string at the
+  regex layer but `validate_optional_uri_string` guards before the regex;
+  `ColumnType.normalize_name` strips the resource-type prefix for
+  `URL#fragment` form (matches FHIR canonical URL semantics). Probe at
+  `/mnt/d/fhir4ds/.temp/qa/sof_vd04_skeptic_2026_07_03_fresh/probe.py`.
+  Post-iteration: ViewDefinition pytest 1055/1055, full conformance
+  2822/2822 (ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706,
+  DQM 47/47).
+- SOF-VD-03 EXPLORER fresh rerun fixed (2026-07-03):
+  `validate_required_string` at `fhir4ds/viewdef/types.py:47` only checked
+  `not value`, which is True only for empty strings. It did not reject
+  whitespace-only strings, so `column.path`, `select.forEach`,
+  `select.forEachOrNull`, `where.path`, `column.tag.name`, and
+  `column.tag.value` silently accepted whitespace-only values at
+  construction/parse time. The malformed value propagated through
+  `Column.__post_init__`, parser, `Select.to_dict`, and only surfaced at
+  SQL generation with a misleading message ("FHIRPath expression must be a
+  non-empty string" — even though the string was non-empty). Per spec,
+  `column.path` / `forEach` / `forEachOrNull` / `where.path` are FHIRPath
+  expressions, and FHIRPath §3 lexical grammar requires at least one
+  expression token; whitespace-only strings are not valid FHIRPath
+  expressions. Fix: tightened `validate_required_string` to also reject
+  whitespace-only strings via `value.strip()`. This is the central choke
+  point used by all the affected fields, so adding the check here fixes
+  the entire class of pathological input at the model boundary instead of
+  patching each caller individually. Regression class
+  `TestWhitespaceFhirPathRejectionPerSpecSofVd03Explorer` in
+  `test_parser.py` (22 tests). Post-fix: ViewDefinition pytest 1055/1055
+  (was 1033), full conformance 2822/2822 unchanged. Probe at
+  `/mnt/d/fhir4ds/.temp/qa/sof_vd03_explorer_2026_07_03_fresh/probe.py`.
+- SOF-VD-03 HISTORIAN fresh rerun fixed (2026-07-03):
+  `parse_view_definition()` and `ViewDefinition.to_dict()` did not reject
+  duplicate column names in the effective output schema, even though the
+  SQL-on-FHIR v2 `ValidateColumns` algorithm step 2.1 throws "Column Already
+  Defined" and the parser already enforced duplicate `Constant.name` at parse
+  time. The duplicate was previously caught only by
+  `SQLGenerator._validate_unique_output_names()` (strict, at generate) and
+  `validate_view_definition()` (permissive warnings). Fix: added an
+  effective-output-schema duplicate-name check in `parse_view_definition()`
+  (parser.py, after the select-parsing loop) and in `ViewDefinition.to_dict()`
+  (types.py, after each `select.to_dict()` validates container shapes). The
+  helper counts each select's direct columns, nested select effective schemas,
+  and only the first `unionAll` branch's effective schema (matching
+  `SQLGenerator._collect_select_output_schema`), so legitimate matching
+  unionAll branch schemas are not flagged. Regression class
+  `TestDuplicateColumnNameRejectionPerSpecSofVd03Historian` in
+  `test_parser.py` (9 tests). Two existing generator tests updated to assert
+  the parser path now rejects. Post-fix: ViewDefinition pytest 1033/1033
+  (was 1024), full conformance 2822/2822 unchanged. Probe at
+  `/mnt/d/fhir4ds/.temp/qa/sof_vd03_historian_2026_07_03_fresh/probe.py`.
+- SOF-VD-03 SKEPTIC fresh rerun fixed (2026-07-03): The `Column` dataclass
+  at `fhir4ds/viewdef/types.py:528` had a `__post_init__` that only validated
+  `type` and `tag`, deferring `path`/`name`/`description`/`collection`
+  validation to `to_dict()` and `SQLGenerator._validate_column_shape`. This
+  was the same anti-pattern SOF-VD-02 SKEPTIC fixed for `Constant` on
+  2026-07-03 — when a module has multiple spec-owning dataclasses, the
+  newest or least-tested one will be missing the `__post_init__` invariant
+  its siblings enforce. Direct construction silently accepted
+  `Column(path='id', name='')`, `Column(path='', name='x')`,
+  `Column(path='id', name='x', description=123)`,
+  `Column(path='id', name='_bad')`, `Column(path='id', name='bad-name')`.
+  Fix: `Column.__post_init__` at `fhir4ds/viewdef/types.py:546-575` now
+  invokes `validate_column_fields(self.path, self.name, self.description)`
+  and `validate_optional_boolean(self.collection, "Column.collection")` at
+  the top of the method, before the existing type/tag conversion logic.
+  Five existing tests that encoded the spec-violation deferral as expected
+  behavior were updated to assert construction-time rejection. New
+  regression class `TestDirectColumnValidationPerSpecSofVd03Skeptic` in
+  `test_columns.py` (8 methods / 13 assertions). Post-fix: ViewDefinition
+  pytest 1024/1024 (was 1005), full conformance 2822/2822 unchanged.
+  Probe at `/mnt/d/fhir4ds/.temp/qa/sof_vd03_skeptic_2026_07_03_fresh/probe.py`.
+- SOF-VD-03 DEFERRED (2026-07-03): `ViewDefinition(select=[])` and
+  `Select(...)` lack `__post_init__`, so direct construction with
+  spec-invalid shapes (empty root select, non-array columns, etc.) defers
+  to `to_dict()`/`generate()`. Per Minimal Footprint and the SOF-VD-02
+  SKEPTIC precedent (only Constant was fixed; ViewDefinition/Select
+  symmetry was left for a future iteration), this lower-priority symmetry
+  concern is DEFERRED. The parser already enforces non-empty select via
+  `_parse_select`, and direct dataclass construction with `select=[]` is
+  rare. Future SOF-VD chunks adding spec-owning dataclasses should adopt
+  the `__post_init__` pattern from the start.
+- SOF-VD-02 EXPLORER iter 1 fresh rerun fixed (2026-07-03): The constant
+  resolver at `fhir4ds/viewdef/constants.py:resolve_constants_in_path` had a
+  silent precedence bug — it checked `if const_name in constants:` BEFORE
+  consulting `FHIRPATH_BUILTIN_VARIABLES`. When a user authored a `Constant`
+  whose `name` matched a FHIRPath built-in environment variable (`context`,
+  `resource`, `rootResource`, `rowIndex`, `ucum`) and referenced `%<name>`
+  in a FHIRPath expression, the user's value silently overrode the FHIR
+  runtime variable. Per FHIRPath v3.0.0-ballot §"Environment variables",
+  builtins are "set for all contexts" and MUST NOT be shadowable by user
+  constants. Fix: reordered the resolver to consult `FHIRPATH_BUILTIN_VARIABLES`
+  FIRST, preserving `%<name>` verbatim for runtime evaluation. The
+  generator's `_validate_constants` (generator.py:1052) was already correct
+  (treats builtins as always-defined) — only the resolver had drifted.
+  Coverage: `TestBuiltinVariablePrecedencePerSpecSofVd02Explorer` class
+  in `test_constants.py` (8 parametrized cases). Post-fix: ViewDefinition
+  pytest 1005/1005 (was 997), full conformance 2822/2822 unchanged.
+  Probe at `/mnt/d/fhir4ds/.temp/qa/sof_vd02_explorer_2026_07_03_fresh/probe.py`.
+- SOF-VD-02 HISTORIAN iter 1 fresh rerun verified clean (2026-07-03):
+  7-battery / 141-assertion systematic spec-walkthrough probe confirmed
+  all 10 golden-standard invariants for `ViewDefinition.constant` are
+  preserved end-to-end (parser → from_dict → Constant → to_dict →
+  SQLGenerator → DuckDB execution). All earlier SOF-VD-02
+  SKEPTIC/HISTORIAN/EXPLORER fixes remain intact, including the
+  2026-07-03 SKEPTIC fix that added `Constant.__post_init__` to enforce
+  sql-name + value[x] allowlist uniformly. The supported primitive
+  choice list (`CONSTANT_VALUE_TYPE_FIELDS`) matches the official spec's
+  19 primitives exactly (no extra historical Coding/CodeableConcept).
+  Built-in FHIRPath variables are canonically centralized in
+  `constants.py:FHIRPATH_BUILTIN_VARIABLES` and shared by resolver + SQL
+  generator. Substitution is FHIRPath-lexical (string literals and
+  backtick identifiers not substituted), string values are properly
+  escaped as FHIRPath single-quoted literals, and undefined user
+  constants raise `ConstantResolutionError`. DuckDB execution parity
+  native ↔ forced Python fallback confirmed with spec-expected results.
+  Probe at
+  `/mnt/d/fhir4ds/.temp/qa/sof_vd02_historian_2026_07_03_fresh2/probe.py`.
+  Post-iteration: ViewDefinition pytest 997/997, full conformance
+  2822/2822 (ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706,
+  DQM 47/47).
+- SOF-VD-02 SKEPTIC fresh rerun fixed (2026-07-03): The `Constant`
+  dataclass at `fhir4ds/viewdef/types.py:687` was missing `__post_init__`,
+  unlike sibling spec-owning dataclasses `Column`, `ColumnTag`, and
+  `Join`. Direct construction accepted invalid `name` (sql-name
+  violations) and unsupported `value_type` values (markdown, Coding,
+  CodeableConcept, Address, etc.). The AGENTS.md SOF-VD-02 SKEPTIC
+  fresh rerun (2026-05-31) invariant already required direct Constant
+  validation, but the dataclass boundary was missed. Fix added
+  `Constant.__post_init__` calling the canonical
+  `validate_constant_fields(self.name, self.value, self.value_type)`
+  helper, matching the pattern of sibling dataclasses. All four
+  spec-owning viewdef dataclasses now consistently enforce invariants
+  at construction. Regression coverage: `TestDirectDataclassValidation`
+  class in `test_constants.py` (8 new test cases). Post-fix:
+  ViewDefinition pytest 997/997 (was 985); full conformance 2822/2822
+  unchanged. Probe at
+  `/mnt/d/fhir4ds/.temp/qa/sof_vd02_skeptic_2026_07_03_fresh/probe.py`.
+  Optional future cleanup: Coding/CodeableConcept/null/empty-string
+  branches in `resolve_constant` (`fhir4ds/viewdef/constants.py`) are
+  now unreachable through normal Constant construction; remain as
+  defensive code paths tested via attribute mutation.
+- SOF-VD-01 EXPLORER fresh rerun verified clean (2026-07-03):
+  42/42 pathological-input probes passed across 6 batteries: resource field
+  (missing/empty/array/null/numeric/object/unknown/lowercase/whitespace/
+  control-char/100K-char DoS/CJK/newline-injection + valid baseline), profile
+  canonical (null/non-array/empty-string/non-string/whitespace/newline/
+  very-long/Unicode/Shareable-with-version-suffix/duplicate URLs),
+  fhirVersion (null/string/unknown/whitespace/empty/numeric/valid mixed
+  R4+R5), shared-table resourceType filtering with DuckDB execution
+  (Patient filter, Observation where, zero-matching-resource zero rows,
+  forEachOrNull null-row preservation, SQL-injection payload rejected at
+  generator guard), pathological VD shapes (10K columns, 100-deep nested
+  select, 1K profile entries), and permissive validator (warns for unknown
+  resource, accepts absent profile). Probe at
+  `/mnt/d/fhir4ds/.temp/qa/sof_vd01_explorer_2026_07_03_fresh/probe.py`.
+  Behavioral spec confirmation (NOT A BUG): FHIR `uri` datatype regex is
+  officially `\S*` ("very permissive") per https://build.fhir.org/datatypes.html
+  — profile canonical values containing Unicode characters such as
+  `http://éxample.com/Y` match the spec's `uri` production and are
+  spec-compliant when accepted. SQL injection via `resource` is impossible
+  because `validate_resource_type()` rejects any non-ResourceType string
+  before SQL emission. Conformance 2822/2822 unchanged.
+- SOF-VD-01 HISTORIAN fresh rerun fixed (2026-07-03):
+  `ViewDefinition.from_dict()` had an over-broad `except Exception` wrapper
+  that re-raised every parser exception as a generic `ValueError`, erasing
+  the typed `ParseError`/`ValidationError` exception info the parser throws.
+  This violated GLOBAL_RULES.md "No Silent Fallbacks: Fail fast with typed
+  exceptions." Fix made `SQLOnFHIRError` inherit from `ValueError` so all
+  typed errors remain catchable as ValueError for backward compatibility,
+  and removed the over-broad wrapper in `from_dict` so typed exceptions
+  propagate directly. Regression test:
+  `test_from_dict_preserves_typed_parse_error_per_spec_sof_vd01_historian`.
+  Probe at `/mnt/d/fhir4ds/.temp/qa/sof_vd01_historian_2026_07_03_fresh/probe.py`.
+  ViewDefinition pytest 985/985; conformance 2822/2822.
+- SOF-VD-01 SKEPTIC fresh rerun verified clean (2026-07-03):
+  38/38 hypothesis-driven probes passed across parser (resource 1..1
+  ResourceType binding, profile 0..* canonical, fhirVersion 0..* FHIRVersion
+  binding), public `ViewDefinition.from_dict`, direct dataclass
+  `SQLGenerator.generate`, DuckDB execution over mixed-resource shared table,
+  permissive `validate_view_definition`, and the official `view_resource.json`
+  fixture. The shared-table resourceType filter, direct-dataclass generator
+  guards, and permissive validator warnings remain aligned with prior
+  SKEPTIC/HISTORIAN/EXPLORER fixes. Probe at
+  `/mnt/d/fhir4ds/.temp/qa/sof_vd01_skeptic_2026_07_03_fresh/probe.py`.
+  Non-blocking architectural observation: `_generate_multi_resource_union`
+  (generator.py:1779-1797) is unreachable dead code because
+  `validate_resource_type` rejects non-string resources before SQL generation;
+  preserved for historical compatibility, low-priority cleanup candidate.
 - Release 0.0.8 Domain 5 SPECIALIST verified clean (2026-06-07):
   Fresh composed ViewDefinition probing found no new issues across
   `forEachOrNull` row preservation, nested `unionAll`, branch-local `where`,
@@ -522,6 +775,15 @@
 
 ## NOT A BUG Registry
 
+- SOF-VD-05 HISTORIAN iter 3 (2026-07-05): String constants substituted into
+  `forEach` paths produce literal-string foci, not navigation. Per FHIRPath
+  `%Const` substitutes the constant's *value* into the expression — a string
+  constant becomes a FHIRPath string literal `'name'`, not the bare
+  navigation path `name`. forEach over a literal string is not navigation;
+  this is a fundamental FHIRPath limitation, not a fhir4ds bug. The spec's
+  only constant example (`code=%bp_code` in a where predicate) substitutes
+  into a comparison, which is the intended use. Direct dataclass / parser /
+  generator paths all behave consistently with this FHIRPath semantic.
 - SOF-VD-09 EXPLORER fresh rerun (2026-06-01): Root `where`
   stays scoped to the root resource when projections use composed rowset
   features. Fresh native-loaded and forced Python fallback probes verified

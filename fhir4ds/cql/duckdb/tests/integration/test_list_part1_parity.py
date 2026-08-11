@@ -194,6 +194,55 @@ def test_cql_list_part1_edge_cases_match_no_python_runtime() -> None:
         cpp.close()
 
 
+def test_cql_list_part1_temporal_and_numeric_equality_match_cpp_registration() -> None:
+    """CQL-18 SKEPTIC iteration 1 regression: temporal-aware dispatch for
+    Except/Intersect/IndexOf, and Integer/Decimal list equality.
+
+    Spec citations:
+      - CQL §Equal (List): "uses equality semantics" — and §Equal (scalar)
+        explicitly says 1.0 = 1 is true (conformance SimpleEqFloat1Int1).
+        Therefore {1} = {1.0} must be true.
+      - CQL §Except/§Intersect/§IndexOf: each "uses equality semantics".
+        §Equal (DateTime) compares by timezone-normalized instant, so
+        same-instant DateTimes must be considered set-equal.
+      - CQL §Equal (DateTime): precision-mismatch comparison returns null.
+        §IndexOf: "If either argument is null, the result is null." An
+        uncertain equality propagates as null.
+    """
+    translated = translate_cql(_cql_list_part1_temporal_numeric_library())
+    expected = {
+        # QA-001: Integer/Decimal list equality must reach the runtime macro.
+        "EqualIntDec": (True,),
+        "EqualDecInt": (True,),
+        "EqualIntDecMulti": (True,),
+        "EqualIntDecDifferent": (False,),
+        # QA-002: IndexOf with DateTime tz mismatch must use temporal compare.
+        "IndexOfDateTimeTzMatch": (0,),
+        # QA-003: Except with DateTime tz mismatch must remove the element.
+        "ExceptDateTimeTz": ([],),
+        # QA-004: Intersect with DateTime tz mismatch must keep the element.
+        "IntersectDateTimeTz": (["2024-01-01T10:00:00+00:00"],),
+        # QA-005: IndexOf with DateTime precision mismatch returns null.
+        "IndexOfDateTimePrecision": (None,),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expr in translated.items():
+                sql = f"SELECT {expr.to_sql()}"
+                py_result = _normalize(py.execute(sql).fetchone())
+                cpp_result = _normalize(cpp.execute(sql).fetchone())
+                no_py_result = _normalize(no_py.execute(sql).fetchone())
+                assert cpp_result == py_result, name
+                assert no_py_result == py_result, name
+                assert py_result == expected[name], name
+    finally:
+        py.close()
+        cpp.close()
+
+
 def test_cql_list_part1_direct_surface_matches_cpp_registration() -> None:
     cases = [
         ("SELECT First([1, 2, 3])", (1,)),
@@ -567,3 +616,22 @@ define IntersectNullElement: { null, 1, 3 } intersect { null, 3, 5 }
 define IntersectBigMixedNumericEmpty: { 9223372036854775807L } intersect { 9223372036854775806.0 }
 define IntersectQuantityEquivalent: { 1 'g', 2 'g' } intersect { 1000 'mg' }
 """
+
+
+def _cql_list_part1_temporal_numeric_library() -> str:
+    """CQL-18 SKEPTIC iteration 1 regression library for temporal-aware
+    list-operator dispatch and Integer/Decimal list equality.
+    """
+    return """library List1TemporalNumeric version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define EqualIntDec: { 1 } = { 1.0 }
+define EqualDecInt: { 1.0 } = { 1 }
+define EqualIntDecMulti: { 1, 2 } = { 1.0, 2.0 }
+define EqualIntDecDifferent: { 1, 2 } = { 1.0, 3.0 }
+define IndexOfDateTimeTzMatch: IndexOf({ @2024-01-01T10:00:00+00:00 }, @2024-01-01T12:00:00+02:00)
+define ExceptDateTimeTz: { @2024-01-01T10:00:00+00:00 } except { @2024-01-01T12:00:00+02:00 }
+define IntersectDateTimeTz: { @2024-01-01T10:00:00+00:00 } intersect { @2024-01-01T12:00:00+02:00 }
+define IndexOfDateTimePrecision: IndexOf({ @2024-01-01 }, @2024-01-01T12)
+"""
+

@@ -467,3 +467,222 @@ define InTimeUncertain: @T15:59:59 in { @T15:59:59.999, @T20:59:59.999 }
 define EqualTimeUncertain: { @T15:59:59.999 } = { @T15:59:59 }
 define NotEqualTimeUncertain: { @T15:59:59.999 } != { @T15:59:59 }
 """
+
+
+def _cql_list_part2_symbolic_pipe_library() -> str:
+    """CQL v1.5.3 §20.29: the union operator can also be invoked with the
+    symbolic operator (|). Both list and interval overloads must translate
+    identically to the `union` keyword form.
+    """
+    return """library List2SymbolicPipe version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define PipeListDedup: { 1, 2 } | { 2, 3 }
+define PipeListLength: Length({ 1, 2 } | { 2, 3 })
+define PipeNullLeft: (null as List<Integer>) | { 4, 5 }
+define PipeNullBoth: (null as List<Integer>) | (null as List<Integer>)
+"""
+
+
+def test_cql_list_part2_symbolic_pipe_union_matches_keyword_union() -> None:
+    """CQL §20.29: `|` is the symbolic form of `union` for lists."""
+    translated = translate_cql(_cql_list_part2_symbolic_pipe_library())
+    expected = {
+        "PipeListDedup": ({1, 2, 3},),
+        "PipeListLength": (3,),
+        "PipeNullLeft": ({4, 5},),
+        "PipeNullBoth": (set(),),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    no_py_cm = no_python_connection()
+    no_py = no_py_cm.__enter__()
+    try:
+        for name, expr in translated.items():
+            sql = f"SELECT {expr.to_sql()}"
+            py_result = py.execute(sql).fetchone()
+            cpp_result = cpp.execute(sql).fetchone()
+            no_py_result = no_py.execute(sql).fetchone()
+            # Normalize list results to sets since order is unspecified for
+            # union per CQL §20.29.
+            def _norm(row):
+                if isinstance(row, tuple) and len(row) == 1:
+                    val = row[0]
+                    if isinstance(val, list):
+                        return (set(val),)
+                    return row
+                return row
+
+            assert _norm(py_result) == _norm(cpp_result), name
+            assert _norm(py_result) == _norm(no_py_result), name
+            assert _norm(py_result) == expected[name], name
+    finally:
+        no_py_cm.__exit__(None, None, None)
+        py.close()
+        cpp.close()
+
+
+def test_cql_list_part2_symbolic_pipe_parses_as_union_binary_expression() -> None:
+    """The parser emits operator == '|' for the symbolic pipe form; ensure
+    it now routes through the union translator (regression sentinel for
+    CQL-19 QA-001)."""
+    expr = parse_expression("{1, 2} | {2, 3}")
+    assert isinstance(expr, BinaryExpression)
+    assert expr.operator == "|"
+    # Translation must succeed and produce SQL list_concat / list_distinct.
+    translated = translate_cql(
+        """library Sentinel version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define X: {1, 2} | {2, 3}
+"""
+    )
+    sql_text = str(translated["X"])
+    # The union lowering path uses list_concat + Distinct (or list_distinct).
+    # Just ensure no raw bitwise `|` operator remains in the SQL.
+    assert "list_concat" in sql_text or "Distinct" in sql_text or "list_distinct" in sql_text
+
+
+def _cql_list_part2_typed_empty_union_library() -> str:
+    """CQL v1.5.3 §20.29 Union (List): typed-empty-list union must return an
+    empty list, not raise BinderException. Regression coverage for
+    CQL-19 HISTORIAN iter 1 QA-001.
+
+    The previous translator fallback emitted a CASE expression that mixed
+    `jsonConcat` (returns VARCHAR[]) with typed CASE arms (e.g., INTEGER[]),
+    raising BinderException on Integer/Long/Decimal/Boolean typed-empty unions.
+    """
+    return """library List2TypedEmptyUnion version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define EmptyInteger: ({} as List<Integer>) union ({} as List<Integer>)
+define EmptyLong: ({} as List<Long>) union ({} as List<Long>)
+define EmptyDecimal: ({} as List<Decimal>) union ({} as List<Decimal>)
+define EmptyBoolean: ({} as List<Boolean>) union ({} as List<Boolean>)
+define EmptyString: ({} as List<String>) union ({} as List<String>)
+define EmptyDateTime: ({} as List<DateTime>) union ({} as List<DateTime>)
+define EmptyTime: ({} as List<Time>) union ({} as List<Time>)
+define EmptyQuantity: ({} as List<Quantity>) union ({} as List<Quantity>)
+define TypedEmptyPlusLiteral: ({} as List<Integer>) union {1, 2, 3}
+define LiteralPlusTypedEmpty: {1, 2, 3} union ({} as List<Integer>)
+define TypedNonEmptyUnion: ({1, 2} as List<Integer>) union ({3, 4} as List<Integer>)
+define TypedEmptyPlusNonEmpty: ({} as List<Integer>) union ({1, 2} as List<Integer>)
+define TypedEmptyPlusNull: ({} as List<Integer>) union (null as List<Integer>)
+define NullPlusTypedEmpty: (null as List<Integer>) union ({} as List<Integer>)
+"""
+
+
+def test_cql_list_part2_typed_empty_list_union_returns_empty_per_spec() -> None:
+    """CQL §20.29: typed-empty-list union must return an empty list, not
+    raise BinderException. Verifies the fix for CQL-19 HISTORIAN iter 1 QA-001
+    across all three DuckDB backends (Python fallback, native C++ extension,
+    no-Python/browser-style C++)."""
+    translated = translate_cql(_cql_list_part2_typed_empty_union_library())
+    expected = {
+        "EmptyInteger": ([],),
+        "EmptyLong": ([],),
+        "EmptyDecimal": ([],),
+        "EmptyBoolean": ([],),
+        "EmptyString": ([],),
+        "EmptyDateTime": ([],),
+        "EmptyTime": ([],),
+        "EmptyQuantity": ([],),
+        "TypedEmptyPlusLiteral": ([1, 2, 3],),
+        "LiteralPlusTypedEmpty": ([1, 2, 3],),
+        "TypedNonEmptyUnion": ([1, 2, 3, 4],),
+        "TypedEmptyPlusNonEmpty": ([1, 2],),
+        "TypedEmptyPlusNull": ([],),
+        "NullPlusTypedEmpty": ([],),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    no_py_cm = no_python_connection()
+    no_py = no_py_cm.__enter__()
+    try:
+        for name, expr in translated.items():
+            sql = f"SELECT {expr.to_sql()}"
+            py_result = py.execute(sql).fetchone()
+            cpp_result = cpp.execute(sql).fetchone()
+            no_py_result = no_py.execute(sql).fetchone()
+            # Normalize lists to sorted form for order-insensitive comparison.
+            def _norm_list(row):
+                if isinstance(row, tuple) and len(row) == 1 and isinstance(row[0], list):
+                    return (sorted(row[0], key=lambda x: (str(type(x)), str(x))),)
+                return row
+            py_n = _norm_list(py_result)
+            cpp_n = _norm_list(cpp_result)
+            no_py_n = _norm_list(no_py_result)
+            exp_n = _norm_list(expected[name])
+            assert cpp_n == py_n, f"{name}: cpp={cpp_n!r} py={py_n!r}"
+            assert no_py_n == py_n, f"{name}: no_py={no_py_n!r} py={py_n!r}"
+            assert py_n == exp_n, f"{name}: py={py_n!r} expected={exp_n!r}"
+    finally:
+        no_py_cm.__exit__(None, None, None)
+        py.close()
+        cpp.close()
+
+
+def _cql_list_part2_explorer_typed_null_list_library() -> str:
+    """CQL v1.5.3 §20 List Properly Includes / Properly Included In:
+
+    For the list-list overload, if either argument is null, the result is null.
+
+    Typed-null lists (e.g., `null as List<Integer>`) translate to
+    `CASE WHEN FALSE THEN NULL ELSE NULL END` rather than a bare SQLNull.
+    The list-list null-check must detect this pattern, otherwise the
+    array_length comparison short-circuits to 0 > N = False, returning
+    False instead of NULL.
+    """
+    return """library List2TypedNullList version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define PI_LeftNullList: (null as List<Integer>) properly includes {1, 3, 5}
+define PI_RightNullList: {1, 3, 5} properly includes (null as List<Integer>)
+define PI_BothNullList: (null as List<Integer>) properly includes (null as List<Integer>)
+define PIIB_LeftNullList: (null as List<Integer>) properly included in {1, 3, 5}
+define PIIB_RightNullList: {1, 3, 5} properly included in (null as List<Integer>)
+define PIIB_BothNullList: (null as List<Integer>) properly included in (null as List<Integer>)
+"""
+
+
+def test_cql_list_part2_typed_null_list_properly_includes_returns_null_per_spec() -> None:
+    """CQL §20: For the list-list overload of properly includes / properly
+    included in, if either argument is null, the result is null.
+
+    Regression coverage for CQL-19 EXPLORER iter 1. The typed-null list
+    `(null as List<Integer>)` is translated to a CASE expression that must
+    be detected by the list-list null guard. Otherwise, the array_length
+    comparison short-circuits to 0 > N = False, returning False instead of
+    NULL across all three DuckDB backends.
+    """
+    translated = translate_cql(_cql_list_part2_explorer_typed_null_list_library())
+    expected = {
+        "PI_LeftNullList": (None,),
+        "PI_RightNullList": (None,),
+        "PI_BothNullList": (None,),
+        "PIIB_LeftNullList": (None,),
+        "PIIB_RightNullList": (None,),
+        "PIIB_BothNullList": (None,),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    no_py_cm = no_python_connection()
+    no_py = no_py_cm.__enter__()
+    try:
+        for name, expr in translated.items():
+            sql = f"SELECT {expr.to_sql()}"
+            py_result = py.execute(sql).fetchone()
+            cpp_result = cpp.execute(sql).fetchone()
+            no_py_result = no_py.execute(sql).fetchone()
+            assert cpp_result == py_result, name
+            assert no_py_result == py_result, name
+            assert py_result == expected[name], f"{name}: got {py_result!r}, expected {expected[name]!r}"
+    finally:
+        no_py_cm.__exit__(None, None, None)
+        py.close()
+        cpp.close()
+
+

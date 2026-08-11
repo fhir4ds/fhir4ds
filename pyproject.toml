@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fhir4ds-v2"
-version = "0.0.10"
+version = "0.0.11"
 description = "FHIR for Data Science — unified package for FHIRPath, CQL, and SQL-on-FHIR analytics"
 readme = "README.md"
 license = {text = "AGPL-3.0-only"}
@@ -47,6 +47,22 @@ hapi = [
 mongo = [
     "pandas",
     "pymongo>=4.6",
+]
+# Terminology service abstraction (Phase 1 of the medterm4ds integration).
+# httpx backs HTTPTerminologyEndpoint; medterm4ds backs the in_process
+# adapter. medterm4ds is published on PyPI (>=0.0.1) so it is declared
+# normally — pip install 'fhir4ds-v2[terminology]' pulls both.
+terminology = [
+    "httpx>=0.24",
+    "medterm4ds>=0.0.1",
+]
+# Phase 4 — Clinical Notes NER. Pulls the medspaCy + HuggingFace NER +
+# SapBERT cascade transitively via medterm4ds[extraction]. fhir4ds
+# itself NEVER imports medspacy / spacy / transformers / torch directly;
+# those heavy deps are owned by medterm4ds so the core ``import fhir4ds``
+# path remains zero-dep.
+ner = [
+    "medterm4ds[extraction]",
 ]
 dev = [
     "pytest>=7.0.0",

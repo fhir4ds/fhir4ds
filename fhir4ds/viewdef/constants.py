@@ -319,15 +319,20 @@ def resolve_constants_in_path(path: str, constants: dict[str, Constant]) -> str:
 
     for start, end, const_name in iter_constant_references(path):
         resolved_parts.append(path[last_end:start])
-        if const_name in constants:
-            resolved_parts.append(resolve_constant(constants[const_name]))
-            last_end = end
-            continue
-        # Spec-compliant FHIRPath context variables (%context, %resource, etc.)
-        # should pass through unchanged — they are resolved at evaluation time.
-        # However, undefined user constants should raise an error.
+        # Per FHIRPath §"Environment variables" (https://build.fhir.org/ig/HL7/FHIRPath/)
+        # and FHIR §FHIRPath (https://build.fhir.org/fhirpath.html), the built-in
+        # environment variables %context, %resource, %rootResource are "set for all
+        # contexts" / "Defined in FHIR"; %ucum is set for all contexts per FHIRPath;
+        # and SQL-on-FHIR v2 adds %rowIndex as a runtime variable. These reserved
+        # runtime variables MUST NOT be shadowed by user-defined constants — check
+        # the builtin set FIRST so a user constant with the same name cannot leak
+        # its value into the runtime variable slot.
         if const_name in FHIRPATH_BUILTIN_VARIABLES:
             resolved_parts.append(path[start:end])
+            last_end = end
+            continue
+        if const_name in constants:
+            resolved_parts.append(resolve_constant(constants[const_name]))
             last_end = end
             continue
         raise ConstantResolutionError(

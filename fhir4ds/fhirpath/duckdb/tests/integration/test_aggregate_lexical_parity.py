@@ -244,3 +244,85 @@ def test_reserved_keywords_and_strict_whitespace_match_fallback(monkeypatch) -> 
     finally:
         con.close()
         fallback.close()
+
+
+def test_pathological_expression_depth_does_not_silently_return_empty_fp19_explorer(
+    monkeypatch,
+) -> None:
+    """FP-19 EXPLORER QA-001 (2026-06-30): pathological-depth expressions
+    must evaluate correctly in the Python fallback, not silently return
+    empty due to Python ``RecursionError``.
+
+    Without the ``_eval_with_recursion_budget`` wrapper in
+    ``fhir4ds/fhirpath/duckdb/udf.py``, the recursive ``do_eval`` evaluator
+    hits Python's default recursion limit at ~250 syntactic markers, and
+    the row-resilient UDF wrapper swallows the resulting
+    ``FHIRPathEvaluationError`` as empty. Native C++ has no such limit.
+
+    Reproducer (pre-fix):
+    - ``(1 | 2 | ... | 500).aggregate($this + $total, 0)`` returned
+      ``125250`` (native) vs ``None`` (fallback).
+    - ``(((((...((1))...)))))`` 300-deep returned ``1`` (native) vs
+      ``None`` (fallback).
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "fp19-deep"})
+
+    # 500-element union aggregate — must return 125250 in both backends
+    big_union_500 = " | ".join(str(i) for i in range(1, 501))
+    aggregate_expr = f"({big_union_500}).aggregate($this + $total, 0)"
+
+    # 300-deep parenthesization — must return 1 in both backends
+    deep_parens_300 = "(" * 300 + "1" + ")" * 300
+
+    # 300-deep not() chain via method invocation — must return same Boolean
+    # in both backends (parity is the requirement; the value depends on
+    # parity of nesting).
+    deep_not_300 = "true" + ".not()" * 300
+
+    con = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        # Aggregate over 500-element union
+        native_agg = con.execute(
+            "SELECT fhirpath_text(?::JSON, ?)", [resource, aggregate_expr]
+        ).fetchone()[0]
+        fallback_agg = fallback.execute(
+            "SELECT fhirpath_text(?::JSON, ?)", [resource, aggregate_expr]
+        ).fetchone()[0]
+        assert native_agg == "125250", f"native aggregate sum: {native_agg}"
+        assert fallback_agg == "125250", f"fallback aggregate sum: {fallback_agg}"
+
+        # Validity check on pathological-depth expression
+        native_valid = con.execute(
+            "SELECT fhirpath_is_valid(?)", [aggregate_expr]
+        ).fetchone()[0]
+        fallback_valid = fallback.execute(
+            "SELECT fhirpath_is_valid(?)", [aggregate_expr]
+        ).fetchone()[0]
+        assert native_valid is True, f"native validity: {native_valid}"
+        assert fallback_valid is True, f"fallback validity: {fallback_valid}"
+
+        # Deep parenthesization
+        native_parens = con.execute(
+            "SELECT fhirpath_text(?::JSON, ?)", [resource, deep_parens_300]
+        ).fetchone()[0]
+        fallback_parens = fallback.execute(
+            "SELECT fhirpath_text(?::JSON, ?)", [resource, deep_parens_300]
+        ).fetchone()[0]
+        assert native_parens == "1", f"native deep parens: {native_parens}"
+        assert fallback_parens == "1", f"fallback deep parens: {fallback_parens}"
+
+        # Deep not() chain — 300 is even, so result is true
+        native_not = con.execute(
+            "SELECT fhirpath_bool(?::JSON, ?)", [resource, deep_not_300]
+        ).fetchone()[0]
+        fallback_not = fallback.execute(
+            "SELECT fhirpath_bool(?::JSON, ?)", [resource, deep_not_300]
+        ).fetchone()[0]
+        assert native_not == fallback_not, (
+            f"deep not() divergence: native={native_not}, fallback={fallback_not}"
+        )
+        assert native_not in (True, False), f"deep not() result: {native_not}"
+    finally:
+        con.close()
+        fallback.close()

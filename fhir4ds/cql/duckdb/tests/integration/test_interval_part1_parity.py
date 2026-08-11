@@ -227,7 +227,10 @@ define ContainsNullPoint: Interval[1, 10] contains null
         "ContainsNullPoint": (None,),
     }
     direct_cases = [
-        ("SELECT intervalContains(NULL, '5')", (None,)),
+        # CQL §19.3 Contains: "If the first argument is null, the result
+        # is false." Both intervalContains and intervalContainsPrecise
+        # must short-circuit null first arg to False.
+        ("SELECT intervalContains(NULL, '5')", (False,)),
         ("SELECT intervalContains(intervalFromBounds('1', '10', true, true), NULL)", (None,)),
         ("SELECT intervalContainsPrecise(NULL, '2024-01-05', 'day')", (False,)),
         (
@@ -307,6 +310,130 @@ define ExpandValidNumericPer: expand Interval[1, 5] per 2
                 else:
                     assert cpp_value == py_value == no_py_value, name
                     assert py_value == expected_result
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part1_expand_hour_precision_time_interval_matches_cpp_per_spec() -> None:
+    """CQL §19.25 Expand: hour-precision Time intervals must dispatch correctly.
+
+    Spec example: `expand { Interval[@T10, @T12] } per hour` produces
+    `{ Interval[@T10, @T10], Interval[@T11, @T11], Interval[@T12, @T12] }`.
+
+    Previously the Python fallback returned `[]` for hour-only Time bounds
+    (no colon in raw string) while the C++ extension returned the correct
+    3 intervals. The fix uses `_is_time_like_string()` for dispatch.
+    """
+    cql = """library IntervalExpandHour version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define ExpandHourPrecision: expand { Interval[@T10, @T12] } per hour
+define ExpandHourRange: expand { Interval[@T10, @T15] } per hour
+define ExpandPer2Hours: expand { Interval[@T10, @T14] } per 2 hours
+define ExpandPerMinuteEmpty: expand { Interval[@T10, @T10] } per minute
+"""
+    translated = translate_cql(cql)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            # Spec example: hour-precision bound + per hour = 3 unit intervals
+            sql = f"SELECT {translated['ExpandHourPrecision'].to_sql()}"
+            py_result = _load_json(py.execute(sql).fetchone()[0])
+            cpp_result = _load_json(cpp.execute(sql).fetchone()[0])
+            no_py_result = _load_json(no_py.execute(sql).fetchone()[0])
+            assert py_result == cpp_result == no_py_result
+            assert len(py_result) == 3
+            assert py_result[0]["low"] == "T10"
+            assert py_result[1]["low"] == "T11"
+            assert py_result[2]["low"] == "T12"
+
+            # Range covering 6 hours
+            sql = f"SELECT {translated['ExpandHourRange'].to_sql()}"
+            py_result = _load_json(py.execute(sql).fetchone()[0])
+            cpp_result = _load_json(cpp.execute(sql).fetchone()[0])
+            no_py_result = _load_json(no_py.execute(sql).fetchone()[0])
+            assert py_result == cpp_result == no_py_result
+            assert len(py_result) == 6
+
+            # Per 2 hours: T10, T12, T14
+            sql = f"SELECT {translated['ExpandPer2Hours'].to_sql()}"
+            py_result = _load_json(py.execute(sql).fetchone()[0])
+            cpp_result = _load_json(cpp.execute(sql).fetchone()[0])
+            no_py_result = _load_json(no_py.execute(sql).fetchone()[0])
+            assert py_result == cpp_result == no_py_result
+            assert len(py_result) == 3
+            assert [iv["low"] for iv in py_result] == ["T10", "T12", "T14"]
+
+            # Spec example: less-precise boundary + more-precise per = empty
+            sql = f"SELECT {translated['ExpandPerMinuteEmpty'].to_sql()}"
+            py_result = py.execute(sql).fetchone()[0]
+            cpp_result = cpp.execute(sql).fetchone()[0]
+            no_py_result = no_py.execute(sql).fetchone()[0]
+            assert _load_json(py_result) == []
+            assert _load_json(cpp_result) == []
+            assert _load_json(no_py_result) == []
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part1_expand_open_bounds_time_interval_matches_cpp_per_spec() -> None:
+    """CQL §19.25 Expand: open-bound Time intervals dispatch partitions correctly.
+
+    Per spec: "contribute all the intervals of size per that start on or after
+    the lower boundary and end on or before the upper boundary". For open
+    bounds, partitions whose start equals the open boundary are excluded
+    (the boundary itself is not contained in the interval).
+
+    - `expand { Interval(T10, T12] } per hour` → 2 intervals {T11, T12}
+      (T10 partition excluded; T10:00:00.000 itself is not in the open-low
+      interval)
+    - `expand { Interval[T10, T12) } per hour` → 2 intervals {T10, T11}
+      (T12 partition excluded; T12:00:00.000 itself is not in the open-high
+      interval)
+    - `expand { Interval(T10, T12) } per hour` → 1 interval {T11}
+      (both T10 and T12 partitions excluded)
+    """
+    cql = """library IntervalExpandOpen version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define ExpandOpenLow: expand { Interval(@T10, @T12] } per hour
+define ExpandOpenHigh: expand { Interval[@T10, @T12) } per hour
+define ExpandOpenBoth: expand { Interval(@T10, @T12) } per hour
+"""
+    translated = translate_cql(cql)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            # Open low: T10 partition excluded, T11 and T12 included
+            sql = f"SELECT {translated['ExpandOpenLow'].to_sql()}"
+            py_result = _load_json(py.execute(sql).fetchone()[0])
+            cpp_result = _load_json(cpp.execute(sql).fetchone()[0])
+            no_py_result = _load_json(no_py.execute(sql).fetchone()[0])
+            assert py_result == cpp_result == no_py_result
+            assert len(py_result) == 2
+            assert [iv["low"] for iv in py_result] == ["T11", "T12"]
+
+            # Open high: T12 partition excluded, T10 and T11 included
+            sql = f"SELECT {translated['ExpandOpenHigh'].to_sql()}"
+            py_result = _load_json(py.execute(sql).fetchone()[0])
+            cpp_result = _load_json(cpp.execute(sql).fetchone()[0])
+            no_py_result = _load_json(no_py.execute(sql).fetchone()[0])
+            assert py_result == cpp_result == no_py_result
+            assert len(py_result) == 2
+            assert [iv["low"] for iv in py_result] == ["T10", "T11"]
+
+            # Open both: only T11 partition included
+            sql = f"SELECT {translated['ExpandOpenBoth'].to_sql()}"
+            py_result = _load_json(py.execute(sql).fetchone()[0])
+            cpp_result = _load_json(cpp.execute(sql).fetchone()[0])
+            no_py_result = _load_json(no_py.execute(sql).fetchone()[0])
+            assert py_result == cpp_result == no_py_result
+            assert len(py_result) == 1
+            assert py_result[0]["low"] == "T11"
     finally:
         py.close()
         cpp.close()
@@ -652,6 +779,164 @@ define EndsDuringHalfOpenDay: Interval[DateTime(2025, 10, 31, 14, 35), DateTime(
             sql = f"SELECT {translated[name].to_sql()}"
             assert py.execute(sql).fetchone() == expected_result
             assert cpp.execute(sql).fetchone() == expected_result
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part1_historian_contains_in_precision_and_null_short_circuit() -> None:
+    """CQL-15 HISTORIAN iteration 1 fresh-run regression coverage.
+
+    Three spec violations were discovered by fresh HISTORIAN spec-walkthrough
+    on 2026-07-02 and fixed:
+
+    1. ``Interval<T> contains <precision> of <point>`` previously dropped the
+       precision wrapper, falling through to ``intervalContains`` without
+       precision and returning False for cases that must be NULL under
+       partial-precision Date/DateTime/Time uncertainty (CQL §19.3).
+    2. ``<point> in <precision> of <interval>`` previously built raw SQL
+       ``>=``/``<=`` comparisons via ``_truncate_to_precision``, losing
+       uncertainty detection for partial-precision Date bounds (CQL §19.11).
+    3. ``(null as Interval<T>) contains (null as T)`` previously returned
+       NULL; spec §19.3 Contains says first-arg-null short-circuits to
+       False. Same for ``(null as Interval<T>) includes 5`` (point-interval
+       overload is a synonym for contains per §19.12).
+    """
+    cql = """library HistorianCql15 version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define ContainsDayOfYearPrecision: Interval[@2024, @2024] contains day of @2024-06-15
+define ContainsDayOfFullDate: Interval[@2024-01-01, @2024-12-31] contains day of @2024-06-15
+define InDayOfYearPrecision: @2024-06-15 in day of Interval[@2024, @2024]
+define InDayOfFullDate: @2024-06-15 in day of Interval[@2024-01-01, @2024-12-31]
+define BothNullContains: (null as Interval<Integer>) contains (null as Integer)
+define NullContainerContains: (null as Interval<Integer>) contains 5
+define NullPointContains: Interval[1, 10] contains (null as Integer)
+define NullContainerIncludesPoint: (null as Interval<Integer>) includes 5
+define IncludesDayOfYearPrecision: Interval[@2024, @2024] includes day of @2024-06-15
+"""
+    translated = translate_cql(cql)
+    expected = {
+        # Partial-precision Date bounds → uncertain → NULL (was False)
+        "ContainsDayOfYearPrecision": (None,),
+        "ContainsDayOfFullDate": (True,),
+        "InDayOfYearPrecision": (None,),
+        "InDayOfFullDate": (True,),
+        # Null-container short-circuit: first-arg null → False (was None)
+        "BothNullContains": (False,),
+        "NullContainerContains": (False,),
+        "NullPointContains": (None,),
+        "NullContainerIncludesPoint": (False,),
+        # Includes precision overload (synonym for contains point-interval)
+        "IncludesDayOfYearPrecision": (None,),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expected_result in expected.items():
+                sql = f"SELECT {translated[name].to_sql()}"
+                assert py.execute(sql).fetchone() == expected_result, (
+                    f"PY {name}: expected {expected_result}, got "
+                    f"{py.execute(sql).fetchone()}"
+                )
+                assert cpp.execute(sql).fetchone() == expected_result, (
+                    f"CPP {name}: expected {expected_result}, got "
+                    f"{cpp.execute(sql).fetchone()}"
+                )
+                assert no_py.execute(sql).fetchone() == expected_result, (
+                    f"NO_PY {name}: expected {expected_result}, got "
+                    f"{no_py.execute(sql).fetchone()}"
+                )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part1_explorer_expand_precision_truncation_and_parity() -> None:
+    """CQL-15 EXPLORER iteration 1 fresh-run regression coverage.
+
+    Four Expand-surface issues were discovered by fresh EXPLORER fuzz/pathological
+    probes on 2026-07-02 and fixed:
+
+    1. ``expand Interval[...] per year`` previously returned malformed ``"YYYYT"``
+       literals on the native C++ extension (C++ ``DateTimeValue::to_string()``
+       appended ``"T"`` for year precision). CQL §9 Date: year-precision dates
+       serialize as 4-digit year YYYY.
+    2. Python ``expand`` did not truncate temporal bounds to per-precision.
+       CQL §19.10 Expand: "If the interval boundaries are more precise than the
+       per quantity, the more precise values will be truncated to the precision
+       specified by the per quantity." Spec example: ``expand { Interval[@T10:00,
+       @T12:30] } per hour`` -> ``{ Interval[@T10, @T10], ... }``.
+    3. ``expand Interval[null, null]`` returned ``[]`` on Python vs ``None`` on
+       C++. Spec is permissive ("implementations are allowed to not return
+       results"), but both backends must agree.
+    4. ``expand Interval[1 'g', 5 'g'] per 1 'mg'`` had IEEE 754 floating-point
+       accumulation drift in C++ (e.g., ``4.9990000000000006`` instead of
+       ``4.999``).
+    """
+    cql = """library ExplorerCql15 version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define ExpandPerYear: expand Interval[@2024-01-01, @2025-01-01] per 1 year
+define ExpandPerMonth: expand Interval[@2024-01-01, @2024-03-31] per 1 month
+define ExpandPerDay: expand Interval[@2024-01-01, @2024-01-05] per 1 day
+define ExpandPerHourTime: expand Interval[@T10:00:00, @T12:30:00] per 1 hour
+define ExpandEmptyInterval: expand Interval[null as Integer, null as Integer]
+define ExpandPerMgQuantity: expand Interval[1 'g', 5 'g'] per 1 'mg'
+"""
+    translated = translate_cql(cql)
+    expected = {
+        # Year-precision truncation: "2024" not "2024T"
+        "ExpandPerYear": ('["2024","2025"]',),
+        # Month-precision truncation
+        "ExpandPerMonth": ('["2024-01","2024-02","2024-03"]',),
+        # Day-precision unchanged
+        "ExpandPerDay": (
+            '["2024-01-01","2024-01-02","2024-01-03","2024-01-04","2024-01-05"]',
+        ),
+        # Time hour-precision truncation
+        "ExpandPerHourTime": ('["T10","T11","T12"]',),
+        # Null-bounds interval → null (parity with C++)
+        "ExpandEmptyInterval": (None,),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expected_result in expected.items():
+                sql = f"SELECT {translated[name].to_sql()}"
+                assert py.execute(sql).fetchone() == expected_result, (
+                    f"PY {name}: expected {expected_result}, got "
+                    f"{py.execute(sql).fetchone()}"
+                )
+                assert cpp.execute(sql).fetchone() == expected_result, (
+                    f"CPP {name}: expected {expected_result}, got "
+                    f"{cpp.execute(sql).fetchone()}"
+                )
+                assert no_py.execute(sql).fetchone() == expected_result, (
+                    f"NO_PY {name}: expected {expected_result}, got "
+                    f"{no_py.execute(sql).fetchone()}"
+                )
+
+        # Quantity FP drift check: compare value-by-value (4001 items).
+        # C++ must not produce values like 4.9990000000000006.
+        sql_qty = f"SELECT {translated['ExpandPerMgQuantity'].to_sql()}"
+        py_result = py.execute(sql_qty).fetchone()[0]
+        cpp_result = cpp.execute(sql_qty).fetchone()[0]
+        assert py_result == cpp_result, (
+            f"ExpandPerMgQuantity parity: py={py_result[:120]}, "
+            f"cpp={cpp_result[:120]}"
+        )
+        # Sanity: spot-check a known FP-trouble value (n=3999 -> 4.999).
+        items = json.loads(py_result)
+        assert len(items) == 4001, f"expected 4001 items, got {len(items)}"
+        # Index 3999 should be exactly 4.999 (was 4.9990000000000006 pre-fix).
+        assert items[3999]["value"] == 4.999, (
+            f"index 3999 value: expected 4.999, got {items[3999]['value']!r}"
+        )
     finally:
         py.close()
         cpp.close()

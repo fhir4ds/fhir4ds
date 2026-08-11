@@ -229,6 +229,7 @@ class ExpressionTranslator(
         registry.register("log", lambda args, ctx: self._translate_log(args))
         registry.register("ln", lambda args, ctx: self._translate_ln(args))
         registry.register("power", lambda args, ctx: self._translate_power(args))
+        registry.register_pre_translate("power", self._translate_power_pre)
 
         # Scalar min/max (2-arg: LEAST/GREATEST — only after aggregate pre-check)
         registry.register("min", lambda args, ctx: self._translate_scalar_min(args))

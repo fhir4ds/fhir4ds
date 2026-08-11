@@ -527,6 +527,15 @@ class SQLTranslationContext:
     # Cached FluentFunctionTranslator for the hardcoded registry path
     _fluent_translator: Optional[Any] = None
 
+    # Phase 3 (medterm4ds subsumption): when True, the translator emits SQL
+    # that consults the pre-populated ``terminology_closure`` table for
+    # ``Code X ~ Code Y``, ``Code X is Code Y`` and ``Descendents(X)``.
+    # When False (default), the translator emits the byte-identical SQL that
+    # the conformance baseline expects — preserving INV-1 (zero regression).
+    # Callers set this via ``set_closure_table_loaded(True)`` after running
+    # ``fhir4ds.cql.terminology.closure.build_closure_table``.
+    _closure_table_loaded: bool = False
+
     def __post_init__(self):
         """Initialize the root scope, default parameter bindings, and profile registry."""
         if not self.scopes:
@@ -1097,6 +1106,26 @@ class SQLTranslationContext:
     def set_connection(self, connection: Any) -> None:
         """Set the DuckDB connection."""
         self._connection = connection
+
+    @property
+    def closure_table_loaded(self) -> bool:
+        """Phase 3: True when ``terminology_closure`` is populated for this build.
+
+        When True, the translator emits SQL that consults the closure table
+        for code equivalence / ``is`` / ``Descendents``. When False (the
+        default), the translator emits byte-identical SQL to the pre-Phase-3
+        baseline (INV-1 — zero regression).
+        """
+        return self._closure_table_loaded
+
+    def set_closure_table_loaded(self, value: bool) -> None:
+        """Phase 3: signal that the closure table is populated.
+
+        Set to True only after ``build_closure_table`` has loaded rows for
+        the library being translated. Set back to False before translating
+        a library without a populated closure table on the same connection.
+        """
+        self._closure_table_loaded = bool(value)
 
     @property
     def context_type(self) -> str:

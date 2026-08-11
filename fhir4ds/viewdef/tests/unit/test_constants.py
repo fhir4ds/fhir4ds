@@ -14,6 +14,7 @@ from ...constants import (
     resolve_constants_in_path,
     ConstantResolver,
     extract_constant_references,
+    FHIRPATH_BUILTIN_VARIABLES,
 )
 
 
@@ -63,8 +64,17 @@ class TestResolveConstant:
         assert result == "false"
 
     def test_resolve_null_constant(self):
-        """Test resolving a null constant."""
-        const = Constant(name="NullValue", value=None, value_type=None)
+        """Test resolving a null constant (resolver defensive branch).
+
+        Per SQL-on-FHIR v2, ``constant.value[x]`` is 1..1, so a real
+        ``Constant`` cannot carry ``value=None`` after SOF-VD-02 SKEPTIC
+        fresh rerun (2026-07-03) added ``Constant.__post_init__`` validation.
+        The resolver still guards the None branch defensively; we exercise
+        it here by mutating the value of a valid Constant.
+        """
+        const = Constant(name="Placeholder", value="x", value_type="string")
+        const.value = None
+        const.value_type = None
         result = resolve_constant(const)
 
         assert result == "null"
@@ -85,7 +95,22 @@ class TestResolveConstant:
 
 
 class TestResolveCodingConstant:
-    """Tests for Coding constant resolution."""
+    """Tests for Coding constant resolution (resolver defensive branch).
+
+    Per SQL-on-FHIR v2, ``ViewDefinition.constant.value[x]`` is constrained
+    to a primitive choice list and does NOT include Coding. After
+    SOF-VD-02 SKEPTIC fresh rerun (2026-07-03) added
+    ``Constant.__post_init__`` validation, no real ``Constant`` can carry a
+    Coding value. The resolver still guards the Coding branch defensively;
+    we exercise it here by mutating a valid Constant.
+    """
+
+    @staticmethod
+    def _coding_constant(name: str, coding: dict) -> Constant:
+        const = Constant(name=name, value="placeholder", value_type="string")
+        const.value = coding
+        const.value_type = "Coding"
+        return const
 
     def test_resolve_simple_coding(self):
         """Test resolving a simple Coding constant."""
@@ -93,7 +118,7 @@ class TestResolveCodingConstant:
             "system": "http://hl7.org/fhir/gender-identity",
             "code": "female"
         }
-        const = Constant(name="FemaleCoding", value=coding, value_type="Coding")
+        const = self._coding_constant("FemaleCoding", coding)
         result = resolve_constant(const)
 
         assert "Coding{" in result
@@ -107,7 +132,7 @@ class TestResolveCodingConstant:
             "code": "73211009",
             "display": "Diabetes mellitus"
         }
-        const = Constant(name="DiabetesCode", value=coding, value_type="Coding")
+        const = self._coding_constant("DiabetesCode", coding)
         result = resolve_constant(const)
 
         assert "Coding{" in result
@@ -119,7 +144,7 @@ class TestResolveCodingConstant:
             "system": "http://example.org",
             "code": "test's code"
         }
-        const = Constant(name="EscapedCoding", value=coding, value_type="Coding")
+        const = self._coding_constant("EscapedCoding", coding)
         result = resolve_constant(const)
 
         # Single quotes should be doubled
@@ -127,7 +152,22 @@ class TestResolveCodingConstant:
 
 
 class TestResolveCodeableConceptConstant:
-    """Tests for CodeableConcept constant resolution."""
+    """Tests for CodeableConcept constant resolution (resolver defensive branch).
+
+    Per SQL-on-FHIR v2, ``ViewDefinition.constant.value[x]`` is constrained
+    to a primitive choice list and does NOT include CodeableConcept. After
+    SOF-VD-02 SKEPTIC fresh rerun (2026-07-03) added
+    ``Constant.__post_init__`` validation, no real ``Constant`` can carry a
+    CodeableConcept value. The resolver still guards the CodeableConcept
+    branch defensively; we exercise it here by mutating a valid Constant.
+    """
+
+    @staticmethod
+    def _concept_constant(name: str, concept: dict) -> Constant:
+        const = Constant(name=name, value="placeholder", value_type="string")
+        const.value = concept
+        const.value_type = "CodeableConcept"
+        return const
 
     def test_resolve_simple_codeable_concept(self):
         """Test resolving a simple CodeableConcept."""
@@ -136,7 +176,7 @@ class TestResolveCodeableConceptConstant:
                 {"system": "http://snomed.info/sct", "code": "73211009"}
             ]
         }
-        const = Constant(name="DiabetesConcept", value=concept, value_type="CodeableConcept")
+        const = self._concept_constant("DiabetesConcept", concept)
         result = resolve_constant(const)
 
         assert "CodeableConcept{" in result
@@ -151,7 +191,7 @@ class TestResolveCodeableConceptConstant:
             ],
             "text": "Hemoglobin"
         }
-        const = Constant(name="HemoglobinConcept", value=concept, value_type="CodeableConcept")
+        const = self._concept_constant("HemoglobinConcept", concept)
         result = resolve_constant(const)
 
         assert "text: 'Hemoglobin'" in result
@@ -164,7 +204,7 @@ class TestResolveCodeableConceptConstant:
                 {"system": "http://icd.codes", "code": "E11"}
             ]
         }
-        const = Constant(name="MultiCodingConcept", value=concept, value_type="CodeableConcept")
+        const = self._concept_constant("MultiCodingConcept", concept)
         result = resolve_constant(const)
 
         assert result.count("Coding{") == 2
@@ -367,8 +407,16 @@ class TestEdgeCases:
     """Tests for edge cases in constant resolution."""
 
     def test_empty_string_value(self):
-        """Test resolving empty string."""
-        const = Constant(name="Empty", value="", value_type="string")
+        """Resolver would emit empty FHIRPath literal (resolver defensive branch).
+
+        Per FHIR R4, ``string`` is non-empty (length >= 1). After
+        SOF-VD-02 SKEPTIC fresh rerun (2026-07-03) added
+        ``Constant.__post_init__`` validation, no real ``Constant`` can
+        carry an empty string. The resolver still handles it defensively;
+        we exercise it here by mutating a valid Constant.
+        """
+        const = Constant(name="Placeholder", value="x", value_type="string")
+        const.value = ""
         result = resolve_constant(const)
 
         assert result == "''"
@@ -470,25 +518,27 @@ class TestEdgeCases:
             })
 
     def test_to_dict_rejects_invalid_constant_name(self):
-        """Direct Constant serialization validates constant.name."""
+        """Constant construction validates constant.name (SOF-VD-02 SKEPTIC)."""
+        # Construction itself raises since __post_init__ validates.
         with pytest.raises(ValueError, match="sql-name"):
-            Constant(name="_bad", value="value", value_type="string").to_dict()
+            Constant(name="_bad", value="value", value_type="string")
 
     def test_to_dict_rejects_invalid_primitive_values(self):
-        """Direct Constant serialization validates value[x] shape."""
+        """Constant construction validates value[x] shape (SOF-VD-02 SKEPTIC)."""
         with pytest.raises(ValueError, match="valueInteger"):
-            Constant(name="BadInteger", value="1", value_type="integer").to_dict()
+            Constant(name="BadInteger", value="1", value_type="integer")
 
         with pytest.raises(ValueError, match="valueDateTime"):
-            Constant(name="BadDateTime", value="2024T00:00:00Z", value_type="dateTime").to_dict()
+            Constant(name="BadDateTime", value="2024T00:00:00Z", value_type="dateTime")
 
         with pytest.raises(ValueError, match="valueInstant"):
-            Constant(name="BadInstant", value="2024-01T00:00:00Z", value_type="instant").to_dict()
+            Constant(name="BadInstant", value="2024-01T00:00:00Z", value_type="instant")
 
     def test_to_dict_rejects_unsupported_value_type(self):
-        """Direct Constant serialization is limited to supported primitive choices."""
+        """Constant construction limits value_type to spec primitive choices."""
+        # Construction itself raises since __post_init__ validates.
         with pytest.raises(ValueError, match="Unsupported Constant.value_type"):
-            Constant(name="BadType", value="x", value_type="notatype").to_dict()
+            Constant(name="BadType", value="x", value_type="notatype")
 
     def test_resolver_rejects_duplicate_names_from_list(self):
         """ConstantResolver construction cannot silently overwrite duplicates."""
@@ -497,3 +547,125 @@ class TestEdgeCases:
                 {"name": "Duplicate", "valueString": "first"},
                 {"name": "Duplicate", "valueString": "second"},
             ])
+
+
+class TestDirectDataclassValidation:
+    """SOF-VD-02 SKEPTIC fresh rerun (2026-07-03).
+
+    Direct Constant dataclass construction must validate spec-defined fields
+    via __post_init__, matching the validation pattern used by sibling
+    dataclasses Column, ColumnTag, and Join. SQL-on-FHIR requires
+    constant.name to satisfy sql-name and constant.value[x] to be exactly one
+    of the 19 supported primitive choices.
+    """
+
+    def test_direct_construct_rejects_invalid_sql_name(self):
+        """Constant(name='_bad') must raise ValueError at construction."""
+        with pytest.raises(ValueError, match="sql-name"):
+            Constant(name="_bad", value="f", value_type="code")
+
+    @pytest.mark.parametrize("bad_name", ["", "bad-name", "bad.name", "9bad", "bad name"])
+    def test_direct_construct_rejects_other_invalid_names(self, bad_name: str):
+        """All sql-name violations are rejected at construction."""
+        with pytest.raises(ValueError, match="sql-name|non-empty"):
+            Constant(name=bad_name, value="f", value_type="code")
+
+    def test_direct_construct_rejects_unsupported_value_type(self):
+        """value_type must be one of the 19 supported primitives."""
+        with pytest.raises(ValueError, match="Unsupported Constant.value_type"):
+            Constant(name="C", value="x", value_type="markdown")
+
+    def test_direct_construct_rejects_complex_value_types(self):
+        """Coding/CodeableConcept/Address are not in the spec choice list."""
+        for bad in ("Coding", "CodeableConcept", "Address"):
+            with pytest.raises(ValueError, match="Unsupported Constant.value_type"):
+                Constant(name="C", value={"x": "y"}, value_type=bad)
+
+    def test_direct_construct_rejects_missing_value_type(self):
+        """value_type=None is not a valid primitive choice."""
+        with pytest.raises(ValueError, match="value_type is required"):
+            Constant(name="C", value="x", value_type=None)
+
+    def test_direct_construct_rejects_invalid_primitive_value(self):
+        """Primitive lexical/range validation runs at construction."""
+        with pytest.raises(ValueError, match="valueInteger"):
+            Constant(name="C", value=2147483648, value_type="integer")
+
+    def test_direct_construct_accepts_valid_constant(self):
+        """A spec-compliant Constant still constructs normally."""
+        c = Constant(name="Female", value="female", value_type="code")
+        assert c.name == "Female"
+        assert c.value == "female"
+        assert c.value_type == "code"
+
+    def test_direct_construct_round_trips_to_dict(self):
+        """A directly constructed valid Constant serializes correctly."""
+        c = Constant(name="Max", value=42, value_type="integer")
+        assert c.to_dict() == {"name": "Max", "valueInteger": 42}
+
+
+class TestBuiltinVariablePrecedencePerSpecSofVd02Explorer:
+    """SOF-VD-02 EXPLORER iter 1 (2026-07-03): FHIRPath §Environment variables.
+
+    Per FHIRPath v3.0.0-ballot §"Environment variables"
+    (https://build.fhir.org/ig/HL7/FHIRPath/) the environment variables
+    ``%ucum`` and ``%context`` are "set for all contexts"; per the FHIR
+    spec (https://build.fhir.org/fhirpath.html) ``%resource`` and
+    ``%rootResource`` are "Defined in FHIR"; SQL-on-FHIR v2 additionally
+    defines ``%rowIndex`` as a runtime variable. These reserved runtime
+    variables MUST NOT be shadowable by user-defined constants. If a user
+    authors ``Constant(name='resource', ...)`` and references ``%resource``
+    in a FHIRPath expression, the resolver must preserve ``%resource`` for
+    runtime evaluation rather than substituting the user's literal value.
+    """
+
+    @pytest.mark.parametrize("builtin_name", sorted(FHIRPATH_BUILTIN_VARIABLES))
+    def test_user_constant_named_after_builtin_does_not_shadow_runtime_var(
+        self, builtin_name
+    ):
+        """A user constant whose name collides with a FHIRPath builtin
+        must NOT have its value substituted in place of the runtime
+        variable reference."""
+        resolver = ConstantResolver.from_list(
+            [Constant(name=builtin_name, value="user-value", value_type="string")]
+        )
+        resolved = resolver.resolve_in_path(f"%{builtin_name}")
+        # The %<builtin> reference must be preserved verbatim for runtime
+        # evaluation, NOT replaced with the user's "'user-value'" literal.
+        assert resolved == f"%{builtin_name}", (
+            f"user constant value leaked into builtin %{builtin_name} substitution: "
+            f"resolved={resolved!r}"
+        )
+
+    def test_user_constant_named_after_builtin_in_larger_expression(self):
+        """A user constant named 'resource' must not corrupt a larger
+        FHIRPath expression that legitimately references the runtime
+        %resource variable."""
+        resolver = ConstantResolver.from_list(
+            [Constant(name="resource", value="evil", value_type="string")]
+        )
+        resolved = resolver.resolve_in_path(
+            "%resource.id = 'p1' and active = true"
+        )
+        assert resolved == "%resource.id = 'p1' and active = true"
+
+    def test_user_constant_named_after_builtin_does_not_block_other_constants(self):
+        """A user constant named 'resource' must still allow OTHER user
+        constants to resolve normally."""
+        resolver = ConstantResolver.from_list(
+            [
+                Constant(name="resource", value="evil", value_type="string"),
+                Constant(name="Female", value="female", value_type="code"),
+            ]
+        )
+        resolved = resolver.resolve_in_path(
+            "%resource.gender = %Female"
+        )
+        assert resolved == "%resource.gender = 'female'"
+
+    def test_resolver_still_uses_user_constants_for_non_builtin_names(self):
+        """Sanity: ordinary user constants still resolve normally."""
+        resolver = ConstantResolver.from_list(
+            [Constant(name="MyConst", value="hello", value_type="string")]
+        )
+        assert resolver.resolve_in_path("%MyConst") == "'hello'"

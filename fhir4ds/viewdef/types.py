@@ -45,8 +45,19 @@ def validate_sql_name(value: Any, field_name: str) -> str:
 
 
 def validate_required_string(value: Any, field_name: str) -> str:
-    """Validate a required non-empty string field and return it."""
+    """Validate a required non-empty string field and return it.
+
+    Per the SQL-on-FHIR v2 logical model, required string fields such as
+    ``column.path``, ``where.path``, and ``column.tag.name``/``value`` carry
+    meaningful FHIRPath expressions or identifiers. A whitespace-only string
+    is functionally empty and must be rejected at the model boundary instead
+    of being deferred to a downstream layer (SQL generation, FHIRPath
+    parsing) that produces a misleading "must be a non-empty string" error
+    for a value that is technically non-empty.
+    """
     if not isinstance(value, str) or not value:
+        raise ValueError(f"{field_name} must be a non-empty string")
+    if not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string")
     return value
 
@@ -544,7 +555,19 @@ class Column:
     tag: List[ColumnTag] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        """Convert string type/tag dictionaries to structured values if needed."""
+        """Validate spec invariants and convert string type/tag dicts.
+
+        Enforces SQL-on-FHIR ``column.path`` (1..1), ``column.name``
+        (1..1 sql-name), ``column.description`` (0..1 markdown), and
+        ``column.collection`` (boolean) at construction time using the
+        canonical helpers also used by parser, ``to_dict()``, and
+        ``SQLGenerator._validate_column_shape``. Matches the pattern of
+        sibling spec-owning dataclasses ``Constant``, ``ColumnTag``, and
+        ``Join`` so direct dataclass construction cannot bypass validation.
+        """
+        validate_column_fields(self.path, self.name, self.description)
+        validate_optional_boolean(self.collection, "Column.collection")
+
         if isinstance(self.type, str):
             self.type = ColumnType.from_string(self.type)
         elif self.type is not None and not isinstance(self.type, ColumnType):
@@ -699,6 +722,18 @@ class Constant:
     name: str
     value: Any
     value_type: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        """Validate spec-defined fields at construction.
+
+        Matches the validation pattern used by sibling dataclasses
+        ``Column``, ``ColumnTag``, and ``Join`` so that direct dataclass
+        construction cannot bypass the SQL-on-FHIR ``constant.name``
+        ``sql-name`` invariant or the ``constant.value[x]`` exactly-one
+        primitive allowlist enforced at parser/serializer/generator
+        boundaries.
+        """
+        validate_constant_fields(self.name, self.value, self.value_type)
 
     # Convenience properties for type-specific access (matching spec naming)
     @property
@@ -914,17 +949,18 @@ class ViewDefinition:
         """Create a ViewDefinition from a dictionary representation.
 
         This is a convenience method for parsing JSON ViewDefinitions.
+        Delegates to :func:`parse_view_definition` and propagates its
+        typed :class:`ParseError` (a subclass of :class:`ValueError`)
+        so callers can catch either the typed exception or the broader
+        ``ValueError`` parent.
         """
         if not isinstance(data, dict):
             raise ValueError(
                 f"ViewDefinition.from_dict expects a dictionary, got {type(data).__name__}"
             )
-        try:
-            from .parser import parse_view_definition
+        from .parser import parse_view_definition
 
-            return parse_view_definition(data)
-        except Exception as exc:
-            raise ValueError(str(exc)) from exc
+        return parse_view_definition(data)
 
     def declared_profile_urls(self) -> set[str]:
         profiles: set[str] = set()
@@ -1005,7 +1041,37 @@ class ViewDefinition:
         for select in self.select:
             if not isinstance(select, Select):
                 raise ValueError("ViewDefinition.select items must be Select objects")
-        data["select"] = [select.to_dict() for select in self.select]
+        # Serialize each select first so nested container/iterator shapes are
+        # validated by Select.to_dict() before the cross-tree name check runs.
+        serialized_selects = [select.to_dict() for select in self.select]
+        # SQL-on-FHIR v2 ValidateColumns algorithm: a duplicate column name in
+        # the effective output schema is a hard "Column Already Defined" error.
+        # The effective schema counts each select's direct columns, its nested
+        # selects' effective schemas, and only the first unionAll branch's
+        # effective schema. Keep the direct-dataclass serializer boundary
+        # aligned with parser and SQL generation.
+        def _effective_output_names(serialized: Dict[str, Any]) -> List[str]:
+            names: List[str] = [col["name"] for col in serialized.get("column", [])]
+            for nested in serialized.get("select", []):
+                names.extend(_effective_output_names(nested))
+            if serialized.get("unionAll"):
+                names.extend(_effective_output_names(serialized["unionAll"][0]))
+            return names
+
+        seen_names: set[str] = set()
+        duplicate_names: set[str] = set()
+        for serialized in serialized_selects:
+            for name in _effective_output_names(serialized):
+                if name in seen_names:
+                    duplicate_names.add(name)
+                seen_names.add(name)
+        if duplicate_names:
+            raise ValueError(
+                f"Duplicate column names across select tree: "
+                f"{sorted(duplicate_names)}. Column names must be unique "
+                f"per the SQL-on-FHIR v2 specification."
+            )
+        data["select"] = serialized_selects
         validate_supported_view_profiles(self)
         if self.joins:
             data["joins"] = [join.to_dict() for join in self.joins]

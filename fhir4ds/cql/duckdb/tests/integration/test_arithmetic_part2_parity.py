@@ -545,3 +545,166 @@ define ScalarQuantityDiv: 10 div 3 'mg'
     with no_python_connection() as con:
         for sql, expected_value in direct_queries.items():
             assert con.execute(sql).fetchone()[0] == expected_value
+
+
+def test_cql_arithmetic_part2_power_overflow_returns_null_per_spec() -> None:
+    """CQL §16 Power: 'If the result of the operation cannot be represented,
+    the result is null.'
+
+    Covers the CQL-11 SKEPTIC fix that brings the function-form Power to
+    parity with the infix `^` form on Integer/Long overflow, AND adds
+    Decimal-range checking for Decimal operands. Both backends must
+    return NULL for unrepresentable results, and must continue to return
+    correct fractional results for negative Integer exponents (per
+    official CqlArithmeticFunctionsTest.xml::Power2ToNeg2).
+    """
+    cql = """
+    library PowerOverflowProbe version '1.0'
+    define FunIntOverflow: Power(2, 100)
+    define FunIntBoundary: Power(2, 31)
+    define FunDecOverflow: Power(10.0, 100.0)
+    define FunDecOverflowAlt: Power(2.5, 100.0)
+    define InfixIntOverflow: 10^100
+    define InfixDecOverflow: 10.0^100.0
+    define FunIntValid: Power(2, 30)
+    define FunDecValid: Power(2.0, 50.0)
+    define FunIntNegExp: Power(2, -2)
+    define InfixIntNegExp: 2^-2
+    define FunIntZero: Power(0, 0)
+    define FunDecZero: Power(2.0, 0.0)
+    """
+    translated = translate_cql(cql)
+
+    # All overflow cases must emit a type-specific TRY_CAST (not AS DOUBLE)
+    # so DuckDB returns NULL when the result cannot be represented.
+    assert "AS INTEGER" in translated["FunIntOverflow"].to_sql()
+    assert "AS INTEGER" in translated["FunIntBoundary"].to_sql()
+    assert "AS DECIMAL(38, 8)" in translated["FunDecOverflow"].to_sql()
+    assert "AS DECIMAL(38, 8)" in translated["FunDecOverflowAlt"].to_sql()
+    assert "AS INTEGER" in translated["InfixIntOverflow"].to_sql()
+    assert "AS DECIMAL(38, 8)" in translated["InfixDecOverflow"].to_sql()
+    # Negative Integer exponent promotes to DECIMAL (fractional result).
+    assert "AS DECIMAL(38, 8)" in translated["FunIntNegExp"].to_sql()
+    assert "AS DECIMAL(38, 8)" in translated["InfixIntNegExp"].to_sql()
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        # Overflow cases — both backends must return None.
+        for name in (
+            "FunIntOverflow",
+            "FunIntBoundary",
+            "FunDecOverflow",
+            "FunDecOverflowAlt",
+            "InfixIntOverflow",
+            "InfixDecOverflow",
+        ):
+            sql = "SELECT " + translated[name].to_sql()
+            assert py.execute(sql).fetchone()[0] is None, name
+            assert cpp.execute(sql).fetchone()[0] is None, name
+
+        # Valid cases — must produce non-None values.
+        assert py.execute("SELECT " + translated["FunIntValid"].to_sql()).fetchone()[0] == 1073741824
+        assert cpp.execute("SELECT " + translated["FunIntValid"].to_sql()).fetchone()[0] == 1073741824
+        # Decimal valid: 2^50 = 1.125899906842624e15; both backends should agree.
+        py_dec = py.execute("SELECT " + translated["FunDecValid"].to_sql()).fetchone()[0]
+        cpp_dec = cpp.execute("SELECT " + translated["FunDecValid"].to_sql()).fetchone()[0]
+        assert abs(float(py_dec) - float(cpp_dec)) < 1e-6
+
+        # Negative Integer exponent — must NOT truncate to 0 (regression check).
+        py_neg = py.execute("SELECT " + translated["FunIntNegExp"].to_sql()).fetchone()[0]
+        cpp_neg = cpp.execute("SELECT " + translated["FunIntNegExp"].to_sql()).fetchone()[0]
+        assert abs(float(py_neg) - 0.25) < 1e-6, py_neg
+        assert abs(float(cpp_neg) - 0.25) < 1e-6, cpp_neg
+
+        py_infix_neg = py.execute("SELECT " + translated["InfixIntNegExp"].to_sql()).fetchone()[0]
+        cpp_infix_neg = cpp.execute("SELECT " + translated["InfixIntNegExp"].to_sql()).fetchone()[0]
+        assert abs(float(py_infix_neg) - 0.25) < 1e-6, py_infix_neg
+        assert abs(float(cpp_infix_neg) - 0.25) < 1e-6, cpp_infix_neg
+
+        # Zero exponent — must return 1.
+        assert py.execute("SELECT " + translated["FunIntZero"].to_sql()).fetchone()[0] == 1
+        assert cpp.execute("SELECT " + translated["FunIntZero"].to_sql()).fetchone()[0] == 1
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_arithmetic_part2_predecessor_successor_literal_boundary_returns_null_per_spec() -> None:
+    """CQL §22.25 Predecessor / §22.26 Successor: "If the result cannot be
+    represented (e.g. `successor of (maximum Integer)`), the result is null."
+
+    The translator's FunctionRef-form guard at
+    `_operators.py:_translate_unary_expression` returns NULL for
+    `successor of (maximum Integer)` and `predecessor of (minimum Integer)`.
+    However, the literal-spelled forms (`successor of 2147483647`,
+    `predecessor of -2147483648`) previously fell through to the generic
+    UDF call (`successorOf(2147483647)`). DuckDB silently promotes
+    INTEGER to BIGINT during execution, so the UDF returned
+    `2147483648` / `-2147483649` (valid BIGINT values that exceed the
+    CQL §Integer range `[-2147483648, 2147483647]`).
+
+    The CQL-11 EXPLORER fix mirrors the FunctionRef guard for the
+    literal-spelled form, returning SQLNull() when the literal value
+    equals `_CQL_INTEGER_MAX` / `_CQL_INTEGER_MIN` / `_CQL_LONG_MAX` /
+    `_CQL_LONG_MIN`.
+
+    Both backends (Python fallback and native C++ extension) must
+    return None for the boundary literal forms AND for the FunctionRef
+    forms. In-range literal values must continue to work correctly.
+    """
+    cql = """
+    library PredSuccLiteralBoundary version '1.0'
+    define SuccIntMaxLiteral: successor of 2147483647
+    define PredIntMinLiteral: predecessor of -2147483648
+    define SuccIntMaxFuncref: successor of (maximum Integer)
+    define PredIntMinFuncref: predecessor of (minimum Integer)
+    define SuccLongMaxLiteral: successor of 9223372036854775807L
+    define PredLongMinLiteral: predecessor of -9223372036854775808L
+    define SuccLongMaxFuncref: successor of (maximum Long)
+    define PredLongMinFuncref: predecessor of (minimum Long)
+    define SuccIntInRange: successor of 100
+    define PredIntInRange: predecessor of 100
+    define SuccIntJustBelowMax: successor of 2147483646
+    define PredIntJustAboveMin: predecessor of -2147483647
+    """
+    translated = translate_cql(cql)
+
+    # The literal-spelled boundary forms must emit SQL NULL directly
+    # (not the UDF call) so DuckDB never auto-promotes to BIGINT.
+    assert translated["SuccIntMaxLiteral"].to_sql() == "NULL"
+    assert translated["PredIntMinLiteral"].to_sql() == "NULL"
+    assert translated["SuccLongMaxLiteral"].to_sql() == "NULL"
+    assert translated["PredLongMinLiteral"].to_sql() == "NULL"
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        # All boundary cases (literal and FunctionRef) must return None.
+        for name in (
+            "SuccIntMaxLiteral",
+            "PredIntMinLiteral",
+            "SuccIntMaxFuncref",
+            "PredIntMinFuncref",
+            "SuccLongMaxLiteral",
+            "PredLongMinLiteral",
+            "SuccLongMaxFuncref",
+            "PredLongMinFuncref",
+        ):
+            sql = "SELECT " + translated[name].to_sql()
+            assert py.execute(sql).fetchone()[0] is None, f"{name}: python should be None"
+            assert cpp.execute(sql).fetchone()[0] is None, f"{name}: cpp should be None"
+
+        # In-range cases must continue to work correctly.
+        assert py.execute("SELECT " + translated["SuccIntInRange"].to_sql()).fetchone()[0] == 101
+        assert cpp.execute("SELECT " + translated["SuccIntInRange"].to_sql()).fetchone()[0] == 101
+        assert py.execute("SELECT " + translated["PredIntInRange"].to_sql()).fetchone()[0] == 99
+        assert cpp.execute("SELECT " + translated["PredIntInRange"].to_sql()).fetchone()[0] == 99
+        assert py.execute("SELECT " + translated["SuccIntJustBelowMax"].to_sql()).fetchone()[0] == 2147483647
+        assert cpp.execute("SELECT " + translated["SuccIntJustBelowMax"].to_sql()).fetchone()[0] == 2147483647
+        assert py.execute("SELECT " + translated["PredIntJustAboveMin"].to_sql()).fetchone()[0] == -2147483648
+        assert cpp.execute("SELECT " + translated["PredIntJustAboveMin"].to_sql()).fetchone()[0] == -2147483648
+    finally:
+        py.close()
+        cpp.close()
+

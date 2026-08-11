@@ -146,16 +146,19 @@ def test_cql_arithmetic_duckdb_surface_matches_cpp_registration() -> None:
             assert py.execute(expression).fetchone() == (None,)
             assert cpp.execute(expression).fetchone() == (None,)
 
+        # CQL v1.5.3 §16.6 Exp and §16.12 Ln both mandate NULL when the
+        # result cannot be represented (Exp overflow to +infinity, Ln(0)
+        # underflow to -infinity). The section header reinforces: "operations
+        # that cause arithmetic overflow or underflow ... will result in
+        # null, rather than a run-time error." These must NOT raise.
         for expression in [
             "SELECT Exp(1000)",
             "SELECT Ln(0)",
             "SELECT mathExp('1000')",
             "SELECT mathLn('0')",
         ]:
-            with pytest.raises(duckdb.Error):
-                py.execute(expression).fetchone()
-            with pytest.raises(duckdb.Error):
-                cpp.execute(expression).fetchone()
+            assert py.execute(expression).fetchone() == (None,)
+            assert cpp.execute(expression).fetchone() == (None,)
     finally:
         py.close()
         cpp.close()
@@ -187,13 +190,21 @@ define QuantityAddMgThenG: 500 'mg' + 1 'g'
         "AddIntegerOverflow",
         "AddLongOverflow",
         "DivideByZero",
+        # CQL v1.5.3 §16.6 Exp: "If the result of the operation cannot be
+        # represented, the result is null." Exp(1000) overflows to +infinity
+        # which cannot be represented -> NULL (not a runtime error).
+        "ExpOverflow",
+        # CQL v1.5.3 §16.12 Ln: "If the result of the operation cannot be
+        # represented, the result is null." Ln(0) underflows to -infinity
+        # which cannot be represented -> NULL (not a runtime error).
+        "LnZero",
         "LnNegative",
         "LogBadBase",
         "DecimalHighTooPrecise",
         "DateHighTooPrecise",
         "TimeLowTooPrecise",
     ]
-    expected_errors = ["ExpOverflow", "LnZero"]
+    expected_errors: list[str] = []
 
     py = _python_only_connection()
     cpp = _cpp_connection()

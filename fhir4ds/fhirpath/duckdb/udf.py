@@ -27,6 +27,7 @@ from .evaluator import (
     FHIRPathEvaluator,
     _has_invalid_partial_datetime_time_literal,
     _has_invalid_timezone_literal,
+    _has_invalid_week_date_literal,
     _has_out_of_range_integer_literal,
     _has_out_of_range_long_literal,
     _is_unary_minus_context,
@@ -57,6 +58,7 @@ def _is_row_resilient_invalid_literal(expression: object) -> bool:
     stripped = expression.strip()
     return (
         _has_invalid_partial_datetime_time_literal(stripped)
+        or _has_invalid_week_date_literal(stripped)
         or _has_out_of_range_integer_literal(stripped)
         or _has_out_of_range_long_literal(stripped)
         or _has_malformed_long_literal_suffix(stripped)
@@ -107,6 +109,87 @@ def _json_max_nesting_depth(resource: str) -> int:
     return max_depth
 
 
+def _expression_max_nesting_depth(expression: str) -> int:
+    """Return maximum FHIRPath expression syntactic nesting depth.
+
+    Counts AST-node-introducing tokens (``(``, ``[``, ``|``, ``&``, ``.``,
+    function-call commas) outside strings, delimited identifiers, and comments.
+    Each AST node consumes ~5-10 Python stack frames during recursive
+    ``do_eval`` evaluation, so this depth drives the Python recursion budget.
+
+    Used by the row-resilient UDF wrapper to temporarily raise
+    ``sys.recursionlimit`` for pathological-size expressions
+    (e.g. ``(1 | 2 | ... | 500).aggregate(...)``) so they evaluate
+    successfully instead of being silently swallowed as ``RecursionError``.
+    Mirrors the resource-side ``_json_max_nesting_depth`` helper.
+
+    See FP-19 EXPLORER QA-001 (2026-06-30): without this budget the
+    Python fallback returns empty for 250+-element unions while native
+    C++ handles 500+ correctly.
+    """
+    max_depth = 0
+    depth = 0
+    in_string = False
+    in_delimited = False
+    escaped = False
+    i = 0
+    n = len(expression)
+
+    while i < n:
+        ch = expression[i]
+
+        if in_string or in_delimited:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif in_string and ch == "'":
+                in_string = False
+            elif in_delimited and ch == "`":
+                in_delimited = False
+            i += 1
+            continue
+
+        # Skip line comments
+        if ch == "/" and i + 1 < n and expression[i + 1] == "/":
+            i += 2
+            while i < n and expression[i] not in "\r\n":
+                i += 1
+            continue
+        # Skip block comments
+        if ch == "/" and i + 1 < n and expression[i + 1] == "*":
+            i += 2
+            while i < n:
+                if expression[i] == "*" and i + 1 < n and expression[i + 1] == "/":
+                    i += 2
+                    break
+                i += 1
+            continue
+
+        if ch == "'":
+            in_string = True
+        elif ch == "`":
+            in_delimited = True
+        elif ch in "([":
+            depth += 1
+            if depth > max_depth:
+                max_depth = depth
+        elif ch in ")]":
+            if depth > 0:
+                depth -= 1
+        elif ch in "|&,":  # binary operators and arg separators grow the AST spine
+            depth += 1
+            if depth > max_depth:
+                max_depth = depth
+        elif ch == ".":  # member/function invocation
+            depth += 1
+            if depth > max_depth:
+                max_depth = depth
+        i += 1
+
+    return max_depth
+
+
 def _parse_json(resource: str) -> dict:
     """Parse a JSON string.
 
@@ -128,6 +211,38 @@ def _parse_json(resource: str) -> dict:
                 sys.setrecursionlimit(needed_limit)
             return json.loads(resource)
         finally:
+            if sys.getrecursionlimit() != current_limit:
+                sys.setrecursionlimit(current_limit)
+
+
+def _eval_with_recursion_budget(func, resource: object, expression: str) -> object:
+    """Run ``func(resource)`` with a Python recursion budget sized for both
+    the resource JSON nesting and the expression syntactic nesting.
+
+    Each AST node in the recursive ``do_eval`` evaluator consumes ~5-10
+    Python stack frames; without this budget, pathological expressions
+    (250+-element unions / 250+-deep parens / 250+-deep function call
+    chains) raise ``RecursionError`` which the UDF wrapper would silently
+    swallow as empty. See FP-19 EXPLORER QA-001 (2026-06-30).
+    """
+    current_limit = sys.getrecursionlimit()
+    json_depth = _json_max_nesting_depth(resource) if isinstance(resource, str) else 0
+    expr_depth = _expression_max_nesting_depth(expression) if isinstance(expression, str) else 0
+    # ~10 frames per AST node for the evaluator's recursive do_eval, plus
+    # 4 frames per JSON nesting level for resource traversal, plus a
+    # 1000-frame floor for ordinary Python machinery.
+    needed_limit = max(
+        current_limit,
+        (expr_depth * 10) + (json_depth * 4) + 1000,
+    )
+    if needed_limit <= current_limit:
+        return func(resource)
+    try:
+        with _RECURSION_LIMIT_LOCK:
+            sys.setrecursionlimit(needed_limit)
+            return func(resource)
+    finally:
+        with _RECURSION_LIMIT_LOCK:
             if sys.getrecursionlimit() != current_limit:
                 sys.setrecursionlimit(current_limit)
 
@@ -1248,6 +1363,17 @@ def _resolve_choice_oftype(resource_dict: dict, expression: str) -> list:
     if not source_expression:
         return []
 
+    # FHIRPath §5.2.4 parity: this trailing-regex branch is a rescue path for
+    # choice-typed sources (e.g., `Observation.value`) where fhirpathpy missed
+    # the ofType() resolution. It MUST NOT fire for plain primitive fields
+    # like `Patient.id` (which is a non-choice field of FHIR type `id`), or
+    # it will overwrite the engine's correct empty result with the raw value
+    # — causing `id.ofType(string)` to wrongly return the value. Gate on the
+    # source's last segment being a known choice-type base name.
+    source_last_segment = source_expression.rsplit(".", 1)[-1]
+    if source_last_segment not in _get_choice_type_lookup():
+        return []
+
     try:
         type_text = trailing_match.group("type")
         if type_text.replace("`", "").startswith("System."):
@@ -1530,6 +1656,16 @@ def _resolve_choice_type_assertion(resource_dict: dict, expression: str) -> list
     target_field = f"{base_name}{suffix}"
     if target_field not in field_names:
         if op == "is":
+            # §6.3.1: empty input collection must propagate as empty, not false.
+            # When the resource has no populated choice-type field, the input
+            # collection to `is` is empty -> result must be empty.
+            # See FP-15 HISTORIAN iteration 1 (2026-06-29) QA-002.
+            has_any_choice_value = any(
+                resource_dict.get(field_name) is not None
+                for field_name in field_names
+            )
+            if not has_any_choice_value:
+                return []
             for field_name in field_names:
                 if (
                     resource_dict.get(field_name) is not None
@@ -1540,6 +1676,14 @@ def _resolve_choice_type_assertion(resource_dict: dict, expression: str) -> list
         return []
 
     if op == "is":
+        # §6.3.1: empty input collection must propagate as empty, not false.
+        # See FP-15 HISTORIAN iteration 1 (2026-06-29) QA-002.
+        has_any_choice_value = any(
+            resource_dict.get(field_name) is not None
+            for field_name in field_names
+        )
+        if not has_any_choice_value:
+            return []
         for field_name in field_names:
             if (
                 resource_dict.get(field_name) is not None
@@ -1610,7 +1754,14 @@ def _resolve_trailing_choice_type_assertion(resource_dict: dict, expression: str
 
     op = match.group("op").lower()
     if not concrete_values:
-        return [False] if op == "is" else []
+        # FP-15 EXPLORER iteration 1 (2026-06-29) QA-003 §6.3.1:
+        # No choice-type field is populated on the parent. The trailing
+        # `.value is X` (or similar) may be resolving to a NON-choice-type
+        # field of the same name (e.g. `Identifier.value` is a plain
+        # FHIR `string`, not an Observation-style `value[x]` choice).
+        # Returning [False]/[] here would override the engine's correct
+        # `is_fn` result. Defer to the engine by returning None.
+        return None
     if len(concrete_values) > 1:
         return None
 
@@ -1726,9 +1877,18 @@ def fhirpath_udf(
                 results.append([])
                 continue
 
-            # Get cached evaluator and evaluate
-            evaluator = _get_compiled_evaluator(expression)
-            result = evaluator.evaluate(resource_dict)
+            # Get cached evaluator and evaluate. Both the ANTLR parser and
+            # the recursive do_evaluator can hit Python's RecursionError on
+            # pathological-size expressions. See FP-19 EXPLORER QA-001.
+            def _compile_and_evaluate(_resource_dict, _expression=expression):
+                evaluator = _get_compiled_evaluator(_expression)
+                return evaluator.evaluate(_resource_dict)
+
+            result = _eval_with_recursion_budget(
+                _compile_and_evaluate,
+                resource_dict,
+                expression,
+            )
 
             choice_assertion = _resolve_choice_type_assertion_any(resource_dict, expression)
             if choice_assertion is not None:
@@ -1898,9 +2058,21 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         if _is_row_resilient_invalid_literal(expression):
             return []
 
-        # Get cached evaluator and evaluate
-        evaluator = _get_compiled_evaluator(expression)
-        result = evaluator.evaluate(resource_dict)
+        # Get cached evaluator and evaluate. Both the ANTLR-generated parser
+        # (parser.expression()) and the recursive do_evaluator can hit
+        # Python's RecursionError on pathological-size expressions; the
+        # _eval_with_recursion_budget wrapper temporarily raises the limit
+        # based on the expression's syntactic depth. See FP-19 EXPLORER
+        # QA-001 (2026-06-30).
+        def _compile_and_evaluate(_resource_dict):
+            evaluator = _get_compiled_evaluator(expression)
+            return evaluator.evaluate(_resource_dict)
+
+        result = _eval_with_recursion_budget(
+            _compile_and_evaluate,
+            resource_dict,
+            expression,
+        )
 
         choice_assertion = _resolve_choice_type_assertion_any(resource_dict, expression)
         if choice_assertion is not None:
@@ -1927,11 +2099,27 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
                 if isinstance(item, bool):
                     return "true" if item else "false"
                 if isinstance(item, float):
+                    # FP-11 EXPLORER (2026-06-29): For subnormal floats where
+                    # `format(item, "f")` would produce a giant zero-padded
+                    # expansion that doesn't match native C++ shortest-round-
+                    # trip rendering, use `str(item)` which mirrors Python's
+                    # David Gay shortest round-trip algorithm. For normal
+                    # floats the existing `.17g` path is preserved.
+                    if abs(item) < 1e-300 and item != 0.0:
+                        return str(item)
                     text = format(item, ".17g")
                     if "." not in text and "e" not in text and "E" not in text:
                         text += ".0"
                     return text
                 if isinstance(item, Decimal):
+                    # FP-11 EXPLORER (2026-06-29): Subnormal values wrapped
+                    # in Decimal by the upstream engine produce unwieldy
+                    # 300+-character zero-padded strings via `format(d, "f")`.
+                    # Match native C++ shortest-round-trip rendering for
+                    # subnormal magnitudes by converting back through float
+                    # and using `str(float)`.
+                    if abs(item) < Decimal("1e-300") and item != 0:
+                        return str(float(item))
                     text = format(item, "f")
                     if "." not in text:
                         text += ".0"
@@ -1956,9 +2144,20 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         if _STRICT_MODE:
             raise
         return []
-    except FHIRPathSyntaxError:
-        # Syntax errors are never valid "no data" — always propagate.
-        raise
+    except FHIRPathSyntaxError as e:
+        # Public DuckDB result-UDFs must be row-resilient for malformed
+        # expressions (matching native C++ EvaluateFhirpath, which returns {}
+        # when GetOrCompile(...) fails). The validity signal is
+        # fhirpath_is_valid(); result UDFs return empty/NULL. Strict callers
+        # can still opt in via FHIRPATH_STRICT_MODE=1.
+        if _STRICT_MODE:
+            raise
+        _logger.warning(
+            "FHIRPath scalar syntax error for '%s': %s — returning empty",
+            expression,
+            e,
+        )
+        return []
     except FHIRPathError:
         if _STRICT_MODE:
             raise
@@ -2070,6 +2269,8 @@ def fhirpath_is_valid_udf(expression: str | None) -> bool:
         return False
     if _has_invalid_partial_datetime_time_literal(stripped):
         return False
+    if _has_invalid_week_date_literal(stripped):
+        return False
     if _has_out_of_range_integer_literal(stripped):
         return False
     if _has_out_of_range_long_literal(stripped):
@@ -2099,15 +2300,33 @@ def fhirpath_is_valid_udf(expression: str | None) -> bool:
     try:
         if _evaluate_literal_temporal_arithmetic(expression) is not None:
             return True
-        evaluator = _get_compiled_evaluator(expression)
-        evaluator.evaluate({"resourceType": "Patient", "id": "_validation"})
+        def _compile_and_evaluate(_resource_dict, _expression=expression):
+            evaluator = _get_compiled_evaluator(_expression)
+            return evaluator.evaluate(_resource_dict)
+        _eval_with_recursion_budget(
+            _compile_and_evaluate,
+            {"resourceType": "Patient", "id": "_validation"},
+            expression,
+        )
         return True
     except FHIRPathError as exc:
         if _is_valid_empty_result_error(exc):
             return True
+        if _is_undefined_environment_variable_error(exc):
+            return True
         return False
     except NotImplementedError as exc:
         return _not_implemented_function_name(exc) in _KNOWN_FUNCTION_NAMES
+    except ValueError as exc:
+        # The Python fallback raises ValueError (not FHIRPathError) for
+        # undefined environment variables. Per FHIRPath §9, syntactically-
+        # valid env var forms (%name, %`name`, %'name') that reference an
+        # undefined env var are runtime errors, not syntax errors. The
+        # is_valid UDF validates expression syntax, not runtime
+        # evaluability, so these expressions must still report as valid.
+        if _is_undefined_environment_variable_error(exc):
+            return True
+        return False
     except Exception:
         # Catch all exceptions — a validation function must never throw
         return False
@@ -2139,6 +2358,26 @@ def _is_valid_empty_result_error(exc: FHIRPathError) -> bool:
     if message.startswith("Expected number or quantity, got: "):
         return True
     return False
+
+
+def _is_undefined_environment_variable_error(exc: Exception) -> bool:
+    """Return true for the spec-defined runtime error for undefined env vars.
+
+    Per FHIRPath §9, accessing an undefined environment variable is a runtime
+    semantic error (not a syntax error). The `is_valid` UDF validates
+    expression syntax; syntactically-valid env var references
+    (``%name``, ``%`name```, ``%'name'`` per §9 backward-compat note) that
+    reference an env var not provided to the validation context must still
+    report as valid. Both backends raise this error (the C++ side via
+    ``FHIRPathSpecError("Undefined variable: ...")`` and the Python side via
+    ``ValueError("Attempting to access an undefined environment variable: ...")``
+    which is then wrapped by ``FHIRPathError("Evaluation error: ...")``).
+    """
+    message = str(exc)
+    return (
+        "Attempting to access an undefined environment variable" in message
+        or message.startswith("Undefined variable:")
+    )
 
 
 def fhirpath_text_udf(resource: str | None, expression: str | None) -> str | None:
@@ -2271,8 +2510,14 @@ def fhirpath_bool_udf(resource: str | None, expression: str | None) -> bool | No
         elif _is_row_resilient_invalid_literal(expression):
             return None
         else:
-            evaluator = _get_compiled_evaluator(expression)
-            result = evaluator.evaluate(resource_dict)
+            def _compile_and_evaluate(_resource_dict, _expression=expression):
+                evaluator = _get_compiled_evaluator(_expression)
+                return evaluator.evaluate(_resource_dict)
+            result = _eval_with_recursion_budget(
+                _compile_and_evaluate,
+                resource_dict,
+                expression,
+            )
             choice_assertion = _resolve_choice_type_assertion_any(resource_dict, expression)
             if choice_assertion is not None:
                 result = choice_assertion
@@ -2295,8 +2540,16 @@ def fhirpath_bool_udf(resource: str | None, expression: str | None) -> bool | No
         if _STRICT_MODE:
             raise
         return None
-    except FHIRPathSyntaxError:
-        raise
+    except FHIRPathSyntaxError as e:
+        # Row-resilient: malformed expressions return NULL; fhirpath_is_valid is the signal.
+        if _STRICT_MODE:
+            raise
+        _logger.warning(
+            "FHIRPath boolean syntax error for '%s': %s — returning NULL",
+            expression,
+            e,
+        )
+        return None
     except (NotImplementedError, FHIRPathError):
         # Unimplemented functions return NULL in boolean context (used by ViewDef)
         return None
@@ -2371,8 +2624,14 @@ def fhirpath_number_udf(resource: str | None, expression: str | None) -> float |
         elif _is_row_resilient_invalid_literal(expression):
             return None
         else:
-            evaluator = _get_compiled_evaluator(expression)
-            result = evaluator.evaluate(resource_dict)
+            def _compile_and_evaluate(_resource_dict, _expression=expression):
+                evaluator = _get_compiled_evaluator(_expression)
+                return evaluator.evaluate(_resource_dict)
+            result = _eval_with_recursion_budget(
+                _compile_and_evaluate,
+                resource_dict,
+                expression,
+            )
 
             choice_assertion = _resolve_choice_type_assertion_any(resource_dict, expression)
             if choice_assertion is not None:
@@ -2385,8 +2644,16 @@ def fhirpath_number_udf(resource: str | None, expression: str | None) -> float |
                 core_result = _resolve_core_type_chain(resource_dict, expression)
                 if core_result is not None:
                     result = core_result
-    except FHIRPathSyntaxError:
-        raise
+    except FHIRPathSyntaxError as e:
+        # Row-resilient: malformed expressions return NULL; fhirpath_is_valid is the signal.
+        if _STRICT_MODE:
+            raise
+        _logger.warning(
+            "FHIRPath number syntax error for '%s': %s — returning NULL",
+            expression,
+            e,
+        )
+        return None
     except (NotImplementedError, FHIRPathError):
         return None
     except (orjson.JSONDecodeError, ValueError, TypeError, KeyError, AttributeError, IndexError, OverflowError):
@@ -2442,8 +2709,14 @@ def fhirpath_json_udf(resource: str | None, expression: str | None) -> str | Non
         elif _is_row_resilient_invalid_literal(expression):
             return None
         else:
-            evaluator = _get_compiled_evaluator(expression)
-            result = evaluator.evaluate(resource_dict)
+            def _compile_and_evaluate(_resource_dict, _expression=expression):
+                evaluator = _get_compiled_evaluator(_expression)
+                return evaluator.evaluate(_resource_dict)
+            result = _eval_with_recursion_budget(
+                _compile_and_evaluate,
+                resource_dict,
+                expression,
+            )
 
             choice_assertion = _resolve_choice_type_assertion_any(resource_dict, expression)
             if choice_assertion is not None:
@@ -2510,8 +2783,16 @@ def fhirpath_json_udf(resource: str | None, expression: str | None) -> str | Non
             return _json_serialize(item)
 
         return "[" + ",".join(_json_item(item) for item in native) + "]"
-    except FHIRPathSyntaxError:
-        raise
+    except FHIRPathSyntaxError as e:
+        # Row-resilient: malformed expressions return NULL; fhirpath_is_valid is the signal.
+        if _STRICT_MODE:
+            raise
+        _logger.warning(
+            "FHIRPath json syntax error for '%s': %s — returning NULL",
+            expression,
+            e,
+        )
+        return None
     except FHIRPathError:
         if _STRICT_MODE:
             raise
@@ -2541,8 +2822,16 @@ def fhirpath_timestamp_udf(resource: str | None, expression: str | None) -> str 
         return None
     try:
         result_items = _evaluate_raw_items(resource, expression)
-    except FHIRPathSyntaxError:
-        raise
+    except FHIRPathSyntaxError as e:
+        # Row-resilient: malformed expressions return NULL; fhirpath_is_valid is the signal.
+        if _STRICT_MODE:
+            raise
+        _logger.warning(
+            "FHIRPath timestamp syntax error for '%s': %s — returning NULL",
+            expression,
+            e,
+        )
+        return None
     except (
         NotImplementedError,
         FHIRPathError,
@@ -2588,8 +2877,16 @@ def fhirpath_quantity_udf(resource: str | None, expression: str | None) -> str |
         return None
     try:
         result_items = _evaluate_raw_items(resource, expression)
-    except FHIRPathSyntaxError:
-        raise
+    except FHIRPathSyntaxError as e:
+        # Row-resilient: malformed expressions return NULL; fhirpath_is_valid is the signal.
+        if _STRICT_MODE:
+            raise
+        _logger.warning(
+            "FHIRPath quantity syntax error for '%s': %s — returning NULL",
+            expression,
+            e,
+        )
+        return None
     except NotImplementedError:
         return None
     except (
@@ -2637,8 +2934,14 @@ def _evaluate_raw_items(resource: str | dict | None, expression: str | None) -> 
     elif _is_row_resilient_invalid_literal(expression):
         return []
     else:
-        evaluator = _get_compiled_evaluator(expression)
-        result = evaluator.evaluate(resource_dict)
+        def _compile_and_evaluate(_resource_dict, _expression=expression):
+            evaluator = _get_compiled_evaluator(_expression)
+            return evaluator.evaluate(_resource_dict)
+        result = _eval_with_recursion_budget(
+            _compile_and_evaluate,
+            resource_dict,
+            expression,
+        )
 
         choice_assertion = _resolve_choice_type_assertion_any(resource_dict, expression)
         if choice_assertion is not None:
@@ -2673,8 +2976,11 @@ def _repeat_json_serialize(obj: object) -> str:
 
 
 def _evaluate_repeat_expression(current: dict, path: str) -> list[dict]:
-    evaluator = _get_compiled_evaluator(path)
-    return [item for item in evaluator.evaluate(current) if isinstance(item, dict)]
+    def _compile_and_evaluate(_resource_dict, _path=path):
+        evaluator = _get_compiled_evaluator(_path)
+        return evaluator.evaluate(_resource_dict)
+    raw = _eval_with_recursion_budget(_compile_and_evaluate, current, path)
+    return [item for item in raw if isinstance(item, dict)]
 
 
 def _repeat_traverse(root: dict, paths: list[str]) -> list[str]:

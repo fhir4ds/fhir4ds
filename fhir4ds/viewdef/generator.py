@@ -1508,6 +1508,7 @@ class SQLGenerator:
         runtime_type_guard: bool = True,
         root_resource_var: Optional[str] = None,
         row_index_expr: str = "0",
+        foreachornull_aliases: Optional[List[str]] = None,
     ) -> Tuple[List[str], List[str], List[str]]:
         """Recursively process a list of Select structures.
 
@@ -1521,6 +1522,12 @@ class SQLGenerator:
             null_preserve_var: If set, all WHERE conditions are wrapped with
                 ``({var} IS NULL OR ...)`` to preserve NULL rows from an
                 enclosing forEachOrNull context.
+            foreachornull_aliases: Optional list to receive the aliases of
+                forEachOrNull unnests emitted at this level (not recursed).
+                Callers building unionAll branches use this to suppress the
+                null-preserved row in non-first branches per spec Process(S, N)
+                step 3 (one null row total when the wrapper forEachOrNull is
+                empty).
 
         Returns:
             Tuple of (column_exprs, join_clauses, where_conditions)
@@ -1536,7 +1543,11 @@ class SQLGenerator:
             current_runtime_type_guard = runtime_type_guard
             current_row_index_expr = row_index_expr
 
-            # Establish a repeat context (CROSS JOIN LATERAL with recursive UDF)
+            # Establish a repeat context (CROSS JOIN LATERAL with recursive
+            # UDF). When enclosed by a forEachOrNull so the parent's NULL
+            # row survives per Process(S, N) step 3, thread
+            # null_preserve_var (already plumbed for WHERE preservation)
+            # so the repeat does not eliminate the preserved NULL row.
             if select.repeat:
                 resolved_paths = []
                 for p in select.repeat:
@@ -1544,13 +1555,22 @@ class SQLGenerator:
                     resolved_paths.append(resolved_path)
                 alias = self._next_alias("repeat")
                 join_clauses.append(
-                    generate_repeat_unnest(resolved_paths, current_var, alias)
+                    generate_repeat_unnest(
+                        resolved_paths,
+                        current_var,
+                        alias,
+                        null_preserve_var=null_preserve_var,
+                    )
                 )
                 current_var = alias
                 current_runtime_type_guard = False
                 current_row_index_expr = f"COALESCE({alias}__row_index, 0)"
 
-            # Establish a new forEach context (CROSS JOIN LATERAL)
+            # Establish a new forEach context (CROSS JOIN LATERAL, or
+            # null-preserving LEFT JOIN LATERAL when enclosed by a
+            # forEachOrNull so the parent's NULL row survives per
+            # Process(S, N) step 3 — but only when the enclosing
+            # forEachOrNull's foci is itself empty).
             if select.forEach:
                 resolved_foreach = self._resolve_path(select.forEach)
                 resolved_foreach, foreach_var = self._resolve_environment_path_context(
@@ -1569,6 +1589,7 @@ class SQLGenerator:
                         foreach_var,
                         alias,
                         foreach_path_expr,
+                        null_preserve_var=null_preserve_var,
                     )
                 )
                 current_var = alias
@@ -1596,6 +1617,8 @@ class SQLGenerator:
                 )
                 current_var = alias
                 in_foreach_or_null = True
+                if foreachornull_aliases is not None:
+                    foreachornull_aliases.append(alias)
                 current_runtime_type_guard = False
                 current_row_index_expr = f"COALESCE({alias}__row_index, 0)"
 
@@ -1668,12 +1691,14 @@ class SQLGenerator:
         table_name: str,
         base_resource_var: str,
         root_where: List[dict],
+        foreachornull_aliases: Optional[List[str]] = None,
     ) -> str:
         """Build a single SELECT query from a list of non-unionAll selects."""
         column_exprs, join_clauses, where_conditions = self._process_selects(
             selects,
             base_resource_var,
             root_resource_var=base_resource_var,
+            foreachornull_aliases=foreachornull_aliases,
         )
 
         if not column_exprs:
@@ -1775,6 +1800,30 @@ class SQLGenerator:
             branch_sqls.append(branch_sql)
 
         return "\nUNION ALL\n".join(branch_sqls)
+
+    def _suppress_null_preserved_row(
+        self, branch_sql: str, null_preserve_alias: str
+    ) -> str:
+        """Add a WHERE filter to a generated branch SQL suppressing rows
+        where the enclosing forEachOrNull unnest alias is NULL.
+
+        Used by ``_generate_single_resource`` to ensure only the first
+        union branch emits the spec-mandated null row when the wrapper
+        forEachOrNull's foci is empty (Process(S, N) step 3: one null
+        row total across the entire selection structure, not one per
+        union branch).
+        """
+        # Insert the filter into the existing WHERE clause; if there is
+        # no WHERE clause, append one. The generated SQL always has a
+        # WHERE clause when the source_table is set (resourceType
+        # filter), so we optimistically patch in-place.
+        filter_expr = f"{null_preserve_alias} IS NOT NULL"
+        marker = "\nWHERE "
+        if marker in branch_sql:
+            return branch_sql.replace(
+                marker, f"{marker}{filter_expr}\n  AND ", 1
+            )
+        return f"{branch_sql}\nWHERE {filter_expr}"
 
     def _generate_multi_resource_union(self, view_definition: ViewDefinition) -> str:
         """Generate UNION ALL query across multiple resource types.
@@ -1921,11 +1970,52 @@ class SQLGenerator:
         root_where = list(view_definition.where)
 
         expanded_selects = self._expand_select_list_unions(list(view_definition.select))
-        queries = [
-            self._build_single_query(selects, table_name, base_resource_var, root_where)
-            for selects in expanded_selects
-        ]
+        queries: List[str] = []
+        # Track forEachOrNull unnest aliases that have already emitted their
+        # spec-mandated null row in a prior UNION ALL branch. Per spec
+        # Process(S, N) step 3, when a wrapper forEachOrNull yields empty
+        # foci, exactly ONE null row is emitted across the entire selection
+        # structure — including any union branches. Because each union
+        # branch becomes its own SELECT with its own copy of the wrapper
+        # forEachOrNull LEFT JOIN, non-first branches must suppress the
+        # null-preserved row to avoid duplicating it.
+        seen_foreachornull_paths: set = set()
+        for selects in expanded_selects:
+            collected_aliases: List[str] = []
+            sql = self._build_single_query(
+                selects,
+                table_name,
+                base_resource_var,
+                root_where,
+                foreachornull_aliases=collected_aliases,
+            )
+            # Identify forEachOrNull paths in this alternative. If the same
+            # path appeared in a prior alternative (i.e., this alternative
+            # is a non-first branch of a unionAll+forEachOrNull expansion),
+            # suppress the null-preserved row.
+            alternative_fornull_paths = self._collect_foreachornull_paths(selects)
+            suppress_aliases: List[str] = []
+            for path, alias in zip(alternative_fornull_paths, collected_aliases):
+                if path in seen_foreachornull_paths:
+                    suppress_aliases.append(alias)
+                else:
+                    seen_foreachornull_paths.add(path)
+            for alias in suppress_aliases:
+                sql = self._suppress_null_preserved_row(sql, alias)
+            queries.append(sql)
         return "\nUNION ALL\n".join(queries)
+
+    def _collect_foreachornull_paths(self, selects: List[Select]) -> List[str]:
+        """Return the forEachOrNull paths encountered at this level of the
+        select list (in order), mirroring how ``_process_selects`` emits
+        aliases. Used by ``_generate_single_resource`` to detect when the
+        same wrapper forEachOrNull appears in multiple UNION ALL branches.
+        """
+        paths: List[str] = []
+        for select in selects:
+            if select.forEachOrNull:
+                paths.append(self._resolve_path(select.forEachOrNull))
+        return paths
 
     def generate(self, view_definition: ViewDefinition) -> str:
         """Generate complete SQL query from a ViewDefinition.

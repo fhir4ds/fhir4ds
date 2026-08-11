@@ -75,6 +75,10 @@ struct Interval {
 	bool starts_same(const Interval &other) const;
 	bool ends_same(const Interval &other) const;
 
+	// Precision-aware interval equality — returns NullOpt when mixed-precision
+	// temporal bounds make the equality uncertain (per CQL §Equal).
+	Optional<bool> equals_nullable(const Interval &other) const;
+
 	// Precision-aware variants (truncate bounds to precision before comparing)
 	bool overlaps(const Interval &other, DateTimeValue::Precision prec) const;
 	bool contains_point(const BoundValue &point, DateTimeValue::Precision prec) const;

@@ -86,6 +86,19 @@ _TIMEDELTA_UNITS: dict[str, str] = {
 }
 _YEAR_UNITS = frozenset(("year", "years", "a"))
 _MONTH_UNITS = frozenset(("month", "months", "mo"))
+# CQL §Add / §Subtract: "For precisions above seconds, any decimal portion
+# of the time-valued quantity is ignored." Membership is determined by the
+# quantity unit (not the input precision). Seconds and milliseconds are
+# at-or-below-seconds and preserve decimal portions (combined as a single
+# decimal precision per CQL §Types/DateTime).
+_ABOVE_SECONDS_UNITS = frozenset((
+    "year", "years", "a",
+    "month", "months", "mo",
+    "week", "weeks", "wk",
+    "day", "days", "d",
+    "hour", "hours", "h",
+    "minute", "minutes", "min",
+))
 def _parse_date(value: str) -> date | None:
     """Parse date from ISO 8601 string.
 
@@ -254,6 +267,13 @@ def _duration_high_boundary(iso_str: str, unit_key: str) -> datetime:
     the end operand must stay at their minimums or a partial period can be
     counted as whole. For example, months between 2012-01-02 and @2012 is
     [0,10], not [0,11].
+
+    For year-target duration with a year-precision operand, the uncertain
+    month/day must be maxed (month=December, day=1 so no partial month is
+    introduced) so the year count reflects the maximum possible whole years.
+    For example, years between @2012-06-01 and @2014 is Interval[1, 2],
+    not 1. The official conformance test `years between DateTime(2005) and
+    DateTime(2010) // Interval[4, 5]` exercises this path.
     """
     comps = _parse_components(iso_str)
     current_idx = _PRECISION_INDEX.get(_infer_precision(iso_str), 6)
@@ -262,7 +282,13 @@ def _duration_high_boundary(iso_str: str, unit_key: str) -> datetime:
     y, mo, d = comps["year"], comps["month"], comps["day"]
     h, mi, s, ms = comps["hour"], comps["minute"], comps["second"], comps["millisecond"]
 
-    if current_idx < 1 <= target_idx:
+    # When the operand lacks month precision (year-only), max the month
+    # to December and zero finer components. This applies for ANY target
+    # precision (year-or-finer) because the operand's missing month is
+    # uncertain and must be maxed to give the highest possible duration.
+    # Day is zeroed to 1 so that no partial-month period is counted as
+    # whole for month-or-finer target precisions.
+    if current_idx < 1:
         mo = 12
         d = 1
         h = mi = s = ms = 0
@@ -1277,6 +1303,13 @@ def dateAddQuantity(date_val: str | None, quantity_json: str | None) -> str | No
     unit_lower = unit.lower()
     if not _is_supported_date_quantity_value(value, unit_lower):
         return None
+
+    # CQL §Add / §Subtract: "For precisions above seconds, any decimal
+    # portion of the time-valued quantity is ignored." The triggering
+    # condition is the quantity unit, not the input precision, so the
+    # truncation must happen here, before any Time/Date/DateTime branching.
+    if unit_lower in _ABOVE_SECONDS_UNITS and isinstance(value, float):
+        value = float(int(value))  # truncate toward zero
 
     try:
         # Time-only value (e.g. 'T15:59:59.999')

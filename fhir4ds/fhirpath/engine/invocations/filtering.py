@@ -194,6 +194,29 @@ def of_type_fn(ctx, coll, tp):
         if value_type.is_exact_type(tp):
             result.append(value)
             continue
+        # FHIRPath §5.2.4 parity: when the value is a raw Python primitive
+        # (not a ResourceNode) and the requested type is a FHIR primitive
+        # (qualified or unqualified), normalize the comparison via the
+        # System↔FHIR primitive map. Without this, qualified specifiers
+        # like `FHIR.decimal` fail to match raw float values that
+        # `TypeInfo.from_value` types as `System.Decimal`. The R4 baseline
+        # has no such test today but the native C++ path matches, so this
+        # keeps the fallback in lockstep.
+        if not isinstance(value, nodes.ResourceNode) and tp.namespace in (
+            nodes.TypeInfo.FHIR,
+            None,
+        ):
+            tp_lower = tp.name
+            if tp_lower and tp_lower[0].islower():
+                # Map FHIR primitive name to its System equivalent and back.
+                system_name = nodes.TypeInfo.FHIR_TO_SYSTEM_TYPE.get(tp_lower)
+                if system_name:
+                    system_tp = nodes.TypeInfo(
+                        name=system_name, namespace=nodes.TypeInfo.System
+                    )
+                    if value_type.is_exact_type(system_tp):
+                        result.append(value)
+                        continue
         # FHIRPath ofType() includes subclasses, but official R4 tests keep
         # primitive FHIR types such as code distinct from string here.
         if (

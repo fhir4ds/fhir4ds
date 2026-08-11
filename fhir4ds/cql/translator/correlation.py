@@ -586,7 +586,6 @@ class CorrelationMixin:
                 if cte_name is not None:
                     # Use existing alias if present, or generate one
                     ref_name = cte_alias or "sub"
-                    # Convert to EXISTS with correlation
                     correlation = SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=[ref_name, "patient_id"]),
@@ -605,14 +604,41 @@ class CorrelationMixin:
                         )
                     else:
                         new_where = correlation
-                    exists_select = SQLSelect(
-                        columns=[SQLLiteral(value=1)],
-                        from_clause=from_clause,
-                        joins=inner_select.joins,
-                        where=new_where,
-                        limit=1,
+
+                    # Guard: only convert to EXISTS when the SELECT column is a
+                    # trivial constant (e.g., SELECT 1). If the column carries a
+                    # meaningful expression (e.g., a boolean check from
+                    # First(... return <boolean>)), the EXISTS form would silently
+                    # drop it — answering "does any row exist?" instead of
+                    # "what is the first row's value?". Preserve the scalar
+                    # subquery in that case with correlation in the WHERE clause.
+                    from ..translator.types import SQLLiteral as _SQLLiteral
+                    is_trivial_column = (
+                        len(inner_select.columns) == 1
+                        and isinstance(inner_select.columns[0], _SQLLiteral)
+                        and inner_select.columns[0].value == 1
                     )
-                    return SQLExists(subquery=SQLSubquery(query=exists_select))
+
+                    if is_trivial_column:
+                        exists_select = SQLSelect(
+                            columns=[_SQLLiteral(value=1)],
+                            from_clause=from_clause,
+                            joins=inner_select.joins,
+                            where=new_where,
+                            limit=1,
+                        )
+                        return SQLExists(subquery=SQLSubquery(query=exists_select))
+                    else:
+                        # Preserve scalar subquery: the SELECT column has a
+                        # meaningful expression that must not be dropped.
+                        correlated_select = SQLSelect(
+                            columns=inner_select.columns,
+                            from_clause=from_clause,
+                            joins=inner_select.joins,
+                            where=new_where,
+                            limit=inner_select.limit,
+                        )
+                        return SQLSubquery(query=correlated_select)
             return expr
 
         elif isinstance(expr, SQLSelect):

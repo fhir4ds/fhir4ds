@@ -67,7 +67,8 @@ class OperatorTranslator:
     - Type operators: as (cast), is (type check)
 
     Special CQL comparison semantics:
-    - String comparison is case-insensitive by default
+    - String comparison is case-sensitive (strictly lexical on Unicode values);
+      only the ~ (equivalence) operator is case-insensitive (CQL v1.5.3 §9).
     - ~ (equivalence) handles nulls specially - returns true if both null
     - !~ is non-equivalence
     """
@@ -469,7 +470,9 @@ class OperatorTranslator:
         """
         Translate a case-insensitive string comparison.
 
-        CQL string comparisons are case-insensitive by default.
+        NOTE: CQL string Equal (=) is case-sensitive (strictly lexical on
+        Unicode values); only Equivalent (~) is case-insensitive. This helper
+        is intended only for callers that explicitly need case-folding.
 
         SQL pattern: LOWER(x) = LOWER(y)
 

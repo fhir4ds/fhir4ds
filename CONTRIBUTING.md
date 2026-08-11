@@ -6,7 +6,7 @@ Thank you for your interest in contributing to FHIR4DS!
 
 To maintain our ability to offer FHIR4DS under both open-source (AGPL v3) and commercial licenses, we require all contributors to agree to our Contributor License Agreement (CLA).
 
-If you have questions about the CLA or wish to discuss specific contribution terms, please contact **fhir4ds@gmail.com**.
+If you have questions about the CLA or wish to discuss specific contribution terms, please contact **contact@fhir4ds.com**.
 
 ## Development Setup
 

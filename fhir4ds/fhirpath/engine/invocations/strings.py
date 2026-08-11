@@ -280,12 +280,70 @@ def replace_matches(ctx, coll, regex, repl, flags=""):
     if regex == "":
         return string
 
-    # Convert FHIRPath $N capture group references to Python \g<N> syntax.
-    # Using \g<N> avoids ambiguity: $0 → \g<0> (full match), $1 → \g<1>, etc.
-    repl = re.sub(r"\$(\d+)", r"\\g<\1>", repl)
+    # Translate (?<name>...) → (?P<name>...) so Python can parse the spec's
+    # canonical named-group syntax (FHIRPath §5.6.10 example). Only translates
+    # when the char after (?< is an identifier start (skips (?<= and (?<!
+    # lookbehind syntax). Falls through to compile error if syntax is invalid.
+    regex_translated = re.sub(
+        r"\(\?<([A-Za-z_][A-Za-z0-9_]*)>",
+        r"(?P<\1>",
+        regex,
+    )
 
-    valid = _compile_regex(regex, _regex_flags(flags))
-    return re.sub(valid, repl, string)
+    try:
+        valid = _compile_regex(regex_translated, _regex_flags(flags))
+    except (re.error, FHIRPathError):
+        # Return empty collection on regex compile errors to match the
+        # native C++ extension's graceful-degradation behavior.
+        return []
+
+    # Translate FHIRPath/PCRE substitution syntax to Python re.sub syntax,
+    # but ONLY for group references that actually exist in the compiled
+    # pattern. This matches the native C++ behavior:
+    #   - ${name} for existing named group → substitution
+    #   - ${name} for unknown name → literal ${name}
+    #   - $N for existing numbered group → substitution
+    #   - $N for nonexistent number → empty substitution (group missing)
+    #   - $$ → literal $
+    #   - $<other> → literal $<other>
+    # See FHIRPath §5.6.10. Per spec note, PCRE is the recommended dialect.
+    group_index = valid.groupindex  # mapping of name → group number
+    num_groups = valid.groups  # count of numbered groups
+
+    def translate_repl(match):
+        # match.group(1) is the digits for $N, group(2) is the {name} or {N}
+        # for ${...}, group(3) is the literal $$.
+        if match.group(3) is not None:  # $$
+            return "$"
+        if match.group(2) is not None:  # ${...}
+            ref = match.group(2)
+            # ${N} (numeric in braces) → native treats as literal ${N}, so we
+            # do NOT translate it. Only ${name} for an existing named group
+            # is translated to \g<name>.
+            if not ref.isdigit() and ref in group_index:
+                return f"\\g<{ref}>"
+            # Unknown name or numeric in braces: literal passthrough
+            return match.group(0)
+        if match.group(1) is not None:  # $N (no braces)
+            n = int(match.group(1))
+            if 0 <= n <= num_groups:
+                return f"\\g<{n}>"
+            # Out of range: native substitutes empty for missing group
+            return ""
+        return match.group(0)
+
+    repl_translated = re.sub(
+        r"\$(\d+)|\$\{(\w+)\}|(\$\$)",
+        translate_repl,
+        repl,
+    )
+
+    try:
+        return re.sub(valid, repl_translated, string)
+    except (re.error, FHIRPathError):
+        # Defensive: any residual re.error (e.g. malformed escape) returns
+        # empty {} to match native C++ behavior.
+        return []
 
 
 def length(ctx, coll):

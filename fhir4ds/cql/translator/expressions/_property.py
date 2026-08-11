@@ -240,6 +240,25 @@ class PropertyMixin:
         path = prop.path
         source = prop.source
 
+        # QA-004 (CQL §11): ``[Resource].field`` as a query source is a
+        # spec-valid form, but the current translator does not implement
+        # the implied "retrieve-then-navigate" expansion. Without this
+        # guard the emitted SQL references the resource type name as a
+        # scalar column (``fhirpath_text("Observation", '...')``) and
+        # DuckDB raises an opaque Binder Error. Fail fast with a typed,
+        # actionable TranslationError instead. Authors should rewrite to
+        # ``exists ([Resource] R where R.field ...)`` which is supported.
+        from ...parser.ast_nodes import Retrieve as _RetrieveForGuard
+        if isinstance(source, _RetrieveForGuard):
+            from ...errors import TranslationError as _TE
+            resource_type = getattr(source, 'type', '<unknown>')
+            raise _TE(
+                f"The CQL form `[Resource].field` (retrieve-then-navigate as a "
+                f"query source) is not supported. Cannot translate "
+                f"`[{resource_type}].{path}`. Rewrite using an explicit alias: "
+                f"`exists ([{resource_type}] R where R.{path} ...)`."
+            )
+
         # Extension property mapping: use context's versioned paths
         source_name = source.name if isinstance(source, Identifier) else None
         ext_paths_map = self.context.extension_paths or {}

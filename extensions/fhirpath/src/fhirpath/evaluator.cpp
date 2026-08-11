@@ -10,6 +10,7 @@ using namespace duckdb_yyjson; // NOLINT
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <functional>
@@ -561,6 +562,24 @@ static bool appendNormalizedRegexCharacterClass(std::string &normalized, const s
 	return true;
 }
 
+// Returns true if the pattern character at position `i` is a regex quantifier
+// that should bind to a whole-Unicode-scalar group rather than to a single
+// trailing UTF-8 byte. Recognizes *, +, ?, {n}, {n,}, {n,m} per ECMAScript.
+static bool isRegexQuantifierAhead(const std::string &pattern, size_t i) {
+	if (i >= pattern.size()) return false;
+	char c = pattern[i];
+	if (c == '*' || c == '+' || c == '?') return true;
+	if (c != '{') return false;
+	// {n}, {n,}, {n,m} — must start with a digit, end with '}', and only
+	// contain digits/commas in between.
+	size_t j = i + 1;
+	if (j >= pattern.size() || pattern[j] < '0' || pattern[j] > '9') return false;
+	while (j < pattern.size() && pattern[j] >= '0' && pattern[j] <= '9') ++j;
+	if (j < pattern.size() && pattern[j] == ',') ++j;
+	while (j < pattern.size() && pattern[j] >= '0' && pattern[j] <= '9') ++j;
+	return j < pattern.size() && pattern[j] == '}';
+}
+
 // std::regex operates over UTF-8 bytes. FHIRPath §5.6.9 requires regex behavior
 // that allows Unicode characters, so codepoint-level constructs are expanded
 // before std::regex sees them.
@@ -596,6 +615,25 @@ static std::string normalizeFHIRPathRegex(const std::string &pattern, bool multi
 			addRegexCodepointTerms(terms, cp, pattern.substr(i, static_cast<size_t>(char_bytes)), true);
 			normalized += positiveRegexCharacterClassMatcher("", terms);
 			i += static_cast<size_t>(char_bytes - 1);
+		} else if (!in_bracket && static_cast<unsigned char>(pattern[i]) >= 0x80) {
+			// Non-ASCII literal outside a character class. std::regex sees the
+			// UTF-8 byte sequence; if a quantifier follows, it must bind to the
+			// whole codepoint, not to the last continuation byte. Wrap in a
+			// non-capturing group when a quantifier follows so 'é*' / 'é+' /
+			// 'é?' / 'é{2}' / 'é{2,}' / 'é{2,3}' all behave per FHIRPath §5.6.9
+			// (regexps operate on Unicode scalar values).
+			int char_bytes = 0;
+			readUtf8Codepoint(pattern, i, char_bytes);
+			std::string literal = pattern.substr(i, static_cast<size_t>(char_bytes));
+			size_t after = i + static_cast<size_t>(char_bytes);
+			if (isRegexQuantifierAhead(pattern, after)) {
+				normalized += "(?:";
+				normalized += literal;
+				normalized += ")";
+			} else {
+				normalized += literal;
+			}
+			i += static_cast<size_t>(char_bytes - 1);
 		} else {
 			normalized += pattern[i];
 		}
@@ -612,9 +650,29 @@ static bool isUcumDurationUnit(const std::string &unit);
 static bool isSecondOrMillisecondDuration(const std::string &unit);
 static bool isMixedCalendarUcumYearMonthDuration(const std::string &left_unit,
                                                  const std::string &right_unit);
+// FP-13 HISTORIAN: forward declaration so quantityEqualState/quantityValuesEqual
+// (defined earlier in file) can use isOffsetTemperatureUnit (defined later).
+static bool isOffsetTemperatureUnit(const std::string &unit);
 static std::string formatDecimalNumber(double value, const std::string &source_text);
 static std::string jsonNumberText(yyjson_val *val);
 static bool isNumericType(const FPValue &v);
+
+// Materialize a yyjson string into std::string preserving embedded NUL bytes.
+// Required because yyjson_get_str() returns a NUL-terminated const char*, and
+// the std::string(const char*) constructor stops at the first NUL byte. JSON
+// strings can validly contain U+0000 escaped as " " (RFC 8259 §7), and
+// FHIRPath §5.6 String Manipulation functions operate on the full Unicode
+// content. Use yyjson_get_len() to capture the full byte range so length(),
+// indexOf(), substring(), startsWith(), endsWith(), and contains() all observe
+// the same characters as the Python fallback.
+static inline std::string yyjsonStringToStd(yyjson_val *val) {
+	if (!val || !yyjson_is_str(val)) return std::string();
+	size_t len = yyjson_get_len(val);
+	const char *s = yyjson_get_str(val);
+	if (!s) return std::string();
+	return std::string(s, len);
+}
+
 
 // --- Static helper functions (used throughout) ---
 
@@ -963,6 +1021,12 @@ static bool fhirTypeIsA(const std::string &type_name, const std::string &parent_
 		{"RiskAssessment", "DomainResource"},
 		{"RiskEvidenceSynthesis", "DomainResource"},
 		{"SampledData", "Element"},
+		// FHIR R4 profile on Quantity (https://hl7.org/fhir/R4/datatypes.html#SimpleQuantity).
+		// Added in FP-15 HISTORIAN iteration 1 (2026-06-29) QA-003 — was missing,
+		// causing `X is SimpleQuantity` / `X as SimpleQuantity` to be rejected
+		// as invalid type specifiers in native C++ while the Python fallback
+		// accepted them.
+		{"SimpleQuantity", "Quantity"},
 		{"Schedule", "DomainResource"},
 		{"SearchParameter", "DomainResource"},
 		{"ServiceRequest", "DomainResource"},
@@ -1115,7 +1179,7 @@ static bool isDateTimeType(const FPValue &v) {
 	if (t == FPValue::Type::String) {
 		std::string s;
 		if (v.type == FPValue::Type::JsonVal && v.json_val && yyjson_is_str(v.json_val))
-			s = yyjson_get_str(v.json_val);
+			s = yyjsonStringToStd(v.json_val);
 		else if (v.type == FPValue::Type::String)
 			s = v.string_val;
 		if (s.size() >= 4 && std::isdigit((unsigned char)s[0]) && std::isdigit((unsigned char)s[1]) &&
@@ -1161,8 +1225,7 @@ static std::string rawStringValue(const FPValue &v) {
 		return v.string_val;
 	}
 	if (v.type == FPValue::Type::JsonVal && v.json_val && yyjson_is_str(v.json_val)) {
-		const char *s = yyjson_get_str(v.json_val);
-		return s ? std::string(s) : std::string();
+		return yyjsonStringToStd(v.json_val);
 	}
 	return "";
 }
@@ -1538,6 +1601,19 @@ static int quantityEqualState(const FPValue &left, const FPValue &right) {
 	if (isMixedCalendarUcumYearMonthDuration(left.quantity_unit, right.quantity_unit)) {
 		return -1;
 	}
+	// FP-13 HISTORIAN (2026-06-29): Offset-based temperature cross-unit
+	// conversion (Cel <-> [degF], etc.) cannot be expressed as a multi-
+	// plicative factor — UCUM uses affine offsets (degF = degC * 9/5 + 32).
+	// The sentinel factor -1.0 in ucum_units.hpp would otherwise produce
+	// arithmetically wrong equality results. Same guard as FP-08 EXPLORER
+	// added to convertQuantityUnit; mirror it here for the = operator.
+	// Same-unit passthrough (1 'Cel' = 1 'Cel') is handled by the earlier
+	// identity check in quantityValuesEqual.
+	if (left.quantity_unit != right.quantity_unit &&
+	    (isOffsetTemperatureUnit(left.quantity_unit) ||
+	     isOffsetTemperatureUnit(right.quantity_unit))) {
+		return -1;
+	}
 	std::string left_base, right_base;
 	convertQuantityToBase(left.quantity_value, left.quantity_unit, left_base);
 	convertQuantityToBase(right.quantity_value, right.quantity_unit, right_base);
@@ -1546,6 +1622,13 @@ static int quantityEqualState(const FPValue &left, const FPValue &right) {
 }
 
 static int quantityEquivalentState(const FPValue &left, const FPValue &right) {
+	// FP-13 HISTORIAN (2026-06-29): Mirror the offset-temperature guard
+	// from quantityEqualState for the ~ operator (see comment there).
+	if (left.quantity_unit != right.quantity_unit &&
+	    (isOffsetTemperatureUnit(left.quantity_unit) ||
+	     isOffsetTemperatureUnit(right.quantity_unit))) {
+		return -1;
+	}
 	std::string left_base, right_base;
 	double left_conv = convertQuantityToBase(left.quantity_value, left.quantity_unit, left_base);
 	double right_conv = convertQuantityToBase(right.quantity_value, right.quantity_unit, right_base);
@@ -1776,10 +1859,35 @@ static bool isDateVsDateTimePair(FPValue::Type a_type, FPValue::Type b_type) {
 
 static bool quantityValuesEqual(const FPValue &a, const FPValue &b) {
 	if (a.quantity_unit == b.quantity_unit) {
+		// FP-13 EXPLORER (2026-06-29): Mirror the precision-preserving
+		// fix from fpValuesEqual's numeric branch. Per §6.1.1 Quantity
+		// Equality "the comparison will be made using the most granular
+		// unit of either input" combined with §4.1.4 (Decimal value is
+		// Decimal, not binary64), compare via source_text when both
+		// operands have canonical text available. The double-based
+		// comparison below loses precision above ~15 significant digits.
+		std::string a_text, b_text;
+		if (quantityValueTextForComparison(a, a_text) && quantityValueTextForComparison(b, b_text)) {
+			return compareDecimalText(a_text, b_text) == 0;
+		}
 		return std::abs(a.quantity_value - b.quantity_value) < 1e-10;
 	}
 
 	if (isMixedCalendarUcumYearMonthDuration(a.quantity_unit, b.quantity_unit)) {
+		return false;
+	}
+
+	// FP-13 HISTORIAN (2026-06-29): Offset-temperature cross-unit conversion
+	// (Cel <-> [degF], etc.) is undefined per UCUM affine offsets; treat as
+	// not-equal here (matching Python fallback's distinct() behavior) rather
+	// than running the sentinel-factor arithmetic that would produce
+	// arithmetically wrong results. The tri-state callers (quantityEqualState,
+	// quantityEquivalentState, valuesEqualState, valuesEquivalentState)
+	// return empty for the = / ~ operators; this bool path is used only by
+	// distinct/isDistinct/subsetOf/supersetOf where not-equal is the safe
+	// interpretation.
+	if (isOffsetTemperatureUnit(a.quantity_unit) ||
+	    isOffsetTemperatureUnit(b.quantity_unit)) {
 		return false;
 	}
 
@@ -1810,6 +1918,18 @@ static bool fpValuesEqual(const FPValue &a, const FPValue &b) {
 
 	// Both numeric: compare by value (1 == 1.0)
 	if (isNumericType(a) && isNumericType(b)) {
+		// FP-13 EXPLORER (2026-06-29): Per §6.1.1 "Decimal: values must be
+		// equal" combined with §4.1.4 "implementations should use fixed-
+		// precision decimal formats to ensure that decimal values are
+		// accurately represented", prefer source_text-based comparison
+		// when both operands have canonical text available. The double-
+		// based comparison below loses precision above ~15 significant
+		// digits (e.g. 0.123456789012345 vs 0.123456789012346 collapsed
+		// to equal). Source_text preserves authored precision.
+		std::string a_text, b_text;
+		if (numericTextForComparison(a, a_text) && numericTextForComparison(b, b_text)) {
+			return compareDecimalText(a_text, b_text) == 0;
+		}
 		double an = getNumericValue(a);
 		double bn = getNumericValue(b);
 		double diff = std::abs(an - bn);
@@ -1879,10 +1999,100 @@ static bool isBareDurationCode(const std::string &unit) {
 	       unit == "h" || unit == "min" || unit == "s" || unit == "ms";
 }
 
+// FP-08 EXPLORER (2026-06-28): Calendar-duration vs UCUM-duration group
+// separation mirrors the Python fallback's `FP_Quantity.conv_unit_to` at
+// fhir4ds/fhirpath/engine/nodes.py:520-553. FHIRPath §4.1.8 / §6.1 / §6.7
+// distinguish calendar durations (year/month/week/day/hour/minute/second/
+// millisecond — variable-length, calendar semantics) from UCUM definite
+// durations ('a'/'mo'/'wk'/'d'/'h'/'min'/'s'/'ms' — fixed-length). Cross-
+// category conversion is only defined for the second/millisecond overlap
+// (§6.1.1: `1 second = 1 's'` is true; `1 year = 1 'a'` is false).
+//
+//   _year_month_set: 'a', 'mo', year, years, month, months
+//   _weeks_days_time_set: 'wk', 'd', 'h', 'min', 's', 'ms',
+//       week, weeks, day, days, hour, hours, minute, minutes,
+//       second, seconds, millisecond, milliseconds
+//
+// Cross-group conversion (e.g. `1 year -> 's'`) must fail because the
+// groups represent semantically distinct categories per spec. Without
+// this guard, native would compute `1 year -> 31556952 's'` (correct
+// arithmetic but spec-category-wrong), producing a parity diff vs the
+// fallback's empty result.
+static bool isYearMonthDurationUnit(const std::string &unit) {
+	// Strip surrounding single quotes for uniform comparison.
+	std::string u = unit;
+	if (u.size() >= 2 && u.front() == '\'' && u.back() == '\'') {
+		u = u.substr(1, u.size() - 2);
+	}
+	return u == "a" || u == "mo" || u == "year" || u == "years" ||
+	       u == "month" || u == "months";
+}
+
+static bool isWeeksDaysTimeDurationUnit(const std::string &unit) {
+	std::string u = unit;
+	if (u.size() >= 2 && u.front() == '\'' && u.back() == '\'') {
+		u = u.substr(1, u.size() - 2);
+	}
+	return u == "wk" || u == "d" || u == "h" || u == "min" || u == "s" || u == "ms" ||
+	       u == "week" || u == "weeks" || u == "day" || u == "days" ||
+	       u == "hour" || u == "hours" || u == "minute" || u == "minutes" ||
+	       u == "second" || u == "seconds" ||
+	       u == "millisecond" || u == "milliseconds";
+}
+
+// FP-08 EXPLORER (2026-06-28): Offset-based temperature units (Cel, [degF],
+// degF, K) cannot be converted via a simple multiplicative factor — UCUM
+// defines them with affine offsets (°F = °C × 9/5 + 32). The native
+// `ucum_units.hpp` table marks these with a sentinel factor of -1.0
+// ("sentinel: handled specially by caller"), but no special offset-handling
+// branch existed, so `convertQuantityUnit` produced arithmetically wrong
+// values (e.g. `(1 'Cel').toQuantity('[degF]')` returned `-1 '[degF]'`
+// instead of either the correct `33.8 '[degF]'` or empty). The FHIRPath
+// §5.5.7 MAY clause permits returning empty when units differ, so we
+// align with the Python fallback (which has no entries for these units
+// in any conversion group) by rejecting all cross-unit temperature
+// conversions. Same-unit passthrough was already handled earlier in
+// `convertQuantityUnit` and never reaches this helper.
+static bool isOffsetTemperatureUnit(const std::string &unit) {
+	std::string u = unit;
+	if (u.size() >= 2 && u.front() == '\'' && u.back() == '\'') {
+		u = u.substr(1, u.size() - 2);
+	}
+	return u == "Cel" || u == "[degF]" || u == "degF" || u == "K" ||
+	       u == "degC" || u == "[degC]" || u == "degRe" || u == "[degRe]";
+}
+
 static bool convertQuantityUnit(const FPValue &quantity, const std::string &to_unit, FPValue &out) {
 	if (to_unit.empty() || quantity.quantity_unit == to_unit) {
 		out = quantity;
 		return true;
+	}
+
+	// FP-08 EXPLORER (2026-06-28): Reject offset-based temperature cross-
+	// conversions (Cel ↔ [degF], etc.) — see isOffsetTemperatureUnit doc.
+	// The native UCUM table's sentinel factor of -1.0 is not a usable
+	// multiplier; without this guard the function produces nonsense values
+	// like -1 '[degF]' for (1 'Cel').toQuantity('[degF]').
+	if (isOffsetTemperatureUnit(quantity.quantity_unit) ||
+	    isOffsetTemperatureUnit(to_unit)) {
+		return false;
+	}
+
+	// FP-08 EXPLORER (2026-06-28): Apply calendar-vs-UCUM group separation
+	// for time-valued durations per §4.1.8/§6.1/§6.7. Year/month durations
+	// are in a distinct group from weeks/days/time durations; cross-group
+	// conversion (e.g. `1 year -> 's'`) must fail to match the Python
+	// fallback's group-based rejection.
+	bool from_in_ym = isYearMonthDurationUnit(quantity.quantity_unit);
+	bool to_in_ym = isYearMonthDurationUnit(to_unit);
+	bool from_in_wdt = isWeeksDaysTimeDurationUnit(quantity.quantity_unit);
+	bool to_in_wdt = isWeeksDaysTimeDurationUnit(to_unit);
+	if ((from_in_ym || to_in_ym) && (from_in_ym != to_in_ym)) {
+		// One side is in year/month group and the other is not — reject.
+		// This catches `1 year -> 's'` (year in YM, 's' in WDT) and
+		// `1 's' -> year` ('s' in WDT, year in YM) but allows
+		// `1 year -> 'a'` (both in YM) and `1 second -> 's'` (both in WDT).
+		return false;
 	}
 
 	std::string from_base;
@@ -1896,8 +2106,337 @@ static bool convertQuantityUnit(const FPValue &quantity, const std::string &to_u
 	out = quantity;
 	out.quantity_value = from_base_value / to_base_factor;
 	out.quantity_unit = to_unit;
-	out.source_text.clear();
+	// FP-08 EXPLORER (2026-06-28): converted Quantity values lose precision
+	// when materialized as Decimal via `.value` or `toString()` because
+	// `formatDecimalNumber` falls back to `std::setprecision(17)` rendering
+	// of the IEEE 754 binary64 result (e.g. 5/1000 → 0.0050000000000000001
+	// instead of 0.005). The Python fallback avoids this by computing the
+	// conversion via `Decimal(str(value)) * factor` which yields the
+	// shortest round-trip string. Mirror that by setting `source_text` to
+	// the shortest round-trip representation of the converted double: find
+	// the smallest precision `*g` format whose `strtod` round-trips back
+	// to the same double value, then mirror the Python fallback's
+	// `_normalize_quantity_value` rule: integer-valued Decimals (e.g. 100.0
+	// from `(1 'm').toQuantity('cm')`) are quantized to integral text
+	// (`100`), while non-integer values preserve their shortest non-sci
+	// form. Spec citations: §5.5.7 toQuantity unit conversion, §4.1.4
+	// fixed-precision decimal formats, §4.1.8 Quantity value is Decimal.
+	// Same binary64-drift bug class as FP-07 SKEPTIC/HISTORIAN/EXPLORER
+	// (fn_toDecimal) and FP-08 HISTORIAN (String-decimal toQuantity) —
+	// conversion-arithmetic path was the missed sibling.
+	char buf[64];
+	std::string shortest_text;
+	// FP-08 SKEPTIC (2026-06-28): Cap shortest-round-trip search at precision
+	// 15 (IEEE 754 double's guaranteed-unique significant digits). The 16th
+	// and 17th digits are sometimes binary64 representation noise rather
+	// than author-intended Decimal precision. The Python fallback never
+	// produces this noise because its Quantity arithmetic is Decimal-exact
+	// (`Decimal('0.1') + Decimal('0.2') == Decimal('0.3')`), so the native
+	// `(0.1 'g' + 0.2 'g').toQuantity('mg')` was rendering as
+	// `"300.00000000000006 'mg'"` while the fallback rendered
+	// `"300 'mg'"`. Capping at 15 sig figs (and falling back to a 15-sig-fig
+	// render when no shorter precision round-trips) drops the noise to
+	// match the fallback. Spec citations: §5.5.7 toQuantity unit conversion,
+	// §4.1.4 System.Decimal ("rational number with implicit precision" —
+	// not binary64 noise), §4.1.8 Quantity value is Decimal. The root
+	// cause is §5.7 native Quantity arithmetic using `double` instead of
+	// `Decimal` (evaluator.cpp:6940-6998, FP-11 scope); this surgical
+	// mask only addresses the §5.5.7 boundary symptom.
+	for (int prec = 1; prec <= 15; ++prec) {
+		std::snprintf(buf, sizeof(buf), "%.*g", prec, out.quantity_value);
+		double parsed = std::strtod(buf, nullptr);
+		if (parsed == out.quantity_value) {
+			shortest_text = buf;
+			break;
+		}
+	}
+	if (shortest_text.empty()) {
+		// No precision 1..15 round-trips exactly. The value likely came
+		// from binary64 arithmetic (e.g. 0.1 + 0.2 = 0.30000000000000004)
+		// and carries noise in the 16th/17th digits. Round to 15 sig figs
+		// to drop the noise and match the Python fallback's Decimal
+		// rendering.
+		std::snprintf(buf, sizeof(buf), "%.15g", out.quantity_value);
+		shortest_text = buf;
+	}
+	if (!shortest_text.empty()) {
+		// Mirror Python FP_Quantity._normalize_quantity_value: if the value
+		// is integer-valued, render as integral text (e.g. "100" not
+		// "100.0"). Otherwise ensure at least one fractional digit per
+		// §4.1.4 Decimal format `(-)?#0.0#`.
+		double int_part;
+		bool is_integer = (std::modf(out.quantity_value, &int_part) == 0.0) &&
+		                  !std::isnan(out.quantity_value) && !std::isinf(out.quantity_value);
+		if (is_integer) {
+			// Render as fixed integer (no sci notation, no .0).
+			// `shortest_text` may be in scientific form (e.g. "1e+02"),
+			// so use a large fixed-precision render then strip the .0.
+			std::ostringstream fixed_int;
+			fixed_int << std::fixed << std::setprecision(0) << out.quantity_value;
+			out.source_text = fixed_int.str();
+		} else {
+			// For non-integer values, normalize: %g may emit scientific
+			// notation for very small/large values; expand via
+			// formatDecimalNumber which falls back to fixed notation.
+			out.source_text = formatDecimalNumber(out.quantity_value, shortest_text);
+		}
+	} else {
+		// Fallback (shouldn't happen for finite doubles): clear source_text
+		// so downstream rendering uses the default binary64 path.
+		out.source_text.clear();
+	}
 	return true;
+}
+
+// FP-11 SKEPTIC (2026-06-28): Produce a Decimal-shaped `source_text` for a
+// Quantity arithmetic result so that the raw binary64 `double` does not
+// leak through `.value` projection or `toString()` materialization. Mirrors
+// the precision-15 shortest-round-trip mask used by `convertQuantityUnit`
+// above (FP-08 SKEPTIC), but in a reusable form for the §5.7.1 arithmetic
+// paths at evaluator.cpp:7107-7166.
+//
+// Spec citations: FHIRPath v2.0.0 §5.7.1 (arithmetic on Quantity operands
+// requires Decimal semantics, matching the Python fallback's Decimal-exact
+// arithmetic); §4.1.4 (System.Decimal is "rational number with implicit
+// precision" — not IEEE 754 binary64 noise); §4.1.8 (Quantity.value is
+// Decimal). Without this normalization, `(0.1 'mg' + 0.2 'mg').value`
+// returns 0.30000000000000004 (native) vs 0.3 (fallback) because native
+// Quantity +/-/* at evaluator.cpp:7107-7166 uses `double` arithmetic and
+// the result FPValue carries empty `source_text`, so the `.value` projection
+// at evaluator.cpp:2576-2599 cannot normalize. The Python fallback avoids
+// the drift entirely via `Decimal('0.1') + Decimal('0.2') == Decimal('0.3')`
+// at fhir4ds/fhirpath/engine/invocations/math.py:_quantity_add_or_sub.
+//
+// Same binary64-drift bug class as FP-07 SKEPTIC/HISTORIAN/EXPLORER
+// (fn_toDecimal branches) and FP-08 EXPLORER/HISTORIAN/SKEPTIC
+// (convertQuantityUnit); this helper addresses the §5.7.1 arithmetic
+// sibling.
+//
+// The helper also re-parses the normalized text back to a `double` via
+// `strtod` and writes it through the by-reference `value` parameter. The
+// re-parse step is required because the Python fallback's `float(Decimal)`
+// yields a different (smaller-magnitude) double than the original binary64
+// arithmetic result. For example, `float(Decimal('0.3'))` is the nearest
+// double to 0.3 (`0x3FD3333333333333`), but `0.1 + 0.2` (binary64 arithmetic)
+// is one ULP larger (`0x3FD3333333333334`). The re-parse ensures that the
+// `quantity_value` field exposed through `.value` projection and the
+// `decimal_val` field set at evaluator.cpp:2649 match the Python fallback's
+// nearest-double, not the original binary64 noise. The `.value` projection
+// at evaluator.cpp:2646-2669 then copies `item.quantity_value` into
+// `v.decimal_val` and copies `item.source_text` into `v.source_text`, and
+// `toNumber()` at evaluator.cpp:7590-7597 returns `decimal_val` directly,
+// so both fields must be the normalized double.
+//
+// The `apply_integral_normalize` parameter mirrors the Python fallback's
+// `_normalize_quantity_value` policy: `+`/`-` Quantity arithmetic at
+// `fhir4ds/fhirpath/engine/invocations/math.py:_quantity_add_or_sub` calls
+// `_normalize_quantity_value`, which quantizes integer-valued Decimal
+// results to integral form (e.g. `Decimal('1.0')` → `Decimal('1')`). The
+// `*`/`/` Quantity arithmetic at `FP_Quantity.__mul__`/`__truediv__` does
+// NOT call `_normalize_quantity_value`, so `(0.1 'mg' * 10)` renders as
+// "1.0 'mg'" in the fallback (preserving 1 fractional digit). Set
+// `apply_integral_normalize=true` for `+`/`-` paths; set `false` for
+// `*`/`/` paths.
+static std::string normalizeQuantityArithmeticSourceText(double &value,
+                                                          bool apply_integral_normalize = true,
+                                                          bool preserve_decimal_point = false) {
+	if (std::isnan(value) || std::isinf(value)) {
+		// Caller should have already filtered NaN/inf; return empty so
+		// downstream rendering falls back to the default path.
+		return {};
+	}
+	char buf[64];
+	std::string shortest_text;
+	// Cap shortest-round-trip search at precision 15 (IEEE 754 double's
+	// guaranteed-unique significant digits). The 16th/17th digits are
+	// sometimes binary64 representation noise rather than author-intended
+	// Decimal precision. The Python fallback never produces this noise
+	// because its Quantity arithmetic is Decimal-exact.
+	//
+	// FP-18 SKEPTIC (2026-06-30): When the value is integer-valued and
+	// within int64 range, prefer a non-scientific integer rendering over
+	// the %g scientific form. Otherwise `%g` prec=1 produces "5e+01" for
+	// value 50, and formatDecimalNumber then renders it as "50.0" (with
+	// unwanted decimal point) instead of "50" (Integer form).
+	double int_part_check;
+	bool value_is_integer = (std::modf(value, &int_part_check) == 0.0) &&
+	                        !std::isnan(value) && !std::isinf(value) &&
+	                        std::fabs(value) < 9.2e18;  // int64 range
+	if (value_is_integer) {
+		std::snprintf(buf, sizeof(buf), "%.0f", value);
+		shortest_text = buf;
+	} else {
+		for (int prec = 1; prec <= 15; ++prec) {
+			std::snprintf(buf, sizeof(buf), "%.*g", prec, value);
+			double parsed = std::strtod(buf, nullptr);
+			if (parsed == value) {
+				shortest_text = buf;
+				break;
+			}
+		}
+		if (shortest_text.empty()) {
+			// No precision 1..15 round-trips exactly. The value likely came
+			// from binary64 arithmetic (e.g. 0.1 + 0.2 = 0.30000000000000004)
+			// and carries noise in the 16th/17th digits. Round to 15 sig figs
+			// to drop the noise and match the Python fallback's Decimal
+			// rendering.
+			std::snprintf(buf, sizeof(buf), "%.15g", value);
+			shortest_text = buf;
+		}
+	}
+	// Re-parse the shortest text back to double. This re-anchoring to the
+	// nearest-double of the rounded text is what matches the Python
+	// fallback's `float(Decimal('0.3'))`. Without this step, `quantity_value`
+	// would still hold the original binary64 noise (e.g. 0.30000000000000004)
+	// even though `source_text` reads "0.3", and `fhirpath_number` /
+	// `.value` projection would return the noise.
+	value = std::strtod(shortest_text.c_str(), nullptr);
+	double int_part;
+	bool is_integer = (std::modf(value, &int_part) == 0.0) &&
+	                  !std::isnan(value) && !std::isinf(value);
+	if (is_integer && apply_integral_normalize) {
+		// Mirror Python FP_Quantity._normalize_quantity_value: integer-
+		// valued Decimals quantize to integral text (e.g. "300" not
+		// "300.0"). Use a large fixed-precision render then strip ".0".
+		std::ostringstream fixed_int;
+		fixed_int << std::fixed << std::setprecision(0) << value;
+		return fixed_int.str();
+	}
+	// FP-18 SKEPTIC (2026-06-30): For scalar Quantity * number paths
+	// (preserve_decimal_point=true), Python's __mul__/__truediv__ over
+	// scalars does NOT call _normalize_quantity_value, so Decimal scale
+	// is preserved — `Decimal('5.0') * 3 = Decimal('15.0')`. When the
+	// result is integer-valued and shortest_text from %g formatting is
+	// e.g. "5", we must append ".0" to mirror Python's "5.0" rendering.
+	// Spec: §4.1.8 Quantity.value is Decimal; §5.5.8 Quantity toString
+	// format `(-)?#0.0# (('«unit»')|(«unit»))` requires at least one
+	// fractional digit.
+	std::string rendered = formatDecimalNumber(value, shortest_text);
+	if (preserve_decimal_point && is_integer &&
+	    rendered.find('.') == std::string::npos &&
+	    rendered.find('e') == std::string::npos &&
+	    rendered.find('E') == std::string::npos &&
+	    !rendered.empty()) {
+		rendered += ".0";
+	}
+	return rendered;
+}
+
+// FP-11 HISTORIAN (2026-06-28): Produce a Decimal-shaped `source_text` for
+// a §5.7 Math (STU) function result (ln/exp/sqrt/log) so that the raw
+// binary64 `double` does not leak through `fhirpath_text` serialization.
+//
+// Without this normalization, `(10).ln()` renders as "2.3025850929940459"
+// (17 sig digits — full IEEE 754 binary64 expansion) via the
+// `std::setprecision(17)` fallback in `Evaluator::toString()` at line 7603.
+// The Python fallback at
+// `fhir4ds/fhirpath/engine/invocations/math.py:310` (`ln`), `:324` (`log`),
+// `:396` (`sqrt`) returns a raw Python `float`, which Python's `str()`
+// serializes via the shortest-round-trip algorithm (David Gay's algorithm),
+// producing "2.302585092994046" (16 sig digits). The numerical value is
+// identical between paths; the divergence is observable only through
+// `fhirpath_text` (toString serialization).
+//
+// Spec citations: FHIRPath v2.0.0 §5.7.5 ln(), §5.7.3 exp(), §5.7.9 sqrt(),
+// §5.7.6 log(base) — these return Decimal; §4.1.4 System.Decimal
+// ("rational number with implicit precision" — not IEEE 754 binary64 noise,
+// "implementations should use fixed-precision decimal formats"); §5.5.8
+// Decimal toString format `(-)?#0.0#` requires at least one digit before
+// and after the decimal point.
+//
+// Same binary64-drift bug class as FP-07 SKEPTIC/HISTORIAN/EXPLORER
+// (fn_toDecimal branches), FP-08 EXPLORER/HISTORIAN/SKEPTIC
+// (convertQuantityUnit), and FP-11 SKEPTIC (Quantity +/-/*); this helper
+// addresses the §5.7 Decimal-returning math sibling.
+//
+// The helper also re-parses the normalized text back to a `double` via
+// `strtod` and writes it through the by-reference `value` parameter. The
+// re-parse step is required because the Python fallback returns
+// `math.log(float(num))` which is the nearest-double to the true
+// mathematical value; C++ `std::log(num)` may produce a different (also
+// valid) nearest-double. The re-parse ensures the `decimal_val` field set
+// on the result FPValue matches the Python fallback's nearest-double, so
+// `fhirpath_number` (which returns `decimal_val` directly) agrees with
+// `fhirpath_text` (which serializes `source_text`).
+//
+// Decimal shape rule: §5.5.8 toString format `(-)?#0.0#` requires at least
+// one fractional digit. For integer-valued results (e.g. `(16).log(2) ==
+// 4.0`, `(81).sqrt() == 9.0`, `(1).ln() == 0.0`), append `.0` so the
+// rendered text is "4.0" / "9.0" / "0.0" — matching the Python fallback's
+// `str(float)` rendering of integer-valued floats.
+static std::string normalizeDecimalMathSourceText(double &value) {
+	if (std::isnan(value) || std::isinf(value)) {
+		// Caller should have already filtered NaN/inf; return empty so
+		// downstream rendering falls back to the default path.
+		return {};
+	}
+	char buf[64];
+	std::string shortest_text;
+	// Search for the shortest precision that round-trips back to the same
+	// double. This mirrors Python's `str(float)` algorithm (David Gay's
+	// shortest-round-trip rendering), which is what the Python fallback
+	// produces for `ln`/`log`/`sqrt` (and now `exp` after FP-11 HISTORIAN).
+	// Cap at 17 (IEEE 754 double's maximum significant digits); most values
+	// round-trip at 15-16 digits.
+	for (int prec = 1; prec <= 17; ++prec) {
+		std::snprintf(buf, sizeof(buf), "%.*g", prec, value);
+		double parsed = std::strtod(buf, nullptr);
+		if (parsed == value) {
+			shortest_text = buf;
+			break;
+		}
+	}
+	if (shortest_text.empty()) {
+		// Should not happen for finite doubles; fall back to 17 sig figs.
+		std::snprintf(buf, sizeof(buf), "%.17g", value);
+		shortest_text = buf;
+	}
+	// FP-11 EXPLORER (2026-06-29): For integer-valued doubles where `%.*g`
+	// produced scientific notation (e.g. -1e+01 for -10.0), re-render in
+	// fixed-point form so the source_text passes formatDecimalNumber's
+	// "no scientific notation" check and renders as "-10.0" to match the
+	// Python fallback `str(-10.0) == "-10.0"`. This also handles
+	// 1e+20 → 100000000000000000000 → +.0 suffix.
+	if (shortest_text.find('e') != std::string::npos ||
+	    shortest_text.find('E') != std::string::npos) {
+		// Try fixed-point rendering. If the magnitude is small enough to
+		// fit in a sane fixed-point text (< 1e16), use snprintf("%.*f").
+		// Otherwise, the source_text keeps scientific notation but at
+		// least the round-trip is preserved.
+		double abs_value = std::fabs(value);
+		if (abs_value < 1e16 && value == std::floor(value)) {
+			// Integer-valued; render with snprintf("%.*f", 0, value) to get
+			// the canonical fixed-point text.
+			std::snprintf(buf, sizeof(buf), "%.0f", value);
+			shortest_text = buf;
+		} else if (abs_value < 1e-300) {
+			// Subnormal — preserve the scientific notation as the only
+			// meaningful representation. Caller (formatDecimalNumber) will
+			// reject this and fall through to its default branch, which we
+			// also need to fix. Keep shortest_text as-is here.
+		}
+	}
+	// Note: unlike normalizeQuantityArithmeticSourceText, we do NOT re-parse
+	// the shortest text back to double here. The C++ standard library
+	// `std::log`/`std::exp`/`std::sqrt` produce the same IEEE 754 nearest-
+	// double as Python's `math.log`/`math.exp`/`math.sqrt` (both are IEEE
+	// 754 compliant), so the original `value` is already correct. Re-parsing
+	// the precision-15 text would actually INTRODUCE drift (e.g.
+	// `std::log(10.0) == 2.302585092994046` but `strtod("2.30258509299405")
+	// == 2.30258509299405`), causing `fhirpath_number` to diverge from the
+	// Python fallback. The Quantity-arithmetic helper re-parses because
+	// `0.1 + 0.2` produces a double that is 1 ULP off from
+	// `float(Decimal('0.3'))`; that is NOT the case for `std::log` et al.
+	//
+	// Ensure §5.5.8 Decimal toString format `(-)?#0.0#`: append `.0` for
+	// integer-valued results so "4" becomes "4.0", matching Python's
+	// `str(4.0) == "4.0"`.
+	if (shortest_text.find('.') == std::string::npos &&
+	    shortest_text.find('e') == std::string::npos &&
+	    shortest_text.find('E') == std::string::npos) {
+		shortest_text += ".0";
+	}
+	return shortest_text;
 }
 
 // Try to convert a JSON value to a Quantity if it looks like one (has value, code/unit fields)
@@ -2345,6 +2884,49 @@ FPCollection Evaluator::evalMemberAccess(const ASTNode &node, const FPCollection
 		};
 
 	for (const auto &item : input) {
+		// FHIRPath §4.1.8: Quantity values expose `value` (Decimal) and `unit`
+		// (String) as named members. Resource-backed FHIR Quantity values are
+		// JSON objects and fall through to the JsonVal branch below; Quantity
+		// literals (and any other typed FPValue carrying Quantity data) need an
+		// explicit branch so member access does not silently drop them.
+		if (item.type == FPValue::Type::Quantity) {
+			if (field_name == "value") {
+				FPValue v;
+				v.type = FPValue::Type::Decimal;
+				v.decimal_val = item.quantity_value;
+				// §4.1.8: the value component is always a Decimal. Preserve
+				// authored precision if the literal text already had a decimal
+				// point (e.g. `5.5 'mg'`); otherwise normalize so the Decimal
+				// surface always shows at least one fractional digit (e.g.
+				// `5 'mg'.value` serializes as `5.0`, not the Integer surface `5`).
+				if (item.source_text.find('.') != std::string::npos) {
+					v.source_text = item.source_text;
+				} else {
+					std::string normalized = item.source_text;
+					if (normalized.empty()) {
+						// Fall back to a high-precision Decimal rendering.
+					} else if (normalized.find('e') == std::string::npos &&
+					           normalized.find('E') == std::string::npos) {
+						normalized += ".0";
+						v.source_text = normalized;
+					}
+				}
+				v.field_name = "value";
+				v.fhir_type = "decimal";
+				result.push_back(v);
+			} else if (field_name == "unit") {
+				FPValue v;
+				v.type = FPValue::Type::String;
+				v.string_val = item.quantity_unit;
+				v.field_name = "unit";
+				v.fhir_type = "string";
+				result.push_back(v);
+			}
+			// `.code`, `.system`, and any other members are not present on a
+			// literal Quantity — return empty (matches the FHIRPath §4.1.8 model
+			// where Quantity literals have only value+unit).
+			continue;
+		}
 		if (item.type != FPValue::Type::JsonVal || !item.json_val) {
 			continue;
 		}
@@ -2711,6 +3293,14 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 	}
 	if (name == "where") {
 		return evalWhere(node, input, doc);
+	}
+	// Bare no-source form `exists([criteria])`: the method form
+	// `source.exists(...)` is parsed as NodeType::ExistsCall and goes through
+	// evalExists at the NodeType switch above; the bare form falls through
+	// here. Per FHIRPath §5.1.2 the no-arg form is equivalent to
+	// `count() > 0`, so dispatch through evalExists to keep parity.
+	if (name == "exists") {
+		return evalExists(node, input, doc);
 	}
 	if (name == "allTrue") {
 		return fn_allTrue(input);
@@ -3489,7 +4079,13 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 		double n = getNumericValue(val);
 		double result = std::exp(n);
 		if (std::isnan(result) || std::isinf(result)) return {};
-		return {FPValue::FromDecimal(result)};
+		// FP-11 HISTORIAN (2026-06-28): set source_text to shortest-round-
+		// trip text and re-anchor decimal_val so the result matches the
+		// Python fallback's `Decimal(format(math.exp(n), ".17g"))` shape
+		// and `str(float)` precision. See normalizeDecimalMathSourceText.
+		auto v = FPValue::FromDecimal(result);
+		v.source_text = normalizeDecimalMathSourceText(v.decimal_val);
+		return {v};
 	}
 	if (name == "ln") {
 		if (input.empty()) return {};
@@ -3499,7 +4095,13 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 		}
 		double n = getNumericValue(val);
 		if (n <= 0) return {};
-		return {FPValue::FromDecimal(std::log(n))};
+		// FP-11 HISTORIAN (2026-06-28): set source_text to shortest-round-
+		// trip text and re-anchor decimal_val so the result matches the
+		// Python fallback's `str(math.log(n))` precision. See
+		// normalizeDecimalMathSourceText.
+		auto v = FPValue::FromDecimal(std::log(n));
+		v.source_text = normalizeDecimalMathSourceText(v.decimal_val);
+		return {v};
 	}
 	if (name == "log") {
 		if (input.empty()) return {};
@@ -3520,7 +4122,13 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 		double val = getNumericValue(logVal);
 		double base = getNumericValue(baseVal);
 		if (val <= 0 || base <= 0 || base == 1.0) return {};
-		return {FPValue::FromDecimal(std::log(val) / std::log(base))};
+		// FP-11 HISTORIAN (2026-06-28): set source_text to shortest-round-
+		// trip text and re-anchor decimal_val so the result matches the
+		// Python fallback's `str(math.log(val)/math.log(base))` precision.
+		// See normalizeDecimalMathSourceText.
+		auto v = FPValue::FromDecimal(std::log(val) / std::log(base));
+		v.source_text = normalizeDecimalMathSourceText(v.decimal_val);
+		return {v};
 	}
 
 	// escape() and unescape() for HTML
@@ -4616,7 +5224,44 @@ FPCollection Evaluator::fn_toDecimal(const FPCollection &input) {
 			return {FPValue::FromDecimal(b ? 1.0 : 0.0)};
 		}
 		if (t == FPValue::Type::Integer) {
-			return {FPValue::FromDecimal(getNumericValue(val))};
+			// JsonVal-wrapped FHIR integer primitive or native Integer literal
+			// promoted to Decimal per §5.5.6. Per §4.1.4 'implementations should
+			// use fixed-precision decimal formats to ensure that decimal values
+			// are accurately represented'. The double decimal_val loses precision
+			// above 2^53, so we MUST preserve canonical integer text via
+			// source_text for downstream toString/equality/comparison paths.
+			// Without this, big.toDecimal().toString() renders scientific
+			// notation (9.2233720368547758e+18) and 9007199254740993 rounds
+			// down to 9007199254740992 (FP-07 HISTORIAN QA-001).
+			FPValue out = FPValue::FromDecimal(getNumericValue(val));
+			std::string raw_text;
+			if (val.type == FPValue::Type::JsonVal && val.json_val) {
+				raw_text = jsonNumberText(val.json_val);
+			} else if (!val.source_text.empty()) {
+				raw_text = val.source_text;
+			} else {
+				raw_text = std::to_string(static_cast<long long>(getNumericValue(val)));
+			}
+			// Decimal surface must carry a fractional digit per §4.1.8.
+			if (raw_text.find('.') == std::string::npos) {
+				raw_text += ".0";
+			}
+			out.source_text = raw_text;
+			return {out};
+		}
+		if (t == FPValue::Type::Decimal) {
+			// JsonVal-wrapped FHIR decimal primitive (e.g. Observation.valueDecimal).
+			// Per §5.5.6 toDecimal() returns the value as Decimal. Must preserve
+			// canonical JSON numeric text for downstream precision semantics
+			// (§4.1.4: 'implementations should use fixed-precision decimal
+			// formats to ensure that decimal values are accurately represented').
+			FPValue out = FPValue::FromDecimal(getNumericValue(val));
+			if (val.type == FPValue::Type::JsonVal && val.json_val) {
+				out.source_text = jsonNumberText(val.json_val);
+			} else if (!val.source_text.empty()) {
+				out.source_text = val.source_text;
+			}
+			return {out};
 		}
 		if (t != FPValue::Type::String) {
 			return {};
@@ -4630,7 +5275,40 @@ FPCollection Evaluator::fn_toDecimal(const FPCollection &input) {
 		if (idx != s.size()) return {};
 		// Reject NaN and Infinity - not valid FHIRPath decimals
 		if (std::isnan(d) || std::isinf(d)) return {};
-		return {FPValue::FromDecimal(d)};
+		// Preserve the parsed source text so downstream equality/comparison/
+		// toString observe canonical decimal text instead of binary64 drift.
+		// Per §4.1.4 implementations should use fixed-precision decimal formats.
+		// Normalize the text the same way Python's Decimal(str) does: drop a
+		// leading '+' and collapse leading zeros in the integer part so
+		// '+5' -> '5.0' and '00' -> '0.0' (parity with fallback).
+		FPValue out = FPValue::FromDecimal(d);
+		std::string normalized = s;
+		// Drop leading '+'
+		if (normalized.size() > 0 && normalized[0] == '+') {
+			normalized.erase(0, 1);
+		}
+		// Collapse leading zeros in the integer part (preserve '-0' and the
+		// decimal point boundary).
+		size_t start = 0;
+		if (start < normalized.size() && (normalized[start] == '-' || normalized[start] == '+')) {
+			++start;
+		}
+		size_t dot_pos = normalized.find('.', start);
+		size_t int_end = (dot_pos == std::string::npos) ? normalized.size() : dot_pos;
+		if (int_end > start + 1) {
+			size_t first_nonzero = start;
+			while (first_nonzero + 1 < int_end && normalized[first_nonzero] == '0') {
+				++first_nonzero;
+			}
+			if (first_nonzero > start) {
+				normalized.erase(start, first_nonzero - start);
+			}
+		}
+		if (normalized.find('.') == std::string::npos) {
+			normalized += ".0";
+		}
+		out.source_text = normalized;
+		return {out};
 	} catch (const std::exception &) {
 		return {};
 	}
@@ -4827,8 +5505,36 @@ FPCollection Evaluator::fn_toQuantity(const FPCollection &input, const std::stri
 			if (!has_frac) return {};
 		}
 		if (!has_digit) return {};
+		// Capture the parsed numeric text BEFORE the unit-parse loop below
+		// advances `idx` past whitespace and the unit suffix. This is the
+		// exact substring the §5.5.7 regex `(?'value'(\+|-)?\d+(\.\d+)?)`
+		// matched and is needed as `source_text` so downstream toString()
+		// preserves the input precision (e.g. `'0.0'` stays `0.0`, not `0`).
+		// Normalize the text the same way Python's Decimal(str) does: drop a
+		// leading '+' and collapse leading zeros in the integer part so
+		// `'+5'` -> `'5'` and `'00'` -> `'0'` (parity with fallback). This
+		// mirrors the canonical-text normalization in fn_toDecimal.
+		std::string num_text = s.substr(num_start, idx - num_start);
+		if (!num_text.empty() && num_text[0] == '+') {
+			num_text.erase(0, 1);
+		}
+		size_t nz_start = 0;
+		if (nz_start < num_text.size() && (num_text[nz_start] == '-' || num_text[nz_start] == '+')) {
+			++nz_start;
+		}
+		size_t nz_dot = num_text.find('.', nz_start);
+		size_t nz_int_end = (nz_dot == std::string::npos) ? num_text.size() : nz_dot;
+		if (nz_int_end > nz_start + 1) {
+			size_t first_nonzero = nz_start;
+			while (first_nonzero + 1 < nz_int_end && num_text[first_nonzero] == '0') {
+				++first_nonzero;
+			}
+			if (first_nonzero > nz_start) {
+				num_text.erase(nz_start, first_nonzero - nz_start);
+			}
+		}
 		double num_val;
-		try { num_val = std::stod(s.substr(num_start, idx - num_start)); } catch (const std::exception &) { return {}; }
+		try { num_val = std::stod(num_text); } catch (const std::exception &) { return {}; }
 		// After number, the next character (if any) must be whitespace or a quote.
 		// Reject strings like "42abc" or "0xFF" where non-whitespace/non-quote
 		// text immediately follows the number.
@@ -4852,12 +5558,18 @@ FPCollection Evaluator::fn_toQuantity(const FPCollection &input, const std::stri
 				if (idx != s.size()) return {};
 			} else {
 				unit_str = s.substr(idx);
-				// Trim trailing whitespace
-				while (!unit_str.empty() && std::isspace((unsigned char)unit_str.back())) unit_str.pop_back();
+				// FHIRPath §5.5.7: the bare-keyword form requires a recognized
+				// calendar duration keyword (year/month/week/day/hour/minute/
+				// second/millisecond and plurals) with no trailing content
+				// (whitespace or otherwise) — the spec regex
+				// `(?'value'(\+|-)?\d+(\.\d+)?)\s*('(?'unit'[^']+)'|(?'time'[a-zA-Z]+))?`
+				// implies full-match. Any other bare alpha sequence (e.g.
+				// "days extra", "abc", "xFF", "days ") must be rejected;
+				// UCUM codes must be single-quoted per spec example
+				// `'10 \\'mg[Hg]\\''`.
 				if (isBareDurationCode(unit_str)) return {};
-				if (isBareDurationKeyword(unit_str)) {
-					// Calendar duration keywords stay in their keyword form.
-				}
+				if (!isBareDurationKeyword(unit_str)) return {};
+				// Calendar duration keywords stay in their keyword form.
 			}
 		} else {
 			unit_str = "1";
@@ -4866,6 +5578,14 @@ FPCollection Evaluator::fn_toQuantity(const FPCollection &input, const std::stri
 		v.type = FPValue::Type::Quantity;
 		v.quantity_value = num_val;
 		v.quantity_unit = unit_str;
+		// FHIRPath §5.5.7/§4.1.4/§5.5.8: preserve the parsed number's source
+		// text so downstream toString() emits the spec-mandated `(-)?#0.0#`
+		// shape (at least one fractional digit for Decimal-shaped values).
+		// Without this, `'0.0'.toQuantity().toString()` would render as
+		// `"0 '1'"` (stripping the `.0`) instead of `"0.0 '1'"`. `num_text`
+		// is the exact substring the regex `(?'value'(\+|-)?\d+(\.\d+)?)`
+		// matched.
+		v.source_text = num_text;
 		return finish_quantity(v);
 	}
 	return {};
@@ -4938,6 +5658,18 @@ FPCollection Evaluator::fn_ceiling(const FPCollection &input) {
 	auto &val = input[0];
 	FPValue quantity;
 	if (fpValueAsQuantity(val, quantity)) {
+		// FP-11 EXPLORER (2026-06-29): Route Quantity ceiling through the
+		// Decimal-text integral-math path so (a) negative-zero is preserved
+		// (per §5.5.8 Decimal-shaped rendering includes authored sign) and
+		// (b) large-magnitude Quantity values don't overflow INT64 (per
+		// §4.1.8 Quantity value is Decimal — Decimal can represent these
+		// exactly; int64 guard over-rejects). If no source_text is available,
+		// fall back to the binary64 path.
+		std::string exact_text;
+		if (!quantity.source_text.empty() &&
+		    integralTextFromDecimalSource(quantity.source_text, IntegralMathOp::Ceiling, exact_text)) {
+			return {makeQuantityMathResult(quantity, std::ceil(quantity.quantity_value), exact_text)};
+		}
 		return {makeQuantityMathResult(quantity, std::ceil(quantity.quantity_value))};
 	}
 	if (isNumericType(val)) {
@@ -5133,7 +5865,13 @@ FPCollection Evaluator::fn_ln(const FPCollection &input) {
 	if (dval <= 0) {
 		return {};
 	}
-	return {FPValue::FromDecimal(std::log(dval))};
+	// FP-11 HISTORIAN (2026-06-28): set source_text to shortest-round-trip
+	// text and re-anchor decimal_val so the result matches the Python
+	// fallback's `str(math.log(n))` precision. See
+	// normalizeDecimalMathSourceText.
+	auto v = FPValue::FromDecimal(std::log(dval));
+	v.source_text = normalizeDecimalMathSourceText(v.decimal_val);
+	return {v};
 }
 
 FPCollection Evaluator::fn_log(const FPCollection &input, const FPCollection &base) {
@@ -5156,7 +5894,304 @@ FPCollection Evaluator::fn_log(const FPCollection &input, const FPCollection &ba
 	if (dval <= 0 || b <= 0 || b == 1.0) {
 		return {};
 	}
-	return {FPValue::FromDecimal(std::log(dval) / std::log(b))};
+	// FP-11 HISTORIAN (2026-06-28): set source_text to shortest-round-trip
+	// text and re-anchor decimal_val so the result matches the Python
+	// fallback's `str(math.log(val)/math.log(base))` precision. See
+	// normalizeDecimalMathSourceText.
+	auto v = FPValue::FromDecimal(std::log(dval) / std::log(b));
+	v.source_text = normalizeDecimalMathSourceText(v.decimal_val);
+	return {v};
+}
+
+// FP-11 EXPLORER (2026-06-29): Arbitrary-precision magnitude multiplication
+// for power(integer, non-negative-integer). Returns the decimal magnitude
+// (no sign, no leading zeros except "0" for zero) of a * b. Both inputs
+// must be non-empty digit strings (signs handled by the caller).
+static std::string multiplyIntegerMagnitudes(const std::string &a_in, const std::string &b_in) {
+	std::string a = stripLeadingIntegerZeros(a_in);
+	std::string b = stripLeadingIntegerZeros(b_in);
+	if (a == "0" || b == "0") return "0";
+	// Schoolbook multiplication. Inputs are bounded by ~30 digits each for
+	// FHIRPath Long literals and ~600 digits for power(2, 1024)-style cases
+	// so O(n*m) is fine here.
+	std::string product(a.size() + b.size(), '0');
+	for (int i = static_cast<int>(a.size()) - 1; i >= 0; --i) {
+		int digit_a = a[static_cast<size_t>(i)] - '0';
+		int carry = 0;
+		for (int j = static_cast<int>(b.size()) - 1; j >= 0; --j) {
+			int digit_b = b[static_cast<size_t>(j)] - '0';
+			size_t pos = static_cast<size_t>((a.size() - 1 - i) + (b.size() - 1 - j));
+			int cur = product[product.size() - 1 - pos] - '0' + digit_a * digit_b + carry;
+			product[product.size() - 1 - pos] = static_cast<char>('0' + (cur % 10));
+			carry = cur / 10;
+		}
+		size_t pos = static_cast<size_t>((a.size() - 1 - i) + b.size());
+		while (carry > 0 && pos < product.size()) {
+			int idx = static_cast<int>(product.size() - 1 - pos);
+			int cur = product[static_cast<size_t>(idx)] - '0' + carry;
+			product[static_cast<size_t>(idx)] = static_cast<char>('0' + (cur % 10));
+			carry = cur / 10;
+			++pos;
+		}
+	}
+	return stripLeadingIntegerZeros(product);
+}
+
+// FP-14 EXPLORER (2026-06-29): Exact Decimal-text integer addition for
+// operands whose source_text is a pure integer magnitude (no fractional
+// part). Used to preserve precision for `(2).power(53) + 1` style
+// expressions where binary64 cannot represent adjacent integers above
+// 2^53. Inputs are unsigned magnitudes (sign handled by caller).
+// Algorithm: schoolbook digit-by-digit addition with carry.
+static std::string addIntegerMagnitudes(std::string a, std::string b) {
+	a = stripLeadingIntegerZeros(a);
+	b = stripLeadingIntegerZeros(b);
+	// Pad to equal length
+	if (a.size() < b.size()) a.swap(b);
+	while (b.size() < a.size()) b.insert(b.begin(), '0');
+	std::string sum(a.size() + 1, '0');
+	int carry = 0;
+	for (int i = static_cast<int>(a.size()) - 1; i >= 0; --i) {
+		int digit_a = a[static_cast<size_t>(i)] - '0';
+		int digit_b = b[static_cast<size_t>(i)] - '0';
+		int cur = digit_a + digit_b + carry;
+		sum[static_cast<size_t>(i + 1)] = static_cast<char>('0' + (cur % 10));
+		carry = cur / 10;
+	}
+	sum[0] = static_cast<char>('0' + carry);
+	return stripLeadingIntegerZeros(sum);
+}
+
+// FP-14 EXPLORER (2026-06-29): Exact Decimal-text integer subtraction
+// for operands whose source_text is a pure integer magnitude. Returns
+// the unsigned magnitude of (|a| - |b|) when |a| >= |b|; the caller
+// must inspect the returned `negative` flag for the actual sign when
+// |b| > |a|. Returns false if either input contains non-digit chars.
+// Used to preserve precision for `(2).power(63) - 1` style expressions.
+static bool subtractIntegerMagnitudes(std::string a, std::string b, std::string &out, bool &negative) {
+	a = stripLeadingIntegerZeros(a);
+	b = stripLeadingIntegerZeros(b);
+	for (char ch : a) {
+		if (!std::isdigit(static_cast<unsigned char>(ch))) return false;
+	}
+	for (char ch : b) {
+		if (!std::isdigit(static_cast<unsigned char>(ch))) return false;
+	}
+	// Compare magnitudes
+	negative = false;
+	if (a.size() < b.size() || (a.size() == b.size() && a < b)) {
+		a.swap(b);
+		negative = true;
+	}
+	while (b.size() < a.size()) b.insert(b.begin(), '0');
+	std::string diff(a.size(), '0');
+	int borrow = 0;
+	for (int i = static_cast<int>(a.size()) - 1; i >= 0; --i) {
+		int digit_a = a[static_cast<size_t>(i)] - '0' - borrow;
+		int digit_b = b[static_cast<size_t>(i)] - '0';
+		if (digit_a < digit_b) {
+			digit_a += 10;
+			borrow = 1;
+		} else {
+			borrow = 0;
+		}
+		diff[static_cast<size_t>(i)] = static_cast<char>('0' + (digit_a - digit_b));
+	}
+	out = stripLeadingIntegerZeros(diff);
+	// If we swapped, the negative flag indicates the true result sign.
+	// But if inputs were equal magnitude and we didn't swap, result is 0
+	// and negative flag is meaningless.
+	if (out == "0") negative = false;
+	return true;
+}
+
+// FP-14 EXPLORER (2026-06-29): Exact Decimal-text arithmetic for
+// integer-valued Decimal operands. Returns the Decimal-shaped source
+// text (e.g. "9007199254740993.0") for `+`, `-`, and `*` operations
+// where both operands have source_text representing a pure integer
+// (fractional part is empty or all-zeros). Returns false if exact
+// computation is not applicable (operand missing source_text, source_text
+// contains a non-zero fractional part, scientific notation). When this
+// returns false, callers fall back to the existing binary64 path.
+static bool tryIntegerArithmeticText(const FPValue &lv, const FPValue &rv,
+                                     const std::string &op, std::string &out) {
+	if (op != "+" && op != "-" && op != "*") return false;
+	// Both operands must be numeric and have integer-valued source_text.
+	if (!isNumericType(lv) || !isNumericType(rv)) return false;
+	std::string l_text, r_text;
+	if (lv.type == FPValue::Type::Integer) {
+		l_text = std::to_string(lv.int_val);
+	} else if (lv.type == FPValue::Type::JsonVal && lv.json_val && yyjson_is_int(lv.json_val)) {
+		l_text = jsonNumberText(lv.json_val);
+	} else if (!lv.source_text.empty()) {
+		l_text = lv.source_text;
+	} else {
+		return false;
+	}
+	if (rv.type == FPValue::Type::Integer) {
+		r_text = std::to_string(rv.int_val);
+	} else if (rv.type == FPValue::Type::JsonVal && rv.json_val && yyjson_is_int(rv.json_val)) {
+		r_text = jsonNumberText(rv.json_val);
+	} else if (!rv.source_text.empty()) {
+		r_text = rv.source_text;
+	} else {
+		return false;
+	}
+	// Reject scientific notation; accept Decimal text with all-zero
+	// fractional part by stripping it.
+	auto stripFractionalZeros = [](std::string &s) -> bool {
+		size_t dot = s.find('.');
+		if (dot == std::string::npos) return true;
+		std::string frac = s.substr(dot + 1);
+		for (char ch : frac) {
+			if (!std::isdigit(static_cast<unsigned char>(ch))) return false;
+			if (ch != '0') return false;  // non-zero fraction: defer to binary64
+		}
+		s.erase(dot);
+		return true;
+	};
+	// FP-18 SKEPTIC (2026-06-30): Track original fractional-digit count
+	// for each operand so we can preserve Decimal scale on `*` (Python
+	// Decimal: result scale = sum of operand scales). For `+`/`-`, the
+	// result scale is max of operand scales, but since this path only
+	// triggers when both operands' fractional parts are all zeros, the
+	// max is just the larger of the two zero-fraction counts.
+	auto fractionalDigitCount = [](const std::string &s) -> int {
+		size_t dot = s.find('.');
+		if (dot == std::string::npos) return 0;
+		return static_cast<int>(s.size() - dot - 1);
+	};
+	int l_frac = fractionalDigitCount(l_text);
+	int r_frac = fractionalDigitCount(r_text);
+	if (l_text.find('e') != std::string::npos || l_text.find('E') != std::string::npos) return false;
+	if (r_text.find('e') != std::string::npos || r_text.find('E') != std::string::npos) return false;
+	if (!stripFractionalZeros(l_text)) return false;
+	if (!stripFractionalZeros(r_text)) return false;
+	// Extract signs and magnitudes.
+	bool l_neg = false, r_neg = false;
+	if (!l_text.empty() && (l_text[0] == '-' || l_text[0] == '+')) {
+		l_neg = l_text[0] == '-';
+		l_text.erase(0, 1);
+	}
+	if (!r_text.empty() && (r_text[0] == '-' || r_text[0] == '+')) {
+		r_neg = r_text[0] == '-';
+		r_text.erase(0, 1);
+	}
+	for (char ch : l_text) {
+		if (!std::isdigit(static_cast<unsigned char>(ch))) return false;
+	}
+	for (char ch : r_text) {
+		if (!std::isdigit(static_cast<unsigned char>(ch))) return false;
+	}
+	l_text = stripLeadingIntegerZeros(l_text);
+	r_text = stripLeadingIntegerZeros(r_text);
+
+	std::string magnitude;
+	bool result_neg = false;
+	if (op == "+") {
+		if (l_neg == r_neg) {
+			magnitude = addIntegerMagnitudes(l_text, r_text);
+			result_neg = l_neg && magnitude != "0";
+		} else {
+			bool swapped_neg = false;
+			if (!subtractIntegerMagnitudes(l_text, r_text, magnitude, swapped_neg)) return false;
+			// subtractIntegerMagnitudes returns |a-b| with `negative` flag
+			// indicating whether |b| > |a|. Combined with input signs: if
+			// l was negative and |l| > |r|, result is negative. If r was
+			// negative and |r| > |l|, result is negative.
+			result_neg = (l_neg && !swapped_neg) || (r_neg && swapped_neg);
+			if (magnitude == "0") result_neg = false;
+		}
+	} else if (op == "-") {
+		// a - b = a + (-b): flip r sign and reuse addition logic.
+		r_neg = !r_neg;
+		if (l_neg == r_neg) {
+			magnitude = addIntegerMagnitudes(l_text, r_text);
+			result_neg = l_neg && magnitude != "0";
+		} else {
+			bool swapped_neg = false;
+			if (!subtractIntegerMagnitudes(l_text, r_text, magnitude, swapped_neg)) return false;
+			result_neg = (l_neg && !swapped_neg) || (r_neg && swapped_neg);
+			if (magnitude == "0") result_neg = false;
+		}
+	} else {  // op == "*"
+		magnitude = multiplyIntegerMagnitudes(l_text, r_text);
+		result_neg = (l_neg != r_neg) && magnitude != "0";
+	}
+	// Cap at 10000 digits to prevent OOM (mirrors powerIntegerExactText).
+	if (magnitude.size() > 10000) return false;
+	// FP-18 SKEPTIC (2026-06-30): Preserve Decimal scale per Python
+	// semantics. For `*`, result scale = sum of operand scales. For
+	// `+`/`-`, result scale = max of operand scales. Since this path
+	// only triggers when both operands' fractional parts are all zeros,
+	// the scale is just trailing zeros appended to the integer magnitude.
+	int result_frac = 0;
+	if (op == "*") {
+		result_frac = l_frac + r_frac;
+	} else {
+		result_frac = std::max(l_frac, r_frac);
+	}
+	if (result_frac == 0) {
+		// Integer-valued operands with no Decimal scale; render as "N.0"
+		// per §5.5.8 Decimal toString format (-)?#0.0#.
+		out = (result_neg ? "-" : "") + magnitude + ".0";
+	} else {
+		// Decimal-typed operands; preserve scale. magnitude has no
+		// fractional digits (operands had only zeros), so pad with zeros.
+		out = (result_neg ? "-" : "") + magnitude + "." + std::string(result_frac, '0');
+	}
+	return true;
+}
+
+
+// integer exponents on integer base values. Returns the Decimal-shaped
+// source text (e.g. "18446744073709551616.0"). Returns false if exact
+// computation is not applicable (negative base, fractional base, exponent
+// out of integer range).
+static bool powerIntegerExactText(const FPValue &baseVal, int64_t exp_int, std::string &out) {
+	if (exp_int < 0) return false;
+	// Extract base magnitude text. Reject fractional/negative inputs because
+	// the spec mandates Decimal-shaped output only for integer results; mixed
+	// type still routes through std::pow via the fallback path.
+	std::string base_text;
+	if (!baseVal.source_text.empty()) {
+		base_text = baseVal.source_text;
+	} else if (baseVal.type == FPValue::Type::Integer) {
+		base_text = std::to_string(baseVal.int_val);
+	} else if (baseVal.type == FPValue::Type::JsonVal && baseVal.json_val && yyjson_is_int(baseVal.json_val)) {
+		base_text = jsonNumberText(baseVal.json_val);
+	} else {
+		return false;
+	}
+	// Strip sign and fractional part; only pure-integer bases are eligible.
+	bool negative = false;
+	if (!base_text.empty() && (base_text[0] == '-' || base_text[0] == '+')) {
+		negative = base_text[0] == '-';
+		base_text.erase(0, 1);
+	}
+	size_t dot = base_text.find('.');
+	if (dot != std::string::npos) {
+		// Fractional base — defer to std::pow path; result may still be
+		// exact for some Decimal bases but the simple integer multiplication
+		// loop below is not applicable.
+		return false;
+	}
+	for (char ch : base_text) {
+		if (!std::isdigit(static_cast<unsigned char>(ch))) return false;
+	}
+	std::string magnitude = stripLeadingIntegerZeros(base_text);
+	bool result_negative = negative && ((exp_int % 2) == 1);
+	// Repeated multiplication: result = magnitude^exp_int.
+	std::string acc = "1";
+	for (int64_t i = 0; i < exp_int; ++i) {
+		acc = multiplyIntegerMagnitudes(acc, magnitude);
+		// Cap the magnitude at a sane bound so a malicious 1-billion exponent
+		// cannot OOM the engine. 10000 digits is well beyond any FHIRPath
+		// Decimal precision requirement but well below memory pressure.
+		if (acc.size() > 10000) return false;
+	}
+	out = (result_negative && acc != "0" ? "-" : "") + acc + ".0";
+	return true;
 }
 
 FPCollection Evaluator::fn_power(const FPCollection &input, const FPCollection &exponent) {
@@ -5198,6 +6233,35 @@ FPCollection Evaluator::fn_power(const FPCollection &input, const FPCollection &
 				return {out};
 			}
 		}
+		// FP-11 EXPLORER (2026-06-29): For non-negative integer exponents on
+		// integer base values, compute the exact Decimal-shaped result via
+		// string-based repeated multiplication. Per §5.7.7 power() returns
+		// Decimal; per §4.1.4 the result must use fixed-precision decimal
+		// notation (not scientific); per §5.5.8 Quantity/Decimal toString
+		// must use decimal digit notation. std::pow returning IEEE-754
+		// binary64 loses precision above 2^53 and returns +inf above ~1.8e308,
+		// which made (2).power(64) render as "1.84e+19" and (2).power(1024)
+		// render as empty, diverging from the Python fallback's Decimal.pow
+		// exact result. This branch preserves the exact text for the common
+		// integer^non-negative-integer case; fractional/Decimal bases still
+		// fall through to the std::pow path (QA-006 LOW-severity drift
+		// documented for that case).
+		if (exact_exp > 1) {
+			std::string exact_text;
+			if (powerIntegerExactText(baseVal, exact_exp, exact_text)) {
+				std::istringstream iss(exact_text);
+				double approx = 0.0;
+				iss >> approx;
+				// Preserve the exact text in source_text so toString returns
+				// the Decimal-shaped integer value, not the binary64 round-
+				// trip rendering. The decimal_val is the closest double for
+				// downstream numeric comparison; the source_text governs the
+				// §5.5.8 toString surface.
+				auto out = FPValue::FromDecimal(approx);
+				out.source_text = exact_text;
+				return {out};
+			}
+		}
 	}
 	double result = std::pow(base, exp);
 	if (std::isnan(result) || std::isinf(result)) {
@@ -5218,7 +6282,13 @@ FPCollection Evaluator::fn_sqrt(const FPCollection &input) {
 	if (dval < 0) {
 		return {};
 	}
-	return {FPValue::FromDecimal(std::sqrt(dval))};
+	// FP-11 HISTORIAN (2026-06-28): set source_text to shortest-round-trip
+	// text and re-anchor decimal_val so the result matches the Python
+	// fallback's `str(math.sqrt(n))` precision. See
+	// normalizeDecimalMathSourceText.
+	auto v = FPValue::FromDecimal(std::sqrt(dval));
+	v.source_text = normalizeDecimalMathSourceText(v.decimal_val);
+	return {v};
 }
 
 FPCollection Evaluator::fn_truncate(const FPCollection &input) {
@@ -5228,6 +6298,22 @@ FPCollection Evaluator::fn_truncate(const FPCollection &input) {
 	auto &val = input[0];
 	FPValue quantity;
 	if (fpValueAsQuantity(val, quantity)) {
+		// FP-11 EXPLORER (2026-06-29): Route Quantity truncate through the
+		// Decimal-text integral-math path when source_text is available.
+		// Per §5.7.10 truncate() Quantity branch preserves the same unit;
+		// per §4.1.8 Quantity value is Decimal — Decimal can represent
+		// values above INT64_MAX exactly. The previous int64 overflow
+		// guard at this site rejected valid large-magnitude Quantity values
+		// like (1e20 'g').truncate() and (1e100 'g').truncate(), diverging
+		// from the Python fallback's Decimal-based truncate. For inputs
+		// without source_text we still fall back to the binary64 path with
+		// the int64 guard (which preserves the prior behavior for legacy
+		// non-source-text Quantity values).
+		std::string exact_text;
+		if (!quantity.source_text.empty() &&
+		    integralTextFromDecimalSource(quantity.source_text, IntegralMathOp::Truncate, exact_text)) {
+			return {makeQuantityMathResult(quantity, static_cast<double>(static_cast<int64_t>(quantity.quantity_value)), exact_text)};
+		}
 		double raw_quantity = quantity.quantity_value;
 		if (raw_quantity > static_cast<double>(INT64_MAX) || raw_quantity < static_cast<double>(INT64_MIN)) {
 			return {};
@@ -6357,6 +7443,32 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				return compareDateTimes(this->toString(lv), this->toString(rv), lt, rt, true, false) == 0 ? 1 : 0;
 			}
 			if (isNumericType(lv) && isNumericType(rv)) {
+				// FP-13 EXPLORER (2026-06-29): Per §6.1.2 Decimal
+				// equivalence "values must be equal, comparison is done
+				// on values rounded to the precision of the least precise
+				// operand. Trailing zeroes after the decimal are ignored
+				// in determining precision." Use source_text-based
+				// comparison when both operands have canonical text
+				// available; fall back to double-based rounding only when
+				// source_text is unavailable (arithmetic results).
+				std::string l_text, r_text;
+				if (numericTextForComparison(lv, l_text) && numericTextForComparison(rv, r_text)) {
+					bool l_neg = false, r_neg = false;
+					std::string l_int, l_frac, r_int, r_frac;
+					splitCanonicalDecimalText(l_text, l_neg, l_int, l_frac);
+					splitCanonicalDecimalText(r_text, r_neg, r_int, r_frac);
+					int l_prec = (int)l_frac.size();
+					int r_prec = (int)r_frac.size();
+					int cmp_prec = (l_prec > 0 && r_prec > 0) ? std::min(l_prec, r_prec)
+					             : std::max(l_prec, r_prec);
+					if (cmp_prec > 0) {
+						// Round both to cmp_prec digits using half-up semantics
+						std::string l_rounded = roundDecimalSourceText(l_text, cmp_prec);
+						std::string r_rounded = roundDecimalSourceText(r_text, cmp_prec);
+						return compareDecimalText(l_rounded, r_rounded) == 0 ? 1 : 0;
+					}
+					return compareDecimalText(l_text, r_text) == 0 ? 1 : 0;
+				}
 				double l_num = getNumericValue(lv);
 				double r_num = getNumericValue(rv);
 				int l_prec = 0, r_prec = 0;
@@ -6408,6 +7520,14 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			if ((fpValueAsQuantity(lv, tmp) || fpValueAsQuantity(rv, tmp)) &&
 			    valueAsEqualityQuantity(lv, lq) && valueAsEqualityQuantity(rv, rq)) {
 				if (isMixedCalendarUcumYearMonthDuration(lq.quantity_unit, rq.quantity_unit)) {
+					return -1;
+				}
+				// FP-13 HISTORIAN (2026-06-29): Offset-temperature cross-unit
+				// conversion (Cel <-> [degF], etc.) is undefined; return empty
+				// to match Python fallback. See quantityEqualState comment.
+				if (lq.quantity_unit != rq.quantity_unit &&
+				    (isOffsetTemperatureUnit(lq.quantity_unit) ||
+				     isOffsetTemperatureUnit(rq.quantity_unit))) {
 					return -1;
 				}
 				std::string l_base, r_base;
@@ -6508,30 +7628,60 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			    lv.json_val && rv.json_val && yyjson_is_num(lv.json_val) && yyjson_is_num(rv.json_val)) {
 				is_eq = is_equiv ? jsonNumbersEquivalent(lv.json_val, rv.json_val)
 				                 : jsonNumbersEqual(lv.json_val, rv.json_val);
-			} else if (is_equiv) {
-				double l_num = getNumericValue(lv);
-				double r_num = getNumericValue(rv);
-				// Equivalence: compare at the precision of the least precise value
-				int l_prec = 0, r_prec = 0;
-				std::string ls = toString(lv), rs = toString(rv);
-				auto l_dot = ls.find('.');
-				auto r_dot = rs.find('.');
-				if (l_dot != std::string::npos) l_prec = (int)(ls.size() - l_dot - 1);
-				if (r_dot != std::string::npos) r_prec = (int)(rs.size() - r_dot - 1);
-				int cmp_prec = (l_prec > 0 && r_prec > 0) ? std::min(l_prec, r_prec)
-				             : std::max(l_prec, r_prec);
-				if (cmp_prec > 0) {
-					double scale = std::pow(10.0, cmp_prec);
-					is_eq = (std::round(l_num * scale) == std::round(r_num * scale));
-				} else {
-					is_eq = (l_num == r_num) || std::abs(l_num - r_num) < 1e-10;
-				}
 			} else {
-				double l_num = getNumericValue(lv);
-				double r_num = getNumericValue(rv);
-				double diff = std::abs(l_num - r_num);
-				double maxval = std::max(std::abs(l_num), std::abs(r_num));
-				is_eq = (l_num == r_num) || diff < 1e-10 || (maxval > 0 && diff / maxval < 1e-10);
+				// FP-13 EXPLORER (2026-06-29): Per §6.1.1 / §6.1.2 Decimal
+				// equality/equivalence combined with §4.1.4 (Decimal value is
+				// Decimal, not binary64). Prefer source_text-based comparison
+				// when both operands have canonical text available; the
+				// double-based branches below lose precision above ~15
+				// significant digits.
+				std::string l_text_canon, r_text_canon;
+				if (numericTextForComparison(lv, l_text_canon) && numericTextForComparison(rv, r_text_canon)) {
+					if (is_equiv) {
+						// §6.1.2: round to the precision of the least precise operand.
+						bool l_neg = false, r_neg = false;
+						std::string l_int, l_frac, r_int, r_frac;
+						splitCanonicalDecimalText(l_text_canon, l_neg, l_int, l_frac);
+						splitCanonicalDecimalText(r_text_canon, r_neg, r_int, r_frac);
+						int l_prec = (int)l_frac.size();
+						int r_prec = (int)r_frac.size();
+						int cmp_prec = (l_prec > 0 && r_prec > 0) ? std::min(l_prec, r_prec)
+						             : std::max(l_prec, r_prec);
+						if (cmp_prec > 0) {
+							std::string l_rounded = roundDecimalSourceText(l_text_canon, cmp_prec);
+							std::string r_rounded = roundDecimalSourceText(r_text_canon, cmp_prec);
+							is_eq = (compareDecimalText(l_rounded, r_rounded) == 0);
+						} else {
+							is_eq = (compareDecimalText(l_text_canon, r_text_canon) == 0);
+						}
+					} else {
+						is_eq = (compareDecimalText(l_text_canon, r_text_canon) == 0);
+					}
+				} else if (is_equiv) {
+					double l_num = getNumericValue(lv);
+					double r_num = getNumericValue(rv);
+					// Equivalence: compare at the precision of the least precise value
+					int l_prec = 0, r_prec = 0;
+					std::string ls = toString(lv), rs = toString(rv);
+					auto l_dot = ls.find('.');
+					auto r_dot = rs.find('.');
+					if (l_dot != std::string::npos) l_prec = (int)(ls.size() - l_dot - 1);
+					if (r_dot != std::string::npos) r_prec = (int)(rs.size() - r_dot - 1);
+					int cmp_prec = (l_prec > 0 && r_prec > 0) ? std::min(l_prec, r_prec)
+					             : std::max(l_prec, r_prec);
+					if (cmp_prec > 0) {
+						double scale = std::pow(10.0, cmp_prec);
+						is_eq = (std::round(l_num * scale) == std::round(r_num * scale));
+					} else {
+						is_eq = (l_num == r_num) || std::abs(l_num - r_num) < 1e-10;
+					}
+				} else {
+					double l_num = getNumericValue(lv);
+					double r_num = getNumericValue(rv);
+					double diff = std::abs(l_num - r_num);
+					double maxval = std::max(std::abs(l_num), std::abs(r_num));
+					is_eq = (l_num == r_num) || diff < 1e-10 || (maxval > 0 && diff / maxval < 1e-10);
+				}
 			}
 		} else if ([&]() -> bool {
 			FPValue lq, rq, tmp;
@@ -6626,6 +7776,24 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		// Quantity comparison with unit conversion
 		if (lv.type == FPValue::Type::Quantity && rv.type == FPValue::Type::Quantity) {
 			if (isMixedCalendarUcumDurationAboveSeconds(lv.quantity_unit, rv.quantity_unit)) return {};
+			// FP-14 SKEPTIC (2026-06-29): Offset-temperature cross-unit
+			// conversion (Cel <-> [degF], Cel <-> K, etc.) is undefined for
+			// the multiplicative-only convertQuantityToBase path. UCUM marks
+			// [degF] with sentinel factor -1.0; without this guard the
+			// §6.2 comparison path produces arithmetically wrong Booleans
+			// (e.g. `1 'Cel' < 33.8 '[degF]'` returned False instead of
+			// empty). Per spec §6.2 "Attempting to operate on quantities
+			// with invalid units will result in empty ({ })" and
+			// "Implementations are not required to fully support operations
+			// on units, but they must at least respect units, recognizing
+			// when units differ." Same-unit passthrough (1 'Cel' < 2 'Cel')
+			// still works via the fast-path below. Mirrors FP-13 HISTORIAN
+			// fix at line 7290-7294 for the §6.1 equality path.
+			if (lv.quantity_unit != rv.quantity_unit &&
+			    (isOffsetTemperatureUnit(lv.quantity_unit) ||
+			     isOffsetTemperatureUnit(rv.quantity_unit))) {
+				return {};
+			}
 			if (lv.quantity_unit == rv.quantity_unit) {
 				std::string l_text, r_text;
 				if (quantityValueTextForComparison(lv, l_text) && quantityValueTextForComparison(rv, r_text)) {
@@ -6728,8 +7896,17 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 					                                : lv.quantity_value - rv.quantity_value;
 					FPValue v;
 					v.type = FPValue::Type::Quantity;
-					v.quantity_value = result_val;
 					v.quantity_unit = lv.quantity_unit;
+					// FP-11 SKEPTIC (2026-06-28): Normalize both source_text
+					// AND quantity_value so that .value projection
+					// (evaluator.cpp:2646-2669) and toString() do not leak
+					// binary64 drift (e.g. 0.1 + 0.2 = 0.30000000000000004).
+					// The helper updates result_val in place to the nearest
+					// double to the shortest-round-trip text (mirroring
+					// Python's float(Decimal('0.3'))), then assigns to
+					// quantity_value. Spec: §5.7.1 + §4.1.4 + §4.1.8.
+					v.source_text = normalizeQuantityArithmeticSourceText(result_val);
+					v.quantity_value = result_val;
 					return {v};
 				}
 				// Different units: convert to base for compatibility check
@@ -6740,8 +7917,11 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				double result_val = (op == "+") ? l_conv + r_conv : l_conv - r_conv;
 				FPValue v;
 				v.type = FPValue::Type::Quantity;
-				v.quantity_value = result_val;
 				v.quantity_unit = l_base;
+				// FP-11 SKEPTIC: same source_text + quantity_value
+				// normalization as above.
+				v.source_text = normalizeQuantityArithmeticSourceText(result_val);
+				v.quantity_value = result_val;
 				return {v};
 			}
 			if (op == "*") {
@@ -6752,13 +7932,22 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				double result_val = l_conv * r_conv;
 				if (l_base == r_base) {
 					FPValue v; v.type = FPValue::Type::Quantity;
-					v.quantity_value = result_val;
 					v.quantity_unit = l_base + "2";
+					// FP-11 SKEPTIC: same source_text + quantity_value
+					// normalization. The Python fallback FP_Quantity.__mul__
+					// does NOT call _normalize_quantity_value, so pass
+					// apply_integral_normalize=false to preserve the
+					// "1.0" rendering for integer-valued products.
+					v.source_text = normalizeQuantityArithmeticSourceText(result_val, /*apply_integral_normalize=*/false);
+					v.quantity_value = result_val;
 					return {v};
 				}
 				FPValue v; v.type = FPValue::Type::Quantity;
-				v.quantity_value = result_val;
 				v.quantity_unit = l_base + "." + r_base;
+				// FP-11 SKEPTIC: same source_text + quantity_value
+				// normalization (no integral normalize, per __mul__).
+				v.source_text = normalizeQuantityArithmeticSourceText(result_val, /*apply_integral_normalize=*/false);
+				v.quantity_value = result_val;
 				return {v};
 			}
 			if (op == "/") {
@@ -6770,13 +7959,22 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				if (l_base == r_base) {
 					// Same unit cancels out to the UCUM dimensionless unit.
 					FPValue v; v.type = FPValue::Type::Quantity;
-					v.quantity_value = result_val;
 					v.quantity_unit = "1";
+					// FP-11 SKEPTIC: same source_text + quantity_value
+					// normalization. FP-18 HISTORIAN QA-003 (2026-06-30):
+					// Force preserve_decimal_point=true per §6.6.2 "The
+					// result of a division is always Decimal".
+					v.source_text = normalizeQuantityArithmeticSourceText(result_val, /*apply_integral_normalize=*/false, /*preserve_decimal_point=*/true);
+					v.quantity_value = result_val;
 					return {v};
 				}
 				FPValue v; v.type = FPValue::Type::Quantity;
-				v.quantity_value = result_val;
 				v.quantity_unit = l_base + "/" + r_base;
+				// FP-11 SKEPTIC: same source_text + quantity_value
+				// normalization. FP-18 HISTORIAN QA-003 (2026-06-30):
+				// Force preserve_decimal_point=true per §6.6.2.
+				v.source_text = normalizeQuantityArithmeticSourceText(result_val, /*apply_integral_normalize=*/false, /*preserve_decimal_point=*/true);
+				v.quantity_value = result_val;
 				return {v};
 			}
 		}
@@ -6786,23 +7984,53 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			if (op == "*" || op == "/") {
 				double qval, nval;
 				std::string qunit;
+				// FP-18 SKEPTIC (2026-06-30): Python's FP_Quantity.__mul__
+				// over scalars does NOT call _normalize_quantity_value, so
+				// Decimal scale is preserved iff the Quantity's value was
+				// authored as Decimal. For Quantity literal `4 'mg'`,
+				// quantity_value is `Decimal('4')` (integer scale); for
+				// `4.0 'mg'` it is `Decimal('4.0')` (decimal scale). The
+				// Quantity's source_text captures this distinction
+				// ("4" vs "4.0"), so pass preserve_decimal_point=true
+				// only when the Quantity's source_text contains a '.'.
+				// Spec: §4.1.8 Quantity.value is Decimal; §5.5.8 Quantity
+				// toString format `(-)?#0.0# (('«unit»')|(«unit»))`.
 				if (lv.type == FPValue::Type::Quantity) {
 					qval = lv.quantity_value; qunit = lv.quantity_unit; nval = getNumericValue(rv);
 					if (op == "/" && nval == 0) return {};
 					FPValue v; v.type = FPValue::Type::Quantity; v.quantity_unit = qunit;
-					v.quantity_value = (op == "*") ? qval * nval : qval / nval;
+					double result_val = (op == "*") ? qval * nval : qval / nval;
+					bool q_has_decimal = !lv.source_text.empty() &&
+					                     lv.source_text.find('.') != std::string::npos;
+					// FP-18 HISTORIAN QA-003 (2026-06-30): Per §6.6.2
+					// "The result of a division is always Decimal, even if
+					// the inputs are both Integer". Force preserve_decimal_
+					// point=true for division regardless of operand form.
+					// Multiplication preserves the FP-18 SKEPTIC rule
+					// (honor operand's decimal point).
+					bool preserve_dp = (op == "/") ? true : q_has_decimal;
+					v.source_text = normalizeQuantityArithmeticSourceText(result_val, /*apply_integral_normalize=*/false, /*preserve_decimal_point=*/preserve_dp);
+					v.quantity_value = result_val;
 					return {v};
 				} else {
 					qval = rv.quantity_value; qunit = rv.quantity_unit; nval = getNumericValue(lv);
 					if (op == "/" && qval == 0) return {};
 					FPValue v; v.type = FPValue::Type::Quantity;
+					double result_val;
 					if (op == "*") {
-						v.quantity_value = qval * nval;
+						result_val = qval * nval;
 						v.quantity_unit = qunit;
 					} else {
-						v.quantity_value = nval / qval;
+						result_val = nval / qval;
 						v.quantity_unit = "1/" + stripQuantityUnitQuotes(qunit);
 					}
+					bool q_has_decimal = !rv.source_text.empty() &&
+					                     rv.source_text.find('.') != std::string::npos;
+					// FP-18 HISTORIAN QA-003 (2026-06-30): Force preserve_
+					// decimal_point=true for division per §6.6.2.
+					bool preserve_dp = (op == "/") ? true : q_has_decimal;
+					v.source_text = normalizeQuantityArithmeticSourceText(result_val, /*apply_integral_normalize=*/false, /*preserve_decimal_point=*/preserve_dp);
+					v.quantity_value = result_val;
 					return {v};
 				}
 			}
@@ -6814,6 +8042,29 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 
 		double l_num = getNumericValue(lv);
 		double r_num = getNumericValue(rv);
+		// FP-14 EXPLORER (2026-06-29): Try exact Decimal-text arithmetic
+		// for integer-valued Decimal operands. This preserves precision
+		// for expressions like `(2).power(53) + 1` where binary64 cannot
+		// represent 9007199254740993 (rounds to 9007199254740992).
+		// Spec: §4.1.4 System.Decimal "rational number with implicit
+		// precision" — Decimal must be representable exactly, not through
+		// binary64. Mirrors the FP-11 EXPLORER QA-001 powerIntegerExactText
+		// pattern. Only handles +/-/* ; division always routes through
+		// binary64 because exact Decimal division is much more complex.
+		// IMPORTANT: only apply when at least one operand is Decimal (not
+		// Integer) — pure Integer+Integer arithmetic must preserve Integer
+		// type per spec §4.1.3 (Integer is 32-bit signed). The Integer+
+		// Integer overflow-to-Decimal case is handled below.
+		bool l_is_int_type = (effectiveType(lv) == FPValue::Type::Integer);
+		bool r_is_int_type = (effectiveType(rv) == FPValue::Type::Integer);
+		if ((op == "+" || op == "-" || op == "*") && !(l_is_int_type && r_is_int_type)) {
+			std::string exact_text;
+			if (tryIntegerArithmeticText(lv, rv, op, exact_text)) {
+				FPValue v = FPValue::FromDecimal(strtod(exact_text.c_str(), nullptr));
+				v.source_text = exact_text;
+				return {v};
+			}
+		}
 		double result = 0;
 		int mod_decimal_places = 0;
 		auto decimalPlacesForArithmetic = [this](const FPValue &v) -> int {
@@ -6833,12 +8084,15 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				std::ostringstream oss;
 				oss << std::fixed << std::setprecision(decimal_places) << rounded;
 				std::string text = oss.str();
-				auto dot = text.find('.');
-				if (dot != std::string::npos) {
-					while (text.size() > dot + 2 && text.back() == '0') {
-						text.pop_back();
-					}
-				}
+				// FP-18 SKEPTIC (2026-06-30): Do NOT strip trailing zeros.
+				// Python's Decimal arithmetic preserves scale: `2.5 * 4.0`
+				// returns `Decimal('10.00')` (2 fractional digits = sum of
+				// operand scales). Stripping trailing zeros diverges from
+				// the Python fallback. Numerically equivalent under
+				// §6.1.1 ("trailing zeroes after the decimal are ignored"
+				// for equality) but breaks source-text fidelity. Spec:
+				// §4.1.4 "implementations should use fixed-precision
+				// decimal formats".
 				out.source_text = text;
 			}
 			return out;
@@ -6873,6 +8127,21 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			constexpr double INT32_MIN_D = -2147483648.0;
 			constexpr double INT32_MAX_D = 2147483647.0;
 			if (result < INT32_MIN_D || result > INT32_MAX_D) {
+				// FP-18 SKEPTIC (2026-06-30): Integer+Integer overflow to
+				// Decimal must preserve exact magnitude via text arithmetic,
+				// not binary64. Without this, `2000000000 * 2000000000`
+				// renders as "4e+18" (scientific notation, 1 sig digit)
+				// instead of the exact "4000000000000000000.0". Same
+				// binary64-drift bug class as FP-14 EXPLORER QA-001
+				// (Decimal +/-). Spec: §4.1.4 Decimal — fixed-precision
+				// formats; §5.5.8 Decimal toString (-)?#0.0# forbids
+				// scientific notation.
+				std::string exact_text;
+				if (tryIntegerArithmeticText(lv, rv, op, exact_text)) {
+					FPValue v = FPValue::FromDecimal(strtod(exact_text.c_str(), nullptr));
+					v.source_text = exact_text;
+					return {v};
+				}
 				return {FPValue::FromDecimal(result)};
 			}
 			return {FPValue::FromInteger(static_cast<int64_t>(result))};
@@ -6887,6 +8156,25 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		}
 		if (op == "+" || op == "-" || op == "*") {
 			return {decimalWithScaleText(result, decimal_result_places)};
+		}
+		// FP-18 HISTORIAN QA-001 (2026-06-30): Division (/) result must
+		// have a shortest-round-trip source_text, not the default
+		// setprecision(17) rendering. Per §4.1.4 "implementations should
+		// use fixed-precision decimal formats" + §5.5.8 format `(-)?#0.0#`,
+		// the result text should match Python's str(float) shortest-
+		// round-trip rendering (e.g. `1/3` → `'0.3333333333333333'` not
+		// `'0.33333333333333331'`). Same binary64-drift bug class as
+		// FP-07/FP-08/FP-11/FP-14/FP-18 SKEPTIC; the tryIntegerArithmeticText
+		// fast-path is documented at evaluator.cpp:8039 as not handling
+		// division because "exact Decimal division is much more complex".
+		// However, the binary64 result itself is the same IEEE 754 nearest-
+		// double as Python's `float.__truediv__`, so re-rendering via
+		// shortest-round-trip produces the same text as the Python fallback
+		// WITHOUT needing arbitrary-precision Decimal division.
+		if (op == "/") {
+			FPValue v = FPValue::FromDecimal(result);
+			v.source_text = normalizeDecimalMathSourceText(result);
+			return {v};
 		}
 		return {FPValue::FromDecimal(result)};
 	}
@@ -6945,6 +8233,18 @@ FPCollection Evaluator::evalUnaryOp(const ASTNode &node, const FPCollection &inp
 			v.type = FPValue::Type::Quantity;
 			v.quantity_value = -operand[0].quantity_value;
 			v.quantity_unit = operand[0].quantity_unit;
+			// FP-18 SKEPTIC (2026-06-30): Propagate source_text for unary
+			// negation of Quantity so downstream scalar arithmetic can
+			// detect Decimal-authored values. Without this, `-2.5 'g' * 2`
+			// loses the `.5` decimal-point signal and renders as `-5 'g'`
+			// instead of `-5.0 'g'`. Mirrors the Decimal branch above.
+			if (!operand[0].source_text.empty()) {
+				if (operand[0].source_text[0] == '-') {
+					v.source_text = operand[0].source_text.substr(1);
+				} else {
+					v.source_text = "-" + operand[0].source_text;
+				}
+			}
 			return {v};
 		}
 		throw FHIRPathSpecError("Unary - applied to non-numeric type");
@@ -7046,9 +8346,37 @@ static std::string formatDecimalNumber(double value, const std::string &source_t
 		if (s.find('.') == std::string::npos) s += ".0";
 		return s;
 	}
+	// FP-11 EXPLORER (2026-06-29): For very small subnormal values where
+	// `setprecision(15) << std::fixed` collapses the value to "0.000000000000000",
+	// return the source_text from normalizeDecimalMathSourceText (which is
+	// already the shortest-round-trip rendering) instead. This matches
+	// Python's `str(math.exp(-710)) == '4.47628622567513e-309'` rendering.
+	// The check is: if the value is in subnormal range (< 1e-300, well below
+	// the smallest normal double ~2.225e-308) and the fixed-point rendering
+	// rounds to "0", preserve the source_text scientific form. We must NOT
+	// trigger this for normal small values like 1e-6 where the Python
+	// fallback uses fixed-point "0.000001".
 	std::ostringstream fixed;
 	fixed << std::fixed << std::setprecision(15) << value;
 	s = stripTrailingFixedZeros(fixed.str());
+	if (value != 0.0 && !std::isnan(value) && !std::isinf(value) &&
+	    std::fabs(value) < 1e-300) {
+		// Subnormal range — return the source_text if it round-trips, else
+		// fall back to the 17-sig-digit scientific form.
+		if (!source_text.empty()) {
+			// FP-11 EXPLORER (2026-06-29): Use strtod instead of std::stod
+			// because std::stod throws std::out_of_range for subnormal
+			// values even when they're representable. strtod returns the
+			// correct subnormal value without throwing.
+			double parsed = std::strtod(source_text.c_str(), nullptr);
+			if (parsed == value) {
+				return source_text;
+			}
+		}
+		std::ostringstream sci;
+		sci << std::setprecision(17) << value;
+		return sci.str();
+	}
 	if (s.find('.') == std::string::npos) s += ".0";
 	return s;
 }
@@ -7206,7 +8534,7 @@ std::string Evaluator::jsonValToString(yyjson_val *val) const {
 		return "";
 	}
 	if (yyjson_is_str(val)) {
-		return std::string(yyjson_get_str(val));
+		return yyjsonStringToStd(val);
 	}
 	if (yyjson_is_int(val)) {
 		return std::to_string(yyjson_get_sint(val));
@@ -7410,12 +8738,34 @@ FPCollection Evaluator::fn_convertsToTime(const FPCollection &input) {
 			if (p.hour < 0 || p.hour > 23) return {FPValue::FromBoolean(false)};
 			if (p.precision >= 5 && p.minute > 59) return {FPValue::FromBoolean(false)};
 			if (p.precision >= 6 && p.second > 59) return {FPValue::FromBoolean(false)};
-			// Reject timezone suffixes
+			// Reject timezone suffixes. FHIRPath §5.5.9 format `hh:mm:ss.fff`
+			// requires exactly 2 digits after each ':' separator. A dangling
+			// ':' without the 2 trailing digits is malformed (e.g. '10:').
 			size_t check_pos = (s[0] == 'T') ? 1 : 0;
-			if (check_pos + 2 <= s.size()) check_pos += 2;
-			if (check_pos < s.size() && s[check_pos] == ':') { check_pos++; if (check_pos + 2 <= s.size()) check_pos += 2; }
-			if (check_pos < s.size() && s[check_pos] == ':') { check_pos++; if (check_pos + 2 <= s.size()) check_pos += 2; }
-			if (check_pos < s.size() && s[check_pos] == '.') { check_pos++; while (check_pos < s.size() && std::isdigit((unsigned char)s[check_pos])) check_pos++; }
+			if (check_pos + 2 > s.size() ||
+			    !std::isdigit(static_cast<unsigned char>(s[check_pos])) ||
+			    !std::isdigit(static_cast<unsigned char>(s[check_pos + 1]))) return {FPValue::FromBoolean(false)};
+			check_pos += 2; // HH
+			if (check_pos < s.size() && s[check_pos] == ':') {
+				check_pos++;
+				if (check_pos + 2 > s.size() ||
+				    !std::isdigit(static_cast<unsigned char>(s[check_pos])) ||
+				    !std::isdigit(static_cast<unsigned char>(s[check_pos + 1]))) return {FPValue::FromBoolean(false)};
+				check_pos += 2; // :MM
+			}
+			if (check_pos < s.size() && s[check_pos] == ':') {
+				check_pos++;
+				if (check_pos + 2 > s.size() ||
+				    !std::isdigit(static_cast<unsigned char>(s[check_pos])) ||
+				    !std::isdigit(static_cast<unsigned char>(s[check_pos + 1]))) return {FPValue::FromBoolean(false)};
+				check_pos += 2; // :SS
+			}
+			if (check_pos < s.size() && s[check_pos] == '.') {
+				check_pos++;
+				bool has_frac = false;
+				while (check_pos < s.size() && std::isdigit((unsigned char)s[check_pos])) { check_pos++; has_frac = true; }
+				if (!has_frac) return {FPValue::FromBoolean(false)};
+			} // .sss
 			if (check_pos < s.size()) return {FPValue::FromBoolean(false)};
 			return {FPValue::FromBoolean(true)};
 		}
@@ -7552,6 +8902,29 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 		}
 		// FHIR primitive types from JSON values
 		if (is_fhir) {
+			// FHIR R4: every primitive datatype (boolean, integer, decimal,
+			// string, date, dateTime, time, code, id, uri, etc.) inherits from
+			// Element. `<primitive> is Element` must return true.
+			// See https://hl7.org/fhir/R4/datatypes.html and FHIRPath §6.3.1.
+			// Gate on !exact to preserve `as Element` parity with the Python
+			// fallback (which currently returns empty for `as Element` on a
+			// FHIR primitive even though `is Element` returns true). When exact
+			// is true (the `as`/`ofType` path), fall through to the specific
+			// primitive branches below so `as Element` keeps returning empty
+			// in C++.
+			// Scope: only fire when the effective type is a System primitive
+			// (Boolean/Integer/Decimal/String/Date/DateTime/Time). Resource
+			// objects (JsonVal with resourceType) inherit from DomainResource
+			// → Resource, NOT from Element, so `Patient is Element` must
+			// remain false.
+			// (FP-20 HISTORIAN iter 1, 2026-06-30, QA-001 §11 Type Safety.)
+			if (!exact && target == "Element" &&
+			    (t == FPValue::Type::Boolean || t == FPValue::Type::Integer ||
+			     t == FPValue::Type::Decimal || t == FPValue::Type::String ||
+			     t == FPValue::Type::Date || t == FPValue::Type::DateTime ||
+			     t == FPValue::Type::Time)) {
+				return {FPValue::FromBoolean(true)};
+			}
 			if (target == "boolean") return {FPValue::FromBoolean(t == FPValue::Type::Boolean)};
 			if (target == "integer" || target == "positiveInt" || target == "unsignedInt")
 				return {FPValue::FromBoolean(t == FPValue::Type::Integer)};
@@ -7574,7 +8947,29 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 						if (!actual_type) return {FPValue::FromBoolean(true)}; // No field info, assume string
 						return {FPValue::FromBoolean(false)};
 					}
-					// Non-exact (is()): string is the parent type - matches all string subtypes
+					// Non-exact (is()): string is the parent type for the FHIR R4
+					// string-subtype family ONLY (id, code, uri, url, canonical,
+					// oid, uuid, markdown). Other JSON-string-encoded primitives
+					// (date, dateTime, instant, time, base64Binary) are sibling
+					// primitives under Element per FHIR R4 — they are NOT subtypes
+					// of string. See FP-15 HISTORIAN iteration 1 (2026-06-29) QA-001
+					// and https://hl7.org/fhir/R4/datatypes.html.
+					if (actual_type) {
+						// Field metadata available — match if the field type IS
+						// string or is one of its declared subtypes (already in
+						// the fhirTypeIsA table at line 1051-1061).
+						return {FPValue::FromBoolean(
+							std::string(actual_type) == "string" ||
+							fhirTypeIsA(actual_type, "string"))};
+					}
+					if (!val.fhir_type.empty()) {
+						std::string fhir_type = val.fhir_type;
+						for (auto &c : fhir_type) c = std::tolower(static_cast<unsigned char>(c));
+						return {FPValue::FromBoolean(
+							fhir_type == "string" || fhirTypeIsA(fhir_type, "string"))};
+					}
+					// No field info: assume string (preserves legacy behavior for
+					// synthetic test inputs without FHIR metadata).
 					return {FPValue::FromBoolean(true)};
 				}
 				// Specific subtype checks: code, id, uri, url, etc.
@@ -7627,7 +9022,13 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 		}
 		// System literals that map to FHIR types
 		if (!is_fhir) {
-			if (target == "Quantity" || target == "Age" || target == "Duration") {
+			// A literal Quantity (e.g., `5 'mg'`) is System.Quantity. The base
+			// `Quantity` type matches, but FHIR profiles on Quantity such as
+			// Age, Distance, Duration, Count, Money, and SimpleQuantity do NOT
+			// — those require specific UCUM unit categories per FHIR R4
+			// (FP-15 SKEPTIC QA-001 §6.3.1/§4.1.8). `5 'mg'` is mass, not an
+			// Age or Duration.
+			if (target == "Quantity") {
 				return {FPValue::FromBoolean(t == FPValue::Type::Quantity)};
 			}
 		}
@@ -7733,11 +9134,33 @@ FPCollection Evaluator::fn_toTime(const FPCollection &input) {
 	if (p.precision >= 6 && (p.second < 0 || p.second > 59)) return {};
 	// Reject timezone suffixes: if the string has '+' or 'Z' after the time part, reject
 	size_t check_pos = (s[0] == 'T') ? 1 : 0;
-	// Skip past HH:MM:SS.sss
-	if (check_pos + 2 <= s.size()) check_pos += 2; // HH
-	if (check_pos < s.size() && s[check_pos] == ':') { check_pos++; if (check_pos + 2 <= s.size()) check_pos += 2; } // :MM
-	if (check_pos < s.size() && s[check_pos] == ':') { check_pos++; if (check_pos + 2 <= s.size()) check_pos += 2; } // :SS
-	if (check_pos < s.size() && s[check_pos] == '.') { check_pos++; while (check_pos < s.size() && std::isdigit((unsigned char)s[check_pos])) check_pos++; } // .sss
+	// Skip past HH:MM:SS.sss. FHIRPath §5.5.9 format `hh:mm:ss.fff` requires
+	// exactly 2 digits after each ':' separator. A dangling ':' without the
+	// 2 trailing digits is malformed and must be rejected (e.g. '10:', '10:30:').
+	if (check_pos + 2 > s.size() ||
+	    !std::isdigit((unsigned char)s[check_pos]) ||
+	    !std::isdigit((unsigned char)s[check_pos + 1])) return {};
+	check_pos += 2; // HH
+	if (check_pos < s.size() && s[check_pos] == ':') {
+		check_pos++;
+		if (check_pos + 2 > s.size() ||
+		    !std::isdigit((unsigned char)s[check_pos]) ||
+		    !std::isdigit((unsigned char)s[check_pos + 1])) return {};
+		check_pos += 2; // :MM
+	}
+	if (check_pos < s.size() && s[check_pos] == ':') {
+		check_pos++;
+		if (check_pos + 2 > s.size() ||
+		    !std::isdigit((unsigned char)s[check_pos]) ||
+		    !std::isdigit((unsigned char)s[check_pos + 1])) return {};
+		check_pos += 2; // :SS
+	}
+	if (check_pos < s.size() && s[check_pos] == '.') {
+		check_pos++;
+		bool has_frac = false;
+		while (check_pos < s.size() && std::isdigit((unsigned char)s[check_pos])) { check_pos++; has_frac = true; }
+		if (!has_frac) return {}; // dangling '.' with no digits
+	} // .sss
 	// If there's anything left (timezone), reject
 	if (check_pos < s.size()) return {};
 	FPValue v;

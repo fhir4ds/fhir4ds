@@ -145,3 +145,28 @@ reliable proxy for patient-level data changes — a file touched without data
 changes produces false positives.
 
 See the `ReactiveEvaluator` documentation for full limitations.
+
+## Cross-Reference: Loader QA Findings (Iteration 4 / Domain 6)
+
+The `FHIRDataLoader` lives in `fhir4ds/cql/loader/fhir_loader.py` (not
+`fhir4ds/loader/`). It populates the `resources` table contract documented
+in §Schema Contract above. Iteration-4 EXPLORER QA probed this surface
+and filed 5 issues (QA-006..010); all five were RESOLVED in the iter-4
+FIX phase:
+
+- QA-006 (HIGH): `NotesPipeline.extract_conditions_batch` now raises
+  `TypeError` for non-list inputs.
+- QA-007 (MEDIUM): `NotesPipelineConfig` / `AutoCoderConfig` `__post_init__`
+  raises `ValueError` for non-positive `workers`/`batch_size`.
+- QA-008 (MEDIUM): `load_bundle` validates `Bundle.type` 1..1 cardinality
+  and BundleType code set per FHIR R4.
+- QA-009 (MEDIUM): `load_ndjson(strict=True)` validates per-line FHIR shape
+  with line-number attribution.
+- QA-010 (LOW): `load_resources` dedup overwrite logs WARNING (was DEBUG).
+
+See `fhir4ds/cql/AGENTS.md` "Iteration 4 / Domain 6 EXPLORER additions"
+for full details. The `resources` view schema contract
+(`id VARCHAR`, `resourceType VARCHAR`, `resource JSON`, `patient_ref
+VARCHAR`) is enforced by `validate_schema()` and is NOT affected by these
+loader-layer issues — adapters that bypass the loader and register their
+own `resources` view are unaffected.

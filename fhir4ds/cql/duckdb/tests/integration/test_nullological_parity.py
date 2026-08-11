@@ -416,3 +416,75 @@ define ActiveDefaultTrue: Coalesce(Patient.active, true) is true
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_infix_nullological_inlines_static_define_aliases_cql08_skeptic() -> None:
+    """CQL-08 SKEPTIC: infix `is true`/`is false`/`is null` must inline static
+    `define` aliases the same way the function-call forms (`IsTrue`, `IsFalse`,
+    `IsNull`) already do.
+
+    Spec citation: CQL v1.5.3 Developer's Guide — Nullological Operators and
+    Translation Semantics Table 6-F (`is true` → `IsTrue`, `is false` →
+    `IsFalse`, `is null` → `IsNull`). The infix and function-call forms are
+    semantically equivalent; their generated SQL must therefore be identical
+    when the operand is a top-level `define` alias wrapping a static literal.
+    """
+    cql = """library InfixInline version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define BoolAlias: true
+define StrAlias: 'hello'
+define InfixIsTrue: BoolAlias is true
+define InfixIsFalse: BoolAlias is false
+define InfixIsNull: BoolAlias is null
+define InfixIsNotTrue: BoolAlias is not true
+define InfixIsNotFalse: BoolAlias is not false
+define FuncIsTrue: IsTrue(BoolAlias)
+define FuncIsFalse: IsFalse(BoolAlias)
+define FuncIsNull: IsNull(BoolAlias)
+define StrInfixIsNull: StrAlias is null
+define StrInfixIsNotNull: StrAlias is not null
+"""
+    translated = translate_cql(cql)
+
+    # Function-call forms must continue to inline the alias.
+    assert translated["FuncIsTrue"].to_sql() == "IsTrue(TRUE)"
+    assert translated["FuncIsFalse"].to_sql() == "IsFalse(TRUE)"
+    assert translated["FuncIsNull"].to_sql() == "IsNull(TRUE)"
+
+    # Infix forms must match the function-call forms after the CQL-08 SKEPTIC
+    # fix. Before the fix, each infix form emitted an EXISTS subquery against
+    # a non-existent table named after the alias.
+    assert translated["InfixIsTrue"].to_sql() == "IsTrue(TRUE)"
+    assert translated["InfixIsFalse"].to_sql() == "IsFalse(TRUE)"
+    assert translated["InfixIsNull"].to_sql() == "TRUE IS NULL"
+    assert translated["InfixIsNotTrue"].to_sql() == "NOT IsTrue(TRUE)"
+    assert translated["InfixIsNotFalse"].to_sql() == "NOT IsFalse(TRUE)"
+
+    # Non-Boolean scalar aliases must also inline for null-test operators.
+    assert translated["StrInfixIsNull"].to_sql() == "'hello' IS NULL"
+    assert translated["StrInfixIsNotNull"].to_sql() == "'hello' IS NOT NULL"
+
+    # Execution parity between Python fallback and native C++ registration.
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    expected = {
+        "InfixIsTrue": (True,),
+        "InfixIsFalse": (False,),
+        "InfixIsNull": (False,),
+        "InfixIsNotTrue": (False,),
+        "InfixIsNotFalse": (True,),
+        "StrInfixIsNull": (False,),
+        "StrInfixIsNotNull": (True,),
+    }
+    try:
+        for name, expected_result in expected.items():
+            sql = translated[name].to_sql()
+            py_result = py.execute(f"SELECT {sql}").fetchone()
+            cpp_result = cpp.execute(f"SELECT {sql}").fetchone()
+            assert py_result == expected_result, name
+            assert cpp_result == expected_result, name
+    finally:
+        py.close()
+        cpp.close()
+

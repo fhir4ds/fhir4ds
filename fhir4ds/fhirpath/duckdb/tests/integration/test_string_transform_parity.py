@@ -280,3 +280,152 @@ def test_string_transform_invalid_signatures_and_regex_validation_match_fallback
     finally:
         native.close()
         fallback.close()
+
+
+def test_string_transform_replace_matches_substitution_edge_cases_fp10_skeptic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-10 SKEPTIC iter 1: replaceMatches substitution edge cases.
+
+    Per FHIRPath §5.6.10, the native C++ extension treats unknown group
+    references gracefully (returns empty for out-of-range $N; literal
+    passthrough for ${name} with no named group). The Python fallback
+    previously raised uncaught re.error exceptions on these inputs,
+    producing a native↔fallback parity defect surfaced through DuckDB
+    as InvalidInputException. This test confirms both paths now agree.
+    """
+    resource = json.dumps({"resourceType": "Patient", "s": "abc"})
+    expressions = [
+        # Out-of-range $N — native returns empty substitution; fallback
+        # previously raised re.error.
+        ("s.replaceMatches('(b)', '$5')", (["ac"], "ac", '["ac"]', None, None)),
+        ("s.replaceMatches('(b)', '$10')", (["ac"], "ac", '["ac"]', None, None)),
+        # $0 full match
+        ("s.replaceMatches('(b)', '[$0]')", (["a[b]c"], "a[b]c", '["a[b]c"]', None, None)),
+        # $1 valid
+        ("s.replaceMatches('(b)', '[$1]')", (["a[b]c"], "a[b]c", '["a[b]c"]', None, None)),
+        # ${name} with no matching named group — literal passthrough
+        ("s.replaceMatches('(b)', '[${name}]')", (["a[${name}]c"], "a[${name}]c", '["a[${name}]c"]', None, None)),
+        # ${N} numeric in braces — native treats as literal ${N}
+        ("s.replaceMatches('(b)', '[${1}]')", (["a[${1}]c"], "a[${1}]c", '["a[${1}]c"]', None, None)),
+    ]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expressions:
+            assert _all_public_outputs(native, resource, expression) == expected
+            assert _all_public_outputs(fallback, resource, expression) == expected
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_string_transform_replace_matches_named_group_spec_example_fp10_skeptic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""FP-10 SKEPTIC iter 1: §5.6.10 canonical spec example with named groups.
+
+    The FHIRPath §5.6.10 spec example uses ECMAScript/PCRE-style named
+    groups (?<name>...) and named substitution references ${name}:
+       '11/30/1972'.replaceMatches('(?<month>\d{1,2})/(?<day>\d{1,2})/(?<year>\d{2,4})',
+              '${day}-${month}-${year}')
+    Expected per spec: '30-11-1972'.
+
+    Native C++ uses std::regex (ECMAScript syntax) which does NOT support
+    named groups, so it returns empty {} — a documented platform-level
+    limitation (spec note: "FHIRPath does not prescribe a particular
+    dialect"). The Python fallback now translates (?<name>...) to
+    (?P<name>...) and ${name} to \g<name> so the spec example produces
+    the documented '30-11-1972' result. This is platform-flexibility
+    behavior, not a regression.
+
+    This test verifies the Python fallback's spec compliance for the
+    canonical example. It does NOT assert native↔fallback parity,
+    because the spec explicitly allows platform differences here.
+    """
+    resource = json.dumps({"resourceType": "Patient"})
+    expressions = [
+        # Spec example w/o word boundaries
+        ("'11/30/1972'.replaceMatches('(?<month>[0-9]{1,2})/(?<day>[0-9]{1,2})/(?<year>[0-9]{2,4})', '${day}-${month}-${year}')",
+         (["30-11-1972"], "30-11-1972", '["30-11-1972"]', None, None)),
+        # Numeric group reference works in both backends
+        ("'11/30/1972'.replaceMatches('([0-9]{1,2})/([0-9]{1,2})/([0-9]{2,4})', '$2-$1-$3')",
+         (["30-11-1972"], "30-11-1972", '["30-11-1972"]', None, None)),
+    ]
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expressions:
+            assert _all_public_outputs(fallback, resource, expression) == expected
+    finally:
+        fallback.close()
+
+
+def test_string_transform_regex_quantifier_on_unicode_scalar_fp10_explorer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-10 EXPLORER iter 1: regex quantifier on multi-byte Unicode scalar.
+
+    Per FHIRPath §5.6.9 ("matches operates on Unicode scalar values") and
+    §5.6.10 (replaceMatches shares the regex normalization path), a regex
+    quantifier (* + ? {n} {n,} {n,m}) following a non-ASCII literal must
+    apply to the whole Unicode scalar, not to the last byte of the UTF-8
+    sequence. The native C++ normalizeFHIRPathRegex previously appended
+    non-ASCII bytes one at a time in the non-ignore_case path, so std::regex
+    saw the quantifier binding only to the trailing continuation byte.
+    Reproducer: 'éé'.matches('^é*$') returned false natively while the
+    Python fallback correctly returned true.
+
+    This test confirms the fix: non-ASCII literals followed by quantifiers
+    are now wrapped in a non-capturing group so the quantifier binds to
+    the whole codepoint. Both backends now agree across 2/3/4-byte UTF-8
+    scalars and across all quantifier forms.
+    """
+    resource = json.dumps({"resourceType": "Patient"})
+    expressions = [
+        # 2-byte UTF-8 (U+00E9 é)
+        ("'éé'.matches('^é*$')",
+         (["true"], "true", "[true]", True, None)),
+        ("'éé'.matches('^é+$')",
+         (["true"], "true", "[true]", True, None)),
+        ("'ééé'.matches('^é{3}$')",
+         (["true"], "true", "[true]", True, None)),
+        ("'éééé'.matches('^é{2,}$')",
+         (["true"], "true", "[true]", True, None)),
+        ("'ééé'.matches('^é{1,5}$')",
+         (["true"], "true", "[true]", True, None)),
+        ("'é'.matches('^é?$')",
+         (["true"], "true", "[true]", True, None)),
+        ("'éé'.matches('^é?$')",
+         (["false"], "false", "[false]", False, None)),
+        # 3-byte UTF-8 (U+3042 あ)
+        ("'ああ'.matches('^あ*$')",
+         (["true"], "true", "[true]", True, None)),
+        ("'あああ'.matches('^あ{3}$')",
+         (["true"], "true", "[true]", True, None)),
+        # 4-byte UTF-8 (U+1F600 😀)
+        ("'😀😀'.matches('^😀*$')",
+         (["true"], "true", "[true]", True, None)),
+        ("'😀😀😀'.matches('^😀{3}$')",
+         (["true"], "true", "[true]", True, None)),
+        ("'😀😀😀😀😀'.matches('^😀{2,10}$')",
+         (["true"], "true", "[true]", True, None)),
+        # Quantifier on replaceMatches — generalizes the bug to replacement
+        ("'ééé'.replaceMatches('é', 'X')",
+         (["XXX"], "XXX", '["XXX"]', None, None)),
+        ("'ééé'.replaceMatches('é+', 'X')",
+         (["X"], "X", '["X"]', None, None)),
+        ("'aééb'.replaceMatches('é+', 'X')",
+         (["aXb"], "aXb", '["aXb"]', None, None)),
+    ]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expressions:
+            assert _all_public_outputs(native, resource, expression) == expected
+            assert _all_public_outputs(fallback, resource, expression) == expected
+    finally:
+        native.close()
+        fallback.close()
+

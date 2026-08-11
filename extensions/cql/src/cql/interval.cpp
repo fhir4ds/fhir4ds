@@ -5,6 +5,7 @@
 using namespace duckdb_yyjson; // NOLINT
 #include <cstdlib>
 #include <algorithm>
+#include <cerrno>
 #include <cmath>
 #include <iomanip>
 #include <limits>
@@ -253,8 +254,24 @@ bool has_T = str.find('T') != std::string::npos;
 bool looks_datelike = has_dash || has_colon || has_T;
 
 if (!looks_datelike) {
+// CQL-17 EXPLORER QA-003: Long MIN..MAX interval bounds
+// (-9223372036854775808, 9223372036854775807) exceed the 9.22e18 cutoff
+// used in the double-based detection below, causing them to be
+// misclassified as Decimal and lose precision in width/size arithmetic.
+// Try integer parsing first (strtoll) for non-decimal strings; only fall
+// back to double parsing for genuine decimals or out-of-int64 magnitudes.
 const char *s = str.c_str();
 char *end = NULL;
+errno = 0;
+long long ll = std::strtoll(s, &end, 10);
+if (end != s && *end == '\0' && errno != ERANGE && str.find('.') == std::string::npos) {
+BoundValue bv;
+bv.raw_str = str;
+bv.type = BoundType::Integer;
+bv.int_val = Optional<int64_t>(static_cast<int64_t>(ll));
+return Optional<BoundValue>(bv);
+}
+end = NULL;
 double d = std::strtod(s, &end);
 if (end != s && *end == '\0' && !std::isinf(d) && !std::isnan(d)) {
 BoundValue bv;
@@ -284,8 +301,19 @@ return Optional<BoundValue>(bv);
 
 // Final fallback: try numeric for any remaining string (e.g. "1.5e10")
 if (looks_datelike) {
+// CQL-17 EXPLORER QA-003: try integer parsing first to preserve Long range.
 const char *s = str.c_str();
 char *end = NULL;
+errno = 0;
+long long ll = std::strtoll(s, &end, 10);
+if (end != s && *end == '\0' && errno != ERANGE && str.find('.') == std::string::npos) {
+BoundValue bv;
+bv.raw_str = str;
+bv.type = BoundType::Integer;
+bv.int_val = Optional<int64_t>(static_cast<int64_t>(ll));
+return Optional<BoundValue>(bv);
+}
+end = NULL;
 double d = std::strtod(s, &end);
 if (end != s && *end == '\0' && !std::isinf(d) && !std::isnan(d)) {
 BoundValue bv;
@@ -436,6 +464,35 @@ static Optional<int> compare_interval_order_nullable(const BoundValue &left, con
 		return NullOpt<int>();
 	}
 	return Optional<int>(cmp);
+}
+
+// Precision-aware interval bound equality.
+//
+// Per CQL 1.5.3 §Equal (Date/DateTime/Time): if one input has a value
+// for a precision and the other does not, comparison stops and the
+// result is null. For interval equality (which uses Start/End
+// semantics), this means mixed-precision temporal bounds make the
+// equality uncertain (null). Returns NullOpt for uncertain.
+static Optional<bool> bound_equals_nullable(const BoundValue &left, const BoundValue &right) {
+	if ((left.type == BoundType::DateTime || left.type == BoundType::Time) &&
+	    left.type == right.type && left.dt_val && right.dt_val) {
+		int left_rank = interval_precision_rank(left.dt_val->precision);
+		int right_rank = interval_precision_rank(right.dt_val->precision);
+		DateTimeValue::Precision coarsest = interval_precision_from_rank(std::min(left_rank, right_rank));
+		int cmp = left.dt_val->compare_at_precision(*right.dt_val, coarsest);
+		if (cmp != 0) {
+			return Optional<bool>(false);
+		}
+		if (left_rank != right_rank) {
+			return NullOpt<bool>();
+		}
+		return Optional<bool>(true);
+	}
+	int cmp = left.compare(right);
+	if (cmp == -2) {
+		return NullOpt<bool>();
+	}
+	return Optional<bool>(cmp == 0);
 }
 
 static cql::DateTimeValue AddDaysForInterval(const cql::DateTimeValue &dt, int64_t days) {
@@ -866,6 +923,39 @@ high_eq = (a_end->compare(*b_end) == 0);
 return low_eq && high_eq;
 }
 
+// Precision-aware interval equality.
+//
+// Per CQL 1.5.3 §Equal (interval) + §Equal (Date/DateTime/Time):
+// mixed-precision temporal bounds make the equality uncertain (null).
+// Returns NullOpt for uncertain, otherwise Optional<bool>(true/false).
+Optional<bool> Interval::equals_nullable(const Interval &other) const {
+auto a_start = effective_start_bound(*this);
+auto a_end = effective_end_bound(*this);
+auto b_start = effective_start_bound(other);
+auto b_end = effective_end_bound(other);
+Optional<bool> low_eq;
+if (!a_start && !b_start) {
+low_eq = Optional<bool>(true);
+} else if (a_start && b_start) {
+low_eq = bound_equals_nullable(*a_start, *b_start);
+} else {
+// One side null, the other not — certain unequal (null bound = unbounded).
+low_eq = Optional<bool>(false);
+}
+Optional<bool> high_eq;
+if (!a_end && !b_end) {
+high_eq = Optional<bool>(true);
+} else if (a_end && b_end) {
+high_eq = bound_equals_nullable(*a_end, *b_end);
+} else {
+high_eq = Optional<bool>(false);
+}
+if (!low_eq.has_value() || !high_eq.has_value()) {
+return NullOpt<bool>();
+}
+return Optional<bool>(low_eq.value() && high_eq.value());
+}
+
 bool Interval::overlaps(const Interval &other) const {
 if (effective_interval_empty(*this) || effective_interval_empty(other)) {
 return false;
@@ -1077,8 +1167,13 @@ return NullOpt<std::string>();
 switch (bound_type) {
 case BoundType::Integer:
 if (start->int_val && end->int_val) {
+// CQL-17 EXPLORER QA-003: Long MIN..MAX width = 2^64 - 1 which overflows
+// int64_t. Use unsigned arithmetic (end >= start invariant from interval
+// validation) to compute the exact width.
 std::ostringstream oss;
-oss << (*end->int_val - *start->int_val);
+uint64_t start_u = static_cast<uint64_t>(*start->int_val);
+uint64_t end_u = static_cast<uint64_t>(*end->int_val);
+oss << (end_u - start_u);
 return Optional<std::string>(oss.str());
 }
 break;
@@ -1119,8 +1214,25 @@ return NullOpt<std::string>();
 switch (bound_type) {
 case BoundType::Integer:
 if (start->int_val && end->int_val) {
-	int64_t size = *end->int_val - *start->int_val + 1;
-	return Optional<std::string>(std::to_string(size < 0 ? 0 : size));
+	// CQL-17 EXPLORER QA-003: Long MIN..MAX size = 2^64 which overflows
+	// both int64_t and uint64_t. Use unsigned __int128 to compute exactly
+	// and emit decimal string digit-by-digit.
+	__int128 start_w = static_cast<__int128>(*start->int_val);
+	__int128 end_w = static_cast<__int128>(*end->int_val);
+	unsigned __int128 size = (end_w < start_w) ? 0
+	    : static_cast<unsigned __int128>(end_w - start_w) + 1;
+	char buf[42];
+	int pos = sizeof(buf) - 1;
+	buf[pos--] = '\0';
+	if (size == 0) {
+	    buf[pos--] = '0';
+	} else {
+	    while (size > 0) {
+	        buf[pos--] = '0' + static_cast<int>(size % 10);
+	        size /= 10;
+	    }
+	}
+	return Optional<std::string>(std::string(buf + pos + 1));
 }
 break;
 case BoundType::Decimal:
@@ -1387,6 +1499,24 @@ return Optional<Interval>(result);
 }
 
 Optional<Interval> Interval::except_of(const Interval &a, const Interval &b) {
+// CQL §9.3 / §19.12: incompatible quantity dimensions must yield NULL.
+// Interval::overlaps returns false when BoundValue::compare returns -2
+// (incomparable, e.g. Quantity dimensions g vs cm). Treat that uncertainty
+// as NULL rather than "no overlap → return a", otherwise except_of silently
+// returns interval1 unchanged for incompatible bounds.
+auto a_start = effective_start_bound(a);
+auto a_end = effective_end_bound(a);
+auto b_start = effective_start_bound(b);
+auto b_end = effective_end_bound(b);
+if (a_start && b_end) {
+int cmp = b_end->compare(*a_start);
+if (cmp == -2) return NullOpt<Interval>();
+}
+if (a_end && b_start) {
+int cmp = a_end->compare(*b_start);
+if (cmp == -2) return NullOpt<Interval>();
+}
+
 // If no overlap, return a
 if (!a.overlaps(b)) {
 return Optional<Interval>(a);

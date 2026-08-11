@@ -27,7 +27,6 @@ _UNSUPPORTED_TOP_LEVEL = {
     "prefetchData",
     "dataEndpoint",
     "contentEndpoint",
-    "terminologyEndpoint",
 }
 
 
@@ -80,8 +79,43 @@ def parse_cql_request(body: Any) -> CQLRequest:
             status_code=422,
         )
 
+    terminology_endpoint_url = _parse_terminology_endpoint(params)
+
     input_parameters = _parse_input_parameters(params)
-    return CQLRequest(expression=expression, parameters=input_parameters)
+    return CQLRequest(
+        expression=expression,
+        parameters=input_parameters,
+        terminology_endpoint_url=terminology_endpoint_url,
+    )
+
+
+def _parse_terminology_endpoint(params: list[Any]) -> str | None:
+    """Extract and validate the optional ``terminologyEndpoint`` parameter.
+
+    Returns the URL string if present, ``None`` if absent. The literal
+    string ``"disabled"`` is treated as ``None`` so callers can explicitly
+    turn off the endpoint via the FHIR Parameters payload.
+    """
+    endpoints = [p for p in params if isinstance(p, dict) and p.get("name") == "terminologyEndpoint"]
+    if not endpoints:
+        return None
+    if len(endpoints) > 1:
+        raise CQLFacadeError(
+            "FHIR $cql accepts at most one terminologyEndpoint parameter",
+            category=CQLErrorCategory.INVALID_REQUEST,
+            status_code=422,
+        )
+    url = endpoints[0].get("valueUrl")
+    if not isinstance(url, str) or not url.strip():
+        raise CQLFacadeError(
+            "FHIR $cql terminologyEndpoint parameter must contain a non-empty valueUrl",
+            category=CQLErrorCategory.INVALID_REQUEST,
+            status_code=422,
+        )
+    url = url.strip()
+    if url.lower() == "disabled":
+        return None
+    return url
 
 
 def operation_outcome(

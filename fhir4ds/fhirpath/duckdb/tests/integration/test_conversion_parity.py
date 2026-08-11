@@ -248,6 +248,183 @@ def test_date_datetime_and_decimal_conversion_match_cpp() -> None:
         con.close()
 
 
+def test_fhir_decimal_primitive_to_decimal_matches_fallback_fp07_skeptic() -> None:
+    """FP-07 SKEPTIC regression: native C++ `fn_toDecimal` previously skipped
+    `effectiveType(val)==Decimal` for JsonVal-wrapped FHIR decimal primitives,
+    returning empty. The fix promotes FHIR-backed decimals just like Integer.
+
+    Spec: FHIRPath §5.5.6 toDecimal().
+    """
+    resource = json.dumps({"resourceType": "Observation", "valueDecimal": 1.5})
+    expressions = [
+        "Observation.valueDecimal.toDecimal()",
+        "Observation.valueDecimal.convertsToDecimal()",
+        "Observation.valueDecimal.toDecimal().toString()",
+    ]
+
+    con = _connection()
+    try:
+        for expression in expressions:
+            cpp = con.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py = (
+                fhirpath_scalar(resource, expression),
+                fhirpath_text_udf(resource, expression),
+                fhirpath_json_udf(resource, expression),
+            )
+            assert cpp == py, f"{expression}: cpp={cpp} py={py}"
+    finally:
+        con.close()
+
+
+def test_string_to_decimal_preserves_precision_fp07_skeptic() -> None:
+    """FP-07 SKEPTIC regression: native C++ parsed String→Decimal via
+    `std::stod` (binary64), losing precision. The fix preserves the source
+    digit text and normalizes it (drop leading '+', collapse leading zeros).
+
+    Spec: FHIRPath §5.5.6 toDecimal() + §4.1.4 Decimal precision.
+    """
+    resource = json.dumps({"resourceType": "Patient"})
+    cases = {
+        "'3.14159265'.toDecimal().toString()": "3.14159265",
+        "'0.1'.toDecimal().toString()": "0.1",
+        "'123.45'.toDecimal().toString()": "123.45",
+        "'123456789.123456789'.toDecimal().toString()": "123456789.123456789",
+        "'+5'.toDecimal().toString()": "5.0",
+        "'00'.toDecimal().toString()": "0.0",
+    }
+
+    con = _connection()
+    try:
+        for expression, expected_text in cases.items():
+            cpp = con.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?)",
+                [resource, expression, resource, expression],
+            ).fetchone()
+            py = (
+                fhirpath_scalar(resource, expression),
+                fhirpath_text_udf(resource, expression),
+            )
+            assert cpp == py, f"{expression}: cpp={cpp} py={py}"
+            assert cpp[1] == expected_text, f"{expression}: expected {expected_text!r}, got {cpp[1]!r}"
+    finally:
+        con.close()
+
+
+def test_fhir_integer_primitive_to_decimal_preserves_exact_text_fp07_historian() -> None:
+    """FP-07 HISTORIAN regression: native C++ `fn_toDecimal` Integer
+    effective-type branch (for JsonVal-wrapped FHIR integer primitives)
+    routed through `getNumericValue` (double), losing precision above 2^53
+    and producing scientific notation in `toString()`. The fix preserves
+    canonical JSON integer text via `source_text` so downstream
+    `toString()`/equality/comparison observe exact digits.
+
+    Spec: FHIRPath §5.5.6 toDecimal() Integer/Long promotion,
+          §4.1.4 fixed-precision decimal formats,
+          §5.5.8 Decimal toString uses decimal digit notation (not scientific).
+    """
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "id": "fp07-historian-int",
+            "longMax": 9223372036854775807,
+            "longMin": -9223372036854775808,
+            "bigJsInt": 9007199254740993,
+            "smallInt": 42,
+            "zeroInt": 0,
+        }
+    )
+    # All inputs are JSON integers; toDecimal() must promote to Decimal
+    # while preserving the exact integer digits (no scientific notation,
+    # no precision loss above 2^53).
+    cases = {
+        "longMax.toDecimal().toString()": "9223372036854775807.0",
+        "longMin.toDecimal().toString()": "-9223372036854775808.0",
+        "bigJsInt.toDecimal().toString()": "9007199254740993.0",
+        "smallInt.toDecimal().toString()": "42.0",
+        "zeroInt.toDecimal().toString()": "0.0",
+    }
+
+    con = _connection()
+    try:
+        for expression, expected_text in cases.items():
+            cpp = con.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?)",
+                [resource, expression, resource, expression],
+            ).fetchone()
+            py = (
+                fhirpath_scalar(resource, expression),
+                fhirpath_text_udf(resource, expression),
+            )
+            assert cpp == py, f"{expression}: cpp={cpp} py={py}"
+            assert cpp[1] == expected_text, (
+                f"{expression}: expected {expected_text!r}, got {cpp[1]!r}"
+            )
+    finally:
+        con.close()
+
+
+def test_unicode_digit_string_to_decimal_rejects_non_ascii_fp07_explorer() -> None:
+    """FP-07 EXPLORER regression: Python fallback `numRegex`/`longDecimalStringRegex`
+    used `\\d` which is Unicode-aware in Python's `re` module and matches non-ASCII
+    Unicode digit code points (full-width U+FF10-U+FF19, Arabic-Indic U+0660-U+0669,
+    Devanagari U+0966-U+096F, etc.). Native C++ `isFHIRPathDecimalString` correctly
+    uses `std::isdigit` (ASCII-only), so the same input produced different results
+    in the two paths.
+
+    Spec: FHIRPath §5.5.6 toDecimal()/convertsToDecimal() regex
+          `(\\+|-)?\\d+(\\.\\d+)?`. The ANTLR grammar DIGIT fragment is
+          `[0-9]` (ASCII only), so the spec-text `\\d` means ASCII digits,
+          not Unicode digits.
+
+    The fix replaces `\\d` with explicit `[0-9]` in `numRegex`,
+    `longDecimalStringRegex`, and `intRegex` (FP-06 §5.5.3 sibling same bug class).
+    """
+    resource = json.dumps({"resourceType": "Patient"})
+
+    # Each expression MUST evaluate to empty/None in both native and fallback,
+    # and convertsTo* MUST return false. The Unicode-digit input is rejected.
+    cases = [
+        # Full-width digits U+FF10-U+FF19
+        "'1.５'.toDecimal()",
+        "'1.５'.convertsToDecimal()",
+        "'１２３'.toDecimal()",
+        "'１２L'.toDecimal()",
+        # Arabic-Indic digits U+0660-U+0669
+        "'٤٥٦'.toDecimal()",
+        # Devanagari digits U+0966-U+096F
+        "'१२३'.toDecimal()",
+        # Same bug class in §5.5.3 toInteger (sibling fix in same regex file)
+        "'４２'.toInteger()",
+        "'４ｂ'.convertsToInteger()",
+    ]
+
+    con = _connection()
+    try:
+        for expression in cases:
+            cpp = con.execute(
+                "SELECT fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, expression],
+            ).fetchone()
+            py = (
+                fhirpath_json_udf(resource, expression),
+                None,  # validity not used for python UDF comparison here
+            )
+            # Native result must be empty/None (or false for convertsTo*)
+            cpp_result = cpp[0]
+            assert cpp_result is None or cpp_result in ("[]", "[false]"), (
+                f"{expression}: native result should be empty/false, got {cpp_result!r}"
+            )
+            # Python fallback must agree with native
+            assert py[0] == cpp_result, (
+                f"{expression}: cpp={cpp_result!r} py={py[0]!r}"
+            )
+    finally:
+        con.close()
+
+
 def test_decimal_string_regex_edges_match_python_fallback(monkeypatch) -> None:
     resource = json.dumps(
         {
@@ -1269,6 +1446,571 @@ def test_fp08_conversion_signatures_and_singleton_errors_match_fallback(monkeypa
             expected = ([], None, None, None, None, False)
             assert con.execute(query, params).fetchone() == expected
             assert fallback.execute(query, params).fetchone() == expected
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_fp08_to_time_time_literal_passthrough_matches_fallback_fp08_skeptic(monkeypatch) -> None:
+    """FP-08 SKEPTIC QA-001 (HIGH): §5.5.9 toTime() Time-literal passthrough.
+
+    Per spec: "If the input collection contains a single item, this function
+    will return a single time if: the item is a Time [or] the item is a String
+    and is convertible to a Time." Python fallback `to_time()` previously
+    failed Time-literal passthrough because `nodes.FP_Time(value)` returns
+    None for non-str inputs.
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    expressions = [
+        ("@T10:30.toTime().toString()", ["10:30"]),
+        ("@T10:30:30.toTime().toString()", ["10:30:30"]),
+        ("@T14:30:14.toTime().toString()", ["14:30:14"]),
+        ("@T14:30:14.559.toTime().toString()", ["14:30:14.559"]),
+        ("@T10:30.convertsToTime()", ["true"]),
+        ("@T14:30:14.559.convertsToTime()", ["true"]),
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected_json in expressions:
+            query = "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_is_valid(?)"
+            params = [resource, expression, resource, expression, expression]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, f"native vs fallback mismatch on {expression}: {cpp} vs {py}"
+            assert cpp[0] == expected_json, f"wrong result on {expression}: got {cpp[0]}, want {expected_json}"
+            assert cpp[2] is True
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_fp08_to_quantity_rejects_trailing_junk_after_keyword_fp08_skeptic(monkeypatch) -> None:
+    """FP-08 SKEPTIC QA-002 (MEDIUM): §5.5.7 toQuantity() trailing junk.
+
+    Native `fn_toQuantity` String-bare-keyword path previously accepted
+    trailing junk after a calendar duration keyword by capturing the entire
+    substr as unit_str. Per spec regex, after the keyword the string must
+    end. Both paths must now reject.
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    invalid_expressions = [
+        "'4 days extra'.toQuantity()",
+        "'4 day extra'.toQuantity()",
+        "'4 year extra'.toQuantity()",
+        "'4 d extra'.toQuantity()",
+        "'4 days '.toQuantity()",
+        "'4 days '.convertsToQuantity()",
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression in invalid_expressions:
+            query = "SELECT fhirpath(?::JSON, ?), fhirpath_is_valid(?)"
+            params = [resource, expression, expression]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, f"native vs fallback mismatch on {expression}: {cpp} vs {py}"
+            if expression.endswith("convertsToQuantity()"):
+                assert cpp[0] == ["false"], f"expected [false] for {expression}, got {cpp[0]}"
+            else:
+                assert cpp[0] == [], f"expected empty for {expression}, got {cpp[0]}"
+            assert cpp[1] is True  # valid expression, just empty/false result
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_fp08_to_time_rejects_trailing_colon_fp08_skeptic(monkeypatch) -> None:
+    """FP-08 SKEPTIC QA-003 (MEDIUM): §5.5.9 toTime() trailing colon.
+
+    Native `fn_toTime` previously accepted malformed time strings with
+    trailing `:` because parseTimeParts consumed the separator without
+    verifying 2 trailing digits. Per spec format `hh:mm:ss.fff`, the colon
+    must be followed by exactly 2 digits.
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    invalid_expressions = [
+        "'10:'.toTime()",
+        "'10:30:'.toTime()",
+        "'10:'.convertsToTime()",
+        "'10:30:'.convertsToTime()",
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression in invalid_expressions:
+            query = "SELECT fhirpath(?::JSON, ?), fhirpath_is_valid(?)"
+            params = [resource, expression, expression]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, f"native vs fallback mismatch on {expression}: {cpp} vs {py}"
+            if expression.endswith("convertsToTime()"):
+                # convertsToTime returns [false]
+                assert cpp[0] == ["false"], f"expected [false] for {expression}, got {cpp[0]}"
+            else:
+                # toTime returns empty
+                assert cpp[0] == [], f"expected empty for {expression}, got {cpp[0]}"
+            assert cpp[1] is True
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_fp08_to_quantity_rejects_bare_alpha_non_keyword_fp08_skeptic(monkeypatch) -> None:
+    """FP-08 SKEPTIC QA-004 (LOW): §5.5.7 toQuantity() bare-alpha rejection.
+
+    Python fallback `to_quantity()` previously accepted ANY bare alpha
+    sequence as a unit (e.g. '0xFF', '5 abc'). Per spec examples, the `time`
+    regex group is for calendar duration keywords only; UCUM codes must be
+    single-quoted.
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    invalid_expressions = [
+        "'0xFF'.toQuantity()",
+        "'5 abc'.toQuantity()",
+        "'5 foo'.toQuantity()",
+        "'0xFF'.convertsToQuantity()",
+        "'5 abc'.convertsToQuantity()",
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression in invalid_expressions:
+            query = "SELECT fhirpath(?::JSON, ?), fhirpath_is_valid(?)"
+            params = [resource, expression, expression]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, f"native vs fallback mismatch on {expression}: {cpp} vs {py}"
+            if expression.endswith("convertsToQuantity()"):
+                assert cpp[0] == ["false"], f"expected [false] for {expression}, got {cpp[0]}"
+            else:
+                assert cpp[0] == [], f"expected empty for {expression}, got {cpp[0]}"
+            assert cpp[1] is True
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_string_decimal_to_quantity_preserves_precision_fp08_historian(monkeypatch) -> None:
+    """FP-08 HISTORIAN QA-001 (MEDIUM): §5.5.7/§4.1.4/§5.5.8 String-decimal
+    toQuantity precision preservation.
+
+    Native `fn_toQuantity` String-decimal branch previously stripped the
+    `.0` from `'0.0'.toQuantity().toString()` returning `"0 '1'"` instead
+    of `"0.0 '1'"`. Per §5.5.7 the String value parses as Decimal; per
+    §4.1.4 implementations should use fixed-precision decimal formats; per
+    §5.5.8 Quantity toString format `(-)?#0.0#` requires at least one
+    fractional digit. The fix sets `source_text` from the parsed numeric
+    substring (with Python-Decimal-style normalization: drop leading '+',
+    collapse leading zeros).
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    cases = [
+        # (expression, expected_text)
+        ("'0.0'.toQuantity().toString()", "0.0 '1'"),
+        ("'5.5'.toQuantity().toString()", "5.5 '1'"),
+        ("'-5.5'.toQuantity().toString()", "-5.5 '1'"),
+        ("'+5'.toQuantity().toString()", "5 '1'"),  # leading + normalized away
+        ("'00.5'.toQuantity().toString()", "0.5 '1'"),  # leading zeros collapsed
+        ("'3.14159265'.toQuantity().toString()", "3.14159265 '1'"),
+    ]
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases:
+            query = "SELECT fhirpath_text(?::JSON, ?), fhirpath_is_valid(?)"
+            params = [resource, expression, expression]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, f"native vs fallback mismatch on {expression}: {cpp} vs {py}"
+            assert cpp[0] == expected, f"expected {expected!r} for {expression}, got {cpp[0]!r}"
+            assert cpp[1] is True
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_string_to_time_rejects_dot_separator_fp08_historian(monkeypatch) -> None:
+    """FP-08 HISTORIAN QA-002 (MEDIUM): §5.5.9 toTime() dot separator rejection.
+
+    Python fallback `FP_Time('"10.30"')` previously parsed `'10.30'` as a
+    partial HH=`'10'` because the regex `(?:\\.([0-9]+))?` accepted `.30`
+    as a fraction even when minute and second were absent. Per §5.5.9
+    format `hh:mm:ss.fff`, a fraction requires preceding hour, minute, AND
+    second. Native C++ correctly rejected; the fix adds a strict
+    fraction-without-minute/second rejection in `FP_Time.__new__`.
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    invalid_expressions = [
+        "'10.30'.toTime()",
+        "'10.30'.convertsToTime()",
+        "'10:30.5'.toTime()",  # fraction without seconds
+        "'10:30.5'.convertsToTime()",
+    ]
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression in invalid_expressions:
+            query = "SELECT fhirpath(?::JSON, ?), fhirpath_is_valid(?)"
+            params = [resource, expression, expression]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, f"native vs fallback mismatch on {expression}: {cpp} vs {py}"
+            if expression.endswith("convertsToTime()"):
+                assert cpp[0] == ["false"], f"expected [false] for {expression}, got {cpp[0]}"
+            else:
+                assert cpp[0] == [], f"expected empty for {expression}, got {cpp[0]}"
+            assert cpp[1] is True
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_unicode_digit_string_to_quantity_rejects_non_ascii_fp08_explorer(monkeypatch) -> None:
+    """FP-08 EXPLORER QA-001 (HIGH): §5.5.7 toQuantity() Unicode-digit regex.
+
+    Python fallback `quantity_regex` at misc.py:374 used `\\d` which is
+    Unicode-aware in Python's `re` module, accepting full-width digits
+    U+FF10-U+FF19, Arabic-Indic U+0660-U+0669, Devanagari U+0966-U+096F,
+    etc. Native C++ uses `std::isdigit((unsigned char)...)` (ASCII-only)
+    per the ANTLR grammar DIGIT fragment `[0-9]`. The asymmetry produced
+    `'１０'.toQuantity()` returning empty in native vs `["10 '1'"]` in
+    fallback. Same Python-re-Unicode trap as FP-07 EXPLORER (numRegex/
+    intRegex/longDecimalStringRegex) — the `quantity_regex` was the
+    explicitly-noted out-of-scope sibling that §5.5.7 now owns.
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    invalid_expressions = [
+        "'０１２'.toQuantity()",  # full-width 012
+        "'１０'.toQuantity()",  # full-width 10
+        "'１０.５'.toQuantity()",  # full-width 10.5
+        "'٠١٢'.toQuantity()",  # Arabic-Indic 012
+        "'०१२'.toQuantity()",  # Devanagari 123
+        "'０１２'.convertsToQuantity()",
+        "'１０'.convertsToQuantity()",
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression in invalid_expressions:
+            query = "SELECT fhirpath(?::JSON, ?), fhirpath_is_valid(?)"
+            params = [resource, expression, expression]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, f"native vs fallback mismatch on {expression}: {cpp} vs {py}"
+            if expression.endswith("convertsToQuantity()"):
+                assert cpp[0] == ["false"], f"expected [false] for {expression}, got {cpp[0]}"
+            else:
+                assert cpp[0] == [], f"expected empty for {expression}, got {cpp[0]}"
+            assert cpp[1] is True
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_case_sensitive_calendar_keyword_to_quantity_fp08_explorer(monkeypatch) -> None:
+    """FP-08 EXPLORER QA-002 (MEDIUM): §5.5.7/§8.7 case-sensitive calendar keywords.
+
+    Python fallback `to_quantity()` previously accepted uppercase/mixed-case
+    calendar duration keywords (`'1 YEAR'`, `'1 Year'`, `'1 DAYS'`) via an
+    `elif time.lower()` branch. FHIRPath is case-sensitive per §8.7 and §8.5
+    defines keywords as lowercase only. Native `isBareDurationKeyword` at
+    evaluator.cpp:1869-1875 already does case-sensitive lookup; the fix
+    removes the lowercasing branch from `to_quantity()`.
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    invalid_expressions = [
+        "'1 YEAR'.toQuantity()",
+        "'1 Year'.toQuantity()",
+        "'1 YEARS'.toQuantity()",
+        "'1 DAYS'.toQuantity()",
+        "'1 Day'.toQuantity()",
+        "'1 YEAR'.convertsToQuantity()",
+        "'1 DAYS'.convertsToQuantity()",
+    ]
+    valid_expressions = [
+        "'1 year'.toQuantity()",
+        "'1 years'.toQuantity()",
+        "'1 day'.toQuantity()",
+        "'1 days'.toQuantity()",
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression in invalid_expressions:
+            query = "SELECT fhirpath(?::JSON, ?), fhirpath_is_valid(?)"
+            params = [resource, expression, expression]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, f"native vs fallback mismatch on {expression}: {cpp} vs {py}"
+            if expression.endswith("convertsToQuantity()"):
+                assert cpp[0] == ["false"], f"expected [false] for {expression}, got {cpp[0]}"
+            else:
+                assert cpp[0] == [], f"expected empty for {expression}, got {cpp[0]}"
+            assert cpp[1] is True
+        for expression in valid_expressions:
+            query = "SELECT fhirpath(?::JSON, ?), fhirpath_is_valid(?)"
+            params = [resource, expression, expression]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, f"native vs fallback mismatch on {expression}: {cpp} vs {py}"
+            assert len(cpp[0]) == 1, f"expected single result for {expression}, got {cpp[0]}"
+            assert cpp[1] is True
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_converted_quantity_value_preserves_decimal_precision_fp08_explorer(monkeypatch) -> None:
+    """FP-08 EXPLORER QA-003 (HIGH): §5.5.7/§4.1.4/§4.1.8 converted Quantity .value.
+
+    Native C++ `convertQuantityUnit` at evaluator.cpp:1882-1901 computed
+    `out.quantity_value = from_base_value / to_base_factor` via `double`
+    arithmetic, producing IEEE 754 binary64 drift that leaked when the
+    converted value was materialized as Decimal via `.value` (e.g.
+    `(5 'mg').toQuantity('g').value` returned `0.0050000000000000001`
+    instead of `0.005`). The fix sets `out.source_text` to the shortest
+    round-trip representation of the converted double, mirroring the
+    Python fallback's `Decimal(str(value)) * factor` approach. Spec
+    citations: §5.5.7 toQuantity unit conversion; §4.1.4 fixed-precision
+    decimal formats; §4.1.8 Quantity.value is Decimal. Same binary64-drift
+    bug class as FP-07 SKEPTIC/HISTORIAN/EXPLORER (fn_toDecimal) and
+    FP-08 HISTORIAN (String-decimal toQuantity) — conversion-arithmetic
+    path was the missed sibling.
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    # (expression, expected_value)
+    cases = [
+        ("(5 'mg').toQuantity('g').value", "0.005"),
+        ("(-5 'mg').toQuantity('g').value", "-0.005"),
+        ("(5.5 'mg').toQuantity('g').value", "0.0055"),
+        ("(0.5 'mg').toQuantity('g').value", "0.0005"),
+        ("(3 'cm').toQuantity('m').value", "0.03"),
+        ("(3 'cm').toQuantity('m').toString()", "0.03 'm'"),
+        ("(5 'mg').toQuantity('g').toString()", "0.005 'g'"),
+        ("(1 'm').toQuantity('cm').toString()", "100 'cm'"),
+        ("(1 'm').toQuantity('mm').toString()", "1000 'mm'"),
+        ("(1 'min').toQuantity('s').toString()", "60 's'"),
+        ("(1 'h').toQuantity('min').toString()", "60 'min'"),
+        ("(7 'd').toQuantity('wk').toString()", "1 'wk'"),
+        ("(1000 'g').toQuantity('kg').toString()", "1 'kg'"),
+        ("(5 'kg').toQuantity('g').toString()", "5000 'g'"),
+        ("(-5 'mg').toQuantity('g').toString()", "-0.005 'g'"),
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases:
+            query = "SELECT fhirpath_text(?::JSON, ?), fhirpath_is_valid(?)"
+            params = [resource, expression, expression]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, f"native vs fallback mismatch on {expression}: {cpp} vs {py}"
+            assert cpp[0] == expected, f"expected {expected!r} for {expression}, got {cpp[0]!r}"
+            assert cpp[1] is True
+    finally:
+        con.close()
+        fallback.close()
+
+
+
+def test_arithmetic_result_quantity_conversion_uses_decimal_not_binary64_fp08_skeptic(
+    monkeypatch,
+) -> None:
+    """FP-08 SKEPTIC (2026-06-28): native Quantity arithmetic produces
+    binary64 noise (e.g. 0.1 + 0.2 = 0.30000000000000004) which then
+    propagated through toQuantity(unit) as 300.00000000000006 'mg'.
+    The Python fallback uses Decimal-exact arithmetic so it produced
+    300 'mg'. The surgical fix in convertQuantityUnit caps the
+    shortest-round-trip search at precision 15 (IEEE 754 double's
+    guaranteed-unique significant digits) so binary64 noise in the
+    16th/17th digits is dropped at the §5.5.7 conversion boundary.
+
+    Spec citations: §5.5.7 toQuantity unit conversion, §4.1.4
+    System.Decimal ("rational number with implicit precision" - not
+    binary64 noise), §4.1.8 Quantity value is Decimal.
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    # (expression, expected_value)
+    cases = [
+        # Direct arithmetic then convert
+        ("(0.1 'g' + 0.2 'g').toQuantity('mg')", "300 'mg'"),
+        ("(0.1 'g' + 0.2 'g').toQuantity('mg').toString()", "300 'mg'"),
+        ("(0.1 'g' + 0.2 'g').toQuantity('mg').value", "300.0"),
+        # Multiply then convert
+        ("(3 'g' * 0.1).toQuantity('mg')", "300 'mg'"),
+        ("(3 'g' * 0.1).toQuantity('mg').toString()", "300 'mg'"),
+        # Subtraction then convert
+        ("(0.3 'g' - 0.1 'g').toQuantity('mg')", "200 'mg'"),
+        # Direct literal still works (no regression)
+        ("(0.3 'g').toQuantity('mg')", "300 'mg'"),
+        ("(0.3 'g').toQuantity('mg').value", "300.0"),
+        ("(0.1 'g').toQuantity('mg').value", "100.0"),
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases:
+            query = "SELECT fhirpath_text(?::JSON, ?), fhirpath_is_valid(?)"
+            params = [resource, expression, expression]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, f"native vs fallback mismatch on {expression}: {cpp!r} vs {py!r}"
+            assert cpp[0] == expected, f"expected {expected!r} for {expression}, got {cpp[0]!r}"
+            assert cpp[1] is True
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_offset_temperature_cross_conversion_rejects_in_both_backends_fp08_explorer(
+    monkeypatch,
+) -> None:
+    """FP-08 EXPLORER (2026-06-28): Native convertQuantityUnit at
+    extensions/fhirpath/src/fhirpath/evaluator.cpp produced arithmetically
+    wrong values for offset-based temperature cross-conversions
+    (Cel <-> [degF], etc.) because the UCUM table at
+    extensions/fhirpath/src/include/shared/ucum_units.hpp:108-109 marks
+    `[degF]` with a sentinel factor of -1.0 ("sentinel: handled specially
+    by caller") but no special offset-handling branch existed in
+    convertQuantityUnit. Native thus computed (1 * 1.0) / -1.0 = -1 for
+    `(1 'Cel').toQuantity('[degF]')`, returning `-1 '[degF]'` while the
+    Python fallback correctly returned empty (it has no entries for these
+    units in any conversion group). Spec citations: FHIRPath §5.5.7
+    toQuantity(unit) "according to the unit conversion rules specified by
+    UCUM"; §5.5.7 MAY clause "Implementations ... may return empty when
+    the `unit` argument is used and it is different than the input
+    quantity unit." UCUM defines temperature conversions with affine
+    offsets (degF = degC * 9/5 + 32), not multiplicative factors, so the
+    sentinel approach is incorrect without special offset handling.
+    Surgical fix adds an `isOffsetTemperatureUnit` early-return guard in
+    convertQuantityUnit so any cross-unit temperature conversion returns
+    empty, mirroring the Python fallback. Same-unit passthrough
+    (`1 'Cel'.toQuantity('Cel')`) still works via the earlier identity
+    check in convertQuantityUnit.
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    cases = [
+        # All offset-temperature cross-conversions must reject in both paths
+        ("(1 'Cel').toQuantity('[degF]')", None),
+        ("(1 'Cel').toQuantity('[degF]').toString()", None),
+        ("(1 'Cel').convertsToQuantity('[degF]')", "false"),
+        ("(100 '[degF]').toQuantity('Cel')", None),
+        ("(100 '[degF]').convertsToQuantity('Cel')", "false"),
+        # Sanity: same-unit temperature passthrough still works
+        ("(25 'Cel').toQuantity('Cel').toString()", "25 'Cel'"),
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases:
+            query = "SELECT fhirpath_text(?::JSON, ?), fhirpath_is_valid(?)"
+            params = [resource, expression, expression]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, (
+                f"native vs fallback mismatch on {expression}: {cpp!r} vs {py!r}"
+            )
+            if expected is None:
+                assert cpp[0] is None, (
+                    f"expected empty for {expression}, got {cpp[0]!r}"
+                )
+            else:
+                assert cpp[0] == expected, (
+                    f"expected {expected!r} for {expression}, got {cpp[0]!r}"
+                )
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_calendar_vs_ucum_duration_group_separation_fp08_explorer(
+    monkeypatch,
+) -> None:
+    """FP-08 EXPLORER (2026-06-28): Native convertQuantityUnit converted
+    calendar durations to UCUM durations across category boundaries
+    (e.g. `1 year.toQuantity('s')` -> `31556952 's'`), producing values
+    that were arithmetically defensible but spec-category-wrong. The
+    Python fallback's `conv_unit_to` separates time-valued units into
+    discrete groups (`_year_month_conversion_factor` for years/months;
+    `_weeks_days_and_time` for weeks/days/hours/minutes/seconds/
+    milliseconds) and rejects cross-group conversions. FHIRPath §4.1.8
+    and §6.1 distinguish calendar durations from UCUM definite durations:
+    `1 year = 1 'a'` is false (different categories above the second
+    precision). The native's flat UCUM table shared the same base unit
+    ('s') for both, so conversion silently succeeded with a fixed
+    mean-tropical-year approximation that contradicts the spec's
+    variable-length calendar semantics. Surgical fix adds
+    `isYearMonthDurationUnit` and `isWeeksDaysTimeDurationUnit` helpers
+    plus an early-return guard in convertQuantityUnit that rejects
+    cross-group conversions. Within-group conversions still work:
+    `1 year -> 'a'`, `1 second -> 's'`, `1 year -> 12 months`.
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    # (expression, expected_text_or_None_for_empty)
+    cases = [
+        # Cross-category conversions must reject in both paths
+        ("(1 year).toQuantity('s')", None),
+        ("(1 year).toQuantity('s').toString()", None),
+        ("(1 year).convertsToQuantity('s')", "false"),
+        ("(1 year).toQuantity('ms')", None),
+        ("(1 month).toQuantity('s')", None),
+        ("(1 month).toQuantity('min')", None),
+        # Reverse direction: UCUM -> calendar cross-category also rejects
+        ("(1 's').toQuantity('year')", None),
+        ("(1 's').convertsToQuantity('year')", "false"),
+        # Within-group conversions still work
+        ("(1 year).toQuantity('a').toString()", "1 'a'"),
+        ("(1 month).toQuantity('mo').toString()", "1 'mo'"),
+        ("(1 year).toQuantity('month').toString()", "12 month"),
+        ("(1 second).toQuantity('s').toString()", "1 's'"),
+        ("(1 day).toQuantity('h').toString()", "24 'h'"),
+        # Incompatible dimensions (mass vs time) still reject
+        ("(5 'g').toQuantity('s')", None),
+        ("(5 'g').convertsToQuantity('s')", "false"),
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases:
+            query = "SELECT fhirpath_text(?::JSON, ?), fhirpath_is_valid(?)"
+            params = [resource, expression, expression]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, (
+                f"native vs fallback mismatch on {expression}: {cpp!r} vs {py!r}"
+            )
+            if expected is None:
+                assert cpp[0] is None, (
+                    f"expected empty for {expression}, got {cpp[0]!r}"
+                )
+            else:
+                assert cpp[0] == expected, (
+                    f"expected {expected!r} for {expression}, got {cpp[0]!r}"
+                )
     finally:
         con.close()
         fallback.close()

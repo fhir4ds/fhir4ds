@@ -471,7 +471,14 @@ class FP_Quantity(FP_Type):
         if isinstance(other, (int, float, Decimal)):
             if other == 0:
                 return []
-            return FP_Quantity(self.value / other, self.unit)
+            # FP-18 HISTORIAN QA-003 (2026-06-30): Per §6.6.2 "The result
+            # of a division is always Decimal, even if the inputs are both
+            # Integer". Wrap result to ensure Decimal form with at least
+            # one decimal place for whole-number results.
+            result_value = self.value / other
+            if isinstance(result_value, Decimal) and result_value == result_value.to_integral_value():
+                result_value = result_value.quantize(Decimal("0.1"))
+            return FP_Quantity(result_value, self.unit)
         if isinstance(other, FP_Quantity):
             if other.value == 0:
                 return []
@@ -480,6 +487,10 @@ class FP_Quantity(FP_Type):
             if other_base.value == 0:
                 return []
             new_value = FP_Quantity._normalize_quantity_value(self_base.value / other_base.value)
+            # FP-18 HISTORIAN QA-003 (2026-06-30): Force Decimal form for
+            # whole-number results per §6.6.2.
+            if isinstance(new_value, Decimal) and new_value == new_value.to_integral_value():
+                new_value = new_value.quantize(Decimal("0.1"))
             if self_base.unit == other_base.unit:
                 return FP_Quantity(new_value, "'1'")
             bare_self = FP_Quantity._strip_unit_quotes(self_base.unit)
@@ -493,7 +504,12 @@ class FP_Quantity(FP_Type):
             if self.value == 0:
                 return []
             bare_unit = FP_Quantity._strip_unit_quotes(self.unit)
-            return FP_Quantity(other / self.value, f"'1/{bare_unit}'")
+            # FP-18 HISTORIAN QA-003 (2026-06-30): Per §6.6.2 division result
+            # is always Decimal. Force Decimal form for whole-number results.
+            result_value = other / self.value
+            if isinstance(result_value, Decimal) and result_value == result_value.to_integral_value():
+                result_value = result_value.quantize(Decimal("0.1"))
+            return FP_Quantity(result_value, f"'1/{bare_unit}'")
         return NotImplemented
 
     def deep_equal(self, other):
@@ -1157,11 +1173,19 @@ class FP_Time(FP_TimeBase):
         if not m:
             return None
         hour, minute, second = m.group(1), m.group(2), m.group(3)
+        fraction = m.group(4)
         if hour is not None and not (0 <= int(hour) <= 23):
             return None
         if minute is not None and not (0 <= int(minute) <= 59):
             return None
         if second is not None and not (0 <= int(second) <= 59):
+            return None
+        # FHIRPath §5.5.9 format `hh:mm:ss.fff` — a fraction (millisecond)
+        # component is permitted only when preceded by hour, minute, AND
+        # second. `'10.30'` must be rejected entirely; it must not partially
+        # parse as HH=`10` with fraction=`30`. Native C++ enforces this
+        # strictly; the Python fallback must match.
+        if fraction is not None and (minute is None or second is None):
             return None
 
         return super(FP_Time, cls).__new__(cls)
@@ -1561,6 +1585,26 @@ class ResourceNode:
                     if isinstance(self.data, abc.Mapping) and type_name[0].islower():
                         continue
                     return TypeInfo(namespace=namespace, name=type_name)
+
+        # FHIRPath §5.2.4 ofType parity: when path metadata is absent for a
+        # string field whose name is itself a FHIR primitive subtype (e.g.
+        # `Patient.id` where the field name `id` is a FHIR primitive distinct
+        # from `string`), resolve the type from the field name. Without this,
+        # `get_type_info()` falls through to value-based inference and returns
+        # `string` for any str value, which causes `ofType(id)` to miss and
+        # `ofType(string)` to over-match — both violating the R4 baseline
+        # (`testFHIRPathAsFunction16` analogue: primitive subtypes are NOT
+        # included by ofType). Only apply this to primitive field names whose
+        # type is NOT the generic `string`; otherwise the suffix/choice logic
+        # above has already produced the right answer or never will.
+        if "." in self.path and isinstance(self.data, str):
+            last_segment = self.path.rsplit(".", 1)[1]
+            if (
+                last_segment in TypeInfo.VALID_FHIR_TYPES
+                and last_segment != "string"
+                and not last_segment[0].isupper()
+            ):
+                return TypeInfo(namespace=namespace, name=last_segment)
 
         # Detect FHIR choice type paths (e.g., "DetectedIssue.identifiedDateTime")
         # by checking if the last path segment ends with a known FHIR type suffix.

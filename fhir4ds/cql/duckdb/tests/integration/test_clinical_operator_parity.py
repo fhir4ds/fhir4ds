@@ -280,7 +280,6 @@ concept HRConcept: { HRNoDisplay } display 'HR'
 context Patient
 define CodeInCodeSystem: HR in LOINC
 define ConceptInCodeSystem: BP in LOINC
-define StringInCodeSystem: '8867-4' in LOINC
 define CodeInValueSet: HR in Vitals
 define ConceptInValueSet: BP in Vitals
 define StringInValueSet: 'code-only' in Vitals
@@ -293,7 +292,6 @@ define ConceptEquivalentIntersection: BP ~ HRConcept
     expected = {
         "CodeInCodeSystem": True,
         "ConceptInCodeSystem": True,
-        "StringInCodeSystem": True,
         "CodeInValueSet": True,
         "ConceptInValueSet": True,
         "StringInValueSet": True,
@@ -315,6 +313,120 @@ define ConceptEquivalentIntersection: BP ~ HRConcept
         cpp.close()
 
 
+def test_cql_string_in_codesystem_raises_unsupported_per_spec() -> None:
+    """CQL 1.5.3 §In (Codesystem) String overload requires a terminology
+    service to verify code membership in an externally-defined code system.
+    The translator must not silently return TRUE for any non-empty string;
+    it must surface the missing capability as a TranslationError.
+
+    Null and empty-string operands still return False per the spec's
+    "If the code argument is null, the result is false" rule.
+    """
+    from fhir4ds.cql.errors import TranslationError
+
+    # Non-empty string: must raise.
+    cql_real = """library RealCodeInCS version '1.0.0'
+using FHIR version '4.0.1'
+codesystem LOINC: 'http://loinc.org'
+context Patient
+define Probe: '8867-4' in LOINC
+"""
+    with __import__("pytest").raises(TranslationError):
+        translate_cql(cql_real)
+
+    # Empty string: spec-compliant False (null argument rule).
+    cql_empty = """library EmptyInCS version '1.0.0'
+using FHIR version '4.0.1'
+codesystem LOINC: 'http://loinc.org'
+context Patient
+define Probe: '' in LOINC
+"""
+    translated_empty = translate_cql(cql_empty)
+    assert translated_empty["Probe"].to_sql() == "FALSE"
+
+    # null literal: spec-compliant False.
+    cql_null = """library NullInCS version '1.0.0'
+using FHIR version '4.0.1'
+codesystem LOINC: 'http://loinc.org'
+context Patient
+define Probe: null as String in LOINC
+"""
+    translated_null = translate_cql(cql_null)
+    assert translated_null["Probe"].to_sql() == "FALSE"
+
+
+def test_cql_string_in_valueset_overload_matches_per_spec_cql21_skeptic() -> None:
+    """CQL 1.5.3 §In (Valueset) String overload: "For the String overload, if
+    the given valueset contains a code with an equivalent code element, the
+    result is true. Note that for this overload, because the code being tested
+    cannot specify code system information, if the resolved value set contains
+    codes from multiple code systems, a run-time error is thrown because the
+    operation is ambiguous."
+
+    Previously the UDF returned False for any String-overload call where the
+    cache had the code under a real (non-empty) system, because the source's
+    synthetic resource encodes system="" and the code-only fallback only
+    matched when the cache itself had ("", code) entries. The fix scans the
+    cache for any entry with the matching code value: 1 distinct non-empty
+    system → True; multiple distinct non-empty systems → NULL (ambiguous per
+    three-valued logic); 0 → only matches if cache has empty-system entry.
+    """
+    vs_url = "http://example.org/fhir/ValueSet/vs21skeptic"
+    vs_multi_url = "http://example.org/fhir/ValueSet/vs21multi"
+
+    def _make_cpp_con():
+        con = _cpp_connection()
+        con.execute("SELECT cql_valueset_cache_clear()")
+        con.execute("SELECT cql_valueset_cache_add(?, ?, ?)", [vs_url, "http://loinc.org", "8867-4"])
+        con.execute("SELECT cql_valueset_cache_add(?, ?, ?)", [vs_multi_url, "http://loinc.org", "8867-4"])
+        con.execute("SELECT cql_valueset_cache_add(?, ?, ?)", [vs_multi_url, "http://snomed.info/sct", "8867-4"])
+        return con
+
+    def _make_py_con():
+        con = _python_only_connection()
+        con.remove_function("in_valueset")
+        con.create_function(
+            "in_valueset",
+            createValuesetMembershipUdf({
+                VALUESET_URL: {("http://loinc.org", "8867-4"), ("", "code-only")},
+                vs_url: {("http://loinc.org", "8867-4")},
+                vs_multi_url: {
+                    ("http://loinc.org", "8867-4"),
+                    ("http://snomed.info/sct", "8867-4"),
+                },
+            }),
+            null_handling="special",
+        )
+        return con
+
+    cql = f"""library VS21Skeptic version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+valueset SingleVS: '{vs_url}'
+valueset MultiVS: '{vs_multi_url}'
+define StringInSingleVS: '8867-4' in SingleVS
+define StringNotInSingleVS: '9999-9' in SingleVS
+define AmbiguousStringInMultiVS: '8867-4' in MultiVS
+define UnambiguousStringInMultiVS: '9999-9' in MultiVS
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "StringInSingleVS": True,           # Single system containing code → True
+        "StringNotInSingleVS": False,        # Code absent → False
+        "AmbiguousStringInMultiVS": None,    # Multi-system ambiguity → None
+        "UnambiguousStringInMultiVS": False, # Code absent → False
+    }
+    for con_factory in (_make_cpp_con, _make_py_con):
+        con = con_factory()
+        try:
+            for name, want in expected.items():
+                sql = f"SELECT {translated[name].to_sql()} AS v"
+                got = con.execute(sql).fetchone()[0]
+                assert got == want, f"{con_factory.__name__} {name}: want {want}, got {got}"
+        finally:
+            con.close()
+
+
 def test_cql_clinical_static_list_membership_overloads_match_cpp_registration() -> None:
     cql = """library ClinicalListTerminologyOps version '1.0.0'
 using FHIR version '4.0.1'
@@ -329,7 +441,6 @@ concept OtherConcept: { Other } display 'Other'
 context Patient
 define CodeListInCodeSystem: { Other, HR } in LOINC
 define CodeListNotInCodeSystem: { Other } in LOINC
-define StringListInCodeSystem: { 'not-here', '8867-4' } in LOINC
 define ConceptListInCodeSystem: { OtherConcept, BP } in LOINC
 define CodeListInValueSet: { Other, HR } in Vitals
 define CodeListNotInValueSet: { Other } in Vitals
@@ -341,7 +452,6 @@ define ConceptListInValueSet: { OtherConcept, BP } in Vitals
     expected = {
         "CodeListInCodeSystem": True,
         "CodeListNotInCodeSystem": False,
-        "StringListInCodeSystem": True,
         "ConceptListInCodeSystem": True,
         "CodeListInValueSet": True,
         "CodeListNotInValueSet": False,
@@ -548,6 +658,77 @@ define DynamicConceptInCodeSystem:
                 ("p1", True, True),
                 ("p2", False, False),
             ]
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_concept_in_valueset_with_literal_codes_matches_per_spec_cql21_historian() -> None:
+    """CQL 1.5.3 Appendix B In (ValueSet): "If the first argument is a
+    Concept, returns true if any code in the concept is in the valueset."
+
+    CQL-21 HISTORIAN iteration 1 found that the prior translator only
+    extracted Literal field values from InstanceExpression, so a Concept
+    with a codes ListExpression field (the natural parse of
+    `Concept { codes: { Code { ... } } }`) was not recognized at
+    translation time. The translator fell through to generic JSON
+    translation producing a non-FHIR {codes:[...]} shape that the
+    in_valueset UDF cannot navigate, so Concept-in-ValueSet always
+    returned False even when the cache held a matching code.
+
+    The fix recurses into each Code InstanceExpression in the
+    ListExpression and emits a proper FHIR-shaped synthetic resource
+    per code, OR-chaining the results.
+    """
+    cql = """library ConceptInValueSetCql21Historian version '1.0.0'
+using FHIR version '4.0.1'
+valueset Vitals: 'http://example.org/fhir/ValueSet/vitals'
+context Patient
+
+// Single-code Concept with a matching cache entry -> True
+define ConceptSingleMatch:
+  Concept { codes: { Code { code: '8867-4', system: 'http://loinc.org' } } }
+    in Vitals
+
+// Multi-code Concept where any code matches -> True (OR-chain)
+define ConceptMultiAnyMatch:
+  Concept {
+    codes: {
+      Code { code: '8867-4', system: 'http://loinc.org' },
+      Code { code: '12345', system: 'http://snomed.info/sct' }
+    }
+  } in Vitals
+
+// Multi-code Concept where no code matches -> False
+define ConceptMultiNoMatch:
+  Concept {
+    codes: {
+      Code { code: '9999-9', system: 'http://loinc.org' },
+      Code { code: '8888-8', system: 'http://snomed.info/sct' }
+    }
+  } in Vitals
+
+// Single-code Concept with no match -> False
+define ConceptSingleNoMatch:
+  Concept { codes: { Code { code: '9999-9', system: 'http://loinc.org' } } }
+    in Vitals
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "ConceptSingleMatch": True,
+        "ConceptMultiAnyMatch": True,
+        "ConceptMultiNoMatch": False,
+        "ConceptSingleNoMatch": False,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            py_row = py.execute(sql).fetchone()
+            cpp_row = cpp.execute(sql).fetchone()
+            assert py_row == (expected_value,), f"{name}: py={py_row!r}"
+            assert cpp_row == (expected_value,), f"{name}: cpp={cpp_row!r}"
     finally:
         py.close()
         cpp.close()

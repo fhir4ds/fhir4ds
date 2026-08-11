@@ -8,12 +8,19 @@ errors during ViewDefinition parsing, validation, and SQL generation.
 from typing import Any, Dict, List, Optional
 
 
-class SQLOnFHIRError(Exception):
+class SQLOnFHIRError(ValueError):
     """Base exception for all SQL-on-FHIR errors.
 
     All custom exceptions in sqlonfhirpy inherit from this class,
     allowing callers to catch all package-specific errors with
     a single except clause.
+
+    Inherits from :class:`ValueError` so that callers can still catch
+    spec/shape/value errors with the standard ``except ValueError:``
+    form, while typed subclasses (``ParseError``, ``ValidationError``,
+    etc.) remain available for callers that want exception-type
+    granularity. This preserves the public API contract that
+    ViewDefinition parsing surfaces value-shaped errors.
 
     Attributes:
         message: Human-readable error description.

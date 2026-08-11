@@ -1279,7 +1279,9 @@ class MeasureEvaluator:
         )
         try:
             return self._execute_compiled_group(compiled_group)
-        except (DQMError, KeyboardInterrupt):
+        except KeyboardInterrupt:
+            raise
+        except DQMError:
             raise
         except (duckdb.Error, ValueError, FileNotFoundError, RuntimeError,
                 SyntaxError, TypeError) as e:
@@ -1529,6 +1531,23 @@ class MeasureEvaluator:
                     ):
                         effective_mask = population_masks.get(col_name)
 
+                # QA-017: when a patient is in denominator_exclusion, the
+                # numerator criteria are not evaluated for that patient, so
+                # any numerator evidence emitted by the audit SQL is the
+                # denominator-criteria evidence leaking through. Prune it so
+                # narratives do not mislead clinicians into thinking the
+                # numerator was evaluated (causal-correctness per CMS eCQM
+                # Logic and Implementation Guidance).
+                numerator_excluded_mask: pd.Series | None = None
+                if (
+                    pop.audit_persona == AuditPersona.NUMERATOR
+                    and col_name == "numerator"
+                    and "denominator_exclusion" in df.columns
+                ):
+                    numerator_excluded_mask = population_masks.get(
+                        "denominator_exclusion"
+                    )
+
                 def _prune(
                     cell,
                     idx,
@@ -1536,10 +1555,24 @@ class MeasureEvaluator:
                     code=pop.population_code,
                     column=col_name,
                     mask=effective_mask,
+                    excluded_mask=numerator_excluded_mask,
                 ):
                     if not isinstance(cell, dict):
                         return cell
                     try:
+                        # QA-017: short-circuit numerator cells for patients
+                        # who are in denominator_exclusion. Their numerator
+                        # criteria are not evaluated.
+                        if (
+                            persona == AuditPersona.NUMERATOR
+                            and excluded_mask is not None
+                            and bool(excluded_mask.loc[idx])
+                        ):
+                            return {
+                                **cell,
+                                "evidence": [],
+                                "effective_result": False,
+                            }
                         effective_result = (
                             bool(mask.loc[idx])
                             if persona == AuditPersona.EXCLUSION and mask is not None
@@ -1612,13 +1645,20 @@ class MeasureEvaluator:
     def _generate_narrative(self, val: Any, population_code: str,
                             audit_mode: AuditMode = AuditMode.FULL) -> list[str]:
         """Generate narrative for a single cell value."""
-        evidence_captured = audit_mode != AuditMode.POPULATION
+        # QA-018: evidence_captured must reflect whether the cell actually
+        # has evidence, not just the audit mode. POPULATION mode does emit
+        # evidence for direct-retrieve CTEs (resource rows); hardcoding
+        # evidence_captured=False hid that evidence from narratives, producing
+        # the misleading "evidence not captured in this audit mode" message
+        # even when concrete resource evidence was present.
         if isinstance(val, dict):
             evidence = val.get("evidence", [])
             is_satisfied = val.get("effective_result", val.get("result", False))
             ev_dicts = [e if isinstance(e, dict) else {} for e in evidence]
+            evidence_captured = bool(ev_dicts) or audit_mode == AuditMode.FULL
             return self._narrative.generate(population_code, ev_dicts, is_satisfied,
                                             evidence_captured=evidence_captured)
+        evidence_captured = audit_mode == AuditMode.FULL
         return self._narrative.generate(population_code, [], bool(val),
                                         evidence_captured=evidence_captured)
 

@@ -214,4 +214,4 @@ This project is dual-licensed:
 1.  **Open Source:** GNU Affero General Public License v3 (AGPL-3.0). See [LICENSE](LICENSE) for details.
 2.  **Commercial:** A proprietary license for enterprise use, embedding in closed-source products, and high-performance C++ extensions.
 
-For commercial licensing inquiries, please contact **fhir4ds@gmail.com**.
+For commercial licensing inquiries, please contact **contact@fhir4ds.com**.

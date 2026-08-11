@@ -479,3 +479,191 @@ def test_calendar_duration_ucum_duration_comparisons_above_seconds_are_empty(mon
     finally:
         native.close()
         fallback.close()
+
+
+def test_equality_vs_comparison_precedence_matches_backends(monkeypatch) -> None:
+    """FHIRPath §6.8 operator precedence: comparison (#08) binds tighter than
+    equality (#09). Expressions like ``5 > 3 = true`` MUST parse as
+    ``(5 > 3) = true``. Native C++ previously inverted this precedence; both
+    backends must now agree with the spec.
+    """
+    resource = json.dumps({"resourceType": "Observation", "a": 5, "b": 3, "active": True})
+    cases = {
+        # Unparenthesized mixed comparison+equality
+        "5 > 3 = true": (["true"], "[true]", True, True),
+        "5 > 3 = false": (["false"], "[false]", False, True),
+        "5 < 3 = true": (["false"], "[false]", False, True),
+        "5 < 3 = false": (["true"], "[true]", True, True),
+        "1 < 2 = true": (["true"], "[true]", True, True),
+        "1 > 0 = true": (["true"], "[true]", True, True),
+        "5 >= 5 = true": (["true"], "[true]", True, True),
+        "5 <= 5 = true": (["true"], "[true]", True, True),
+        # All four equality operators at #09
+        "5 > 3 ~ true": (["true"], "[true]", True, True),
+        "5 > 3 != false": (["true"], "[true]", True, True),
+        "5 > 3 !~ false": (["true"], "[true]", True, True),
+        # Symmetric: equality on the left, comparison on the right
+        "true = 5 > 3": (["true"], "[true]", True, True),
+        # Parenthesized controls (must still match)
+        "(5 > 3) = true": (["true"], "[true]", True, True),
+        "true = (5 > 3)": (["true"], "[true]", True, True),
+        # Lone comparison (unchanged behavior)
+        "5 > 3": (["true"], "[true]", True, True),
+        "5 < 3": (["false"], "[false]", False, True),
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            native_result = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            fallback_result = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native_result == fallback_result == expected, expression
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_cross_unit_temperature_comparison_returns_empty_in_both_backends_fp14_skeptic(
+    monkeypatch,
+) -> None:
+    """FP-14 SKEPTIC (2026-06-29): Native C++ §6.2 comparison operator path
+    at extensions/fhirpath/src/fhirpath/evaluator.cpp:7539-7559 previously
+    lacked the isOffsetTemperatureUnit guard that FP-13 HISTORIAN added to
+    the §6.1 equality path at 5 sites. The UCUM table at
+    extensions/fhirpath/src/include/shared/ucum_units.hpp:108-109 marks
+    `[degF]` with sentinel factor -1.0 ("sentinel: handled specially by
+    caller") but the §6.2 comparison path computed
+    (val * from_base_factor) / to_base_factor without offset handling,
+    producing arithmetically wrong Boolean results.
+
+    This test verifies the fix: cross-unit temperature comparisons must
+    return empty (NULL) in both native and fallback, NOT a wrong Boolean.
+    Per spec §6.2: "Attempting to operate on quantities with invalid units
+    will result in empty (`{ }`)." + "Implementations are not required to
+    fully support operations on units, but they must at least respect
+    units, recognizing when units differ." UCUM defines temperature
+    conversions with affine offsets (degF = degC * 9/5 + 32), not
+    multiplicative factors.
+
+    Same-unit passthrough (1 'Cel' < 2 'Cel') still works correctly via
+    the existing fast-path that compares decimal text representations.
+    Mirrors the FP-13 HISTORIAN equality regression
+    `test_cross_unit_temperature_equality_returns_empty_in_both_backends_fp13_historian`.
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    cases = [
+        # All cross-unit temperature comparison operators return empty
+        ("1 'Cel' < 33.8 '[degF]'", None),
+        ("1 'Cel' > 33.8 '[degF]'", None),
+        ("1 'Cel' <= 33.8 '[degF]'", None),
+        ("1 'Cel' >= 33.8 '[degF]'", None),
+        # Reverse argument order — same defect, must also return empty
+        ("33.8 '[degF]' < 1 'Cel'", None),
+        ("33.8 '[degF]' > 1 'Cel'", None),
+        ("100 '[degF]' < 37.8 'Cel'", None),
+        ("100 '[degF]' > 37.8 'Cel'", None),
+        # Kelvin is also an offset temperature unit
+        ("1 'Cel' < 274.15 'K'", None),
+        ("1 'Cel' > 274.15 'K'", None),
+        ("274.15 'K' < 1 'Cel'", None),
+        ("1 'Cel' < 1 'Cel'", False),    # same-unit sanity — strict less-than is False
+        ("1 'Cel' <= 1 'Cel'", True),    # same-unit sanity — less-or-equal is True
+        ("1 'Cel' > 0 'Cel'", True),     # same-unit sanity — different magnitudes
+        ("1 'Cel' >= 1 'Cel'", True),    # same-unit sanity — equal magnitudes
+    ]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases:
+            query = "SELECT fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)"
+            params = [resource, expression, resource, expression]
+            cpp = native.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, (
+                f"native vs fallback mismatch on {expression!r}: "
+                f"native={cpp!r} vs fallback={py!r}"
+            )
+            assert cpp[0] is expected, (
+                f"wrong result for {expression!r}: expected {expected}, "
+                f"got native={cpp[0]!r}"
+            )
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_decimal_arithmetic_feeding_comparison_preserves_adjacent_integers_fp14_explorer(
+    monkeypatch,
+) -> None:
+    """FP-14 EXPLORER (2026-06-29): Native Decimal +/- arithmetic at
+    evaluator.cpp ~7800+ used binary64 `double` and lost precision for
+    integer-valued operands above 2^53. The §6.2 comparison path then
+    compared two equal binary64 values and returned false instead of
+    true.
+
+    Reproducer: `(2).power(53) < (2).power(53) + 1` returned False in
+    native vs True in fallback. Root cause: Decimal arithmetic path
+    lacked the integer-text fast-path that Quantity arithmetic has
+    (via normalizeQuantityArithmeticSourceText). The surgical fix
+    added tryIntegerArithmeticText helper that mirrors the FP-11
+    EXPLORER powerIntegerExactText pattern for +/-/* on integer-valued
+    Decimal operands.
+    """
+    resource = json.dumps({"resourceType": "Observation"})
+    cases = [
+        # (expression, expected_bool_result)
+        # Adjacent-integers above 2^53 boundary via arithmetic.
+        ("(2).power(53) < (2).power(53) + 1", True),
+        ("(2).power(53) > (2).power(53) - 1", True),  # arith result is 2^53-1 = 9007199254740991
+        ("(2).power(53) <= (2).power(53) + 1", True),
+        ("(2).power(53) >= (2).power(53) + 1", False),
+        ("(2).power(63) < (2).power(63) + 1", True),
+        ("(2).power(63) > (2).power(63) - 1", True),
+        # The arithmetic result text itself
+        ("(2).power(53) + 1", None),  # json output, no bool
+        ("(2).power(63) + 1", None),
+        # Direct Decimal-literal arithmetic at 2^53 boundary
+        ("9007199254740992.0 + 1.0 = 9007199254740993.0", True),
+        ("9007199254740992.0 + 1.0 < 9007199254740993.0", False),  # equal
+        ("9007199254740992.0 + 1.0 > 9007199254740993.0", False),  # equal
+        ("9007199254740992.0 + 2.0 < 9007199254740993.0", False),
+        ("9007199254740992.0 + 2.0 > 9007199254740993.0", True),
+        ("9007199254740993.0 - 1.0 < 9007199254740992.0", False),  # equal
+        ("9007199254740993.0 - 2.0 < 9007199254740992.0", True),
+        ("9007199254740993.0 - 1.0 > 9007199254740991.0", True),
+        # Multiplication producing large Decimal
+        ("(2).power(40) * 2 < (2).power(41) + 1", True),
+        # Adjacent integers above 2^53 via subtraction
+        ("(2).power(54) - 1 < (2).power(54)", True),
+        ("(2).power(54) - 1 > (2).power(54) - 2", True),
+        # Decimal-with-zero-fraction arithmetic
+        ("9007199254740992.000 + 1.000 = 9007199254740993.0", True),
+    ]
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected_bool in cases:
+            query = "SELECT fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)"
+            params = [resource, expression, resource, expression]
+            cpp = native.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py, (
+                f"native vs fallback mismatch on {expression!r}: "
+                f"native={cpp!r} vs fallback={py!r}"
+            )
+            if expected_bool is not None:
+                assert cpp[0] is expected_bool, (
+                    f"wrong bool result for {expression!r}: expected {expected_bool}, "
+                    f"got native={cpp[0]!r}"
+                )
+    finally:
+        native.close()
+        fallback.close()

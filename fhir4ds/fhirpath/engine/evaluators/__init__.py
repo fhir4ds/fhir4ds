@@ -349,9 +349,36 @@ def create_reduce_member_invocation(model, key):
             actualTypes = model["choiceTypePaths"].get(childPath)
 
         if isinstance(res.data, nodes.FP_Quantity):
-            toAdd = res.data.value
+            # FHIRPath §4.1.8: Quantity has `value` (Decimal) and `unit` (String)
+            # as named members. Resource-backed FHIR Quantity also exposes `code`
+            # and `system`, but a Quantity literal has no UCUM code/namespace URI
+            # metadata, so those members return empty for literals.
             if key == "value":
+                # §4.1.8: "If the value literal is an Integer, it will be
+                # implicitly converted to a Decimal in the resulting Quantity
+                # value." Materialize the value as Decimal so the member surface
+                # matches the spec (e.g. `5 'mg'.value` is Decimal `5.0`, not
+                # Integer `5`).
+                raw_value = res.data.value
+                if isinstance(raw_value, int):
+                    toAdd = nodes.Decimal(str(raw_value))
+                elif isinstance(raw_value, float):
+                    toAdd = nodes.Decimal(str(raw_value))
+                elif isinstance(raw_value, nodes.Decimal):
+                    toAdd = raw_value
+                else:
+                    toAdd = nodes.Decimal(str(raw_value))
                 childPath = "decimal"
+            elif key == "unit":
+                # §5.5.8 Quantity toString shows UCUM units in quotes (e.g.
+                # `5 'mg'`) and calendar durations bare (e.g. `4 days`). When
+                # exposing `.unit` as a String member, return the bare UCUM
+                # code (matching native C++), so `5 'mg'.unit = 'mg'`.
+                toAdd = nodes.FP_Quantity._strip_unit_quotes(res.data.unit)
+                childPath = "string"
+            else:
+                # `.code`/`.system`/other members not present on a literal Quantity.
+                toAdd = None
 
         if actualTypes and isinstance(res.data, abc.Mapping):
             # Use actualTypes to find the field's value
@@ -596,7 +623,7 @@ def polarity_expression(ctx, parentData, node):
     # In that case, we wrap the entire collection in a DescendingSortMarker
     if len(rtn) != 1:
         # Check if all items are non-numeric (for sort context)
-        all_non_numeric = all(not util.is_number(v) for v in rtn)
+        all_non_numeric = all(not util.is_number(util.get_data(v)) for v in rtn)
         if all_non_numeric and sign == "-" and ctx.get("_sort_expression"):
             from ...engine.invocations.collections import DescendingSortMarker
             return [DescendingSortMarker(rtn)]
@@ -611,10 +638,17 @@ def polarity_expression(ctx, parentData, node):
             return [FP_Quantity(-value.value, value.unit)]
         return rtn
 
-    if not util.is_number(value):
+    # Unwrap ResourceNode to access the underlying primitive value before
+    # checking whether the operand is numeric. Without this, `-a` (where `a`
+    # is a FHIR primitive integer/decimal path) raises FHIRPathError because
+    # ResourceNode is not itself a Python number. Native C++ already unwraps
+    # the resource node correctly.
+    unwrapped = util.get_data(value)
+
+    if not util.is_number(unwrapped):
         # In strict mode, applying polarity to a boolean is an error
         # (e.g., -1.convertsToInteger() where dot binds tighter than unary -)
-        if ctx.get("strict_mode") and isinstance(value, bool):
+        if ctx.get("strict_mode") and isinstance(unwrapped, bool):
             raise TypeError(
                 f"Unary {sign} cannot be applied to non-numeric value: {value!r}"
             )
@@ -626,7 +660,7 @@ def polarity_expression(ctx, parentData, node):
         raise FHIRPathError(f"Unary {sign} cannot be applied to non-numeric value: {value!r}")
 
     if sign == "-":
-        rtn[0] = -value
+        rtn[0] = -unwrapped
 
     return rtn
 

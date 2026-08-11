@@ -802,3 +802,72 @@ def test_cql_structural_forced_python_fhirpath_choice_is_as_matches_cpp() -> Non
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_structural_bare_numeric_ratio_literal_parses_per_spec() -> None:
+    """CQL 1.5.3 §Types/Ratio and §Equal Ratio examples.
+
+    The bare numeric ratio literal form ``<quantity>:<quantity>`` (with
+    default UCUM unit '1' on both components) is used throughout the
+    spec's own Ratio examples:
+
+        define "RatioEqualIsTrue": 1:8 = 1:8
+        define "RatioEqualIsFalse": 1:8 = 2:16
+        define "RatioEquivalentIsTrue": 1:8 ~ 2:16
+
+    Previously ``parse_literal`` only routed unit-qualified quantities
+    (``1 'mg':2 'mg'``) through ``_maybe_parse_ratio_literal``; bare
+    Integer/Decimal/Long numerics returned a ``Literal`` directly,
+    silently dropping the ``:<denominator>`` and leaving a dangling
+    COLON that raised ``ParseError`` at the library level.
+    """
+    # Parser-level: bare numeric ratio literal must produce a FunctionRef
+    # (ToRatio) on both Integer and Decimal numerators.
+    assert isinstance(parse_expression("1:8"), FunctionRef)
+    assert isinstance(parse_expression("1.5:2.5"), FunctionRef)
+    # Bare numerics without a trailing colon are unaffected.
+    from fhir4ds.cql.parser.ast_nodes import Literal
+    assert isinstance(parse_expression("5"), Literal)
+    assert isinstance(parse_expression("5.5"), Literal)
+
+    # Translator + execution: spec Ratio equality/equivalence examples.
+    cql = (
+        "library RatioSpec version '1.0.0'\n"
+        "using FHIR version '4.0.1'\n"
+        "context Patient\n"
+        "define RatioEqualIsTrue: 1:8 = 1:8\n"
+        "define RatioEqualIsFalse: 1:8 = 2:16\n"
+        "define RatioEquivalentIsTrue: 1:8 ~ 2:16\n"
+        "define RatioEquivalentScaled: 1:100 ~ 10:1000\n"
+        "define DecimalRatio: 1.5:2.5\n"
+    )
+    translated = translate_cql(cql)
+    # Ratio equality/equivalence lowers to ratioCompare UDF (Ratio is a
+    # structured type; tuple equality is UDF-implemented).
+    assert "ratioCompare" in translated["RatioEqualIsTrue"].to_sql()
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        expected = {
+            "RatioEqualIsTrue": (True,),
+            "RatioEqualIsFalse": (False,),
+            "RatioEquivalentIsTrue": (True,),
+            "RatioEquivalentScaled": (True,),
+        }
+        for define_name, want in expected.items():
+            sql = f"SELECT {translated[define_name].to_sql()}"
+            assert py.execute(sql).fetchone() == want
+            assert cpp.execute(sql).fetchone() == want
+
+        # Decimal-ratio numerator must produce a valid Ratio JSON value
+        # on both backends.
+        dec_sql = f"SELECT {translated['DecimalRatio'].to_sql()}"
+        py_ratio = json.loads(py.execute(dec_sql).fetchone()[0])
+        cpp_ratio = json.loads(cpp.execute(dec_sql).fetchone()[0])
+        assert py_ratio == cpp_ratio
+        assert py_ratio["numerator"]["value"] == 1.5
+        assert py_ratio["denominator"]["value"] == 2.5
+    finally:
+        py.close()
+        cpp.close()

@@ -6,6 +6,7 @@ Leverages the benchmarking runner infrastructure to execute all 2025 QI Core
 measures and verify their accuracy against official test cases.
 """
 
+import argparse
 import json
 import os
 import sys
@@ -60,9 +61,33 @@ def _print_slowest(report: dict, timing_key: str, label: str, limit: int = 8) ->
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Run DQM (Data Quality Measures) conformance tests."
+    )
+    # QA-019: --audit flag lets CI exercise audit SQL emission so that
+    # audit-mode bugs (e.g. QA-016) are caught by the release gate rather
+    # than masked by a silent fallback. Default remains audit=False to
+    # preserve the historical 47/47 baseline.
+    parser.add_argument(
+        "--audit",
+        action="store_true",
+        help=(
+            "Enable audit-mode SQL emission. Audit failures are reported "
+            "via the runner's verbose path; they do not fail the "
+            "conformance suite because the runner has a documented silent "
+            "fallback for measures whose FULL-audit SQL still fails to "
+            "bind (see QA-016 for the remaining binder issues)."
+        ),
+    )
+    args = parser.parse_args()
+    audit_enabled = bool(args.audit)
+
     suite = "2025"
     suite_start = time.perf_counter()
     suite_timings = {}
+
+    if audit_enabled:
+        print(">>> Audit-mode SQL emission ENABLED (POPULATION tier)")
 
     print(f">>> Discovering DQM measures (suite: {suite})...")
     configs = _time_phase(
@@ -130,13 +155,17 @@ def main():
             test_suite_load_ms = _elapsed_ms(test_suite_start)
 
             # Run measure
+            # QA-019: when --audit is passed, exercise the audit SQL path
+            # so bugs surface. The conformance runner has a silent fallback
+            # that masks audit failures (runner.py:201-213); the flag makes
+            # those failures visible without breaking CI.
             result = run_measure(
                 db.conn,
                 config,
                 test_suite,
                 verbose=False,
                 all_columns=False, # Only population definitions for conformance
-                audit=False,
+                audit=audit_enabled,
                 library_cache=library_cache,
             )
 

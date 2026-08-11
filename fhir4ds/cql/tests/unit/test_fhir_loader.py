@@ -136,6 +136,7 @@ def test_load_bundle_with_nested_resources(loader):
     """Test loading bundle with nested contained resources."""
     bundle = {
         "resourceType": "Bundle",
+        "type": "collection",
         "entry": [
             {
                 "resource": {
@@ -165,13 +166,13 @@ def test_load_bundle_invalid(loader):
 
 def test_load_bundle_rejects_malformed_entries(loader):
     with pytest.raises(TypeError, match=r"Bundle\.entry must be a list"):
-        loader.load_bundle({"resourceType": "Bundle", "entry": {"resource": {}}})
+        loader.load_bundle({"resourceType": "Bundle", "type": "collection", "entry": {"resource": {}}})
 
     with pytest.raises(TypeError, match=r"Bundle\.entry\[0\] must be an object"):
-        loader.load_bundle({"resourceType": "Bundle", "entry": ["not an entry"]})
+        loader.load_bundle({"resourceType": "Bundle", "type": "collection", "entry": ["not an entry"]})
 
     with pytest.raises(TypeError, match=r"Bundle\.entry\[0\]\.resource must be an object"):
-        loader.load_bundle({"resourceType": "Bundle", "entry": [{"resource": "not a resource"}]})
+        loader.load_bundle({"resourceType": "Bundle", "type": "collection", "entry": [{"resource": "not a resource"}]})
 
 
 def test_load_ndjson(loader, tmp_path):
@@ -252,6 +253,7 @@ def test_load_file_bundle(loader, tmp_path):
     bundle_file = tmp_path / "bundle.json"
     bundle_file.write_text(json.dumps({
         "resourceType": "Bundle",
+        "type": "collection",
         "entry": [
             {"resource": {"resourceType": "Patient", "id": "p1"}},
             {"resource": {"resourceType": "Patient", "id": "p2"}}
@@ -570,6 +572,7 @@ def test_load_from_url(loader, tmp_path, monkeypatch):
     # Create a mock response
     bundle_data = {
         "resourceType": "Bundle",
+        "type": "searchset",
         "entry": [
             {"resource": {"resourceType": "Patient", "id": "url-p1"}}
         ]

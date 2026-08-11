@@ -7,6 +7,10 @@
 #include "fhirpath/expression_cache.hpp"
 #include "fhirpath/parser.hpp"
 
+#include <cmath>
+#include <sstream>
+#include <iomanip>
+
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/types/value.hpp"
@@ -511,7 +515,18 @@ static std::pair<bool, std::string> FastPathLookup(const char *json_data, idx_t 
 		} else if (yyjson_is_int(current)) {
 			result = std::make_pair(true, std::to_string(yyjson_get_sint(current)));
 		} else if (yyjson_is_real(current)) {
-			result = std::make_pair(true, std::to_string(yyjson_get_real(current)));
+			// FP-12 EXPLORER (2026-06-29): std::to_string(double) uses
+			// setprecision(6) << std::fixed by C++ standard, which renders
+			// `12.5` as `"12.500000"`. Use `yyjson_val_write` to extract the
+			// original JSON text — this matches the Python fallback's
+			// shortest-round-trip rendering, the fhirpath_json UDF wrapper,
+			// and the `Evaluator::jsonValToString` non-fast-path. Same fix
+			// as the one applied in `JsonValueToOwnedString` above.
+			char *json = yyjson_val_write(current, 0, nullptr);
+			if (json) {
+				result = std::make_pair(true, std::string(json));
+				free(json);
+			}
 		} else if (yyjson_is_bool(current)) {
 			result = std::make_pair(true, std::string(yyjson_get_bool(current) ? "true" : "false"));
 		} else if (yyjson_is_arr(current)) {
@@ -755,7 +770,21 @@ static bool JsonValueToOwnedString(yyjson_val *value, std::string &result) {
 		return true;
 	}
 	if (yyjson_is_real(value)) {
-		result = std::to_string(yyjson_get_real(value));
+		// FP-12 EXPLORER (2026-06-29): std::to_string(double) uses
+		// setprecision(6) << std::fixed by C++ standard ([string.conversions]),
+		// which renders `12.5` as `"12.500000"`. This diverges from the
+		// Python fallback's `str(float)` shortest-round-trip rendering and
+		// from the non-fast-path `Evaluator::jsonValToString` which uses
+		// `formatDecimalNumber(yyjson_get_real(val), jsonNumberText(val))`.
+		// Use `yyjson_val_write` to extract the original JSON text — this
+		// matches both the Python fallback and the fhirpath_json UDF wrapper
+		// (which already uses `yyjson_val_write` at line ~1465).
+		char *json = yyjson_val_write(value, 0, nullptr);
+		if (!json) {
+			return false;
+		}
+		result = json;
+		free(json);
 		return true;
 	}
 	if (yyjson_is_bool(value)) {
@@ -1435,8 +1464,64 @@ static void FhirpathJsonFunction(DataChunk &args, ExpressionState &state, Vector
 					// Serialize as JSON object {"value": X, "unit": "Y"}
 					json_str += "{\"value\":";
 					char buf[64];
-					snprintf(buf, sizeof(buf), "%.15g", val.quantity_value);
-					json_str += buf;
+					// FP-18 SKEPTIC (2026-06-30): Python's fhirpath_json
+					// _to_native for FP_Quantity converts integer-valued
+					// floats to int via `int(value)` before serialization.
+					// For integer-valued quantity_value within int64 range,
+					// render as integer text to match. For non-integer
+					// values, use %.15g then post-process to match Python's
+					// orjson.dumps() thresholds (decimal for
+					// 1e-5 <= |v| < 1e16, scientific otherwise; e-N format).
+					double int_part_check;
+					bool q_is_integer = (std::modf(val.quantity_value, &int_part_check) == 0.0) &&
+					                    !std::isnan(val.quantity_value) &&
+					                    std::isinf(val.quantity_value) == false &&
+					                    std::fabs(val.quantity_value) < 9.2e18;
+					std::string num_str;
+					if (q_is_integer) {
+						snprintf(buf, sizeof(buf), "%.0f", val.quantity_value);
+						num_str = buf;
+					} else {
+						snprintf(buf, sizeof(buf), "%.15g", val.quantity_value);
+						num_str = buf;
+						// orjson renders scientific notation as "e-N"
+						// (single-digit exponent, no leading zero) while
+						// %.15g renders as "e-0N". Normalize.
+						if (num_str.find('e') != std::string::npos ||
+						    num_str.find('E') != std::string::npos) {
+							size_t e_pos = num_str.find_first_of("eE");
+							if (e_pos != std::string::npos && e_pos + 2 < num_str.size() &&
+							    (num_str[e_pos + 1] == '+' || num_str[e_pos + 1] == '-') &&
+							    num_str[e_pos + 2] == '0') {
+								if (e_pos + 3 < num_str.size()) {
+									num_str.erase(e_pos + 2, 1);
+								}
+							}
+							if (num_str[e_pos] == 'E') num_str[e_pos] = 'e';
+						}
+						// orjson uses decimal notation for
+						// 1e-5 <= |value| < 1e16, scientific otherwise.
+						if ((num_str.find('e') != std::string::npos) &&
+						    val.quantity_value != 0.0 &&
+						    std::fabs(val.quantity_value) >= 1e-5 &&
+						    std::fabs(val.quantity_value) < 1e16) {
+							std::ostringstream fixed;
+							fixed << std::fixed << std::setprecision(15) << val.quantity_value;
+							std::string fixed_str = fixed.str();
+							auto dot = fixed_str.find('.');
+							if (dot != std::string::npos) {
+								while (fixed_str.size() > dot + 2 &&
+								       fixed_str.back() == '0') {
+									fixed_str.pop_back();
+								}
+								if (fixed_str.back() == '.') {
+									fixed_str.pop_back();
+								}
+							}
+							num_str = fixed_str;
+						}
+					}
+					json_str += num_str;
 					json_str += ",\"unit\":\"";
 					for (unsigned char c : val.quantity_unit) {
 						switch (c) {
@@ -1774,8 +1859,16 @@ static void FhirpathIsValidFunction(DataChunk &args, ExpressionState &state, Vec
 			} catch (const std::bad_alloc&) {
 				yyjson_doc_free(doc);
 				throw;
-			} catch (const std::exception&) {
-				result_data[i] = false;
+			} catch (const std::exception& e) {
+				// Per FHIRPath §9, accessing an undefined environment
+				// variable is a runtime semantic error (not a syntax
+				// error). The is_valid UDF validates expression syntax,
+				// so syntactically-valid env var references
+				// (%name, %`name`, %'name' per §9 backward-compat note)
+				// that reference an env var not provided to the
+				// validation context must still report as valid.
+				std::string what = e.what();
+				result_data[i] = (what.rfind("Undefined variable:", 0) == 0);
 			}
 			yyjson_doc_free(doc);
 		} catch (const std::bad_alloc&) {

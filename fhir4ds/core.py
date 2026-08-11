@@ -281,6 +281,10 @@ def register(
     ------
     TypeError
         If *con* is not a DuckDB connection.
+    duckdb.ConnectionException
+        If the connection is closed (mirrors the ``evaluate_measure``
+        wrap pattern so callers get an actionable, fhir4ds-typed
+        message instead of the raw DuckDB string).
     """
     if con is None:
         raise TypeError(
@@ -291,6 +295,14 @@ def register(
         raise TypeError(
             f"Expected a DuckDB connection for 'con', got {type(con).__name__}"
         )
+    try:
+        con.execute("SELECT 1").fetchone()
+    except _duckdb_mod.ConnectionException:
+        raise _duckdb_mod.ConnectionException(
+            "Cannot register fhir4ds UDFs: DuckDB connection is closed"
+        ) from None
+    except _duckdb_mod.Error:
+        pass  # connection is alive, other DuckDB errors are expected
     cql_cpp = register_cql(con, valueset_cache=valueset_cache)
     from fhir4ds.fhirpath.duckdb.extension import _is_cpp_extension_loaded
     fhirpath_cpp = _is_cpp_extension_loaded(con)

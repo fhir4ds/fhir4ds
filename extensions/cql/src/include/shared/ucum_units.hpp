@@ -103,10 +103,11 @@ inline const std::unordered_map<std::string, UnitConversion> &GetUcumUnitTable()
 	    {"cm[H2O]", {"Pa", 98.0665}},
 	    {"cmH2O", {"Pa", 98.0665}},
 
-	    // ---- Temperature -> Celsius base (Fahrenheit requires special handling) ----
+	    // ---- Temperature -> Celsius base (Fahrenheit/Kelvin require special handling) ----
 	    {"Cel", {"Cel", 1.0}},
 	    {"[degF]", {"Cel", -1.0}},  // sentinel: handled specially by caller
 	    {"degF", {"Cel", -1.0}},    // sentinel: handled specially by caller
+	    {"K", {"Cel", -2.0}},       // sentinel: handled specially by caller (Kelvin affine)
 
 	    // ---- Concentration (compound units, same-unit comparison) ----
 	    {"mg/dL", {"mg/dL", 1.0}},

@@ -61,6 +61,16 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'category',
+          label: 'Terminology & NLP',
+          link: {type: 'doc', id: 'user-guide/terminology/terminology-service'},
+          items: [
+            'user-guide/terminology/terminology-service',
+            'user-guide/terminology/autocoding',
+            'user-guide/terminology/notes-pipeline',
+          ],
+        },
+        {
+          type: 'category',
           label: 'Quality & Reporting',
           items: [
             'user-guide/quality/dqm',
@@ -89,11 +99,6 @@ const sidebars: SidebarsConfig = {
           type: 'doc',
           id: 'integrations/mongo-fhir-server',
           label: 'Mongo FHIR Server',
-        },
-        {
-          type: 'doc',
-          id: 'integrations/cql-tests-runner-facade',
-          label: 'CQL Tests Runner Facade',
         },
         {
           type: 'doc',
@@ -183,6 +188,11 @@ const sidebars: SidebarsConfig = {
           type: 'doc',
           id: 'examples/smart-demo',
           label: 'SMART on FHIR',
+        },
+        {
+          type: 'doc',
+          id: 'examples/bulk-publish',
+          label: 'Bulk Publish',
         },
         {
           type: 'doc',
