@@ -37,22 +37,34 @@ responsibilities**:
   `medspacy` / `spacy` directly)
 - Zero-dep default (`fhir4ds` core imports without medterm4ds)
 
-**medterm4ds.extract contract** (`src/medterm4ds/services/extraction.py:480`):
+**medterm4ds.extract contract** (published PyPI medterm4ds 0.0.1;
+top-level re-export in `medterm4ds/__init__.py` -> service impl in
+`medterm4ds/services/extraction.py` `ExtractionService.extract`):
 
 ```python
 def extract(
     text: str,
     *,
-    format: str = "codes",          # "codes" -> ExtractedConcept; "terms" -> FilteredSpan
-    categories: list[str] | None = None,   # ["condition", "medication", "lab", ...]
-    mode: str | None = None,        # "lexical" | "semantic" | "hybrid"
-    min_grade: str | None = None,   # "certain" | "probable" | "possible"
+    format: str = "codes",          # "codes" -> ExtractedConcept; "terms" -> FilteredSpan; "annotated" -> dict
+    ner_labels: list[str] | None = None,    # GLiNER label override (default 9-label set)
+    result_types: str | list[str] | None = None,  # anchor-type filter ("condition","medication","lab",...)
+    mode: str | None = None,        # "lexical" | "semantic" | "hybrid" | "canonical"
+    min_grade: str | None = None,   # "certain"/"exact" | "probable" | "possible" | "broader"
     include_negated: bool = False,
     include_uncertain: bool = False,
     include_historical: bool = False,
-) -> list[ExtractedConcept]:
+) -> list[ExtractedConcept] | list[FilteredSpan] | dict[str, Any]:
     ...
 ```
+
+> **Note (re-release 0.0.11, 2026-08-10):** the pre-PyPI draft of this FDD
+> listed a `categories: list[str] | None = None` kwarg. That kwarg never
+> existed on the published medterm4ds 0.0.1 wheel — anchor-type filtering
+> is done via `result_types`. The 0.0.11 fhir4ds code path
+> (`fhir4ds/cql/loader/notes_pipeline.py:_extract_kwargs()`) sends only
+> `format`, `mode`, `min_grade`, `include_negated`, `include_uncertain`,
+> `include_historical`; it does not send `categories`, `ner_labels`, or
+> `result_types`.
 
 `ExtractedConcept` fields used by fhir4ds: `code`, `source` (UMLS mnemonic —
 already covered by Phase 1's `_SOURCE_MNEMONIC_TO_URL` map), `display`,
@@ -61,8 +73,7 @@ already covered by Phase 1's `_SOURCE_MNEMONIC_TO_URL` map), `display`,
 
 **Defaults used by fhir4ds (configurable via `NotesPipelineConfig`):**
 - `format="codes"`
-- `categories=None` (all)
-- `mode=None` (medterm4ds default = hybrid)
+- `mode=None` (medterm4ds default = canonical/hybrid)
 - `min_grade="certain"`
 - `include_negated=False`, `include_uncertain=False`, `include_historical=False`
 - Only `concept.status == "affirmed"` concepts generate Conditions.

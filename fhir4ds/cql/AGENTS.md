@@ -4644,8 +4644,30 @@ zero parity diffs:
    applies ONLY to `DependencyResolver.resolve_valueset`. Direct callers
    of `endpoint.expand()` should let exceptions propagate.
 5. **medterm4ds symbol drift.** `InProcessTerminologyEndpoint` lazily
-   imports `medterm4ds.apps.fhir_api_helpers.expand_url_pattern` /
-   `expand_intensional` and `medterm4ds.services.discovery.search_names`.
+   imports the canonical post-PyPI medterm4ds 0.0.1 surface — never the
+   pre-PyPI `fhir_api_helpers` paths that were removed in commit
+   `bd5d7ded`. The four symbols the adapter depends on are:
+   - `medterm4ds.LocalDuckDBEngine` (top-level re-export; preferred
+     import path used in `in_process_adapter.py:94`).
+   - `medterm4ds.engines.duckdb.engine.LocalDuckDBEngine` (full path,
+     used as a safety-net fallback at `in_process_adapter.py:97` when
+     the top-level re-export is not present).
+   - `medterm4ds.Terminology.expand_url` (preferred ValueSet-expansion
+     entry point — `Terminology` is the object returned by
+     `medterm4ds.connect()`; the adapter calls it via
+     `getattr(self._terminology, "expand_url", None)` at
+     `in_process_adapter.py:265`).
+   - `medterm4ds.apps.fhir_api.expand_url_pattern` (fallback path used
+     when `Terminology.expand_url` is unavailable, at
+     `in_process_adapter.py:296`).
+   - `medterm4ds.services.discovery.search_names` (the canonical
+     text-search service used at `in_process_adapter.py:388`).
+   **Known limitation:** the pre-PyPI draft mentioned
+   `expand_intensional` as a programmatic entry point. On the published
+   PyPI medterm4ds 0.0.1 wheel `expand_intensional` has NO programmatic
+   entry point — it is reachable only via the HTTP FHIR server. The
+   adapter does NOT call `expand_intensional`; intensional ValueSet
+   expansion goes through `expand_url` / `expand_url_pattern` instead.
    If these symbols drift between medterm4ds releases the adapter
    degrades to empty results with a WARNING — it does NOT crash the
    resolver. Verify symbol stability at Phase 2 / Phase 3 time.

@@ -7,6 +7,81 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.11 (re-release)
+*August 2026*
+
+This is a documentation-and-packaging re-release of 0.0.11. The original
+July 2026 ship notes are preserved verbatim in the next section. The
+re-release applies a single Python-only commit (`bd5d7ded` —
+"fix(terminology): use medterm4ds from PyPI as a normal extra dep") that
+migrates the medterm4ds integration from a vendored/source-checkout
+arrangement to the published PyPI wheel. No C++ code changed; no WASM
+artifacts changed; the bundled `fhirpath.duckdb_extension` is byte-for-byte
+identical to the original 0.0.11 ship.
+
+### What changed
+
+- **`pyproject.toml` `[terminology]` extra** now declares
+  `medterm4ds>=0.0.1` as a normal PyPI dependency. `pip install
+  'fhir4ds-v2[terminology]'` pulls medterm4ds from PyPI like any other
+  extra — no special install hint, no source checkout, no `--find-links`
+  pinning required.
+- **`fhir4ds.cql.terminology.in_process_adapter`** no longer references
+  the legacy pre-PyPI import fallbacks
+  (`medterm4ds.engines.local_duckdb`, `medterm4ds.apps.fhir_api_helpers`).
+  The canonical surface is now:
+  - `medterm4ds.LocalDuckDBEngine` (top-level re-export; preferred),
+  - `medterm4ds.engines.duckdb.engine.LocalDuckDBEngine` (full-path
+    safety net),
+  - `medterm4ds.Terminology.expand_url` (preferred for ValueSet expand),
+  - `medterm4ds.apps.fhir_api.expand_url_pattern` (fallback),
+  - `medterm4ds.services.discovery.search_names`.
+- **`NotesPipelineConfig`** dropped the unsupported `categories` kwarg.
+  The published PyPI `medterm4ds.extract` signature is
+  `extract(text, *, format, ner_labels, result_types, mode, min_grade,
+  include_negated, include_uncertain, include_historical)` — the
+  `categories` parameter never existed on the published wheel; anchor-type
+  filtering is done via `result_types`. The fhir4ds pipeline sends only
+  `format`, `mode`, `min_grade`, `include_negated`, `include_uncertain`,
+  `include_historical`.
+- **Known limitation surfaced:** `expand_intensional` has no programmatic
+  entry point on PyPI medterm4ds 0.0.1 — it is reachable only via the
+  HTTP FHIR server. The in_process adapter intentionally returns an
+  empty list for `expand_intensional` calls and logs a WARNING; full
+  intensional ValueSet expansion requires the HTTP adapter
+  (`fhir4ds.cql.terminology.http_adapter`).
+
+### What did NOT change
+
+- Conformance baselines (see table below) — identical to the original
+  0.0.11 ship.
+- Public API surface — all `fhir4ds.*` import paths and signatures are
+  unchanged.
+- Wheel C++/WASM contents — same `fhirpath.duckdb_extension`, same
+  browser assets.
+
+### Conformance Baselines (re-release verification)
+
+| Suite | Passed | Total | Pass Rate |
+|-------|-------:|------:|----------:|
+| ViewDefinition v2 | 134 | 134 | 100.0% |
+| FHIRPath R4 | 935 | 935 | 100.0% |
+| CQL | 1,706 | 1,706 | 100.0% |
+| DQM QI-Core 2025 | 47 | 47 | 100.0% |
+| **Overall** | **2,822** | **2,822** | **100.0%** |
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.11
+```
+
+If you previously installed `fhir4ds-v2[terminology]` or
+`fhir4ds-v2[ner]`, the upgrade pulls medterm4ds from PyPI automatically.
+No manual medterm4ds install is required.
+
+---
+
 ## Version 0.0.11
 *July 2026*
 
