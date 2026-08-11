@@ -20,12 +20,14 @@ def _install_medterm4ds_stub(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 
     Returns the engine mock so individual tests can program return values.
 
-    The stub mirrors the published medterm4ds API surface:
+    The stub mirrors the published medterm4ds PyPI surface:
     - ``medterm4ds.connect(db_path=...)`` returns a Terminology facade.
     - The Terminology facade exposes ``.engine`` (the DiscoveryEngine)
       and ``.expand_url(url)`` (returns ``list[medterm4ds.CodeRef]``).
-    - ``LocalDuckDBEngine`` is also exposed for backward-compat tests
-      of the direct-construction fallback path.
+    - ``LocalDuckDBEngine`` is exposed both at the top level
+      (``medterm4ds.LocalDuckDBEngine``) and at the full path
+      (``medterm4ds.engines.duckdb.engine.LocalDuckDBEngine``) — the
+      two canonical locations guaranteed by the published wheel.
     """
     engine = MagicMock(name="DiscoveryEngine")
 
@@ -37,13 +39,15 @@ def _install_medterm4ds_stub(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 
     fake_pkg = types.ModuleType("medterm4ds")
     engines_pkg = types.ModuleType("medterm4ds.engines")
-    base_mod = types.ModuleType("medterm4ds.engines.base")
-    local_mod = types.ModuleType("medterm4ds.engines.local_duckdb")
+    duckdb_pkg = types.ModuleType("medterm4ds.engines.duckdb")
+    duckdb_engine_mod = types.ModuleType("medterm4ds.engines.duckdb.engine")
     services_pkg = types.ModuleType("medterm4ds.services")
     services_discovery = types.ModuleType("medterm4ds.services.discovery")
 
-    base_mod.DiscoveryEngine = object
-    local_mod.LocalDuckDBEngine = MagicMock(return_value=engine)
+    # LocalDuckDBEngine is exposed at both canonical PyPI paths.
+    local_duckdb_factory = MagicMock(return_value=engine)
+    fake_pkg.LocalDuckDBEngine = local_duckdb_factory
+    duckdb_engine_mod.LocalDuckDBEngine = local_duckdb_factory
 
     def _fake_search_names(query, engine, *, sources=None, limit=25):
         return []
@@ -57,15 +61,17 @@ def _install_medterm4ds_stub(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     fake_pkg.Terminology = terminology
 
     fake_pkg.engines = engines_pkg
-    engines_pkg.base = base_mod
-    engines_pkg.local_duckdb = local_mod
+    engines_pkg.duckdb = duckdb_pkg
+    duckdb_pkg.engine = duckdb_engine_mod
     fake_pkg.services = services_pkg
     services_pkg.discovery = services_discovery
 
     monkeypatch.setitem(sys.modules, "medterm4ds", fake_pkg)
     monkeypatch.setitem(sys.modules, "medterm4ds.engines", engines_pkg)
-    monkeypatch.setitem(sys.modules, "medterm4ds.engines.base", base_mod)
-    monkeypatch.setitem(sys.modules, "medterm4ds.engines.local_duckdb", local_mod)
+    monkeypatch.setitem(sys.modules, "medterm4ds.engines.duckdb", duckdb_pkg)
+    monkeypatch.setitem(
+        sys.modules, "medterm4ds.engines.duckdb.engine", duckdb_engine_mod
+    )
     monkeypatch.setitem(sys.modules, "medterm4ds.services", services_pkg)
     monkeypatch.setitem(sys.modules, "medterm4ds.services.discovery", services_discovery)
 
@@ -199,41 +205,45 @@ def test_expand_uses_medterm4ds_helper(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def test_expand_intensional_uses_medterm4ds_helper(monkeypatch: pytest.MonkeyPatch) -> None:
-    _install_medterm4ds_stub(monkeypatch)
-    fake_helpers = types.ModuleType("medterm4ds.apps.fhir_api_helpers")
-    fake_helpers.expand_intensional = MagicMock(
-        return_value={
-            "expansion": {
-                "contains": [
-                    {"system": "http://snomed.info/sct", "code": "73211009"}
-                ]
-            }
-        }
-    )
-    fake_apps = types.ModuleType("medterm4ds.apps")
-    monkeypatch.setitem(sys.modules, "medterm4ds.apps", fake_apps)
-    monkeypatch.setitem(sys.modules, "medterm4ds.apps.fhir_api_helpers", fake_helpers)
+def test_expand_intensional_returns_empty_on_published_medterm4ds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """expand_intensional is not yet supported against published medterm4ds.
 
+    The PyPI wheel (0.0.1) exposes intensional expansion only as an HTTP
+    operation on the FHIR API, not as a programmatic entry point. The
+    adapter returns [] with a clear log so callers can route through
+    HTTP mode instead. The "not supported" path must NOT trip the
+    breaker — it's a permanent gap, not a transient failure.
+    """
+    _install_medterm4ds_stub(monkeypatch)
     from fhir4ds.cql.terminology.in_process_adapter import (
         InProcessTerminologyEndpoint,
     )
 
-    adapter = InProcessTerminologyEndpoint()
+    adapter = InProcessTerminologyEndpoint(breaker_threshold=2)
     body = {"resourceType": "ValueSet", "compose": {"include": []}}
-    refs = adapter.expand_intensional(body)
-    assert refs == [CodeRef("http://snomed.info/sct", "73211009", None)]
-    fake_helpers.expand_intensional.assert_called_once()
+    assert adapter.expand_intensional(body) == []
+    # Critical invariant: "not supported" does NOT trip the breaker —
+    # otherwise expand()/search_text() would collateral-fail after a
+    # few closure lookups.
+    assert adapter._consecutive_failures == 0
 
 
 def test_expand_degrades_to_empty_on_helper_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """If medterm4ds helper raises, expand() returns [] (does NOT propagate)."""
-    _install_medterm4ds_stub(monkeypatch)
-    fake_helpers = types.ModuleType("medterm4ds.apps.fhir_api_helpers")
-    fake_helpers.expand_url_pattern = MagicMock(side_effect=RuntimeError("boom"))
+    """If the medterm4ds fhir_api helper raises, expand() returns []."""
+    engine = _install_medterm4ds_stub(monkeypatch)
+    terminology = engine.terminology
+    # Force the preferred Terminology.expand_url path to be skipped so
+    # the fhir_api.expand_url_pattern fallback is exercised.
+    del terminology.expand_url
+
+    fake_fhir_api = types.ModuleType("medterm4ds.apps.fhir_api")
+    fake_fhir_api.expand_url_pattern = MagicMock(side_effect=RuntimeError("boom"))
     fake_apps = types.ModuleType("medterm4ds.apps")
+    fake_apps.fhir_api = fake_fhir_api
     monkeypatch.setitem(sys.modules, "medterm4ds.apps", fake_apps)
-    monkeypatch.setitem(sys.modules, "medterm4ds.apps.fhir_api_helpers", fake_helpers)
+    monkeypatch.setitem(sys.modules, "medterm4ds.apps.fhir_api", fake_fhir_api)
 
     from fhir4ds.cql.terminology.in_process_adapter import (
         InProcessTerminologyEndpoint,
@@ -241,6 +251,7 @@ def test_expand_degrades_to_empty_on_helper_error(monkeypatch: pytest.MonkeyPatc
 
     adapter = InProcessTerminologyEndpoint()
     assert adapter.expand("http://example.org/ValueSet/Foo") == []
+    fake_fhir_api.expand_url_pattern.assert_called_once()
 
 
 # ----------------------------------------------------------------------

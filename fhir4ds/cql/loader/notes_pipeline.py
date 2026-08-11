@@ -108,8 +108,6 @@ class NotesPipelineConfig:
     Attributes:
         note_paths: Per-resource-type dotted-path map. Defaults to
             :data:`DEFAULT_NOTE_PATHS`.
-        categories: Optional medterm4ds category filter (``["condition",
-            "medication", ...]``). ``None`` = all categories.
         mode: Search mode (``"lexical"``/``"semantic"``/``"hybrid"``).
             ``None`` lets medterm4ds pick its default (hybrid).
         min_grade: Minimum match grade to keep (``"certain"``/``"probable"``
@@ -153,7 +151,6 @@ class NotesPipelineConfig:
     """
 
     note_paths: dict[str, list[str]] = field(default_factory=lambda: dict(DEFAULT_NOTE_PATHS))
-    categories: Optional[list[str]] = None
     mode: Optional[str] = None
     min_grade: Optional[str] = "certain"
     include_negated: bool = False
@@ -434,8 +431,6 @@ class NotesPipeline:
         initializer (parallel) build the identical kwargs.
         """
         kwargs: dict[str, Any] = {"format": "codes"}
-        if self._config.categories is not None:
-            kwargs["categories"] = list(self._config.categories)
         if self._config.mode is not None:
             kwargs["mode"] = self._config.mode
         if self._config.min_grade is not None:

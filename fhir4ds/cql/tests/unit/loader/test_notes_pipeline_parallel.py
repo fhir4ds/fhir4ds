@@ -161,9 +161,14 @@ def test_worker_handles_engine_failure():
 
 
 def test_extract_kwargs_matches_call_medterm4ds(monkeypatch):
-    """_extract_kwargs must produce the same dict as _call_medterm4ds."""
+    """_extract_kwargs must produce the same dict as _call_medterm4ds.
+
+    The kwargs surface is constrained by what the published
+    ``medterm4ds.extract`` (PyPI 0.0.1) accepts. ``categories`` is NOT
+    in that surface — it was an internal medterm4ds API that never
+    shipped on PyPI.
+    """
     cfg = NotesPipelineConfig(
-        categories=["condition"],
         mode="hybrid",
         min_grade="certain",
         include_negated=True,
@@ -173,7 +178,6 @@ def test_extract_kwargs_matches_call_medterm4ds(monkeypatch):
     pipe = NotesPipeline(cfg)
     expected = {
         "format": "codes",
-        "categories": ["condition"],
         "mode": "hybrid",
         "min_grade": "certain",
         "include_negated": True,

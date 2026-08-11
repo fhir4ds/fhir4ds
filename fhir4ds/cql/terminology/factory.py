@@ -115,8 +115,7 @@ def get_terminology_endpoint(
         except ImportError as e:
             raise ImportError(
                 "medterm4ds is required for in-process terminology mode. "
-                "medterm4ds is a sibling-repo install — install it alongside "
-                "fhir4ds-v2[terminology]. See the medterm4ds README."
+                "Install with: pip install 'fhir4ds-v2[terminology]'"
             ) from e
         endpoint = InProcessTerminologyEndpoint(
             medterm4ds_db_path=cfg.medterm4ds_db_path,

@@ -49,12 +49,12 @@ mongo = [
     "pymongo>=4.6",
 ]
 # Terminology service abstraction (Phase 1 of the medterm4ds integration).
-# Only httpx is declared — it backs HTTPTerminologyEndpoint. medterm4ds is
-# a sibling-repo install (not on PyPI) so it is intentionally NOT declared
-# here. The factory raises a clear ImportError with an install hint when a
-# user opts into in_process mode without medterm4ds available.
+# httpx backs HTTPTerminologyEndpoint; medterm4ds backs the in_process
+# adapter. medterm4ds is published on PyPI (>=0.0.1) so it is declared
+# normally — pip install 'fhir4ds-v2[terminology]' pulls both.
 terminology = [
     "httpx>=0.24",
+    "medterm4ds>=0.0.1",
 ]
 # Phase 4 — Clinical Notes NER. Pulls the medspaCy + HuggingFace NER +
 # SapBERT cascade transitively via medterm4ds[extraction]. fhir4ds

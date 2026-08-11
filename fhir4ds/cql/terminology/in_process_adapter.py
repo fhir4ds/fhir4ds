@@ -85,42 +85,23 @@ class InProcessTerminologyEndpoint:
         # Lazy import — INV-1 / INV-3: top-level `import fhir4ds` must
         # never pull medterm4ds. Only opt-in callers pay this cost.
         #
-        # The published medterm4ds wheel (0.0.1) exposes the engine via
-        # ``medterm4ds.LocalDuckDBEngine`` (top-level re-export) and
-        # ``medterm4ds.engines.duckdb.engine.LocalDuckDBEngine`` (full
-        # path). The earlier ``medterm4ds.engines.local_duckdb`` path
-        # was renamed when the duckdb module was reorganized into a
-        # subpackage. We try the canonical paths in order and fall back
-        # to the legacy path so a medterm4ds version that still uses
-        # the old layout keeps working.
+        # The published medterm4ds wheel exposes LocalDuckDBEngine via
+        # the top-level re-export (``medterm4ds.LocalDuckDBEngine``) and
+        # also at ``medterm4ds.engines.duckdb.engine.LocalDuckDBEngine``.
+        # We try the canonical top-level path first; the full path is a
+        # safety net in case a future medterm4ds drops the re-export.
         try:
-            from medterm4ds.engines.base import DiscoveryEngine  # type: ignore
-        except ImportError as e:  # pragma: no cover - exercised via factory tests
-            raise ImportError(
-                "medterm4ds is required for InProcessTerminologyEndpoint. "
-                "Install medterm4ds alongside fhir4ds-v2[terminology]."
-            ) from e
-        try:
-            # Preferred: top-level re-export (stable since 0.0.1).
             from medterm4ds import LocalDuckDBEngine  # type: ignore
         except ImportError:
             try:
-                # Full path on the renamed layout.
                 from medterm4ds.engines.duckdb.engine import (  # type: ignore
                     LocalDuckDBEngine,
                 )
-            except ImportError:
-                try:
-                    # Legacy path — medterm4ds pre-rename.
-                    from medterm4ds.engines.local_duckdb import (  # type: ignore
-                        LocalDuckDBEngine,
-                    )
-                except ImportError as e:  # pragma: no cover
-                    raise ImportError(
-                        "Could not import LocalDuckDBEngine from medterm4ds. "
-                        "medterm4ds is required for InProcessTerminologyEndpoint. "
-                        "Install medterm4ds alongside fhir4ds-v2[terminology]."
-                    ) from e
+            except ImportError as e:  # pragma: no cover
+                raise ImportError(
+                    "Could not import LocalDuckDBEngine from medterm4ds. "
+                    "Install with: pip install 'fhir4ds-v2[terminology]'"
+                ) from e
 
         self._medterm4ds_db_path = medterm4ds_db_path
         self._search_index_dir = search_index_dir
@@ -170,7 +151,7 @@ class InProcessTerminologyEndpoint:
         except ImportError as e:  # pragma: no cover - exercised via factory tests
             raise ImportError(
                 "medterm4ds is required for InProcessTerminologyEndpoint. "
-                "Install medterm4ds alongside fhir4ds-v2[terminology]."
+                "Install with: pip install 'fhir4ds-v2[terminology]'"
             ) from e
 
     # ------------------------------------------------------------------
@@ -264,9 +245,8 @@ class InProcessTerminologyEndpoint:
         Preferred path: ``Terminology.expand_url(url)`` (Option B from
         the medterm4ds team — flat list of CodeRefs). Falls back to
         ``medterm4ds.apps.fhir_api.expand_url_pattern`` (Option A —
-        FHIR ValueSet payload) for older medterm4ds versions, then to
-        the legacy ``medterm4ds.apps.fhir_api_helpers.expand_url_pattern``
-        for the pre-rename layout.
+        FHIR ValueSet payload) when the Terminology facade is
+        unavailable but the underlying engine is constructed.
 
         Short-circuits to ``[]`` when the circuit breaker is open.
         """
@@ -308,45 +288,13 @@ class InProcessTerminologyEndpoint:
             self._on_call_success()
             return refs
 
-        # Fallback A: medterm4ds.apps.fhir_api.expand_url_pattern
-        # (FHIR ValueSet payload). Used when the Terminology facade is
-        # unavailable (older medterm4ds) but the new helper module exists.
+        # Fallback: medterm4ds.apps.fhir_api.expand_url_pattern (FHIR
+        # ValueSet payload). Used when the Terminology facade is
+        # unavailable (no ``expand_url`` attribute) but the underlying
+        # engine is constructed.
         try:
             from medterm4ds.apps.fhir_api import (  # type: ignore
                 expand_url_pattern,
-            )
-        except ImportError:
-            expand_url_pattern = None  # type: ignore[assignment]
-
-        if expand_url_pattern is not None:
-            try:
-                expanded = expand_url_pattern(self._engine, valueset_url, count=1000)
-                contains = (
-                    expanded.get("expansion", {}).get("contains", [])
-                    if isinstance(expanded, dict)
-                    else []
-                )
-            except Exception as e:  # pragma: no cover - medterm4ds drift guard
-                _logger.warning(
-                    "in_process expand failed for %s: %s", valueset_url, e
-                )
-                self._on_call_failure()
-                return []
-            refs = []
-            for item in contains:
-                ref = self._to_coderef(
-                    item.get("system"), item.get("code"), item.get("display")
-                )
-                if ref is not None:
-                    refs.append(ref)
-            self._on_call_success()
-            return refs
-
-        # Fallback B: legacy pre-rename helper. Returns [] if neither
-        # fallback is available so callers degrade gracefully.
-        try:
-            from medterm4ds.apps.fhir_api_helpers import (  # type: ignore
-                expand_url_pattern as _legacy,
             )
         except ImportError:
             _logger.warning(
@@ -356,8 +304,9 @@ class InProcessTerminologyEndpoint:
             )
             self._on_call_failure()
             return []
+
         try:
-            expanded = _legacy(self._engine, valueset_url, count=1000)
+            expanded = expand_url_pattern(self._engine, valueset_url, count=1000)
             contains = (
                 expanded.get("expansion", {}).get("contains", [])
                 if isinstance(expanded, dict)
@@ -380,9 +329,19 @@ class InProcessTerminologyEndpoint:
         return refs
 
     def expand_intensional(self, value_set: dict) -> list[CodeRef]:
-        """Expand an intensional ValueSet via medterm4ds's compose-walk.
+        """Expand an intensional ValueSet.
 
-        Short-circuits to ``[]`` when the circuit breaker is open.
+        Not yet supported via the in_process adapter: the published
+        medterm4ds wheel (0.0.1) exposes intensional expansion only as
+        an HTTP operation on the FHIR API, not as a programmatic entry
+        point. Callers that need intensional expansion should switch
+        this endpoint to HTTP mode (``FHIR4DS_TERMINOLOGY_MODE=http``)
+        so the request routes through medterm4ds's ``$expand`` operation.
+
+        Short-circuits to ``[]`` when the circuit breaker is open. The
+        "not supported" path does NOT trip the breaker — it's a
+        permanent gap, not a transient failure, so tripping would
+        collateral-damage ``expand`` / ``search_text``.
         """
         now = time.monotonic()
         if self._is_breaker_open(now):
@@ -394,37 +353,13 @@ class InProcessTerminologyEndpoint:
             )
             return []
 
-        try:
-            from medterm4ds.apps.fhir_api_helpers import (  # type: ignore
-                expand_intensional,
-            )
-        except ImportError:
-            _logger.warning(
-                "medterm4ds expand_intensional helper unavailable; "
-                "in_process.expand_intensional returns []"
-            )
-            self._on_call_failure()
-            return []
-
-        try:
-            expanded = expand_intensional(self._engine, value_set, count=1000)
-            contains = expanded.get("expansion", {}).get("contains", []) if isinstance(
-                expanded, dict
-            ) else []
-        except Exception as e:  # pragma: no cover - medterm4ds drift guard
-            _logger.warning("in_process expand_intensional failed: %s", e)
-            self._on_call_failure()
-            return []
-
-        refs: list[CodeRef] = []
-        for item in contains:
-            ref = self._to_coderef(
-                item.get("system"), item.get("code"), item.get("display")
-            )
-            if ref is not None:
-                refs.append(ref)
-        self._on_call_success()
-        return refs
+        _logger.warning(
+            "expand_intensional is not supported via the in_process adapter "
+            "against published medterm4ds; use HTTP mode "
+            "(FHIR4DS_TERMINOLOGY_MODE=http) for intensional ValueSet "
+            "expansion. Returning []."
+        )
+        return []
 
     def search_text(
         self,

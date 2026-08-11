@@ -256,7 +256,6 @@ def test_phase4_notes_pipeline_extracts_conditions_in_process() -> None:
 
     pipeline = NotesPipeline(
         NotesPipelineConfig(
-            categories=["condition"],
             min_grade="probable",  # loosen
         )
     )
