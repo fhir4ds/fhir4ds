@@ -56,6 +56,37 @@ class TestPackageImports:
         assert SQLQUERY_PROFILE_CANONICAL == "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
         assert SQLVIEW_PROFILE_CANONICAL == "https://sql-on-fhir.org/ig/StructureDefinition/SQLView"
 
+    def test_error_hierarchy_inherits_sqlofhiriroot(self):
+        """SQLError inherits from viewdef.errors.SQLOnFHIRError (BUGFIX-001).
+
+        Consumers catching the existing SQLOnFHIRError root should also
+        catch SQLQuery errors. SQLOnFHIRError already inherits from
+        ValueError, so the broader `except ValueError` form still works
+        transitively.
+        """
+        from ...viewdef.errors import SQLOnFHIRError
+        # Class hierarchy
+        assert issubclass(SQLError, SQLOnFHIRError)
+        assert issubclass(SQLError, ValueError)  # transitive
+        for sub in (
+            SQLQueryParseError,
+            SQLQueryValidationError,
+            UnsupportedDialectError,
+        ):
+            assert issubclass(sub, SQLOnFHIRError), sub
+        # Behavioral: except SQLOnFHIRError catches SQLQuery errors
+        for exc_factory in (
+            lambda: SQLQueryParseError("p"),
+            lambda: SQLQueryValidationError("v"),
+            lambda: UnsupportedDialectError("d"),
+        ):
+            try:
+                raise exc_factory()
+            except SQLOnFHIRError:
+                pass  # caught — expected
+            else:
+                pytest.fail(f"{exc_factory()} should be caught by SQLOnFHIRError")
+
 
 class TestParserDispatch:
     def test_parse_sqlquery(self):

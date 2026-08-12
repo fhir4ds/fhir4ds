@@ -1001,14 +1001,15 @@ class ViewDefinition:
     constants: List[Constant] = field(default_factory=list)
     joins: List[Join] = field(default_factory=list)
     where: List[Dict[str, str]] = field(default_factory=list)
-    # SQL-on-FHIR v2 §G-3 CanonicalResource/DomainResource roundtrip extension bag.
+    # SQL-on-FHIR v2 §G-3 CanonicalResource/DomainResource roundtrip bag.
     # ViewDefinition inherits from CanonicalResource, which inherits from
     # DomainResource, which inherits from Resource. The dataclass models only
     # the fields the generator consumes; this dict preserves unknown top-level
     # keys verbatim through from_dict/to_dict (no validation, no coercion).
-    # Leading underscore signals "private catch-all" — not an official FHIR
-    # field name. Used for publisher, purpose, copyright, extension[], etc.
-    _extensions: Dict[str, Any] = field(default_factory=dict)
+    # Used for publisher, purpose, copyright, extension[], etc. ``repr=False``
+    # and ``compare=False`` keep the bag out of repr and equality semantics
+    # so existing dataclass equality assertions in tests are unaffected.
+    extra_fields: Dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ViewDefinition":
@@ -1152,9 +1153,9 @@ class ViewDefinition:
                 )
             ]
         # §G-3 CanonicalResource/DomainResource roundtrip: emit unknown
-        # top-level keys verbatim from the _extensions bag. Order does not
+        # top-level keys verbatim from the extra_fields bag. Order does not
         # matter for FHIR JSON; emit after known fields.
-        for key, value in self._extensions.items():
+        for key, value in self.extra_fields.items():
             if key not in data:
                 data[key] = value
         return data

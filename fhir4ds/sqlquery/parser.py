@@ -188,8 +188,8 @@ def _parse_parameter(entries: Any) -> list[SQLParameter]:
     return parsed
 
 
-def _collect_extensions(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Preserve unknown Library keys verbatim (mirrors §G-3 extension bag)."""
+def _collect_extra_fields(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Preserve unknown Library keys verbatim (mirrors §G-3 extra_fields bag)."""
     return {
         k: v for k, v in data.items() if k not in _KNOWN_LIBRARY_KEYS
     }
@@ -236,7 +236,7 @@ def parse_library(input_: Union[Dict[str, Any], str]) -> Union[SQLQuery, SQLView
 
     content = _parse_content(data.get("content"))
     related_artifact = _parse_related_artifact(data.get("relatedArtifact"))
-    extensions = _collect_extensions(data)
+    extensions = _collect_extra_fields(data)
 
     common_kwargs = dict(
         id=data.get("id"),
@@ -247,7 +247,7 @@ def parse_library(input_: Union[Dict[str, Any], str]) -> Union[SQLQuery, SQLView
         status=data.get("status"),
         content=content,
         related_artifact=related_artifact,
-        _extensions=extensions,
+        extra_fields=extensions,
     )
 
     if profile_kind == "SQLQuery":

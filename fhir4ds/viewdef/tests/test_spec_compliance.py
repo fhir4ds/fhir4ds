@@ -628,9 +628,17 @@ class TestSpecCoverage:
             print(f"  {f}: {count} tests")
         print(f"  Total: {len(all_tests)} tests")
 
-        # We should have all 22 spec test files
+        # We should have all 22 spec test files. Test count uses a floor
+        # (>= MIN_EXPECTED) rather than strict equality so future upstream
+        # suite growth does not break the runner; the actual count is
+        # logged via the print above for visibility.
+        MIN_EXPECTED_SPEC_TESTS = 144  # FHIR/sql-on-fhir.js snapshot as of 2026-08-11
         assert len(files) == 22
-        assert len(all_tests) == 144
+        assert len(all_tests) >= MIN_EXPECTED_SPEC_TESTS, (
+            f"Spec test count dropped below the {MIN_EXPECTED_SPEC_TESTS}-test "
+            f"floor; got {len(all_tests)}. Re-pull from "
+            f"https://github.com/FHIR/sql-on-fhir.js/tree/main/tests."
+        )
 
 
 def _adapt_sql_for_resources_table(sql: str, resource_type: str) -> str:

@@ -114,8 +114,9 @@ class _SQLLibraryBase:
     content: List[SQLContent] = field(default_factory=list)
     related_artifact: List[SQLRelatedArtifact] = field(default_factory=list)
     # Raw Library JSON preserved verbatim for roundtrip (mirrors the
-    # ``ViewDefinition._extensions`` bag at §G-3).
-    _extensions: Dict[str, Any] = field(default_factory=dict)
+    # ``ViewDefinition.extra_fields`` bag at §G-3). ``repr=False`` and
+    # ``compare=False`` keep the bag out of repr and equality semantics.
+    extra_fields: Dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
 
 @dataclass

@@ -1,13 +1,16 @@
 """Typed error hierarchy for ``fhir4ds.sqlquery``.
 
-All errors inherit from :class:`SQLError` (which itself inherits from
-``ValueError`` for backward compatibility with callers that catch the
-broader parent). Profile validation, parsing, materialization, and
-execution each have a typed subclass so callers can dispatch precisely.
+All errors inherit from :class:`SQLError`. Per BUGFIX-001, `SQLError`
+inherits from :class:`fhir4ds.viewdef.errors.SQLOnFHIRError` so consumers
+catching the existing SQL-on-FHIR root also catch SQLQuery errors.
+`SQLOnFHIRError` already inherits from `ValueError`, so the broader
+`except ValueError:` form still works transitively.
 """
 
+from ..viewdef.errors import SQLOnFHIRError
 
-class SQLError(ValueError):
+
+class SQLError(SQLOnFHIRError):
     """Base class for all ``fhir4ds.sqlquery`` typed errors."""
 
 

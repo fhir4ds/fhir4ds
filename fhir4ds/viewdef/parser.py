@@ -560,7 +560,7 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
     name = _parse_optional_sql_name(data, "name")
 
     # §G-3 CanonicalResource/DomainResource roundtrip: preserve unknown
-    # top-level keys verbatim in _extensions. No validation, no coercion.
+    # top-level keys verbatim in extra_fields. No validation, no coercion.
     # The known-keys set covers everything the dataclass models explicitly.
     _KNOWN_TOP_LEVEL_KEYS = frozenset({
         "resourceType", "resource", "id", "meta", "url", "version", "name",
@@ -590,7 +590,7 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
         constants=constants,
         joins=joins,
         where=where,
-        _extensions=extensions_bag,
+        extra_fields=extensions_bag,
     )
     try:
         validate_supported_view_profiles(view_definition)
@@ -639,7 +639,7 @@ def validate_view_definition(vd: ViewDefinition) -> List[str]:
         # capital, 2-255 chars total). Warning severity per spec — do not
         # promote to error. The sql-name error invariant above stays.
         if vd.name and (
-            not vd.name[0].isupper() or len(vd.name) > 255
+            not vd.name[0].isupper() or len(vd.name) > 255 or len(vd.name) < 2
         ):
             warnings.append(
                 f"ViewDefinition.name {vd.name!r} violates cnl-0: must start "

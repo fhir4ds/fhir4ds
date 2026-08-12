@@ -2254,19 +2254,15 @@ class TestCnl0NameWarningPerSpecG2:
         assert not any("cnl-0" in w for w in warnings), warnings
 
     def test_single_char_name_warns(self):
-        """Single-character name 'A' violates cnl-0 (must be 2+ chars)."""
+        """Single-character name 'A' violates cnl-0 (must be 2+ chars).
+
+        Per BUGFIX-002: the cnl-0 regex `^[A-Z]([A-Za-z0-9_]){1,254}$`
+        requires 2-255 chars total. The warning condition now includes
+        `len(vd.name) < 2` so single-char names fire the warning.
+        """
         vd = self._vd_with_name("A")
         warnings = validate_view_definition(vd)
-        # cnl-0 requires 2-255 chars; single char violates.
-        # Note: our check only flags first-char-uppercase OR >255 length.
-        # Single-char with uppercase passes our check (we don't enforce min length).
-        # Document this as a known gap per the spec's regex.
-        # The sql-name invariant still accepts single char, so this is consistent.
-        assert not any("cnl-0" in w for w in warnings), (
-            "Our cnl-0 check is conservative: it flags non-capital or >255, "
-            "not single-char (too short). Spec regex requires 2+ chars; we "
-            "do not over-enforce minimum length."
-        )
+        assert any("cnl-0" in w for w in warnings), warnings
 
 
 class TestCanonicalResourceRoundtripPerSpecG3:
@@ -2353,13 +2349,13 @@ class TestCanonicalResourceRoundtripPerSpecG3:
         assert out["experimental"] is False
 
     def test_known_keys_are_not_treated_as_extensions(self):
-        """Known keys (resource, select, etc.) are NOT in _extensions."""
+        """Known keys (resource, select, etc.) are NOT in extra_fields."""
         vd = {
             "resource": "Patient",
             "select": [{"column": [{"path": "id", "name": "id"}]}],
         }
         parsed = parse_view_definition(json.dumps(vd))
-        assert parsed._extensions == {}
+        assert parsed.extra_fields == {}
 
     def test_no_extensions_does_not_emit_extra_keys(self):
         """A standard ViewDefinition (no extras) serializes cleanly."""
@@ -2371,6 +2367,28 @@ class TestCanonicalResourceRoundtripPerSpecG3:
         out = parsed.to_dict()
         # Should not contain random extension keys
         assert set(out.keys()) <= {"resourceType", "resource", "select"}
+
+    def test_narrative_text_div_survives_roundtrip(self):
+        """DomainResource `text` narrative round-trips verbatim (BUGFIX-006).
+
+        Per FHIR JSON serialization: the `text` element is a `Narrative`
+        with `status` (string) and `div` (XHTML string). Both are stored
+        as JSON keys directly (no underscore prefix — the `_primitive`
+        convention applies only to primitives carrying extensions).
+        """
+        text = {
+            "status": "generated",
+            "div": '<div xmlns="http://www.w3.org/1999/xhtml"><p>Hello</p></div>',
+        }
+        vd = {
+            "resource": "Patient",
+            "text": text,
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        parsed = parse_view_definition(json.dumps(vd))
+        out = parsed.to_dict()
+        # Byte-for-byte at the JSON-key level for the unknown key
+        assert json.dumps(out["text"], sort_keys=True) == json.dumps(text, sort_keys=True)
 
 
 class TestColumnTagNamespaceWarningPerSpecG4:
