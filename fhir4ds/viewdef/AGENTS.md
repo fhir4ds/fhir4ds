@@ -1,6 +1,32 @@
 # ViewDefinition Agent Notes
 
 ## Known Fragile Areas
+- §G-5 spec suite refresh (2026-08-11): Pulled current
+  `FHIR/sql-on-fhir.js` tests/ snapshot (134 → 144 tests; 12 new
+  `repeat.json` tests covering recursive-traversal + forEach + unionAll
+  + constants + nested iteration). Four triage fixes landed:
+  (1) `_split_top_level_union_all` and `_has_top_level_where` in
+  `test_spec_compliance.py` are depth- and string-aware so generated SQL
+  containing UNION ALL *inside* LATERAL subqueries (the SOF-VD-05 ARCH-003
+  null-preservation pattern, used by `repeat` inside `forEachOrNull`) is
+  not fragmented by the resourceType-filter adapter. Any future generator
+  change that introduces top-level UNION ALL should re-verify both helpers.
+  (2) `generator.generate_column_expr` wraps uncast `fhirpath_text(...)`
+  calls in `NULLIF(..., '')` so an empty FHIRPath collection surfaces as
+  NULL, not empty string (FHIRPath empty-collection semantics for
+  non-collection columns; see fn_join spec tests). TRY_CAST paths already
+  convert empty to NULL via the cast, so the wrap is only needed when no
+  SQL cast applies. (3) `_allowed_actual_type_names` extends the `dateTime`
+  compat set to `{DateTime, Date, String, dateTime, date, string}` and
+  symmetrically extends `date` to accept `DateTime`, because FHIRPath
+  boundary functions (`lowBoundary`/`highBoundary`) on date inputs
+  legitimately return Date (a strict subtype of DateTime). See fn_boundary
+  date lowBoundary/highBoundary spec tests. (4) `datetime.py:_time_boundary`
+  preserves input-precision `second`/`ms` (match_list[2]/[3]) and only
+  falls back to fill values for components below the input's precision;
+  highBoundary of `12:34:00` now correctly yields `12:34:00.999` rather
+  than `12:34:59.999`. Post-refresh: ViewDefinition spec 144/144,
+  viewdef+fhirpath 2656/2656.
 - SOF-VD-05 HISTORIAN iter 3 fixed (2026-07-05): `forEachOrNull`
   with a nested `forEach` was dropping the parent row when the outer
   collection was empty. Per SQL-on-FHIR v2 Process(S, N) algorithm step 3

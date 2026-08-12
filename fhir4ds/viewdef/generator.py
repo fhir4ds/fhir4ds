@@ -325,9 +325,17 @@ class SQLGenerator:
         if declared_type == "boolean":
             return {"Boolean", "boolean"}
         if declared_type == "date":
-            return {"Date", "String", "date", "string"}
+            # Date columns accept Date or DateTime runtime types: a DateTime
+            # value with time precision can be silenced to date precision, and
+            # boundary functions on date inputs return Date. See fn_boundary
+            # spec tests.
+            return {"Date", "DateTime", "String", "date", "dateTime", "string"}
         if declared_type == "dateTime":
-            return {"DateTime", "String", "dateTime", "string"}
+            # DateTime columns accept Date runtime types because FHIRPath
+            # boundary functions on date inputs (e.g. birthDate.lowBoundary())
+            # legitimately return Date, and Date is a strict subtype of
+            # DateTime. See fn_boundary spec tests.
+            return {"DateTime", "Date", "String", "dateTime", "date", "string"}
         if declared_type == "time":
             return {"String", "Time", "string", "time"}
         if declared_type == "instant":
@@ -872,6 +880,13 @@ class SQLGenerator:
         expr = udf_call
         if sql_cast:
             expr = f"TRY_CAST({udf_call} AS {sql_cast})"
+        elif udf_func == "fhirpath_text":
+            # fhirpath_text returns '' for an empty FHIRPath collection. Per
+            # SQL-on-FHIR v2, a non-collection column whose FHIRPath evaluates
+            # to empty must surface as NULL, not empty string (see fn_join
+            # spec tests: name.given.join(...) over a resource with no `name`
+            # must produce NULL).
+            expr = f"NULLIF({udf_call}, '')"
         guard = self._runtime_guard_condition(
             eval_resource_var,
             resolved_path,

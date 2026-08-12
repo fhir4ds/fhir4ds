@@ -86,7 +86,13 @@ def validate_optional_fhirpath_string(value: Any, field_name: str) -> Optional[s
 
 
 def validate_optional_uri_string(value: Any, field_name: str) -> Optional[str]:
-    """Validate an optional URI string field and return it."""
+    """Validate an optional URI string field and return it.
+
+    Uses the permissive `_URI_RE = ^\\S*$` matcher. Appropriate for fields
+    that accept relative URIs or element-ID references (e.g. `Column.type`).
+    For canonical URL fields (`ViewDefinition.url`, `profile`, `meta.profile`)
+    use `validate_canonical_string` instead, which enforces cnl-1.
+    """
     if value is None:
         return None
     if not isinstance(value, str) or not value:
@@ -96,8 +102,36 @@ def validate_optional_uri_string(value: Any, field_name: str) -> Optional[str]:
     return value
 
 
+def validate_canonical_string(value: Any, field_name: str) -> Optional[str]:
+    """Validate an optional canonical URL field, enforcing SQL-on-FHIR v2 cnl-1.
+
+    cnl-1: `exists() implies matches('^[^|# ]+$')` — forbids pipe, hash, and
+    space in canonical URLs. Use this for `ViewDefinition.url`, `profile[]`,
+    and `meta.profile[]`. For `Column.type` keep `validate_optional_uri_string`,
+    which accepts the relative URIs and element-ID references the spec allows
+    there.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field_name} must be a non-empty canonical string")
+    if not _CANONICAL_RE.fullmatch(value):
+        raise ValueError(
+            f"{field_name} must be a valid canonical URL per cnl-1 "
+            f"(no pipe, hash, or space): {value!r}"
+        )
+    return value
+
+
 def validate_canonical_array(value: Any, field_name: str) -> List[str]:
-    """Validate a repeating canonical primitive field and return a copy."""
+    """Validate a repeating canonical primitive field and return a copy.
+
+    Elements are `canonical` typed, which allows the FHIR canonical form
+    `<url>[|<version>[|<fragment>]]`. The `|version` separator is therefore
+    permitted. Whitespace is still forbidden via `_URI_RE`. For the strict
+    cnl-1 invariant that forbids `|` entirely, use `validate_canonical_string`
+    on a single-value `uri` field (e.g., `ViewDefinition.url`).
+    """
     if value is None or not isinstance(value, list):
         raise ValueError(f"{field_name} must be an array of canonical strings")
     canonical_values: List[str] = []
@@ -247,6 +281,17 @@ _ID_RE = re.compile(r"^[A-Za-z0-9\-.]{1,64}$")
 _OID_RE = re.compile(r"^urn:oid:[0-2](?:\.(?:0|[1-9][0-9]*))+$")
 _UUID_RE = re.compile(r"^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 _URI_RE = re.compile(r"^\S*$")
+_CANONICAL_RE = re.compile(r"^[^|# ]+$")
+
+# §E-1 joins serialization gate (default OFF). When True,
+# ``ViewDefinition.to_dict()`` would refuse to emit ``joins`` unless
+# ``meta.profile`` declares ``https://fhir4ds.org/StructureDefinition/JoinExtension``.
+# The gate is currently OFF — current behavior preserves ``joins`` in
+# roundtrip output. A future feature may flip this if downstream consumers
+# that roundtrip ViewDefinitions through other SQL-on-FHIR v2 runners
+# surface. The constant is exposed at module scope so release-engineer
+# validation can assert the default.
+_EMIT_JOINS_REQUIRES_PROFILE: bool = False
 _TIME_RE = re.compile(r"^(?P<hour>[01][0-9]|2[0-3]):(?P<minute>[0-5][0-9]):(?P<second>[0-5][0-9]|60)(?:\.[0-9]{1,9})?$")
 _DATE_PART_RE = re.compile(r"^(?P<year>[1-9][0-9]{3})(?:-(?P<month>0[1-9]|1[0-2])(?:-(?P<day>0[1-9]|[12][0-9]|3[01]))?)?$")
 _DATETIME_RE = re.compile(
@@ -873,7 +918,20 @@ class Constant:
 class Join:
     """Represents a join definition in a ViewDefinition.
 
-    Joins allow linking resources based on FHIRPath expressions.
+    **fhir4ds extension — NOT part of SQL-on-FHIR v2.** The ``joins`` field,
+    this dataclass, ``JoinType``, and the ``JoinGenerator`` module are
+    fhir4ds-specific and have never appeared in any version of the spec
+    (verified across all 1,104 commits of ``HL7/sql-on-fhir``). A
+    ViewDefinition authored with ``joins`` is non-portable: other runners
+    will reject the JSON or silently ignore the field. Authors who need
+    cross-resource joins should use the spec's SQLQuery Library profile
+    (``fhir4ds/sqlquery/``) instead, where joins are expressed as raw SQL
+    ``JOIN`` keywords inside ``content[].data``. The canonical profile URL
+    ``https://fhir4ds.org/StructureDefinition/JoinExtension`` is reserved
+    for opt-in declaration.
+
+    Within fhir4ds, joins allow linking resources based on FHIRPath
+    expressions.
 
     Attributes:
         name: Name for the joined resource (used as table alias).
@@ -943,6 +1001,14 @@ class ViewDefinition:
     constants: List[Constant] = field(default_factory=list)
     joins: List[Join] = field(default_factory=list)
     where: List[Dict[str, str]] = field(default_factory=list)
+    # SQL-on-FHIR v2 §G-3 CanonicalResource/DomainResource roundtrip extension bag.
+    # ViewDefinition inherits from CanonicalResource, which inherits from
+    # DomainResource, which inherits from Resource. The dataclass models only
+    # the fields the generator consumes; this dict preserves unknown top-level
+    # keys verbatim through from_dict/to_dict (no validation, no coercion).
+    # Leading underscore signals "private catch-all" — not an official FHIR
+    # field name. Used for publisher, purpose, copyright, extension[], etc.
+    _extensions: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ViewDefinition":
@@ -1085,6 +1151,12 @@ class ViewDefinition:
                     "ViewDefinition.where",
                 )
             ]
+        # §G-3 CanonicalResource/DomainResource roundtrip: emit unknown
+        # top-level keys verbatim from the _extensions bag. Order does not
+        # matter for FHIR JSON; emit after known fields.
+        for key, value in self._extensions.items():
+            if key not in data:
+                data[key] = value
         return data
 
 
@@ -1163,7 +1235,7 @@ def validate_root_metadata_fields(
                 "ViewDefinition.meta.profile",
             )
     if url is not None:
-        url = validate_optional_uri_string(url, "ViewDefinition.url")
+        url = validate_canonical_string(url, "ViewDefinition.url")
     if version is not None:
         version = validate_required_string(version, "ViewDefinition.version")
     if status is not None:

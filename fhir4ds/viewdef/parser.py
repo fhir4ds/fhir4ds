@@ -559,6 +559,20 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
 
     name = _parse_optional_sql_name(data, "name")
 
+    # §G-3 CanonicalResource/DomainResource roundtrip: preserve unknown
+    # top-level keys verbatim in _extensions. No validation, no coercion.
+    # The known-keys set covers everything the dataclass models explicitly.
+    _KNOWN_TOP_LEVEL_KEYS = frozenset({
+        "resourceType", "resource", "id", "meta", "url", "version", "name",
+        "status", "title", "description", "profile", "fhirVersion",
+        "constant", "select", "where", "joins",
+    })
+    extensions_bag: dict = {}
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if key not in _KNOWN_TOP_LEVEL_KEYS:
+                extensions_bag[key] = value
+
     view_definition = ViewDefinition(
         resource=resource,
         select=selects,
@@ -575,7 +589,8 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
         fhirVersion=fhir_version,
         constants=constants,
         joins=joins,
-        where=where
+        where=where,
+        _extensions=extensions_bag,
     )
     try:
         validate_supported_view_profiles(view_definition)
@@ -619,6 +634,17 @@ def validate_view_definition(vd: ViewDefinition) -> List[str]:
 
     if vd.name is not None:
         _warn_from_validator(validate_sql_name, vd.name, "ViewDefinition.name")
+        # SQL-on-FHIR v2 cnl-0 warning invariant on ViewDefinition.name:
+        # when present, must match ^[A-Z]([A-Za-z0-9_]){1,254}$ (leading
+        # capital, 2-255 chars total). Warning severity per spec — do not
+        # promote to error. The sql-name error invariant above stays.
+        if vd.name and (
+            not vd.name[0].isupper() or len(vd.name) > 255
+        ):
+            warnings.append(
+                f"ViewDefinition.name {vd.name!r} violates cnl-0: must start "
+                f"with a capital letter and be 2-255 characters total"
+            )
 
     if vd.profile or not isinstance(vd.profile, list):
         _warn_from_validator(validate_canonical_array, vd.profile, "ViewDefinition.profile")
@@ -784,6 +810,17 @@ def _validate_selects(selects: List[Select], path: str) -> List[str]:
                 validate_column_fields(col.path, col.name, col.description)
             except ValueError as exc:
                 warnings.append(str(exc))
+
+            # SQL-on-FHIR v2 §G-4: column.tag.name namespace recommendation.
+            # Spec language is "Namespace recommended (e.g. `ansi/type`)",
+            # not "shall". Warning severity only — do not promote to error.
+            for tag in (col.tag or []):
+                if isinstance(tag, ColumnTag) and tag.name and "/" not in tag.name:
+                    warnings.append(
+                        f"{col_path}.tag: name {tag.name!r} lacks a namespace "
+                        f"prefix; spec recommends namespaced tag names like "
+                        f"'ansi/type'"
+                    )
 
         # Recursively validate nested selects
         if sel.select:

@@ -1,8 +1,11 @@
 """
 SQL-on-FHIR v2 Official Specification Tests
 
-Tests sqlonfhirpy against the official SQL-on-FHIR v2 specification tests
-from https://github.com/FHIR/sql-on-fhir-v2/tree/master/tests
+Tests fhir4ds against the official SQL-on-FHIR v2 specification tests
+from https://github.com/FHIR/sql-on-fhir.js/tree/main/tests
+
+The local snapshot under spec_tests/ must be periodically re-synced from
+upstream; see the release checklist in fhir4ds-private/docs/.
 """
 
 import json
@@ -627,7 +630,7 @@ class TestSpecCoverage:
 
         # We should have all 22 spec test files
         assert len(files) == 22
-        assert len(all_tests) == 134
+        assert len(all_tests) == 144
 
 
 def _adapt_sql_for_resources_table(sql: str, resource_type: str) -> str:
@@ -642,18 +645,105 @@ def _adapt_sql_for_resources_table(sql: str, resource_type: str) -> str:
     return adapted
 
 
+def _has_top_level_where(sql: str) -> bool:
+    """Return True if the SQL has a WHERE keyword at paren depth 0.
+
+    Like `_split_top_level_union_all`, this is string-literal aware so that
+    WHERE keywords appearing inside FHIRPath expressions inside SQL string
+    literals do not trigger a false positive.
+    """
+    depth = 0
+    i = 0
+    n = len(sql)
+    in_string = False
+    while i < n:
+        ch = sql[i]
+        if in_string:
+            if ch == "'" and i + 1 < n and sql[i + 1] == "'":
+                i += 2
+                continue
+            if ch == "'":
+                in_string = False
+            i += 1
+            continue
+        if ch == "'":
+            in_string = True
+            i += 1
+            continue
+        if depth == 0 and sql[i:i + 6].upper() == "WHERE " and (
+            i == 0 or not sql[i - 1].isalnum() and sql[i - 1] != '_'
+        ):
+            return True
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        i += 1
+    return False
+
+
+def _split_top_level_union_all(sql: str) -> list[str]:
+    """Split SQL on `\\nUNION ALL\\n` at paren depth 0, ignoring parens inside string literals.
+
+    The generated SQL for some ViewDefinition shapes (e.g. `repeat` inside
+    `forEachOrNull`) contains `UNION ALL` *inside* LATERAL subqueries (the
+    null-preservation pattern from SOF-VD-05 ARCH-003). A naive
+    `sql.split("\\nUNION ALL\\n")` would fragment the SQL at those subquery
+    boundaries and produce malformed output when WHERE/AND clauses are appended.
+    """
+    pieces: list[str] = []
+    current: list[str] = []
+    depth = 0
+    i = 0
+    n = len(sql)
+    in_string = False
+    while i < n:
+        ch = sql[i]
+        if in_string:
+            current.append(ch)
+            # SQL escapes single quotes by doubling them.
+            if ch == "'" and i + 1 < n and sql[i + 1] == "'":
+                current.append(sql[i + 1])
+                i += 2
+                continue
+            if ch == "'":
+                in_string = False
+            i += 1
+            continue
+        if ch == "'":
+            in_string = True
+            current.append(ch)
+            i += 1
+            continue
+        if depth == 0 and sql[i:i + 11] == "\nUNION ALL\n":
+            pieces.append("".join(current))
+            current = []
+            i += 11
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        current.append(ch)
+        i += 1
+    pieces.append("".join(current))
+    return pieces
+
+
 def _add_resource_type_filter(sql: str, resource_type: str) -> str:
     """Add a WHERE clause to filter by resourceType for the resources table."""
     import re
     type_filter = f"json_extract_string(t.resource, '$.resourceType') = '{resource_type}'"
 
-    # For UNION ALL queries, add the filter to each branch
-    branches = sql.split("\nUNION ALL\n")
+    # For UNION ALL queries, add the filter to each top-level branch only.
+    # Use depth-aware splitting so UNION ALL inside LATERAL subqueries is not
+    # mistaken for a top-level branch boundary.
+    branches = _split_top_level_union_all(sql)
     adapted_branches = []
     for branch in branches:
-        # Look for a SQL-level WHERE keyword (at start of line, not inside strings)
-        has_where = bool(re.search(r'^\s*WHERE\s', branch, re.MULTILINE | re.IGNORECASE))
-        if has_where:
+        # A top-level WHERE (depth 0) means we AND onto the existing clause.
+        # WHERE keywords inside LATERAL subqueries do not count.
+        if _has_top_level_where(branch):
             adapted_branches.append(branch + f"\n  AND {type_filter}")
         else:
             adapted_branches.append(branch + f"\nWHERE {type_filter}")
