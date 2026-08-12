@@ -1182,6 +1182,60 @@ TABULAR_PRIMITIVE_TYPE_NAMES = frozenset({
 })
 
 
+# §M-1 SQLQuery MVP: FHIR-primitive-type to DuckDB-type registry.
+# Dict-driven so new types are added by editing the dict, not by adding
+# if/elif branches (per GLOBAL_RULES "Model Knowledge Must Be Data-Driven").
+# Used by fhir4ds.sqlquery.runner to bind SQLQuery parameters via DuckDB
+# prepared statements with proper FHIR-type-to-SQL-type coercion.
+_FHIR_TYPE_TO_DUCKDB: Dict[str, str] = {
+    "string": "VARCHAR",
+    "id": "VARCHAR",
+    "code": "VARCHAR",
+    "markdown": "VARCHAR",
+    "url": "VARCHAR",
+    "uri": "VARCHAR",
+    "canonical": "VARCHAR",
+    "oid": "VARCHAR",
+    "uuid": "VARCHAR",
+    "base64Binary": "VARCHAR",
+    "integer": "INTEGER",
+    "positiveInt": "INTEGER",
+    "unsignedInt": "INTEGER",
+    "integer64": "BIGINT",
+    "decimal": "DOUBLE",
+    "boolean": "BOOLEAN",
+    "date": "DATE",
+    "dateTime": "TIMESTAMP",
+    "instant": "TIMESTAMP",
+    "time": "TIME",
+}
+
+
+def fhir_type_to_duckdb(fhir_type: str) -> str:
+    """Return the DuckDB SQL type string for a FHIR primitive type name.
+
+    Public helper used by ``fhir4ds.sqlquery.runner`` to coerce
+    ``SQLQuery.parameter[].type`` values to the corresponding DuckDB
+    column types when binding via prepared statements. Unknown types
+    raise ``ValueError`` so callers fail fast rather than silently
+    falling back to VARCHAR.
+
+    Args:
+        fhir_type: A FHIR primitive type name (e.g. ``"string"``,
+            ``"integer"``, ``"dateTime"``).
+
+    Raises:
+        ValueError: when ``fhir_type`` is not in the supported
+            primitive registry.
+    """
+    if fhir_type not in _FHIR_TYPE_TO_DUCKDB:
+        raise ValueError(
+            f"Unsupported FHIR type for DuckDB coercion: {fhir_type!r}. "
+            f"Supported types: {sorted(_FHIR_TYPE_TO_DUCKDB)}"
+        )
+    return _FHIR_TYPE_TO_DUCKDB[fhir_type]
+
+
 def _column_type_to_string(type_value: ColumnType | str | None) -> str | None:
     if isinstance(type_value, ColumnType):
         return type_value.value

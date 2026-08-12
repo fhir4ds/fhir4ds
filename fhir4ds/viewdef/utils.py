@@ -3,6 +3,35 @@ Shared utilities for sql-on-fhir-py.
 """
 
 
+import re
+
+
+_SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def quote_identifier(name: str) -> str:
+    """Quote a SQL identifier, rejecting names that could enable injection.
+
+    Public helper used by both ``viewdef`` (column/table references in
+    generated SQL) and ``sqlquery`` (relatedArtifact labels and parameter
+    names materialized as DuckDB views). The validation regex requires
+    identifiers to start with a letter or underscore and contain only
+    alphanumeric characters and underscores; valid identifiers are then
+    double-quoted per DuckDB SQL identifier syntax.
+
+    Raises:
+        ValueError: when ``name`` is not a string, empty, or contains
+            characters outside the safe-identifier regex.
+    """
+    if not isinstance(name, str) or not name or not _SAFE_IDENTIFIER_RE.match(name):
+        raise ValueError(
+            f"Invalid SQL identifier: {name!r}. "
+            "SQL identifiers must start with a letter or underscore and contain "
+            "only alphanumeric characters and underscores."
+        )
+    return f'"{name}"'
+
+
 def pluralize_resource(resource: str) -> str:
     """Convert a FHIR resource type to its pluralized table name.
 

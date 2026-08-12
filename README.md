@@ -17,6 +17,7 @@ The project is now organized under the `fhir4ds` namespace for a clean, professi
 | **CQL** | `fhir4ds.cql` | CQL parser and SQL translator |
 | **CQL (DuckDB)** | `fhir4ds.cql.duckdb` | DuckDB UDFs and translations for CQL |
 | **ViewDefinition** | `fhir4ds.viewdef` | SQL-on-FHIR v2 ViewDefinition to SQL generator |
+| **SQLQuery / SQLView** | `fhir4ds.sqlquery` | SQL-on-FHIR v2 Analytics Layer (Library profiles wrapping raw SQL over materialized ViewDefinitions) |
 | **DQM** | `fhir4ds.dqm` | Digital Quality Measure orchestrator & audit engine |
 
 ### Non-Python Components
@@ -121,7 +122,8 @@ The unified engine is rigorously tested against official specifications.
 |-----------|------------|---------------------|
 | `fhir4ds.fhirpath` | ✅ Passing | 935/935 FHIRPath R4 (100%) |
 | `fhir4ds.cql` | ✅ Passing | 1706/1706 CQL (100%) |
-| `fhir4ds.viewdef` | ✅ Passing | 134/134 ViewDefinition v2 (100%) |
+| `fhir4ds.viewdef` | ✅ Passing | 144/144 ViewDefinition v2 (100%) |
+| `fhir4ds.sqlquery` | ✅ Passing | 28/28 SQLQuery / SQLView (Analytics Layer) |
 | `fhir4ds.dqm` | ✅ Passing | 47/47 DQM QI-Core 2025 (100%) |
 
 ## Architecture
@@ -133,7 +135,8 @@ The project follows a **Feature-First** hierarchy:
     - `duckdb/`: DuckDB-specific FHIRPath integration.
   - `cql/`: Core CQL-to-SQL translator.
     - `duckdb/`: DuckDB-specific CQL integration.
-  - `viewdef/`: SQL-on-FHIR v2 implementation.
+  - `viewdef/`: SQL-on-FHIR v2 ViewDefinition implementation.
+  - `sqlquery/`: SQL-on-FHIR v2 Analytics Layer (SQLQuery / SQLView Library profiles).
   - `dqm/`: Digital Quality Measure orchestration.
 - `extensions/`: High-performance C++ source for DuckDB extensions.
 - `web/`: Documentation website and interactive WASM demos.

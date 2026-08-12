@@ -27,7 +27,9 @@ from .utils import pluralize_resource
 
 _logger = logging.getLogger(__name__)
 
-# Regex for safe SQL identifiers — alphanumeric and underscores only
+# Regex for safe SQL identifiers — now lives in utils.quote_identifier; kept
+# here as a private alias for any internal call sites that still reference it
+# directly during the transition. Prefer ``from .utils import quote_identifier``.
 _SAFE_IDENTIFIER_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 _SIMPLE_FHIRPATH_NAV_RE = re.compile(
     r"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*$"
@@ -36,14 +38,17 @@ _CONTEXT_SWITCHING_BUILTINS = {"context", "resource", "rootResource"}
 
 
 def _quote_identifier(name: str) -> str:
-    """Quote a SQL identifier, rejecting names that could enable injection."""
-    if not isinstance(name, str) or not name or not _SAFE_IDENTIFIER_RE.match(name):
-        raise ValidationError(
-            f"Invalid SQL identifier: {name!r}. "
-            "SQL identifiers must start with a letter or underscore and contain "
-            "only alphanumeric characters and underscores."
-        )
-    return f'"{name}"'
+    """Quote a SQL identifier (thin wrapper over the public utils helper).
+
+    Raises ``ValidationError`` for backward compatibility with existing
+    callers; the underlying utils helper raises ``ValueError``.
+    """
+    from .utils import quote_identifier
+
+    try:
+        return quote_identifier(name)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
 
 
 def _quote_column_identifier(name: str) -> str:
