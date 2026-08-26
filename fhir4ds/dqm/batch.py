@@ -12,7 +12,7 @@ from typing import Any
 import fhir4ds
 from fhir4ds.cql import FHIRDataLoader, evaluate_measure
 from fhir4ds.cql.parser import parse_cql
-from fhir4ds.cql.parser.ast_nodes import Definition
+from fhir4ds.cql.parser.ast_nodes import Definition, ParameterDefinition
 from fhir4ds.sources import FileSystemSource
 
 from .config import DefinitionOutputSpec, DQMConfigError, DQMRunConfig, MeasureSpec, SourceSpec
@@ -302,7 +302,10 @@ def _write_definition_outputs(
         library_path=str(cql_path),
         conn=evaluator.conn,
         output_columns=column_mapping,
-        parameters=config.parameters,
+        # The CLI injects a global "Measurement Period" across every measure;
+        # drop runtime parameters this library does not declare (public
+        # evaluate_measure fails fast on undeclared names by contract).
+        parameters=_declared_parameters_only(cql_path, config.parameters),
         patient_ids=_result_patient_ids(result),
         include_paths=_include_paths_for_cql(config, cql_path),
         audit_mode=AuditMode.NONE.value,
@@ -329,6 +332,21 @@ def _result_patient_ids(result: Any) -> list[str]:
     if "patient_id" not in result.dataframe.columns:
         return []
     return [str(patient_id) for patient_id in result.dataframe["patient_id"].tolist()]
+
+
+def _declared_parameters_only(
+    cql_path: Path, parameters: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Filter runtime parameters down to names the CQL library declares."""
+    if not parameters:
+        return {}
+    library = parse_cql(cql_path.read_text())
+    declared = {
+        stmt.name
+        for stmt in getattr(library, "parameters", []) or []
+        if isinstance(stmt, ParameterDefinition)
+    }
+    return {name: value for name, value in parameters.items() if name in declared}
 
 
 def _build_definition_output_mapping(
