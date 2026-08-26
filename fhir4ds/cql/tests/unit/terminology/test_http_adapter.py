@@ -70,8 +70,13 @@ class _MockClient:
         self._records.append(("GET", url, params or {}))
         return self._response
 
-    def post(self, url: str, json: dict | None = None) -> _MockResponse:
-        self._records.append(("POST", url, json or {}))
+    def post(
+        self,
+        url: str,
+        json: dict | None = None,
+        params: dict | None = None,
+    ) -> _MockResponse:
+        self._records.append(("POST", url, json or {}, params or {}))
         return self._response
 
 
@@ -159,11 +164,18 @@ def test_expand_invokes_get_with_canonical_url():
     with patch.object(adapter, "_client", return_value=_MockClient(response, records)):
         refs = adapter.expand("http://example.org/ValueSet/Foo")
     assert refs == [CodeRef("http://snomed.info/sct", "73211009", "Diabetes")]
+    # MT-003: count=1000 (server max; medterm default 20 silently
+    # truncated large value sets) and activeOnly=false (expansion feeds
+    # membership resolution — retired codes included per settled policy).
     assert records == [
         (
             "GET",
             "http://localhost:8001/fhir/ValueSet/$expand",
-            {"url": "http://example.org/ValueSet/Foo"},
+            {
+                "url": "http://example.org/ValueSet/Foo",
+                "count": 1000,
+                "activeOnly": "false",
+            },
         )
     ]
 
@@ -232,6 +244,9 @@ def test_expand_intensional_posts_value_set_body():
     assert records[0][0] == "POST"
     assert records[0][1] == "http://localhost:8001/fhir/ValueSet/$expand"
     assert records[0][2] == body
+    # MT-003: intensional expansion is capped at the same count=1000 and
+    # activeOnly=false as plain expansion (membership path, retired in).
+    assert records[0][3] == {"count": 1000, "activeOnly": "false"}
 
 
 # ----------------------------------------------------------------------
@@ -264,6 +279,63 @@ def test_search_text_returns_search_results():
     assert r.score == pytest.approx(0.95)
     assert r.match_grade == "certain"
     assert r.search_mode == "hybrid"
+
+
+# ----------------------------------------------------------------------
+# MT-002: $search must send the params medterm4ds actually reads
+# (system / searchMode / count). The legacy category/mode params were
+# silently dropped by FastAPI, making every HTTP search all-systems
+# lexical regardless of the caller's request.
+# ----------------------------------------------------------------------
+
+
+def _recorded_search_params(
+    category: str, mode: str = "hybrid"
+) -> dict[str, str]:
+    response = _MockResponse(_search_bundle([]))
+    records: list[tuple[str, str, dict]] = []
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    with patch.object(adapter, "_client", return_value=_MockClient(response, records)):
+        adapter.search_text("diabetes", category, mode=mode)
+    assert len(records) == 1
+    return records[0][2]
+
+
+def test_mt002_search_sends_system_searchmode_count():
+    params = _recorded_search_params("condition")
+    assert params["query"] == "diabetes"
+    # condition -> SNOMEDCT_US -> canonical URL.
+    assert params["system"] == "http://snomed.info/sct"
+    assert params["searchMode"] == "hybrid"
+    # 25 = parity with the in-process discovery limit.
+    assert params["count"] == "25"
+    # Legacy params medterm4ds never read must be gone.
+    assert "category" not in params
+    assert "mode" not in params
+
+
+def test_mt002_search_maps_each_known_category():
+    assert (
+        _recorded_search_params("medication")["system"]
+        == "http://www.nlm.nih.gov/research/umls/rxnorm"
+    )
+    assert _recorded_search_params("lab")["system"] == "http://loinc.org"
+    assert _recorded_search_params("icd10")["system"] == (
+        "http://hl7.org/fhir/sid/icd-10-cm"
+    )
+
+
+@pytest.mark.parametrize("category", ["", "unknown-category", "   "])
+def test_mt002_unknown_or_empty_category_omits_system(category):
+    """All-systems is the medterm semantic — omit ``system`` entirely."""
+    params = _recorded_search_params(category)
+    assert "system" not in params
+    assert params["query"] == "diabetes"
+
+
+def test_mt002_search_mode_forwarded():
+    params = _recorded_search_params("condition", mode="semantic")
+    assert params["searchMode"] == "semantic"
 
 
 def test_search_batch_loops_over_queries():

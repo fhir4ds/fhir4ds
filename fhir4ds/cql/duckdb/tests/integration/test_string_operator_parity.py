@@ -395,3 +395,213 @@ define RegexChain:
         for name, expected_value in expected.items():
             sql = "SELECT " + translated[name].to_sql()
             assert con.execute(sql).fetchone()[0] == expected_value
+
+
+def test_cql_string_indexer_over_scalar_string_define() -> None:
+    """CQL §17.6: bracket indexing a scalar String-valued define.
+
+    Regression for the CQL-12 SKEPTIC finding where the RESOURCE_ROWS
+    list-index branch fired on ``has_resource`` alone: scalar defines whose
+    expression contains a Retrieve (``First([Patient]).name.family``) were
+    list-indexed over a one-element resource list, so any index > 0
+    returned NULL instead of the character. Scalar sources must route
+    through the public string ``Indexer`` macro; genuine row-list defines
+    (``define Obs: [Observation]``) must keep the list-index lowering.
+    """
+    cql = """library StringIndexerScalar version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define Fam: First([Patient]).name.family
+define FamThird: Fam[3]
+define FamFirst: Fam[0]
+define FamNullIndex: Fam[null]
+define FamOutOfRange: Fam[99]
+define FamNegative: Fam[-1]
+define Obs: [Observation]
+define ObsFirstStatus: Obs[0].status
+"""
+    translated = translate_cql(cql)
+
+    # Scalar string source -> public Indexer macro (null on out-of-range).
+    scalar_sql = translated["FamThird"].to_sql()
+    assert "Indexer(" in scalar_sql
+    assert "list_extract" not in scalar_sql
+    # Genuine RESOURCE_ROWS define keeps the per-patient list indexing.
+    rows_sql = translated["ObsFirstStatus"].to_sql()
+    assert "list_extract" in rows_sql
+
+    # End-to-end over retrieved data: the scalar string define must yield
+    # the indexed character on both the native and Python-only engines.
+    import duckdb as _duckdb
+
+    from fhir4ds.cql import FHIRDataLoader, evaluate_measure
+
+    cql_path = _tmp_cql_path("string_indexer_scalar.cql")
+    cql_path.write_text(cql)
+    output_columns = {
+        "fam_third": "FamThird",
+        "fam_first": "FamFirst",
+        "fam_null_index": "FamNullIndex",
+        "fam_out_of_range": "FamOutOfRange",
+        "fam_negative": "FamNegative",
+    }
+    for cpp in (False, True):
+        con = (
+            _cpp_connection()
+            if cpp
+            else _python_only_connection()
+        )
+        try:
+            loader = FHIRDataLoader(con)
+            loader.load_resource(
+                {
+                    "resourceType": "Patient",
+                    "id": "p1",
+                    "name": [{"family": "Montavon", "given": ["Joel"]}],
+                }
+            )
+            df = evaluate_measure(str(cql_path), con, output_columns=output_columns)
+            row = df.iloc[0]
+            assert row["fam_third"] == "t", row.to_dict()
+            assert row["fam_first"] == "M", row.to_dict()
+            assert row["fam_null_index"] is None or df["fam_null_index"].isna().iloc[0]
+            assert row["fam_out_of_range"] is None or df["fam_out_of_range"].isna().iloc[0]
+            assert row["fam_negative"] is None or df["fam_negative"].isna().iloc[0]
+        finally:
+            con.close()
+
+def _tmp_cql_path(name: str):
+    import tempfile
+    from pathlib import Path
+
+    d = Path(tempfile.mkdtemp(prefix="cql12_string_"))
+    return d / name
+
+
+def test_cql_string_combine_scalar_fhirpath_source_fails_typed() -> None:
+    """CQL-12 HISTORIAN QA-001 regression.
+
+    Combine over a chained property navigation that lowers to scalar
+    fhirpath extraction (first element only) must fail at translate time
+    with a typed, actionable TranslationError — not surface later as an
+    opaque DuckDB BinderException (lambda bound against a scalar).
+    """
+    cql = "\n".join(
+        [
+            "library T version '1.0.0'",
+            "using FHIR version '4.0.1'",
+            "context Patient",
+            "define D: Combine(First([Patient]).name.given, '+')",
+        ]
+    ) + "\n"
+    with pytest.raises(TranslationError, match="List<String>"):
+        translate_cql(cql)
+
+    # Supported Combine sources must keep translating.
+    for expr in (
+        "Combine({'a', 'b'}, '+')",
+        "Combine({})",
+        "Combine(null as List<String>)",
+    ):
+        ok = "\n".join(
+            [
+                "library T version '1.0.0'",
+                "using FHIR version '4.0.1'",
+                "context Patient",
+                f"define D: {expr}",
+            ]
+        ) + "\n"
+        translate_cql(ok)
+
+def test_cql_string_splitonmatches_excludes_capture_groups() -> None:
+    """CQL-12 EXPLORER QA-001 regression.
+
+    CQL SplitOnMatches (Appendix B) has no group-inclusion clause; the
+    reference engine and the native extension use Java Pattern.split
+    semantics that exclude capture groups. The Python fallback must not
+    leak the Python re.split behavior of interleaving group captures.
+    """
+    cql = """library SplitOnMatchesGroups version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define GroupSingle: SplitOnMatches('a1b2', '(\\d)')
+define GroupDouble: SplitOnMatches('xa1yb2z', '([a-z])(\\d)')
+define NoGroup: SplitOnMatches('a1b2', '\\d')
+"""
+    translated = translate_cql(cql)
+    for cpp in (False, True):
+        con = _cpp_connection() if cpp else _python_only_connection()
+        try:
+            for name, expected in (
+                ("GroupSingle", ["a", "b", ""]),
+                ("GroupDouble", ["x", "y", "z"]),
+                ("NoGroup", ["a", "b", ""]),
+            ):
+                sql = "SELECT " + translated[name].to_sql()
+                assert con.execute(sql).fetchone()[0] == expected, name
+        finally:
+            con.close()
+
+
+def test_cql_string_indexer_over_fhirpath_chain_is_list_indexing() -> None:
+    """CQL-12 EXPLORER QA-002 regression.
+
+    CQL 1.5 implicit property traversal: accessing a property of a
+    multi-valued element yields the LIST of values, so bracket indexing
+    over chained navigation (``Patient.name.given[0]``) is element
+    indexing — never character indexing of the collapsed first value
+    (which silently returned 'J' for 'Joel', and '{' for the raw JSON of
+    a Coding element). Chains must lower to the list-returning fhirpath
+    UDF + LIST_EXTRACT.
+    """
+    import duckdb as _duckdb
+
+    from fhir4ds.cql import FHIRDataLoader, evaluate_measure
+
+    cql = """library ChainIndexer version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define GivenFirst: Patient.name.given[0]
+define GivenSecond: Patient.name.given[1]
+define GivenPastEnd: Patient.name.given[5]
+define CodingCode: First([Observation]).code.coding[0].code
+define LiteralIndex: 'abc'[1]
+"""
+    cql_path = _tmp_cql_path("string_indexer_chain.cql")
+    cql_path.write_text(cql)
+    output_columns = {
+        "given_first": "GivenFirst",
+        "given_second": "GivenSecond",
+        "given_past_end": "GivenPastEnd",
+        "coding_code": "CodingCode",
+        "literal_index": "LiteralIndex",
+    }
+    for cpp in (False, True):
+        con = _cpp_connection() if cpp else _python_only_connection()
+        try:
+            loader = FHIRDataLoader(con)
+            loader.load_resource(
+                {
+                    "resourceType": "Patient",
+                    "id": "p1",
+                    "name": [{"family": "Montavon", "given": ["Joel", "Ray"]}],
+                }
+            )
+            loader.load_resource(
+                {
+                    "resourceType": "Observation",
+                    "id": "o1",
+                    "status": "final",
+                    "code": {"coding": [{"system": "http://loinc.org", "code": "8480-6"}]},
+                    "subject": {"reference": "Patient/p1"},
+                }
+            )
+            df = evaluate_measure(str(cql_path), con, output_columns=output_columns)
+            row = df.iloc[0]
+            assert row["given_first"] == "Joel", row.to_dict()
+            assert row["given_second"] == "Ray", row.to_dict()
+            assert row["given_past_end"] is None or df["given_past_end"].isna().iloc[0]
+            assert row["coding_code"] == "8480-6", row.to_dict()
+            assert row["literal_index"] == "b", row.to_dict()
+        finally:
+            con.close()

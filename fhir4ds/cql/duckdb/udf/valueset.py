@@ -410,6 +410,85 @@ def codingMatches(resource: str | None, path: str, system: str, code: str) -> bo
     return False
 
 
+def _extract_coding_dicts_for_match(data, path: str) -> list:
+    """Extract full Coding dicts (code/system/version/display) from a value.
+
+    Mirrors the traversal contract of ``_extract_codes_for_match``: `data`
+    is the JSON value at a resource path (or the CodeableConcept/Coding
+    element itself when path == "code" does not navigate).
+    """
+    element = None
+    if isinstance(data, dict):
+        node = data
+        navigated = True
+        for seg in (path or "").split("."):
+            if seg and isinstance(node, dict) and seg in node:
+                node = node[seg]
+            else:
+                navigated = False
+                break
+        if navigated:
+            element = node
+    if element is None:
+        element = data
+
+    def _from_element(el):
+        if isinstance(el.get("coding"), list):
+            return [c for c in el["coding"] if isinstance(c, dict)]
+        if el.get("code") is not None:
+            return [el]
+        return []
+
+    if isinstance(element, list):
+        out: list = []
+        for item in element:
+            if isinstance(item, dict):
+                out.extend(_from_element(item))
+        return out
+    if isinstance(element, dict):
+        return _from_element(element)
+    return []
+
+
+def codingMatchesExact(
+    resource: str | None, path: str, system: str, code: str,
+    display: str | None, version: str | None,
+) -> bool | None:
+    """CQL 1.5 Equal (Code) against a dynamically retrieved code value.
+
+    Equal on codes considers code, system, version, and display (Authors
+    Guide: `=` on codes is an exact match including version and display,
+    unlike `~` which ignores them). `display`/`version` of None mean the
+    literal has no value for that element, so it is not constrained.
+    Returns None when the retrieved value is null (Equal null semantics).
+    """
+    if resource is None:
+        return None
+    if not path or not code:
+        return None
+    try:
+        data = orjson.loads(resource)
+    except (orjson.JSONDecodeError, TypeError, ValueError):
+        return None
+    expected_system = _normalize_system(_CODE_SYSTEM_ALIASES.get(system, system))
+    for coding in _extract_coding_dicts_for_match(data, path):
+        if coding.get("code") != code:
+            continue
+        actual_system = coding.get("system") or ""
+        normalized = _normalize_system(actual_system)
+        if not (normalized == expected_system or actual_system == system):
+            continue
+        # Exact match: an element absent from the literal (null) must be
+        # absent from the coding as well; a value on either side alone is
+        # not an exact match.
+        if display != coding.get("display"):
+            continue
+        if version != coding.get("version"):
+            continue
+        return True
+    return False
+
+
 def resolveProfileUrl(profile_url: str | None) -> str | None:
     """
     Resolve a profile URL to its FHIR base resource type.
@@ -636,6 +715,7 @@ def registerValuesetUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("extractFirstCodeSystem", extractFirstCodeSystem, null_handling="special")
     con.create_function("extractFirstCodeValue", extractFirstCodeValue, null_handling="special")
     con.create_function("coding_matches", codingMatches, null_handling="special")
+    con.create_function("coding_matches_exact", codingMatchesExact, null_handling="special")
     con.create_function("resolveProfileUrl", resolveProfileUrl, null_handling="special")
     con.execute(
         """

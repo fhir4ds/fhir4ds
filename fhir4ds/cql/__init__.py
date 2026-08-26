@@ -79,7 +79,7 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
-__version__ = "0.0.11"
+__version__ = "0.0.12"
 
 
 def parse_cql(cql_text: str):
@@ -172,7 +172,12 @@ def _validate_parameters(library, parameters: Dict[str, Any]) -> None:
     for name, value in parameters.items():
         pdef = param_defs.get(name)
         if pdef is None:
-            continue
+            # Unknown provided names silently fall back to CQL defaults,
+            # which turns a typo into wrong measure results (QA-016).
+            raise TypeError(
+                f"Parameter {name!r} is not declared by the library. "
+                f"Declared parameters: {sorted(param_defs) or 'none'}."
+            )
         type_spec = pdef.type
         if type_spec is None or value is None:
             continue
@@ -408,6 +413,14 @@ def evaluate_measure(
                 raise TypeError(
                     f"patient_ids[{index}] must be a string, got {type(patient_id).__name__}"
                 )
+    if parameters is not None:
+        if not isinstance(parameters, dict) or not all(
+            isinstance(k, str) for k in parameters
+        ):
+            raise TypeError(
+                "parameters must be a dict mapping parameter names to values, "
+                f"got {type(parameters).__name__}"
+            )
     if output_columns is not None:
         if not isinstance(output_columns, dict):
             raise TypeError(
@@ -473,6 +486,23 @@ def evaluate_measure(
     # Build population SQL — this method handles empty-definition and
     # output_columns logic internally, so no pre-translation is needed.
     # Pass output_columns as-is: None → include all definitions, {} → patient_id only.
+    if output_columns:
+        from .parser.ast_nodes import Definition, FunctionDefinition
+        defined_names = {
+            stmt.name
+            for stmt in getattr(library, "statements", [])
+            if isinstance(stmt, (Definition, FunctionDefinition))
+        }
+        unknown = [
+            def_name for def_name in output_columns.values()
+            if def_name not in defined_names
+        ]
+        if unknown:
+            raise ValueError(
+                f"output_columns references definition(s) not defined by the "
+                f"library: {sorted(set(unknown))}. Available definitions: "
+                f"{sorted(defined_names) or 'none'}."
+            )
     sql = translator.translate_library_to_population_sql(
         library=library,
         output_columns=output_columns,

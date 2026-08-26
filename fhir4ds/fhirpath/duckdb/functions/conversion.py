@@ -673,7 +673,14 @@ def _convert_quantity(quantity: nodes.FP_Quantity, unit: str | None) -> nodes.FP
     target_unit = _core_quantity_unit(unit)
     if quantity.unit == target_unit:
         return quantity
-    return nodes.FP_Quantity.conv_unit_to(quantity.unit, quantity.value, target_unit)
+    # FP-08 HISTORIAN QA-002 (2026-08-17): direct helpers follow the same
+    # §5.5.7 conversion-factor table as the core engine (1 year = 365
+    # days, 1 month = 30 days) — route duration pairs through the
+    # toQuantity-only spec table before the metric/mass group tables.
+    converted = nodes.FP_Quantity.conv_duration_to_spec(quantity.unit, quantity.value, target_unit)
+    if converted is None:
+        converted = nodes.FP_Quantity.conv_unit_to(quantity.unit, quantity.value, target_unit)
+    return converted
 
 
 def _quantity_from_string(value: str) -> nodes.FP_Quantity | None:

@@ -499,5 +499,145 @@ def test_bare_exists_no_arg_matches_count_gt_zero_in_native_and_fallback(monkeyp
             assert cpp == py == expected, expression
     finally:
         native.close()
+
+
+def test_criteria_comparison_type_error_parity_fp03_skeptic(monkeypatch) -> None:
+    """FP-03 SKEPTIC QA-001 (2026-08-16): §6.2 comparison type errors must
+    signal an evaluation error, not degrade to an empty result.
+
+    Native C++ used to return ``{}`` for incompatible comparison operand
+    types. Masked at the UDF top level (error and empty both surface as
+    NULL) but decisive inside iteration functions: ``all()``/``exists()``/
+    ``where()``/``select()`` criteria and ``iif`` criteria converted the
+    empty criteria result into false/no-match, silently producing wrong
+    Booleans and collections (``mixed.all($this > 0)`` → false,
+    ``mixed.exists($this > 0)`` → true) while the Python fallback errored
+    to empty per §6.2 ("the evaluator will throw an error if the types
+    differ").
+    """
+    resource = json.dumps({"resourceType": "Patient", "mixed": [1, "a"], "t": True})
+
+    empty_result_expressions = [
+        # §6.2 type-error criteria inside §5.1 iteration functions
+        "mixed.all($this > 0)",
+        "mixed.all($this < 5)",
+        "mixed.exists($this > 0)",
+        "mixed.exists($this < 5)",
+        "mixed.where($this > 0)",
+        "mixed.select($this > 0)",
+        "iif('a' > 0, 1, 2)",
+        "iif(1 > t, 1, 2)",
+        # Top-level type-mismatch comparisons stay empty (wrapper converts
+        # the §6.2 evaluation error to an empty result for row resilience)
+        "'a' < 1",
+        "1 < t",
+        "t > f",
+        "'a' > t",
+    ]
+    spec_empty_expressions = [
+        # Spec-mandated empty comparison results that must NOT become errors
+        "@2018-03 < @2018-03-01",
+        "@T10 < @T10:30",
+        "1 year > 1 'a'",
+        "1 'Cel' < 33.8 '[degF]'",
+        "1 'cm' < 1 's'",
+    ]
+    value_expressions = {
+        # Healthy comparisons keep evaluating
+        "mixed.all($this = 1)": (["false"], "[false]", False),
+        "mixed.exists($this = 1)": (["true"], "[true]", True),
+        "nums_ok.all($this > 0)": (["true"], "[true]", True),
+    }
+    resource = json.dumps({"resourceType": "Patient", "mixed": [1, "a"], "t": True, "nums_ok": [3, 4]})
+
+    from fhir4ds.fhirpath.duckdb.udf import fhirpath_is_valid_udf
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in empty_result_expressions + spec_empty_expressions:
+            cpp = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp == py == ([], None, None), expression
+        for expression, expected in value_expressions.items():
+            cpp = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp == py == expected, expression
+        for expression in empty_result_expressions:
+            # Execution type errors are valid expressions (FP-02 QA-002 /
+            # FP-03 QA-001 doctrine) on both surfaces.
+            assert fhirpath_is_valid_udf(expression) is True, expression
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_time_string_ordering_not_coerced_parity_fp03_skeptic(monkeypatch) -> None:
+    """FP-03 SKEPTIC QA-002 (2026-08-16): time-shaped plain strings are not
+    implicitly coerced against ``@T...`` Time literals for ordering.
+
+    Per the §5.5 conversion table String→Time is Explicit-only, matching the
+    pinned Time-vs-String equality convention (FP-01 QA-003). The Python
+    fallback's comparison typecheck used to coerce ``'10:00'`` into an
+    ``FP_Time`` for ordering (``'10:00' < @T10:30`` → true) while the native
+    engine signaled the §6.2 type error (empty). Date/DateTime-shaped string
+    ordering coercion is a shared convention in both engines and stays.
+    """
+    resource = json.dumps({"resourceType": "Patient"})
+
+    empty_expressions = [
+        "@T10:30 < '10:00'",
+        "'10:00' < @T10:30",
+        "@T10:30 < '10:30'",
+        "'10:00' < @2018-01-01",
+        "@T10 < 'a'",
+    ]
+    value_expressions = {
+        # Date/DateTime-shaped string ordering coercion stays shared.
+        "'2018-01-01' < @2018-03-01": (["true"], "[true]", True),
+        "@2018-03-01 < '2019-01-01'": (["true"], "[true]", True),
+        "'2018' < '2019'": (["true"], "[true]", True),
+        # Time-vs-Time literal ordering unchanged.
+        "@T10:30:00 < @T10:30:01": (["true"], "[true]", True),
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in empty_expressions:
+            cpp = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp == py == ([], None, None), expression
+        for expression, expected in value_expressions.items():
+            cpp = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp == py == expected, expression
+    finally:
+        native.close()
+        fallback.close()
         fallback.close()
 

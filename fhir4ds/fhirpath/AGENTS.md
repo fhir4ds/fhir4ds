@@ -2,6 +2,19 @@
 
 ## Known Fragile Areas
 
+- **§G-5 time boundary precision fix (2026-08-11):** `lowBoundary()` /
+  `highBoundary()` on a Time input now preserves components at the
+  input's precision and only fills components below it. Previously
+  `_time_boundary` (`fhir4ds/fhirpath/engine/invocations/datetime.py`)
+  unconditionally used `fill["second"]`, treating `12:34:00` as
+  minute-precision and producing `12:34:59.999` for highBoundary.
+  After the fix: highBoundary of `12:34:00` correctly yields
+  `12:34:00.999` (preserve seconds, max fractional); highBoundary of
+  `12:34` still yields `12:34:59.999`. The fix routes through
+  `match_list[2]` (seconds) and `match_list[3]` (ms) when present,
+  falling back to fill only when absent. See `fn_boundary.json:time
+  highBoundary` spec test.
+
 - **FHIRPath FP-20 SKEPTIC iteration 1 §9 Environment Variables + §10
   Types/Reflection + §11 Type Safety + §12 Formal Specifications
   (2026-06-30):** **1 ISSUE RESOLVED, 1 DEFERRED.** A fresh SKEPTIC

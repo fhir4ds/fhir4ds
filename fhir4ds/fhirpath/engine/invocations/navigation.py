@@ -113,7 +113,16 @@ def create_reduce_children(ctx, exclude_primitive_extensions):
         res = create_node(res)
 
         if isinstance(data, list):
-            data = dict((i, data[i]) for i in range(0, len(data)))
+            mapping = getattr(res, "_data", None)
+            if isinstance(mapping, abc.Mapping):
+                data = mapping
+            else:
+                # An array JSON item's children are its elements (native
+                # fn_children parity). Only reachable with nested-array JSON,
+                # which valid FHIR never produces.
+                for n in data:
+                    acc.append(create_node(n))
+                return acc
 
         if not isinstance(data, abc.Mapping) and isinstance(getattr(res, "_data", None), abc.Mapping):
             data = res._data
@@ -160,8 +169,20 @@ def create_reduce_children(ctx, exclude_primitive_extensions):
                     altPropName = res.path + "." + prop[:-len(childPath)]
                     actualTypes = model["choiceTypePaths"].get(altPropName, [])
                     if len(actualTypes) > 0:
-                        # If it is, we can use it
-                        fullPath = f"{res.propName}.{prop[:-len(childPath)]}"
+                        # If it is, we can use it. Fall back to the element
+                        # path (not res.propName, which is None at the
+                        # resource root) so the truncated propName stays a
+                        # resolvable FHIR path — ofType()/is() choice-primitive
+                        # matching re-appends the type suffix and looks the
+                        # full path up in FHIR_PATH_TO_TYPE (FP-12 QA-001:
+                        # `children().ofType(Integer)` on multipleBirthInteger
+                        # must match, exactly like direct navigation).
+                        stripped = prop[:-len(childPath)]
+                        fullPath = (
+                            f"{res.propName}.{stripped}" if res.propName
+                            else f"{res.path}.{stripped}" if res.path is not None
+                            else stripped
+                        )
 
                 shadow_value = data.get(f"_{prop}") if isinstance(prop, str) else None
 

@@ -408,6 +408,27 @@ def run_test(conn, test_elem) -> tuple[bool, str]:
             # produced a non-NULL value, that IS a real spec violation.
             if result is None:
                 return True, "Spec-compliant NULL (CQL §16 null-on-overflow rule)"
+            # Decimal-literal precision tests (ValueLiteralsAndSelectors
+            # DecimalTenthStep et al.): the official fixture comment accepts
+            # either "an error saying the literal uses more precision than
+            # the Decimal step size, or round to a whole step". The
+            # translator now rounds sub-step Decimal literals to the
+            # implementation step (10^-8), so a result equal to the literal
+            # rounded half-up to 8 fractional digits is a pass.
+            stripped = cql_expr.strip()
+            try:
+                from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+                literal_text = stripped
+                if literal_text.startswith(("+", "-")):
+                    literal_text = literal_text[1:]
+                if literal_text and (literal_text[0].isdigit()) and "." in literal_text:
+                    rounded = Decimal(stripped).quantize(
+                        Decimal("1.00000000"), rounding=ROUND_HALF_UP
+                    )
+                    if isinstance(result, Decimal) and result == rounded:
+                        return True, "Sub-step Decimal literal rounded to implementation step (fixture-accepted)"
+            except (InvalidOperation, ValueError):
+                pass
             return False, f"Expected error or NULL per CQL §16, got {result!r}"
 
         # Comparison logic

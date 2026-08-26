@@ -12,9 +12,21 @@ _logger = logging.getLogger(__name__)
 # This file holds code to hande the FHIRPath Existence functions (5.1 in the
 # specification).
 
-intRegex = re.compile(r"^[+-]?[0-9]+$")
-numRegex = re.compile(r"^[+-]?[0-9]+(\.[0-9]+)?$")
-longDecimalStringRegex = re.compile(r"^[+-]?[0-9]+L$")
+# FP-06 HISTORIAN (2026-08-17): use \Z (absolute end-of-string), not `$` —
+# Python re `$` also matches before a single trailing newline, so '1\n'
+# passed the grammar and converted to 1 while the native evaluator (and the
+# exact (\+|-)?\d+ grammar of FHIRPath §5.5.3) reject it.
+intRegex = re.compile(r"^[+-]?[0-9]+\Z")
+# FP-06 HISTORIAN (2026-08-17): \Z end-anchor for the same reason as intRegex
+# above — `$` matches before a single trailing newline, so '1\n'.toDecimal()
+# converted in the fallback while the native evaluator rejects it.
+numRegex = re.compile(r"^[+-]?[0-9]+(\.[0-9]+)?\Z")
+# FP-07 SKEPTIC (2026-08-17): \Z end-anchor for the same reason as
+# intRegex/numRegex above — `$` matches before a single trailing newline,
+# so '5L\n' passed this regex and Decimal('5L') raised ConversionSyntax
+# (unhandled UDF crash) while the native evaluator correctly returns empty
+# via isFHIRPathLongDecimalString.
+longDecimalStringRegex = re.compile(r"^[+-]?[0-9]+L\Z")
 
 
 def _read_digits(value, pos, min_len, max_len):
@@ -257,10 +269,38 @@ def iif_macro(ctx, data, cond, ok, fail=None):
     if len(data) > 1:
         raise FHIRPathError("iif() can only be called on an empty or singleton collection")
 
-    if util.is_true(cond(data), singleton_non_boolean=not ctx.get("strict_mode")):
-        return ok(data)
+    # FP-06 HISTORIAN (2026-08-17): mirror native fn_iif scope semantics —
+    # variables defined in an iif branch do not escape it, and each branch
+    # is evaluated with a cleared chain scope and restored vars/chain.
+    # FP-06 EXPLORER (2026-08-17): native fn_iif evaluates the criterion in
+    # the expression's main scope (defined_variables_ restored only for the
+    # branch snapshots), so variables defined in the iif CRITERION persist
+    # for the remainder of the whole expression — matching the §5.2.9
+    # defineVariable contract ("available for the remainder of the
+    # expression"). Verified natively for true, false, and empty criteria.
+    # Branch-defined variables remain scoped to their branch.
+    missing = object()
+    old_chain = ctx.get("_chain_defined_vars", missing)
+
+    def _eval_branch(branch):
+        branch_base_vars = dict(ctx.get("vars", {}))
+        try:
+            if old_chain is not missing:
+                ctx["_chain_defined_vars"] = set()
+            return branch(data)
+        finally:
+            ctx["vars"] = branch_base_vars
+            if old_chain is missing:
+                ctx.pop("_chain_defined_vars", None)
+            else:
+                ctx["_chain_defined_vars"] = old_chain
+
+    taken = util.is_true(cond(data), singleton_non_boolean=not ctx.get("strict_mode"))
+
+    if taken:
+        return _eval_branch(ok)
     elif fail:
-        return fail(data)
+        return _eval_branch(fail)
     else:
         return []
 
@@ -435,12 +475,24 @@ def to_quantity(ctx, coll, to_unit=None):
                 # native C++ behavior.
 
         if result and to_unit and result.unit != to_unit:
-            converted = nodes.FP_Quantity.conv_unit_to(result.unit, result.value, to_unit)
+            # FP-08 SKEPTIC QA-001 (2026-08-17): §5.5.7 toQuantity() uses
+            # its own canonical conversion-factor table (1 year = 12 months
+            # or 365 days, 1 month = 30 days); route duration pairs through
+            # it first so calendar-keyword cross conversions succeed, then
+            # fall back to the equality-oriented group tables for metric /
+            # mass / reduced-UCUM units.
+            converted = nodes.FP_Quantity.conv_duration_to_spec(result.unit, result.value, to_unit)
+            if converted is None:
+                converted = nodes.FP_Quantity.conv_unit_to(result.unit, result.value, to_unit)
             if not converted:
                 _logger.debug(
                     "Unit conversion from %s to %s failed — returning empty",
                     result.unit, to_unit,
                 )
+            # FP-08 HISTORIAN QA-001 (2026-08-17): conv_duration_to_spec()
+            # and conv_unit_to() render exact terminating quotients without
+            # Decimal scale artifacts (native parity); non-terminating
+            # quotients keep their 28-significant-digit rounding verbatim.
             result = converted
 
     return result if result else []
@@ -483,6 +535,11 @@ def to_string(ctx, coll):
     value = util.parse_value(util.val_data_converted(coll[0]))
     if isinstance(value, float):
         value = Decimal(str(value))
+
+    # A null item (e.g. a JSON-null child preserved by children()) has no
+    # String representation (§5.5.2): empty, never the Python None repr.
+    if value is None:
+        return []
 
     if isinstance(value, (dict, list)):
         return []

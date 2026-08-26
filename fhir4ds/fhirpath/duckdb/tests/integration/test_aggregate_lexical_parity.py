@@ -326,3 +326,80 @@ def test_pathological_expression_depth_does_not_silently_return_empty_fp19_explo
     finally:
         con.close()
         fallback.close()
+
+
+def test_incompatible_arithmetic_errors_abort_parents_fp19_explorer(
+    monkeypatch,
+) -> None:
+    """FP-19 EXPLORER QA-001: N1 §6.6 — incompatible-type arithmetic operands
+    signal an error that aborts parent expressions. Previously the native
+    evaluator degraded the arithmetic to an empty collection, so parents kept
+    evaluating: `(1+'x') | 99` returned ['99'] natively but [] on the fallback.
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1", "o": {"k": 1}})
+    expressions = [
+        "(1+'x') | 99",
+        "99 | (1+'x')",
+        "(1+true) | 99",
+        "(1+o) | 99",
+        "('a'-'b') | 99",
+        "(1|'x').aggregate($this+$total, 0).count()",
+        "(1|2).aggregate($this+'x', 0) | 99",
+    ]
+    con = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        for expression in expressions:
+            native = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            fb = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert native == fb == [], (
+                f"{expression}: native={native}, fallback={fb}"
+            )
+        # Top-level incompatible arithmetic is empty on both, and is_valid
+        # accepts it as an execution type error (parity).
+        native_valid = con.execute("SELECT fhirpath_is_valid(?)", ["1+'x'"]).fetchone()[0]
+        fallback_valid = fallback.execute(
+            "SELECT fhirpath_is_valid(?)", ["1+'x'"]
+        ).fetchone()[0]
+        assert native_valid is fallback_valid is True
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_mixed_unit_quantity_sum_uses_most_granular_unit_fp19_explorer(
+    monkeypatch,
+) -> None:
+    """FP-19 EXPLORER QA-002: N1 §6.6.3 — different-unit quantity arithmetic
+    converts to the most granular input unit (3 'm' + 3 'cm' // 303 'cm').
+    Previously the native evaluator returned the canonical base unit
+    (3.5 'wk' + 2 'd' -> 2289600 's') diverging from the fallback's 26.5 'd'.
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    expressions = [
+        ("1 'cm' + 1 'm'", "101 'cm'"),
+        ("1 'm' + 1 'cm'", "101 'cm'"),
+        ("3 'm' + 3 'cm'", "303 'cm'"),
+        ("3.5 'wk' + 2 'd'", "26.5 'd'"),
+        ("3.5 'wk' - 2 'd'", "22.5 'd'"),
+    ]
+    con = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expressions:
+            native = con.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            fb = fallback.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert native == fb == expected, (
+                f"{expression}: native={native}, fallback={fb}, expected={expected}"
+            )
+    finally:
+        con.close()
+        fallback.close()

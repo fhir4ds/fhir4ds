@@ -37,6 +37,34 @@ except ImportError:
     SQLList = None  # type: ignore[assignment,misc]
 
 
+def _promote_fhirpath_text_list(node):
+    """Rewrite a scalar 2-arg ``fhirpath_text(...)`` call to its list-valued
+    projection ``from_json(fhirpath(...), '["VARCHAR"]')``.
+
+    Multi-valued FHIR property operands (e.g. ``Patient.name.given``) lower to
+    ``fhirpath_text``, which truncates to the FIRST matching node. CQL list
+    operators (CQL 1.5 Appendix B §10.x) require the full element list, so
+    list-operator dispatch must promote such operands. This mirrors the
+    established repair for the ``in`` operator in ``_operators.py``
+    ("the right side may be multi-valued (e.g., claimItem.diagnosisSequence)").
+    """
+    from ...translator.types import SQLLiteral
+
+    if (
+        isinstance(node, SQLFunctionCall)
+        and node.name == "fhirpath_text"
+        and len(node.args) == 2
+    ):
+        return SQLFunctionCall(
+            name="from_json",
+            args=[
+                SQLFunctionCall(name="fhirpath", args=list(node.args)),
+                SQLLiteral(value='["VARCHAR"]'),
+            ],
+        )
+    return node
+
+
 def _is_list_returning_sql(node) -> bool:
     """Return True if *node* is an SQL expression that returns a list/array.
 

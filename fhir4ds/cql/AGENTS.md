@@ -213,6 +213,12 @@
     with signature `not (argument Boolean) Boolean`. Function form
     `not(true)` and prefix `not true` work correctly. Method form
     `X.not()` is not in spec grammar.
+  - `Split('A B', null as String)` returns `{'A B'}` (CQL-12 HISTORIAN
+    re-launch, 2026-08-21): the spec defines only null `stringToSplit`
+    behavior; a null separator is spec-silent. Both the native/C++ and
+    Python engines agree and follow the "separator not found" rule
+    (single-element whole-string list). Do not "fix" this to null or an
+    error without spec evidence.
   - `1e20` lexer error: CQL §9 Decimal literal syntax is fixed-point
     only; no exponent notation. Use `100000000000000000000.0` instead.
   - 200-deep `((((1))))` parser error "Expression exceeds maximum nesting
@@ -1934,9 +1940,16 @@ together.
 - `'café' ~ 'cafe'` returns **False**. CQL §9 Equivalent (String)
   normalizes case + whitespace only; accents/diacritics are NOT
   normalized. NFC/NFD normalization is not part of the spec.
-- `5 'mg' = 5` returns **True**. Integer literal 5 is promoted to
-  Quantity with implicit unit `1` and compares equal to `5 'mg'` via
-  the unity conversion.
+- `5 'mg' = 5` returns **null** (CQL-09 EXPLORER 2026-08-21 fix, QA-001).
+  CQL 1.5 Table 9-E: Integer/Decimal implicitly convert to Quantity with
+  DEFAULT unit `'1'` (dimensionless), NOT the other operand's unit. So
+  `5 'mg' = 5` resolves as `5 'mg' = 5 '1'` → incompatible dimensions →
+  null (§9.5 Equal); `5 'mg' ~ 5` → false (§9.7 never null); `1 = 1 '1'`
+  → true. The earlier pinned `True` doctrine ("unity conversion" adopting
+  the peer unit) contradicted both the spec and the engine's own
+  `1 '1' = 1 'm'` → null behavior; unit-dropping raw-value comparison
+  paths were removed for static bare numeric literals in
+  `_operators.py` mixed quantity branches.
 - Arithmetic operator chains (`1 + 2 + 3`, `2 * 3 * 4`) and logical
   chains (`(1<2) and (3<4)`) remain **unparenthesized** in DuckDB SQL
   emission. DuckDB natively supports these chained forms; only the
@@ -5229,3 +5242,919 @@ unchanged by iter-6.
   rationale: inline CASE bloats SQL and risks audit-scope alias
   dangling.
 
+
+## CQL-01 Primitive Types — pins and fragile areas (2026-08-19)
+
+NOT A BUG registry (spec-verified against local CQL 1.5 spec source):
+- `convert 1.9 to Integer` → null is CORRECT: the §Convert conversion list
+  has no Decimal→Integer conversion; implicit Integer→Decimal only, never
+  the reverse (authorsguide).
+- `1 = '1'` → null (no numeric/string implicit conversion for equality);
+  `'A' = 'a'` → false (Equal is case-sensitive); `'A' ~ 'a'` → true.
+- Integer/Long arithmetic overflow → null (logical spec §16 header), both
+  constant-folded literals AND the runtime path (guarded by TRY()).
+- `ToDecimal('1e3')`, `ToDecimal('1.')`, `ToDecimal('.5')`, `ToInteger('1.0')`
+  → null (spec formatting string `(+|-)?#0(.0#)?` has no exponent form and
+  requires a digit after the decimal point).
+- ToBoolean accepts t/f/yes/no/y/n/1/0 case-insensitively (reference
+  Table 9-F); numeric input only 0/1, else null.
+- Decimal implementation scale is 8 fractional digits (spec floor "at least
+  8 digits of scale"); over-precision literals/strings are ROUNDED HALF-UP,
+  never rejected or nulled (ValueLiteralsAndSelectors DecimalTenthStep
+  fixtures sanction step rounding).
+
+Fragile areas:
+- Shared macro names (e.g. `Truncate`) are defined in BOTH
+  `fhir4ds/cql/duckdb/macros/` and `fhir4ds/fhirpath/duckdb/macros/`;
+  FHIRPath registration runs later and CLOBBERS the CQL definition. Shared
+  names must stay byte-identical in both packages; `Truncate` is
+  `TRY_CAST(system.trunc(x) AS INTEGER)` in both (CQL §Truncate returns
+  Integer; the FHIRPath Python engine truncate() also returns int).
+- DuckDB `TRY()` cannot wrap volatile functions — ALL Python UDFs are
+  volatile by default. The arithmetic overflow guard in
+  `expressions/_operators.py` must stay restricted to function-call-free
+  SQL subtrees (`_contains_function_call`).
+- `minimum/maximum Integer|Long` extents emit typed
+  `CAST(... AS INTEGER/BIGINT)` raw SQL so DuckDB performs true INT32/INT64
+  arithmetic; reverting to bare literals silently widens to BIGINT/DECIMAL
+  and produces out-of-range values instead of null.
+
+## CQL-03 Spec Compliance (Temporal and Complex Types) SKEPTIC iter 1 — 2026-08-19
+
+- `QA-001` RESOLVED. CQL 1.5 grammar DATE/TIME/DATETIME literals must be
+  strictly shaped. `fhir4ds/cql/parser/lexer.py:_validate_datetime_literal`
+  was rewritten from ad-hoc partial checks to a full grammar-shape match:
+  zero-padded components, optional `Z|±hh:mm` offset limited to
+  [-14:00,+14:00], calendar validation incl. leap years, Time-literal range
+  checks and no offset on Time literals. Previously accepted silently:
+  `@2024-01-15.year` (evaluated to string "2024-01-15.year"), `@2024-1-1`
+  (`= @2024-01-01` → True), `@2024-02-30` / `@2019-02-29` round-trips,
+  `+99:00` / `+02` offsets, `@T14:30:22+02:00`, `@T24:00` at lex time.
+  Coverage: `test_cql_malformed_temporal_literals_rejected_at_lex_time_per_spec`
+  in `fhir4ds/cql/duckdb/tests/integration/test_temporal_complex_parity.py`.
+- `QA-002` RESOLVED. CQL 1.5 §Equal (Quantity): "operating on quantities
+  with invalid units will result in a null". Native C++
+  `quantity_compare()` same-code branch compared values without unit
+  validation (`5 'xyz' = 5 'xyz'` → True, `~` → True). Added
+  `same_code_unit_valid_for_compare()` guard in
+  `extensions/cql/src/cql/quantity.cpp`: identical codes compare by value
+  only for valid units — table/calendar/'1' units, UCUM annotations
+  ('{dose}', '[pH]'), annotated known units ('mm[Hg]' → 'mm'), or
+  compounds of valid components ('mg/m2'). Unknown codes ('xyz') → null
+  (Equal) / false (Equivalent). CAUTION: a first table-only guard version
+  regressed 3 DQM measures (CMS69/CMS771/CMS1218 — their CQL compares
+  '{...}', 'mg/m2', and '[pH]' quantities); the baseline gate caught it.
+  Extension rebuilt md5 `67c1b10a93db5cc47b26082dfc43de21`, deployed to
+  repo bundle + site-packages. Coverage:
+  `test_cql_invalid_unit_quantity_comparison_returns_null_per_spec`.
+- `QA-003` INTENDED: `ToString(1:8)` renders `1.0 '1':8.0 '1'` (Decimal
+  semantics, pinned in `test_ratio_udfs.py`) while `ToString(5 'mg')` strips
+  trailing `.0` (macro). Both backends agree; spec silent. No change.
+
+### NOT A BUG Registry additions (CQL-03 spec-compliance SKEPTIC 2026-08-19)
+
+- Dot component access on temporals (`@2024-01-15.year`) is NOT CQL syntax;
+  the canonical accessor is `year from X` (verified correct, all
+  components). Dot access on computed temporals (`ToDate('...').year`)
+  returns null as unknown-property semantics.
+- `ToQuantity('5.5 cm')` (unquoted unit) → null: the spec format is
+  `(+|-)?#0(.0#)?('<unit>')?` — the unit must be a quoted literal inside
+  the string.
+- `ToQuantity(1 'mg')` → null: no Quantity overload of ToQuantity in the
+  spec (String/Integer/Long/Decimal/Ratio only).
+- `@2012-01 ~ @2012-01-15` → false and `=` → null: uncertainty semantics
+  (Equivalent is total, equality is uncertain) — confirmed on both backends.
+- `1:8 ~ null` → false per §Equivalent's always-boolean contract.
+
+### Known Fragile Areas (CQL-03 spec-compliance additions)
+
+- `fhir4ds/cql/parser/lexer.py:_validate_datetime_literal`: regex patterns
+  MUST be composed by string concatenation, NOT rf-strings — f-strings
+  treat regex quantifiers like `{2}` as replacement fields and silently
+  corrupt the pattern (`\d2` instead of `\d{2}`).
+- `extensions/cql/src/cql/quantity.cpp:quantity_compare` same-code branch:
+  MUST keep the `same_code_unit_valid_for_compare` guard so unknown UCUM
+  codes return null instead of value-comparing. The guard MUST accept UCUM
+  annotations ('{dose}', '[pH]'), annotated units ('mm[Hg]'), and compound
+  units ('mg/m2') — eCQMs depend on them (CMS69/771/1218). Do not simplify
+  it to a bare table lookup. A separator-free bare code MUST NOT recurse
+  into itself (early return false) or the extension segfaults on stack
+  overflow. Keep in lockstep with the Python fallback's pint-failure →
+  null path in `fhir4ds/cql/duckdb/udf/quantity.py` (note: the Python
+  fallback still nulls '{dose}'-style annotations that native accepts —
+  pre-existing divergence, conformance runs native).
+
+### CQL-03 spec-compliance doctrine refinements (2026-08-19, remediation)
+
+- Timezone-offset RANGE errors in temporal literals (+14:30, +99:00) are a
+  VALUE error, NOT a lexical error: they must lex fine and evaluate to null
+  at runtime (pinned by test_datetime_part1_parity.py
+  AddInvalidTimezone/BeforeInvalidTimezone/etc.). The lexer enforces offset
+  SHAPE only (`Z` or `±hh:mm`, two-digit zero-padded). Do not add a ±14:00
+  range check to the lexer.
+- The Python fallback quantityCompare now has a same-code fast path
+  (`_same_code_unit_valid_for_compare` in
+  `fhir4ds/cql/duckdb/udf/quantity.py`) mirroring the native guard:
+  identical codes compare by value only for valid units; UCUM annotations
+  ('{dose}', '[pH]') and annotated/compound cores resolve through
+  `_is_valid_quantity_unit` after stripping `{...}`/`[...]` segments.
+  Equivalence (`~`/`!~`) in the fast path MUST use
+  `_apply_quantity_compare` with `_decimal_equivalence_precision` (plain
+  float equality breaks the pinned `1.24 'mg' ~ 1.2 'mg'` → True case).
+- Out-of-range offsets only surface on USE: `@...+99:00 = @...+99:00`
+  → null, `+ 1 hour` → null; a bare literal define echoes the literal
+  text. Consistent with the translate-valid/runtime-null doctrine.
+
+## CQL-03 Spec Compliance HISTORIAN iter 1 — 2026-08-20
+
+Probed constructors (partial precision, out-of-range → null), MinValue/
+MaxValue, calendar month-end truncation (incl. leap years), uncertain-
+precision ORDERING, UCUM case-sensitivity lattice, Ratio tuple selector,
+Time wrap-around; ~130 dual-backend cases
+(`.temp/qa/cql03_historian2_2026_08_20/`). SKEPTIC's two fixes re-verified
+intact.
+
+### Resolved (details in .ai_loop/engineer_handoff.md)
+
+- QA-001 HIGH: same-code quantity comparison validity is now judged by a
+  STRUCTURAL UCUM grammar (metric prefixes incl. two-char 'da', power-of-
+  ten terms `10*3`/`10^-6`, single-digit exponent suffixes `cm3`/`m3`,
+  supplement symbols 'l' liter / 'G' gauss), NOT conversion-table/pint
+  lookup. `*` is NOT a compound separator (UCUM uses it only inside power
+  prefixes). Native `is_valid_ucum_atom()` in
+  `extensions/cql/src/cql/quantity.cpp` and Python
+  `_is_valid_ucum_atom()` in `fhir4ds/cql/duckdb/udf/quantity.py` must
+  stay in lockstep (`_UCUM_VALIDITY_SYMBOLS` mirrors the 85-entry shared
+  table keys). The Python same-code path must NOT fall through to pint for
+  invalid identical codes (pint is case-insensitive and rescues the bare
+  prefix 'M'). This also fixed the prior '{dose}'-annotation python-null
+  divergence. Extension md5 3da236e1fb13c991704fc89acce5a65d.
+- QA-002 HIGH: `Ratio { numerator: X, denominator: Y }` tuple selectors
+  fold to canonical FHIR Ratio JSON via `_fold_ratio_instance()`
+  (`fhir4ds/cql/translator/expressions/_lists.py`) with quantity-object
+  components (CAST(parse_quantity(...) AS JSON)); Integer/Decimal
+  components implicitly convert to unit-'1' quantities. Generic
+  json_object emission breaks ratioCompare validity (double-encoded
+  strings) — do not revert.
+- QA-003 MEDIUM: MinValue/MaxValue(T) fold to compile-time constants in
+  `_translate_min_max_value()` (`_functions.py`) for Integer/Long/Decimal/
+  Date/DateTime/Time; other types raise typed TranslationError. Prevents
+  untranslated passthrough → DuckDB Catalog Error.
+- QA-004 LOW DEFERRED: cross-code comparisons across metric-PREFIXED units
+  (`5 'ML' < 5 'ml'`, `5 'kg' = 1000 'dag'`) still null on native (no
+  prefix-aware conversion algebra; FP-18 deferred family).
+
+### NOT A BUG Registry additions (CQL-03 HISTORIAN 2026-08-20)
+
+- DateTime constructor vs literal comparisons are PRECISION-driven:
+  `DateTime(...,0,2) = @...T10:30:22.000+02:00` → True, but ms-precision
+  ctor vs second-precision literal → `=` null / `~` false — identical to
+  literal-vs-literal ms-mismatch semantics. Not a ctor-comparison bug.
+- Month-end truncation (`@2024-01-31 + 1 month` → 2024-02-29), Time
+  wrap-around, uncertain-precision ordering (decidable → bool, requiring
+  missing precision → null), out-of-range constructor components → null:
+  all verified conformant both backends.
+
+Gate after fixes: 2832/2832 conformance; chunk parity file 20/20; CQL
+duckdb suite 780 passed / 5 skipped.
+
+## CQL-04 HISTORIAN launch (2026-08-20, iter 1 → CLEAN)
+
+- QA-001 (HIGH, RESOLVED): unary `not` was parsed at the deepest precedence
+  tier (`parse_unary_expression`), binding tighter than equality/comparison/
+  membership/`between`. The CQL 1.5 grammar (HL7/cql v1.5 `cql.g4`
+  `expression` alternative ordering) places `notExpression` BETWEEN `and`
+  and the comparison alternatives — `not X in Y` must parse as
+  `not (X in Y)`. Canonical forms `not 5 in {1,2}`, `not 1 = 2`, `not 3 < 2`
+  previously raised TranslationError. Fixed by adding
+  `parse_not_expression()` between `parse_and_expression` and
+  `parse_equality_expression` (parser.py) and removing NOT from
+  `parse_unary_expression`. Regression test:
+  `test_cql_not_precedence_looser_than_comparisons_per_grammar` in
+  `fhir4ds/cql/duckdb/tests/integration/test_logical_parity.py`.
+- Precedence doctrine (grammar-verified): not > and > or/xor > implies is
+  only the LOWER half; the full order is `is null/is true/...` and
+  comparisons/membership/between/union > not > and > or/xor > implies.
+  `not X is null` correctly parses as `not (X is null)` (postfix binds
+  tighter).
+- Gate: conformance 2832/2832; CQL pytest 5710 passed / 9 skipped;
+  test_logical_parity.py 53/53.
+- Probes: /mnt/d/fhir4ds/.temp/qa/cql04_historian2_2026_08_20/probe.py.
+
+## CQL-05 Structural Type Operators (2026-08-20, SKEPTIC launch)
+
+**Hardened in CQL-05 SKEPTIC iteration (2026-08-20).** First/Last/`singleton from` over a bare
+retrieve must lower to a per-patient correlated subquery over the retrieve CTE
+(`_translate_first_last_over_retrieve` in `translator/expressions/_functions.py`); never emit
+`LIST_EXTRACT("<CTE>", 1)` without a FROM. Query sources over Children()/Descendants() bind
+their alias per element via UNNEST + `_lt_<alias>` (structural handler in
+`translator/expressions/_query.py`); element-value aliases (list literals, Children/Descendants
+sources) must not be qualified with `.resource` in is-checks (`_alias_is_element_value`), and
+`_cql_typed_value_type_check` reads the `__fhir4ds_cql_type` tag for `_lt_` items.
+`translator/correlation.py` must not inject patient_id correlation into subqueries with no FROM
+clause (unnest list sources are patient-independent). `exists()` over row-subquery list sources
+lowers to EXISTS, never `list_count(subquery)`. FHIR primitive families satisfy System-type
+`is` targets through the data-driven `FHIR_TYPE_TO_CQL_TYPE` map in `translator/inference.py`
+(FHIR.code/id/uri/... are System.String); FHIR-qualified targets (`FHIR.code`, `FHIR.string`)
+skip both the static System-type shortcut and the clinical Code routing — FHIR.code is not the
+CQL clinical Code type. Known deferred gap (QA-005): value comparisons (`C > 3`) over tagged
+Children/Descendants items still see the JSON tag wrapper as VARCHAR; `is`/`as`/Convert unwrap
+correctly. Regression coverage: `duckdb/tests/integration/test_structural_type_parity.py`.
+
+## CQL-07 To-Conversions (2026-08-20, HISTORIAN launch)
+
+**ToQuantity JSON dispatch is dual-shape (2026-08-20, HISTORIAN fix).** CQL 1.5
+Appendix B §ToQuantity (Table 9-E) accepts BOTH Ratio JSON (divide numerator by
+denominator) and Quantity JSON (identity: "the quantity itself").
+`udf/quantity.py::toQuantity()` tries `_quantity_from_ratio_json()` first, then
+`_quantity_identity_from_json()` (shape-validated via `is_valid_quantity_object`,
+re-emitted canonically; invalid shapes stay null). Native `cql::to_quantity`
+(quantity.cpp) carries the same '{'-identity branch — keep the two in lockstep.
+Reminder: `ToQuantity` is Python-preferred (`_PYTHON_PREFERRED_CPP_CONFLICTS`,
+macro → `__fhir4ds_py_toquantity`), so the Python UDF is the conformance
+authority on both backends; the native implementation is the WASM fallback.
+Twin invariant re-verified: what `ConvertsToQuantity` accepts, `ToQuantity`
+converts.
+- NOT A BUG Registry additions (verified spec-compliant this iteration):
+  - `ToQuantity(Ratio)` with non-annihilable cross units yields a ratio unit
+    (e.g. `g/mg`), consistent with quantity division — not null.
+  - `RatioToString` trailing `.0` Decimal formatting (e.g. `10.0 'mg':2.0 'mL'`)
+    is pinned (`test_ratio_udfs.py`).
+  - `ToTime` normalizes away a timezone offset and preserves input precision
+    (`T14:30:00.0+05:30` → `T14:30:00.0`), fixture-pinned.
+  - Direct-SQL `ToString(<raw Ratio JSON VARCHAR>)` passes the JSON through;
+    the translator dispatches `RatioToString` for Ratio-typed operands.
+
+## NOT A BUG Registry additions (CQL-07 EXPLORER, 2026-08-20)
+
+- ToDateTime/ToTime of strings with 4+ fractional-second digits (e.g.
+  `'2024-03-15T10:30:00.123456'`) return NULL on both engines. CQL 1.5 Appendix B
+  defines DateTime/Time with millisecond maximum precision (1 ms step), so
+  sub-millisecond literals are invalid; strict null is correct (consistent with the
+  strict-digit-counts invariant). 1–3 fractional digits work and ToString preserves
+  timezone offsets (round-trippable per Table 9-G).
+- ToBoolean accepts 'Y'/'Yes'/'TRUE' (case-insensitive) per Appendix B Table 9-F
+  (true/t/yes/y/1 and false/f/no/n/0). Verified dual-engine.
+- ToQuantity(Quantity) identity (HISTORIAN fix) re-verified intact through both
+  macro and e2e population-SQL surfaces.
+- e2e probe note: patient-context defines must be executed through
+  `CQLToSQLTranslator.translate_library_to_population_sql` over the `resources`
+  table shape; `translate_cql()` returns Dict[str, SQLExpression] (not SQL text).
+
+## CQL-09 EXPLORER Iteration 1 (Comparison Operators) — 2026-08-21
+
+- Fixture doctrine (CMS72/CMS190 regression guard): `O.value as Quantity > 3.5`
+  where the FHIR valueQuantity carries a non-UCUM unit display (e.g. "0" with
+  no `code`) compares NUMERICALLY per official eCQM fixture expectations
+  (FHIRHelpers unit: Coalesce(code, unit, '1')). The unit-'1' promotion applies
+  only to static Quantity literals; making it global regressed CMS72
+  (Denominator Exception) and CMS190 (Numerator) by one patient each —
+  verified by A/B SQL diff (`quantity_value(...) > 3.5` vs promoted
+  `quantity_compare`), root: quantityCompare cannot convert "0"→'1' and
+  errors toward null. Future work (DEFERRED): UCUM-validity-gated numeric
+  fallback inside quantity_compare for unparseable units, dual-engine.
+- RESOLVED QA-001: static bare-numeric vs Quantity comparisons dropped units
+  (`1 = 1 'm'` → true, `1 < 2 'm'` → true). Now promote the literal to a
+  unit-'1' quantity (Table 9-E) and route through `quantity_compare`
+  (`_operators.py` mixed branches). Dynamic choice-value disambiguation
+  (`O.value = 1 'm'` JSON-check CASE) is unchanged.
+- RESOLVED QA-002: `1 ~ 1 'm'` / `1 !~ 1 'm'` raised DuckDB BinderException
+  (quantityCompare got a raw INTEGER). Same promotion added in
+  `_translate_equivalence_op` → false / true per §9.7.
+- NOT A BUG pins verified against fetched §9 text:
+  - Equivalent on temporals at differing precision → FALSE (not null):
+    `@2012-01-01T12:00 ~ @2012-01-01T12:00:00` → false; seconds+ms is one
+    combined decimal precision (`.000` ~ no-ms → true); offsets compare as
+    instants (`+01:00 ~ Z` shifted-instant → true).
+  - `1 'year' ~ 1 'a'`, `1 'month' ~ 1 'mo'`, `7 'day' ~ 1 'week'` → true
+    (calendar/definite-duration counterparts); `12 'month' ~ 1 'year'` → false.
+  - Code/Concept ordered comparisons (`Code < Code`) → null: §9.10 defines
+    Greater only for Integer/Long/Decimal/Quantity/Date/DateTime/Time/String
+    and is silent on others; conservative null is the pinned behavior.
+  - `true > false` → true: Boolean ordering unspecified in CQL (FHIRPath
+    defines false < true); kept, unspecified-but-consistent.
+  - Between with Date operand and DateTime bound deciding at day precision
+    → true (`@2015-01-15 between @2015-01-01T00 and @2015-12-31`); §9.1 is
+    `>= low and <= high`, decided at the first differing precision.
+  - count(where-predicate all-null) → 0 (Count ignores null).
+  - Out-of-range Integer literal (no L suffix) correctly rejected; >8
+    fraction-digit Decimal literal rounds half-up (repo path; stale
+    site-packages copies may still hard-reject — always use PYTHONPATH).
+- Fragile area: stale site-packages `fhir4ds` shadowing the repo when
+  PYTHONPATH is unset — probes must run with `PYTHONPATH=/mnt/d/fhir4ds`.
+
+## CQL-10 Arithmetic Part 1 (SKEPTIC re-launch iter 1, 2026-08-21) — ALL RESOLVED
+
+Five spec violations found on both Python and C++ backends (zero parity
+drift; probes in `.temp/qa/cql10/`). NOT A BUG confirmations below.
+
+- RESOLVED QA-001: High/LowBoundary Decimal precision semantics — when precision
+  < current decimal places the input is returned unchanged; spec requires the
+  precision-bucket boundary (HighBoundary(1.587,2)=1.59, Low=1.58, prec 0 →
+  2/1). Python `udf/math.py` and C++ `boundary.cpp` both affected.
+- RESOLVED QA-002: Ceiling/Floor of Decimal beyond Integer extent must be null
+  (Ceiling(3147483647.05), Floor(2147483648.2)); currently returns the value.
+- RESOLVED QA-003: Mixed Integer+Long Add loses Long typing → DuckDB INT32
+  OutOfRangeError (`1 + 2147483647L`); spec: Integer implicitly promoted to
+  Long → 2147483648.
+- RESOLVED QA-004: Abs typed-overflow guard only matches literal AST shapes;
+  `Abs(-2147483648 - 0)` returns 2147483648 instead of null.
+- RESOLVED QA-005: Exp/Ln/Log lower to DOUBLE, spec return type is Decimal
+  (scale-8 per CQL-01 doctrine).
+
+NOT A BUG (verified this pass): no Quantity overload exists for
+High/LowBoundary — Quantity input → null is spec-correct. Log argument order
+(Log(8,2)=3 via system.log(2,8)) correct. Mixed Integer+Decimal Add, exact
+cqlDivide semantics, Exp/Ln/Log domain-error nulls, quantity Add unit-space
+composition, and temporal boundary paths all verified correct.
+
+
+### CQL-10 re-launch fix notes (2026-08-21)
+
+- High/LowBoundary Decimal semantics now mirror the HL7 reference
+  implementation (append 99999999/00000000 then setScale(precision, DOWN)):
+  `HighBoundary(1.587, 2)` = 1.58, NOT 1.59 as the v2 spec prose example
+  claims — fixtures/reference outrank prose (doctrine). Applied in Python
+  `udf/math.py::_decimal_boundary_text` AND C++ `boundary.cpp`
+  (`decimal_boundary_text` helper); extension rebuilt (md5
+  774abbac349f6e6a755f7317ba4a4978) and deployed to repo bundle +
+  site-packages.
+- Ceiling/Floor are typed Integer with null on out-of-extent results
+  (TRY_CAST AS INTEGER in translator registry/macros; Integer-extent guards
+  in mathCeiling/mathFloor Python + C++). `Ceiling(2147483647.05)` → null.
+- Mixed Integer+Long +,-,* lowers with BIGINT casts (CQL implicit
+  Integer→Long promotion); previously `1 + 2147483647L` raised a DuckDB
+  INT32 OutOfRangeError.
+- Abs on statically-integral COMPUTED operands (e.g. `Abs(-2147483648 - 0)`)
+  narrows via TRY_CAST to INTEGER/BIGINT → null on overflow. Bare literal /
+  unary / minimum-FunctionRef forms keep the exact-NULL Step 2b guards
+  (`test_primitive_parity` asserts to_sql == 'NULL' for those shapes).
+- Exp/Ln/Log return DECIMAL(38,8) (Exp(1) → 2.71828183), per CQL Decimal
+  return signatures and CQL-01 exact-Decimal doctrine; official fixtures
+  (Round(Exp(1),8)) unaffected.
+- NOT A BUG: `1 + 2147483647L` may INT32-overflow in DuckDB if Long typing
+  is dropped again — regression-tested in
+  test_arithmetic_operator_parity.py::test_cql_arithmetic_spec_compliance_boundaries_typing_and_promotion.
+
+### CQL-10 HISTORIAN launch notes (2026-08-21)
+
+- Reference-implementation verification (fetched
+  `HighBoundaryEvaluator.kt`/`LowBoundaryEvaluator.kt` from
+  cqframework/clinical_quality_language main): the Decimal boundary semantics
+  are setScale(precision, DOWN) = toward zero. NEGATIVE results are therefore
+  correct as implemented (`LowBoundary(-1.587, 2)` = -1.58, NOT -1.59) — do
+  not "fix" toward floor semantics. Closes REV-030-002's negative-value
+  concern for the decimal surface.
+- Temporal boundaries: default precision maps through the reference's
+  expandPartialMax/withPrecision precision-RANGE mapping
+  (Date <=4/<=6/<=8; DateTime <=4/6/8/10/12/14/17; Time <=2/4/6/9).
+  `HighBoundary(@2014)` = @2014 (expandPartialMax(YEAR) fills month/day with
+  MINIMUMs) — pinned correct.
+- QA-001 (HIGH): Decimal High/LowBoundary define results were degraded to
+  DOUBLE (`TRY_CAST(CAST(... AS VARCHAR) AS DOUBLE)`) — 16-sig corruption on
+  >15-sig values and loss of the fixture-mandated scale-8 rendering
+  (LowBoundaryDecimal expects `1.58700000`). Now DECIMAL(38,8), same seam as
+  Exp/Ln/Log.
+- QA-002 (MEDIUM): statically-wrong-typed operands on the chunk operator
+  family now raise a uniform typed TranslationError (previously a three-way
+  split: silent null for Divide/Exp/Ln/Log/boundaries, raw BinderException
+  for Abs/Floor/Ceiling, raw Conversion Error for HighBoundary precision).
+- Probe-harness trap: `SELECT <generated> ::VARCHAR` binds the cast tighter
+  than infix operators (`a + b::VARCHAR`); always parenthesize generated SQL
+  before appending casts.
+
+## Known Fragile Areas (CQL-10 EXPLORER additions, 2026-08-21)
+
+- `quantityDivide` (udf/quantity.py + native quantity.cpp): pint division
+  does NOT reduce commensurable units — `1000 'mg' / 1 'g'` returned
+  `1000 'mg/g'` instead of the reference-engine `1.0 '1'`
+  (DivideEvaluator.kt uses ucumService.divideBy, which applies the
+  conversion factor and cancels). Exponent simplification works
+  (`12 'cm2' / 3 'cm'` → `4.0 'cm'`); like-unit and unity-divisor paths are
+  fixture-correct.
+- Statically-known scalar-vs-Quantity mixtures for `+`/`-`/`/` and Quantity
+  inputs to High/LowBoundary silently translate to NULL (reference engine
+  throws InvalidOperatorArgument). The HISTORIAN typed guards cover
+  String/Boolean but not Quantity. NOT A BUG Registry: `Exp(100)` → null is
+  spec-correct (result exceeds the CQL §2.3 Decimal range 10^28; overflow →
+  null), and `Quantity / Decimal` → scaled Quantity is fixture-correct
+  (Divide1Q1Q family).
+
+## CQL-10 EXPLORER fixes (2026-08-21, iteration 1)
+
+- `quantityDivide` now cancels commensurable units per CQL 1.5 §9.4 +
+  reference `DivideEvaluator.kt` (ucumService.divideBy): Python applies pint
+  `to_reduced_units()`; native `quantity_divide` converts via `to_base` when
+  `units_compatible`. `1000 'mg' / 1 'g'` → `1.0 '1'`. Extension md5
+  `2722c674ccbdd1e542e4949f8f65c6ae` (repo bundle + site-packages).
+- Typed static guards extended: scalar-vs-Quantity mixtures for `+`/`-`,
+  scalar-left/Quantity-right for `/`, any Quantity for `^`, and Quantity
+  operands of Ceiling/Floor/Exp/Ln/Log/High/LowBoundary raise typed
+  TranslationError (Abs exempt — valid Quantity overload). Still valid and
+  unchanged: `Quantity / Decimal` (Divide1Q1Q), `*` either order,
+  temporal `+/-` Quantity, Q/Q arithmetic.
+
+## CQL-12 SKEPTIC QA launch (2026-08-21) — string operators
+
+- 77-case CQL 1.5 §17 spec-example matrix verified clean on BOTH native/C++ and
+  Python-supplement engines (Combine null/empty-list → NULL, null separator
+  ignored; +/Concatenate null propagation vs & null-to-empty; PositionOf
+  empty pattern → 0 / not-found → −1; LastPositionOf('', s) → Length(s);
+  Substring 0-based truncation with invalid bounds → NULL; Matches/
+  ReplaceMatches single-line + `$1` substitution + escaped `$`).
+- FRAGILE: string bracket indexing on a scalar string-valued define
+  (`define Fam: First([Patient]).name.family; Fam[3]`) returned NULL — the
+  RESOURCE_ROWS list-index branch in `_translate_indexer_expression`
+  (`translator/expressions/_lists.py`) fired on `has_resource` alone instead
+  of the RESOURCE_ROWS shape; scalar defines containing a Retrieve also set
+  `has_resource`. See evolution.json QA-001.
+- NOT A BUG (spec-silent, parity-consistent, do not "fix" without a fixture):
+  `Split('A,',',')` → `['A','']` and `SplitOnMatches('a1b2','\d')` →
+  `['a','b','']` keep trailing empty strings on both engines; the Java RI
+  drops them but CQL 1.5 §17 does not specify trailing-empty handling.
+
+- FIXED (CQL-12 SKEPTIC launch, 2026-08-21): bracket indexing a scalar
+  String-valued define now routes through the public `Indexer` macro.
+  `_definition_resource_cte_name` gates the RESOURCE_ROWS list-index lowering
+  on `meta.shape == RowShape.RESOURCE_ROWS` (scalar defines containing a
+  Retrieve also set `has_resource` and previously hijacked the lowering);
+  `_is_string_index_source` treats scalar defines with cql_type String/Any as
+  string indexer sources. Regression:
+  test_string_operator_parity.py::test_cql_string_indexer_over_scalar_string_define.
+- ARCHITECTURE DRIFT (open, LOW): static type inference returns Any for
+  property chains over `First(Retrieve)` because schema metadata does not
+  resolve complex-type subfields (`get_element_type('HumanName','family')`
+  → None). Landing modelinfo-backed chained-property inference would remove
+  the defensive Any-typed-scalar dispatch in `_is_string_index_source`.
+
+## CQL-12 EXPLORER launch (2026-08-21, iteration 1)
+- NOT A BUG: `ReplaceMatches('abc','zz','$1')` raises a typed
+  `CQLRegexPatternRejected` (rendered "Unsupported feature: ReplaceMatches")
+  because the substitution references a group the pattern does not capture;
+  the Java reference engine also throws. Typed rejection, never a silent null.
+- NOT A BUG (spec conversion table): `Concatenate`/`+`/`&` over non-String
+  operands (Integer, Date, Quantity) fail at translate time with a typed
+  TranslationError; there is no implicit conversion to String in CQL. Use
+  `ToString(x)`.
+- NOT A BUG (pinned doctrine, start >= length → null): `Substring('', 0)` →
+  null, consistent with `Substring('abc', 3)` → null.
+- Verified-clean EXPLORER seams: PositionOf/LastPositionOf overlapping
+  substrings and empty needles (0 / length / -1), Substring zero-length and
+  clamped-length boundaries, Indexer last-char/single-char, nested quantified
+  regex groups + optional-group substitution + empty-match replace, Combine
+  null-element skipping on literal lists, chained Split→Indexer→Substring, and
+  end-to-end DuckDB execution over loaded FHIR resources on both engines
+  (py == cpp on all 11 probe columns).
+- FRAGILE (open, see QA-002): Indexer over collapsed chained navigation
+  silently character-indexes lowered scalars — `Patient.name.given[0]` → 'J'
+  and `First([Observation]).code.coding[0]` → '{' on BOTH engines (ARCH-001
+  chained-typing debt family).
+- FIXED (CQL-12 EXPLORER launch, 2026-08-21): SplitOnMatches no longer leaks
+  Python `re.split` capture-group interleaving on the Python fallback
+  (`udf/string.py` keeps `parts[::groups+1]`), restoring py/native parity and
+  Java Pattern.split reference semantics. Regression:
+  test_cql_string_splitonmatches_excludes_capture_groups.
+- FIXED (CQL-12 EXPLORER launch, 2026-08-21, HIGH): bracket indexing over
+  chained navigation is now LIST indexing per CQL 1.5 implicit property
+  traversal — `_is_string_index_source` no longer treats
+  `fhirpath_text`/`fhirpath_scalar` chains as String sources; they lower to the
+  list-returning `fhirpath` UDF + LIST_EXTRACT. `Patient.name.given[0]` →
+  'Joel' (was 'J'), `First([Observation]).code.coding[0].code` → '8480-6'
+  (was '{'/NULL). Literal Strings and First()-demoted scalar defines keep the
+  string Indexer. Regression:
+  test_cql_string_indexer_over_fhirpath_chain_is_list_indexing. The
+  ARCH-001 chained-typing drift entry remains open for the general typing
+  question, but its string-Indexer manifestation is closed.
+- CQL-14 EXPLORER fragile-area additions (2026-08-21, QA of timing-phrase
+  qualifiers): (1) `starts/ends same <prec> or after|or before` — the parser
+  branch at fhir4ds/cql/parser/parser.py (~L739 starts / ~L802 ends)
+  consumes the token after the precision unit with `advance()` assuming `as`,
+  silently dropping the `or after`/`or before` qualifier; the expression then
+  lowers to `same as` equality (cqlSameAsP) instead of cqlSameOrAfterP/
+  cqlSameOrBeforeP → definitive wrong booleans. No-precision
+  `starts same or after X` is a hard ParseError. (2) `starts/ends on or
+  before|after <prec> of X` parses as starts/ends wrapping
+  `on or before (precision of X)`; `_translate_starts_op`/`_translate_ends_op`
+  in fhir4ds/cql/translator/expressions/_operators.py hardcode DATE casts for
+  the simple inner on-or forms, ignoring the inner `precision of` →
+  false negatives at year/month precision (day-collapse at finer
+  precisions). Spec: §9.18/§9.19 ("same" is a synonym for "on" in timing
+  phrases); comparisons must run at the specified precision on BOTH bounds.
+  NOT A BUG registry (verified this launch): `starts/ends same <prec> as
+  Interval[...]` compares SameAs(bound, interval-as-singleton) — start AND
+  end must match (§9.24); right side is only reduced to a bound by an
+  explicit trailing `start of`/`end of`. `Today() <= Now()` → null is
+  implicit-conversion precision uncertainty, consistent with pinned doctrine.
+  DateTime − DateTime correctly has no Subtract signature (BinderError);
+  use duration between.
+- FIXED (CQL-14 EXPLORER launch, 2026-08-21, 2 HIGH): (1) `starts/ends same
+  <prec> or after|or before` timing phrases — parser (parser.py starts/ends
+  `same` branches) now accepts the full grammar production
+  `same dateTimePrecision? (relativeQualifier|'as')`; previously the
+  OR_AFTER/OR_BEFORE token was consumed as if it were `as`, silently
+  rewriting same-or comparisons to same-as equality (definitive wrong
+  booleans), and no-precision `starts same or after X` was a ParseError.
+  `_translate_tail_operators`'s quantity-offset prefix heuristic now
+  excludes the same-family; lowering flows through the existing
+  `_translate_same_operator` precision/no-precision patterns (§9.25/§9.26
+  bound extraction). (2) `starts/ends on or before|after <prec> of X` —
+  `_translate_starts_op`/`_translate_ends_op` now detect the inner
+  `precision of` operand and lower to cqlSameOrBeforeP/cqlSameOrAfterP at
+  the specified precision (previously hardcoded DATE casts → false
+  negatives at year/month). Regression (dual-engine):
+  test_datetime_part2_parity.py::test_cql_datetime_part2_starts_ends_same_or_and_on_or_precision.
+  Architecture drift note (deferred): operator-STRING prefix dispatch over
+  flattened timing-phrase strings has now shadowed a grammar form twice in
+  CQL-14's history; structured timing-phrase AST nodes are the recommended
+  long-term fix.
+
+## CQL-16 EXPLORER launch (2026-08-22) — interval part 2 dual-engine fixes
+
+- **FIXED (native only, no-Python mode diverged)**: `BoundValue::compare`
+  (extensions/cql/src/cql/interval.cpp) treated Integer-vs-Decimal interval
+  bounds as incomparable (-2), producing SQL NULL for meets / on or before /
+  on or after / intersect and WRONG DETERMINISTIC FALSE for overlaps /
+  included in / overlaps before / overlaps after / equals / equivalent
+  (e.g. `Interval[1,3] overlaps Interval[2.5,5]` native false vs py true;
+  `Interval[1,3] !~ Interval[1.0,3.0]` native true vs py false). CQL 1.5 §2
+  implicit conversions make numeric point types cross-comparable. Fix:
+  numeric cross-type compare (long double) before the type-mismatch gate.
+  Extension rebuilt; md5 87e4f6e866bfbc7151eb42ff779c9fd1 across build,
+  repo bundle, and site-packages.
+- **FIXED (native only)**: `Interval::intersect` used raw low/high and
+  propagated open flags. CQL 1.5 §9.9 (via §9.14/§9.15 Start/End) requires
+  effective bounds and always-closed result (reference
+  IntersectEvaluator.kt: `new Interval(max, true, min, true)`):
+  `Interval[1,5) intersect Interval[4,8]` is `[4,4]`, not `[4,5)`. Fix:
+  normalize open finite bounds via successor/predecessor before min/max.
+  Python authority already normalized at parse time (`_parse_interval`).
+- NOT A BUG registry: reference OverlapsBefore/AfterEvaluator is start-based
+  strict (`before(start1, start2) and overlaps`) —
+  `Interval[1,9] overlaps after Interval[1,5]` is false; verified against
+  cqframework/cql-engine source. Hour-precision DateTime successors step by
+  hour, so `[@T..., @2024-02-01T00] meets [@2024-02-01T01, ...]` is true.
+- Coverage: `test_interval_part2_parity.py::
+  test_cql_interval_part2_native_effective_bounds_and_cross_numeric_parity`
+  (10 cases × py-fallback / native-loaded / no-Python engines).
+
+## CQL-17 SKEPTIC Iteration 1 fresh run (2026-08-22)
+
+- Re-validated all 11 chunk items across py-supplements / native+supplements
+  / no-Python engines (33 translated + direct-UDF probes): union adjacency
+  at successor steps (int / decimal 1e-8 / date / hour / month), disjoint
+  union null, open-bound union exclusion, Starts precision both conjuncts,
+  Same Or After/Before equality edges, properly-includes strictness, point
+  from Quantity/Date, Long MIN..MAX size exactness — all CLEAN.
+- **QA-001 (HIGH) RESOLVED**: `(null as Interval<T>) union Interval[...]`
+  lowered to LIST union (jsonConcat) and raised BinderException on valid
+  CQL; typed-null on both sides returned `[]`. CQL §19.31: either argument
+  null → null. Root cause: `_translate_union_op`
+  (translator/expressions/_operators.py) required BOTH operands recognized
+  by `_is_fhir_interval_expression`; the null-CASE lowering of
+  `null as Interval<T>` is neither that nor an `SQLNull`. Fix: also resolve
+  `_static_structural_type_name(node).startswith("Interval<")` for both
+  operands so interval-typed ASTs (including typed nulls and typed
+  identifiers) route to `intervalUnion`. Intersect/except/properly-includes
+  already handled this operand shape; union was the outlier.
+- **QA-002 (MEDIUM) RESOLVED**: `start of`/`end of` a Quantity interval on
+  the Python path returned a Python dict repr (`{'value': 1.0, ...}`, not
+  JSON) while native returned valid JSON. Root cause:
+  `_raw_closed_bound` (duckdb/udf/interval.py) `str()`'d dict raw bounds.
+  Fix: dict/list raw bounds serialize via `orjson.dumps`, matching the
+  native compact-JSON shape exactly.
+- **QA-003 (MEDIUM) RESOLVED**: `width of` a Quantity interval on the
+  Python path omitted `"system":"http://unitsofmeasure.org"` that
+  `interval_size` and the native extension include (CQL-17 HISTORIAN fixed
+  Size only; Width was missed). Fix: `intervalWidth` quantity branch now
+  mirrors `interval_size`.
+- Coverage: `test_interval_part3_parity.py` (3 union-null defines + 2
+  quantity Start/End defines across 3 engines; `$.system` direct-UDF check).
+- Known fragile area: union dispatch now depends on
+  `_static_structural_type_name` resolving `Interval<` AST types — keep the
+  `_type_specifier_name` IntervalTypeSpecifier branch intact or typed-null
+  unions regress to list semantics.
+
+## CQL-17 HISTORIAN Iteration 1, 2nd launch (Interval Operators Part 3) — 2026-08-22
+
+- 4 issues (2 HIGH): see `.ai_loop/evolution.json`. All found by applying the
+  CQL-16 lesson "probe MIXED POINT TYPES on interval bounds".
+- QA-001/QA-002 HIGH: no-precision interval `same as` / `same or after` /
+  `same or before` with Decimal bounds are broken on ALL engines — Python
+  RAISES ValueError (`cqlDateTimeEqual` → `_parse_components` int('1.0')),
+  native returns NULL. Integer intervals only work by accident (datetime
+  parser reads '1' as year). Root: `_temporal_comparisons.py` lowers these
+  to temporal UDFs regardless of interval point type.
+- QA-003 MEDIUM: native `interval_width`/`interval_size` NULL on mixed
+  Integer/Decimal bounds (interval.cpp width_string/size_string switch on
+  bound_type from LOW bound; needs cross-type numeric fallback like the
+  CQL-16 BoundValue::compare fix).
+- QA-004 MEDIUM: `start of`/`end of` Quantity intervals emit
+  {"value","unit"} without "code"/"system" while Width/Size emit canonical
+  UCUM Quantity JSON (native `quantity_json_for_bound` minimal shape).
+- NOT A BUG registry additions:
+  - `start of Interval[null as Integer, 5]` → -2147483648 is CORRECT: CQL
+    Integer is signed 32-bit (spec §2 types), minimum is -2^31, not 64-bit.
+  - Quantity-interval union result keeps each bound's authored unit (low in
+    'g', high in 'mg' is possible); semantically correct set-union bounds,
+    cosmetic heterogeneity only.
+  - `same day or after` with differing timezone offsets evaluates by
+    normalized instant (start vs end) — consistent across engines.
+- QA probes: `.temp/qa/cql17_historian2_2026_08_22/probe.py`.
+
+## CQL-17 HISTORIAN 2nd launch — fix notes (2026-08-22)
+
+- All 4 issues RESOLVED (translator dispatch + native width/size cross-type
+  + canonical Quantity bound JSON). Extension rebuilt and redeployed:
+  cql.duckdb_extension md5 3e7d4167143e01907fdd8561db43b7d7 (repo bundle +
+  site-packages; was 87e4f6e8...).
+- Known fragile area: the no-precision same/same-or interval family in
+  `_temporal_comparisons.py` now depends on
+  `_numeric_interval_point_kind` static AST typing — if new interval
+  expression forms stop resolving through `_static_structural_type_name`,
+  numeric intervals silently fall back to the temporal UDF path (NULL on
+  decimals). The parity test guards this.
+- PRE-EXISTING (from prior sessions' working tree, NOT this launch): native
+  unittest `extensions/cql/test/sql/cql.test:110`
+  `cqlDurationBetween('2012-01-02','2012','month')` returns
+  `end:10` vs expected `end:11` (uncertainty high boundary off by one).
+  Verified present with this launch's patch reverted. Needs a dedicated
+  follow-up; not covered by the master conformance gate.
+
+## CQL-18 SKEPTIC Re-launch (List Operators Part 1) — 2026-08-22
+
+- ROOT CAUSE DOCTRINE: dynamic multi-valued FHIR property operands lower to
+  scalar `fhirpath_text` (FIRST-node truncation). Every CQL list operator
+  (§10.x) must promote such operands to the full list projection
+  `from_json(fhirpath(...), '["VARCHAR"]')` before list-macro dispatch. This
+  is now centralized in
+  `_promote_fhirpath_text_list()` (translator/expressions/_utils.py) and
+  applied in `_list_contains_call`/`_list_has_all_call`/`_list_except_call`/
+  `_list_intersect_call`/`_list_equal_call`/`_list_index_of_call`, the
+  CQLListEquivalentEq dispatch, the Contains fallthrough (equality semantics,
+  NOT substring, over dynamic FHIR paths), the Exists fhirpath_bool branch
+  (COALESCE(list_count(...),0) > 0), the Distinct generic fallback, and the
+  new `flatten` pre-translate (`_translate_flatten_pre`, preserves
+  List<List<T>> nesting for `flatten { <dynamic list> }`).
+- Fixed in this launch: `exists Patient.name.given` silently returned false
+  with data present; `contains` used substring-over-first-node semantics;
+  Distinct/Equal/Equivalent/Except/Intersect/IndexOf/Includes/IncludedIn/
+  Flatten-of-list-literal raised DuckDB BinderExceptions over dynamic lists.
+- Spec adjudications (fixtures outrank prose; verified against
+  CqlListOperatorsTest.xml): distinct dedupes nulls ({null,null,null} →
+  {null}) despite the §10.2 prose note; `null in {1,null}` → true despite the
+  §10.9 IsNull example; ExceptLeft example pins null-right → left list.
+  Both = and ~ on lists are ORDER-SENSITIVE (§10.3/§10.4 "in order").
+- Regression test:
+  test_cql_list_part1_dynamic_fhir_lists_execute_and_match_cpp_registration
+  (population-SQL, py + cpp engines).
+
+## CQL-19 HISTORIAN launch (2026-08-22) — Known Fragile Areas + probe doctrine
+
+Fresh HISTORIAN launch (post-SKEPTIC-fix tree) found 4 new divergences in
+list-ops part 2 (all translator-level, py==cpp==nopy; probes in
+`.temp/qa/cql19_historian/`):
+
+- `Count(<retrieve> union <retrieve>)` -> BinderException "Subquery returns 2
+  columns": the aggregate COUNT wraps the rows-shaped SQLUnion without list
+  coercion. Count over a single retrieve works. (HIGH)
+- `singleton from G` where G is a stored-list define alias: silently returns
+  the whole list (3 elements) instead of the §20.30 run-time error; empty ->
+  [] not null. `_apply_singleton_from`'s subquery branch counts CTE ROWS, not
+  list ELEMENTS. Static literals behave correctly. (HIGH)
+- `Patient.name.given union (null as List<String>)` -> NESTED list
+  `[['Peter','James','Kim']]`: Case 6a typed-list eligibility does not cover
+  promoted dynamic (from_json) lists; the jsonConcat fallback nests. Static
+  `{1,2} union null` is correct. (HIGH)
+- Navigation after a retrieve union (`Last(([Condition] union [Observation]).id)`)
+  -> opaque BinderException "Referenced column ... not found" instead of the
+  typed `[Resource].field` TranslationError given for single retrieves. (MEDIUM)
+
+Conformant re-verified: all 5 SKEPTIC fixes (102 probe cases, zero diverge),
+union dedup overlap/both-dynamic/symbolic |, dynamic + negative Skip/Take
+counts, method syntax skip/take/union, union-typed define aliases under
+Tail/Length/Take/SingletonFrom/Count, empty-list Tail/Last/Length, two-dynamic
+!=/!~/properly-includes. Retrieve-union row ORDER is nondeterministic across
+engine modes (content + dedup conformant) — observation, not a bug.
+
+### CQL-19 HISTORIAN launch fixes (2026-08-22)
+- `Count(<retrieve> union <retrieve>)`: aggregate pre-translate now resolves
+  resource-define aliases to their Retrieve ASTs and wraps the rows-union in
+  the patient-correlated `COUNT(*)` subquery (QA-001).
+- `singleton from G` (stored-list define alias): `_apply_singleton_from`
+  subquery branch counted CTE ROWS not ELEMENTS; new
+  `_apply_singleton_from_list_value` element-cardinality CASE + pre-hook and
+  unary-path routing for stored-list aliases (QA-002).
+- `dynamicList union null` nesting was TWO layers: the §20.29 null gate did
+  not recognize statically-null list CASE operands (and
+  `_is_static_null_case` rejected CASE-without-ELSE, which evaluates NULL),
+  and the define-level stored-list union marking rejected null/`as`-cast
+  operands so the population wrap LIST()-nested the result (QA-003). Null
+  operands can never be resource CTEs — the DQM union guard still excludes
+  Identifier/Retrieve operands.
+- `([A] union [B]).field` raises the typed TranslationError like
+  `[Resource].field` (QA-004).
+- NOT A BUG (added): retrieve-union row ORDER differs across py/cpp/nopy
+  (content + dedup conformant; CQL list-union order unspecified, set
+  semantics).
+
+### CQL-20 SKEPTIC launch fixes (2026-08-22, Aggregate Functions chunk)
+- Aggregates over ELEMENT-ROWS defines (`define Vals: (from [Observation] O
+  return O.value as Quantity); Sum(Vals)`) previously consumed a LIMIT-1
+  scalar subquery (only the FIRST row aggregated — Min({120,80}mg) returned
+  120) or hit GROUP BY/lambda binder errors. New
+  `_translate_list_aggregate_dispatch` + `_element_rows_define_list`
+  (expressions/_functions.py) materialize the per-patient element LIST and
+  apply CQL list semantics; PATIENT_SCALAR `List<...>`-typed non-stored-list
+  defines prefer inlining the definition AST (non-CTE-backed sources only —
+  CTE-backed inline translations carry NO patient correlation and leak rows
+  across patients; they must use the rows-CTE materialization).
+- Quantity statistical aggregates over dynamic (subquery-derived) lists use a
+  hoisted derived-table shape (`FROM (SELECT <list> AS __qty_list) __qty_src`)
+  because DuckDB forbids subqueries inside list_transform/list_reduce lambda
+  bodies.
+- `_wrap_definition_cte` (cte_manager.py) UNKNOWN branch: scalar AGGREGATE
+  subqueries (e.g. AllTrue over a retrieve-backed query → `(SELECT
+  COALESCE(bool_and(_val),TRUE) FROM (...) AS _agg)`) and single-column
+  selects over DERIVED tables must keep their outer `_pt` correlation.
+  Unwrapping them and rewriting `_pt` → the derived alias made the
+  correlation self-referential (BinderException `_agg not found`).
+- FHIR choice-cast type names (`as dateTime`, `as instant`, ...) canonicalize
+  to CQL spellings (`_FHIR_TO_CQL_TYPE_NAMES` in _functions.py) so
+  Min/Max(List<DateTime>/Date/Time) spec overloads are accepted for
+  query-derived lists (`define Dates: ... return O.effective as dateTime`).
+- Mode over dynamic multi-valued fields (`Mode(Patient.name.given)`) promotes
+  fhirpath_text → the from_json element list and routes through CQLListMode
+  (scalar MODE() over the JSON value never binds).
+- Product(List<Integer>)/(List<Long>) now returns exact typed Integer/Long
+  (list_aggregate 'product' + TRY_CAST width restore, overflow → null),
+  mirroring the CQL-01 Sum doctrine (previously always Decimal(38,8)).
+- NOT A BUG (added): GeometricMean over List<Quantity> is a typed
+  TranslationError — the CQL 1.5 spec defines GeometricMean ONLY for
+  List<Decimal>. GeometricMean of negative elements → null (reference-engine
+  ln() convention; spec formula is ambiguous there).
+
+## CQL-20 HISTORIAN additions (2026-08-22)
+
+- Dynamic query-element numeric aggregates (`Sum((from [Observation] O return
+  O.valueQuantity.value as Integer))`, `ToDecimal(...)` elements, arithmetic
+  `D + 0.0` derivations) route through the exact-typed list dispatcher
+  (INTEGER/BIGINT width restore; DECIMAL(38,8) exact Sum/Product per CQL 1.5
+  §2.3) — the generic row aggregate lowers through
+  `SUM(TRY_CAST(x AS DOUBLE))` and loses Decimal exactness / Integer typing.
+- Static element-type inference now covers Boolean-result operators
+  (`is null`, comparisons, and/or/xor, in/is/like) and CQL arithmetic
+  promotion (Integer/Long/Decimal; `/` always Decimal). PLACEMENT INVARIANT:
+  these branches must stay AFTER the `as`-cast branch in `_element_type` —
+  placing them earlier short-circuits choice-casts and re-breaks
+  Min/Max(List<DateTime>) (CQL-20 SKEPTIC QA-003 regression vector).
+- Arithmetic-inference soundness rule: unknown-typed operands are treated as
+  numeric ONLY when they are plain Identifiers (query/lambda aliases);
+  unknown function results (`all(...) + 1` in CumulativeMedicationDuration)
+  must stay None — treating them as numeric misroutes struct-valued elements
+  into `list_aggregate(..., 'sum')` and breaks DQM CMS128.
+- Untyped-identifier × numeric-literal arithmetic no longer hardcodes
+  TRY_CAST(... AS INTEGER) (_operators.py): target follows inferred static
+  type, else the literal kind (float → DECIMAL(38,8)). `Sum((from {0.1, 0.2}
+  D return D + 0.0))` previously returned 0 via NULL truncation.
+- DEFERRED (out-of-chunk, pre-existing — verified by git-stash bisect):
+  `Ratio { numerator: 1 'mg', denominator: 2 'mg' }.numerator.value` returns
+  a list (test_temporal_complex_parity.py ratio accessor case fails on the
+  inherited tree; equality/equivalence cases pass). Owner: CQL-03 surface.
+
+## CQL-20 EXPLORER iteration additions (2026-08-22)
+
+- Statistical aggregates (Median/StdDev/Variance/Population*) over DECIMAL
+  lists use the shifted exact-decimal lowering (deviations from first
+  non-null element; Median = anchor + median(devs)) in BOTH the translator
+  static branch and the SQL macros (`macros/aggregate.py`). Rationale: DOUBLE
+  casts corrupt sub-centesimal deviations at ≥1e10 magnitudes
+  (Variance({1e11+.01, 1e11+.03}) was 0.00020024). INVARIANT: the
+  dispatch-site shifted form is SQLArray-only — dynamic subquery lists must
+  not embed the anchor inside the deviations lambda (DuckDB forbids
+  subqueries in lambda bodies).
+- `_static_list_element_types` sees through unary +/- numerics; negative
+  decimal literals keep their element type (previously fell to the untyped
+  DOUBLE path).
+- NOT A BUG registry: AllTrue(null/empty/all-null) → true, AnyTrue → false,
+  Count(null) → 0 (spec examples verified); GeometricMean zero → 0.0,
+  negative → null (INTENDED); StdDev/Variance single-element → null,
+  Population* single-element → 0; Sum Integer/Long extent overflow → null;
+  scientific-notation literals rejected and 28-integer-digit Decimal limit
+  enforced (§2.3); `iif` is FHIRPath not CQL (pass-through catalog error is
+  prior CQL-06 doctrine).
+- Known fragile (pre-existing, verified by stash bisect):
+  `fhir4ds/cql/tests/unit/test_audit_mode.py` TestMinMaxAttribution arg_min/
+  arg_max shape failures exist on the inherited tree.
+- DEFERRED: GeometricMean exp(avg(ln)) artifact at 1e13+ (needs decimal
+  ln/exp/sqrt); aggregates over query-as-query-source / define-alias list
+  sources ("More than one row returned by a scalar subquery") — CQL-05
+  QA-107 row-shape family, owner: query-plumbing chunk.
+
+### Age-operator uncertainty (CQL-21, fixed 2026-08-22)
+
+- `fhir4ds/cql/duckdb/udf/age.py`, `extensions/cql/src/cql/age.cpp` +
+  `cql_extension.cpp` (`AgeFromStringTexts` = `AgeTextGuarded(
+  CqlDurationBetweenString(...))`), translator `_functions.py`
+  (`_translate_age_function` / `_translate_age_at_function`), and
+  `_operators.py` (`_UNCERTAIN_BETWEEN_UDFS`, `_CQL_AGE_FUNC_NAMES`): ALL
+  age surfaces are §22.21 duration calculations returning VARCHAR
+  (integer string when certain, closed-interval JSON when the birthDate/asOf
+  precision is below the operator precision). Crisp negative age → NULL;
+  intervals spanning negatives are surfaced per spec. Full-precision
+  birthDates give identical crisp results as before. The 1706-test gate has
+  NO age fixtures (no CqlAgeOperatorsTest.xml), so spec prose is the sole
+  anchor. FRAGILE: any new consumer of age results must go through
+  `cqlUncertainCompare` — `age in Interval[a,b]` must lower to the
+  uncertain-compare conjunction in `_operators.py` (interval-`in` branch),
+  NOT raw SQL BETWEEN (VARCHAR vs INTEGER_LITERAL BinderException; broke 11
+  DQM measures when missed). Population-mode boolean defines are
+  filter-based, so uncertain (NULL) comparisons surface as False at the
+  define boundary — expected representational convention.
+- After ANY cql_extension.cpp / age.cpp edit, rebuild
+  (`cmake --build extensions/cql/build/release`) and deploy the binary to
+  the repo bundle AND site-packages, and clear `~/.duckdb/extensions` —
+  a stale binary produced NULL-instead-of-interval divergences that looked
+  like code bugs (bit again in CQL-21).
+
+### Known out-of-chunk unit-suite failure (logged CQL-21 QA-002, 2026-08-22)
+
+- `test_logical_parity.py::test_cql_boolean_define_alias_feeds_logic_by_value`
+  fails in the shared campaign tree: a define alias of a SINGLE-valued
+  Boolean FHIR property (`define F: Patient.active`) is marked
+  `_definition_is_dynamic_list` (fhirpath_text shape) → meta cql_type
+  `List<Any>`, which `_validate_boolean_operand` then rejects for
+  `F and true`. Works at HEAD db1e4164. Owner: list/property-typing chunk
+  (CQL-19 family). Suggested fix: gate the dynamic-list marking on FHIR
+  max-cardinality > 1 (schema metadata already resolves Patient.active as
+  Boolean) or look through stored-list aliases of Boolean-typed properties
+  in `_validate_boolean_operand`.
+
+## CQL-21 EXPLORER launch (2026-08-23) — clinical operators findings
+
+- FIXED (QA-001, HIGH): `=` between a dynamically retrieved code and a literal
+  Code had no dynamic lowering path (raw CodeableConcept-JSON vs Code-JSON
+  comparison — could never match; `~` worked). Now lowered via
+  `_translate_dynamic_code_equality` → `coding_matches_exact` UDF
+  (exact code/system/version/display; absent literal element must be absent in
+  the coding). Keep `=` and `~` lowerings symmetric when adding code paths.
+- FIXED (QA-002, MEDIUM): literal-list Sum over §22.21 uncertainty elements
+  silently dropped intervals (DuckDB list sum ignores unparseable VARCHAR).
+  Now `cqlUncertainListSum` (Python + native) → [Σ lows, Σ highs]; Avg/Median
+  over uncertain literals return null (not representable; honest null). Any
+  new list aggregate must handle §22.21 VARCHAR elements.
+- FIXED (QA-003, MEDIUM): CQL keyword `Average` was missing from the
+  pre-translate registry and `_CQL_AGG_TO_SQL` keys ('avg'); a raw
+  `Average(...)` SQL call leaked → DuckDB Catalog error. New CQL aggregate
+  keywords must be registered in BOTH `expressions/__init__.py`
+  (register_pre_translate) and the `_functions.py` maps.
+- NOT A BUG: timestamped Patient.birthDate (invalid FHIR date+time) is treated
+  as a day-precision date → §22.21 day uncertainty interval (time and offset
+  dropped). NOT A BUG: population-mode define columns collapse valueset-null
+  (`in` on a declared-but-unloaded ValueSet) to False at the define boundary;
+  the direct `in_valueset` UDF returns spec-correct NULL with a warning.
+  NOT A BUG: Sum over integral ages surfaces as DuckDB DECIMAL/INTEGER text
+  (value-correct).
+- Conformance after fixes: 2832/2832 (DQM 47/47); cql extension md5
+  c5b22d58310c1eb7bafa17ce7877f989 across build/bundle/site-packages.
+
+## medterm4ds 0.0.2 integration remediation (MT-001..MT-007, 2026-08-24)
+
+- Dependency bounded: `medterm4ds>=0.0.2,<0.0.3` in `pyproject.toml`
+  (unbounded minors ship silent behavior changes; re-verify before bumps).
+- HTTP `$search` now sends `system` (canonical URL via
+  `system_mappings.category_to_system_param`; unknown/empty category →
+  param omitted = all-systems), `searchMode`, `count=25`. The legacy
+  `category`/`mode` params were never read by medterm4ds — every HTTP
+  search was all-systems lexical. Do not reintroduce them.
+- HTTP `$expand`/`$expand_intensional` now send `count=1000` +
+  `activeOnly=false` (medterm defaults are count=20 / activeOnly=true —
+  deliberate divergence from R4; expansion feeds membership so retired
+  codes are IN, per the settled retired-code policy: include-retired on
+  expansion/membership, active-only on search/autocoding).
+- In-process `expand()` primary path is
+  `apps.fhir_api.expand_url_pattern(engine, url, count=1000,
+  include_retired=True)`; facade `Terminology.expand_url` is fallback
+  only (no include_retired). In-process `expand_intensional` is wired:
+  `expand_intensional_value_set(engine, vs, 1000, include_retired=True)`
+  — count is POSITIONAL — with facade fallback.
+- `connect()` RuntimeError (db set but missing) is re-raised with a
+  FHIR4DS_TERMINOLOGY_DB hint naming build-duckdb / auto-provision /
+  prepare-derived (schema 0.9) remediations. `cache_indexes=True` is
+  passed (long-lived engine). `search_index_dir` exists only on the
+  TypeError legacy fallback path.
+- Category→source mapping moved to
+  `terminology/system_mappings.py` (shared with HTTP adapter);
+  `_category_to_sources`/`_CATEGORY_TO_SOURCES` in in_process_adapter
+  are backward-compat aliases.
+- Known Fragile Area (pre-existing, OUT OF SCOPE for MT): unit tests
+  `test_audit_mode.py::TestMinMaxAttribution::test_min/max_on_query_uses_arg_*`
+  fail on the uncommitted campaign tree (arg_min/arg_max not emitted for
+  query-level Min/Max attribution) — reproduced in a terminology-free
+  subprocess env; unrelated to medterm4ds. Logged as MT-008 NEW.
+- Code-review audited (2026-08-24, CLEAN_WITH_NOTES): all MT-001..MT-007
+  verified against the INSTALLED 0.0.2 wheel (note: the /mnt/d/medterm4ds
+  working tree can diverge from the wheel — trust site-packages). Latent
+  REV-001 (LOW, open): `category_to_system_param` comma-joins multi-system
+  values, but `$search`'s `system` is a single URI — dead path today (every
+  category maps to one mnemonic); if a multi-mnemonic category is ever added,
+  send `system` per-request instead of comma-joining.

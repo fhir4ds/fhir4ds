@@ -72,6 +72,21 @@ Optional<DateTimeValue> AgeCalculator::extract_birthdate(const char *json, size_
 	return result;
 }
 
+Optional<std::string> AgeCalculator::extract_birthdate_text(const char *json, size_t len) {
+	yyjson_doc *doc = yyjson_read(json, len, 0);
+	if (!doc) {
+		return NullOpt<std::string>();
+	}
+	yyjson_val *root = yyjson_doc_get_root(doc);
+	yyjson_val *bd = yyjson_obj_get(root, "birthDate");
+	Optional<std::string> result;
+	if (bd && yyjson_is_str(bd)) {
+		result = std::string(yyjson_get_str(bd));
+	}
+	yyjson_doc_free(doc);
+	return result;
+}
+
 Optional<int64_t> AgeCalculator::age_in_years(const DateTimeValue &birth, const DateTimeValue &as_of) {
 	int64_t years = as_of.year - birth.year;
 	if (DateAfter(AddCalendarMonths(birth, years * 12), as_of)) {

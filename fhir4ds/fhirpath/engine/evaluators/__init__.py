@@ -19,14 +19,32 @@ def boolean_literal(ctx, parentData, node):
 def number_literal(ctx, parentData, node):
     text = node["text"]
     if text.endswith("L"):
-        return [int(text[:-1])]
+        value = int(text[:-1])
+        # Long literals are 64-bit signed (lockstep with the native
+        # evaluator's "Long literal out of range" check). The exact value
+        # 2^63 is allowed through because it is only representable under
+        # unary minus (`-9223372036854775808L`), which the native
+        # evaluator special-cases to LLONG_MIN.
+        if value > 9223372036854775808 or value < -9223372036854775808:
+            raise FHIRPathError("Long literal out of range")
+        return [value]
 
     # Check if the number has a decimal point - if so, it's a Decimal
     # Otherwise, it's an Integer
     if '.' in text:
         return [Decimal(text)]
     else:
-        return [int(text)]
+        value = int(text)
+        # FP-18 SKEPTIC QA-001 (2026-08-18): FHIRPath N1 §22.1 Integer is
+        # 32-bit signed. Unsuffixed integer literals beyond INT32_MAX are
+        # out of range (the native evaluator throws "Integer literal out
+        # of range" and both DuckDB paths return empty); 64-bit values
+        # require the Long literal form (`...L`). Keep the strict core in
+        # lockstep by raising FHIRPathError instead of silently returning
+        # an out-of-range Integer.
+        if value > 2147483647 or value < -2147483648:
+            raise FHIRPathError("Integer literal out of range")
+        return [value]
 
 
 def identifier(ctx, parentData, node):
@@ -452,12 +470,24 @@ def create_reduce_member_invocation(model, key):
                 item = val if val is not None else ext
                 if item is not None:
                     # Pass extension data as _data so extension() function can access it
-                    acc.append(nodes.ResourceNode.create_node(item, childPath, _data=ext, propName=f"{fullPath}[{i}]", index=i))
+                    node = nodes.ResourceNode.create_node(item, childPath, _data=ext, propName=f"{fullPath}[{i}]", index=i)
+                    # SOF-VD-07 EXPLORER QA-001: when the main slot is empty and
+                    # the element is synthesized purely from `_field` primitive-
+                    # extension data, flag it so the top-level result filter can
+                    # drop ONLY these shadow nodes — not genuine elements whose
+                    # sole content happens to be an `extension` (valid FHIR).
+                    if val is None and isinstance(node, nodes.ResourceNode):
+                        node._is_shadow_extension = True
+                    acc.append(node)
         elif util.is_some(toAdd):
             # Pass _data for primitives with extensions
             acc.append(nodes.ResourceNode.create_node(toAdd, childPath, _data=toAdd_, propName=fullPath))
         elif util.is_some(toAdd_):
-            acc.append(nodes.ResourceNode.create_node(toAdd_, childPath, propName=fullPath))
+            node = nodes.ResourceNode.create_node(toAdd_, childPath, propName=fullPath)
+            # SOF-VD-07 EXPLORER QA-001: synthesized from `_field` shadow data.
+            if isinstance(node, nodes.ResourceNode):
+                node._is_shadow_extension = True
+            acc.append(node)
         return acc
 
     return func
@@ -614,6 +644,32 @@ def function_invocation(ctx, parentData, node):
 
 def polarity_expression(ctx, parentData, node):
     sign = node["terminalNodeText"][0]
+
+    # FP-18 HISTORIAN QA-006 (2026-08-18): FHIRPath N1 §4.1.3 — the Integer
+    # range includes the minimum -2^31, and the minus sign in a negative
+    # integer literal is the unary negation operator, not part of the
+    # literal. `number_literal` raises "Integer literal out of range" for
+    # the unsigned literal 2147483648 before negation can run, so the valid
+    # Integer minimum `-2147483648` was rejected (native accepts it).
+    # Special-case unary minus over the exact 2^31 literal, mirroring the
+    # Long-literal convention at the top of `number_literal`
+    # (-9223372036854775808L). A bare positive 2147483648 still raises.
+    if sign == "-":
+        literal = node.get("children", [None])[0] if node.get("children") else None
+        while literal is not None and literal.get("type") in (
+            "TermExpression",
+            "LiteralTerm",
+            "InvocationTerm",
+        ):
+            kids = literal.get("children") or []
+            literal = kids[0] if len(kids) == 1 else None
+        if (
+            literal is not None
+            and literal.get("type") == "NumberLiteral"
+            and literal.get("text") == "2147483648"
+        ):
+            return [-2147483648]
+
     rtn = engine.do_eval(ctx, parentData, node["children"][0])
 
     if len(rtn) == 0:
@@ -660,7 +716,28 @@ def polarity_expression(ctx, parentData, node):
         raise FHIRPathError(f"Unary {sign} cannot be applied to non-numeric value: {value!r}")
 
     if sign == "-":
-        rtn[0] = -unwrapped
+        # FP-01 SKEPTIC QA-005 (2026-08-16): Python's Decimal unary minus
+        # normalizes negative zero to 0.0, which is the behavior the
+        # official R4 test suite requires (`-0.0034.highBoundary(1)` ->
+        # `0.0`, i.e. unary minus of a zero result renders as 0.0). The
+        # native C++ unary-minus branch now applies the same zero-sign
+        # normalization for parity.
+        negated = -unwrapped
+        # FP-18 EXPLORER QA-001 (2026-08-18): §6.6 overflow doctrine —
+        # Integer/Long arithmetic overflow degrades to the exact Decimal
+        # value (the binary `+`/`-`/`*` path does this via
+        # _numeric_arithmetic_result; e.g. `9223372036854775807L + 1L` ->
+        # Decimal on both engines). Unary negation must not emit a raw
+        # Python int outside the int64 Long range (`- -9223372036854775808L`).
+        if (
+            isinstance(unwrapped, int)
+            and not isinstance(unwrapped, bool)
+            and not (-9223372036854775808 <= negated <= 9223372036854775807)
+        ):
+            from decimal import Decimal as _Decimal
+
+            negated = _Decimal(negated)
+        rtn[0] = negated
 
     return rtn
 

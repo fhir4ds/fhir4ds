@@ -86,6 +86,23 @@ def iter_constant_references(path: str):
                 yield i, match.end(), match.group(0)
                 i = match.end()
                 continue
+            # FHIRPath "Environment Variables": the variable name may also be a
+            # backtick-delimited identifier (e.g. %`var name`). Recognize the
+            # delimited region here so the reference is substituted (or loudly
+            # rejected) instead of falling through to the backtick skip-region
+            # below and silently evaluating to an empty collection.
+            if i + 1 < len(path) and path[i + 1] == "`":
+                end = _skip_quoted_region(path, i + 1, "`")
+                if end - i > 3:  # non-empty name between the backticks
+                    raw = path[i + 2 : end - 1]
+                    name = (
+                        raw.replace("\\`", "`").replace("\\\\", "\\")
+                        if "\\" in raw
+                        else raw
+                    )
+                    yield i, end, name
+                    i = end
+                    continue
 
         i += 1
 
@@ -141,6 +158,24 @@ def resolve_constant(constant: Constant) -> str:
     # Determine the type of the constant
     value_type = constant.value_type
 
+    # SQL-on-FHIR v2 ViewDefinition.constant.value[x] includes valueInteger64,
+    # but constants are substituted textually into FHIRPath expressions and
+    # FHIRPath Integer literals are limited to the 32-bit signed range
+    # (FHIRPath §Literals / N1 grammar Integer). An out-of-range integer64
+    # value would be substituted as an unrepresentable literal that both
+    # evaluation engines silently fold to the empty collection. Raise an
+    # explicit error instead of silently producing wrong (empty) results.
+    if value_type == "integer64" and value is not None:
+        parsed = int(value)
+        if not -(2**31) <= parsed <= 2**31 - 1:
+            raise ConstantResolutionError(
+                f"Constant {constant.name!r} (integer64) value {value} is outside the "
+                "FHIRPath Integer literal range -2147483648..2147483647 and cannot be "
+                "substituted into a FHIRPath expression",
+                constant_name=constant.name,
+                constant_type="integer64",
+            )
+
     # Handle based on type
     if value_type == "Coding" or (isinstance(value, dict) and _is_coding(value)):
         return _resolve_coding(value)
@@ -184,6 +219,29 @@ def _resolve_simple_value(value: Any, value_type: str | None) -> str:
         )
     if isinstance(value, bool):
         return "true" if value else "false"
+    elif value_type == "decimal":
+        # SQL-on-FHIR v2 constant.value[x] "effectively converts the FHIR
+        # literal defined here to a FHIRPath literal used in the path
+        # expression". The FHIRPath N1 grammar has no exponent notation for
+        # Number literals, so Python's ``str()`` (which switches to
+        # scientific notation for |v| < 1e-4 or |v| >= 1e16) would emit an
+        # invalid literal that both evaluation engines silently fold to the
+        # empty collection. Serialize in plain fixed-point notation instead,
+        # preserving authored precision (FHIR decimal: 18 digits), and force
+        # a fractional part so the literal always lexes as a Decimal rather
+        # than an out-of-32-bit-range Integer.
+        if isinstance(value, Decimal):
+            dec = value
+        elif isinstance(value, int):
+            dec = Decimal(value)
+        else:
+            # ``repr()`` of a float is the shortest round-trip string, which
+            # avoids leaking binary-expansion noise into the literal.
+            dec = Decimal(repr(value))
+        text = format(dec, "f")
+        if "." not in text:
+            text += ".0"
+        return text
     elif isinstance(value, (int, float, Decimal)):
         return str(value)
     elif value_type == "integer64":
@@ -328,7 +386,10 @@ def resolve_constants_in_path(path: str, constants: dict[str, Constant]) -> str:
         # the builtin set FIRST so a user constant with the same name cannot leak
         # its value into the runtime variable slot.
         if const_name in FHIRPATH_BUILTIN_VARIABLES:
-            resolved_parts.append(path[start:end])
+            # Normalize runtime variables to the plain %name spelling: builtins
+            # are resolved by the evaluation engines, which do not accept the
+            # backtick-delimited form (%`rowIndex` -> %rowIndex).
+            resolved_parts.append(f"%{const_name}")
             last_end = end
             continue
         if const_name in constants:

@@ -45,6 +45,8 @@ static const std::string CQL_MIN_TIME = "T00:00:00.000";
 static const std::string CQL_MAX_TIME = "T23:59:59.999";
 static const std::string CQL_MIN_INTEGER = "-2147483648";
 static const std::string CQL_MAX_INTEGER = "2147483647";
+static const std::string CQL_MIN_LONG = "-9223372036854775808";
+static const std::string CQL_MAX_LONG = "9223372036854775807";
 static const std::string CQL_MIN_DECIMAL = "-99999999999999999999.99999999";
 static const std::string CQL_MAX_DECIMAL = "99999999999999999999.99999999";
 
@@ -117,6 +119,16 @@ static int64_t ToEpochMillisForElapsed(const cql::DateTimeValue &value) {
 		millis -= static_cast<int64_t>(value.tz_offset_minutes) * MS_PER_MINUTE;
 	}
 	return millis;
+}
+
+// Floor division for int64 (C++ integer division truncates toward zero).
+static int64_t FloorDivInt64(int64_t a, int64_t b) {
+	int64_t q = a / b;
+	int64_t r = a % b;
+	if (r != 0 && ((r < 0) != (b < 0))) {
+		--q;
+	}
+	return q;
 }
 
 static cql::DateTimeValue AddYears(const cql::DateTimeValue &dt, int32_t years);
@@ -538,172 +550,6 @@ static cql::DateTimeValue GetToday() {
 // =====================================================================
 // Age UDFs
 // =====================================================================
-#define DEFINE_AGE_UDF(FuncName, method_call)                                                                           \
-	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
-		idx_t count = args.size();                                                                                     \
-		UnifiedVectorFormat res_data;                                                                                   \
-		args.data[0].ToUnifiedFormat(count, res_data);                                                                 \
-		auto resources = UnifiedVectorFormat::GetData<string_t>(res_data);                                             \
-		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto result_data = FlatVector::GetData<int64_t>(result);                                                       \
-		auto &result_mask = FlatVector::Validity(result);                                                              \
-		auto today = GetToday();                                                                                       \
-		for (idx_t i = 0; i < count; i++) {                                                                            \
-			auto idx = res_data.sel->get_index(i);                                                                     \
-			if (!res_data.validity.RowIsValid(idx)) {                                                                  \
-				result_mask.SetInvalid(i);                                                                             \
-				continue;                                                                                              \
-			}                                                                                                          \
-			auto birth = cql::AgeCalculator::extract_birthdate(resources[idx].GetData(), resources[idx].GetSize());    \
-			if (!birth) {                                                                                              \
-				result_mask.SetInvalid(i);                                                                             \
-				continue;                                                                                              \
-			}                                                                                                          \
-			auto age = method_call(*birth, today);                                                                     \
-			if (!age) {                                                                                                \
-				result_mask.SetInvalid(i);                                                                             \
-			} else {                                                                                                   \
-				result_data[i] = *age;                                                                                 \
-			}                                                                                                          \
-		}                                                                                                              \
-	}
-
-#define DEFINE_AGE_AT_UDF(FuncName, method_call)                                                                       \
-	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
-		idx_t count = args.size();                                                                                     \
-		UnifiedVectorFormat res_data, date_data;                                                                       \
-		args.data[0].ToUnifiedFormat(count, res_data);                                                                 \
-		args.data[1].ToUnifiedFormat(count, date_data);                                                                \
-		auto resources = UnifiedVectorFormat::GetData<string_t>(res_data);                                             \
-		auto dates = UnifiedVectorFormat::GetData<string_t>(date_data);                                                \
-		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto result_data = FlatVector::GetData<int64_t>(result);                                                       \
-		auto &result_mask = FlatVector::Validity(result);                                                              \
-		for (idx_t i = 0; i < count; i++) {                                                                            \
-			auto r_idx = res_data.sel->get_index(i);                                                                   \
-			auto d_idx = date_data.sel->get_index(i);                                                                  \
-			if (!res_data.validity.RowIsValid(r_idx) || !date_data.validity.RowIsValid(d_idx)) {                       \
-				result_mask.SetInvalid(i);                                                                             \
-				continue;                                                                                              \
-			}                                                                                                          \
-			auto birth = cql::AgeCalculator::extract_birthdate(resources[r_idx].GetData(),                             \
-			                                                   resources[r_idx].GetSize());                            \
-			auto as_of = cql::DateTimeValue::parse(dates[d_idx].GetString());                                          \
-			if (!birth || !as_of) {                                                                                    \
-				result_mask.SetInvalid(i);                                                                             \
-				continue;                                                                                              \
-			}                                                                                                          \
-			auto age = method_call(*birth, *as_of);                                                                    \
-			if (!age || *age < 0) {                                                                                \
-				result_mask.SetInvalid(i);                                                                             \
-			} else {                                                                                                   \
-				result_data[i] = *age;                                                                                 \
-			}                                                                                                          \
-		}                                                                                                              \
-	}
-
-DEFINE_AGE_UDF(AgeInYearsFunc, cql::AgeCalculator::age_in_years)
-DEFINE_AGE_UDF(AgeInMonthsFunc, cql::AgeCalculator::age_in_months)
-DEFINE_AGE_UDF(AgeInDaysFunc, cql::AgeCalculator::age_in_days)
-DEFINE_AGE_UDF(AgeInHoursFunc, cql::AgeCalculator::age_in_hours)
-DEFINE_AGE_UDF(AgeInMinutesFunc, cql::AgeCalculator::age_in_minutes)
-DEFINE_AGE_UDF(AgeInSecondsFunc, cql::AgeCalculator::age_in_seconds)
-DEFINE_AGE_AT_UDF(AgeInYearsAtFunc, cql::AgeCalculator::age_in_years)
-DEFINE_AGE_AT_UDF(AgeInMonthsAtFunc, cql::AgeCalculator::age_in_months)
-DEFINE_AGE_AT_UDF(AgeInDaysAtFunc, cql::AgeCalculator::age_in_days)
-DEFINE_AGE_AT_UDF(AgeInHoursAtFunc, cql::AgeCalculator::age_in_hours)
-DEFINE_AGE_AT_UDF(AgeInMinutesAtFunc, cql::AgeCalculator::age_in_minutes)
-DEFINE_AGE_AT_UDF(AgeInSecondsAtFunc, cql::AgeCalculator::age_in_seconds)
-
-static cql::Optional<int64_t> AgeInWeeksValue(const cql::DateTimeValue &birth, const cql::DateTimeValue &as_of) {
-	auto days = cql::AgeCalculator::age_in_days(birth, as_of);
-	if (!days) {
-		return cql::NullOpt<int64_t>();
-	}
-	return *days / 7;
-}
-
-DEFINE_AGE_UDF(AgeInWeeksFunc, AgeInWeeksValue)
-DEFINE_AGE_AT_UDF(AgeInWeeksAtFunc, AgeInWeeksValue)
-
-#define DEFINE_CALCULATE_AGE_UDF(FuncName, method_call)                                                                \
-	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
-		idx_t count = args.size();                                                                                     \
-		UnifiedVectorFormat birth_data;                                                                                \
-		args.data[0].ToUnifiedFormat(count, birth_data);                                                               \
-		auto births = UnifiedVectorFormat::GetData<string_t>(birth_data);                                              \
-		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto result_data = FlatVector::GetData<int64_t>(result);                                                       \
-		auto &result_mask = FlatVector::Validity(result);                                                              \
-		auto today = GetToday();                                                                                       \
-		for (idx_t i = 0; i < count; i++) {                                                                            \
-			auto b_idx = birth_data.sel->get_index(i);                                                                 \
-			if (!birth_data.validity.RowIsValid(b_idx)) {                                                              \
-				result_mask.SetInvalid(i);                                                                             \
-				continue;                                                                                              \
-			}                                                                                                          \
-			auto birth = cql::DateTimeValue::parse(births[b_idx].GetString());                                         \
-			if (!birth) {                                                                                              \
-				result_mask.SetInvalid(i);                                                                             \
-				continue;                                                                                              \
-			}                                                                                                          \
-			auto age = method_call(*birth, today);                                                                     \
-			if (!age || *age < 0) {                                                                                    \
-				result_mask.SetInvalid(i);                                                                             \
-			} else {                                                                                                   \
-				result_data[i] = *age;                                                                                 \
-			}                                                                                                          \
-		}                                                                                                              \
-	}
-
-#define DEFINE_CALCULATE_AGE_AT_UDF(FuncName, method_call)                                                             \
-	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
-		idx_t count = args.size();                                                                                     \
-		UnifiedVectorFormat birth_data, date_data;                                                                     \
-		args.data[0].ToUnifiedFormat(count, birth_data);                                                               \
-		args.data[1].ToUnifiedFormat(count, date_data);                                                                \
-		auto births = UnifiedVectorFormat::GetData<string_t>(birth_data);                                              \
-		auto dates = UnifiedVectorFormat::GetData<string_t>(date_data);                                                \
-		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto result_data = FlatVector::GetData<int64_t>(result);                                                       \
-		auto &result_mask = FlatVector::Validity(result);                                                              \
-		for (idx_t i = 0; i < count; i++) {                                                                            \
-			auto b_idx = birth_data.sel->get_index(i);                                                                 \
-			auto d_idx = date_data.sel->get_index(i);                                                                  \
-			if (!birth_data.validity.RowIsValid(b_idx) || !date_data.validity.RowIsValid(d_idx)) {                     \
-				result_mask.SetInvalid(i);                                                                             \
-				continue;                                                                                              \
-			}                                                                                                          \
-			auto birth = cql::DateTimeValue::parse(births[b_idx].GetString());                                         \
-			auto as_of = cql::DateTimeValue::parse(dates[d_idx].GetString());                                          \
-			if (!birth || !as_of) {                                                                                    \
-				result_mask.SetInvalid(i);                                                                             \
-				continue;                                                                                              \
-			}                                                                                                          \
-			auto age = method_call(*birth, *as_of);                                                                    \
-			if (!age || *age < 0) {                                                                                    \
-				result_mask.SetInvalid(i);                                                                             \
-			} else {                                                                                                   \
-				result_data[i] = *age;                                                                                 \
-			}                                                                                                          \
-		}                                                                                                              \
-	}
-
-DEFINE_CALCULATE_AGE_UDF(CalculateAgeInYearsFunc, cql::AgeCalculator::age_in_years)
-DEFINE_CALCULATE_AGE_UDF(CalculateAgeInMonthsFunc, cql::AgeCalculator::age_in_months)
-DEFINE_CALCULATE_AGE_UDF(CalculateAgeInWeeksFunc, AgeInWeeksValue)
-DEFINE_CALCULATE_AGE_UDF(CalculateAgeInDaysFunc, cql::AgeCalculator::age_in_days)
-DEFINE_CALCULATE_AGE_UDF(CalculateAgeInHoursFunc, cql::AgeCalculator::age_in_hours)
-DEFINE_CALCULATE_AGE_UDF(CalculateAgeInMinutesFunc, cql::AgeCalculator::age_in_minutes)
-DEFINE_CALCULATE_AGE_UDF(CalculateAgeInSecondsFunc, cql::AgeCalculator::age_in_seconds)
-DEFINE_CALCULATE_AGE_AT_UDF(CalculateAgeInYearsAtFunc, cql::AgeCalculator::age_in_years)
-DEFINE_CALCULATE_AGE_AT_UDF(CalculateAgeInMonthsAtFunc, cql::AgeCalculator::age_in_months)
-DEFINE_CALCULATE_AGE_AT_UDF(CalculateAgeInWeeksAtFunc, AgeInWeeksValue)
-DEFINE_CALCULATE_AGE_AT_UDF(CalculateAgeInDaysAtFunc, cql::AgeCalculator::age_in_days)
-DEFINE_CALCULATE_AGE_AT_UDF(CalculateAgeInHoursAtFunc, cql::AgeCalculator::age_in_hours)
-DEFINE_CALCULATE_AGE_AT_UDF(CalculateAgeInMinutesAtFunc, cql::AgeCalculator::age_in_minutes)
-DEFINE_CALCULATE_AGE_AT_UDF(CalculateAgeInSecondsAtFunc, cql::AgeCalculator::age_in_seconds)
-
 // =====================================================================
 // Datetime difference UDFs
 // =====================================================================
@@ -738,7 +584,9 @@ DEFINE_TWO_STR_BIGINT_UDF(DifferenceInHoursFunc, {
 	if (a_dt->has_tz != b_dt->has_tz) {
 		result_mask.SetInvalid(i);
 	} else {
-		result_data[i] = (ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt)) / MS_PER_HOUR;
+		// CQL §8.7: count hour boundaries crossed, not truncated elapsed hours
+		result_data[i] = FloorDivInt64(ToEpochMillisForElapsed(*b_dt), MS_PER_HOUR) -
+		                 FloorDivInt64(ToEpochMillisForElapsed(*a_dt), MS_PER_HOUR);
 	}
 })
 
@@ -746,7 +594,9 @@ DEFINE_TWO_STR_BIGINT_UDF(DifferenceInMinutesFunc, {
 	if (a_dt->has_tz != b_dt->has_tz) {
 		result_mask.SetInvalid(i);
 	} else {
-		result_data[i] = (ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt)) / MS_PER_MINUTE;
+		// CQL §8.7: count minute boundaries crossed, not truncated elapsed minutes
+		result_data[i] = FloorDivInt64(ToEpochMillisForElapsed(*b_dt), MS_PER_MINUTE) -
+		                 FloorDivInt64(ToEpochMillisForElapsed(*a_dt), MS_PER_MINUTE);
 	}
 })
 
@@ -754,7 +604,9 @@ DEFINE_TWO_STR_BIGINT_UDF(DifferenceInSecondsFunc, {
 	if (a_dt->has_tz != b_dt->has_tz) {
 		result_mask.SetInvalid(i);
 	} else {
-		result_data[i] = (ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt)) / MS_PER_SECOND;
+		// CQL §8.7: count second boundaries crossed, not truncated elapsed seconds
+		result_data[i] = FloorDivInt64(ToEpochMillisForElapsed(*b_dt), MS_PER_SECOND) -
+		                 FloorDivInt64(ToEpochMillisForElapsed(*a_dt), MS_PER_SECOND);
 	}
 })
 
@@ -847,10 +699,36 @@ static bool BoundLooksLikeDateTime(const cql::BoundValue &bound) {
 	return bound.raw_str.find('T') != std::string::npos || bound.raw_str.find(' ') != std::string::npos;
 }
 
+static const cql::BoundValue *PeerBoundForSentinel(const cql::Interval &iv) {
+	// The peer of a null closed bound is the opposite non-null bound.
+	if (iv.high) {
+		return &*iv.high;
+	}
+	if (iv.low) {
+		return &*iv.low;
+	}
+	return nullptr;
+}
+
+static std::string QuantitySentinelJson(double value, const std::string &unit) {
+	std::ostringstream oss;
+	oss << "{\"value\":" << value << ",\"unit\":\"" << unit << "\"}";
+	return oss.str();
+}
+
 static std::string MinimumForIntervalPointType(const cql::Interval &iv) {
 	switch (iv.bound_type) {
-	case cql::BoundType::Integer:
+	case cql::BoundType::Integer: {
+		// §9.14 Start: Long point type (peer beyond int32; authored L-ness is
+		// erased at translation) sentinels at int64 min (reference MIN_LONG).
+		const auto *peer = PeerBoundForSentinel(iv);
+		if (peer && peer->int_val &&
+		    (*peer->int_val > std::numeric_limits<int32_t>::max() ||
+		     *peer->int_val < std::numeric_limits<int32_t>::min())) {
+			return CQL_MIN_LONG;
+		}
 		return CQL_MIN_INTEGER;
+	}
 	case cql::BoundType::Decimal:
 		return CQL_MIN_DECIMAL;
 	case cql::BoundType::DateTime:
@@ -863,16 +741,30 @@ static std::string MinimumForIntervalPointType(const cql::Interval &iv) {
 		return CQL_MIN_DATE;
 	case cql::BoundType::Time:
 		return CQL_MIN_TIME;
-	case cql::BoundType::Quantity:
+	case cql::BoundType::Quantity: {
+		// Reference Interval.start getter: Quantity(MIN_DECIMAL, unit).
+		const auto *peer = PeerBoundForSentinel(iv);
+		if (peer && peer->qty_numeric) {
+			return QuantitySentinelJson(-99999999999999999999.99999999, peer->qty_unit);
+		}
 		return "";
+	}
 	}
 	return "";
 }
 
 static std::string MaximumForIntervalPointType(const cql::Interval &iv) {
 	switch (iv.bound_type) {
-	case cql::BoundType::Integer:
+	case cql::BoundType::Integer: {
+		// §9.15 End: Long point type sentinels at int64 max (reference MAX_LONG).
+		const auto *peer = PeerBoundForSentinel(iv);
+		if (peer && peer->int_val &&
+		    (*peer->int_val > std::numeric_limits<int32_t>::max() ||
+		     *peer->int_val < std::numeric_limits<int32_t>::min())) {
+			return CQL_MAX_LONG;
+		}
 		return CQL_MAX_INTEGER;
+	}
 	case cql::BoundType::Decimal:
 		return CQL_MAX_DECIMAL;
 	case cql::BoundType::DateTime:
@@ -885,8 +777,14 @@ static std::string MaximumForIntervalPointType(const cql::Interval &iv) {
 		return CQL_MAX_DATE;
 	case cql::BoundType::Time:
 		return CQL_MAX_TIME;
-	case cql::BoundType::Quantity:
+	case cql::BoundType::Quantity: {
+		// Reference Interval.end getter: Quantity(MAX_DECIMAL, unit).
+		const auto *peer = PeerBoundForSentinel(iv);
+		if (peer && peer->qty_numeric) {
+			return QuantitySentinelJson(99999999999999999999.99999999, peer->qty_unit);
+		}
 		return "";
+	}
 	}
 	return "";
 }
@@ -2243,7 +2141,44 @@ ExpandTemporalInterval(const cql::Interval &iv, const ExpandStep &step) {
 		return cql::NullOpt<std::vector<ExpandedInterval>>();
 	}
 
-	std::string unit = step.supplied && !step.unit.empty() ? step.unit : (iv.bound_type == cql::BoundType::Time ? "hour" : "day");
+	std::string unit;
+	if (step.supplied && !step.unit.empty()) {
+		unit = step.unit;
+	} else if (iv.bound_type == cql::BoundType::Time) {
+		unit = "hour";
+	} else {
+		// CQL 1.5 §9 Expand: null per → "a per value will be constructed
+		// based on the coarsest precision of the boundaries of the
+		// intervals in the input set." (CQL-15 EXPLORER QA-002)
+		auto coarsest = iv.low->dt_val->precision;
+		if (ExpandPrecisionRank(iv.high->dt_val->precision) < ExpandPrecisionRank(coarsest)) {
+			coarsest = iv.high->dt_val->precision;
+		}
+		switch (coarsest) {
+		case cql::DateTimeValue::Precision::Year:
+			unit = "year";
+			break;
+		case cql::DateTimeValue::Precision::Month:
+			unit = "month";
+			break;
+		case cql::DateTimeValue::Precision::Hour:
+			unit = "hour";
+			break;
+		case cql::DateTimeValue::Precision::Minute:
+			unit = "minute";
+			break;
+		case cql::DateTimeValue::Precision::Second:
+			unit = "second";
+			break;
+		case cql::DateTimeValue::Precision::Millisecond:
+			unit = "millisecond";
+			break;
+		case cql::DateTimeValue::Precision::Day:
+		default:
+			unit = "day";
+			break;
+		}
+	}
 	double step_value = step.supplied ? step.value : 1.0;
 	if (step_value <= 0 || std::isnan(step_value) || std::isinf(step_value)) {
 		return cql::NullOpt<std::vector<ExpandedInterval>>();
@@ -2251,10 +2186,56 @@ ExpandTemporalInterval(const cql::Interval &iv, const ExpandStep &step) {
 
 	cql::DateTimeValue start = *iv.low->dt_val;
 	cql::DateTimeValue end = *iv.high->dt_val;
+	// CQL 1.5 §9 Expand: "If the interval boundaries are more precise than
+	// the per quantity, the more precise values will be truncated to the
+	// precision specified by the per quantity." And for boundaries LESS
+	// precise than the per (temporal uncertainty), "the interval will not
+	// contribute any results to the output, because adding the per to the
+	// lower boundary of the input interval results in null." (CQL-15
+	// EXPLORER QA-002; mirrors the Time-overload handling above.)
+	auto per_precision = PrecisionForExpandUnit(unit, start.precision);
+	if (ExpandPrecisionRank(per_precision) > ExpandPrecisionRank(start.precision)) {
+		return std::vector<ExpandedInterval>();
+	}
+	auto truncate = [](cql::DateTimeValue &dt, cql::DateTimeValue::Precision p) {
+		switch (p) {
+		case cql::DateTimeValue::Precision::Year:
+			dt.month = 1;
+			[[fallthrough]];
+		case cql::DateTimeValue::Precision::Month:
+			dt.day = 1;
+			[[fallthrough]];
+		case cql::DateTimeValue::Precision::Day:
+			dt.hour = 0;
+			[[fallthrough]];
+		case cql::DateTimeValue::Precision::Hour:
+			dt.minute = 0;
+			[[fallthrough]];
+		case cql::DateTimeValue::Precision::Minute:
+			dt.second = 0;
+			[[fallthrough]];
+		case cql::DateTimeValue::Precision::Second:
+			dt.millisecond = 0;
+			[[fallthrough]];
+		case cql::DateTimeValue::Precision::Millisecond:
+			break;
+		}
+		dt.precision = p;
+	};
+	if (ExpandPrecisionRank(per_precision) < ExpandPrecisionRank(start.precision)) {
+		truncate(start, per_precision);
+	}
+	// Only the LOW boundary is truncated to the per grid; when the high
+	// boundary is MORE precise than the per, keep the ORIGINAL bound for the
+	// loop comparison (official fixture: expand Interval[@T10:00, @T12:30)
+	// per hour -> {T10, T11, T12}). The predecessor rule applies only when
+	// the high boundary is at or coarser than the per precision.
+	bool high_more_precise =
+	    ExpandPrecisionRank(per_precision) < ExpandPrecisionRank(iv.high->dt_val->precision);
 	if (!iv.low_closed) {
 		start = AddExpandStep(start, step_value, unit);
 	}
-	if (!iv.high_closed) {
+	if (!iv.high_closed && !high_more_precise) {
 		end = SubtractExpandStep(end, step_value, unit);
 	}
 	start.precision = PrecisionForExpandUnit(unit, start.precision);
@@ -2344,11 +2325,28 @@ ExpandTimeInterval(const cql::Interval &iv, const ExpandStep &step) {
 		return std::vector<ExpandedInterval>();
 	}
 
+	// CQL 1.5 §9 Expand: "If the interval boundaries are more precise than
+	// the per quantity, the more precise values will be truncated to the
+	// precision specified by the per quantity." (CQL-15 EXPLORER QA-002;
+	// mirrors ExpandTemporalInterval's truncation above and the Python
+	// fallback's _expand_time.) Only the LOW boundary is truncated to the
+	// per grid; grid starts compare against the ORIGINAL high bound
+	// (official fixture: expand Interval[@T10:00, @T12:30) per hour ->
+	// {T10, T11, T12}).
+	int64_t low_ms_trunc = TimeMillisOfDay(*iv.low->dt_val);
+	if (input_rank > per_rank) {
+		int64_t unit_ms = TimeStepMillis(1.0, unit);
+		if (unit_ms <= 0) {
+			unit_ms = MS_PER_HOUR;
+		}
+		low_ms_trunc = (low_ms_trunc / unit_ms) * unit_ms;
+	}
+
 	int64_t step_ms = TimeStepMillis(step_value, unit);
 	if (step_ms <= 0) {
 		return cql::NullOpt<std::vector<ExpandedInterval>>();
 	}
-	int64_t start = TimeMillisOfDay(*iv.low->dt_val);
+	int64_t start = low_ms_trunc;
 	int64_t end = TimeMillisOfDay(*iv.high->dt_val);
 	if (!iv.low_closed) {
 		start += 1;
@@ -2379,6 +2377,16 @@ ExpandIntervalUnits(const cql::Interval &iv, const ExpandStep &step) {
 		return cql::NullOpt<std::vector<ExpandedInterval>>();
 	}
 	if (!iv.low || !iv.high) {
+		// CQL 1.5 §9 Expand: "if the boundary is open (e.g.,
+		// Interval[0, null)), the interval will not contribute any
+		// results to the output" — an OPEN null bound yields an empty
+		// expansion. A CLOSED null bound ("implementations are allowed
+		// to not return results") stays NULL, matching the Python UDF.
+		bool low_open_null = !iv.low && !iv.low_closed;
+		bool high_open_null = !iv.high && !iv.high_closed;
+		if (low_open_null || high_open_null) {
+			return std::vector<ExpandedInterval>();
+		}
 		return cql::NullOpt<std::vector<ExpandedInterval>>();
 	}
 
@@ -2936,12 +2944,33 @@ CompareTemporal(const std::string &left, const std::string &right,
 		return cql::NullOpt<TemporalCompareResult>();
 	}
 
+	// CQL 1.5 comparison signatures are same-type; there is no implicit
+	// Time<->DateTime conversion. A mixed pair is undefined — report
+	// uncertain rather than a definitive ordering from zero-filled date
+	// components.
+	if ((*a_dt).is_time != (*b_dt).is_time) {
+		TemporalCompareResult res;
+		res.cmp = 0;
+		res.certain = false;
+		return res;
+	}
+
 	cql::DateTimeValue::Precision target;
 	bool specified = static_cast<bool>(specified_precision);
+	// CQL 1.5: seconds and milliseconds are combined into a single decimal
+	// precision for comparison; an unspecified milliseconds component is
+	// treated as 0, so `T10:00:00.0 = T10:00:00` is certain (not uncertain).
+	bool combined_sec_ms = false;
 	if (specified) {
 		target = *specified_precision;
 	} else {
-		target = PrecisionByRank(std::min(PrecisionRank((*a_dt).precision), PrecisionRank((*b_dt).precision)));
+		auto a_rank = PrecisionRank((*a_dt).precision);
+		auto b_rank = PrecisionRank((*b_dt).precision);
+		combined_sec_ms = (a_rank == 5 && b_rank == 6) || (a_rank == 6 && b_rank == 5);
+		target = PrecisionByRank(std::min(a_rank, b_rank));
+		if (combined_sec_ms) {
+			target = cql::DateTimeValue::Precision::Millisecond;
+		}
 	}
 
 	cql::DateTimeValue left_dt = *a_dt;
@@ -2967,7 +2996,8 @@ CompareTemporal(const std::string &left, const std::string &right,
 
 	int cmp = CompareTemporalComponents(left_dt, right_dt, target);
 	bool certain = true;
-	if (!specified && cmp == 0 && PrecisionRank(left_dt.precision) != PrecisionRank(right_dt.precision)) {
+	if (!specified && cmp == 0 && !combined_sec_ms &&
+	    PrecisionRank(left_dt.precision) != PrecisionRank(right_dt.precision)) {
 		certain = false;
 	}
 
@@ -3324,11 +3354,16 @@ static cql::Optional<int64_t> ComputeDifferenceBetweenValue(const cql::DateTimeV
 		return cql::AgeCalculator::diff_months(start, end);
 	}
 	if (is_week || u == "week") {
-		auto days = cql::AgeCalculator::diff_days(start, end);
-		if (!days) {
-			return cql::NullOpt<int64_t>();
-		}
-		return *days / 7;
+		// CQL 1.5 §8.7 Difference: "For calculations involving weeks, Sunday
+		// is considered to be the first day of the week for the purposes of
+		// determining the number of boundaries crossed." Count Sunday
+		// boundaries, not whole elapsed weeks. Julian Day Number 0 is a
+		// Monday, so Sunday JDNs are ≡ 6 (mod 7) and (jdn + 1) / 7 is the
+		// Sunday-based week index; the difference increments exactly once per
+		// Sunday crossed. JDNs are positive for the CQL date range.
+		int64_t start_week = (start.to_julian_day() + 1) / 7;
+		int64_t end_week = (end.to_julian_day() + 1) / 7;
+		return end_week - start_week;
 	}
 	if (u == "day") {
 		return cql::AgeCalculator::diff_days(start, end);
@@ -3336,20 +3371,37 @@ static cql::Optional<int64_t> ComputeDifferenceBetweenValue(const cql::DateTimeV
 	if (start.has_tz != end.has_tz) {
 		return cql::NullOpt<int64_t>();
 	}
-	int64_t delta = ToEpochMillisForElapsed(end) - ToEpochMillisForElapsed(start);
+	// CQL 1.5 §8.7 Difference: "returns the number of boundaries crossed
+	// for the specified precision" — for sub-day precisions a boundary is a
+	// unit mark on the (offset-normalized) timeline, so the count is the
+	// difference of floor(epoch/unit) boundary indices, NOT truncation of
+	// the elapsed duration (that is §8.8 Duration semantics). Epoch millis
+	// can be negative for dates before 1970, so floor division is required.
+	int64_t unit_ms = 0;
 	if (u == "hour") {
-		return delta / MS_PER_HOUR;
+		unit_ms = MS_PER_HOUR;
+	} else if (u == "minute") {
+		unit_ms = MS_PER_MINUTE;
+	} else if (u == "second") {
+		unit_ms = MS_PER_SECOND;
+	} else if (u == "millisecond") {
+		unit_ms = 1;
+	} else {
+		return cql::NullOpt<int64_t>();
 	}
-	if (u == "minute") {
-		return delta / MS_PER_MINUTE;
+	return FloorDivInt64(ToEpochMillisForElapsed(end), unit_ms) -
+	       FloorDivInt64(ToEpochMillisForElapsed(start), unit_ms);
+}
+
+// In the §22.21 uncertainty path, a naive (offset-less) boundary paired
+// with an offset-aware boundary is interpreted at UTC, matching the Python
+// boundary functions (the crisp elapsed path keeps mixed aware/naive null).
+static cql::DateTimeValue AsUtcIfNaive(cql::DateTimeValue v) {
+	if (!v.has_tz) {
+		v.has_tz = true;
+		v.tz_offset_minutes = 0;
 	}
-	if (u == "second") {
-		return delta / MS_PER_SECOND;
-	}
-	if (u == "millisecond") {
-		return delta;
-	}
-	return cql::NullOpt<int64_t>();
+	return v;
 }
 
 static cql::Optional<std::string> CqlDurationBetweenString(const std::string &start_text,
@@ -3376,9 +3428,19 @@ static cql::Optional<std::string> CqlDurationBetweenString(const std::string &st
 	bool date_fully_specified = date_only && date_unit &&
 	                            start_rank == PrecisionRank(cql::DateTimeValue::Precision::Day) &&
 	                            end_rank == PrecisionRank(cql::DateTimeValue::Precision::Day);
-	bool both_sufficient_precision = date_unit && !date_fully_specified ?
-	                                  start_rank > unit_rank && end_rank > unit_rank :
-	                                  start_rank >= unit_rank && end_rank >= unit_rank;
+	bool both_sufficient_precision;
+	if (date_unit && (duration_unit == "year" || duration_unit == "month")) {
+		// Calendar year/month durations depend on the (possibly unknown)
+		// day-of-month of both operands, so a certain result requires at
+		// least day precision on BOTH sides. A month-precision operand
+		// yields an uncertainty interval, mirroring the official test
+		// `years between DateTime(2005) and DateTime(2010) // Interval[4,5]`.
+		both_sufficient_precision = start_rank >= 2 && end_rank >= 2;
+	} else if (date_unit && !date_fully_specified) {
+		both_sufficient_precision = start_rank > unit_rank && end_rank > unit_rank;
+	} else {
+		both_sufficient_precision = start_rank >= unit_rank && end_rank >= unit_rank;
+	}
 	if (both_sufficient_precision || date_fully_specified) {
 		auto duration = ComputeDurationBetweenValue(*start, *end, unit_text, is_week);
 		if (!duration) return cql::NullOpt<std::string>();
@@ -3386,9 +3448,26 @@ static cql::Optional<std::string> CqlDurationBetweenString(const std::string &st
 	}
 
 	auto start_high = HighBoundaryValue(start_text);
+	if ((duration_unit == "year" || duration_unit == "month") &&
+	    start_text.find('T') == std::string::npos && !start->is_time) {
+		// Date-only operands follow the midnight convention for calendar
+		// (year/month) durations — the crisp day-precision path parses
+		// them at midnight — so the uncertain start's latest possible
+		// instant must not inject a phantom 23:59:59.999 that would flip
+		// an exact anniversary boundary.
+		start_high.hour = 0;
+		start_high.minute = 0;
+		start_high.second = 0;
+		start_high.millisecond = 0;
+	}
 	auto end_high = DurationHighBoundaryValue(end_text, *unit_precision);
-	auto min_val = ComputeDurationBetweenValue(start_high, *end, unit_text, is_week);
-	auto max_val = ComputeDurationBetweenValue(*start, end_high, unit_text, is_week);
+	bool tz_mismatch = start->has_tz != end->has_tz;
+	cql::DateTimeValue start_hi = tz_mismatch ? AsUtcIfNaive(start_high) : start_high;
+	cql::DateTimeValue end_lo = tz_mismatch ? AsUtcIfNaive(*end) : *end;
+	cql::DateTimeValue start_lo = tz_mismatch ? AsUtcIfNaive(*start) : *start;
+	cql::DateTimeValue end_hi = tz_mismatch ? AsUtcIfNaive(end_high) : end_high;
+	auto min_val = ComputeDurationBetweenValue(start_hi, end_lo, unit_text, is_week);
+	auto max_val = ComputeDurationBetweenValue(start_lo, end_hi, unit_text, is_week);
 	if (!min_val || !max_val) return cql::NullOpt<std::string>();
 	if (*min_val == *max_val) {
 		return std::to_string(*min_val);
@@ -3398,6 +3477,213 @@ static cql::Optional<std::string> CqlDurationBetweenString(const std::string &st
 	    << ",\"lowClosed\":true,\"highClosed\":true}";
 	return oss.str();
 }
+
+// =====================================================================
+// Age UDFs (CQL §Age/§AgeAt/§CalculateAge/§CalculateAgeAt)
+//
+// Every age operator is defined in terms of a duration calculation, so all
+// of them delegate to the §22.21 duration engine: an integer string when
+// the result is certain, a closed-interval JSON string when the birthDate
+// (or asOf) precision is below the requested unit. A definitive negative
+// age is clinically invalid and returns NULL.
+// =====================================================================
+static cql::Optional<std::string> AgeTextGuarded(cql::Optional<std::string> value) {
+	if (!value) {
+		return value;
+	}
+	const std::string &text = *value;
+	if (text.empty()) {
+		return value;
+	}
+	size_t pos = 0;
+	try {
+		int64_t scalar = std::stoll(text, &pos);
+		if (pos == text.size() && scalar < 0) {
+			return cql::NullOpt<std::string>();
+		}
+	} catch (const std::exception &) {
+		// interval JSON — surfaced per spec
+	}
+	return value;
+}
+
+static std::string AgeTodayText() {
+	auto t = GetToday();
+	char buf[16];
+	std::snprintf(buf, sizeof(buf), "%04d-%02d-%02d", t.year, t.month, t.day);
+	return std::string(buf);
+}
+
+static std::string AgeNowText() {
+	auto now = std::chrono::system_clock::now();
+	auto secs = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+	auto today = GetToday();
+	// Time-of-day in UTC
+	int64_t day_secs = secs % 86400;
+	if (day_secs < 0) {
+		day_secs += 86400;
+	}
+	char buf[32];
+	std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d", today.year, today.month, today.day,
+	              static_cast<int>(day_secs / 3600), static_cast<int>((day_secs % 3600) / 60),
+	              static_cast<int>(day_secs % 60));
+	return std::string(buf);
+}
+
+// unit: "year"|"month"|"week"|"day" use Today(); hour-or-finer use Now()
+static std::string AgeReferenceText(const std::string &unit) {
+	return (unit == "hour" || unit == "minute" || unit == "second") ? AgeNowText() : AgeTodayText();
+}
+
+static cql::Optional<std::string> AgeFromStringTexts(const std::string &birth_text, const std::string &as_of_text,
+                                                     const std::string &unit) {
+	return AgeTextGuarded(CqlDurationBetweenString(birth_text, as_of_text, unit));
+}
+
+#define DEFINE_AGE_TEXT_UDF(FuncName, unit)                                                                            \
+	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
+		idx_t count = args.size();                                                                                     \
+		UnifiedVectorFormat res_data;                                                                                  \
+		args.data[0].ToUnifiedFormat(count, res_data);                                                                 \
+		auto resources = UnifiedVectorFormat::GetData<string_t>(res_data);                                             \
+		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
+		auto as_of = AgeReferenceText(unit);                                                                           \
+		for (idx_t i = 0; i < count; i++) {                                                                            \
+			auto idx = res_data.sel->get_index(i);                                                                     \
+			if (!res_data.validity.RowIsValid(idx)) {                                                                  \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto birth = cql::AgeCalculator::extract_birthdate_text(resources[idx].GetData(),                          \
+			                                                        resources[idx].GetSize());                           \
+			if (!birth) {                                                                                              \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto age = AgeFromStringTexts(*birth, as_of, unit);                                                        \
+			if (!age) {                                                                                                \
+				result_mask.SetInvalid(i);                                                                             \
+			} else {                                                                                                   \
+				FlatVector::GetData<string_t>(result)[i] =                                                             \
+				    StringVector::AddString(result, *age);                                                             \
+			}                                                                                                          \
+		}                                                                                                              \
+	}
+
+#define DEFINE_AGE_AT_TEXT_UDF(FuncName, unit)                                                                          \
+	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
+		idx_t count = args.size();                                                                                     \
+		UnifiedVectorFormat res_data, date_data;                                                                       \
+		args.data[0].ToUnifiedFormat(count, res_data);                                                                 \
+		args.data[1].ToUnifiedFormat(count, date_data);                                                                \
+		auto resources = UnifiedVectorFormat::GetData<string_t>(res_data);                                             \
+		auto dates = UnifiedVectorFormat::GetData<string_t>(date_data);                                                \
+		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
+		for (idx_t i = 0; i < count; i++) {                                                                            \
+			auto r_idx = res_data.sel->get_index(i);                                                                   \
+			auto d_idx = date_data.sel->get_index(i);                                                                  \
+			if (!res_data.validity.RowIsValid(r_idx) || !date_data.validity.RowIsValid(d_idx)) {                       \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto birth = cql::AgeCalculator::extract_birthdate_text(resources[r_idx].GetData(),                        \
+			                                                        resources[r_idx].GetSize());                         \
+			if (!birth) {                                                                                              \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto age = AgeFromStringTexts(*birth, dates[d_idx].GetString(), unit);                                     \
+			if (!age) {                                                                                                \
+				result_mask.SetInvalid(i);                                                                             \
+			} else {                                                                                                   \
+				FlatVector::GetData<string_t>(result)[i] =                                                             \
+				    StringVector::AddString(result, *age);                                                             \
+			}                                                                                                          \
+		}                                                                                                              \
+	}
+
+#define DEFINE_CALCULATE_AGE_TEXT_UDF(FuncName, unit)                                                                   \
+	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
+		idx_t count = args.size();                                                                                     \
+		UnifiedVectorFormat birth_data;                                                                                \
+		args.data[0].ToUnifiedFormat(count, birth_data);                                                               \
+		auto births = UnifiedVectorFormat::GetData<string_t>(birth_data);                                              \
+		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
+		auto as_of = AgeReferenceText(unit);                                                                           \
+		for (idx_t i = 0; i < count; i++) {                                                                            \
+			auto b_idx = birth_data.sel->get_index(i);                                                                 \
+			if (!birth_data.validity.RowIsValid(b_idx)) {                                                              \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto age = AgeFromStringTexts(births[b_idx].GetString(), as_of, unit);                                     \
+			if (!age) {                                                                                                \
+				result_mask.SetInvalid(i);                                                                             \
+			} else {                                                                                                   \
+				FlatVector::GetData<string_t>(result)[i] =                                                             \
+				    StringVector::AddString(result, *age);                                                             \
+			}                                                                                                          \
+		}                                                                                                              \
+	}
+
+#define DEFINE_CALCULATE_AGE_AT_TEXT_UDF(FuncName, unit)                                                                \
+	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
+		idx_t count = args.size();                                                                                     \
+		UnifiedVectorFormat birth_data, date_data;                                                                     \
+		args.data[0].ToUnifiedFormat(count, birth_data);                                                               \
+		args.data[1].ToUnifiedFormat(count, date_data);                                                                \
+		auto births = UnifiedVectorFormat::GetData<string_t>(birth_data);                                              \
+		auto dates = UnifiedVectorFormat::GetData<string_t>(date_data);                                                \
+		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
+		for (idx_t i = 0; i < count; i++) {                                                                            \
+			auto b_idx = birth_data.sel->get_index(i);                                                                 \
+			auto d_idx = date_data.sel->get_index(i);                                                                  \
+			if (!birth_data.validity.RowIsValid(b_idx) || !date_data.validity.RowIsValid(d_idx)) {                     \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto age = AgeFromStringTexts(births[b_idx].GetString(), dates[d_idx].GetString(), unit);                  \
+			if (!age) {                                                                                                \
+				result_mask.SetInvalid(i);                                                                             \
+			} else {                                                                                                   \
+				FlatVector::GetData<string_t>(result)[i] =                                                             \
+				    StringVector::AddString(result, *age);                                                             \
+			}                                                                                                          \
+		}                                                                                                              \
+	}
+
+DEFINE_AGE_TEXT_UDF(AgeInYearsFunc, "year")
+DEFINE_AGE_TEXT_UDF(AgeInMonthsFunc, "month")
+DEFINE_AGE_TEXT_UDF(AgeInWeeksFunc, "week")
+DEFINE_AGE_TEXT_UDF(AgeInDaysFunc, "day")
+DEFINE_AGE_TEXT_UDF(AgeInHoursFunc, "hour")
+DEFINE_AGE_TEXT_UDF(AgeInMinutesFunc, "minute")
+DEFINE_AGE_TEXT_UDF(AgeInSecondsFunc, "second")
+DEFINE_AGE_AT_TEXT_UDF(AgeInYearsAtFunc, "year")
+DEFINE_AGE_AT_TEXT_UDF(AgeInMonthsAtFunc, "month")
+DEFINE_AGE_AT_TEXT_UDF(AgeInWeeksAtFunc, "week")
+DEFINE_AGE_AT_TEXT_UDF(AgeInDaysAtFunc, "day")
+DEFINE_AGE_AT_TEXT_UDF(AgeInHoursAtFunc, "hour")
+DEFINE_AGE_AT_TEXT_UDF(AgeInMinutesAtFunc, "minute")
+DEFINE_AGE_AT_TEXT_UDF(AgeInSecondsAtFunc, "second")
+DEFINE_CALCULATE_AGE_TEXT_UDF(CalculateAgeInYearsFunc, "year")
+DEFINE_CALCULATE_AGE_TEXT_UDF(CalculateAgeInMonthsFunc, "month")
+DEFINE_CALCULATE_AGE_TEXT_UDF(CalculateAgeInWeeksFunc, "week")
+DEFINE_CALCULATE_AGE_TEXT_UDF(CalculateAgeInDaysFunc, "day")
+DEFINE_CALCULATE_AGE_TEXT_UDF(CalculateAgeInHoursFunc, "hour")
+DEFINE_CALCULATE_AGE_TEXT_UDF(CalculateAgeInMinutesFunc, "minute")
+DEFINE_CALCULATE_AGE_TEXT_UDF(CalculateAgeInSecondsFunc, "second")
+DEFINE_CALCULATE_AGE_AT_TEXT_UDF(CalculateAgeInYearsAtFunc, "year")
+DEFINE_CALCULATE_AGE_AT_TEXT_UDF(CalculateAgeInMonthsAtFunc, "month")
+DEFINE_CALCULATE_AGE_AT_TEXT_UDF(CalculateAgeInWeeksAtFunc, "week")
+DEFINE_CALCULATE_AGE_AT_TEXT_UDF(CalculateAgeInDaysAtFunc, "day")
+DEFINE_CALCULATE_AGE_AT_TEXT_UDF(CalculateAgeInHoursAtFunc, "hour")
+DEFINE_CALCULATE_AGE_AT_TEXT_UDF(CalculateAgeInMinutesAtFunc, "minute")
+DEFINE_CALCULATE_AGE_AT_TEXT_UDF(CalculateAgeInSecondsAtFunc, "second")
 
 static cql::Optional<std::string> CqlDifferenceBetweenString(const std::string &start_text,
                                                              const std::string &end_text,
@@ -3576,6 +3862,103 @@ static void CqlDifferenceBetweenFunc(DataChunk &args, ExpressionState &state, Ve
 
 DEFINE_UNCERTAIN_ARITH(CqlUncertainAddFunc, a->low + b->low, a->high + b->high)
 DEFINE_UNCERTAIN_ARITH(CqlUncertainSubtractFunc, a->low - b->high, a->high - b->low)
+DEFINE_UNCERTAIN_ARITH(CqlUncertainMinFunc, std::min(a->low, b->low), std::min(a->high, b->high))
+DEFINE_UNCERTAIN_ARITH(CqlUncertainMaxFunc, std::max(a->low, b->low), std::max(a->high, b->high))
+
+// CQL Min/Max list aggregates over uncertainty-capable (§22.21 VARCHAR)
+// elements. Null elements are ignored per CQL aggregate null handling;
+// empty / all-null lists yield SQL NULL. Interval-aware: Min ranges over
+// [min of lows, min of highs], Max over [max of lows, max of highs].
+#define DEFINE_UNCERTAIN_LIST_MINMAX(FuncName, combine)                                                              \
+	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                   \
+		idx_t count = args.size();                                                                                    \
+		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                \
+		auto result_data = FlatVector::GetData<string_t>(result);                                                     \
+		auto &result_mask = FlatVector::Validity(result);                                                             \
+		for (idx_t i = 0; i < count; i++) {                                                                           \
+			auto list_val = args.data[0].GetValue(i);                                                                 \
+			if (list_val.IsNull()) {                                                                                  \
+				result_mask.SetInvalid(i);                                                                            \
+				continue;                                                                                             \
+			}                                                                                                         \
+			bool any = false;                                                                                         \
+			int64_t low = 0;                                                                                          \
+			int64_t high = 0;                                                                                         \
+			bool valid = true;                                                                                        \
+			for (const auto &child : ListValue::GetChildren(list_val)) {                                              \
+				if (child.IsNull()) {                                                                                 \
+					continue;                                                                                         \
+				}                                                                                                     \
+				auto range = ParseUncertainRange(child.GetValue<std::string>());                                       \
+				if (!range) {                                                                                         \
+					valid = false;                                                                                    \
+					break;                                                                                            \
+				}                                                                                                     \
+				if (!any) {                                                                                           \
+					low = range->low;                                                                                 \
+					high = range->high;                                                                               \
+					any = true;                                                                                       \
+				} else {                                                                                              \
+					low = combine(low, range->low);                                                                   \
+					high = combine(high, range->high);                                                                \
+				}                                                                                                     \
+			}                                                                                                         \
+			if (!valid || !any) {                                                                                     \
+				result_mask.SetInvalid(i);                                                                            \
+				continue;                                                                                             \
+			}                                                                                                         \
+			result_data[i] = StringVector::AddString(result, FormatUncertainRange(low, high));                         \
+		}                                                                                                             \
+	}
+
+DEFINE_UNCERTAIN_LIST_MINMAX(CqlUncertainListMinFunc, std::min<int64_t>)
+DEFINE_UNCERTAIN_LIST_MINMAX(CqlUncertainListMaxFunc, std::max<int64_t>)
+
+// CQL-21 EXPLORER QA-002: Sum list aggregate over uncertainty-capable
+// (§22.21 VARCHAR) elements. Null elements are ignored per CQL aggregate
+// null handling; empty / all-null lists yield SQL NULL. Interval-aware:
+// the sum ranges over [sum of lows, sum of highs] — uncertain elements
+// are never silently dropped as null.
+static void CqlUncertainListSumFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto list_val = args.data[0].GetValue(i);
+		if (list_val.IsNull()) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		bool any = false;
+		int64_t low = 0;
+		int64_t high = 0;
+		bool valid = true;
+		for (const auto &child : ListValue::GetChildren(list_val)) {
+			if (child.IsNull()) {
+				continue;
+			}
+			auto range = ParseUncertainRange(child.GetValue<std::string>());
+			if (!range) {
+				valid = false;
+				break;
+			}
+			if (!any) {
+				low = range->low;
+				high = range->high;
+				any = true;
+			} else {
+				low += range->low;
+				high += range->high;
+			}
+		}
+		if (!valid || !any) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = StringVector::AddString(result, FormatUncertainRange(low, high));
+	}
+}
 
 static void CqlUncertainMultiplyFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
@@ -4675,6 +5058,18 @@ static bool IsSubDayUnit(const std::string &unit) {
 	       unit == "ms" || unit == "millisecond" || unit == "milliseconds";
 }
 
+// CQL 1.5 §8.1 Add / §8.15 Subtract: "For Time values, the quantity unit
+// must be one of: hours, minutes, seconds, or milliseconds." Day-level
+// units (year/month/week/day, keyword or UCUM) on Time values are invalid
+// and produce null rather than silently no-opping (the reference-date
+// shift is invisible at time precision).
+static bool IsDayLevelUnit(const std::string &unit) {
+	return unit == "a" || unit == "year" || unit == "years" ||
+	       unit == "mo" || unit == "month" || unit == "months" ||
+	       unit == "wk" || unit == "week" || unit == "weeks" ||
+	       unit == "d" || unit == "day" || unit == "days";
+}
+
 static int UnitPrecisionRank(const std::string &unit) {
 	std::string u = NormalizeUnitName(unit);
 	if (u == "year") return 0;
@@ -4870,6 +5265,23 @@ static void DateAddQuantityFunc(DataChunk &args, ExpressionState &state, Vector 
 		double value = parsed->value;
 		std::string unit = parsed->code;
 
+		// CQL 1.5 §8.1 Add: "For Date values, the quantity unit must be one
+		// of: years, months, weeks, or days." Date values carry no 'T' marker;
+		// sub-day units on them are invalid and produce null rather than
+		// silently converting down to zero days.
+		if (!dt->is_time && input.find('T') == std::string::npos &&
+		    input.find(' ') == std::string::npos && IsSubDayUnit(LowerAscii(unit))) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
+		// CQL 1.5 §8.1 Add: "For Time values, the quantity unit must be
+		// one of: hours, minutes, seconds, or milliseconds."
+		if (dt->is_time && IsDayLevelUnit(LowerAscii(unit))) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
 		cql::DateTimeValue new_dt = ApplyQuantityAtInputPrecision(*dt, value, unit);
 		result_data[i] = StringVector::AddString(result, FormatQuantityDateTimeResult(new_dt, input));
 	}
@@ -4915,6 +5327,22 @@ static void DateSubtractQuantityFunc(DataChunk &args, ExpressionState &state, Ve
 		}
 		double value = parsed->value;
 		std::string unit = parsed->code;
+
+		// CQL 1.5 §8.15 Subtract: same Date unit restriction as Add
+		// (years/months/weeks/days only); sub-day units on Date values
+		// produce null.
+		if (!dt->is_time && input.find('T') == std::string::npos &&
+		    input.find(' ') == std::string::npos && IsSubDayUnit(LowerAscii(unit))) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
+		// CQL 1.5 §8.15 Subtract: same Time unit restriction as Add
+		// (hours/minutes/seconds/milliseconds only).
+		if (dt->is_time && IsDayLevelUnit(LowerAscii(unit))) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
 
 		cql::DateTimeValue new_dt = ApplyQuantityAtInputPrecision(*dt, -value, unit);
 		result_data[i] = StringVector::AddString(result, FormatQuantityDateTimeResult(new_dt, input));
@@ -4989,6 +5417,228 @@ static void CollapseIntervalsFunc(DataChunk &args, ExpressionState &state, Vecto
 		}
 
 		// Serialize to JSON array
+		std::string output = "[";
+		for (size_t j = 0; j < merged.size(); j++) {
+			if (j > 0) {
+				output += ",";
+			}
+			output += merged[j].to_json();
+		}
+		output += "]";
+		result_data[i] = StringVector::AddString(result, output);
+	}
+}
+
+// =====================================================================
+// collapse_intervals_per(intervals_json VARCHAR, per VARCHAR) → VARCHAR
+// CQL 1.5 §9 Collapse(argument, per): the per argument widens the merge
+// window — each interval's end is extended by `per` for the overlap/meets
+// decision only; output intervals keep their ORIGINAL boundaries
+// (mirrors reference CollapseEvaluator.getIntervalWithPerApplied).
+// Temporal per with value 1 (or 0) performs precision-based meets/overlaps
+// without extension, per the reference engine.
+// =====================================================================
+// Canonicalize a temporal unit string to a DateTimeValue precision.
+static cql::Optional<cql::DateTimeValue::Precision> TemporalUnitPrecision(const std::string &unit) {
+	std::string u = LowerAscii(unit);
+	if (u == "year" || u == "years" || u == "a") return cql::DateTimeValue::Precision::Year;
+	if (u == "month" || u == "months" || u == "mo") return cql::DateTimeValue::Precision::Month;
+	if (u == "day" || u == "days" || u == "d") return cql::DateTimeValue::Precision::Day;
+	if (u == "hour" || u == "hours" || u == "h") return cql::DateTimeValue::Precision::Hour;
+	if (u == "minute" || u == "minutes" || u == "min") return cql::DateTimeValue::Precision::Minute;
+	if (u == "second" || u == "seconds" || u == "s") return cql::DateTimeValue::Precision::Second;
+	if (u == "millisecond" || u == "milliseconds" || u == "ms") return cql::DateTimeValue::Precision::Millisecond;
+	return cql::NullOpt<cql::DateTimeValue::Precision>();
+}
+
+// Collapse per 0/1 merge decision at the per-unit precision (reference
+// CollapseEvaluator keeps the interval unextended for temporal per of 0
+// or 1 and passes precision = per.unit to Overlaps/Meets). Equivalent:
+// truncate both bounds to the precision; merge iff truncated low <=
+// successor-at-precision of truncated high (i.e. unit distance <= 1).
+static bool TemporalPrecisionMeetsOrOverlaps(const cql::DateTimeValue &high,
+                                             const cql::DateTimeValue &low,
+                                             cql::DateTimeValue::Precision prec) {
+	cql::DateTimeValue h = high;
+	cql::DateTimeValue l = low;
+	switch (prec) {
+	case cql::DateTimeValue::Precision::Year:
+		return l.year <= h.year + 1;
+	case cql::DateTimeValue::Precision::Month: {
+		int64_t lm = static_cast<int64_t>(l.year) * 12 + l.month;
+		int64_t hm = static_cast<int64_t>(h.year) * 12 + h.month;
+		return lm - hm <= 1;
+	}
+	case cql::DateTimeValue::Precision::Day:
+		return l.to_julian_day() - h.to_julian_day() <= 1;
+	case cql::DateTimeValue::Precision::Hour:
+		h.minute = h.second = h.millisecond = 0;
+		l.minute = l.second = l.millisecond = 0;
+		return l.to_epoch_millis() - h.to_epoch_millis() <= 3600000;
+	case cql::DateTimeValue::Precision::Minute:
+		h.second = h.millisecond = 0;
+		l.second = l.millisecond = 0;
+		return l.to_epoch_millis() - h.to_epoch_millis() <= 60000;
+	case cql::DateTimeValue::Precision::Second:
+		h.millisecond = 0;
+		l.millisecond = 0;
+		return l.to_epoch_millis() - h.to_epoch_millis() <= 1000;
+	case cql::DateTimeValue::Precision::Millisecond:
+		return l.to_epoch_millis() - h.to_epoch_millis() <= 1;
+	}
+	return false;
+}
+
+static void CollapseIntervalsPerFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat iv_data, per_data;
+	args.data[0].ToUnifiedFormat(count, iv_data);
+	args.data[1].ToUnifiedFormat(count, per_data);
+	auto intervals = UnifiedVectorFormat::GetData<string_t>(iv_data);
+	auto per_vals = UnifiedVectorFormat::GetData<string_t>(per_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto idx = iv_data.sel->get_index(i);
+		auto p_idx = per_data.sel->get_index(i);
+		if (!iv_data.validity.RowIsValid(idx) || !per_data.validity.RowIsValid(p_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
+		auto quantity = cql::parse_quantity_json(per_vals[p_idx].GetString());
+		if (!quantity) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		double per_value = quantity->value;
+		std::string per_unit = quantity->code;
+		if (std::isnan(per_value) || per_value < 0) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		bool temporal_per = IsTemporalExpandUnit(per_unit);
+		bool default_per_unit = per_unit.empty() || LowerAscii(per_unit) == "1";
+		// Reference CollapseEvaluator: temporal per of exactly 0 or 1
+		// performs the merge decision at the per-unit precision (no
+		// bound extension). Weeks have no comparison precision, so a
+		// per of 1 week extends numerically by 7 days instead.
+		cql::Optional<cql::DateTimeValue::Precision> per_precision;
+		if (temporal_per && (per_value == 0.0 || per_value == 1.0)) {
+			std::string u = LowerAscii(per_unit);
+			if (u == "week" || u == "weeks" || u == "wk") {
+				per_value = 7.0 * (per_value == 0.0 ? 1.0 : per_value);
+				per_unit = "days";
+			} else {
+				per_precision = TemporalUnitPrecision(per_unit);
+			}
+		}
+
+		std::string json_str = intervals[idx].GetString();
+		auto parsed = cql::parse_interval_array(json_str);
+
+		if (parsed.empty()) {
+			result_data[i] = StringVector::AddString(result, "[]");
+			continue;
+		}
+
+		std::sort(parsed.begin(), parsed.end(), [](const cql::Interval &a, const cql::Interval &b) {
+			if (!a.low && !b.low) {
+				return false;
+			}
+			if (!a.low) {
+				return true;
+			}
+			if (!b.low) {
+				return false;
+			}
+			return a.low->compare(*b.low) < 0;
+		});
+
+		// Extend an interval's high bound by the per quantity for the merge
+		// decision. Returns the original bound when no extension applies.
+		auto extend_high = [&](const cql::BoundValue &high) -> cql::BoundValue {
+			if (per_value == 0.0) {
+				return high;
+			}
+			if (high.type == cql::BoundType::DateTime && high.dt_val) {
+				// Temporal per of exactly 1 unit: precision-based meets.
+				if (!temporal_per || per_value == 1.0) {
+					return high;
+				}
+				if (!IsSupportedDateQuantityUnit(per_unit) ||
+				    !IsSupportedDateQuantityValue(per_value, per_unit)) {
+					return high;
+				}
+				cql::BoundValue ext = high;
+				ext.dt_val = ApplyQuantityAtInputPrecision(*high.dt_val, per_value, per_unit);
+				return ext;
+			}
+			if (high.type == cql::BoundType::Integer && high.int_val) {
+				if (temporal_per) {
+					return high;
+				}
+				cql::BoundValue ext = high;
+				ext.int_val = *high.int_val + static_cast<int64_t>(per_value);
+				return ext;
+			}
+			if (high.type == cql::BoundType::Decimal && high.dec_val) {
+				if (temporal_per) {
+					return high;
+				}
+				cql::BoundValue ext = high;
+				ext.dec_val = *high.dec_val + per_value;
+				return ext;
+			}
+			if (high.type == cql::BoundType::Quantity && high.qty_numeric) {
+				if (temporal_per || default_per_unit) {
+					return high;
+				}
+				cql::BoundValue ext = high;
+				ext.qty_numeric = *high.qty_numeric + per_value;
+				return ext;
+			}
+			return high;
+		};
+
+		std::vector<cql::Interval> merged;
+		merged.push_back(parsed[0]);
+
+		for (size_t j = 1; j < parsed.size(); j++) {
+			auto &current = merged.back();
+			auto &next = parsed[j];
+
+			cql::Interval decision = current;
+			if (current.high) {
+				decision.high = extend_high(*current.high);
+			}
+
+			bool can_merge;
+			if (per_precision && current.high && current.high->dt_val && next.low && next.low->dt_val) {
+				can_merge = TemporalPrecisionMeetsOrOverlaps(*current.high->dt_val, *next.low->dt_val,
+				                                             *per_precision);
+			} else {
+				can_merge = decision.overlaps(next) || decision.meets(next) || next.meets(decision);
+			}
+
+			if (can_merge) {
+				// Merged bounds come from the ORIGINAL intervals.
+				if (!next.high) {
+					current.high = cql::NullOpt<cql::BoundValue>();
+				} else if (!current.high || next.high->compare(*current.high) > 0) {
+					current.high = next.high;
+					current.high_closed = next.high_closed;
+				} else if (current.high && next.high->compare(*current.high) == 0) {
+					current.high_closed = current.high_closed || next.high_closed;
+				}
+			} else {
+				merged.push_back(next);
+			}
+		}
+
 		std::string output = "[";
 		for (size_t j = 0; j < merged.size(); j++) {
 			if (j > 0) {
@@ -6727,55 +7377,55 @@ DEFINE_ONE_STR_STR_UDF(LogicalCoalesceFunc, {
 // =====================================================================
 static void LoadInternal(ExtensionLoader &loader) {
 	// Age UDFs
-	RegisterSpecialScalar(loader, "AgeInYears", {LogicalType::VARCHAR}, LogicalType::BIGINT, AgeInYearsFunc);
-	RegisterSpecialScalar(loader, "AgeInMonths", {LogicalType::VARCHAR}, LogicalType::BIGINT, AgeInMonthsFunc);
-	RegisterSpecialScalar(loader, "AgeInWeeks", {LogicalType::VARCHAR}, LogicalType::BIGINT, AgeInWeeksFunc);
-	RegisterSpecialScalar(loader, "AgeInDays", {LogicalType::VARCHAR}, LogicalType::BIGINT, AgeInDaysFunc);
-	RegisterSpecialScalar(loader, "AgeInHours", {LogicalType::VARCHAR}, LogicalType::BIGINT, AgeInHoursFunc);
-	RegisterSpecialScalar(loader, "AgeInMinutes", {LogicalType::VARCHAR}, LogicalType::BIGINT, AgeInMinutesFunc);
-	RegisterSpecialScalar(loader, "AgeInSeconds", {LogicalType::VARCHAR}, LogicalType::BIGINT, AgeInSecondsFunc);
-	RegisterSpecialScalar(loader, "AgeInYearsAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
+	RegisterSpecialScalar(loader, "AgeInYears", {LogicalType::VARCHAR}, LogicalType::VARCHAR, AgeInYearsFunc);
+	RegisterSpecialScalar(loader, "AgeInMonths", {LogicalType::VARCHAR}, LogicalType::VARCHAR, AgeInMonthsFunc);
+	RegisterSpecialScalar(loader, "AgeInWeeks", {LogicalType::VARCHAR}, LogicalType::VARCHAR, AgeInWeeksFunc);
+	RegisterSpecialScalar(loader, "AgeInDays", {LogicalType::VARCHAR}, LogicalType::VARCHAR, AgeInDaysFunc);
+	RegisterSpecialScalar(loader, "AgeInHours", {LogicalType::VARCHAR}, LogicalType::VARCHAR, AgeInHoursFunc);
+	RegisterSpecialScalar(loader, "AgeInMinutes", {LogicalType::VARCHAR}, LogicalType::VARCHAR, AgeInMinutesFunc);
+	RegisterSpecialScalar(loader, "AgeInSeconds", {LogicalType::VARCHAR}, LogicalType::VARCHAR, AgeInSecondsFunc);
+	RegisterSpecialScalar(loader, "AgeInYearsAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      AgeInYearsAtFunc);
-	RegisterSpecialScalar(loader, "AgeInMonthsAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
+	RegisterSpecialScalar(loader, "AgeInMonthsAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      AgeInMonthsAtFunc);
-	RegisterSpecialScalar(loader, "AgeInWeeksAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
+	RegisterSpecialScalar(loader, "AgeInWeeksAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      AgeInWeeksAtFunc);
-	RegisterSpecialScalar(loader, "AgeInDaysAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
+	RegisterSpecialScalar(loader, "AgeInDaysAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      AgeInDaysAtFunc);
-	RegisterSpecialScalar(loader, "AgeInHoursAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
+	RegisterSpecialScalar(loader, "AgeInHoursAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      AgeInHoursAtFunc);
-	RegisterSpecialScalar(loader, "AgeInMinutesAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
+	RegisterSpecialScalar(loader, "AgeInMinutesAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      AgeInMinutesAtFunc);
-	RegisterSpecialScalar(loader, "AgeInSecondsAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
+	RegisterSpecialScalar(loader, "AgeInSecondsAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      AgeInSecondsAtFunc);
-	RegisterSpecialScalar(loader, "CalculateAgeInYears", {LogicalType::VARCHAR}, LogicalType::BIGINT,
+	RegisterSpecialScalar(loader, "CalculateAgeInYears", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      CalculateAgeInYearsFunc);
-	RegisterSpecialScalar(loader, "CalculateAgeInMonths", {LogicalType::VARCHAR}, LogicalType::BIGINT,
+	RegisterSpecialScalar(loader, "CalculateAgeInMonths", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      CalculateAgeInMonthsFunc);
-	RegisterSpecialScalar(loader, "CalculateAgeInWeeks", {LogicalType::VARCHAR}, LogicalType::BIGINT,
+	RegisterSpecialScalar(loader, "CalculateAgeInWeeks", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      CalculateAgeInWeeksFunc);
-	RegisterSpecialScalar(loader, "CalculateAgeInDays", {LogicalType::VARCHAR}, LogicalType::BIGINT,
+	RegisterSpecialScalar(loader, "CalculateAgeInDays", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      CalculateAgeInDaysFunc);
-	RegisterSpecialScalar(loader, "CalculateAgeInHours", {LogicalType::VARCHAR}, LogicalType::BIGINT,
+	RegisterSpecialScalar(loader, "CalculateAgeInHours", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      CalculateAgeInHoursFunc);
-	RegisterSpecialScalar(loader, "CalculateAgeInMinutes", {LogicalType::VARCHAR}, LogicalType::BIGINT,
+	RegisterSpecialScalar(loader, "CalculateAgeInMinutes", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      CalculateAgeInMinutesFunc);
-	RegisterSpecialScalar(loader, "CalculateAgeInSeconds", {LogicalType::VARCHAR}, LogicalType::BIGINT,
+	RegisterSpecialScalar(loader, "CalculateAgeInSeconds", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      CalculateAgeInSecondsFunc);
 	RegisterSpecialScalar(loader, "CalculateAgeInYearsAt", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, CalculateAgeInYearsAtFunc);
+	                      LogicalType::VARCHAR, CalculateAgeInYearsAtFunc);
 	RegisterSpecialScalar(loader, "CalculateAgeInMonthsAt", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, CalculateAgeInMonthsAtFunc);
+	                      LogicalType::VARCHAR, CalculateAgeInMonthsAtFunc);
 	RegisterSpecialScalar(loader, "CalculateAgeInWeeksAt", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, CalculateAgeInWeeksAtFunc);
+	                      LogicalType::VARCHAR, CalculateAgeInWeeksAtFunc);
 	RegisterSpecialScalar(loader, "CalculateAgeInDaysAt", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, CalculateAgeInDaysAtFunc);
+	                      LogicalType::VARCHAR, CalculateAgeInDaysAtFunc);
 	RegisterSpecialScalar(loader, "CalculateAgeInHoursAt", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, CalculateAgeInHoursAtFunc);
+	                      LogicalType::VARCHAR, CalculateAgeInHoursAtFunc);
 	RegisterSpecialScalar(loader, "CalculateAgeInMinutesAt", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, CalculateAgeInMinutesAtFunc);
+	                      LogicalType::VARCHAR, CalculateAgeInMinutesAtFunc);
 	RegisterSpecialScalar(loader, "CalculateAgeInSecondsAt", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, CalculateAgeInSecondsAtFunc);
+	                      LogicalType::VARCHAR, CalculateAgeInSecondsAtFunc);
 
 	// CQL string regex helpers used by Python-side SQL macros and WASM/no-Python execution.
 	RegisterSpecialScalar(loader, "cqlRegexMatches", {LogicalType::VARCHAR, LogicalType::VARCHAR},
@@ -6841,6 +7491,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::VARCHAR, ExpandFunc);
 	RegisterSpecialScalar(loader, "collapse_intervals", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      CollapseIntervalsFunc);
+	RegisterSpecialScalar(loader, "collapse_intervals_per", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, CollapseIntervalsPerFunc);
 
 	// Precision-aware interval UDFs (3-arg: interval, interval/point, precision → BOOLEAN)
 	RegisterSpecialScalar(loader, "intervalOverlapsPrecise",
@@ -6959,6 +7611,21 @@ static void LoadInternal(ExtensionLoader &loader) {
 	RegisterSpecialScalar(loader, "cqlUncertainCompare",
 	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
 	                      CqlUncertainCompareFunc);
+	RegisterSpecialScalar(loader, "cqlUncertainMin",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
+	                      CqlUncertainMinFunc);
+	RegisterSpecialScalar(loader, "cqlUncertainMax",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
+	                      CqlUncertainMaxFunc);
+	RegisterSpecialScalar(loader, "cqlUncertainListMin",
+	                      {LogicalType::LIST(LogicalType::VARCHAR)}, LogicalType::VARCHAR,
+	                      CqlUncertainListMinFunc);
+	RegisterSpecialScalar(loader, "cqlUncertainListMax",
+	                      {LogicalType::LIST(LogicalType::VARCHAR)}, LogicalType::VARCHAR,
+	                      CqlUncertainListMaxFunc);
+	RegisterSpecialScalar(loader, "cqlUncertainListSum",
+	                      {LogicalType::LIST(LogicalType::VARCHAR)}, LogicalType::VARCHAR,
+	                      CqlUncertainListSumFunc);
 	RegisterSpecialScalar(loader, "dateComponent", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
 	                      DateComponentFunc);
 	RegisterSpecialScalar(loader, "quantityToInterval", {LogicalType::VARCHAR}, LogicalType::VARCHAR,

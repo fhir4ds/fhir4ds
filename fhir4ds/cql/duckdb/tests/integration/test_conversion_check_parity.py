@@ -100,7 +100,10 @@ def test_cql_conversion_check_spec_boundaries_match_cpp_registration() -> None:
         ("SELECT ConvertsToDecimal('1.')", False),
         ("SELECT ConvertsToDecimal('.5')", False),
         ("SELECT ConvertsToDecimal('1.12345678')", True),
-        ("SELECT ConvertsToDecimal('1.123456789')", False),
+        # CQL 1.5 App. B: ConvertsToDecimal mirrors ToDecimal, which ROUNDS
+        # excess fractional scale (CQL-01 doctrine) — QA-002.
+        ("SELECT ConvertsToDecimal('1.123456789')", True),
+        ("SELECT ConvertsToDecimal('0.0000000001')", True),
         ("SELECT ConvertsToDecimal('1000000000000000000000000000000')", False),
         ("SELECT ConvertsToDecimal(true)", True),
         ("SELECT ConvertsToDate(2024)", False),
@@ -282,3 +285,174 @@ def test_cql_converts_to_quantity_does_not_leak_pint_assertion_error_cql06_explo
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_to_quantity_accepts_bare_calendar_duration_keywords_cql06_skeptic() -> None:
+    """CQL 1.5 Appendix B §ToQuantity: the unit designator may be a
+    "case-sensitive UCUM unit of measure or calendar duration keyword,
+    singular or plural", and Table 9-G's round-trip rule (``ToString(4 days)``
+    results in ``4 days``) requires ToQuantity to parse bare calendar
+    duration keywords. Bare non-calendar UCUM units (``5 mg``) must remain
+    rejected: UCUM units appear as a quoted string literal.
+
+    Reproducer for CQL-06 SKEPTIC (HIGH severity, calendar keyword grammar).
+    """
+    cases = [
+        ("SELECT ConvertsToQuantity('5 years')", True),
+        ("SELECT ConvertsToQuantity('5 year')", True),
+        ("SELECT ConvertsToQuantity('4 days')", True),
+        ("SELECT ConvertsToQuantity('12 months')", True),
+        ("SELECT ConvertsToQuantity('5 weeks')", True),
+        ("SELECT ConvertsToQuantity('1 hours')", True),
+        ("SELECT ConvertsToQuantity('30 minutes')", True),
+        ("SELECT ConvertsToQuantity('3 millisecond')", True),
+        ("SELECT ConvertsToQuantity('5 milliseconds')", True),
+        ("SELECT ToQuantity('5 years') IS NOT NULL", True),
+        # Bare UCUM / unknown / wrong-case tokens stay rejected
+        ("SELECT ConvertsToQuantity('5 mg')", False),
+        ("SELECT ConvertsToQuantity('5 Years')", False),
+        ("SELECT ConvertsToQuantity('5 mgx')", False),
+        # Ratio quantities use the same grammar on both sides of the ':'
+        ("SELECT ConvertsToRatio('5 years:2 days')", True),
+        ("SELECT ConvertsToRatio('5 years:2 mg')", False),
+        ("SELECT ToRatio('5 years:2 days') IS NOT NULL", True),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in cases:
+            assert py.execute(expression).fetchone() == (expected,), expression
+            assert cpp.execute(expression).fetchone() == (expected,), expression
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_to_string_renders_calendar_duration_keywords_bare_cql06_historian() -> None:
+    """CQL 1.5 Appendix B §ToString (Table 9-G): the Quantity string format is
+    ``(-)?#0.0# (('<unit>')|(<unit>))`` — calendar duration keywords render as
+    a bare keyword ("``ToString(4 days)`` results in the string value
+    ``4 days`` (i.e. not ``4 'd'``)"), while UCUM units render quoted.
+    Round-trip through ToQuantity must hold on both backends.
+
+    Reproducer for CQL-06 HISTORIAN (HIGH severity, ToString calendar-unit form).
+    """
+    cases = [
+        # Calendar-duration units: bare keyword, round-trippable
+        ("ToString(4 days)", "4 day"),
+        ("ToString(12 months)", "12 month"),
+        ("ToString(5 minutes)", "5 minute"),
+        # UCUM units stay quoted
+        ("ToString(5 'cm')", "5 'cm'"),
+        ("ToString(-0.1 'mg')", "-0.1 'mg'"),
+        ("ToString(1.5 'a')", "1.5 'a'"),
+        # Unitless decimal literal renders per the decimal ToString rule
+        ("ToString(1.5)", "1.5"),
+        # Round-trips
+        ("ToQuantity(ToString(4 days))", '{"value":4,"unit":"day","code":"day","system":"http://unitsofmeasure.org"}'),
+        ("ToQuantity(ToString(5 'cm'))", '{"value":5,"unit":"cm","code":"cm","system":"http://unitsofmeasure.org"}'),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in cases:
+            cql = f"library T\ncontext Patient\ndefine X: {expression}"
+            sql = translate_cql(cql)["X"].to_sql()
+            assert py.execute(f"SELECT ({sql})").fetchone() == (expected,), expression
+            assert cpp.execute(f"SELECT ({sql})").fetchone() == (expected,), expression
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_converts_to_decimal_and_time_mirror_to_functions_cql06_explorer() -> None:
+    """CQL 1.5 Appendix B: ConvertsToX must return true for every value
+    ToX accepts. ToDecimal ROUNDS excess fractional scale (CQL-01 doctrine),
+    so ConvertsToDecimal must accept any fractional digit count (QA-002).
+    The CQL Time type carries no retained timezone component, but the
+    official cql-tests fixtures (CqlTypeOperatorsTest ToTime2/3/4) accept a
+    trailing timezone marker on input and normalize it away — fixtures
+    outrank spec prose (QA-003 reclassified INTENDED per fixture evidence).
+    """
+    cases = [
+        ("ConvertsToDecimal('1.123456789')", True),
+        ("ConvertsToDecimal('0.0000000001')", True),
+        ("ConvertsToDecimal('1.')", False),
+        ("ConvertsToDecimal('.5')", False),
+        ("ConvertsToDecimal('1e2')", False),
+        ("ConvertsToTime('12:00:00Z')", True),
+        ("ConvertsToTime('12:00:00+05:00')", True),
+        ("ConvertsToTime('12:00:00+99:00')", False),
+        ("ConvertsToTime('12:00:00')", True),
+        ("ConvertsToTime('T12:00:00.123')", True),
+        ("ToTime('12:00:00+05:00')", "T12:00:00"),
+        ("ToTime('T14:30:00.0+05:30')", "T14:30:00.0"),
+        ("ToTime('12:00:00')", "T12:00:00"),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in cases:
+            cql = f"library T\ncontext Patient\ndefine X: {expression}"
+            sql = translate_cql(cql)["X"].to_sql()
+            assert py.execute(f"SELECT ({sql})").fetchone() == (expected,), expression
+            assert cpp.execute(f"SELECT ({sql})").fetchone() == (expected,), expression
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_fhir_primitive_value_accessor_yields_system_scalar_cql06_explorer() -> None:
+    """CQL 1.5 §09-b data-model access: a `.value` segment following a
+    FHIR-primitive-typed path is the FHIR-to-System value accessor (the
+    canonical FHIRHelpers pattern) and must evaluate to the primitive's
+    System value, not to an (empty) FHIRPath `.value` navigation (QA-001).
+    """
+    from fhir4ds.cql.parser import parse_cql
+    from fhir4ds.cql.translator import CQLToSQLTranslator
+
+    library = parse_cql(
+        """library T version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define BD: [Patient] P return P.birthDate.value
+define Gen: [Patient] P return P.gender.value
+define StV: [Observation] O return O.status.value
+define CastV: [Observation] O return (O.value as FHIR.string).value
+define ObsInt: Count([Observation] O where ConvertsToInteger((O.value as FHIR.string).value))
+define ObsSum: Sum([Observation] O where ConvertsToInteger((O.value as FHIR.string).value) return ToInteger((O.value as FHIR.string).value))
+"""
+    )
+    columns = ["BD", "Gen", "StV", "CastV", "ObsInt", "ObsSum"]
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        library, output_columns={c: c for c in columns}
+    )
+    for factory in (_python_only_connection, _cpp_connection):
+        con = factory()
+        try:
+            con.execute(
+                "CREATE TABLE resources (patient_ref VARCHAR, resourceType VARCHAR,"
+                " id VARCHAR, resource JSON)"
+            )
+            con.execute(
+                "INSERT INTO resources VALUES"
+                " ('p1','Patient','p1','{\"resourceType\":\"Patient\",\"id\":\"p1\","
+                "\"birthDate\":\"1980-01-01\",\"gender\":\"male\"}'::JSON),"
+                " ('p1','Observation','o1','{\"resourceType\":\"Observation\",\"id\":\"o1\","
+                "\"status\":\"final\",\"subject\":{\"reference\":\"Patient/p1\"},"
+                "\"valueString\":\"42\"}'::JSON),"
+                " ('p1','Observation','o2','{\"resourceType\":\"Observation\",\"id\":\"o2\","
+                "\"status\":\"final\",\"subject\":{\"reference\":\"Patient/p1\"},"
+                "\"valueString\":\"high\"}'::JSON)"
+            )
+            row = con.execute(sql).fetchone()
+            assert row[1] == ["1980-01-01"], row
+            assert row[2] == ["male"], row
+            assert row[3] == ["final", "final"], row
+            assert sorted(row[4]) == ["42", "high"], row
+            assert row[5] == 1 and row[6] == 42, row
+        finally:
+            con.close()

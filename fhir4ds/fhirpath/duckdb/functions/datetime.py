@@ -556,10 +556,10 @@ class DateTimeLiteral:
         r'^@?(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$'
     )
     TIME_PATTERN = re.compile(
-        r'^@?T(\d{2})(?::(\d{2}))?(?::(\d{2}))?(?:\.(\d{3}))?$'
+        r'^@?T(\d{2})(?::(\d{2}))?(?::(\d{2}))?(?:\.(\d{1,9}))?$'
     )
     DATETIME_PATTERN = re.compile(
-        r'^@?(\d{4})-(\d{2})-(\d{2})T(\d{2})(?::(\d{2}))?(?::(\d{2}))?(?:\.(\d{3}))?$'
+        r'^@?(\d{4})-(\d{2})-(\d{2})T(\d{2})(?::(\d{2}))?(?::(\d{2}))?(?:\.(\d{1,9}))?$'
     )
     TIMEZONE_PATTERN = re.compile(r'([Z]|[+-]\d{2}:\d{2})$')
 
@@ -642,7 +642,8 @@ class DateTimeLiteral:
         hour = int(match.group(1))
         minute = int(match.group(2)) if match.group(2) else 0
         second = int(match.group(3)) if match.group(3) else 0
-        microsecond = int(match.group(4)) * 1000 if match.group(4) else 0
+        microsecond = (int(match.group(4)) * 10 ** (6 - len(match.group(4)))
+                       if match.group(4) else 0)
 
         # Determine precision
         if match.group(4):
@@ -694,7 +695,8 @@ class DateTimeLiteral:
             hour = int(match.group(4))
             minute = int(match.group(5)) if match.group(5) else 0
             second = int(match.group(6)) if match.group(6) else 0
-            microsecond = int(match.group(7)) * 1000 if match.group(7) else 0
+            microsecond = (int(match.group(7)) * 10 ** (6 - len(match.group(7)))
+                           if match.group(7) else 0)
 
             # Determine precision
             if match.group(7):
@@ -1227,120 +1229,106 @@ class DateTimeComparisons:
     Implements ordering comparisons for dates and times:
     - <, >, <=, >=
 
-    Follows FHIRPath precision rules for comparisons.
+    Follows FHIRPath §6.2 precision rules for comparisons by delegating to
+    the canonical engine comparison semantics (FP_Date/FP_DateTime/FP_Time
+    ``compare``): precision-mismatched operands are uncertain (None/empty),
+    timezone offsets are honored when both operands carry them (instant
+    semantics), and trailing-zero fractional seconds do not add precision.
     """
 
     @staticmethod
-    def less_than(dt1: Union[FHIRDate, FHIRDateTime, FHIRTime],
-                  dt2: Union[FHIRDate, FHIRDateTime, FHIRTime]) -> Optional[bool]:
-        """
-        Compare if first is less than second.
+    def _engine_compare(dt1: Union[FHIRDate, FHIRDateTime, FHIRTime],
+                        dt2: Union[FHIRDate, FHIRDateTime, FHIRTime]) -> Optional[int]:
+        """Compare via the canonical engine FP temporal nodes.
 
-        Args:
-            dt1: First date/datetime/time.
-            dt2: Second date/datetime/time.
-
-        Returns:
-            True if dt1 < dt2, False otherwise.
-            Returns None if either input is None (empty collection).
+        Returns -1/0/1, or None when the comparison is uncertain (e.g.
+        differing precision) per FHIRPath §6.2.
         """
-        if dt1 is None or dt2 is None:
+        from ...engine import nodes as engine_nodes
+
+        # FP-14 HISTORIAN QA-002 (2026-08-18): §6.2 requires comparison
+        # operands to be the same type (or implicitly convertible). The
+        # implicit-conversion table defines no Time <-> Date/DateTime
+        # conversion, so Time never orders against Date/DateTime: the result
+        # is empty (None), mirroring the engine expression-level behavior.
+        if isinstance(dt1, FHIRTime) != isinstance(dt2, FHIRTime):
+            return None
+
+        def to_engine_node(dt):
+            lexical = str(dt)
+            if isinstance(dt, FHIRTime):
+                if not lexical.startswith("T"):
+                    lexical = "T" + lexical
+                return engine_nodes.FP_Time(lexical)
+            if isinstance(dt, FHIRDateTime):
+                return engine_nodes.FP_DateTime(lexical)
+            return engine_nodes.FP_Date(lexical)
+
+        node1 = to_engine_node(dt1)
+        node2 = to_engine_node(dt2)
+        # FP-14 HISTORIAN QA-003: the FP temporal constructors return None
+        # for invalid lexical forms (e.g. a FHIRDate rendered with an offset,
+        # which dates cannot carry). An invalid operand is uncertain, not a
+        # crash: return None (empty).
+        if node1 is None or node2 is None:
             return None
 
         try:
-            return dt1 < dt2
-        except TypeError:
+            return node1.compare(node2)
+        except (TypeError, ValueError):
             return None
 
-    @staticmethod
-    def less_or_equal(dt1: Union[FHIRDate, FHIRDateTime, FHIRTime],
-                      dt2: Union[FHIRDate, FHIRDateTime, FHIRTime]) -> Optional[bool]:
-        """
-        Compare if first is less than or equal to second.
-
-        Args:
-            dt1: First date/datetime/time.
-            dt2: Second date/datetime/time.
-
-        Returns:
-            True if dt1 <= dt2, False otherwise.
-            Returns None if either input is None.
-        """
+    @classmethod
+    def less_than(cls, dt1, dt2):
+        """True if dt1 < dt2; None if either input is None or the
+        comparison is uncertain (§6.2 precision/timezone rules)."""
         if dt1 is None or dt2 is None:
             return None
-
-        try:
-            return dt1 <= dt2
-        except TypeError:
+        result = cls._engine_compare(dt1, dt2)
+        if result is None:
             return None
+        return result < 0
 
-    @staticmethod
-    def greater_than(dt1: Union[FHIRDate, FHIRDateTime, FHIRTime],
-                     dt2: Union[FHIRDate, FHIRDateTime, FHIRTime]) -> Optional[bool]:
-        """
-        Compare if first is greater than second.
-
-        Args:
-            dt1: First date/datetime/time.
-            dt2: Second date/datetime/time.
-
-        Returns:
-            True if dt1 > dt2, False otherwise.
-            Returns None if either input is None.
-        """
+    @classmethod
+    def less_or_equal(cls, dt1, dt2):
+        """True if dt1 <= dt2; None on empty/uncertain input."""
         if dt1 is None or dt2 is None:
             return None
-
-        try:
-            return dt1 > dt2
-        except TypeError:
+        result = cls._engine_compare(dt1, dt2)
+        if result is None:
             return None
+        return result <= 0
 
-    @staticmethod
-    def greater_or_equal(dt1: Union[FHIRDate, FHIRDateTime, FHIRTime],
-                         dt2: Union[FHIRDate, FHIRDateTime, FHIRTime]) -> Optional[bool]:
-        """
-        Compare if first is greater than or equal to second.
-
-        Args:
-            dt1: First date/datetime/time.
-            dt2: Second date/datetime/time.
-
-        Returns:
-            True if dt1 >= dt2, False otherwise.
-            Returns None if either input is None.
-        """
+    @classmethod
+    def greater_than(cls, dt1, dt2):
+        """True if dt1 > dt2; None on empty/uncertain input."""
         if dt1 is None or dt2 is None:
             return None
-
-        try:
-            return dt1 >= dt2
-        except TypeError:
+        result = cls._engine_compare(dt1, dt2)
+        if result is None:
             return None
+        return result > 0
 
-    @staticmethod
-    def equals(dt1: Union[FHIRDate, FHIRDateTime, FHIRTime],
-               dt2: Union[FHIRDate, FHIRDateTime, FHIRTime]) -> Optional[bool]:
-        """
-        Compare if two date/time values are equal.
-
-        Takes precision into account: @2019 != @2019-01-01.
-
-        Args:
-            dt1: First date/datetime/time.
-            dt2: Second date/datetime/time.
-
-        Returns:
-            True if equal, False otherwise.
-            Returns None if either input is None.
-        """
+    @classmethod
+    def greater_or_equal(cls, dt1, dt2):
+        """True if dt1 >= dt2; None on empty/uncertain input."""
         if dt1 is None or dt2 is None:
             return None
+        result = cls._engine_compare(dt1, dt2)
+        if result is None:
+            return None
+        return result >= 0
 
-        try:
-            return dt1 == dt2
-        except TypeError:
-            return False
+    @classmethod
+    def equals(cls, dt1, dt2):
+        """True if dt1 == dt2 (precision- and timezone-aware per §6.1/§6.2);
+        None if either input is None or precision makes equality uncertain."""
+        if dt1 is None or dt2 is None:
+            return None
+        result = cls._engine_compare(dt1, dt2)
+        if result is None:
+            return None
+        return result == 0
 
     @staticmethod
     def not_equals(dt1: Union[FHIRDate, FHIRDateTime, FHIRTime],

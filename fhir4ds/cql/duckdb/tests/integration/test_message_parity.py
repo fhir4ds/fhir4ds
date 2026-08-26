@@ -365,3 +365,60 @@ define ErrorCondition: Message('src', true, 'code', 'Error', 'message')
 define NullCondition: Message('src', null, 'code', 'Error', 'message')
 define ExpressionFalseCondition: Message('src', 1 = 2, 'code', 'Error', 'message')
 """
+
+
+def test_cql_message_where_clause_in_navigation_query_applies_per_element_cql22_explorer() -> None:
+    """CQL 1.5 §9 (Query where) + Appendix B (Message): the WHERE clause of a
+    query over a multi-valued navigation source (`Patient.name N where ...
+    return N.given`) must filter per element. Previously the where clause was
+    silently discarded, returning unfiltered lists for every patient and
+    swallowing Error-severity Message raises.
+    """
+    translated = translate_cql(
+        """library NavQueryMessage version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define PlainWhere: Patient.name N where First(N.given) = 'Ann' return N.given
+define MsgWarn: Patient.name N where Message(true, First(N.given) = 'Ann', 'F', 'Warning', 'note') return N.given
+define MsgError: Patient.name N where Message(true, First(N.given) = 'Ann', 'F', 'Error', 'first given not Ann') return N.given
+"""
+    )
+    assert "list_filter" in translated["MsgError"].to_sql()
+    assert "CQLMessage" in translated["MsgError"].to_sql()
+
+    def _setup(con):
+        con.execute("CREATE TABLE patients (patient_id VARCHAR, patient_resource VARCHAR)")
+        con.execute(
+            "INSERT INTO patients VALUES ('p1', ?)",
+            ['{"resourceType":"Patient","id":"p1","name":[{"given":["Ann","Marie"]},{"given":["Bob"]}]}'],
+        )
+        con.execute(
+            "INSERT INTO patients VALUES ('p2', ?)",
+            ['{"resourceType":"Patient","id":"p2","name":[{"given":["Zoe"]}]}'],
+        )
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            _setup(con)
+            rows = con.execute(
+                f"SELECT patient_id, ({translated['PlainWhere'].to_sql()}) AS v FROM patients _pt ORDER BY patient_id"
+            ).fetchall()
+            # p2 has no name whose first given is 'Ann' -> empty; p1 keeps only
+            # the matching element (scalar per-element projection).
+            assert rows[0][0] == "p1" and rows[0][1] is not None and "Ann" in rows[0][1]
+            assert rows[1] == ("p2", []), rows
+            # Warning severity passes through (no filtering, no raise)
+            warn = con.execute(
+                f"SELECT ({translated['MsgWarn'].to_sql()}) FROM patients _pt WHERE patient_id = 'p2'"
+            ).fetchone()
+            assert warn is not None
+            # Error severity raises at execution on the non-matching element
+            with pytest.raises(duckdb.Error, match="first given not Ann"):
+                con.execute(
+                    f"SELECT ({translated['MsgError'].to_sql()}) FROM patients _pt WHERE patient_id = 'p1'"
+                ).fetchone()
+    finally:
+        py.close()
+        cpp.close()

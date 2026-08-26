@@ -273,3 +273,195 @@ def test_unknown_function_invocation_is_row_resilient_in_fallback(
     finally:
         cpp.close()
         py.close()
+
+
+@pytest.mark.parametrize(
+    ("expression", "valid"),
+    [
+        # FP-02 SKEPTIC QA-001 (2026-08-16): §6.8 precedence — arithmetic
+        # operators (#04/#05) bind tighter than '|' union (#07), so these
+        # parse as `(1 + 2) | 3` etc. and MUST report valid in both the
+        # native extension and the Python fallback validity precheck.
+        ("1 + 2 | 3", True),
+        ("1 | 2 + 3", True),
+        ("'a' | 'b' & 'c'", True),
+        ("2 * 3 | 4", True),
+        ("3 | 4 + 5", True),
+        ("1 + 1 | 2", True),
+        ("0 + 1 | 2", True),
+        ("-1 | 2", True),
+        ("1 div 2 | 3", True),
+        ("1 mod 2 | 3", True),
+        # Parenthesized multi-item operands of math operators stay invalid.
+        ("(1 | 2) + 3", False),
+        ("1 + (2 | 3)", False),
+        ("(1 | 2) * 3", False),
+        # Multi-item operands of comparisons stay invalid (singleton rule).
+        ("1 < 2 | 3", False),
+        ("(1|2) < 3", False),
+    ],
+)
+def test_union_precedence_validity_matches_native_fp02_skeptic(
+    expression: str,
+    valid: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        query = "SELECT fhirpath_is_valid(?), fhirpath(?::JSON, ?)"
+        params = [expression, RESOURCE, expression]
+        cpp_row = cpp.execute(query, params).fetchone()
+        py_row = py.execute(query, params).fetchone()
+        assert cpp_row[0] is valid, f"{expression!r}: native is_valid={cpp_row[0]}"
+        assert py_row[0] is valid, f"{expression!r}: fallback is_valid={py_row[0]}"
+        assert cpp_row[1] == py_row[1], f"{expression!r}: eval divergence"
+    finally:
+        cpp.close()
+        py.close()
+
+
+@pytest.mark.parametrize(
+    ("expression", "valid"),
+    [
+        # FP-02 SKEPTIC QA-002 (2026-08-16): unary +/- on non-numeric
+        # literals is an execution type error (§6.8 syntax is valid; §6.6
+        # signals at evaluation), matching the binary classification of
+        # `'a' - 'b'`. Singleton violations stay invalid.
+        ("-'a'", True),
+        ("+'a'", True),
+        ("'a' - 'b'", True),
+        ("(1 | 2).not()", False),
+    ],
+)
+def test_unary_type_error_validity_classification_fp02_skeptic(
+    expression: str,
+    valid: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for con in (cpp, py):
+            got = con.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone()[0]
+            assert got is valid, f"{expression!r}: is_valid={got} expected={valid}"
+    finally:
+        cpp.close()
+        py.close()
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        # FP-02 EXPLORER QA-001 (2026-08-16): sum/min/max/avg are NOT
+        # FHIRPath N1/R4 functions. The native extension treats them as
+        # unknown functions -> empty/NULL, and fhirpath_is_valid rejects
+        # them; the Python fallback registry must not evaluate expressions
+        # its own validator rejects ({}.sum() -> 0 even violated the
+        # spec-wide empty-input convention).
+        "{}.sum()",
+        "nums.sum()",
+        "nums.min()",
+        "nums.max()",
+        "nums.avg()",
+        "dups.sum()",
+        "nums.sum() = 3",
+        "(1 | 2).sum()",
+    ],
+)
+def test_non_spec_aggregate_functions_parity_fp02_explorer(
+    expression: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resource = json.dumps(
+        {"resourceType": "Patient", "id": "p", "nums": [1, 2], "dups": [1, 2, 1]}
+    )
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        query = "SELECT fhirpath(?::JSON, ?), fhirpath_is_valid(?)"
+        params = [resource, expression, expression]
+        cpp_row = cpp.execute(query, params).fetchone()
+        py_row = py.execute(query, params).fetchone()
+        assert cpp_row == py_row == ([], False), f"{expression!r}: {cpp_row} vs {py_row}"
+    finally:
+        cpp.close()
+        py.close()
+
+
+@pytest.mark.parametrize(
+    ("expression", "valid"),
+    [
+        # FP-02 EXPLORER QA-003 (2026-08-16): §6.2 omits Boolean from the
+        # orderable types, so boolean-vs-boolean ordering is an execution
+        # type error of the SAME class as mixed-type ordering (`1 > true`),
+        # which must classify as valid per the is_valid doctrine.
+        ("true > false", True),
+        ("false < true", True),
+        ("true >= false", True),
+        ("true <= false", True),
+        ("1 > true", True),
+        ("'a' > 1", True),
+        ("true > 1", True),
+        ("true > 'a'", True),
+        ("@2014-01-01 < 'a'", True),
+    ],
+)
+def test_ordering_type_error_validity_classification_fp02_explorer(
+    expression: str,
+    valid: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for con in (cpp, py):
+            got = con.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone()[0]
+            assert got is valid, f"{expression!r}: is_valid={got} expected={valid}"
+    finally:
+        cpp.close()
+        py.close()
+
+
+@pytest.mark.parametrize(
+    ("expression", "valid"),
+    [
+        # FP-05 SKEPTIC QA-001 (2026-08-17): §5.3 subsetting argument type
+        # errors (indexer `[i]`, skip(num), take(num) require Integer) are
+        # execution type errors of the same class as `'a' - 'b'` — the
+        # expression grammar is valid and the mismatch signals at
+        # evaluation, so fhirpath_is_valid must report True. Singleton /
+        # multi-item argument violations stay invalid (doctrine).
+        ("(1|2|3).skip('x')", True),
+        ("(1|2|3).skip(1.5)", True),
+        ("(1|2|3).skip(true)", True),
+        ("(1|2|3).take('x')", True),
+        ("(1|2|3).take(1.5)", True),
+        ("(1|2|3)[1.5]", True),
+        ("(1|2|3)['1']", True),
+        ("'abc'['x']", True),
+        # Singleton/multi-item violations remain invalid.
+        ("(1|2|3).skip(1|2)", False),
+        ("(1|2|3).take(1|2)", False),
+        ("(1|2|3)[1|2]", False),
+        ("(1|2).single()", False),
+        # Sanity: valid subsetting forms.
+        ("(1|2|3).skip(1)", True),
+        ("(1|2|3).take(2)", True),
+        ("(1|2|3)[0]", True),
+    ],
+)
+def test_subsetting_argument_type_error_validity_classification_fp05_skeptic(
+    expression: str,
+    valid: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for con in (cpp, py):
+            got = con.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone()[0]
+            assert got is valid, f"{expression!r}: is_valid={got} expected={valid}"
+    finally:
+        cpp.close()
+        py.close()

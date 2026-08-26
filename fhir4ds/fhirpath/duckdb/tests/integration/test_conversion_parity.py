@@ -198,7 +198,15 @@ def test_fp06_explorer_iif_conversion_edges_match_forced_fallback(monkeypatch) -
     cases = {
         "iif('1'.convertsToInteger(), 'T', 'F')": (["T"], '["T"]', True),
         "iif('+1'.convertsToInteger(), '+1'.toInteger(), 'bad')": (["1"], "[1]", True),
-        "-1.convertsToInteger()": ([], None, False),
+        # FP-02 SKEPTIC QA-002 (2026-08-16): unary +/- on a non-numeric
+        # operand is an execution type error, the same class as the already
+        # -valid binary `'a' - 'b'` (both carry invalid="execution" in the
+        # official fixtures: testPrecedence1 / testMinus4). Per the is_valid
+        # doctrine (GLOBAL_RULES: "Valid incompatible comparison/arithmetic
+        # expressions may evaluate to empty/NULL and must still be valid"),
+        # the DuckDB validity helper reports True while the strict core and
+        # the official harness still expect the evaluation error.
+        "-1.convertsToInteger()": ([], None, True),
         "(-1).convertsToInteger()": (["true"], "[true]", True),
         "('b'|'a').sort(-$this)": (["b", "a"], '["b","a"]', True),
     }
@@ -2011,6 +2019,149 @@ def test_calendar_vs_ucum_duration_group_separation_fp08_explorer(
                 assert cpp[0] == expected, (
                     f"expected {expected!r} for {expression}, got {cpp[0]!r}"
                 )
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_integer_conversion_trailing_newline_and_iif_scope_parity_fp06_historian(
+    monkeypatch,
+) -> None:
+    """FP-06 HISTORIAN (2026-08-17) regressions.
+
+    1. Python `re` `$` matches before a single trailing newline, so the
+       fallback accepted '1\\n'.toInteger() -> 1 while the native evaluator
+       (and the exact (\\+|-)?\\d+ grammar of FHIRPath N1 §5.5.3) reject it.
+       intRegex now anchors with \\Z.
+    2. The fallback's iif_macro leaked defineVariable out of the taken
+       branch (native fn_iif scopes defined_variables_/chain_defined_vars_
+       per branch, evaluator.cpp:7169).
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p"})
+    cases = [
+        # (expression, expected fhirpath result list; [] == empty)
+        ("'1\\n'.toInteger()", []),
+        ("'-1\\n'.toInteger()", []),
+        ("'1\\n\\n'.toInteger()", []),
+        ("'\\n1'.toInteger()", []),
+        ("'1\\t'.toInteger()", []),
+        ("'1\\n'.convertsToInteger()", ["false"]),
+        ("'-1\\n'.convertsToInteger()", ["false"]),
+        ("'1'.toInteger()", ["1"]),
+        # FP-06 HISTORIAN sibling: same $-anchor class in numRegex —
+        # '1\n'.toDecimal() must be empty (native), not 1.0 (fallback)
+        ("'1\\n'.toDecimal()", []),
+        ("'1.5\\n'.toDecimal()", []),
+        ("'1.5'.toDecimal()", ["1.5"]),
+        ("'1\\n'.convertsToDecimal()", ["false"]),
+        # defineVariable inside an iif branch must not leak past the iif
+        ("iif(true, defineVariable('dv', 9).select(1), 2).select(%dv)", []),
+        ("iif(false, 2, defineVariable('dv', 9).select(1)).select(%dv)", []),
+        # ...but the variable IS visible inside the defining branch
+        ("iif(true, defineVariable('dv', 9).select(%dv.count()), 0).first()", ["1"]),
+        # variables defined before iif remain visible in criterion/branches
+        ("1.defineVariable('n', $this).iif(%n = 1, %n + 1, %n - 1)", ["2"]),
+        # FP-06 EXPLORER (2026-08-17): native fn_iif restores
+        # defined_variables_ after the criterion but NOT chain_defined_vars_,
+        # so a variable defined in the iif criterion remains visible in the
+        # taken branch (matching the §5.2.9 defineVariable contract "for the
+        # remainder of the expression"). The fallback iif_macro previously
+        # snapshotted vars BEFORE the criterion for branch evaluation, hiding
+        # criterion-defined variables.
+        ("iif(defineVariable('dc', 1).select(true), %dc, 0)", ["1"]),
+        ("iif(defineVariable('cv', true).select(%cv), %cv, 2)", ["true"]),
+        # ...and criterion vars persist for the remainder of the expression
+        # (true, false, and empty criteria all leave the var defined)
+        ("iif(defineVariable('dc', 1).select(true), %dc, 0).select(%dc)", ["1"]),
+        ("iif(defineVariable('nc', 5).select(false), 1, 2).select(%nc)", ["5"]),
+        ("iif(defineVariable('ec', 6).select({}.exists()), 1, 2).select(%ec)", ["6"]),
+        ("iif(defineVariable('nc', 5).select(false), 1, %nc)", ["5"]),
+        # variables defined before the iif still visible in both branches
+        ("defineVariable('g', 7).select(iif(false, 0, %g))", ["7"]),
+        ("defineVariable('g', 7).select(iif(true, %g, 0))", ["7"]),
+        # FP-07 SKEPTIC (2026-08-17): the third `$`-anchor sibling,
+        # longDecimalStringRegex — '5L\n' matched (regex `$` matches
+        # before one trailing newline) and Decimal('5L') raised an
+        # unhandled ConversionSyntax in the fallback UDF while native
+        # returns empty via isFHIRPathLongDecimalString. Now \Z-anchored.
+        ("'5L\\n'.toDecimal()", []),
+        ("'5L\\n'.convertsToDecimal()", ["false"]),
+        ("'-5L\\n'.toDecimal()", []),
+        # ...while the valid Long-suffix spelling still converts (shared
+        # convention, both engines)
+        ("'5L'.toDecimal().toString()", ["5.0"]),
+        ("'5L'.convertsToDecimal()", ["true"]),
+        ("'5.5L'.toDecimal()", []),
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases:
+            query = "SELECT fhirpath(?::JSON, ?)"
+            cpp = con.execute(query, [resource, expression]).fetchone()[0]
+            py = fallback.execute(query, [resource, expression]).fetchone()[0]
+            assert cpp == py, (
+                f"native vs fallback mismatch on {expression!r}: {cpp!r} vs {py!r}"
+            )
+            assert cpp == expected, (
+                f"expected {expected!r} for {expression!r}, got {cpp!r}"
+            )
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_temporal_arithmetic_preserves_authored_z_suffix_parity_fp07_explorer(
+    monkeypatch,
+) -> None:
+    """FP-07 EXPLORER (2026-08-17) regression.
+
+    The Python fallback's FP_DateTime._extractDateByPrecision normalized an
+    authored "Z" timezone to "+00:00" when rendering temporal arithmetic
+    results (@2020-06-30T23:59:59Z + 1 second -> "...+00:00"), while the
+    native evaluator preserves the authored "Z" spelling. Authored "+hh:mm"
+    offsets were already preserved by both engines. Conversion (toDateTime)
+    and equality were unaffected; only arithmetic result display diverged.
+    No official fixture pins Z-suffixed arithmetic output, so engine parity
+    governs (FHIRPath N1 §5.5.1 representation table keeps Z for UTC).
+    """
+    resource = json.dumps({"resourceType": "Patient", "id": "p"})
+    cases = [
+        ("'2020-06-30T23:59:59Z'.toDateTime() + 0 seconds", ["2020-06-30T23:59:59Z"]),
+        ("@2020-06-30T23:59:59Z + 1 second", ["2020-07-01T00:00:00Z"]),
+        ("@2020-06-30T23:59:59Z + 1 minute", ["2020-07-01T00:00:59Z"]),
+        (
+            "@2020-06-30T23:59:59.5Z + 500 milliseconds",
+            ["2020-07-01T00:00:00.000Z"],
+        ),
+        ("'2020-06-30T23:59:59Z'.toDateTime() - 1 second", ["2020-06-30T23:59:58Z"]),
+        ("(@2020-06-30T23:59:59Z + 1 second).toString()", ["2020-07-01T00:00:00Z"]),
+        # Authored numeric offsets keep their spelling in both engines.
+        ("@2020-06-30T23:59:59+00:00 + 1 second", ["2020-07-01T00:00:00+00:00"]),
+        ("@2020-06-30T23:59:59+10:00 + 1 hour", ["2020-07-01T00:59:59+10:00"]),
+        # Date-only and partial-precision arithmetic is unaffected.
+        ("@2020-06-30 + 1 day", ["2020-07-01"]),
+        ("@2015 + 1 year", ["2016"]),
+        # Equality semantics were already correct in both engines.
+        ("@2020-06-30T23:59:59Z + 1 second = @2020-07-01T00:00:00Z", ["true"]),
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases:
+            query = "SELECT fhirpath(?::JSON, ?)"
+            cpp = con.execute(query, [resource, expression]).fetchone()[0]
+            py = fallback.execute(query, [resource, expression]).fetchone()[0]
+            assert cpp == py, (
+                f"native vs fallback mismatch on {expression!r}: {cpp!r} vs {py!r}"
+            )
+            assert cpp == expected, (
+                f"expected {expected!r} for {expression!r}, got {cpp!r}"
+            )
     finally:
         con.close()
         fallback.close()

@@ -202,7 +202,14 @@ def resolve_placeholders(
             where=resolve_placeholders(ast.where, cte_name_map) if ast.where else None,
             group_by=[resolve_placeholders(g, cte_name_map) for g in ast.group_by] if ast.group_by else None,
             having=resolve_placeholders(ast.having, cte_name_map) if ast.having else None,
-            order_by=ast.order_by,
+            order_by=[
+                (
+                    resolve_placeholders(expr, cte_name_map)
+                    if not isinstance(expr, str) else expr,
+                    direction,
+                )
+                for expr, direction in ast.order_by
+            ] if ast.order_by else None,
             distinct=ast.distinct,
             limit=ast.limit
         )

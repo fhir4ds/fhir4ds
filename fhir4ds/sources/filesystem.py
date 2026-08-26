@@ -224,26 +224,35 @@ class FileSystemSource:
         return {row[0] for row in rows}
 
     def _raw_fhir_patient_ref_sql(self, resource_expr: str) -> str:
-        """Build SQL that derives patient_ref from a raw FHIR resource JSON."""
-        reference_expr = (
-            f"COALESCE("
-            f"json_extract_string({resource_expr}, '$.subject.reference'), "
-            f"json_extract_string({resource_expr}, '$.patient.reference'), "
-            f"json_extract_string({resource_expr}, '$.beneficiary.reference')"
-            f")"
-        )
-        normalized_ref = (
-            f"regexp_replace("
-            f"regexp_replace({reference_expr}, '^urn:uuid:', ''), "
-            f"'^.*/', ''"
-            f")"
-        )
-        return (
-            f"CASE "
-            f"WHEN src.resourceType = 'Patient' THEN src.id::VARCHAR "
-            f"ELSE {normalized_ref} "
-            f"END"
-        )
+        """Build SQL that derives patient_ref from a raw FHIR resource JSON.
+
+        Follows the shared patient-identity doctrine (see
+        ``FHIRDataLoader._extract_patient_ref``): only Patient-typed
+        references (relative ``Patient/{id}``, absolute URLs ending
+        ``/Patient/{id}``, and version-specific variants resolved to the
+        current id) and bundle-local ``urn:uuid:`` references populate
+        patient_ref; references targeting other resource types (e.g.
+        ``Group/{id}``) and bare ids yield NULL so they cannot fabricate
+        phantom patient ids downstream.
+        """
+        candidates = [
+            "CASE WHEN src.resourceType = 'Patient' THEN src.id::VARCHAR END"
+        ]
+        for path in ("$.subject.reference", "$.patient.reference", "$.beneficiary.reference"):
+            ref_expr = f"json_extract_string({resource_expr}, '{path}')"
+            candidates.append(
+                f"NULLIF(regexp_extract({ref_expr}, '^Patient/([^/]+)$', 1), '')"
+            )
+            candidates.append(
+                f"NULLIF(regexp_extract({ref_expr}, '^https?://.*/Patient/([^/]+)$', 1), '')"
+            )
+            candidates.append(
+                f"NULLIF(regexp_extract({ref_expr}, '^Patient/([^/]+)/_history/[^/]+$', 1), '')"
+            )
+            candidates.append(
+                f"NULLIF(regexp_extract({ref_expr}, '^urn:uuid:(.+)$', 1), '')"
+            )
+        return f"COALESCE({', '.join(candidates)})"
 
     def _resources_view_sql(self, con: Any, scan_expr: str) -> str:
         """Build the CREATE VIEW statement for the configured file source."""

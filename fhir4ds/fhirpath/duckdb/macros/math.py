@@ -44,7 +44,7 @@ def register_math_macros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute("CREATE MACRO IF NOT EXISTS LogBase(x, base) AS system.ln(x) / system.ln(base)")
 
     con.execute("CREATE MACRO IF NOT EXISTS Power(x, y) AS system.pow(x, y)")
-    con.execute("CREATE MACRO IF NOT EXISTS Truncate(x) AS system.trunc(x)")
+    con.execute("CREATE MACRO IF NOT EXISTS Truncate(x) AS TRY_CAST(system.trunc(x) AS INTEGER)")
 
 
 __all__ = ["register_math_macros"]

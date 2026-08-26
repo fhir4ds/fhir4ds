@@ -24,7 +24,14 @@ _BOOL_STRINGS = {"true", "false", "t", "f", "yes", "no", "y", "n", "1", "0"}
 # Unicode-digit strings like ``'٢٠٢٤-٠١-٠١'`` that real Mideast FHIR data
 # can carry.
 _INTEGER_STRING_RE = re.compile(r"^[+-]?\d+$", re.ASCII)
-_DECIMAL_STRING_RE = re.compile(r"^[+-]?\d+(?:\.\d{1,8})?$", re.ASCII)
+# CQL 1.5 Appendix B §ToDecimal: accepted string format is (+|-)?#0(.0#)?
+# — any number of fractional digits. The RESULT is "limited in precision
+# and scale to the maximum precision and scale representable" (CQL-01
+# doctrine: rounding at 8 fractional digits, matching the ToDecimal macro's
+# TRY_CAST(... AS DECIMAL(38, 8))). ConvertsToDecimal must therefore accept
+# any digit count the To function accepts; only the integer-digit extent
+# (30 digits for DECIMAL(38, 8)) is a hard limit.
+_DECIMAL_STRING_RE = re.compile(r"^[+-]?\d+(?:\.\d+)?$", re.ASCII)
 _DUCKDB_DECIMAL_INTEGER_DIGITS = 30
 _DUCKDB_DECIMAL_SCALE = 8
 _DATE_RE = re.compile(r"^(?P<year>\d{4})(?:-(?P<month>\d{2})(?:-(?P<day>\d{2}))?)?$", re.ASCII)
@@ -62,6 +69,18 @@ def _fits_duckdb_decimal(value: Decimal) -> bool:
     if not value.is_finite():
         return False
     if value.as_tuple().exponent < -_DUCKDB_DECIMAL_SCALE:
+        return False
+    if value.is_zero():
+        return True
+    integer_digits = value.copy_abs().adjusted() + 1
+    return integer_digits <= _DUCKDB_DECIMAL_INTEGER_DIGITS
+
+
+def _fits_duckdb_decimal_rounded(value: Decimal) -> bool:
+    """Like _fits_duckdb_decimal, but excess FRACTIONAL scale is allowed
+    because ToDecimal rounds to the representable scale (CQL-01 doctrine).
+    Only the integer-digit extent is a hard limit."""
+    if not value.is_finite():
         return False
     if value.is_zero():
         return True
@@ -134,11 +153,18 @@ def _is_valid_cql_datetime(text: str) -> bool:
 
 
 def _is_valid_cql_time(text: str) -> bool:
+    # hh:mm:ss.fff (any precision). The official cql-tests fixtures
+    # (CqlTypeOperatorsTest ToTime2/3/4) accept a trailing timezone marker
+    # and normalize it away — fixtures outrank spec prose — so offsets are
+    # parsed and validated but not retained in the Time result.
     match = _TIME_RE.fullmatch(text)
     if match is None:
         return False
     groups = match.groupdict()
-    return _valid_time_parts(groups["hour"], groups["minute"], groups["second"]) and _valid_timezone(groups["tz"])
+    return (
+        _valid_time_parts(groups["hour"], groups["minute"], groups["second"])
+        and _valid_timezone(groups["tz"])
+    )
 
 
 def ConvertsToBoolean(value) -> bool | None:
@@ -159,7 +185,12 @@ def ConvertsToInteger(value) -> bool | None:
         return None
     if isinstance(value, bool):
         return True
+    if isinstance(value, Decimal):
+        # CQL 1.5 Appendix B Table 9-E defines no Decimal->Integer conversion
+        # and ToInteger has no Decimal overload (Boolean/String/Long only).
+        return False
     if isinstance(value, int):
+        # Long -> Integer is an explicit conversion, valid within Integer range.
         return -(2**31) <= value <= 2**31 - 1
     if isinstance(value, str):
         if _INTEGER_STRING_RE.fullmatch(value) is None:
@@ -174,6 +205,10 @@ def ConvertsToLong(value) -> bool | None:
         return None
     if isinstance(value, bool):
         return True
+    if isinstance(value, Decimal):
+        # CQL 1.5 Appendix B Table 9-E defines no Decimal->Long conversion
+        # and ToLong has no Decimal overload (Boolean/String only).
+        return False
     if isinstance(value, int):
         return -(2**63) <= value <= 2**63 - 1
     if isinstance(value, str):
@@ -191,10 +226,10 @@ def ConvertsToDecimal(value) -> bool | None:
         return True
     if isinstance(value, (int, float, Decimal)):
         dec = _finite_decimal(str(value))
-        return dec is not None and _fits_duckdb_decimal(dec)
+        return dec is not None and _fits_duckdb_decimal_rounded(dec)
     if isinstance(value, str):
         dec = _finite_decimal(value)
-        return _DECIMAL_STRING_RE.fullmatch(value) is not None and dec is not None and _fits_duckdb_decimal(dec)
+        return _DECIMAL_STRING_RE.fullmatch(value) is not None and dec is not None and _fits_duckdb_decimal_rounded(dec)
     return False
 
 
@@ -346,15 +381,19 @@ def ToTime(value) -> str | None:
     if not isinstance(value, str):
         return None
     text = value
-    if not _is_valid_cql_time(text):
+    match = _TIME_RE.fullmatch(text)
+    if match is None or not _is_valid_cql_time(text):
         return None
-    if text.endswith("Z"):
-        text = text[:-1]
-    else:
-        tz_match = re.search(r"[+-]\d{2}:\d{2}$", text)
-        if tz_match:
-            text = text[:tz_match.start()]
-    return text[1:] if text.startswith("T") else text
+    # Drop any timezone marker (official fixtures: ToTime('T14:30:00.0+05:30')
+    # -> @T14:30:00.000 — the CQL Time type carries no offset; the marker is
+    # accepted on input and normalized away).
+    groups = match.groupdict()
+    if groups["tz"] is not None:
+        text = text[: match.start("tz")] if match.start("tz") else text
+    # CQL Time values are transported as T-prefixed strings (same convention
+    # as Time literals and TimeOfDay()); stripping the marker breaks
+    # component extraction and time comparisons downstream.
+    return "T" + (text[1:] if text.startswith("T") else text)
 
 
 def ConvertQuantity(value, target_unit: str | None) -> str | None:

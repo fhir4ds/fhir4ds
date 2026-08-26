@@ -728,3 +728,233 @@ def test_load_bundle_rejects_non_dict(loader, bad_input):
     """load_bundle must raise TypeError for non-dict inputs (QA-006)."""
     with pytest.raises(TypeError, match="Expected dict for bundle"):
         loader.load_bundle(bad_input)
+
+
+# --- 0.0.12 evolution campaign, Domain 6 SKEPTIC fixes (QA-001..QA-005) ---
+
+def test_patient_ref_group_subject_not_attributed(loader, duckdb_con):
+    """QA-001: non-Patient subject references must not create phantom patients."""
+    loader.load_resource({
+        "resourceType": "Condition", "id": "c1",
+        "subject": {"reference": "Group/g7"}, "code": {"text": "dx"},
+    })
+    got = duckdb_con.execute(
+        "SELECT patient_ref FROM resources WHERE id = 'c1'"
+    ).fetchone()[0]
+    assert got is None
+
+
+def test_patient_ref_patient_typed_subject(loader, duckdb_con):
+    loader.load_resource({
+        "resourceType": "Observation", "id": "o1",
+        "subject": {"reference": "Patient/123"},
+    })
+    got = duckdb_con.execute(
+        "SELECT patient_ref FROM resources WHERE id = 'o1'"
+    ).fetchone()[0]
+    assert got == "123"
+
+
+def test_patient_ref_absolute_and_versioned(loader, duckdb_con):
+    loader.load_resource({
+        "resourceType": "Condition", "id": "c2",
+        "subject": {"reference": "https://example.org/fhir/Patient/abc"},
+    })
+    loader.load_resource({
+        "resourceType": "Condition", "id": "c3",
+        "subject": {"reference": "Patient/p9/_history/4"},
+    })
+    rows = dict(duckdb_con.execute(
+        "SELECT id, patient_ref FROM resources WHERE id IN ('c2', 'c3')"
+    ).fetchall())
+    assert rows == {"c2": "abc", "c3": "p9"}
+
+
+def test_patient_ref_bare_id_not_attributed(loader, duckdb_con):
+    """Bare ids are not valid FHIR R4 references and carry no target type."""
+    loader.load_resource({
+        "resourceType": "Condition", "id": "c4",
+        "subject": {"reference": "bare-id"},
+    })
+    got = duckdb_con.execute(
+        "SELECT patient_ref FROM resources WHERE id = 'c4'"
+    ).fetchone()[0]
+    assert got is None
+
+
+def test_patient_ref_list_valued_reference(loader, duckdb_con):
+    """QA-004: Appointment-style 0..* patient references use the first Patient entry."""
+    loader.load_resource({
+        "resourceType": "Appointment", "id": "a1", "status": "booked",
+        "patient": [
+            {"reference": "Group/g1"},
+            {"reference": "Patient/p11"},
+            {"reference": "Patient/p12"},
+        ],
+    })
+    got = duckdb_con.execute(
+        "SELECT patient_ref FROM resources WHERE id = 'a1'"
+    ).fetchone()[0]
+    assert got == "p11"
+
+
+def test_patient_ref_urn_uuid_bundle_local(loader, duckdb_con):
+    loader.load_resource({
+        "resourceType": "Condition", "id": "c5",
+        "subject": {"reference": "urn:uuid:7f9c4d2a"},
+    })
+    got = duckdb_con.execute(
+        "SELECT patient_ref FROM resources WHERE id = 'c5'"
+    ).fetchone()[0]
+    assert got == "7f9c4d2a"
+
+
+def test_resolve_macro_versioned_reference(loader, duckdb_con):
+    """QA-002: version-specific references resolve to the current resource."""
+    loader.load_resource({"resourceType": "Patient", "id": "p20"})
+    got = duckdb_con.execute(
+        "SELECT json_extract_string(resolve('Patient/p20/_history/9'), '$.id')"
+    ).fetchone()[0]
+    assert got == "p20"
+
+
+def test_resolve_macro_regression_forms(loader, duckdb_con):
+    loader.load_resources([
+        {"resourceType": "Patient", "id": "p30"},
+        {"resourceType": "Observation", "id": "ob30",
+         "subject": {"reference": "Patient/p30"}},
+    ])
+    assert duckdb_con.execute(
+        "SELECT json_extract_string(resolve('Patient/p30'), '$.id')"
+    ).fetchone()[0] == "p30"
+    assert duckdb_con.execute(
+        "SELECT json_extract_string(resolve('https://s/fhir/Patient/p30'), '$.id')"
+    ).fetchone()[0] == "p30"
+    assert duckdb_con.execute(
+        "SELECT json_extract_string("
+        "resolve(json('{\"reference\": \"Patient/p30\"}')), '$.id')"
+    ).fetchone()[0] == "p30"
+    assert duckdb_con.execute(
+        "SELECT json_extract_string(resolve('urn:uuid:p30'), '$.id')"
+    ).fetchone()[0] == "p30"
+    assert duckdb_con.execute("SELECT resolve('Patient/missing')").fetchone()[0] is None
+
+
+def test_load_ndjson_bom_tolerated(loader, duckdb_con, tmp_path):
+    """QA-003: UTF-8 BOM on the first line must not reject the file."""
+    p = tmp_path / "bom.ndjson"
+    p.write_text('{"resourceType": "Patient", "id": "b1"}\n', encoding="utf-8-sig")
+    assert loader.load_ndjson(p) == 1
+    assert loader.count() == 1
+
+
+def test_load_file_bom_tolerated(loader, duckdb_con, tmp_path):
+    p = tmp_path / "bom.json"
+    p.write_text('{"resourceType": "Patient", "id": "b2"}', encoding="utf-8-sig")
+    assert loader.load_file(p) == 1
+    assert loader.count() == 1
+
+
+def test_load_bundle_rejects_empty_resource_with_index(loader):
+    """QA-005: entry.resource == {} is invalid FHIR, not a silent skip."""
+    with pytest.raises(ValueError, match=r"Bundle.entry\[0\]\.resource is empty"):
+        loader.load_bundle({
+            "resourceType": "Bundle", "type": "collection",
+            "entry": [{"resource": {}}],
+        })
+
+
+def test_load_bundle_invalid_entry_attribution(loader):
+    with pytest.raises(ValueError, match=r"Bundle.entry\[1\].*resourceType"):
+        loader.load_bundle({
+            "resourceType": "Bundle", "type": "collection",
+            "entry": [
+                {"resource": {"resourceType": "Patient", "id": "ok1"}},
+                {"resource": {"id": "no-type"}},
+            ],
+        })
+
+
+# --- 0.0.12 evolution campaign, Domain 6 EXPLORER fixes (QA-009..QA-012) ---
+
+def test_load_directory_case_variant_extensions(loader, tmp_path):
+    """QA-009: .JSON/.NdJsOn files must load on case-insensitive trees."""
+    (tmp_path / "UPPER.JSON").write_text('{"resourceType": "Patient", "id": "u1"}')
+    (tmp_path / "mixed.NdJsOn").write_text('{"resourceType": "Patient", "id": "m1"}\n')
+    assert loader.load_directory(tmp_path) == 2
+    assert loader.count() == 2
+
+
+def test_load_directory_skips_unreadable_file(loader, duckdb_con, tmp_path):
+    """QA-010: an unreadable file must not abort the whole directory load."""
+    (tmp_path / "ok.json").write_text('{"resourceType": "Patient", "id": "ok1"}')
+    bad = tmp_path / "bad.json"
+    bad.write_text('{"resourceType": "Patient", "id": "never"}')
+    bad.chmod(0o000)
+    try:
+        loaded = loader.load_directory(tmp_path)
+    finally:
+        bad.chmod(0o644)
+    assert loaded == 1
+    assert loader.count() == 1
+
+
+def test_serialize_deep_nesting_raises_value_error(loader):
+    """QA-011: pathological nesting surfaces as ValueError, not RecursionError."""
+    obj = {"resourceType": "Patient", "id": "d1"}
+    node = obj
+    for _ in range(5000):
+        node["contained"] = [{"resourceType": "Basic"}]
+        node = node["contained"][0]
+    with pytest.raises(ValueError, match="nesting"):
+        loader.load_resource(obj)
+
+
+def test_serialize_circular_reference_message(loader):
+    """QA-012: circular-reference errors name the actual cause."""
+    a = {"resourceType": "Patient", "id": "circ"}
+    a["self"] = a
+    with pytest.raises(ValueError, match="circular"):
+        loader.load_resource(a)
+
+
+# --- 0.0.12 evolution campaign, Domain 7 SKEPTIC fix (QA-013) ---
+
+def test_load_resources_bulk_path_and_fallback(loader, duckdb_con, monkeypatch):
+    """QA-013: Arrow bulk insert used when available; executemany fallback intact."""
+    batch = [{"resourceType": "Patient", "id": f"p{i}"} for i in range(500)]
+    assert loader.load_resources(batch) == 500
+    assert loader.count() == 500
+    # reload same identities: dedup DELETE + bulk insert, no row growth
+    batch2 = [{"resourceType": "Patient", "id": f"p{i}", "active": True} for i in range(500)]
+    assert loader.load_resources(batch2) == 500
+    assert loader.count() == 500
+    assert duckdb_con.execute(
+        "SELECT COUNT(*) FROM resources WHERE json_extract_string(resource,'$.active') = 'true'"
+    ).fetchone()[0] == 500
+    # fallback: block pyarrow import inside the loader module path
+    import builtins
+    real_import = builtins.__import__
+    def no_pa(name, *a, **k):
+        if name == "pyarrow":
+            raise ImportError("blocked")
+        return real_import(name, *a, **k)
+    monkeypatch.setattr(builtins, "__import__", no_pa)
+    batch3 = [{"resourceType": "Observation", "id": f"o{i}",
+               "subject": {"reference": "Patient/p0"}} for i in range(50)]
+    assert loader.load_resources(batch3) == 50
+    assert loader.count("Observation") == 50
+
+
+def test_load_resources_mixed_null_ids_bulk(loader, duckdb_con):
+    """Bulk path must handle NULL ids and NULL patient_refs (Arrow typed columns)."""
+    batch = [
+        {"resourceType": "Patient"},
+        {"resourceType": "Patient", "id": "x1"},
+        {"resourceType": "Observation", "subject": {"reference": "Patient/x1"}},
+    ]
+    assert loader.load_resources(batch) == 3
+    rows = duckdb_con.execute(
+        "SELECT id, patient_ref FROM resources ORDER BY resourceType, id NULLS FIRST"
+    ).fetchall()
+    assert rows == [(None, "x1"), (None, None), ("x1", "x1")]

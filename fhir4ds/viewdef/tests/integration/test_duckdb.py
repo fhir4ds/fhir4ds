@@ -447,7 +447,7 @@ def test_shareable_metadata_does_not_change_execution_native_and_fallback(monkey
         "version": "1.0.0",
         "name": "shareable_patient",
         "status": "draft",
-        "fhirVersion": ["4.0.1"],
+        "fhirVersion": ["4.0"],
         "resource": "Patient",
         "select": [
             {
@@ -1308,6 +1308,89 @@ class TestSimplePatientView:
             SQLGenerator(source_table="resources").generate(vd)
 
 
+class TestPrefixMixedFocusOperandSpecSofVd09Historian:
+    """SOF-VD-09 HISTORIAN QA-001: expressions PREFIXED with %rootResource/%resource
+    whose binary-operator operands reference the current focus must fail loud.
+
+    Per Process(S,N), columns evaluate as fhirpath(col.path, f) with f the
+    iterated focus while %rootResource/%resource track the root resource. A
+    focus-rooted operand after a root-variable prefix previously evaluated
+    silently against the WRONG JSON input (returning wrong/null data) instead
+    of raising the same "mixes built-in ViewDefinition contexts" error the
+    reverse ordering raises.
+    """
+
+    PATIENT = {
+        "resourceType": "Patient",
+        "id": "pt-root",
+        "gender": "female",
+        "active": True,
+        "name": [
+            {"given": ["Alice"], "use": "official"},
+            {"given": ["Eve"], "use": "nickname"},
+        ],
+    }
+
+    @pytest.mark.parametrize("path", [
+        "%rootResource.gender & given.first()",
+        "%resource.gender & given.first()",
+        "%rootResource.gender = given.first()",
+        "%rootResource.gender = 'female' and (use = 'official')",
+    ])
+    def test_prefix_focus_operand_fails_loud(self, path):
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "forEach": "name",
+                "column": [{"path": path, "name": "c", "type": "string"}],
+            }],
+        }
+        vd = parse_view_definition(view)
+        with pytest.raises(ValidationError, match="mixes built-in ViewDefinition contexts"):
+            SQLGenerator(source_table="resources").generate(vd)
+
+    @pytest.mark.parametrize("path,expected", [
+        ("%rootResource.gender", [("female",), ("female",)]),
+        ("%resource.gender", [("female",), ("female",)]),
+        ("%rootResource.name.first().given.first()", [("Alice",), ("Alice",)]),
+        ("%rootResource.name.where(use = 'official').given.first()",
+         [("Alice",), ("Alice",)]),
+        ("%rootResource.gender = 'female'", [("true",), ("true",)]),
+        ("%rootResource.active = true", [("true",), ("true",)]),
+    ])
+    def test_pure_continuation_and_literal_operands_still_work(self, monkeypatch, path, expected):
+        """Continuations, function args, and literal operands must keep evaluating."""
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "forEach": "name",
+                "column": [{"path": path, "name": "c"}],
+            }],
+        }
+        native = duckdb.connect(config={"allow_unsigned_extensions": True})
+        register_fhirpath(native)
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            assert _execute_shared_view(native, view, [self.PATIENT]) == expected
+            assert _execute_shared_view(fallback, view, [self.PATIENT]) == expected
+        finally:
+            native.close()
+            fallback.close()
+
+    def test_extension_where_prefix_focus_operand_fails_loud(self):
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "forEach": "name",
+                "where": [{"path": "%rootResource.gender = 'female' and (use = 'official')"}],
+                "column": [{"path": "given.first()", "name": "g", "type": "string"}],
+            }],
+        }
+        vd = parse_view_definition(view)
+        with pytest.raises(ValidationError, match="mixes built-in ViewDefinition contexts"):
+            SQLGenerator(source_table="resources").generate(vd)
+
+
 class TestRepeat:
     """Test select.repeat recursive traversal."""
 
@@ -1497,6 +1580,36 @@ class TestRepeat:
                 assert native_rows == fallback_rows
             finally:
                 native.close()
+
+    def test_repeat_extreme_depth_does_not_crash_fallback(self):
+        """Recursion-budget raises beyond the inline ceiling must not segfault.
+
+        SOF-VD-07 SKEPTIC QA-001 (2026-08-23): raising sys.setrecursionlimit
+        to ~60k for a ~14k-deep resource let the evaluator's per-level
+        recursion overflow the 8 MB C stack (CPython <= 3.10 consumes native
+        stack per Python frame), crashing the host process. Budgets beyond
+        _INLINE_RECURSION_LIMIT_MAX must run on a stack-sized worker thread
+        (or degrade to a clean RecursionError), never segfault.
+        """
+        import threading
+
+        from fhir4ds.fhirpath.duckdb import udf as fhirpath_udf
+
+        depth = 6000  # needed_limit = 6000 * 4 + 1000 = 25000 > 20000 ceiling
+        resource_json = self._nested_questionnaire_json(depth)
+        limit_before = sys.getrecursionlimit()
+        stack_size_before = threading.stack_size()
+
+        result = fhirpath_udf.fhirpath_repeat_udf(resource_json, '["item"]')
+
+        assert len(result) == depth + 1
+        # result[0] embeds the whole 6000-deep subtree, so inspect it without
+        # a full recursive parse (stdlib json caps at the default limit).
+        assert result[0].startswith('{"linkId":"n0"')
+        assert json.loads(result[-1])["linkId"] == f"n{depth}"
+        # Global interpreter state must be restored.
+        assert sys.getrecursionlimit() == limit_before
+        assert threading.stack_size() == stack_size_before
 
     def test_repeat_this_column_context_matches_native_and_fallback(self, monkeypatch):
         """$this-prefixed columns inside repeat evaluate against each repeated node."""
@@ -1756,7 +1869,7 @@ class TestWhereClause:
 
         vd_json = json.dumps({
             "resource": "Patient",
-            "where": "gender = 'male'",
+            "where": [{"path": "gender = 'male'"}],
             "select": [{
                 "column": [
                     {"path": "id", "name": "pid", "type": "id"},
@@ -2870,3 +2983,53 @@ class TestViewDefinitionValidation:
         assert columns[1].type == ColumnType.INTEGER
         assert columns[2].type == ColumnType.BOOLEAN
         assert columns[3].type == ColumnType.DECIMAL
+
+
+def test_boolean_constant_column_without_type_native_and_fallback(monkeypatch):
+    """SQL-on-FHIR v2: column.type is only required for non-primitive returns.
+
+    A bare boolean-constant column path (``%Flag`` resolving to ``true`` or
+    ``false``) returns the FHIR primitive Boolean, so it must execute without
+    a declared column type. Regression guard for the runtime type guard that
+    previously mis-classified the boolean literal as non-primitive output.
+    """
+    view = {
+        "resource": "Patient",
+        "constant": [{"name": "Flag", "valueBoolean": True}],
+        "select": [{"column": [{"path": "%Flag", "name": "flag"}]}],
+    }
+    resources = [{"resourceType": "Patient", "id": "p1"}]
+
+    native = duckdb.connect(config={"allow_unsigned_extensions": True})
+    if register_fhirpath(native) is not True:
+        native.close()
+        pytest.skip("native FHIRPath extension not available")
+    fallback = _forced_python_connection(monkeypatch)
+    try:
+        assert _execute_shared_view(native, view, resources) == [("true",)]
+        assert _execute_shared_view(fallback, view, resources) == [("true",)]
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_boolean_constant_false_column_without_type_native_and_fallback(monkeypatch):
+    """Same guard for the ``false`` literal branch of the boolean constant."""
+    view = {
+        "resource": "Patient",
+        "constant": [{"name": "Flag", "valueBoolean": False}],
+        "select": [{"column": [{"path": "%Flag", "name": "flag"}]}],
+    }
+    resources = [{"resourceType": "Patient", "id": "p1"}]
+
+    native = duckdb.connect(config={"allow_unsigned_extensions": True})
+    if register_fhirpath(native) is not True:
+        native.close()
+        pytest.skip("native FHIRPath extension not available")
+    fallback = _forced_python_connection(monkeypatch)
+    try:
+        assert _execute_shared_view(native, view, resources) == [("false",)]
+        assert _execute_shared_view(fallback, view, resources) == [("false",)]
+    finally:
+        native.close()
+        fallback.close()

@@ -565,12 +565,19 @@ def membership(
 
     Returns:
         Collection containing boolean result.
+
+    Raises:
+        FHIRPathError: If the left operand of ``in`` (the element) has
+            multiple items (FHIRPath §6.4.2: "If the left operand has
+            multiple items, an exception is thrown"). Mirrors the core
+            engine and native evaluator messages so all surfaces classify
+            the singleton violation identically.
     """
     if element.is_empty:
         return FHIRPathCollection([])
 
     if not element.is_singleton:
-        return FHIRPathCollection([])
+        raise FHIRPathError("in requires the left operand to contain at most one item")
 
     target = element.singleton_value
 
@@ -598,7 +605,16 @@ def contains(
 
     Returns:
         Collection containing boolean result.
+
+    Raises:
+        FHIRPathError: If the right operand of ``contains`` (the element)
+            has multiple items (FHIRPath §6.4.3 mirrors §6.4.2). The
+            message matches the core engine and native evaluator.
     """
+    if not element.is_empty and not element.is_singleton:
+        raise FHIRPathError(
+            "contains requires the right operand to contain at most one item"
+        )
     return membership(element, collection)
 
 

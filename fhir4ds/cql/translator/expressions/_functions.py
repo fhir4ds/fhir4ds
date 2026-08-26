@@ -36,6 +36,7 @@ from ...parser.ast_nodes import (
     Quantity,
     Query,
     QuerySource,
+    Retrieve,
     SingletonExpression,
     SkipExpression,
     TakeExpression,
@@ -110,6 +111,36 @@ _UNCERTAIN_NUMERIC_HELPERS = {
     "cqlUncertainAdd",
     "cqlUncertainSubtract",
     "cqlUncertainMultiply",
+}
+
+# CQL-10 HISTORIAN QA-002: statically-known operand types that are NEVER
+# valid for the CQL 1.5 §16 arithmetic operator family (no String/Boolean
+# overload exists and Table 9-E defines no implicit String/Boolean ->
+# numeric conversion). Validation is conservative: it only rejects types
+# that are definitely incompatible; unknown/dynamic ("Any") operands pass
+# through to the runtime null semantics.
+_ARITHMETIC_FN_STATIC_REJECTED_TYPES = {"String", "Boolean"}
+
+# CQL 1.5 §16: Abs has a Quantity overload, but Ceiling/Floor/Exp/Ln/Log and
+# High/LowBoundary do not (the reference engine raises
+# InvalidOperatorArgument for Quantity inputs to these). CQL-10 EXPLORER
+# QA-002: statically-known Quantity operands must fail at translation time
+# instead of silently nulling at execution.
+_ARITHMETIC_FN_QUANTITY_REJECTED = {
+    "ceiling", "floor", "exp", "ln", "log", "highboundary", "lowboundary",
+}
+
+# Per-function argument slots: True = value slot (String/Boolean rejected);
+# the boundary precision slot must additionally be Integer.
+_ARITHMETIC_FN_STATIC_GUARDS = {
+    "abs": (True,),
+    "ceiling": (True,),
+    "floor": (True,),
+    "exp": (True,),
+    "ln": (True,),
+    "log": (True, True),
+    "highboundary": (True, "Integer"),
+    "lowboundary": (True, "Integer"),
 }
 
 
@@ -239,6 +270,25 @@ from ...translator.fhirpath_builder import (
     FHIRPathBuilder,
 )
 
+# FHIR R4 primitive type names (used in choice-type casts like
+# `O.effective as dateTime`) mapped to their CQL 1.5 spellings, so
+# spec overload sets keyed on CQL type names accept FHIR casts.
+_FHIR_TO_CQL_TYPE_NAMES = {
+    "boolean": "Boolean",
+    "integer": "Integer",
+    "long": "Long",
+    "decimal": "Decimal",
+    "quantity": "Quantity",
+    "string": "String",
+    "uri": "String",
+    "url": "String",
+    "code": "Code",
+    "datetime": "DateTime",
+    "instant": "DateTime",
+    "date": "Date",
+    "time": "Time",
+}
+
 class FunctionsMixin:
     """Mixin providing function reference, exists, and age translations."""
 
@@ -250,17 +300,25 @@ class FunctionsMixin:
                 args.append(SQLLiteral(value=elem.name))
                 args.append(self._translate_structural_traversal_value(elem.type))
             return SQLFunctionCall(name="json_object", args=args)
+        if isinstance(node, ListExpression):
+            return self._translate_structural_traversal_value(node)
         return self.translate(node, usage=ExprUsage.SCALAR)
 
     def _translate_structural_traversal_value(self, node: Any) -> SQLExpression:
         if isinstance(node, TupleExpression):
             return self._translate_structural_traversal_arg(node)
         if isinstance(node, ListExpression):
-            return SQLArray(
-                elements=[
+            # Serialize nested list literals as JSON so heterogeneous or
+            # nested arrays stay executable (a SQL array like [1, [2, 3]]
+            # cannot be typed by DuckDB).  CQL 1.5 §Children/§Descendants:
+            # a list source invokes the operator on each element and
+            # flattens; json_array preserves that structure for the UDF.
+            return SQLFunctionCall(
+                name="json_array",
+                args=[
                     self._translate_structural_traversal_value(element)
                     for element in node.elements
-                ]
+                ],
             )
         static_type = self._static_structural_type_name(node)
         if static_type in {"Long", "Date", "DateTime", "Time"}:
@@ -290,11 +348,19 @@ class FunctionsMixin:
 
     @staticmethod
     def _type_spec_name(type_spec) -> Optional[str]:
-        """Return a compact CQL type name from a parsed type specifier."""
+        """Return a compact CQL type name from a parsed type specifier.
+
+        FHIR choice-type casts use FHIR primitive names (``as dateTime``,
+        ``as instant``); CQL aggregate/comparison type families use the CQL
+        spellings (DateTime, Date, Time, ...). Canonicalize so spec overloads
+        keyed on CQL names accept FHIR choice-cast type specifiers
+        (CQL-20 SKEPTIC QA-003).
+        """
         if type_spec is None:
             return None
         if hasattr(type_spec, "name"):
-            return str(type_spec.name).split(".")[-1]
+            bare = str(type_spec.name).split(".")[-1]
+            return _FHIR_TO_CQL_TYPE_NAMES.get(bare.lower(), bare)
         if hasattr(type_spec, "element_type"):
             return FunctionsMixin._type_spec_name(type_spec.element_type)
         text = str(type_spec)
@@ -312,7 +378,13 @@ class FunctionsMixin:
         This intentionally stays conservative: unknown dynamic sources return
         None and remain runtime-checked by the existing SQL/helper surfaces.
         """
-        from ...parser.ast_nodes import BinaryExpression as ASTBinaryExpression
+        from ...parser.ast_nodes import BinaryExpression as ASTBinaryExpression, UnaryExpression as ASTUnaryExpression
+
+        # CQL-20 HISTORIAN QA-002: boolean-result operators are statically
+        # typed so aggregates reject them at translation (CQL 1.5 Appendix B
+        # typed overloads) instead of leaking engine binder errors.
+        _BOOLEAN_UNARY = {"is null", "is not null", "is true", "is false", "not"}
+        _BOOLEAN_BINARY = {"and", "or", "xor", "=", "!=", "<>", "<", "<=", ">", ">=", "in", "is", "like"}
 
         def _from_cql_type(cql_type: str | None) -> Optional[set[str]]:
             if not cql_type:
@@ -320,11 +392,23 @@ class FunctionsMixin:
             text = str(cql_type)
             if text.startswith("List<") and text.endswith(">"):
                 inner = text[5:-1].split(".")[-1]
-                return {inner}
+                # CQL-20 SKEPTIC QA-003: FHIR choice-cast element names
+                # (dateTime/instant/...) canonicalize to CQL spellings.
+                return {_FHIR_TO_CQL_TYPE_NAMES.get(inner.lower(), inner)}
             return None
 
         def _function_return_type(func: FunctionRef) -> Optional[str]:
             name = (func.name or "").lower()
+            # `maximum T` / `minimum T` carry their result type as the
+            # type-specifier argument (System.Integer/Long/Decimal...).
+            if name in ("maximum", "minimum") and func.arguments:
+                first = func.arguments[0]
+                if isinstance(first, NamedTypeSpecifier):
+                    return str(first.name).split(".")[-1]
+                if isinstance(first, Identifier):
+                    bare = str(first.name).split(".")[-1]
+                    if bare in ("Integer", "Long", "Decimal", "Quantity"):
+                        return bare
             conversion_returns = {
                 "toboolean": "Boolean",
                 "tointeger": "Integer",
@@ -406,6 +490,56 @@ class FunctionsMixin:
                 if target_name == "Any":
                     return _element_type(left)
                 return target_name or _element_type(left)
+            if isinstance(element, ASTUnaryExpression):
+                # CQL-20 HISTORIAN QA-002: null/boolean checks are Boolean.
+                op = (element.operator or "").strip().lower()
+                if op in _BOOLEAN_UNARY:
+                    return "Boolean"
+                # CQL-20 EXPLORER QA-001: signed numerics (-100000000000.03)
+                # keep their numeric element type so the exact shifted
+                # statistical lowering still applies.
+                if op in ("-", "+"):
+                    inner = _element_type(getattr(element, "operand", None))
+                    if inner in ("Integer", "Long", "Decimal", "Null"):
+                        return inner
+                return None
+            if isinstance(element, ASTBinaryExpression):
+                op = (element.operator or "").strip().lower()
+                if op in _BOOLEAN_BINARY:
+                    return "Boolean"
+                # CQL-20 HISTORIAN QA-001: arithmetic result types (CQL 1.5
+                # §Arithmetic Operators: Integer/Long/Decimal promotion,
+                # division always Decimal) enable the exact-typed aggregate
+                # lowering for dynamically derived numeric elements.
+                if op in ("+", "-", "*", "/", "^", "mod", "div"):
+                    # Conservative promotion inference: every operand must
+                    # have a known numeric type, EXCEPT a plain Identifier
+                    # (query/lambda alias with runtime type), where the
+                    # other side's type governs promotion. Unknown function
+                    # calls (e.g. `all(...) + 1`) must stay None — treating
+                    # them as numeric misroutes struct-valued elements into
+                    # the numeric list_aggregate lowering (CMS128 CMD).
+                    from ...parser.ast_nodes import Identifier as _Ident
+                    operand_types: set[str] = set()
+                    for side in (element.left, element.right):
+                        if side is None:
+                            return None
+                        side_type = _element_type(side)
+                        if side_type is None:
+                            if not isinstance(side, _Ident):
+                                return None
+                            continue  # open-typed alias: rely on the other side
+                        operand_types.add(side_type)
+                    if not operand_types or not operand_types <= {"Integer", "Long", "Decimal"}:
+                        return None
+                    if op == "/":
+                        return "Decimal"
+                    if "Decimal" in operand_types:
+                        return "Decimal"
+                    if "Long" in operand_types:
+                        return "Long"
+                    return "Integer"
+                return None
             return None
 
         if isinstance(node, Identifier):
@@ -456,6 +590,13 @@ class FunctionsMixin:
             return None
 
         if not isinstance(node, ListExpression):
+            # CQL-20 HISTORIAN QA-002: single non-list expressions with a
+            # statically inferable scalar type (Boolean checks, arithmetic)
+            # contribute that element type so aggregate operand validation
+            # sees dynamic operands, not only list literals.
+            scalar_type = _element_type(node)
+            if scalar_type and scalar_type not in ("List", "Tuple", "Interval"):
+                return {scalar_type}
             return None
 
         types: set[str] = set()
@@ -807,13 +948,253 @@ class FunctionsMixin:
             target_type="VARCHAR",
         )
 
+    def _translate_list_aggregate_dispatch(
+        self,
+        name: str,
+        list_sql: SQLExpression,
+        element_types: Optional[set[str]],
+    ) -> Optional[SQLExpression]:
+        """Aggregate a SQL expression that EVALUATES to the element list.
+
+        CQL-20 SKEPTIC QA-001/QA-002/QA-005/QA-006: element-rows defines,
+        query-derived Quantity lists, and promoted dynamic multi-valued
+        properties all need list-semantics aggregation (CQL 1.5 Appendix B
+        Aggregate Functions) — routing them through scalar-subquery / row
+        aggregates aggregates only the first row or fails to bind.
+
+        ``element_types`` mirrors ``_static_list_element_types`` output and
+        selects the exact/typed lowering (Quantity unit-aware, integral
+        Sum/Product widths, exact Decimal Avg). Returns None when the
+        aggregate name is not in the list-aggregate family.
+        """
+        lower = name.lower()
+        if element_types is None:
+            element_types = set()
+
+        # Count: number of non-null elements (CQL Appendix B Count).
+        if lower == "count":
+            return SQLFunctionCall(
+                name="len",
+                args=[SQLFunctionCall(
+                    name="list_filter",
+                    args=[list_sql, SQLLambda(param="_v", body=SQLUnaryOp(
+                        operator="IS NOT NULL",
+                        operand=SQLIdentifier(name="_v"),
+                        prefix=False,
+                    ))],
+                )],
+            )
+
+        # Mode: statistical mode over the element list, ties -> null.
+        if lower == "mode":
+            return SQLFunctionCall(name="CQLListMode", args=[list_sql])
+
+        # Quantity element lists: unit-aware helpers (Sum/Avg/Min/Max and
+        # the statistical family), empty -> null.
+        if element_types == {"Quantity"}:
+            return self._translate_quantity_list_aggregate(name, list_sql, force=True)
+
+        if lower in ("min", "max"):
+            # CQL-21 HISTORIAN QA-002: uncertainty-capable (§22.21 VARCHAR
+            # age/duration) elements compare lexicographically under
+            # list_min/list_max — route through the interval-aware UDFs.
+            from ._operators import _is_uncertain_between_sql, _unwrap_cast
+
+            unwrapped_list = _unwrap_cast(list_sql)
+            if isinstance(unwrapped_list, SQLArray) and any(
+                _is_uncertain_between_sql(e) for e in unwrapped_list.elements
+            ):
+                return SQLFunctionCall(
+                    name="cqlUncertainListMin" if lower == "min" else "cqlUncertainListMax",
+                    args=[list_sql],
+                )
+            return SQLFunctionCall(
+                name="list_min" if lower == "min" else "list_max",
+                args=[list_sql],
+            )
+
+        numeric = {"Integer", "Long", "Decimal"}
+        normalized = {t for t in element_types if t not in (None, "Null", "Any")}
+        numeric_elements = bool(normalized) and normalized <= numeric
+
+        if numeric_elements and lower == "sum":
+            native_sum = SQLFunctionCall(
+                name="list_aggregate", args=[list_sql, SQLLiteral(value="sum")],
+            )
+            if "Decimal" not in normalized:
+                target = "INTEGER" if normalized == {"Integer"} else "BIGINT"
+                return SQLCast(
+                    expression=native_sum, target_type=target, try_cast=True,
+                )
+            # CQL 1.5 §2.3: Decimal results are exact, not floating point —
+            # clamp to the CQL Decimal scale even when elements were lowered
+            # through DOUBLE (dynamic JSON-derived numerics).
+            return SQLCast(
+                expression=native_sum, target_type="DECIMAL(38, 8)", try_cast=True,
+            )
+
+        if numeric_elements and lower == "avg":
+            non_null_count = SQLFunctionCall(
+                name="len",
+                args=[SQLFunctionCall(
+                    name="list_filter",
+                    args=[list_sql, SQLLambda(param="_v", body=SQLUnaryOp(
+                        operator="IS NOT NULL",
+                        operand=SQLIdentifier(name="_v"),
+                        prefix=False,
+                    ))],
+                )],
+            )
+            exact_sum = SQLFunctionCall(
+                name="list_aggregate", args=[list_sql, SQLLiteral(value="sum")],
+            )
+            return SQLFunctionCall(
+                name="cqlDivide",
+                args=[
+                    SQLCast(expression=exact_sum, target_type="VARCHAR"),
+                    SQLCast(expression=non_null_count, target_type="VARCHAR"),
+                ],
+            )
+
+        if numeric_elements and lower == "product":
+            native_product = SQLFunctionCall(
+                name="list_aggregate", args=[list_sql, SQLLiteral(value="product")],
+            )
+            if "Decimal" not in normalized:
+                # CQL Appendix B Product(List<Integer>) Integer /
+                # Product(List<Long>) Long — restore CQL result width,
+                # overflow -> null (TRY_CAST).
+                target = "INTEGER" if normalized == {"Integer"} else "BIGINT"
+                return SQLCast(
+                    expression=native_product, target_type=target, try_cast=True,
+                )
+            # CQL 1.5 §2.3 Decimal exactness (see sum above).
+            return SQLCast(
+                expression=native_product, target_type="DECIMAL(38, 8)", try_cast=True,
+            )
+
+        statistical = {
+            "avg": "avg", "median": "median",
+            "stddev": "stddev_samp", "stddevpop": "stddev_pop",
+            "populationstddev": "stddev_pop",
+            "variance": "var_samp", "populationvariance": "var_pop",
+            "product": "product",
+        }
+        agg = statistical.get(lower)
+        if agg is not None:
+            # CQL 1.5 Appendix B / §2.3: Decimal results carry >= 28
+            # significant digits — casting large DECIMAL elements to DOUBLE
+            # destroys small deviations and corrupts variance/median.
+            # Shift-invariant aggregates run on exact DECIMAL deviations from
+            # the first non-null element; Median is recomposed as
+            # anchor + median(deviations).
+            if agg != "product" and "Decimal" in normalized and isinstance(list_sql, SQLArray):
+                # Static literal lists only: dynamic (subquery-derived) lists
+                # cannot embed the anchor expression inside the deviations
+                # lambda (DuckDB forbids subqueries in lambda bodies —
+                # CQL-20 SKEPTIC QA-002 lambda-hoist doctrine).
+                _not_null = SQLUnaryOp(
+                    operator="IS NOT NULL", operand=SQLIdentifier(name="_v"), prefix=False,
+                )
+                non_null_list = SQLFunctionCall(
+                    name="list_filter",
+                    args=[list_sql, SQLLambda(param="_v", body=_not_null)],
+                )
+                anchor = SQLFunctionCall(
+                    name="list_extract",
+                    args=[non_null_list, SQLLiteral(value=1)],
+                )
+                deviations = SQLFunctionCall(
+                    name="list_transform",
+                    args=[
+                        SQLFunctionCall(
+                            name="list_transform",
+                            args=[list_sql, SQLLambda(
+                                param="_v",
+                                body=SQLBinaryOp(
+                                    operator="-",
+                                    left=SQLIdentifier(name="_v"),
+                                    right=anchor,
+                                ),
+                            )],
+                        ),
+                        SQLLambda(param="_v", body=SQLCast(
+                            expression=SQLIdentifier(name="_v"),
+                            target_type="DOUBLE",
+                            try_cast=True,
+                        )),
+                    ],
+                )
+                aggregate = SQLFunctionCall(
+                    name="list_aggregate",
+                    args=[deviations, SQLLiteral(value=agg)],
+                )
+                if agg == "median":
+                    return SQLBinaryOp(
+                        operator="+",
+                        left=SQLCast(
+                            expression=anchor, target_type="DECIMAL(38, 8)", try_cast=True,
+                        ),
+                        right=SQLCast(
+                            expression=aggregate, target_type="DECIMAL(38, 8)", try_cast=True,
+                        ),
+                    )
+                return SQLCast(
+                    expression=aggregate, target_type="DECIMAL(38, 8)", try_cast=True,
+                )
+            cast_source = SQLFunctionCall(
+                name="list_transform",
+                args=[list_sql, SQLLambda(param="_v", body=SQLCast(
+                    expression=SQLIdentifier(name="_v"),
+                    target_type="DOUBLE",
+                    try_cast=True,
+                ))],
+            )
+            return SQLCast(
+                expression=SQLFunctionCall(
+                    name="list_aggregate",
+                    args=[cast_source, SQLLiteral(value=agg)],
+                ),
+                target_type="DECIMAL(38, 8)",
+                try_cast=True,
+            )
+        return None
+
+    def _element_rows_define_list(self, name: str, meta) -> Optional[SQLExpression]:
+        """Per-patient element LIST for an element-rows (PATIENT_MULTI_VALUE)
+        define CTE — CQL-19 `_list_operator_full_list_source` shape, but keyed
+        on the define's value column so aggregate consumers see every row."""
+        _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
+        value_col = getattr(meta, "value_column", None) or "value"
+        return SQLFunctionCall(
+            name="COALESCE",
+            args=[
+                SQLSubquery(query=SQLSelect(
+                    columns=[SQLFunctionCall(
+                        name="list",
+                        args=[SQLQualifiedIdentifier(parts=["_lst_src", value_col])],
+                    )],
+                    from_clause=SQLAlias(
+                        expr=SQLIdentifier(name=name, quoted=True), alias="_lst_src",
+                    ),
+                    where=SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["_lst_src", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+                    ),
+                )),
+                SQLArray(elements=[]),
+            ],
+        )
+
     def _translate_quantity_list_aggregate(
         self,
         name: str,
         source_sql: SQLExpression,
+        force: bool = False,
     ) -> Optional[SQLExpression]:
         """Translate Quantity list aggregates through unit-aware helpers."""
-        if not self._is_quantity_sql_array(source_sql):
+        if not force and not self._is_quantity_sql_array(source_sql):
             return None
 
         filtered = self._non_null_quantity_list(source_sql)
@@ -871,6 +1252,49 @@ class FunctionsMixin:
             return None
 
         unit_expr = SQLFunctionCall(name="quantityUnit", args=[sum_expr])
+        if not isinstance(source_sql, SQLArray):
+            # CQL-20 SKEPTIC QA-002: dynamic (subquery-derived) quantity
+            # lists must not embed the sum/subquery inside the
+            # list_transform lambda — DuckDB forbids subqueries in lambda
+            # bodies. Hoist the list into a derived table and reference the
+            # unit of its first non-null element (same canonical unit the
+            # sum-based derivation yields for convertible units).
+            hoisted_col = SQLQualifiedIdentifier(parts=["__qty_src", "__qty_list"])
+            hoisted_filtered = self._non_null_quantity_list(hoisted_col)
+            hoisted_unit = SQLFunctionCall(
+                name="quantityUnit",
+                args=[SQLFunctionCall(
+                    name="list_extract",
+                    args=[hoisted_filtered, SQLLiteral(value=1)],
+                )],
+            )
+            hoisted_agg = SQLFunctionCall(
+                name="list_aggregate",
+                args=[
+                    self._quantity_numeric_values(hoisted_filtered, hoisted_unit),
+                    SQLLiteral(value=aggregate_name),
+                ],
+            )
+            hoisted_empty = SQLBinaryOp(
+                operator="=",
+                left=self._quantity_list_count(hoisted_filtered),
+                right=SQLLiteral(value=0),
+            )
+            return SQLSubquery(query=SQLSelect(
+                columns=[SQLCase(
+                    when_clauses=[
+                        (hoisted_empty, SQLNull()),
+                        (SQLUnaryOp(operator="IS NULL", operand=hoisted_agg, prefix=False), SQLNull()),
+                    ],
+                    else_clause=self._quantity_json(hoisted_agg, hoisted_unit),
+                )],
+                from_clause=SQLAlias(
+                    expr=SQLSubquery(query=SQLSelect(
+                        columns=[SQLAlias(expr=source_sql, alias="__qty_list")],
+                    )),
+                    alias="__qty_src",
+                ),
+            ))
         numeric_values = self._quantity_numeric_values(filtered, unit_expr)
         aggregate = SQLFunctionCall(
             name="list_aggregate",
@@ -1049,6 +1473,92 @@ class FunctionsMixin:
             ),
         ))
 
+    def _validate_static_arithmetic_operands(self, func: "FunctionRef", bare_lower: str) -> None:
+        """Reject statically known incompatible operands for the CQL-10
+        arithmetic function family (Abs, Ceiling, Floor, Exp, Ln, Log,
+        High/LowBoundary) with a typed TranslationError.
+
+        CQL 1.5 §16 defines no String/Boolean overloads for these functions
+        and Table 9-E defines no implicit String/Boolean -> numeric
+        conversion, so statically String/Boolean value operands must fail at
+        translation time instead of silently nulling (previous Exp/Ln/Log/
+        High/LowBoundary behavior) or leaking raw DuckDB Binder/Conversion
+        errors at execution (previous Abs/Floor/Ceiling behavior). The
+        High/LowBoundary precision slot must be Integer. Null literals,
+        unknown, and dynamic ("Any") operands pass through to runtime null
+        semantics.
+        """
+        slots = _ARITHMETIC_FN_STATIC_GUARDS.get(bare_lower)
+        if slots is None:
+            return
+        formal = getattr(func, "name", None) or (bare_lower[0].upper() + bare_lower[1:])
+        for node, slot in zip(func.arguments or [], slots):
+            if node is None:
+                continue
+            if isinstance(node, Literal) and node.value is None:
+                continue
+            operand_type = self._bare_cql_type_name(
+                self._static_structural_type_name(node)
+            )
+            if operand_type is None or operand_type == "Any":
+                continue
+            if slot == "Integer":
+                if operand_type != "Integer":
+                    raise TranslationError(
+                        f"CQL operator '{formal}' requires an Integer precision "
+                        f"argument; got {operand_type}"
+                    )
+            elif (
+                operand_type == "Quantity"
+                and bare_lower in _ARITHMETIC_FN_QUANTITY_REJECTED
+            ):
+                raise TranslationError(
+                    f"CQL arithmetic operator '{formal}' has no Quantity "
+                    f"overload (CQL 1.5 §16); got {operand_type}"
+                )
+            elif operand_type in _ARITHMETIC_FN_STATIC_REJECTED_TYPES:
+                raise TranslationError(
+                    f"CQL arithmetic operator '{formal}' requires numeric "
+                    f"operands; got {operand_type}"
+                )
+
+    def _translate_min_max_value(self, which: str, type_arg) -> SQLExpression:
+        """Fold MinValue(T)/MaxValue(T) to compile-time literals (CQL 1.5
+        Appendix B-A). Temporal values reuse the literal-string lowering used
+        by temporal literals themselves."""
+        if isinstance(type_arg, NamedTypeSpecifier):
+            type_name = getattr(type_arg, "name", None)
+        else:
+            type_name = getattr(type_arg, "name", None)
+        bare = (type_name or "").rsplit(".", 1)[-1].lower()
+        constants = {
+            "date": {"minvalue": "0001-01-01", "maxvalue": "9999-12-31"},
+            "datetime": {
+                "minvalue": "0001-01-01T00:00:00.000",
+                "maxvalue": "9999-12-31T23:59:59.999",
+            },
+            "time": {"minvalue": "T00:00:00.000", "maxvalue": "T23:59:59.999"},
+            "integer": {"minvalue": -2147483648, "maxvalue": 2147483647},
+            "long": {
+                "minvalue": -9223372036854775808,
+                "maxvalue": 9223372036854775807,
+            },
+            # CQL 1.5 §Types: Decimal max magnitude 10^28 - 10^-8, 8 frac digits.
+            "decimal": {
+                "minvalue": -9999999999999999999999999999.99999999,
+                "maxvalue": 9999999999999999999999999999.99999999,
+            },
+        }
+        table = constants.get(bare)
+        if table is None:
+            raise TranslationError(
+                f"{which.capitalize()} is only defined for Integer, Long, Decimal, "
+                f"Date, DateTime, and Time (got {type_name!r}) per CQL 1.5 Appendix B-A"
+            )
+        literal = SQLLiteral(value=table[which])
+        literal.result_type = bare.capitalize() if bare in ("date", "datetime", "time") else bare.capitalize()
+        return literal
+
     def _translate_function_ref(self, func: FunctionRef, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL function call to SQL via the function registry."""
         from ...translator.function_registry import (
@@ -1058,10 +1568,37 @@ class FunctionsMixin:
         arity = len(func.arguments) if func.arguments else 0
         bare_lower = name.rsplit(".", 1)[-1].lower() if "." in name else name.lower()
 
+        # CQL 1.5 Appendix B-A: MinValue(T)/MaxValue(T) are compile-time
+        # constants for Integer, Long, Decimal, Date, DateTime, and Time.
+        # Fold them to literals instead of passing the call through to SQL
+        # (which surfaces as a DuckDB Catalog Error at execution). Unknown
+        # type operands raise a typed TranslationError, not a silent
+        # passthrough.
+        if bare_lower in ("minvalue", "maxvalue") and len(func.arguments) == 1:
+            return self._translate_min_max_value(bare_lower, func.arguments[0])
+
+        # CQL-10 HISTORIAN QA-002: statically-known incompatible operands for
+        # the CQL arithmetic operator family must raise a typed
+        # TranslationError (CQL 1.5 §16 has no String/Boolean overloads and
+        # Table 9-E defines no implicit String/Boolean -> numeric conversion).
+        # Previously this split three ways: silent null (Exp/Ln/Log/
+        # High/LowBoundary), raw DuckDB BinderException (Abs/Floor/Ceiling),
+        # and raw Conversion Error (HighBoundary precision argument).
+        if bare_lower in _ARITHMETIC_FN_STATIC_GUARDS:
+            self._validate_static_arithmetic_operands(func, bare_lower)
+
         # Special handling for First/Last with Query args — must check BEFORE
         # translating args so we can use window functions for deterministic ordering
         if name.lower() in ("first", "last") and func.arguments:
             arg = func.arguments[0]
+            # Bare retrieves (e.g. First([Observation])) resolve to a Retrieve
+            # CTE placeholder; LIST_EXTRACT on the placeholder references the
+            # CTE as a column without a FROM clause. Build a correlated
+            # per-patient subquery instead, mirroring the aggregate path below.
+            if isinstance(arg, Retrieve):
+                return self._translate_first_last_over_retrieve(
+                    arg, first=name.lower() == "first"
+                )
             if isinstance(arg, Query):
                 if self._is_list_typed_ast(arg):
                     source = _coerce_query_rows_to_list(self.translate(arg, usage=ExprUsage.LIST))
@@ -1071,6 +1608,18 @@ class FunctionsMixin:
                     )
                 direction = "ASC" if name.lower() == "first" else "DESC"
                 return self._translate_first_last_with_window(arg, direction=direction)
+            # Definition references (e.g. First(ObsList) with `define
+            # ObsList: [Observation]`) resolve through _translate_identifier,
+            # whose SCALAR usage yields a LIMIT-1 single-row subquery that
+            # LIST_EXTRACT would reduce to NULL. Resource-backed (RESOURCE_
+            # ROWS) definitions need the same correlated list subquery the
+            # bare-retrieve path builds (CQL 1.5 Appendix B First/Last).
+            if isinstance(arg, Identifier):
+                cte_name = self._definition_resource_cte_name(arg.name)
+                if cte_name is not None:
+                    return self._translate_first_last_over_cte(
+                        cte_name, first=name.lower() == "first"
+                    )
 
         # Step 1: Check for pre-translate strategies (aggregates on Queries, maximum/minimum)
         function_registry = self._get_function_registry()
@@ -1145,10 +1694,27 @@ class FunctionsMixin:
                     f"CQL {name} count argument must be Integer; got {count_type}"
                 )
         if bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom"} and arg_nodes:
-            source_node = self._definition_ast_for_identifier(arg_nodes[0])
-            if source_node is not None and self._is_list_typed_ast(source_node):
-                arg_nodes[0] = source_node
+            # CQL-19 SKEPTIC QA-002: for a stored-list define reference
+            # (`define G: Patient.name.given; Tail(G)`), inline the SOURCE
+            # AST only when the alias is NOT itself a stored-list CTE —
+            # inlining a dynamic-list define loses the per-patient stored
+            # list and the operator sees a scalar subquery instead
+            # (Tail -> [], Length -> 1, Take -> nested list).
+            _alias_meta = (
+                self.context.definition_meta.get(arg_nodes[0].name)
+                if isinstance(arg_nodes[0], Identifier)
+                else None
+            )
+            if not (
+                _alias_meta is not None
+                and not _alias_meta.has_resource
+                and getattr(_alias_meta, "stores_list_value", False)
+            ):
+                source_node = self._definition_ast_for_identifier(arg_nodes[0])
+                if source_node is not None and self._is_list_typed_ast(source_node):
+                    arg_nodes[0] = source_node
         static_inline_functions = {
+            "canconvert",
             "canconvertquantity",
             "coalesce",
             "convertquantity",
@@ -1187,14 +1753,133 @@ class FunctionsMixin:
             source_node = self._definition_ast_for_identifier(arg_nodes[0])
             if isinstance(source_node, Query):
                 arg_nodes[0] = source_node
+        if name.lower() == "coalesce" and len(arg_nodes) >= 2:
+            # CQL 1.5 §Coalesce: scalar invocation takes two or more
+            # variadic arguments (no upper bound) and all arguments must be
+            # implicitly castable to a common type. Integer/Long/Decimal and
+            # String have no common implicit conversion, so a static mix of
+            # string-family and numeric-family operands is a translation
+            # error — regardless of argument order (DuckDB's COALESCE binder
+            # accepts or rejects mixed types order-dependently, which is not
+            # a spec-grounded behavior).
+            _STRING_FAMILY = {"String"}
+            _NUMERIC_FAMILY = {"Integer", "Long", "Decimal"}
+            seen_families = set()
+            for arg_node in arg_nodes:
+                arg_type = (self._infer_static_cql_type_for_logical_operand(arg_node) or "Any").split(".")[-1]
+                if arg_type in _STRING_FAMILY:
+                    seen_families.add("String")
+                elif arg_type in _NUMERIC_FAMILY:
+                    seen_families.add("Numeric")
+            if seen_families == {"String", "Numeric"}:
+                raise TranslationError(
+                    "Coalesce arguments must be implicitly castable to a "
+                    "common type; String and Integer/Long/Decimal are not"
+                )
         if name.lower() in {"istrue", "isfalse"} and len(arg_nodes) == 1:
             args = [self.translate(arg_nodes[0], usage=ExprUsage.SCALAR, boolean_context=True)]
+        elif (
+            bare_lower in {"tail", "skip", "take", "length", "singletonfrom"}
+            and arg_nodes
+            and (
+                self._is_list_typed_ast(arg_nodes[0])
+                or self._list_operator_source_is_retrieve_shaped(arg_nodes[0])
+            )
+        ):
+            # CQL-19 EXPLORER QA-002: retrieve-shaped list-operator operands
+            # (bare retrieves, resource-define aliases, retrieve unions,
+            # query returns) lower rows-shaped; materialize them into the
+            # per-patient element list before the macro wrap. First/Last
+            # keep their existing window-function paths over queries.
+            _full_list = self._list_operator_full_list_source(arg_nodes[0])
+            if _full_list is not None:
+                args = [_full_list]
+            # CQL-19 SKEPTIC QA-002: a stored-list define reference already
+            # translates (SCALAR) to the whole element list held in its CTE
+            # value column — do NOT rows-coerce it (LIST(value) nests the
+            # list and breaks Length/Tail/Skip/Take/SingletonFrom).
+            elif (
+                isinstance(arg_nodes[0], Identifier)
+                and (
+                    self.context.definition_meta.get(arg_nodes[0].name)
+                    is not None
+                    and not self.context.definition_meta[arg_nodes[0].name].has_resource
+                    and getattr(
+                        self.context.definition_meta[arg_nodes[0].name],
+                        "stores_list_value",
+                        False,
+                    )
+                )
+            ):
+                args = [self.translate(arg_nodes[0], usage=ExprUsage.SCALAR)]
+            else:
+                args = [_coerce_query_rows_to_list(self.translate(arg_nodes[0], usage=ExprUsage.LIST))]
+            args.extend(self.translate(arg, usage=ExprUsage.SCALAR) for arg in arg_nodes[1:])
         elif bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom"} and arg_nodes and self._is_list_typed_ast(arg_nodes[0]):
-            args = [_coerce_query_rows_to_list(self.translate(arg_nodes[0], usage=ExprUsage.LIST))]
+            # CQL-19 SKEPTIC QA-002: a stored-list define reference already
+            # translates (SCALAR) to the whole element list held in its CTE
+            # value column — do NOT rows-coerce it (LIST(value) nests the
+            # list and breaks Length/Tail/Skip/Take/SingletonFrom).
+            _src_meta = (
+                self.context.definition_meta.get(arg_nodes[0].name)
+                if isinstance(arg_nodes[0], Identifier)
+                else None
+            )
+            if (
+                _src_meta is not None
+                and not _src_meta.has_resource
+                and getattr(_src_meta, "stores_list_value", False)
+            ):
+                args = [self.translate(arg_nodes[0], usage=ExprUsage.SCALAR)]
+            else:
+                args = [_coerce_query_rows_to_list(self.translate(arg_nodes[0], usage=ExprUsage.LIST))]
             args.extend(self.translate(arg, usage=ExprUsage.SCALAR) for arg in arg_nodes[1:])
         else:
             _reject_non_integer_temporal_components(name, arg_nodes)
             args = [self.translate(arg, usage=ExprUsage.SCALAR) for arg in arg_nodes]
+
+        # CQL-19 SKEPTIC QA-001/QA-002/QA-005: the list-argument family
+        # (First/Last/Length/Tail/Skip/Take/SingletonFrom — CQL 1.5 §10.x)
+        # must operate on the full element list. Dynamic multi-valued FHIR
+        # properties lower to scalar fhirpath_text (first-node truncation);
+        # promote to the list-valued fhirpath projection. No-op for every
+        # non-fhirpath_text operand.
+        if (
+            bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom"}
+            and args
+        ):
+            from ...translator.expressions._utils import _promote_fhirpath_text_list
+            args[0] = _promote_fhirpath_text_list(args[0])
+
+        # CQL 1.5 logical spec CanConvert(x, T): true iff x can be converted
+        # to T. Lower to the same runtime check the ConvertsToT family uses
+        # (ConvertsToT(x)) rather than silently passing an unregistered
+        # function through to SQL.
+        if name.lower() == "canconvert" and len(func.arguments) == 2:
+            _CAN_CONVERT_TARGETS = {
+                "boolean": "ConvertsToBoolean",
+                "integer": "ConvertsToInteger",
+                "long": "ConvertsToLong",
+                "decimal": "ConvertsToDecimal",
+                "string": "ConvertsToString",
+                "date": "ConvertsToDate",
+                "datetime": "ConvertsToDateTime",
+                "time": "ConvertsToTime",
+                "quantity": "ConvertsToQuantity",
+                "ratio": "ConvertsToRatio",
+            }
+            target_name = self._type_spec_name(func.arguments[1])
+            if target_name is None:
+                raise TranslationError(
+                    "CQL CanConvert requires a type specifier as its second argument"
+                )
+            bare_target = target_name.split(".")[-1].lower()
+            macro_name = _CAN_CONVERT_TARGETS.get(bare_target)
+            if macro_name is None:
+                raise TranslationError(
+                    f"CQL CanConvert has no supported conversion check for target type '{target_name}'"
+                )
+            return SQLFunctionCall(name=macro_name, args=[args[0]])
 
         # CQL ToString(Ratio) must use the round-trippable ratio text form,
         # not the implementation JSON used internally for Ratio values.
@@ -1294,6 +1979,28 @@ class FunctionsMixin:
                 return SQLNull()
             if _is_quantity_expression(args[0]) or self._is_cql_quantity_expr(func.arguments[0]):
                 return SQLFunctionCall(name="quantityAbs", args=[_ensure_parse_quantity(args[0])])
+            # CQL §16.1: Abs(Integer)→Integer / Abs(Long)→Long; "if the
+            # absolute value cannot be represented, the result is null".
+            # Typed narrowing via TRY_CAST nulls out-of-extent results for
+            # ANY statically integral operand (not just the literal shapes
+            # guarded above), e.g. Abs(-2147483648 - 0) → NULL.
+            abs_static_type = self._static_structural_type_name(raw_arg)
+            if abs_static_type == "Integer":
+                return SQLCast(
+                    expression=SQLFunctionCall(name="TRY", args=[
+                        SQLFunctionCall(name="system.abs", args=[args[0]])
+                    ]),
+                    target_type="INTEGER",
+                    try_cast=True,
+                )
+            if abs_static_type == "Long":
+                return SQLCast(
+                    expression=SQLFunctionCall(name="TRY", args=[
+                        SQLFunctionCall(name="system.abs", args=[args[0]])
+                    ]),
+                    target_type="BIGINT",
+                    try_cast=True,
+                )
 
         # Step 2c: CQL Length — polymorphic over String and List
         # CQL §20.16: Length on list returns count, null list → 0
@@ -1342,12 +2049,19 @@ class FunctionsMixin:
                 self._static_structural_type_name(func.arguments[0])
             )
             if source_type in {"Integer", "Long", "Decimal"}:
+                # CQL §16.7/§16.13: Decimal boundary results are exact
+                # Decimals (fill-and-truncate per the HL7 reference
+                # implementation, scale 8). DECIMAL(38,8) transport preserves
+                # 28-significant-digit exactness and the fixture-mandated
+                # scale-8 rendering (LowBoundaryDecimal expects 1.58700000);
+                # a DOUBLE cast corrupts >15-significant-digit values
+                # (CQL-10 HISTORIAN QA-001).
                 return SQLCast(
                     expression=SQLCast(
                         expression=boundary_call,
                         target_type="VARCHAR",
                     ),
-                    target_type="DOUBLE",
+                    target_type="DECIMAL(38, 8)",
                     try_cast=True,
                 )
             return boundary_call
@@ -1396,11 +2110,37 @@ class FunctionsMixin:
                 ))
 
             index_args = list(args)
+            # CQL-18 SKEPTIC relaunch QA-004: dynamic multi-valued FHIR
+            # properties lower to scalar fhirpath_text (first-node
+            # truncation); IndexOf (CQL 1.5 §10.13) needs the full list.
+            from ...translator.expressions._utils import _promote_fhirpath_text_list
+            index_args[0] = _promote_fhirpath_text_list(index_args[0])
             source_arg = index_args[0]
-            if isinstance(source_arg, SQLSubquery) and isinstance(source_arg.query, SQLSelect):
-                index_args[0] = _query_rows_as_index_list(source_arg.query)
-            elif isinstance(source_arg, SQLSelect):
-                index_args[0] = _query_rows_as_index_list(source_arg)
+            # CQL-18 HISTORIAN QA-001: a reference to a PATIENT_SCALAR
+            # List-typed define already lowers to a scalar subquery whose
+            # value column IS the element list. Wrapping it in the
+            # rows-to-list coercion below would nest list-in-list and every
+            # IndexOf lookup would miss (-1).
+            _list_typed_define_ref = False
+            if (
+                func.arguments
+                and isinstance(func.arguments[0], Identifier)
+            ):
+                _idx_meta = self.context.definition_meta.get(func.arguments[0].name)
+                if (
+                    _idx_meta is not None
+                    and not _idx_meta.has_resource
+                    and getattr(_idx_meta, "stores_list_value", False)
+                ):
+                    index_args[0] = self.translate(
+                        func.arguments[0], usage=ExprUsage.SCALAR
+                    )
+                    _list_typed_define_ref = True
+            if not _list_typed_define_ref:
+                if isinstance(source_arg, SQLSubquery) and isinstance(source_arg.query, SQLSelect):
+                    index_args[0] = _query_rows_as_index_list(source_arg.query)
+                elif isinstance(source_arg, SQLSelect):
+                    index_args[0] = _query_rows_as_index_list(source_arg)
             # Dispatch to the temporal-aware IndexOf variant when the list and
             # element are both temporal-typed (Date/DateTime/Time). Mirrors the
             # existing _list_contains_call dispatch for Contains/In. CQL §IndexOf
@@ -1523,6 +2263,30 @@ class FunctionsMixin:
                 combine_args[0] = _query_rows_as_list(source_arg.query)
             elif isinstance(source_arg, SQLSelect):
                 combine_args[0] = _query_rows_as_list(source_arg)
+            # CQL-12 HISTORIAN QA-001: fail fast when the Combine source
+            # lowered to a scalar fhirpath extraction. Chained property-list
+            # navigation (e.g. First([Patient]).name.given) currently lowers
+            # to fhirpath_text, which returns only the FIRST element as a
+            # scalar. Emitting that as the Combine source binds the macro's
+            # list_filter lambda against a scalar and fails much later with
+            # an opaque DuckDB BinderException at execution time. Per the
+            # no-silent-fallback rule and the QA-004 `[Resource].field`
+            # guard doctrine, raise a typed, actionable TranslationError at
+            # translate time instead.
+            if isinstance(source_arg, SQLFunctionCall) and str(
+                getattr(source_arg, "name", "")
+            ).startswith("fhirpath_"):
+                from ...errors import TranslationError as _TE
+
+                raise _TE(
+                    "CQL string operator 'Combine' requires a List<String> source, "
+                    "but this argument lowered to scalar element extraction "
+                    "(fhirpath scalar navigation returns only the first value of a "
+                    "multi-valued element). Chained property-list navigation is not "
+                    "supported as a Combine source. Rewrite using an explicit query "
+                    "source with an alias (e.g. Combine(([Patient] P return P.name. "
+                    "given), '+')) or a literal list."
+                )
             if len(combine_args) == 2:
                 return SQLFunctionCall(name="CombineSep", args=combine_args)
             if len(combine_args) == 1:
@@ -1631,6 +2395,12 @@ class FunctionsMixin:
         name = func.name
         if not func.arguments:
             return None
+        # CQL-21 EXPLORER QA-003: the CQL keyword is `Average`, but every
+        # downstream aggregate map/dispatcher keys on `avg`. Without this
+        # normalization the lookup missed and a raw `Average(...)` SQL call
+        # leaked through, failing at execution with a DuckDB Catalog error.
+        if name.lower() == "average":
+            name = "Avg"
         from ...parser.ast_nodes import Query as CQLQuery, ListExpression, Retrieve, DistinctExpression
         arg = func.arguments[0]
         self._validate_static_aggregate_argument(name, arg)
@@ -1695,6 +2465,135 @@ class FunctionsMixin:
 
             meta = self.context.definition_meta.get(arg.name)
             cql_type = str(getattr(meta, "cql_type", "") or "")
+            # CQL-18 HISTORIAN QA-001: PATIENT_SCALAR List-typed defines
+            # (static list literals AND promoted dynamic multi-valued
+            # properties) store ONE row per patient whose value column holds
+            # the whole element list. COUNT(*) over that CTE would always
+            # return 1; aggregate over the list value instead
+            # (CQL §10.x / §20 Count counts non-null list elements).
+            if (
+                meta is not None
+                and getattr(meta, "stores_list_value", False)
+                and not meta.has_resource
+                and cql_type != "List<Quantity>"
+            ):
+                source_sql = self.translate(arg, usage=ExprUsage.SCALAR)
+                if name.lower() == "count":
+                    filtered = SQLFunctionCall(
+                        name="list_filter",
+                        args=[source_sql, SQLLambda(param="_v", body=SQLUnaryOp(
+                            operator="IS NOT NULL",
+                            operand=SQLIdentifier(name="_v"),
+                            prefix=False,
+                        ))],
+                    )
+                    return SQLFunctionCall(name="len", args=[filtered])
+                _def_list_func = {
+                    "min": "list_min",
+                    "max": "list_max",
+                    "sum": "list_sum",
+                    "avg": "list_avg",
+                }.get(name.lower())
+                if _def_list_func is not None:
+                    return SQLFunctionCall(name=_def_list_func, args=[source_sql])
+                # CQL-20 SKEPTIC: stored-list defines also honor the
+                # statistical family (Median/Mode/StdDev/Variance/
+                # Population*/Product/GeometricMean-style semantics) through
+                # the list dispatcher; None falls through to legacy paths.
+                _stored_elems = None
+                try:
+                    _stored_elems = self._static_list_element_types(arg)
+                except Exception:  # noqa: BLE001 - conservative inference
+                    _stored_elems = None
+                _dispatched = self._translate_list_aggregate_dispatch(
+                    name, source_sql, _stored_elems,
+                )
+                if _dispatched is not None:
+                    return _dispatched
+            # CQL-20 SKEPTIC QA-001/QA-002: element-rows (PATIENT_MULTI_VALUE)
+            # defines — one CTE row per list element. Scalar-subquery
+            # consumption sees only the FIRST row (Min({120,80}mg) returned
+            # 120; Sum silently dropped rows). Materialize the per-patient
+            # element LIST and aggregate with CQL list semantics
+            # (CQL 1.5 Appendix B Aggregate Functions).
+            if (
+                meta is not None
+                and not getattr(meta, "stores_list_value", False)
+                and not getattr(meta, "has_resource", False)
+                and (
+                    getattr(meta, "shape", None) == RowShape.PATIENT_MULTI_VALUE
+                    or (
+                        getattr(meta, "shape", None) == RowShape.PATIENT_SCALAR
+                        and cql_type.startswith("List<")
+                    )
+                )
+            ):
+                _inner = cql_type[5:-1].strip() if (
+                    cql_type.startswith("List<") and cql_type.endswith(">")
+                ) else ""
+                _inner = _FHIR_TO_CQL_TYPE_NAMES.get(_inner.lower(), _inner)
+                _row_elems = {_inner} if _inner else None
+                if _row_elems is None:
+                    _def_ast = getattr(self.context, "_definition_cql_asts", {}).get(arg.name)
+                    if _def_ast is not None:
+                        try:
+                            _row_elems = self._static_list_element_types(_def_ast)
+                        except Exception:  # noqa: BLE001 - conservative inference
+                            _row_elems = None
+                if _row_elems:
+                    # Prefer inlining the definition expression when it
+                    # translates directly to a list value (e.g. literal-list
+                    # queries); otherwise materialize the per-patient element
+                    # LIST from the define's rows CTE. CTE-backed (retrieve)
+                    # sources must use the rows-CTE materialization — the
+                    # inline translation carries no patient correlation and
+                    # would leak rows across patients.
+                    _row_list = None
+                    _def_ast = getattr(self.context, "_definition_cql_asts", {}).get(arg.name)
+                    if _def_ast is not None:
+                        try:
+                            _inlined = self.translate(_def_ast, usage=ExprUsage.SCALAR)
+                        except Exception:  # noqa: BLE001 - fall back to rows CTE
+                            _inlined = None
+
+                        def _is_cte_backed_expr(fc):
+                            from ..types import SQLAlias as _SA
+                            inner = fc.expr if isinstance(fc, _SA) else fc
+                            if isinstance(inner, SQLIdentifier) and inner.quoted:
+                                return True
+                            if isinstance(inner, RetrievePlaceholder):
+                                return True
+                            if isinstance(inner, SQLSubquery) and isinstance(inner.query, SQLSelect):
+                                return inner.query.from_clause is not None and _is_cte_backed_expr(inner.query.from_clause)
+                            return False
+
+                        def _inner_from(expr):
+                            from ..types import SQLSubquery as _SQ, SQLSelect as _SS
+                            if isinstance(expr, _SQ) and isinstance(expr.query, _SS):
+                                return _inner_from(expr.query)
+                            if isinstance(expr, _SS):
+                                return expr.from_clause
+                            return None
+
+                        _inline_from = _inner_from(_inlined) if _inlined is not None else None
+                        _inline_ok = (
+                            _inlined is not None
+                            and (_inline_from is None or not _is_cte_backed_expr(_inline_from))
+                        )
+                        if _inline_ok and not _is_list_returning_sql(_inlined):
+                            from ._utils import _coerce_query_rows_to_list as _cqrl
+                            _coerced = _cqrl(_inlined)
+                            if _coerced is not _inlined and _is_list_returning_sql(_coerced):
+                                _inlined = _coerced
+                        if _inline_ok and _is_list_returning_sql(_inlined):
+                            _row_list = _inlined
+                    if _row_list is None:
+                        _row_list = self._element_rows_define_list(arg.name, meta)
+                    _dispatched = self._translate_list_aggregate_dispatch(
+                        name, _row_list, _row_elems,
+                    )
+                    if _dispatched is not None:
+                        return _dispatched
             if cql_type == "List<Quantity>":
                 definition_ast = getattr(self.context, "_definition_cql_asts", {}).get(arg.name)
                 if definition_ast is not None:
@@ -1725,6 +2624,58 @@ class FunctionsMixin:
                 ),
             ))
             return _maybe_negate(correlated)
+
+        # CQL-19 HISTORIAN QA-001: `Count(<retrieve> union <retrieve>)` — the
+        # union translates to a rows-shaped SQLUnion (patient_id, resource
+        # branches). The generic COUNT(func) path embeds the 2-column union
+        # as a scalar subquery -> BinderException "Subquery returns 2
+        # columns". CQL §20.9 Count counts the non-null elements of its list
+        # argument; a resource union is a list whose elements are the union
+        # rows. Resolve resource-define aliases to their underlying
+        # Retrieves (so heterogeneous CTE columns do not collide), then
+        # count the union rows in a patient-correlated subquery — the same
+        # shape as the single-Retrieve branch above.
+        if (
+            agg_func == "COUNT"
+            and isinstance(arg, BinaryExpression)
+            and (getattr(arg, "operator", "") or "").strip().lower() in {"union", "|"}
+        ):
+            from ...parser.ast_nodes import Retrieve as _UnionRetrieve
+
+            def _resolve_union_leaf(node):
+                if isinstance(node, _UnionRetrieve):
+                    return node
+                if isinstance(node, BinaryExpression) and (getattr(node, "operator", "") or "").strip().lower() in {"union", "|"}:
+                    left = _resolve_union_leaf(node.left)
+                    right = _resolve_union_leaf(node.right)
+                    if left is None or right is None:
+                        return None
+                    return BinaryExpression(
+                        operator=node.operator, left=left, right=right,
+                        strict=getattr(node, "strict", False),
+                    )
+                if isinstance(node, Identifier):
+                    meta = self.context.definition_meta.get(node.name)
+                    if meta is not None and getattr(meta, "has_resource", False):
+                        definition_ast = self._definition_ast_for_identifier(node)
+                        return _resolve_union_leaf(definition_ast) if definition_ast is not None else None
+                return None
+
+            resolved = _resolve_union_leaf(arg)
+            if resolved is not None:
+                union_sql = self.translate(resolved, usage=ExprUsage.LIST)
+                if isinstance(union_sql, SQLUnion):
+                    _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
+                    correlated = SQLSubquery(query=SQLSelect(
+                        columns=[SQLFunctionCall(name="COUNT", args=[SQLIdentifier(name="*")])],
+                        from_clause=SQLAlias(expr=union_sql, alias="_agg_src"),
+                        where=SQLBinaryOp(
+                            operator="=",
+                            left=SQLQualifiedIdentifier(parts=["_agg_src", "patient_id"]),
+                            right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+                        ),
+                    ))
+                    return _maybe_negate(correlated)
 
         # Aggregate on distinct(query) — e.g., Count(distinct(query)) (CMS117).
         # Translate the inner query and wrap with COUNT(DISTINCT col) instead of
@@ -1794,6 +2745,66 @@ class FunctionsMixin:
 
         if isinstance(arg, CQLQuery):
             source_sql = self.translate(arg, usage=ExprUsage.LIST)
+            # CQL-20 SKEPTIC QA-001/QA-002: Quantity-returning queries
+            # (`from [Observation] O return O.value as Quantity`) must use the
+            # unit-aware Quantity aggregate helpers — row aggregates over the
+            # raw quantity JSON compare/sort lexicographically (Min({120,80})
+            # returned 120) and TRY_CAST(JSON AS DOUBLE) silently nulls.
+            if self._static_list_element_types(arg) == {"Quantity"}:
+                wrapped = self._wrap_list_aggregate("list", source_sql)
+                if wrapped is not None:
+                    quantity_list = SQLFunctionCall(
+                        name="COALESCE",
+                        args=[wrapped, SQLArray(elements=[])],
+                    )
+                    dispatched = self._translate_list_aggregate_dispatch(
+                        name, quantity_list, {"Quantity"},
+                    )
+                    if dispatched is not None:
+                        # Mark the result Quantity-typed so downstream
+                        # comparisons on the defining CTE reference route
+                        # through quantity_compare (MinBP < 140 'mmHg'
+                        # previously fell to TRY_CAST(... AS DOUBLE) -> NULL).
+                        try:
+                            dispatched.result_type = "Quantity"
+                        except AttributeError:
+                            pass
+                        # MT-008: in audit mode, attach the winning-resource
+                        # twin (arg_min/arg_max) from the row path so evidence
+                        # attributes the Observation that produced the
+                        # extreme, not the quantity value itself. The VALUE
+                        # keeps the exact quantityCompare list semantics; the
+                        # twin is best-effort attribution over native ordering.
+                        if (getattr(self.context, "audit_mode", False)
+                                and name.lower() in ("min", "max")):
+                            twin_source = self._wrap_list_aggregate(
+                                "MIN" if name.lower() == "min" else "MAX",
+                                source_sql,
+                            )
+                            twin_target = getattr(
+                                twin_source, "_audit_target", None
+                            ) if twin_source is not None else None
+                            if twin_target is not None:
+                                dispatched._audit_target = twin_target
+                        return _maybe_negate(dispatched)
+            # CQL-20 HISTORIAN QA-001: numeric-returning queries must use the
+            # exact-typed list lowering (CQL 1.5 §2.3 Decimal is exact;
+            # Appendix B Sum(List<Integer>) -> Integer). The generic row
+            # aggregate casts elements to DOUBLE — Sum of dynamic {0.1, 0.2}
+            # returned 0.30000000000000004 instead of the exact 0.3.
+            _query_elems = self._static_list_element_types(arg)
+            if _query_elems and _query_elems <= {"Integer", "Long", "Decimal"}:
+                wrapped = self._wrap_list_aggregate("list", source_sql)
+                if wrapped is not None:
+                    numeric_list = SQLFunctionCall(
+                        name="COALESCE",
+                        args=[wrapped, SQLArray(elements=[])],
+                    )
+                    dispatched = self._translate_list_aggregate_dispatch(
+                        name, numeric_list, _query_elems,
+                    )
+                    if dispatched is not None:
+                        return _maybe_negate(dispatched)
             result = self._wrap_list_aggregate(agg_func, source_sql)
             if result is not None:
                 return _maybe_negate(result)
@@ -1821,6 +2832,17 @@ class FunctionsMixin:
             ))
         # AnyTrue/AllTrue/AnyFalse/AllFalse with non-query source (list literals)
         # CQL §20.1-20.4: these aggregate boolean lists into a single boolean.
+        # CQL-20 SKEPTIC QA-005: Mode over dynamic multi-valued FHIR fields
+        # (Mode(Patient.name.given)) — promote the scalar fhirpath_text
+        # projection to the full element list and use CQLListMode (CQL 1.5
+        # Appendix B Mode(argument List<T>) T); scalar MODE() over the JSON
+        # value is never unnested and fails to bind.
+        if name.lower() == "mode" and isinstance(arg, Property):
+            from ...translator.expressions._utils import _promote_fhirpath_text_list
+            _mode_scalar = self.translate(arg, usage=ExprUsage.SCALAR)
+            _mode_promoted = _promote_fhirpath_text_list(_mode_scalar)
+            if _is_list_returning_sql(_mode_promoted):
+                return SQLFunctionCall(name="CQLListMode", args=[_mode_promoted])
         _BOOL_AGG_UDF = {
             "alltrue": "logicalAllTrue",
             "anytrue": "logicalAnyTrue",
@@ -1839,6 +2861,19 @@ class FunctionsMixin:
                     quantity_result = self._translate_quantity_list_aggregate(name, source_sql)
                     if quantity_result is not None:
                         return quantity_result
+                    # CQL-21 HISTORIAN QA-002: uncertainty-capable (§22.21
+                    # VARCHAR age/duration) elements compare
+                    # lexicographically under list_min/list_max — route
+                    # through interval-aware cqlUncertainList{Min,Max}.
+                    if isinstance(source_sql, SQLArray):
+                        from ._operators import _is_uncertain_between_sql
+
+                        if any(_is_uncertain_between_sql(e) for e in source_sql.elements):
+                            return SQLFunctionCall(
+                                name="cqlUncertainListMin" if name.lower() == "min"
+                                else "cqlUncertainListMax",
+                                args=[source_sql],
+                            )
                     list_func = "list_min" if name.lower() == "min" else "list_max"
                     return SQLFunctionCall(name=list_func, args=[source_sql])
 
@@ -1847,7 +2882,7 @@ class FunctionsMixin:
         if _list_src is not None:
             source_sql = self.translate(_list_src, usage=ExprUsage.SCALAR)
             # JSON-returning list functions (collapse_intervals, expand) need json_array_length
-            _JSON_LIST_FUNCS = {"collapse_intervals", "expand"}
+            _JSON_LIST_FUNCS = {"collapse_intervals", "collapse_intervals_per", "expand"}
             _is_json_list = isinstance(source_sql, SQLFunctionCall) and source_sql.name in _JSON_LIST_FUNCS
             if _is_json_list:
                 if name.lower() == "count":
@@ -1858,6 +2893,22 @@ class FunctionsMixin:
                 quantity_result = self._translate_quantity_list_aggregate(name, source_sql)
                 if quantity_result is not None:
                     return quantity_result
+                # CQL-21 EXPLORER QA-002: §22.21 uncertainty must propagate
+                # through Sum — a literal list of age/duration VARCHARs (crisp
+                # or interval) sums to [Σ lows, Σ highs] via
+                # cqlUncertainListSum; the generic list lowering silently
+                # dropped interval elements as null and returned a wrong
+                # crisp number. Avg/Median over uncertain elements cannot be
+                # represented in the integer-bounded §22.21 form, so they
+                # surface null rather than a wrong crisp value.
+                if isinstance(source_sql, SQLArray):
+                    from ._operators import _is_uncertain_between_sql
+
+                    if any(_is_uncertain_between_sql(e) for e in source_sql.elements):
+                        if name.lower() == "sum":
+                            return SQLFunctionCall(name="cqlUncertainListSum", args=[source_sql])
+                        if name.lower() in ("avg", "median"):
+                            return SQLNull()
                 if name.lower() == "count":
                     # CQL §20.5: Count returns number of non-null elements
                     filtered = SQLFunctionCall(
@@ -1880,6 +2931,139 @@ class FunctionsMixin:
                     # Mode works on any type; numeric aggregates need DOUBLE cast
                     if _list_agg == "mode":
                         return SQLFunctionCall(name="CQLListMode", args=[source_sql])
+                    # CQL §20 aggregate result typing: Sum(List<Integer>) Integer,
+                    # Sum(List<Long>) Long, Sum/List<Decimal> and Avg results are
+                    # Decimal. DuckDB's native list sum is exact (HUGEINT for
+                    # integral lists, DECIMAL(38,8) for decimal lists), so for
+                    # statically numeric element types compute exactly instead of
+                    # routing through DOUBLE (which produced artifacts such as
+                    # Sum({0.1, 0.2}) = 0.30000000000000004).
+                    element_types = None
+                    try:
+                        element_types = self._static_list_element_types(arg)
+                    except Exception:  # noqa: BLE001 - conservative inference
+                        element_types = None
+                    numeric_elements = None
+                    if element_types:
+                        normalized = {
+                            t for t in element_types if t not in (None, "Null", "Any")
+                        }
+                        if normalized and normalized <= {"Integer", "Long", "Decimal"}:
+                            numeric_elements = normalized
+                    if numeric_elements and _list_agg == "sum":
+                        native_sum = SQLFunctionCall(
+                            name="list_aggregate",
+                            args=[source_sql, SQLLiteral(value="sum")],
+                        )
+                        if "Decimal" not in numeric_elements:
+                            # Integral element types: restore the CQL result
+                            # width (TRY_CAST turns overflow into null, per
+                            # "if the result cannot be represented, null").
+                            target = "INTEGER" if numeric_elements == {"Integer"} else "BIGINT"
+                            return SQLCast(
+                                expression=native_sum, target_type=target, try_cast=True
+                            )
+                        return native_sum
+                    if numeric_elements and _list_agg == "product":
+                        # CQL-20 SKEPTIC QA-006: Product(List<Integer>) Integer /
+                        # Product(List<Long>) Long — exact native product with
+                        # CQL result width restored (TRY_CAST overflow -> null).
+                        native_product = SQLFunctionCall(
+                            name="list_aggregate",
+                            args=[source_sql, SQLLiteral(value="product")],
+                        )
+                        if "Decimal" not in numeric_elements:
+                            target = "INTEGER" if numeric_elements == {"Integer"} else "BIGINT"
+                            return SQLCast(
+                                expression=native_product, target_type=target, try_cast=True
+                            )
+                        return native_product
+                    if numeric_elements and _list_agg == "avg":
+                        # Exact Decimal average: exact sum / count of non-null
+                        # elements, quantized by cqlDivide to scale 8.
+                        non_null_count = SQLFunctionCall(
+                            name="len",
+                            args=[SQLFunctionCall(
+                                name="list_filter",
+                                args=[source_sql, SQLLambda(param="_v", body=SQLUnaryOp(
+                                    operator="IS NOT NULL",
+                                    operand=SQLIdentifier(name="_v"),
+                                    prefix=False,
+                                ))],
+                            )],
+                        )
+                        exact_sum = SQLFunctionCall(
+                            name="list_aggregate",
+                            args=[source_sql, SQLLiteral(value="sum")],
+                        )
+                        return SQLFunctionCall(
+                            name="cqlDivide", args=[
+                                SQLCast(expression=exact_sum, target_type="VARCHAR"),
+                                SQLCast(expression=non_null_count, target_type="VARCHAR"),
+                            ]
+                        )
+                    # CQL 1.5 Appendix B / §2.3 Decimal precision: casting
+                    # large DECIMAL elements to DOUBLE destroys sub-centesimal
+                    # deviations (e.g. Variance({1e11+.01, 1e11+.03}) was
+                    # 0.00020024 instead of 0.0002). Variance/StdDev are
+                    # shift-invariant, so run them on exact DECIMAL deviations
+                    # from the first non-null element; Median is recomposed as
+                    # anchor + median(deviations).
+                    if (
+                        numeric_elements
+                        and "Decimal" in numeric_elements
+                        and _list_agg in ("median", "stddev_samp", "stddev_pop", "var_samp", "var_pop")
+                    ):
+                        non_null_list = SQLFunctionCall(
+                            name="list_filter",
+                            args=[source_sql, SQLLambda(param="_v", body=SQLUnaryOp(
+                                operator="IS NOT NULL",
+                                operand=SQLIdentifier(name="_v"),
+                                prefix=False,
+                            ))],
+                        )
+                        anchor = SQLFunctionCall(
+                            name="list_extract",
+                            args=[non_null_list, SQLLiteral(value=1)],
+                        )
+                        deviations = SQLFunctionCall(
+                            name="list_transform",
+                            args=[
+                                SQLFunctionCall(
+                                    name="list_transform",
+                                    args=[source_sql, SQLLambda(
+                                        param="_v",
+                                        body=SQLBinaryOp(
+                                            operator="-",
+                                            left=SQLIdentifier(name="_v"),
+                                            right=anchor,
+                                        ),
+                                    )],
+                                ),
+                                SQLLambda(param="_v", body=SQLCast(
+                                    expression=SQLIdentifier(name="_v"),
+                                    target_type="DOUBLE",
+                                    try_cast=True,
+                                )),
+                            ],
+                        )
+                        aggregate = SQLFunctionCall(
+                            name="list_aggregate",
+                            args=[deviations, SQLLiteral(value=_list_agg)],
+                        )
+                        if _list_agg == "median":
+                            return SQLBinaryOp(
+                                operator="+",
+                                left=SQLCast(
+                                    expression=anchor, target_type="DECIMAL(38, 8)", try_cast=True,
+                                ),
+                                right=SQLCast(
+                                    expression=aggregate, target_type="DECIMAL(38, 8)", try_cast=True,
+                                ),
+                            )
+                        return SQLCast(
+                            expression=aggregate, target_type="DECIMAL(38, 8)", try_cast=True,
+                        )
                     cast_source = SQLFunctionCall(
                         name="list_transform",
                         args=[source_sql, SQLLambda(param="_v", body=SQLCast(
@@ -1888,14 +3072,135 @@ class FunctionsMixin:
                             try_cast=True,
                         ))],
                     )
-                    return SQLFunctionCall(
-                        name="list_aggregate",
-                        args=[cast_source, SQLLiteral(value=_list_agg)],
+                    # Remaining numeric aggregates (median, stddev, variance,
+                    # product) declare Decimal result types in CQL §20; type
+                    # the DOUBLE computation as DECIMAL(38,8).
+                    return SQLCast(
+                        expression=SQLFunctionCall(
+                            name="list_aggregate",
+                            args=[cast_source, SQLLiteral(value=_list_agg)],
+                        ),
+                        target_type="DECIMAL(38, 8)",
+                        try_cast=True,
                     )
 
         return None  # Fall through to standard translation
 
     # ── Parameterized function handlers ───────────────────────────────────
+
+    def _translate_first_last_over_retrieve(self, retrieve, first: bool) -> SQLExpression:
+        """Translate First/Last over a bare retrieve (CQL §22.12/§22.16).
+
+        ``First([Observation])`` — the retrieve lowers to a CTE placeholder;
+        extracting from the placeholder directly references the CTE as a bare
+        column.  Build a per-patient correlated subquery over the CTE, the
+        same strategy the aggregate path uses for Count([X]).  CQL First/Last
+        return the first/last element of the (unordered) retrieve result and
+        null when the list is empty; list_extract over an empty list yields
+        NULL, matching that contract.
+        """
+        placeholder = self.translate(retrieve, usage=ExprUsage.LIST)
+        _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
+        extracted = SQLFunctionCall(
+            name="list_extract",
+            args=[
+                SQLFunctionCall(
+                    name="list",
+                    args=[SQLQualifiedIdentifier(parts=["_agg_src", "resource"])],
+                ),
+                SQLLiteral(value=1 if first else -1),
+            ],
+        )
+        return SQLSubquery(query=SQLSelect(
+            columns=[extracted],
+            from_clause=SQLAlias(expr=placeholder, alias="_agg_src"),
+            where=SQLBinaryOp(
+                operator="=",
+                left=SQLQualifiedIdentifier(parts=["_agg_src", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+            ),
+        ))
+
+    def _definition_resource_cte_name(self, name: str) -> Optional[str]:
+        """CTE name when *name* references a resource-backed (RESOURCE_ROWS)
+        named definition (e.g. ``define ObsList: [Observation]``)."""
+        symbol = self.context.lookup_symbol(name)
+        if symbol is None or getattr(symbol, "symbol_type", None) != "definition":
+            # Promoted / sibling definitions may not be in the active symbol
+            # table; definition_meta is the authoritative registry.
+            if name not in getattr(self.context, "promoted_definitions", {}):
+                return None
+        meta = self.context.definition_meta.get(name)
+        if meta is None or not getattr(meta, "has_resource", False):
+            return None
+        # Only row-list (RESOURCE_ROWS) definitions expose a per-patient
+        # element LIST. Scalar defines whose expression merely *contains* a
+        # Retrieve (e.g. ``define Fam: First([Patient]).name.family``) also
+        # set has_resource, but must NOT be list-indexed as resource rows —
+        # doing so turned ``Fam[3]`` (CQL §17.6 string indexer) into
+        # list_extract over a one-element resource list (always NULL for
+        # index > 0).
+        if getattr(meta, "shape", None) is not RowShape.RESOURCE_ROWS:
+            return None
+        return name
+
+    def _definition_resource_rows_list(self, name: str) -> Optional[SQLExpression]:
+        """Correlated per-patient element LIST subquery for a RESOURCE_ROWS
+        definition (e.g. ``(SELECT list(sub.resource) FROM "ObsList" AS sub
+        WHERE sub.patient_id = _pt.patient_id)``). Returns None when *name*
+        is not a resource-backed definition. Used by list-position consumers
+        (Indexer, method-form first()/last()) so the alias surfaces the whole
+        list instead of a scalarized row (CQL 1.5 Appendix B Property/Query).
+        """
+        cte_name = self._definition_resource_cte_name(name)
+        if cte_name is None:
+            return None
+        _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
+        return SQLSubquery(query=SQLSelect(
+            columns=[SQLFunctionCall(
+                name="list",
+                args=[SQLQualifiedIdentifier(parts=["sub", "resource"])],
+            )],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name=cte_name, quoted=True), alias="sub"
+            ),
+            where=SQLBinaryOp(
+                operator="=",
+                left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+            ),
+        ))
+
+    def _translate_first_last_over_cte(self, cte_name: str, first: bool) -> SQLExpression:
+        """First/Last over a resource-backed definition CTE (CQL Appendix B).
+
+        Mirrors :meth:`_translate_first_last_over_retrieve` but sources the
+        definition's CTE directly, so ``First(ObsList)`` extracts the first
+        element of the per-patient resource list instead of a scalarized
+        LIMIT-1 row.
+        """
+        _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
+        extracted = SQLFunctionCall(
+            name="list_extract",
+            args=[
+                SQLFunctionCall(
+                    name="list",
+                    args=[SQLQualifiedIdentifier(parts=["_agg_src", "resource"])],
+                ),
+                SQLLiteral(value=1 if first else -1),
+            ],
+        )
+        return SQLSubquery(query=SQLSelect(
+            columns=[extracted],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name=cte_name, quoted=True), alias="_agg_src"
+            ),
+            where=SQLBinaryOp(
+                operator="=",
+                left=SQLQualifiedIdentifier(parts=["_agg_src", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+            ),
+        ))
 
     def _translate_coalesce(self, args: list) -> SQLExpression:
         """Translate CQL Coalesce with type compatibility handling.
@@ -1946,9 +3251,9 @@ class FunctionsMixin:
             return _coalesce_query_list(args[0].query)
         elif len(args) == 1 and isinstance(args[0], SQLSelect):
             return _coalesce_query_list(args[0])
-        elif len(args) < 2 or len(args) > 5:
+        elif len(args) < 2:
             raise TranslationError(
-                "Coalesce scalar overload requires 2 to 5 arguments; "
+                "Coalesce scalar overload requires 2 or more arguments; "
                 "use Coalesce({ ... }) for list input"
             )
 
@@ -1993,7 +3298,18 @@ class FunctionsMixin:
         def _is_numeric_expr(a):
             if isinstance(a, SQLFunctionCall) and (a.name or "").upper() == "TRY" and a.args:
                 return _is_numeric_expr(a.args[0])
+            # TruncatedDivide lowers to TRUNC(cqlDivide(...)); unwrap TRUNC
+            # so the DECIMAL(38,8) core participates in numeric normalization.
+            if isinstance(a, SQLFunctionCall) and (a.name or "").upper() == "TRUNC" and a.args:
+                return _is_numeric_expr(a.args[0])
+            # cqlDivide returns DECIMAL(38,8) (exact CQL Decimal division);
+            # DuckDB cannot implicitly mix VARCHAR with DECIMAL in COALESCE,
+            # so it must participate in the numeric (DOUBLE) normalization.
+            if isinstance(a, SQLFunctionCall) and a.name == "cqlDivide":
+                return True
             if isinstance(a, SQLCast) and a.target_type == "DOUBLE":
+                return True
+            if isinstance(a, SQLCast) and a.target_type.startswith("DECIMAL"):
                 return True
             if isinstance(a, SQLBinaryOp) and a.operator in ("+", "-", "*", "/"):
                 return True
@@ -2023,7 +3339,15 @@ class FunctionsMixin:
     def _translate_count(self, args: list) -> SQLExpression:
         """Translate CQL Count to SQL."""
         if args and isinstance(args[0], SQLFunctionCall) and args[0].name in ('fhirpath_text', 'fhirpath_scalar'):
-            return SQLFunctionCall(name="json_array_length", args=args)
+            # fhirpath_text returns only the FIRST element of a multi-valued
+            # path, and json_array_length over that scalar text is always
+            # 0/NULL. Count must see the full element list: swap in the
+            # list-returning fhirpath UDF and take its array_length
+            # (NULL resource -> NULL list -> NULL, matching CQL Count(null)).
+            return SQLFunctionCall(
+                name="array_length",
+                args=[self._coerce_fhirpath_text_to_list(args[0])],
+            )
 
         use_distinct = False
         if args and isinstance(args[0], SQLFunctionCall) and args[0].name in ('ARRAY_DISTINCT', 'distinct'):
@@ -2171,6 +3495,64 @@ class FunctionsMixin:
             args=[SQLFunctionCall(name="system.abs", args=[args[0]])],
         )
 
+    @staticmethod
+    def _static_integral_expr_type(node: Any) -> Optional[str]:
+        """Statically infer Integer/Long for literal arithmetic trees.
+
+        Walks literals, unary +/-, and binary + - * so typed Abs narrowing
+        (CQL §16.1) can apply to any statically integral operand, not just
+        bare literals. Returns "Integer", "Long" or None.
+        """
+        if isinstance(node, Literal):
+            if isinstance(node.value, bool):
+                return None
+            name = str(getattr(node, "type", "") or "").split(".")[-1]
+            return name if name in ("Integer", "Long") else None
+        if isinstance(node, UnaryExpression) and getattr(node, "operator", None) in ("+", "-"):
+            return FunctionsMixin._static_integral_expr_type(node.operand)
+        if isinstance(node, BinaryExpression) and getattr(node, "operator", None) in ("+", "-", "*"):
+            left = FunctionsMixin._static_integral_expr_type(node.left)
+            right = FunctionsMixin._static_integral_expr_type(node.right)
+            if left is None or right is None:
+                return None
+            return "Long" if "Long" in (left, right) else "Integer"
+        return None
+
+    def _translate_abs_pre(self, func: FunctionRef, translator) -> Optional[SQLExpression]:
+        """Pre-translate CQL Abs with typed Integer/Long narrowing.
+
+        CQL §16.1: Abs(Integer)→Integer, Abs(Long)→Long; "if the absolute
+        value cannot be represented (e.g. Abs(minimum Integer)), the result
+        is null." TRY_CAST to the operand's CQL integral type nulls
+        out-of-extent results for ANY statically integral operand (e.g.
+        ``Abs(-2147483648 - 0)`` → NULL), not just the literal shapes
+        guarded in Step 2b. Returns None to fall through to the generic
+        dispatch when the operand type is not statically integral.
+        """
+        if not func.arguments or len(func.arguments) != 1:
+            return None
+        raw_arg = func.arguments[0]
+        # Bare literals / unary-minus literals / minimum-FunctionRef forms
+        # are handled exactly by the Step 2b guards (literal NULL); only
+        # computed integral arithmetic trees need the typed narrowing here.
+        if isinstance(raw_arg, (Literal, UnaryExpression)):
+            return None
+        if isinstance(raw_arg, FunctionRef):
+            return None
+        static_type = self._static_integral_expr_type(raw_arg)
+        if static_type is None:
+            return None
+        arg_sql = self.translate(raw_arg, usage=ExprUsage.SCALAR)
+        if _is_quantity_expression(arg_sql) or self._is_cql_quantity_expr(raw_arg):
+            return None
+        return SQLCast(
+            expression=SQLFunctionCall(name="TRY", args=[
+                SQLFunctionCall(name="system.abs", args=[arg_sql])
+            ]),
+            target_type="INTEGER" if static_type == "Integer" else "BIGINT",
+            try_cast=True,
+        )
+
     def _translate_log(self, args: list) -> SQLExpression:
         """Translate CQL Log(value, base).
 
@@ -2180,32 +3562,48 @@ class FunctionsMixin:
         """
         if len(args) != 2:
             raise TranslationError("CQL Log requires exactly two arguments: Log(value, base)")
-        # CQL: Log(value, base) → DuckDB: TRY(system.log(base, value))
-        return SQLFunctionCall(name="TRY", args=[
-            SQLFunctionCall(name="system.log", args=[args[1], args[0]])
-        ])
+        # CQL: Log(value, base) → DuckDB: TRY(system.log(base, value)).
+        # CQL signature is Log(argument Decimal, base Decimal) Decimal —
+        # the result is a Decimal at the implementation scale (8).
+        return SQLCast(
+            expression=SQLFunctionCall(name="TRY", args=[
+                SQLFunctionCall(name="system.log", args=[args[1], args[0]])
+            ]),
+            target_type="DECIMAL(38, 8)",
+            try_cast=True,
+        )
 
     def _translate_exp(self, args: list) -> SQLExpression:
-        """Translate CQL Exp through the parity-aligned math UDF."""
+        """Translate CQL Exp through the parity-aligned math UDF.
+
+        CQL signature is ``Exp(argument Decimal) Decimal`` — the result is
+        a Decimal at the implementation scale (8), not a DOUBLE
+        (CQL-01 exact-Decimal arithmetic doctrine).
+        """
         if not args:
             return SQLNull()
         return SQLCast(
             expression=SQLFunctionCall(name="mathExp", args=[
                 SQLCast(expression=args[0], target_type="VARCHAR")
             ]),
-            target_type="DOUBLE",
+            target_type="DECIMAL(38, 8)",
             try_cast=True,
         )
 
     def _translate_ln(self, args: list) -> SQLExpression:
-        """Translate CQL Ln (§16.12) through the parity-aligned math UDF."""
+        """Translate CQL Ln (§16.12) through the parity-aligned math UDF.
+
+        CQL signature is ``Ln(argument Decimal) Decimal`` — Integer/Long
+        operands are implicitly converted to Decimal and the result is a
+        Decimal at the implementation scale (8), not a DOUBLE.
+        """
         if not args:
             return SQLNull()
         return SQLCast(
             expression=SQLFunctionCall(name="mathLn", args=[
                 SQLCast(expression=args[0], target_type="VARCHAR")
             ]),
-            target_type="DOUBLE",
+            target_type="DECIMAL(38, 8)",
             try_cast=True,
         )
 
@@ -2297,33 +3695,165 @@ class FunctionsMixin:
 
     def _translate_scalar_min(self, args: list) -> SQLExpression:
         """Translate CQL scalar Min (2-arg) to DuckDB LEAST."""
+        folded = self._fold_uncertain_scalar_minmax(args, "Min")
+        if folded is not None:
+            return folded
         return SQLFunctionCall(name="LEAST", args=args)
 
     def _translate_scalar_max(self, args: list) -> SQLExpression:
         """Translate CQL scalar Max (2-arg) to DuckDB GREATEST."""
+        folded = self._fold_uncertain_scalar_minmax(args, "Max")
+        if folded is not None:
+            return folded
         return SQLFunctionCall(name="GREATEST", args=args)
+
+    def _fold_uncertain_scalar_minmax(self, args: list, op: str) -> Optional[SQLExpression]:
+        """CQL-21 HISTORIAN QA-003: scalar Min/Max over uncertainty-capable
+        (§22.21 VARCHAR age/duration) operands.
+
+        DuckDB LEAST/GREATEST cannot mix VARCHAR and numeric types and
+        compares VARCHAR lexicographically; route through the
+        interval-aware cqlUncertainMin/cqlUncertainMax UDFs instead,
+        casting non-uncertain operands to VARCHAR.
+        """
+        from ._operators import _is_uncertain_between_sql, _unwrap_cast
+
+        if not any(_is_uncertain_between_sql(a) for a in args):
+            return None
+
+        def _as_varchar(a: SQLExpression) -> SQLExpression:
+            unwrapped = _unwrap_cast(a)
+            if isinstance(unwrapped, SQLLiteral) and isinstance(unwrapped.value, (int, float)):
+                return SQLCast(
+                    expression=SQLLiteral(value=str(unwrapped.value)),
+                    target_type="VARCHAR",
+                )
+            if not _is_uncertain_between_sql(a):
+                return SQLCast(expression=a, target_type="VARCHAR")
+            return a
+
+        folded = _as_varchar(args[0])
+        for arg in args[1:]:
+            folded = SQLFunctionCall(
+                name=f"cqlUncertain{op}",
+                args=[folded, _as_varchar(arg)],
+            )
+        return folded
 
     def _translate_simple_aggregate(self, sql_name: str, args: list) -> SQLExpression:
         """Translate a simple CQL aggregate (Sum, Avg) to SQL."""
         return SQLFunctionCall(name=sql_name, args=args)
 
+    @staticmethod
+    def _coerce_fhirpath_text_to_list(expr: SQLExpression) -> SQLExpression:
+        """Rewrite ``fhirpath_text(src, path)`` to the list-returning ``fhirpath`` UDF.
+
+        ``fhirpath_text`` returns only the FIRST element of a multi-valued
+        path (CQL 1.5 Appendix B Property returns all elements of a 0..*
+        element). List consumers (First/Last/Count) must operate on the full
+        element list, so swap in the list-returning ``fhirpath`` UDF with the
+        same arguments.
+        """
+        if (
+            isinstance(expr, SQLFunctionCall)
+            and expr.name in ("fhirpath_text", "fhirpath_scalar")
+            and expr.args
+        ):
+            return SQLFunctionCall(name="fhirpath", args=list(expr.args))
+        return expr
+
     def _translate_first(self, args: list) -> SQLExpression:
         """Translate CQL First to DuckDB LIST_EXTRACT(list, 1)."""
+        self._reject_scalar_string_list_function_arg(args, "First")
         if args:
-            return SQLFunctionCall(name="LIST_EXTRACT", args=[args[0], SQLLiteral(value=1)])
+            source = self._coerce_fhirpath_text_to_list(args[0])
+            return SQLFunctionCall(name="LIST_EXTRACT", args=[source, SQLLiteral(value=1)])
         return SQLNull()
 
     def _translate_last(self, args: list) -> SQLExpression:
         """Translate CQL Last to DuckDB LIST_EXTRACT(list, -1)."""
+        self._reject_scalar_string_list_function_arg(args, "Last")
         if args:
-            return SQLFunctionCall(name="LIST_EXTRACT", args=[args[0], SQLLiteral(value=-1)])
+            source = self._coerce_fhirpath_text_to_list(args[0])
+            return SQLFunctionCall(name="LIST_EXTRACT", args=[source, SQLLiteral(value=-1)])
         return SQLNull()
+
+    def _translate_first_last_list_define_pre(self, func: "FunctionRef", translator) -> Optional[SQLExpression]:
+        """Pre-translate First/Last over a List-typed define reference.
+
+        CQL-18 HISTORIAN QA-001: a PATIENT_SCALAR List-typed define stores
+        one row whose value column is the element list. The generic argument
+        path coerces the reference subquery to "element rows" (list([value]))
+        which would nest list-in-list and return the whole list from
+        LIST_EXTRACT. Translate the reference as a scalar (the list itself)
+        and index into it (CQL 1.5 §10.8/§10.9).
+        """
+        if not func.arguments:
+            return None
+        arg = func.arguments[0]
+        if not isinstance(arg, Identifier):
+            return None
+        meta = self.context.definition_meta.get(arg.name)
+        if not (
+            meta is not None
+            and not meta.has_resource
+            and getattr(meta, "stores_list_value", False)
+        ):
+            return None
+        src = self.translate(arg, usage=ExprUsage.SCALAR)
+        idx = 1 if func.name.lower() == "first" else -1
+        return SQLFunctionCall(name="LIST_EXTRACT", args=[src, SQLLiteral(value=idx)])
+
+    def _reject_scalar_string_list_function_arg(self, args: list, formal: str) -> None:
+        """Reject a statically String-typed argument to a list-only function.
+
+        CQL 1.5 §10.8 First / §10.9 Last have the single signature
+        ``First(argument List<T>)``; String is a scalar type (§4.2.1) with no
+        implicit list conversion. Passing a bare String must fail at
+        translation time — silently slicing it as a character list
+        (LIST_EXTRACT('final', 1) -> 'f') is a wrong answer.
+        """
+        if args and isinstance(args[0], SQLLiteral) and isinstance(args[0].value, str):
+            raise TranslationError(
+                f"CQL {formal} requires a list argument "
+                f"(CQL 1.5 §10.8/§10.9 {formal}(argument List<T>)); "
+                f"got the String '{args[0].value}'. Strings are scalar, not lists."
+            )
 
     def _translate_singletonfrom(self, args: list) -> SQLExpression:
         """Translate CQL SingletonFrom."""
         if args:
             return self._apply_singleton_from(args[0])
         return SQLNull()
+
+    def _translate_singleton_list_define_pre(self, func: "FunctionRef", translator) -> Optional[SQLExpression]:
+        """Pre-translate SingletonFrom over a List-typed stored-list define reference.
+
+        CQL-19 HISTORIAN QA-002: `singleton from G` where
+        `define G: Patient.name.given` stores ONE row per patient whose value
+        column IS the element list. The generic path lowers the reference to
+        a single-column value subquery, and `_apply_singleton_from`'s
+        subquery branch counts CTE ROWS (always 1) instead of list ELEMENTS —
+        silently returning the whole list (3 elements) instead of the CQL 1.5
+        §20.30 run-time error, and [] instead of null for the empty case.
+        Translate the reference as a scalar (the element list itself) and
+        apply the element-cardinality CASE (0 -> null, 1 -> element,
+        >1 -> typed SingletonFrom error).
+        """
+        if not func.arguments:
+            return None
+        arg = func.arguments[0]
+        if not isinstance(arg, Identifier):
+            return None
+        meta = self.context.definition_meta.get(arg.name)
+        if not (
+            meta is not None
+            and not meta.has_resource
+            and getattr(meta, "stores_list_value", False)
+        ):
+            return None
+        src = self.translate(arg, usage=ExprUsage.SCALAR)
+        return self._apply_singleton_from_list_value(src)
 
     def _translate_message(self, args: list) -> SQLExpression:
         """Translate CQL Message (§22.15) — return source or raise on Error severity.
@@ -2436,8 +3966,11 @@ class FunctionsMixin:
             "datetime": "9999-12-31T23:59:59.999Z",
             "date": "9999-12-31",
             "time": "T23:59:59.999",
-            "integer": 2147483647,
-            "long": 9223372036854775807,
+            # Typed raw SQL so DuckDB performs true INT32/INT64 arithmetic
+            # (untyped literals promote to BIGINT/DECIMAL, silently producing
+            # out-of-range Integer/Long results instead of overflow).
+            "integer": (2147483647, "integer"),
+            "long": (9223372036854775807, "long"),
             "decimal": ("99999999999999999999.99999999", "decimal"),
             "quantity": ("99999999999999999999.99999999", "quantity"),
         }
@@ -2449,7 +3982,26 @@ class FunctionsMixin:
                 val = _MAX_VALUES.get(type_name)
                 if val is not None:
                     if isinstance(val, tuple) and val[1] == "decimal":
-                        return SQLLiteral(value=val[0], raw_sql=val[0])
+                        # Numeric (not string) literal so '+' dispatch treats
+                        # the extent as numeric arithmetic, not concatenation.
+                        from decimal import Decimal as _D
+                        return SQLLiteral(
+                            value=_D(val[0]),
+                            raw_sql=val[0],
+                            sql_type="decimal",
+                        )
+                    if isinstance(val, tuple) and val[1] == "integer":
+                        return SQLLiteral(
+                            value=val[0],
+                            raw_sql=f"CAST({val[0]} AS INTEGER)",
+                            sql_type="integer",
+                        )
+                    if isinstance(val, tuple) and val[1] == "long":
+                        return SQLLiteral(
+                            value=val[0],
+                            raw_sql=f"CAST({val[0]} AS BIGINT)",
+                            sql_type="integer",
+                        )
                     if isinstance(val, tuple) and val[1] == "quantity":
                         result = SQLFunctionCall(
                             name="json_object",
@@ -2479,8 +4031,8 @@ class FunctionsMixin:
             "datetime": "0001-01-01T00:00:00.000Z",
             "date": "0001-01-01",
             "time": "T00:00:00.000",
-            "integer": -2147483648,
-            "long": -9223372036854775808,
+            "integer": (-2147483648, "integer"),
+            "long": (-9223372036854775808, "long"),
             "decimal": ("-99999999999999999999.99999999", "decimal"),
             "quantity": ("-99999999999999999999.99999999", "quantity"),
         }
@@ -2492,7 +4044,24 @@ class FunctionsMixin:
                 val = _MIN_VALUES.get(type_name)
                 if val is not None:
                     if isinstance(val, tuple) and val[1] == "decimal":
-                        return SQLLiteral(value=val[0], raw_sql=val[0])
+                        from decimal import Decimal as _D
+                        return SQLLiteral(
+                            value=_D(val[0]),
+                            raw_sql=val[0],
+                            sql_type="decimal",
+                        )
+                    if isinstance(val, tuple) and val[1] == "integer":
+                        return SQLLiteral(
+                            value=val[0],
+                            raw_sql=f"CAST({val[0]} AS INTEGER)",
+                            sql_type="integer",
+                        )
+                    if isinstance(val, tuple) and val[1] == "long":
+                        return SQLLiteral(
+                            value=val[0],
+                            raw_sql=f"CAST({val[0]} AS BIGINT)",
+                            sql_type="integer",
+                        )
                     if isinstance(val, tuple) and val[1] == "quantity":
                         result = SQLFunctionCall(
                             name="json_object",
@@ -2516,6 +4085,30 @@ class FunctionsMixin:
                 raise ValueError(f"The Minimum operator is not defined for type {raw_type_name}")
         return SQLNull()
 
+    def _translate_flatten_pre(self, func, translator) -> "Optional[SQLExpression]":
+        """Pre-translate CQL Flatten() over dynamic FHIR list properties.
+
+        CQL-18 SKEPTIC relaunch QA-006: `flatten { Patient.name.given }` lowers
+        the dynamic operand to scalar fhirpath_text (first-node truncation), so
+        the wrapping SQLArray is one nesting level short and DuckDB's flatten()
+        gets a VARCHAR[] instead of VARCHAR[][]. CQL 1.5 §10.7 requires the
+        full List<List<T>>. Promote fhirpath_text operands (and array elements)
+        to their list-valued projections before flattening.
+        """
+        from ...translator.expressions._utils import _promote_fhirpath_text_list
+        from ...translator.types import SQLArray, SQLFunctionCall
+        if not func.arguments:
+            return None
+        arg_sql = translator.translate(func.arguments[0])
+        if isinstance(arg_sql, SQLArray):
+            promoted_elements = [
+                _promote_fhirpath_text_list(element) for element in arg_sql.elements
+            ]
+            arg_sql = SQLArray(elements=promoted_elements)
+        else:
+            arg_sql = _promote_fhirpath_text_list(arg_sql)
+        return SQLFunctionCall(name="flatten", args=[arg_sql])
+
     def _translate_precision_pre(self, func, translator) -> "Optional[SQLExpression]":
         """Pre-translate CQL Precision() — preserve raw Decimal trailing zeros.
 
@@ -2529,11 +4122,15 @@ class FunctionsMixin:
             # Decimal literal with raw_str: pass the raw string to preserve
             # trailing zeros that Python float() would strip.
             if (isinstance(arg, _ASTLiteral)
-                    and getattr(arg, 'type', None) == 'Decimal'
-                    and getattr(arg, 'raw_str', None)):
+                    and getattr(arg, 'type', None) in ('Decimal', 'Integer', 'Long')):
+                # Numeric literals must reach CQLPrecision as VARCHAR text:
+                # the native UDF is VARCHAR-typed and a raw INTEGER literal
+                # raises a BinderException on the native path (while the
+                # Python path silently duck-types it), diverging engines.
+                raw = getattr(arg, 'raw_str', None) or str(getattr(arg, 'value', ''))
                 return SQLFunctionCall(
                     name="CQLPrecision",
-                    args=[SQLLiteral(value=arg.raw_str)],
+                    args=[SQLLiteral(value=raw)],
                 )
         # Fall through: let the normal rename handle it
         return None
@@ -2629,20 +4226,20 @@ class FunctionsMixin:
                     ))
                     break
         if len(args) > 1:
-            expand_arg = arg
-            if isinstance(expand_arg, SQLSubquery):
-                expand_arg = SQLFunctionCall(
-                    name="from_json",
-                    args=[expand_arg, SQLLiteral(value='["VARCHAR"]')],
-                )
-            elif not isinstance(expand_arg, SQLArray) and not (
-                isinstance(expand_arg, SQLFunctionCall)
-                and expand_arg.name
-                and expand_arg.name.startswith("list_")
-            ) and not _is_list_returning_sql(expand_arg):
-                expand_arg = SQLFunctionCall(name="list_value", args=[expand_arg])
-            arg = SQLFunctionCall(name="expand", args=[expand_arg, args[1]])
-            return SQLFunctionCall(name="collapse_intervals", args=[arg])
+            # CQL 1.5 §9 Collapse(argument, per): `per` only widens the merge
+            # window (each interval's end is extended by `per` for the
+            # overlap/meets decision); the output intervals keep their
+            # ORIGINAL boundaries. Lowering through expand() truncated bounds
+            # to the per grid and corrupted results (QA-002) — route to the
+            # dedicated collapse_intervals_per UDF instead.
+            if isinstance(arg, SQLSubquery):
+                # Subqueries produce a json_group_array VARCHAR scalar.
+                pass
+            elif _is_list_returning_sql(arg):
+                arg = SQLFunctionCall(name="to_json", args=[arg])
+            elif isinstance(arg, SQLArray):
+                arg = SQLFunctionCall(name="to_json", args=[arg])
+            return SQLFunctionCall(name="collapse_intervals_per", args=[arg, args[1]])
         if _is_list_returning_sql(arg):
             arg = SQLFunctionCall(name="to_json", args=[arg])
         return SQLFunctionCall(name="collapse_intervals", args=[arg])
@@ -2669,6 +4266,12 @@ class FunctionsMixin:
         if isinstance(ast_arg, Literal) and ast_arg.value is None:
             return SQLNull()
         is_single_interval = isinstance(ast_arg, CQLInterval)
+        if not is_single_interval:
+            # CQL-15 EXPLORER QA-001: an interval-typed SQL operand (e.g.
+            # First/Last/indexer selection over an interval list lowering
+            # to LIST_EXTRACT) selects the single-interval overload
+            # (List<T> of points) rather than the list-of-intervals one.
+            is_single_interval = self._is_fhir_interval_expression(first_arg)
 
         if is_single_interval:
             # Single-interval overload → expand_points UDF (accepts VARCHAR)
@@ -3045,26 +4648,28 @@ class FunctionsMixin:
         return op
 
     def _translate_age_function(self, name: str, args: List[SQLExpression]) -> SQLExpression:
-        """Translate AgeInYears/AgeInMonths/etc. using calendar-duration macros.
+        """Translate AgeInYears/AgeInMonths/etc. per CQL §Age.
 
-        Uses the demographics CTE to access Patient.birthDate and the
-        YearsBetween/MonthsBetween/DaysBetween macros for CQL-compliant
-        calendar duration semantics (CQL §2.3, §18.4).
+        Age operators are defined in terms of a duration calculation, so
+        they delegate to cqlDurationBetween (§22.21 semantics): a partial
+        birthDate below the operator precision yields an uncertainty
+        interval rather than a crisp day-1-based value. AgeInYears and
+        AgeInMonths use Today(); finer precisions use Now().
         """
         name_lower = name.lower()
 
-        # Map to calendar-duration macro names
-        macro_map = {
-            "ageinyears": "YearsBetween",
-            "ageinmonths": "MonthsBetween",
-            "ageinweeks": "WeeksBetween",
-            "ageindays": "DaysBetween",
-            "ageinhours": "HoursBetween",
-            "ageinminutes": "MinutesBetween",
-            "ageinseconds": "SecondsBetween",
+        # Map to cqlDurationBetween precision units
+        unit_map = {
+            "ageinyears": "year",
+            "ageinmonths": "month",
+            "ageinweeks": "week",
+            "ageindays": "day",
+            "ageinhours": "hour",
+            "ageinminutes": "minute",
+            "ageinseconds": "second",
+            "age": "year",
         }
-
-        macro_name = macro_map.get(name_lower, "YearsBetween")
+        unit = unit_map.get(name_lower, "year")
 
         if args:
             birth_date = args[0]
@@ -3100,8 +4705,12 @@ class FunctionsMixin:
             )
 
         return SQLFunctionCall(
-            name=macro_name,
-            args=[birth_date, current_reference],
+            name="cqlDurationBetween",
+            args=[
+                SQLCast(expression=birth_date, target_type="VARCHAR"),
+                current_reference,
+                SQLLiteral(value=unit),
+            ],
         )
 
     def _translate_age_at_function(self, name: str, args: List[SQLExpression]) -> SQLExpression:
@@ -3133,7 +4742,10 @@ class FunctionsMixin:
         # If only one arg provided, assume it's the as_of_date and use current resource
         if len(args) == 1:
             # Use current Patient columns folded into _patients for birthday-aware
-            # age calculation.
+            # age calculation. CQL §AgeAt: shorthand for CalculateAgeIn...At,
+            # a duration calculation — the CalculateAgeIn*At UDFs implement
+            # §22.21 uncertainty semantics (interval JSON for partial
+            # birthDates) with the negative-age null convention.
             self.context._needs_demographics = True
             calc_udf_map = {
                 "ageinyearsat": "CalculateAgeInYearsAt",

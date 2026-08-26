@@ -36,9 +36,9 @@ def Coalesce(*args: Any) -> Any:
             if value is not None:
                 return _coalesce_return_value(value)
         return None
-    if len(args) < 2 or len(args) > 5:
+    if len(args) < 2:
         raise ValueError(
-            "Coalesce scalar overload requires 2 to 5 arguments; "
+            "Coalesce scalar overload requires 2 or more arguments; "
             "use Coalesce([ ... ]) for list input"
         )
     for arg in args:

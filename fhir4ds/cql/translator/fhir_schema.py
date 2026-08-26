@@ -364,6 +364,42 @@ class FHIRSchemaRegistry:
 
         return None
         
+    def is_multi_valued_element(self, resource_type: str, element_path: str) -> bool:
+        """
+        Check whether an element path is multi-valued (max cardinality ``*``).
+
+        Args:
+            resource_type: FHIR resource type
+            element_path: Dot-separated element path (e.g., "component" or
+                "component.code.code")
+
+        Returns:
+            True when the element's max cardinality is ``*``; False when the
+            element is known and single-valued, or when no schema information
+            is available for the path.
+        """
+        resource = self.resources.get(resource_type)
+        if not resource:
+            return False
+        # Navigation over a dotted path is multi-valued when ANY segment
+        # along the path is multi-valued (e.g. "component.code.code" is
+        # multi-valued because Observation.component is 0..*). Schema
+        # element paths may not include every leaf level, so walk prefixes.
+        segments = element_path.split(".")
+        for i in range(1, len(segments) + 1):
+            prefix = ".".join(segments[:i])
+            full_path = f"{resource_type}.{prefix}"
+            element = resource.elements.get(full_path)
+            if element is None:
+                search_suffix = f".{prefix}"
+                for path, elem in resource.elements.items():
+                    if path.endswith(search_suffix):
+                        element = elem
+                        break
+            if element is not None and element.cardinality.endswith("*"):
+                return True
+        return False
+
     def is_valid_element(self, resource_type: str, element_name: str) -> bool:
         """
         Check if an element name is valid for a resource type.

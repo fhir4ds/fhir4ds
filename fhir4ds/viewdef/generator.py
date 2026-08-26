@@ -27,7 +27,9 @@ from .utils import pluralize_resource
 
 _logger = logging.getLogger(__name__)
 
-# Regex for safe SQL identifiers — alphanumeric and underscores only
+# Regex for safe SQL identifiers — now lives in utils.quote_identifier; kept
+# here as a private alias for any internal call sites that still reference it
+# directly during the transition. Prefer ``from .utils import quote_identifier``.
 _SAFE_IDENTIFIER_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 _SIMPLE_FHIRPATH_NAV_RE = re.compile(
     r"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)*$"
@@ -36,14 +38,17 @@ _CONTEXT_SWITCHING_BUILTINS = {"context", "resource", "rootResource"}
 
 
 def _quote_identifier(name: str) -> str:
-    """Quote a SQL identifier, rejecting names that could enable injection."""
-    if not isinstance(name, str) or not name or not _SAFE_IDENTIFIER_RE.match(name):
-        raise ValidationError(
-            f"Invalid SQL identifier: {name!r}. "
-            "SQL identifiers must start with a letter or underscore and contain "
-            "only alphanumeric characters and underscores."
-        )
-    return f'"{name}"'
+    """Quote a SQL identifier (thin wrapper over the public utils helper).
+
+    Raises ``ValidationError`` for backward compatibility with existing
+    callers; the underlying utils helper raises ``ValueError``.
+    """
+    from .utils import quote_identifier
+
+    try:
+        return quote_identifier(name)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
 
 
 def _quote_column_identifier(name: str) -> str:
@@ -216,8 +221,17 @@ class SQLGenerator:
     _JSON_NULL_TYPES = {"NULL"}
 
     def _is_element_id_type(self, type_str: str | None) -> bool:
-        """Return True for FHIR element ID notation such as Observation.referenceRange."""
-        return bool(type_str and "." in type_str)
+        """Return True for FHIR element ID notation such as Observation.referenceRange.
+
+        Absolute URIs are never element-ID notation, even when they contain
+        dots (e.g. ``HTTP://hl7.org/fhir/StructureDefinition/string`` or
+        ``http://example.org/StructureDefinition/Foo.Bar``). Element-ID
+        notation is a bare relative dotted path with no colon, so strings
+        containing ``:`` (any URI scheme, including ``urn:``) fall through to
+        the unsupported column type error instead of a misleading
+        cross-resource element-ID diagnostic.
+        """
+        return bool(type_str and "." in type_str and ":" not in type_str)
 
     def _is_complex_declared_type(self, type_str: str | None) -> bool:
         """Return True when a column declaration expects a non-primitive JSON value."""
@@ -325,9 +339,17 @@ class SQLGenerator:
         if declared_type == "boolean":
             return {"Boolean", "boolean"}
         if declared_type == "date":
-            return {"Date", "String", "date", "string"}
+            # Date columns accept Date or DateTime runtime types: a DateTime
+            # value with time precision can be silenced to date precision, and
+            # boundary functions on date inputs return Date. See fn_boundary
+            # spec tests.
+            return {"Date", "DateTime", "String", "date", "dateTime", "string"}
         if declared_type == "dateTime":
-            return {"DateTime", "String", "dateTime", "string"}
+            # DateTime columns accept Date runtime types because FHIRPath
+            # boundary functions on date inputs (e.g. birthDate.lowBoundary())
+            # legitimately return Date, and Date is a strict subtype of
+            # DateTime. See fn_boundary spec tests.
+            return {"DateTime", "Date", "String", "dateTime", "date", "string"}
         if declared_type == "time":
             return {"String", "Time", "string", "time"}
         if declared_type == "instant":
@@ -378,15 +400,11 @@ class SQLGenerator:
             return f"CAST(({row_index_expr}) AS VARCHAR)"
         return "(" + " || ".join(parts) + ")"
 
-    def _expression_uses_current_focus(self, resolved_path: str) -> bool:
-        """Return True when a FHIRPath expression refers to the current focus."""
-        try:
-            ast = parse_fhirpath(resolved_path, strict_mode=True)
-        except Exception:
-            return True
-
-        def _external_name(node: dict) -> str | None:
-            for child in node.get("children", []):
+    @staticmethod
+    def _ast_uses_current_focus(node) -> bool:
+        """Return True when a parsed FHIRPath AST node refers to the focus."""
+        def _external_name(n: dict) -> str | None:
+            for child in n.get("children", []):
                 if isinstance(child, dict) and child.get("type") == "Identifier":
                     return child.get("text")
                 if isinstance(child, dict):
@@ -395,25 +413,75 @@ class SQLGenerator:
                         return nested
             return None
 
-        def _walk(node) -> bool:
+        if isinstance(node, list):
+            return any(SQLGenerator._ast_uses_current_focus(c) for c in node)
+        if not isinstance(node, dict):
+            return False
+
+        node_type = node.get("type")
+        children = node.get("children", [])
+        if node_type == "ExternalConstant":
+            return _external_name(node) == "context"
+        if node_type == "ThisInvocation":
+            return True
+        if node_type == "InvocationTerm" and children:
+            first = children[0]
+            if isinstance(first, dict) and first.get("type") == "MemberInvocation":
+                return True
+        return any(SQLGenerator._ast_uses_current_focus(c) for c in children)
+
+    def _expression_uses_current_focus(self, resolved_path: str) -> bool:
+        """Return True when a FHIRPath expression refers to the current focus."""
+        try:
+            ast = parse_fhirpath(resolved_path, strict_mode=True)
+        except Exception:
+            return True
+
+        return self._ast_uses_current_focus(ast)
+
+    def _prefix_tail_has_focus_operand(self, tail: str) -> bool:
+        """Return True when a builtin-variable continuation tail mixes contexts.
+
+        After stripping a leading ``%rootResource.``/``%resource.`` prefix, the
+        remaining expression is routed to (and evaluated against) the root
+        resource JSON input. The leading navigation chain is a legitimate
+        continuation of the built-in variable, and function arguments bind to
+        their own lambda ``$this`` — but any operand of a top-level binary
+        operator (``=``, ``&``, ``and``, ``+``, ...) starts a NEW evaluation
+        rooted at the CURRENT FOCUS. Such operands cannot be lowered to the
+        single-input DuckDB FHIRPath UDF surface and must fail loud instead of
+        being silently evaluated against the wrong JSON input.
+        """
+        try:
+            ast = parse_fhirpath(tail, strict_mode=True)
+        except Exception:
+            return True
+
+        def _spine(node) -> bool:
             if isinstance(node, list):
-                return any(_walk(child) for child in node)
+                return any(_spine(child) for child in node)
             if not isinstance(node, dict):
                 return False
-
             node_type = node.get("type")
             children = node.get("children", [])
-            if node_type == "ExternalConstant":
-                return _external_name(node) == "context"
-            if node_type == "ThisInvocation":
-                return True
-            if node_type == "InvocationTerm" and children:
-                first = children[0]
-                if isinstance(first, dict) and first.get("type") == "MemberInvocation":
+            if (
+                isinstance(node_type, str)
+                and node_type.endswith("Expression")
+                and node_type != "InvocationExpression"
+                and children
+            ):
+                # Multi-operand expression: the first child continues the
+                # built-in variable spine; remaining operands are evaluated
+                # from the current focus.
+                if any(
+                    self._ast_uses_current_focus(child)
+                    for child in children[1:]
+                ):
                     return True
-            return any(_walk(child) for child in children)
+                return _spine(children[0])
+            return any(_spine(child) for child in children)
 
-        return _walk(ast)
+        return _spine(ast)
 
     def _path_supports_runtime_type_guard(self, resolved_path: str) -> bool:
         """Return True when ``type().name`` is reliable for this expression.
@@ -424,6 +492,15 @@ class SQLGenerator:
         simple root-resource navigation paths and let cardinality checks cover
         the broader expression surface.
         """
+        # FHIRPath boolean literals lexically match the simple navigation
+        # pattern, but they are literals, not resource element navigation:
+        # their runtime type probe reports the System name "Boolean", which a
+        # simple-path guard cannot accept. Route them through the expression
+        # guard so bare boolean-constant columns (e.g. path "%Flag" resolving
+        # to "true") are not falsely rejected as non-primitive output
+        # (SQL-on-FHIR v2: column.type is only required for non-primitives).
+        if resolved_path in ("true", "false"):
+            return False
         return bool(_SIMPLE_FHIRPATH_NAV_RE.fullmatch(resolved_path))
 
     def _expression_runtime_complex_guard_condition(
@@ -684,6 +761,21 @@ class SQLGenerator:
                 }
                 # Do not silently run mixed-context expressions against the wrong
                 # JSON input. The public DuckDB UDF accepts a single context value.
+                # Beyond nested builtin refs, a binary-operator operand in the
+                # tail starts a new evaluation at the CURRENT FOCUS; evaluating
+                # it against the routed root input would silently produce wrong
+                # data, so it must fail loud too (same doctrine, both orderings).
+                if (
+                    variable in ("%resource", "%rootResource")
+                    and current_resource_var != root_var
+                    and self._prefix_tail_has_focus_operand(tail)
+                ):
+                    raise ValidationError(
+                        "FHIRPath expression mixes built-in ViewDefinition contexts "
+                        f"inside an iterator ({variable} with the current focus); "
+                        "this cannot be lowered to the single-input DuckDB "
+                        "FHIRPath UDF surface"
+                    )
                 if mixed_context_refs and current_resource_var != root_var:
                     refs = ", ".join(f"%{name}" for name in sorted(mixed_context_refs))
                     raise ValidationError(
@@ -872,6 +964,13 @@ class SQLGenerator:
         expr = udf_call
         if sql_cast:
             expr = f"TRY_CAST({udf_call} AS {sql_cast})"
+        elif udf_func == "fhirpath_text":
+            # fhirpath_text returns '' for an empty FHIRPath collection. Per
+            # SQL-on-FHIR v2, a non-collection column whose FHIRPath evaluates
+            # to empty must surface as NULL, not empty string (see fn_join
+            # spec tests: name.given.join(...) over a resource with no `name`
+            # must produce NULL).
+            expr = f"NULLIF({udf_call}, '')"
         guard = self._runtime_guard_condition(
             eval_resource_var,
             resolved_path,
@@ -1204,7 +1303,9 @@ class SQLGenerator:
                             else:
                                 _logger.warning(
                                     "Column '%s' has collection=false but path '%s' may "
-                                    "return multiple values; only the first will be used. "
+                                    "return multiple values. Per the SQL-on-FHIR v2 "
+                                    "spec, the runtime guard will raise an error if "
+                                    "multiple values are actually produced. "
                                     "Set collection=true to return all values.",
                                     column.name, column.path,
                                 )
@@ -1214,6 +1315,40 @@ class SQLGenerator:
 
                 if select.unionAll:
                     validate_select_columns(select.unionAll, current_in_foreach)
+
+        validate_select_columns(view_definition.select)
+
+    def _validate_element_id_column_types(self, view_definition: ViewDefinition) -> None:
+        """Reject element-ID column types naming a different resource.
+
+        Per SQL-on-FHIR v2 ``column.type``, element-ID notation (e.g.
+        ``Observation.referenceRange``) identifies a backbone element of the
+        NAMED resource. A declaration whose leading resource segment differs
+        from ``ViewDefinition.resource`` can never match the produced values,
+        so the engine reports the type mismatch statically (spec: "Implementations
+        should report an error if the returned type does not match the type set
+        here"). Same-resource element-ID declarations keep the runtime
+        cardinality-only guard because ``type().name`` cannot identify backbone
+        element shapes portably.
+        """
+
+        def validate_select_columns(selects: List[Select]) -> None:
+            for select in selects:
+                for column in select.column:
+                    declared = self._get_type_name(column.type)
+                    if self._is_element_id_type(declared):
+                        declared_resource = declared.split(".", 1)[0]
+                        if declared_resource != view_definition.resource:
+                            raise ValidationError(
+                                f"Column '{column.name}' declares element-ID type "
+                                f"'{declared}' but the view resource is "
+                                f"'{view_definition.resource}'; the returned type "
+                                "can never match this declaration."
+                            )
+                if select.select:
+                    validate_select_columns(select.select)
+                if select.unionAll:
+                    validate_select_columns(select.unionAll)
 
         validate_select_columns(view_definition.select)
 
@@ -1509,6 +1644,7 @@ class SQLGenerator:
         root_resource_var: Optional[str] = None,
         row_index_expr: str = "0",
         foreachornull_aliases: Optional[List[str]] = None,
+        foreachornull_wrapper_ids: Optional[List[object]] = None,
     ) -> Tuple[List[str], List[str], List[str]]:
         """Recursively process a list of Select structures.
 
@@ -1523,11 +1659,16 @@ class SQLGenerator:
                 ``({var} IS NULL OR ...)`` to preserve NULL rows from an
                 enclosing forEachOrNull context.
             foreachornull_aliases: Optional list to receive the aliases of
-                forEachOrNull unnests emitted at this level (not recursed).
-                Callers building unionAll branches use this to suppress the
-                null-preserved row in non-first branches per spec Process(S, N)
-                step 3 (one null row total when the wrapper forEachOrNull is
-                empty).
+                forEachOrNull unnests emitted anywhere in this select tree
+                (recursed into nested selects), in emission order.
+            foreachornull_wrapper_ids: Optional list to receive, in lockstep
+                with ``foreachornull_aliases``, the ``_union_origin_id`` marker
+                of each forEachOrNull select (None when it is not a union
+                expansion wrapper copy).
+                Callers building unionAll branches use these paired lists to
+                suppress the null-preserved row in non-first branches per spec
+                Process(S, N) step 3 (one null row total when the wrapper
+                forEachOrNull is empty) — at ANY nesting depth.
 
         Returns:
             Tuple of (column_exprs, join_clauses, where_conditions)
@@ -1619,6 +1760,10 @@ class SQLGenerator:
                 in_foreach_or_null = True
                 if foreachornull_aliases is not None:
                     foreachornull_aliases.append(alias)
+                if foreachornull_wrapper_ids is not None:
+                    foreachornull_wrapper_ids.append(
+                        getattr(select, "_union_origin_id", None)
+                    )
                 current_runtime_type_guard = False
                 current_row_index_expr = f"COALESCE({alias}__row_index, 0)"
 
@@ -1674,6 +1819,8 @@ class SQLGenerator:
                     current_runtime_type_guard,
                     root_resource_var,
                     current_row_index_expr,
+                    foreachornull_aliases=foreachornull_aliases,
+                    foreachornull_wrapper_ids=foreachornull_wrapper_ids,
                 )
                 column_exprs.extend(sub_cols)
                 join_clauses.extend(sub_joins)
@@ -1692,6 +1839,7 @@ class SQLGenerator:
         base_resource_var: str,
         root_where: List[dict],
         foreachornull_aliases: Optional[List[str]] = None,
+        foreachornull_wrapper_ids: Optional[List[object]] = None,
     ) -> str:
         """Build a single SELECT query from a list of non-unionAll selects."""
         column_exprs, join_clauses, where_conditions = self._process_selects(
@@ -1699,6 +1847,7 @@ class SQLGenerator:
             base_resource_var,
             root_resource_var=base_resource_var,
             foreachornull_aliases=foreachornull_aliases,
+            foreachornull_wrapper_ids=foreachornull_wrapper_ids,
         )
 
         if not column_exprs:
@@ -1932,6 +2081,14 @@ class SQLGenerator:
                         select=list(select.select) + [branch],
                         where=list(select.where),
                     )
+                    # Tag replicated wrappers with the identity of the
+                    # union-owning select so that null-row suppression can
+                    # distinguish union wrapper copies (which must emit the
+                    # spec-mandated null row exactly once across all
+                    # branches) from independent sibling selects that merely
+                    # repeat the same forEachOrNull path (each emits its own
+                    # null row per Process(S, N) step 3).
+                    wrapper._union_origin_id = id(select)  # type: ignore[attr-defined]
                     alternatives.extend(self._expand_select_unions(wrapper))
                 else:
                     alternatives.extend(self._expand_select_unions(branch))
@@ -1979,43 +2136,36 @@ class SQLGenerator:
         # branch becomes its own SELECT with its own copy of the wrapper
         # forEachOrNull LEFT JOIN, non-first branches must suppress the
         # null-preserved row to avoid duplicating it.
-        seen_foreachornull_paths: set = set()
+        seen_union_wrapper_ids: set = set()
         for selects in expanded_selects:
             collected_aliases: List[str] = []
+            collected_wrapper_ids: List[object] = []
             sql = self._build_single_query(
                 selects,
                 table_name,
                 base_resource_var,
                 root_where,
                 foreachornull_aliases=collected_aliases,
+                foreachornull_wrapper_ids=collected_wrapper_ids,
             )
-            # Identify forEachOrNull paths in this alternative. If the same
-            # path appeared in a prior alternative (i.e., this alternative
-            # is a non-first branch of a unionAll+forEachOrNull expansion),
-            # suppress the null-preserved row.
-            alternative_fornull_paths = self._collect_foreachornull_paths(selects)
+            # The paired lists collected above identify union-expansion
+            # wrapper copies at ANY nesting depth. A wrapper tagged by
+            # _expand_select_unions that already emitted its null-preserved
+            # row in a prior alternative (i.e., this alternative is a
+            # non-first branch of a unionAll expansion of the same owning
+            # select) must suppress that row. Independent sibling selects —
+            # even with the same forEachOrNull path — keep their own null
+            # row (Process(S, N) step 3 applies per selection structure).
             suppress_aliases: List[str] = []
-            for path, alias in zip(alternative_fornull_paths, collected_aliases):
-                if path in seen_foreachornull_paths:
+            for wrapper_id, alias in zip(collected_wrapper_ids, collected_aliases):
+                if wrapper_id is not None and wrapper_id in seen_union_wrapper_ids:
                     suppress_aliases.append(alias)
-                else:
-                    seen_foreachornull_paths.add(path)
+                elif wrapper_id is not None:
+                    seen_union_wrapper_ids.add(wrapper_id)
             for alias in suppress_aliases:
                 sql = self._suppress_null_preserved_row(sql, alias)
             queries.append(sql)
         return "\nUNION ALL\n".join(queries)
-
-    def _collect_foreachornull_paths(self, selects: List[Select]) -> List[str]:
-        """Return the forEachOrNull paths encountered at this level of the
-        select list (in order), mirroring how ``_process_selects`` emits
-        aliases. Used by ``_generate_single_resource`` to detect when the
-        same wrapper forEachOrNull appears in multiple UNION ALL branches.
-        """
-        paths: List[str] = []
-        for select in selects:
-            if select.forEachOrNull:
-                paths.append(self._resolve_path(select.forEachOrNull))
-        return paths
 
     def generate(self, view_definition: ViewDefinition) -> str:
         """Generate complete SQL query from a ViewDefinition.
@@ -2095,6 +2245,7 @@ class SQLGenerator:
         self._validate_foreach_mutual_exclusion(view_definition.select)
         self._validate_union_all_columns(view_definition.select)
         self._validate_where_paths(view_definition)
+        self._validate_element_id_column_types(view_definition)
         self._alias_counter = 0
         self._constant_resolver = ConstantResolver.from_view_definition(view_definition)
 

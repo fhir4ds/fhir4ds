@@ -351,13 +351,36 @@ def test_cql_interval_part2_explorer_regressions_match_no_python_cpp() -> None:
                 assert no_py.execute(sql).fetchone() == expected
 
             for con in (py, cpp, no_py):
+                # CQL-17 HISTORIAN (2nd launch) QA-004: Quantity bounds use
+                # the canonical Quantity JSON shape (value/unit/code/system)
+                # on every engine, matching Width/Size output.
                 quantity_interval = json.loads(con.execute(quantity_interval_sql).fetchone()[0])
-                assert quantity_interval["low"] == {"value": 1000, "unit": "mg"}
-                assert quantity_interval["high"] == {"value": 2, "unit": "g"}
+                assert quantity_interval["low"] == {
+                    "value": 1000.0,
+                    "unit": "mg",
+                    "code": "mg",
+                    "system": "http://unitsofmeasure.org",
+                }
+                assert quantity_interval["high"] == {
+                    "value": 2.0,
+                    "unit": "g",
+                    "code": "g",
+                    "system": "http://unitsofmeasure.org",
+                }
 
                 quantity_intersect = json.loads(con.execute(quantity_intersect_sql).fetchone()[0])
-                assert quantity_intersect["low"] == {"value": 1500, "unit": "mg"}
-                assert quantity_intersect["high"] == {"value": 2500, "unit": "mg"}
+                assert quantity_intersect["low"] == {
+                    "value": 1500.0,
+                    "unit": "mg",
+                    "code": "mg",
+                    "system": "http://unitsofmeasure.org",
+                }
+                assert quantity_intersect["high"] == {
+                    "value": 2500.0,
+                    "unit": "mg",
+                    "code": "mg",
+                    "system": "http://unitsofmeasure.org",
+                }
     finally:
         py.close()
         cpp.close()
@@ -394,7 +417,10 @@ def test_cql_interval_part2_set_ops_incompatible_quantity_dimensions_null_cql16_
             "SELECT intervalIntersect("
             "intervalFromBounds('{\"value\":1,\"unit\":\"g\"}', '{\"value\":3,\"unit\":\"g\"}', true, true), "
             "intervalFromBounds('{\"value\":2,\"unit\":\"g\"}', '{\"value\":5,\"unit\":\"g\"}', true, true))",
-            {"low": {"value": 2, "unit": "g"}, "high": {"value": 3, "unit": "g"},
+            {"low": {"value": 2.0, "unit": "g", "code": "g",
+                     "system": "http://unitsofmeasure.org"},
+             "high": {"value": 3.0, "unit": "g", "code": "g",
+                      "system": "http://unitsofmeasure.org"},
              "lowClosed": True, "highClosed": True},
         ),
         # Sanity: compatible units still work for except
@@ -762,3 +788,224 @@ define QuantityOverlapIncompatibleNull: Interval[1 'g', 3 'g'] overlaps Interval
 define QuantityOverlapsBeforeIncompatibleNull: Interval[1 'g', 3 'g'] overlaps before Interval[1 'cm', 2 'cm']
 define QuantityOverlapsAfterIncompatibleNull: Interval[1 'cm', 2 'cm'] overlaps after Interval[1 'g', 3 'g']
 """
+
+
+def test_cql_interval_part2_null_bound_sentinels_and_in_keyword_cql16_skeptic_2026_08() -> None:
+    """CQL-16 SKEPTIC (2026-08-22) regressions.
+
+    QA-001: ``in`` between two intervals must lower to intervalIncludedIn
+    (interval-interval Included In overload accepted by the CQL grammar and
+    the reference InEvaluator); previously it fell into the point-in-interval
+    BETWEEN lowering and raised a DuckDB BinderException.
+
+    QA-003: closed null interval bounds sentinelize to the min/max of the
+    point type (CQL 1.5 §9.14 Start / §9.15 End, reference Interval.start/
+    .end getters), so Meets / On Or After / On Or Before return determined
+    results instead of null. Successor of the maximum temporal sentinel is
+    null (Appendix C overflow rule), so meets with a closed null high bound
+    is false, and the temporal sentinel arithmetic must not raise.
+    """
+    cql = """library CQL16Skeptic2026_08 version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define InIntervalTrue: Interval[2, 3] in Interval[1, 5]
+define InIntervalFalse: Interval[2, 7] in Interval[1, 5]
+define InIntervalPrecision: Interval[@2024-01-15, @2024-01-20] in day of Interval[@2024-01-01, @2024-01-31]
+define InIntervalFromList: First({ Interval[2, 4], Interval[9, 10] }) in Interval[1, 5]
+define MeetsNullHighFalse: Interval[1, null] meets Interval[6, 10]
+define MeetsNullLowFalse: Interval[1, 5] meets Interval[null, 3]
+define MeetsTemporalNullHighFalse: Interval[@2024-01-01, null] meets Interval[@2025-01-01, @2025-06-01]
+define MeetsOpenNullHighNull: Interval[1, null) meets Interval[6, 10]
+define OnOrAfterNullLowFalse: Interval[null, 5] on or after Interval[1, 3]
+define OnOrAfterNullHighFalse: Interval[6, 10] on or after Interval[1, null]
+define OnOrAfterTemporalNullHighFalse: Interval[@2025-01-01, @2025-06-01] on or after Interval[@2024-01-01, null]
+define OnOrBeforeNullLowFalse: Interval[null, 3] on or before Interval[1, 5]
+define OnOrBeforeUnboundedHighTrue: Interval[1, 5] on or before Interval[6, null]
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "InIntervalTrue": (True,),
+        "InIntervalFalse": (False,),
+        "InIntervalPrecision": (True,),
+        "InIntervalFromList": (True,),
+        "MeetsNullHighFalse": (False,),
+        "MeetsNullLowFalse": (False,),
+        "MeetsTemporalNullHighFalse": (False,),
+        "MeetsOpenNullHighNull": (None,),
+        "OnOrAfterNullLowFalse": (False,),
+        "OnOrAfterNullHighFalse": (False,),
+        "OnOrAfterTemporalNullHighFalse": (False,),
+        "OnOrBeforeNullLowFalse": (False,),
+        "OnOrBeforeUnboundedHighTrue": (True,),
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expr in translated.items():
+                sql = f"SELECT {expr.to_sql()}"
+                py_result = py.execute(sql).fetchone()
+                cpp_result = cpp.execute(sql).fetchone()
+                no_py_result = no_py.execute(sql).fetchone()
+                assert py_result == cpp_result == no_py_result, (
+                    name,
+                    py_result,
+                    cpp_result,
+                    no_py_result,
+                )
+                assert py_result == expected[name], (name, py_result)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part2_long_and_quantity_sentinels_cql16_historian_2026_08() -> None:
+    """CQL-16 HISTORIAN (2026-08-22) regressions.
+
+    QA-001: Long intervals with closed null bounds sentinel at the int64
+    min/max of the Long point type (CQL 1.5 §9.14 Start / §9.15 End;
+    reference Constants.MIN_LONG/MAX_LONG). Authored L-ness is erased at
+    translation, so the magnitude of the peer bound (beyond int32) is the
+    Long signal. Successor of Long max is null (Appendix C), so meets at the
+    sentinel boundary is null-uncertain rather than a wrong determined true.
+
+    QA-002: Quantity intervals with closed null bounds sentinel to
+    Quantity(MIN_DECIMAL/MAX_DECIMAL, unit) per the reference Interval.start/
+    .end getters, so On Or Before / On Or After / Meets return determined
+    results instead of null.
+    """
+    cql = """library CQL16Historian2026_08 version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define LongEnd: end of Interval[5000000000L, null]
+define LongStart: start of Interval[null, 5000000000L]
+define LongMeetsFalse: Interval[5000000000L, null] meets Interval[2147483648L, 2147483649L]
+define LongMeetsBeforeOverflowFalse: Interval[5000000000L, null] meets before Interval[9223372036854775807L, 9223372036854775807L]
+define TemporalMeetsBeforeOverflowFalse: Interval[@2024-01-01, null] meets before Interval[@9999-12-31, @9999-12-31]
+define LongMeetsMaxOverflowFalse: Interval[5000000000L, null] meets Interval[9223372036854775807L, 9223372036854775807L]
+define LongOnOrBeforeFalse: Interval[5000000000L, null] on or before Interval[2147483648L, 2147483648L]
+define LongOnOrBeforeTrue: Interval[null, 5000000000L] on or before Interval[6000000000L, 7000000000L]
+define QtyOnOrBeforeFalse: Interval[1 'g', null] on or before Interval[2 'g', 3 'g']
+define QtyOnOrAfterFalse: Interval[null, 5 'g'] on or after Interval[6 'g', 7 'g']
+define QtyMeetsNullLowFalse: Interval[null, 4 'g'] meets Interval[5 'g', 6 'g']
+define QtyOverlapsNullLowTrue: Interval[null, 5 'g'] overlaps Interval[1 'g', 2 'g']
+define QtyIncludedInNullLowTrue: Interval[2 'g', 3 'g'] included in Interval[null, 5 'g']
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "LongEnd": ("9223372036854775807",),
+        "LongStart": ("-9223372036854775808",),
+        "LongMeetsFalse": (False,),
+        # Successor of the Long max sentinel overflows (Appendix C); the pinned
+        # CQL-16 SKEPTIC convention (reference isMax guard) lowers to false.
+        "LongMeetsBeforeOverflowFalse": (False,),
+        "TemporalMeetsBeforeOverflowFalse": (False,),
+        "LongMeetsMaxOverflowFalse": (False,),
+        "LongOnOrBeforeFalse": (False,),
+        "LongOnOrBeforeTrue": (True,),
+        "QtyOnOrBeforeFalse": (False,),
+        "QtyOnOrAfterFalse": (False,),
+        "QtyMeetsNullLowFalse": (False,),
+        "QtyOverlapsNullLowTrue": (True,),
+        "QtyIncludedInNullLowTrue": (True,),
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expr in translated.items():
+                sql = f"SELECT {expr.to_sql()}"
+                py_result = py.execute(sql).fetchone()
+                cpp_result = cpp.execute(sql).fetchone()
+                no_py_result = no_py.execute(sql).fetchone()
+                assert py_result == cpp_result == no_py_result, (
+                    name,
+                    py_result,
+                    cpp_result,
+                    no_py_result,
+                )
+                assert py_result == expected[name], (name, py_result)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part2_native_effective_bounds_and_cross_numeric_parity() -> None:
+    """CQL-16 EXPLORER regression coverage (2026-08-22).
+
+    Two native-only defects fixed dual-engine:
+    - §9.9 Intersect must use effective Start/End bounds (§9.14/§9.15):
+      open discrete bounds step to successor/predecessor and the result
+      bounds are closed (reference IntersectEvaluator).
+    - §2 implicit numeric conversions: Integer and Decimal interval bounds
+      are comparable across types; the native ``BoundValue::compare`` type
+      gate previously returned incomparable (-2), yielding SQL NULL — and
+      wrong deterministic FALSE for overlaps/included-in — in no-Python
+      mode.
+    """
+    cases = [
+        # Effective-bound intersect (open bounds participate via succ/pred).
+        (
+            "SELECT intervalIntersect(intervalFromBounds('1', '5', true, false), "
+            "intervalFromBounds('4', '8', true, true))",
+            ('{"low": "4", "high": "4", "lowClosed": true, "highClosed": true}',),
+        ),
+        (
+            "SELECT intervalIntersect(intervalFromBounds('1', '5', true, false), "
+            "intervalFromBounds('3', '7', false, true))",
+            ('{"low": "4", "high": "4", "lowClosed": true, "highClosed": true}',),
+        ),
+        # Integer vs Decimal bounds across the part-2 family.
+        (
+            "SELECT intervalMeets(intervalFromBounds('1', '3', true, true), "
+            "intervalFromBounds('4.00000001', '6', true, true))",
+            (False,),
+        ),
+        (
+            "SELECT intervalOverlaps(intervalFromBounds('1', '3', true, true), "
+            "intervalFromBounds('2.5', '5', true, true))",
+            (True,),
+        ),
+        (
+            "SELECT intervalOnOrBefore(intervalFromBounds('1', '3', true, true), "
+            "intervalFromBounds('3.5', '6', true, true))",
+            (True,),
+        ),
+        (
+            "SELECT intervalIntersect(intervalFromBounds('1', '3', true, true), "
+            "intervalFromBounds('2.5', '5', true, true))",
+            ('{"low": "2.5", "high": "3", "lowClosed": true, "highClosed": true}',),
+        ),
+        (
+            "SELECT intervalIncludedIn(intervalFromBounds('1', '3', true, true), "
+            "intervalFromBounds('0.5', '5', true, true))",
+            (True,),
+        ),
+        (
+            "SELECT intervalEquivalent(intervalFromBounds('1', '3', true, true), "
+            "intervalFromBounds('1.0', '3.0', true, true))",
+            (True,),
+        ),
+        (
+            "SELECT intervalOverlapsBefore(intervalFromBounds('1', '3', true, true), "
+            "intervalFromBounds('2.5', '5', true, true))",
+            (True,),
+        ),
+        (
+            "SELECT intervalOverlapsAfter(intervalFromBounds('2.5', '5', true, true), "
+            "intervalFromBounds('1', '3', true, true))",
+            (True,),
+        ),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for sql, expected in cases:
+                assert py.execute(sql).fetchone() == expected, sql
+                assert cpp.execute(sql).fetchone() == expected, sql
+                assert no_py.execute(sql).fetchone() == expected, sql
+    finally:
+        py.close()
+        cpp.close()

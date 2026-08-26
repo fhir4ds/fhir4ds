@@ -67,6 +67,12 @@ def equality(ctx, x, y):
 
     # §6.1: calendar years/months are not equal to definite UCUM years/months;
     # equality is indeterminate/empty. Other time-valued units are comparable.
+    # FP-01 HISTORIAN QA-001 (2026-08-16): verified against the OFFICIAL R4
+    # fixtures, which pin `'1 'a''.toQuantity() = 1 year` and the 'mo' analog
+    # to EMPTY (tests-fhir-r4.xml testStringQuantity{Year,Month}Literal-
+    # ToQuantity have no <output> element). The N1/master prose ("considered
+    # unequal", `1 year = 1 'a'` // false) conflicts with the official suite;
+    # per the QA-005 precedent, official fixtures outrank spec prose.
     if isinstance(a, nodes.FP_Quantity) and isinstance(b, nodes.FP_Quantity):
         if _mixed_calendar_ucum_year_month(a.unit, b.unit):
             return None
@@ -81,6 +87,16 @@ def equality(ctx, x, y):
     if isinstance(a, nodes.FP_Quantity) and isinstance(b, nodes.FP_Quantity):
         if a.unit == b.unit:
             return a.value == b.value
+        # FP-01 SKEPTIC QA-003 (2026-08-16): year↔month pairs compare in
+        # months (§5.5.7: "1 year = 12 months"), never through day-based
+        # seconds factors — the spec table is month-based for year↔month and
+        # day-based (30d/365d) for year/month vs day-and-below, and the two
+        # are intentionally not reconcilable in seconds.
+        if (
+            a.unit in nodes.FP_Quantity._years_and_months
+            and b.unit in nodes.FP_Quantity._years_and_months
+        ):
+            return a._compare_years_and_months(b, year_units=["'a'", "year", "years"])
         l_base = _quantity_base(a)
         r_base = _quantity_base(b)
         if l_base is None or r_base is None:
@@ -153,8 +169,18 @@ def _complex_equality(ctx, a, b):
     return equality(ctx, [a], [b])
 
 
+# FP-13 HISTORIAN (2026-08-17): §6.1.2 String Equivalence normalizes
+# whitespace "as defined in the Whitespace lexical category" (§Lexical
+# Structure > Whitespace), which is ONLY tab, LF, CR and space — not the
+# full Unicode whitespace set that str.isspace() accepts (NBSP, U+001C-001F,
+# U+2028, ideographic space, ...).
+_FHIRPATH_WHITESPACE = frozenset("\t\n\r ")
+
+
 def normalize_string(s):
-    return "".join(" " if ch.isspace() else ch.casefold() for ch in s)
+    return "".join(
+        " " if ch in _FHIRPATH_WHITESPACE else ch.casefold() for ch in s
+    )
 
 
 def decimal_places(a):
@@ -424,11 +450,26 @@ def equivalence(ctx, x, y):
 
 
 def _quantity_base(q):
+    # FP-01 SKEPTIC QA-003 (2026-08-16): FHIRPath N1 §5.5.7 calendar
+    # conversion factors govern unanchored equality/equivalence of
+    # time-valued quantities (per §6.1.1/§6.2 units are supported "as
+    # specified by UCUM, as well as the calendar durations as defined in
+    # the toQuantity function"): 1 month = 30 days, 1 year = 365 days.
+    # UCUM 'mo'/'a' keep their mean-duration seconds. Mixed
+    # calendar-vs-UCUM year/month pairs are rejected by the caller's
+    # _mixed_calendar_ucum_year_month guard before reaching here.
+    calendar = nodes.FP_Quantity._unanchored_duration_seconds(q.unit, q.value)
+    if calendar is not None:
+        return calendar
     unit = q.unit
     clean_unit = nodes.FP_Quantity._strip_unit_quotes(unit)
     if (
         unit not in nodes.FP_Quantity._ucum_base_conversion_factor
         and clean_unit not in nodes.FP_Quantity._ucum_base_conversion_factor
+        # FP-02 SKEPTIC QA-003 (2026-08-16): multi-term/exponent UCUM units
+        # ('m2/m', 'm3', 'g.m/s2') reduce through the base table too, so
+        # §6.6.1/§6.6.2 arithmetic results compare per §6.1.1.
+        and not nodes.FP_Quantity._unit_reduces_to_base(unit)
     ):
         return None
     converted = nodes.FP_Quantity.conv_unit_to_base(q.unit, q.value)
@@ -444,10 +485,25 @@ def datetime_equality(ctx, x, y):
         v_x = util.get_data(datetime_x)
         if not isinstance(v_x, str):
             return None
+        # FP-01 HISTORIAN QA-003 (2026-08-16): plain (untyped) Strings do
+        # not implicitly convert to Time — the §5.5 conversion table marks
+        # String→Date/DateTime/Time Explicit-only — so `@T14:34:28 =
+        # '14:34:28'` is empty, matching the native engine. Date-like
+        # strings keep the JSON-convenience coercion both engines apply
+        # for Date/DateTime peers, and strings carrying FHIR type metadata
+        # (ResourceNode) still participate in temporal comparison.
+        if type(datetime_y) is nodes.FP_Time and not isinstance(
+            datetime_x, nodes.ResourceNode
+        ):
+            return None
         datetime_x = nodes.FP_TimeBase.get_match_data(v_x)
     if type(datetime_y) not in DATETIME_NODES_LIST:
         v_y = util.get_data(datetime_y)
         if not isinstance(v_y, str):
+            return None
+        if type(datetime_x) is nodes.FP_Time and not isinstance(
+            datetime_y, nodes.ResourceNode
+        ):
             return None
         datetime_y = nodes.FP_TimeBase.get_match_data(v_y)
     if datetime_x is None or datetime_y is None:
@@ -565,12 +621,19 @@ def typecheck(a, b):
         d = None
 
         # TODO refactor
-        if lClass == str and (rClass == nodes.FP_DateTime or rClass == nodes.FP_Time or rClass == nodes.FP_Date):
-            d = nodes.FP_Date(a) or nodes.FP_DateTime(a) or nodes.FP_Time(a)
+        # FP-03 SKEPTIC QA-002 (2026-08-16): time-shaped plain strings are NOT
+        # coerced against FP_Time peers for ordering. Per the §5.5 conversion
+        # table String→Time is Explicit-only, matching the pinned Time-vs-
+        # String equality convention (FP-01 QA-003) and the native engine,
+        # which signals the §6.2 type error for `@T... < 'hh:mm'` shapes.
+        # Date/DateTime-shaped string coercion is a shared JSON-convenience
+        # convention in BOTH engines and stays.
+        if lClass == str and (rClass == nodes.FP_DateTime or rClass == nodes.FP_Date):
+            d = nodes.FP_Date(a) or nodes.FP_DateTime(a)
             if d is not None:
                 rtn = [d, b]
-        elif rClass == str and (lClass == nodes.FP_DateTime or lClass == nodes.FP_Time or lClass == nodes.FP_Date):
-            d = nodes.FP_Date(b) or nodes.FP_DateTime(b) or nodes.FP_Time(b)
+        elif rClass == str and (lClass == nodes.FP_DateTime or lClass == nodes.FP_Date):
+            d = nodes.FP_Date(b) or nodes.FP_DateTime(b)
             if d is not None:
                 rtn = [a, d]
         # Allow Date vs DateTime comparison - they are both FP_TimeBase types

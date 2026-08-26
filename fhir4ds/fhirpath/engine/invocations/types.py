@@ -81,8 +81,13 @@ def as_fn(ctx, coll, type_info):
     if _matches_unqualified_choice_primitive(coll[0], type_info):
         return coll
     value_type = TypeInfo.from_value(coll[0])
-    # FHIR R4 primitive conformance treats primitive casts as exact even though
-    # complex/resource FHIR types follow the §6.3 "type or subclass" rule.
+    # FP-15 HISTORIAN (2026-08-18): official R4 fixtures pin `as`/`ofType` as
+    # EXACT-match for FHIR primitive specifiers while `is` uses the full
+    # subtype rule: testFHIRPathAsFunction11 `Patient.gender.as(string)` is
+    # EMPTY (missing <output>) although `gender is string` is TRUE
+    # (testFHIRPathIsFunction group; code <: string per R4). Fixtures outrank
+    # spec prose (GLOBAL_RULES), so primitive casts stay exact; complex and
+    # resource FHIR types keep the §6.3 "type or subclass" rule.
     if (
         value_type.namespace == TypeInfo.FHIR
         and type_info.namespace in (TypeInfo.FHIR, None)

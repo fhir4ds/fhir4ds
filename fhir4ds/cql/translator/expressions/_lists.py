@@ -80,6 +80,7 @@ from ...translator.types import (
     SQLExcept,
 )
 from ...translator.expressions._utils import (
+    _promote_fhirpath_text_list,
     BINARY_OPERATOR_MAP,
     UNARY_OPERATOR_MAP,
     _coerce_query_rows_to_list,
@@ -91,6 +92,7 @@ from ...translator.expressions._utils import (
     _get_qicore_extension_fhirpath,
     _resolve_library_code_constant,
 )
+from ...translator.expressions._operators import _ensure_parse_quantity
 from ...errors import TranslationError
 
 if TYPE_CHECKING:
@@ -151,11 +153,56 @@ class ListsMixin:
 
     def _translate_list_expression(self, lst: ListExpression, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL list to SQL array."""
+        self._validate_list_selector_common_type(lst)
         elements = []
         for element in lst.elements:
             source = self._static_conversion_source_node(element)
             elements.append(self.translate(source or element, boolean_context=False))
         return SQLArray(elements=elements)
+
+    def _validate_list_selector_common_type(self, lst: ListExpression) -> None:
+        """CQL-18 EXPLORER QA-005: list selector elements must share a common
+        type (CQL 1.5 Appendix B List selector). A statically String vs
+        numeric/Boolean heterogeneous literal list has no common element
+        type; it must fail at translation time with a typed error instead of
+        surfacing later as a DuckDB ConversionException on generated SQL.
+        """
+        from ...errors import TranslationError
+        from ...parser.ast_nodes import Literal as CQLLiteral
+        numeric = {"Integer", "Long", "Decimal"}
+        saw_string = saw_numeric = saw_boolean = False
+        for element in lst.elements:
+            node = self._static_conversion_source_node(element) or element
+            inferred = None
+            if hasattr(self, "_infer_cql_type"):
+                try:
+                    inferred = self._infer_cql_type(node)
+                except Exception:
+                    inferred = None
+            t = str(inferred or "").replace("System.", "")
+            if not t or t == "Any":
+                # Fall back to literal-shape inference (the expression
+                # translator may not carry the full inference mixin).
+                if isinstance(node, CQLLiteral):
+                    v = node.value
+                    if isinstance(v, bool):
+                        t = "Boolean"
+                    elif isinstance(v, (int, float)):
+                        t = "Integer" if isinstance(v, int) else "Decimal"
+                    elif isinstance(v, str):
+                        t = "String"
+            if t == "String":
+                saw_string = True
+            elif t in numeric:
+                saw_numeric = True
+            elif t == "Boolean":
+                saw_boolean = True
+        if (saw_string and (saw_numeric or saw_boolean)) or (saw_boolean and saw_numeric):
+            raise TranslationError(
+                "CQL list selector elements must share a common element type "
+                "(CQL 1.5 Appendix B List selector); the literal list mixes "
+                "incompatible element types (String/numeric/Boolean)."
+            )
 
     def _infer_row_shape_for_expr(self, expr: Any) -> RowShape:
         """Helper to infer row shape from expression for conditional handling."""
@@ -359,6 +406,8 @@ class ListsMixin:
         when_clauses = []
         is_searched_case = expr.comparand is None
 
+        reached_true_tail = False
+        else_clause = None
         for item in expr.case_items:
             condition = self.translate(item.when, boolean_context=True)
             condition = _demote_audit_struct_to_bool(condition)
@@ -366,12 +415,21 @@ class ListsMixin:
                 if condition.value is False:
                     continue
                 if condition.value is True:
-                    return self.translate(item.then, boolean_context=boolean_context)
+                    true_result = self.translate(item.then, boolean_context=boolean_context)
+                    if not when_clauses:
+                        # No earlier (dynamic) whens: everything before was
+                        # statically false, so this branch wins outright.
+                        return true_result
+                    # Earlier dynamic whens exist: CASE is first-match, so a
+                    # later literal-true when is only the fallback. Later
+                    # whens and the else clause are unreachable past it.
+                    else_clause = true_result
+                    reached_true_tail = True
+                    break
             result = self.translate(item.then, boolean_context=boolean_context)
             when_clauses.append((condition, result))
 
-        else_clause = None
-        if expr.else_expr:
+        if not reached_true_tail and expr.else_expr:
             else_clause = self.translate(expr.else_expr, boolean_context=boolean_context)
 
         if is_searched_case and not when_clauses:
@@ -494,6 +552,27 @@ class ListsMixin:
                 )
             return self._translate_quantity(Quantity(value=value, unit=unit), boolean_context)
 
+        # CQL-03 QA-002: Ratio { numerator: X, denominator: Y } tuple
+        # selectors must produce canonical FHIR Ratio JSON with
+        # quantity-object components, so ratioCompare()/accessors see the
+        # same shape as ToRatio() literals. The generic json_object path
+        # embeds quantity JSON as raw scalars/strings, which
+        # _parse_valid_ratio rejects (equality → null, equivalence → false).
+        if self._bare_cql_type_name(inst.type) == "Ratio":
+            folded = self._fold_ratio_instance(inst)
+            if folded is not None:
+                return folded
+
+        # CQL-02 QA-002: Concept { codes: { ... } } instances with statically
+        # resolvable members must produce the same structured Concept JSON as
+        # ToConcept/named concept declarations. The generic json_object path
+        # below embeds already-serialized named-code literals as STRINGS
+        # inside the codes list, double-serializing them.
+        if self._bare_cql_type_name(inst.type) == "Concept":
+            folded = self._fold_static_concept_instance(inst)
+            if folded is not None:
+                return folded
+
         # Generic instance - build JSON object
         args = []
         for elem in inst.elements:
@@ -503,6 +582,88 @@ class ListsMixin:
             args.append(value)
 
         return SQLFunctionCall(name="json_object", args=args)
+
+    def _fold_ratio_instance(self, inst: InstanceExpression):
+        """Fold a Ratio { numerator: X, denominator: Y } instance to canonical
+        FHIR Ratio JSON with quantity-object components.
+
+        Per CQL 1.5 (Types/Ratio + Appendix B), the Ratio constructor takes
+        Quantity components; Integer/Decimal components implicitly convert to
+        unit-'1' quantities. Components are emitted as nested JSON objects
+        (CAST(<quantity JSON> AS JSON)) so ratioCompare's quantity-object
+        validation accepts them, matching the ToRatio() literal shape.
+
+        Returns None when a component cannot be statically folded to a
+        quantity, letting the generic instance path apply.
+        """
+        def component_quantity_sql(elem):
+            if elem is None:
+                return SQLNull()
+            node = elem.type
+            if isinstance(node, Literal):
+                if node.value is None:
+                    return SQLNull()
+                if isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+                    return self._translate_quantity(
+                        Quantity(value=node.value, unit="1"), boolean_context=False
+                    )
+                return None
+            if self._is_cql_quantity_expr(node):
+                return _ensure_parse_quantity(
+                    self.translate(node, boolean_context=False)
+                )
+            return None
+
+        numerator_elem = next((e for e in inst.elements if e.name == "numerator"), None)
+        denominator_elem = next((e for e in inst.elements if e.name == "denominator"), None)
+        numerator = component_quantity_sql(numerator_elem)
+        denominator = component_quantity_sql(denominator_elem)
+        if numerator is None or denominator is None:
+            return None
+
+        def as_json_object(expr):
+            # parse_quantity(...) yields VARCHAR quantity JSON; nest it as a
+            # JSON object so json_object('numerator', ...) stores the object,
+            # not a double-encoded string.
+            return SQLCast(expression=expr, target_type="JSON")
+
+        return SQLFunctionCall(
+            name="json_object",
+            args=[
+                SQLLiteral(value="numerator"), as_json_object(numerator),
+                SQLLiteral(value="denominator"), as_json_object(denominator),
+            ],
+        )
+
+    def _fold_static_concept_instance(self, inst: InstanceExpression):
+        """Fold a Concept instance with statically known members to a literal.
+
+        Returns None when any codes member is not statically resolvable so
+        dynamic Concept instances keep the generic runtime construction.
+        """
+        import json as _json
+
+        codes = None
+        display = None
+        for elem in inst.elements:
+            if elem.name == "codes" and isinstance(elem.type, ListExpression):
+                entries = []
+                for item in elem.type.elements:
+                    value = self._static_clinical_value_object(item)
+                    if not (isinstance(value, dict) and value.get("code")):
+                        return None
+                    entries.append(self._normalize_static_clinical_code(value))
+                codes = entries
+            elif elem.name == "display":
+                display_expr = self.translate(elem.type, boolean_context=False)
+                if isinstance(display_expr, SQLLiteral) and isinstance(display_expr.value, str):
+                    display = display_expr.value
+        if codes is None:
+            return None
+        concept_obj = {"codes": codes}
+        if display is not None:
+            concept_obj["display"] = display
+        return SQLLiteral(value=_json.dumps(concept_obj, separators=(",", ":")))
 
     def _translate_method_invocation(self, expr: MethodInvocation, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL method invocation to SQL."""
@@ -517,6 +678,22 @@ class ListsMixin:
             return self._translate_function_ref(qualified_func, boolean_context=boolean_context)
 
         method = expr.method
+        # RESOURCE_ROWS definition aliases must surface the per-patient
+        # element LIST for element-selection methods (CQL 1.5 Appendix B
+        # First/Last/SingletonFrom); generic identifier translation
+        # scalarizes the reference instead.
+        _method_lower = method.lower()
+        if (
+            isinstance(expr.source, Identifier)
+            and _method_lower in {"first", "last", "singletonfrom"}
+        ):
+            _rows_list = self._definition_resource_rows_list(expr.source.name)
+            if _rows_list is not None:
+                _pos = 1 if _method_lower in {"first", "singletonfrom"} else -1
+                return SQLFunctionCall(
+                    name="list_extract",
+                    args=[_rows_list, SQLLiteral(value=_pos)],
+                )
         source_usage = (
             ExprUsage.LIST
             if method.lower() in {"first", "last", "singletonfrom", "count", "distinct", "where", "select"}
@@ -751,6 +928,22 @@ class ListsMixin:
             meta_type = getattr(meta, "cql_type", None) if meta else None
             if meta_type and str(meta_type).split(".")[-1] == "String":
                 return True
+            # Scalar (non-list) definitions are the other legal Indexer
+            # target besides lists: the String indexer (CQL §17.6). Static
+            # inference cannot yet resolve property chains such as
+            # ``First([Patient]).name.family`` (cql_type 'Any'), so any
+            # scalar definition that is not a tuple routes through the
+            # public Indexer macro (null on out-of-range), never
+            # LIST_EXTRACT — per the pinned CQL-12 string-indexer doctrine.
+            if meta is not None and getattr(meta, "is_scalar", False):
+                bare = str(meta_type or "Any").split(".")[-1]
+                if bare == "String":
+                    return True
+                # Untyped scalar (cql_type Any): only String indexing is
+                # defined for scalars in CQL, so use the string Indexer.
+                # Typed non-String scalars fall through to the list path,
+                # which surfaces the invalid indexer.
+                return bare == "Any"
         if isinstance(ast_expr, BinaryExpression) and ast_expr.operator == "as":
             target = ast_expr.right
             if isinstance(target, NamedTypeSpecifier) and target.name.split(".")[-1] == "String":
@@ -782,8 +975,6 @@ class ListsMixin:
         if isinstance(sql_expr, SQLCast) and sql_expr.target_type.upper() in {"VARCHAR", "TEXT", "STRING"}:
             return True
         if isinstance(sql_expr, SQLFunctionCall) and sql_expr.name in {
-            "fhirpath_text",
-            "fhirpath_scalar",
             "ToString",
             "system.substring",
             "system.upper",
@@ -800,6 +991,25 @@ class ListsMixin:
 
     def _translate_indexer_expression(self, expr: IndexerExpression, boolean_context: bool = False) -> SQLExpression:
         """Translate an indexer expression (array[i]) to SQL."""
+        # RESOURCE_ROWS definition aliases (``define L: [Observation]`` then
+        # ``L[0].status``) must index the per-patient element LIST; generic
+        # identifier translation scalarizes the reference (LIMIT-1 row or a
+        # multi-row scalar-subquery binder error).
+        if isinstance(expr.source, Identifier):
+            _rows_list = self._definition_resource_rows_list(expr.source.name)
+            if _rows_list is not None:
+                index = self.translate(expr.index, boolean_context=False)
+                adjusted_index = SQLCast(
+                    expression=SQLBinaryOp(
+                        operator="+",
+                        left=index,
+                        right=SQLLiteral(value=1),
+                    ),
+                    target_type="BIGINT",
+                )
+                return SQLFunctionCall(
+                    name="list_extract", args=[_rows_list, adjusted_index]
+                )
         source = self.translate(expr.source, boolean_context=False)
         index = self.translate(expr.index, boolean_context=False)
 
@@ -822,15 +1032,29 @@ class ListsMixin:
         # index directly — it must first be parsed into a native list type.
         _json_string_funcs = {
             'json_extract_string', 'json_extract',
+            # JSON-returning interval list functions (CQL-15 EXPLORER QA-001):
+            # collapse_intervals/collapse_intervals_per/expand return JSON
+            # array text (VARCHAR); LIST_EXTRACT over the raw string does
+            # character extraction. Parse to a DuckDB list first, mirroring
+            # the First/Last handling in _lists (JSON list funcs doctrine).
+            'collapse_intervals', 'collapse_intervals_per', 'expand',
         }
         if isinstance(source, SQLFunctionCall) and source.name in _json_string_funcs:
             source = SQLFunctionCall(
                 name="from_json",
                 args=[source, SQLLiteral(value='["VARCHAR"]')],
             )
-        elif isinstance(source, SQLFunctionCall) and source.name == 'fhirpath_text':
-            # fhirpath_text returns a single value, not an array — switch to
-            # fhirpath() which returns VARCHAR[] for proper indexing
+        elif isinstance(source, SQLFunctionCall) and source.name in (
+            'fhirpath_text', 'fhirpath_scalar',
+        ):
+            # fhirpath_text/fhirpath_scalar return a single value, not an
+            # array — switch to fhirpath() which returns VARCHAR[] for
+            # proper indexing. CQL 1.5 §Property: accessing a property of a
+            # multi-valued element yields the LIST of values (implicit
+            # traversal), so bracket indexing over chained navigation is
+            # element indexing, never character indexing (CQL-12 EXPLORER
+            # QA-002: 'name.given[0]' must be the first given element, not
+            # the first character of the collapsed first value).
             source = SQLFunctionCall(name='fhirpath', args=source.args)
         # fhirpath/fhirpath_json already return arrays — no conversion needed
 
@@ -843,6 +1067,16 @@ class ListsMixin:
         if normalized_count_type not in {"Any", "Integer"}:
             raise TranslationError(f"CQL Skip count argument must be Integer; got {count_type}")
         source = self.translate(node.source, boolean_context=False)
+        # CQL-19 SKEPTIC QA-002: dynamic multi-valued FHIR properties lower
+        # to scalar fhirpath_text (first-node truncation); Skip must see the
+        # full element list (CQL 1.5 §10.23).
+        source = _promote_fhirpath_text_list(source)
+        # CQL-19 EXPLORER QA-002: retrieve-shaped sources (bare retrieves,
+        # resource-define aliases, retrieve unions, query returns) lower
+        # rows-shaped and must be materialized into the element list.
+        _full_list = self._list_operator_full_list_source(node.source)
+        if _full_list is not None:
+            source = _full_list
         count = self.translate(node.count, boolean_context=False)
         return SQLFunctionCall(name="Skip", args=[source, count])
 
@@ -853,6 +1087,15 @@ class ListsMixin:
         if normalized_count_type not in {"Any", "Integer"}:
             raise TranslationError(f"CQL Take count argument must be Integer; got {count_type}")
         source = self.translate(node.source, boolean_context=False)
+        # CQL-19 SKEPTIC QA-002: promote scalar fhirpath_text sources to the
+        # full list projection — Take over VARCHAR character-slices the first
+        # node ('P') instead of taking the first ELEMENT (CQL 1.5 §10.24).
+        source = _promote_fhirpath_text_list(source)
+        # CQL-19 EXPLORER QA-002: retrieve-shaped sources lower rows-shaped
+        # and must be materialized into the element list.
+        _full_list = self._list_operator_full_list_source(node.source)
+        if _full_list is not None:
+            source = _full_list
         count = self.translate(node.count, boolean_context=False)
         return SQLFunctionCall(name="Take", args=[source, count])
 
@@ -942,6 +1185,10 @@ class ListsMixin:
 
         # Generic fallback: translate source as list, apply order-preserving Distinct macro
         source = self.translate(node.source, usage=ExprUsage.LIST)
+        # CQL-18 SKEPTIC relaunch QA-003: dynamic multi-valued FHIR properties
+        # lower to scalar fhirpath_text; promote to the full list projection
+        # so Distinct sees every element (and LIST() aggregation is not needed).
+        source = _promote_fhirpath_text_list(source)
         if _is_list_returning_sql(source):
             return SQLFunctionCall(name='"Distinct"', args=[source])
         return SQLFunctionCall(name='"Distinct"',
@@ -1188,7 +1435,7 @@ class ListsMixin:
             # not a DuckDB list.  Convert to list so First/Last can extract.
             if (
                 isinstance(source_sql, SQLFunctionCall)
-                and source_sql.name == "collapse_intervals"
+                and source_sql.name in ("collapse_intervals", "collapse_intervals_per")
             ):
                 list_expr = SQLFunctionCall(
                     name="from_json",
@@ -2015,6 +2262,166 @@ class ListsMixin:
         # Default to fhirpath_number for Quantity values (common case)
         return "fhirpath_number"
 
+    def _list_operator_source_is_retrieve_shaped(self, node) -> bool:
+        """CQL-19 EXPLORER QA-002 companion predicate for
+        `_list_operator_full_list_source`: True for sources the generic
+        list-operator paths lower rows-shaped."""
+        if isinstance(node, (Retrieve, Query)):
+            return True
+        if isinstance(node, Identifier):
+            meta = self.context.definition_meta.get(node.name)
+            if meta is None:
+                return False
+            if getattr(meta, "has_resource", False):
+                return True
+            # Element-rows value CTE (`define RetList: [Observation] O
+            # return O.id` stores one row per element): consumers must
+            # LIST()-aggregate the rows (CQL-19 EXPLORER QA-002). Scalar
+            # defines (PATIENT_SCALAR, e.g. String for Length(String)) keep
+            # their existing scalar paths.
+            return (
+                meta.shape == RowShape.PATIENT_MULTI_VALUE
+                or str(meta.cql_type).startswith("List<")
+            ) and not getattr(meta, "stores_list_value", False)
+        if isinstance(node, BinaryExpression) and (getattr(node, "operator", "") or "").strip().lower() in {"union", "|"}:
+            return True
+        return False
+
+    def _list_operator_full_list_source(self, node) -> Optional[SQLExpression]:
+        """CQL-19 EXPLORER QA-002: materialize retrieve-shaped list-operator
+        operands into the per-patient element list.
+
+        CQL 1.5 Appendix B (Tail §10.23 / Take §10.24 / Skip / Length /
+        SingletonFrom §20.30) accepts any list — including lists of resources
+        from retrieves and lists produced by query return clauses. Those
+        sources lower rows-shaped (RetrievePlaceholder CTE scans, 2-column
+        retrieve unions, scalar return subqueries); consuming them directly
+        produces binder errors or cross-patient rows. Build the correlated
+        per-patient LIST here. Returns None when the operand keeps the
+        existing (literal / stored-list / dynamic-property) paths.
+        """
+        def _patient_list(from_expr, col: str = "resource") -> SQLExpression:
+            _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
+            return SQLFunctionCall(
+                name="COALESCE",
+                args=[
+                    SQLSubquery(query=SQLSelect(
+                        columns=[SQLFunctionCall(
+                            name="list",
+                            args=[SQLQualifiedIdentifier(parts=["_lst_src", col])],
+                        )],
+                        from_clause=SQLAlias(expr=from_expr, alias="_lst_src"),
+                        where=SQLBinaryOp(
+                            operator="=",
+                            left=SQLQualifiedIdentifier(parts=["_lst_src", "patient_id"]),
+                            right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+                        ),
+                    )),
+                    SQLArray(elements=[]),
+                ],
+            )
+
+        # Bare retrieve (list of resources) -> per-patient resource list.
+        if isinstance(node, Retrieve):
+            return _patient_list(self.translate(node, usage=ExprUsage.LIST))
+
+        # Resource-define alias (`define Obs: [Observation]; Tail(Obs)`) —
+        # the define's CTE is named after the define and holds one row per
+        # patient resource.
+        if isinstance(node, Identifier):
+            meta = self.context.definition_meta.get(node.name)
+            if meta is not None and getattr(meta, "has_resource", False):
+                return _patient_list(SQLIdentifier(name=node.name, quoted=True))
+            if (
+                meta is not None
+                and (
+                    meta.shape == RowShape.PATIENT_MULTI_VALUE
+                    or str(meta.cql_type).startswith("List<")
+                )
+                and not getattr(meta, "stores_list_value", False)
+            ):
+                # Element-rows value CTE: LIST()-aggregate the value column
+                # rows per patient.
+                return _patient_list(SQLIdentifier(name=node.name, quoted=True), col=meta.value_column or "value")
+
+        # Retrieve union (`Length([Observation] union [Condition])`) —
+        # resolve resource-define aliases to their retrieves, then LIST the
+        # union rows' resource column per patient.
+        if isinstance(node, BinaryExpression) and (getattr(node, "operator", "") or "").strip().lower() in {"union", "|"}:
+            def _resolve_leaf(_n):
+                if isinstance(_n, Retrieve):
+                    return _n
+                if isinstance(_n, BinaryExpression) and (getattr(_n, "operator", "") or "").strip().lower() in {"union", "|"}:
+                    _l = _resolve_leaf(_n.left)
+                    _r = _resolve_leaf(_n.right)
+                    return _n if (_l is not None and _r is not None) else None
+                if isinstance(_n, Identifier):
+                    _m = self.context.definition_meta.get(_n.name)
+                    if _m is not None and getattr(_m, "has_resource", False):
+                        _ast = self._definition_ast_for_identifier(_n)
+                        return _resolve_leaf(_ast) if _ast is not None else None
+                return None
+
+            _resolved = _resolve_leaf(node)
+            if _resolved is not None:
+                _union_sql = self.translate(_resolved, usage=ExprUsage.LIST)
+                if isinstance(_union_sql, SQLUnion):
+                    return _patient_list(_union_sql)
+
+        # Query with a return clause (`[Observation] O return O.id`) — the
+        # LIST translation is a single-column rows subquery; wrap with the
+        # aggregate LIST() machinery, which also injects the per-patient
+        # correlation for CTE-backed sources.
+        if isinstance(node, Query):
+            _sql = self.translate(node, usage=ExprUsage.LIST)
+            if not isinstance(_sql, RetrievePlaceholder):
+                _wrapped = self._wrap_list_aggregate("list", _sql)
+                if _wrapped is not None:
+                    return SQLFunctionCall(
+                        name="COALESCE",
+                        args=[_wrapped, SQLArray(elements=[])],
+                    )
+
+        return None
+
+    def _apply_singleton_from_list_value(self, source: SQLExpression) -> SQLExpression:
+        """Element-cardinality CASE for an SQL expression that EVALUATES to
+        the element list but is not statically recognized by
+        `_is_list_returning_sql` (e.g., a stored-list define's value-column
+        subquery). CQL 1.5 §20.30 Singleton From: null list -> null,
+        0 elements -> null, 1 element -> the element, >1 -> run-time error.
+        See CQL-19 HISTORIAN QA-002.
+        """
+        length_expr = SQLFunctionCall(name="array_length", args=[source, SQLLiteral(value=1)])
+        return SQLCase(
+            when_clauses=[
+                (
+                    SQLUnaryOp(operator="IS NULL", operand=source, prefix=False),
+                    SQLNull(),
+                ),
+                (
+                    SQLBinaryOp(
+                        operator="=",
+                        left=length_expr,
+                        right=SQLLiteral(value=0),
+                    ),
+                    SQLNull(),
+                ),
+                (
+                    SQLBinaryOp(
+                        operator="=",
+                        left=length_expr,
+                        right=SQLLiteral(value=1),
+                    ),
+                    SQLFunctionCall(name="LIST_EXTRACT", args=[source, SQLLiteral(value=1)]),
+                )
+            ],
+            else_clause=SQLFunctionCall(
+                name="error",
+                args=[SQLLiteral("SingletonFrom: Expected a list with at most one element")],
+            ),
+        )
+
     def _apply_singleton_from(self, source: SQLExpression) -> SQLExpression:
         """Apply 'singleton from' semantics to source.
 
@@ -2032,35 +2439,7 @@ class ListsMixin:
         For array/list expressions, use a similar pattern with array_length.
         """
         if _is_list_returning_sql(source):
-            length_expr = SQLFunctionCall(name="array_length", args=[source, SQLLiteral(value=1)])
-            return SQLCase(
-                when_clauses=[
-                    (
-                        SQLUnaryOp(operator="IS NULL", operand=source, prefix=False),
-                        SQLNull(),
-                    ),
-                    (
-                        SQLBinaryOp(
-                            operator="=",
-                            left=length_expr,
-                            right=SQLLiteral(value=0),
-                        ),
-                        SQLNull(),
-                    ),
-                    (
-                        SQLBinaryOp(
-                            operator="=",
-                            left=length_expr,
-                            right=SQLLiteral(value=1),
-                        ),
-                        SQLFunctionCall(name="LIST_EXTRACT", args=[source, SQLLiteral(value=1)]),
-                    )
-                ],
-                else_clause=SQLFunctionCall(
-                    name="error",
-                    args=[SQLLiteral("SingletonFrom: Expected a list with at most one element")],
-                ),
-            )
+            return self._apply_singleton_from_list_value(source)
 
         # Determine the inner SELECT (works for both SQLSelect and SQLSubquery)
         if isinstance(source, SQLSubquery) and isinstance(source.query, SQLSelect):
@@ -2102,6 +2481,17 @@ class ListsMixin:
             # when singleton from references a CTE-backed retrieve
             count_query = self._add_patient_id_correlation_to_exists(count_query)
             value_query = self._add_patient_id_correlation_to_exists(value_query)
+            # CQL-19 EXPLORER QA-003: CQL 1.5 §20.30 Singleton From says >1
+            # element is a run-time error. That error is raised on the
+            # ELEMENT-semantics paths (list-value CASE above; the
+            # materialized per-patient list over inline queries). This
+            # legacy rows-subquery branch is used by guarded fluent-function
+            # bodies (CQMCommon `singleton from ((A union B) C where ...)`)
+            # where SQL evaluates eagerly for every patient/row while the
+            # reference engine short-circuits the enclosing guard — raising
+            # here regressed DQM CMS1017/CMS832, so >1 stays NULL here
+            # (adjudication: gate/fixtures outrank prose; element-exact
+            # paths keep the typed error).
             return SQLCase(
                 when_clauses=[
                     (
@@ -2111,26 +2501,30 @@ class ListsMixin:
                             right=SQLLiteral(value=1),
                         ),
                         SQLSubquery(query=value_query),
-                    )
+                    ),
                 ],
                 else_clause=SQLNull(),
             )
 
         # For fhirpath results (JSON strings), use JSON array functions
         if isinstance(source, SQLFunctionCall) and source.name in ('fhirpath_text', 'fhirpath_scalar'):
-            return SQLCase(
-                when_clauses=[
-                    (
-                        SQLBinaryOp(
-                            operator="=",
-                            left=SQLFunctionCall(name="json_array_length", args=[source]),
-                            right=SQLLiteral(value=1),
-                        ),
-                        SQLFunctionCall(name="json_extract_string", args=[source, SQLLiteral(value='$[0]')]),
-                    )
-                ],
-                else_clause=SQLNull(),
-            )
+            # CQL-19 SKEPTIC QA-005: fhirpath_text returns the FIRST matching
+            # node as plain text (not a JSON array), so json_array_length
+            # raised a Malformed-JSON runtime error on valid CQL. CQL 1.5
+            # §10.21 Singleton From needs the full element list: promote to
+            # the list-valued fhirpath projection and re-dispatch into the
+            # cardinality-checking list branch above (0 -> null, 1 -> element,
+            # >1 -> typed run-time error, null list -> null).
+            promoted = _promote_fhirpath_text_list(source)
+            if promoted is source and len(source.args) == 2:
+                promoted = SQLFunctionCall(
+                    name="from_json",
+                    args=[
+                        SQLFunctionCall(name="fhirpath", args=list(source.args)),
+                        SQLLiteral(value='["VARCHAR"]'),
+                    ],
+                )
+            return self._apply_singleton_from(promoted)
 
         # For array/list expressions, use cardinality check with array_length.
         # CQL §20.30: singleton from raises a runtime error if >1 elements.
@@ -2285,6 +2679,16 @@ class ListsMixin:
 
         if self._is_list_typed_ast(node.source) and not isinstance(node.source, ListExpression):
             source = self.translate(node.source, usage=ExprUsage.SCALAR)
+            # Queries with WHERE clauses lower to row subqueries; DuckDB has no
+            # scalar list_count over a subquery and a multi-row scalar subquery
+            # errors at run time.  EXISTS is the faithful non-empty test.
+            _inner_sel = None
+            if isinstance(source, SQLSubquery) and isinstance(source.query, SQLSelect):
+                _inner_sel = source.query
+            elif isinstance(source, SQLSelect):
+                _inner_sel = source
+            if _inner_sel is not None:
+                return SQLExists(subquery=SQLSubquery(query=_inner_sel))
             return SQLBinaryOp(
                 operator=">",
                 left=SQLFunctionCall(
@@ -2300,6 +2704,30 @@ class ListsMixin:
         # The source should be translated with EXISTS context
         # This allows nested Retrieves to register JOINs
         source = self.translate(node.source, usage=ExprUsage.EXISTS)
+
+        # CQL-18 SKEPTIC relaunch QA-001: dynamic FHIR paths lower to scalar
+        # fhirpath_bool, which is NULL for non-boolean collections, so
+        # `exists Patient.name.given` returned false despite data. CQL 1.5
+        # §10.6: exists is true when the full node list has any non-null
+        # element — evaluate the list-valued fhirpath() projection instead.
+        if (
+            isinstance(source, SQLFunctionCall)
+            and source.name == "fhirpath_bool"
+            and len(source.args) == 2
+        ):
+            from ...translator.types import SQLFunctionCall as _FC, SQLLiteral as _Lit
+            promoted = _FC(
+                name="from_json",
+                args=[_FC(name="fhirpath", args=list(source.args)), _Lit(value='["VARCHAR"]')],
+            )
+            return SQLBinaryOp(
+                operator=">",
+                left=SQLFunctionCall(
+                    name="COALESCE",
+                    args=[SQLFunctionCall(name="list_count", args=[promoted]), SQLLiteral(value=0)],
+                ),
+                right=SQLLiteral(value=0),
+            )
 
         # If source is already an EXISTS (from boolean_context handling), return it directly
         if isinstance(source, SQLExists):
@@ -2506,6 +2934,18 @@ class ListsMixin:
                     'sum': 'list_sum',
                     'avg': 'list_avg',
                 }
+                # CQL-21 HISTORIAN QA-002: uncertainty-capable (§22.21
+                # VARCHAR age/duration) elements compare lexicographically
+                # under list_min/list_max — route through interval-aware UDFs.
+                if operator_lower in ('min', 'max'):
+                    from ._operators import _is_uncertain_between_sql
+
+                    if any(_is_uncertain_between_sql(e) for e in source.elements):
+                        return SQLFunctionCall(
+                            name='cqlUncertainListMin' if operator_lower == 'min'
+                            else 'cqlUncertainListMax',
+                            args=[source],
+                        )
                 return SQLFunctionCall(
                     name=list_func_map[operator_lower],
                     args=[source],

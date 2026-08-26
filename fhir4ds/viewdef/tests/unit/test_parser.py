@@ -28,6 +28,15 @@ from ...metadata import (
     VIEWDEFINITION_RESOURCE_TYPE,
 )
 
+# Official canonical form used by every published Shareable/Tabular profile
+# StructureDefinition and the IG examples (e.g. ShareablePatientDemographics).
+OFFICIAL_SHAREABLE_PROFILE = (
+    "http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/ShareableViewDefinition"
+)
+OFFICIAL_TABULAR_PROFILE = (
+    "http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/TabularViewDefinition"
+)
+
 
 class TestColumnParsing:
     """Tests for Column parsing."""
@@ -133,6 +142,32 @@ class TestColumnParsing:
         assert [(tag.name, tag.value) for tag in tags] == [
             ("ansi/type", "DATE"),
             ("duckdb/type", "DATE"),
+        ]
+
+    def test_column_tag_whitespace_only_strings_accepted(self):
+        """v2 SD defines tag.name/value as plain string 1..1 with no minLength.
+
+        Whitespace-only metadata values like ' ' are spec-valid (tags are
+        opaque metadata, not FHIRPath expressions) and must round-trip.
+        """
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "select": [{
+                "column": [{
+                    "path": "id",
+                    "name": "id",
+                    "tag": [
+                        {"name": " ", "value": " "},
+                        {"name": " padded ", "value": "\t\n"},
+                    ],
+                }]
+            }],
+        })
+
+        tags = vd.to_dict()["select"][0]["column"][0]["tag"]
+        assert tags == [
+            {"name": " ", "value": " "},
+            {"name": " padded ", "value": "\t\n"},
         ]
 
     def test_column_with_plural_tags_alias_rejected(self):
@@ -446,9 +481,17 @@ class TestSelectParsing:
                 "select": [{"column": [{"path": "id", "name": "id"}]}],
             })
 
+        # SOF-VD-09 SKEPTIC: non-array where is invalid official JSON shape.
+        with pytest.raises(ValueError, match="array"):
+            ViewDefinition.from_dict({
+                "resource": "Patient",
+                "where": {"path": "active = true"},
+                "select": [{"column": [{"path": "id", "name": "id"}]}],
+            })
+
         vd = ViewDefinition.from_dict({
             "resource": "Patient",
-            "where": {"path": "active = true"},
+            "where": [{"path": "active = true"}],
             "select": [{"column": [{"path": "id", "name": "id"}]}],
         })
 
@@ -641,20 +684,19 @@ class TestSelectParsing:
         assert vd.select[0].where[0]["path"] == "active = true"
 
     def test_select_with_string_where(self):
-        """Test parsing select where clause from a convenience string."""
-        vd = parse_view_definition('''
-        {
-            "resource": "Patient",
-            "select": [{
-                "column": [
-                    {"path": "id", "name": "patient_id"}
-                ],
-                "where": "active = true"
-            }]
-        }
-        ''')
-
-        assert vd.select[0].where == [{"path": "active = true"}]
+        """Test parsing select where clause rejects non-array convenience string."""
+        with pytest.raises(ParseError, match="array"):
+            parse_view_definition('''
+            {
+                "resource": "Patient",
+                "select": [{
+                    "column": [
+                        {"path": "id", "name": "patient_id"}
+                    ],
+                    "where": "active = true"
+                }]
+            }
+            ''')
 
 
 class TestConstantParsing:
@@ -1043,6 +1085,16 @@ class TestJoinParsing:
 class TestViewDefinitionParsing:
     """Tests for complete ViewDefinition parsing."""
 
+    def test_new_r6_resource_type_device_alert_accepted(self):
+        """DeviceAlert is in the bound resource-types value set (R6) and must be accepted."""
+        vd = parse_view_definition({
+            "resource": "DeviceAlert",
+            "select": [{
+                "column": [{"path": "id", "name": "id"}]
+            }]
+        })
+        assert vd.resource == "DeviceAlert"
+
     def test_view_definition_resource_required(self):
         """Test that resource field is required."""
         with pytest.raises(ParseError) as exc_info:
@@ -1119,20 +1171,19 @@ class TestViewDefinitionParsing:
         assert vd.where[0]["path"] == "active = true"
 
     def test_view_definition_with_string_where(self):
-        """Test parsing top-level where from a convenience string."""
-        vd = parse_view_definition('''
-        {
-            "resource": "Patient",
-            "where": "active = true",
-            "select": [{
-                "column": [
-                    {"path": "id", "name": "patient_id"}
-                ]
-            }]
-        }
-        ''')
-
-        assert vd.where == [{"path": "active = true"}]
+        """Non-array top-level where is invalid official JSON shape."""
+        with pytest.raises(ParseError, match="array"):
+            parse_view_definition('''
+            {
+                "resource": "Patient",
+                "where": "active = true",
+                "select": [{
+                    "column": [
+                        {"path": "id", "name": "patient_id"}
+                    ]
+                }]
+            }
+            ''')
 
     def test_invalid_json_raises_error(self):
         """Test that invalid JSON raises ParseError."""
@@ -1201,7 +1252,7 @@ class TestViewDefinitionParsing:
             "profile": [
                 "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
             ],
-            "fhirVersion": ["4.0.1", "5.0.0"],
+            "fhirVersion": ["4.0", "5.0"],
             "select": [{
                 "column": [{"path": "id", "name": "id"}]
             }]
@@ -1210,7 +1261,7 @@ class TestViewDefinitionParsing:
         assert vd.profile == [
             "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
         ]
-        assert vd.fhirVersion == ["4.0.1", "5.0.0"]
+        assert vd.fhirVersion == ["4.0", "5.0"]
         assert vd.resourceType == VIEWDEFINITION_RESOURCE_TYPE
         assert vd.id == "PatientView"
         assert vd.url == "https://example.org/ViewDefinition/patient-view"
@@ -1446,7 +1497,7 @@ class TestViewDefinitionParsing:
                 "meta": {"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
                 "url": "https://example.org/ViewDefinition/shareable",
                 "name": "shareable_patient",
-                "fhirVersion": ["4.0.1"],
+                "fhirVersion": ["4.0"],
                 "resource": "Patient",
                 "select": [{"column": [{"path": "id", "name": "id", "type": "id"}]}],
             })
@@ -1457,7 +1508,7 @@ class TestViewDefinitionParsing:
                 "url": "https://example.org/ViewDefinition/shareable",
                 "name": "shareable_patient",
                 "status": "active",
-                "fhirVersion": ["4.0.1"],
+                "fhirVersion": ["4.0"],
                 "resource": "Patient",
                 "select": [{"column": [{"path": "id", "name": "id"}]}],
             })
@@ -1467,11 +1518,74 @@ class TestViewDefinitionParsing:
             "url": "https://example.org/ViewDefinition/shareable",
             "name": "shareable_patient",
             "status": "active",
-            "fhirVersion": ["4.0.1"],
+            "fhirVersion": ["4.0"],
             "resource": "Patient",
             "select": [{"column": [{"path": "id", "name": "id", "type": "id"}]}],
         })
         assert vd.has_profile(SHAREABLE_VIEWDEFINITION_PROFILE)
+
+    def test_official_profile_canonicals_trigger_shareable_and_tabular_rules(self):
+        """hl7.org/fhir/uv canonicals (the only published form) must enforce too.
+
+        The Shareable/Tabular profile SDs and the official IG examples all
+        declare http://hl7.org/fhir/uv/sql-on-fhir/... canonicals; recognition
+        must not be limited to the legacy sql-on-fhir.org/ig spellings.
+        """
+        # Shareable: url/name/fhirVersion min=1 and column.type min=1
+        with pytest.raises(ParseError, match="ShareableViewDefinition.*url"):
+            parse_view_definition({
+                "meta": {"profile": [OFFICIAL_SHAREABLE_PROFILE]},
+                "status": "active",
+                "name": "shareable_patient",
+                "fhirVersion": ["4.0"],
+                "resource": "Patient",
+                "select": [{"column": [{"path": "id", "name": "id", "type": "id"}]}],
+            })
+        with pytest.raises(ParseError, match="Column.type"):
+            parse_view_definition({
+                "meta": {"profile": [OFFICIAL_SHAREABLE_PROFILE]},
+                "url": "https://example.org/ViewDefinition/shareable",
+                "name": "shareable_patient",
+                "status": "active",
+                "fhirVersion": ["4.0"],
+                "resource": "Patient",
+                "select": [{"column": [{"path": "id", "name": "id"}]}],
+            })
+        # Tabular: no-collections and primitives-only constraints
+        with pytest.raises(ParseError, match="collection"):
+            parse_view_definition({
+                "meta": {"profile": [OFFICIAL_TABULAR_PROFILE]},
+                "status": "active",
+                "resource": "Patient",
+                "select": [{
+                    "column": [
+                        {"path": "id", "name": "id", "type": "id", "collection": True}
+                    ]
+                }],
+            })
+        with pytest.raises(ParseError, match="primitive"):
+            parse_view_definition({
+                "meta": {"profile": [OFFICIAL_TABULAR_PROFILE]},
+                "status": "active",
+                "resource": "Patient",
+                "select": [{
+                    "column": [{"path": "name", "name": "human_name", "type": "HumanName"}]
+                }],
+            })
+        # Conforming official-form profile declaration still parses.
+        vd = parse_view_definition({
+            "meta": {"profile": [OFFICIAL_SHAREABLE_PROFILE, OFFICIAL_TABULAR_PROFILE]},
+            "url": "https://example.org/ViewDefinition/shareable",
+            "name": "shareable_patient",
+            "status": "active",
+            "fhirVersion": ["4.0"],
+            "resource": "Patient",
+            "select": [{"column": [{"path": "id", "name": "id", "type": "id"}]}],
+        })
+        assert vd.to_dict()["meta"]["profile"] == [
+            OFFICIAL_SHAREABLE_PROFILE,
+            OFFICIAL_TABULAR_PROFILE,
+        ]
 
     def test_tabular_profile_rejects_collections_and_complex_column_types(self):
         """TabularViewDefinition only permits scalar primitive columns."""
@@ -1525,7 +1639,7 @@ class TestViewDefinitionParsing:
             meta={"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
             url="https://example.org/ViewDefinition/shareable",
             name="shareable_patient",
-            fhirVersion=["4.0.1"],
+            fhirVersion=["4.0"],
             select=[Select(column=[Column(path="id", name="id", type="id")])],
         )
         with pytest.raises(ValueError, match="ShareableViewDefinition.*status"):
@@ -1604,6 +1718,66 @@ class TestViewDefinitionParsing:
             parse_view_definition({
                 "resource": "Patient",
                 "fhirVersion": ["definitely-not-a-fhir-version"],
+                "select": [{
+                    "column": [{"path": "id", "name": "id"}]
+                }]
+            })
+
+    def test_fhir_version_accepts_official_two_segment_codes(self):
+        """Spec-valid FHIRVersion codes include [publication].[major] codes.
+
+        The SQL-on-FHIR IG (3.0.0-ballot) builds on FHIR 6.0.0-ballot5; the
+        required binding http://hl7.org/fhir/ValueSet/FHIR-version includes
+        codes like '4.0', '4.3', '5.0', '6.0'.
+        """
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "fhirVersion": ["4.0", "4.3", "5.0", "6.0"],
+            "select": [{
+                "column": [{"path": "id", "name": "id"}]
+            }]
+        })
+        assert vd.fhirVersion == ["4.0", "4.3", "5.0", "6.0"]
+
+    @pytest.mark.parametrize("valid_code", [
+        "0.01", "0.0", "0.0.82", "0.4", "1.0", "1.0.2", "3.0.1", "4.0",
+        "4.0.1", "4.3.0", "4.3.0-cibuild", "4.3.0-snapshot1", "4.6.0",
+        "5.0.0", "5.0.0-cibuild", "5.0.0-snapshot1", "5.0.0-snapshot2",
+        "5.0.0-ballot", "5.0.0-snapshot3", "5.0.0-draft-final", "6.0",
+        "6.0.0", "6.0.0-ballot1", "6.0.0-ballot4",
+    ])
+    def test_fhir_version_accepts_full_version_and_milestone_codes(
+        self, valid_code
+    ):
+        """The FHIR-version value set covers BOTH codesystem hierarchy levels.
+
+        http://hl7.org/fhir/ValueSet/FHIR-version composes an unfiltered
+        include of http://hl7.org/fhir/FHIR-version, so full-version child
+        concepts ('4.0.1', '5.0.0', '6.0.0') and milestone codes
+        ('4.3.0-cibuild', '5.0.0-draft-final', '6.0.0-ballot4') are valid
+        ViewDefinition.fhirVersion values (SOF-VD-01 QA-001 regression).
+        """
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "fhirVersion": [valid_code],
+            "select": [{
+                "column": [{"path": "id", "name": "id"}]
+            }]
+        })
+        assert vd.fhirVersion == [valid_code]
+
+    @pytest.mark.parametrize("invalid_code", [
+        "r4", "4", "4.", "4.0.2", "7.0.0", "6.0.0-ballot9", "5.0.0-rc1",
+        "4.0.1 ", "4.0.1-beta",
+    ])
+    def test_fhir_version_rejects_codes_outside_required_binding(
+        self, invalid_code
+    ):
+        """Codes absent from the FHIR-version codesystem are rejected."""
+        with pytest.raises(ParseError, match="FHIRVersion"):
+            parse_view_definition({
+                "resource": "Patient",
+                "fhirVersion": [invalid_code],
                 "select": [{
                     "column": [{"path": "id", "name": "id"}]
                 }]
@@ -1772,7 +1946,7 @@ class TestValidation:
                     meta={"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
                     url="https://example.org/ViewDefinition/shareable",
                     name="shareable_patient",
-                    fhirVersion=["4.0.1"],
+                    fhirVersion=["4.0"],
                     select=[Select(column=[Column(path="id", name="id", type="id")])],
                 ),
                 ("ShareableViewDefinition", "ViewDefinition.status"),
@@ -2065,3 +2239,704 @@ class TestLoadViewDefinition:
         """Test loading from nonexistent file raises error."""
         with pytest.raises(FileNotFoundError):
             load_view_definition("/nonexistent/path/view.json")
+
+
+class TestCnl1CanonicalUrlInvariantPerSpecG1:
+    """Tests for the SQL-on-FHIR v2 cnl-1 invariant on canonical URL fields.
+
+    cnl-1: `exists() implies matches('^[^|# ]+$')`. The official
+    StructureDefinition-ViewDefinition (FHIR/sql-on-fhir-v2,
+    element ViewDefinition.url) declares cnl-1 with severity=warning, and the
+    sql-on-fhir.js reference implementation does not enforce it at all — so
+    `|` and `#` in ViewDefinition.url produce a WARNING via
+    validate_view_definition, not a parse error. Whitespace remains a lexical
+    `uri`-type error. `profile[]` / `meta.profile[]` are `canonical`-typed and
+    permit the `|version` form. `Column.type` stays on the permissive
+    `_URI_RE = ^\\S*$` because the spec allows relative URIs and element-ID
+    references there.
+    """
+
+    def test_url_with_pipe_warns_per_cnl1(self):
+        """ViewDefinition.url containing '|' parses and warns per cnl-1 (WARNING severity)."""
+        vd = {
+            "resource": "Patient",
+            "url": "http://example.org/Patient|extra",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        result = parse_view_definition(json.dumps(vd))
+        assert result.url == "http://example.org/Patient|extra"
+        warnings = validate_view_definition(result)
+        assert any("cnl-1" in w and "url" in w for w in warnings)
+
+    def test_url_with_hash_warns_per_cnl1(self):
+        """ViewDefinition.url containing '#' parses and warns per cnl-1."""
+        vd = {
+            "resource": "Patient",
+            "url": "http://example.org/Patient#fragment",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        result = parse_view_definition(json.dumps(vd))
+        assert result.url == "http://example.org/Patient#fragment"
+        warnings = validate_view_definition(result)
+        assert any("cnl-1" in w for w in warnings)
+
+    def test_url_with_pipe_roundtrips_through_to_dict(self):
+        """A VD with a cnl-1-warning url still round-trips losslessly."""
+        vd = {
+            "resource": "Patient",
+            "url": "http://example.org/ViewDefinition/Patient|1.0.0",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        result = parse_view_definition(json.dumps(vd))
+        as_dict = result.to_dict()
+        assert as_dict["url"] == "http://example.org/ViewDefinition/Patient|1.0.0"
+
+    def test_clean_url_emits_no_cnl1_warning(self):
+        """A conformant canonical URL produces no cnl-1 warning."""
+        vd = {
+            "resource": "Patient",
+            "url": "http://example.org/fhir/ViewDefinition/PatientDemographics",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        result = parse_view_definition(json.dumps(vd))
+        assert not any("cnl-1" in w for w in validate_view_definition(result))
+
+    def test_url_with_space_is_rejected(self):
+        """ViewDefinition.url containing ' ' is rejected (uri lexical rule `^\\S*$`)."""
+        vd = {
+            "resource": "Patient",
+            "url": "http://example.org/Patient View",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        with pytest.raises((ParseError, ValueError)):
+            parse_view_definition(json.dumps(vd))
+
+    def test_url_valid_canonical_is_accepted(self):
+        """A spec-valid canonical URL is accepted."""
+        vd = {
+            "resource": "Patient",
+            "url": "http://example.org/fhir/ViewDefinition/PatientDemographics",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        result = parse_view_definition(json.dumps(vd))
+        assert result.url == "http://example.org/fhir/ViewDefinition/PatientDemographics"
+
+    def test_profile_with_pipe_version_is_accepted(self):
+        """ViewDefinition.profile[] entries use FHIR canonical form, which allows `|version`.
+
+        Note: cnl-1 strictly forbids `|` in `ViewDefinition.url` (which is
+        `uri`-typed). `profile` is `canonical`-typed and supports the FHIR
+        canonical form `<url>|<version>[|<fragment>]`, so `|version` is
+        accepted there.
+        """
+        vd = {
+            "resource": "Patient",
+            "profile": ["http://example.org/StructureDefinition/Good|1.0.0"],
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        result = parse_view_definition(json.dumps(vd))
+        assert result.profile == ["http://example.org/StructureDefinition/Good|1.0.0"]
+
+    def test_profile_with_whitespace_is_rejected(self):
+        """Whitespace in canonical URLs is rejected (URI lexical rule, applies to all URI fields)."""
+        vd = {
+            "resource": "Patient",
+            "profile": ["http://example.org/StructureDefinition/Bad Path"],
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        with pytest.raises((ParseError, ValueError)):
+            parse_view_definition(json.dumps(vd))
+
+    def test_meta_profile_with_whitespace_is_rejected(self):
+        """Whitespace in meta.profile canonical URLs is rejected."""
+        vd = {
+            "resource": "Patient",
+            "meta": {"profile": ["http://example.org/StructureDefinition/Bad Path"]},
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        with pytest.raises((ParseError, ValueError)):
+            parse_view_definition(json.dumps(vd))
+
+    def test_url_with_version_pipe_suffix_warns_not_rejects(self):
+        """Canonical URLs with `|version` suffix parse and warn (WARNING severity).
+
+        Note: cnl-1 on ViewDefinition.url is WARNING severity per the official
+        StructureDefinition-ViewDefinition; version-pinning callers should use
+        the separate `version` field, but a `|version` url still parses and
+        round-trips.
+        """
+        vd = {
+            "resource": "Patient",
+            "url": "http://example.org/ViewDefinition/Patient|1.0.0",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        result = parse_view_definition(json.dumps(vd))
+        warnings = validate_view_definition(result)
+        assert any("cnl-1" in w for w in warnings)
+
+    def test_column_type_relative_uri_still_accepted(self):
+        """`Column.type` accepts relative URIs and element-ID references (Invariant I-5).
+
+        The cnl-1 tightening applies only to canonical URL fields, not to
+        `Column.type`, which spec-allows relative URIs and element-ID references
+        like 'Observation.referenceRange'.
+        """
+        vd = {
+            "resource": "Observation",
+            "select": [{
+                "column": [{
+                    "path": "referenceRange",
+                    "name": "range",
+                    "type": "Observation.referenceRange",
+                }]
+            }],
+        }
+        result = parse_view_definition(json.dumps(vd))
+        assert result.select[0].column[0].type == "Observation.referenceRange"
+
+    def test_column_type_relative_path_still_accepted(self):
+        """`Column.type` accepts simple relative paths."""
+        vd = {
+            "resource": "Patient",
+            "select": [{
+                "column": [{
+                    "path": "address",
+                    "name": "addr",
+                    "type": "relative/path",
+                }]
+            }],
+        }
+        result = parse_view_definition(json.dumps(vd))
+        assert result.select[0].column[0].type == "relative/path"
+
+
+class TestCnl0NameWarningPerSpecG2:
+    """Tests for the SQL-on-FHIR v2 cnl-0 warning invariant on ViewDefinition.name.
+
+    cnl-0: when name is present, must match `^[A-Z]([A-Za-z0-9_]){1,254}$`
+    (leading capital, 2-255 chars total). Warning severity per spec —
+    `validate_view_definition()` returns the warning in its list;
+    `parse_view_definition()` does NOT raise.
+    """
+
+    def _vd_with_name(self, name):
+        return ViewDefinition(
+            resource="Patient",
+            name=name,
+            select=[Select(column=[Column(path="id", name="id")])],
+        )
+
+    def test_lowercase_name_warns(self):
+        """name='myView' (lowercase start) produces a cnl-0 warning."""
+        vd = self._vd_with_name("myView")
+        warnings = validate_view_definition(vd)
+        assert any("cnl-0" in w for w in warnings), warnings
+
+    def test_lowercase_name_does_not_raise(self):
+        """Permissive parse path does not raise on lowercase name (Invariant I-6)."""
+        vd_dict = {
+            "resource": "Patient",
+            "name": "myView",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        # Should not raise.
+        result = parse_view_definition(json.dumps(vd_dict))
+        assert result.name == "myView"
+
+    def test_overlong_name_warns(self):
+        """name with 256+ characters produces a cnl-0 warning."""
+        long_name = "A" + "a" * 255  # 256 chars total, starts with capital
+        vd = self._vd_with_name(long_name)
+        warnings = validate_view_definition(vd)
+        assert any("cnl-0" in w for w in warnings), warnings
+
+    def test_valid_capital_name_does_not_warn(self):
+        """name='PatientDemographics' does not produce a cnl-0 warning."""
+        vd = self._vd_with_name("PatientDemographics")
+        warnings = validate_view_definition(vd)
+        assert not any("cnl-0" in w for w in warnings), warnings
+
+    def test_single_char_name_warns(self):
+        """Single-character name 'A' violates cnl-0 (must be 2+ chars).
+
+        Per BUGFIX-002: the cnl-0 regex `^[A-Z]([A-Za-z0-9_]){1,254}$`
+        requires 2-255 chars total. The warning condition now includes
+        `len(vd.name) < 2` so single-char names fire the warning.
+        """
+        vd = self._vd_with_name("A")
+        warnings = validate_view_definition(vd)
+        assert any("cnl-0" in w for w in warnings), warnings
+
+    def test_non_ascii_capital_name_warns(self):
+        """Non-ASCII capital start (e.g. 'Éxample') violates cnl-0.
+
+        Per QA-001 (SOF-VD-13 EXPLORER): the spec regex class [A-Z] is
+        ASCII-only, so Python's unicode-aware str.isupper() must not gate
+        this check. Only reachable via directly-constructed ViewDefinition
+        objects — the JSON parse path raises a sql-name ParseError first.
+        """
+        vd = self._vd_with_name("Éxample")
+        warnings = validate_view_definition(vd)
+        assert any("cnl-0" in w for w in warnings), warnings
+
+
+class TestCanonicalResourceRoundtripPerSpecG3:
+    """Tests for the §G-3 extension bag preserving unknown top-level keys.
+
+    ViewDefinition inherits from CanonicalResource / DomainResource. The
+    dataclass models only the fields the generator consumes; this bag
+    preserves unknown keys verbatim through from_dict/to_dict so that
+    `parse → to_dict` is idempotent at the JSON-key level for arbitrary
+    CanonicalResource fields (publisher, purpose, copyright, extension[],
+    etc.). No validation, no coercion.
+    """
+
+    def test_flat_string_publisher_survives_roundtrip(self):
+        """A flat string `publisher` field round-trips verbatim."""
+        vd = {
+            "resource": "Patient",
+            "publisher": "HL7",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        parsed = parse_view_definition(json.dumps(vd))
+        out = parsed.to_dict()
+        assert out["publisher"] == "HL7"
+
+    def test_extension_array_survives_roundtrip(self):
+        """A `DomainResource.extension[]` array round-trips verbatim."""
+        ext = [{"url": "https://example.org/x", "valueString": "v"}]
+        vd = {
+            "resource": "Patient",
+            "extension": ext,
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        parsed = parse_view_definition(json.dumps(vd))
+        out = parsed.to_dict()
+        assert out["extension"] == ext
+
+    def test_deeply_nested_extension_survives_roundtrip(self):
+        """A complex nested extension round-trips verbatim (byte-for-byte at JSON level)."""
+        ext = [{
+            "url": "https://example.org/x",
+            "extension": [
+                {"url": "https://example.org/y", "valueBoolean": True}
+            ],
+        }]
+        vd = {
+            "resource": "Patient",
+            "extension": ext,
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        parsed = parse_view_definition(json.dumps(vd))
+        out = parsed.to_dict()
+        # Byte-for-byte at the JSON-key level for the unknown key
+        assert json.dumps(out["extension"], sort_keys=True) == json.dumps(ext, sort_keys=True)
+
+    def test_meta_tag_array_survives_roundtrip(self):
+        """A non-extension DomainResource field (e.g. meta.tag) round-trips verbatim."""
+        # Note: `meta` itself is a known field, but its contents (e.g. tag
+        # arrays) are preserved as-is via the dict storage.
+        meta = {"tag": [{"system": "https://example.org", "code": "c", "display": "d"}]}
+        vd = {
+            "resource": "Patient",
+            "meta": meta,
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        parsed = parse_view_definition(json.dumps(vd))
+        out = parsed.to_dict()
+        assert out["meta"] == meta
+
+    def test_unknown_top_level_keys_roundtrip_together(self):
+        """Multiple unknown top-level keys all survive."""
+        vd = {
+            "resource": "Patient",
+            "publisher": "HL7",
+            "purpose": "Demo",
+            "copyright": "CC-BY",
+            "experimental": False,
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        parsed = parse_view_definition(json.dumps(vd))
+        out = parsed.to_dict()
+        assert out["publisher"] == "HL7"
+        assert out["purpose"] == "Demo"
+        assert out["copyright"] == "CC-BY"
+        assert out["experimental"] is False
+
+    def test_known_keys_are_not_treated_as_extensions(self):
+        """Known keys (resource, select, etc.) are NOT in extra_fields."""
+        vd = {
+            "resource": "Patient",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        parsed = parse_view_definition(json.dumps(vd))
+        assert parsed.extra_fields == {}
+
+    def test_no_extensions_does_not_emit_extra_keys(self):
+        """A standard ViewDefinition (no extras) serializes cleanly."""
+        vd = {
+            "resource": "Patient",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        parsed = parse_view_definition(json.dumps(vd))
+        out = parsed.to_dict()
+        # Should not contain random extension keys
+        assert set(out.keys()) <= {"resourceType", "resource", "select"}
+
+    def test_narrative_text_div_survives_roundtrip(self):
+        """DomainResource `text` narrative round-trips verbatim (BUGFIX-006).
+
+        Per FHIR JSON serialization: the `text` element is a `Narrative`
+        with `status` (string) and `div` (XHTML string). Both are stored
+        as JSON keys directly (no underscore prefix — the `_primitive`
+        convention applies only to primitives carrying extensions).
+        """
+        text = {
+            "status": "generated",
+            "div": '<div xmlns="http://www.w3.org/1999/xhtml"><p>Hello</p></div>',
+        }
+        vd = {
+            "resource": "Patient",
+            "text": text,
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        }
+        parsed = parse_view_definition(json.dumps(vd))
+        out = parsed.to_dict()
+        # Byte-for-byte at the JSON-key level for the unknown key
+        assert json.dumps(out["text"], sort_keys=True) == json.dumps(text, sort_keys=True)
+
+
+class TestColumnTagNamespaceWarningPerSpecG4:
+    """Tests for the SQL-on-FHIR v2 §G-4 column.tag.name namespace recommendation.
+
+    Spec basis: `column.tag.name` short element definition reads
+    "A name that identifies the meaning of the tag. Namespace recommended
+    (e.g. `ansi/type`)." Recommendation, not requirement — warning severity.
+    `validate_view_definition` returns the warning; `parse_view_definition`
+    does NOT raise.
+    """
+
+    def test_unnamespaced_tag_name_warns(self):
+        """`column.tag.name='type'` (no `/`) produces a §G-4 warning."""
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[Select(column=[
+                Column(path="id", name="id", tag=[ColumnTag(name="type", value="integer")])
+            ])],
+        )
+        warnings = validate_view_definition(vd)
+        assert any("namespace" in w.lower() for w in warnings), warnings
+
+    def test_namespaced_tag_name_does_not_warn(self):
+        """`column.tag.name='ansi/type'` (with `/`) does not produce a §G-4 warning."""
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[Select(column=[
+                Column(path="id", name="id", tag=[ColumnTag(name="ansi/type", value="integer")])
+            ])],
+        )
+        warnings = validate_view_definition(vd)
+        assert not any("namespace" in w.lower() for w in warnings), warnings
+
+    def test_unnamespaced_tag_does_not_raise(self):
+        """Permissive parse path does not raise on unnamespaced tag (Invariant I-6)."""
+        vd = {
+            "resource": "Patient",
+            "select": [{
+                "column": [{
+                    "path": "id",
+                    "name": "id",
+                    "tag": [{"name": "type", "value": "integer"}],
+                }]
+            }],
+        }
+        result = parse_view_definition(json.dumps(vd))
+        assert result.select[0].column[0].tag[0].name == "type"
+
+    def test_no_tag_does_not_warn(self):
+        """A column with no tag does not produce a §G-4 warning."""
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[Select(column=[Column(path="id", name="id")])],
+        )
+        warnings = validate_view_definition(vd)
+        assert not any("namespace" in w.lower() for w in warnings), warnings
+
+
+class TestColumnUnknownFields:
+    """SOF-VD-04: unknown fields in column and tag objects are rejected
+    (reference validator schema sets additionalProperties:false)."""
+
+    def test_unknown_column_field_rejected(self):
+        vd = {
+            "resource": "Patient",
+            "select": [{"column": [{
+                "path": "gender", "name": "g", "unknownColField": 1,
+            }]}],
+        }
+        with pytest.raises(ParseError, match="unknownColField"):
+            parse_view_definition(json.dumps(vd))
+
+    def test_unknown_tag_field_rejected(self):
+        vd = {
+            "resource": "Patient",
+            "select": [{"column": [{
+                "path": "gender", "name": "g",
+                "tag": [{"name": "ansi/type", "value": "DATE", "extraKey": "x"}],
+            }]}],
+        }
+        with pytest.raises(ParseError, match="extraKey"):
+            parse_view_definition(json.dumps(vd))
+
+    def test_all_documented_column_fields_accepted(self):
+        vd = {
+            "resource": "Patient",
+            "select": [{"column": [{
+                "path": "gender", "name": "g", "description": "d",
+                "collection": False, "type": "string",
+                "tag": [{"name": "ansi/type", "value": "VARCHAR"}],
+            }]}],
+        }
+        result = parse_view_definition(json.dumps(vd))
+        assert result.select[0].column[0].tag[0].value == "VARCHAR"
+
+
+class TestElementIdColumnTypeValidation:
+    """SOF-VD-04: element-ID column.type must name the view's resource."""
+
+    def test_element_id_type_wrong_resource_rejected(self):
+        vd = {
+            "resource": "Patient",
+            "select": [{"column": [{
+                "path": "gender", "name": "g",
+                "type": "Observation.referenceRange",
+            }]}],
+        }
+        parsed = parse_view_definition(json.dumps(vd))
+        with pytest.raises(ValidationError, match="Observation.referenceRange"):
+            SQLGenerator().generate(parsed)
+
+    def test_element_id_type_wrong_resource_full_uri_rejected(self):
+        vd = {
+            "resource": "Patient",
+            "select": [{"column": [{
+                "path": "maritalStatus", "name": "m",
+                "type": "http://hl7.org/fhir/StructureDefinition/"
+                        "Observation#Observation.referenceRange",
+            }]}],
+        }
+        parsed = parse_view_definition(json.dumps(vd))
+        with pytest.raises(ValidationError, match="view resource is 'Patient'"):
+            SQLGenerator().generate(parsed)
+
+    def test_element_id_type_same_resource_accepted(self):
+        vd = {
+            "resource": "Patient",
+            "select": [{"column": [{
+                "path": "maritalStatus", "name": "m",
+                "type": "Patient.maritalStatus",
+            }]}],
+        }
+        parsed = parse_view_definition(json.dumps(vd))
+        sql = SQLGenerator().generate(parsed)
+        assert "SELECT" in sql
+
+    def test_absolute_uri_type_not_misdiagnosed_as_element_id(self):
+        """SOF-VD-04 HISTORIAN: dotted absolute URIs (any scheme) are not element-ID
+        notation and must raise the unsupported-column-type error, not the
+        cross-resource element-ID diagnostic."""
+        for uri in [
+            "HTTP://hl7.org/fhir/StructureDefinition/string",
+            "http://example.org/StructureDefinition/Foo.Bar",
+            "urn:oid:1.2.3.4",
+        ]:
+            vd = {
+                "resource": "Patient",
+                "select": [{"column": [{"path": "gender", "name": "g", "type": uri}]}],
+            }
+            parsed = parse_view_definition(json.dumps(vd))
+            with pytest.raises(
+                ValidationError, match="Unsupported ViewDefinition column type"
+            ):
+                SQLGenerator().generate(parsed)
+
+
+class TestSelectUnknownFieldAndEmptyContainerRejectionPerSpecSofVd05Skeptic:
+    """SOF-VD-05 SKEPTIC: the official SQL-on-FHIR validator
+    (sof-js/src/validate.js) declares select items with
+    additionalProperties:false, select/column arrays with minItems:1, and
+    neither v2 SD (2.0.0 / 3.0.0-ballot) defines any other select element.
+    Unknown select-level fields and present-empty column/select arrays must
+    be rejected at parse time instead of silently dropped/ignored."""
+
+    def _rejects(self, view, fragment):
+        with pytest.raises(ParseError, match=fragment):
+            parse_view_definition(json.dumps(view))
+
+    def test_select_content_reference_field_rejected(self):
+        """A FHIR StructureDefinition-style contentReference inside select is
+        not a SQL-on-FHIR field; silently ignoring it would evaluate columns
+        in the parent context (wrong results, no error)."""
+        self._rejects(
+            {
+                "resource": "Patient",
+                "select": [
+                    {
+                        "contentReference": "Patient.contact",
+                        "column": [{"path": "id", "name": "id"}],
+                    }
+                ],
+            },
+            "unknown field",
+        )
+
+    def test_select_columns_typo_rejected(self):
+        self._rejects(
+            {
+                "resource": "Patient",
+                "select": [{"columns": [{"path": "id", "name": "id"}]}],
+            },
+            "unknown field",
+        )
+
+    def test_nested_select_unknown_field_rejected_at_depth(self):
+        self._rejects(
+            {
+                "resource": "Patient",
+                "select": [
+                    {
+                        "column": [{"path": "id", "name": "id"}],
+                        "select": [{"forEach": "contact", "foo": 1}],
+                    }
+                ],
+            },
+            "unknown field",
+        )
+
+    def test_present_empty_column_array_rejected(self):
+        self._rejects(
+            {"resource": "Patient", "select": [{"column": []}]},
+            "must contain at least one",
+        )
+
+    def test_present_empty_nested_select_array_rejected(self):
+        self._rejects(
+            {
+                "resource": "Patient",
+                "select": [
+                    {
+                        "column": [{"path": "id", "name": "id"}],
+                        "select": [],
+                    }
+                ],
+            },
+            "must contain at least one",
+        )
+
+    def test_valid_nested_select_still_accepted(self):
+        vd = parse_view_definition(json.dumps({
+            "resource": "Patient",
+            "select": [
+                {
+                    "column": [{"path": "id", "name": "id"}],
+                    "select": [
+                        {
+                            "forEachOrNull": "contact",
+                            "column": [
+                                {"path": "name.family", "name": "family"}
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }))
+        sql = SQLGenerator().generate(vd)
+        assert "family" in sql
+
+
+class TestWhereOfficialJsonShapePerSpecSofVd09Skeptic:
+    """SOF-VD-09 SKEPTIC (2026-08-23): strict parser where shape.
+
+    The official validator (FHIR/sql-on-fhir.js sof-js/src/validate.js)
+    declares ViewDefinition.where as {type: array, items: {type: object,
+    required: ['path'], additionalProperties: false, properties:
+    {path, description}}}, and FHIR JSON rules require repeating
+    (max="*") elements to be arrays.
+    """
+
+    def _view(self, where):
+        return json.dumps({
+            "resource": "Patient",
+            "where": where,
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        })
+
+    def test_string_where_rejected(self):
+        with pytest.raises(ParseError, match="array"):
+            parse_view_definition(self._view("active = true"))
+
+    def test_single_object_where_rejected(self):
+        with pytest.raises(ParseError, match="array"):
+            parse_view_definition(self._view({"path": "active = true"}))
+
+    def test_list_of_string_where_rejected(self):
+        with pytest.raises(ParseError, match="object"):
+            parse_view_definition(self._view(["active = true"]))
+
+    @pytest.mark.parametrize("extra", ["foo", "criteria", "value"])
+    def test_unknown_where_item_field_rejected(self, extra):
+        item = {"path": "active = true", extra: 1}
+        with pytest.raises(ParseError, match="unknown field"):
+            parse_view_definition(self._view([item]))
+
+    def test_valid_array_object_where_accepted(self):
+        vd = parse_view_definition(self._view(
+            [{"path": "active = true", "description": "only active"}]))
+        assert vd.where == [{"path": "active = true",
+                             "description": "only active"}]
+
+    def test_select_level_string_where_rejected(self):
+        with pytest.raises(ParseError, match="array"):
+            parse_view_definition(json.dumps({
+                "resource": "Patient",
+                "select": [{
+                    "column": [{"path": "id", "name": "id"}],
+                    "where": "active = true",
+                }],
+            }))
+
+
+class TestDeepNestingRecursionSafety:
+    """Adversarial deeply nested select trees raise typed ParseError (SOF-VD-10 QA-001)."""
+
+    @staticmethod
+    def _deep_view(depth: int) -> dict:
+        node: dict = {"column": [{"path": "id", "name": "id"}]}
+        for _ in range(depth):
+            node = {"select": [node]}
+        return {"resource": "Patient", "select": [node]}
+
+    @staticmethod
+    def _deep_view_json(depth: int) -> str:
+        # Build incrementally: json.dumps of the full dict itself hits the
+        # recursion limit while encoding before the parser is ever invoked.
+        text = '{"column": [{"path": "id", "name": "id"}]}'
+        for _ in range(depth):
+            text = '{"select": [' + text + ']}'
+        return '{"resource": "Patient", "select": [' + text + ']}'
+
+    def test_dict_input_deep_nesting_raises_parse_error_not_recursion_error(self):
+        with pytest.raises(ParseError, match="nested too deeply"):
+            parse_view_definition(self._deep_view(2000))
+
+    def test_json_string_input_deep_nesting_raises_parse_error_not_recursion_error(self):
+        with pytest.raises(ParseError, match="nested too deeply"):
+            parse_view_definition(self._deep_view_json(2000))
+
+    def test_from_dict_deep_nesting_raises_parse_error_not_recursion_error(self):
+        with pytest.raises(ParseError, match="nested too deeply"):
+            ViewDefinition.from_dict(self._deep_view(2000))
+
+    def test_moderate_nesting_still_parses(self):
+        vd = parse_view_definition(self._deep_view(50))
+        assert vd.resource == "Patient"

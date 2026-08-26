@@ -228,3 +228,89 @@ class TestFHIRPathCollection:
         original = FHIRPathCollection([1, 2])
         col4 = wrap_as_collection(original)
         assert col4.to_list() == [1, 2]
+
+
+class TestTreeNavigationHelpersFp12Skeptic:
+    """Direct-helper contract for §5.8/§5.9 children/descendants/trace (FP-12)."""
+
+    def test_children_key_order_and_null_preservation(self) -> None:
+        from ...functions import children
+
+        node = {"family": "Doe", "given": [None, "Jane"]}
+        assert children(node) == ["Doe", None, "Jane"]
+
+    def test_children_skip_resource_type_and_underscore_props(self) -> None:
+        from ...functions import children
+
+        assert children({"resourceType": "Patient", "id": "p1", "_id": {}}) == ["p1"]
+
+    def test_children_primitives_have_no_children(self) -> None:
+        from ...functions import children
+
+        assert children("male") == []
+        assert children(42) == []
+        assert children(None) == []
+        assert children(True) == []
+
+    def test_children_unsupported_type_raises(self) -> None:
+        from ...functions import children
+
+        with pytest.raises(Exception):
+            children(object())
+
+    def test_descendants_repeat_children_semantics(self) -> None:
+        from ...functions import descendants
+
+        obs = {
+            "resourceType": "Observation",
+            "status": "final",
+            "component": [
+                {"valueQuantity": {"value": 120}},
+                {"valueQuantity": {"value": 80}},
+            ],
+        }
+        result = descendants(obs)
+        # Unitless Quantity wrappers with different values are NOT equal (FP-12 QA-001)
+        assert 120 in result and 80 in result
+        assert {"value": 120} in result and {"value": 80} in result
+        # 7 distinct descendants: final, both component items, both wrappers, both values
+        assert len(result) == 7
+
+    def test_descendants_dedupes_equal_children(self) -> None:
+        from ...functions import descendants
+
+        tree = {"a": [{"v": 1}, {"v": 1}]}
+        assert descendants(tree).count({"v": 1}) == 1
+        # 1 = 1.0 numerically
+        assert descendants({"a": [1, 1.0]}).count(1) == 1
+
+    def test_trace_passthrough_and_logging(self, caplog) -> None:
+        import logging
+
+        from ...functions import trace
+
+        value = [{"family": "Doe"}]
+        with caplog.at_level(logging.INFO, logger="fhir4ds.fhirpath.duckdb.functions.navigation"):
+            out = trace(value, "t")
+        assert out is value
+        assert "TRACE:[t]" in caplog.text
+
+    def test_trace_projection(self) -> None:
+        from ...functions import trace
+
+        assert trace([{"a": 1}, {"a": 2}], "t", lambda item: item["a"]) == [{"a": 1}, {"a": 2}]
+
+    def test_trace_requires_string_name(self) -> None:
+        from ...functions import trace
+        from fhir4ds.fhirpath.engine.errors import FHIRPathError
+
+        with pytest.raises(FHIRPathError):
+            trace("x", 1)
+        with pytest.raises(FHIRPathError):
+            trace("x", "")
+
+    def test_children_collection_input_reduces_per_item(self) -> None:
+        from ...functions import children
+
+        assert children([{"a": 1}, {"b": 2}]) == [1, 2]
+        assert children([{"a": 1}, "prim"]) == [1]

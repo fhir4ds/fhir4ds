@@ -215,6 +215,106 @@ def _parse_json(resource: str) -> dict:
                 sys.setrecursionlimit(current_limit)
 
 
+# C-stack-safe ceiling for raising the interpreter recursion limit in-place.
+# On CPython <= 3.10 every Python-to-Python call consumes native stack, so a
+# raised limit beyond roughly this ceiling lets deep recursive evaluation
+# (e.g. the per-JSON-level ``visit`` recursion under fhirpath_repeat) smash
+# the default 8 MB thread stack and SEGFAULT the host process before the
+# Python-level limit fires (SOF-VD-07 SKEPTIC QA-001, 2026-08-23: crash at
+# needed_limit ~57k / JSON depth ~14k). Budgets larger than this ceiling are
+# executed on a dedicated thread whose stack is sized for the budget instead.
+_INLINE_RECURSION_LIMIT_MAX = 20_000
+
+# Native stack bytes to reserve per Python recursion frame (conservative).
+_RECURSION_STACK_BYTES_PER_FRAME = 2048
+
+_RECURSION_STACK_MIN = 1 << 20  # 1 MiB
+_RECURSION_STACK_MAX = 1 << 29  # 512 MiB
+
+
+def _run_with_recursion_budget(func, needed_limit: int, *args):
+    """Run ``func()`` with the interpreter recursion limit raised to
+    ``needed_limit`` without risking a native stack overflow.
+
+    Small budgets raise the limit in-place. Large budgets run on a worker
+    thread whose stack size is sized for the budget, because CPython <= 3.10
+    consumes native stack for every Python frame and an in-place raise past
+    ``_INLINE_RECURSION_LIMIT_MAX`` can overflow the default 8 MB stack.
+    """
+    current_limit = sys.getrecursionlimit()
+    if needed_limit <= current_limit:
+        return func(*args)
+
+    if needed_limit <= _INLINE_RECURSION_LIMIT_MAX:
+        try:
+            with _RECURSION_LIMIT_LOCK:
+                sys.setrecursionlimit(needed_limit)
+                return func(*args)
+        finally:
+            with _RECURSION_LIMIT_LOCK:
+                if sys.getrecursionlimit() != current_limit:
+                    sys.setrecursionlimit(current_limit)
+
+    # Large budget: provide real native stack instead of over-promising on
+    # the current thread's 8 MB stack. If a worker stack cannot be configured
+    # (platform restriction), degrade to the safe inline ceiling so the worst
+    # outcome is a clean RecursionError, never a segfault.
+    import threading
+
+    stack_bytes = min(
+        max(needed_limit * _RECURSION_STACK_BYTES_PER_FRAME, _RECURSION_STACK_MIN),
+        _RECURSION_STACK_MAX,
+    )
+    worker_supported = True
+    previous_stack_size = None
+    try:
+        previous_stack_size = threading.stack_size()
+        threading.stack_size(stack_bytes)
+    except (ValueError, RuntimeError, OverflowError):
+        worker_supported = False
+
+    if not worker_supported:
+        try:
+            with _RECURSION_LIMIT_LOCK:
+                sys.setrecursionlimit(_INLINE_RECURSION_LIMIT_MAX)
+                return func(*args)
+        finally:
+            with _RECURSION_LIMIT_LOCK:
+                if sys.getrecursionlimit() != current_limit:
+                    sys.setrecursionlimit(current_limit)
+
+    outcome: dict = {}
+
+    def _worker():
+        try:
+            with _RECURSION_LIMIT_LOCK:
+                sys.setrecursionlimit(needed_limit)
+            try:
+                outcome["value"] = func(*args)
+            finally:
+                with _RECURSION_LIMIT_LOCK:
+                    if sys.getrecursionlimit() != current_limit:
+                        sys.setrecursionlimit(current_limit)
+        except BaseException as exc:  # noqa: BLE001 - re-raised on caller
+            outcome["error"] = exc
+
+    thread = threading.Thread(
+        target=_worker, name="fhirpath-recursion-budget", daemon=True
+    )
+    thread.start()
+    thread.join()
+
+    try:
+        if previous_stack_size is not None:
+            threading.stack_size(previous_stack_size)
+    except (ValueError, RuntimeError, OverflowError):
+        pass
+
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome.get("value")
+
+
 def _eval_with_recursion_budget(func, resource: object, expression: str) -> object:
     """Run ``func(resource)`` with a Python recursion budget sized for both
     the resource JSON nesting and the expression syntactic nesting.
@@ -235,16 +335,7 @@ def _eval_with_recursion_budget(func, resource: object, expression: str) -> obje
         current_limit,
         (expr_depth * 10) + (json_depth * 4) + 1000,
     )
-    if needed_limit <= current_limit:
-        return func(resource)
-    try:
-        with _RECURSION_LIMIT_LOCK:
-            sys.setrecursionlimit(needed_limit)
-            return func(resource)
-    finally:
-        with _RECURSION_LIMIT_LOCK:
-            if sys.getrecursionlimit() != current_limit:
-                sys.setrecursionlimit(current_limit)
+    return _run_with_recursion_budget(func, needed_limit, resource)
 
 
 def _json_default(obj: object) -> object:
@@ -257,8 +348,21 @@ def _json_default(obj: object) -> object:
 
 
 def _json_serialize(obj: object) -> str:
-    """Serialize an object to a JSON string using orjson for performance."""
-    return orjson.dumps(obj, default=_json_default).decode()
+    """Serialize an object to a JSON string using orjson for performance.
+
+    orjson enforces an internal nesting ceiling (~127 levels) and raises
+    ``TypeError("Recursion limit reached")`` for deeper — but valid — JSON
+    trees (e.g. chained Extensions). The native C++ evaluator serializes such
+    results fine, so the Python fallback must not silently diverge to empty
+    output. SOF-VD-11 EXPLORER QA-001 (2026-08-23): fall back to the
+    iterative (explicit-stack) serializer for deeply nested structures.
+    """
+    try:
+        return orjson.dumps(obj, default=_json_default).decode()
+    except TypeError as exc:
+        if "recursion limit" not in str(exc).lower():
+            raise
+        return _json_serialize_iterative(obj)
 
 
 def _json_scalar_serialize(obj: object) -> str:
@@ -343,7 +447,15 @@ def _evaluate_literal_temporal_arithmetic(expression: str) -> list[str] | None:
     if literal is None:
         return None
 
-    result = literal.plus(FP_Quantity(value, match.group("unit")))
+    # FP-18 SKEPTIC QA-005 (2026-08-18): `FP_TimeBase.plus` raises bare
+    # ValueError for §6.7.1-invalid units (e.g. `@2012-01-01 + 25 hours`).
+    # Convert to FHIRPathError so `fhirpath_is_valid` classifies it as an
+    # accepted execution error (the native engine returns empty) instead
+    # of leaking a raw ValueError.
+    try:
+        result = literal.plus(FP_Quantity(value, match.group("unit")))
+    except ValueError as exc:
+        raise FHIRPathError(str(exc)) from exc
     return [str(result)]
 
 
@@ -367,6 +479,14 @@ def _get_compiled_evaluator(expression: str) -> FHIRPathEvaluator:
     stripped = expression.strip()
     precheck_text = _strip_comments_for_precheck(stripped)
     if _INVALID_EXPR_PATTERNS.search(precheck_text):
+        raise FHIRPathSyntaxError(
+            f"Invalid FHIRPath expression: rejected by pattern check: '{expression}'"
+        )
+    if _INVALID_TYPE_SPECIFIER_INVOCATION.search(_mask_string_literals(precheck_text)):
+        raise FHIRPathSyntaxError(
+            f"Invalid FHIRPath expression: rejected by pattern check: '{expression}'"
+        )
+    if _INVALID_DOLLAR_PATTERNS.search(_mask_string_literals(precheck_text)):
         raise FHIRPathSyntaxError(
             f"Invalid FHIRPath expression: rejected by pattern check: '{expression}'"
         )
@@ -995,6 +1115,45 @@ def _split_top_level_keyword_segments(text: str, keywords: tuple[str, ...]) -> l
     return parts
 
 
+def _split_top_level_pipe_segments(text: str) -> list[str] | None:
+    """Split an expression on top-level '|' union operators (§6.8 #07).
+
+    Strings, backtick identifiers, and comments are masked via the
+    position-preserving scan text; pipes nested inside (), {}, or [] are
+    part of a parenthesized operand, not a top-level union boundary.
+    Returns None when no top-level pipe exists.
+    """
+    scan_text = _function_scan_text_preserve_positions(text)
+    parts: list[str] = []
+    start = 0
+    depth_paren = 0
+    depth_brace = 0
+    depth_bracket = 0
+    i = 0
+    while i < len(scan_text):
+        ch = scan_text[i]
+        if depth_paren == 0 and depth_brace == 0 and depth_bracket == 0 and ch == "|":
+            parts.append(text[start:i].strip())
+            start = i + 1
+        elif ch == "(":
+            depth_paren += 1
+        elif ch == ")":
+            depth_paren -= 1
+        elif ch == "{":
+            depth_brace += 1
+        elif ch == "}":
+            depth_brace -= 1
+        elif ch == "[":
+            depth_bracket += 1
+        elif ch == "]":
+            depth_bracket -= 1
+        i += 1
+    if not parts:
+        return None
+    parts.append(text[start:].strip())
+    return parts
+
+
 def _iter_top_level_membership_operators(text: str) -> list[tuple[str, int, int]]:
     scan_text = _function_scan_text_preserve_positions(text)
     operators: list[tuple[str, int, int]] = []
@@ -1115,6 +1274,17 @@ def _has_invalid_math_literal_operands(expression: str) -> bool:
     logical_parts = _split_top_level_keyword_segments(stripped, ("implies", "and", "or", "xor"))
     if logical_parts is not None:
         return any(_has_invalid_math_literal_operands(part) for part in logical_parts)
+
+    # FP-02 SKEPTIC QA-001 (2026-08-16): §6.8 precedence — arithmetic
+    # operators (#04 `* / div mod`, #05 `+ - &`) bind TIGHTER than the '|'
+    # union operator (#07), so `1 + 2 | 3` parses as `(1 + 2) | 3` and the
+    # `+` operand is only the adjacent term. Analyze each top-level union
+    # segment independently instead of attributing the whole textual side
+    # of a math operator to it. Parenthesized unions like `(1 | 2) + 3`
+    # contain no top-level pipe and are still flagged below.
+    pipe_parts = _split_top_level_pipe_segments(stripped)
+    if pipe_parts is not None:
+        return any(_has_invalid_math_literal_operands(part) for part in pipe_parts)
 
     operators = _iter_top_level_math_operators(stripped)
     if not operators:
@@ -1272,9 +1442,12 @@ def _has_invalid_string_regex_literals(expression: str) -> bool:
             if signature is None or signature[0] != "String":
                 continue
             try:
-                from ..engine.invocations.strings import _compile_regex
+                from ..engine.invocations.strings import _compile_regex, _translate_named_groups
 
-                _compile_regex(str(signature[1]), compile_flags)
+                # FP-10 HISTORIAN QA-001: (?<name>...) named groups are valid
+                # §5.6.10 syntax; translate them for the Python re compile
+                # check exactly as the engine does.
+                _compile_regex(_translate_named_groups(str(signature[1])), compile_flags)
             except FHIRPathError:
                 return True
     return False
@@ -1307,6 +1480,19 @@ def _get_choice_type_lookup() -> dict[str, list[str]]:
                     from .fhir_types_generated import CHOICE_TYPES
 
                     for _path, field_names in CHOICE_TYPES.items():
+                        # Only include ACTUAL choice types (multiple type
+                        # options). Single-option entries are not value[x]
+                        # choice fields: e.g. "Resource.contained":
+                        # ["containedResource"] is the 0..* Resource backbone
+                        # (R4), and "Observation.subject":
+                        # ["subjectReference"] is a plain Reference field.
+                        # Treating them as choice fields made the
+                        # choice-assertion rescue hijack correct evaluator
+                        # results for `contained is/as(T)` (FP-15 SKEPTIC
+                        # QA-003, 2026-08-18). Mirrors the same rule in
+                        # fhir_model.py::build_fhir_model.
+                        if len(field_names) <= 1:
+                            continue
                         # Extract base name (e.g., "Observation.value" -> "value")
                         base = _path.split(".")[-1] if "." in _path else _path
                         if base not in lookup:
@@ -1652,9 +1838,18 @@ def _resolve_choice_type_assertion(resource_dict: dict, expression: str) -> list
 
     suffix = _choice_type_suffix(match.group("type"))
     if suffix is None:
-        return [False] if op == "is" else []
+        if op == "is":
+            return [False]
+        # FP-15 HISTORIAN (2026-08-18) guard-on-empty: defer to the engine
+        # instead of clobbering its result with [].
+        return None
     target_field = f"{base_name}{suffix}"
     if target_field not in field_names:
+        if op != "is":
+            # FP-15 HISTORIAN (2026-08-18) guard-on-empty: the requested type
+            # is not a declared choice arm; the engine's §6.3 subtype result
+            # (e.g. valueUuid as FHIR.string via uuid <: uri <: string) wins.
+            return None
         if op == "is":
             # §6.3.1: empty input collection must propagate as empty, not false.
             # When the resource has no populated choice-type field, the input
@@ -1693,7 +1888,10 @@ def _resolve_choice_type_assertion(resource_dict: dict, expression: str) -> list
         return [False]
     val = resource_dict.get(target_field)
     if val is None:
-        return []
+        # FP-15 HISTORIAN (2026-08-18) guard-on-empty: the target arm is not
+        # populated; an empty [] here must not clobber a correct non-empty
+        # engine subtype result for `as` (§6.3 "type or subclass").
+        return None
     return [val]
 
 
@@ -1769,7 +1967,13 @@ def _resolve_trailing_choice_type_assertion(resource_dict: dict, expression: str
         return [_choice_field_is_type(base_name, concrete_fields[0], match.group("type"))]
     if target_values:
         return target_values[:1]
-    return []
+    # FP-15 HISTORIAN (2026-08-18) ARCH-001 guard-on-empty: an `as` that does
+    # not match a concrete choice arm (or whose requested type is not a
+    # declared arm) must DEFER to the engine instead of returning []. The
+    # engine implements the §6.3 "type or subclass" rule (e.g.
+    # `parameter[0].value as FHIR.string` on a valueUuid arm: uuid <: uri <:
+    # string), and a [] here would clobber a correct non-empty engine result.
+    return None
 
 
 def _resolve_choice_type_assertion_any(resource_dict: dict, expression: str) -> list | None:
@@ -2175,6 +2379,16 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         return []
 
 
+# FP-15 SKEPTIC QA-005 (2026-08-18): the N1 grammar defines the operand of
+# infix `is`/`as` as a typeSpecifier (qualified identifier), NOT an
+# expression. A function invocation chained directly onto the type specifier
+# (`X is FHIR.Quantity.not()`) is therefore a SYNTAX error — the native
+# parser rejects it; the lenient fallback grammar accepted it. Applied to
+# string-masked text so literal parentheses in string literals cannot trip it.
+_INVALID_TYPE_SPECIFIER_INVOCATION = re.compile(
+    r"\b(?:is|as)\s+`?[A-Za-z_][\w.]*?`?\.[A-Za-z_]\w*\s*\("
+)
+
 _INVALID_EXPR_PATTERNS = re.compile(
     r"(?:"
     r"\.\s*$"  # trailing dot
@@ -2187,10 +2401,47 @@ _INVALID_EXPR_PATTERNS = re.compile(
     r"|^\s*@T\d{2}:\d{2}\.\d"  # Fractional Time requires seconds component
     r"|^\s*\d+(?:\.\d+)?\s+(?!years?\b|months?\b|weeks?\b|days?\b|hours?\b|minutes?\b|seconds?\b|milliseconds?\b)[A-Za-z_]\w*\s*$"
     r"|^\s*\d+\.\d+\.\d+"  # Ambiguous numeric/member-access tokenization
-    r"|\$\$"  # invalid $$ prefix
+    r")"
+)
+
+# Dollar-sign syntax checks must NOT run against string-literal contents:
+# §5.6.10 replaceMatches substitutions legitimately contain $$, $N, and
+# ${name} (FP-10 QA-005). Mask literals before applying these checks.
+_INVALID_DOLLAR_PATTERNS = re.compile(
+    r"(?:"
+    r"\$\$"  # invalid $$ prefix
     r"|\$(?!this\b|total\b|index\b|that\b)[a-zA-Z]"  # $ not followed by valid env variable
     r")"
 )
+
+
+def _mask_string_literals(text: str) -> str:
+    """Replace the contents of single-quoted string literals with spaces.
+
+    Preserves literal boundaries and overall length so positional checks on
+    the masked text stay aligned with the original expression.
+    """
+    out = list(text)
+    in_string = False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if in_string:
+            if ch == "\\" and i + 1 < len(text):
+                out[i] = " "
+                out[i + 1] = " "
+                i += 2
+                continue
+            if ch == "'":
+                in_string = False
+            else:
+                out[i] = " "
+            i += 1
+            continue
+        if ch == "'":
+            in_string = True
+        i += 1
+    return "".join(out)
 
 
 def _has_balanced_delimiters(expression: str) -> bool:
@@ -2264,6 +2515,10 @@ def fhirpath_is_valid_udf(expression: str | None) -> bool:
     # Reject common invalid patterns that fhirpathpy may accept
     precheck_text = _strip_comments_for_precheck(stripped)
     if _INVALID_EXPR_PATTERNS.search(precheck_text):
+        return False
+    if _INVALID_TYPE_SPECIFIER_INVOCATION.search(_mask_string_literals(precheck_text)):
+        return False
+    if _INVALID_DOLLAR_PATTERNS.search(_mask_string_literals(precheck_text)):
         return False
     if _has_invalid_timezone_literal(stripped):
         return False
@@ -2356,6 +2611,52 @@ def _is_valid_empty_result_error(exc: FHIRPathError) -> bool:
     if message.startswith("Cannot [") and "fhir4ds.fhirpath.engine.nodes.FP_" not in message:
         return True
     if message.startswith("Expected number or quantity, got: "):
+        return True
+    # FP-02 SKEPTIC QA-002 (2026-08-16): unary +/- on a non-numeric literal is
+    # an execution type error (§6.8 unary operators are valid syntax; §6.6
+    # type errors signal at evaluation), the same class as binary
+    # `'a' - 'b'` ("Cannot [...]"). Singleton violations ("can only be
+    # applied to an individual number") stay invalid.
+    if message.startswith("Unary - cannot be applied to non-numeric value"):
+        return True
+    if message.startswith("Unary + cannot be applied to non-numeric value"):
+        return True
+    # FP-02 EXPLORER QA-003 (2026-08-16): §6.2 defines ordering for strings,
+    # integers, decimals, quantities, dates, datetimes and times — Boolean is
+    # omitted, so boolean-vs-boolean ordering is the same execution type-error
+    # class as mixed-type ordering (`1 > true`), which is accepted above via
+    # the "Type of ... InequalityExpression" form. The special-cased message
+    # must classify identically or `fhirpath_is_valid` disagrees with itself
+    # across operand shapes.
+    if message.startswith("Comparison operators are not defined for Boolean operands"):
+        return True
+    # FP-05 SKEPTIC QA-001 (2026-08-17): §5.3 subsetting argument type errors
+    # (indexer `[i]`, skip(num), take(num) require Integer) are execution
+    # type errors of the same class as `'a' - 'b'` — the expression grammar
+    # is valid and the mismatch signals at evaluation. Singleton violations
+    # ("Indexer requires a singleton integer index",
+    # "Unexpected collection[...]; expected singleton of type Integer")
+    # remain invalid.
+    if message.startswith("Expected integer, got: "):
+        return True
+    # FP-18 SKEPTIC QA-005 (2026-08-18): §6.6.5/§6.6.6 div/mod accept
+    # Integer and Decimal operands only; Quantity/Boolean operand
+    # mismatches are execution type errors of the same class as
+    # `'a' - 'b'` ("Cannot [..."). The native engine returns empty for
+    # these shapes, so the expression stays valid.
+    if message.startswith("Cannot ") and (" div " in message or " mod " in message):
+        return True
+    # FP-18 SKEPTIC QA-005 (2026-08-18): §6.7.1/§6.7.2 unit restrictions
+    # (e.g. `@2012-01-01 + 25 hours`, `@T10:00:00 + 1 day`) signal at
+    # evaluation; the native engine returns empty, so the expressions
+    # remain valid.
+    if message.startswith("For date arithmetic,"):
+        return True
+    if message.startswith("For time arithmetic,"):
+        return True
+    if message.startswith("For date/time arithmetic,"):
+        return True
+    if message.startswith("Indexer requires an integer index"):
         return True
     return False
 
@@ -2750,6 +3051,13 @@ def fhirpath_json_udf(resource: str | None, expression: str | None) -> str | Non
                 value = float(item.value)
                 if value.is_integer():
                     value = int(value)
+                else:
+                    # FP-01 SKEPTIC QA-007 (2026-08-16): Match the native
+                    # precision-15 shortest-round-trip mask so quantity JSON
+                    # values agree between the C++ extension and the Python
+                    # fallback (e.g. `3.141592653589793236 'mg'` serializes
+                    # as 3.14159265358979 in both paths).
+                    value = float(format(value, ".15g"))
                 unit = str(item.unit)
                 if len(unit) >= 2 and unit[0] == "'" and unit[-1] == "'":
                     unit = unit[1:-1]
@@ -3078,15 +3386,7 @@ def fhirpath_repeat_udf(resource: str, paths_json: str) -> list:
 
     needed_limit = (_json_max_nesting_depth(resource) * 4) + 1000
     try:
-        with _RECURSION_LIMIT_LOCK:
-            current_limit = sys.getrecursionlimit()
-            try:
-                if needed_limit > current_limit:
-                    sys.setrecursionlimit(needed_limit)
-                return evaluate_repeat()
-            finally:
-                if sys.getrecursionlimit() != current_limit:
-                    sys.setrecursionlimit(current_limit)
+        return _run_with_recursion_budget(evaluate_repeat, needed_limit)
     except Exception:
         _logger.debug("fhirpath_repeat failed", exc_info=True)
         return []

@@ -19,6 +19,7 @@ from ...collection import FHIRPathCollection
 from ...errors import FHIRPathFunctionError
 from ...functions.string import (
     length,
+    index_of,
     substring,
     starts_with,
     ends_with,
@@ -71,6 +72,52 @@ class TestLength:
         """Test length on non-string singleton raises error."""
         with pytest.raises(FHIRPathFunctionError):
             length(FHIRPathCollection([123]))
+
+
+class TestIndexOfFp09Skeptic:
+    """Tests for index_of() direct helper (FHIRPath §5.6.1)."""
+
+    def test_index_of_found(self) -> None:
+        result = index_of(FHIRPathCollection(["abcdefg"]), "bc")
+        assert result.is_singleton
+        assert type(result.singleton_value) is int
+        assert result.singleton_value == 1
+
+    def test_index_of_first_occurrence(self) -> None:
+        result = index_of(FHIRPathCollection(["abcabc"]), "bc")
+        assert result.singleton_value == 1
+
+    def test_index_of_not_found(self) -> None:
+        result = index_of(FHIRPathCollection(["abcdefg"]), "x")
+        assert result.is_singleton
+        assert result.singleton_value == -1
+
+    def test_index_of_empty_substring_returns_zero(self) -> None:
+        result = index_of(FHIRPathCollection(["abcdefg"]), "")
+        assert result.singleton_value == 0
+
+    def test_index_of_empty_input_returns_empty(self) -> None:
+        result = index_of(FHIRPathCollection([]), "a")
+        assert result.is_empty
+
+    def test_index_of_empty_argument_returns_empty(self) -> None:
+        result = index_of(FHIRPathCollection(["abc"]), None)
+        assert result.is_empty
+
+    def test_index_of_unicode_positions(self) -> None:
+        result = index_of(FHIRPathCollection(["héllo"]), "l")
+        assert result.singleton_value == 2
+
+    def test_index_of_non_string_raises(self) -> None:
+        with pytest.raises(FHIRPathFunctionError):
+            index_of(FHIRPathCollection([3]), "a")
+
+    def test_index_of_multi_element_raises(self) -> None:
+        with pytest.raises(FHIRPathFunctionError):
+            index_of(FHIRPathCollection(["a", "b"]), "a")
+
+    def test_index_of_registered_in_string_functions(self) -> None:
+        assert "indexOf" in STRING_FUNCTIONS
 
 
 class TestSubstring:
@@ -435,6 +482,74 @@ class TestReplaceMatches:
         with pytest.raises(FHIRPathFunctionError):
             replace_matches(FHIRPathCollection(["aaaaaaaa"]), r"(a|aa)+", "x")
 
+    def test_replace_matches_dollar_substitution_syntax_fp10_skeptic2(self) -> None:
+        """FP-10 QA-006: helper must implement §5.6.10 $N/${name}/$$ substitution.
+
+        The helper previously passed the replacement straight to re.sub,
+        producing literal '$1' text and rejecting PCRE named-group patterns.
+        It now delegates to the engine implementation.
+        """
+        assert replace_matches(FHIRPathCollection(["abc"]), "(b)", "[$1]").singleton_value == "a[b]c"
+        # Out-of-range $N → empty substitution (native-matching semantics)
+        assert replace_matches(FHIRPathCollection(["abc"]), "(b)", "[$5]").singleton_value == "a[]c"
+        # $0 full match
+        assert replace_matches(FHIRPathCollection(["abc"]), "(b)", "[$0]").singleton_value == "a[b]c"
+        # $$ literal dollar
+        assert replace_matches(FHIRPathCollection(["Abc"]), "A", "$$").singleton_value == "$bc"
+        # ${name} for existing named group substitutes; unknown name is literal
+        assert (
+            replace_matches(FHIRPathCollection(["11/30/1972"]), r"(?<year>[0-9]{4})", "[${year}]").singleton_value
+            == "11/30/[1972]"
+        )
+        assert (
+            replace_matches(FHIRPathCollection(["abc"]), "(b)", "[${name}]").singleton_value
+            == "a[${name}]c"
+        )
+        # Spec §5.6.10 canonical example (numbered-group form)
+        assert (
+            replace_matches(
+                FHIRPathCollection(["11/30/1972"]),
+                r"([0-9]{1,2})/([0-9]{1,2})/([0-9]{2,4})",
+                "$2-$1-$3",
+            ).singleton_value
+            == "30-11-1972"
+        )
+
+    def test_replace_matches_none_args_return_empty_fp10_skeptic2(self) -> None:
+        """FP-10 QA-006: None regex/replacement → empty collection (engine contract)."""
+        assert replace_matches(FHIRPathCollection(["abc"]), None, "x").is_empty
+        assert replace_matches(FHIRPathCollection(["abc"]), "a", None).is_empty
+
+    def test_replace_none_args_return_empty_fp10_skeptic2(self) -> None:
+        """FP-10 QA-006: replace() guards None pattern/replacement."""
+        from ...errors import FHIRPathFunctionError
+
+        assert replace(FHIRPathCollection(["abc"]), None, "x").is_empty
+        assert replace(FHIRPathCollection(["abc"]), "a", None).is_empty
+        with pytest.raises(FHIRPathFunctionError):
+            replace(FHIRPathCollection(["abc"]), 123, "x")
+        with pytest.raises(FHIRPathFunctionError):
+            replace(FHIRPathCollection(["abc"]), "a", 123)
+
+    def test_matches_ascii_class_dialect_fp10_skeptic2(self) -> None:
+        """FP-10 QA-003: helper matches() uses ASCII \w/\d/\s/\b (PCRE default),
+        matching the native engine, while Unicode case-insensitive matching
+        still works."""
+        assert matches(FHIRPathCollection(["日本語"]), r"\w+").singleton_value is False
+        assert matches(FHIRPathCollection(["abc"]), r"\w+").singleton_value is True
+        assert matches(FHIRPathCollection(["a\u0020b"]), r"\s").singleton_value is True
+        assert matches(FHIRPathCollection(["É"]), "é", "i").singleton_value is True
+
+    def test_matches_none_and_non_string_regex_arg_fp10_historian(self) -> None:
+        """FP-10 HISTORIAN QA-002: matches() None regex → empty collection
+        (sibling-helper contract); non-String regex → typed error, not a
+        raw TypeError from len(None)."""
+        from ...errors import FHIRPathFunctionError
+
+        assert matches(FHIRPathCollection(["abc"]), None).is_empty
+        with pytest.raises(FHIRPathFunctionError):
+            matches(FHIRPathCollection(["abc"]), 123)
+
 
 class TestToChars:
     """Tests for toChars() function."""
@@ -691,3 +806,53 @@ class TestFHIRPathSemantics:
         result = length(FHIRPathCollection(["hello"]))
         assert type(result.singleton_value) is int
         assert result.singleton_value == 5
+
+
+class TestStringHelperEngineContractFp09Historian:
+    """Direct string helpers must follow engine (§5.6.1-§5.6.5) semantics.
+
+    Engine parity contract (core evaluator + native fn_* agree):
+    - empty argument collection -> empty result collection
+    - non-String singleton argument -> typed FHIRPathFunctionError
+    - substring(start, length<=0) -> the empty STRING '' (not empty collection)
+    """
+
+    def test_starts_with_empty_argument_returns_empty(self) -> None:
+        assert starts_with(FHIRPathCollection(["hello"]), None).is_empty
+
+    def test_ends_with_empty_argument_returns_empty(self) -> None:
+        assert ends_with(FHIRPathCollection(["hello"]), None).is_empty
+
+    def test_contains_empty_argument_returns_empty(self) -> None:
+        assert contains(FHIRPathCollection(["hello"]), None).is_empty
+
+    def test_starts_with_non_string_argument_raises_typed(self) -> None:
+        with pytest.raises(FHIRPathFunctionError):
+            starts_with(FHIRPathCollection(["hello"]), 3)
+
+    def test_ends_with_non_string_argument_raises_typed(self) -> None:
+        with pytest.raises(FHIRPathFunctionError):
+            ends_with(FHIRPathCollection(["hello"]), True)
+
+    def test_contains_non_string_argument_raises_typed(self) -> None:
+        with pytest.raises(FHIRPathFunctionError):
+            contains(FHIRPathCollection(["hello"]), 1.5)
+
+    def test_substring_empty_start_argument_returns_empty(self) -> None:
+        assert substring(FHIRPathCollection(["hello"]), None).is_empty
+
+    def test_substring_negative_length_returns_empty_string(self) -> None:
+        # Both engines return '' for length <= 0 (§5.6.2), not an empty
+        # collection; the helper previously diverged by returning {}.
+        result = substring(FHIRPathCollection(["hello"]), 1, -2)
+        assert result.is_singleton
+        assert result.singleton_value == ""
+
+    def test_substring_zero_length_returns_empty_string(self) -> None:
+        result = substring(FHIRPathCollection(["hello"]), 1, 0)
+        assert result.is_singleton
+        assert result.singleton_value == ""
+
+    def test_substring_negative_start_still_empty_collection(self) -> None:
+        # Negative START keeps the empty-collection convention (engines agree).
+        assert substring(FHIRPathCollection(["hello"]), -1).is_empty

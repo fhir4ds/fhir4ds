@@ -28,8 +28,11 @@ class EvaluationContext:
     - Iteration context ($this, $index, $total)
     - Environment variable values
 
-    Context Variables:
-        %context: The current resource being evaluated (changes with focus)
+    Context Variables (FHIRPath §9):
+        %context: The original node passed to the evaluation engine before
+            evaluation started. Per spec this does NOT change with focus;
+            nested %context references (e.g. inside select/where) resolve
+            against the original node.
         %resource: The original input resource (does not change)
         %rootResource: The container root resource (for Bundles)
 
@@ -237,8 +240,13 @@ class EvaluationContext:
         """
         Create a context with a new focus resource.
 
-        The %context variable changes to the new focus, but %resource
-        and %rootResource remain the same.
+        Updates ``context_resource`` (the focus used by focus-dependent
+        helper evaluation), while ``resource`` (%resource) and
+        ``root_resource`` (%rootResource) remain the same. Note: per
+        FHIRPath §9, spec-level %context is the ORIGINAL node passed to the
+        engine; nested %context references inside select/where expressions
+        resolve against that original node (handled by the evaluator), not
+        against this focus.
 
         Args:
             focus_resource: The new focus resource.

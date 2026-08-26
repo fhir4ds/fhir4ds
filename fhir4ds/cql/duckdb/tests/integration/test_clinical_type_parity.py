@@ -764,3 +764,381 @@ define ConceptEquivConcept_Same: Conc ~ Conc
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql02_skeptic_equivalence_uses_string_equivalence_casing() -> None:
+    """CQL 1.5 Clinical Operators > Equivalent: Code equivalence compares the
+    code and system elements using STRING equivalence, which ignores case and
+    locale and normalizes whitespace (09-b-cqlreference.md > Equivalent)."""
+    cql = """library Cql02SkepticEquiv version '1.0.0'
+using FHIR version '4.0.1'
+codesystem LOINC: 'http://loinc.org'
+context Patient
+define CaseInsensitiveCode: Code { code: 'ABC', system: 'http://s.org' } ~ Code { code: 'abc', system: 'http://s.org' }
+define CaseInsensitiveSystem: Code { code: 'abc', system: 'http://S.ORG' } ~ Code { code: 'abc', system: 'http://s.org' }
+define WhitespaceNormalized: Code { code: 'a b', system: 's' } ~ Code { code: 'a  b', system: 's' }
+define SystemDiffers: Code { code: 'abc', system: 's1' } ~ Code { code: 'abc', system: 's2' }
+define EqualityStillCaseSensitive: Code { code: 'ABC', system: 's' } = Code { code: 'abc', system: 's' }
+define ConceptIntersectionCaseInsensitive: Concept { codes: { Code { code: 'ABC', system: 's' } } } ~ Concept { codes: { Code { code: 'abc', system: 's' } } }
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "CaseInsensitiveCode": True,
+        "CaseInsensitiveSystem": True,
+        "WhitespaceNormalized": True,
+        "SystemDiffers": False,
+        "EqualityStillCaseSensitive": False,
+        "ConceptIntersectionCaseInsensitive": True,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, want in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (want,), name
+            assert cpp.execute(sql).fetchone() == (want,), name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql02_skeptic_concept_instance_with_named_codes_is_structured() -> None:
+    """CQL 1.5 Types > Concept: codes is List<Code>; named-code members must
+    not double-serialize as strings inside the codes list."""
+    cql = """library Cql02SkepticConcept version '1.0.0'
+using FHIR version '4.0.1'
+codesystem LOINC: 'http://loinc.org'
+code "Systolic": '8480-6' from LOINC display 'Systolic blood pressure'
+code "Diastolic": '8462-4' from LOINC display 'Diastolic blood pressure'
+context Patient
+define ConceptJson: Concept { codes: { "Systolic", "Diastolic" }, display: 'BP' }
+define ConceptCodesCount: Count((Concept { codes: { "Systolic", "Diastolic" } }).codes)
+"""
+    translated = translate_cql(cql)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        value = json.loads(py.execute(f"SELECT {translated['ConceptJson'].to_sql()}").fetchone()[0])
+        assert value == {
+            "codes": [
+                {"code": "8480-6", "system": "http://loinc.org", "display": "Systolic blood pressure"},
+                {"code": "8462-4", "system": "http://loinc.org", "display": "Diastolic blood pressure"},
+            ],
+            "display": "BP",
+        }
+        cpp_value = json.loads(cpp.execute(f"SELECT {translated['ConceptJson'].to_sql()}").fetchone()[0])
+        assert cpp_value == value
+        sql = f"SELECT {translated['ConceptCodesCount'].to_sql()}"
+        assert py.execute(sql).fetchone() == (2,)
+        assert cpp.execute(sql).fetchone() == (2,)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql02_skeptic_concept_codes_accessor_is_list() -> None:
+    """CQL 1.5 Types > Concept: `.codes` is List<Code>; fhirpath_text-based
+    lowering returned only the first element and Count returned 0/1."""
+    cql = """library Cql02SkepticCodesAccess version '1.0.0'
+using FHIR version '4.0.1'
+codesystem LOINC: 'http://loinc.org'
+code "Systolic": '8480-6' from LOINC display 'Systolic blood pressure'
+code "Diastolic": '8462-4' from LOINC display 'Diastolic blood pressure'
+context Patient
+define CodesAccessor: ToConcept({ "Systolic", "Diastolic" }).codes
+define CodesCount: Count(ToConcept({ "Systolic", "Diastolic" }).codes)
+define DisplayAccessor: ToConcept("Systolic").display
+define CodeAccessor: (Code '8480-6' from LOINC).code
+define SystemAccessor: (Code '8480-6' from LOINC).system
+"""
+    translated = translate_cql(cql)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        sql = f"SELECT {translated['CodesAccessor'].to_sql()}"
+        py_codes = py.execute(sql).fetchone()[0]
+        cpp_codes = cpp.execute(sql).fetchone()[0]
+        assert len(py_codes) == 2
+        assert py_codes == cpp_codes
+        assert json.loads(py_codes[0])["code"] == "8480-6"
+        assert json.loads(py_codes[1])["code"] == "8462-4"
+        sql = f"SELECT {translated['CodesCount'].to_sql()}"
+        assert py.execute(sql).fetchone() == (2,)
+        assert cpp.execute(sql).fetchone() == (2,)
+        sql = f"SELECT {translated['DisplayAccessor'].to_sql()}"
+        assert py.execute(sql).fetchone() == ("Systolic blood pressure",)
+        assert cpp.execute(sql).fetchone() == ("Systolic blood pressure",)
+        sql = f"SELECT {translated['CodeAccessor'].to_sql()}"
+        assert py.execute(sql).fetchone() == ("8480-6",)
+        assert cpp.execute(sql).fetchone() == ("8480-6",)
+        sql = f"SELECT {translated['SystemAccessor'].to_sql()}"
+        assert py.execute(sql).fetchone() == ("http://loinc.org",)
+        assert cpp.execute(sql).fetchone() == ("http://loinc.org",)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql02_skeptic_static_clinical_define_alias_inlines() -> None:
+    """A top-level define whose body is a static clinical literal must be
+    inlined at reference sites; the previous patient-correlated CTE lookup
+    hit a Binder error against a literal CTE with no patient_id column."""
+    from fhir4ds.cql.parser import parse_cql
+
+    cql = """library Cql02SkepticAlias version '1.0.0'
+using FHIR version '4.0.1'
+valueset "Example VS": 'http://example.org/fhir/ValueSet/example'
+codesystem LOINC: 'http://loinc.org'
+context Patient
+define CodeDef: Code '8480-6' from LOINC
+define UseIt: CodeDef.code
+define UseItDirect: CodeDef
+define AliasOfAlias: UseItDirect
+define ConceptDef: Concept { codes: { Code { code: 'c1', system: 's1' } } }
+define UseConcept: ConceptDef ~ Concept { codes: { Code { code: 'c1', system: 's1' } } }
+define VSDef: "Example VS"
+"""
+    translated = translate_cql(cql)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        sql = f"SELECT {translated['UseIt'].to_sql()}"
+        assert py.execute(sql).fetchone() == ("8480-6",)
+        assert cpp.execute(sql).fetchone() == ("8480-6",)
+        sql = f"SELECT {translated['AliasOfAlias'].to_sql()}"
+        py_val = json.loads(py.execute(sql).fetchone()[0])
+        assert py_val == {"code": "8480-6", "system": "http://loinc.org"}
+        assert cpp.execute(sql).fetchone() == py.execute(sql).fetchone()
+        sql = f"SELECT {translated['UseConcept'].to_sql()}"
+        assert py.execute(sql).fetchone() == (True,)
+        assert cpp.execute(sql).fetchone() == (True,)
+    finally:
+        py.close()
+        cpp.close()
+
+    # End-to-end: full-library SQL must execute without Binder errors.
+    from fhir4ds.cql.translator import translate_library_to_sql
+
+    con = _python_only_connection()
+    try:
+        con.execute("CREATE TABLE _pt(patient_id VARCHAR)")
+        for final in ("UseIt", "UseItDirect", "AliasOfAlias", "UseConcept", "VSDef"):
+            sql = translate_library_to_sql(parse_cql(cql), final_definition=final)
+            con.execute(sql).fetchall()
+    finally:
+        con.close()
+
+
+def test_cql02_historian_valueset_alias_membership_unwraps_url() -> None:
+    """CQL-02 HISTORIAN QA-001: `X in VSDef` where `define VSDef: "VS"` is a
+    define alias of a valueset declaration must unwrap the structured clinical
+    JSON to the canonical URL at the terminology boundary. Previously the
+    translator emitted `... IN '{"id":...}'` (raw JSON as a SQL IN-list
+    operand) which raised a ParserException on both backends."""
+    cql = """library Cql02HistorianVsAlias version '1.0.0'
+using FHIR version '4.0.1'
+valueset "Example VS": 'http://example.org/fhir/ValueSet/example'
+codesystem LOINC: 'http://loinc.org'
+code "Systolic": '8480-6' from LOINC
+context Patient
+define VSDef: "Example VS"
+define CodeInVSDef: Code { code: 'x', system: 's' } in VSDef
+define NullInVSDef: null in VSDef
+define VSDefIsValueSet: VSDef is ValueSet
+"""
+    translated = translate_cql(cql)
+    sql = translated["CodeInVSDef"].to_sql()
+    # Membership must route through in_valueset with the canonical URL.
+    assert "in_valueset" in sql
+    assert "'http://example.org/fhir/ValueSet/example'" in sql
+    assert '"id"' not in sql
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        # No valueset data loaded: membership unknown -> NULL on BOTH backends
+        # (never a ParserException, never a raised Python error).
+        assert py.execute(f"SELECT {sql}").fetchone() == (None,)
+        assert cpp.execute(f"SELECT {sql}").fetchone() == (None,)
+        assert py.execute(
+            f"SELECT {translated['NullInVSDef'].to_sql()}"
+        ).fetchone() == (False,)
+        assert cpp.execute(
+            f"SELECT {translated['NullInVSDef'].to_sql()}"
+        ).fetchone() == (False,)
+        assert py.execute(
+            f"SELECT {translated['VSDefIsValueSet'].to_sql()}"
+        ).fetchone() == (True,)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql02_historian_codesystem_alias_membership_unwraps_url() -> None:
+    """CQL-02 HISTORIAN QA-001: `X in CSDef` where `define CSDef: LOINC` must
+    resolve through the alias to the codesystem URL and apply CodeSystem
+    membership semantics (previously a ParserException from raw JSON IN)."""
+    cql = """library Cql02HistorianCsAlias version '1.0.0'
+using FHIR version '4.0.1'
+codesystem LOINC: 'http://loinc.org'
+codesystem SNOMED: 'http://snomed.info/sct'
+code "Systolic": '8480-6' from LOINC
+context Patient
+define CSDef: LOINC
+define NamedCodeInCSDef: "Systolic" in CSDef
+define WrongSystemCodeInCSDef: Code 'x' from SNOMED in CSDef
+define AliasOfAliasInCS: (CSDef) is CodeSystem
+"""
+    translated = translate_cql(cql)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        sql = f"SELECT {translated['NamedCodeInCSDef'].to_sql()}"
+        assert py.execute(sql).fetchone() == (True,)
+        assert cpp.execute(sql).fetchone() == (True,)
+        sql = f"SELECT {translated['WrongSystemCodeInCSDef'].to_sql()}"
+        assert py.execute(sql).fetchone() == (False,)
+        assert cpp.execute(sql).fetchone() == (False,)
+        sql = f"SELECT {translated['AliasOfAliasInCS'].to_sql()}"
+        assert py.execute(sql).fetchone() == (True,)
+        assert cpp.execute(sql).fetchone() == (True,)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql02_historian_empty_concept_membership_folds_false() -> None:
+    """CQL-02 HISTORIAN QA-002: `Concept { }` (empty concept selector) used
+    with `in` CodeSystem/ValueSet must fold to FALSE (no codes can be members).
+    Previously the empty Concept fell through to the generic membership path
+    and emitted invalid SQL (`json_object() IN '{"id":...}'`)."""
+    cql = """library Cql02HistorianEmptyConcept version '1.0.0'
+using FHIR version '4.0.1'
+valueset "Example VS": 'http://example.org/fhir/ValueSet/example'
+codesystem LOINC: 'http://loinc.org'
+context Patient
+define ConceptEmptyInCS: Concept { } in LOINC
+define ConceptEmptyInVS: Concept { } in "Example VS"
+define ConceptCodesEmptyInCS: Concept { codes: { } } in LOINC
+define ConceptEmptyEquiv: Concept { } ~ Concept { codes: { Code { code: 'x', system: 's' } } }
+"""
+    translated = translate_cql(cql)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name in ("ConceptEmptyInCS", "ConceptEmptyInVS", "ConceptCodesEmptyInCS"):
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (False,), name
+            assert cpp.execute(sql).fetchone() == (False,), name
+    finally:
+        py.close()
+        cpp.close()
+
+    # Equivalence lowering uses fhirpath helpers, so use fhirpath-enabled
+    # connections for this assertion.
+    py = duckdb.connect(config={"allow_unsigned_extensions": True})
+    _register_python_supplements(py, cpp_loaded=False, include_fhirpath=True)
+    cpp = duckdb.connect(config={"allow_unsigned_extensions": True})
+    register(cpp, include_fhirpath=True)
+    try:
+        sql = f"SELECT {translated['ConceptEmptyEquiv'].to_sql()}"
+        assert py.execute(sql).fetchone() == (False,)
+        assert cpp.execute(sql).fetchone() == (False,)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql02_historian_in_valueset_fallback_null_without_data() -> None:
+    """CQL-02 HISTORIAN QA-003: with no value set data loaded, the Python
+    fallback in_valueset must return SQL NULL (matching the native C++ path),
+    not raise InvalidInputException through DuckDB."""
+    cql = """library Cql02HistorianVsNull version '1.0.0'
+using FHIR version '4.0.1'
+valueset "Example VS": 'http://example.org/fhir/ValueSet/example'
+context Patient
+define DirectCodeInVS: Code { code: 'x', system: 's' } in "Example VS"
+define DirectStringInVS: 'x' in "Example VS"
+"""
+    translated = translate_cql(cql)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name in ("DirectCodeInVS", "DirectStringInVS"):
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (None,), name
+            assert cpp.execute(sql).fetchone() == (None,), name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql02_explorer_absent_vs_null_system_equivalence_and_equality() -> None:
+    """CQL-02 EXPLORER QA-001: an absent system element and an explicit
+    `system: null` element are both "no value" (CQL 1.5 Equal: values for all
+    elements *that have values* are equal; Equivalent: String equivalence
+    where null ~ null is true and null is not equivalent to '')."""
+    cql = """library Cql02ExplorerNullSystem version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define AbsentVsExplicitNullEquiv: Code { code: 'x' } ~ Code { code: 'x', system: null }
+define AbsentVsExplicitNullEqual: Code { code: 'x' } = Code { code: 'x', system: null }
+define BothNullSystemsEquiv: Code { code: 'x', system: null } ~ Code { code: 'x', system: null }
+define ValueVsNullSystemEqual: Code { code: 'x', system: 's' } = Code { code: 'x', system: null }
+define EmptyCodeNotEquivNullCode: Code { code: '', system: 's' } ~ Code { code: null, system: 's' }
+"""
+    translated = translate_cql(cql)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    expected = {
+        "AbsentVsExplicitNullEquiv": (True,),
+        "AbsentVsExplicitNullEqual": (True,),
+        "BothNullSystemsEquiv": (True,),
+        "ValueVsNullSystemEqual": (None,),
+        "EmptyCodeNotEquivNullCode": (False,),
+    }
+    try:
+        for name, want in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == want, name
+            assert cpp.execute(sql).fetchone() == want, name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql02_explorer_concept_codes_list_equivalence_case_insensitive() -> None:
+    """CQL-02 EXPLORER QA-002: statically folded List<Code> operands
+    (Concept.codes, ToConcept(...).codes, define-alias .codes) must use
+    element-wise Code equivalence (CQL 1.5 Equivalent for lists), not
+    byte-wise JSON comparison. Concept-level ~ keeps intersection
+    (order-insensitive) semantics; list-level ~ stays order-sensitive."""
+    cql = """library Cql02ExplorerCodesEquiv version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define C: Concept { codes: { Code { code: 'c1', system: 's' }, Code { code: 'c2', system: 's' } } }
+define CodesEquivCaseInsensitive: C.codes ~ { Code { code: 'C1', system: 'S' }, Code { code: 'C2', system: 'S' } }
+define ToConceptCodesEquivCase: ToConcept(Code { code: 'c1', system: 's' }).codes ~ { Code { code: 'C1', system: 'S' } }
+define CodesEquivOrderSensitive: C.codes ~ { Code { code: 'c2', system: 's' }, Code { code: 'c1', system: 's' } }
+define CodesEquivLengthMismatch: C.codes ~ { Code { code: 'c1', system: 's' } }
+define CodesNotEquivNegated: C.codes !~ { Code { code: 'zzz', system: 's' }, Code { code: 'c2', system: 's' } }
+define ConceptEquivIntersectionOrderInsensitive: C ~ Concept { codes: { Code { code: 'c2', system: 's' }, Code { code: 'c1', system: 's' } } }
+"""
+    translated = translate_cql(cql)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    expected = {
+        "CodesEquivCaseInsensitive": (True,),
+        "ToConceptCodesEquivCase": (True,),
+        "CodesEquivOrderSensitive": (False,),
+        "CodesEquivLengthMismatch": (False,),
+        "CodesNotEquivNegated": (True,),
+        "ConceptEquivIntersectionOrderInsensitive": (True,),
+    }
+    try:
+        for name, want in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == want, name
+            assert cpp.execute(sql).fetchone() == want, name
+    finally:
+        py.close()
+        cpp.close()

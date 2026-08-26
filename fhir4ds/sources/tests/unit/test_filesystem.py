@@ -375,3 +375,59 @@ class TestSupportsIncremental:
 
     def test_iceberg_is_not_incremental(self):
         assert not FileSystemSource("/data/", format="iceberg").supports_incremental()
+
+
+# ---------------------------------------------------------------------------
+# Tests: patient-identity doctrine (0.0.12 evolution campaign, QA-006)
+# ---------------------------------------------------------------------------
+
+
+class TestRawFhirPatientRefDoctrine:
+    """patient_ref derivation must match FHIRDataLoader._extract_patient_ref."""
+
+    @staticmethod
+    def _mount(tmpdir, resources):
+        path = os.path.join(tmpdir, "raw.ndjson")
+        with open(path, "w") as f:
+            for r in resources:
+                f.write(json.dumps(r) + "\n")
+        con = _make_con()
+        FileSystemSource(path, format="ndjson").register(con)
+        return dict(
+            con.execute("SELECT id, patient_ref FROM resources").fetchall()
+        )
+
+    def test_group_subject_not_attributed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            got = self._mount(tmpdir, [
+                {"resourceType": "Condition", "id": "c1",
+                 "subject": {"reference": "Group/g7"}},
+            ])
+            assert got == {"c1": None}
+
+    def test_patient_typed_forms_attributed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            got = self._mount(tmpdir, [
+                {"resourceType": "Observation", "id": "o1",
+                 "subject": {"reference": "Patient/p1"}},
+                {"resourceType": "Observation", "id": "o2",
+                 "subject": {"reference": "https://h/fhir/Patient/p2"}},
+                {"resourceType": "Observation", "id": "o3",
+                 "subject": {"reference": "Patient/p3/_history/9"}},
+                {"resourceType": "Observation", "id": "o4",
+                 "subject": {"reference": "urn:uuid:uu1"}},
+                {"resourceType": "Patient", "id": "px1"},
+            ])
+            assert got == {
+                "o1": "p1", "o2": "p2", "o3": "p3", "o4": "uu1", "px1": "px1",
+            }
+
+    def test_bare_id_and_other_types_not_attributed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            got = self._mount(tmpdir, [
+                {"resourceType": "Encounter", "id": "e1",
+                 "subject": {"reference": "Location/loc1"}},
+                {"resourceType": "Condition", "id": "c2",
+                 "subject": {"reference": "bare-id"}},
+            ])
+            assert got == {"e1": None, "c2": None}

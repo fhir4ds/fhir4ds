@@ -154,12 +154,28 @@ _HIGH_FILL = {
 
 
 def _time_boundary(data, precision, fill):
-    """Shared Time boundary logic."""
+    """Shared Time boundary logic.
+
+    Components present in the input are preserved; components below the
+    input's precision are filled with the boundary value (high=59/999,
+    low=00/000). For example, highBoundary of `12:34:00` (seconds precision)
+    yields `12:34:00.999` (preserve seconds, max fractional); highBoundary
+    of `12:34` (minute precision) yields `12:34:59.999` (max seconds and
+    fractional).
+    """
     match_list = data._getMatchAsList()
     hour = match_list[0] if match_list[0] is not None else fill["hour"]
     minute = match_list[1] if match_list[1] is not None else fill["minute"]
-    second = fill["second"]
-    ms = fill["ms"]
+    second = (
+        match_list[2]
+        if len(match_list) > 2 and match_list[2] is not None
+        else fill["second"]
+    )
+    ms = (
+        match_list[3]
+        if len(match_list) > 3 and match_list[3] is not None
+        else fill["ms"]
+    )
     tz = match_list[4] if len(match_list) > 4 and match_list[4] else ""
 
     if precision is not None:

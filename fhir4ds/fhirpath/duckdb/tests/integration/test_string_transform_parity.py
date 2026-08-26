@@ -324,25 +324,21 @@ def test_string_transform_replace_matches_substitution_edge_cases_fp10_skeptic(
 def test_string_transform_replace_matches_named_group_spec_example_fp10_skeptic(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    r"""FP-10 SKEPTIC iter 1: §5.6.10 canonical spec example with named groups.
+    r"""FP-10: §5.6.10 canonical spec example with named groups.
 
-    The FHIRPath §5.6.10 spec example uses ECMAScript/PCRE-style named
-    groups (?<name>...) and named substitution references ${name}:
+    The FHIRPath §5.6.10 spec example uses PCRE-style named groups
+    (?<name>...) and named substitution references ${name}:
        '11/30/1972'.replaceMatches('(?<month>\d{1,2})/(?<day>\d{1,2})/(?<year>\d{2,4})',
               '${day}-${month}-${year}')
     Expected per spec: '30-11-1972'.
 
-    Native C++ uses std::regex (ECMAScript syntax) which does NOT support
-    named groups, so it returns empty {} — a documented platform-level
-    limitation (spec note: "FHIRPath does not prescribe a particular
-    dialect"). The Python fallback now translates (?<name>...) to
-    (?P<name>...) and ${name} to \g<name> so the spec example produces
-    the documented '30-11-1972' result. This is platform-flexibility
-    behavior, not a regression.
-
-    This test verifies the Python fallback's spec compliance for the
-    canonical example. It does NOT assert native↔fallback parity,
-    because the spec explicitly allows platform differences here.
+    FP-10 HISTORIAN QA-001: the native C++ path previously failed the
+    spec's own canonical example (std::regex has no named-group syntax and
+    the substitution went raw to std::regex_replace). normalizeFHIRPathRegex
+    now translates (?<name>...) to a plain capturing group (numbering
+    preserved) and replaceMatches rewrites ${name} for existing named
+    groups to the numbered $N form. Both engines must now run the
+    canonical example identically.
     """
     resource = json.dumps({"resourceType": "Patient"})
     expressions = [
@@ -352,12 +348,142 @@ def test_string_transform_replace_matches_named_group_spec_example_fp10_skeptic(
         # Numeric group reference works in both backends
         ("'11/30/1972'.replaceMatches('([0-9]{1,2})/([0-9]{1,2})/([0-9]{2,4})', '$2-$1-$3')",
          (["30-11-1972"], "30-11-1972", '["30-11-1972"]', None, None)),
+        # Spec example WITH word boundaries (verbatim §5.6.10 pattern)
+        (r"'11/30/1972'.replaceMatches('\\b(?<month>\\d{1,2})/(?<day>\\d{1,2})/(?<year>\\d{2,4})\\b', '${day}-${month}-${year}')",
+         (["30-11-1972"], "30-11-1972", '["30-11-1972"]', None, None)),
+        # Named group + mixed numbered references
+        ("'ab'.replaceMatches('(?<n>a)(b)', '$2${n}')",
+         (["ba"], "ba", '["ba"]', None, None)),
+        # ${unknown} stays literal; bare $name stays literal
+        ("'abc'.replaceMatches('(?<n>a)', '${missing}')",
+         (["${missing}bc"], "${missing}bc", '["${missing}bc"]', None, None)),
+        ("'abc'.replaceMatches('(?<n>a)', '$n')",
+         (["$nbc"], "$nbc", '["$nbc"]', None, None)),
+        # Named groups inside matches() (no substitution)
+        ("'11/30/1972'.matches('(?<month>[0-9]{1,2})/(?<day>[0-9]{1,2})')",
+         (["true"], "true", "[true]", True, None)),
+        # Named group combined with a leading inline flag group (the captured
+        # text keeps its original case — 'A' — in both engines)
+        ("'AB'.replaceMatches('(?i)(?<n>a)', '${n}${n}')",
+         (["AAB"], "AAB", '["AAB"]', None, None)),
+        # Multiline flag path with named groups and ${name} substitution
+        ("'a\\nb'.replaceMatches('(?m)^(?<n>a)', '${n}X')",
+         (["aX\nb"], "aX\nb", '["aX\\nb"]', None, None)),
     ]
+    native = _connection()
     fallback = _python_fallback_connection(monkeypatch)
     try:
         for expression, expected in expressions:
-            assert _all_public_outputs(fallback, resource, expression) == expected
+            assert _all_public_outputs(native, resource, expression) == expected, expression
+            assert _all_public_outputs(fallback, resource, expression) == expected, expression
     finally:
+        native.close()
+        fallback.close()
+
+
+def test_string_transform_regex_anchor_flags_and_classes_parity_fp10_skeptic2(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""FP-10 SKEPTIC iter 1 (fresh rerun): regex dialect parity fixes.
+
+    Three parity doctrines pinned after dual-path probing:
+    - QA-001: default-mode `$` follows PCRE semantics — matches at end of
+      subject OR immediately before a single trailing newline (native
+      previously end-only like raw std::regex ECMAScript).
+    - QA-002: PCRE inline flag groups (?i)/(?m)/(?im)/(?s) at the pattern
+      start are honored (native previously failed compilation).
+    - QA-003: `\w`/`\d`/`\s`/`\b` are ASCII classes per the PCRE-recommended
+      dialect (§5.6.9 note: FHIRPath does not prescribe a dialect, PCRE
+      recommended; PCRE defaults are ASCII). The Python fallback previously
+      compiled with Unicode-aware classes; it now passes re.ASCII.
+    - QA-005: `$$` inside a replaceMatches substitution string literal is
+      valid syntax (escaped literal dollar); the fallback's syntax precheck
+      previously rejected the whole expression.
+    """
+    resource = json.dumps({"resourceType": "Patient", "s": "Abc abc"})
+    expressions = [
+        # QA-001: PCRE $ before a single trailing newline (LF only; the
+        # preceding \r in CRLF is an ordinary character, so 'ab$' on
+        # "ab\r\n" is false — matching PCRE and Python re)
+        ("'abc\\n'.matches('abc$')", (["true"], "true", "[true]", True, None)),
+        ("'ab\\r\\n'.matches('ab$')", (["false"], "false", "[false]", False, None)),
+        ("'ab\\n\\n'.matches('ab$')", (["false"], "false", "[false]", False, None)),
+        ("'abc'.matches('abc$')", (["true"], "true", "[true]", True, None)),
+        ("'abc'.matches('ab$')", (["false"], "false", "[false]", False, None)),
+        # QA-002: inline flags
+        ("s.matches('(?i)abc')", (["true"], "true", "[true]", True, None)),
+        ("s.matches('(?i)zzz')", (["false"], "false", "[false]", False, None)),
+        ("s.matches('(?m)^abc')", (["false"], "false", "[false]", False, None)),
+        ("s.matches('(?im)^abc')", (["true"], "true", "[true]", True, None)),
+        ("s.matches('(?s)A.c')", (["true"], "true", "[true]", True, None)),
+        ("s.replaceMatches('(?i)a', 'X')", (["Xbc Xbc"], "Xbc Xbc", '["Xbc Xbc"]', None, None)),
+        # QA-003: ASCII \w \d \s \b (PCRE default dialect)
+        ("'日本語'.matches('\\\\w+')", (["false"], "false", "[false]", False, None)),
+        ("'abc'.matches('\\\\w+')", (["true"], "true", "[true]", True, None)),
+        ("'١٢٣'.matches('\\\\d+')", (["false"], "false", "[false]", False, None)),
+        ("'123'.matches('\\\\d+')", (["true"], "true", "[true]", True, None)),
+        ("'a\\u00A0b'.matches('\\\\s')", (["false"], "false", "[false]", False, None)),
+        ("'a b'.matches('\\\\s')", (["true"], "true", "[true]", True, None)),
+        ("'straße'.matches('stra\\\\b')", (["true"], "true", "[true]", True, None)),
+        ("'日本語'.matches('.+')", (["true"], "true", "[true]", True, None)),
+        # QA-005: $$ substitution literal
+        ("s.replaceMatches('A','$$')", (["$bc abc"], "$bc abc", '["$bc abc"]', None, None)),
+        # $1 out-of-range group -> empty substitution; trailing $ stays literal
+        ("s.replaceMatches('A','$1$')", (["$bc abc"], "$bc abc", '["$bc abc"]', None, None)),
+    ]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expressions:
+            assert _all_public_outputs(native, resource, expression) == expected, expression
+            assert _all_public_outputs(fallback, resource, expression) == expected, expression
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_string_transform_regex_dialect_documented_divergences_fp10_skeptic2(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""FP-10 SKEPTIC iter 1 (fresh rerun): spec-sanctioned dialect divergences.
+
+    §5.6.9 note: "FHIRPath does not prescribe a particular dialect". Native
+    std::regex ECMAScript has no lookbehind assertions, no mid-pattern or
+    scoped inline flags, and no regex-level \uXXXX escapes (Python re
+    supports all three; default PCRE also lacks \u). Named groups ARE
+    supported natively since FP-10 HISTORIAN (translated to numbered
+    groups). These assertions pin each engine's actual behavior so future
+    dialect work is deliberate.
+    """
+    resource = json.dumps({"resourceType": "Patient"})
+    native_expectations = [
+        ("'abc'.matches('(?<=a)b')", ([], None, None, None, None)),  # unsupported -> invalid
+        # FP-10 HISTORIAN QA-003: mid-pattern inline flags unsupported natively
+        ("'ab'.matches('a(?i)B')", ([], None, None, None, None)),
+        # scoped flag group (?i:...) unsupported natively
+        ("'AB'.matches('(?i:a)b')", ([], None, None, None, None)),
+        # regex-level \uXXXX escape (NOT a FHIRPath literal escape): the
+        # pattern text contains a literal backslash-u sequence, which
+        # Python re interprets but std::regex and default PCRE do not
+        (r"'café'.matches('caf\\u00E9')", (["false"], "false", "[false]", False, None)),
+    ]
+    fallback_expectations = [
+        ("'abc'.matches('(?<=a)b')", (["true"], "true", "[true]", True, None)),
+        ("'ab'.matches('a(?i)B')", (["true"], "true", "[true]", True, None)),
+        ("'AB'.matches('(?i:a)b')", (["false"], "false", "[false]", False, None)),
+        (r"'café'.matches('caf\\u00E9')", (["true"], "true", "[true]", True, None)),
+    ]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in native_expectations:
+            assert _all_public_outputs(native, resource, expression) == expected, expression
+        for expression, expected in fallback_expectations:
+            assert _all_public_outputs(fallback, resource, expression) == expected, expression
+    finally:
+        native.close()
         fallback.close()
 
 
@@ -429,3 +555,48 @@ def test_string_transform_regex_quantifier_on_unicode_scalar_fp10_explorer(
         native.close()
         fallback.close()
 
+
+
+def test_escaped_backslash_argument_literals_lex_correctly_fp10_explorer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FHIRPath lexical grammar: STRING must close at its own closing quote.
+
+    A greedy antlr loop let ESC's `\\'` alternative match across a raw
+    backslash, swallowing the closing quote and the following comma, so any
+    expression with a string literal ending in an escaped backslash followed
+    by a comma (e.g. replace('\\\\', '/')) mis-lexed as one token in the
+    Python fallback while the native engine evaluated it correctly. The
+    non-greedy STRING loop fixes this; tolerant raw-backslash corners
+    ('abc\\', 'short \\u005') must keep their prior behavior.
+    """
+    resource = json.dumps({"resourceType": "Patient", "p": "C:\\x\\y"})
+    cases = [
+        ("p.replace('\\\\', '/')", ["C:/x/y"]),
+        ("'a'.iif(true, '\\\\', 'x')", ["\\"]),
+        ("('\\\\') | 'x'", ["\\", "x"]),
+        ("p.replaceMatches('\\\\d', '#')", ["C:\\x\\y"]),
+        # Tolerated raw-backslash corners must be unchanged
+        (r"'abc\'", ["abc"]),
+        (r"'short \u005'", ["short u005"]),
+        ("'a\\nb'.length()", ["3"]),
+    ]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases:
+            assert _all_public_outputs(native, resource, expression)[0] == expected
+            assert _all_public_outputs(fallback, resource, expression)[0] == expected
+        # is_valid parity for the previously mis-lexed form
+        assert (
+            native.execute("SELECT fhirpath_is_valid(?)", ["p.replace('\\\\', '/')"]).fetchone()[0]
+            is True
+        )
+        assert (
+            fallback.execute("SELECT fhirpath_is_valid(?)", ["p.replace('\\\\', '/')"]).fetchone()[0]
+            is True
+        )
+    finally:
+        native.close()
+        fallback.close()

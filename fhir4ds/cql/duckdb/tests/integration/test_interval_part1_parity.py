@@ -266,6 +266,16 @@ context Patient
 define CollapseEmpty: collapse { }
 define CollapseInvalidPer: collapse { Interval[1, 3] } per 1 'cm'
 define CollapseValidPer: collapse { Interval[1, 3], Interval[5, 6] } per 2
+define CollapsePerOne: collapse { Interval[1, 3], Interval[5, 6] } per 1
+define CollapsePerZero: collapse { Interval[1, 3], Interval[4, 6] } per 0
+define CollapsePerNoMerge: collapse { Interval[1, 3], Interval[7, 9] } per 2
+define CollapsePerDecimal: collapse { Interval[1.0, 3.0], Interval[3.5, 6.0] } per 1.0
+define CollapsePerTemporalOne: collapse { Interval[@2024-01-01, @2024-01-03], Interval[@2024-01-05, @2024-01-08] } per day
+define CollapsePerTemporalTwo: collapse { Interval[@2024-01-01, @2024-01-03], Interval[@2024-01-06, @2024-01-08] } per 2 days
+define EndsPrecStartConjunct: Interval[@2012-01-01, @2012-01-15] ends day of Interval[@2012-01-05, @2012-01-15]
+define EndsPrecTrue: Interval[@2012-01-05, @2012-01-15] ends day of Interval[@2012-01-01, @2012-01-15]
+define EndsSpecFalse: Interval[-1, 7] ends Interval[0, 7]
+define ExceptListInterval: { Interval[1, 5], Interval[10, 12] } except Interval[2, 3]
 define ExpandNull: expand null
 define ExpandInvalidPer: expand Interval[1, 3] per 1 'cm'
 define ExpandValidNumericPer: expand Interval[1, 5] per 2
@@ -282,9 +292,41 @@ define ExpandValidNumericPer: expand Interval[1, 5] per 2
     expected = {
         "CollapseEmpty": "[]",
         "CollapseInvalidPer": None,
+        # CQL 1.5 §9 Collapse per: each interval's end is extended by `per`
+        # for the merge decision (reference getIntervalWithPerApplied);
+        # output intervals keep their ORIGINAL boundaries.
         "CollapseValidPer": [
-            {"low": "1", "high": "2", "lowClosed": True, "highClosed": True},
-            {"low": "5", "high": "6", "lowClosed": True, "highClosed": True},
+            {"low": "1", "high": "6", "lowClosed": True, "highClosed": True},
+        ],
+        "CollapsePerOne": [
+            {"low": "1", "high": "6", "lowClosed": True, "highClosed": True},
+        ],
+        "CollapsePerZero": [
+            {"low": "1", "high": "6", "lowClosed": True, "highClosed": True},
+        ],
+        "CollapsePerNoMerge": [
+            {"low": "1", "high": "3", "lowClosed": True, "highClosed": True},
+            {"low": "7", "high": "9", "lowClosed": True, "highClosed": True},
+        ],
+        "CollapsePerDecimal": [
+            {"low": "1.0", "high": "6.0", "lowClosed": True, "highClosed": True},
+        ],
+        # Temporal per of exactly 1 unit: precision-based meets — no merge.
+        "CollapsePerTemporalOne": [
+            {"low": "2024-01-01", "high": "2024-01-03", "lowClosed": True, "highClosed": True},
+            {"low": "2024-01-05", "high": "2024-01-08", "lowClosed": True, "highClosed": True},
+        ],
+        "CollapsePerTemporalTwo": [
+            {"low": "2024-01-01", "high": "2024-01-08", "lowClosed": True, "highClosed": True},
+        ],
+        # CQL 1.5 §9 Ends at precision: start(left) >= start(right) AND
+        # end(left) == end(right), both at the given precision.
+        "EndsPrecStartConjunct": False,
+        "EndsPrecTrue": True,
+        "EndsSpecFalse": False,
+        "ExceptListInterval": [
+            '{"low": "1", "high": "5", "lowClosed": true, "highClosed": true}',
+            '{"low": "10", "high": "12", "lowClosed": true, "highClosed": true}',
         ],
         "ExpandNull": None,
         "ExpandInvalidPer": "[]",
@@ -304,7 +346,12 @@ define ExpandValidNumericPer: expand Interval[1, 5] per 2
                 py_value = py.execute(sql).fetchone()[0]
                 cpp_value = cpp.execute(sql).fetchone()[0]
                 no_py_value = no_py.execute(sql).fetchone()[0]
-                if isinstance(expected_result, list):
+                if isinstance(py_value, list):
+                    # List-returning results (e.g. list except) arrive as
+                    # DuckDB LISTs, not JSON text.
+                    assert py_value == cpp_value == no_py_value, name
+                    assert py_value == expected_result
+                elif isinstance(expected_result, list):
                     assert _load_json(py_value) == _load_json(cpp_value) == _load_json(no_py_value), name
                     assert _load_json(py_value) == expected_result
                 else:
@@ -937,6 +984,232 @@ define ExpandPerMgQuantity: expand Interval[1 'g', 5 'g'] per 1 'mg'
         assert items[3999]["value"] == 4.999, (
             f"index 3999 value: expected 4.999, got {items[3999]['value']!r}"
         )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part1_historian_collapse_per_precision_and_includes_expand() -> None:
+    """CQL-15 HISTORIAN pins: collapse per 0/1 precision meets, includes
+    [precision] interval-interval routing, expand null-bound semantics.
+
+    - CQL 1.5 §9 Collapse(argument, per): reference CollapseEvaluator keeps
+      the interval unextended for a temporal per of exactly 0 or 1 unit and
+      performs the overlaps/meets decision at the per-unit precision.
+    - CQL 1.5 §9 Includes [precision] (Interval): comparisons are performed
+      at the specified precision (determined results must not be null).
+    - CQL 1.5 §9 Expand: an OPEN null boundary contributes no results;
+      a CLOSED null boundary is an implementation choice not to expand
+      (returns null, matching the native extension).
+    """
+    cql = """library IntervalHistorian version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define CollapsePerMonthMeets: collapse { Interval[@2024-01-15, @2024-01-31], Interval[@2024-02-02, @2024-02-10] } per month
+define CollapsePerZeroMonthsMeets: collapse { Interval[@2024-01-15, @2024-01-31], Interval[@2024-02-02, @2024-02-10] } per 0 months
+define CollapsePerMonthNoMerge: collapse { Interval[@2024-01-15, @2024-01-31], Interval[@2024-03-02, @2024-03-10] } per month
+define CollapsePerYearMeets: collapse { Interval[@2024-01, @2024-03], Interval[@2024-05, @2024-06] } per year
+define CollapsePerHourNoMerge: collapse { Interval[@2024-01-15T10, @2024-01-15T11], Interval[@2024-01-15T13, @2024-01-15T14] } per hour
+define CollapsePerHourMeets: collapse { Interval[@2024-01-15T10, @2024-01-15T11], Interval[@2024-01-15T12, @2024-01-15T14] } per hour
+define CollapsePerWeekMeets: collapse { Interval[@2024-01-02, @2024-01-03], Interval[@2024-01-05, @2024-01-06] } per week
+define IncludesPrecMonthTrue: Interval[@2024-01-05, @2024-03-31] includes month of Interval[@2024-01-01, @2024-02-15]
+define IncludesPrecMonthFalse: Interval[@2024-01-05, @2024-03-31] includes month of Interval[@2024-04-01, @2024-04-15]
+define IncludesPrecDayTrue: Interval[@2024-01-01, @2024-03-31] includes day of Interval[@2024-02-01, @2024-02-15]
+define IncludesPrecPoint: Interval[@2024-01-01, @2024-01-31] includes day of @2024-01-15
+define ExpandClosedNullHigh: expand Interval[1, null]
+define ExpandOpenNullHigh: expand Interval[1, null)
+define ExpandOpenNullLow: expand Interval(null, 5]
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "CollapsePerMonthMeets": [
+            {"low": "2024-01-15", "high": "2024-02-10", "lowClosed": True, "highClosed": True},
+        ],
+        "CollapsePerZeroMonthsMeets": [
+            {"low": "2024-01-15", "high": "2024-02-10", "lowClosed": True, "highClosed": True},
+        ],
+        "CollapsePerMonthNoMerge": [
+            {"low": "2024-01-15", "high": "2024-01-31", "lowClosed": True, "highClosed": True},
+            {"low": "2024-03-02", "high": "2024-03-10", "lowClosed": True, "highClosed": True},
+        ],
+        "CollapsePerYearMeets": [
+            {"low": "2024-01", "high": "2024-06", "lowClosed": True, "highClosed": True},
+        ],
+        "CollapsePerHourNoMerge": [
+            {"low": "2024-01-15T10", "high": "2024-01-15T11", "lowClosed": True, "highClosed": True},
+            {"low": "2024-01-15T13", "high": "2024-01-15T14", "lowClosed": True, "highClosed": True},
+        ],
+        "CollapsePerHourMeets": [
+            {"low": "2024-01-15T10", "high": "2024-01-15T14", "lowClosed": True, "highClosed": True},
+        ],
+        "CollapsePerWeekMeets": [
+            {"low": "2024-01-02", "high": "2024-01-06", "lowClosed": True, "highClosed": True},
+        ],
+        "IncludesPrecMonthTrue": True,
+        "IncludesPrecMonthFalse": False,
+        "IncludesPrecDayTrue": True,
+        "IncludesPrecPoint": True,
+        "ExpandClosedNullHigh": None,
+        "ExpandOpenNullHigh": [],
+        "ExpandOpenNullLow": [],
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expected_result in expected.items():
+                sql = f"SELECT {translated[name].to_sql()}"
+                py_value = py.execute(sql).fetchone()[0]
+                cpp_value = cpp.execute(sql).fetchone()[0]
+                no_py_value = no_py.execute(sql).fetchone()[0]
+                if isinstance(expected_result, list) and not isinstance(py_value, list):
+                    assert _load_json(py_value) == _load_json(cpp_value) == _load_json(no_py_value), name
+                    assert _load_json(py_value) == expected_result
+                else:
+                    assert py_value == cpp_value == no_py_value, name
+                    assert py_value == expected_result, name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part1_explorer3_list_extract_interval_operands_route_as_intervals() -> None:
+    """CQL-15 EXPLORER (iter 1) QA-001 regression: LIST_EXTRACT operands.
+
+    Element selection over interval lists — ``First({Interval[4, 6]})``,
+    ``Last(...)``, and indexers over ``collapse(...)`` output — lower to
+    ``LIST_EXTRACT`` which the interval-expression recognition
+    (``_is_fhir_interval_expression``) must classify as an Interval operand
+    for CQL 1.5 §9 operator routing. Before the fix: contains/in degraded
+    to DuckDB string-contains Binder Errors, after/before raised UDF
+    TypeErrors, ends/starts silently re-wrapped the selection as a
+    degenerate intervalFromBounds(x, x) -> false, except returned null, and
+    expand emitted degenerate interval structs instead of points.
+    """
+    cql = """library IntervalExplorer3 version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define FirstContains: First({ Interval[4, 6] }) contains 5
+define FirstIn: 5 in First({ Interval[4, 6] })
+define FirstIncludesPoint: First({ Interval[4, 6] }) includes 5
+define FirstIncludesInterval: First({ Interval[4, 6] }) includes Interval[4, 5]
+define IncludedFirst: Interval[3, 9] includes First({ Interval[4, 6] })
+define FirstAfter: First({ Interval[4, 6] }) after Interval[1, 2]
+define FirstBefore: First({ Interval[4, 6] }) before Interval[9, 10]
+define FirstStart: start of First({ Interval[4, 6] })
+define FirstEnd: end of First({ Interval[4, 6] })
+define FirstEqual: First({ Interval[4, 6] }) = Interval[4, 6]
+define FirstEquivalent: First({ Interval[4, 6] }) ~ Interval[4, 6]
+define FirstEnds: First({ Interval[4, 6] }) ends Interval[1, 6]
+define FirstStarts: First({ Interval[4, 6] }) starts Interval[4, 9]
+define LastContains: Last({ Interval[4, 6] }) contains 6
+define FirstExpand: expand First({ Interval[4, 6] }) per 1
+define CollapseIdxContains: (collapse { Interval[1, 2], Interval[4, 6] })[1] contains 5
+define CollapseIdxExcept: (collapse { Interval[1, 2], Interval[4, 6] })[1] except Interval[4, 5]
+define ContainsStartOfFirst: Interval[4, 6] contains start of First({ Interval[4, 6] })
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "FirstContains": True,
+        "FirstIn": True,
+        "FirstIncludesPoint": True,
+        "FirstIncludesInterval": True,
+        "IncludedFirst": True,
+        "FirstAfter": True,
+        "FirstBefore": True,
+        "FirstStart": "4",
+        "FirstEnd": "6",
+        "FirstEqual": True,
+        "FirstEquivalent": True,
+        "FirstEnds": True,
+        "FirstStarts": True,
+        "LastContains": True,
+        "FirstExpand": "[4,5,6]",
+        "CollapseIdxContains": True,
+        "CollapseIdxExcept": '{"low": 6, "high": "6", "lowClosed": true, "highClosed": true}',
+        "ContainsStartOfFirst": True,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expected_result in expected.items():
+                sql = f"SELECT {translated[name].to_sql()}"
+                py_value = py.execute(sql).fetchone()[0]
+                cpp_value = cpp.execute(sql).fetchone()[0]
+                no_py_value = no_py.execute(sql).fetchone()[0]
+                if name == "CollapseIdxExcept":
+                    # intervalExcept JSON scalar quoting of numeric bounds
+                    # differs between the Python UDF ("low": 6) and the pure
+                    # C++ serializer ("low": "6") — a pre-existing transport
+                    # convention; normalize before comparing.
+                    def _norm(v):
+                        parsed = json.loads(v)
+                        parsed["low"] = str(parsed["low"])
+                        parsed["high"] = str(parsed["high"])
+                        return parsed
+                    py_value = _norm(py_value)
+                    cpp_value = _norm(cpp_value)
+                    no_py_value = _norm(no_py_value)
+                    expected_iv = json.loads(expected_result)
+                    expected_iv["low"] = str(expected_iv["low"])
+                    expected_iv["high"] = str(expected_iv["high"])
+                    expected_result = expected_iv
+                assert py_value == cpp_value == no_py_value == expected_result, (
+                    f"{name}: py={py_value!r}, cpp={cpp_value!r}, "
+                    f"no_py={no_py_value!r}, expected={expected_result!r}"
+                )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part1_explorer3_expand_temporal_boundary_truncation() -> None:
+    """CQL-15 EXPLORER (iter 1) QA-002 regression: Expand boundary semantics.
+
+    CQL 1.5 §9 Expand: "If the interval boundaries are more precise than
+    the per quantity, the more precise values will be truncated to the
+    precision specified by the per quantity." For Date/Time boundaries
+    LESS precise than per (temporal uncertainty): "the interval will not
+    contribute any results to the output." Spec examples:
+    ``expand Interval[@T10:30, @T12:00] per hour`` -> {T10, T11, T12};
+    ``expand Interval[@T10, @T10] per minute`` -> {}.
+
+    The numeric case (``expand Interval[1.2, 3.0] per 1`` -> [1.2, 2.2],
+    grid from interval start) matches the HL7 DBCG Java reference engine
+    (ExpandEvaluator.java) and is preserved verbatim.
+    """
+    cql = """library IntervalExplorer3B version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define ExpandTruncHour: expand Interval[@2024-01-01T10:30, @2024-01-01T12:00] per hour
+define ExpandTruncTimeHour: expand Interval[@T10:30, @T12:00] per hour
+define ExpandLessPreciseDay: expand Interval[@2024-01, @2024-01] per day
+define ExpandLessPreciseMinute: expand Interval[@T10, @T10] per minute
+define ExpandNumericDbcg: expand Interval[1.2, 3.0] per 1
+define ExpandTruncMonth: expand Interval[@2024-01-15, @2024-03-20] per month
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "ExpandTruncHour": ('["2024-01-01T10","2024-01-01T11","2024-01-01T12"]',),
+        "ExpandTruncTimeHour": ('["T10","T11","T12"]',),
+        "ExpandLessPreciseDay": ("[]",),
+        "ExpandLessPreciseMinute": ("[]",),
+        "ExpandNumericDbcg": ("[1.2,2.2]",),
+        "ExpandTruncMonth": ('["2024-01","2024-02","2024-03"]',),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expected_result in expected.items():
+                sql = f"SELECT {translated[name].to_sql()}"
+                assert py.execute(sql).fetchone() == expected_result, name
+                assert cpp.execute(sql).fetchone() == expected_result, name
+                assert no_py.execute(sql).fetchone() == expected_result, name
     finally:
         py.close()
         cpp.close()

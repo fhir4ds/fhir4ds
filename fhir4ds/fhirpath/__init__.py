@@ -15,7 +15,7 @@ from .engine.util import arraify, get_data, set_paths, process_user_invocation_t
 from .engine.nodes import FP_Type, ResourceNode
 
 __title__ = "fhir4ds.fhirpath"
-__version__ = "0.0.11"
+__version__ = "0.0.12"
 __author__ = "FHIR4DS Team"
 __license__ = "AGPL-3.0-only"
 __copyright__ = "Copyright 2026 FHIR4DS Team"
@@ -72,11 +72,14 @@ def apply_parsed_path(resource, parsedPath, context=None, model=None, options=No
             # Filter out intenal representation of primitive extensions
             # even in this raw data mode (as they are not a part of the output)
             for item in node:
-                if isinstance(item, ResourceNode):
-                    if isinstance(item.data, dict):
-                        keys = list(item.data.keys())
-                        if keys == ["extension"]:
-                            continue
+                # Filter out internal representation of primitive extensions
+                # even in this raw data mode (as they are not a part of the
+                # output). SOF-VD-07 EXPLORER QA-001: filter on the
+                # `_is_shadow_extension` flag set at synthesis time instead of
+                # the data key shape — genuine elements whose sole content is
+                # an `extension` (valid FHIR) must survive.
+                if getattr(item, "_is_shadow_extension", False):
+                    continue
                 res.append(item)
             return res
         return node
@@ -95,11 +98,11 @@ def apply_parsed_path(resource, parsedPath, context=None, model=None, options=No
                 # `_given` array on a FHIR split-representation) must pass
                 # through unchanged so the caller sees the raw FHIR JSON.
                 # Mirrors the returnRawData branch's ResourceNode guard.
-                if isinstance(item, ResourceNode):
-                    if isinstance(item.data, dict):
-                        keys = list(item.data.keys())
-                        if keys == ["extension"]:
-                            continue
+                # SOF-VD-07 EXPLORER QA-001: filter on the explicit
+                # `_is_shadow_extension` flag rather than the key shape so
+                # genuine extension-only elements are not dropped.
+                if getattr(item, "_is_shadow_extension", False):
+                    continue
                 res.append(visit(item))
             return res
 

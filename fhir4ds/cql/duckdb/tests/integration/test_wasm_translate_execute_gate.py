@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from .wasm_runtime_helpers import (
     catalog_names,
     emitted_function_names,
@@ -72,8 +74,8 @@ EXPECTED = {
     "DstDifferenceMinutesCtor": "45",
     "PartialPrecisionUncertain": None,
     "DurationUncertainDays": '{"start":16,"end":44,"lowClosed":true,"highClosed":true}',
-    "HighBoundaryDecimal": 1.58799999,
-    "LowBoundaryDecimal": 1.587,
+    "HighBoundaryDecimal": Decimal("1.58799999"),
+    "LowBoundaryDecimal": Decimal("1.58700000"),
     "PredecessorDecimal": 0.99999999,
     "AgeYearsAt": 44,
     "AgeWeeksAt": 2,

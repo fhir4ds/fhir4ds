@@ -296,24 +296,38 @@ class TestArithmeticOperators:
         assert result.to_sql() == "6 * 7"
 
     def test_division(self, translator: ExpressionTranslator):
-        """Test division: 15 / 3 -> 15 / 3."""
+        """Test division: 15 / 3 lowers to exact Decimal cqlDivide.
+
+        CQL §16.4 divide is Decimal division at implementation scale;
+        DuckDB's native `/` promotes DECIMAL to DOUBLE (artifacts), so the
+        translator emits the exact cqlDivide UDF.
+        """
         result = translator.translate(
             BinaryExpression(operator="/", left=Literal(value=15), right=Literal(value=3))
         )
-        assert isinstance(result, SQLBinaryOp)
-        assert result.operator == "/"
-        assert result.to_sql() == "15 / NULLIF(3, 0)"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "cqlDivide"
 
     def test_integer_division_div(self, translator: ExpressionTranslator):
-        """Test integer division: 17 div 5 -> FLOOR(17 / 5)."""
+        """Test integer division: 17 div 5 -> exact cqlDivide + TRUNC.
+
+        CQL-11 SKEPTIC: div must not lower through DuckDB's DOUBLE `/`
+        (0.3 div 0.1 -> 2); it uses the exact cqlDivide core, truncated
+        toward zero, narrowed with TRY_CAST for Integer/Long operands.
+        """
         result = translator.translate(
             BinaryExpression(operator="div", left=Literal(value=17), right=Literal(value=5))
         )
+        # Bare Integer/Long literals (no Decimal type info) narrow to INTEGER
+        # via a TRY_CAST wrapper around TRUNC(cqlDivide(...)).
+        if isinstance(result, SQLCast):
+            assert result.try_cast is True and result.target_type == "INTEGER"
+            result = result.expression
         assert isinstance(result, SQLFunctionCall)
         assert result.name == "TRUNC"
-        # TRUNC wraps a division
-        assert isinstance(result.args[0], SQLBinaryOp)
-        assert result.args[0].operator == "/"
+        core = result.args[0]
+        assert isinstance(core, SQLFunctionCall)
+        assert core.name == "cqlDivide"
 
     def test_modulo(self, translator: ExpressionTranslator):
         """Test modulo: 17 mod 5 -> 17 % 5 (via SQLBinaryOp)."""
@@ -1507,10 +1521,15 @@ class TestStatisticalFunctions:
                 ]
             )
         )
-        assert isinstance(result, SQLFunctionCall)
-        # List literal → list_aggregate (DuckDB's MEDIAN is a column aggregate)
-        assert result.name == "list_aggregate"
-        assert len(result.args) == 2
+        from ...translator.types import SQLCast
+        assert isinstance(result, SQLCast)
+        # List literal → list_aggregate (DuckDB's MEDIAN is a column aggregate),
+        # typed to the CQL §20 Decimal result type.
+        assert result.target_type == "DECIMAL(38, 8)"
+        inner = result.expression
+        assert isinstance(inner, SQLFunctionCall)
+        assert inner.name == "list_aggregate"
+        assert len(inner.args) == 2
 
     def test_mode_function(self, translator: ExpressionTranslator):
         """Test Mode function: Mode(values) -> CQLListMode(values)."""
@@ -1538,9 +1557,13 @@ class TestStatisticalFunctions:
                 ]
             )
         )
-        assert isinstance(result, SQLFunctionCall)
-        assert result.name == "list_aggregate"
-        assert len(result.args) == 2
+        from ...translator.types import SQLCast
+        assert isinstance(result, SQLCast)
+        assert result.target_type == "DECIMAL(38, 8)"
+        inner = result.expression
+        assert isinstance(inner, SQLFunctionCall)
+        assert inner.name == "list_aggregate"
+        assert len(inner.args) == 2
         assert "'var_samp'" in result.to_sql()
 
     def test_stddev_function(self, translator: ExpressionTranslator):
@@ -1554,9 +1577,13 @@ class TestStatisticalFunctions:
                 ]
             )
         )
-        assert isinstance(result, SQLFunctionCall)
-        assert result.name == "list_aggregate"
-        assert len(result.args) == 2
+        from ...translator.types import SQLCast
+        assert isinstance(result, SQLCast)
+        assert result.target_type == "DECIMAL(38, 8)"
+        inner = result.expression
+        assert isinstance(inner, SQLFunctionCall)
+        assert inner.name == "list_aggregate"
+        assert len(inner.args) == 2
         assert "'stddev_samp'" in result.to_sql()
 
     def test_population_variance_function(self, translator: ExpressionTranslator):
@@ -1570,9 +1597,13 @@ class TestStatisticalFunctions:
                 ]
             )
         )
-        assert isinstance(result, SQLFunctionCall)
-        assert result.name == "list_aggregate"
-        assert len(result.args) == 2
+        from ...translator.types import SQLCast
+        assert isinstance(result, SQLCast)
+        assert result.target_type == "DECIMAL(38, 8)"
+        inner = result.expression
+        assert isinstance(inner, SQLFunctionCall)
+        assert inner.name == "list_aggregate"
+        assert len(inner.args) == 2
         assert "'var_pop'" in result.to_sql()
 
     def test_population_stddev_function(self, translator: ExpressionTranslator):
@@ -1586,9 +1617,13 @@ class TestStatisticalFunctions:
                 ]
             )
         )
-        assert isinstance(result, SQLFunctionCall)
-        assert result.name == "list_aggregate"
-        assert len(result.args) == 2
+        from ...translator.types import SQLCast
+        assert isinstance(result, SQLCast)
+        assert result.target_type == "DECIMAL(38, 8)"
+        inner = result.expression
+        assert isinstance(inner, SQLFunctionCall)
+        assert inner.name == "list_aggregate"
+        assert len(inner.args) == 2
         assert "'stddev_pop'" in result.to_sql()
 
 

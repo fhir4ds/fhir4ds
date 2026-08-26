@@ -323,13 +323,19 @@ def test_cql_list_part2_query_produced_lists_remain_lists() -> None:
 
 def test_cql_list_part2_temporal_uncertainty_matches_no_python_cpp() -> None:
     translated = translate_cql(_cql_list_part2_temporal_uncertainty_library())
+    # CQL 1.5.3 §1.6/§1.11 (DateTime/Time types): "seconds and milliseconds
+    # are combined and represented as a Decimal for the purposes of
+    # comparison... When milliseconds are null, they are combined as .0."
+    # So @T15:59:59 compares to @T15:59:59.999 deterministically (as .0),
+    # making these boundary results certain rather than uncertain.
+    # (CQL-03 EXPLORER QA-003.)
     expected = {
-        "ProperIncludesTimeUncertain": (None,),
-        "ProperIncludedInTimeUncertain": (None,),
-        "ContainsTimeUncertain": (None,),
-        "InTimeUncertain": (None,),
-        "EqualTimeUncertain": (None,),
-        "NotEqualTimeUncertain": (None,),
+        "ProperIncludesTimeUncertain": (False,),   # point .0 < low .999
+        "ProperIncludedInTimeUncertain": (False,),
+        "ContainsTimeUncertain": (False,),
+        "InTimeUncertain": (False,),
+        "EqualTimeUncertain": (False,),            # .999 != .0
+        "NotEqualTimeUncertain": (True,),
     }
 
     py = _python_only_connection()
@@ -347,10 +353,11 @@ def test_cql_list_part2_temporal_uncertainty_matches_no_python_cpp() -> None:
             assert py_result == expected[name], name
 
         direct_cases = [
-            ("SELECT CQLListContainsTemporalEq(['T15:59:59.999'], 'T15:59:59')", (None,)),
+            # Combined-decimal precision: .999 vs null-ms (.0) is certain.
+            ("SELECT CQLListContainsTemporalEq(['T15:59:59.999'], 'T15:59:59')", (False,)),
             ("SELECT CQLListContainsTemporalEq(['T14:59:59.999'], 'T15:59:59')", (False,)),
-            ("SELECT CQLListHasAllTemporalEq(['T15:59:59.999'], ['T15:59:59'])", (None,)),
-            ("SELECT CQLListEqualTemporalEq(['T15:59:59.999'], ['T15:59:59'])", (None,)),
+            ("SELECT CQLListHasAllTemporalEq(['T15:59:59.999'], ['T15:59:59'])", (False,)),
+            ("SELECT CQLListEqualTemporalEq(['T15:59:59.999'], ['T15:59:59'])", (False,)),
         ]
         for sql, expected_row in direct_cases:
             assert py.execute(sql).fetchone() == expected_row, sql
@@ -686,3 +693,311 @@ def test_cql_list_part2_typed_null_list_properly_includes_returns_null_per_spec(
         cpp.close()
 
 
+
+
+# ---------------------------------------------------------------------------
+# CQL-19 SKEPTIC iteration: dynamic multi-valued FHIR list operands
+# (end-to-end population SQL; py == cpp == no-python parity)
+# ---------------------------------------------------------------------------
+
+_CQL19_RESOURCES_SQL = """
+CREATE TABLE IF NOT EXISTS resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR);
+DELETE FROM resources;
+INSERT INTO resources VALUES
+('P1','Patient','{"resourceType":"Patient","id":"P1","active":true,"name":[{"family":"Chalmers","given":["Peter","James"]},{"family":"Gray","given":["Kim"]}]}',NULL),
+('P2','Patient','{"resourceType":"Patient","id":"P2","active":true}',NULL),
+('O1','Observation','{"resourceType":"Observation","id":"O1","status":"final","code":{"coding":[{"system":"http://loinc.org","code":"29463-7"}]},"subject":{"reference":"Patient/P1"},"component":[{"code":{"coding":[{"system":"http://loinc.org","code":"8480-6"}]},"valueQuantity":{"value":120}},{"code":{"coding":[{"system":"http://loinc.org","code":"8462-4"}]},"valueQuantity":{"value":80}}]}','P1'),
+('O3','Observation','{"resourceType":"Observation","id":"O3","status":"final","code":{"coding":[{"system":"http://loinc.org","code":"8867-4"}]},"subject":{"reference":"Patient/P2"},"component":[{"code":{"coding":[{"system":"http://loinc.org","code":"8867-4"}]},"valueQuantity":{"value":60}}]}','P2'),
+('C1','Condition','{"resourceType":"Condition","id":"C1","code":{"coding":[{"system":"http://snomed.info/sct","code":"195967001"}]},"subject":{"reference":"Patient/P1"}}','P1'),
+('C2','Condition','{"resourceType":"Condition","id":"C2","code":{"coding":[{"system":"http://snomed.info/sct","code":"195967001"}]},"subject":{"reference":"Patient/P1"}}','P1')
+"""
+
+_CQL19_DYNAMIC_HEADER = """library Cql19Dynamic version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define Obs: [Observation]
+"""
+
+
+def _run_population_case(cql: str) -> dict:
+    from fhir4ds.cql.parser import parse_cql
+    from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql), output_columns={"R": "R"}
+    )
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    no_py_cm = no_python_connection()
+    no_py = no_py_cm.__enter__()
+    try:
+        results = {}
+        for label, con in (("py", py), ("cpp", cpp), ("nopy", no_py)):
+            con.execute(_CQL19_RESOURCES_SQL)
+            results[label] = con.execute(sql).fetchall()
+        return results
+    finally:
+        no_py_cm.__exit__(None, None, None)
+        py.close()
+        cpp.close()
+
+
+@pytest.mark.parametrize(
+    "expr,expected_p1,expected_p2",
+    [
+        # QA-001: Length over dynamic multi-valued field counts ELEMENTS
+        ("Length(Patient.name.given)", 3, 0),
+        # QA-002: Skip/Tail/Take operate on the element list
+        ("Skip(Patient.name.given, 1)", ["James", "Kim"], []),
+        ("Tail(Patient.name.given)", ["James", "Kim"], []),
+        ("Take(Patient.name.given, 1)", ["Peter"], []),
+        ("singleton from (Take(Patient.name.given, 1))", "Peter", None),
+        # QA-003: union with dynamic operands (dedup, null operand = empty)
+        ("Length(Patient.name.given union {'Extra'})", 4, 1),
+        ("Patient.name.given union Patient.name.prefix", ["Peter", "James", "Kim"], []),
+        ("Obs.component.code.coding.code union {'NEW'}", ["8480-6", "8462-4", "NEW"], ["8867-4", "NEW"]),
+        # QA-004: properly includes element overload over dynamic list
+        ("Patient.name.given properly includes 'Kim'", True, False),
+        ("'Kim' properly included in Patient.name.given", True, False),
+        # alias (stored-list define) forms
+        ("Length(G)", 3, 0),
+        ("Tail(G)", ["James", "Kim"], []),
+        ("Take(G, 2)", ["Peter", "James"], []),
+        ("singleton from (Take(G, 1))", "Peter", None),
+        ("Length(G union {'Z'})", 4, 1),
+    ],
+)
+def test_cql19_dynamic_list_operands_end_to_end(expr, expected_p1, expected_p2) -> None:
+    cql = _CQL19_DYNAMIC_HEADER + "define G: Patient.name.given\ndefine R: " + expr + "\n"
+    results = _run_population_case(cql)
+    assert results["cpp"] == results["py"], expr
+    assert results["nopy"] == results["py"], expr
+    values = {pid: value for pid, value in results["py"]}
+    assert values.get("P1") == expected_p1, expr
+    assert values.get("P2") == expected_p2, expr
+
+
+def test_cql19_singleton_from_multi_element_dynamic_list_raises() -> None:
+    """CQL §10.21: singleton from a list with more than one element is a
+    run-time error (typed error, not a Malformed-JSON binder failure)."""
+    cql = _CQL19_DYNAMIC_HEADER + "define R: singleton from Patient.name.given\n"
+    # P1 raises the typed SingletonFrom run-time error at execution
+    py = _python_only_connection()
+    try:
+        py.execute(_CQL19_RESOURCES_SQL)
+        from fhir4ds.cql.parser import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+        sql = CQLToSQLTranslator().translate_library_to_population_sql(
+            parse_cql(cql), output_columns={"R": "R"}
+        )
+        with pytest.raises(duckdb.Error, match="SingletonFrom"):
+            py.execute(sql).fetchall()
+    finally:
+        py.close()
+
+
+# ---------------------------------------------------------------------------
+# CQL-19 HISTORIAN launch: aggregate-over-union, singleton-over-stored-list,
+# union-null nesting, navigation-over-union typed error
+# ---------------------------------------------------------------------------
+
+def test_cql19_historian_count_over_retrieve_union() -> None:
+    """CQL §20.9 Count counts the elements of its list argument; a resource
+    union is a list whose elements are the union rows. Count over a single
+    retrieve worked; over `<retrieve> union <retrieve>` the generic COUNT
+    path embedded the 2-column union as a scalar subquery (BinderException).
+    CQL-19 HISTORIAN QA-001."""
+    header = """library Cql19HistCount version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define Obs: [Observation]
+define Cond: [Condition]
+"""
+    for expr, expected_p1, expected_p2 in [
+        # P1: 1 Observation + 2 Conditions; P2: 1 Observation
+        ("Count([Observation] union [Condition])", 3, 1),
+        # Same union expressed through resource-define aliases
+        ("Count(Obs union Cond)", 3, 1),
+        # Self-union dedups rows (list union eliminates duplicates)
+        ("Count([Condition] union [Condition])", 2, 0),
+        # Single-retrieve control (pre-existing behavior)
+        ("Count([Condition])", 2, 0),
+    ]:
+        results = _run_population_case(header + "define R: " + expr + "\n")
+        assert results["cpp"] == results["py"], expr
+        assert results["nopy"] == results["py"], expr
+        values = dict(results["py"])
+        assert values.get("P1") == expected_p1, expr
+        assert values.get("P2") == expected_p2, expr
+
+
+def test_cql19_historian_singleton_from_stored_list_alias_cardinality() -> None:
+    """CQL §20.30 Singleton From over a stored-list define alias must count
+    list ELEMENTS, not CTE rows: >1 element -> typed run-time error,
+    empty/absent -> null. CQL-19 HISTORIAN QA-002 (silent whole-list return)."""
+    from fhir4ds.cql.parser import parse_cql
+    from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+    from fhir4ds.cql.errors import TranslationError
+
+    header = """library Cql19HistSingleton version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define G: Patient.name.given
+define G1: Patient.name.prefix
+"""
+    for syntax in ("singleton from G", "SingletonFrom(G)"):
+        py = _python_only_connection()
+        try:
+            py.execute(_CQL19_RESOURCES_SQL)
+            sql = CQLToSQLTranslator().translate_library_to_population_sql(
+                parse_cql(header + "define R: " + syntax + "\n"),
+                output_columns={"R": "R"},
+            )
+            with pytest.raises(duckdb.Error, match="SingletonFrom"):
+                py.execute(sql).fetchall()
+        finally:
+            py.close()
+    # Empty stored list (absent prefix) -> null (row filtered -> [])
+    results = _run_population_case(
+        header + "define R: singleton from G1\n"
+    )
+    assert results["cpp"] == results["py"]
+    assert results["nopy"] == results["py"]
+    # Absent prefix -> empty stored list -> null result (presence-encoded
+    # as a NULL row value, consistent with the population LEFT JOIN wrap).
+    assert dict(results["py"]).get("P1") is None
+    # Control: one-element list -> the element
+    results = _run_population_case(
+        header + "define R: singleton from (Take(G, 1))\n"
+    )
+    assert dict(results["py"])["P1"] == "Peter"
+
+
+def test_cql19_historian_union_null_dynamic_operand_not_nested() -> None:
+    """CQL §20.29 (cqframework clinical_quality_language#887): a null list
+    operand is treated as empty — union returns the OTHER list. Over a
+    dynamic multi-valued FHIR property the result previously came back as a
+    NESTED list ([['Peter','James','Kim']]). CQL-19 HISTORIAN QA-003."""
+    header = """library Cql19HistUnionNull version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+"""
+    for expr, expected_p1, expected_p2 in [
+        ("Patient.name.given union (null as List<String>)", ["Peter", "James", "Kim"], []),
+        ("Patient.name.given union null", ["Peter", "James", "Kim"], []),
+        ("(null as List<String>) union Patient.name.given", ["Peter", "James", "Kim"], []),
+        # Static control (pre-existing behavior, flat)
+        ("{1, 2} union (null as List<Integer>)", [1, 2], [1, 2]),
+    ]:
+        results = _run_population_case(header + "define R: " + expr + "\n")
+        assert results["cpp"] == results["py"], expr
+        assert results["nopy"] == results["py"], expr
+        values = dict(results["py"])
+        assert values.get("P1") == expected_p1, expr
+        assert values.get("P2") == expected_p2, expr
+
+
+def test_cql19_historian_navigation_over_retrieve_union_typed_error() -> None:
+    """Navigation over a resource union (`([A] union [B]).field`) is not a
+    supported query-source form; it must fail with the same typed, actionable
+    TranslationError as `[Resource].field`, not an opaque DuckDB binder error
+    at execution. CQL-19 HISTORIAN QA-004."""
+    from fhir4ds.cql.parser import parse_cql
+    from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+    from fhir4ds.cql.errors import TranslationError
+
+    cql = """library Cql19HistNavUnion version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define R: Last(([Condition] union [Observation]).id)
+"""
+    with pytest.raises(TranslationError, match="union"):
+        CQLToSQLTranslator().translate_library_to_population_sql(
+            parse_cql(cql), output_columns={"R": "R"}
+        )
+
+
+# ---------------------------------------------------------------------------
+# CQL-19 EXPLORER launch (2026-08-22): retrieve-shaped list-operator operands,
+# depth-2 alias unions, and singleton-from cardinality over query sources.
+# ---------------------------------------------------------------------------
+
+_CQL19_EXPLORER_HEADER = """library Cql19Explorer version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define Obs: [Observation]
+define StaticA: {1, 2, 3}
+define StaticB: StaticA
+define RetList: [Observation] O return O.id
+define CondIds: [Condition] C return C.id
+"""
+
+
+@pytest.mark.parametrize(
+    "expr,expected_p1,expected_p2",
+    [
+        # QA-001: union over a depth-2 stored-list define alias (dedup per
+        # CQL 1.5 §10.25 equivalent-distinct union semantics).
+        ("Length(StaticB union {2, 3})", 3, 3),
+        ("Length(StaticB union {9})", 4, 4),
+        # QA-002: list operators over bare retrieves / retrieve unions.
+        ("Length(Tail([Observation]))", 0, 0),
+        ("Length([Observation] union [Condition])", 3, 1),
+        ("Length([Observation] O return O.id)", 1, 1),
+        # QA-002: over resource-define aliases and element-rows value CTEs.
+        ("Length(Tail(Obs))", 0, 0),
+        ("Length(Tail(RetList))", 0, 0),
+        ("Length(Take(RetList, 1))", 1, 1),
+        ("Length(CondIds)", 2, 0),
+        ("Length(Tail(CondIds))", 1, 0),
+        ("Length(CondIds union {'C1'})", 2, 1),
+        # Guard: scalar String defines keep Length(String) semantics.
+        ("Length('abcde')", 5, 5),
+    ],
+)
+def test_cql19_explorer_retrieve_shaped_list_operands(expr, expected_p1, expected_p2) -> None:
+    cql = _CQL19_EXPLORER_HEADER + "define R: " + expr + "\n"
+    results = _run_population_case(cql)
+    assert results["cpp"] == results["py"], expr
+    assert results["nopy"] == results["py"], expr
+    values = {pid: value for pid, value in results["py"]}
+    assert values.get("P1") == expected_p1, expr
+    assert values.get("P2") == expected_p2, expr
+
+
+def test_cql19_explorer_singleton_from_multi_element_query_is_null() -> None:
+    """CQL-19 EXPLORER QA-003 adjudication: CQL 1.5 §20.30 says singleton
+    from a >1-element list is a run-time error, and the materialized
+    element-list paths (list literals, stored-list defines, dynamic
+    properties) DO raise the typed SingletonFrom error. Query-shaped
+    sources keep >1 -> NULL: DQM measures (CMS1017/CMS832 via CQMCommon
+    `singleton from ((A union B) C where ...)`) evaluate those guards
+    eagerly per patient/row where the reference engine short-circuits the
+    enclosing guard, so raising there regressed the 47/47 gate. Gate
+    fixtures outrank spec prose (same doctrine as union-null /
+    ProperInNullRightFalse). P1 has 2 Conditions -> NULL."""
+    results = _run_population_case(
+        _CQL19_EXPLORER_HEADER
+        + "define R: singleton from ([Condition] C return C.id)\n"
+    )
+    assert results["cpp"] == results["py"]
+    assert results["nopy"] == results["py"]
+    values = {pid: value for pid, value in results["py"]}
+    assert values.get("P1") is None
+    assert values.get("P2") is None
+
+
+def test_cql19_explorer_not_equivalent_null_list_operand_is_true() -> None:
+    """CQL 1.5 Equivalent is null-tolerant (null ~ x is false), so
+    `{1,2} !~ (null as List<Integer>)` is TRUE (Appendix B Not Equivalent).
+    NOT A BUG pin from the CQL-19 EXPLORER launch."""
+    results = _run_population_case(
+        _CQL19_EXPLORER_HEADER
+        + "define R: {1, 2} !~ (null as List<Integer>)\n"
+    )
+    assert results["cpp"] == results["py"]
+    assert results["nopy"] == results["py"]
+    values = {pid: value for pid, value in results["py"]}
+    assert values.get("P1") is True
+    assert values.get("P2") is True

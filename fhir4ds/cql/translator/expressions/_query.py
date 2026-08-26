@@ -1126,6 +1126,53 @@ class QueryMixin:
             return None
         return ast_def
 
+    def _is_static_clinical_definition(self, node: Any, depth: int = 0) -> bool:
+        """True when a definition body is a static clinical literal value.
+
+        CQL-02 QA-004: such definitions are library constants (no retrieve,
+        query, or patient-data dependency) and must be inlined at reference
+        sites rather than emitted as patient-correlated CTE lookups.
+        """
+        if depth > 8:
+            return False
+        if isinstance(node, CodeSelector):
+            return True
+        if isinstance(node, InstanceExpression) and self._bare_cql_type_name(
+            node.type
+        ) in ("Code", "Concept"):
+            return True
+        if isinstance(node, Identifier):
+            if (
+                node.name in self.context.valuesets
+                or node.name in self.context.codesystems
+                or node.name in self.context.codes
+            ):
+                return True
+            nested = self._definition_source_ast(node.name)
+            if nested is not None and nested is not node:
+                return self._is_static_clinical_definition(nested, depth + 1)
+        return False
+
+    def _is_static_temporal_definition(self, node: Any, depth: int = 0) -> bool:
+        """True when a definition body is a static temporal literal value.
+
+        CQL-03 QA-002: temporal literal defines (Date/DateTime/Time
+        literals, including through define-alias chains) are library
+        constants with no retrieve/query dependency. Inlining them at
+        reference sites avoids patient-correlated CTE lookups against
+        literal CTEs that have no patient_id column (Binder error
+        end-to-end), mirroring the CQL-02 static clinical inlining.
+        """
+        if depth > 8:
+            return False
+        if isinstance(node, (DateTimeLiteral, TimeLiteral)):
+            return True
+        if isinstance(node, Identifier):
+            nested = self._definition_source_ast(node.name)
+            if nested is not None and nested is not node:
+                return self._is_static_temporal_definition(nested, depth + 1)
+        return False
+
     def _static_conversion_source_node(self, node: Any) -> Optional[Any]:
         """Return the definition body for conversion operands that are safe to inline.
 
@@ -2585,6 +2632,7 @@ class QueryMixin:
         self,
         expr: SQLExpression,
         bare_type: str,
+        fhir_qualified: bool = False,
     ) -> Optional[SQLExpression]:
         """Build a FHIRPath type().name check for direct FHIR value extracts."""
         canonical_type = _canonical_fhir_r4_type_name(bare_type)
@@ -2607,6 +2655,29 @@ class QueryMixin:
             left=lowered,
             right=SQLLiteral(value=canonical_type.lower()),
         )
+        # CQL FHIR model mapping: FHIR primitives of the same System type
+        # satisfy `is T` (FHIR.code/id/uri/... are System.String).  Extend
+        # the accepted runtime type().name set data-driven from modelinfo.
+        from ...translator.inference import fhir_type_names_for_cql_type
+        _cql_name_by_lower = {
+            "boolean": "Boolean", "integer": "Integer", "long": "Long",
+            "decimal": "Decimal", "string": "String", "date": "Date",
+            "datetime": "DateTime", "instant": "DateTime", "time": "Time",
+        }
+        _cql_family = _cql_name_by_lower.get(bare_type.lower())
+        if _cql_family is not None and not fhir_qualified:
+            for _fhir_name in fhir_type_names_for_cql_type(_cql_family):
+                _name_lower = _fhir_name.lower()
+                if _name_lower != canonical_type.lower():
+                    type_match = SQLBinaryOp(
+                        operator="OR",
+                        left=type_match,
+                        right=SQLBinaryOp(
+                            operator="=",
+                            left=lowered,
+                            right=SQLLiteral(value=_name_lower),
+                        ),
+                    )
         shape_check = self._fhir_coding_shape_check(
             SQLCast(expression=expr, target_type="VARCHAR"),
             canonical_type,
@@ -2706,6 +2777,30 @@ class QueryMixin:
                 return self._is_cql_structural_list_expr(expr.args[0])
         return False
 
+    def _alias_is_element_value(self, alias_name: str) -> bool:
+        """True when the alias iterates element values, not resource rows.
+
+        Query sources over list literals (``from {1,2,3} N``) and over
+        Children()/Descendants() results (``exists (Descendants(X) D ...)``)
+        bind the alias to each *element* value via UNNEST, not to a table
+        row with a ``resource`` column.  Qualifying such aliases with
+        ``.resource`` produces invalid SQL ("Referenced table N not found").
+        """
+        from ...parser.ast_nodes import ListExpression as _ListExpr, FunctionRef as _FnRef, Query as _QueryExpr
+        source_ast = self.context._alias_source_asts.get(alias_name)
+        if isinstance(source_ast, _ListExpr):
+            return True
+        if isinstance(source_ast, _QueryExpr):
+            # Nested query source (``[X] x return e a where a is T``): the
+            # alias iterates the inner query's return values, not rows with a
+            # ``resource`` column.
+            return True
+        if isinstance(source_ast, _FnRef) and source_ast.name.lower() in {
+            "children", "descendants", "descendents",
+        }:
+            return True
+        return False
+
     @staticmethod
     def _cql_typed_value_expected_tags(bare_type: str) -> tuple[str, ...]:
         return {
@@ -2734,7 +2829,22 @@ class QueryMixin:
         bare_type: str,
     ) -> Optional[SQLExpression]:
         """Build a type check for one item emitted by Children()/Descendants()."""
-        if not self._is_cql_structural_item_expr(expr):
+        # Element-value aliases over Children()/Descendants() sources carry
+        # one tagged item per row (via UNNEST), even though the SQL shape is
+        # a bare column identifier.
+        if isinstance(expr, SQLIdentifier):
+            from ...parser.ast_nodes import FunctionRef as _FnRef
+            _name = expr.name
+            if _name.startswith("_lt_"):
+                _name = _name[len("_lt_"):]
+            source_ast = self.context._alias_source_asts.get(_name)
+            if not (
+                isinstance(source_ast, _FnRef)
+                and source_ast.name.lower() in {"children", "descendants", "descendents"}
+            ):
+                if not self._is_cql_structural_item_expr(expr):
+                    return None
+        elif not self._is_cql_structural_item_expr(expr):
             return None
         expected_tags = self._cql_typed_value_expected_tags(bare_type)
         if not expected_tags:
@@ -2941,6 +3051,27 @@ class QueryMixin:
         }.get(bare_type.lower())
         if not expected_names:
             return None
+        # CQL FHIR model mapping: FHIR primitives of the same System type
+        # satisfy `is T` (e.g. FHIR.code/id/uri are System.String).  Extend
+        # the accepted runtime type().name values data-driven from the
+        # modelinfo mapping rather than a per-field list.
+        from ...translator.inference import fhir_type_names_for_cql_type
+        _cql_canonical = {
+            "boolean": "Boolean",
+            "integer": "Integer",
+            "long": "Long",
+            "decimal": "Decimal",
+            "string": "String",
+            "date": "Date",
+            "datetime": "DateTime",
+            "instant": "DateTime",
+            "time": "Time",
+        }.get(bare_type.lower())
+        if _cql_canonical is not None:
+            expected_names = tuple(dict.fromkeys(
+                list(expected_names)
+                + [n.lower() for n in fhir_type_names_for_cql_type(_cql_canonical)]
+            ))
 
         type_name = SQLFunctionCall(
             name="fhirpath_text",
@@ -3034,6 +3165,11 @@ class QueryMixin:
             )
 
         static_type = self._static_structural_type_name(expr.left)
+        # Static inference is at System-type granularity (e.g. String for a
+        # FHIR.code element); FHIR-qualified targets (FHIR.code, FHIR.string)
+        # test the FHIR-level runtime type, so skip the static shortcut.
+        if static_type and str(type_name).startswith("FHIR."):
+            static_type = None
         if static_type:
             normalized_static_type = self._normalize_structural_type_name(static_type)
             normalized_target_type = self._normalize_structural_type_name(type_name)
@@ -3080,6 +3216,45 @@ class QueryMixin:
         if isinstance(expr.left, Quantity):
             return SQLLiteral(value=bare_type in ("Quantity", "quantity"))
 
+        # Static resolution for aliases bound to `as`-cast query sources
+        # (``[X] x return e as T a where a is T2``): the as-cast target type
+        # is known at translate time.  Per CQL 1.5 §As, a run-time mismatch
+        # yields null and ``null is T2`` is false, so a conforming target
+        # reduces to a null check on the cast result; a non-conforming one
+        # is statically false.
+        if isinstance(expr.left, Identifier):
+            _src_ast = self.context._alias_source_asts.get(expr.left.name)
+            if isinstance(_src_ast, Query) and _src_ast.return_clause is not None:
+                _ret = _src_ast.return_clause.expression
+                if (
+                    isinstance(_ret, BinaryExpression)
+                    and str(getattr(_ret, "operator", "")).lower() == "as"
+                ):
+                    _target = _ret.right
+                    _tname = None
+                    if isinstance(_target, NamedTypeSpecifier):
+                        _tname = _target.name
+                    elif isinstance(_target, Identifier):
+                        _tname = _target.name
+                    if _tname:
+                        _static = self._static_structural_type_name(_ret) or _tname
+                        # FHIR string-family primitives satisfy the unqualified
+                        # System type (e.g., `x as FHIR.string` then `is String`).
+                        from ..inference import fhir_type_names_for_cql_type
+                        _bare_family = fhir_type_names_for_cql_type(type_name)
+                        _family_match = _tname in _bare_family or (
+                            "." in _tname and _tname.split(".")[-1] in _bare_family
+                        )
+                        if (
+                            self._structural_type_conforms(_static, type_name)
+                            or _family_match
+                        ):
+                            _left = self.translate(expr.left, usage=ExprUsage.SCALAR)
+                            return SQLBinaryOp(
+                                operator="IS NOT", left=_left, right=SQLNull()
+                            )
+                        return SQLLiteral(value=False)
+
         if isinstance(expr.left, Literal) and bare_type not in _PRIMITIVE_TYPES:
             return SQLLiteral(value=False)
 
@@ -3087,7 +3262,10 @@ class QueryMixin:
         # CQL clinical values (Code, Concept, ValueSet, CodeSystem) often lower
         # to JSON/VARCHAR literals. Resolve their type identity before generic
         # FHIR resourceType probing, which only applies to FHIR resources.
-        clinical_target = self._CLINICAL_CQL_TYPES.get(bare_type.lower())
+        clinical_target = (
+            None if str(type_name).startswith("FHIR.")
+            else self._CLINICAL_CQL_TYPES.get(bare_type.lower())
+        )
         clinical_source = self._static_clinical_type(expr.left)
         if clinical_target is not None and clinical_source is not None:
             return SQLLiteral(
@@ -3109,18 +3287,31 @@ class QueryMixin:
         if isinstance(resource_expr, _SQLId) and not isinstance(resource_expr, _SQLQId):
             alias_name = resource_expr.name
             symbol = self.context.lookup_symbol(alias_name)
-            if symbol and getattr(symbol, 'table_alias', None):
+            if (
+                symbol
+                and getattr(symbol, 'table_alias', None)
+                and not self._alias_is_element_value(alias_name)
+            ):
                 resource_expr = _SQLQId(parts=[alias_name, "resource"])
 
         cql_structural_list_check = self._cql_structural_list_type_check(resource_expr, type_name)
         if cql_structural_list_check is not None:
             return cql_structural_list_check
 
-        clinical_runtime_check = self._clinical_json_type_check(resource_expr, bare_type)
+        # FHIR-qualified primitive targets (FHIR.code, FHIR.string) test the
+        # FHIR runtime type; do not conflate FHIR.code with the CQL clinical
+        # Code type, which has a different JSON shape.
+        clinical_runtime_check = (
+            None if str(type_name).startswith("FHIR.")
+            else self._clinical_json_type_check(resource_expr, bare_type)
+        )
         if clinical_runtime_check is not None:
             return clinical_runtime_check
 
-        fhirpath_type_check = self._fhirpath_type_name_check(resource_expr, bare_type)
+        fhirpath_type_check = self._fhirpath_type_name_check(
+            resource_expr, bare_type,
+            fhir_qualified=str(type_name).startswith("FHIR."),
+        )
         if fhirpath_type_check is not None:
             return fhirpath_type_check
 
@@ -3561,6 +3752,58 @@ class QueryMixin:
                     source_expr = SQLSelect(
                         columns=[SQLIdentifier(name=alias)],
                         from_clause=SQLAlias(expr=SQLSubquery(query=_inner), alias="_list"),
+                    )
+                    self.context.add_alias(alias, table_alias=alias)
+                    self.context._alias_source_asts[alias] = _src0_expr
+                elif (
+                    alias
+                    and isinstance(source_expr, SQLFunctionCall)
+                    and source_expr.name.lower() in ("cqlchildren", "cqldescendants")
+                ):
+                    # Children()/Descendants() sources list structural items;
+                    # UNNEST them so WHERE/RETURN iterate one item per row
+                    # under the alias (CQL §22.9/§22.10).
+                    _unnest_call = SQLFunctionCall(name="unnest", args=[source_expr])
+                    _inner = SQLSelect(columns=[SQLAlias(expr=_unnest_call, alias=alias)])
+                    source_expr = SQLSelect(
+                        columns=[SQLIdentifier(name=alias)],
+                        from_clause=SQLAlias(expr=SQLSubquery(query=_inner), alias="_list"),
+                    )
+                    self.context.add_alias(alias, table_alias=alias)
+                    self.context._alias_source_asts[alias] = _src0_expr
+                elif (
+                    alias
+                    and isinstance(_src0_expr, Query)
+                    and isinstance(source_expr, SQLSubquery)
+                    and isinstance(source_expr.query, SQLSelect)
+                    and source_expr.query.columns
+                    and isinstance(source_expr.query.from_clause, SQLAlias)
+                    and source_expr.query.from_clause.alias
+                ):
+                    # Nested query source (CQL 1.5 §Query: the query source may
+                    # be any expression; the alias binds to each element of its
+                    # result).  Preserve the inner query's projection — one row
+                    # per element under the alias — instead of flattening the
+                    # source to its underlying CTE (which discarded the inner
+                    # return expression).  patient_id is carried through so
+                    # per-patient correlation keeps working.
+                    _inner_sel = source_expr.query
+                    _first_col = _inner_sel.columns[0]
+                    _first_expr = (
+                        _first_col.expr if isinstance(_first_col, SQLAlias) else _first_col
+                    )
+                    source_expr = SQLSelect(
+                        columns=[
+                            SQLAlias(expr=_first_expr, alias=alias),
+                        ],
+                        from_clause=_inner_sel.from_clause,
+                        where=_inner_sel.where,
+                        joins=_inner_sel.joins,
+                        group_by=_inner_sel.group_by,
+                        having=_inner_sel.having,
+                        order_by=_inner_sel.order_by,
+                        limit=_inner_sel.limit,
+                        distinct=_inner_sel.distinct,
                     )
                     self.context.add_alias(alias, table_alias=alias)
                     self.context._alias_source_asts[alias] = _src0_expr
@@ -4275,16 +4518,65 @@ class QueryMixin:
                                 alias=alias
                             )
                         )
+                        # Row-shaped FROM alias: property access must resolve
+                        # to correlated <alias>.resource references, not the
+                        # inline ast_expr subquery (which DuckDB rejects as a
+                        # 2-column scalar subquery and loses correlation).
+                        self.context.add_alias(alias, table_alias=alias, cte_name=provisional_cte_name)
                     else:
-                        # Use the first placeholder as the FROM source
-                        result = SQLSelect(
-                            columns=[SQLIdentifier(name="*")],
-                            from_clause=SQLAlias(
-                                expr=inner_placeholder,
-                                alias=alias
+                        # Nested query source whose projection is a computed
+                        # value (e.g., ``[X] x return e a where a is T``): the
+                        # alias binds to each element VALUE (CQL 1.5 §Query),
+                        # so preserve the inner projection instead of
+                        # flattening to ``SELECT * FROM <cte>`` which silently
+                        # discards the return expression.  Row-shaped
+                        # projections (``*``/``.resource``) keep the flatten.
+                        _proj_sel = inner_query if isinstance(inner_query, SQLSelect) else None
+                        _is_value_projection = False
+                        _proj_first = None
+                        if _proj_sel is not None and _proj_sel.columns:
+                            _c0 = _proj_sel.columns[0]
+                            _c0e = _c0.expr if isinstance(_c0, SQLAlias) else _c0
+                            _proj_first = _c0e
+                            _is_row_shape = (
+                                isinstance(_c0e, SQLIdentifier)
+                                and _c0e.name in ("*", "resource")
+                            ) or (
+                                isinstance(_c0e, SQLQualifiedIdentifier)
+                                and _c0e.parts
+                                and _c0e.parts[-1] == "resource"
                             )
-                        )
-                    self.context.add_alias(alias, table_alias=alias, cte_name=provisional_cte_name)
+                            _is_value_projection = not _is_row_shape
+                        if (
+                            _is_value_projection
+                            and isinstance(_proj_sel.from_clause, SQLAlias)
+                            and _proj_sel.from_clause.alias
+                        ):
+                            result = SQLSelect(
+                                columns=[
+                                    SQLAlias(expr=_proj_first, alias=alias),
+                                ],
+                                from_clause=_proj_sel.from_clause,
+                                where=_proj_sel.where,
+                                joins=_proj_sel.joins,
+                                group_by=_proj_sel.group_by,
+                                having=_proj_sel.having,
+                                order_by=_proj_sel.order_by,
+                                limit=_proj_sel.limit,
+                                distinct=_proj_sel.distinct,
+                            )
+                            self.context.add_alias(alias, table_alias=alias)
+                            self.context._alias_source_asts[alias] = source_expr_node
+                        else:
+                            # Use the first placeholder as the FROM source
+                            result = SQLSelect(
+                                columns=[SQLIdentifier(name="*")],
+                                from_clause=SQLAlias(
+                                    expr=inner_placeholder,
+                                    alias=alias
+                                )
+                            )
+                            self.context.add_alias(alias, table_alias=alias, cte_name=provisional_cte_name)
                 else:
                     cte_key = _extract_cte_name(source_expr)
                     result = SQLSelect(
@@ -4549,8 +4841,77 @@ class QueryMixin:
         if not _multi_source_done and hasattr(node, 'let_clauses') and node.let_clauses:
             self._process_let_clauses(node.let_clauses, node=node)
 
+        # Children()/Descendants() query sources: iterate one structural item
+        # per row (CQL §22.9/§22.10) so WHERE/RETURN alias references bind to
+        # each element, not the whole list.
+        _structural_done = False
+        if (
+            not _multi_source_done
+            and isinstance(result, SQLFunctionCall)
+            and alias
+            and result.name.lower() in ("cqlchildren", "cqldescendants")
+        ):
+            from ...parser.ast_nodes import FunctionRef as _FnRef, QuerySource as _QSrc
+            _lt_param = f"_lt_{alias}"
+            if isinstance(node.source, list) and node.source:
+                _src_node = node.source[0]
+            else:
+                _src_node = node.source
+            _src_ast = _src_node.expression if isinstance(_src_node, _QSrc) else _src_node
+            self.context.push_scope()
+            self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_lt_param))
+            self.context._alias_source_asts[alias] = _src_ast if isinstance(_src_ast, _FnRef) else None
+            try:
+                _st_where = None
+                if node.where:
+                    _st_where = _demote_audit_struct_to_bool(
+                        self.translate(node.where, usage=ExprUsage.BOOLEAN)
+                    )
+                _st_return: SQLExpression = SQLIdentifier(name=_lt_param)
+                if node.return_clause:
+                    _st_return = self.translate(node.return_clause, usage=ExprUsage.SCALAR)
+            finally:
+                self.context.pop_scope()
+            _st_return = _ensure_scalar_body(_st_return)
+            result = SQLSubquery(query=SQLSelect(
+                columns=[SQLFunctionCall(name="list", args=[_st_return])],
+                from_clause=SQLAlias(
+                    expr=SQLSubquery(query=SQLSelect(columns=[SQLAlias(
+                        expr=SQLFunctionCall(name="unnest", args=[result]),
+                        alias=_lt_param,
+                    )])),
+                    alias="_lt_unnest",
+                ),
+                where=_st_where,
+            ))
+            _structural_done = True
+
+        if _structural_done:
+            if usage == ExprUsage.BOOLEAN:
+                return SQLBinaryOp(
+                    left=SQLFunctionCall(name="array_length", args=[result]),
+                    operator=">",
+                    right=SQLLiteral(value=0),
+                )
+            return result
+
+        # CQL 1.5 §9 (Query) / Appendix B (Message): when the source is a
+        # scalar fhirpath navigation (e.g. ``Patient.name N``) and the query
+        # has BOTH a where and a return clause, defer the WHERE to the
+        # list_transform path below so it applies per-element. Applying it
+        # here as a list-level CASE wrap makes the return clause's
+        # list_transform path discard it entirely — silently unfiltered
+        # results and swallowed Error-severity Message raises.
+        _defer_where_to_list_transform = (
+            not _multi_source_done
+            and alias is not None
+            and isinstance(result, SQLFunctionCall)
+            and result.name in ("fhirpath_text", "fhirpath")
+            and node.return_clause is not None
+        )
+
         # Apply WHERE clause if present (skip when multi-source already handled it)
-        if not _multi_source_done and node.where:
+        if not _multi_source_done and node.where and not _defer_where_to_list_transform:
             where_expr = _demote_audit_struct_to_bool(self.translate(node.where, usage=ExprUsage.BOOLEAN))
             if isinstance(result, SQLSelect):
                 # Combine with existing WHERE
@@ -4845,12 +5206,12 @@ class QueryMixin:
                 # list/array.  Scalar-returning functions (e.g., intervalEnd)
                 # must fall through to the scalar return path below.
                 _is_known_list_source = (
-                    result.name in ("collapse_intervals", "fhirpath_text", "fhirpath")
+                    result.name in ("collapse_intervals", "collapse_intervals_per", "fhirpath_text", "fhirpath")
                     or _is_list_returning_sql(result)
                 )
                 if _is_known_list_source:
                     _lt_source = result
-                    if result.name == "collapse_intervals":
+                    if result.name in ("collapse_intervals", "collapse_intervals_per"):
                         # collapse_intervals returns a JSON array string (VARCHAR),
                         # not a DuckDB list.  Wrap in from_json to convert to
                         # VARCHAR[] so list_transform can iterate.
@@ -4872,10 +5233,18 @@ class QueryMixin:
                             ],
                         )
                     _lt_param = f"_lt_{alias}"
+                    _lt_where = None
                     self.context.push_scope()
                     try:
                         self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_lt_param))
                         _lt_body = self.translate(node.return_clause, usage=ExprUsage.SCALAR)
+                        if _defer_where_to_list_transform and node.where:
+                            # Per-element WHERE in the same lambda scope as the
+                            # return body (CQL 1.5 §9: where filters the
+                            # elements the query returns).
+                            _lt_where = _demote_audit_struct_to_bool(
+                                self.translate(node.where, usage=ExprUsage.BOOLEAN)
+                            )
                     finally:
                         self.context.pop_scope()
 
@@ -4883,7 +5252,9 @@ class QueryMixin:
                     # expressions.  When the body contains subqueries, use
                     # UNNEST + list() aggregation instead of list_transform.
                     # Pattern: (SELECT list(<body>) FROM (SELECT unnest(<source>) AS <param>) _t)
-                    if _contains_sql_subquery(_lt_body):
+                    if _contains_sql_subquery(_lt_body) or (
+                        _lt_where is not None and _contains_sql_subquery(_lt_where)
+                    ):
                         _lt_body = _ensure_scalar_body(_lt_body)
                         _inner_unnest = SQLSubquery(query=SQLSelect(
                             columns=[SQLAlias(
@@ -4895,11 +5266,20 @@ class QueryMixin:
                         result = SQLSubquery(query=SQLSelect(
                             columns=[SQLFunctionCall(name="list", args=[_lt_body])],
                             from_clause=_unnest_from,
+                            where=_lt_where,
                         ))
                     else:
+                        _lt_iter_source = _lt_source
+                        if _lt_where is not None:
+                            # list_filter cannot drop to NULL bodies either —
+                            # filter first, then project per element.
+                            _lt_iter_source = SQLFunctionCall(
+                                name="list_filter",
+                                args=[_lt_source, SQLLambda(param=_lt_param, body=_lt_where)],
+                            )
                         result = SQLFunctionCall(
                             name="list_transform",
-                            args=[_lt_source, SQLLambda(param=_lt_param, body=_lt_body)]
+                            args=[_lt_iter_source, SQLLambda(param=_lt_param, body=_lt_body)]
                         )
                     _did_list_transform = True
 

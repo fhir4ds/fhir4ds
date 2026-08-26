@@ -87,6 +87,8 @@
   ".code": "code",
   ".display": "string",
   ".url": "uri",
+  ".source": "uri",
+  ".profile": "canonical",
   ".version": "string",
   ".name": "string",
   ".title": "string",
@@ -141,5 +143,12 @@
   ".valueTriggerDefinition": "TriggerDefinition",
   ".valueUsageContext": "UsageContext",
   ".valueDosage": "Dosage",
-  ".valueMeta": "Meta"
+  ".valueMeta": "Meta",
+  ".issued": "instant",
+  ".authoredOn": "dateTime",
+  ".date": "dateTime",
+  ".implicitRules": "uri",
+  ".recorded": "instant",
+  ".lastUpdated": "instant",
+  ".type": "code"
 }

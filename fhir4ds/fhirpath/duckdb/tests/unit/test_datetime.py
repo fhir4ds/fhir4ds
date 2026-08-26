@@ -513,6 +513,9 @@ class TestDateTimeFunctions:
             assert result.value.second == 45
 
 
+C = DateTimeComparisons  # short alias for FP-14 regression tests
+
+
 class TestDateTimeComparisons:
     """Tests for DateTimeComparisons."""
 
@@ -569,8 +572,10 @@ class TestDateTimeComparisons:
         d2 = FHIRDate(value=date(2019, 6, 15), precision=DatePrecision.DAY)
         d3 = FHIRDate(value=date(2019, 1, 1), precision=DatePrecision.YEAR)
 
-        # Same year but different precision = not equal
-        assert DateTimeComparisons.equals(d1, d2) is False
+        # Same year but different precision = uncertain, i.e. empty (None)
+        # per FHIRPath §6.1/§6.2 — a coarser value may or may not equal the
+        # finer one within its unspecified range. Matches both engines.
+        assert DateTimeComparisons.equals(d1, d2) is None
         # Same year and same precision = equal
         assert DateTimeComparisons.equals(d1, d3) is True
 
@@ -588,6 +593,84 @@ class TestDateTimeComparisons:
         assert DateTimeComparisons.less_than(d, None) is None
         assert DateTimeComparisons.greater_than(None, d) is None
         assert DateTimeComparisons.equals(None, d) is None
+
+    def test_ordering_spec_semantics_fp14_skeptic(self) -> None:
+        """FP-14 SKEPTIC: §6.2 ordering helper must match engine semantics.
+
+        Precision-mismatched ordering is empty (None), timezone offsets are
+        honored (instant semantics), Z == +00:00, trailing-zero fractional
+        seconds add no precision (fixtures testLessThan26/27), and 1-digit
+        fractional seconds parse (fixtures use '.0').
+        """
+        C = DateTimeComparisons
+
+        # Precision mismatch => uncertain/empty, not a definitive boolean
+        # (official fixtures testLessThan23-25 carry no <output>).
+        assert C.less_than(FHIRDate.from_string("2018-03"),
+                           FHIRDate.from_string("2018-03-01")) is None
+        assert C.less_or_equal(FHIRDate.from_string("2018-03"),
+                               FHIRDate.from_string("2018-03-01")) is None
+        assert C.greater_than(FHIRDateTime.from_string("2018-03-01T10:30"),
+                              FHIRDateTime.from_string("2018-03-01T10:30:00")) is None
+        assert C.less_than(FHIRTime.from_string("T10:30"),
+                           FHIRTime.from_string("T10:30:00")) is None
+
+        # Timezone-aware instant ordering (§6.2 / §6.1 examples)
+        x = FHIRDateTime.from_string("2014-01-01T00:00:00+02:00")  # 2013-12-31T22:00Z
+        y = FHIRDateTime.from_string("2014-01-01T00:00:00Z")
+        assert C.less_than(x, y) is True
+        assert C.greater_or_equal(x, y) is False
+        a = FHIRDateTime.from_string("2014-01-01T00:00:00Z")
+        b = FHIRDateTime.from_string("2014-01-01T00:00:00+00:00")
+        assert C.less_than(a, b) is False
+        assert C.equals(a, b) is True
+
+        # Trailing-zero fractional seconds add no precision (fixture: false)
+        p = FHIRDateTime.from_string("2018-03-01T10:30:00")
+        q = FHIRDateTime.from_string("2018-03-01T10:30:00.0")
+        assert C.less_than(p, q) is False
+        assert C.less_or_equal(p, q) is True
+
+        # Date vs DateTime cross-type ordering is uncertain (engine parity)
+        assert C.less_than(FHIRDate.from_string("2014-12-12"),
+                           FHIRDateTime.from_string("2014-12-12T00:00:00")) is None
+
+    def test_fractional_seconds_one_digit_parse_fp14_skeptic(self) -> None:
+        """FP-14 SKEPTIC QA-003: 1-2 digit fractional seconds must parse
+        (fixtures such as testLessThan26 use '.0')."""
+        dt = FHIRDateTime.from_string("2018-03-01T10:30:00.0")
+        assert dt.value.microsecond == 0
+        t = FHIRTime.from_string("T10:30:00.5")
+        assert t.value.microsecond == 500000
+
+    def test_helper_time_not_ordered_against_dates_fp14_historian(self) -> None:
+        """FP-14 HISTORIAN QA-002: the implicit-conversion table defines no
+        Time <-> Date/DateTime conversion, so ordering/equality across those
+        types is empty (None), matching engine expression-level behavior
+        (e.g. `@T12:00:00 < @2014-01-01` evaluates to empty)."""
+        t = FHIRTime.from_string("T12:00:00")
+        d = FHIRDate.from_string("2018-03-01")
+        dt = FHIRDateTime.from_string("2018-03-01T12:00")
+        for op in (C.less_than, C.less_or_equal, C.greater_than,
+                   C.greater_or_equal, C.equals, C.not_equals):
+            assert op(t, dt) is None, op.__name__
+            assert op(t, d) is None, op.__name__
+            assert op(dt, t) is None, op.__name__
+            assert op(d, t) is None, op.__name__
+
+    def test_helper_invalid_lexical_operand_is_empty_fp14_historian(self) -> None:
+        """FP-14 HISTORIAN QA-003: FHIRDate.from_string over-accepts an
+        offset ('2018-03-01+05:00'; dates carry no offset), which renders to
+        a lexical form the engine FP_Date constructor rejects (returns
+        None). The public comparison helper must treat that as uncertain
+        (None/empty), never crash with AttributeError."""
+        invalid = FHIRDate.from_string("2018-03-01+05:00")
+        plain = FHIRDate.from_string("2018-03-02")
+        assert invalid is not None  # over-acceptance is the trigger
+        for op in (C.less_than, C.less_or_equal, C.greater_than,
+                   C.greater_or_equal, C.equals, C.not_equals):
+            assert op(invalid, plain) is None, op.__name__
+            assert op(plain, invalid) is None, op.__name__
 
 
 class TestPrecisionSemantics:

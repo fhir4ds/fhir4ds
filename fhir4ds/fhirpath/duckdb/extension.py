@@ -99,18 +99,18 @@ def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
             _logger.debug("duckdb_fhirpath_py: C++ extension already loaded")
             return True
         if "unsigned" in msg or "signature" in msg:
-            # Try enabling unsigned extensions and retrying
-            try:
-                con.execute("SET allow_unsigned_extensions = true")
-                con.execute(f"LOAD '{escaped_path}'")
-                _logger.debug("duckdb_fhirpath_py: loaded unsigned C++ extension from %s", ext_path)
-                return True
-            except duckdb.Error:
-                _logger.info(
-                    "duckdb_fhirpath_py: C++ extension found but not loaded (unsigned dev build). "
-                    "Use duckdb.connect(config={'allow_unsigned_extensions': True}) to enable. "
-                    "Falling back to Python UDFs."
-                )
+            # The setting cannot be flipped after the database is running
+            # (DuckDB rejects `SET allow_unsigned_extensions` mid-session with
+            # "Cannot change allow_unsigned_extensions setting while database
+            # is running"), so there is no in-session retry: the connection
+            # must be created with the config up front.
+            _logger.warning(
+                "duckdb_fhirpath_py: bundled C++ extension is an unsigned dev "
+                "build and cannot be loaded on this connection. Reconnect with "
+                "duckdb.connect(config={'allow_unsigned_extensions': True}) "
+                "(or fhir4ds.connect(), which sets it by default) to enable "
+                "the native engine. Falling back to Python UDFs."
+            )
         else:
             _logger.warning("duckdb_fhirpath_py: failed to load bundled C++ extension: %s", exc)
         return False

@@ -320,3 +320,58 @@ def test_boolean_not_rejects_arguments_in_native_and_fallback(
     finally:
         native.close()
         fallback.close()
+
+
+# FP-17 EXPLORER (2026-08-18): official R4 fixtures testIntegerBooleanNotTrue /
+# testIntegerBooleanNotFalse require non-boolean singletons (0, 1, 'false', ...)
+# to be TRUTHY in Singleton Evaluation of Collections for boolean logic.
+# toBoolean conversion criteria do NOT apply to and/or/xor/implies/not()
+# operands. Locks native and Python fallback to that shared semantics.
+@pytest.mark.parametrize(
+    ("expression", "expected"),
+    [
+        ("n0 and t", True),
+        ("n0d and t", True),
+        ("sF and t", True),
+        ("n0 or f", True),
+        ("n0 xor f", True),
+        ("sF implies f", False),
+        ("t implies sF", True),
+        ("f implies sF", True),
+        ("n0.not()", False),
+        ("n1.not()", False),
+        ("sF.not()", False),
+        ("sX and t", True),
+        ("n and f", False),
+        ("sX.not()", False),
+    ],
+)
+def test_boolean_operators_treat_non_boolean_singletons_as_truthy(
+    monkeypatch: pytest.MonkeyPatch, expression: str, expected: bool
+) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "t": True,
+            "f": False,
+            "n1": 1,
+            "n0": 0,
+            "n0d": 0.0,
+            "sF": "false",
+            "sX": "x",
+            "n": 5,
+        }
+    )
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        native_result = native.execute(
+            "SELECT fhirpath_bool(?::JSON, ?)", [resource, expression]
+        ).fetchone()[0]
+        fallback_result = fallback.execute(
+            "SELECT fhirpath_bool(?::JSON, ?)", [resource, expression]
+        ).fetchone()[0]
+        assert native_result == fallback_result == expected, expression
+    finally:
+        native.close()
+        fallback.close()

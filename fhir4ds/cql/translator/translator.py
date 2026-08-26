@@ -1718,9 +1718,143 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 self._context.pop_scope()
                 self._context.query_builder = old_builder
 
+            # CQL-18 HISTORIAN QA-001: a bare dynamic multi-valued FHIR
+            # property definition (`define G: Patient.name.given`) lowers to
+            # scalar fhirpath_text (first node only), so the define truncates
+            # to one element and downstream list operators over the alias get
+            # the wrong shape (distinct G -> one element, Count(G) -> 1,
+            # except/intersect/= /includes via alias -> Binder errors).
+            # CQL 1.5 Appendix B Property returns ALL elements of a 0..*
+            # element, so store the list-valued projection and mark the
+            # definition List-typed (matching static list-literal defines,
+            # which every list operator already handles correctly).
+            _definition_is_dynamic_list = (
+                isinstance(result, SQLFunctionCall)
+                and result.name == "fhirpath_text"
+                and len(result.args) == 2
+            )
+            # CQL-18 EXPLORER QA-001: deep multi-valued navigation over a
+            # retrieve define (`define CC: Obs.component.code.coding.code`)
+            # lowers to a correlated scalar subquery that yields the whole
+            # per-patient element list (marked by _resource_rows_navigation).
+            _definition_is_navigation_list = bool(
+                getattr(result, "stores_patient_list", False)
+            )
+            _definition_stores_list_value = False
+
+            # CQL-19 SKEPTIC QA-003: a list-union define
+            # (`G1 union G2`, `Patient.name.given union Patient.name.prefix`)
+            # stores ONE row per patient whose value column holds the union
+            # result list. Without this, AST-only shape inference sees
+            # property operands and wraps the define in the
+            # PATIENT_MULTI_VALUE LIST() aggregate, nesting list-in-list.
+            from ..parser.ast_nodes import (
+                BinaryExpression as _DefBinExpr,
+                ListExpression as _DefListExpr,
+                Literal as _DefLiteral,
+                Property as _DefProperty,
+                Retrieve as _DefRetrieve,
+            )
+
+            # CQL-19 HISTORIAN QA-003: `X union null` / `X union (null as
+            # List<T>)` is still an element-list union — the null operand
+            # lowers to SQLNull / an all-NULL CASE and the union returns the
+            # other element list (§20.29 null-as-empty). A null literal or
+            # `as`-cast can never be a resource CTE, so allowing them keeps
+            # the DQM resource-union guard intact while letting the stored-
+            # list marking fire (otherwise the PATIENT_MULTI_VALUE wrap
+            # LIST()-nests the per-patient list into [[...]]).
+            def _is_element_list_union_operand(_o) -> bool:
+                if isinstance(_o, (_DefProperty, _DefListExpr)):
+                    return True
+                if isinstance(_o, _DefBinExpr):
+                    if getattr(_o, "operator", None) in ("union", "|"):
+                        return True
+                    if getattr(_o, "operator", None) == "as":
+                        return True
+                    return False
+                if isinstance(_o, _DefLiteral) and _o.value is None:
+                    return True
+                return False
+            _uexpr = definition.expression
+            if isinstance(_uexpr, _DefBinExpr):
+                _u_operands = (_uexpr.left, _uexpr.right)
+            else:
+                _u_operands = ()
+            if (
+                isinstance(_uexpr, _DefBinExpr)
+                and getattr(_uexpr, "operator", None) in ("union", "|")
+                # Restrict to element-list unions: property paths and list
+                # literals only. Identifier operands (resource defines) and
+                # retrieves keep their existing shape — DQM measures union
+                # resource CTEs through this operator and MUST NOT become
+                # stored-list scalars (CMS130/133 regression).
+                and all(
+                    _is_element_list_union_operand(_o)
+                    for _o in _u_operands
+                )
+                and not isinstance(_uexpr.left, _DefRetrieve)
+                and not isinstance(_uexpr.right, _DefRetrieve)
+                and self._definition_result_is_list_returning(result)
+                and not isinstance(result, (SQLSelect, SQLSubquery))
+            ):
+                # Reuse the navigation-list path below: sets cql_type
+                # List<Any>, stores_list_value, and shape PATIENT_SCALAR.
+                _definition_is_navigation_list = True
+
             # Populate DefinitionMeta for this definition
             shape = self._infer_row_shape(definition.expression)
             cql_type = self._infer_cql_type(definition.expression)
+
+            # CQL-19 EXPLORER QA-001: an alias define (`define B: A`) whose
+            # target is a stored-list define is itself a stored-list define —
+            # its CTE value column holds the same whole element list. Without
+            # propagating the marker, depth-2 alias operands are not
+            # recognized by union/list-operator stored-list detection and the
+            # rows-shaped `(SELECT * FROM "B")` scan leaks into scalar context
+            # (BinderException 'Subquery returns 2 columns').
+            from ..parser.ast_nodes import Identifier as _DefIdentifier
+            if isinstance(definition.expression, _DefIdentifier):
+                _alias_meta = self._context.definition_meta.get(
+                    definition.expression.name
+                )
+                if _alias_meta is not None and getattr(
+                    _alias_meta, "stores_list_value", False
+                ):
+                    _definition_stores_list_value = True
+                    if not str(cql_type).startswith("List<"):
+                        _alias_cql_type = str(_alias_meta.cql_type)
+                        cql_type = (
+                            _alias_cql_type
+                            if _alias_cql_type.startswith("List<")
+                            else "List<Any>"
+                        )
+                    from .context import RowShape as _AliasRowShape
+                    shape = _AliasRowShape.PATIENT_SCALAR
+            if _definition_is_dynamic_list:
+                from .expressions._utils import _promote_fhirpath_text_list
+                from ..translator.context import RowShape as _RowShape
+                result = _promote_fhirpath_text_list(result)
+                cql_type = "List<Any>"
+                _definition_stores_list_value = True
+                # The CTE stores ONE row per patient whose value column holds
+                # the full element list — the same physical shape as a static
+                # list-literal define. Marking it PATIENT_SCALAR is what makes
+                # downstream consumers (distinct/contains/in/includes/=/~/
+                # except/intersect/IndexOf/Count over the alias) recognize the
+                # reference as a single list value instead of element rows
+                # (CQL 1.5 Appendix B §10.x list-operator semantics).
+                shape = _RowShape.PATIENT_SCALAR
+            elif _definition_is_navigation_list:
+                # Same stored-list physical shape as above: the subquery is
+                # already list-valued (COALESCE(flatten(LIST(...))), [])), so
+                # only the metadata needs to change. Wrapping happens in the
+                # PATIENT_SCALAR path, which keeps the `_pt` correlation that
+                # the PATIENT_MULTI_VALUE wrap would destroy.
+                from ..translator.context import RowShape as _RowShape
+                cql_type = "List<Any>"
+                _definition_stores_list_value = True
+                shape = _RowShape.PATIENT_SCALAR
             # has_resource should reflect whether the CTE OUTPUT has a resource column,
             # not whether the expression REFERENCES a resource column.
             # Only RESOURCE_ROWS shape produces CTEs with resource columns.
@@ -1759,6 +1893,22 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 value_column=value_column,
                 tracked_refs=tracked_refs,
                 uses_demographics=needs_demographics,
+                stores_list_value=(
+                    _definition_stores_list_value
+                    or isinstance(result, SQLArray)
+                    # CQL-18 EXPLORER QA-004: a PATIENT_SCALAR define whose
+                    # value column holds a list-returning expression over
+                    # other stored lists (`define A2: distinct A_Lit`) stores
+                    # ONE row per patient with the whole element list — the
+                    # physical shape is identical to a static list define,
+                    # so the marker must be set for First/Last/Count/IndexOf
+                    # consumers (CQL 1.5 App B §10.8 First).
+                    or (
+                        shape == RowShape.PATIENT_SCALAR
+                        and cql_type.startswith("List<")
+                        and self._definition_result_is_list_returning(result)
+                    )
+                ),
             )
             # Propagate SQL result type hint (e.g., "Quantity") from translated expression
             if hasattr(result, 'result_type') and result.result_type:

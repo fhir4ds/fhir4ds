@@ -1162,50 +1162,93 @@ class Lexer:
             self.tokens.append(Token(TokenType.DATE, value, start_line, start_col))
 
     def _validate_datetime_literal(self, value: str, line: int, col: int) -> None:
-        """Validate date/time literal components are within valid ranges."""
+        """Validate date/time literal against the strict CQL 1.5 lexical shapes.
+
+        CQL grammar defines (all components zero-padded, partial precision allowed):
+          DATE:     YYYY | YYYY-MM | YYYY-MM-DD
+          TIME:     T hh | T hh:mm | T hh:mm:ss | T hh:mm:ss.fff (no offset)
+          DATETIME: DATE ('T' TIME_WITHOUT_T)? (('Z' | ('+'|'-') hh:mm))?
+        The timezone offset, when present, must be in the range
+        [-14:00, +14:00] (CQL 1.5 §DateTime). Invalid shapes and impossible
+        calendar dates must raise rather than silently lexing into a
+        garbage literal.
+        """
+        import datetime as _datetime
         import re
-        # Extract date portion (before T)
-        date_part = value.split("T")[0] if "T" in value else value
-        # Only validate if it looks like a date (has dashes)
-        if "-" not in date_part:
-            return
-        parts = date_part.split("-")
-        if len(parts) >= 1:
-            year = parts[0]
-            if not year.isdigit() or len(year) != 4:
-                raise LexerError(f"Invalid year in date literal @{value} at line {line}, column {col}")
-        if len(parts) >= 2:
-            month = parts[1]
-            if month.isdigit():
-                m = int(month)
-                if m < 1 or m > 12:
-                    raise LexerError(f"Invalid month {m} in date literal @{value} at line {line}, column {col} (must be 1-12)")
-        if len(parts) >= 3:
-            day = parts[2]
-            if day.isdigit():
-                d = int(day)
-                if d < 1 or d > 31:
-                    raise LexerError(f"Invalid day {d} in date literal @{value} at line {line}, column {col} (must be 1-31)")
-        # Validate time portion if present
-        if "T" in value:
-            time_part = value.split("T")[1]
-            # Strip timezone
-            time_only = re.split(r"[Z+-]", time_part)[0]
-            time_parts = time_only.split(":")
-            if len(time_parts) >= 1 and time_parts[0].isdigit():
-                h = int(time_parts[0])
-                if h > 23:
-                    raise LexerError(f"Invalid hour {h} in datetime literal @{value} at line {line}, column {col} (must be 0-23)")
-            if len(time_parts) >= 2 and time_parts[1].isdigit():
-                mi = int(time_parts[1])
-                if mi > 59:
-                    raise LexerError(f"Invalid minute {mi} in datetime literal @{value} at line {line}, column {col} (must be 0-59)")
-            if len(time_parts) >= 3:
-                sec_str = time_parts[2].split(".")[0]
-                if sec_str.isdigit():
-                    s = int(sec_str)
-                    if s > 59:
-                        raise LexerError(f"Invalid second {s} in datetime literal @{value} at line {line}, column {col} (must be 0-59)")
+
+        date_re = r"\d{4}(-\d{2}(-\d{2})?)?"
+        time_re = r"\d{2}(:\d{2}(:\d{2}(\.\d+)?)?)?"
+        offset_re = r"(Z|[+-]\d{2}:\d{2})?"
+        # NOTE: compose via concatenation, not f-strings — f-strings would
+        # treat regex quantifiers like {2} as replacement fields.
+        time_literal_re = re.compile("T" + time_re + "$")
+        time_opt_re = r"(\d{2}(:\d{2}(:\d{2}(\.\d+)?)?)?)?"
+        datetime_re = re.compile(
+            date_re + "(T" + time_opt_re + ")?" + offset_re + "$"
+        )
+
+        def err(msg: str) -> None:
+            raise LexerError(
+                f"Invalid date/time literal @{value} at line {line}, column {col} ({msg})"
+            )
+
+        is_time_only = value.startswith("T")
+        if is_time_only:
+            m = time_literal_re.match(value)
+            if not m:
+                err("expected @T hh:mm:ss(.fff) with zero-padded components and no timezone offset")
+        else:
+            m = datetime_re.match(value)
+            if not m:
+                err(
+                    "expected @YYYY, @YYYY-MM, @YYYY-MM-DD, or "
+                    "@YYYY-MM-DDThh:mm:ss(.fff)(Z|+hh:mm) with zero-padded components"
+                )
+
+        body = value[1:] if is_time_only else value
+        # Split off the timezone offset (only valid on datetime literals)
+        offset = ""
+        if not is_time_only and ("Z" in body or re.search(r"[+-]\d{2}:\d{2}$", body)):
+            mo = re.search(r"(Z|[+-]\d{2}:\d{2})$", body)
+            offset = mo.group(1)
+            body = body[: mo.start()]
+
+        # Validate time components and ranges
+        time_part = ""
+        if "T" in body:
+            date_part, time_part = body.split("T", 1)
+        elif is_time_only:
+            date_part = ""
+            time_part = body
+        else:
+            date_part = body
+
+        if time_part:
+            comps = time_part.split(":")
+            hour = int(comps[0]) if comps[0] else 0
+            minute = int(comps[1]) if len(comps) > 1 and comps[1] else 0
+            sec_str = comps[2].split(".")[0] if len(comps) > 2 else "0"
+            second = int(sec_str) if sec_str else 0
+            if hour > 23:
+                err(f"hour {hour} must be 0-23")
+            if minute > 59:
+                err(f"minute {minute} must be 0-59")
+            if second > 59:
+                err(f"second {second} must be 0-59")
+
+        # Validate offset shape only (already matched by the grammar regex).
+        # Out-of-range offsets (e.g. +14:30, +99:00) are a VALUE error, not a
+        # lexical one: per the established conformance doctrine (pinned in
+        # test_datetime_part1_parity.py), statically invalid temporal
+        # boundary values are runtime-invalid (null), not parse errors.
+
+        # Validate calendar date (leap years included) when day precision given
+        if date_part.count("-") == 2:
+            y, mo_, d = (int(p) for p in date_part.split("-"))
+            try:
+                _datetime.date(y, mo_, d)
+            except ValueError as e:
+                err(str(e))
 
     def _read_number(self) -> None:
         """Read an integer or decimal number."""

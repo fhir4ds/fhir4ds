@@ -721,7 +721,12 @@ TYPE_HIERARCHY: Dict[str, str] = {
     "canonical": "uri",
     "code": "string",
     "id": "string",
-    "instant": "dateTime",
+    # FP-02 EXPLORER QA-002 (2026-08-16): FHIR R4 has NO dateTime-derived
+    # primitives — instant is a sibling primitive under Element (matches the
+    # canonical models/r4/type2Parent.json). The stale instant->dateTime edge
+    # made `Observation.issued is dateTime` true in the Python fallback while
+    # `issued.type().name` said 'instant'.
+    "instant": "Element",
     "markdown": "string",
     "oid": "uri",
     "positiveInt": "integer",

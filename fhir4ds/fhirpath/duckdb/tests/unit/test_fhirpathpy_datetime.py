@@ -51,7 +51,7 @@ class TestDateTimeTimezonePreservation:
         dt = FP_DateTime("1973-12-25T00:00:00.000Z")
         qty = FP_Quantity(7, "days")
         result = dt.plus(qty)
-        assert result == "1974-01-01T00:00:00.000+00:00"
+        assert result == "1974-01-01T00:00:00.000Z"  # FP-07 Z-preservation doctrine; updated FP-08 2026-08-17
 
     def test_plus_days_preserves_timezone_negative(self) -> None:
         """Test that adding days preserves negative timezone offset."""

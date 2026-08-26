@@ -2,15 +2,18 @@
 
 ## 1. Final Compliance Table
 
-| Standard | Initial | Phase 1-2 | Phase 3-4 | Final | Rate |
-|---|---|---|---|---|---|
-| ViewDefinition (v2) | 111 / 134 | 123 / 134 | **134 / 134** | **134 / 134** | **100.0%** |
-| FHIRPath (R4) | 928 / 935 | 934 / 935 | **935 / 935** | **935 / 935** | **100.0%** |
-| CQL | 854 / 1706 | 1667 / 1706 | 1703 / 1706 | **1704 / 1706** | **99.9%** |
-| DQM (QI Core 2025) | 42 / 46 | 42 / 46 | 42 / 46 | **42 / 46** | **91.3%** |
-| **OVERALL** | **1935 / 2821** | **2766 / 2821** | **2814 / 2821** | **2815 / 2821** | **99.8%** |
+| Standard | Initial | Phase 1-2 | Phase 3-4 | Pre-0.0.13 | Final (0.0.13) | Rate |
+|---|---|---|---|---|---|---|
+| ViewDefinition (v2) | 111 / 134 | 123 / 134 | **134 / 134** | 134 / 134 | **144 / 144** | **100.0%** |
+| SQLQuery / SQLView (Analytics Layer) | — | — | — | — | **28 / 28** (unit + integration) | **100.0%** |
+| FHIRPath (R4) | 928 / 935 | 934 / 935 | **935 / 935** | 935 / 935 | **935 / 935** | **100.0%** |
+| CQL | 854 / 1706 | 1667 / 1706 | 1703 / 1706 | 1704 / 1706 | **1704 / 1706** | **99.9%** |
+| DQM (QI Core 2025) | 42 / 46 | 42 / 46 | 42 / 46 | 42 / 46 | **42 / 46** | **91.3%** |
+| **OVERALL** | **1935 / 2821** | **2766 / 2821** | **2814 / 2821** | 2815 / 2821 | **2825 / 2831** | **99.8%** |
 
 Starting compliance: **68.6%** → Final compliance: **99.8%** (+31.2 percentage points)
+
+> **0.0.13 spec suite refresh (2026-08-11):** The canonical SQL-on-FHIR v2 conformance suite moved from `HL7/sql-on-fhir` to `FHIR/sql-on-fhir.js` in May 2026 and grew from 134 to 144 tests. The local snapshot at `fhir4ds/viewdef/tests/spec_tests/` was re-synced; the 12 new `repeat.json` tests (recursive-traversal coverage combined with `forEach`, `unionAll`, constants, and nested iteration) all pass after the test-infrastructure fix below. The denominator for ViewDefinition is now 144; the OVERALL denominator is now 2831.
 
 ### Remaining 6 Failures (all terminal — external blockers)
 
@@ -121,7 +124,25 @@ Major fix categories (see session history for full details):
 | Aggregate clause | ~15 | list_reduce, SQLLambda2, null starting value |
 | Other | ~29 | XOR, between, macro shadowing fixes |
 
-### 2.4 Phase 3-4 Fixes (Sessions 3A-3B, +49 tests)
+### 2.4 0.0.13 Spec Suite Refresh + Analytics Layer (+38 tests, all passing)
+
+The canonical SQL-on-FHIR v2 conformance suite moved from `HL7/sql-on-fhir` to `FHIR/sql-on-fhir.js` in May 2026 (commit `48f3607`) and grew from 134 to 144 tests. The local snapshot was re-synced; the 10-test delta (12 new `repeat.json` tests covering recursive-traversal + `forEach`/`unionAll`/constants/nested iteration, minus 2 `fhirpath.json` tests relocated to `fn_join.json`) all pass after the four triage fixes below.
+
+| Fix | Spec Reference | Tests Fixed | Status |
+|---|---|---|---|
+| Depth-aware UNION ALL splitter + WHERE detector in `test_spec_compliance.py` | Test infrastructure (SOF-VD-05 ARCH-003 LATERAL null-preservation pattern) | 1 (`repeat.json:repeat inside forEachOrNull`) | APPROVED |
+| `NULLIF(fhirpath_text(...), '')` for uncast text columns | FHIRPath empty-collection → NULL semantics | 3 (`fn_join.json:join with comma/empty value/no value`) | APPROVED |
+| Extend `dateTime` compat set to accept `Date` (and symmetric `date` ← `DateTime`) | FHIRPath `lowBoundary()`/`highBoundary()` on date inputs | 2 (`fn_boundary.json:date lowBoundary/highBoundary`) | APPROVED |
+| Time boundary preserves input-precision seconds/ms | FHIRPath `highBoundary()` time precision | 1 (`fn_boundary.json:time highBoundary`) | APPROVED |
+| SQL-on-FHIR v2 §G-1 `cnl-1` URL invariant | ViewDefinition.url canonical regex | 9 new unit tests | APPROVED |
+| SQL-on-FHIR v2 §G-2 `cnl-0` name warning | ViewDefinition.name leading-capital + 255-char | 5 new unit tests | APPROVED |
+| SQL-on-FHIR v2 §G-3 CanonicalResource roundtrip | ViewDefinition._extensions dict preserves unknown keys | 7 new unit tests | APPROVED |
+| SQL-on-FHIR v2 §G-4 column.tag.name namespace warning | column tag namespace recommendation | 4 new unit tests | APPROVED |
+| SQL-on-FHIR v2 §M-1 SQLQuery / SQLView Library profiles (DuckDB MVP) | Analytics Layer: profile parser, validator, runner | 28 new unit + integration tests | APPROVED |
+
+Triage decision tree (S-7) applied to all 8 initial failures: 1 test-infrastructure constant update (trivial), 7 spec-violation fixes (all small, none required `WAIT_FOR_USER_APPROVAL`). Step 7 (§M-1 SQLQuery MVP) delivered as a new `fhir4ds/sqlquery/` package with profile parser, validator, runner (CREATE OR REPLACE VIEW materialization, prepared-statement parameter binding, cycle detection), and typed error hierarchy. Public helpers `viewdef.utils.quote_identifier` and `viewdef.types.fhir_type_to_duckdb` extracted. Full non-regression: 2710/2710 viewdef+fhirpath+sqlquery tests green.
+
+### 2.5 Phase 3-4 Fixes (Sessions 3A-3B, +49 tests)
 
 | Fix | Spec Reference | Tests Fixed | Status |
 |---|---|---|---|

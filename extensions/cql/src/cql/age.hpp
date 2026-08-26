@@ -9,6 +9,9 @@ namespace cql {
 
 struct AgeCalculator {
 	static Optional<DateTimeValue> extract_birthdate(const char *json, size_t len);
+	// Raw birthDate text ('YYYY', 'YYYY-MM' or full) - partial birthDates
+	// must reach the duration-uncertainty engine unparsed (CQL Age ops).
+	static Optional<std::string> extract_birthdate_text(const char *json, size_t len);
 
 	// Age-style (complete units, birthday logic) — for AgeInYears/Months/etc.
 	static Optional<int64_t> age_in_years(const DateTimeValue &birth, const DateTimeValue &as_of);

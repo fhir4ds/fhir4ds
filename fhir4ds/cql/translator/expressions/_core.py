@@ -94,8 +94,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-
-@lru_cache(maxsize=None)
 def _camel_to_snake_cached(name: str) -> str:
     """Convert CamelCase to snake_case."""
     result = []
@@ -323,6 +321,14 @@ class CoreMixin:
 
         if isinstance(value, (int, float)):
             if getattr(lit, 'type', None) == "Decimal" and getattr(lit, 'raw_str', None):
+                # NOTE: no extent rejection here on purpose. The official CQL
+                # conformance fixtures (ValueLiteralsAndSelectors.xml) pin
+                # 28-int-digit literals such as 10000000000000000000000000000.00000000
+                # as VALID Decimal selectors; official fixtures outrank the
+                # (10^28-1)/10^8 "maximum Decimal" prose, so out-of-extent
+                # Decimal literals must translate (Integer/Long keep their
+                # range checks because fixtures pin those rejections).
+                return SQLLiteral(value=value, raw_sql=lit.raw_str)
                 return SQLLiteral(value=value, raw_sql=lit.raw_str)
             # CQL §2.2: Integer is 32-bit signed [-2^31, 2^31-1]
             if isinstance(value, int) and not isinstance(value, bool):
@@ -508,6 +514,11 @@ class CoreMixin:
         res = SQLSubquery(query=select)
         if meta and meta.sql_result_type:
             res.result_type = meta.sql_result_type
+        if usage == ExprUsage.BOOLEAN and strategy.kind == _RefKind.CORRELATED_SCALAR:
+            # Value-bearing Boolean define consumed by a logical operator:
+            # force an explicit Boolean cast so CQL 3VL applies to the VALUE
+            # instead of inheriting DuckDB string truthiness.
+            return SQLCast(expression=res, target_type="BOOLEAN")
         return res
 
     def _translate_identifier(self, ident: Identifier, usage: ExprUsage = ExprUsage.LIST) -> SQLExpression:
@@ -527,6 +538,25 @@ class CoreMixin:
 
         name = ident.name
 
+        # CQL-02 QA-004: statically-known clinical literal definitions (Code
+        # selectors, Concept instances, ValueSet/CodeSystem references) are
+        # library constants with no retrieve/query dependency. Inline them at
+        # reference sites instead of emitting patient-correlated CTE lookups
+        # against literal CTEs that have no patient_id column (Binder error
+        # end-to-end). Must run before alias/promotion/CTE resolution so all
+        # reference paths agree.
+        if not self.context.is_alias(name):
+            clinical_source = self._definition_source_ast(name)
+            if clinical_source is not None and self._is_static_clinical_definition(clinical_source):
+                return self.translate(clinical_source, usage=usage)
+
+        # CQL-03 QA-002: temporal literal defines are library constants too;
+        # inline them for the same patient-correlated-CTE reason.
+        if not self.context.is_alias(name):
+            temporal_source = self._definition_source_ast(name)
+            if temporal_source is not None and self._is_static_temporal_definition(temporal_source):
+                return self.translate(temporal_source, usage=usage)
+
         # Check if this definition is promoted to a global CTE for deduplication.
         # If so, we MUST return a subquery lookup instead of the full AST
         # to prevent combinatorial explosion.
@@ -540,6 +570,11 @@ class CoreMixin:
             if table_alias and usage == ExprUsage.SCALAR:
                 source_ast = getattr(self.context, "_alias_source_asts", {}).get(name)
                 if isinstance(source_ast, ListExpression):
+                    return SQLIdentifier(name=table_alias)
+                if isinstance(source_ast, Query):
+                    # Nested query source (``[X] x return e a``): the alias
+                    # iterates element VALUES of the inner query's projection,
+                    # not resource rows (CQL 1.5 §Query).
                     return SQLIdentifier(name=table_alias)
                 cte_name = getattr(symbol, "cte_name", None)
                 col = "resource"
@@ -599,6 +634,15 @@ class CoreMixin:
                             name="list_extract",
                             args=[ast_expr, SQLLiteral(value=1)]
                         )
+
+                    # Alias-bound resource-row subqueries project
+                    # (patient_id, resource); in scalar usage the whole
+                    # subquery would be inlined where a single value is
+                    # expected (DuckDB: "Subquery returns 2 columns").
+                    # Narrow to the resource column; computed-value
+                    # projections (query return clauses) are unaffected.
+                    if usage == ExprUsage.SCALAR:
+                        ast_expr = self._narrow_to_resource_column(ast_expr)
 
                     # Return the AST expression directly
                     return ast_expr
@@ -704,7 +748,10 @@ class CoreMixin:
                         )
                     return self._build_correlated_exists(name)
 
-                if usage == ExprUsage.SCALAR:
+                if usage == ExprUsage.SCALAR or (
+                    usage == ExprUsage.BOOLEAN
+                    and strategy.kind == _RefKind.CORRELATED_SCALAR
+                ):
                     # Diagnostic: RESOURCE_ROWS defines referenced as scalars
                     # are almost always a user mistake (no ORDER BY → row choice
                     # is unspecified). Only emitted from this path because
@@ -732,6 +779,12 @@ class CoreMixin:
                     ))
                     if meta and meta.sql_result_type:
                         subq.result_type = meta.sql_result_type
+                    if usage == ExprUsage.BOOLEAN:
+                        # Value-bearing Boolean define consumed by a logical
+                        # operator: force an explicit Boolean cast so CQL 3VL
+                        # applies to the VALUE (null/false included) instead
+                        # of inheriting DuckDB string truthiness.
+                        return SQLCast(expression=subq, target_type="BOOLEAN")
                     return subq
 
                 # LIST context on a non-boolean define. Prefer JOIN tracking
@@ -823,6 +876,11 @@ class CoreMixin:
         # Check if this is a definition reference (not in symbol table but defined in context)
         definition = self.context.get_definition(name)
         if definition:
+            # CQL-02 QA-004: statically-known clinical literal definitions
+            # (Code selectors, Concept instances, ValueSet/CodeSystem refs)
+            # are library constants. Inline them at reference sites instead
+            # of emitting a patient-correlated CTE lookup against a literal
+            # CTE with no patient_id column (Binder error end-to-end).
             # Fetch meta here so it's available for LIST context too.
             meta = self.context.definition_meta.get(name)
             # For SCALAR/BOOLEAN/EXISTS context, register JOIN with query builder

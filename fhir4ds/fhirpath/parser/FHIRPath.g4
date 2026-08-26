@@ -147,7 +147,15 @@ DELIMITEDIDENTIFIER
         ;
 
 STRING
-        : '\'' (ESC | ~['])* '\''
+        // The loop must be NON-GREEDY. A greedy `(ESC | ~['])*` lets ANTLR
+        // maximal munch match `\\'` through ESC's `\'` alternative after a
+        // raw backslash, swallowing the closing quote and lexing the valid
+        // two-argument form `'lit\\','next'` as a single STRING token
+        // (e.g. replace('\\', ...)). Non-greedy closes the literal at the
+        // first quote that terminates ANY alternative path, which is the
+        // intended FHIRPath lexical behavior, and preserves the tolerant
+        // raw-backslash corners ('abc\', 'short \u005').
+        : '\'' (ESC | ~['])*? '\''
         ;
 
 // Also allows leading zeroes now (just like CQL and XSD)

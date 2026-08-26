@@ -55,6 +55,18 @@ def _install_medterm4ds_stub(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     services_discovery.search_names = _fake_search_names
     services_pkg.search_names = _fake_search_names
 
+    # apps.fhir_api surface (medterm4ds 0.0.2): expand_url_pattern and
+    # expand_intensional_value_set. Default to empty expansions; tests
+    # rebind to control returns.
+    apps_pkg = types.ModuleType("medterm4ds.apps")
+    fhir_api_mod = types.ModuleType("medterm4ds.apps.fhir_api")
+    fhir_api_mod.expand_url_pattern = MagicMock(
+        return_value={"expansion": {"contains": []}}
+    )
+    fhir_api_mod.expand_intensional_value_set = MagicMock(return_value=([], False))
+    apps_pkg.fhir_api = fhir_api_mod
+    fake_pkg.apps = apps_pkg
+
     # Top-level connect(): returns the mock Terminology.
     fake_pkg.connect = MagicMock(return_value=terminology)
     # Expose Terminology and CodeRef on the fake package too.
@@ -74,6 +86,8 @@ def _install_medterm4ds_stub(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     )
     monkeypatch.setitem(sys.modules, "medterm4ds.services", services_pkg)
     monkeypatch.setitem(sys.modules, "medterm4ds.services.discovery", services_discovery)
+    monkeypatch.setitem(sys.modules, "medterm4ds.apps", apps_pkg)
+    monkeypatch.setitem(sys.modules, "medterm4ds.apps.fhir_api", fhir_api_mod)
 
     # Stash the terminology mock on the engine so tests that only grab
     # the engine return value can still reach the terminology via
@@ -179,13 +193,65 @@ def test_search_batch_loops(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_expand_uses_medterm4ds_helper(monkeypatch: pytest.MonkeyPatch) -> None:
-    """expand() should delegate to Terminology.expand_url (Option B)."""
+    """MT-004: expand() prefers expand_url_pattern with retired codes in.
+
+    The Terminology facade's expand_url() has no include_retired opt-in
+    and medterm4ds 0.0.2 defaults to active-only, which would silently
+    drop codes retired since they were recorded. Expansion feeds
+    membership resolution, so the primary path must pass
+    include_retired=True (settled retired-code policy).
+    """
     engine = _install_medterm4ds_stub(monkeypatch)
     terminology = engine.terminology  # mock Terminology facade
 
-    # Program expand_url to return a list of medterm4ds-style CodeRef
-    # objects. medterm4ds.CodeRef has (source, code) — source is the
-    # UMLS mnemonic; the adapter normalizes it to the FHIR canonical URL.
+    import medterm4ds.apps.fhir_api as fhir_api_mod
+
+    fhir_api_mod.expand_url_pattern = MagicMock(
+        return_value={
+            "expansion": {
+                "contains": [
+                    # Canonical URL system — must pass through
+                    # _normalize_system unchanged.
+                    {
+                        "system": "http://snomed.info/sct",
+                        "code": "73211009",
+                        "display": "Diabetes mellitus",
+                    },
+                ]
+            }
+        }
+    )
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    refs = adapter.expand("http://snomed.info/sct/73211009?fhir_vs=isa")
+    assert refs == [CodeRef("http://snomed.info/sct", "73211009", "Diabetes mellitus")]
+    fhir_api_mod.expand_url_pattern.assert_called_once_with(
+        engine,
+        "http://snomed.info/sct/73211009?fhir_vs=isa",
+        count=1000,
+        include_retired=True,
+    )
+    # The facade (no include_retired) must NOT be the primary path.
+    terminology.expand_url.assert_not_called()
+
+
+def test_expand_falls_back_to_facade_without_fhir_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without apps.fhir_api the facade expand_url is the fallback."""
+    engine = _install_medterm4ds_stub(monkeypatch)
+    terminology = engine.terminology
+
+    # Make ``from medterm4ds.apps.fhir_api import ...`` fail.
+    monkeypatch.delitem(sys.modules, "medterm4ds.apps.fhir_api")
+    monkeypatch.delitem(sys.modules, "medterm4ds.apps")
+
+    # medterm4ds.CodeRef has (source, code) — source is the UMLS
+    # mnemonic; the adapter normalizes it to the FHIR canonical URL.
     mt_coderef = MagicMock()
     mt_coderef.source = "SNOMEDCT_US"
     mt_coderef.code = "73211009"
@@ -198,25 +264,133 @@ def test_expand_uses_medterm4ds_helper(monkeypatch: pytest.MonkeyPatch) -> None:
 
     adapter = InProcessTerminologyEndpoint()
     refs = adapter.expand("http://snomed.info/sct/73211009?fhir_vs=isa")
-    # Adapter normalized SNOMEDCT_US → http://snomed.info/sct.
     assert refs == [CodeRef("http://snomed.info/sct", "73211009", None)]
     terminology.expand_url.assert_called_once_with(
         "http://snomed.info/sct/73211009?fhir_vs=isa"
     )
 
 
-def test_expand_intensional_returns_empty_on_published_medterm4ds(
+def test_mt006_connect_runtime_error_gets_config_hint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """expand_intensional is not yet supported against published medterm4ds.
-
-    The PyPI wheel (0.0.1) exposes intensional expansion only as an HTTP
-    operation on the FHIR API, not as a programmatic entry point. The
-    adapter returns [] with a clear log so callers can route through
-    HTTP mode instead. The "not supported" path must NOT trip the
-    breaker — it's a permanent gap, not a transient failure.
-    """
+    """MT-006: medterm4ds RuntimeError on missing db is re-raised with a hint."""
     _install_medterm4ds_stub(monkeypatch)
+    import medterm4ds as fake_pkg
+
+    fake_pkg.connect = MagicMock(
+        side_effect=RuntimeError("database not found: /nonexistent/mt.db")
+    )
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    with pytest.raises(RuntimeError, match="FHIR4DS_TERMINOLOGY_DB") as exc:
+        InProcessTerminologyEndpoint(medterm4ds_db_path="/nonexistent/mt.db")
+    # The remediation actions must be surfaced to the operator.
+    msg = str(exc.value)
+    assert "build-duckdb" in msg
+    assert "prepare-derived" in msg
+    # The underlying medterm4ds message is preserved.
+    assert "/nonexistent/mt.db" in msg
+
+
+def test_mt006_connect_passes_cache_indexes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """MT-006: the long-lived adapter engine persists BM25 indexes."""
+    _install_medterm4ds_stub(monkeypatch)
+    import medterm4ds as fake_pkg
+
+    connect_mock = fake_pkg.connect
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    InProcessTerminologyEndpoint(medterm4ds_db_path="/tmp/mt.db")
+    assert connect_mock.call_args.kwargs.get("db_path") == "/tmp/mt.db"
+    assert connect_mock.call_args.kwargs.get("cache_indexes") is True
+
+
+def test_mt005_expand_intensional_wired_in_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MT-005: intensional expansion uses the 0.0.2 programmatic helper.
+
+    ``count`` is POSITIONAL in expand_intensional_value_set; retired
+    codes are included per the settled policy (expansion feeds
+    membership).
+    """
+    engine = _install_medterm4ds_stub(monkeypatch)
+
+    import medterm4ds.apps.fhir_api as fhir_api_mod
+
+    fhir_api_mod.expand_intensional_value_set = MagicMock(
+        return_value=(
+            [
+                {
+                    "system": "http://snomed.info/sct",
+                    "code": "444814009",
+                    "display": "Viral sinusitis",
+                },
+            ],
+            False,
+        )
+    )
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    body = {"resourceType": "ValueSet", "compose": {"include": []}}
+    refs = adapter.expand_intensional(body)
+    assert refs == [
+        CodeRef("http://snomed.info/sct", "444814009", "Viral sinusitis")
+    ]
+    # count POSITIONAL, include_retired keyword.
+    fhir_api_mod.expand_intensional_value_set.assert_called_once_with(
+        engine, body, 1000, include_retired=True
+    )
+    assert adapter._consecutive_failures == 0
+
+
+def test_mt005_expand_intensional_falls_back_to_facade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without apps.fhir_api the facade expand_intensional is the fallback."""
+    engine = _install_medterm4ds_stub(monkeypatch)
+    terminology = engine.terminology
+
+    monkeypatch.delitem(sys.modules, "medterm4ds.apps.fhir_api")
+    monkeypatch.delitem(sys.modules, "medterm4ds.apps")
+
+    mt_coderef = MagicMock()
+    mt_coderef.source = "LNC"
+    mt_coderef.code = "718-7"
+    mt_coderef.display = "Hemoglobin"
+    terminology.expand_intensional = MagicMock(return_value=[mt_coderef])
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    body = {"resourceType": "ValueSet", "compose": {"include": []}}
+    refs = adapter.expand_intensional(body)
+    assert refs == [CodeRef("http://loinc.org", "718-7", "Hemoglobin")]
+    terminology.expand_intensional.assert_called_once_with(body, count=1000)
+
+
+def test_expand_intensional_returns_empty_when_unsupported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No helper and no facade: [] without tripping the breaker."""
+    engine = _install_medterm4ds_stub(monkeypatch)
+    terminology = engine.terminology
+
+    monkeypatch.delitem(sys.modules, "medterm4ds.apps.fhir_api")
+    monkeypatch.delitem(sys.modules, "medterm4ds.apps")
+    del terminology.expand_intensional
+
     from fhir4ds.cql.terminology.in_process_adapter import (
         InProcessTerminologyEndpoint,
     )
@@ -224,26 +398,19 @@ def test_expand_intensional_returns_empty_on_published_medterm4ds(
     adapter = InProcessTerminologyEndpoint(breaker_threshold=2)
     body = {"resourceType": "ValueSet", "compose": {"include": []}}
     assert adapter.expand_intensional(body) == []
-    # Critical invariant: "not supported" does NOT trip the breaker —
-    # otherwise expand()/search_text() would collateral-fail after a
-    # few closure lookups.
+    # "not supported" must NOT trip the breaker — otherwise
+    # expand()/search_text() would collateral-fail after a few closure
+    # lookups.
     assert adapter._consecutive_failures == 0
 
 
 def test_expand_degrades_to_empty_on_helper_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """If the medterm4ds fhir_api helper raises, expand() returns []."""
-    engine = _install_medterm4ds_stub(monkeypatch)
-    terminology = engine.terminology
-    # Force the preferred Terminology.expand_url path to be skipped so
-    # the fhir_api.expand_url_pattern fallback is exercised.
-    del terminology.expand_url
+    _install_medterm4ds_stub(monkeypatch)
 
-    fake_fhir_api = types.ModuleType("medterm4ds.apps.fhir_api")
-    fake_fhir_api.expand_url_pattern = MagicMock(side_effect=RuntimeError("boom"))
-    fake_apps = types.ModuleType("medterm4ds.apps")
-    fake_apps.fhir_api = fake_fhir_api
-    monkeypatch.setitem(sys.modules, "medterm4ds.apps", fake_apps)
-    monkeypatch.setitem(sys.modules, "medterm4ds.apps.fhir_api", fake_fhir_api)
+    import medterm4ds.apps.fhir_api as fhir_api_mod
+
+    fhir_api_mod.expand_url_pattern = MagicMock(side_effect=RuntimeError("boom"))
 
     from fhir4ds.cql.terminology.in_process_adapter import (
         InProcessTerminologyEndpoint,
@@ -251,7 +418,7 @@ def test_expand_degrades_to_empty_on_helper_error(monkeypatch: pytest.MonkeyPatc
 
     adapter = InProcessTerminologyEndpoint()
     assert adapter.expand("http://example.org/ValueSet/Foo") == []
-    fake_fhir_api.expand_url_pattern.assert_called_once()
+    fhir_api_mod.expand_url_pattern.assert_called_once()
 
 
 # ----------------------------------------------------------------------
@@ -264,8 +431,10 @@ def test_in_process_circuit_breaker_trips_and_short_circuits(
 ) -> None:
     """After threshold failures, breaker trips and subsequent calls return []."""
     engine = _install_medterm4ds_stub(monkeypatch)
-    terminology = engine.terminology  # mock Terminology facade
-    terminology.expand_url = MagicMock(side_effect=RuntimeError("boom"))
+
+    import medterm4ds.apps.fhir_api as fhir_api_mod
+
+    fhir_api_mod.expand_url_pattern = MagicMock(side_effect=RuntimeError("boom"))
 
     from fhir4ds.cql.terminology.in_process_adapter import (
         InProcessTerminologyEndpoint,
@@ -281,11 +450,11 @@ def test_in_process_circuit_breaker_trips_and_short_circuits(
     assert adapter._consecutive_failures == 2
     assert adapter._tripped_until > 0.0
 
-    # Breaker open: the third call short-circuits before reaching the
-    # Terminology facade.
-    call_count_before = terminology.expand_url.call_count
+    # Breaker open: the third call short-circuits before reaching
+    # medterm4ds.
+    call_count_before = fhir_api_mod.expand_url_pattern.call_count
     assert adapter.expand("http://example.org/ValueSet/Baz") == []
-    assert terminology.expand_url.call_count == call_count_before
+    assert fhir_api_mod.expand_url_pattern.call_count == call_count_before
 
 
 def test_in_process_is_healthy_with_engine(monkeypatch: pytest.MonkeyPatch) -> None:

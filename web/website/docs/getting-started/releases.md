@@ -7,6 +7,58 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.12
+*August 2026*
+
+Version 0.0.12 ships the completed **SQL-on-FHIR v2 spec-compliance
+campaign** (58 chunks across ViewDefinition, the Analytics Layer, CQL, and
+FHIRPath), hardens the **CQL translator** (exact Decimal arithmetic,
+age-uncertainty semantics, list/aggregate correctness, and query-level
+Min/Max audit attribution), closes **FHIRPath dual-engine parity** work, and
+upgrades the **medterm4ds integration to 0.0.2** (bounded dependency
+`>=0.0.2,<0.0.3`, retired-code policy split, in-process intensional ValueSet
+expansion). Conformance rises to **2832/2832** across all four suites
+(ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47).
+
+### Data ingestion correctness
+
+- `patient_ref` attribution now follows a single Patient-typed doctrine
+  across the loader and file sources: only Patient-typed references (and
+  bundle-local `urn:uuid:`) populate the patient identity — Group or
+  Location subject references and bare ids no longer fabricate phantom
+  patients in measure results.
+- Version-specific references (`Patient/123/_history/2`) resolve to the
+  current resource instead of silently dropping.
+- UTF-8 BOM-prefixed JSON/NDJSON files (common from Windows tooling) load
+  cleanly; case-variant extensions (`.JSON`) and unreadable files no longer
+  break or silently skip during directory loads.
+- Bundle entries are validated per-entry with index attribution; empty
+  `entry.resource` objects are rejected with a clear error.
+- Batch ingestion is **~70-150x faster** (Arrow bulk path with automatic
+  fallback); a 25,000-resource batch loads in ~0.3s.
+
+### Audit evidence and measure evaluation
+
+- Min/Max aggregates over quantity queries now attribute the winning
+  resource in audit evidence (`Observation/xyz`) with value and threshold —
+  previously the evidence cited the aggregate value itself.
+- Quantity-typed aggregate references compare correctly (`MinBP < 140
+  'mmHg'`) instead of evaluating to false.
+- `audit_mode="full"` output is one row per patient with the union of
+  per-resource evidence (previously rows multiplied per evidence resource).
+- `evaluate_measure` validates `output_columns` definition names and
+  parameter names against the library — typos raise actionable errors
+  instead of producing silently wrong results.
+
+### medterm4ds 0.0.2
+
+- Dependency bound `medterm4ds>=0.0.2,<0.0.3` on both the `terminology` and
+  `ner` extras; expansion behavior verified against the installed wheel.
+- Membership expansion includes retired codes for historical data while
+  discovery/search stays active-only.
+- In-process intensional ValueSet expansion (`?fhir_vs=isa/…`) with graded
+  code search (`lexical`/`hybrid`/`semantic`).
+
 ## Version 0.0.11
 *August 2026*
 

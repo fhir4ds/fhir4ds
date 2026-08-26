@@ -41,6 +41,145 @@ bool is_valid_quantity_unit(const std::string &unit) {
 	return table.find(unit) != table.end();
 }
 
+// Whether a unit code is structurally a UCUM unit suitable for same-code
+// quantity comparison: a UCUM annotation ('{dose}'), or a compound unit
+// ('mg/m2', 'cm2.m') whose components are themselves valid. Used so that
+// identical valid UCUM units (even ones without a local conversion factor)
+// remain comparable, while genuinely unknown codes ('xyz') yield null per
+// CQL 1.5 §Equal.
+// UCUM case-sensitive metric prefixes (UCUM §metric prefix table). Used for
+// structural validity of same-code units whose exact form is not in the
+// local conversion table (e.g. 'Mg' megagram, 'ML' megaliter, 'MG' megagauss).
+static bool is_ucum_metric_prefix(char c) {
+	static const std::string prefixes = "YZEPTGMkhdcunpfazy";
+	return prefixes.find(c) != std::string::npos;
+}
+
+// UCUM base/known symbols beyond the conversion table that are valid units
+// without a local conversion factor ('l' liter, 'G' gauss).
+static bool is_known_ucum_symbol(const std::string &atom) {
+	static const char *extra[] = {"l", "G", nullptr};
+	const auto &table = GetUnitTable();
+	if (table.find(atom) != table.end()) {
+		return true;
+	}
+	for (int i = 0; extra[i] != nullptr; ++i) {
+		if (atom == extra[i]) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// Whether an atomic (separator-free, annotation-free) UCUM term is
+// structurally valid: a bare power-of-ten term ('10*3', '10^-6'), a known
+// symbol ('mg', 'l', 'G'), or a metric prefix applied to a known symbol
+// ('Mg', 'ML', 'dag'). A bare prefix without a unit ('M') is invalid.
+static bool is_valid_ucum_atom(const std::string &atom) {
+	// Power-of-ten terms: 10*<n> or 10^<n> with optional sign.
+	if (atom.size() > 3 && atom.compare(0, 2, "10") == 0 &&
+	    (atom[2] == '*' || atom[2] == '^')) {
+		bool digit_seen = false;
+		for (size_t i = 3; i < atom.size(); ++i) {
+			char c = atom[i];
+			if ((c == '-' || c == '+') && i == 3) {
+				continue;
+			}
+			if (c < '0' || c > '9') {
+				digit_seen = false;
+				break;
+			}
+			digit_seen = true;
+		}
+		if (digit_seen) {
+			return true;
+		}
+	}
+	if (is_known_ucum_symbol(atom)) {
+		return true;
+	}
+	// Exponent-suffixed symbols ('m2', 'cm3'): a known symbol followed by
+	// positive integer exponent digits is a valid UCUM atom.
+	if (atom.size() > 1) {
+		size_t last_digit = atom.size();
+		while (last_digit > 0 && atom[last_digit - 1] >= '0' && atom[last_digit - 1] <= '9') {
+			--last_digit;
+		}
+		if (last_digit > 0 && last_digit < atom.size() && atom[last_digit] != '0' &&
+		    last_digit == atom.size() - 1) {
+			// single trailing exponent digit (UCUM grammar: one digit 1-9)
+			return is_known_ucum_symbol(atom.substr(0, last_digit));
+		}
+	}
+	// 'da' (deka) is the only two-character metric prefix.
+	if (atom.size() > 2 && atom.compare(0, 2, "da") == 0 &&
+	    is_known_ucum_symbol(atom.substr(2))) {
+		return true;
+	}
+	if (atom.size() > 1 && is_ucum_metric_prefix(atom[0]) &&
+	    is_known_ucum_symbol(atom.substr(1))) {
+		return true;
+	}
+	return false;
+}
+
+static bool same_code_unit_valid_for_compare(const std::string &unit) {
+	if (is_valid_quantity_unit(unit)) {
+		return true;
+	}
+	// UCUM annotations: '{text}' (e.g. '{dose}') annotate the whole unit;
+	// square-bracket segments '[text]' annotate the preceding symbol
+	// ('mm[Hg]') or stand alone ('[pH]'). Strip all annotated segments and
+	// validate the bare UCUM core; an empty core is a valid dimensionless
+	// annotated unit.
+	std::string core;
+	for (size_t i = 0; i < unit.size(); ++i) {
+		char c = unit[i];
+		if (c == '{' || c == '[') {
+			char closer = (c == '{') ? '}' : ']';
+			size_t close = unit.find(closer, i + 1);
+			if (close == std::string::npos) {
+				return false; // unterminated annotation
+			}
+			i = close;
+			continue;
+		}
+		core += c;
+	}
+	if (core.empty()) {
+		return true; // pure annotation ('{dose}', '[pH]')
+	}
+	if (is_valid_quantity_unit(core)) {
+		return true; // annotated known unit ('mm[Hg]' -> 'mm')
+	}
+	// Compound units: validate each separator-delimited component. Only
+	// recurse when the unit actually contains a separator, otherwise a
+	// bare unknown code would recurse into itself infinitely.
+	static const std::string seps = "/.";
+	if (core.find_first_of(seps) == std::string::npos) {
+		// Structural UCUM atom check: metric-prefixed symbols ('Mg', 'ML')
+		// and power-of-ten terms ('10*3') are valid even without a local
+		// conversion factor; bare prefixes ('M') and unknown codes ('xyz')
+		// remain invalid per CQL 1.5 §Equal.
+		return is_valid_ucum_atom(core);
+	}
+	std::string component;
+	for (size_t i = 0; i <= core.size(); ++i) {
+		if (i == core.size() || seps.find(core[i]) != std::string::npos) {
+			if (component.empty()) {
+				return false; // leading/doubled separator
+			}
+			if (!same_code_unit_valid_for_compare(component)) {
+				return false;
+			}
+			component.clear();
+		} else {
+			component += core[i];
+		}
+	}
+	return true;
+}
+
 // Convert value from source unit to base unit
 static Optional<double> to_base(double value, const std::string &unit) {
 	const auto &table = GetUnitTable();
@@ -485,6 +624,15 @@ Optional<bool> quantity_compare(const std::string &q1_json, const std::string &q
 		return duration_result;
 	}
 	if (code1 == code2) {
+		// CQL 1.5 §Equal (Quantity): operating on quantities with invalid
+		// (non-UCUM, non-calendar) units results in null. The same-code fast
+		// path must not bypass unit validation, otherwise unknown units like
+		// 'xyz' compare by value instead of returning null. UCUM annotations
+		// ('{dose}') and compound units ('mg/m2') are valid UCUM and remain
+		// comparable.
+		if (!same_code_unit_valid_for_compare(code1)) {
+			return NullOpt<bool>();
+		}
 		v1 = q1->value;
 		v2 = q2->value;
 	} else {
@@ -704,6 +852,21 @@ Optional<std::string> quantity_divide(const std::string &q1_json, const std::str
 		result.code = code1;
 	} else if (code1 == code2) {
 		result.code = "1";
+	} else if (units_compatible(code1, code2)) {
+		// CQL 1.5 §9.4 Divide: the resulting quantity "will have the
+		// appropriate unit". Reference engine (DivideEvaluator.kt) uses
+		// ucumService.divideBy, which applies the unit conversion factor
+		// and cancels commensurable units: 1000 'mg' / 1 'g' -> 1.0 '1',
+		// not 1000 'mg/g'. Divide the base-unit magnitudes so both the
+		// value and the cancelled unit match the reference semantics.
+		auto base1 = to_base(q1->value, code1);
+		auto base2 = to_base(q2->value, code2);
+		if (base1.has_value() && base2.has_value() && base2.value() != 0) {
+			result.value = base1.value() / base2.value();
+			result.code = "1";
+		} else {
+			return NullOpt<std::string>();
+		}
 	} else {
 		// Compound-unit division: reduce via exponent arithmetic.
 		// CQL §Divide example: 12 'cm2' / 3 'cm' -> 'cm'.
@@ -778,6 +941,19 @@ Optional<std::string> quantity_truncated_divide(const std::string &q1_json, cons
 
 Optional<std::string> to_quantity(const std::string &s) {
 	if (s.empty()) return NullOpt<std::string>();
+	// CQL 1.5 Appendix B §ToQuantity (Table 9-E): a Quantity input is the
+	// identity conversion ("the quantity itself"). Quantity values arrive on
+	// this surface as canonical Quantity JSON, so re-emit them after parsing.
+	// (Ratio JSON is handled by the Python-side authority; the native path is
+	// not reachable for ratios because ToRatio is Python-registered only.)
+	if (s.front() == '{') {
+		auto q = parse_quantity_json(s);
+		if (!q) return NullOpt<std::string>();
+		if (q->code.empty()) q->code = "1";
+		if (q->system.empty()) q->system = "http://unitsofmeasure.org";
+		if (!is_valid_quantity_unit(q->code)) return NullOpt<std::string>();
+		return format_quantity_json(*q);
+	}
 	// Match the CQL ToQuantity string grammar: (+|-)?#0(.0#)?('<unit>')?
 	const char *p = s.c_str();
 	if (*p == '+' || *p == '-') p++;

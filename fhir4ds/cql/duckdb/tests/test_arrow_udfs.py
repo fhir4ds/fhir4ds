@@ -27,7 +27,7 @@ class TestAgeUdfs:
         result = con.execute("SELECT AgeInYears(?)", [patient]).fetchone()[0]
         # Age depends on current date, just verify it's reasonable
         # Born June 15, 1990, as of Feb 20, 2026: 35 years old
-        assert 34 <= result <= 36
+        assert 34 <= int(result) <= 36
 
     def test_age_in_years_null(self, con):
         result = con.execute("SELECT AgeInYears(NULL)").fetchone()[0]
@@ -49,20 +49,20 @@ class TestAgeUdfs:
         ages = [r[0] for r in results]
 
         # Ages should be in descending order (oldest first)
-        assert ages[0] > ages[1] > ages[2]
+        assert int(ages[0]) > int(ages[1]) > int(ages[2])
 
     def test_age_in_months(self, con):
         patient = make_patient("2024-01-15")
         result = con.execute("SELECT AgeInMonths(?)", [patient]).fetchone()[0]
         # Current-date dependent; verify a plausible age for this fixture.
-        assert result >= 24
-        assert result <= 36
+        assert int(result) >= 24
+        assert int(result) <= 36
 
     def test_age_in_days(self, con):
         patient = make_patient("2026-02-01")
         # Use AgeInDaysAt with a fixed date to avoid time-sensitive assertions
         result = con.execute("SELECT AgeInDaysAt(?, ?)", [patient, "2026-02-20"]).fetchone()[0]
-        assert result == 19
+        assert result == '19'
 
     def test_age_in_years_at(self, con):
         patient = make_patient("1990-05-15")
@@ -70,7 +70,7 @@ class TestAgeUdfs:
             "SELECT AgeInYearsAt(?, ?)", [patient, "2020-05-15"]
         ).fetchone()[0]
         # Born May 15, 1990, as of May 15, 2020: exactly 30
-        assert result == 30
+        assert result == '30'
 
     def test_age_in_years_at_before_birthday(self, con):
         patient = make_patient("1990-05-15")
@@ -78,7 +78,7 @@ class TestAgeUdfs:
             "SELECT AgeInYearsAt(?, ?)", [patient, "2020-05-14"]
         ).fetchone()[0]
         # Born May 15, 1990, as of May 14, 2020: 29
-        assert result == 29
+        assert result == '29'
 
     def test_age_in_months_at(self, con):
         patient = make_patient("1990-05-15")
@@ -86,7 +86,7 @@ class TestAgeUdfs:
             "SELECT AgeInMonthsAt(?, ?)", [patient, "2020-05-15"]
         ).fetchone()[0]
         # Born May 15, 1990, as of May 15, 2020: exactly 360 months
-        assert result == 360
+        assert result == '360'
 
     def test_age_in_days_at(self, con):
         patient = make_patient("1990-05-15")
@@ -94,7 +94,7 @@ class TestAgeUdfs:
             "SELECT AgeInDaysAt(?, ?)", [patient, "1990-05-20"]
         ).fetchone()[0]
         # Born May 15, 1990, as of May 20, 1990: exactly 5 days
-        assert result == 5
+        assert result == '5'
 
     def test_age_null_handling(self, con):
         """Test that all age functions handle nulls correctly."""
@@ -156,14 +156,14 @@ class TestBatchProcessing:
         # Verify we got 4 results
         assert len(results) == 4
 
-        # Verify ordering (oldest first)
+        # Verify ordering (oldest first) — §Age scalar strings of equal width
         years = [r[0] for r in results]
-        assert years == sorted(years, reverse=True)
+        assert [int(y) for y in years] == sorted((int(y) for y in years), reverse=True)
 
         # Verify months > years * 12 for all (basic sanity check)
         for years_val, months_val, days_val in results:
-            assert months_val >= years_val * 12
-            assert days_val >= years_val * 365
+            assert int(months_val) >= int(years_val) * 12
+            assert int(days_val) >= int(years_val) * 365
 
     def test_batch_with_nulls(self, con):
         """Test batch processing with NULL values mixed in."""

@@ -115,7 +115,7 @@ The server accepts requests at `/$cql` and at the configured base path, such as
 preferring bundled native extensions, and `--debug` to include diagnostics in
 responses.
 
-See [CQL Tests Runner Facade](/docs/integrations/cql-tests-runner-facade) for
+See the CQL Tests Runner Facade documentation (currently in draft) for
 the supported request shape, result serialization matrix, and runner harness
 command.
 

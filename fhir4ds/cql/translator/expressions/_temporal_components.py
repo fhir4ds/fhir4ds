@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import calendar
 import math
-from typing import List
+from typing import List, Optional
 
 from ...parser.ast_nodes import DateComponent, DateTimeLiteral, Literal, TimeLiteral
 from ...translator.context import ExprUsage
@@ -280,6 +280,14 @@ class DateComponentMixin:
                 return self._time_component_constructor([
                     self.translate(raw_arg, usage=ExprUsage.SCALAR)
                 ])
+            # CQL 1.5 §8.16: "At least one component must be specified" —
+            # a lone null literal is an unsatisfied constructor, which
+            # evaluates to null (same convention as Time(null, null) and
+            # the spec's own TimeInvalid example), not a translation crash.
+            if raw_arg.value is None:
+                return self._time_component_constructor([
+                    self.translate(raw_arg, usage=ExprUsage.SCALAR)
+                ])
             raise ValueError("Time constructor components must be Integer values")
 
         if isinstance(raw_arg, DateComponent) and raw_arg.component.lower() != "timezoneoffset":
@@ -314,14 +322,34 @@ class DateComponentMixin:
             return SQLNull()
 
         args = list(args)
+        # CQL §22.5: trailing null components are the sanctioned partial
+        # form ("hour may be null, but then minute, second, and millisecond
+        # must all be null"). Strip trailing static nulls — including any
+        # that sit below a specified timezoneOffset — before precision is
+        # decided; a static-null timezoneOffset is treated as unspecified.
+        timezone_arg = None
+        if len(args) > 7:
+            timezone_arg = args[7]
+            args = args[:7]
+        if timezone_arg is not None and self._is_static_null_component(timezone_arg):
+            timezone_arg = None
         while len(args) > 1 and self._is_static_null_component(args[-1]):
             args.pop()
-
+        # CQL §22.5: "no component may be specified at a precision below an
+        # unspecified precision" — a static null left ABOVE a specified
+        # component (e.g. DateTime(2012, 1, 1, 12, null, 0, 0, -7), the
+        # spec's DateInvalid example) is rejected at translation time.
+        # An all-null argument list (DateTime(null), the official
+        # DateTimeNull fixture) evaluates to null instead.
+        _seen_unspecified = False
         for component in args[:min(len(args), 7)]:
-            if isinstance(component, SQLLiteral) and (
-                not isinstance(component.value, int) or isinstance(component.value, bool)
-            ):
-                raise ValueError("DateTime constructor components must be Integer values")
+            if self._is_static_null_component(component):
+                _seen_unspecified = True
+            elif _seen_unspecified:
+                raise ValueError(
+                    "DateTime constructor components may not be specified below "
+                    "an unspecified (null) component"
+                )
 
         # Validate year bounds (1-9999) for literal year values
         year_arg = args[0]
@@ -368,8 +396,8 @@ class DateComponentMixin:
             return False, None
 
         timezone_is_static = True
-        if len(args) > 7:
-            timezone_is_static, _ = _literal_timezone_offset(args[7])
+        if timezone_arg is not None:
+            timezone_is_static, _ = _literal_timezone_offset(timezone_arg)
 
         # Check if all provided date/time args are integer literals — if so,
         # emit a compile-time ISO 8601 string literal preserving precision.
@@ -378,7 +406,7 @@ class DateComponentMixin:
             isinstance(a, SQLLiteral) and isinstance(a.value, int) and not isinstance(a.value, bool)
             for a in args[:min(len(args), 7)]
         )
-        if all_literal and len(args) <= 8 and timezone_is_static:
+        if all_literal and timezone_is_static:
             vals = [int(a.value) for a in args[:min(len(args), 7)]]
             _validate_literal_components(vals)
             n = len(vals)
@@ -399,8 +427,8 @@ class DateComponentMixin:
 
             # Handle timezone offset (8th arg) — may be SQLLiteral(+N) or
             # SQLUnaryOp('-', SQLLiteral(N)) for negative offsets.
-            if len(args) > 7:
-                _, tz_val = _literal_timezone_offset(args[7])
+            if timezone_arg is not None:
+                _, tz_val = _literal_timezone_offset(timezone_arg)
                 if tz_val is None:
                     raise ValueError("DateTime timezoneOffset must be a Decimal value")
                 if not math.isfinite(tz_val) or tz_val < -14 or tz_val > 14:
@@ -488,8 +516,8 @@ class DateComponentMixin:
             args=[SQLLiteral('%04d-%02d-%02dT%02d:%02d:%02d.%03d'), year, month, day, hour, minute, second, millisecond],
         )
 
-        if len(args) > 7:
-            tz_offset_double, tz_guard = self._decimal_component_value(args[7])
+        if timezone_arg is not None:
+            tz_offset_double, tz_guard = self._decimal_component_value(timezone_arg)
             abs_tz = SQLFunctionCall(
                 name="ABS",
                 args=[tz_offset_double],
@@ -567,6 +595,12 @@ class DateComponentMixin:
         """
         if not args:
             return SQLNull()
+
+        args = list(args)
+        # CQL §22.26: trailing null components are the sanctioned partial
+        # form ("month may be null, but then day must also be null").
+        while len(args) > 1 and self._is_static_null_component(args[-1]):
+            args.pop()
 
         for component in args if len(args) > 1 else []:
             if isinstance(component, SQLLiteral) and (
@@ -708,6 +742,14 @@ class DateComponentMixin:
                 args=[SQLCast(expression=operand, target_type="VARCHAR")],
             )
 
+        # Handle 'time from X' — extract the Time portion of a DateTime value.
+        # Mirrors the `time from` dateTimeComponent grammar form via the same
+        # extraction shape the one-arg Time() conversion path uses.
+        if component_lower == 'time':
+            return self._translate_time_constructor([
+                SQLCast(operand, "VARCHAR"),
+            ])
+
         # Handle 'date from X' - extract date portion (first 10 chars of ISO string)
         if component_lower == 'date':
             operand = self._unwrap_interval_case(operand)
@@ -745,3 +787,65 @@ class DateComponentMixin:
 
         # Fallback for unknown components
         return SQLFunctionCall(name="Year", args=[operand])
+
+    # CQL 1.5 dateTimeComponent accessors valid on temporal-typed sources.
+    # `week` is a duration precision, not a component, and is excluded.
+    _TEMPORAL_COMPONENT_PATHS = frozenset({
+        'year', 'month', 'day', 'hour', 'minute', 'second', 'millisecond',
+        'date', 'time', 'timezoneoffset',
+    })
+
+    def _static_source_cql_type(self, source) -> str:
+        """Standalone static CQL type resolution for temporal/complex literals.
+
+        The full ``_infer_cql_type`` machinery lives on the library-level
+        translator, not on the ExpressionTranslator mixin stack; expression
+        contexts only need the literal/function-ref subset resolved here.
+        """
+        from ...parser.ast_nodes import FunctionRef as _FunctionRef
+        if isinstance(source, DateTimeLiteral):
+            value = str(getattr(source, "value", "") or "")
+            if value.startswith("T"):
+                return "Time"
+            return "DateTime" if "T" in value else "Date"
+        if isinstance(source, TimeLiteral):
+            return "Time"
+        if isinstance(source, _FunctionRef):
+            name = (getattr(source, "name", "") or "").lower()
+            if name == "totime":
+                return "Time"
+            if name == "todate":
+                return "Date"
+            if name == "todatetime":
+                return "DateTime"
+            if name == "toratio":
+                return "Ratio"
+        return "Any"
+
+    def _translate_temporal_component_property(self, prop) -> Optional[SQLExpression]:
+        """Route ``<temporal>.month``-style property access through dateComponent.
+
+        CQL 1.5 §09-b (Date and Time Component From) defines BOTH the
+        ``month from X`` form and the ``X.month`` property accessor for the
+        same component extraction. Property access on temporal values must
+        not lower to FHIRPath text navigation (which returns SQL null for
+        bare ISO string literals).
+        """
+        path = (getattr(prop, 'path', None) or '').lower()
+        if path not in self._TEMPORAL_COMPONENT_PATHS:
+            return None
+        source = getattr(prop, 'source', None)
+        if source is None:
+            return None
+        source_type = self._static_source_cql_type(source)
+        if source_type not in ('Date', 'DateTime', 'Time'):
+            # Define aliases of temporal literals resolve through their
+            # definition AST chains (CQL-03 QA-002 inlining makes the
+            # operand translation a literal again).
+            from ...parser.ast_nodes import Identifier as _Identifier
+            if not isinstance(source, _Identifier) or self.context.is_alias(source.name):
+                return None
+            if not self._is_static_temporal_definition(source):
+                return None
+        node = DateComponent(component=path, operand=source)
+        return self._translate_date_component(node)

@@ -634,7 +634,9 @@ define GestationalAgeToString: convert EstimatedGestationalAge to String
         assert json.loads(cpp_rows["p2"][1]) == json.loads(py_rows["p2"][1])
         assert cpp_rows["p1"][2] == py_rows["p1"][2]
         assert cpp_rows["p2"][2] == py_rows["p2"][2]
-        assert cpp_rows["p1"][3] == py_rows["p1"][3] == "38 'weeks'"
+        # CQL 1.5 ToString Table 9-G + CQL-06 doctrine: calendar-duration
+        # keyword units (weeks) render bare; UCUM units (cm) stay quoted.
+        assert cpp_rows["p1"][3] == py_rows["p1"][3] == "38 weeks"
         assert cpp_rows["p2"][3] == py_rows["p2"][3] == "37 'cm'"
         quantity = json.loads(py_rows["p1"][1])
         assert quantity["value"] == 38
@@ -868,6 +870,474 @@ def test_cql_structural_bare_numeric_ratio_literal_parses_per_spec() -> None:
         assert py_ratio == cpp_ratio
         assert py_ratio["numerator"]["value"] == 1.5
         assert py_ratio["denominator"]["value"] == 2.5
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_structural_first_last_singleton_over_bare_retrieve() -> None:
+    """CQL §22.12/§22.16/§22.30: First/Last/`singleton from` over a bare
+    retrieve must generate valid per-patient SQL instead of referencing the
+    retrieve CTE as a bare column."""
+    library = """library StructuralBareRetrieve version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define FirstObs: First([Observation])
+define LastObs: Last([Observation])
+define FirstEmpty: First([Encounter])
+define SingletonPatient: singleton from [Patient]
+define FirstObsAsObservation: First([Observation]) as Observation
+define FirstObsAsPatient: First([Observation]) as Patient
+define FirstObsIsObservation: First([Observation]) is Observation
+"""
+    translated = translate_cql(library)
+    setup = [
+        "CREATE TABLE resources (patient_ref VARCHAR, resourceType VARCHAR, id VARCHAR, resource JSON)",
+        """INSERT INTO resources VALUES
+        ('p1','Patient','p1','{"resourceType":"Patient","id":"p1"}'::JSON),
+        ('p1','Observation','o1','{"resourceType":"Observation","id":"o1","subject":{"reference":"Patient/p1"}}'::JSON),
+        ('p1','Observation','o2','{"resourceType":"Observation","id":"o2","subject":{"reference":"Patient/p1"}}'::JSON)""",
+    ]
+    # End-to-end population SQL is the authoritative reproducer (QA-001):
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(library),
+        output_columns={
+            "first_obs": "FirstObs",
+            "first_empty": "FirstEmpty",
+            "singleton_patient": "SingletonPatient",
+            "first_obs_as_observation": "FirstObsAsObservation",
+            "first_obs_as_patient": "FirstObsAsPatient",
+            "first_obs_is_observation": "FirstObsIsObservation",
+        },
+    )
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            for stmt in setup:
+                con.execute(stmt)
+        py_row = py.execute(sql).fetchone()
+        cpp_row = cpp.execute(sql).fetchone()
+        # First/Last over an unordered retrieve have no deterministic
+        # element order; compare order-insensitively for those columns.
+        def _norm(row):
+            return tuple(
+                json.dumps(json.loads(v), sort_keys=True) if isinstance(v, str) and v.startswith("{") else v
+                for v in row
+            )
+        for _i, (_pv, _cv) in enumerate(zip(py_row, cpp_row)):
+            if _i in (1, 2, 4, 5) and isinstance(_pv, str) and isinstance(_cv, str):
+                # First/Last/as-Observation pick either observation under an
+                # unordered retrieve; accept either id across backends.
+                assert (
+                    json.loads(_pv)["id"] in {"o1", "o2"}
+                    and json.loads(_cv)["id"] in {"o1", "o2"}
+                ), _i
+            else:
+                assert _cv == _pv, _i
+        # Columns follow output_columns order: patient, FirstObs, FirstEmpty,
+        # SingletonPatient, FirstObsAsObservation, FirstObsAsPatient,
+        # FirstObsIsObservation.
+        assert py_row[0] == "p1"
+        assert json.loads(py_row[1])["id"] in {"o1", "o2"}
+        assert py_row[2] is None  # First([Encounter]) on empty retrieve
+        assert json.loads(py_row[3])["id"] == "p1"  # singleton from [Patient]
+        assert json.loads(py_row[4])["resourceType"] == "Observation"
+        assert py_row[5] is None  # Observation as Patient -> null (§As)
+        assert py_row[6] is True
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_structural_alias_over_list_and_traversal_sources() -> None:
+    """QA-002/QA-004: where-clause aliases over list literals and
+    Children()/Descendants() sources must bind per element (CQL §9, §22.9,
+    §22.10), including `is` type tests on each element."""
+    translated = translate_cql(
+        """library StructuralAliasSources version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define FromListWhereGt: Count(from {1,2,3} N where N > 1)
+define FromListIsInteger: Count(from {'1', 'x'} N where N is Integer)
+define ExistsListIsInteger: exists ({1, 2} N where N is Integer)
+define ExistsChildIsInteger: exists (Children({ a: 1, b: 'x' }) C where C is Integer)
+define ExistsDescendantIsInteger: exists (Descendants({ a: { b: 1 } }) D where D is Integer)
+define ExistsDescendantIsNotString: exists (Descendants({ a: { b: 1 } }) D where D is String)
+"""
+    )
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    expected = {
+        "FromListWhereGt": (2,),
+        "FromListIsInteger": (0,),
+        "ExistsListIsInteger": (True,),
+        "ExistsChildIsInteger": (True,),
+        "ExistsDescendantIsInteger": (True,),
+        "ExistsDescendantIsNotString": (False,),
+    }
+    try:
+        for name, expr in translated.items():
+            sql = f"SELECT {expr.to_sql()}"
+            py_result = py.execute(sql).fetchone()
+            cpp_result = cpp.execute(sql).fetchone()
+            assert cpp_result == py_result, name
+            assert py_result == expected[name], name
+    finally:
+        py.close()
+        cpp.close()
+
+    # Retrieve-backed traversal with per-element is-checks (QA-002 end-to-end).
+    cql = """library StructuralTraversalRetrieve version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define DescendantsHaveQuantity: exists ([Observation] O where exists (Descendants(O) D where D is Quantity))
+define ChildrenHaveFhirQuantity: exists ([Observation] O where exists (Children(O) C where C is FHIR.Quantity))
+define DescendantIsDate: exists ([Observation] O where exists (Descendants(O) D where D is Date))
+"""
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql),
+        output_columns={
+            "descendants_have_quantity": "DescendantsHaveQuantity",
+            "children_have_fhir_quantity": "ChildrenHaveFhirQuantity",
+            "descendant_is_date": "DescendantIsDate",
+        },
+    )
+    setup = [
+        "CREATE TABLE resources (patient_ref VARCHAR, resourceType VARCHAR, id VARCHAR, resource JSON)",
+        """INSERT INTO resources VALUES
+        ('p1','Patient','p1','{"resourceType":"Patient","id":"p1"}'::JSON),
+        ('p1','Observation','o1','{"resourceType":"Observation","id":"o1","subject":{"reference":"Patient/p1"},"valueQuantity":{"value":38,"unit":"weeks","code":"weeks"},"status":"final"}'::JSON)""",
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            for stmt in setup:
+                con.execute(stmt)
+        py_row = py.execute(sql).fetchone()
+        cpp_row = cpp.execute(sql).fetchone()
+        assert cpp_row == py_row
+        assert py_row == ("p1", True, True, False)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_structural_fhir_string_family_satisfies_is_string() -> None:
+    """CQL FHIR model mapping: FHIR string-family primitives (code, id, uri,
+    ...) are System.String, so `is String` accepts them, while `is FHIR.string`
+    still tests the exact FHIR type (status is FHIR.code, not FHIR.string)."""
+    cql = """library StructuralStringFamily version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define StatusIsString: exists ([Observation] O where O.status is String)
+define StatusIsFhirString: exists ([Observation] O where O.status is FHIR.string)
+define StatusIsFhirCode: exists ([Observation] O where O.status is FHIR.code)
+define IdIsString: exists ([Observation] O where O.id is String)
+define ValueIsString: exists ([Observation] O where O.value is String)
+"""
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql),
+        output_columns={
+            "status_is_string": "StatusIsString",
+            "status_is_fhir_string": "StatusIsFhirString",
+            "status_is_fhir_code": "StatusIsFhirCode",
+            "id_is_string": "IdIsString",
+            "value_is_string": "ValueIsString",
+        },
+    )
+    setup = [
+        "CREATE TABLE resources (patient_ref VARCHAR, resourceType VARCHAR, id VARCHAR, resource JSON)",
+        """INSERT INTO resources VALUES
+        ('p1','Patient','p1','{"resourceType":"Patient","id":"p1"}'::JSON),
+        ('p1','Observation','o1','{"resourceType":"Observation","id":"o1","subject":{"reference":"Patient/p1"},"status":"final","valueString":"high"}'::JSON)""",
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            for stmt in setup:
+                con.execute(stmt)
+        py_row = py.execute(sql).fetchone()
+        cpp_row = cpp.execute(sql).fetchone()
+        assert cpp_row == py_row
+        assert py_row == ("p1", True, False, True, True, True)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_structural_as_cast_query_source_alias_binds_element_values() -> None:
+    """QA-101: `X e return v as T a where a is T` must test the cast VALUE.
+
+    CQL 1.5 §Query: a query source may be any expression; the alias binds to
+    each element of its result.  §As: run-time mismatch yields null and
+    `null is T` is false, so the count must only include rows whose cast
+    succeeded (not every resource row).
+    """
+    cql = """library AsCastAlias version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define QtyAliasedIsQty: Count([Observation] O return O.value as FHIR.Quantity Q where Q is FHIR.Quantity)
+define QtyAliasedNotNull: Count([Observation] O return O.value as FHIR.Quantity Q where Q is not null)
+define StrAliasedIsString: Count([Observation] O return O.value as FHIR.string S where S is String)
+define StrAliasedIsFhirString: Count([Observation] O return O.value as FHIR.string S where S is FHIR.string)
+define CodeAliasedIsCode: Count([Observation] O return O.status as FHIR.code C where C is FHIR.code)
+define LiteralAsIsString: Count([Observation] O return 'x' as String X where X is String)
+define AsMismatchIsType: Count([Observation] O return 'x' as Integer X where X is Integer)
+"""
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql),
+        output_columns={
+            "qty_aliased_is_qty": "QtyAliasedIsQty",
+            "qty_aliased_not_null": "QtyAliasedNotNull",
+            "str_aliased_is_string": "StrAliasedIsString",
+            "str_aliased_is_fhir_string": "StrAliasedIsFhirString",
+            "code_aliased_is_code": "CodeAliasedIsCode",
+            "literal_as_is_string": "LiteralAsIsString",
+            "as_mismatch_is_type": "AsMismatchIsType",
+        },
+    )
+    rows = [
+        ("p1", "Patient", "p1", {"resourceType": "Patient", "id": "p1"}),
+        (
+            "p1",
+            "Observation",
+            "o1",
+            {
+                "resourceType": "Observation",
+                "id": "o1",
+                "subject": {"reference": "Patient/p1"},
+                "status": "final",
+                "valueQuantity": {"value": 5.5, "unit": "mg"},
+            },
+        ),
+        (
+            "p1",
+            "Observation",
+            "o2",
+            {
+                "resourceType": "Observation",
+                "id": "o2",
+                "subject": {"reference": "Patient/p1"},
+                "status": "final",
+                "valueString": "text",
+            },
+        ),
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            con.execute(
+                """
+                CREATE TABLE resources (
+                    patient_ref VARCHAR,
+                    resourceType VARCHAR,
+                    id VARCHAR,
+                    resource JSON
+                )
+                """
+            )
+            for patient_ref, resource_type, resource_id, resource in rows:
+                con.execute(
+                    "INSERT INTO resources VALUES (?, ?, ?, ?::JSON)",
+                    [patient_ref, resource_type, resource_id, json.dumps(resource)],
+                )
+        py_row = py.execute(sql).fetchone()
+        cpp_row = cpp.execute(sql).fetchone()
+        assert cpp_row == py_row
+        # Alias binds cast VALUES: only o1 satisfies the Quantity cast,
+        # only o2 satisfies the string cast; 'x' as Integer is null → 0.
+        assert py_row == (
+            "p1",
+            1,  # qty_aliased_is_qty
+            1,  # qty_aliased_not_null
+            1,  # str_aliased_is_string
+            1,  # str_aliased_is_fhir_string
+            2,  # code_aliased_is_code
+            2,  # literal_as_is_string
+            0,  # as_mismatch_is_type
+        )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_structural_traversal_over_nested_list_literals() -> None:
+    """QA-102: Descendants/Children over list literals containing lists.
+
+    CQL 1.5 §Children/§Descendants: a list source invokes the operator on each
+    element and flattens; primitive elements have no children, so the result
+    is empty — not a binder error from an untypable heterogeneous SQL array.
+    """
+    translated = translate_cql(
+        """library NestedListTraversal version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define DescendantsNestedList: Descendants({1, {2, 3}})
+define ChildrenNestedList: Children({1, {2, 3}})
+define DescendantsNestedListFirst: Descendants({{ { a: 1 } }, 2})
+define ChildrenNestedListFirst: Children({{ { a: 1 } }, 2})
+define DescendantsFlatList: Descendants({1, 2})
+define DescendantsEmpty: Descendants({})
+"""
+    )
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected in [
+            ("DescendantsNestedList", []),
+            ("ChildrenNestedList", []),
+            ("DescendantsFlatList", []),
+            ("DescendantsEmpty", []),
+        ]:
+            sql = f"SELECT {translated[name].to_sql()}"
+            py_result = py.execute(sql).fetchone()
+            cpp_result = cpp.execute(sql).fetchone()
+            assert cpp_result == py_result, name
+            assert py_result == (expected,), name
+        # List elements that themselves have children contribute their values.
+        for name in ("DescendantsNestedListFirst", "ChildrenNestedListFirst"):
+            sql = f"SELECT {translated[name].to_sql()}"
+            py_result = py.execute(sql).fetchone()
+            cpp_result = cpp.execute(sql).fetchone()
+            assert cpp_result == py_result, name
+            assert py_result == (
+                ['{"__fhir4ds_cql_type":"Integer","value":1}'],
+            ), name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_structural_strict_cast_in_arithmetic_binds() -> None:
+    """QA-104: strict casts lower to CASE ... ELSE error(...) END; the
+    integral-arithmetic TRY overflow guard must not wrap volatile error()
+    calls (DuckDB: TRY cannot combine with volatile functions)."""
+    library = """library StructuralCastArith version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define AnyPlusOne: (cast 5 as Any) + 1
+define AsAnyPlusOne: (5 as Any) + 1
+"""
+    translated = translate_cql(library)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expr in translated.items():
+            sql = f"SELECT {expr.to_sql()}"
+            py_row = py.execute(sql).fetchone()
+            cpp_row = cpp.execute(sql).fetchone()
+            assert cpp_row == py_row == (6,), (name, sql, py_row, cpp_row)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_structural_element_access_over_retrieve_bound_define_alias() -> None:
+    """QA-105: First/Last/indexer/method-first over a define alias bound to a
+    bare retrieve must surface the per-patient element list (CQL Appendix B
+    First/Last/Indexer), not a scalarized LIMIT-1 row."""
+    library = """library StructuralAliasElement version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define ObsList: [Observation]
+define FirstStatus: First(ObsList).status
+define LastStatus: Last(ObsList).status
+define IndexerStatus: ObsList[0].status
+define MethodFirstId: ObsList.first().id
+define AliasCount: Count(ObsList)
+"""
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(library),
+        output_columns={
+            "first_status": "FirstStatus",
+            "last_status": "LastStatus",
+            "indexer_status": "IndexerStatus",
+            "method_first_id": "MethodFirstId",
+            "alias_count": "AliasCount",
+        },
+    )
+    setup = [
+        "CREATE TABLE resources (patient_ref VARCHAR, resourceType VARCHAR, id VARCHAR, resource JSON)",
+        """INSERT INTO resources VALUES
+        ('p1','Patient','p1','{"resourceType":"Patient","id":"p1"}'::JSON),
+        ('p1','Observation','o1','{"resourceType":"Observation","id":"o1","status":"final","subject":{"reference":"Patient/p1"}}'::JSON),
+        ('p1','Observation','o2','{"resourceType":"Observation","id":"o2","status":"preliminary","subject":{"reference":"Patient/p1"}}'::JSON)""",
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            for stmt in setup:
+                con.execute(stmt)
+        py_row = py.execute(sql).fetchone()
+        cpp_row = cpp.execute(sql).fetchone()
+        assert py_row[0] == "p1"
+        assert py_row[1] in {"final", "preliminary"}  # unordered retrieve
+        assert py_row[2] in {"final", "preliminary"}
+        assert py_row[3] in {"final", "preliminary"}
+        # Method-form .first() may surface the id as a singleton list or
+        # scalar (CQL properties of a single resource are 0..* lists).
+        _mid = py_row[4][0] if isinstance(py_row[4], list) else json.loads(py_row[4]) if isinstance(py_row[4], str) and py_row[4].startswith("{") else py_row[4]
+        assert _mid in {"o1", "o2"}, py_row[4]
+        assert py_row[5] == 2  # Count over the alias counts both elements
+        assert cpp_row == py_row
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_structural_array_property_on_singleton_resource_expressions() -> None:
+    """QA-106: 0..* FHIR element access (.contained/.component) on singleton
+    resource expressions must return all elements (CQL Appendix B Property).
+    fhirpath_text returns only the first element, so Count/First over such
+    properties must use the list-returning fhirpath UDF."""
+    library = """library StructuralArrayProp version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define ObsListAlias: [Observation]
+define SingletonObs: singleton from [Observation]
+define ContainedCount: Count(First([Observation]).contained)
+define SingletonContainedCount: Count(SingletonObs.contained)
+define FirstContainedId: First(First([Observation]).contained).id
+define ComponentCount: Count(First([Observation]).component)
+define AliasContainedCount: Count(First(ObsListAlias).contained)
+"""
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(library),
+        output_columns={
+            "contained_count": "ContainedCount",
+            "singleton_contained_count": "SingletonContainedCount",
+            "first_contained_id": "FirstContainedId",
+            "component_count": "ComponentCount",
+            "alias_contained_count": "AliasContainedCount",
+        },
+    )
+    setup = [
+        "CREATE TABLE resources (patient_ref VARCHAR, resourceType VARCHAR, id VARCHAR, resource JSON)",
+        """INSERT INTO resources VALUES
+        ('p1','Patient','p1','{"resourceType":"Patient","id":"p1"}'::JSON),
+        ('p1','Observation','o1','{"resourceType":"Observation","id":"o1","status":"final","subject":{"reference":"Patient/p1"},"contained":[{"resourceType":"Observation","id":"c1"},{"resourceType":"Observation","id":"c2"}],"component":[{"code":{"text":"sys"},"valueQuantity":{"value":120,"code":"mm[Hg]"}},{"code":{"text":"dia"},"valueQuantity":{"value":80,"code":"mm[Hg]"}}]}'::JSON)""",
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            for stmt in setup:
+                con.execute(stmt)
+        py_row = py.execute(sql).fetchone()
+        cpp_row = cpp.execute(sql).fetchone()
+        assert py_row[0] == "p1"
+        assert py_row[1] == 2  # two contained resources
+        assert py_row[2] == 2  # singleton-from alias sees the same list
+        assert py_row[3] in {"c1", "c2"}  # unordered contained pick
+        assert py_row[4] == 2  # two components
+        assert py_row[5] == 2  # First(alias).contained
+        assert cpp_row == py_row
     finally:
         py.close()
         cpp.close()

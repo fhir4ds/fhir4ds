@@ -159,8 +159,6 @@ class ExpressionTranslator(
             "lower": "LOWER",
             "replace": "REPLACE",
             "split": "STR_SPLIT",
-            "ceiling": "CEIL",
-            "floor": "FLOOR",
             "sqrt": "SQRT",
             "nullif": "NULLIF",
             "median": "MEDIAN",
@@ -181,8 +179,29 @@ class ExpressionTranslator(
         # raw_str, pass the raw string so the UDF counts actual fractional digits.
         # The pre_translate intercepts Decimal literals; the rename provides the
         # fallback for all other types (DateTime, Time, etc.).
+        registry.register_pre_translate("flatten", self._translate_flatten_pre)
         registry.register_pre_translate("precision", self._translate_precision_pre)
         registry.register_rename("precision", "CQLPrecision")
+
+        # Ceiling/Floor: CQL 1.5 Appendix B — Ceiling(Decimal)/Floor(Decimal)
+        # return Integer; results outside the Integer extent are null ("If
+        # the result of the operation cannot be represented as an Integer,
+        # the result is null"), so narrow with TRY_CAST instead of a bare
+        # CEIL/FLOOR rename.
+        def _ceiling_floor(sql_name: str):
+            def _handler(args, ctx):
+                from ...translator.types import SQLCast
+                if not args:
+                    from ...translator.types import SQLNull
+                    return SQLNull()
+                return SQLCast(
+                    expression=SQLFunctionCall(name=sql_name, args=args),
+                    target_type="INTEGER",
+                    try_cast=True,
+                )
+            return _handler
+        registry.register("ceiling", _ceiling_floor("CEIL"), arity=1)
+        registry.register("floor", _ceiling_floor("FLOOR"), arity=1)
 
         # === SQL keywords that must not have parentheses ===
         from ...translator.types import SQLRaw
@@ -191,7 +210,11 @@ class ExpressionTranslator(
             "now",
             lambda args, ctx: SQLRaw(
                 raw_sql=(
+                    # CQL 1.5 §8.9 + DateTime model: millisecond max precision,
+                    # so truncate CURRENT_TIMESTAMP's microseconds to 3 digits.
+                    "regexp_replace("
                     "regexp_replace(REPLACE(CAST(CURRENT_TIMESTAMP AS VARCHAR), ' ', 'T'), "
+                    "'\\.([0-9]{3})[0-9]+', '.\\1'), "
                     "'([+-][0-9]{2})$', '\\1:00')"
                 )
             ),
@@ -224,6 +247,7 @@ class ExpressionTranslator(
         registry.register("splitonmatches", lambda args, ctx: SQLFunctionCall(name="SplitOnMatches", args=args))
 
         # Math functions
+        registry.register_pre_translate("abs", self._translate_abs_pre)
         registry.register("abs", lambda args, ctx: self._translate_abs(args))
         registry.register("exp", lambda args, ctx: self._translate_exp(args))
         registry.register("log", lambda args, ctx: self._translate_log(args))
@@ -248,7 +272,16 @@ class ExpressionTranslator(
         # List functions
         registry.register("first", lambda args, ctx: self._translate_first(args))
         registry.register("last", lambda args, ctx: self._translate_last(args))
+        registry.register_pre_translate(
+            "first", self._translate_first_last_list_define_pre
+        )
+        registry.register_pre_translate(
+            "last", self._translate_first_last_list_define_pre
+        )
         registry.register("singletonfrom", lambda args, ctx: self._translate_singletonfrom(args))
+        registry.register_pre_translate(
+            "singletonfrom", self._translate_singleton_list_define_pre
+        )
 
         # Misc
         registry.register("message", lambda args, ctx: self._translate_message(args))
@@ -297,7 +330,7 @@ class ExpressionTranslator(
 
         # === Pre-translate strategies: need raw CQL AST (aggregates on queries) ===
         for agg_name in ("anytrue", "alltrue", "anyfalse", "allfalse",
-                         "min", "max", "sum", "avg", "count",
+                         "min", "max", "sum", "avg", "average", "count",
                          "median", "mode", "stddev", "variance",
                          "populationstddev", "populationvariance",
                          "stddevpop", "product", "geometricmean"):
@@ -507,10 +540,21 @@ class ExpressionTranslator(
             and meta.cql_type == "Boolean"
         ) or (meta is None and self._is_forward_ref_boolean(name))
 
-        # BOOLEAN/EXISTS usage: EXISTS is the safe form. It works regardless
-        # of shape — for real scalars (First/Last) it's true whenever the
-        # scalar is non-null; for boolean defines it tracks row presence.
-        if usage in (ExprUsage.BOOLEAN, ExprUsage.EXISTS):
+        # EXISTS usage: EXISTS is the safe form (row-count semantics for
+        # exists() style references).
+        if usage == ExprUsage.EXISTS:
+            return _RefStrategy(kind=_RefKind.EXISTS)
+
+        # BOOLEAN usage (logical-operator operands): EXISTS is only correct
+        # for row-presence boolean CTEs (is_boolean_scalar), whose CTE drops
+        # rows when false. A value-bearing define (e.g. `define F: Patient
+        # .active`) keeps one row per patient with a NULL/false value column,
+        # so EXISTS would be always-true and destroy CQL three-valued logic.
+        # Contribute the VALUE instead, via a correlated scalar lookup.
+        if usage == ExprUsage.BOOLEAN:
+            if not is_boolean_scalar and meta is not None and meta.has_resource:
+                col = meta.value_column or "resource"
+                return _RefStrategy(kind=_RefKind.CORRELATED_SCALAR, column=col)
             return _RefStrategy(kind=_RefKind.EXISTS)
 
         # Non-BOOLEAN usage on a boolean-like define: must still use EXISTS,

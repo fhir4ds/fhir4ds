@@ -603,3 +603,176 @@ define NestedGtChain: (1 > 0) = (2 > 1)
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_null_uncertainty_preserved_in_list_and_interval_equality() -> None:
+    """CQL 1.5 §9.4 Equal: one-sided null operands must yield null (uncertain).
+
+    List equality: null elements are considered equal to null, but a null
+    element versus a known value is uncertain (null), not false. Interval
+    equality via Start/End: a one-sided null bound is unknown, so the
+    comparison is null. Equivalent (~) must stay never-null (false).
+    """
+    cql = """library NullUncertainComparison version '1.0.0'
+context Unfiltered
+define ListNullElementEqual: { 1, null } = { 1, 2 }
+define ListNullElementBothNullEqual: { 1, null } = { 1, null }
+define ListNullElementEquivalent: { 1, null } ~ { 1, 2 }
+define ListContainsUncertain: 5 in { 1, null }
+define IntervalNullLowEqual: Interval[null, 3] = Interval[1, 3]
+define IntervalNullHighEqual: Interval[1, 3] = Interval[1, null]
+define IntervalBothNullBoundsEqual: Interval[null, 3] = Interval[null, 3]
+define IntervalNullLowEquivalent: Interval[null, 3] ~ Interval[1, 3]
+define IntervalNullLowNotEqual: Interval[null, 3] != Interval[1, 3]
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "ListNullElementEqual": None,
+        "ListNullElementBothNullEqual": True,
+        "ListNullElementEquivalent": False,
+        "ListContainsUncertain": False,  # pinned contains doctrine: one-sided null element is NOT contained
+        "IntervalNullLowEqual": None,
+        "IntervalNullHighEqual": None,
+        "IntervalBothNullBoundsEqual": True,
+        "IntervalNullLowEquivalent": False,
+        "IntervalNullLowNotEqual": None,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            assert py.execute(sql).fetchone() == (expected_value,), (
+                name, "py", py.execute(sql).fetchone(), "expected", expected_value,
+            )
+            assert cpp.execute(sql).fetchone() == (expected_value,), (
+                name, "cpp", cpp.execute(sql).fetchone(), "expected", expected_value,
+            )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_null_uncertainty_preserved_in_composite_list_elements() -> None:
+    """CQL 1.5 §9.4 Equal: uncertainty must propagate through composite elements.
+
+    Nested-list elements recurse into list equality, so an uncertain inner
+    element makes the outer comparison null, not false. Tuple elements inside
+    lists compare field-wise with = semantics, so a one-sided null field is
+    uncertain (null). Tuple field order is irrelevant; numeric fields compare
+    with trailing-zero/trailing-.x equality; missing-field tuples are unequal.
+    """
+    cql = """library CompositeUncertainComparison version '1.0.0'
+context Unfiltered
+define NestedListUncertainEqual: { { 1, null }, { 2 } } = { { 1, 2 }, { 2 } }
+define NestedListKnownEqual: { { 1, null }, { 2 } } = { { 1, null }, { 2 } }
+define NestedListKnownUnequal: { { 1, 2 } } = { { 1, 3 } }
+define NestedListLengthMismatch: { { 1 }, { 2 } } = { { 1 } }
+define NestedListNumericTrailingZeros: { { 1.0 }, { 2 } } = { { 1 }, { 2 } }
+define NestedListNotEqualPropagates: { { 1, null }, { 2 } } != { { 1, 2 }, { 2 } }
+define NestedTemporalPrecisionEqual: { { @2024-01-01T10 } } = { { @2024-01-01T10:00 } }
+define TupleInListUncertainEqual: { Tuple { a: 1, b: null } } = { Tuple { a: 1, b: 2 } }
+define TupleInListKnownEqual: { Tuple { a: 1 } } = { Tuple { a: 1 } }
+define TupleInListBothNullEqual: { Tuple { a: null } } = { Tuple { a: null } }
+define TupleInListKnownUnequal: { Tuple { a: 1 } } = { Tuple { a: 2 } }
+define TupleInListNumericEqual: { Tuple { a: 1.0 } } = { Tuple { a: 1 } }
+define TupleInListMissingFieldUnequal: { Tuple { a: 1 } } = { Tuple { a: 1, b: 2 } }
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "NestedListUncertainEqual": None,
+        "NestedListKnownEqual": True,
+        "NestedListKnownUnequal": False,
+        "NestedListLengthMismatch": False,
+        "NestedListNumericTrailingZeros": True,
+        "NestedListNotEqualPropagates": None,
+        "NestedTemporalPrecisionEqual": True,
+        "TupleInListUncertainEqual": None,
+        "TupleInListKnownEqual": True,
+        "TupleInListBothNullEqual": True,
+        "TupleInListKnownUnequal": False,
+        "TupleInListNumericEqual": True,
+        "TupleInListMissingFieldUnequal": False,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            assert py.execute(sql).fetchone() == (expected_value,), (
+                name, "py", py.execute(sql).fetchone(), "expected", expected_value,
+            )
+            assert cpp.execute(sql).fetchone() == (expected_value,), (
+                name, "cpp", cpp.execute(sql).fetchone(), "expected", expected_value,
+            )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_bare_numeric_vs_quantity_promotes_unit_aware() -> None:
+    """CQL 1.5 Table 9-E: Integer/Long/Decimal implicitly convert to Quantity
+    with default unit '1'. A bare numeric literal compared against a STATIC
+    Quantity literal must be promoted and compared unit-aware: incompatible
+    units yield null for =/!=/</<=/>/>= (§9.5 Equal) and false for ~/!~
+    (§9.7 Equivalent never null), instead of dropping the unit and comparing
+    raw values (or raising a binder error for ~). Dynamic FHIR-sourced
+    quantities intentionally keep the numeric path (FHIRHelpers unit
+    Coalesce(code, unit, '1') admits non-UCUM display strings; official
+    eCQM fixtures pin numeric comparison there — CMS72/CMS190 'INR.value as
+    Quantity > 3.5' with unit display "0"). Regression for CQL-09 EXPLORER
+    QA-001/QA-002."""
+    cql = """library BareNumericQuantity version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define EqualIncompatibleUnits: 1 = 1 'm'
+define EqualIncompatibleUnitsRight: 1 'm' = 1
+define NotEqualIncompatibleUnits: 1 != 1 'm'
+define LessIncompatibleUnits: 1 < 2 'm'
+define GreaterIncompatibleUnits: 2 > 1 'm'
+define EqualMassIncompatible: 1 = 1 'g'
+define EqualUnityUnit: 1 = 1 '1'
+define EqualUnityUnitExisting: 1 '1' = 1
+define LessUnityUnit: 0 < 1 '1'
+define GreaterUnityUnit: 2 > 1 '1'
+define EquivalentIncompatibleUnits: 1 ~ 1 'm'
+define NotEquivalentIncompatibleUnits: 1 !~ 1 'm'
+define EquivalentIncompatibleUnitsRight: 1 'm' ~ 1
+define EquivalentUnityUnit: 1.5 ~ 1.5 '1'
+define EquivalentExistingUnity: 1 '1' ~ 1
+define QuantityEqualUnchanged: 100 'cm' = 1 'm'
+define QuantityEquivalentUnchanged: 100 'cm' ~ 1 'm'
+define QuantityEqualIncompatibleUnchanged: 1 'm' = 1 'g'
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "EqualIncompatibleUnits": None,
+        "EqualIncompatibleUnitsRight": None,
+        "NotEqualIncompatibleUnits": None,
+        "LessIncompatibleUnits": None,
+        "GreaterIncompatibleUnits": None,
+        "EqualMassIncompatible": None,
+        "EqualUnityUnit": True,
+        "EqualUnityUnitExisting": True,
+        "LessUnityUnit": True,
+        "GreaterUnityUnit": True,
+        "EquivalentIncompatibleUnits": False,
+        "NotEquivalentIncompatibleUnits": True,
+        "EquivalentIncompatibleUnitsRight": False,
+        "EquivalentUnityUnit": True,
+        "EquivalentExistingUnity": True,
+        "QuantityEqualUnchanged": True,
+        "QuantityEquivalentUnchanged": True,
+        "QuantityEqualIncompatibleUnchanged": None,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            assert cpp.execute(sql).fetchone() == (expected_value,), name
+            assert py.execute(sql).fetchone() == (expected_value,), name
+    finally:
+        py.close()
+        cpp.close()

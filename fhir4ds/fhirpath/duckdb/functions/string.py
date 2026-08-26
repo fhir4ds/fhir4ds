@@ -154,6 +154,40 @@ def length(collection: FHIRPathCollection) -> FHIRPathCollection:
     return FHIRPathCollection([len(value)])
 
 
+def index_of(collection: FHIRPathCollection, substring_val: str | None) -> FHIRPathCollection:
+    """
+    Returns the 0-based index of the first position substring_val is found
+    in the input string, or -1 if it is not found.
+
+    If substring_val is an empty string (''), the function returns 0.
+    If the input or substring_val argument is empty (None here), the result
+    is empty.
+
+    FHIRPath: indexOf(substring : string) : integer
+
+    Args:
+        collection: A collection containing a single string
+        substring_val: The substring to search for, or None for an empty
+            argument collection
+
+    Returns:
+        Collection containing the 0-based index, or empty if input or
+        argument is empty
+
+    Example:
+        >>> index_of(FHIRPathCollection(['abcdefg']), 'bc')
+        FHIRPathCollection([1])
+        >>> index_of(FHIRPathCollection(['abcdefg']), 'x')
+        FHIRPathCollection([-1])
+        >>> index_of(FHIRPathCollection(['abcdefg']), '')
+        FHIRPathCollection([0])
+    """
+    value = _get_singleton_string(collection, "indexOf")
+    if value is None or substring_val is None:
+        return FHIRPathCollection([])
+    return FHIRPathCollection([value.find(substring_val)])
+
+
 def substring(
     collection: FHIRPathCollection,
     start: int,
@@ -190,6 +224,10 @@ def substring(
     if value is None:
         return FHIRPathCollection([])
 
+    # Engine parity: empty start argument (empty collection) -> empty result
+    if start is None:
+        return FHIRPathCollection([])
+
     # Validate start index
     if start < 0 or start >= len(value):
         return FHIRPathCollection([])
@@ -197,14 +235,38 @@ def substring(
     if length_val is None:
         return _string_result(value[start:])
     else:
-        if length_val < 0:
-            return FHIRPathCollection([])
+        # Engine parity (§5.6.2): a negative or zero length returns the empty
+        # STRING, not an empty collection (both core evaluator and native
+        # fn_substring return '' for length <= 0).
+        if length_val <= 0:
+            return _string_result("")
         return _string_result(value[start:start + length_val])
 
 
 # =============================================================================
 # Prefix/Suffix Functions
 # =============================================================================
+
+
+def _validate_string_arg(value: object, func_name: str, arg_name: str) -> str | None:
+    """Validate a FHIRPath String function argument (engine-contract parity).
+
+    The engine paths (core evaluator and native extension) treat an empty
+    argument collection as "argument is empty" and reject non-String
+    singleton arguments with a typed error. Direct helpers must follow the
+    same contract instead of raising raw TypeError.
+
+    Returns None when the argument collection is empty (the function result
+    is an empty collection); otherwise the validated String.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise FHIRPathFunctionError(
+            func_name,
+            f"Expected String {arg_name} argument, got {type(value).__name__}",
+        )
+    return value
 
 
 def starts_with(collection: FHIRPathCollection, prefix: str) -> FHIRPathCollection:
@@ -228,6 +290,9 @@ def starts_with(collection: FHIRPathCollection, prefix: str) -> FHIRPathCollecti
     """
     value = _get_singleton_string(collection, "startsWith")
     if value is None:
+        return FHIRPathCollection([])
+    prefix = _validate_string_arg(prefix, "startsWith", "prefix")
+    if prefix is None:
         return FHIRPathCollection([])
     return _bool_result(value.startswith(prefix))
 
@@ -253,6 +318,9 @@ def ends_with(collection: FHIRPathCollection, suffix: str) -> FHIRPathCollection
     """
     value = _get_singleton_string(collection, "endsWith")
     if value is None:
+        return FHIRPathCollection([])
+    suffix = _validate_string_arg(suffix, "endsWith", "suffix")
+    if suffix is None:
         return FHIRPathCollection([])
     return _bool_result(value.endswith(suffix))
 
@@ -283,6 +351,9 @@ def contains(collection: FHIRPathCollection, substring_val: str) -> FHIRPathColl
     """
     value = _get_singleton_string(collection, "contains")
     if value is None:
+        return FHIRPathCollection([])
+    substring_val = _validate_string_arg(substring_val, "contains", "substring")
+    if substring_val is None:
         return FHIRPathCollection([])
     return _bool_result(substring_val in value)
 
@@ -363,6 +434,12 @@ def replace(
     value = _get_singleton_string(collection, "replace")
     if value is None:
         return FHIRPathCollection([])
+    pattern = _validate_string_arg(pattern, "replace", "pattern")
+    if pattern is None:
+        return FHIRPathCollection([])
+    replacement = _validate_string_arg(replacement, "replace", "replacement")
+    if replacement is None:
+        return FHIRPathCollection([])
     return _string_result(value.replace(pattern, replacement))
 
 
@@ -388,9 +465,24 @@ def matches(collection: FHIRPathCollection, regex: str, flags: str = "") -> FHIR
     value = _get_singleton_string(collection, "matches")
     if value is None:
         return FHIRPathCollection([])
-    _validate_regex(regex, "matches")
+    # FP-10 HISTORIAN QA-002: None regex -> empty result (sibling-helper
+    # contract); non-String regex -> typed FHIRPathFunctionError.
+    if regex is None:
+        return FHIRPathCollection([])
+    _validate_regex(_validate_string_arg(regex, "matches", "regex"), "matches")
+    from ...engine.invocations.strings import (
+        _translate_named_groups,
+        _translate_pcre_ascii_classes,
+    )
+
     try:
-        result = _compile_regex(regex, _regex_flags(flags, "matches")).search(value) is not None
+        result = (
+            _compile_regex(
+                _translate_named_groups(_translate_pcre_ascii_classes(regex)),
+                _regex_flags(flags, "matches"),
+            ).search(value)
+            is not None
+        )
         return _bool_result(result)
     except re.error as e:
         raise FHIRPathFunctionError("matches", f"Invalid regular expression: {e}")
@@ -422,15 +514,27 @@ def replace_matches(
     value = _get_singleton_string(collection, "replaceMatches")
     if value is None:
         return FHIRPathCollection([])
-    regex_flags = _regex_flags(flags, "replaceMatches")
-    if regex == "":
-        return _string_result(value)
+    # Delegate to the engine implementation so the §5.6.10 substitution
+    # contract ($N, ${name}, $$, out-of-range $N, (?<name>...) named groups)
+    # is identical on the direct-helper surface and the engine surface
+    # (FP-10 QA-006: helper previously passed the replacement straight to
+    # re.sub, producing literal '$1' and rejecting named-group patterns).
+    # The helper keeps its typed ReDoS/length guard (engine converts the same
+    # error to an empty collection for row resilience).
+    regex = _validate_string_arg(regex, "replaceMatches", "regex")
+    if regex is None:
+        return FHIRPathCollection([])
     _validate_regex(regex, "replaceMatches")
-    try:
-        result = _compile_regex(regex, regex_flags).sub(replacement, value)
+    replacement = _validate_string_arg(replacement, "replaceMatches", "replacement")
+    if replacement is None:
+        return FHIRPathCollection([])
+    flags = _validate_string_arg(flags, "replaceMatches", "flags") or ""
+    from ...engine.invocations.strings import replace_matches as _engine_replace_matches
+
+    result = _engine_replace_matches(None, [value], regex, replacement, flags)
+    if isinstance(result, str):
         return _string_result(result)
-    except re.error as e:
-        raise FHIRPathFunctionError("replaceMatches", f"Invalid regular expression: {e}")
+    return FHIRPathCollection([])
 
 
 def to_chars(collection: FHIRPathCollection) -> FHIRPathCollection:
@@ -597,6 +701,7 @@ STRING_FUNCTIONS = {
     "toChars": lambda col: to_chars(col),
 
     # Single-argument functions
+    "indexOf": lambda col, arg: index_of(col, arg),
     "startsWith": lambda col, arg: starts_with(col, arg),
     "endsWith": lambda col, arg: ends_with(col, arg),
     "contains": lambda col, arg: contains(col, arg),

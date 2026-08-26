@@ -69,6 +69,7 @@ _PYTHON_PREFERRED_CPP_CONFLICTS = {
     "intervalOnOrBefore",
     "pointFrom",
     "collapse_intervals",
+    "collapse_intervals_per",
     "quantityToInterval",
     "dateAddQuantity",
     "dateSubtractQuantity",
@@ -274,18 +275,30 @@ def _register_python_supplements(
             _logger.warning("UDF group '%s' registration failed: %s", label, e)
 
     if not cpp_loaded:
-        # Register a placeholder in_valueset UDF that raises a clear error.
-        def _in_valueset_placeholder(resource: str | None, path: str, valueset_url: str) -> bool:
-            import duckdb as _duckdb
-            raise _duckdb.InvalidInputException(
-                f"in_valueset('{path}', '{valueset_url}') cannot execute: "
-                "value set data has not been loaded into this connection. "
-                "When using the DQM evaluator (MeasureEvaluator), value sets are loaded "
-                "automatically. For standalone CQL queries, call "
-                "fhir4ds.cql.duckdb.valueset.register_valueset_udfs(conn, cache) "
-                "with a populated ValueSetCache before executing queries that use "
-                "value set membership tests."
-            )
+        # Register a placeholder in_valueset UDF for the no-valueset-data case.
+        # CQL-02 HISTORIAN QA-003: the native C++ in_valueset returns SQL NULL
+        # when the valueset_codes table has no data for the URL (membership
+        # unknown). The Python fallback previously RAISED InvalidInputException
+        # through DuckDB, breaking parity and row-level resilience. Return NULL
+        # with a warn-once log so standalone usage still surfaces guidance
+        # without aborting the query.
+        _warned: list[bool] = []
+
+        def _in_valueset_placeholder(resource: str | None, path: str, valueset_url: str) -> bool | None:
+            if not _warned:
+                _warned.append(True)
+                _logger.warning(
+                    "in_valueset('%s', '%s') has no value set data loaded on this "
+                    "connection; returning NULL (membership unknown). When using "
+                    "the DQM evaluator (MeasureEvaluator), value sets are loaded "
+                    "automatically. For standalone CQL queries, call "
+                    "fhir4ds.cql.duckdb.valueset.register_valueset_udfs(conn, cache) "
+                    "with a populated ValueSetCache before executing queries that "
+                    "use value set membership tests.",
+                    path,
+                    valueset_url,
+                )
+            return None
         con.create_function("in_valueset", _in_valueset_placeholder, null_handling="special")
 
 

@@ -450,6 +450,47 @@ class CTEManagerMixin:
     # Core CTE wrapping
     # ------------------------------------------------------------------
 
+    _SCALAR_AGGREGATE_FUNCS = frozenset({
+        "count", "sum", "avg", "min", "max", "median", "mode",
+        "bool_and", "bool_or", "product",
+        "stddev_samp", "stddev_pop", "var_samp", "var_pop",
+        "any_value", "arg_min", "arg_max", "first", "last",
+    })
+
+    @classmethod
+    def _is_scalar_aggregate_select(cls, select: "SQLSelect") -> bool:
+        """True when a single-column SELECT projects a row aggregate.
+
+        Such selects are per-patient scalar aggregate subqueries whose outer
+        correlation (`_pt`) is intentional; the UNKNOWN-shape unwrap + alias
+        rewrite in `_wrap_definition_cte` must not touch them.
+        """
+        from ..translator.types import SQLFunctionCall
+
+        cols = select.columns or []
+        if len(cols) != 1:
+            return False
+
+        def _contains_agg(expr) -> bool:
+            if isinstance(expr, SQLFunctionCall):
+                if expr.name.lower() in cls._SCALAR_AGGREGATE_FUNCS:
+                    return True
+                return any(_contains_agg(a) for a in (expr.args or []))
+            from ..translator.types import SQLAlias as _SQLAlias, SQLCase, SQLCast
+            if isinstance(expr, _SQLAlias):
+                return _contains_agg(expr.expr)
+            if isinstance(expr, SQLCase):
+                for when, then in expr.when_clauses or []:
+                    if _contains_agg(then):
+                        return True
+                return _contains_agg(expr.else_clause) if expr.else_clause is not None else False
+            if isinstance(expr, SQLCast):
+                return _contains_agg(expr.expression)
+            return False
+
+        from ..translator.types import SQLAlias as _SQLAliasCol
+        return _contains_agg(cols[0].expr if isinstance(cols[0], _SQLAliasCol) else cols[0])
+
     def _wrap_definition_cte(
         self,
         name: str,
@@ -696,6 +737,46 @@ class CTEManagerMixin:
                     # Merge evidence JOINs with existing definition JOINs
                     all_joins = list(joins) if joins else []
                     all_joins.extend(evidence_joins)
+                    from ..translator.types import SQLAuditStruct, SQLRaw, SQLSubquery
+                    if evidence_joins and isinstance(audit_expr, SQLAuditStruct):
+                        # Evidence JOINs fan out one row per joined resource
+                        # row; multiple evidence-bearing definitions then
+                        # cartesian in the final population SELECT (N obs x M
+                        # defs rows per patient). Aggregate per patient:
+                        # result is patient-deterministic (ANY_VALUE) and
+                        # evidence is the distinct union across fanned rows.
+                        inner = SQLSelect(
+                            columns=[
+                                SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
+                                SQLAlias(expr=audit_expr, alias="_audit_result"),
+                            ],
+                            from_clause=SQLAlias(
+                                expr=SQLIdentifier(name="_patients"),
+                                alias="_pt",
+                            ),
+                            joins=all_joins,
+                        )
+                        return SQLSelect(
+                            columns=[
+                                SQLIdentifier(name="patient_id"),
+                                SQLAlias(
+                                    expr=SQLRaw(
+                                        "struct_pack("
+                                        "result := ANY_VALUE(struct_extract("
+                                        "_ev._audit_result, 'result')), "
+                                        "evidence := list_distinct(flatten("
+                                        "list(struct_extract("
+                                        "_ev._audit_result, 'evidence'))))"
+                                        ")"
+                                    ),
+                                    alias="_audit_result",
+                                ),
+                            ],
+                            from_clause=SQLAlias(
+                                expr=SQLSubquery(query=inner), alias="_ev"
+                            ),
+                            group_by=[SQLIdentifier(name="patient_id")],
+                        )
                     return SQLSelect(
                         columns=[
                             SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
@@ -1331,6 +1412,41 @@ class CTEManagerMixin:
                 )
         else:
             # UNKNOWN shape: Treat as PATIENT_SCALAR to ensure patient_id is present
+            # CQL-20 SKEPTIC QA-004: a scalar AGGREGATE subquery (e.g.
+            # AllTrue((from [Observation] O return ...)) lowering to
+            # `(SELECT COALESCE(bool_and(_val), TRUE) FROM (...) AS _agg)`)
+            # must keep its outer `_pt` correlation. Unwrapping it and
+            # rewriting `_pt` -> the derived-table alias (`_agg`) makes the
+            # correlation self-referential -> BinderException. The same holds
+            # for any single-column select over a DERIVED table (its
+            # projection references the derived alias; e.g. the hoisted
+            # Quantity statistical-aggregate shape). Wrap both as per-patient
+            # scalar value columns instead.
+            def _from_is_derived(fc) -> bool:
+                from ..translator.types import SQLFunctionCall as _FC
+                inner = fc.expr if isinstance(fc, SQLAlias) else fc
+                return isinstance(inner, (SQLSubquery, SQLSelect)) or isinstance(inner, _FC)
+
+            if (
+                isinstance(sql_ast, SQLSubquery)
+                and isinstance(sql_ast.query, SQLSelect)
+                and sql_ast.query.from_clause is not None
+                and (
+                    self._is_scalar_aggregate_select(sql_ast.query)
+                    or _from_is_derived(sql_ast.query.from_clause)
+                )
+            ):
+                return SQLSelect(
+                    columns=[
+                        SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
+                        SQLAlias(expr=sql_ast, alias=meta.value_column),
+                    ],
+                    from_clause=SQLAlias(
+                        expr=SQLIdentifier(name="_patients"),
+                        alias="_pt",
+                    ),
+                    joins=joins if joins else None,
+                )
             # Unwrap SQLSubquery → SQLSelect for structural inspection
             if isinstance(sql_ast, SQLSubquery) and isinstance(sql_ast.query, SQLSelect):
                 sql_ast = sql_ast.query

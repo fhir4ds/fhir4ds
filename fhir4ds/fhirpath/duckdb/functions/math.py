@@ -766,6 +766,12 @@ def round_fn(value: Any, precision: Any = None) -> list[Any]:
     except InvalidOperation:
         return []
 
+    # FP-11 HISTORIAN (2026-08-17): normalize negative zero to positive
+    # zero (mirrors engine rround() / native '0.0'; round_fn(-0.4) must
+    # not render '-0.0').
+    if result == 0:
+        result = result.copy_abs()
+
     if quantity is not None:
         return [FP_Quantity(result, quantity.unit)]
 
@@ -844,20 +850,55 @@ def power(value: Any, exponent: Any) -> list[Any]:
     if base_num is None or exp_num is None:
         return []
 
-    # Negative base with non-integer exponent returns empty
-    if base_num < 0 and not isinstance(exp_num, int) and not exp_num.is_integer():
+    base_dec = _to_decimal(base_num)
+    exp_dec = _to_decimal(exp_num)
+
+    # Undefined powers return empty (mirrors engine §5.7.2 power())
+    if base_dec == 0 and exp_dec <= 0:
+        return []
+    if base_dec < 0 and exp_dec.to_integral_value(rounding="ROUND_FLOOR") != exp_dec:
         return []
 
-    try:
-        result = math.pow(base_num, exp_num)
-
-        # Check for overflow
-        if math.isinf(result):
+    # FP-11 HISTORIAN (2026-08-17): §5.7 power — Integer base with Integer
+    # exponent yields an Integer result; a negative Integer exponent on an
+    # Integer base returns empty (STU3 functions.json). Beyond the 64-bit
+    # Integer range, degrade to the exact Decimal-shaped value. Mirrors the
+    # engine `power()` in engine/invocations/math.py.
+    if isinstance(base_num, int) and isinstance(exp_num, int):
+        if exp_num < 0:
             return []
-
+        result_int = base_num ** exp_num
+        if -(2 ** 63) <= result_int < 2 ** 63:
+            return [result_int]
+        return [Decimal(result_int)]
+    if exp_dec != exp_dec.to_integral_value():
+        # Non-integral exponents are transcendental: binary64
+        # shortest-round-trip rendering (shared engine doctrine).
+        try:
+            result = math.pow(float(base_dec), float(exp_dec))
+        except (ValueError, OverflowError):
+            return []
+        if math.isinf(result) or math.isnan(result):
+            return []
         return [result]
-    except (ValueError, OverflowError):
+
+    # Integral Decimal exponents: exact Decimal power (FP-11 SKEPTIC
+    # doctrine — no binary64 noise, e.g. power(1.1, 2) -> 1.21).
+    try:
+        result = pow(base_dec, exp_dec)
+    except (InvalidOperation, OverflowError):
         return []
+    if result != 0:
+        try:
+            if math.isinf(float(result)):
+                return []
+        except OverflowError:
+            return []
+    result = result.normalize()
+    text = format(result, "f")
+    if "." not in text:
+        text += ".0"
+    return [Decimal(text)]
 
 
 def log(value: Any, base: Any = None) -> list[Any]:
