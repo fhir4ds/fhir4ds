@@ -118,7 +118,10 @@ def test_cql_temporal_complex_negative_boundaries_match_spec_and_backend_parity(
         "SELECT ToDateTime('2024-01-01T10:00:00+14:01')": None,
         "SELECT ConvertsToTime('T25:00:00')": False,
         "SELECT ConvertsToTime('T10:00:00+14:01')": False,
-        "SELECT ToTime('T10:00:00Z')": "10:00:00",
+        # CQL Time values are transported with the leading T marker (same
+        # convention as Time literals/TimeOfDay) so component extraction and
+        # precision comparisons parse consistently (CQL-03 EXPLORER QA-006).
+        "SELECT ToTime('T10:00:00Z')": "T10:00:00",
         "SELECT ToTime('T10:00:00+14:01')": None,
         "SELECT ConvertsToQuantity('5..5 ''cm''')": False,
         "SELECT ConvertsToQuantity('{\"value\":\"abc\",\"unit\":\"mg\"}')": False,
@@ -624,6 +627,343 @@ def test_cql_cross_unit_cel_kelvin_comparison_returns_correct_boolean_per_spec()
             cpp_result = cpp.execute(sql).fetchone()[0]
             assert py_result == expected, (expression, "py", py_result, "expected", expected)
             assert cpp_result == expected, (expression, "cpp", cpp_result, "expected", expected)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_malformed_temporal_literals_rejected_at_lex_time_per_spec() -> None:
+    """CQL 1.5 grammar defines strict zero-padded DATE/TIME/DATETIME shapes.
+
+    Malformed literals must raise LexerError rather than silently lexing into
+    garbage DateTimeLiteral values (e.g. ``@2024-01-15.year`` previously
+    evaluated to the string ``2024-01-15.year``).
+    """
+    import pytest
+
+    from fhir4ds.cql.errors import CQLError, LexerError, ParseError
+    from fhir4ds.cql.parser import parse_expression
+
+    valid = [
+        "@2020",
+        "@2020-01",
+        "@2020-01-01",
+        "@T14",
+        "@T14:30",
+        "@T14:30:22",
+        "@T14:30:22.123",
+        "@2020-01-01T",
+        "@2020-01-01T14",
+        "@2020-01-01T14:30",
+        "@2020-01-01T14:30:22Z",
+        "@2020-01-01T14:30:22+02:00",
+        "@2020-01-01T14:30:22.5-05:30",
+        "@2020-02-29",
+        "@2020-01-01T14:30:22+14:00",
+    ]
+    for literal in valid:
+        assert parse_expression(literal) is not None, literal
+
+    malformed = [
+        "@T24:00",  # hour out of range
+        "@T14:60",  # minute out of range
+        "@T14:30:60",  # second out of range
+        "@T14:30:22+02:00",  # Time literals carry no timezone offset
+        "@2024-13-01",  # month out of range
+        "@2024-00-01",  # month zero
+        "@2024-02-30",  # impossible calendar date
+        "@2019-02-29",  # non-leap Feb 29
+        "@2024-1-1",  # unpadded month/day
+        "@2024-01-1",  # unpadded day
+        "@24-01-01",  # year must be 4 digits
+        "@2024-01-15.year",  # trailing junk swallowed into the literal
+        "@2024-01-15.abc",
+        "@T14:30:22.abc",
+        "@2024-01-15T25:00:00",  # hour out of range
+        "@2024-01-15T10:30:22+02",  # offset must be hh:mm
+    ]
+    for literal in malformed:
+        with pytest.raises((ParseError, LexerError)):
+            parse_expression(literal)
+
+
+def test_cql_invalid_unit_quantity_comparison_returns_null_per_spec() -> None:
+    """CQL 1.5 §Equal (Quantity): invalid (non-UCUM) units yield null.
+
+    The native C++ same-unit fast path previously compared values without
+    validating the unit, returning True/False for unknown units like 'xyz'
+    instead of null. Equivalent (~) wraps the null as false per the spec's
+    always-boolean equivalent contract.
+    """
+    cases = [
+        ("5 'xyz' = 5 'xyz'", None),
+        ("5 'xyz' = 6 'xyz'", None),
+        ("5 'xyz' ~ 5 'xyz'", False),
+        ("5 'mg' = 5 'mg'", True),
+        ("5 'mg' ~ 5 'mg'", True),
+        ("100 'cm' = 1 'm'", True),
+        ("1 year = 1 year", True),
+        ("5 = 5", True),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in cases:
+            sql = _translated_definition_sql(expression)
+            py_result = py.execute(sql).fetchone()[0]
+            cpp_result = cpp.execute(sql).fetchone()[0]
+            assert py_result == expected, (expression, "py", py_result)
+            assert cpp_result == expected, (expression, "cpp", cpp_result)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_ucum_structural_validity_same_code_compare_per_spec() -> None:
+    """CQL 1.5 §Equal (Quantity): same-code comparison requires a VALID UCUM
+    code, judged by the UCUM case-sensitive grammar — not by local conversion
+    table membership (native) or pint's case-insensitive parsing (fallback).
+
+    CQL-03 HISTORIAN QA-001: metric-prefixed symbols ('Mg', 'MG', 'ML'),
+    supplement symbols ('G' gauss, 'l' liter), power-of-ten terms
+    ('10*3/uL', '10^6'), and exponent-suffixed symbols ('cm3', 'km2') are
+    valid UCUM and must compare; bare prefixes ('M', 'u') and unknown codes
+    ('xyz') are invalid UCUM and must yield null on BOTH backends.
+    """
+    cases = [
+        ("5 'G' = 5 'G'", True),  # gauss
+        ("5 'Mg' = 5 'Mg'", True),  # megagram
+        ("5 'MG' < 6 'MG'", True),  # megagauss
+        ("5 'dag' = 5 'dag'", True),  # deka-gram (two-char prefix)
+        ("5 'Gg' = 5 'Gg'", True),  # gigagram
+        ("2 '10*3/uL' = 2 '10*3/uL'", True),  # UCUM power prefix
+        ("1 '10^6' = 1 '10^6'", True),
+        ("1 'cm3' = 1 'cm3'", True),  # exponent-suffixed symbol
+        ("5 'm3' = 5 'm3'", True),
+        ("2 'km2' = 2 'km2'", True),
+        ("1 'm20' = 1 'm20'", None),  # two exponent digits: not UCUM grammar
+        ("1 'cm0' = 1 'cm0'", None),  # exponent must be 1-9
+        ("5 'M' = 5 'M'", None),  # bare mega prefix: invalid UCUM
+        ("5 'u' = 5 'u'", None),  # bare micro prefix: invalid UCUM
+        ("5 'M' ~ 5 'M'", False),  # equivalent wraps null as false
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in cases:
+            sql = _translated_definition_sql(expression)
+            py_result = py.execute(sql).fetchone()[0]
+            cpp_result = cpp.execute(sql).fetchone()[0]
+            assert py_result == expected, (expression, "py", py_result)
+            assert cpp_result == expected, (expression, "cpp", cpp_result)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_ratio_tuple_selector_compares_as_ratio_per_spec() -> None:
+    """CQL 1.5 §Types Ratio: the Ratio { numerator: X, denominator: Y }
+    constructor produces a Ratio whose equality is component-wise Quantity
+    equality and whose equivalence compares the represented value.
+
+    CQL-03 HISTORIAN QA-002: the tuple selector previously emitted generic
+    json_object scalars, so identical Ratios compared null and equivalent
+    ratios compared false. Integer components implicitly convert to
+    unit-'1' quantities per the constructor signature.
+    """
+    cases = [
+        ("Ratio { numerator: 1 'mg', denominator: 2 'mg' } = Ratio { numerator: 1 'mg', denominator: 2 'mg' }", True),
+        ("Ratio { numerator: 1, denominator: 2 } = Ratio { numerator: 1, denominator: 2 }", True),
+        ("Ratio { numerator: 1, denominator: 2 } = 1:2", True),
+        ("Ratio { numerator: 1, denominator: 2 } ~ 1:2", True),
+        ("Ratio { numerator: 1 'mg', denominator: 2 'mg' } = 1 'mg':2 'mg'", True),
+        ("Ratio { numerator: 1 'mg', denominator: 2 'mg' } ~ 2 'mg':4 'mg'", True),
+        ("Ratio { numerator: 1, denominator: 2 } = Ratio { numerator: 1, denominator: 3 }", False),
+        ("Ratio { numerator: 1 'mg', denominator: 2 'mg' } = 2 'mg':4 'mg'", False),
+        # null component propagates per §Equal null semantics
+        ("Ratio { numerator: null, denominator: 2 'mg' } = Ratio { numerator: null, denominator: 2 'mg' }", None),
+        ("Ratio { }.numerator", None),
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in cases:
+            sql = _translated_definition_sql(expression)
+            py_result = py.execute(sql).fetchone()[0]
+            cpp_result = cpp.execute(sql).fetchone()[0]
+            assert py_result == expected, (expression, "py", py_result)
+            assert cpp_result == expected, (expression, "cpp", cpp_result)
+        # Accessors still resolve on the folded constructor JSON.
+        accessor_sql = _translated_definition_sql(
+            "Ratio { numerator: 1 'mg', denominator: 2 'mg' }.numerator.value"
+        )
+        for con in (py, cpp):
+            assert float(con.execute(accessor_sql).fetchone()[0]) == 1.0
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_min_max_value_fold_to_spec_constants_per_spec() -> None:
+    """CQL 1.5 Appendix B-A: MinValue(T)/MaxValue(T) fold to compile-time
+    constants instead of passing an untranslated call into SQL (which
+    surfaced as a DuckDB Catalog Error at execution).
+
+    CQL-03 HISTORIAN QA-003.
+    """
+    from fhir4ds.cql.errors import TranslationError
+
+    cases = [
+        ("MinValue(Date) < @2024-01-01", True),
+        ("MaxValue(Date) > @2024-01-01", True),
+        ("MaxValue(Date) = @9999-12-31", True),
+        ("MinValue(DateTime) <= MaxValue(DateTime)", True),
+        ("MinValue(Date) < MinValue(DateTime)", True),
+        ("MinValue(Time) < @T12:00:00", True),
+        ("MaxValue(Time) > @T12:00:00", True),
+        ("ToString(MinValue(Date))", "0001-01-01"),
+        ("ToString(MaxValue(Time))", "23:59:59.999"),
+        ("MinValue(Integer)", -2147483648),
+        ("MaxValue(Long)", 9223372036854775807),
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in cases:
+            sql = _translated_definition_sql(expression)
+            py_result = py.execute(sql).fetchone()[0]
+            cpp_result = cpp.execute(sql).fetchone()[0]
+            assert py_result == expected, (expression, "py", py_result)
+            assert cpp_result == expected, (expression, "cpp", cpp_result)
+        # Types without spec constants fail fast with a typed error instead
+        # of silent SQL passthrough.
+        with pytest.raises(TranslationError):
+            _translated_definition_sql("MinValue(String)")
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql03_explorer_temporal_component_property_accessors_dual_backend() -> None:
+    """CQL 1.5 §09-b (Date and Time Component From): the property accessor
+    form ``X.month`` is the same operator as ``month from X`` and must route
+    through dateComponent, not FHIRPath text navigation. Temporal-literal
+    define aliases must inline (CQL-03 EXPLORER QA-001/QA-002)."""
+
+    cases = {
+        "(@2024-06-15).month": 6,
+        "(@2024).year": 2024,
+        "(@2024-06).month": 6,
+        "(@2024-06).day": None,
+        "(@T14:30).hour": 14,
+        "(@T14).hour": 14,
+        "(@T14).minute": None,
+        "ToTime('T14').hour": 14,
+        "(@2024-01-01T12:30:45).second": 45,
+        "(@2024-01-01T12:30:45.123).millisecond": 123,
+        "time from @2024-06-15T12:30:00": "T12:30:00",
+    }
+    alias_cases = {
+        "library CQL03E2 version '1.0'\ndefine D: @2024-06-15\ndefine Result: D.month\n": 6,
+        "library CQL03E2 version '1.0'\ndefine D: @2024-06\ndefine Result: D.month\n": 6,
+        "library CQL03E2 version '1.0'\ndefine T: @T14:30\ndefine Result: T.hour\n": 14,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in cases.items():
+            sql = _translated_definition_sql(expression)
+            assert py.execute(sql).fetchone() == (expected,), expression
+            assert cpp.execute(sql).fetchone() == (expected,), expression
+        for library, expected in alias_cases.items():
+            sql = CQLToSQLTranslator().translate_library_to_sql(parse_cql(library))
+            assert py.execute(sql).fetchone() == (expected,), library
+            assert cpp.execute(sql).fetchone() == (expected,), library
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql03_explorer_timezoneoffset_property_accessor_per_spec() -> None:
+    """CQL 1.5 cql.g4 lists 'timezoneoffset' as a dateTimeComponent AND a
+    keywordIdentifier: ``(@2024-01-01T12:00:00+02:00).timezoneOffset`` must
+    parse and extract the Decimal-hours offset (CQL-03 EXPLORER QA-005)."""
+
+    cases = {
+        "(@2024-01-01T12:00:00+02:00).timezoneOffset": 2.0,
+        "(@2024-01-01T12:00:00-02:30).timezoneOffset": -2.5,
+        "(@2024-01-01T12:00:00Z).timezoneOffset": 0.0,
+        "(@2024-01-01T12:00:00+02:00).timezoneoffset": 2.0,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in cases.items():
+            sql = _translated_definition_sql(expression)
+            assert py.execute(sql).fetchone() == (expected,), expression
+            assert cpp.execute(sql).fetchone() == (expected,), expression
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql03_explorer_seconds_milliseconds_combined_precision_equality() -> None:
+    """CQL 1.5 (DateTime/Time types, §Equal): seconds and milliseconds are
+    combined and represented as a single Decimal precision for comparison;
+    unspecified milliseconds are treated as 0, so ``.0 = no-ms`` is TRUE and
+    ``.5 = no-ms`` is FALSE (spec-pinned examples). Minute-precision
+    mismatch with fractional seconds stays uncertain (null).
+    (CQL-03 EXPLORER QA-003)."""
+
+    cases = {
+        "@T10:00:00.0 = @T10:00:00": True,
+        "@T10:00:00.5 = @T10:00:00": False,
+        "@2024-11-15T12:30:00.0 = @2024-11-15T12:30:00": True,
+        "@2024-11-15T12:30:00.5 = @2024-11-15T12:30:00": False,
+        "@2024-11-15T12:30:00.5 = @2024-11-15T12:30": None,
+        "@T10:00:00.5 > @T10:00:00": True,
+        "@T10:00:00.0 < @T10:00:00": False,
+        "@T10:00:00.500 = @T10:00:00.5": True,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in cases.items():
+            sql = _translated_definition_sql(expression)
+            assert py.execute(sql).fetchone() == (expected,), expression
+            assert cpp.execute(sql).fetchone() == (expected,), expression
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql03_explorer_ratio_accessor_quantity_arithmetic() -> None:
+    """CQL 1.5 §Ratio: .numerator/.denominator are Quantity values and must
+    participate in Quantity ± Quantity arithmetic (CQL-03 EXPLORER QA-004)."""
+
+    numerator_sql = _translated_definition_sql(
+        "ToRatio('10 ''mg'':2 ''mL''').numerator + 5 'mg'"
+    )
+    denominator_sql = _translated_definition_sql(
+        "ToRatio('10 ''mg'':2 ''mL''').denominator + 3 'mL'"
+    )
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for sql, expected in (
+            (numerator_sql, {"value": 15.0, "unit": "mg"}),
+            (denominator_sql, {"value": 5.0, "unit": "mL"}),
+        ):
+            py_value = json.loads(py.execute(sql).fetchone()[0])
+            cpp_value = json.loads(cpp.execute(sql).fetchone()[0])
+            for value in (py_value, cpp_value):
+                assert value["value"] == expected["value"], value
+                assert (value.get("unit") or value.get("code")) == expected["unit"], value
     finally:
         py.close()
         cpp.close()

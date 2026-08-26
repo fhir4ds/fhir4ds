@@ -654,6 +654,7 @@ static bool isMixedCalendarUcumYearMonthDuration(const std::string &left_unit,
 // (defined earlier in file) can use isOffsetTemperatureUnit (defined later).
 static bool isOffsetTemperatureUnit(const std::string &unit);
 static std::string formatDecimalNumber(double value, const std::string &source_text);
+static std::string shortestRoundTripText(double value);
 static std::string jsonNumberText(yyjson_val *val);
 static bool isNumericType(const FPValue &v);
 
@@ -1057,7 +1058,12 @@ static bool fhirTypeIsA(const std::string &type_name, const std::string &parent_
 		{"canonical", "uri"},
 		{"code", "string"},
 		{"id", "string"},
-		{"instant", "dateTime"},
+		// FP-02 EXPLORER QA-002 (2026-08-16): FHIR R4 has no dateTime-derived
+		// primitives — instant is a sibling primitive under Element (matches
+		// the canonical models/r4/type2Parent.json and the Python fallback's
+		// fhir_types_generated.py). The stale instant->dateTime edge made
+		// `issued is dateTime` true while `issued.type().name` said 'instant'.
+		{"instant", "Element"},
 		{"markdown", "string"},
 		{"oid", "uri"},
 		{"positiveInt", "integer"},
@@ -1208,6 +1214,10 @@ struct DateTimeParts {
 	int year, month, day, hour, minute, second, millisecond;
 	int tz_offset_minutes; // offset from UTC in minutes, INT_MIN if no TZ
 	int precision; // 1=year,2=month,3=day,4=hour,5=minute,6=second,7=millisecond
+	// FP-14 HISTORIAN QA-001: full fractional-second digit string ("" = none).
+	// Kept untruncated so ordering/equality can apply §6.2 decimal comparison
+	// semantics to sub-second digits instead of the 3-digit millisecond int.
+	std::string frac_digits;
 	bool valid;
 };
 static DateTimeParts parseDateTimeParts(const std::string &s);
@@ -1310,6 +1320,12 @@ static std::string fpValueToString(const FPValue &val) {
 }
 
 static double convertQuantityToBase(double value, const std::string &unit, std::string &base_unit);
+// FP-01 SKEPTIC QA-003 (2026-08-16): forward declarations for the §5.5.7
+// unanchored calendar-factor comparison helpers (defined near the other
+// duration-unit helpers below).
+static bool yearMonthMonthsFactor(const std::string &unit, double &factor);
+static double unanchoredDurationSeconds(double value, const std::string &unit,
+                                        std::string &base_unit);
 
 static std::string normalizeEquivalentString(const std::string &in) {
 	std::string out;
@@ -1317,11 +1333,14 @@ static std::string normalizeEquivalentString(const std::string &in) {
 	while (byte < in.size()) {
 		int char_bytes = 0;
 		int32_t cp = readUtf8Codepoint(in, byte, char_bytes);
+		// FP-13 HISTORIAN QA-001 (2026-08-17): §6.1.2 String Equivalence
+		// normalizes whitespace "as defined in the Whitespace lexical
+		// category" — ONLY tab (U+0009), LF (U+000A), CR (U+000D) and
+		// space (U+0020). The full Unicode whitespace set (NBSP, U+0085,
+		// U+1680, U+2000–U+200A, U+2028/9, U+202F, U+205F, U+3000) must
+		// NOT be normalized (`'a\u00A0b' ~ 'a b'` is false).
 		bool white_space =
-		    (cp >= 0x0009 && cp <= 0x000D) || cp == 0x0020 || cp == 0x0085 ||
-		    cp == 0x00A0 || cp == 0x1680 || (cp >= 0x2000 && cp <= 0x200A) ||
-		    cp == 0x2028 || cp == 0x2029 || cp == 0x202F || cp == 0x205F ||
-		    cp == 0x3000;
+		    cp == 0x0009 || cp == 0x000A || cp == 0x000D || cp == 0x0020;
 		if (white_space) {
 			out += ' ';
 		} else {
@@ -1519,9 +1538,17 @@ static bool jsonNumbersEquivalent(yyjson_val *left, yyjson_val *right) {
 	double r_num = yyjson_get_num(right);
 	int l_prec = decimalPlacesFromNumberText(jsonNumberText(left));
 	int r_prec = decimalPlacesFromNumberText(jsonNumberText(right));
-	int cmp_prec = (l_prec > 0 && r_prec > 0) ? std::min(l_prec, r_prec)
-	             : std::max(l_prec, r_prec);
+	// FP-13 SKEPTIC (2026-08-17): least precision governs, including 0.
+	int cmp_prec = std::min(l_prec, r_prec);
 	if (cmp_prec > 0) {
+		// FP-13 EXPLORER QA-002 (2026-08-17): JSON integers must compare
+		// EXACTLY. The binary64 path below coerces both through double,
+		// silently merging integers beyond 2^53 (9007199254740992 ~
+		// 9007199254740993 -> true while the Python fallback and `a = b`
+		// both say they differ).
+		if (yyjson_is_int(left) && yyjson_is_int(right)) {
+			return yyjson_get_sint(left) == yyjson_get_sint(right);
+		}
 		double scale = std::pow(10.0, cmp_prec);
 		return std::round(l_num * scale) == std::round(r_num * scale);
 	}
@@ -1599,6 +1626,13 @@ static bool valueAsEqualityQuantity(const FPValue &v, FPValue &out) {
 
 static int quantityEqualState(const FPValue &left, const FPValue &right) {
 	if (isMixedCalendarUcumYearMonthDuration(left.quantity_unit, right.quantity_unit)) {
+		// FP-01 HISTORIAN QA-001 (2026-08-16): stays indeterminate. The
+		// N1/master §6.1.1 prose says "unequal" (`1 year = 1 'a'` // false),
+		// but the OFFICIAL R4 fixtures pin `'1 'a''.toQuantity() = 1 year`
+		// (and the 'mo' analog) to EMPTY — testStringQuantity{Year,Month}
+		// LiteralToQuantity carry no <output> element. Official fixtures
+		// outrank spec prose (QA-005 precedent), so equality is empty;
+		// §6.2 ordering is empty as well.
 		return -1;
 	}
 	// FP-13 HISTORIAN (2026-06-29): Offset-based temperature cross-unit
@@ -1614,11 +1648,60 @@ static int quantityEqualState(const FPValue &left, const FPValue &right) {
 	     isOffsetTemperatureUnit(right.quantity_unit))) {
 		return -1;
 	}
+	// Same units: keep the precision-preserving source_text comparison in
+	// quantityValuesEqual's identity fast path.
+	if (left.quantity_unit == right.quantity_unit) {
+		return quantityValuesEqual(left, right) ? 1 : 0;
+	}
+	// FP-01 SKEPTIC QA-003 (2026-08-16): FHIRPath N1 §5.5.7 defines the
+	// calendar duration conversion factors for unanchored calculations:
+	// 1 year = 12 months or 365 days; 1 month = 30 days. The table is
+	// month-based for year↔month pairs and day-based for year/month vs
+	// day-and-below (12 × 30 days = 360 days ≠ 365 days), so year↔month
+	// pairs compare in months while cross-group time pairs compare in
+	// seconds using the 30-day/365-day factors for the calendar keyword
+	// operand. UCUM 'mo'/'a' keep their mean-duration UCUM seconds, and
+	// the shared ucum_units.hpp table is untouched (CQL shares it).
+	double left_months = 0.0, right_months = 0.0;
+	if (yearMonthMonthsFactor(left.quantity_unit, left_months) &&
+	    yearMonthMonthsFactor(right.quantity_unit, right_months)) {
+		double lmv = left.quantity_value * left_months;
+		double rmv = right.quantity_value * right_months;
+		double diff = std::abs(lmv - rmv);
+		double maxval = std::max(std::abs(lmv), std::abs(rmv));
+		return (lmv == rmv) || diff < 1e-10 || (maxval > 0 && diff / maxval < 1e-10) ? 1 : 0;
+	}
 	std::string left_base, right_base;
-	convertQuantityToBase(left.quantity_value, left.quantity_unit, left_base);
-	convertQuantityToBase(right.quantity_value, right.quantity_unit, right_base);
+	double left_secs =
+	    unanchoredDurationSeconds(left.quantity_value, left.quantity_unit, left_base);
+	double right_secs =
+	    unanchoredDurationSeconds(right.quantity_value, right.quantity_unit, right_base);
 	if (left_base != right_base) return -1;
-	return quantityValuesEqual(left, right) ? 1 : 0;
+	double diff = std::abs(left_secs - right_secs);
+	double maxval = std::max(std::abs(left_secs), std::abs(right_secs));
+	return (left_secs == right_secs) || diff < 1e-10 || (maxval > 0 && diff / maxval < 1e-10)
+	           ? 1
+	           : 0;
+}
+
+// FP-13 EXPLORER (2026-08-17): §6.1.2 quantity-equivalence tolerance uses the
+// precision of the LEAST precise operand with trailing zeros IGNORED (1.0 has
+// precision 0, half-width 0.5) — same rule the Python fallback's
+// decimal_places (rstrip '0') implements and FP-13 SKEPTIC applied to plain
+// decimals. countDecimalPlaces preserves trailing zeros (needed by
+// lowBoundary/highBoundary implicit precision), so equivalence must not use it.
+static int leastPrecisionDecimalPlaces(const FPValue &val) {
+	std::string s = val.source_text;
+	if (s.empty()) {
+		if (val.type == FPValue::Type::Decimal) {
+			std::ostringstream oss;
+			oss << val.decimal_val;
+			s = oss.str();
+		} else if (val.type == FPValue::Type::Integer) {
+			return 0;
+		}
+	}
+	return decimalPlacesFromNumberText(s);
 }
 
 static int quantityEquivalentState(const FPValue &left, const FPValue &right) {
@@ -1629,12 +1712,30 @@ static int quantityEquivalentState(const FPValue &left, const FPValue &right) {
 	     isOffsetTemperatureUnit(right.quantity_unit))) {
 		return -1;
 	}
+	// FP-01 SKEPTIC QA-003 (2026-08-16): year↔month pairs compare in
+	// months (§5.5.7 "1 year = 12 months"); other time pairs convert with
+	// the §5.5.7 calendar factors for calendar keyword year/month operands
+	// (see quantityEqualState). Equivalence tolerance keeps the
+	// round-to-least-precision half-width semantics.
+	double left_months = 0.0, right_months = 0.0;
+	if (yearMonthMonthsFactor(left.quantity_unit, left_months) &&
+	    yearMonthMonthsFactor(right.quantity_unit, right_months)) {
+		double lmv = left.quantity_value * left_months;
+		double rmv = right.quantity_value * right_months;
+		int left_dp = leastPrecisionDecimalPlaces(left);
+		int right_dp = leastPrecisionDecimalPlaces(right);
+		double left_half = 0.5 * std::pow(10.0, -left_dp) * left_months;
+		double right_half = 0.5 * std::pow(10.0, -right_dp) * right_months;
+		return std::abs(lmv - rmv) < std::max(left_half, right_half) ? 1 : 0;
+	}
 	std::string left_base, right_base;
-	double left_conv = convertQuantityToBase(left.quantity_value, left.quantity_unit, left_base);
-	double right_conv = convertQuantityToBase(right.quantity_value, right.quantity_unit, right_base);
+	double left_conv =
+	    unanchoredDurationSeconds(left.quantity_value, left.quantity_unit, left_base);
+	double right_conv =
+	    unanchoredDurationSeconds(right.quantity_value, right.quantity_unit, right_base);
 	if (left_base != right_base) return -1;
-	int left_dp = countDecimalPlaces(left);
-	int right_dp = countDecimalPlaces(right);
+	int left_dp = leastPrecisionDecimalPlaces(left);
+	int right_dp = leastPrecisionDecimalPlaces(right);
 	double left_scale = (left.quantity_value != 0) ? left_conv / left.quantity_value : 1.0;
 	double right_scale = (right.quantity_value != 0) ? right_conv / right.quantity_value : 1.0;
 	double left_half = 0.5 * std::pow(10.0, -left_dp) * std::abs(left_scale);
@@ -1663,6 +1764,35 @@ static int jsonValuesEqualState(yyjson_val *left, yyjson_val *right) {
 		if (left_is_quantity && right_is_quantity) {
 			return quantityEqualState(left_quantity, right_quantity);
 		}
+	}
+
+	// Re-land guard (2026-08-19, FP-12 HISTORIAN parity restoration):
+	// §6.1.1 defines the implicit quantity<->number conversion only for
+	// unit '1'. A quantity-shaped JSON object WITHOUT a unit (e.g.
+	// valueQuantity {"value":120} with no "unit"/"code"}) therefore has
+	// no defined =/!= against a bare JSON number — the result is empty,
+	// not false, matching the Python fallback (unitless FP_Quantity vs
+	// Integer is non-convertible). Pinned by
+	// test_children_type_operators_match_direct_navigation_fp12_historian2.
+	auto jsonValueIsUnitlessQuantityShape = [](yyjson_val *v) -> bool {
+		if (!v || !yyjson_is_obj(v)) return false;
+		yyjson_val *value_field = yyjson_obj_get(v, "value");
+		if (!value_field || !(yyjson_is_num(value_field) || yyjson_is_str(value_field))) {
+			return false;
+		}
+		const char *unit = nullptr;
+		yyjson_val *code_field = yyjson_obj_get(v, "code");
+		yyjson_val *unit_field = yyjson_obj_get(v, "unit");
+		if (code_field && yyjson_is_str(code_field)) {
+			unit = yyjson_get_str(code_field);
+		} else if (unit_field && yyjson_is_str(unit_field)) {
+			unit = yyjson_get_str(unit_field);
+		}
+		return unit == nullptr || std::string(unit).empty();
+	};
+	if ((jsonValueIsUnitlessQuantityShape(left) && yyjson_is_num(right)) ||
+	    (jsonValueIsUnitlessQuantityShape(right) && yyjson_is_num(left))) {
+		return -1;
 	}
 
 	if (yyjson_is_null(left) || yyjson_is_null(right)) {
@@ -1827,6 +1957,19 @@ static bool isSecondOrMillisecondDuration(const std::string &unit) {
 	       unit == "s" || unit == "ms";
 }
 
+// FP-02 HISTORIAN QA-003 (2026-08-16): week/day/time duration units in
+// BOTH spellings (calendar keywords and UCUM codes, quoted or bare).
+// Every member converts to exact seconds (no mean-duration ambiguity),
+// so any pair inside this set is orderable.
+static bool isWeeksDaysTimeDuration(const std::string &unit) {
+	return unit == "week" || unit == "weeks" || unit == "'wk'" || unit == "wk" ||
+	       unit == "day" || unit == "days" || unit == "'d'" || unit == "d" ||
+	       unit == "hour" || unit == "hours" || unit == "'h'" || unit == "h" ||
+	       unit == "minute" || unit == "minutes" || unit == "'min'" || unit == "min" ||
+	       unit == "second" || unit == "seconds" || unit == "'s'" || unit == "s" ||
+	       unit == "millisecond" || unit == "milliseconds" || unit == "'ms'" || unit == "ms";
+}
+
 static bool isYearOrMonthDuration(const std::string &unit) {
 	return unit == "year" || unit == "years" || unit == "month" || unit == "months" ||
 	       unit == "'a'" || unit == "'mo'" || unit == "a" || unit == "mo";
@@ -1849,7 +1992,70 @@ static bool isMixedCalendarUcumDurationAboveSeconds(const std::string &left_unit
 	if (!mixed_calendar_ucum) {
 		return false;
 	}
-	return !(isSecondOrMillisecondDuration(left_unit) && isSecondOrMillisecondDuration(right_unit));
+	if (isSecondOrMillisecondDuration(left_unit) && isSecondOrMillisecondDuration(right_unit)) {
+		return false;
+	}
+	// FP-02 HISTORIAN QA-003 (2026-08-16): calendar week/day/time keywords
+	// vs UCUM week/day/time codes are exactly convertible (both sides map
+	// to exact seconds through the shared table), so ordering is decidable
+	// (`1 day > 23 'h'` // true), matching the equality surface
+	// (`1 day = 24 'h'` // true). Mirrors the Python fallback's
+	// FP_Quantity.compare() calendar_wdt_vs_ucum_wdt exemption.
+	if (isWeeksDaysTimeDuration(left_unit) && isWeeksDaysTimeDuration(right_unit)) {
+		return false;
+	}
+	// FP-01 SKEPTIC QA-003/QA-004 (2026-08-16): comparable despite the
+	// calendar/UCUM mix when a calendar year/month keyword faces a UCUM
+	// week/day/time code — `30 'd'` is exactly 30 days, so the §5.5.7
+	// factors still apply (`1 month > 29 'd'` // true). Only the year/month
+	// UCUM analogues stay un-comparable per §6.2 (`1 'mo' > 29 days` //
+	// empty, `1 year > 1 'a'` // empty).
+	if (isYearOrMonthDuration(left_unit) && isCalendarDurationUnit(left_unit) &&
+	    !isYearOrMonthDuration(right_unit) && isUcumDurationUnit(right_unit)) {
+		return false;
+	}
+	if (isYearOrMonthDuration(right_unit) && isCalendarDurationUnit(right_unit) &&
+	    !isYearOrMonthDuration(left_unit) && isUcumDurationUnit(left_unit)) {
+		return false;
+	}
+	return true;
+}
+
+// FP-01 SKEPTIC QA-003 (2026-08-16): FHIRPath N1 §5.5.7 defines calendar
+// duration conversion factors for UNANCHORED calculations: 1 year = 12
+// months or 365 days; 1 month = 30 days. §6.1.1/§6.2 require unit-aware
+// equality/comparison to honor "the calendar durations as defined in the
+// toQuantity function". The spec table is month-based for year↔month pairs
+// and day-based for year/month vs day-and-below (12 × 30 days = 360 days
+// ≠ 365 days), so year↔month pairs must compare in months (12 / 1) while
+// cross-group time pairs convert through explicit 30-day/365-day seconds
+// for the calendar KEYWORD operand. UCUM 'mo'/'a' are definite durations
+// and keep their UCUM mean-duration seconds. The shared ucum_units.hpp
+// table is deliberately untouched: the CQL extension shares it for UCUM
+// quantity conversion semantics.
+static bool yearMonthMonthsFactor(const std::string &unit, double &factor) {
+	if (unit == "year" || unit == "years" || unit == "'a'" || unit == "a") {
+		factor = 12.0;
+		return true;
+	}
+	if (unit == "month" || unit == "months" || unit == "'mo'" || unit == "mo") {
+		factor = 1.0;
+		return true;
+	}
+	return false;
+}
+
+static double unanchoredDurationSeconds(double value, const std::string &unit,
+                                        std::string &base_unit) {
+	if (unit == "month" || unit == "months") {
+		base_unit = "s";
+		return value * 2592000.0; // §5.5.7: 1 month = 30 days
+	}
+	if (unit == "year" || unit == "years") {
+		base_unit = "s";
+		return value * 31536000.0; // §5.5.7: 1 year = 365 days
+	}
+	return convertQuantityToBase(value, unit, base_unit);
 }
 
 static bool isDateVsDateTimePair(FPValue::Type a_type, FPValue::Type b_type) {
@@ -1891,9 +2097,24 @@ static bool quantityValuesEqual(const FPValue &a, const FPValue &b) {
 		return false;
 	}
 
+	// FP-01 SKEPTIC QA-003 (2026-08-16): year↔month pairs compare in months
+	// (§5.5.7 "1 year = 12 months"); other cross-unit time pairs convert
+	// with the §5.5.7 calendar factors for calendar keyword year/month
+	// operands. Keeps distinct()/membership consistent with the = operator.
+	double a_months = 0.0, b_months = 0.0;
+	if (yearMonthMonthsFactor(a.quantity_unit, a_months) &&
+	    yearMonthMonthsFactor(b.quantity_unit, b_months)) {
+		double av = a.quantity_value * a_months;
+		double bv = b.quantity_value * b_months;
+		double months_diff = std::abs(av - bv);
+		double months_max = std::max(std::abs(av), std::abs(bv));
+		return (av == bv) || months_diff < 1e-10 ||
+		       (months_max > 0 && months_diff / months_max < 1e-10);
+	}
+
 	std::string a_base, b_base;
-	double a_converted = convertQuantityToBase(a.quantity_value, a.quantity_unit, a_base);
-	double b_converted = convertQuantityToBase(b.quantity_value, b.quantity_unit, b_base);
+	double a_converted = unanchoredDurationSeconds(a.quantity_value, a.quantity_unit, a_base);
+	double b_converted = unanchoredDurationSeconds(b.quantity_value, b.quantity_unit, b_base);
 	if (a_base != b_base) {
 		return false;
 	}
@@ -1982,8 +2203,281 @@ static bool requireBooleanValue(const FPValue &item, const std::string &function
 	throw FHIRPathSpecError(function_name + "() requires a collection of Boolean values");
 }
 
+// FP-02 SKEPTIC QA-003 (2026-08-16): UCUM unit-expression exponent algebra.
+// FHIRPath §6.6.1 `3 'cm' * 12 'cm2' // 36 'cm3'` and §6.6.2 `12 'cm2' /
+// 3 'cm' // 4.0 'cm'` require quantity arithmetic to MERGE base-symbol
+// exponents (m.m2 -> m3, m2/m -> m) instead of concatenating unit strings;
+// unreduced spellings ('m2/m') must also convert through the base table so
+// equality/ordering per §6.1/§6.2 accept them. These helpers parse
+// '.'-separated terms with '/'-separated denominators and optional integer
+// exponents (m2, s-1); the dimensionless '1' contributes nothing. Rendering
+// sorts symbols alphabetically so the native path and the Python fallback
+// (nodes.py::_render_unit_exponents) produce byte-identical spellings.
+static bool fhirpathSplitUnitTerm(const std::string &term, std::string &symbol, int &exponent) {
+	if (term.empty() || term == "1") {
+		return term == "1";
+	}
+	size_t end = term.size();
+	while (end > 0 && term[end - 1] >= '0' && term[end - 1] <= '9') {
+		--end;
+	}
+	if (end > 1 && term[end - 1] == '-') {
+		// Exponent sign only when a non-empty symbol precedes it ('s-1');
+		// std::stoi on the remaining suffix carries the sign.
+		--end;
+	}
+	if (end == 0) {
+		return false;
+	}
+	if (end == term.size()) {
+		exponent = 1;
+	} else {
+		exponent = std::stoi(term.substr(end));
+	}
+	symbol = term.substr(0, end);
+	return !symbol.empty();
+}
+
+static bool fhirpathParseUnitExponents(const std::string &unit,
+                                       std::vector<std::pair<std::string, int>> &out) {
+	out.clear();
+	std::string clean = unit;
+	if (clean.size() >= 2 && clean.front() == '\'' && clean.back() == '\'') {
+		clean = clean.substr(1, clean.size() - 2);
+	}
+	if (clean.empty() || clean.find_first_of(" \t\r\n") != std::string::npos) {
+		return false;
+	}
+	size_t segment_start = 0;
+	bool first_segment = true;
+	for (size_t i = 0; i <= clean.size(); ++i) {
+		if (i != clean.size() && clean[i] != '/' ) {
+			continue;
+		}
+		std::string segment = clean.substr(segment_start, i - segment_start);
+		segment_start = i + 1;
+		if (segment.empty()) {
+			return false;
+		}
+		size_t term_start = 0;
+		for (size_t j = 0; j <= segment.size(); ++j) {
+			if (j != segment.size() && segment[j] != '.') {
+				continue;
+			}
+			std::string term = segment.substr(term_start, j - term_start);
+			term_start = j + 1;
+			if (term.empty()) {
+				return false;
+			}
+			if (term == "1") {
+				continue; // dimensionless term ('1', or numerator of '1/s')
+			}
+			std::string symbol;
+			int exponent = 1;
+			if (!fhirpathSplitUnitTerm(term, symbol, exponent)) {
+				return false;
+			}
+			int signed_exponent = first_segment ? exponent : -exponent;
+			bool found = false;
+			for (auto &entry : out) {
+				if (entry.first == symbol) {
+					entry.second += signed_exponent;
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				out.emplace_back(symbol, signed_exponent);
+			}
+		}
+		first_segment = false;
+	}
+	out.erase(std::remove_if(out.begin(), out.end(),
+	                         [](const std::pair<std::string, int> &e) { return e.second == 0; }),
+	          out.end());
+	return true;
+}
+
+static std::string fhirpathRenderUnitExponents(std::vector<std::pair<std::string, int>> exponents) {
+	std::sort(exponents.begin(), exponents.end(),
+	          [](const std::pair<std::string, int> &a, const std::pair<std::string, int> &b) {
+		          return a.first < b.first;
+	          });
+	std::string numerator, denominator;
+	for (const auto &entry : exponents) {
+		if (entry.second == 0) {
+			continue;
+		}
+		int magnitude = entry.second < 0 ? -entry.second : entry.second;
+		std::string term = entry.first + (magnitude != 1 ? std::to_string(magnitude) : "");
+		if (entry.second > 0) {
+			if (!numerator.empty()) numerator += ".";
+			numerator += term;
+		} else {
+			if (!denominator.empty()) denominator += ".";
+			denominator += term;
+		}
+	}
+	if (numerator.empty() && denominator.empty()) return "1";
+	if (numerator.empty()) return "1/" + denominator;
+	if (denominator.empty()) return numerator;
+	return numerator + "/" + denominator;
+}
+
+static std::string fhirpathComposeQuantityUnits(const std::string &left, const std::string &right,
+                                                bool divide) {
+	std::vector<std::pair<std::string, int>> left_terms, right_terms;
+	if (fhirpathParseUnitExponents(left, left_terms) &&
+	    fhirpathParseUnitExponents(right, right_terms)) {
+		for (const auto &entry : right_terms) {
+			int signed_exponent = divide ? -entry.second : entry.second;
+			bool found = false;
+			for (auto &left_entry : left_terms) {
+				if (left_entry.first == entry.first) {
+					left_entry.second += signed_exponent;
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				left_terms.emplace_back(entry.first, signed_exponent);
+			}
+		}
+		return fhirpathRenderUnitExponents(left_terms);
+	}
+	// FP-02 SKEPTIC QA-003: unparseable units keep the legacy concatenation.
+	return divide ? (left + "/" + right) : (left + "." + right);
+}
+
+// FP-02 HISTORIAN QA-004 (2026-08-16): curated UCUM derived units the
+// shared table does not carry. Kept FHIRPath-LOCAL: the shared
+// ucum_units.hpp stays byte-identical so the CQL extension does not need
+// a rebuild (FHIRPath-specific semantics live at consumer sites). Base
+// forms use the SAME sorted, unquoted spelling that
+// fhirpathRenderUnitExponents produces so direct entries and multi-term
+// reductions agree on one canonical string (N1 §6.1.1 "converted to the
+// same unit, or a common unit"): 1 J = 1 kg.m2/s2 = 1000 g.m2/s2,
+// 1 N = 1000 g.m/s2, 1 W = 1000 g.m2/s3, 1 V = 1000 A.g.m2/s3.
+static const std::unordered_map<std::string, fhir::UnitConversion> &FhirpathDerivedUnitTable() {
+	static const std::unordered_map<std::string, fhir::UnitConversion> table = {
+	    {"J", {"g.m2/s2", 1000.0}},
+	    {"'J'", {"g.m2/s2", 1000.0}},
+	    {"kJ", {"g.m2/s2", 1000000.0}},
+	    {"'kJ'", {"g.m2/s2", 1000000.0}},
+	    {"N", {"g.m/s2", 1000.0}},
+	    {"'N'", {"g.m/s2", 1000.0}},
+	    {"kN", {"g.m/s2", 1000000.0}},
+	    {"'kN'", {"g.m/s2", 1000000.0}},
+	    {"W", {"g.m2/s3", 1000.0}},
+	    {"'W'", {"g.m2/s3", 1000.0}},
+	    {"kW", {"g.m2/s3", 1000000.0}},
+	    {"'kW'", {"g.m2/s3", 1000000.0}},
+	    {"mW", {"g.m2/s3", 1.0}},
+	    {"'mW'", {"g.m2/s3", 1.0}},
+	    {"A", {"A", 1.0}},
+	    {"'A'", {"A", 1.0}},
+	    {"mA", {"A", 0.001}},
+	    {"'mA'", {"A", 0.001}},
+	    {"V", {"g.m2/A.s3", 1000.0}},
+	    {"'V'", {"g.m2/A.s3", 1000.0}},
+	    {"kV", {"g.m2/A.s3", 1000000.0}},
+	    {"'kV'", {"g.m2/A.s3", 1000000.0}},
+	    {"mV", {"g.m2/A.s3", 1.0}},
+	    {"'mV'", {"g.m2/A.s3", 1.0}},
+	};
+	return table;
+}
+
+static const fhir::UnitConversion *fhirpathFindUnitConversion(const std::string &unit) {
+	const auto &table = fhir::GetUcumUnitTable();
+	auto it = table.find(unit);
+	if (it != table.end()) {
+		return &it->second;
+	}
+	const auto &derived = FhirpathDerivedUnitTable();
+	auto dt = derived.find(unit);
+	if (dt != derived.end()) {
+		return &dt->second;
+	}
+	return nullptr;
+}
+
 static double convertQuantityToBase(double value, const std::string &unit, std::string &base_unit) {
-	return fhir::ConvertToBaseUnit(value, unit, base_unit);
+	std::string clean_unit = unit;
+	if (clean_unit.size() >= 2 && clean_unit.front() == '\'' && clean_unit.back() == '\'') {
+		clean_unit = clean_unit.substr(1, clean_unit.size() - 2);
+	}
+	const fhir::UnitConversion *direct = fhirpathFindUnitConversion(unit);
+	if (direct == nullptr) {
+		direct = fhirpathFindUnitConversion(clean_unit);
+	}
+	if (direct != nullptr) {
+		base_unit = direct->base_unit;
+		return value * direct->factor;
+	}
+	// FP-02 SKEPTIC QA-003: multi-term / exponent-suffixed UCUM expressions
+	// ('m2/m', 'm3', 'g.m/s2') convert term-by-term with exponent merging.
+	// Sentinel (<= 0) factors mark offset temperatures handled specially by
+	// callers and never participate in multiplicative reduction.
+	std::vector<std::pair<std::string, int>> terms;
+	if (fhirpathParseUnitExponents(clean_unit, terms)) {
+		std::vector<std::pair<std::string, int>> merged;
+		double converted = value;
+		bool ok = true;
+		for (const auto &entry : terms) {
+			const fhir::UnitConversion *term_conversion = fhirpathFindUnitConversion(entry.first);
+			if (term_conversion == nullptr || term_conversion->factor <= 0.0) {
+				ok = false;
+				break;
+			}
+			std::string base_symbol = term_conversion->base_unit;
+			if (base_symbol.size() >= 2 && base_symbol.front() == '\'' && base_symbol.back() == '\'') {
+				base_symbol = base_symbol.substr(1, base_symbol.size() - 2);
+			}
+			if (term_conversion->factor != 1.0) {
+				converted *= std::pow(term_conversion->factor, entry.second);
+			}
+			// FP-02 HISTORIAN QA-004 (2026-08-16): derived-unit bases are
+			// themselves term expressions ('J' -> 'g.m2/s2'); expand them
+			// so multi-term operands ('kg.m2/s2', 'N.m') merge on true
+			// base symbols. Single-symbol bases parse to themselves, so
+			// this is behavior-preserving for the shared table.
+			std::vector<std::pair<std::string, int>> sub_terms;
+			if (fhirpathParseUnitExponents(base_symbol, sub_terms) && !sub_terms.empty()) {
+				for (const auto &sub_entry : sub_terms) {
+					bool sub_found = false;
+					for (auto &merged_entry : merged) {
+						if (merged_entry.first == sub_entry.first) {
+							merged_entry.second += entry.second * sub_entry.second;
+							sub_found = true;
+							break;
+						}
+					}
+					if (!sub_found) {
+						merged.emplace_back(sub_entry.first, entry.second * sub_entry.second);
+					}
+				}
+			} else {
+				bool found = false;
+				for (auto &merged_entry : merged) {
+					if (merged_entry.first == base_symbol) {
+						merged_entry.second += entry.second;
+						found = true;
+						break;
+					}
+				}
+				if (!found) {
+					merged.emplace_back(base_symbol, entry.second);
+				}
+			}
+		}
+		if (ok) {
+			base_unit = fhirpathRenderUnitExponents(merged);
+			return converted;
+		}
+	}
+	base_unit = unit;
+	return value;
 }
 
 static bool isBareDurationKeyword(const std::string &unit) {
@@ -2062,6 +2556,286 @@ static bool isOffsetTemperatureUnit(const std::string &unit) {
 	       u == "degC" || u == "[degC]" || u == "degRe" || u == "[degRe]";
 }
 
+// FP-08 SKEPTIC QA-001/QA-002 (2026-08-17): §5.5.7 toQuantity() defines
+// its own canonical conversion-factor table ("1 year = 12 months or 365
+// days", "1 month = 30 days", "1 day = 24 hours", "1 hour = 60 minutes",
+// "1 minute = 60 seconds"). The equality-oriented calendar-vs-UCUM group
+// guard below must not block calendar-keyword to calendar-keyword
+// conversion in toQuantity(), and converted values must carry Decimal
+// semantics (§4.1.4: 28 significant digits, half-even), not the
+// binary64 15-significant-digit shortest-round-trip mask. Magnitudes:
+// kind 1 = year/month group (magnitude in months), kind 2 = seconds
+// group (exact rationals). Mirrors FP_Quantity.conv_duration_to_spec in
+// fhir4ds/fhirpath/engine/nodes.py — used ONLY by the toQuantity/
+// convertsToQuantity path, never by equality/ordering/arithmetic.
+struct DurationSpecMagnitude {
+	int kind;       // 0 = not a duration unit, 1 = year/month, 2 = seconds
+	long long num;  // numerator of magnitude
+	long long den;  // denominator of magnitude
+};
+
+static DurationSpecMagnitude durationSpecMagnitude(const std::string &unit) {
+	std::string u = unit;
+	if (u.size() >= 2 && u.front() == '\'' && u.back() == '\'') {
+		u = u.substr(1, u.size() - 2);
+	}
+	if (u == "year" || u == "years" || u == "a") return {1, 12, 1};
+	if (u == "month" || u == "months" || u == "mo") return {1, 1, 1};
+	if (u == "week" || u == "weeks" || u == "wk") return {2, 604800, 1};
+	if (u == "day" || u == "days" || u == "d") return {2, 86400, 1};
+	if (u == "hour" || u == "hours" || u == "h") return {2, 3600, 1};
+	if (u == "minute" || u == "minutes" || u == "min") return {2, 60, 1};
+	if (u == "second" || u == "seconds" || u == "s") return {2, 1, 1};
+	if (u == "millisecond" || u == "milliseconds" || u == "ms") return {2, 1, 1000};
+	return {0, 0, 1};
+}
+
+static bool isBareCalendarKeywordForm(const std::string &unit) {
+	std::string u = unit;
+	if (u.size() >= 2 && u.front() == '\'' && u.back() == '\'') {
+		u = u.substr(1, u.size() - 2);
+	}
+	return isBareDurationKeyword(u);
+}
+
+// Compute value_text * num/den exactly (long division) and render with at
+// most 28 significant digits (ROUND_HALF_EVEN), mirroring the Python
+// fallback's 28-digit Decimal context. Returns "" when guards fail
+// (caller falls back to the binary64 path). out_value receives strtod of
+// the produced text so quantity_value matches the rendered Decimal.
+static std::string exactDecimalRatioText(const std::string &value_text, long long num, long long den,
+                                         double &out_value) {
+	out_value = 0.0;
+	if (num == 0 || den == 0) {
+		return "";
+	}
+	bool negative = false;
+	std::string digits;
+	int scale = 0;
+	bool seen_dot = false;
+	for (char c : value_text) {
+		if (c == '-') {
+			negative = !negative;
+		} else if (c == '+') {
+			// ignore
+		} else if (c == '.') {
+			if (seen_dot) {
+				return "";
+			}
+			seen_dot = true;
+		} else if (c >= '0' && c <= '9') {
+			digits.push_back(c);
+			if (seen_dot) {
+				scale++;
+			}
+		} else {
+			return ""; // scientific or other forms: guard
+		}
+	}
+	if (digits.empty() || digits.size() > 25 || scale > 20) {
+		return "";
+	}
+	// Strip leading zeros (value-preserving).
+	size_t first_nz = digits.find_first_not_of('0');
+	if (first_nz == std::string::npos) {
+		// zero value: exact result is zero
+		out_value = negative ? -0.0 : 0.0;
+		return "0";
+	}
+	digits = digits.substr(first_nz);
+	unsigned __int128 n = 0;
+	for (char c : digits) {
+		n = n * 10 + (unsigned)(c - '0');
+	}
+	unsigned __int128 ratio_num = (unsigned __int128)(num > 0 ? num : -num);
+	unsigned __int128 d = (unsigned __int128)den;
+	for (int i = 0; i < scale; ++i) {
+		d *= 10;
+	}
+	n *= ratio_num;
+	// Long division: integer part then up to 60 fractional digits.
+	std::string ip = "";
+	unsigned __int128 q = n / d;
+	unsigned __int128 rem = n % d;
+	if (q == 0) {
+		ip = "0";
+	} else {
+		while (q > 0) {
+			ip.push_back('0' + (int)(q % 10));
+			q /= 10;
+		}
+		std::reverse(ip.begin(), ip.end());
+	}
+	std::string frac;
+	bool exact = true;
+	while (rem != 0) {
+		if (frac.size() >= 60) {
+			exact = false;
+			break;
+		}
+		rem *= 10;
+		frac.push_back('0' + (int)(rem / d));
+		rem %= d;
+	}
+	std::string all = ip + frac;
+	size_t ip_len = ip.size();
+	// Round `all` to 28 significant digits, half-even.
+	size_t first_sig = all.find_first_not_of('0');
+	if (first_sig == std::string::npos) {
+		out_value = negative ? -0.0 : 0.0;
+		return "0";
+	}
+	size_t sig_count = all.size() - first_sig;
+	std::string rounded = all;
+	size_t new_ip_len = ip_len;
+	bool needs_point = frac.size() > 0;
+	if (sig_count > 28) {
+		size_t cut = first_sig + 28;
+		char next = all[cut];
+		bool round_up;
+		if (next > '5') {
+			round_up = true;
+		} else if (next < '5') {
+			round_up = false;
+		} else {
+			bool rest_nonzero = false;
+			for (size_t i = cut + 1; i < all.size(); ++i) {
+				if (all[i] != '0') {
+					rest_nonzero = true;
+					break;
+				}
+			}
+			round_up = rest_nonzero || ((all[cut - 1] - '0') % 2 == 1);
+		}
+		rounded = all.substr(0, cut);
+		if (round_up) {
+			int i = (int)cut - 1;
+			for (; i >= 0; --i) {
+				if (rounded[i] == '9') {
+					rounded[i] = '0';
+				} else {
+					rounded[i] = (char)(rounded[i] + 1);
+					break;
+				}
+			}
+			if (i < 0) {
+				rounded = "1" + rounded;
+				new_ip_len += 1;
+			}
+		}
+		// Re-locate the decimal point: if cut <= ip_len the result is
+		// integer-valued; otherwise fractional digits remain.
+		if (new_ip_len == ip_len && ip_len > cut) {
+			needs_point = false;
+		}
+	}
+	// Assemble text.
+	std::string text;
+	if (new_ip_len >= rounded.size()) {
+		// integer result (possibly all digits consumed by carry)
+		text = rounded;
+		if (new_ip_len > rounded.size()) {
+			text.insert(0, new_ip_len - rounded.size(), '0');
+		}
+	} else {
+		text = rounded.substr(0, new_ip_len);
+		std::string frac_part = rounded.substr(new_ip_len);
+		// Strip trailing zeros for exact results (Python Decimal division
+		// trims to the ideal exponent); keep them for rounded results only
+		// when they are significant.
+		if (exact) {
+			while (!frac_part.empty() && frac_part.back() == '0') {
+				frac_part.pop_back();
+			}
+		}
+		if (frac_part.empty()) {
+			needs_point = false;
+		} else {
+			text += "." + frac_part;
+		}
+	}
+	(void)needs_point;
+	if (negative) {
+		text = "-" + text;
+	}
+	out_value = std::strtod(text.c_str(), nullptr);
+	return text;
+}
+
+// FP-08 EXPLORER QA-002 (2026-08-17; re-landed 2026-08-19 after a
+// sibling-session whole-file clobber): convert a plain-decimal conversion
+// factor (stored as binary64 in the shared ucum_units.hpp table) into an
+// exact integer numerator/denominator ratio using its shortest round-trip
+// decimal text — mirroring the Python fallback, which multiplies by
+// Decimal(str(factor)) with the literal decimal digits. Integral factors
+// map to den=1. Guards (positive finite factor, ≤15 significant digits,
+// ≤12 fractional digits) reject exotic inputs so the caller falls back to
+// the binary64 path. Spec anchor: §4.1.4 System.Decimal, §5.5.7
+// toQuantity unit conversion.
+static bool decimalFactorRatio(double factor, long long &num, long long &den) {
+	num = 0;
+	den = 1;
+	if (!(factor > 0.0) || !std::isfinite(factor) || factor >= 1e15) {
+		return false;
+	}
+	// Shortest round-trip text: the smallest %.*g precision whose strtod
+	// reproduces the double. For table literals like 133.322 this yields
+	// the authored decimal digits, not binary64 expansion noise.
+	char buf[64];
+	buf[0] = '\0';
+	for (int prec = 1; prec <= 17; ++prec) {
+		std::snprintf(buf, sizeof(buf), "%.*g", prec, factor);
+		if (std::strtod(buf, nullptr) == factor) {
+			break;
+		}
+	}
+	std::string s = buf;
+	if (s.find('e') != std::string::npos || s.find('E') != std::string::npos) {
+		// %g renders round magnitudes (1000 -> "1e+03") in scientific form.
+		// Integral factors convert exactly via (long long); non-integral
+		// scientific factors keep the guard (fall back to binary64).
+		double int_part;
+		if (std::modf(factor, &int_part) != 0.0) {
+			return false;
+		}
+		num = static_cast<long long>(int_part);
+		den = 1;
+		return num > 0;
+	}
+	std::string digits;
+	int scale = 0;
+	bool seen_dot = false;
+	for (char c : s) {
+		if (c >= '0' && c <= '9') {
+			digits.push_back(c);
+			if (seen_dot) {
+				scale++;
+			}
+		} else if (c == '.') {
+			if (seen_dot) {
+				return false;
+			}
+			seen_dot = true;
+		} else if (c != '+') {
+			return false;
+		}
+	}
+	if (digits.empty() || digits.size() > 15 || scale > 12) {
+		return false;
+	}
+	long long n = 0;
+	for (char c : digits) {
+		n = n * 10 + (c - '0');
+	}
+	long long d = 1;
+	for (int i = 0; i < scale; ++i) {
+		d *= 10;
+	}
+	num = n;
+	den = d;
+	return true;
+}
+
 static bool convertQuantityUnit(const FPValue &quantity, const std::string &to_unit, FPValue &out) {
 	if (to_unit.empty() || quantity.quantity_unit == to_unit) {
 		out = quantity;
@@ -2076,6 +2850,64 @@ static bool convertQuantityUnit(const FPValue &quantity, const std::string &to_u
 	if (isOffsetTemperatureUnit(quantity.quantity_unit) ||
 	    isOffsetTemperatureUnit(to_unit)) {
 		return false;
+	}
+
+	// FP-08 SKEPTIC QA-001/QA-002 (2026-08-17): §5.5.7 conversion-factor
+	// table path for duration units. Calendar-keyword to calendar-keyword
+	// conversion is allowed across the year/month vs day-and-below boundary
+	// using the direct table rows (1 year = 365 days, 1 month = 30 days;
+	// year<->month keeps the direct factor 12). Calendar-vs-UCUM cross
+	// conversions keep the §6.1 category rejection below. Values are
+	// computed with exact long division and rendered at 28 significant
+	// digits (§4.1.4), matching the Python fallback's Decimal context.
+	{
+		DurationSpecMagnitude fm = durationSpecMagnitude(quantity.quantity_unit);
+		DurationSpecMagnitude tm = durationSpecMagnitude(to_unit);
+		if (fm.kind != 0 && tm.kind != 0) {
+			bool from_ym = fm.kind == 1;
+			bool to_ym = tm.kind == 1;
+			bool allowed = true;
+			long long fnum = fm.num, fden = fm.den;
+			long long tnum = tm.num, tden = tm.den;
+			if (from_ym != to_ym) {
+				bool from_bare = isBareCalendarKeywordForm(quantity.quantity_unit);
+				bool to_bare = isBareCalendarKeywordForm(to_unit);
+				if (!from_bare || !to_bare) {
+					allowed = false; // fall through to the group guard below (rejects)
+				} else if (from_ym) {
+					fnum = (fm.num == 12) ? 365LL * 86400 : 30LL * 86400;
+					fden = 1;
+				} else {
+					tnum = (tm.num == 12) ? 365LL * 86400 : 30LL * 86400;
+					tden = 1;
+				}
+			}
+			if (allowed) {
+				// result = value * fnum/fden * tden/tnum
+				std::string value_text = quantity.source_text;
+				if (value_text.empty()) {
+					char buf[64];
+					for (int prec = 1; prec <= 17; ++prec) {
+						std::snprintf(buf, sizeof(buf), "%.*g", prec, quantity.quantity_value);
+						if (std::strtod(buf, nullptr) == quantity.quantity_value) {
+							break;
+						}
+					}
+					value_text = buf;
+				}
+				double nv = 0.0;
+				std::string text = exactDecimalRatioText(value_text, fnum * tden, fden * tnum, nv);
+				if (!text.empty()) {
+					out = quantity;
+					out.quantity_value = nv;
+					out.quantity_unit = to_unit;
+					out.source_text = text;
+					return true;
+				}
+				// Exact-math guard failed (unusual input shape): fall
+				// through to the binary64 path rather than failing.
+			}
+		}
 	}
 
 	// FP-08 EXPLORER (2026-06-28): Apply calendar-vs-UCUM group separation
@@ -2101,6 +2933,52 @@ static bool convertQuantityUnit(const FPValue &quantity, const std::string &to_u
 	double to_base_factor = convertQuantityToBase(1.0, to_unit, to_base);
 	if (from_base != to_base || to_base_factor == 0.0) {
 		return false;
+	}
+
+	// FP-08 EXPLORER QA-002 (2026-08-17; re-landed 2026-08-19): exact
+	// 28-sig-digit ROUND_HALF_EVEN rendering for the metric base path.
+	// Route the conversion through exactDecimalRatioText with the exact
+	// integer num/den ratios of both conversion factors (§4.1.4), instead
+	// of the binary64 quotient below that only carries 15 significant
+	// digits. Guards fall back to the previous binary64 path for exotic
+	// inputs (scientific-notation value text, oversized factors).
+	{
+		// Compute the from-factor directly (not from_base_value/value, whose
+		// quotient can carry binary64 division noise like 1000.0000000000001
+		// that would fail the exact-ratio guard below).
+		std::string from_factor_base;
+		double from_factor = convertQuantityToBase(1.0, quantity.quantity_unit, from_factor_base);
+		(void)from_base_value;
+		long long fnum = 0, fden = 1, tnum = 0, tden = 1;
+		if (decimalFactorRatio(from_factor, fnum, fden) &&
+		    decimalFactorRatio(to_base_factor, tnum, tden) && fnum != 0 && tnum != 0 &&
+		    fnum <= LLONG_MAX / tden &&
+		    fden <= LLONG_MAX / tnum) {
+			long long rnum = fnum * tden;
+			long long rden = fden * tnum;
+			std::string value_text = quantity.source_text;
+			if (value_text.empty()) {
+				char vbuf[64];
+				for (int prec = 1; prec <= 17; ++prec) {
+					std::snprintf(vbuf, sizeof(vbuf), "%.*g", prec, quantity.quantity_value);
+					if (std::strtod(vbuf, nullptr) == quantity.quantity_value) {
+						break;
+					}
+				}
+				value_text = vbuf;
+			}
+			double nv = 0.0;
+			std::string text = exactDecimalRatioText(value_text, rnum, rden, nv);
+			if (!text.empty()) {
+				out = quantity;
+				out.quantity_value = nv;
+				out.quantity_unit = to_unit;
+				out.source_text = text;
+				return true;
+			}
+		}
+		// Exact-math guard failed (unusual input shape): fall through to
+		// the binary64 path rather than failing.
 	}
 
 	out = quantity;
@@ -2607,9 +3485,17 @@ static const char* fhirFieldType(const std::string &field_name) {
 	    field_name == "contentType" || field_name == "subjectType")
 		return "code";
 	// uri fields
+	// FP-20 HISTORIAN QA-001 (2026-08-18): Meta.profile is `canonical`, not
+	// `uri` (R4 canonical is a uri subtype; the `hierarchy` map carries
+	// canonical -> uri), and Meta.source is `uri`. Keep in lockstep with the
+	// `.profile`/`.source` suffix entries in
+	// fhir4ds/fhirpath/models/r4/fhir_path_to_type.json.
 	if (field_name == "url" || field_name == "system" || field_name == "reference" ||
-	    field_name == "profile" || field_name == "instantiatesUri" || field_name == "implicitRules")
+	    field_name == "source" || field_name == "instantiatesUri" || field_name == "implicitRules")
 		return "uri";
+	// canonical fields
+	if (field_name == "profile")
+		return "canonical";
 	// id fields
 	if (field_name == "id" || field_name == "versionId")
 		return "id";
@@ -2627,13 +3513,64 @@ static const char* fhirFieldType(const std::string &field_name) {
 	    field_name == "multipleBirthBoolean")
 		return "boolean";
 	// dateTime fields
-	if (field_name == "issued" || field_name == "created" || field_name == "authored" ||
-	    field_name == "lastUpdated" || field_name == "date")
+	// FP-02 EXPLORER QA-002 (2026-08-16): `issued` is FHIR R4 `instant`
+	// (Observation.issued, DiagnosticReport.issued), NOT dateTime — instant
+	// and dateTime are sibling primitives, so `issued is dateTime` must be
+	// false and `issued is instant` true. `authoredOn` is R4 dateTime
+	// (MedicationRequest/Task/ServiceRequest/...).
+	if (field_name == "created" || field_name == "authored" || field_name == "authoredOn" ||
+	    field_name == "date")
 		return "dateTime";
+	// instant fields
+	// FP-15 EXPLORER QA-002/QA-003 (2026-08-18): AuditEvent/Provenance.recorded
+	// and Meta.lastUpdated are R4 `instant` (sibling of dateTime), so
+	// `recorded is FHIR.instant` / `meta.lastUpdated is FHIR.instant` are true
+	// and `lastUpdated is dateTime` is false.
+	if (field_name == "issued" || field_name == "recorded" || field_name == "lastUpdated")
+		return "instant";
 	// date fields
 	if (field_name == "birthDate")
 		return "date";
 	return nullptr; // unknown
+}
+
+// Structural complex-type inference for JSON objects reached through
+// unmodelled fields (no choice-type resolution, no field metadata).
+// Mirrors the Python fallback's value-based inference in
+// fhir4ds/fhirpath/engine/nodes.py TypeInfo.create_by_value_in_namespace
+// so `is`/`as`/`ofType`/`type()` agree across engines
+// (FHIRPath §5.2.4, §6.3.1, §6.3.3; FP-04 SKEPTIC QA-001, 2026-08-17).
+static const char* structuralFHIRComplexType(yyjson_val *obj, const std::string &field_name) {
+	bool has_coding = yyjson_obj_get(obj, "coding") != nullptr;
+	bool has_system = yyjson_obj_get(obj, "system") != nullptr;
+	bool has_code = yyjson_obj_get(obj, "code") != nullptr;
+	bool has_value = yyjson_obj_get(obj, "value") != nullptr;
+	bool has_unit = yyjson_obj_get(obj, "unit") != nullptr;
+	bool has_low = yyjson_obj_get(obj, "low") != nullptr;
+	bool has_high = yyjson_obj_get(obj, "high") != nullptr;
+	bool has_start = yyjson_obj_get(obj, "start") != nullptr;
+	bool has_end = yyjson_obj_get(obj, "end") != nullptr;
+	if (has_coding) return "CodeableConcept";
+	if (has_system && has_code && !has_value) return "Coding";
+	if (has_value && (has_unit || has_code)) return "Quantity";
+	if (yyjson_obj_get(obj, "reference")) return "Reference";
+	if (yyjson_obj_get(obj, "contentType")) return "Attachment";
+	if (has_low || has_high) return "Range";
+	if (has_start || has_end) return "Period";
+	// Known FHIR backbone-element fields keep BackboneElement, matching the
+	// Python fallback's path metadata (models/r4/fhir_path_to_type.json
+	// full-path entries such as Patient.contact -> Patient.contact). The
+	// previous blanket default for ANY field name diverged from the fallback.
+	// FP-12 EXPLORER QA-002 (2026-08-17): extension-array elements are
+	// FHIR.Extension regardless of their internal value fields, matching the
+	// Python fallback (navigation special-cases childPath "Extension").
+	if (field_name == "extension" || field_name == "modifierExtension") return "Extension";
+	if (field_name == "communication" || field_name == "component" || field_name == "compose" ||
+	    field_name == "contact" || field_name == "expansion" || field_name == "item" ||
+	    field_name == "link") {
+		return "BackboneElement";
+	}
+	return nullptr;
 }
 
 FPCollection Evaluator::evaluate(const ASTNode &ast, yyjson_doc *doc, yyjson_val *root) {
@@ -2838,7 +3775,8 @@ static std::string infer_fhir_type(const std::string &field_name) {
 	// Common FHIR type suffixes for choice types [x]. 
 	// This ensures direct access like valueQuantity sets fhir_type metadata.
 	static const char* suffixes[] = {
-		"Boolean", "Integer", "Decimal", "String", "Date", "DateTime", "Time", "Quantity",
+		"Boolean", "Integer", "Decimal", "String", "Date", "DateTime", "Time", "Instant",
+		"Quantity",
 		"Attachment", "Identifier", "CodeableConcept", "Coding", "Reference", "Period",
 		"Range", "Ratio", "SampledData", "Signature", "HumanName", "Address", "ContactPoint", "Timing",
 		"Uri", "Url", "Canonical", "Base64Binary", "Code", "Id", "Oid", "UnsignedInt", "PositiveInt",
@@ -3581,9 +4519,16 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 						} else if (val.field_name == "code") {
 							ns = "FHIR";
 							nm = "CodeableConcept";
-						} else {
+						} else if (val.field_name == "extension" || val.field_name == "modifierExtension") {
+							// FP-12 EXPLORER QA-002 (2026-08-17)
 							ns = "FHIR";
-							nm = "BackboneElement";
+							nm = "Extension";
+						} else {
+							const char *structural = structuralFHIRComplexType(val.json_val, val.field_name);
+							ns = "FHIR";
+							// Match the Python fallback's value-based inference:
+							// unknown objects report FHIR.object, not BackboneElement.
+							nm = structural ? structural : "object";
 						}
 					}
 					break;
@@ -6143,54 +7088,746 @@ static bool tryIntegerArithmeticText(const FPValue &lv, const FPValue &rv,
 	return true;
 }
 
+// FP-01 EXPLORER QA-001/QA-002 (2026-08-16): Exact Decimal string
+// arithmetic mirroring the Python fallback's `decimal` module semantics
+// (default context: 28 significant digits, ROUND_HALF_EVEN).
+//
+// The binary64 paths re-render IEEE 754 doubles at a fixed decimal scale,
+// so decimals with more than 16 significant digits were silently corrupted
+// by identity operations (`0.6666666666666666 * 1` -> `0.66666666666666663`,
+// `0.1 + 1e-28` -> binary64 noise, subtraction catastrophic cancellation to
+// `0.0`), and division rendered the double quotient so `2.0 / 3 =
+// 0.6666666666666666` evaluated TRUE natively but FALSE in the Python
+// fallback. Spec: §4.1.4 "implementations should use fixed-precision
+// decimal formats to ensure that decimal values are accurately
+// represented"; §6.6.2 "/" — "The result of a division is always Decimal,
+// even if the inputs are both Integer". The Python core engine is the R4
+// conformance engine, so its Decimal semantics are canonical; these
+// helpers reproduce them for the native path.
+struct FpDecimalDigits {
+	bool neg = false;
+	std::string digits;  // decimal digits, leading zeros stripped; "0" for zero
+	int exp = 0;         // value = (neg ? -1 : 1) * int(digits) * 10^exp
+};
+
+// Parse an FPValue into exact decimal digits. Only Integer values, JSON
+// integers, and Decimals carrying a plain (non-scientific) source_text are
+// eligible; anything else (JSON reals, text-less Decimals) returns false so
+// callers defer to the existing binary64 path.
+static bool parseFpDecimalDigits(const FPValue &v, FpDecimalDigits &out) {
+	out.neg = false;
+	out.digits = "0";
+	out.exp = 0;
+	std::string text;
+	if (v.type == FPValue::Type::Integer) {
+		text = std::to_string(v.int_val);
+	} else if (v.type == FPValue::Type::JsonVal && v.json_val && yyjson_is_int(v.json_val)) {
+		text = jsonNumberText(v.json_val);
+	} else if (!v.source_text.empty()) {
+		text = v.source_text;
+	} else {
+		return false;
+	}
+	if (text.find('e') != std::string::npos || text.find('E') != std::string::npos) return false;
+	size_t start = 0;
+	if (!text.empty() && (text[0] == '-' || text[0] == '+')) {
+		out.neg = text[0] == '-';
+		start = 1;
+	}
+	std::string digits;
+	int frac = 0;
+	bool seen_dot = false;
+	for (size_t i = start; i < text.size(); ++i) {
+		char ch = text[i];
+		if (ch == '.') {
+			if (seen_dot) return false;
+			seen_dot = true;
+		} else if (std::isdigit(static_cast<unsigned char>(ch))) {
+			digits += ch;
+			if (seen_dot) ++frac;
+		} else {
+			return false;
+		}
+	}
+	if (digits.empty()) return false;
+	out.digits = stripLeadingIntegerZeros(digits);
+	out.exp = -frac;
+	return true;
+}
+
+// Round to at most 28 significant digits, ROUND_HALF_EVEN (Python decimal
+// default context). Carries adjust the exponent.
+static void roundFpDecimalTo28(FpDecimalDigits &d) {
+	if (d.digits == "0") return;
+	size_t n = d.digits.size();
+	if (n <= 28) return;
+	size_t cut = n - 28;
+	std::string kept = d.digits.substr(0, 28);
+	char round_digit = d.digits[28];
+	bool nonzero_after = false;
+	for (size_t i = 29; i < n; ++i) {
+		if (d.digits[i] != '0') {
+			nonzero_after = true;
+			break;
+		}
+	}
+	bool round_up;
+	if (round_digit > '5') {
+		round_up = true;
+	} else if (round_digit < '5') {
+		round_up = false;
+	} else {
+		round_up = nonzero_after || ((kept[27] - '0') % 2 == 1);
+	}
+	if (round_up) {
+		int carry = 1;
+		for (int i = 27; i >= 0 && carry; --i) {
+			int cur = kept[static_cast<size_t>(i)] - '0' + carry;
+			kept[static_cast<size_t>(i)] = static_cast<char>('0' + (cur % 10));
+			carry = cur / 10;
+		}
+		if (carry) {
+			// 99..9 -> 100..0: keep 28 significant digits and bump the exponent.
+			kept.insert(kept.begin(), '1');
+			kept = kept.substr(0, 28);
+			d.digits = kept;
+			d.exp += static_cast<int>(cut) + 1;
+			return;
+		}
+	}
+	d.digits = kept;
+	d.exp += static_cast<int>(cut);
+}
+
+// a ± b. Mirrors Python decimal add/sub: operands align at min(exponents)
+// (the ideal exponent for exact results). Zero-sign rules per IBM decimal
+// arithmetic: same-sign operands keep the sign even for zero; opposite-sign
+// cancellation yields POSITIVE zero unless both operands were zero, in
+// which case the LEFT operand's sign is kept.
+static FpDecimalDigits fpDecAddSub(FpDecimalDigits a, FpDecimalDigits b, bool subtract) {
+	if (subtract) b.neg = !b.neg;
+	int e = std::min(a.exp, b.exp);
+	if (a.exp > e) {
+		a.digits.append(static_cast<size_t>(a.exp - e), '0');
+		a.exp = e;
+	}
+	if (b.exp > e) {
+		b.digits.append(static_cast<size_t>(b.exp - e), '0');
+		b.exp = e;
+	}
+	FpDecimalDigits out;
+	out.exp = e;
+	if (a.neg == b.neg) {
+		out.digits = addIntegerMagnitudes(a.digits, b.digits);
+		// Keep the sign even for zero results: Python gives
+		// Decimal('-0.0') + Decimal('-0.0') == Decimal('-0.0').
+		out.neg = a.neg;
+	} else {
+		bool swapped_neg = false;
+		std::string magnitude;
+		if (!subtractIntegerMagnitudes(a.digits, b.digits, magnitude, swapped_neg)) {
+			out.digits = "0";
+			out.neg = false;
+			return out;
+		}
+		out.digits = magnitude;
+		out.neg = (a.neg && !swapped_neg) || (b.neg && swapped_neg);
+		if (magnitude == "0") {
+			// Opposite-sign cancellation: both-zero operands keep the sign
+			// of the LEFT operand (Decimal('-0.0') + Decimal('0.0') ->
+			// -0.0), while nonzero operands cancelling to zero give a
+			// POSITIVE zero (Decimal('-1') + Decimal('1.0') -> 0.0).
+			out.neg = (a.digits == "0" && b.digits == "0") ? a.neg : false;
+		}
+	}
+	roundFpDecimalTo28(out);
+	return out;
+}
+
+// a * b. Python decimal multiplication keeps the XOR sign even for zero
+// results (Decimal('0.0') * -1 -> -0.0) and the ideal exponent ea + eb.
+static FpDecimalDigits fpDecMul(const FpDecimalDigits &a, const FpDecimalDigits &b) {
+	FpDecimalDigits out;
+	out.digits = multiplyIntegerMagnitudes(a.digits, b.digits);
+	out.exp = a.exp + b.exp;
+	out.neg = (a.neg != b.neg);
+	roundFpDecimalTo28(out);
+	return out;
+}
+
+// a / b (caller guarantees b is non-zero). Long division streams quotient
+// digits until the remainder reaches zero (exact) or 28 significant digits
+// are available (then ROUND_HALF_EVEN). The exponent falls out naturally:
+// value = (a.digits / b.digits) * 10^(a.exp - b.exp - fractional_digits).
+// Verified against Python for exact quotients ('2.0 / 2' -> 1.0,
+// '10 / 0.1' -> 100.0, '1 / 4' -> 0.25), padded fractions ('1 / 8'),
+// leading-fraction zeros ('1 / 1000000' -> 0.000001), and inexact 28-digit
+// quotients ('2.0 / 3', '7.0 / 6.0', '12345678901234567890.0 / 7.0').
+static FpDecimalDigits fpDecDiv(const FpDecimalDigits &a, const FpDecimalDigits &b) {
+	FpDecimalDigits out;
+	out.neg = (a.neg != b.neg);  // sign preserved even for zero quotients
+	std::string divisor = stripLeadingIntegerZeros(b.digits);
+	if (stripLeadingIntegerZeros(a.digits) == "0") {
+		out.digits = "0";
+		out.exp = a.exp - b.exp;
+		return out;
+	}
+	// Integer part: schoolbook long division over a.digits. Bring down one
+	// digit at a time (rem = rem*10 + digit), then peel off the divisor.
+	std::string rem = "0";
+	std::string sig;
+	for (char c : a.digits) {
+		rem = (rem == "0") ? std::string(1, c) : (rem + c);
+		rem = stripLeadingIntegerZeros(rem);
+		int qd = 0;
+		while (true) {
+			std::string diff;
+			bool neg_flag = false;
+			if (!subtractIntegerMagnitudes(rem, divisor, diff, neg_flag)) break;
+			if (neg_flag) break;
+			rem = diff;
+			++qd;
+		}
+		sig += static_cast<char>('0' + qd);
+	}
+	bool exact = (rem == "0");
+	int frac_len = 0;
+	// Fractional digit stream until exact or 29 significant digits. The 29th
+	// digit is the rounding guard: roundFpDecimalTo28 needs it to round
+	// half-even (e.g. `22 / 7` -> 3.142857142857142857142857143, the final
+	// 3 carried from the dropped 8).
+	while (!exact && stripLeadingIntegerZeros(sig).size() < 29 && frac_len < 128) {
+		rem = stripLeadingIntegerZeros(rem + '0');
+		int qd = 0;
+		while (true) {
+			std::string diff;
+			bool neg_flag = false;
+			if (!subtractIntegerMagnitudes(rem, divisor, diff, neg_flag)) break;
+			if (neg_flag) break;
+			rem = diff;
+			++qd;
+		}
+		sig += static_cast<char>('0' + qd);
+		++frac_len;
+		rem = stripLeadingIntegerZeros(rem);
+		if (rem == "0") exact = true;
+	}
+	// Tie-break continuation: when the 29th significant digit (the rounding
+	// guard) is exactly '5' and the quotient is not exact, ROUND_HALF_EVEN
+	// needs to know whether any nonzero digit follows. A non-exact quotient
+	// always produces one within ~log10(divisor) digits (an all-zero tail
+	// would force the remainder to zero, i.e. exactness), so this loop
+	// terminates quickly; the 512 cap is pure paranoia.
+	if (!exact) {
+		std::string s29 = stripLeadingIntegerZeros(sig);
+		if (s29.size() >= 29 && s29[28] == '5') {
+			while (frac_len < 512) {
+				rem = stripLeadingIntegerZeros(rem + '0');
+				int qd = 0;
+				while (true) {
+					std::string diff;
+					bool neg_flag = false;
+					if (!subtractIntegerMagnitudes(rem, divisor, diff, neg_flag)) break;
+					if (neg_flag) break;
+					rem = diff;
+					++qd;
+				}
+				sig += static_cast<char>('0' + qd);
+				++frac_len;
+				rem = stripLeadingIntegerZeros(rem);
+				if (qd != 0) break;          // nonzero after the guard: round up
+				if (rem == "0") {
+					exact = true;  // genuine tie at the guard digit
+					break;
+				}
+			}
+		}
+	}
+	out.digits = stripLeadingIntegerZeros(sig);
+	out.exp = a.exp - b.exp - frac_len;
+	// Python's `decimal` context applies its 28-significant-digit precision
+	// to division results unconditionally — even quotients that terminate
+	// exactly (e.g. `9999999999999999999999999999.99999999 / 1`) are capped
+	// at 28 significant digits with ROUND_HALF_EVEN.
+	roundFpDecimalTo28(out);
+	return out;
+}
+
+// Plain-notation rendering mirroring the Python fallback's
+// `format(d, "f")` + `".0"` when no decimal point is present (§5.5.8
+// Decimal toString format `(-)?#0.0#` forbids scientific notation).
+static std::string fpDecToPlainText(const FpDecimalDigits &d) {
+	if (d.digits == "0") {
+		// Python `format(Decimal("0E-7"), "f")` -> "0.0000000": zero keeps
+		// its ideal-exponent scale (`0 * 0.0000001` -> `0.0000000`).
+		if (d.exp >= 0) return d.neg ? "-0.0" : "0.0";
+		std::string text = "0." + std::string(static_cast<size_t>(-d.exp) - 1, '0') + "0";
+		return (d.neg ? "-" : "") + text;
+	}
+	const std::string &digits = d.digits;
+	std::string text;
+	if (d.exp >= 0) {
+		text = digits + std::string(static_cast<size_t>(d.exp), '0') + ".0";
+	} else {
+		size_t frac = static_cast<size_t>(-d.exp);
+		if (digits.size() > frac) {
+			text = digits.substr(0, digits.size() - frac) + "." + digits.substr(digits.size() - frac);
+		} else {
+			text = "0." + std::string(frac - digits.size(), '0') + digits;
+		}
+	}
+	return (d.neg ? "-" : "") + text;
+}
+
+// Exact Decimal arithmetic for +, -, *, / over operands that carry exact
+// decimal digits. Returns the canonical plain source text; false defers to
+// the binary64 path (division-by-zero is the caller's responsibility).
+static bool tryDecimalArithmeticText(const FPValue &lv, const FPValue &rv,
+                                     const std::string &op, std::string &out) {
+	if (op != "+" && op != "-" && op != "*" && op != "/") return false;
+	FpDecimalDigits a, b;
+	if (!parseFpDecimalDigits(lv, a)) return false;
+	if (!parseFpDecimalDigits(rv, b)) return false;
+	if (op == "/" && b.digits == "0") return false;
+	FpDecimalDigits r;
+	if (op == "+") {
+		r = fpDecAddSub(a, b, false);
+	} else if (op == "-") {
+		r = fpDecAddSub(a, b, true);
+	} else if (op == "*") {
+		r = fpDecMul(a, b);
+	} else {
+		r = fpDecDiv(a, b);
+		// FP-18 HISTORIAN QA-003 + FP-01 EXPLORER QA-002: the fallback's
+		// `div` quantizes integral quotients to exactly one decimal place
+		// (§5.5.8 `(-)?#0.0#`): `2 / 0.6666666666666666666666666667`
+		// displays '3.0', not '3.000000000000000000000000000'. The quantize
+		// requires the coefficient to fit the 28-digit context; beyond that
+		// (guarded InvalidOperation in Python) the value passes through and
+		// the renderer appends ".0".
+		bool integral = (r.digits == "0") || r.exp >= 0;
+		if (!integral) {
+			size_t frac = static_cast<size_t>(-r.exp);
+			if (frac <= r.digits.size()) {
+				integral = true;
+				for (size_t i = r.digits.size() - frac; i < r.digits.size(); ++i) {
+					if (r.digits[i] != '0') {
+						integral = false;
+						break;
+					}
+				}
+			}
+		}
+		if (integral) {
+			std::string magnitude = r.digits;
+			if (r.exp < 0 && static_cast<size_t>(-r.exp) < magnitude.size()) {
+				magnitude = magnitude.substr(0, magnitude.size() - static_cast<size_t>(-r.exp));
+			} else if (r.exp < 0) {
+				magnitude = "0";
+			}
+			if (r.exp > 0) {
+				magnitude += std::string(static_cast<size_t>(r.exp), '0');
+			}
+			magnitude = stripLeadingIntegerZeros(magnitude);
+			if (magnitude.size() + 1 <= 28) {
+				r.digits = stripLeadingIntegerZeros(magnitude + "0");
+				r.exp = -1;
+			}
+		}
+	}
+	out = fpDecToPlainText(r);
+	return true;
+}
+
 
 // integer exponents on integer base values. Returns the Decimal-shaped
 // source text (e.g. "18446744073709551616.0"). Returns false if exact
 // computation is not applicable (negative base, fractional base, exponent
 // out of integer range).
-static bool powerIntegerExactText(const FPValue &baseVal, int64_t exp_int, std::string &out) {
-	if (exp_int < 0) return false;
-	// Extract base magnitude text. Reject fractional/negative inputs because
-	// the spec mandates Decimal-shaped output only for integer results; mixed
-	// type still routes through std::pow via the fallback path.
+// FP-11 SKEPTIC QA-002 (2026-08-17): Round a plain (no-exponent) decimal
+// text to at most `sig` significant digits using ROUND_HALF_EVEN, mirroring
+// the Python fallback's 28-digit Decimal context so Decimal-base power()
+// results rendered by both engines agree digit-for-digit. Same rounding
+// core as exactDecimalRatioText above.
+static std::string roundDecimalTextHalfEvenSig(const std::string &text, size_t sig = 28) {
+	if (text.empty()) return text;
+	bool neg = text[0] == '-';
+	std::string body = neg ? text.substr(1) : text;
+	size_t dot = body.find('.');
+	std::string ip = dot == std::string::npos ? body : body.substr(0, dot);
+	std::string fp = dot == std::string::npos ? "" : body.substr(dot + 1);
+	std::string all = ip + fp;
+	size_t first_sig = all.find_first_not_of('0');
+	if (first_sig == std::string::npos || all.size() - first_sig <= sig) {
+		return text;
+	}
+	size_t ip_len = ip.size();
+	size_t cut = first_sig + sig;
+	char next = all[cut];
+	bool round_up;
+	if (next > '5') {
+		round_up = true;
+	} else if (next < '5') {
+		round_up = false;
+	} else {
+		bool rest_nonzero = false;
+		for (size_t i = cut + 1; i < all.size(); ++i) {
+			if (all[i] != '0') {
+				rest_nonzero = true;
+				break;
+			}
+		}
+		round_up = rest_nonzero || ((all[cut - 1] - '0') % 2 == 1);
+	}
+	std::string rounded = all.substr(0, cut);
+	size_t new_ip_len = ip_len;
+	if (round_up) {
+		int i = static_cast<int>(cut) - 1;
+		for (; i >= 0; --i) {
+			if (rounded[static_cast<size_t>(i)] == '9') {
+				rounded[static_cast<size_t>(i)] = '0';
+			} else {
+				rounded[static_cast<size_t>(i)] = static_cast<char>(rounded[static_cast<size_t>(i)] + 1);
+				break;
+			}
+		}
+		if (i < 0) {
+			rounded = "1" + rounded;
+			new_ip_len += 1;
+		}
+	}
+	// Zero-fill the dropped digit positions so the magnitude is preserved,
+	// matching the Python fallback's Decimal.normalize() under a 28-digit
+	// context (e.g. (2).power(1024) keeps 308 integer digits with the tail
+	// beyond 28 significant digits zeroed).
+	if (rounded.size() < all.size()) {
+		rounded += std::string(all.size() - rounded.size(), '0');
+	}
+	std::string out;
+	if (new_ip_len >= rounded.size()) {
+		out = rounded;
+	} else {
+		out = rounded.substr(0, new_ip_len) + "." + rounded.substr(new_ip_len);
+	}
+	return (neg ? "-" : "") + out;
+}
+
+// Long division of two unsigned integer digit-string magnitudes, producing
+// a plain decimal text with up to max_frac fractional digits. `exact` tells
+// the caller whether the division terminated (remainder reached zero).
+static bool divideIntegerMagnitudeText(const std::string &num, const std::string &den,
+                                       size_t max_frac, std::string &out, bool &exact) {
+	exact = false;
+	std::string d = stripLeadingIntegerZeros(den);
+	std::string n = stripLeadingIntegerZeros(num);
+	if (d == "0" || d.size() > 10000) return false;
+	if (n == "0") {
+		out = "0";
+		exact = true;
+		return true;
+	}
+	// Schoolbook long division: consume numerator digits one at a time.
+	std::string ip;
+	std::string rem = "0";
+	size_t idx = 0;
+	auto bring_down = [&](char digit, std::string &cur) {
+		cur = stripLeadingIntegerZeros(cur + digit);
+		if (cur.empty()) cur = "0";
+	};
+	auto compare_magnitudes = [](const std::string &a, const std::string &b) -> int {
+		std::string x = stripLeadingIntegerZeros(a);
+		std::string y = stripLeadingIntegerZeros(b);
+		if (x.size() != y.size()) return x.size() < y.size() ? -1 : 1;
+		if (x == y) return 0;
+		return x < y ? -1 : 1;
+	};
+	while (idx < n.size()) {
+		bring_down(n[idx], rem);
+		++idx;
+		int q = 0;
+		while (compare_magnitudes(rem, d) >= 0) {
+			// subtract d from rem
+			std::string a = rem;
+			std::string b = d;
+			while (b.size() < a.size()) b.insert(b.begin(), '0');
+			int borrow = 0;
+			for (int i = static_cast<int>(a.size()) - 1; i >= 0; --i) {
+				int cur = (a[static_cast<size_t>(i)] - '0') - (b[static_cast<size_t>(i)] - '0') - borrow;
+				if (cur < 0) {
+					cur += 10;
+					borrow = 1;
+				} else {
+					borrow = 0;
+				}
+				a[static_cast<size_t>(i)] = static_cast<char>('0' + cur);
+			}
+			rem = stripLeadingIntegerZeros(a);
+			if (rem.empty()) rem = "0";
+			++q;
+		}
+		ip.push_back(static_cast<char>('0' + q));
+	}
+	ip = stripLeadingIntegerZeros(ip);
+	if (ip.empty()) ip = "0";
+	std::string frac;
+	while (rem != "0") {
+		if (frac.size() >= max_frac) {
+			out = ip + "." + frac;
+			return true;
+		}
+		bring_down('0', rem);
+		int q = 0;
+		while (compare_magnitudes(rem, d) >= 0) {
+			std::string a = rem;
+			std::string b = d;
+			while (b.size() < a.size()) b.insert(b.begin(), '0');
+			int borrow = 0;
+			for (int i = static_cast<int>(a.size()) - 1; i >= 0; --i) {
+				int cur = (a[static_cast<size_t>(i)] - '0') - (b[static_cast<size_t>(i)] - '0') - borrow;
+				if (cur < 0) {
+					cur += 10;
+					borrow = 1;
+				} else {
+					borrow = 0;
+				}
+				a[static_cast<size_t>(i)] = static_cast<char>('0' + cur);
+			}
+			rem = stripLeadingIntegerZeros(a);
+			if (rem.empty()) rem = "0";
+			++q;
+		}
+		frac.push_back(static_cast<char>('0' + q));
+	}
+	exact = true;
+	out = ip + (frac.empty() ? "" : "." + frac);
+	return true;
+}
+
+// FP-11 EXPLORER QA-002 (2026-08-17): 28-significant-digit Decimal power for
+// plain-decimal bases with integral exponents whose exact magnitude text
+// would exceed the 10000-digit anti-DoS cap, whose |exponent| exceeds the
+// exact-loop bound, or whose scale·|exponent| exceeds the exact
+// long-division bound. The Python fallback computes Decimal pow under a
+// 28-digit correctly-rounded context with no magnitude cap, so degrading to
+// std::pow here diverged in both value and rendering
+// (1.0000001.power(1000000) -> std::pow 1.1051709126143208, wrong at the
+// 11th significant digit, vs Decimal 1.105170912549793416638382709;
+// 0.000000000000000000000000001.power(2) -> binary64 underflow rendering
+// '0.0' vs the exact '1e-54' text). Algorithm: binary exponentiation over a
+// 64-digit guarded mantissa plus a dropped-power-of-ten counter (~1e-58
+// relative accuracy, far beyond the 28th significant digit), then
+// ROUND_HALF_EVEN rounding to 28 significant digits via
+// roundDecimalTextHalfEvenSig, mirroring the Python Decimal context.
+// Validated against CPython Decimal for positive and negative exponents
+// (1.0000001^1000000, 0.5^100000, 0.5^-2000, 0.751^-99999).
+static bool powerDecimalGuarded28Text(const std::string &digits, int scale,
+                                      int64_t exp_int, bool negative,
+                                      std::string &out) {
+	if (exp_int == 0) return false;
+	int64_t e = exp_int < 0 ? -exp_int : exp_int;
+	const size_t K = 64;
+	std::string r = "1", b = digits;
+	long long r_drop = 0, b_drop = 0;
+	auto mul_guarded = [&K](const std::string &a, long long a_drop,
+	                        const std::string &b, long long b_drop,
+	                        std::string &c, long long &c_drop) {
+		std::string p = multiplyIntegerMagnitudes(a, b);
+		c_drop = a_drop + b_drop;
+		if (p.size() > K) {
+			size_t shift = p.size() - K;
+			p.resize(K);
+			c_drop += static_cast<long long>(shift);
+		}
+		c = stripLeadingIntegerZeros(p);
+	};
+	while (e > 0) {
+		if (e & 1) mul_guarded(r, r_drop, b, b_drop, r, r_drop);
+		e >>= 1;
+		if (e > 0) mul_guarded(b, b_drop, b, b_drop, b, b_drop);
+	}
+	if (r == "0") {
+		out = "0";
+		return true;
+	}
+	auto place_point = [](const std::string &d, long long point, std::string &text) -> bool {
+		if (point <= 0) {
+			if (-point > 1000000) return false;
+			text = "0." + std::string(static_cast<size_t>(-point), '0') + d;
+		} else if (point >= static_cast<long long>(d.size())) {
+			if (point > 1000000) return false;
+			text = d + std::string(static_cast<size_t>(point - d.size()), '0');
+		} else {
+			text = d.substr(0, static_cast<size_t>(point)) + "." +
+			       d.substr(static_cast<size_t>(point));
+		}
+		return true;
+	};
+	std::string text;
+	if (exp_int > 0) {
+		// value = digits^e × 10^-(scale·e) = r × 10^(r_drop - scale·e)
+		long long point = static_cast<long long>(r.size()) + r_drop -
+		                  static_cast<long long>(scale) * exp_int;
+		if (!place_point(r, point, text)) return false;
+	} else {
+		// base^-e = 10^(scale·e - r_drop) / r = (10^k / r) × 10^(P - k)
+		long long P = static_cast<long long>(scale) * e - r_drop;
+		size_t k = r.size() + 44;
+		std::string numerator = "1" + std::string(k, '0');
+		std::string qtext;
+		bool exact_div = false;
+		if (!divideIntegerMagnitudeText(numerator, r, 0, qtext, exact_div)) return false;
+		std::string qd;
+		for (char ch : qtext) {
+			if (std::isdigit(static_cast<unsigned char>(ch))) qd.push_back(ch);
+		}
+		qd = stripLeadingIntegerZeros(qd);
+		if (qd == "0" || qd.empty()) {
+			out = "0";
+			return true;
+		}
+		long long point = static_cast<long long>(qd.size()) + P - static_cast<long long>(k);
+		if (!place_point(qd, point, text)) return false;
+	}
+	text = roundDecimalTextHalfEvenSig(text, 28);
+	bool result_negative = negative && ((exp_int % 2) != 0);
+	out = (result_negative ? "-" : "") + text;
+	return true;
+}
+
+// FP-11 SKEPTIC QA-002 (2026-08-17): Exact Decimal power for plain-decimal
+// bases with integral exponents, superseding the integer-only
+// powerIntegerExactText (2026-06-29). std::pow leaked binary64 noise for
+// Decimal bases (1.1.power(2) -> 1.2100000000000002) and for negative
+// integral exponents (10.power(-1) -> 0.10000000000000001), diverging from
+// the Python fallback's Decimal.pow. Computes magnitude^|exp| exactly via
+// repeated string multiplication, places the decimal point, and rounds to
+// 28 significant digits ROUND_HALF_EVEN (mirroring the Python Decimal
+// context). exp_int == 0/1 are handled by the caller. Returns false when
+// guards fail (scientific base text, oversized digits, huge |exponent|);
+// the caller falls back to the std::pow path.
+static bool powerDecimalExactText(const FPValue &baseVal, int64_t exp_int, std::string &out) {
+	if (exp_int == 0) {
+		out = "1";
+		return true;
+	}
+	// FP-11 EXPLORER QA-002 (2026-08-17): raised from ±1024. Larger integral
+	// exponents now route through powerDecimalGuarded28Text (log-time
+	// binary exponentiation) when the exact loop would exceed the
+	// 10000-digit cap, so Decimal bases no longer silently degrade to
+	// std::pow. Beyond ±1e15 keep the binary64 degrade (absurd exponents;
+	// anti-DoS bound).
+	if (exp_int < -1000000000000000LL || exp_int > 1000000000000000LL) return false;
 	std::string base_text;
 	if (!baseVal.source_text.empty()) {
 		base_text = baseVal.source_text;
 	} else if (baseVal.type == FPValue::Type::Integer) {
 		base_text = std::to_string(baseVal.int_val);
-	} else if (baseVal.type == FPValue::Type::JsonVal && baseVal.json_val && yyjson_is_int(baseVal.json_val)) {
+	} else if (baseVal.type == FPValue::Type::Decimal) {
+		base_text = formatDecimalNumber(baseVal.decimal_val, "");
+	} else if (baseVal.type == FPValue::Type::JsonVal && baseVal.json_val &&
+	           (yyjson_is_int(baseVal.json_val) || yyjson_is_real(baseVal.json_val))) {
 		base_text = jsonNumberText(baseVal.json_val);
 	} else {
 		return false;
 	}
-	// Strip sign and fractional part; only pure-integer bases are eligible.
+	if (base_text.find('e') != std::string::npos || base_text.find('E') != std::string::npos) {
+		return false;
+	}
 	bool negative = false;
 	if (!base_text.empty() && (base_text[0] == '-' || base_text[0] == '+')) {
 		negative = base_text[0] == '-';
 		base_text.erase(0, 1);
 	}
-	size_t dot = base_text.find('.');
-	if (dot != std::string::npos) {
-		// Fractional base — defer to std::pow path; result may still be
-		// exact for some Decimal bases but the simple integer multiplication
-		// loop below is not applicable.
-		return false;
+	std::string digits;
+	int scale = 0;
+	bool seen_dot = false;
+	for (char c : base_text) {
+		if (c == '.') {
+			if (seen_dot) return false;
+			seen_dot = true;
+		} else if (std::isdigit(static_cast<unsigned char>(c))) {
+			digits.push_back(c);
+			if (seen_dot) scale++;
+		} else {
+			return false;
+		}
 	}
-	for (char ch : base_text) {
-		if (!std::isdigit(static_cast<unsigned char>(ch))) return false;
+	// FP-11 EXPLORER QA-002 (2026-08-17): dropped the `scale > 20` guard.
+	// The Python fallback computes Decimal powers for any input scale, and
+	// bailing to std::pow for tiny bases diverged (1e-27.power(2) rendered
+	// '0.0' vs the exact 1e-54 text). Bounded below by the final-text
+	// length guard instead.
+	if (digits.empty() || digits.size() > 30) return false;
+	digits = stripLeadingIntegerZeros(digits);
+	if (digits == "0") {
+		out = "0";
+		return true;
 	}
-	std::string magnitude = stripLeadingIntegerZeros(base_text);
-	bool result_negative = negative && ((exp_int % 2) == 1);
-	// Repeated multiplication: result = magnitude^exp_int.
-	std::string acc = "1";
-	for (int64_t i = 0; i < exp_int; ++i) {
-		acc = multiplyIntegerMagnitudes(acc, magnitude);
-		// Cap the magnitude at a sane bound so a malicious 1-billion exponent
-		// cannot OOM the engine. 10000 digits is well beyond any FHIRPath
-		// Decimal precision requirement but well below memory pressure.
-		if (acc.size() > 10000) return false;
+	int64_t e = exp_int < 0 ? -exp_int : exp_int;
+	std::string magnitude = "1";
+	bool oversized = false;
+	// FP-11 EXPLORER QA-002: 1^e == 1 for any e — skip the loop so huge
+	// exponents on tiny bases (1e-27.power(1000000000)) cannot spin.
+	if (digits != "1") {
+		for (int64_t i = 0; i < e; ++i) {
+			magnitude = multiplyIntegerMagnitudes(magnitude, digits);
+			// Cap at 10000 digits so a malicious exponent cannot OOM the engine.
+			if (magnitude.size() > 10000) {
+				oversized = true;
+				break;
+			}
+		}
 	}
-	out = (result_negative && acc != "0" ? "-" : "") + acc + ".0";
+	if (oversized) {
+		// Integer bases with positive exponents keep their full exact digits
+		// (engine doctrine, e.g. (2).power(1024)); the 28-sig guarded path
+		// cannot reproduce that, so keep the documented binary64 degrade.
+		// Decimal bases round to 28 significant digits in the Python
+		// fallback anyway, so the guarded path is an exact parity match.
+		if (scale == 0 && exp_int > 0) return false;
+		return powerDecimalGuarded28Text(digits, scale, exp_int, negative, out);
+	}
+	bool result_negative = negative && ((e % 2) == 1);
+	long long total_scale = static_cast<long long>(scale) * e;
+	std::string text;
+	if (exp_int > 0) {
+		// FP-11 EXPLORER QA-002 (2026-08-17): bound the final fixed-point
+		// text at 1M chars (anti-DoS); the Python fallback's Decimal power
+		// would expand similarly, so practical inputs never hit this.
+		if (static_cast<long long>(magnitude.size()) + total_scale > 1000000LL) return false;
+		if (total_scale == 0) {
+			text = magnitude;
+		} else if (static_cast<size_t>(total_scale) >= magnitude.size()) {
+			text = "0." + std::string(static_cast<size_t>(total_scale) - magnitude.size(), '0') + magnitude;
+		} else {
+			text = magnitude.substr(0, magnitude.size() - static_cast<size_t>(total_scale)) + "." +
+			       magnitude.substr(magnitude.size() - static_cast<size_t>(total_scale));
+		}
+	} else {
+		// base^-e = 10^(scale*e) / magnitude^e
+		// FP-11 EXPLORER QA-002 (2026-08-17): raised from 100 to 10000;
+		// beyond that, the guarded 28-sig path replaces the binary64 degrade.
+		if (total_scale > 10000) {
+			return powerDecimalGuarded28Text(digits, scale, exp_int, negative, out);
+		}
+		std::string numerator = "1" + std::string(static_cast<size_t>(total_scale), '0');
+		bool exact = false;
+		// FP-11 EXPLORER QA-002 (2026-08-17): raised from 60 fractional
+		// digits. With the negative-exponent cap raised to 10000, results as
+		// small as ~1e-10000 must retain 28 significant digits; 60 digits
+		// truncated 2.0.power(-1023) to '0.0'.
+		if (!divideIntegerMagnitudeText(numerator, magnitude, 10100, text, exact)) {
+			return false;
+		}
+	}
+	// 28-sig rounding mirrors the Python Decimal context, but pure integer
+	// bases raised to positive integer exponents keep their full exact text
+	// (FP-11 EXPLORER 2026-06-29 doctrine: unbounded Integer powers preserve
+	// exact Decimal-shaped digits, e.g. (2).power(1024)).
+	if (!(scale == 0 && exp_int > 0)) {
+		text = roundDecimalTextHalfEvenSig(text, 28);
+	}
+	out = (result_negative ? "-" : "") + text;
 	return true;
 }
 
@@ -6217,57 +7854,94 @@ FPCollection Evaluator::fn_power(const FPCollection &input, const FPCollection &
 	}
 	int64_t exact_exp = 0;
 	if (extractStrictInteger(expVal, exact_exp)) {
+		// FP-11 SKEPTIC QA-001 (2026-08-17): §5.7 power — "If this function
+		// is used with Integers, the result is an Integer" (N1 2.0.0; STU3
+		// functions.json typeMapping Integer-Integer). A negative integer
+		// exponent on an Integer base cannot be represented as an Integer,
+		// so the result is empty (STU3 states this explicitly).
+		int64_t base_int_probe = 0;
+		bool base_integer_typed = extractStrictInteger(baseVal, base_int_probe);
+		if (base_integer_typed && exact_exp < 0) {
+			return {};
+		}
+		std::string exact_text;
 		if (exact_exp == 0) {
-			auto one = FPValue::FromDecimal(1.0);
-			one.source_text = "1.0";
-			return {one};
+			exact_text = "1";
+		} else if (exact_exp == 1) {
+			if (!decimalIdentityTextFromNumericValue(baseVal, exact_text)) {
+				exact_text.clear();
+			} else if (exact_text.size() >= 2 &&
+			           exact_text.compare(exact_text.size() - 2, 2, ".0") == 0) {
+				// Strip the identity ".0" suffix; it is re-added below only
+				// for Decimal-typed results.
+				exact_text.erase(exact_text.size() - 2);
+			}
+		} else {
+			powerDecimalExactText(baseVal, exact_exp, exact_text);
 		}
-		if (exact_exp == 1) {
-			std::string exact_text;
-			if (decimalIdentityTextFromNumericValue(baseVal, exact_text)) {
-				std::istringstream iss(exact_text);
-				double exact_value = 0.0;
-				iss >> exact_value;
-				auto out = FPValue::FromDecimal(exact_value);
-				out.source_text = exact_text;
+		if (!exact_text.empty()) {
+			// Preserve the exact text in source_text so toString returns
+			// the exact Decimal-shaped value, not the binary64 round-trip
+			// rendering. The decimal_val is the closest double for
+			// downstream numeric comparison; the source_text governs the
+			// §5.5.8 toString surface.
+			if (base_integer_typed) {
+				// Integer in, Integer out when the magnitude fits 64 bits.
+				// Beyond int64 the result degrades to an exact Decimal-
+				// shaped value (engine doctrine: unbounded Integer powers
+				// degrade to exact Decimal rather than empty, preserving
+				// 10.power(20) semantics).
+				int64_t int_result = 0;
+				if (integerTextToInt64(exact_text, int_result)) {
+					return {FPValue::FromInteger(int_result)};
+				}
+				auto out = FPValue::FromDecimal(std::strtod(exact_text.c_str(), nullptr));
+				out.source_text = exact_text + ".0";
 				return {out};
 			}
-		}
-		// FP-11 EXPLORER (2026-06-29): For non-negative integer exponents on
-		// integer base values, compute the exact Decimal-shaped result via
-		// string-based repeated multiplication. Per §5.7.7 power() returns
-		// Decimal; per §4.1.4 the result must use fixed-precision decimal
-		// notation (not scientific); per §5.5.8 Quantity/Decimal toString
-		// must use decimal digit notation. std::pow returning IEEE-754
-		// binary64 loses precision above 2^53 and returns +inf above ~1.8e308,
-		// which made (2).power(64) render as "1.84e+19" and (2).power(1024)
-		// render as empty, diverging from the Python fallback's Decimal.pow
-		// exact result. This branch preserves the exact text for the common
-		// integer^non-negative-integer case; fractional/Decimal bases still
-		// fall through to the std::pow path (QA-006 LOW-severity drift
-		// documented for that case).
-		if (exact_exp > 1) {
-			std::string exact_text;
-			if (powerIntegerExactText(baseVal, exact_exp, exact_text)) {
-				std::istringstream iss(exact_text);
-				double approx = 0.0;
-				iss >> approx;
-				// Preserve the exact text in source_text so toString returns
-				// the Decimal-shaped integer value, not the binary64 round-
-				// trip rendering. The decimal_val is the closest double for
-				// downstream numeric comparison; the source_text governs the
-				// §5.5.8 toString surface.
-				auto out = FPValue::FromDecimal(approx);
-				out.source_text = exact_text;
-				return {out};
+			// Decimal-typed base: normalize like the Python fallback's
+			// `format(result.normalize(), "f")` (+ ".0" for integral text).
+			size_t dot_pos = exact_text.find('.');
+			if (dot_pos != std::string::npos) {
+				while (exact_text.size() > dot_pos + 1 && exact_text.back() == '0') {
+					exact_text.pop_back();
+				}
+				if (exact_text.size() == dot_pos + 1) {
+					exact_text.pop_back(); // trailing "." -> integral
+				}
 			}
+			if (exact_text.find('.') == std::string::npos) {
+				exact_text += ".0";
+			}
+			// FP-11 EXPLORER QA-002 (2026-08-17): subnormal-scale results
+			// (|value| < 1e-300) render via the Python fallback's
+			// `str(float(item))` scientific form, not the exact Decimal
+			// expansion ((0.5).power(1074) -> '5e-324'; 2.0.power(-1023) ->
+			// '1.1125369292536007e-308'; values that underflow binary64
+			// entirely -> '0.0').
+			double dv = std::strtod(exact_text.c_str(), nullptr);
+			auto out = FPValue::FromDecimal(dv);
+			bool zero_magnitude = exact_text.find_first_not_of("0.-") == std::string::npos;
+			if (!zero_magnitude && std::isfinite(dv) && std::fabs(dv) < 1e-300) {
+				out.source_text = (dv == 0.0) ? std::string("0.0")
+				                              : shortestRoundTripText(dv);
+			} else {
+				out.source_text = exact_text;
+			}
+			return {out};
 		}
 	}
 	double result = std::pow(base, exp);
 	if (std::isnan(result) || std::isinf(result)) {
 		return {};
 	}
-	return {FPValue::FromDecimal(result)};
+	// FP-11 SKEPTIC QA-004 (2026-08-17): Non-integral exponents reach this
+	// transcendental path; render with the shortest-round-trip text (and
+	// fixed-notation, not scientific) like the sqrt()/ln()/exp() siblings
+	// and the Python fallback's `str(float)`.
+	auto out = FPValue::FromDecimal(result);
+	out.source_text = normalizeDecimalMathSourceText(out.decimal_val);
+	return {out};
 }
 
 FPCollection Evaluator::fn_sqrt(const FPCollection &input) {
@@ -6706,6 +8380,7 @@ static bool collectionIsBool(const FPCollection &col, bool &out) {
 static DateTimeParts parseDateTimeParts(const std::string &s) {
 	DateTimeParts p;
 	p.year = p.month = p.day = p.hour = p.minute = p.second = p.millisecond = 0;
+	p.frac_digits.clear();
 	p.tz_offset_minutes = INT_MIN;
 	p.precision = 0;
 	p.valid = false;
@@ -6862,6 +8537,7 @@ static DateTimeParts parseDateTimeParts(const std::string &s) {
 			ms_str += s[pos++];
 		}
 		if (ms_str.empty()) { p.valid = false; return p; }
+		p.frac_digits = ms_str;
 		while (ms_str.size() < 3) ms_str += '0';
 		p.millisecond = std::atoi(ms_str.substr(0, 3).c_str());
 		p.precision = 7;
@@ -7133,6 +8809,7 @@ static bool parseTemporalWithFormat(const std::string &value, const std::string 
 static DateTimeParts parseTimeParts(const std::string &s) {
 	DateTimeParts p;
 	p.year = p.month = p.day = p.hour = p.minute = p.second = p.millisecond = 0;
+	p.frac_digits.clear();
 	p.tz_offset_minutes = INT_MIN;
 	p.precision = 0;
 	p.valid = false;
@@ -7182,6 +8859,7 @@ static DateTimeParts parseTimeParts(const std::string &s) {
 			ms_str += s[pos++];
 		}
 		if (ms_str.empty()) { p.valid = false; return p; }
+		p.frac_digits = ms_str;
 		while (ms_str.size() < 3) ms_str += '0';
 		p.millisecond = std::atoi(ms_str.substr(0, 3).c_str());
 		p.precision = 7;
@@ -7268,18 +8946,74 @@ static int compareDateTimes(const std::string &a, const std::string &b,
 	int start_idx = a_is_time ? 3 : 0;
 	// Always compare through milliseconds if both have second-level precision
 	int cmp_to = same_precision_level ? max_prec : min_prec;
-	for (int i = start_idx; i < cmp_to; i++) {
+	// FP-14 HISTORIAN QA-001 (2026-08-18): §6.2 treats seconds and
+	// fractional seconds as a single precision compared "using a decimal,
+	// with decimal comparison semantics". Compare whole seconds via the
+	// field loop, then the fraction digits as decimals (right-padded to
+	// equal width) so ".1234" < ".1236" and ".1" == ".100". Comparing only
+	// the 3-digit truncated millisecond int lost sub-millisecond precision
+	// and diverged from the Python fallback engine.
+	int second_end = std::min(cmp_to, 6);
+	for (int i = start_idx; i < second_end; i++) {
 		if (fields_a[i] < fields_b[i]) return -1;
 		if (fields_a[i] > fields_b[i]) return 1;
 	}
-	// Equal at all compared fields
-	if (same_precision_level) return 0;
+	// Equal at all compared whole-second fields
+	if (same_precision_level) {
+		if (norm_min >= 6) {
+			// Both second-level precision: compare sub-second fractions
+			// with decimal (trailing-zero-insensitive) semantics.
+			const std::string fa = pa.frac_digits.empty() ? std::string("0") : pa.frac_digits;
+			const std::string fb = pb.frac_digits.empty() ? std::string("0") : pb.frac_digits;
+			size_t width = std::max(fa.size(), fb.size());
+			std::string ra = fa;
+			std::string rb = fb;
+			ra.resize(width, '0');
+			rb.resize(width, '0');
+			if (ra < rb) return -1;
+			if (ra > rb) return 1;
+		}
+		return 0;
+	}
 
 	// Different precision levels, equal at shared fields → incomparable
 	return INT_MIN;
 }
 
 // --- Binary operators ---
+
+// FP-03 SKEPTIC QA-001 (2026-08-16): §6.2 requires the evaluator to "throw
+// an error if the types differ" for comparison operands that are not of the
+// same type (or implicitly convertible). Returning an empty collection for
+// incompatible comparison types is masked at the UDF boundary (error and
+// empty both surface as NULL), but it silently changes results inside
+// iteration functions: all()/exists()/where()/select()/iif criteria convert
+// an empty criteria result to "false"/"no match" instead of propagating the
+// evaluation error, so e.g. `{1, 'a'}.all($this > 0)` returned false
+// natively while the Python fallback correctly errors to empty. The message
+// mirrors the Python core's InequalityExpression form, which
+// udf.py::_is_valid_empty_result_error and the native is_valid classifier
+// both treat as a valid expression with an execution type error.
+static std::string fhirpathTypeNameForCompareError(const FPValue &v) {
+	switch (effectiveType(v)) {
+	case FPValue::Type::Integer: return "Integer";
+	case FPValue::Type::Decimal: return "Decimal";
+	case FPValue::Type::String: return "String";
+	case FPValue::Type::Boolean: return "Boolean";
+	case FPValue::Type::Quantity: return "Quantity";
+	case FPValue::Type::Date: return "Date";
+	case FPValue::Type::DateTime: return "DateTime";
+	case FPValue::Type::Time: return "Time";
+	default: return "ComplexType";
+	}
+}
+
+static void throwIncompatibleComparison(const FPValue &lv, const FPValue &rv) {
+	throw FHIRPathSpecError("Type of \"" + fpValueToString(lv) + "\" (" +
+	                        fhirpathTypeNameForCompareError(lv) +
+	                        ") did not match type of \"" + fpValueToString(rv) + "\" (" +
+	                        fhirpathTypeNameForCompareError(rv) + "). InequalityExpression");
+}
 
 static std::string stripQuantityUnitQuotes(const std::string &unit);
 
@@ -7459,15 +9193,19 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 					splitCanonicalDecimalText(r_text, r_neg, r_int, r_frac);
 					int l_prec = (int)l_frac.size();
 					int r_prec = (int)r_frac.size();
-					int cmp_prec = (l_prec > 0 && r_prec > 0) ? std::min(l_prec, r_prec)
-					             : std::max(l_prec, r_prec);
-					if (cmp_prec > 0) {
-						// Round both to cmp_prec digits using half-up semantics
-						std::string l_rounded = roundDecimalSourceText(l_text, cmp_prec);
-						std::string r_rounded = roundDecimalSourceText(r_text, cmp_prec);
-						return compareDecimalText(l_rounded, r_rounded) == 0 ? 1 : 0;
-					}
-					return compareDecimalText(l_text, r_text) == 0 ? 1 : 0;
+					// FP-13 SKEPTIC (2026-08-17): the LEAST precise
+					// operand governs — an integral operand (precision 0
+					// after trailing-zero stripping) means both sides
+					// round to integers (`1.0 ~ 1.0001` -> true,
+					// `1 ~ 1.4` -> true). The previous max() fallback
+					// made the MORE precise operand win whenever one side
+					// was integral, diverging from §6.1.2 and the Python
+					// fallback.
+					int cmp_prec = std::min(l_prec, r_prec);
+					// Round both to cmp_prec digits using half-up semantics
+					std::string l_rounded = roundDecimalSourceText(l_text, cmp_prec);
+					std::string r_rounded = roundDecimalSourceText(r_text, cmp_prec);
+					return compareDecimalText(l_rounded, r_rounded) == 0 ? 1 : 0;
 				}
 				double l_num = getNumericValue(lv);
 				double r_num = getNumericValue(rv);
@@ -7520,6 +9258,9 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			if ((fpValueAsQuantity(lv, tmp) || fpValueAsQuantity(rv, tmp)) &&
 			    valueAsEqualityQuantity(lv, lq) && valueAsEqualityQuantity(rv, rq)) {
 				if (isMixedCalendarUcumYearMonthDuration(lq.quantity_unit, rq.quantity_unit)) {
+					// FP-01 HISTORIAN QA-001 (2026-08-16): stays
+					// indeterminate per the official R4 toQuantity
+					// fixtures; see quantityEqualState.
 					return -1;
 				}
 				// FP-13 HISTORIAN (2026-06-29): Offset-temperature cross-unit
@@ -7645,36 +9386,28 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 						splitCanonicalDecimalText(r_text_canon, r_neg, r_int, r_frac);
 						int l_prec = (int)l_frac.size();
 						int r_prec = (int)r_frac.size();
-						int cmp_prec = (l_prec > 0 && r_prec > 0) ? std::min(l_prec, r_prec)
-						             : std::max(l_prec, r_prec);
-						if (cmp_prec > 0) {
-							std::string l_rounded = roundDecimalSourceText(l_text_canon, cmp_prec);
-							std::string r_rounded = roundDecimalSourceText(r_text_canon, cmp_prec);
-							is_eq = (compareDecimalText(l_rounded, r_rounded) == 0);
-						} else {
-							is_eq = (compareDecimalText(l_text_canon, r_text_canon) == 0);
-						}
+						// FP-13 SKEPTIC (2026-08-17): the LEAST precise operand
+						// governs, including precision 0 (integral operand after
+						// trailing-zero strip): `1.0 ~ 1.0001` and `1 ~ 1.4` are
+						// TRUE per §6.1.2. The previous max() fallback let the
+						// more precise operand win whenever one side was integral.
+						int cmp_prec = std::min(l_prec, r_prec);
+						std::string l_rounded = roundDecimalSourceText(l_text_canon, cmp_prec);
+						std::string r_rounded = roundDecimalSourceText(r_text_canon, cmp_prec);
+						is_eq = (compareDecimalText(l_rounded, r_rounded) == 0);
 					} else {
 						is_eq = (compareDecimalText(l_text_canon, r_text_canon) == 0);
 					}
 				} else if (is_equiv) {
 					double l_num = getNumericValue(lv);
 					double r_num = getNumericValue(rv);
-					// Equivalence: compare at the precision of the least precise value
-					int l_prec = 0, r_prec = 0;
-					std::string ls = toString(lv), rs = toString(rv);
-					auto l_dot = ls.find('.');
-					auto r_dot = rs.find('.');
-					if (l_dot != std::string::npos) l_prec = (int)(ls.size() - l_dot - 1);
-					if (r_dot != std::string::npos) r_prec = (int)(rs.size() - r_dot - 1);
-					int cmp_prec = (l_prec > 0 && r_prec > 0) ? std::min(l_prec, r_prec)
-					             : std::max(l_prec, r_prec);
-					if (cmp_prec > 0) {
-						double scale = std::pow(10.0, cmp_prec);
-						is_eq = (std::round(l_num * scale) == std::round(r_num * scale));
-					} else {
-						is_eq = (l_num == r_num) || std::abs(l_num - r_num) < 1e-10;
-					}
+					// FP-13 SKEPTIC (2026-08-17): least-precision rounding
+					// including precision 0 (see source_text path above);
+					// decimalPlacesFromNumberText strips trailing zeros.
+					int cmp_prec = std::min(decimalPlacesFromNumberText(toString(lv)),
+					                    decimalPlacesFromNumberText(toString(rv)));
+					double scale = std::pow(10.0, cmp_prec);
+					is_eq = (std::round(l_num * scale) == std::round(r_num * scale));
 				} else {
 					double l_num = getNumericValue(lv);
 					double r_num = getNumericValue(rv);
@@ -7690,6 +9423,11 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				return false;
 			}
 			if (!is_equiv && isMixedCalendarUcumYearMonthDuration(lq.quantity_unit, rq.quantity_unit)) {
+				// FP-01 HISTORIAN QA-001 (2026-08-16): `=`/`!=` stay
+				// empty for mixed calendar-vs-UCUM year/month pairs per
+				// the official R4 toQuantity fixtures (see
+				// quantityEqualState); equivalence (~) keeps its §6.1.2
+				// true result via the branch below.
 				if (op == "=" || op == "!=") {
 					return true;
 				}
@@ -7716,6 +9454,12 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			    (fpValueAsQuantity(lv, tmp) || fpValueAsQuantity(rv, tmp)) &&
 			    valueAsEqualityQuantity(lv, lq) && valueAsEqualityQuantity(rv, rq);
 			if (has_quantity_pair) {
+				// FP-01 HISTORIAN QA-001 (2026-08-16): mixed
+				// calendar-vs-UCUM year/month quantities keep the empty
+				// `=`/`!=` result mandated by the official R4 toQuantity
+				// fixtures; other indeterminate states (offset
+				// temperatures, incomparable UCUM dimensions) also
+				// return empty here.
 				if ((!is_equiv && isMixedCalendarUcumYearMonthDuration(lq.quantity_unit, rq.quantity_unit)) ||
 				    (is_equiv && quantityEquivalentState(lq, rq) < 0) ||
 				    (!is_equiv && quantityEqualState(lq, rq) < 0)) {
@@ -7805,8 +9549,24 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				}
 			}
 			std::string l_base, r_base;
-			double l_conv = convertQuantityToBase(lv.quantity_value, lv.quantity_unit, l_base);
-			double r_conv = convertQuantityToBase(rv.quantity_value, rv.quantity_unit, r_base);
+			// FP-01 SKEPTIC QA-003/QA-004 (2026-08-16): year↔month pairs
+			// compare in months (§5.5.7 "1 year = 12 months"); other
+			// cross-unit time pairs convert with the §5.5.7 calendar
+			// factors (1 month = 30 days, 1 year = 365 days) for calendar
+			// keyword year/month operands, per §6.2 "as well as the
+			// calendar durations as defined in the toQuantity function".
+			double l_months = 0.0, r_months = 0.0;
+			double l_conv, r_conv;
+			if (yearMonthMonthsFactor(lv.quantity_unit, l_months) &&
+			    yearMonthMonthsFactor(rv.quantity_unit, r_months)) {
+				l_conv = lv.quantity_value * l_months;
+				r_conv = rv.quantity_value * r_months;
+				l_base = "mo";
+				r_base = "mo";
+			} else {
+				l_conv = unanchoredDurationSeconds(lv.quantity_value, lv.quantity_unit, l_base);
+				r_conv = unanchoredDurationSeconds(rv.quantity_value, rv.quantity_unit, r_base);
+			}
 			if (l_base != r_base) return {};
 			if (op == "<") return {FPValue::FromBoolean(l_conv < r_conv)};
 			if (op == ">") return {FPValue::FromBoolean(l_conv > r_conv)};
@@ -7839,8 +9599,12 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			if (op == "<=") return {FPValue::FromBoolean(l_num <= r_num)};
 			return {FPValue::FromBoolean(l_num >= r_num)};
 		}
-		// One numeric, one not → incompatible
-		if (isNumericType(lv) || isNumericType(rv)) return {};
+		// One numeric, one not → incompatible types: §6.2 evaluation error
+		// (FP-03 SKEPTIC QA-001; empty here silently corrupted all()/
+		// exists()/where()/select()/iif criteria results).
+		if (isNumericType(lv) || isNumericType(rv)) {
+			throwIncompatibleComparison(lv, rv);
+		}
 
 		// String comparison - lexicographic, only between same types
 		if (lt == FPValue::Type::String && rt == FPValue::Type::String) {
@@ -7851,8 +9615,8 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			if (op == "<=") return {FPValue::FromBoolean(l_str <= r_str)};
 			return {FPValue::FromBoolean(l_str >= r_str)};
 		}
-		// Incompatible types → empty
-		return {};
+		// Incompatible types → §6.2 evaluation error (FP-03 SKEPTIC QA-001).
+		throwIncompatibleComparison(lv, rv);
 	}
 
 	// Arithmetic
@@ -7887,6 +9651,25 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			throw FHIRPathSpecError("Invalid operands for date/time arithmetic");
 		}
 
+		// FP-02 HISTORIAN QA-001 (2026-08-16): the N1 §5 conversion table
+		// makes Integer/Decimal -> Quantity (unit '1') an IMPLICIT
+		// conversion, so `2 + 2 '1'` // 4 '1' — and empty when the units
+		// are incommensurate (`2 + 2 'cm'`), which the Quantity±Quantity
+		// base-mismatch path below already yields. The mixed `*` and `/`
+		// branches already honor this conversion; `+`/`-` previously fell
+		// through to the numeric type guard and returned empty while the
+		// Python fallback computed the spec value.
+		if (op == "+" || op == "-") {
+			FPValue converted;
+			if (lv.type == FPValue::Type::Quantity && isNumericType(rv) &&
+			    numericValueAsUnitQuantity(rv, converted)) {
+				rv = converted;
+			} else if (rv.type == FPValue::Type::Quantity && isNumericType(lv) &&
+			           numericValueAsUnitQuantity(lv, converted)) {
+				lv = converted;
+			}
+		}
+
 		// Quantity arithmetic
 		if (lv.type == FPValue::Type::Quantity && rv.type == FPValue::Type::Quantity) {
 			if (op == "+" || op == "-") {
@@ -7914,10 +9697,30 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				double l_conv = convertQuantityToBase(lv.quantity_value, lv.quantity_unit, l_base);
 				double r_conv = convertQuantityToBase(rv.quantity_value, rv.quantity_unit, r_base);
 				if (l_base != r_base) return {};
-				double result_val = (op == "+") ? l_conv + r_conv : l_conv - r_conv;
+				// FP-02 HISTORIAN QA-002 (2026-08-16): N1 §6.6.3 — convert
+				// to the MOST GRANULAR operand unit (`3 'm' + 3 'cm' //
+				// 303 'cm'`). The operand whose unit has the smaller base
+				// factor is the more granular one; ties prefer the operand
+				// already in canonical (base) form so `1 'm2/m' + 1 'm'`
+				// still renders 'm'. Mirrors Python math.py
+				// _quantity_add_or_sub.
+				double l_factor = convertQuantityToBase(1.0, lv.quantity_unit, l_base);
+				double r_factor = convertQuantityToBase(1.0, rv.quantity_unit, r_base);
+				auto strip_unit_quotes = [](const std::string &u) {
+					if (u.size() >= 2 && u.front() == '\'' && u.back() == '\'') {
+						return u.substr(1, u.size() - 2);
+					}
+					return u;
+				};
+				bool l_canonical = strip_unit_quotes(lv.quantity_unit) == l_base;
+				bool r_canonical = strip_unit_quotes(rv.quantity_unit) == r_base;
+				bool use_right = std::abs(r_factor) < std::abs(l_factor) ||
+				                 (std::abs(r_factor) == std::abs(l_factor) && r_canonical && !l_canonical);
+				double sum_base = (op == "+") ? l_conv + r_conv : l_conv - r_conv;
+				double result_val = use_right ? sum_base / r_factor : sum_base / l_factor;
 				FPValue v;
 				v.type = FPValue::Type::Quantity;
-				v.quantity_unit = l_base;
+				v.quantity_unit = use_right ? rv.quantity_unit : lv.quantity_unit;
 				// FP-11 SKEPTIC: same source_text + quantity_value
 				// normalization as above.
 				v.source_text = normalizeQuantityArithmeticSourceText(result_val);
@@ -7925,54 +9728,36 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				return {v};
 			}
 			if (op == "*") {
-				// Convert both to base units, multiply
-				std::string l_base, r_base;
-				double l_conv = convertQuantityToBase(lv.quantity_value, lv.quantity_unit, l_base);
-				double r_conv = convertQuantityToBase(rv.quantity_value, rv.quantity_unit, r_base);
-				double result_val = l_conv * r_conv;
-				if (l_base == r_base) {
-					FPValue v; v.type = FPValue::Type::Quantity;
-					v.quantity_unit = l_base + "2";
-					// FP-11 SKEPTIC: same source_text + quantity_value
-					// normalization. The Python fallback FP_Quantity.__mul__
-					// does NOT call _normalize_quantity_value, so pass
-					// apply_integral_normalize=false to preserve the
-					// "1.0" rendering for integer-valued products.
-					v.source_text = normalizeQuantityArithmeticSourceText(result_val, /*apply_integral_normalize=*/false);
-					v.quantity_value = result_val;
-					return {v};
-				}
+				// FP-02 HISTORIAN QA-002 (2026-08-16): N1 §6.6.1 composes
+				// in OPERAND unit space — `12 'cm' * 3 'cm' // 36 'cm2'`,
+				// `3 'cm' * 12 'cm2' // 36 'cm3'` — merging the operand
+				// units' term exponents directly and multiplying the
+				// operand values. Comparisons still reduce through the
+				// base table, so official fixture testQuantity9
+				// (`2.0 'cm' * 2.0 'm' = 0.040 'm2'` -> true) keeps holding
+				// via 'cm.m' -> m2 reduction.
+				double result_val = lv.quantity_value * rv.quantity_value;
 				FPValue v; v.type = FPValue::Type::Quantity;
-				v.quantity_unit = l_base + "." + r_base;
-				// FP-11 SKEPTIC: same source_text + quantity_value
-				// normalization (no integral normalize, per __mul__).
-				v.source_text = normalizeQuantityArithmeticSourceText(result_val, /*apply_integral_normalize=*/false);
+				v.quantity_unit = fhirpathComposeQuantityUnits(lv.quantity_unit, rv.quantity_unit, /*divide=*/false);
+				// Mirrors Python __mul__'s _normalize_quantity_value
+				// (integral Decimals quantize; 2.0 * 2.0 renders "4").
+				v.source_text = normalizeQuantityArithmeticSourceText(result_val, /*apply_integral_normalize=*/true);
 				v.quantity_value = result_val;
 				return {v};
 			}
 			if (op == "/") {
-				std::string l_base, r_base;
-				double l_conv = convertQuantityToBase(lv.quantity_value, lv.quantity_unit, l_base);
-				double r_conv = convertQuantityToBase(rv.quantity_value, rv.quantity_unit, r_base);
-				if (r_conv == 0) return {};
-				double result_val = l_conv / r_conv;
-				if (l_base == r_base) {
-					// Same unit cancels out to the UCUM dimensionless unit.
-					FPValue v; v.type = FPValue::Type::Quantity;
-					v.quantity_unit = "1";
-					// FP-11 SKEPTIC: same source_text + quantity_value
-					// normalization. FP-18 HISTORIAN QA-003 (2026-06-30):
-					// Force preserve_decimal_point=true per §6.6.2 "The
-					// result of a division is always Decimal".
-					v.source_text = normalizeQuantityArithmeticSourceText(result_val, /*apply_integral_normalize=*/false, /*preserve_decimal_point=*/true);
-					v.quantity_value = result_val;
-					return {v};
-				}
+				if (rv.quantity_value == 0) return {};
+				// FP-02 HISTORIAN QA-002 (2026-08-16): N1 §6.6.2 composes
+				// in OPERAND unit space — `12 'cm2' / 3 'cm' // 4.0 'cm'` —
+				// merging operand term exponents (cm2/cm -> cm) and
+				// dividing the operand values; same units cancel to the
+				// UCUM dimensionless '1'.
+				double result_val = lv.quantity_value / rv.quantity_value;
 				FPValue v; v.type = FPValue::Type::Quantity;
-				v.quantity_unit = l_base + "/" + r_base;
-				// FP-11 SKEPTIC: same source_text + quantity_value
-				// normalization. FP-18 HISTORIAN QA-003 (2026-06-30):
-				// Force preserve_decimal_point=true per §6.6.2.
+				v.quantity_unit = fhirpathComposeQuantityUnits(lv.quantity_unit, rv.quantity_unit, /*divide=*/true);
+				// FP-11 SKEPTIC + FP-18 HISTORIAN QA-003: force
+				// preserve_decimal_point=true per §6.6.2 "The result of a
+				// division is always Decimal".
 				v.source_text = normalizeQuantityArithmeticSourceText(result_val, /*apply_integral_normalize=*/false, /*preserve_decimal_point=*/true);
 				v.quantity_value = result_val;
 				return {v};
@@ -8022,7 +9807,11 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 						v.quantity_unit = qunit;
 					} else {
 						result_val = nval / qval;
-						v.quantity_unit = "1/" + stripQuantityUnitQuotes(qunit);
+						// FP-02 SKEPTIC QA-003 (2026-08-16): invert
+						// exponents instead of blind "1/" + unit so
+						// multi-unit dividends reduce (1 / (10 'g' /
+						// 2 's') -> 's/g'); single units keep '1/x'.
+						v.quantity_unit = fhirpathComposeQuantityUnits("1", qunit, /*divide=*/true);
 					}
 					bool q_has_decimal = !rv.source_text.empty() &&
 					                     rv.source_text.find('.') != std::string::npos;
@@ -8036,30 +9825,50 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			}
 		}
 
+		// FP-19 EXPLORER QA-001 (2026-08-18): N1 §6.6 math — "If there is
+		// more than one item, or an incompatible item, the evaluation of
+		// the expression will end and signal an error to the calling
+		// environment." Incompatible-type arithmetic operands
+		// (1 + 'x', true + false, 1 + {}) must signal an error that
+		// aborts parent expressions, matching the Python fallback
+		// ("Cannot [1] + ['x']"). Previously this returned an empty
+		// collection, so parents kept evaluating: `(1+'x') | 99` returned
+		// ['99'] natively but [] on the fallback. String+string, date/time
+		// ± quantity, and quantity arithmetic are all handled above, so
+		// reaching here with non-numeric operands is genuinely
+		// incompatible.
 		if (!isNumericType(lv) || !isNumericType(rv)) {
-			return {};
+			throw FHIRPathSpecError(std::string("Incompatible operands for arithmetic operator '") + op + "'");
 		}
 
 		double l_num = getNumericValue(lv);
 		double r_num = getNumericValue(rv);
-		// FP-14 EXPLORER (2026-06-29): Try exact Decimal-text arithmetic
-		// for integer-valued Decimal operands. This preserves precision
-		// for expressions like `(2).power(53) + 1` where binary64 cannot
-		// represent 9007199254740993 (rounds to 9007199254740992).
-		// Spec: §4.1.4 System.Decimal "rational number with implicit
-		// precision" — Decimal must be representable exactly, not through
-		// binary64. Mirrors the FP-11 EXPLORER QA-001 powerIntegerExactText
-		// pattern. Only handles +/-/* ; division always routes through
-		// binary64 because exact Decimal division is much more complex.
-		// IMPORTANT: only apply when at least one operand is Decimal (not
-		// Integer) — pure Integer+Integer arithmetic must preserve Integer
-		// type per spec §4.1.3 (Integer is 32-bit signed). The Integer+
-		// Integer overflow-to-Decimal case is handled below.
+		if (op == "/" && r_num == 0) {
+			// §6.6.2: "If an attempt is made to divide by zero, the result
+			// is empty ({ })." Hoisted above the exact-decimal gate so both
+			// paths share it.
+			return {};
+		}
 		bool l_is_int_type = (effectiveType(lv) == FPValue::Type::Integer);
 		bool r_is_int_type = (effectiveType(rv) == FPValue::Type::Integer);
-		if ((op == "+" || op == "-" || op == "*") && !(l_is_int_type && r_is_int_type)) {
+		// FP-01 EXPLORER QA-001/QA-002 (2026-08-16): exact Decimal string
+		// arithmetic mirroring the Python fallback's `decimal` semantics
+		// (28 significant digits, ROUND_HALF_EVEN). This supersedes the
+		// FP-14 EXPLORER integer-valued-only helper and covers fractional
+		// operands, preserving precision where binary64 re-rendering
+		// corrupted >16-significant-digit decimals (`0.6666666666666666 *
+		// 1` -> `0.66666666666666663`) and flipping equality outcomes
+		// (`2.0 / 3 = 0.6666666666666666` was TRUE here, FALSE in the
+		// fallback). Division ALWAYS takes this path when operands carry
+		// exact digits because §6.6.2 mandates "The result of a division
+		// always Decimal, even if the inputs are both Integer". For
+		// `+`/`-`/`*`, Integer+Integer stays on the Integer fast path per
+		// §4.1.3 (Integer is 32-bit signed); overflow-to-Decimal is handled
+		// below. Operands without exact decimal digits (JSON reals,
+		// text-less Decimals) still defer to the binary64 path below.
+		if (op == "/" || !(l_is_int_type && r_is_int_type)) {
 			std::string exact_text;
-			if (tryIntegerArithmeticText(lv, rv, op, exact_text)) {
+			if (tryDecimalArithmeticText(lv, rv, op, exact_text)) {
 				FPValue v = FPValue::FromDecimal(strtod(exact_text.c_str(), nullptr));
 				v.source_text = exact_text;
 				return {v};
@@ -8102,7 +9911,8 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		else if (op == "-") result = l_num - r_num;
 		else if (op == "*") result = l_num * r_num;
 		else if (op == "/") {
-			if (r_num == 0) return {};
+			// Zero-divisor was handled above; this branch only runs when
+			// the exact-decimal gate deferred (no exact operand digits).
 			result = l_num / r_num;
 		} else if (op == "div") {
 			if (r_num == 0) return {};
@@ -8157,20 +9967,16 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		if (op == "+" || op == "-" || op == "*") {
 			return {decimalWithScaleText(result, decimal_result_places)};
 		}
-		// FP-18 HISTORIAN QA-001 (2026-06-30): Division (/) result must
-		// have a shortest-round-trip source_text, not the default
-		// setprecision(17) rendering. Per §4.1.4 "implementations should
-		// use fixed-precision decimal formats" + §5.5.8 format `(-)?#0.0#`,
-		// the result text should match Python's str(float) shortest-
-		// round-trip rendering (e.g. `1/3` → `'0.3333333333333333'` not
-		// `'0.33333333333333331'`). Same binary64-drift bug class as
-		// FP-07/FP-08/FP-11/FP-14/FP-18 SKEPTIC; the tryIntegerArithmeticText
-		// fast-path is documented at evaluator.cpp:8039 as not handling
-		// division because "exact Decimal division is much more complex".
-		// However, the binary64 result itself is the same IEEE 754 nearest-
-		// double as Python's `float.__truediv__`, so re-rendering via
-		// shortest-round-trip produces the same text as the Python fallback
-		// WITHOUT needing arbitrary-precision Decimal division.
+		// FP-18 HISTORIAN QA-001 (2026-06-30) — SUPERSEDED for exact-digit
+		// operands by the FP-01 EXPLORER tryDecimalArithmeticText gate
+		// above. This residual branch runs only when operands lack exact
+		// decimal digits (JSON reals, text-less Decimals): render the
+		// binary64 quotient shortest-round-trip instead of setprecision(17)
+		// noise. NOTE: the original comment's claim that shortest-round-trip
+		// "produces the same text as the Python fallback" assumed the
+		// fallback uses `float.__truediv__`; the Python engine actually
+		// divides Decimals at the 28-significant-digit context, which is why
+		// the exact-decimal gate above is required for parity.
 		if (op == "/") {
 			FPValue v = FPValue::FromDecimal(result);
 			v.source_text = normalizeDecimalMathSourceText(result);
@@ -8218,12 +10024,25 @@ FPCollection Evaluator::evalUnaryOp(const ASTNode &node, const FPCollection &inp
 			return {FPValue::FromInteger(-value)};
 		}
 		if (et == FPValue::Type::Decimal) {
-			auto result = FPValue::FromDecimal(-getNumericValue(operand[0]));
+			double negated = -getNumericValue(operand[0]);
+			// FP-01 SKEPTIC QA-005 (2026-08-16): Unary negation of a decimal
+			// zero normalizes to positive zero. The official R4 test suite
+			// requires `-0.0034.highBoundary(1)` -> `0.0` (the unary minus
+			// applies to the already-zero boundary result), so authored
+			// display text and the binary64 value both drop the negative
+			// sign for zero; `-0.0 = 0.0` is unaffected either way.
+			if (negated == 0.0) {
+				negated = 0.0;
+			}
+			auto result = FPValue::FromDecimal(negated);
 			if (operand[0].type == FPValue::Type::Decimal && !operand[0].source_text.empty()) {
 				if (operand[0].source_text[0] == '-') {
 					result.source_text = operand[0].source_text.substr(1);
 				} else {
 					result.source_text = "-" + operand[0].source_text;
+				}
+				if (negated == 0.0 && !result.source_text.empty() && result.source_text[0] == '-') {
+					result.source_text = result.source_text.substr(1);
 				}
 			}
 			return {result};
@@ -8233,6 +10052,12 @@ FPCollection Evaluator::evalUnaryOp(const ASTNode &node, const FPCollection &inp
 			v.type = FPValue::Type::Quantity;
 			v.quantity_value = -operand[0].quantity_value;
 			v.quantity_unit = operand[0].quantity_unit;
+			// FP-01 SKEPTIC QA-005 (2026-08-16): normalize negative zero for
+			// Quantity values too, mirroring the Decimal branch above and
+			// the Python fallback (`-Decimal('0.0')` is `0.0` there).
+			if (v.quantity_value == 0.0) {
+				v.quantity_value = 0.0;
+			}
 			// FP-18 SKEPTIC (2026-06-30): Propagate source_text for unary
 			// negation of Quantity so downstream scalar arithmetic can
 			// detect Decimal-authored values. Without this, `-2.5 'g' * 2`
@@ -8243,6 +10068,10 @@ FPCollection Evaluator::evalUnaryOp(const ASTNode &node, const FPCollection &inp
 					v.source_text = operand[0].source_text.substr(1);
 				} else {
 					v.source_text = "-" + operand[0].source_text;
+				}
+				if (v.quantity_value == 0.0 && !v.source_text.empty() &&
+				    v.source_text[0] == '-') {
+					v.source_text = v.source_text.substr(1);
 				}
 			}
 			return {v};
@@ -8304,6 +10133,76 @@ static std::string stripTrailingFixedZeros(std::string s) {
 	}
 	if (s == "-0" || s.empty()) return "0";
 	return s;
+}
+
+// FP-11 EXPLORER QA-001 (2026-08-17): shortest-round-trip decimal text of a
+// double, mirroring Python's `str(float)` (David Gay shortest-round-trip).
+// Same algorithm as normalizeDecimalMathSourceText's search loop.
+static std::string shortestRoundTripText(double value) {
+	if (std::isnan(value) || std::isinf(value)) return {};
+	char buf[64];
+	for (int prec = 1; prec <= 17; ++prec) {
+		std::snprintf(buf, sizeof(buf), "%.*g", prec, value);
+		if (std::strtod(buf, nullptr) == value) return buf;
+	}
+	std::snprintf(buf, sizeof(buf), "%.17g", value);
+	return buf;
+}
+
+// FP-11 EXPLORER QA-001 (2026-08-17): expand a scientific-notation decimal
+// text like "3.1622776601683796e-14" into plain fixed-point notation,
+// mirroring the Python fallback's canonical rendering of computed Decimal
+// results: `format(Decimal(str(value)), "f")`. Returns empty on parse
+// failure so callers can fall back to the legacy path.
+static std::string expandScientificToFixed(const std::string &sci) {
+	if (sci.empty()) return {};
+	size_t epos = sci.find_first_of("eE");
+	if (epos == std::string::npos) return {};
+	std::string mantissa = sci.substr(0, epos);
+	std::string expstr = sci.substr(epos + 1);
+	bool neg_value = false;
+	if (!mantissa.empty() && (mantissa[0] == '-' || mantissa[0] == '+')) {
+		neg_value = mantissa[0] == '-';
+		mantissa.erase(0, 1);
+	}
+	bool neg_exp = false;
+	if (!expstr.empty() && (expstr[0] == '-' || expstr[0] == '+')) {
+		neg_exp = expstr[0] == '-';
+		expstr.erase(0, 1);
+	}
+	long long exp10 = 0;
+	for (char ch : expstr) {
+		if (!std::isdigit(static_cast<unsigned char>(ch))) return {};
+		exp10 = exp10 * 10 + (ch - '0');
+		if (exp10 > 2000000LL) return {};
+	}
+	if (neg_exp) exp10 = -exp10;
+	std::string digits;
+	size_t int_len = 0;
+	bool seen_dot = false;
+	for (char ch : mantissa) {
+		if (ch == '.') {
+			if (seen_dot) return {};
+			seen_dot = true;
+		} else if (std::isdigit(static_cast<unsigned char>(ch))) {
+			digits.push_back(ch);
+			if (!seen_dot) int_len++;
+		} else {
+			return {};
+		}
+	}
+	if (digits.empty()) return {};
+	long long point = static_cast<long long>(int_len) + exp10;
+	std::string out;
+	if (point <= 0) {
+		out = "0." + std::string(static_cast<size_t>(-point), '0') + digits;
+	} else if (point >= static_cast<long long>(digits.size())) {
+		out = digits + std::string(static_cast<size_t>(point - digits.size()), '0') + ".0";
+	} else {
+		out = digits.substr(0, static_cast<size_t>(point)) + "." +
+		      digits.substr(static_cast<size_t>(point));
+	}
+	return neg_value ? "-" + out : out;
 }
 
 static std::string formatQuantityNumber(double value) {
@@ -8376,6 +10275,20 @@ static std::string formatDecimalNumber(double value, const std::string &source_t
 		std::ostringstream sci;
 		sci << std::setprecision(17) << value;
 		return sci.str();
+	}
+	// FP-11 EXPLORER QA-001 (2026-08-17): Non-subnormal scientific values —
+	// expand the shortest-round-trip text into fixed notation, matching the
+	// Python fallback's `format(Decimal(str(value)), "f")` canonical
+	// rendering. The previous `std::fixed << std::setprecision(15)` path
+	// truncated significant digits behind leading fractional zeros
+	// (0.000000000000001.sqrt() rendered '0.000000031622777' vs the
+	// fallback '0.00000003162277660168379'; 1e-27.sqrt() rendered
+	// '0.000000000000032', a ~1% error; 1e-28.sqrt() collapsed to '0.0'),
+	// and rendered large values as the exact binary64 expansion instead of
+	// the fallback's shortest-round-trip expansion.
+	{
+		std::string expanded = expandScientificToFixed(shortestRoundTripText(value));
+		if (!expanded.empty()) return expanded;
 	}
 	if (s.find('.') == std::string::npos) s += ".0";
 	return s;
@@ -8879,9 +10792,13 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 				else if (val.field_name == "telecom") inferred_type = "ContactPoint";
 				else if (val.field_name == "coding") inferred_type = "Coding";
 				else if (val.field_name == "code") inferred_type = "CodeableConcept";
+				// FP-12 EXPLORER QA-002 (2026-08-17): extension-array elements
+				// are FHIR.Extension for is()/ofType()/type(), matching the
+				// Python fallback's "Extension" path typing.
+				else if (val.field_name == "extension" || val.field_name == "modifierExtension") inferred_type = "Extension";
 				else if (yyjson_obj_get(val.json_val, "reference")) inferred_type = "Reference";
 				else if (yyjson_obj_get(val.json_val, "contentType")) inferred_type = "Attachment";
-				else if (!val.field_name.empty()) inferred_type = "BackboneElement";
+				else inferred_type = structuralFHIRComplexType(val.json_val, val.field_name);
 				if (inferred_type) {
 					if (target == inferred_type) return {FPValue::FromBoolean(true)};
 				if (!exact && fhirTypeIsA(inferred_type, target)) return {FPValue::FromBoolean(true)};
@@ -8973,10 +10890,19 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 					return {FPValue::FromBoolean(true)};
 				}
 				// Specific subtype checks: code, id, uri, url, etc.
+				// FP-20 HISTORIAN QA-001 (2026-08-18): for non-exact `is`, honor the
+				// R4 uri-family subtype chain (canonical/url/uuid/oid -> uri, pinned
+				// by official fixture testTypeA4 `valueUuid is FHIR.uri` // true) via
+				// fhirTypeIsA. Exact (`as`/`ofType`) stays exact-only per the FP-15
+				// fixture pin (testFHIRPathAsFunction11).
 				if (target == "code" || target == "id" || target == "uri" || target == "url" ||
 				    target == "canonical" || target == "uuid" || target == "oid" ||
 				    target == "markdown" || target == "xhtml") {
-					if (actual_type && target == actual_type) return {FPValue::FromBoolean(true)};
+					if (actual_type) {
+						if (target == actual_type) return {FPValue::FromBoolean(true)};
+						if (!exact && fhirTypeIsA(actual_type, target))
+							return {FPValue::FromBoolean(true)};
+					}
 					return {FPValue::FromBoolean(false)};
 				}
 			}
@@ -8986,17 +10912,14 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 				if (t == FPValue::Type::String) {
 					const char *actual_type = fhirFieldType(val.field_name);
 					if (actual_type && std::string(actual_type) == "date") return {FPValue::FromBoolean(true)};
-					// Also check if the string looks like a date and has no field name
-					if (!actual_type && isDateTimeType(val)) {
-						std::string s;
-						if (val.type == FPValue::Type::JsonVal && val.json_val && yyjson_is_str(val.json_val))
-							s = yyjson_get_str(val.json_val);
-						else if (val.type == FPValue::Type::String)
-							s = val.string_val;
-						// Date (not dateTime): YYYY, YYYY-MM, or YYYY-MM-DD (no T)
-						if (!s.empty() && s.find('T') == std::string::npos) return {FPValue::FromBoolean(true)};
-					}
 				}
+				// FP-02 EXPLORER QA-002 (2026-08-16): lexical shape sniffing
+				// removed. `is` operates on the operand's TYPE (§6.3.1), not
+				// its lexical content: guessing "looks like a date" made
+				// model-unknown string fields match `is date`/`is FHIR.date`
+				// while type().name said 'string' (self-contradiction) and
+				// the Python fallback (metadata-driven typing) said false.
+				// Parity contract: unknown fields are FHIR.string.
 				return {FPValue::FromBoolean(false)};
 			}
 			if (target == "dateTime" || target == "instant") {
@@ -9004,17 +10927,14 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 				// FHIR dateTime fields arrive as JSON strings — check field metadata
 				if (t == FPValue::Type::String) {
 					const char *actual_type = fhirFieldType(val.field_name);
-					if (actual_type && (std::string(actual_type) == "dateTime" || std::string(actual_type) == "instant"))
+					// FP-02 EXPLORER QA-002 (2026-08-16): instant and
+					// dateTime are SIBLING FHIR R4 primitives — match them
+					// exactly per fhirFieldType instead of lumping them, so
+					// `Observation.issued is dateTime` is false while
+					// `issued is instant` is true (mirrors the Python
+					// fallback's metadata typing).
+					if (actual_type && std::string(actual_type) == target)
 						return {FPValue::FromBoolean(true)};
-					// String with 'T' is a dateTime
-					if (!actual_type && isDateTimeType(val)) {
-						std::string s;
-						if (val.type == FPValue::Type::JsonVal && val.json_val && yyjson_is_str(val.json_val))
-							s = yyjson_get_str(val.json_val);
-						else if (val.type == FPValue::Type::String)
-							s = val.string_val;
-						if (!s.empty() && s.find('T') != std::string::npos) return {FPValue::FromBoolean(true)};
-					}
 				}
 				return {FPValue::FromBoolean(false)};
 			}
@@ -9028,7 +10948,14 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 			// — those require specific UCUM unit categories per FHIR R4
 			// (FP-15 SKEPTIC QA-001 §6.3.1/§4.1.8). `5 'mg'` is mass, not an
 			// Age or Duration.
-			if (target == "Quantity") {
+			// FP-15 SKEPTIC QA-002 (2026-08-18): only the UNQUALIFIED
+			// `Quantity` specifier matches a literal (System.Quantity)
+			// Quantity (shared engine convention, parity-tested). An
+			// explicitly FHIR-qualified `FHIR.Quantity` must NOT match a
+			// System.Quantity literal: FHIR.* and System.* namespaces are
+			// distinct for is() per fixtures testType12/testType14 and
+			// §6.3.1, mirroring the Python fallback.
+			if (target == "Quantity" && !explicit_namespace) {
 				return {FPValue::FromBoolean(t == FPValue::Type::Quantity)};
 			}
 		}
@@ -9547,14 +11474,25 @@ FPCollection Evaluator::fn_children(const FPCollection &input) {
 				if (std::string(key_str) == "resourceType") continue;
 				yyjson_val *val = yyjson_obj_iter_get_val(key);
 				if (!val) continue;
+				std::string fname(key_str);
+				std::string ftype = infer_fhir_type(fname);
 				if (yyjson_is_arr(val)) {
 					size_t idx2, max2;
 					yyjson_val *elem;
 					yyjson_arr_foreach(val, idx2, max2, elem) {
-						result.push_back(FPValue::FromJson(elem));
+						FPValue child = FPValue::FromJson(elem);
+						// §5.8.1: children must carry the same model type
+						// metadata as direct navigation so §6.3 type operators
+						// behave identically on children() vs field access.
+						child.field_name = fname;
+						if (!ftype.empty()) child.fhir_type = ftype;
+						result.push_back(child);
 					}
 				} else {
-					result.push_back(FPValue::FromJson(val));
+					FPValue child = FPValue::FromJson(val);
+					child.field_name = fname;
+					if (!ftype.empty()) child.fhir_type = ftype;
+					result.push_back(child);
 				}
 			}
 			continue;
@@ -9571,6 +11509,8 @@ FPCollection Evaluator::fn_children(const FPCollection &input) {
 				if (std::string(key_str) == "resourceType") continue; // skip meta
 				yyjson_val *val = yyjson_obj_iter_get_val(key);
 				if (!val) continue;
+				std::string fname(key_str);
+				std::string ftype = infer_fhir_type(fname);
 				std::string shadow_name = "_" + std::string(key_str);
 				yyjson_val *shadow = yyjson_obj_get(obj, shadow_name.c_str());
 				if (yyjson_is_arr(val)) {
@@ -9584,6 +11524,8 @@ FPCollection Evaluator::fn_children(const FPCollection &input) {
 								child.primitive_shadow = shadow_elem;
 							}
 						}
+						child.field_name = fname;
+						if (!ftype.empty()) child.fhir_type = ftype;
 						result.push_back(child);
 					}
 				} else {
@@ -9591,6 +11533,8 @@ FPCollection Evaluator::fn_children(const FPCollection &input) {
 					if (shadow && yyjson_is_obj(shadow)) {
 						child.primitive_shadow = shadow;
 					}
+					child.field_name = fname;
+					if (!ftype.empty()) child.fhir_type = ftype;
 					result.push_back(child);
 				}
 			}
@@ -10044,7 +11988,11 @@ FPCollection Evaluator::fn_dateArith(const FPValue &date_val, const FPValue &qty
 		} else {
 			std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d.%03d", static_cast<int>(hour), static_cast<int>(minute), static_cast<int>(second), static_cast<int>(millis));
 		}
-		result.string_val = std::string("T") + buf;
+		// FP-01 HISTORIAN QA-002 (2026-08-16): canonical Time storage is
+		// T-less (see normalizeTimeLiteralString; §5.5.1 toString table
+		// renders Time as hh:mm:ss.fff). The arithmetic result previously
+		// leaked the literal "T" marker (`T15:04:28`).
+		result.string_val = buf;
 		return {result};
 	}
 

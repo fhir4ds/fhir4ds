@@ -304,6 +304,7 @@ class DefinitionMeta:
     is_tuple: bool = False  # True when CTE returns a tuple (to_json(struct_pack(...)))
     sql_result_type: Optional[str] = None  # Result type hint from translated SQL (e.g., "Quantity")
     quantity_fields: Optional[set] = None  # Tuple field names known to carry Quantity values
+    stores_list_value: bool = False  # True when the CTE's value column holds a whole element LIST
     source_resource_ctes: list = field(default_factory=list)
     # Transitive list of RESOURCE_ROWS CTE names this PATIENT_SCALAR non-boolean
     # definition depends on (e.g. "Lowest Systolic Reading" → Observation retrieve CTE).

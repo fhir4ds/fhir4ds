@@ -653,7 +653,8 @@ class FHIRPathEvaluator:
 
         fhirpathpy expects variables in a context dict that gets stored
         in ctx['vars']. This includes:
-        - 'context': the current resource (mapped to %context)
+        - 'context': the original node passed to the engine (mapped to
+          %context per FHIRPath §9; does not change with focus)
         - 'resource': the original resource (mapped to %resource)
         - 'rootResource': the root resource (mapped to %rootResource)
         - Any user-defined variables
@@ -915,7 +916,7 @@ class FHIRPathEvaluator:
         Evaluate a context variable reference.
 
         Handles:
-        - %context - current resource
+        - %context - the original node passed to the engine (FHIRPath §9)
         - %resource - original resource
         - %rootResource - root resource (Bundles)
         - %`name` - environment variable

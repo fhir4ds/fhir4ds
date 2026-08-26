@@ -166,7 +166,9 @@ def test_string_equivalence_normalizes_case_and_whitespace_without_collapse(monk
         "' a' ~ 'a'": False,
         "' a' !~ 'a'": True,
         "'a\tb' ~ 'A b'": True,
-        "nbspLeft ~ spaceRight": True,
+        # FP-13 HISTORIAN: NBSP is not in the FHIRPath Whitespace lexical
+        # category {tab, LF, CR, space}, so it is NOT normalized.
+        "nbspLeft ~ spaceRight": False,
         "'É' ~ 'é'": True,
     }
 
@@ -485,6 +487,9 @@ def test_large_json_numbers_compare_exactly_in_native_and_fallback(monkeypatch) 
         "arrA ~ arrB": False,
         "arrA !~ arrB": True,
     }
+    # FP-13 EXPLORER QA-002: JSON integers beyond 2^53 must stay distinct
+    # under `~` (precision 0 rounding is identity for integers); native
+    # previously coerced through binary64 and merged them.
 
     native = _connection()
     fallback = _python_fallback_connection(monkeypatch)

@@ -198,6 +198,12 @@ class FP_Quantity(FP_Type):
         "s",
         "ms",
     }
+    # FP-01 SKEPTIC QA-003 (2026-08-16): calendar year/month keywords are
+    # not comparable with their UCUM year/month analogues (§6.1.1/§6.2:
+    # `1 year = 1 'a'` // empty, `1 year > 1 'a'` // empty), but they ARE
+    # comparable with day-and-below durations via the §5.5.7 factors
+    # (1 month = 30 days, and 30 'd' is exactly 30 days).
+    _year_month_ucum_units = {"'a'", "'mo'", "a", "mo"}
     _second_or_millisecond_duration_units = {
         "second",
         "seconds",
@@ -332,6 +338,37 @@ class FP_Quantity(FP_Type):
         "mmHg": ("'Pa'", Decimal("133.322")),
         "cm[H2O]": ("'Pa'", Decimal("98.0665")),
         "cmH2O": ("'Pa'", Decimal("98.0665")),
+        # FP-02 HISTORIAN QA-004 (2026-08-16): curated UCUM derived units
+        # (N1 §6.1.1: quantity equality/ordering must convert commensurable
+        # units "to the same unit, or a common unit"). Base forms use the
+        # SAME sorted, quoted spelling `_render_unit_exponents` produces so
+        # single-entry and multi-term reductions agree on one canonical
+        # string: 1 J = 1 kg.m2/s2 = 1000 g.m2/s2, 1 N = 1000 g.m/s2,
+        # 1 W = 1000 g.m2/s3, 1 V = 1000 A.g.m2/s3, 1 A is its own base.
+        "J": ("'g.m2/s2'", Decimal("1000")),
+        "'J'": ("'g.m2/s2'", Decimal("1000")),
+        "kJ": ("'g.m2/s2'", Decimal("1000000")),
+        "'kJ'": ("'g.m2/s2'", Decimal("1000000")),
+        "N": ("'g.m/s2'", Decimal("1000")),
+        "'N'": ("'g.m/s2'", Decimal("1000")),
+        "kN": ("'g.m/s2'", Decimal("1000000")),
+        "'kN'": ("'g.m/s2'", Decimal("1000000")),
+        "W": ("'g.m2/s3'", Decimal("1000")),
+        "'W'": ("'g.m2/s3'", Decimal("1000")),
+        "kW": ("'g.m2/s3'", Decimal("1000000")),
+        "'kW'": ("'g.m2/s3'", Decimal("1000000")),
+        "mW": ("'g.m2/s3'", Decimal("1")),
+        "'mW'": ("'g.m2/s3'", Decimal("1")),
+        "A": ("'A'", Decimal("1")),
+        "'A'": ("'A'", Decimal("1")),
+        "mA": ("'A'", Decimal("0.001")),
+        "'mA'": ("'A'", Decimal("0.001")),
+        "V": ("'g.m2/A.s3'", Decimal("1000")),
+        "'V'": ("'g.m2/A.s3'", Decimal("1000")),
+        "kV": ("'g.m2/A.s3'", Decimal("1000000")),
+        "'kV'": ("'g.m2/A.s3'", Decimal("1000000")),
+        "mV": ("'g.m2/A.s3'", Decimal("1")),
+        "'mV'": ("'g.m2/A.s3'", Decimal("1")),
         "Cel": ("'Cel'", Decimal("1")),
         "mg/dL": ("'mg/dL'", Decimal("1")),
         "g/dL": ("'mg/dL'", Decimal("1000")),
@@ -351,8 +388,57 @@ class FP_Quantity(FP_Type):
         **{key: Decimal("0.001") for key in ["'ms'", "millisecond", "milliseconds"]},
     }
 
+    # FP-01 SKEPTIC QA-003 (2026-08-16): FHIRPath N1 §5.5.7 defines calendar
+    # duration conversion factors for UNANCHORED calculations: 1 month = 30
+    # days, 1 year = 365 days (and 1 year = 12 months). §6.1.1/§6.2 require
+    # unit-aware equality/comparison to honor "the calendar durations as
+    # defined in the toQuantity function". UCUM 'mo'/'a' are definite
+    # durations and keep their UCUM mean-duration seconds; only the calendar
+    # KEYWORDS use these factors. Note the spec table is month-based for
+    # year↔month pairs (1 year = 12 months) and day-based for year/month vs
+    # day-and-below (12 × 30 days = 360 days ≠ 365 days), so year↔month pairs
+    # must be compared in months, never through these seconds factors.
+    _calendar_unanchored_seconds_factor = {
+        "month": Decimal("2592000"),
+        "months": Decimal("2592000"),
+        "year": Decimal("31536000"),
+        "years": Decimal("31536000"),
+    }
+
+    @staticmethod
+    def _unanchored_duration_seconds(unit, value):
+        """Seconds value of a time-valued quantity for unanchored equality,
+        equivalence, and ordering per §5.5.7: calendar month/year keywords use
+        the 30-day/365-day factors; every other time unit (UCUM durations and
+        calendar week-and-below keywords, which the spec defines as exactly
+        equal to their UCUM counterparts) converts through the UCUM base
+        table. Returns (seconds, "'s'") or None for non-time units."""
+        factor = FP_Quantity._calendar_unanchored_seconds_factor.get(unit)
+        if factor is not None:
+            return Decimal(str(value)) * factor, "'s'"
+        base = FP_Quantity.conv_unit_to_base(unit, value)
+        if base.unit not in ("'s'", "s"):
+            return None
+        return Decimal(str(base.value)), "'s'"
+
     def __init__(self, value, unit):
         super().__init__()
+        # FP-01 SKEPTIC QA-001/QA-002/QA-006 (2026-08-16): FHIRPath
+        # §4.1.8 allows a Quantity literal's unit to be a single-quoted
+        # calendar duration keyword, singular or plural (`4 'year'`,
+        # `2 'days'`), and the Time-valued Quantities table defines
+        # `'year'` etc. as the *unit representation* of the calendar
+        # keywords — the same quantity as the bare keyword form.
+        # Canonicalize quoted keyword spellings to the bare form so the
+        # equality/comparison/arithmetic guards that match bare
+        # spellings treat them identically. This mirrors the native C++
+        # lexer, which stores STRING units unquoted. Genuine UCUM units
+        # ('a', 'mo', 'wk', ...) are NOT keyword spellings and keep
+        # their quotes.
+        if isinstance(unit, str) and len(unit) >= 2 and unit[0] == "'" and unit[-1] == "'":
+            inner = unit[1:-1]
+            if inner in self._calendar_duration_units:
+                unit = inner
         self.asStr = f"{self._format_quantity_number(value)} {unit}"
         self.value = value
         self.unit = unit
@@ -401,6 +487,11 @@ class FP_Quantity(FP_Type):
                     self.unit in self._ucum_duration_units
                     and other.unit in self._calendar_duration_units
                 )
+                # FP-01 HISTORIAN QA-001 (2026-08-16): mixed calendar-vs-UCUM
+                # year/month pairs stay indeterminate — the OFFICIAL R4
+                # fixtures pin `'1 'a''.toQuantity() = 1 year` to EMPTY
+                # (testStringQuantityYearLiteralToQuantity has no <output>),
+                # outranking the N1/master §6.1.1 prose that says false.
                 if mixed_calendar_ucum:
                     return None
                 return self._compare_years_and_months(other, year_units=["'a'", "year", "years"])
@@ -409,6 +500,34 @@ class FP_Quantity(FP_Type):
                 other_value_in_seconds = other.value * self.datetime_multipliers[other.unit]
                 return self_value_in_seconds == other_value_in_seconds
             else:
+                # FP-01 SKEPTIC QA-003 (2026-08-16): cross-group time-valued
+                # durations (calendar year/month vs weeks/days/time) compare
+                # with the §5.5.7 unanchored factors. Mixed calendar-vs-UCUM
+                # year/month pairs stay indeterminate (§6.1.1; pinned EMPTY
+                # by the official R4 toQuantity fixtures, FP-01 HISTORIAN
+                # QA-001 2026-08-16), and UCUM-only pairs (e.g. 'mo' vs
+                # 'd') compare through UCUM seconds.
+                self_ym = self.unit in self._years_and_months
+                other_ym = other.unit in self._years_and_months
+                if self_ym != other_ym:
+                    mixed_year_month_ucum = (
+                        self.unit in self._calendar_duration_units
+                        and other.unit in self._year_month_ucum_units
+                    ) or (
+                        self.unit in self._year_month_ucum_units
+                        and other.unit in self._calendar_duration_units
+                    )
+                    if mixed_year_month_ucum:
+                        return None
+                    self_seconds = self._unanchored_duration_seconds(self.unit, self.value)
+                    other_seconds = self._unanchored_duration_seconds(other.unit, other.value)
+                    if (
+                        self_seconds is not None
+                        and other_seconds is not None
+                        and self_seconds[1] == other_seconds[1]
+                    ):
+                        return self_seconds[0] == other_seconds[0]
+                    return None
                 # FHIRPath §6.1: incompatible units → empty (None)
                 converted = FP_Quantity.conv_unit_to(self.unit, self.value, other.unit)
                 if converted is not None:
@@ -433,28 +552,171 @@ class FP_Quantity(FP_Type):
         return value
 
     @staticmethod
+    def _divide_and_render(numerator, denominator):
+        """FP-08 HISTORIAN QA-001 (2026-08-17): §5.5.7 conversion division
+        mirroring the native exact long-division rendering: when the
+        quotient terminates exactly, trailing scale zeros are trimmed
+        (180 cm / 100 -> "1.8", not "1.80"); a non-terminating quotient
+        keeps the 28-significant-digit ROUND_HALF_EVEN result verbatim
+        (trailing zero from rounding is significant)."""
+        quotient = numerator / denominator
+        from fractions import Fraction
+
+        exact = Fraction(numerator) / Fraction(denominator)
+        den = exact.denominator
+        for prime in (2, 5):
+            while den % prime == 0:
+                den //= prime
+        if den == 1:
+            return FP_Quantity._normalize_quantity_value(quotient)
+        return quotient
+
+    @staticmethod
     def conv_unit_to_base(unit, value):
         clean_unit = FP_Quantity._strip_unit_quotes(unit)
         conversion = FP_Quantity._ucum_base_conversion_factor.get(unit)
         if conversion is None:
             conversion = FP_Quantity._ucum_base_conversion_factor.get(clean_unit)
         if conversion is None:
+            # FP-02 SKEPTIC QA-003 (2026-08-16): multi-term UCUM expressions
+            # ('m2/m', 'm.m2', 'g.m/s2', exponent-suffixed single terms such
+            # as 'm3') convert term-by-term through the UCUM table with
+            # exponent merging, per §6.6.1 `3 'cm' * 12 'cm2' // 36 'cm3'`
+            # and §6.6.2 `12 'cm2' / 3 'cm' // 4.0 'cm'` — UCUM semantics
+            # reduce identical base symbols (m2/m -> m). Unparseable or
+            # partially-unknown units stay unconvertible (returned as-is).
+            terms = FP_Quantity._parse_unit_exponents(clean_unit)
+            if terms is not None:
+                merged: dict[str, int] = {}
+                converted_value = Decimal(str(value))
+                for symbol, exponent in terms.items():
+                    term_conversion = FP_Quantity._ucum_base_conversion_factor.get(symbol)
+                    if term_conversion is None:
+                        return FP_Quantity(value, unit)
+                    base_symbol = FP_Quantity._strip_unit_quotes(term_conversion[0])
+                    factor = term_conversion[1]
+                    # FP-02 HISTORIAN QA-004 (2026-08-16): derived-unit
+                    # bases are themselves term expressions ('J' ->
+                    # 'g.m2/s2'); expand them so multi-term operands
+                    # ('kg.m2/s2', 'N.m') merge on true base symbols and
+                    # land on the same canonical string as the direct
+                    # entry. Single-symbol bases parse to themselves, so
+                    # this is behavior-preserving for the existing table.
+                    sub_terms = FP_Quantity._parse_unit_exponents(base_symbol)
+                    if sub_terms is not None:
+                        for sub_symbol, sub_exponent in sub_terms.items():
+                            merged[sub_symbol] = (
+                                merged.get(sub_symbol, 0) + exponent * sub_exponent
+                            )
+                    else:
+                        merged[base_symbol] = merged.get(base_symbol, 0) + exponent
+                    if factor != Decimal(1):
+                        converted_value *= factor**exponent
+                if not any(merged.values()):
+                    merged = {}
+                return FP_Quantity(
+                    FP_Quantity._normalize_quantity_value(converted_value),
+                    FP_Quantity._render_unit_exponents(merged),
+                )
             return FP_Quantity(value, unit)
 
         base_unit, factor = conversion
         converted_value = Decimal(str(value)) * factor
         return FP_Quantity(FP_Quantity._normalize_quantity_value(converted_value), base_unit)
 
+    @staticmethod
+    def _parse_unit_exponents(unit):
+        """Parse a bare UCUM term expression into {base symbol: exponent}.
+
+        Supports the forms produced by quantity arithmetic and accepted from
+        users: '.'-separated numerator terms, '/'-separated denominator terms
+        (each '/' segment after the first contributes negative exponents),
+        optional integer exponents per term (m2, s-1), and the dimensionless
+        '1'. Returns None when the string is not a pure term expression
+        (empty, whitespace, or a term with no symbol/exponent split).
+        """
+        clean = FP_Quantity._strip_unit_quotes(unit)
+        if not clean or any(ch.isspace() for ch in clean):
+            return None
+        exponents: dict[str, int] = {}
+        for index, segment in enumerate(clean.split("/")):
+            sign = 1 if index == 0 else -1
+            if not segment:
+                return None
+            for term in segment.split("."):
+                if not term:
+                    return None
+                if term == "1":
+                    # Dimensionless term: '1', or the numerator of '1/s'.
+                    continue
+                match = re.fullmatch(r"(.*?)(-?\d+)?", term)
+                if not match or not match.group(1):
+                    return None
+                symbol = match.group(1)
+                exponent = int(match.group(2)) if match.group(2) is not None else 1
+                exponents[symbol] = exponents.get(symbol, 0) + sign * exponent
+        return {s: e for s, e in exponents.items() if e != 0}
+
+    @staticmethod
+    def _render_unit_exponents(exponents):
+        """Render {base symbol: exponent} back to a quoted UCUM unit string.
+
+        Symbols render in sorted order so both engines (and repeated
+        operations) produce one canonical spelling; zero exponents are
+        dropped; a fully-cancelled map renders as the dimensionless "'1'".
+        """
+        pruned = {s: e for s, e in exponents.items() if e != 0}
+        if not pruned:
+            return "'1'"
+        numerator = ".".join(
+            symbol + (str(exp) if exp != 1 else "") for symbol, exp in sorted(pruned.items()) if exp > 0
+        )
+        denominator = ".".join(
+            symbol + (str(-exp) if -exp != 1 else "") for symbol, exp in sorted(pruned.items()) if exp < 0
+        )
+        if numerator and denominator:
+            return f"'{numerator}/{denominator}'"
+        if denominator:
+            return f"'1/{denominator}'"
+        return f"'{numerator}'"
+
     def __mul__(self, other):
         """Multiply quantity by a number or another quantity."""
         if isinstance(other, (int, float, Decimal)):
             return FP_Quantity(self.value * other, self.unit)
         if isinstance(other, FP_Quantity):
+            # FP-02 HISTORIAN QA-002 (2026-08-16): N1 §6.6.1 composes in
+            # OPERAND unit space — `12 'cm' * 3 'cm' // 36 'cm2'`,
+            # `3 'cm' * 12 'cm2' // 36 'cm3'` — merging the operand units'
+            # term exponents directly and multiplying the operand values.
+            # Comparisons still reduce through the base table, so official
+            # fixture testQuantity9 (`2.0 'cm' * 2.0 'm' = 0.040 'm2'` ->
+            # true) keeps holding via 'cm.m' -> m2 reduction.
+            bare_self = FP_Quantity._strip_unit_quotes(self.unit)
+            bare_other = FP_Quantity._strip_unit_quotes(other.unit)
+            self_terms = FP_Quantity._parse_unit_exponents(bare_self)
+            other_terms = FP_Quantity._parse_unit_exponents(bare_other)
+            if self_terms is not None and other_terms is not None:
+                new_value = FP_Quantity._normalize_quantity_value(self.value * other.value)
+                merged = dict(self_terms)
+                for symbol, exponent in other_terms.items():
+                    merged[symbol] = merged.get(symbol, 0) + exponent
+                return FP_Quantity(new_value, FP_Quantity._render_unit_exponents(merged))
             self_base = FP_Quantity.conv_unit_to_base(self.unit, self.value)
             other_base = FP_Quantity.conv_unit_to_base(other.unit, other.value)
             new_value = FP_Quantity._normalize_quantity_value(self_base.value * other_base.value)
             bare_self = FP_Quantity._strip_unit_quotes(self_base.unit)
             bare_other = FP_Quantity._strip_unit_quotes(other_base.unit)
+            # FP-02 SKEPTIC QA-003 (2026-08-16): unparseable units keep the
+            # base-symbol exponent merge (m.m2 -> m3) instead of string
+            # concatenation, and the dimensionless '1' instead of '12'.
+            self_terms = FP_Quantity._parse_unit_exponents(bare_self)
+            other_terms = FP_Quantity._parse_unit_exponents(bare_other)
+            if self_terms is not None and other_terms is not None:
+                merged = dict(self_terms)
+                for symbol, exponent in other_terms.items():
+                    merged[symbol] = merged.get(symbol, 0) + exponent
+                return FP_Quantity(new_value, FP_Quantity._render_unit_exponents(merged))
             if self_base.unit == other_base.unit:
                 return FP_Quantity(new_value, f"'{bare_self}2'")
             return FP_Quantity(new_value, f"'{bare_self}.{bare_other}'")
@@ -482,6 +744,26 @@ class FP_Quantity(FP_Type):
         if isinstance(other, FP_Quantity):
             if other.value == 0:
                 return []
+            # FP-02 HISTORIAN QA-002 (2026-08-16): N1 §6.6.2 composes in
+            # OPERAND unit space — `12 'cm2' / 3 'cm' // 4.0 'cm'` —
+            # merging the operand units' term exponents and dividing the
+            # operand values. Comparisons still reduce through the base
+            # table ('m2/m' spellings and products stay commensurable).
+            bare_self = FP_Quantity._strip_unit_quotes(self.unit)
+            bare_other = FP_Quantity._strip_unit_quotes(other.unit)
+            self_terms = FP_Quantity._parse_unit_exponents(bare_self)
+            other_terms = FP_Quantity._parse_unit_exponents(bare_other)
+            if self_terms is not None and other_terms is not None:
+                new_value = self.value / other.value
+                # FP-18 HISTORIAN QA-003 (2026-06-30): force Decimal form
+                # for whole-number results per §6.6.2 "the result of a
+                # division is always Decimal".
+                if isinstance(new_value, Decimal) and new_value == new_value.to_integral_value():
+                    new_value = new_value.quantize(Decimal("0.1"))
+                merged = dict(self_terms)
+                for symbol, exponent in other_terms.items():
+                    merged[symbol] = merged.get(symbol, 0) - exponent
+                return FP_Quantity(new_value, FP_Quantity._render_unit_exponents(merged))
             self_base = FP_Quantity.conv_unit_to_base(self.unit, self.value)
             other_base = FP_Quantity.conv_unit_to_base(other.unit, other.value)
             if other_base.value == 0:
@@ -495,6 +777,16 @@ class FP_Quantity(FP_Type):
                 return FP_Quantity(new_value, "'1'")
             bare_self = FP_Quantity._strip_unit_quotes(self_base.unit)
             bare_other = FP_Quantity._strip_unit_quotes(other_base.unit)
+            # FP-02 SKEPTIC QA-003 (2026-08-16): unparseable units divide by
+            # merging base-symbol exponents so m2/m reduces to m and the
+            # result stays comparable/convertible.
+            self_terms = FP_Quantity._parse_unit_exponents(bare_self)
+            other_terms = FP_Quantity._parse_unit_exponents(bare_other)
+            if self_terms is not None and other_terms is not None:
+                merged = dict(self_terms)
+                for symbol, exponent in other_terms.items():
+                    merged[symbol] = merged.get(symbol, 0) - exponent
+                return FP_Quantity(new_value, FP_Quantity._render_unit_exponents(merged))
             return FP_Quantity(new_value, f"'{bare_self}/{bare_other}'")
         return NotImplemented
 
@@ -509,6 +801,13 @@ class FP_Quantity(FP_Type):
             result_value = other / self.value
             if isinstance(result_value, Decimal) and result_value == result_value.to_integral_value():
                 result_value = result_value.quantize(Decimal("0.1"))
+            # FP-02 SKEPTIC QA-003 (2026-08-16): merge exponents so
+            # `1 / 4 's'` -> '1/s' and multi-term dividends reduce
+            # (`1 / (10 'g' / 2 's')` -> 's/g') rather than double-nesting.
+            self_terms = FP_Quantity._parse_unit_exponents(bare_unit)
+            if self_terms is not None:
+                merged = {symbol: -exponent for symbol, exponent in self_terms.items()}
+                return FP_Quantity(result_value, FP_Quantity._render_unit_exponents(merged))
             return FP_Quantity(result_value, f"'1/{bare_unit}'")
         return NotImplemented
 
@@ -528,6 +827,27 @@ class FP_Quantity(FP_Type):
                                 self.value == reverse_converted.value
                                 and self.unit == reverse_converted.unit
                             )
+                    # FP-01 SKEPTIC QA-003 (2026-08-16): fall back to §5.5.7
+                    # unanchored calendar factors for cross-group time-valued
+                    # durations (e.g. `1 month` vs `30 day`), mirroring the
+                    # `=` operator's equality() path so membership/distinct
+                    # stay consistent with the spec conversion factors.
+                    mixed_year_month_ucum = (
+                        self.unit in self._calendar_duration_units
+                        and other.unit in self._year_month_ucum_units
+                    ) or (
+                        self.unit in self._year_month_ucum_units
+                        and other.unit in self._calendar_duration_units
+                    )
+                    if not mixed_year_month_ucum:
+                        self_seconds = self._unanchored_duration_seconds(self.unit, self.value)
+                        other_seconds = self._unanchored_duration_seconds(other.unit, other.value)
+                        if (
+                            self_seconds is not None
+                            and other_seconds is not None
+                            and self_seconds[1] == other_seconds[1]
+                        ):
+                            return self_seconds[0] == other_seconds[0]
                     return False
                 return self.__eq__(other)
         else:
@@ -544,13 +864,20 @@ class FP_Quantity(FP_Type):
             and toUnit in FP_Quantity._weeks_days_and_time
         ):
             value_in_seconds = value * FP_Quantity.datetime_multipliers.get(fromUnit)
-            new_value = value_in_seconds / FP_Quantity.datetime_multipliers.get(toUnit)
+            new_value = FP_Quantity._divide_and_render(
+                value_in_seconds, FP_Quantity.datetime_multipliers.get(toUnit)
+            )
             return FP_Quantity(new_value, toUnit)
 
         from_m_cm_mm_magnitude = FP_Quantity._m_cm_mm_conversion_factor.get(fromUnit)
         to_m_cm_mm_magnitude = FP_Quantity._m_cm_mm_conversion_factor.get(toUnit)
         if from_m_cm_mm_magnitude and to_m_cm_mm_magnitude:
-            return FP_Quantity(from_m_cm_mm_magnitude * value / to_m_cm_mm_magnitude, toUnit)
+            return FP_Quantity(
+                FP_Quantity._divide_and_render(
+                    from_m_cm_mm_magnitude * value, to_m_cm_mm_magnitude
+                ),
+                toUnit,
+            )
 
         from_lbs_kg_magnitude = FP_Quantity._lbs_kg_conversion_factor.get(fromUnit)
         to_lbs_kg_magnitude = FP_Quantity._lbs_kg_conversion_factor.get(toUnit)
@@ -566,7 +893,153 @@ class FP_Quantity(FP_Type):
                 from_g_mg_magnitude * Decimal(str(value)) / to_g_mg_magnitude
             )
             return FP_Quantity(result, toUnit)
+
+        # FP-02 SKEPTIC QA-003 (2026-08-16): multi-term or exponent-merged
+        # UCUM units ('m2/m', 'm3', 'g.m/s2') convert through base
+        # reduction when no direct group applies, so ordering (§6.2),
+        # equivalence (§6.1.2), and arithmetic comparisons accept the
+        # reduced spellings the §6.6.1/§6.6.2 examples produce.
+        if FP_Quantity._unit_reduces_to_base(fromUnit):
+            from_base = FP_Quantity.conv_unit_to_base(fromUnit, value)
+            to_direct = toUnit in FP_Quantity._ucum_base_conversion_factor or (
+                FP_Quantity._strip_unit_quotes(toUnit)
+                in FP_Quantity._ucum_base_conversion_factor
+            )
+            if to_direct or FP_Quantity._unit_reduces_to_base(toUnit):
+                to_base = FP_Quantity.conv_unit_to_base(toUnit, Decimal(1))
+                if to_base.unit == from_base.unit and to_base.value != 0:
+                    return FP_Quantity(
+                        FP_Quantity._normalize_quantity_value(
+                            Decimal(str(from_base.value)) / Decimal(str(to_base.value))
+                        ),
+                        toUnit,
+                    )
+
+        # FP-08 EXPLORER QA-001 (2026-08-17): direct-table-key units must
+        # also bridge through base reduction. `_unit_reduces_to_base()`
+        # deliberately returns False for direct keys, so derived-unit
+        # families ('J'->'kJ', 'N'->'kN', 'W'->'kW') and exponent-suffixed
+        # area/volume keys ('m2'->'cm2') plus direct<->expression pairs
+        # ('kJ'->'kg.m2/s2') fell through to None here while the native
+        # evaluator converts them and §6.1.1 equality already accepts them
+        # via conv_unit_to_base. The time domain (base unit "'s'") is
+        # excluded so the duration doctrines above stay intact: calendar
+        # year/month vs UCUM 'a'/'mo' pairs and `1 year -> 's'` remain
+        # unconvertible (§5.5.7 category table, §6.1.1 fixture pins), and
+        # the week/day/time groups are handled by the earlier branches.
+        if FP_Quantity._strip_unit_quotes(fromUnit) in FP_Quantity._ucum_base_conversion_factor:
+            to_is_convertible = (
+                FP_Quantity._strip_unit_quotes(toUnit)
+                in FP_Quantity._ucum_base_conversion_factor
+            ) or FP_Quantity._unit_reduces_to_base(toUnit)
+            if to_is_convertible:
+                from_base = FP_Quantity.conv_unit_to_base(fromUnit, value)
+                to_base = FP_Quantity.conv_unit_to_base(toUnit, Decimal(1))
+                if (
+                    to_base.unit == from_base.unit
+                    and from_base.unit != "'s'"
+                    and to_base.value != 0
+                ):
+                    return FP_Quantity(
+                        FP_Quantity._divide_and_render(
+                            Decimal(str(from_base.value)),
+                            Decimal(str(to_base.value)),
+                        ),
+                        toUnit,
+                    )
         return None
+
+    # FP-08 SKEPTIC QA-001/QA-002 (2026-08-17): §5.5.7 toQuantity() has its
+    # OWN canonical conversion-factor table ("1 year = 12 months or 365
+    # days", "1 month = 30 days", "1 day = 24 hours", "1 hour = 60
+    # minutes", "1 minute = 60 seconds"). The equality-oriented group
+    # separation in conv_unit_to() (landed for §6.1 calendar-vs-UCUM
+    # semantics: 12 x 30 days = 360 != 365 days) must NOT block
+    # calendar-keyword to calendar-keyword conversion in toQuantity().
+    # This table is used ONLY by to_quantity()/converts_to_quantity() and
+    # never by equality/ordering/arithmetic conversion paths.
+    # Each duration unit maps to (kind, num, den):
+    #   kind "ym"  -> magnitude in months (year=12, month=1)
+    #   kind "sec" -> magnitude in seconds (exact rationals)
+    # Cross-kind conversion is allowed only when BOTH units are bare
+    # calendar duration keywords (no UCUM quotes), bridging the year/month
+    # side through the direct table rows (year = 365 days, month = 30
+    # days) so year<->month keeps the direct factor 12 (365/30 != 12).
+    _duration_spec_table = {
+        "year": ("ym", 12, 1), "years": ("ym", 12, 1), "'a'": ("ym", 12, 1),
+        "month": ("ym", 1, 1), "months": ("ym", 1, 1), "'mo'": ("ym", 1, 1),
+        "week": ("sec", 604800, 1), "weeks": ("sec", 604800, 1), "'wk'": ("sec", 604800, 1),
+        "day": ("sec", 86400, 1), "days": ("sec", 86400, 1), "'d'": ("sec", 86400, 1),
+        "hour": ("sec", 3600, 1), "hours": ("sec", 3600, 1), "'h'": ("sec", 3600, 1),
+        "minute": ("sec", 60, 1), "minutes": ("sec", 60, 1), "'min'": ("sec", 60, 1),
+        "second": ("sec", 1, 1), "seconds": ("sec", 1, 1), "'s'": ("sec", 1, 1),
+        "millisecond": ("sec", 1, 1000), "milliseconds": ("sec", 1, 1000), "'ms'": ("sec", 1, 1000),
+    }
+    # Direct §5.5.7 rows for bridging year/month into the seconds group.
+    _ym_seconds_bridge = {
+        "year": (365 * 86400, 1), "years": (365 * 86400, 1),
+        "month": (30 * 86400, 1), "months": (30 * 86400, 1),
+    }
+
+    @staticmethod
+    def conv_duration_to_spec(fromUnit, value, toUnit):
+        """§5.5.7 toQuantity()-only duration conversion via the spec's
+        canonical conversion-factor table. Returns FP_Quantity or None when
+        the pair is not a duration pair or the calendar-vs-UCUM category
+        doctrine (§4.1.8/§6.1) forbids the conversion."""
+        table = FP_Quantity._duration_spec_table
+        from_entry = table.get(fromUnit)
+        to_entry = table.get(toUnit)
+        if not from_entry or not to_entry:
+            return None
+        from_kind, from_num, from_den = from_entry
+        to_kind, to_num, to_den = to_entry
+        if from_kind != to_kind:
+            # Cross-category (year/month vs day-and-below): allowed only
+            # for bare calendar keywords on BOTH sides, per the §5.5.7
+            # table rows (1 year = 365 days, 1 month = 30 days). UCUM
+            # codes keep the §6.1 category rejection (1 year -> 's'
+            # remains empty, pinned by
+            # test_calendar_vs_ucum_duration_group_separation_fp08_explorer).
+            from_bare = fromUnit in FP_Quantity._ym_seconds_bridge or (
+                from_kind == "sec" and not (fromUnit.startswith("'") and fromUnit.endswith("'"))
+            )
+            to_bare = toUnit in FP_Quantity._ym_seconds_bridge or (
+                to_kind == "sec" and not (toUnit.startswith("'") and toUnit.endswith("'"))
+            )
+            if not (from_bare and to_bare):
+                return None
+            if from_kind == "ym":
+                from_num, from_den = FP_Quantity._ym_seconds_bridge[fromUnit]
+            else:
+                to_num, to_den = FP_Quantity._ym_seconds_bridge[toUnit]
+        if not isinstance(value, Decimal):
+            value = Decimal(str(value))
+        # Single division => one 28-significant-digit rounding, matching
+        # the pre-existing conv_unit_to() Decimal style (§4.1.4), with
+        # exact-quotient trailing-zero trimming for native parity
+        # (FP-08 HISTORIAN QA-001).
+        numerator = value * from_num * to_den
+        denominator = from_den * to_num
+        return FP_Quantity(FP_Quantity._divide_and_render(numerator, denominator), toUnit)
+
+    @staticmethod
+    def _unit_reduces_to_base(unit):
+        """True when the unit is a multi-term/exponent UCUM expression whose
+        every symbol is convertible through the UCUM base table ('m2/m',
+        'm3', 'g.m/s2'), i.e. neither a direct table key nor unconvertible.
+        """
+        if unit in FP_Quantity._ucum_base_conversion_factor:
+            return False
+        clean = FP_Quantity._strip_unit_quotes(unit)
+        if clean in FP_Quantity._ucum_base_conversion_factor:
+            return False
+        terms = FP_Quantity._parse_unit_exponents(clean)
+        if terms is None:
+            return False
+        return all(
+            symbol in FP_Quantity._ucum_base_conversion_factor for symbol in terms
+        )
 
     def _compare_years_and_months(self, other, year_units=None):
         year_units = year_units or ["year", "years"]
@@ -593,9 +1066,38 @@ class FP_Quantity(FP_Type):
         ) or (
             self.unit in self._ucum_duration_units and other.unit in self._calendar_duration_units
         )
+        # FP-01 SKEPTIC QA-003/QA-004 (2026-08-16): comparable despite the
+        # calendar/UCUM mix when a calendar year/month keyword faces a UCUM
+        # week/day/time code — `30 'd'` is exactly 30 days, so §5.5.7 factors
+        # still apply (`1 month > 29 'd'` // true). Only the year/month UCUM
+        # analogues ('a'/'mo') stay un-comparable per §6.2 (`1 'mo' > 29
+        # days` // empty, `1 year > 1 'a'` // empty).
+        calendar_ym_vs_ucum_weeks_days_time = (
+            self.unit in self._years_and_months
+            and self.unit in self._calendar_duration_units
+            and other.unit in self._weeks_days_and_time
+            and other.unit in self._ucum_duration_units
+        ) or (
+            other.unit in self._years_and_months
+            and other.unit in self._calendar_duration_units
+            and self.unit in self._weeks_days_and_time
+            and self.unit in self._ucum_duration_units
+        )
+        # FP-02 HISTORIAN QA-003 (2026-08-16): a calendar week/day/time
+        # KEYWORD facing a UCUM week/day/time code is exactly convertible
+        # (both sides carry exact second multipliers via
+        # datetime_multipliers / the UCUM base table), so ordering is
+        # decidable — `1 day > 23 'h'` // true — matching the equality
+        # surface (`1 day = 24 'h'` // true). Only year/month keyword-vs-
+        # 'a'/'mo' pairs stay un-comparable (§6.1.1/§6.2, fixture-pinned
+        # empty by FP-01 HISTORIAN QA-001). This subsumes the previous
+        # second/millisecond-only exemption.
+        calendar_wdt_vs_ucum_wdt = (
+            self.unit in self._weeks_days_and_time
+            and other.unit in self._weeks_days_and_time
+        )
         if mixed_calendar_ucum and not (
-            self.unit in self._second_or_millisecond_duration_units
-            and other.unit in self._second_or_millisecond_duration_units
+            calendar_wdt_vs_ucum_wdt or calendar_ym_vs_ucum_weeks_days_time
         ):
             return None
 
@@ -624,6 +1126,32 @@ class FP_Quantity(FP_Type):
                 return 1
             return 0
 
+        # FP-01 SKEPTIC QA-003/QA-004 (2026-08-16): Cross-group time-valued
+        # ordering such as `1 month > 29 days` uses the §5.5.7 calendar
+        # conversion factors (1 month = 30 days, 1 year = 365 days) for the
+        # calendar keyword operand, per §6.2 "as well as the calendar
+        # durations as defined in the toQuantity function". Mixed
+        # calendar-vs-UCUM year/month pairs were already rejected above.
+        cross_group = (
+            self.unit in self._years_and_months and other.unit in self._weeks_days_and_time
+        ) or (
+            self.unit in self._weeks_days_and_time and other.unit in self._years_and_months
+        )
+        if cross_group:
+            self_seconds = self._unanchored_duration_seconds(self.unit, self.value)
+            other_seconds = self._unanchored_duration_seconds(other.unit, other.value)
+            if (
+                self_seconds is not None
+                and other_seconds is not None
+                and self_seconds[1] == other_seconds[1]
+            ):
+                if self_seconds[0] < other_seconds[0]:
+                    return -1
+                if self_seconds[0] > other_seconds[0]:
+                    return 1
+                return 0
+            return None
+
         # Try to convert units for comparison
         if self.unit != other.unit:
             converted = FP_Quantity.conv_unit_to(self.unit, self.value, other.unit)
@@ -631,6 +1159,22 @@ class FP_Quantity(FP_Type):
                 if converted.value < other.value:
                     return -1
                 elif converted.value > other.value:
+                    return 1
+                return 0
+            # FP-02 SKEPTIC QA-004 (found in FIX, 2026-08-16): §6.2 quantity
+            # ordering must use the same UCUM base-table comparability the
+            # §6.1.1 equality path (`_quantity_base`) already uses — pairs
+            # such as `1 'mm[Hg]' < 200 'Pa'` ordered in the native path but
+            # returned empty here because conv_unit_to only knows the
+            # special groups. Unknown units come back unchanged, so two
+            # different unknown units still compare as None; offset
+            # temperature units map to distinct bases and stay incomparable.
+            self_base = FP_Quantity.conv_unit_to_base(self.unit, self.value)
+            other_base = FP_Quantity.conv_unit_to_base(other.unit, other.value)
+            if self_base.unit == other_base.unit:
+                if self_base.value < other_base.value:
+                    return -1
+                if self_base.value > other_base.value:
                     return 1
                 return 0
             # FHIRPath §6.1: incompatible units → cannot compare
@@ -684,6 +1228,34 @@ class FP_TimeBase(FP_Type):
 
     def _getDateTimeInt(self):
         raise NotImplementedError()
+
+    # FP-14 EXPLORER QA-001/QA-002/QA-003 (2026-08-18): §6.2 requires
+    # seconds + fractional seconds to compare as a single decimal precision
+    # with decimal comparison semantics (and fixtures testLessThan26/27 pin
+    # that trailing-zero fractions add no precision). Python `datetime`
+    # caps at microseconds and `strptime("%f")` at 6 digits, so the old
+    # `_getDateTimeInt()`-based comparison truncated 7-9 digit fractions
+    # and cross-compared incommensurate FP_Date/FP_DateTime numeric scales.
+    # Comparisons therefore walk components and compare the raw fraction
+    # digit strings decimally (a missing fraction is "0").
+    def _fraction_digits(self):
+        lst = self._getMatchAsList()
+        # FP_Time: 5-element list, fraction at index 3
+        if len(lst) == 5:
+            return lst[3]
+        # FP_Date / FP_DateTime: 8-element lists, fraction at index 6
+        if len(lst) >= 7:
+            return lst[6]
+        return None
+
+    @staticmethod
+    def _compare_decimal_fractions(fa, fb):
+        fa = fa or "0"
+        fb = fb or "0"
+        width = max(len(fa), len(fb))
+        fa = fa.ljust(width, "0")
+        fb = fb.ljust(width, "0")
+        return (fa > fb) - (fa < fb)
 
     def equals(self, otherDateTime):
         """
@@ -744,7 +1316,17 @@ class FP_TimeBase(FP_Type):
             return None
 
         if normalized_thisdt_precision == normalized_otherdt_precision:
-            return self._getDateTimeInt() == otherDateTime._getDateTimeInt()
+            # FP-14 EXPLORER QA-001: compare components + the decimal
+            # fraction exactly; `_getDateTimeInt()` truncates fractional
+            # seconds at microseconds (dateutil/datetime cap).
+            if normalized_thisdt_list != normalized_otherdt_list:
+                return False
+            return (
+                self._compare_decimal_fractions(
+                    self._fraction_digits(), otherDateTime._fraction_digits()
+                )
+                == 0
+            )
 
         if normalized_thisdt_precision != normalized_otherdt_precision:
             min_precision = min(normalized_thisdt_precision, normalized_otherdt_precision)
@@ -842,14 +1424,22 @@ class FP_TimeBase(FP_Type):
                     return 1
             return 0
 
-        thisDateTimeInt = self._getDateTimeInt()
-        otherDateTimeInt = otherDateTime._getDateTimeInt()
-
-        if thisDateTimeInt < otherDateTimeInt:
-            return -1
-        elif thisDateTimeInt == otherDateTimeInt:
-            return 0
-        return 1
+        # FP-14 EXPLORER QA-001/QA-003: componentwise walk plus exact
+        # decimal-fraction compare. The previous `_getDateTimeInt()` branch
+        # (a) truncated sub-microsecond fractions (datetime cap) and
+        # (b) mixed FP_Date multiplier-sum ints with FP_DateTime epoch
+        # timestamps for equal-precision Date-vs-DateTime comparisons,
+        # flipping the result (e.g. @2015-01-01 < @2016-01-01T -> false).
+        for left, right in zip(normalized_thisdt_list, normalized_otherdt_list, strict=True):
+            if left is None or right is None:
+                return None
+            if left < right:
+                return -1
+            if left > right:
+                return 1
+        return self._compare_decimal_fractions(
+            self._fraction_digits(), otherDateTime._fraction_digits()
+        )
 
     # Conversion divisors for truncating fine-grained units to coarser ones.
     # Key: (from_unit, to_unit) -> divisor
@@ -1020,9 +1610,13 @@ class FP_TimeBase(FP_Type):
                 result = date_obj
         else:
             result = date_obj
-        return (
-            self._extractTimeByPrecision(result, precision) + (dt_list[4] or "")
-        )
+        # FP-01 HISTORIAN QA-002 (2026-08-16): the arithmetic result must be
+        # an FP_Time value in canonical T-less lexical form (§5.5.1 toString
+        # representation table: Time renders as hh:mm:ss.fff), identical to
+        # how Time literals are stored. Returning the raw "T..."-prefixed
+        # string leaked the literal marker into results (`T15:04:28`) and
+        # degraded the value to a plain String.
+        return FP_Time(self._extractTimeByPrecision(result, precision) + (dt_list[4] or ""))
 
     @staticmethod
     def check_string(cls, str_val):
@@ -1210,6 +1804,14 @@ class FP_Time(FP_TimeBase):
                 "T%H:%M:%S",
                 "T%H:%M:%S.%f",
                 "T%H:%M%z",
+                # FP-08 SKEPTIC QA-003 (2026-08-17): non-timezone T-prefixed
+                # partial forms must parse too; without "T%H:%M"/"T%H" the
+                # strptime loop never sets _pyTimeObject for 'T14:34'/'T14',
+                # so FP_TimeBase.equals() compares _getDateTimeInt() None vs
+                # int and `'T14:34'.toTime() = @T14:34` wrongly returns false
+                # while native returns true.
+                "T%H:%M",
+                "T%H",
                 "%H:%M:%S%z",
                 "%H:%M:%S.%f%z",
                 "%H:%M:%S",
@@ -1217,6 +1819,7 @@ class FP_Time(FP_TimeBase):
                 "%H:%M%z",
                 "%H:%M",
                 "%H%z",
+                "%H",
             ]
 
             for fmt in formats:
@@ -1228,6 +1831,31 @@ class FP_Time(FP_TimeBase):
                     break
                 except ValueError:
                     continue
+
+            # FP-14 EXPLORER QA-002 (2026-08-18): strptime("%f") accepts at
+            # most 6 fractional digits, so §4.1.7 Time literals with 7-9
+            # digit fractions left `_pyTimeObject` None and every ordering
+            # errored to empty. Build the time object manually (fraction
+            # truncated to microseconds is fine here: ordering uses the
+            # exact digit strings via `_compare_decimal_fractions`; this
+            # object backs display/arithmetic only).
+            if self._pyTimeObject is None and self._timeMatchData.group(1) is not None:
+                _h = self._timeMatchData.group(1)
+                _mi = self._timeMatchData.group(2)
+                _s = self._timeMatchData.group(3)
+                _frac = self._timeMatchData.group(4)
+                try:
+                    self._pyTimeObject = datetime(
+                        2000,
+                        1,
+                        1,
+                        int(_h),
+                        int(_mi or 0),
+                        int(_s or 0),
+                        int((_frac + "000000")[:6]) if _frac else 0,
+                    ).time()
+                except ValueError:
+                    pass
 
     def __str__(self):
         if self._timeMatchData:
@@ -1270,9 +1898,12 @@ class FP_Time(FP_TimeBase):
         return None
 
     def _extractTimeByPrecision(self, date_obj, precision):
-        format = {1: "T%H", 2: "T%H:%M", 3: "T%H:%M:%S", 4: "T%H:%M:%S.%f"}
+        # FP-01 HISTORIAN QA-002 (2026-08-16): canonical Time lexical form is
+        # T-less (§5.5.1 toString table: Time -> hh:mm:ss.fff). The leading
+        # "T" belongs only to the @T literal syntax, not to values.
+        format = {1: "%H", 2: "%H:%M", 3: "%H:%M:%S", 4: "%H:%M:%S.%f"}
         if precision == 4:
-            return date_obj.strftime("T%H:%M:%S.") + date_obj.strftime("%f")[:3]
+            return date_obj.strftime("%H:%M:%S.") + date_obj.strftime("%f")[:3]
         return date_obj.strftime(format.get(precision)) if precision in format else None
 
     def _calculateTimePrecision(self, dt_list):
@@ -1429,8 +2060,10 @@ class FP_DateTime(FP_TimeBase):
             milliseconds = date_obj.strftime("%f")[:3]
             formatted_date = f"{formatted_date}.{milliseconds}"
         if precision >= 4 and timezone_str:
-            # Normalize Z to +00:00 for consistent output.
-            formatted_date += "+00:00" if timezone_str == "Z" else timezone_str
+            # Preserve the authored timezone spelling, including "Z"
+            # (parity with the native evaluator, which keeps "Z" through
+            # temporal arithmetic).
+            formatted_date += timezone_str
         return formatted_date
 
     def _convertDatetime(self, date_list):
@@ -1490,6 +2123,28 @@ class ResourceNode:
     *  this parameter.
     * @param _data additional data stored in a property named with "_" prepended.
     """
+
+    # FP-12 EXPLORER QA-001 (2026-08-17): field-name -> complex type table
+    # mirroring the native evaluator.cpp field_name inference chains used by
+    # type()/is()/ofType(). LOCKSTEP RULE: keep aligned with the native
+    # structuralFHIRComplexType/field-name chains in evaluator.cpp.
+    _FIELD_NAME_COMPLEX_TYPES = {
+        "name": "HumanName",
+        "address": "Address",
+        "identifier": "Identifier",
+        "telecom": "ContactPoint",
+        "coding": "Coding",
+        "code": "CodeableConcept",
+        "extension": "Extension",
+        "modifierExtension": "Extension",
+    }
+
+    # Known FHIR backbone-element fields (curated from
+    # models/r4/fhir_path_to_type.json; mirrors the native set in
+    # structuralFHIRComplexType).
+    _BACKBONE_ELEMENT_FIELDS = frozenset(
+        {"communication", "component", "compose", "contact", "expansion", "item", "link"}
+    )
 
     def __init__(self, data, path, _data=None, propName=None, index=None):
         """
@@ -1619,6 +2274,22 @@ class ResourceNode:
                         fhir_type = suffix[0].lower() + suffix[1:]
                         return TypeInfo(namespace=namespace, name=fhir_type)
 
+        # FP-12 EXPLORER QA-001 (2026-08-17): mirror the native engine's
+        # field-name complex-type inference (evaluator.cpp structuralFHIRComplexType
+        # and the type()/is()/ofType() field_name chains) for Mapping nodes whose
+        # paths are absent from path metadata — e.g. recursive backbone paths
+        # (Questionnaire.item.item) and choice-suffixed nested paths
+        # (Observation.component.valueCodeableConcept.coding). Without this,
+        # `item.item.type().name` reports 'object' and `coding.ofType(FHIR.Coding)`
+        # misses while the native engine types them BackboneElement/Coding.
+        if isinstance(self.data, abc.Mapping) and self.path and "." in self.path:
+            field_name = self.path.rsplit(".", 1)[1]
+            complex_name = self._FIELD_NAME_COMPLEX_TYPES.get(field_name)
+            if complex_name is None and field_name in self._BACKBONE_ELEMENT_FIELDS:
+                complex_name = "BackboneElement"
+            if complex_name is not None:
+                return TypeInfo(namespace=namespace, name=complex_name)
+
         # If we have a model but no path match, fall back to value-based inference
         # (don't just return BackboneElement)
         # Fall back to value-based type inference
@@ -1700,10 +2371,24 @@ class TypeInfo:
     # Loaded from models/r4/fhir_path_to_type.json
     FHIR_PATH_TO_TYPE = _load_json("fhir_path_to_type.json")
 
-    # Loaded from models/r4/type2Parent.json with legacy primitive overrides.
+    # Loaded from models/r4/type2Parent.json as the CANONICAL hierarchy, with
+    # deliberate legacy-primitive conventions layered on top. Canonical must
+    # win for primitive subtype chains: type2Parent.json carries uuid->uri /
+    # oid->uri (official R4; fixture testTypeA4 pins `valueUuid is FHIR.uri`
+    # // true), while the legacy fhir_type_hierarchy.json flattens uuid/oid
+    # straight to string, erasing the uri ancestor and breaking qualified
+    # `is`/`as` subtype checks (FP-15 SKEPTIC QA-001, 2026-08-18). The
+    # remaining explicit overrides preserve documented conventions: uri is
+    # string-compatible for `is FHIR.string`, and Money/Dosage/Timing keep
+    # their legacy FHIRPath parents (Money is a Quantity profile; Dosage and
+    # Timing are Element datatypes, not BackboneElements).
     FHIR_TYPE_HIERARCHY = {
-        **_load_json("type2Parent.json"),
         **_load_json("fhir_type_hierarchy.json"),
+        **_load_json("type2Parent.json"),
+        "uri": "string",
+        "Money": "Quantity",
+        "Dosage": "Element",
+        "Timing": "Element",
     }
 
     def __init__(self, name, namespace):

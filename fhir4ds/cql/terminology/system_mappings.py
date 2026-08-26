@@ -38,3 +38,42 @@ SOURCE_MNEMONIC_TO_URL: dict[str, str] = {
     "NDC": "http://hl7.org/fhir/sid/ndc",
     "MEASURE": "http://hl7.org/fhir/measure",
 }
+
+#: Coarse category hint -> medterm4ds source mnemonics. Intentionally
+#: permissive: unknown categories fall through to ``None`` ("all sources").
+CATEGORY_TO_SOURCES: dict[str, tuple[str, ...]] = {
+    "condition": ("SNOMEDCT_US",),
+    "medication": ("RXNORM",),
+    "lab": ("LNC",),
+    "loinc": ("LNC",),
+    "snomed": ("SNOMEDCT_US",),
+    "rxnorm": ("RXNORM",),
+    "icd10": ("ICD10CM",),
+    "icd10cm": ("ICD10CM",),
+}
+
+
+def category_to_source_mnemonics(category: str) -> tuple[str, ...] | None:
+    """Map a coarse category hint to medterm4ds source mnemonics.
+
+    Returns ``None`` for unknown/empty categories — medterm4ds interprets
+    that as "search all sources".
+    """
+    if not category:
+        return None
+    return CATEGORY_TO_SOURCES.get(category.lower())
+
+
+def category_to_system_param(category: str) -> str | None:
+    """Map a coarse category hint to a FHIR ``system`` parameter value.
+
+    medterm4ds 0.0.2 HTTP ``$search`` reads ``system`` (canonical URL),
+    not the old ``category`` hint. Returns a comma-joined canonical URL
+    list, or ``None`` when the category is unknown/empty (all-systems is
+    the medterm semantic in that case — omit the param entirely).
+    """
+    mnemonics = category_to_source_mnemonics(category)
+    if not mnemonics:
+        return None
+    urls = [SOURCE_MNEMONIC_TO_URL[m] for m in mnemonics if m in SOURCE_MNEMONIC_TO_URL]
+    return ",".join(urls) if urls else None

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from datetime import date
 
+from decimal import Decimal
+
 import duckdb
 import pytest
 
@@ -261,7 +263,7 @@ define QuantityValueMin: Min({IndexQuantity().value / 0.9, 1}) = 1
 """
     translated = translate_cql(cql)
     expected = {
-        "QuantityValueRatio": (5.555555555555555,),
+        "QuantityValueRatio": (Decimal("5.55555556"),),  # CQL-01 exact DECIMAL(38,8) division via cqlDivide
         "QuantityValueMin": (True,),
     }
     py = _python_only_connection()
@@ -282,9 +284,12 @@ def test_cql_coalesce_rejects_invalid_scalar_arities_but_allows_list() -> None:
     invalid_bodies = [
         "define X: Coalesce()",
         "define X: Coalesce(1)",
-        "define X: Coalesce(null, null, null, null, null, 1)",
+        # CQL 1.5 §Coalesce: arguments must be implicitly castable to a
+        # common type; String and Integer are not — rejected in BOTH orders.
+        "define X: Coalesce(null, 1, 'x')",
+        "define X: Coalesce(null, 'x', 1)",
     ]
-    for body in invalid_bodies:
+    for body in invalid_bodies[:2]:
         cql = f"""library BadCoalesce version '1.0.0'
 using FHIR version '4.0.1'
 context Patient
@@ -292,19 +297,32 @@ context Patient
 """
         with pytest.raises(TranslationError, match="Coalesce scalar overload"):
             translate_cql(cql)
+    for body in invalid_bodies[2:]:
+        cql = f"""library BadCoalesce version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+{body}
+"""
+        with pytest.raises(TranslationError, match="implicitly castable"):
+            translate_cql(cql)
 
+    # CQL 1.5 §Coalesce: scalar invocation is variadic with no upper bound.
     valid_cql = """library GoodCoalesce version '1.0.0'
 using FHIR version '4.0.1'
 context Patient
 define EmptyList: Coalesce({})
 define ListValue: Coalesce({null, 'x'})
 define FiveScalar: Coalesce(null, null, null, null, 'y')
+define SixScalar: Coalesce(null, null, null, null, null, 1)
+define NineScalar: Coalesce(null, null, null, null, null, null, null, null, 2)
 """
     translated = translate_cql(valid_cql)
     expected = {
         "EmptyList": (None,),
         "ListValue": ("x",),
         "FiveScalar": ("y",),
+        "SixScalar": (1,),
+        "NineScalar": (2,),
     }
     py = _python_only_connection()
     cpp = _cpp_connection()
@@ -347,7 +365,6 @@ def test_cql_direct_coalesce_rejects_invalid_scalar_arities() -> None:
     invalid = [
         'SELECT "Coalesce"(1)',
         'SELECT "Coalesce"(NULL)',
-        'SELECT "Coalesce"(NULL, NULL, NULL, NULL, NULL, 1)',
     ]
     py = _python_only_connection()
     cpp = _cpp_connection()
@@ -359,6 +376,8 @@ def test_cql_direct_coalesce_rejects_invalid_scalar_arities() -> None:
             assert con.execute('SELECT "Coalesce"([NULL, 5])').fetchone() == (5,)
             assert con.execute('SELECT "Coalesce"(NULL, NULL)').fetchone() == (None,)
             assert con.execute('SELECT "Coalesce"(NULL, NULL, NULL, NULL, 5)').fetchone() == (5,)
+            # Variadic scalar overload has no upper bound (CQL 1.5 §Coalesce).
+            assert con.execute('SELECT "Coalesce"(NULL, NULL, NULL, NULL, NULL, 6)').fetchone() == (6,)
     finally:
         py.close()
         cpp.close()
@@ -488,3 +507,166 @@ define StrInfixIsNotNull: StrAlias is not null
         py.close()
         cpp.close()
 
+
+
+def test_cql_coalesce_variadic_over_fhir_boolean_defaults_cql08() -> None:
+    """CQL-08 SKEPTIC (2026-08-20): the scalar Coalesce overload is variadic
+    with no upper bound (CQL 1.5 §Coalesce — "first non-null expression among
+    two or more"). A six-argument Coalesce over a dynamic FHIR Boolean field
+    with a static null tail must translate (population context) and the static
+    tail must execute on both backends.
+    """
+    cql = """library VariadicCoalesce version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define ActiveDefault: Coalesce(Patient.active, null, null, null, null, false)
+define AllNullTail: Coalesce(null, null, null, null, null, null)
+define NumericSix: Coalesce(null, null, null, null, null, 7)
+"""
+    translated = translate_cql(cql)
+    active_sql = translated["ActiveDefault"].to_sql()
+    assert "COALESCE" in active_sql
+    assert "fhirpath_bool" in active_sql
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            null_sql = translated["AllNullTail"].to_sql()
+            numeric_sql = translated["NumericSix"].to_sql()
+            assert con.execute(f"SELECT {null_sql}").fetchone() == (None,)
+            assert con.execute(f"SELECT {numeric_sql}").fetchone() == (7,)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_coalesce_nested_static_type_guard_cql08_historian() -> None:
+    """CQL-08 HISTORIAN QA-002: a nested Coalesce call must propagate its
+    static return type (the first non-null argument's type per CQL 1.5
+    §Coalesce) so that a String/numeric family mix inside nested Coalesce
+    arguments is rejected at translation with the same typed TranslationError
+    as the flat form — instead of leaking a raw DuckDB binder error at
+    execution time."""
+    header = "library NestedCoalesce version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n"
+    rejected = [
+        "Coalesce(1, Coalesce(null, 'a'))",
+        "Coalesce(Coalesce(null, 'a'), 1)",
+        "Coalesce(1, Coalesce(null as String))",
+    ]
+    for expr in rejected:
+        with pytest.raises(TranslationError, match="implicitly castable"):
+            translate_cql(header + f"define X:\n  {expr}\n")
+
+    accepted = {
+        "Coalesce(1, Coalesce(null, 2))": 1,
+        "Coalesce(null, Coalesce(null, 'a'))": "a",
+        "Coalesce(Coalesce(null, null), 5)": 5,
+        "Coalesce('a', Coalesce(null, 'b'))": "a",
+    }
+    translated = translate_cql(
+        header
+        + "\n".join(f"define D{i}:\n  {expr}" for i, expr in enumerate(accepted))
+    )
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for i, expected in enumerate(accepted.values()):
+            sql = f"SELECT {translated[f'D{i}'].to_sql()}"
+            assert py.execute(sql).fetchone() == (expected,)
+            assert cpp.execute(sql).fetchone() == (expected,)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_to_integer_long_reject_decimal_cql08_historian() -> None:
+    """CQL-08 HISTORIAN QA-001: CQL 1.5 Appendix B Table 9-E defines no
+    Decimal->Integer/Long conversion (ToInteger overloads: Boolean/String/
+    Long; ToLong: Boolean/String). Decimal inputs yield null/false on BOTH
+    the native and Python-fallback registration surfaces; the spec's
+    truncation behavior belongs to the separate Truncate operator."""
+    header = "library DecReject version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n"
+    translated = translate_cql(
+        header
+        + "\n".join(
+            [
+                "define TI: ToInteger(1.5)",
+                "define TINeg: ToInteger(-1.5)",
+                "define TL: ToLong(2.5)",
+                "define CTI: CanConvert(1.5, Integer)",
+                "define CTL: CanConvert(2.5, Long)",
+                "define ConvTI: convert 2.7 to Integer",
+                "define TIString: ToInteger('1.5')",
+                "define TIValid: ToInteger('-25')",
+            ]
+        )
+    )
+    expected = {
+        "TI": None,
+        "TINeg": None,
+        "TL": None,
+        "CTI": False,
+        "CTL": False,
+        "ConvTI": None,
+        "TIString": None,
+        "TIValid": -25,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (value,), name
+            assert cpp.execute(sql).fetchone() == (value,), name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_is_null_over_query_valued_lists_fixture_semantics_cql08_explorer() -> None:
+    """CQL-08 EXPLORER pin: query-valued `is (not) null` is EXISTENTIAL.
+
+    Strict Appendix B reading (a List, even empty, is never null) would make
+    `(query) is not null` a constant true — but official eCQM content
+    (CMS2/CMS771/CMS130, ecqm-content-qicore-2025) uses the idiom
+    `( "Most Recent X" Q where ... ) is not null` as a NON-EMPTINESS test,
+    and the DQM conformance fixtures encode that expectation. Fixtures
+    outrank spec prose, so query operands keep row-presence semantics:
+    IS NOT NULL over the lowered scalar subquery. The literal-list path
+    stays strict-spec (IsNull({}) is false, IsNull({null}) is false,
+    IsNull(null as List<T>) is true). Both registration surfaces agree."""
+    header = "library NullQuery version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n"
+    translated = translate_cql(
+        header
+        + "\n".join(
+            [
+                "define EmptyQueryIsNull: IsNull((from {} D return D))",
+                "define FilteredEmptyIsNotNull: (from { 1, 2, 3 } D where D > (null as Integer) return D) is not null",
+                "define FilteredEmptyIsNull: (from { 1, 2, 3 } D where D > (null as Integer) return D) is null",
+                "define ScalarNullIsNull: IsNull(null)",
+                "define NullElemListIsNull: IsNull({ null as Integer })",
+                "define EmptyListLiteralIsNull: IsNull({})",
+                "define NullListIsNull: IsNull(null as List<Integer>)",
+            ]
+        )
+    )
+    expected = {
+        "EmptyQueryIsNull": True,           # fixture semantics: empty query -> null
+        "FilteredEmptyIsNotNull": False,    # no rows -> "is not null" false (eCQM idiom)
+        "FilteredEmptyIsNull": True,
+        "ScalarNullIsNull": True,
+        "NullElemListIsNull": False,        # strict-spec literal-list path
+        "EmptyListLiteralIsNull": False,
+        "NullListIsNull": True,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (value,), name
+            assert cpp.execute(sql).fetchone() == (value,), name
+    finally:
+        py.close()
+        cpp.close()

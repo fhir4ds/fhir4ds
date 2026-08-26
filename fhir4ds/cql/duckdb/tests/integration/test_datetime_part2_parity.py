@@ -411,3 +411,78 @@ def test_cql_datetime_part2_explorer_integer_quantity_unaffected() -> None:
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_datetime_part2_starts_ends_same_or_and_on_or_precision() -> None:
+    """CQL 1.5 §9.18/§9.19 ("same" is a synonym for "on" in timing phrases),
+    §9.25 Same Or After / §9.26 Same Or Before, §9.24 Same As.
+
+    Two previously broken timing-phrase surfaces:
+    1. `starts/ends same <precision> or after|or before` — the parser dropped
+       the `or after`/`or before` qualifier (consuming the token as if it were
+       `as`), lowering to same-as equality (definitive wrong booleans), and
+       the no-precision forms were hard ParseErrors. Per the CQL grammar
+       these are SameOrAfter/SameOrBefore on the start/end boundary of the
+       left operand.
+    2. `starts/ends on or before|after <precision> of X` — the interval-bound
+       side was hardcoded to DATE casts, ignoring the specified precision,
+       producing false negatives at year/month precision.
+    """
+    cql = """library DateTime2Explorer version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define StartsWithOrAfterTrue: Interval[@2012-01-02, @2012-01-05] starts same day or after @2012-01-01
+define StartsWithOrAfterFalse: Interval[@2012-01-01, @2012-01-05] starts same day or after @2012-01-02
+define EndsWithOrBeforeTrue: Interval[@2012-01-01, @2012-01-05] ends same day or before @2012-01-06
+define EndsWithOrBeforeFalse: Interval[@2012-01-01, @2012-01-06] ends same day or before @2012-01-05
+define StartsWithOrAfterHour: Interval[@2012-01-01T05:00:00, @2012-01-01T09:00:00] starts same hour or after @2012-01-01T03:30:00
+define NoPrecisionOrAfter: Interval[@2012-01-02, @2012-01-05] starts same or after @2012-01-01
+define NoPrecisionOrBefore: Interval[@2012-01-01, @2012-01-05] ends same or before @2012-01-06
+define SameOrIntervalRight: Interval[@2012-01-05, @2012-01-06] starts same day or after Interval[@2012-01-01, @2012-01-04]
+define SameOrBeforeIntervalRight: Interval[@2012-01-01, @2012-01-02] ends same day or before Interval[@2012-01-03, @2012-01-04]
+define StartsOnOrBeforeYear: Interval[@2012-01-01, @2012-06-01] starts on or before year of @2012-12-31
+define EndsOnOrBeforeYear: Interval[@2012-01-01, @2012-06-01] ends on or before year of @2012-12-31
+define EndsOnOrBeforeMonth: Interval[@2012-01-01, @2012-03-01] ends on or before month of @2012-03-20
+define EndsOnOrBeforeMonthFalse: Interval[@2012-01-01, @2012-04-01] ends on or before month of @2012-03-20
+define StartsOnOrAfterMonth: Interval[@2012-03-15, @2012-06-01] starts on or after month of @2012-03-20
+define EndsOnOrAfterYear: Interval[@2012-03-01, @2012-06-01] ends on or after year of @2012-01-15
+define StartsOnOrBeforeDay: Interval[@2012-01-01, @2012-01-05] starts on or before day of @2012-01-06
+define SameAsPointStillWorks: Interval[@2012-01-01, @2012-01-05] starts same day as @2012-01-01
+define SameAsIntervalSingleton: Interval[@2012-01-01, @2012-01-05] starts same day as Interval[@2012-01-01, @2012-01-10]
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "StartsWithOrAfterTrue": "true",
+        "StartsWithOrAfterFalse": "false",
+        "EndsWithOrBeforeTrue": "true",
+        "EndsWithOrBeforeFalse": "false",
+        "StartsWithOrAfterHour": "true",
+        "NoPrecisionOrAfter": "true",
+        "NoPrecisionOrBefore": "true",
+        "SameOrIntervalRight": "true",
+        "SameOrBeforeIntervalRight": "true",
+        "StartsOnOrBeforeYear": "true",
+        "EndsOnOrBeforeYear": "true",
+        "EndsOnOrBeforeMonth": "true",
+        "EndsOnOrBeforeMonthFalse": "false",
+        "StartsOnOrAfterMonth": "true",
+        "EndsOnOrAfterYear": "true",
+        "StartsOnOrBeforeDay": "true",
+        "SameAsPointStillWorks": "true",
+        # §9.24 Same As with a point-vs-interval operand: the point is a
+        # singleton interval so start AND end must match — differing ends → false.
+        "SameAsIntervalSingleton": "false",
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = f"SELECT CAST(({translated[name].to_sql()}) AS VARCHAR)"
+            py_row = py.execute(sql).fetchone()[0]
+            cpp_row = cpp.execute(sql).fetchone()[0]
+            norm = lambda v: None if v is None else str(v).strip().lower()  # noqa: E731
+            assert norm(py_row) == expected_value, f"Python mismatch for {name}: {py_row!r} != {expected_value!r}"
+            assert norm(cpp_row) == expected_value, f"C++ mismatch for {name}: {cpp_row!r} != {expected_value!r}"
+    finally:
+        py.close()
+        cpp.close()

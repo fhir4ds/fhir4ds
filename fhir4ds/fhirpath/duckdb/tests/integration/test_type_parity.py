@@ -1007,6 +1007,11 @@ def test_as_element_on_primitive_preserves_empty_parity_fp20_historian(
     `as Element` on a FHIR primitive (Python's `as Element` returns
     empty even though `is Element` returns true). When Python's `as
     Element` is fixed to return the input, this gate should be removed.
+
+    FP-15 HISTORIAN (2026-08-18): confirmed this gate is required, not
+    temporary: official fixtures testFHIRPathAsFunction11/13 pin exact-match
+    `as` for FHIR primitives (`gender.as(string)` -> EMPTY), so `as Element`
+    on a primitive stays empty in both engines.
     """
     resource = json.dumps({
         "resourceType": "Patient",
@@ -1021,14 +1026,14 @@ def test_as_element_on_primitive_preserves_empty_parity_fp20_historian(
     native = _connection()
     fallback = _python_fallback_connection(monkeypatch)
     try:
-        for expression in expressions:
+        for expression in ["valueInteger as Element", "active as Element"]:
             native_row = native.execute(
                 "SELECT fhirpath_json(?::JSON, ?)", [resource, expression]
             ).fetchone()[0]
             fallback_row = fallback.execute(
                 "SELECT fhirpath_json(?::JSON, ?)", [resource, expression]
             ).fetchone()[0]
-            # Both must be empty (None/NULL)
+            # Both must be empty (None/NULL): fixtures pin exact-match `as`
             assert native_row is None, (
                 f"native should return NULL for {expression!r}, got {native_row!r}"
             )
@@ -1319,3 +1324,401 @@ def test_choice_type_assertion_unchanged_for_populated_choice_field_fp15_explore
         native.close()
         fallback.close()
 
+
+
+def test_temporal_field_type_specifiers_parity_fp02_explorer(monkeypatch) -> None:
+    """FP-02 EXPLORER QA-002 (2026-08-16): §4.2 is/as + §6.3 field typing.
+
+    The native lexical shape-sniffing branches were removed (``is`` operates
+    on the operand's TYPE, not its lexical content — model-unknown date-shaped
+    string fields are FHIR.string per type()), ``instant`` and ``dateTime``
+    are sibling R4 primitives (canonical models/r4/type2Parent.json), and the
+    canonical temporal field metadata (.issued -> instant, .authoredOn ->
+    dateTime, .date -> dateTime) is aligned across both surfaces.
+    """
+    medication = json.dumps(
+        {"resourceType": "MedicationRequest", "id": "m", "authoredOn": "2024-01-01T10:00:00"}
+    )
+    observation = json.dumps(
+        {
+            "resourceType": "Observation",
+            "status": "final",
+            "issued": "2020-01-01T10:00:00Z",
+            "effectiveInstant": "2020-01-01T10:00:00Z",
+        }
+    )
+    composition = json.dumps(
+        {"resourceType": "Composition", "id": "c", "date": "2020-01-01T10:00:00Z"}
+    )
+    patient = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p",
+            "birthDate": "1974-12-25",
+            "active": True,
+            "bd": "1974-12-25",
+            "dtm": "1974-12-25T10:00:00",
+        }
+    )
+
+    cases = [
+        # Real R4 dateTime field (MedicationRequest.authoredOn)
+        (medication, "authoredOn is dateTime", "true"),
+        (medication, "authoredOn is FHIR.dateTime", "true"),
+        (medication, "authoredOn.type().name", "dateTime"),
+        (medication, "authoredOn as dateTime", "2024-01-01T10:00:00"),
+        (medication, "authoredOn is string", "false"),
+        (medication, "authoredOn is date", "false"),
+        (medication, "authoredOn is Element", "true"),
+        # Real R4 instant field (Observation.issued): instant is NOT dateTime
+        (observation, "issued is instant", "true"),
+        (observation, "issued is dateTime", "false"),
+        (observation, "issued.type().name", "instant"),
+        (observation, "issued is Element", "true"),
+        # Choice-typed instant
+        (observation, "effectiveInstant is instant", "true"),
+        (observation, "effectiveInstant is dateTime", "false"),
+        (observation, "effectiveInstant.type().name", "instant"),
+        # Real R4 dateTime field named `date` (Composition.date)
+        (composition, "date is dateTime", "true"),
+        (composition, "date.type().name", "dateTime"),
+        # Model-unknown custom fields stay strings (no lexical sniffing)
+        (patient, "bd is date", "false"),
+        (patient, "bd is FHIR.date", "false"),
+        (patient, "bd is string", "true"),
+        (patient, "bd.type().name", "string"),
+        (patient, "dtm is dateTime", "false"),
+        (patient, "dtm is string", "true"),
+        # Anchors: model-known fields and the FHIR-vs-System namespace split
+        (patient, "birthDate is date", "true"),
+        (patient, "birthDate is Date", "true"),
+        (patient, "birthDate is string", "false"),
+        (patient, "active is Boolean", "false"),
+        (patient, "active is FHIR.boolean", "true"),
+        (patient, "active is boolean", "true"),
+    ]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for resource, expression, expected in cases:
+            cpp = native.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            py = fallback.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert cpp == expected, f"{expression!r}: native={cpp!r} expected={expected!r}"
+            assert py == expected, f"{expression!r}: fallback={py!r} expected={expected!r}"
+            assert _surfaces(native, resource, expression) == _surfaces(
+                fallback, resource, expression
+            )
+    finally:
+        native.close()
+        fallback.close()
+
+
+# --- FP-15 fresh SKEPTIC launch (2026-08-18) ---
+
+
+def _run_both(con, fb, resource: str, expression: str):
+    native = con.execute(
+        "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+    ).fetchone()[0]
+    fallback = fb.execute(
+        "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+    ).fetchone()[0]
+    return native, fallback
+
+
+_PARAMS_UUID = json.dumps(
+    {
+        "resourceType": "Parameters",
+        "parameter": [
+            {"name": "c", "valueUuid": "urn:uuid:c2e10e5e-0527-458f-b325-6bb6238f5d94"}
+        ],
+    }
+)
+
+_PATIENT_CONTAINED = json.dumps(
+    {
+        "resourceType": "Patient",
+        "id": "p1",
+        "contained": [{"resourceType": "Patient", "id": "c1", "gender": "female"}],
+    }
+)
+
+_OBS_QTY = json.dumps(
+    {
+        "resourceType": "Observation",
+        "status": "final",
+        "valueQuantity": {"value": 5, "unit": "mg"},
+    }
+)
+
+
+def test_uuid_oid_is_fhir_uri_subtype_parity_fp15_skeptic2(monkeypatch) -> None:
+    """Official fixture testTypeA4: valueUuid is FHIR.uri // true (uuid->uri)."""
+    con = _connection()
+    fb = _python_fallback_connection(monkeypatch)
+    params_oid = json.dumps(
+        {
+            "resourceType": "Parameters",
+            "parameter": [{"name": "o", "valueOid": "1.2.3.4.5"}],
+        }
+    )
+    for resource, expr, expected in [
+        (_PARAMS_UUID, "parameter[0].value.is(FHIR.uri)", ["true"]),
+        (_PARAMS_UUID, "parameter[0].value.is(FHIR.uuid)", ["true"]),
+        (_PARAMS_UUID, "parameter[0].value.is(FHIR.string)", ["true"]),
+        (params_oid, "parameter[0].value.is(FHIR.uri)", ["true"]),
+        (params_oid, "parameter[0].value.is(FHIR.oid)", ["true"]),
+    ]:
+        native, fallback = _run_both(con, fb, resource, expr)
+        assert native == expected, (expr, native)
+        assert fallback == expected, (expr, fallback)
+
+
+def test_literal_quantity_qualified_fhir_quantity_rejects_fp15_skeptic2(
+    monkeypatch,
+) -> None:
+    """System.Quantity literal must not match explicitly FHIR-qualified Quantity."""
+    patient = json.dumps({"resourceType": "Patient", "id": "p"})
+    con = _connection()
+    fb = _python_fallback_connection(monkeypatch)
+    cases = [
+        ("5 'mg' is FHIR.Quantity", ["false"]),
+        ("5 'mg' is System.Quantity", ["true"]),
+        ("5 'mg' is Quantity", ["true"]),  # unqualified: shared convention
+        ("5 'mg' is Age", ["false"]),
+        ("5 'mg' is Duration", ["false"]),
+    ]
+    for expr, expected in cases:
+        native, fallback = _run_both(con, fb, patient, expr)
+        assert native == expected, (expr, native)
+        assert fallback == expected, (expr, fallback)
+
+
+def test_contained_is_as_not_hijacked_by_choice_rescue_fp15_skeptic2(
+    monkeypatch,
+) -> None:
+    """Resource.contained is not a choice type; is/as must reach the engine."""
+    con = _connection()
+    fb = _python_fallback_connection(monkeypatch)
+    cases = [
+        ("contained is Patient", ["true"]),
+        ("contained.is(Patient)", ["true"]),
+        ("contained as Patient", None),  # resource object; parity only
+        ("contained.as(Patient).id", ["c1"]),
+        ("(contained as Patient).gender", ["female"]),
+        ("contained as Observation", []),
+        ("contained is Observation", ["false"]),
+    ]
+    for expr, expected in cases:
+        native, fallback = _run_both(con, fb, _PATIENT_CONTAINED, expr)
+        assert native == fallback, (expr, native, fallback)
+        if expected is not None:
+            assert native == expected, (expr, native)
+        else:
+            assert native is not None and native != []
+
+
+def test_type_specifier_function_invocation_is_syntax_error_fp15_skeptic2(
+    monkeypatch,
+) -> None:
+    """`X is FHIR.Quantity.not()` is invalid grammar (typeSpecifier, not expr)."""
+    con = _connection()
+    fb = _python_fallback_connection(monkeypatch)
+    for expr in [
+        "valueQuantity is FHIR.Quantity.not()",
+        "value as FHIR.Quantity.not()",
+    ]:
+        native = con.execute(
+            "SELECT fhirpath(?::JSON, ?)", [_OBS_QTY, expr]
+        ).fetchone()[0]
+        fallback = fb.execute(
+            "SELECT fhirpath(?::JSON, ?)", [_OBS_QTY, expr]
+        ).fetchone()[0]
+        assert native == fallback == [] or (native is None and fallback is None), expr
+        assert con.execute("SELECT fhirpath_is_valid(?)", [expr]).fetchone()[0] is False
+        assert (
+            fb.execute("SELECT fhirpath_is_valid(?)", [expr]).fetchone()[0] is False
+        )
+    # Guard against false positives: valid is/as forms stay valid on both.
+    for expr in [
+        "(valueQuantity is FHIR.Quantity).not()",
+        "value as Quantity",
+        "value.as(FHIR.Quantity)",
+        "5 is Integer",
+        "'x'.is(String)",
+    ]:
+        assert (
+            fb.execute("SELECT fhirpath_is_valid(?)", [expr]).fetchone()[0] is True
+        ), expr
+        assert (
+            con.execute("SELECT fhirpath_is_valid(?)", [expr]).fetchone()[0] is True
+        ), expr
+
+
+def test_exported_is_as_helpers_string_specifiers_fp15_skeptic2() -> None:
+    """typecheck.is_type/as_type must resolve unqualified string specifiers."""
+    from fhir4ds.fhirpath.duckdb.functions import typecheck
+
+    ctx: dict = {}
+    assert typecheck.is_type(ctx, [1], "Integer") == [True]
+    assert typecheck.is_type(ctx, [1], "System.Integer") == [True]
+    assert typecheck.is_type(ctx, [1], "Decimal") == [False]
+    assert typecheck.is_type(ctx, [True], "Boolean") == [True]
+    assert typecheck.as_type(ctx, [5], "Integer") == [5]
+    assert typecheck.as_type(ctx, ["a"], "Integer") == []
+    assert typecheck.is_type(ctx, ["x"], "uri") == [False]
+    patient = {"resourceType": "Patient", "id": "p"}
+    assert typecheck.is_type(ctx, [patient], "Patient") == [True]
+    assert typecheck.as_type(ctx, [patient], "Patient") == [patient]
+
+
+def test_as_type_specifier_accepts_fhir_primitive_ancestors_fp15_historian(
+    monkeypatch,
+) -> None:
+    """FP-15 HISTORIAN (2026-08-18): the `is`/`as` asymmetry on FHIR
+    primitives is pinned by official fixtures — `is` is subtype-based
+    (testFHIRPathIsFunction: `gender is string` TRUE, code <: string),
+    while `as`/`ofType` are EXACT-match (testFHIRPathAsFunction11:
+    `gender.as(string)` EMPTY; AsFunction12: `.as(code)` -> male). Both
+    engines must implement this split identically."""
+    patient = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p1",
+            "gender": "male",
+            "active": True,
+            "birthDate": "1974-12-25",
+        }
+    )
+    params_code = json.dumps(
+        {
+            "resourceType": "Parameters",
+            "parameter": [{"name": "b", "valueCode": "m"}],
+        }
+    )
+    con = _connection()
+    fb = _python_fallback_connection(monkeypatch)
+    cases = [
+        (patient, "gender is FHIR.string", ["true"]),   # is: subtype
+        (patient, "(gender as FHIR.string) = 'male'", []),  # as: exact
+        (patient, "gender.as(FHIR.string)", []),
+        (patient, "(gender as code) = 'male'", ["true"]),   # as: exact match
+        (patient, "(id as FHIR.id) = 'p1'", ["true"]),
+        (patient, "(id as FHIR.string) = 'p1'", []),        # id <: string, as exact
+        (patient, "active as FHIR.string", []),
+        (_PARAMS_UUID, "parameter[0].value is FHIR.string", ["true"]),
+        (_PARAMS_UUID, "parameter[0].value as FHIR.string", []),  # uuid <: uri <: string
+        (_PARAMS_UUID, "parameter[0].value as FHIR.uri", []),
+        (_PARAMS_UUID, "parameter[0].value.as(FHIR.uuid) = parameter[0].value", ["true"]),
+        (params_code, "(parameter[0].value as FHIR.string) = 'm'", []),
+        (params_code, "(parameter[0].value as code) = 'm'", ["true"]),
+        # System-namespace `as` unaffected (flat, exact by construction)
+        (patient, "(1 as Integer) = 1", ["true"]),
+        (patient, "1 as String", []),
+    ]
+    for resource, expr, expected in cases:
+        native, fallback = _run_both(con, fb, resource, expr)
+        assert native == expected, (expr, native)
+        assert fallback == expected, (expr, fallback)
+
+
+def test_implicit_rules_typed_uri_both_engines_fp15_historian(monkeypatch) -> None:
+    """FP-15 HISTORIAN QA-002: Patient.implicitRules is FHIR.uri (R4); the
+    fallback must not fall through to value-shape string typing."""
+    patient = json.dumps(
+        {"resourceType": "Patient", "id": "p1", "implicitRules": "http://example.org/r"}
+    )
+    con = _connection()
+    fb = _python_fallback_connection(monkeypatch)
+    for expr, expected in [
+        ("implicitRules is FHIR.uri", ["true"]),
+        ("implicitRules.is(uri)", ["true"]),
+        ("implicitRules.type().name", ["uri"]),
+        ("implicitRules.type().namespace", ["FHIR"]),
+        ("implicitRules is FHIR.string", ["true"]),  # uri <: string
+        ("(implicitRules as FHIR.uri) = 'http://example.org/r'", ["true"]),
+        ("implicitRules is FHIR.code", ["false"]),
+        ("(implicitRules as FHIR.string) = 'http://example.org/r'", []),  # as exact
+    ]:
+        native, fallback = _run_both(con, fb, patient, expr)
+        assert native == expected, (expr, native)
+        assert fallback == expected, (expr, fallback)
+
+
+def test_infix_is_as_chains_both_engines_fp15_explorer(monkeypatch) -> None:
+    """FP-15 EXPLORER QA-001: the official FHIRPath grammar's typeExpression
+    rule (`expression ('is' | 'as') typeSpecifier`) is left-recursive, so
+    chained infix type specifiers such as `A as Resource is FHIR.Patient`
+    are valid and must associate LEFT. The native parser previously consumed
+    at most one typeSpecifier, yielding empty results while the Python
+    fallback evaluated the chain."""
+    patient = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p1",
+            "gender": "male",
+            "contained": [
+                {"resourceType": "Observation", "status": "final", "code": {"text": "t"}}
+            ],
+        }
+    )
+    con = _connection()
+    fb = _python_fallback_connection(monkeypatch)
+    for expr, expected in [
+        ("Patient as Resource is FHIR.Patient", ["true"]),
+        ("Patient as Resource is FHIR.Resource", ["true"]),
+        ("Patient as Resource as Resource is FHIR.Patient", ["true"]),
+        ("Patient is Resource is Boolean", ["true"]),
+        ("contained[0] as Observation is FHIR.Observation", ["true"]),
+        ("contained[0] as Observation as DomainResource is FHIR.Resource", ["true"]),
+        ("(Patient as Resource).is(FHIR.Patient)", ["true"]),
+        ("gender as code = 'male'", ["true"]),
+        # exact-match `as` doctrine for FHIR primitives is preserved in chains
+        ("gender as code as string", []),
+    ]:
+        native, fallback = _run_both(con, fb, patient, expr)
+        assert native == expected, (expr, native)
+        assert fallback == expected, (expr, fallback)
+
+
+def test_recorded_and_last_updated_typed_instant_both_engines_fp15_explorer(
+    monkeypatch,
+) -> None:
+    """FP-15 EXPLORER QA-002/QA-003: FHIR R4 types AuditEvent.recorded,
+    Provenance.recorded, and Meta.lastUpdated as `instant` (not string, not
+    dateTime — instant and dateTime are sibling primitives)."""
+    audit = json.dumps(
+        {
+            "resourceType": "AuditEvent",
+            "type": {"code": "rest"},
+            "recorded": "2024-01-01T10:00:00.000Z",
+            "agent": [{"who": {"display": "x"}}],
+            "source": {"observer": {"display": "o"}},
+        }
+    )
+    patient = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p1",
+            "meta": {"lastUpdated": "2024-01-01T10:00:00.000Z", "versionId": "2"},
+        }
+    )
+    con = _connection()
+    fb = _python_fallback_connection(monkeypatch)
+    for resource, expr, expected in [
+        (audit, "recorded is FHIR.instant", ["true"]),
+        (audit, "recorded.is(instant)", ["true"]),
+        (audit, "recorded is FHIR.dateTime", ["false"]),
+        (audit, "recorded is FHIR.string", ["false"]),
+        (patient, "meta.lastUpdated is FHIR.instant", ["true"]),
+        (patient, "meta.lastUpdated is FHIR.dateTime", ["false"]),
+        (patient, "meta.versionId is FHIR.id", ["true"]),
+    ]:
+        native, fallback = _run_both(con, fb, resource, expr)
+        assert native == expected, (expr, native)
+        assert fallback == expected, (expr, fallback)

@@ -7,18 +7,22 @@ the same guards.
 
 from __future__ import annotations
 
+import re
 from typing import Iterable
 
 from .errors import SQLQueryValidationError, UnsupportedDialectError
 from .types import (
     SQLQUERY_LIBRARY_TYPE_CODE,
-    SQLQUERY_PROFILE_CANONICAL,
-    SQLVIEW_PROFILE_CANONICAL,
+    SQLQUERY_PROFILE_CANONICALS,
+    SQLVIEW_PROFILE_CANONICALS,
     SUPPORTED_CONTENT_TYPES,
     SQLContent,
     SQLView,
     _SQLLibraryBase,
 )
+
+# sql-on-fhir-v2 models.fsh Invariant sql-name (ASCII-only regex).
+SQL_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
 
 def validate_sql_library(library: _SQLLibraryBase, *, strict: bool = True) -> list[str]:
@@ -67,7 +71,7 @@ def validate_sql_library(library: _SQLLibraryBase, *, strict: bool = True) -> li
 
     # relatedArtifact MS — each label must be non-empty and satisfy sql-name.
     for i, ra in enumerate(library.related_artifact):
-        if not ra.label or not ra.label[0].isalpha():
+        if not ra.label or not SQL_NAME_PATTERN.fullmatch(ra.label):
             violations.append(
                 f"relatedArtifact[{i}].label {ra.label!r} must satisfy sql-name "
                 f"^[A-Za-z][A-Za-z0-9_]*$"
@@ -86,8 +90,12 @@ def validate_sql_library(library: _SQLLibraryBase, *, strict: bool = True) -> li
     if not is_sql_view:
         # SQLQuery parameter shape: each must have name + type + use="in"
         for i, param in enumerate(getattr(library, "parameter", []) or []):
-            if not param.name:
-                violations.append(f"parameter[{i}].name must be non-empty")
+            if not param.name or not SQL_NAME_PATTERN.fullmatch(param.name):
+                violations.append(
+                    f"parameter[{i}].name {param.name!r} must satisfy sql-name "
+                    f"^[A-Za-z][A-Za-z0-9_]*$ (it is bound as a DuckDB named "
+                    f"parameter token)"
+                )
             if not param.type:
                 violations.append(f"parameter[{i}].type must be non-empty")
             if param.use != "in":
@@ -133,7 +141,8 @@ def select_best_content(content_entries: Iterable[SQLContent]) -> SQLContent:
 __all__ = [
     "validate_sql_library",
     "select_best_content",
-    "SQLQUERY_PROFILE_CANONICAL",
-    "SQLVIEW_PROFILE_CANONICAL",
+    "SQLQUERY_PROFILE_CANONICALS",
+    "SQLVIEW_PROFILE_CANONICALS",
     "SQLQUERY_LIBRARY_TYPE_CODE",
+    "SQL_NAME_PATTERN",
 ]

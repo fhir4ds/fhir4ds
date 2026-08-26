@@ -35,6 +35,7 @@ from ...parser.ast_nodes import (
     QualifiedIdentifier,
     Quantity,
     Query,
+    Retrieve,
     QuerySource,
     SingletonExpression,
     SkipExpression,
@@ -92,8 +93,110 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# FHIR-to-System primitive `.value` accessor (CQL 1.5 data-model access)
+#
+# In CQL, navigating a FHIR primitive element yields the FHIR-typed wrapper;
+# the System value is extracted with the `.value` accessor (the canonical
+# FHIRHelpers pattern, e.g. ``period."start".value`` in the bundled
+# FHIRHelpers.cql). FHIRPath itself has no `.value` key on primitive scalars,
+# so a path literal like ``birthDate.value`` evaluates to empty. When a
+# `.value` segment follows a FHIR-primitive-typed accumulated path, the
+# segment is an identity mapping and must be dropped from the emitted
+# FHIRPath path. The decision is data-driven from the generated FHIR model
+# metadata (models/r4/path2Type.json), keyed by resource-qualified path.
+# ---------------------------------------------------------------------------
+_FHIR_PRIMITIVE_TYPES = frozenset({
+    "base64Binary", "boolean", "canonical", "code", "date", "dateTime",
+    "decimal", "id", "instant", "integer", "markdown", "oid", "positiveInt",
+    "string", "time", "unsignedInt", "uri", "url", "uuid", "integer64",
+})
+
+_FHIR_PRIMITIVE_LOWERCASE = frozenset(
+    name.lower() for name in _FHIR_PRIMITIVE_TYPES
+)
+
+_PATH2TYPE_CACHE: Optional[Dict[str, str]] = None
+
+
+def _load_path2type() -> Dict[str, str]:
+    global _PATH2TYPE_CACHE
+    if _PATH2TYPE_CACHE is None:
+        from pathlib import Path as _Path
+        try:
+            metadata_path = (
+                _Path(__file__).resolve().parents[3]
+                / "fhirpath" / "models" / "r4" / "path2Type.json"
+            )
+            with open(metadata_path, encoding="utf-8") as fh:
+                _PATH2TYPE_CACHE = json.load(fh)
+        except (OSError, ValueError):
+            _PATH2TYPE_CACHE = {}
+    return _PATH2TYPE_CACHE
+
+
+def _strip_primitive_value_segments(
+    resource_type: Optional[str], path: str
+) -> str:
+    """Drop ``.value`` segments that follow a FHIR-primitive-typed prefix.
+
+    Conservative: paths containing function calls, quoted literals, or
+    bracket indexing are returned unchanged; unknown prefixes are returned
+    unchanged (metadata miss keeps current behavior).
+    """
+    if not resource_type or not path or path == "value":
+        return path
+    if "(" in path or "'" in path or '"' in path or "[" in path:
+        return path
+    path2type = _load_path2type()
+    if not path2type:
+        return path
+    output: List[str] = []
+    for segment in path.split("."):
+        if segment == "value" and output:
+            prefix = ".".join(output)
+            element_type = path2type.get(f"{resource_type}.{prefix}")
+            if element_type in _FHIR_PRIMITIVE_TYPES:
+                continue
+        output.append(segment)
+    return ".".join(output)
+
+
 class PropertyMixin:
     """Mixin providing FHIR property access and choice-type translations."""
+
+    def _fold_static_clinical_property(self, prop: Property) -> Optional[SQLExpression]:
+        """Fold ``<clinical>.member`` when the source is a static Code/Concept.
+
+        Returns None when the source is not a statically-known clinical value
+        so dynamic FHIR property navigation is unaffected.
+        """
+        value = self._static_clinical_value_object(prop.source)
+        if not isinstance(value, dict):
+            return None
+        path = prop.path
+        if isinstance(value.get("codes"), list):
+            # Concept members: codes (List<Code>) and display. Emit a SQL
+            # list of structured Code JSON values so list-aware consumers
+            # (Count, in, distinct) see List<Code>, not a JSON text scalar.
+            if path == "codes":
+                return SQLArray(elements=[
+                    SQLLiteral(value=json.dumps(code, separators=(",", ":")))
+                    for code in value["codes"]
+                    if isinstance(code, dict)
+                ])
+            if path in value and value[path] is not None:
+                return SQLLiteral(value=value[path])
+            if path == "display":
+                return SQLNull()
+            return None
+        # Code members: code, system, version, display.
+        if path in ("code", "system", "version", "display"):
+            if value.get(path) is not None:
+                return SQLLiteral(value=value[path])
+            return SQLNull()
+        return None
+
     @staticmethod
     def _arg_involves_query(node: Any) -> bool:
         """Return True if *node* is or transitively wraps a CQL Query.
@@ -108,6 +211,109 @@ class PropertyMixin:
         if isinstance(node, CQLProperty):
             return PropertyMixin._arg_involves_query(node.source)
         return False
+
+    def _resource_rows_navigation(
+        self, source_name: str, full_path: str, boolean_context: bool
+    ) -> SQLExpression:
+        """Navigate a (possibly dotted) property path over a row-set define CTE.
+
+        The source definition has multiple resource rows per patient. For a
+        multi-valued element path (CQL 1.5 Appendix B Property/Query
+        semantics), navigation yields the flattened List of ALL matching
+        nodes across rows — aggregate the per-row list projections per
+        patient instead of truncating to the first row's first node
+        (CQL-18 HISTORIAN QA-004).
+        """
+        _res_type = self._infer_resource_type_from_definition_name(source_name)
+        _schema = getattr(self.context, "fhir_schema", None)
+        _multi = (
+            _res_type is not None
+            and _schema is not None
+            and _schema.is_multi_valued_element(_res_type, full_path)
+        )
+        _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
+        if _multi:
+            _elem_type = ""
+            if _schema is not None:
+                _elem_type = (_schema.get_element_type(_res_type, full_path) or "")
+            # Unknown leaf types occur only for paths deeper than the
+            # schema element table (e.g. component.code.coding.code); those
+            # leaves are FHIR primitives, so default to VARCHAR.
+            _json_type = (
+                '["VARCHAR"]'
+                if _elem_type == ""
+                or _elem_type.lower() in _FHIR_PRIMITIVE_LOWERCASE
+                or _elem_type.lower() == "xhtml"
+                else '["JSON"]'
+            )
+            navigation_subquery = SQLSubquery(query=SQLSelect(
+                columns=[SQLFunctionCall(
+                    name="COALESCE",
+                    args=[
+                        SQLFunctionCall(
+                            name="flatten",
+                            args=[SQLFunctionCall(
+                                name="LIST",
+                                args=[SQLFunctionCall(
+                                    name="from_json",
+                                    args=[
+                                        SQLFunctionCall(
+                                            name="fhirpath",
+                                            args=[
+                                                SQLQualifiedIdentifier(parts=["_rr", "resource"]),
+                                                SQLLiteral(value=full_path),
+                                            ],
+                                        ),
+                                        SQLLiteral(value=_json_type),
+                                    ],
+                                )],
+                            )],
+                        ),
+                        SQLArray(elements=[]),
+                    ],
+                )],
+                from_clause=SQLAlias(
+                    expr=SQLIdentifier(name=source_name, quoted=True),
+                    alias="_rr",
+                ),
+                where=SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=["_rr", "patient_id"]),
+                    right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+                ),
+            ))
+            # CQL-18 EXPLORER QA-001: mark the subquery as storing a whole
+            # per-patient element LIST so a bare define over this navigation
+            # (`define CC: Obs.component.code.coding.code`) is wrapped as a
+            # PATIENT_SCALAR stored-list CTE instead of falling into the
+            # PATIENT_MULTI_VALUE CTE path, which drops the outer-patient
+            # correlation (`_pt` -> `_rr` alias rewrite) and keeps the
+            # LIST() aggregate without GROUP BY patient_id (BinderException).
+            navigation_subquery.stores_patient_list = True
+            return navigation_subquery
+        # Source has multiple rows per patient — use a correlated
+        # subquery to extract the property from each row in the CTE.
+        # list_apply() cannot be used here because the CTE reference
+        # resolves to a single JOIN row (j1.resource), not a DuckDB LIST.
+        func_name = self._infer_fhirpath_func_for_property(full_path, boolean_context)
+        return SQLSubquery(query=SQLSelect(
+            columns=[SQLFunctionCall(
+                name=func_name,
+                args=[
+                    SQLQualifiedIdentifier(parts=["_rr", "resource"]),
+                    SQLLiteral(value=full_path),
+                ],
+            )],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name=source_name, quoted=True),
+                alias="_rr",
+            ),
+            where=SQLBinaryOp(
+                operator="=",
+                left=SQLQualifiedIdentifier(parts=["_rr", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+            ),
+        ))
 
     def _infer_source_shape(self, source: Any) -> RowShape:
         """
@@ -259,6 +465,50 @@ class PropertyMixin:
                 f"`exists ([{resource_type}] R where R.{path} ...)`."
             )
 
+        # CQL-19 HISTORIAN QA-004: same guard for navigation over a UNION of
+        # retrieves (`([A] union [B]).field`). Without it the union lowers to
+        # resource-type identifiers inside fhirpath_text and DuckDB raises an
+        # opaque Binder Error ("Referenced column <Type> not found"). Fail
+        # fast with the same typed, actionable TranslationError.
+        from ...parser.ast_nodes import BinaryExpression as _BinExprForGuard
+
+        def _union_retrieve_type(node):
+            if isinstance(node, _RetrieveForGuard):
+                return getattr(node, 'type', None)
+            if isinstance(node, _BinExprForGuard) and (getattr(node, "operator", "") or "").strip().lower() in {"union", "|"}:
+                left_type = _union_retrieve_type(node.left)
+                if left_type:
+                    return left_type
+                return _union_retrieve_type(node.right)
+            return None
+
+        _union_type = _union_retrieve_type(source) if isinstance(source, _BinExprForGuard) else None
+        if _union_type:
+            from ...errors import TranslationError as _TE
+            raise _TE(
+                f"The CQL form `(<retrieve> union <retrieve>).field` "
+                f"(navigate over a resource union) is not supported. Cannot "
+                f"translate `([{_union_type}] union ...).{path}`. Rewrite using "
+                f"an explicit query alias over each retrieve."
+            )
+
+        # CQL-02 QA-003: fold member access on statically-known clinical
+        # values (Code/Concept literals, named codes/concepts, ToConcept).
+        # Structured clinical list members such as Concept.codes are
+        # List<Code>; routing them through fhirpath_text returns only the
+        # FIRST element instead of the list.
+        static_clinical = self._fold_static_clinical_property(prop)
+        if static_clinical is not None:
+            return static_clinical
+
+        # CQL-03 QA-001/QA-005: temporal component property accessors
+        # (`X.month`, `X.hour`, `X.timezoneOffset`) on temporal-typed sources
+        # are the same operator as `month from X` (CQL 1.5 §09-b) and must
+        # route through dateComponent, not FHIRPath text navigation.
+        temporal_component = self._translate_temporal_component_property(prop)
+        if temporal_component is not None:
+            return temporal_component
+
         # Extension property mapping: use context's versioned paths
         source_name = source.name if isinstance(source, Identifier) else None
         ext_paths_map = self.context.extension_paths or {}
@@ -307,6 +557,27 @@ class PropertyMixin:
                         )
                         return SQLQualifiedIdentifier(parts=[alias, col_name])
 
+        # CQL-18 HISTORIAN QA-004: collapse a Property chain (e.g.
+        # O.component.code.code) rooted at a row-set define into a single
+        # navigation handled at the OUTERMOST property. Navigating segment
+        # by segment chains fhirpath over a scalar subquery and loses all
+        # but the first row's first node.
+        if isinstance(source, Property) and not is_choice_type:
+            _chain_parts = [path]
+            _chain_node = source
+            while isinstance(_chain_node, Property):
+                _chain_parts.insert(0, _chain_node.path)
+                _chain_node = _chain_node.source
+            if (
+                isinstance(_chain_node, Identifier)
+                and not self.context.is_alias(_chain_node.name)
+                and _chain_node.name not in self.context.includes
+                and self._infer_source_shape(_chain_node) == RowShape.RESOURCE_ROWS
+            ):
+                return self._resource_rows_navigation(
+                    _chain_node.name, ".".join(_chain_parts), boolean_context
+                )
+
         # Shape-aware handling for Identifier sources referencing definitions
         if isinstance(source, Identifier) and not self.context.is_alias(source.name):
             source_name = source.name
@@ -314,31 +585,7 @@ class PropertyMixin:
             if source_name not in self.context.includes:
                 source_shape = self._infer_source_shape(source)
                 if source_shape == RowShape.RESOURCE_ROWS:
-                    # Source has multiple rows per patient — use a correlated
-                    # subquery to extract the property from each row in the CTE.
-                    # list_apply() cannot be used here because the CTE reference
-                    # resolves to a single JOIN row (j1.resource), not a DuckDB LIST.
-                    func_name = self._infer_fhirpath_func_for_property(path, boolean_context)
-                    _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
-                    result = SQLSubquery(query=SQLSelect(
-                        columns=[SQLFunctionCall(
-                            name=func_name,
-                            args=[
-                                SQLQualifiedIdentifier(parts=["_rr", "resource"]),
-                                SQLLiteral(value=path),
-                            ],
-                        )],
-                        from_clause=SQLAlias(
-                            expr=SQLIdentifier(name=source_name, quoted=True),
-                            alias="_rr",
-                        ),
-                        where=SQLBinaryOp(
-                            operator="=",
-                            left=SQLQualifiedIdentifier(parts=["_rr", "patient_id"]),
-                            right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
-                        ),
-                    ))
-                    return result
+                    return self._resource_rows_navigation(source_name, path, boolean_context)
                 elif source_shape == RowShape.PATIENT_SCALAR:
                     # Source is scalar per patient - use simple fhirpath call
                     source_sql = self.translate(source, usage=ExprUsage.SCALAR)
@@ -652,7 +899,10 @@ class PropertyMixin:
                             existing_resource = source_sql.args[0] if source_sql.args and len(source_sql.args) >= 2 else None
                             existing_path = source_sql.args[1].value if (source_sql.args and len(source_sql.args) >= 2
                                                                           and hasattr(source_sql.args[1], 'value')) else None
-                            new_path = f"{existing_path}.{path}" if existing_path else path
+                            new_path = _strip_primitive_value_segments(
+                                self._current_resource_type(),
+                                f"{existing_path}.{path}" if existing_path else path,
+                            )
                             func_name = f"fhirpath_{existing_func_type}"
                             return SQLFunctionCall(
                                 name=func_name,
@@ -694,7 +944,10 @@ class PropertyMixin:
                             existing_resource = source_sql.args[0] if source_sql.args and len(source_sql.args) >= 2 else None
                             existing_path = source_sql.args[1].value if (source_sql.args and len(source_sql.args) >= 2
                                                                           and hasattr(source_sql.args[1], 'value')) else None
-                            new_path = f"{existing_path}.{path}" if existing_path else path
+                            new_path = _strip_primitive_value_segments(
+                                self._current_resource_type(),
+                                f"{existing_path}.{path}" if existing_path else path,
+                            )
                             func_name = f"fhirpath_{existing_func_type}"
                             return SQLFunctionCall(
                                 name=func_name,
@@ -759,6 +1012,19 @@ class PropertyMixin:
         _as_inner = source
         if isinstance(source, BinaryExpression) and source.operator == "as":
             _as_inner = source.left
+            # FHIR-to-System `.value` accessor on an explicitly FHIR-primitive
+            # `as` cast is an identity mapping (CQL 1.5 data-model access):
+            # `(O.value as FHIR.string).value` == `O.value as FHIR.string`.
+            # The cast translation already yields the System scalar; wrapping
+            # it in another fhirpath navigation for `value` returns empty.
+            if path == "value":
+                _as_target = getattr(source.right, "name", None)
+                if isinstance(_as_target, str):
+                    # Cast targets are model-qualified (e.g. "FHIR.string");
+                    # the bare type name carries the primitive-ness.
+                    _bare_target = _as_target.rsplit(".", 1)[-1].lower()
+                    if _bare_target in _FHIR_PRIMITIVE_LOWERCASE:
+                        return self.translate(source, usage=ExprUsage.SCALAR)
 
         if isinstance(_as_inner, Identifier) and self.context.is_alias(_as_inner.name):
             sym = self.context.lookup_symbol(_as_inner.name)
@@ -1149,6 +1415,19 @@ class PropertyMixin:
                     and isinstance(sel.columns[0], SQLIdentifier)
                     and sel.columns[0].name == '*'):
                 return True
+            # Explicit resource-row projections (e.g. SELECT patient_id,
+            # resource FROM <cte> WHERE ...) are the same shape as SELECT *
+            # for row CTEs and must be narrowed the same way; otherwise the
+            # 2-column subquery reaches fhirpath functions and DuckDB raises
+            # "Subquery returns 2 columns - expected 1".
+            if sel.columns and all(
+                isinstance(c, SQLIdentifier) and c.name in ("patient_id", "resource")
+                for c in sel.columns
+            ) and any(
+                isinstance(c, SQLIdentifier) and c.name == "resource"
+                for c in sel.columns
+            ):
+                return True
             return False
 
         def _get_from_alias(from_clause: Optional[SQLExpression]) -> Optional[str]:
@@ -1184,8 +1463,47 @@ class PropertyMixin:
 
         return sql
 
-    @staticmethod
-    def _flatten_fhirpath_source(source_sql: SQLExpression, path: str, func_name: str) -> SQLFunctionCall:
+    def _current_resource_type(self) -> Optional[str]:
+        if not self.context:
+            return None
+        return (
+            getattr(self.context, "_current_resource_type", None)
+            or getattr(self.context, "resource_type", None)
+        )
+
+    def _resource_type_for_resource_ref(self, sql_expr: SQLExpression) -> Optional[str]:
+        """Resolve the FHIR resource type behind a ``<alias>.resource``
+        column reference by walking the alias's registered source AST down
+        to its Retrieve node."""
+        if not self.context:
+            return None
+        alias: Optional[str] = None
+        if isinstance(sql_expr, SQLQualifiedIdentifier):
+            parts = [getattr(p, "name", p) for p in sql_expr.parts]
+            if len(parts) >= 2 and str(parts[-1]) == "patient_resource":
+                # Patient-context singleton column (from the 'Patient'
+                # identifier resolution): its FHIR resource type is the
+                # declared context type, enabling primitive .value stripping.
+                context_type = getattr(self.context, "context_type", None)
+                if context_type and context_type != "Unfiltered":
+                    return context_type
+                return None
+            if len(parts) >= 2 and str(parts[-1]) in ("resource", "data"):
+                alias = str(parts[0])
+        elif isinstance(sql_expr, SQLIdentifier) and sql_expr.name.endswith(".resource"):
+            alias = sql_expr.name[: -len(".resource")]
+        if not alias:
+            return None
+        node = getattr(self.context, "_alias_source_asts", {}).get(alias)
+        depth = 0
+        while node is not None and not isinstance(node, Retrieve) and depth < 12:
+            node = getattr(node, "source", None) or getattr(node, "expression", None)
+            depth += 1
+        if isinstance(node, Retrieve):
+            return getattr(node, "type", None)
+        return getattr(self.context, "_alias_resource_types", {}).get(alias) or None
+
+    def _flatten_fhirpath_source(self, source_sql: SQLExpression, path: str, func_name: str) -> SQLFunctionCall:
         """Build a fhirpath call, flattening nested fhirpath chains.
 
         If *source_sql* is already a ``fhirpath_*`` call like
@@ -1207,7 +1525,14 @@ class PropertyMixin:
             # Flatten dot-paths including those with FHIRPath functions like
             # .where() — e.g. extension.where(url='...').value is valid FHIRPath
             if isinstance(inner_path, str):
-                combined = f"{inner_path}.{path}"
+                resource_type = (
+                    self._current_resource_type()
+                    or self._resource_type_for_resource_ref(source_sql.args[0])
+                )
+                combined = _strip_primitive_value_segments(
+                    resource_type,
+                    f"{inner_path}.{path}",
+                )
                 return SQLFunctionCall(
                     name=func_name,
                     args=[source_sql.args[0], SQLLiteral(value=combined)],

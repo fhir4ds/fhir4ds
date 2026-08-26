@@ -1868,7 +1868,54 @@ static void FhirpathIsValidFunction(DataChunk &args, ExpressionState &state, Vec
 				// that reference an env var not provided to the
 				// validation context must still report as valid.
 				std::string what = e.what();
-				result_data[i] = (what.rfind("Undefined variable:", 0) == 0);
+				// FP-02 SKEPTIC QA-002 (2026-08-16): unary +/- on a
+				// non-numeric operand is an execution type error (§6.8
+				// unary operators are valid syntax; §6.6 type errors
+				// signal at evaluation) — the same class the Python
+				// fallback's `_is_valid_empty_result_error` accepts for
+				// binary arithmetic. Singleton violations ("requires a
+				// single item input collection") stay invalid.
+				result_data[i] = (what.rfind("Undefined variable:", 0) == 0) ||
+				                 (what.rfind("Unary - applied to non-numeric type", 0) == 0) ||
+				                 (what.rfind("Unary + applied to non-numeric type", 0) == 0) ||
+				                 // FP-02 EXPLORER QA-003 (2026-08-16):
+				                 // §6.2 omits Boolean from the orderable
+				                 // types, so boolean-vs-boolean ordering is
+				                 // an execution type error of the same class
+				                 // as mixed-type ordering (`1 > true`), which
+				                 // evaluates to empty without throwing and
+				                 // therefore reports valid.
+				                 (what.rfind("Comparison operators are not defined for Boolean operands", 0) == 0) ||
+				                 // FP-03 SKEPTIC QA-001 (2026-08-16): §6.2
+				                 // mixed-type ordering signals the evaluation
+				                 // error ("Type of ... did not match type of
+				                 // ... InequalityExpression", mirroring the
+				                 // Python core) instead of degrading to an
+				                 // empty result; same accepted execution
+				                 // type-error class as the Python fallback's
+				                 // `_is_valid_empty_result_error`.
+				                 (what.rfind("Type of ", 0) == 0 &&
+				                  what.find("InequalityExpression") != std::string::npos) ||
+				                 // FP-05 SKEPTIC QA-001 (2026-08-17): §5.3
+				                 // subsetting argument type errors (indexer
+				                 // `[i]`, skip(num), take(num) require
+				                 // Integer) are execution type errors of the
+				                 // same class as binary `'a' - 'b'`. The
+				                 // singleton/multi-item variants ("requires
+				                 // a single integer ...") stay invalid,
+				                 // matching the Python fallback's
+				                 // singleton-violation doctrine.
+				                 (what.rfind("Indexer requires an integer index", 0) == 0) ||
+				                 (what.rfind("skip() requires an integer argument", 0) == 0) ||
+				                 (what.rfind("take() requires an integer argument", 0) == 0) ||
+		                 // FP-19 EXPLORER QA-001 (2026-08-18): 6.6 incompatible-
+		                 // type arithmetic operands signal an execution type
+		                 // error - the same accepted class as the Python
+		                 // fallback's "Cannot [1] + ['x']" (accepted by
+		                 // _is_valid_empty_result_error via the "Cannot ["
+		                 // prefix). Singleton/multi-item violations ("requires
+		                 // a single item input collection") stay invalid.
+		                 (what.rfind("Incompatible operands for arithmetic operator", 0) == 0);
 			}
 			yyjson_doc_free(doc);
 		} catch (const std::bad_alloc&) {

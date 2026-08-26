@@ -96,8 +96,11 @@ define QuantityScalarDiv: 10 'mg' div 3
 """
     translated = translate_cql(cql)
 
-    assert translated["MaxInt"].to_sql() == "2147483647"
-    assert translated["MinInt"].to_sql() == "-2147483648"
+    # CQL-01 EXPLORER doctrine: Integer-typed min/max literals lower with
+    # an explicit INTEGER cast so exact-integral semantics survive alias
+    # chains instead of DuckDB default INTEGER-inference drift.
+    assert translated["MaxInt"].to_sql() == "CAST(2147483647 AS INTEGER)"
+    assert translated["MinInt"].to_sql() == "CAST(-2147483648 AS INTEGER)"
     assert translated["MaxDateTime"].to_sql() == "'9999-12-31T23:59:59.999Z'"
     assert translated["MinDateTime"].to_sql() == "'0001-01-01T00:00:00.000Z'"
     assert translated["MaxTime"].to_sql() == "'T23:59:59.999'"
@@ -630,6 +633,124 @@ def test_cql_arithmetic_part2_power_overflow_returns_null_per_spec() -> None:
         cpp.close()
 
 
+def test_cql_arithmetic_part2_truncated_divide_exact_and_typed_per_spec() -> None:
+    """CQL §16.16 TruncatedDivide: Integer/Long operands produce
+    Integer/Long results; Decimal quotients are exact (never computed
+    through DOUBLE); unrepresentable results are null.
+
+    The CQL-11 SKEPTIC fix replaced the DOUBLE ``a / NULLIF(b, 0)``
+    lowering with the exact cqlDivide core plus typed TRY_CAST narrowing:
+    - 0.3 div 0.1 -> 3 (DOUBLE path returned 2)
+    - 9223372036854775807L div 3L -> 3074457345618258602 (exact Long)
+    - -9223372036854775808L div -1L -> null (Long overflow)
+    """
+    cql = """
+    library DivExactness version '1.0'
+    define DivDecimalNearInteger: 0.3 div 0.1
+    define DivDecimalNearInteger2: 0.6 div 0.2
+    define DivDecimalNeg: -10.5 div 3.0
+    define DivIntType: 10 div 3
+    define DivIntNeg: -10 div 3
+    define DivLongExact: 9223372036854775807L div 3L
+    define DivLongMinNeg: -9223372036854775808L div -1L
+    define DivByZero: 10 div 0
+    define DivDecimalByZero: 1.5 div 0.0
+    """
+    translated = translate_cql(cql)
+    sql = translated["DivIntType"].to_sql()
+    assert "cqlDivide" in sql and "TRUNC" in sql.upper() and "AS INTEGER" in sql
+    assert "AS BIGINT" in translated["DivLongExact"].to_sql()
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        expected = {
+            "DivDecimalNearInteger": Decimal("3"),
+            "DivDecimalNearInteger2": Decimal("3"),
+            "DivDecimalNeg": Decimal("-3"),
+            "DivIntType": 3,
+            "DivIntNeg": -3,
+            "DivLongExact": 3074457345618258602,
+            "DivLongMinNeg": None,
+            "DivByZero": None,
+            "DivDecimalByZero": None,
+        }
+        for name, expected_value in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            got = py.execute(sql).fetchone()[0]
+            assert got == expected_value, f"{name} py: {got!r}"
+            assert cpp.execute(sql).fetchone()[0] == expected_value, f"{name} cpp"
+        # Integer operands must produce a typed INTEGER (not DOUBLE) column.
+        assert py.execute("SELECT " + translated["DivIntType"].to_sql()).description[0][1] == "INTEGER"
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_arithmetic_part2_power_underflow_quantizes_to_zero_per_spec() -> None:
+    """CQL §16.12 Power: Decimal results are quantized at the
+    implementation scale (8). Power(2, -30) = 9.31e-10 quantizes to
+    0.00000000, NOT 0.00000001: the old '%.15g' scientific output text
+    was rounded UP by DuckDB's VARCHAR->DECIMAL(38,8) cast.
+    """
+    cql = """
+    library PowerUnderflow version '1.0'
+    define PowUnderflow: Power(2, -30)
+    define PowDeepUnderflow: Power(2, -100)
+    define PowJustAbove: Power(2, -27)
+    define PowInRange: Power(2, -9)
+    """
+    translated = translate_cql(cql)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in (
+            ("PowUnderflow", Decimal("0E-8")),
+            ("PowDeepUnderflow", Decimal("0E-8")),
+            ("PowJustAbove", Decimal("1E-8")),
+            ("PowInRange", Decimal("0.00195313")),
+        ):
+            sql = "SELECT " + translated[name].to_sql()
+            assert py.execute(sql).fetchone()[0] == expected_value, name
+            assert cpp.execute(sql).fetchone()[0] == expected_value, name
+    finally:
+        py.close()
+        cpp.close()
+
+    with no_python_connection() as con:
+        assert con.execute("SELECT mathPower('2','-30')").fetchone()[0] == "0.00000000"
+        assert con.execute("SELECT mathPower('2','-27')").fetchone()[0] == "0.00000001"
+
+
+def test_cql_arithmetic_part2_precision_integer_literal_engine_parity() -> None:
+    """CQL §22.24 Precision: numeric literals must reach the CQLPrecision
+    UDF as VARCHAR text. A raw INTEGER literal previously raised a
+    BinderException on the native path while the Python path returned 0.
+    """
+    cql = """
+    library PrecisionLiteralParity version '1.0'
+    define PrecisionIntLiteral: Precision(5)
+    define PrecisionLongLiteral: Precision(5L)
+    define PrecisionDecimalLiteral: Precision(1.2300)
+    """
+    translated = translate_cql(cql)
+    assert translated["PrecisionIntLiteral"].to_sql() == "CQLPrecision('5')"
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in (
+            ("PrecisionIntLiteral", 0),
+            ("PrecisionLongLiteral", 0),
+            ("PrecisionDecimalLiteral", 4),
+        ):
+            sql = "SELECT " + translated[name].to_sql()
+            assert py.execute(sql).fetchone()[0] == expected_value, name
+            assert cpp.execute(sql).fetchone()[0] == expected_value, name
+    finally:
+        py.close()
+        cpp.close()
+
+
 def test_cql_arithmetic_part2_predecessor_successor_literal_boundary_returns_null_per_spec() -> None:
     """CQL §22.25 Predecessor / §22.26 Successor: "If the result cannot be
     represented (e.g. `successor of (maximum Integer)`), the result is null."
@@ -708,3 +829,210 @@ def test_cql_arithmetic_part2_predecessor_successor_literal_boundary_returns_nul
         py.close()
         cpp.close()
 
+
+
+def test_cql_round_macro_survives_integer_range_shift_cql11_historian2() -> None:
+    """CQL-11 HISTORIAN2 QA-001: Round/RoundTo must not inherit the CQL
+    Floor macro's TRY_CAST-to-INTEGER narrowing.
+
+    CQL 1.5 Appendix B Round returns a Decimal; only results unrepresentable
+    as Decimal(38, 8) are null. Previously the macros called FLOOR/CEIL,
+    and Floor(x) is overridden in the same registration as the CQL Floor
+    macro (TRY_CAST AS INTEGER), so any shifted magnitude above the Integer
+    range rounded to NULL (RoundTo(123.456, 8) -> NULL).
+    """
+    cql = """library RoundMacro version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define RoundHighPrec: Round(2.12345678901234, 10)
+define RoundPrec8Large: Round(123.456, 8)
+define RoundPrec8Negative: Round(-123.456, 8)
+define RoundNoPrecLarge: Round(3147483647.05)
+define RoundNoPrecSmall: Round(-2.5)
+define RoundPrec8Exact: Round(1.234567895, 8)
+"""
+    translated = translate_cql(cql)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    expected = {
+        "RoundHighPrec": Decimal("2.12345679"),
+        "RoundPrec8Large": Decimal("123.45600000"),
+        "RoundPrec8Negative": Decimal("-123.45600000"),
+        "RoundNoPrecLarge": Decimal("3147483647.00000000"),
+        "RoundNoPrecSmall": Decimal("-3.00000000"),
+        "RoundPrec8Exact": Decimal("1.23456790"),
+    }
+    try:
+        for name, want in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            for label, con in (("python", py), ("cpp", cpp)):
+                got = con.execute(sql).fetchone()[0]
+                assert got == want, f"{name} ({label}): got {got!r}, expected {want!r}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_decimal_multiply_overflow_is_null_cql11_historian2() -> None:
+    """CQL-11 HISTORIAN2 QA-002: Decimal arithmetic overflow -> null.
+
+    CQL 1.5 Appendix B arithmetic header: overflow results in null rather
+    than a run-time error. Statically-foldable Decimal literal products
+    beyond DECIMAL(38, 8) must fold to NULL instead of raising DuckDB
+    OutOfRangeException at execution.
+    """
+    cql = """library DecOverflow version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define MulOverflow: 9999999999999999999999999999.0 * 9999999999999999999999999999.0
+define MulInRange: 9999999999999999999999999999.0 * 2.0
+"""
+    translated = translate_cql(cql)
+    assert translated["MulOverflow"].to_sql() == "NULL"
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, want in (
+            ("MulOverflow", None),
+            ("MulInRange", Decimal("19999999999999999999999999998.00000000")),
+        ):
+            sql = "SELECT " + translated[name].to_sql()
+            for label, con in (("python", py), ("cpp", cpp)):
+                got = con.execute(sql).fetchone()[0]
+                assert got == want, f"{name} ({label}): got {got!r}, expected {want!r}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_integer_successor_boundary_nonliteral_is_null_cql11_explorer2() -> None:
+    """CQL-11 EXPLORER2 QA-001: statically Integer non-literal successor/predecessor boundary -> null.
+
+    CQL 1.5 Appendix B Arithmetic Operators header + Successor/Predecessor:
+    "If the argument is already the maximum value for the type, a null is
+    returned" / "If the result ... would result in an overflow, the result is
+    null." DuckDB's BIGINT helper clamps only at Long bounds, so the
+    translator must guard the Integer boundary for statically Integer-typed
+    non-literal operands (literal forms were covered by CQL-11 EXPLORER
+    QA-001).
+    """
+    cql = """library IntBoundary version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define SuccIntMax: successor of Coalesce({2147483647})
+define PredIntMin: predecessor of Coalesce({-2147483648})
+define SuccIntNear: successor of Coalesce({2147483646})
+define PredIntNear: predecessor of Coalesce({-2147483647})
+define SuccIntNullable: successor of Coalesce(null, 2147483647)
+define SuccLongMax: successor of Coalesce({9223372036854775807L})
+define PredLongMin: predecessor of Coalesce({-9223372036854775808L})
+"""
+    translated = translate_cql(cql)
+    assert "CASE WHEN" in translated["SuccIntMax"].to_sql()
+    assert "CASE WHEN" in translated["PredIntMin"].to_sql()
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        expected = {
+            "SuccIntMax": None,
+            "PredIntMin": None,
+            "SuccIntNear": 2147483647,
+            "PredIntNear": -2147483648,
+            "SuccIntNullable": None,
+            "SuccLongMax": None,
+            "PredLongMin": None,
+        }
+        for name, want in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            for label, con in (("python", py), ("cpp", cpp)):
+                got = con.execute(sql).fetchone()[0]
+                assert got == want, f"{name} ({label}): got {got!r}, expected {want!r}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_negate_duration_between_cql11_explorer2() -> None:
+    """CQL-11 EXPLORER2 QA-002: Negate over duration/difference between.
+
+    CQL 1.5 Negate has Integer/Long/Decimal/Quantity overloads and duration
+    between is Integer-valued, so `-(days between A and B)` is valid CQL.
+    The lowering must normalize the VARCHAR-returning cqlDurationBetween /
+    cqlDifferenceBetween helpers to a numeric type before applying prefix
+    minus, otherwise DuckDB binder-fails with -(VARCHAR).
+    """
+    cql = """library NegDur version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define NegDays: -(days between @2024-01-01 and @2024-01-10)
+define NegMonths: -(months between @2023-01-01 and @2024-03-01)
+define NegDiffDays: -(difference in days between @2024-01-01 and @2024-01-10)
+"""
+    translated = translate_cql(cql)
+    for name in ("NegDays", "NegMonths", "NegDiffDays"):
+        assert "TRY_CAST(" in translated[name].to_sql(), name
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        expected = {"NegDays": -9, "NegMonths": -14, "NegDiffDays": -9}
+        for name, want in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            for label, con in (("python", py), ("cpp", cpp)):
+                got = con.execute(sql).fetchone()[0]
+                assert got == want, f"{name} ({label}): got {got!r}, expected {want!r}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_negate_quantity_preserves_unit_parity_cql11_explorer2() -> None:
+    """CQL-11 EXPLORER2 QA-003: quantityNegate must preserve the unit verbatim.
+
+    CQL 1.5 Negate: "When negating quantities, the unit is unchanged." The
+    Python fallback previously round-tripped through pint, which normalizes
+    calendar-duration keywords ('day') to UCUM ('d') and diverged from the
+    native engine for `-(3 days)`.
+    """
+    cql = """library NegQty version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define NegTemporal: -(3 days)
+define NegCm: -(1.5 'cm')
+define NegMg: -(5 'mg')
+"""
+    translated = translate_cql(cql)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name in ("NegTemporal", "NegCm", "NegMg"):
+            sql = "SELECT " + translated[name].to_sql()
+            py_got = py.execute(sql).fetchone()[0]
+            cpp_got = cpp.execute(sql).fetchone()[0]
+            assert py_got == cpp_got, f"{name}: python {py_got!r} != cpp {cpp_got!r}"
+        assert '"unit":"day"' in py.execute(
+            "SELECT " + translated["NegTemporal"].to_sql()
+        ).fetchone()[0]
+        assert '"unit":"cm"' in py.execute(
+            "SELECT " + translated["NegCm"].to_sql()
+        ).fetchone()[0]
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_parse_expression_rejects_trailing_tokens_cql11_explorer2() -> None:
+    """CQL-11 EXPLORER2 QA-004: parse_expression must consume the whole input.
+
+    Bare Time literals require the @ prefix; `successor of T05:30` used to
+    silently parse `successor of T05` and drop `:30`.
+    """
+    from fhir4ds.cql.errors import ParseError
+
+    for bad in ("successor of T05:30", "Precision(T05:30:15.123"):
+        with pytest.raises(ParseError):
+            parse_expression(bad)
+    for good in ("successor of @T05:30", "1 + 2", "Round(1.5, 0)", "Coalesce(null, 5)"):
+        parse_expression(good)

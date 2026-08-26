@@ -160,8 +160,12 @@ def test_weeks_between_null_end():
 
 
 def test_difference_in_weeks_negative_truncates_toward_zero():
+    # CQL 1.5 §8.7: Sunday is the first day of the week for counting
+    # boundaries crossed. 2020-01-05 is a Sunday.
     assert differenceInWeeks("2020-01-10", "2020-01-01") == -1
-    assert differenceInWeeks("2020-01-06", "2020-01-01") == 0
+    assert differenceInWeeks("2020-01-01", "2020-01-06") == 1
+    assert differenceInWeeks("2020-01-01", "2020-01-04") == 0
+    assert differenceInWeeks("2020-01-01", "2020-01-05") == 1
 
 
 # ========================================
@@ -291,10 +295,13 @@ def test_minutes_between_negative():
     assert minutesBetween("2012-12-30T08:40:00", "2012-12-30T06:50:00") == -110
 
 
-def test_difference_in_time_units_truncate_toward_zero_and_handle_timezones():
-    assert differenceInHours("2013-10-10T12:30:00", "2013-10-10T08:40:00") == -3
-    assert differenceInMinutes("2013-10-10T12:30:00", "2013-10-10T12:29:30") == 0
-    assert differenceInSeconds("2013-10-10T12:30:00", "2013-10-10T12:29:59.500") == 0
+def test_difference_in_time_units_count_boundaries_and_handle_timezones():
+    # CQL 1.5 §8.7: Difference counts boundaries crossed (endpoint marks
+    # included), not truncated elapsed duration; negative when the first
+    # argument is later.
+    assert differenceInHours("2013-10-10T12:30:00", "2013-10-10T08:40:00") == -4
+    assert differenceInMinutes("2013-10-10T12:30:00", "2013-10-10T12:29:30") == -1
+    assert differenceInSeconds("2013-10-10T12:30:00", "2013-10-10T12:29:59.500") == -1
     assert differenceInMilliseconds("2013-10-10T12:30:00.000", "2013-10-10T12:29:59.999") == -1
     assert differenceInHours(
         "2017-03-12T01:12:05.100-05:00",

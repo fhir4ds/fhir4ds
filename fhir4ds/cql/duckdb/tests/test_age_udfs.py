@@ -26,6 +26,13 @@ from ..udf.age import (
     registerAgeUdfs,
 )
 
+def _interval_low(value):
+    """Scalar-or-interval §Age result: return the certain value or interval low."""
+    import json as _json
+    if value.startswith("{"):
+        return _json.loads(value)["start"]
+    return value
+
 
 @pytest.fixture
 def patient_resource():
@@ -54,8 +61,8 @@ def test_age_in_years_valid(patient_resource):
     result = ageInYears(patient_resource)
     assert result is not None
     # Born in 1990, should be around 34-35 years old
-    assert result >= 34
-    assert result <= 36
+    assert result is not None and int(result) >= 34
+    assert int(result) <= 36
 
 
 def test_age_in_years_null():
@@ -87,7 +94,7 @@ def test_age_in_months_valid(patient_resource):
     result = ageInMonths(patient_resource)
     assert result is not None
     # Born in 1990, should be around 400+ months old
-    assert result >= 400
+    assert int(result) >= 400
 
 
 def test_age_in_months_null():
@@ -109,7 +116,7 @@ def test_age_in_days_valid(patient_resource):
     result = ageInDays(patient_resource)
     assert result is not None
     # Born in 1990, should be around 12,000+ days old
-    assert result >= 12000
+    assert int(result) >= 12000
 
 
 def test_age_in_days_null():
@@ -126,7 +133,7 @@ def test_age_in_hours_valid(patient_resource):
     result = ageInHours(patient_resource)
     assert result is not None
     # Born in 1990, should be around 300,000+ hours old
-    assert result >= 300000
+    assert int(_interval_low(result)) >= 300000
 
 
 def test_age_in_hours_null():
@@ -143,7 +150,7 @@ def test_age_in_minutes_valid(patient_resource):
     result = ageInMinutes(patient_resource)
     assert result is not None
     # Born in 1990, should be around 18 million minutes old
-    assert result >= 18000000
+    assert int(_interval_low(result)) >= 18000000
 
 
 def test_age_in_minutes_null():
@@ -160,7 +167,7 @@ def test_age_in_seconds_valid(patient_resource):
     result = ageInSeconds(patient_resource)
     assert result is not None
     # Born in 1990, should be around 1 billion seconds old
-    assert result >= 1000000000
+    assert int(_interval_low(result)) >= 1000000000
 
 
 def test_age_in_seconds_null():
@@ -176,21 +183,21 @@ def test_age_in_years_at_valid(patient_resource):
     """Test ageInYearsAt with specific date."""
     # Born 1990-05-15, as of 2020-05-15 should be exactly 30
     result = ageInYearsAt(patient_resource, "2020-05-15")
-    assert result == 30
+    assert result == '30'
 
 
 def test_age_in_years_at_before_birthday(patient_resource):
     """Test ageInYearsAt before birthday in that year."""
     # Born 1990-05-15, as of 2020-05-14 should be 29
     result = ageInYearsAt(patient_resource, "2020-05-14")
-    assert result == 29
+    assert result == '29'
 
 
 def test_age_in_years_at_after_birthday(patient_resource):
     """Test ageInYearsAt after birthday in that year."""
     # Born 1990-05-15, as of 2020-05-16 should be 30
     result = ageInYearsAt(patient_resource, "2020-05-16")
-    assert result == 30
+    assert result == '30'
 
 
 def test_age_in_years_at_null_resource():
@@ -212,16 +219,16 @@ def test_age_in_years_at_datetime_format(patient_resource):
     """Test ageInYearsAt with datetime string."""
     # Should work with datetime strings too (takes first 10 chars)
     result = ageInYearsAt(patient_resource, "2020-05-15T10:30:00Z")
-    assert result == 30
+    assert result == '30'
 
 
 def test_age_in_years_at_leap_day_anniversary_non_leap_year():
     """Feb 29 birthdays use Feb 28 as the anniversary in non-leap years."""
     patient = '{"resourceType": "Patient", "birthDate": "2020-02-29"}'
-    assert ageInYearsAt(patient, "2021-02-27") == 0
-    assert ageInYearsAt(patient, "2021-02-28") == 1
-    assert ageInYearsAt(patient, "2021-03-01") == 1
-    assert calculateAgeInYearsAt("2000-02-29", "2021-02-28") == 21
+    assert ageInYearsAt(patient, "2021-02-27") == '0'
+    assert ageInYearsAt(patient, "2021-02-28") == '1'
+    assert ageInYearsAt(patient, "2021-03-01") == '1'
+    assert calculateAgeInYearsAt("2000-02-29", "2021-02-28") == '21'
 
 
 # ========================================
@@ -232,22 +239,22 @@ def test_age_in_months_at_valid(patient_resource):
     """Test ageInMonthsAt with specific date."""
     # Born 1990-05-15, as of 2020-05-15 should be exactly 360 months (30 years)
     result = ageInMonthsAt(patient_resource, "2020-05-15")
-    assert result == 360
+    assert result == '360'
 
 
 def test_age_in_months_at_before_birthday(patient_resource):
     """Test ageInMonthsAt before day of month."""
     # Born 1990-05-15, as of 2020-05-14 should be 359 months
     result = ageInMonthsAt(patient_resource, "2020-05-14")
-    assert result == 359
+    assert result == '359'
 
 
 def test_age_in_months_at_leap_day_anniversary_non_leap_year():
     """Complete month age applies last-day adjustment for Feb 29 birthdays."""
     patient = '{"resourceType": "Patient", "birthDate": "2020-02-29"}'
-    assert ageInMonthsAt(patient, "2021-02-27") == 11
-    assert ageInMonthsAt(patient, "2021-02-28") == 12
-    assert calculateAgeInMonthsAt("2020-02-29", "2021-02-28") == 12
+    assert ageInMonthsAt(patient, "2021-02-27") == '11'
+    assert ageInMonthsAt(patient, "2021-02-28") == '12'
+    assert calculateAgeInMonthsAt("2020-02-29", "2021-02-28") == '12'
 
 
 def test_age_in_months_at_null_resource():
@@ -263,14 +270,14 @@ def test_age_in_days_at_valid(patient_resource):
     """Test ageInDaysAt with specific date."""
     # Born 1990-05-15, as of 1990-05-20 should be 5 days
     result = ageInDaysAt(patient_resource, "1990-05-20")
-    assert result == 5
+    assert result == '5'
 
 
 def test_age_in_days_at_one_year(patient_resource):
     """Test ageInDaysAt after one year."""
     # Born 1990-05-15, as of 1991-05-15 should be 365 days
     result = ageInDaysAt(patient_resource, "1991-05-15")
-    assert result == 365
+    assert result == '365'
 
 
 def test_age_in_days_at_null_resource():
@@ -298,7 +305,7 @@ def test_registration():
     # Test that functions are registered and callable
     result = con.execute("SELECT ageInYears(?)", [patient]).fetchone()
     assert result[0] is not None
-    assert result[0] >= 34
+    assert int(result[0]) >= 34
 
     result = con.execute("SELECT ageInMonths(?)", [patient]).fetchone()
     assert result[0] is not None
@@ -307,7 +314,7 @@ def test_registration():
     assert result[0] is not None
 
     result = con.execute("SELECT ageInYearsAt(?, ?)", [patient, "2020-05-15"]).fetchone()
-    assert result[0] == 30
+    assert result[0] == '30'
 
     con.close()
 

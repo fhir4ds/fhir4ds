@@ -261,14 +261,17 @@ class IntervalMixin:
                 _inner.query, SQLSelect
             ):
                 _inner = _inner.query
-            # If the inner SELECT has computed columns (not just * or resource),
-            # it's a query return clause that already produces interval values.
+            # If the inner SELECT has computed columns (not just a raw
+            # resource-row projection), it's a query return clause that
+            # already produces interval values.
             if isinstance(_inner, SQLSelect) and _inner.columns:
-                _first_col = _inner.columns[0]
-                if not (
-                    isinstance(_first_col, SQLIdentifier)
-                    and _first_col.name in ("*", "resource")
-                ):
+                _cols = _inner.columns
+                _is_row_shape = all(
+                    isinstance(c, SQLIdentifier)
+                    and c.name in ("patient_id", "resource", "*")
+                    for c in _cols
+                )
+                if not _is_row_shape:
                     return _ast
 
         resource_type = getattr(self.context, "_alias_resource_types", {}).get(
@@ -308,6 +311,11 @@ class IntervalMixin:
         primary_path = self._RESOURCE_PRIMARY_DATE_PATHS.get(resource_type)
         if not primary_path:
             return sql_expr
+
+        # Alias-bound row subqueries project (patient_id, resource); narrow
+        # to the single resource column before handing to fhirpath UDFs —
+        # DuckDB scalar subqueries must return exactly one column.
+        sql_expr = self._narrow_to_resource_column(sql_expr)
 
         # Build toInterval-style CASE expression for choice-type paths
         # (e.g. performed -> performedPeriod or performedDateTime)
@@ -480,6 +488,46 @@ class IntervalMixin:
                 return True
             if expr.name in ("intervalExcept", "intervalIntersect", "intervalUnion"):
                 return True
+            # Element selection over an interval-producing list (CQL-15
+            # EXPLORER QA-001): First/Last/indexer lower to LIST_EXTRACT
+            # over either a list of intervalFromBounds elements or a
+            # from_json(...) parse of a JSON interval-array UDF
+            # (collapse_intervals / collapse_intervals_per). The selected
+            # element is itself an Interval and must stay in interval
+            # routing; otherwise contains/in degrade to DuckDB string
+            # contains and the {low, high} bounds-list coercion silently
+            # re-wraps the selection as a degenerate interval.
+            if expr.name in ("LIST_EXTRACT", "list_extract") and expr.args:
+                source = expr.args[0]
+                if isinstance(source, SQLFunctionCall):
+                    if source.name == "from_json" and source.args:
+                        inner = source.args[0]
+                        if (
+                            isinstance(inner, SQLFunctionCall)
+                            and inner.name
+                            in ("collapse_intervals", "collapse_intervals_per")
+                        ):
+                            return True
+                    if source.name in (
+                        "intervalFromBounds",
+                        "intervalExcept",
+                        "intervalIntersect",
+                        "intervalUnion",
+                    ):
+                        return True
+                from ...translator.types import (
+                    SQLArray as _SQLArray,
+                    SQLList as _SQLList,
+                )
+
+                if isinstance(source, (_SQLArray, _SQLList)):
+                    elements = getattr(source, "elements", None)
+                    if elements is None:
+                        elements = source.items
+                    return any(
+                        self._is_fhir_interval_expression(element)
+                        for element in elements
+                    )
             # DATE_TRUNC(precision, interval_expr) wraps an interval when
             # precision-of is applied — check the inner argument.
             if expr.name and expr.name.upper() == "DATE_TRUNC" and len(expr.args) >= 2:
@@ -623,6 +671,13 @@ class IntervalMixin:
             'list_filter', 'list_concat', 'list_distinct', 'list_sort',
             'list_transform', 'Distinct', '"Distinct"', 'Tail',
             'CQLListDistinctEq', 'CQLListExceptEq', 'CQLListIntersectEq',
+            # CQL-18 EXPLORER QA-002: chained list operators (except/
+            # intersect/distinct feeding includes/included-in, flatten
+            # feeding includes) are list-valued operands — without these
+            # names the includes dispatcher misroutes a list producer to
+            # the list-list has-all overload with a scalar right operand.
+            'CQLListExceptTemporalEq', 'CQLListIntersectTemporalEq',
+            'flatten', 'list_value', 'list_slice',
         ):
             return True
         return False
@@ -637,9 +692,16 @@ class IntervalMixin:
         """
         from ...parser.ast_nodes import ListExpression, Interval
         from ...translator.types import SQLArray
+        from ._utils import _is_list_returning_sql
         # If either side is an SQLArray or a CQL ListExpression, this is
         # a list operation (CQL overloads these operators for both types).
         if isinstance(left, SQLArray) or isinstance(right, SQLArray):
+            return True
+        # CQL-18 HISTORIAN QA-002: operands promoted to list projections
+        # (from_json(fhirpath(...), '["VARCHAR"]')) or other list-returning
+        # SQL (list aggregates, LIST() subqueries over multi-valued
+        # navigation) are list operands, not intervals.
+        if _is_list_returning_sql(left) or _is_list_returning_sql(right):
             return True
         if hasattr(expr, 'left') and isinstance(expr.left, ListExpression):
             return True
@@ -791,7 +853,11 @@ class IntervalMixin:
             result_is_null = isinstance(result, SQLNull)
             if not (cond_is_false and result_is_null):
                 return False
-        if not isinstance(sql_expr.else_clause, SQLNull):
+        # A CASE with no ELSE clause evaluates to NULL, so a missing
+        # else_clause is statically null too (e.g., the `(null as List<T>)`
+        # lowering `CASE WHEN FALSE THEN NULL END`). See CQL-19 HISTORIAN
+        # QA-003.
+        if sql_expr.else_clause is not None and not isinstance(sql_expr.else_clause, SQLNull):
             return False
         return True
 

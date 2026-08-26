@@ -174,33 +174,38 @@ def test_temporal_arithmetic_match_cpp() -> None:
             "1.2 * 1.8",
             (["2.16"], "2.16", "[2.16]", None, 2.16, True),
         ),
+        # FP-02 HISTORIAN QA-002 (2026-08-16): N1 §6.6.3 — addition
+        # converts to the most granular operand unit (mm), and §6.6.1/§6.6.2
+        # compose in operand unit space ('cm.mm', 'cm/mm' keeps the prefix
+        # ratio in the unit; `1 'cm' / 10 'mm' = 1` still evaluates true
+        # via base reduction).
         (
             "1 'cm' + 10 'mm'",
-            (["0.02 'm'"], "0.02 'm'", '[{"value":0.02,"unit":"m"}]', None, 0.02, True),
+            (["20 'mm'"], "20 'mm'", '[{"value":20,"unit":"mm"}]', None, 20.0, True),
         ),
         (
             "1 'cm' - 10 'mm'",
-            (["0 'm'"], "0 'm'", '[{"value":0,"unit":"m"}]', None, 0.0, True),
+            (["0 'mm'"], "0 'mm'", '[{"value":0,"unit":"mm"}]', None, 0.0, True),
         ),
         (
             "1 'cm' * 10 'mm'",
             (
-                ["0.0001 'm2'"],
-                "0.0001 'm2'",
-                '[{"value":0.0001,"unit":"m2"}]',
+                ["10 'cm.mm'"],
+                "10 'cm.mm'",
+                '[{"value":10,"unit":"cm.mm"}]',
                 None,
-                0.0001,
+                10.0,
                 True,
             ),
         ),
         (
             "1 'cm' / 10 'mm'",
-            # FP-18 HISTORIAN QA-003 (2026-06-30): Per §6.6.2 "The result
-            # of a division is always Decimal, even if the inputs are both
-            # Integer" — Quantity division result is Decimal `1.0 '1'`
-            # (not Integer `1 '1'`). JSON serialization normalizes 1.0 → 1
-            # in both backends consistent with orjson behavior.
-            (["1.0 '1'"], "1.0 '1'", '[{"value":1,"unit":"1"}]', None, 1.0, True),
+            # FP-02 HISTORIAN QA-002 (2026-08-16): operand-space division
+            # keeps the mixed-prefix ratio in the unit ('cm/mm' = 10); the
+            # quantity is dimensionally exact (`= 1` evaluates true via
+            # base reduction). FP-18 QA-003's Decimal rule still applies
+            # to same-unit division (`10 'mg' / 2 'mg'` -> 5.0 '1').
+            (["0.1 'cm/mm'"], "0.1 'cm/mm'", '[{"value":0.1,"unit":"cm/mm"}]', None, 0.1, True),
         ),
         (
             "2 / 1 'mg'",
@@ -258,19 +263,19 @@ def test_numeric_quantity_public_surfaces_native_and_fallback(
         ),
         (
             "@T12:34 + 30 seconds",
-            (["T12:34"], "T12:34", '["T12:34"]', None, None, True),
+            (["12:34"], "12:34", '["12:34"]', None, None, True),
         ),
         (
             "@T00:00:00 - 1 millisecond",
-            (["T00:00:00"], "T00:00:00", '["T00:00:00"]', None, None, True),
+            (["00:00:00"], "00:00:00", '["00:00:00"]', None, None, True),
         ),
         (
             "@T12 + 61 minutes",
-            (["T13"], "T13", '["T13"]', None, None, True),
+            (["13"], "13", '["13"]', None, None, True),
         ),
         (
             "@T00:00:00.500 + 0.5 seconds",
-            (["T00:00:00.500"], "T00:00:00.500", '["T00:00:00.500"]', None, None, True),
+            (["00:00:00.500"], "00:00:00.500", '["00:00:00.500"]', None, None, True),
         ),
         (
             "@2016-01-01T00:00:00.500 + 0.5 seconds",
@@ -338,7 +343,7 @@ def test_numeric_quantity_public_surfaces_native_and_fallback(
         ),
         (
             "@T23+119 minutes",
-            (["T00"], "T00", '["T00"]', None, None, True),
+            (["00"], "00", '["00"]', None, None, True),
         ),
         (
             "@2016-02-29T23+119 minutes",
@@ -428,9 +433,9 @@ def test_resource_backed_temporal_overflow_is_row_resilient(
     [
         ("effectiveDateTime + 1 second", '["2016-03-01T00:00:00"]'),
         ("effectiveDateTime + 1 's'", '["2016-03-01T00:00:00"]'),
-        ("effectiveTime + 750 milliseconds", '["T00:00:00.250"]'),
+        ("effectiveTime + 750 milliseconds", '["00:00:00.250"]'),
         ("effectiveDateTime + 0.5 seconds", '["2016-02-29T23:59:59"]'),
-        ("effectiveTime + 0.5 seconds", '["T23:59:59.500"]'),
+        ("effectiveTime + 0.5 seconds", '["23:59:59.500"]'),
     ],
 )
 def test_fhir_temporal_path_arithmetic_native_and_fallback(
@@ -833,7 +838,10 @@ def test_decimal_arithmetic_preserves_scale_fp18_skeptic(
         ("1000000 'g' * 1000000 'g'", '[{"value":1000000000000,"unit":"g2"}]'),
         ("10000000 'g' * 10000000 'g'", '[{"value":100000000000000,"unit":"g2"}]'),
         # Tiny Quantity product — decimal notation in JSON per orjson.
-        ("3 'cm' * 12 'cm2'", '[{"value":0.000036,"unit":"m.m2"}]'),
+        # FP-02 HISTORIAN QA-002 (2026-08-16): operand-space composition
+        # per N1 §6.6.1 `3 'cm' * 12 'cm2' // 36 'cm3'` — the JSON unit is
+        # the merged operand spelling 'cm3' with the unscaled value 36.
+        ("3 'cm' * 12 'cm2'", '[{"value":36,"unit":"cm3"}]'),
     ],
 )
 def test_quantity_arithmetic_json_serialization_fp18_skeptic_architect(
@@ -907,16 +915,26 @@ def test_quantity_scalar_mult_preserves_decimal_authored_form_fp18_skeptic_archi
 @pytest.mark.parametrize(
     ("expression", "expected_text"),
     [
-        # FP-18 HISTORIAN QA-001 (2026-06-30): Native Decimal division must
-        # use shortest-round-trip rendering, not setprecision(17) binary64
-        # noise. Per §4.1.4 + §5.5.8 format (-)?#0.0#.
-        ("1 / 3", "0.3333333333333333"),
-        ("2 / 3", "0.6666666666666666"),
-        ("1 / 11", "0.09090909090909091"),
-        ("22 / 7", "3.142857142857143"),
+        # FP-01 EXPLORER QA-002 (2026-08-16): §6.6.2 "The result of a
+        # division is always Decimal, even if the inputs are both Integer."
+        # Both engines now divide Decimals at the Python `decimal` default
+        # 28-significant-digit context (ROUND_HALF_EVEN); the former
+        # FP-18 HISTORIAN QA-001 shortest-round-trip expectations (and the
+        # fallback's int/int float truediv) rendered the binary64 quotient
+        # instead, flipping equality vs 16-digit literals across engines.
+        ("1 / 3", "0.3333333333333333333333333333"),
+        ("2 / 3", "0.6666666666666666666666666667"),
+        ("1 / 11", "0.09090909090909090909090909091"),
+        ("22 / 7", "3.142857142857142857142857143"),
         ("1 / 5", "0.2"),
-        ("1000000 / 3", "333333.3333333333"),
+        ("1000000 / 3", "333333.3333333333333333333333"),
         ("10.0 / 4.0", "2.5"),
+        ("1 / 4", "0.25"),
+        ("1 / 8", "0.125"),
+        ("2 / 2", "1.0"),
+        ("1 / 1000000", "0.000001"),
+        ("0.0000002 / 2", "0.0000001"),
+        ("12345678901234567890.0 / 7.0", "1763668414462081127.142857143"),
     ],
 )
 def test_division_uses_shortest_roundtrip_text_fp18_historian(
@@ -954,7 +972,10 @@ def test_division_uses_shortest_roundtrip_text_fp18_historian(
         ("6 'g' / 3", "2.0 'g'"),
         ("10 'g' / 2", "5.0 'g'"),
         ("100 'mg' / 4", "25.0 'mg'"),
-        ("1 'cm' / 10 'mm'", "1.0 '1'"),
+        # FP-02 HISTORIAN QA-002 (2026-08-16): operand-space division keeps the
+        # mixed-prefix ratio in the unit; the Decimal-division rule itself is
+        # unchanged (same-unit `10 'mg' / 2 'mg'` -> `5.0 '1'`).
+        ("1 'cm' / 10 'mm'", "0.1 'cm/mm'"),
         ("2 / 1 'mg'", "2.0 '1/mg'"),
     ],
 )
@@ -1022,6 +1043,338 @@ def test_boolean_operands_rejected_by_arithmetic_ops_fp18_historian(
         assert cpp == py == [], (
             f"{expression!r}: native={cpp!r} fallback={py!r}; both must be []"
         )
+    finally:
+        native.close()
+        fallback.close()
+
+
+# ---- FP-01 EXPLORER QA-001/QA-002 (2026-08-16) ---------------------------------
+# Decimal literal arithmetic must use exact Decimal semantics (Python
+# `decimal` default context: 28 significant digits, ROUND_HALF_EVEN) in BOTH
+# engines. Native binary64 re-rendering corrupted >16-significant-digit
+# decimals under identity operations and rendered division quotients that
+# flipped equality/ordering outcomes versus the fallback. §4.1.4 ("should
+# use fixed-precision decimal formats ... accurately represented"), §6.6.2
+# ("The result of a division is always Decimal, even if the inputs are both
+# Integer").
+
+
+@pytest.mark.parametrize(
+    ("expression", "expected_text"),
+    [
+        # Identity operations must not corrupt >16-sig-digit decimals (QA-001).
+        ("0.6666666666666666 * 1", "0.6666666666666666"),
+        ("0.6666666666666666666666666667 + 0", "0.6666666666666666666666666667"),
+        ("0.6666666666666666666666666667 * 1", "0.6666666666666666666666666667"),
+        # Exact small-fraction addition; no binary64 noise (QA-001).
+        ("0.1 + 0.0000000000000000000000000001", "0.1000000000000000000000000001"),
+        # Subtraction must not collapse through binary64 cancellation (QA-001).
+        (
+            "0.6666666666666666666666666667 - 0.6666666666666666",
+            "0.0000000000000000666666666667",
+        ),
+        # Division display parity on Decimal operands (QA-002).
+        ("2.0 / 3", "0.6666666666666666666666666667"),
+        ("2.0 / 3.0 + 0.0", "0.6666666666666666666666666667"),
+        ("0.0000001 / 3", "0.00000003333333333333333333333333333"),
+        ("12345678901234567890.0 / 7.0", "1763668414462081127.142857143"),
+        # 28-digit rounding contexts (half-even, exponent carry).
+        ("7.0 / 6.0", "1.166666666666666666666666667"),
+        ("1.0 / 7.0", "0.1428571428571428571428571429"),
+        ("22 / 7", "3.142857142857142857142857143"),
+        (
+            "12345678901234567.0 * 12345678901234567.0",
+            "152415787532388345526596755700000.0",
+        ),
+        # Zero keeps its ideal-exponent scale in products.
+        ("0 * 0.0000001", "0.0000000"),
+        ("0.0 * 0.1", "0.00"),
+        # Signed zero through division (mirrors Python Decimal sign rule).
+        ("0 / -1", "-0.0"),
+    ],
+)
+def test_decimal_arithmetic_exact_text_parity_fp01_explorer(
+    expression: str,
+    expected_text: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-01 EXPLORER QA-001: exact Decimal text for +,-,* across engines."""
+    resource = json.dumps({"resourceType": "Observation"})
+
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        cpp_text = native.execute(
+            "SELECT fhirpath_text(?::JSON, ?)", [resource, expression]
+        ).fetchone()[0]
+        py_text = fallback.execute(
+            "SELECT fhirpath_text(?::JSON, ?)", [resource, expression]
+        ).fetchone()[0]
+        assert cpp_text == py_text == expected_text, (
+            f"{expression!r}: native={cpp_text!r} fallback={py_text!r} "
+            f"expected={expected_text!r}"
+        )
+    finally:
+        native.close()
+        fallback.close()
+
+
+@pytest.mark.parametrize(
+    ("expression", "expected_text"),
+    [
+        # §6.6.2: division is always Decimal — including Integer/Integer
+        # inputs. The fallback previously produced a binary64 float here,
+        # making `1 / 3 = 0.3333333333333333` FALSE while displaying that
+        # exact text (QA-002).
+        ("1 / 3 = 0.3333333333333333", "false"),
+        ("1 / 3 = 0.3333333333333333333333333333", "true"),
+        ("2.0 / 3 = 0.6666666666666666", "false"),
+        ("2.0 / 3 = 0.6666666666666666666666666667", "true"),
+        ("2.0 / 3 != 0.6666666666666666", "true"),
+        ("(2.0 / 3) > 0.6666666666666666", "true"),
+        ("(2.0 / 3) < 0.6666666666666667", "true"),
+        ("(0.1 / 0.3) = 0.3333333333333333333333333333", "true"),
+        ("(0.1 / 0.3) = 0.33333333333333337", "false"),
+        ("1.0 / 3.0 * 3.0 = 1.0", "false"),
+    ],
+)
+def test_division_decimal_equality_semantics_parity_fp01_explorer(
+    expression: str,
+    expected_text: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-01 EXPLORER QA-002: division equality/ordering must match Decimal."""
+    resource = json.dumps({"resourceType": "Observation"})
+
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        cpp_text = native.execute(
+            "SELECT fhirpath_text(?::JSON, ?)", [resource, expression]
+        ).fetchone()[0]
+        py_text = fallback.execute(
+            "SELECT fhirpath_text(?::JSON, ?)", [resource, expression]
+        ).fetchone()[0]
+        assert cpp_text == py_text == expected_text, (
+            f"{expression!r}: native={cpp_text!r} fallback={py_text!r} "
+            f"expected={expected_text!r}"
+        )
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_division_no_scientific_notation_in_json_fp01_explorer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-01 EXPLORER QA-002: fhirpath_json must not leak binary64
+    scientific notation for small Decimal quotients (the fallback renders
+    `format(d, "f")`)."""
+    resource = json.dumps({"resourceType": "Observation"})
+
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        for expression, expected in [
+            ("0.0000001 / 3", "[0.00000003333333333333333333333333333]"),
+            ("2.0 / 3", "[0.6666666666666666666666666667]"),
+            ("1 / 4", "[0.25]"),
+            ("2 / 2", "[1.0]"),
+        ]:
+            cpp_json = native.execute(
+                "SELECT fhirpath_json(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            py_json = fallback.execute(
+                "SELECT fhirpath_json(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert cpp_json == py_json == expected, (
+                f"{expression!r}: native={cpp_json!r} fallback={py_json!r} "
+                f"expected={expected!r}"
+            )
+    finally:
+        native.close()
+        fallback.close()
+
+
+@pytest.mark.parametrize(
+    ("expression", "expected_scalar"),
+    [
+        # FHIRPath N1 §6.6.1: `3 'cm' * 12 'cm2' // 36 'cm3'` and §6.6.2:
+        # `12 'cm2' / 3 'cm' // 4.0 'cm'` — quantity arithmetic composes in
+        # OPERAND unit space (FP-02 HISTORIAN QA-002, 2026-08-16): merge
+        # operand term exponents (cm.cm2 -> cm3, cm2/cm -> cm) and operate
+        # on the operand values directly. Comparisons still reduce through
+        # the base table (official fixture testQuantity9 holds).
+        ("3 'cm' * 12 'cm2'", "36 'cm3'"),
+        ("12 'cm2' / 3 'cm'", "4.0 'cm'"),
+        # Dimensionless operands square to '1' (previously rendered '12').
+        ("1 '1' * 1 '1'", "1 '1'"),
+        ("(12 'cm' / 3 'cm') * (12 'cm' / 3 'cm')", "16 '1'"),
+        # Scalar-over-quantity keeps the inverted single unit form.
+        ("1 / 4 's'", "0.25 '1/s'"),
+        ("10 'g' / 2 's'", "5.0 'g/s'"),
+        # Multi-unit dividends reduce through the inverted map.
+        ("1 / (10 'g' / 2 's')", "0.2 's/g'"),
+        # Cross-symbol products keep a deterministic sorted spelling.
+        # FP-02 HISTORIAN QA-002: operand-space composition keeps the
+        # authored unit symbols (kg.m, values unscaled).
+        ("6 'kg' * 2 'm'", "12 'kg.m'"),
+        ("2 'm' * 6 'kg'", "12 'kg.m'"),
+    ],
+)
+def test_quantity_unit_exponent_merge_both_backends_fp02_skeptic(
+    expression: str,
+    expected_scalar: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-02 SKEPTIC QA-003: §6.6.1/§6.6.2 unit composition merges exponents."""
+    resource = json.dumps({"resourceType": "Observation"})
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        native_row = native.execute(
+            "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+        ).fetchone()[0]
+        fallback_row = fallback.execute(
+            "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+        ).fetchone()[0]
+        assert native_row == [expected_scalar], (
+            f"{expression!r}: native={native_row!r} expected={[expected_scalar]!r}"
+        )
+        assert fallback_row == [expected_scalar], (
+            f"{expression!r}: fallback={fallback_row!r} expected={[expected_scalar]!r}"
+        )
+    finally:
+        native.close()
+        fallback.close()
+
+
+@pytest.mark.parametrize(
+    ("expression", "expected_scalar"),
+    [
+        # The spec examples' follow-up comparisons must hold once results
+        # carry reduced units: `12 'cm2' / 3 'cm' = 4 'cm'`.
+        ("12 'cm2' / 3 'cm' = 4 'cm'", "true"),
+        ("12 'cm2' / 3 'cm' = 0.04 'm'", "true"),
+        ("3 'cm' * 12 'cm2' = 36 'cm3'", "true"),
+        # User-authored unreduced spellings reduce through the base table.
+        ("1 'm2/m' = 1 'm'", "true"),
+        ("1 'm.m2' = 1 'm3'", "true"),
+        ("1 'm2/m' < 2 'm'", "true"),
+        ("1 'm2/m' > 0.5 'm'", "true"),
+        ("1 'm2/m' ~ 1 'm'", "true"),
+        ("1 'm3' = 1000000 'cm3'", "true"),
+        ("5 'cm3' < 1 'm3'", "true"),
+        ("1 'm2/cm2' = 10000", "true"),
+        ("1 'm2/m' + 1 'm'", "2 'm'"),
+        # Incompatible dimensions still compare empty (§6.1/§6.2).
+        ("1 'm2/m' + 1 'g'", None),
+        ("1 'm2/m' = 1 'g'", None),
+        ("1 'm3' < 1 's'", None),
+        # Pre-existing controls stay green.
+        ("12 'cm' / 3 'cm' = 4", "true"),
+        ("10 'm' * 10 'm' = 100 'm2'", "true"),
+        ("3 'm' + 3 'cm' = 303 'cm'", "true"),
+        ("5 'mg' + 5 'mg' = 10 'mg'", "true"),
+        ("12 'cm' * 3 'cm' = 36 'cm2'", "true"),
+        ("1 'cm' + 1 'g'", None),
+        # Value-correct but unit-different comparisons stay false, not empty.
+        ("12 'cm2' / 3 'cm' = 5 'cm'", "false"),
+        ("1 'g.m/s2' = 1 'kg.m/s2'", "false"),
+    ],
+)
+def test_quantity_unit_reduction_comparisons_both_backends_fp02_skeptic(
+    expression: str,
+    expected_scalar: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-02 SKEPTIC QA-003: reduced/unreduced units compare per §6.1/§6.2."""
+    resource = json.dumps({"resourceType": "Observation"})
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        for con in (native, fallback):
+            row = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert row == ([expected_scalar] if expected_scalar is not None else []), (
+                f"{expression!r}: result={row!r} expected={expected_scalar!r}"
+            )
+    finally:
+        native.close()
+        fallback.close()
+
+
+# --- FP-02 HISTORIAN (2026-08-16): QA-001/QA-002/QA-004 regression coverage ---
+
+_FP02_HISTORIAN_CASES = [
+    # QA-001: N1 §5 conversion table — Integer/Decimal -> Quantity('1') is
+    # IMPLICIT, so `2 + 2 '1' // 4 '1'` in BOTH backends (native previously
+    # returned empty while the Python fallback computed the value); a
+    # non-'1' unit still yields empty (`2 + 2 'cm'`).
+    ("2 + 2 '1'", ["4 '1'"]),
+    ("2 '1' + 2", ["4 '1'"]),
+    ("2 - 1 '1'", ["1 '1'"]),
+    ("2.5 + 1 '1'", ["3.5 '1'"]),
+    ("5 '1' + 5", ["10 '1'"]),
+    ("2 + 2 'cm'", []),
+    # QA-002: N1 §6.6.1/§6.6.2/§6.6.3 verbatim examples — operand-unit-space
+    # composition and most-granular addition (values unscaled, .value/.unit
+    # match the normative example outputs).
+    ("12 'cm' * 3 'cm'", ["36 'cm2'"]),
+    ("3 'cm' * 12 'cm2'", ["36 'cm3'"]),
+    ("12 'cm2' / 3 'cm'", ["4.0 'cm'"]),
+    ("3 'm' + 3 'cm'", ["303 'cm'"]),
+    ("3 'cm' + 3 'm'", ["303 'cm'"]),
+    ("(12 'cm2' / 3 'cm').value", ["4.0"]),
+    ("(12 'cm2' / 3 'cm').unit", ["cm"]),
+    ("(3 'cm' * 12 'cm2').value", ["36.0"]),
+    ("(3 'cm' * 12 'cm2').unit", ["cm3"]),
+    # Official fixture testQuantity9 keeps holding via base reduction.
+    ("2.0 'cm' * 2.0 'm' = 0.040 'm2'", ["true"]),
+    # Mixed-prefix composition keeps the ratio in the unit; equality holds.
+    ("1 'cm' * 10 'mm' = 0.0001 'm2'", ["true"]),
+    ("1 'cm' / 10 'mm' = 1", ["true"]),
+    # Calendar additions render in the most granular operand unit.
+    ("1 'wk' + 2 days", ["9 days"]),
+    ("1 week + 14 days", ["21 days"]),
+    ("3 'd' + 1 'wk'", ["10 'd'"]),
+    # QA-004: derived UCUM units convert through the curated table.
+    ("1 'kJ' = 1000 'J'", ["true"]),
+    ("1 'J' = 1 'kg.m2/s2'", ["true"]),
+    ("1 'J' ~ 1 'kg.m2/s2'", ["true"]),
+    ("1 'kg.m2/s2' < 2 'J'", ["true"]),
+    ("1 'N' = 1 'kg.m/s2'", ["true"]),
+    ("1 'N.m' = 1 'J'", ["true"]),
+    ("1 'W' = 1 'kg.m2/s3'", ["true"]),
+    ("1 'V' = 1 'kg.m2/s3.A'", ["true"]),
+    ("1 'mV' = 0.001 'V'", ["true"]),
+    ("1 'kN' = 1000 'N'", ["true"]),
+    ("2 'kW' = 2000 'W'", ["true"]),
+]
+
+
+@pytest.mark.parametrize(
+    ("expression", "expected"),
+    _FP02_HISTORIAN_CASES,
+)
+def test_quantity_arithmetic_spec_examples_both_backends_fp02_historian(
+    expression: str,
+    expected,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-02 HISTORIAN QA-001/QA-002/QA-004: N1 §6.6 examples in both backends."""
+    resource = json.dumps({"resourceType": "Observation"})
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        for con in (native, fallback):
+            row = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert row == expected, (
+                f"{expression!r}: result={row!r} expected={expected!r}"
+            )
     finally:
         native.close()
         fallback.close()

@@ -401,7 +401,7 @@ class TestFullQueryGeneration:
             meta={"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
             url="https://example.org/ViewDefinition/shareable",
             name="shareable_patient",
-            fhirVersion=["4.0.1"],
+            fhirVersion=["4.0"],
             select=[Select(column=[Column(path="id", name="id", type="id")])],
         )
         with pytest.raises(ValidationError, match="ViewDefinition.status"):
@@ -413,7 +413,7 @@ class TestFullQueryGeneration:
             url="https://example.org/ViewDefinition/shareable",
             name="shareable_patient",
             status="active",
-            fhirVersion=["4.0.1"],
+            fhirVersion=["4.0"],
             select=[Select(column=[Column(path="id", name="id")])],
         )
         with pytest.raises(ValidationError, match="Column.type"):
@@ -718,3 +718,34 @@ class TestMultipleSelects:
 
         assert "patient_id" in sql
         assert "gender" in sql
+
+
+class TestCollectionPreflightWarning:
+    """SOF-VD-03: collection=false preflight warning must match runtime behavior.
+
+    The SQL-on-FHIR v2 spec (Select.column.collection) requires implementations
+    to report an ERROR when multiple values are produced with collection unset
+    or false. The permissive-mode preflight warning must therefore not claim
+    silent truncation ("only the first will be used") — runtime guards raise.
+    """
+
+    def test_multivalue_warning_states_runtime_error_not_truncation(self, caplog):
+        import logging
+
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "name": "v",
+            "status": "draft",
+            "select": [{
+                "column": [{"path": "name.family", "name": "fam"}]
+            }],
+        })
+
+        with caplog.at_level(logging.WARNING, logger="fhir4ds.viewdef.generator"):
+            SQLGenerator().generate(vd)
+
+        warnings = [r for r in caplog.records if "collection=false" in r.getMessage()]
+        assert warnings, "expected a collection=false preflight warning"
+        message = warnings[0].getMessage()
+        assert "only the first will be used" not in message
+        assert "raise" in message and "error" in message

@@ -100,7 +100,18 @@ static std::string quantity_json_for_bound(yyjson_val *value_node, const std::st
 		oss << "null";
 	}
 	oss << ",\"unit\":\"" << escapeJsonString(unit) << "\"}";
-	return oss.str();
+	// CQL-17 HISTORIAN QA-004: canonicalize to the full Quantity JSON shape
+	// (value/unit/code/system) so `start of`/`end of`/`point from` on
+	// Quantity intervals match the Width/Size output (format_quantity_json).
+	const std::string minimal = oss.str();
+	auto parsed = parse_quantity_json(minimal);
+	if (parsed) {
+		auto formatted = format_quantity_json(*parsed);
+		if (formatted) {
+			return *formatted;
+		}
+	}
+	return minimal;
 }
 
 // =====================================================================
@@ -108,6 +119,26 @@ static std::string quantity_json_for_bound(yyjson_val *value_node, const std::st
 // =====================================================================
 
 int BoundValue::compare(const BoundValue &other) const {
+	// CQL 1.5 §2 (implicit numeric conversions): Integer and Decimal point
+	// types are comparable across types (Integer converts to Decimal).
+	// Compare numerically instead of treating the mix as incomparable,
+	// mirroring the Python authority. long double keeps int64 magnitudes
+	// exact against doubles within the 2^53 double mantissa.
+	bool this_numeric = (type == BoundType::Integer || type == BoundType::Decimal);
+	bool other_numeric = (other.type == BoundType::Integer || other.type == BoundType::Decimal);
+	if (this_numeric && other_numeric) {
+		bool valid = (type == BoundType::Integer ? int_val.has_value() : dec_val.has_value()) &&
+		             (other.type == BoundType::Integer ? other.int_val.has_value()
+		                                               : other.dec_val.has_value());
+		if (!valid) {
+			return -2;
+		}
+		long double l = type == BoundType::Integer ? static_cast<long double>(*int_val)
+		                                           : static_cast<long double>(*dec_val);
+		long double r = other.type == BoundType::Integer ? static_cast<long double>(*other.int_val)
+		                                                 : static_cast<long double>(*other.dec_val);
+		return (l < r) ? -1 : (l > r) ? 1 : 0;
+	}
 if (type != other.type) {
 return -2; // type mismatch = incomparable
 }
@@ -702,6 +733,75 @@ static Optional<BoundValue> effective_end_bound(const Interval &iv) {
 	return iv.high_closed ? iv.high : predecessor_bound(*iv.high);
 }
 
+static Optional<BoundValue> sentinel_start_bound(const Interval &iv) {
+	// CQL 1.5 §9.14 Start: a closed null low boundary resolves to the
+	// minimum value of the point type (inferred from the high peer bound),
+	// mirroring the reference engine Interval.start getter, so Meets /
+	// On Or After / On Or Before produce determined results instead of null.
+	if (iv.low) {
+		return effective_start_bound(iv);
+	}
+	if (!iv.low_closed || !iv.high) {
+		return NullOpt<BoundValue>();
+	}
+	const BoundValue &peer = *iv.high;
+	std::string sent;
+	if (peer.type == BoundType::Time) {
+		sent = "T00:00:00.000";
+	} else if (peer.type == BoundType::Integer) {
+		// §9.14 Start: Long point type (peer beyond int32 — authored L-ness is
+		// erased at translation) sentinels at int64 min (reference MIN_LONG).
+		sent = (peer.int_val && (*peer.int_val > std::numeric_limits<int32_t>::max() ||
+		                         *peer.int_val < std::numeric_limits<int32_t>::min()))
+		           ? "-9223372036854775808"
+		           : "-2147483648";
+	} else if (peer.type == BoundType::Decimal) {
+		sent = "-99999999999999999999.99999999";
+	} else if (peer.type == BoundType::Quantity) {
+		// Reference Interval.start getter: Quantity(MIN_DECIMAL, unit).
+		std::ostringstream oss;
+		oss << "{\"value\":-99999999999999999999.99999999,\"unit\":\""
+		    << escapeJsonString(peer.qty_unit) << "\"}";
+		return BoundValue::from_interval_bound_string(oss.str());
+	} else {
+		sent = (peer.raw_str.find('T') != std::string::npos) ? "0001-01-01T00:00:00.000" : "0001-01-01";
+	}
+	return BoundValue::from_interval_bound_string(sent);
+}
+
+static Optional<BoundValue> sentinel_end_bound(const Interval &iv) {
+	// CQL 1.5 §9.15 End: a closed null high boundary resolves to the
+	// maximum value of the point type (inferred from the low peer bound).
+	if (iv.high) {
+		return effective_end_bound(iv);
+	}
+	if (!iv.high_closed || !iv.low) {
+		return NullOpt<BoundValue>();
+	}
+	const BoundValue &peer = *iv.low;
+	std::string sent;
+	if (peer.type == BoundType::Time) {
+		sent = "T23:59:59.999";
+	} else if (peer.type == BoundType::Integer) {
+		// §9.15 End: Long point type sentinels at int64 max (reference MAX_LONG).
+		sent = (peer.int_val && (*peer.int_val > std::numeric_limits<int32_t>::max() ||
+		                         *peer.int_val < std::numeric_limits<int32_t>::min()))
+		           ? "9223372036854775807"
+		           : "2147483647";
+	} else if (peer.type == BoundType::Decimal) {
+		sent = "99999999999999999999.99999999";
+	} else if (peer.type == BoundType::Quantity) {
+		// Reference Interval.end getter: Quantity(MAX_DECIMAL, unit).
+		std::ostringstream oss;
+		oss << "{\"value\":99999999999999999999.99999999,\"unit\":\""
+		    << escapeJsonString(peer.qty_unit) << "\"}";
+		return BoundValue::from_interval_bound_string(oss.str());
+	} else {
+		sent = (peer.raw_str.find('T') != std::string::npos) ? "9999-12-31T23:59:59.999" : "9999-12-31";
+	}
+	return BoundValue::from_interval_bound_string(sent);
+}
+
 static bool effective_interval_empty(const Interval &iv) {
 	auto start = effective_start_bound(iv);
 	auto end = effective_end_bound(iv);
@@ -939,8 +1039,13 @@ low_eq = Optional<bool>(true);
 } else if (a_start && b_start) {
 low_eq = bound_equals_nullable(*a_start, *b_start);
 } else {
-// One side null, the other not — certain unequal (null bound = unbounded).
-low_eq = Optional<bool>(false);
+// One side null, the other not. Per CQL 1.5 §Equal (interval, via
+// Start/End): a CLOSED null bound is unknown, so the equality is
+// uncertain (NullOpt). An OPEN null bound is unbounded, which is
+// definitely unequal to a finite bound (false). Callers with
+// never-null semantics (Equivalent) coerce uncertainty to false.
+const Interval &null_side = a_start ? other : *this;
+low_eq = null_side.low_closed ? NullOpt<bool>() : Optional<bool>(false);
 }
 Optional<bool> high_eq;
 if (!a_end && !b_end) {
@@ -948,7 +1053,8 @@ high_eq = Optional<bool>(true);
 } else if (a_end && b_end) {
 high_eq = bound_equals_nullable(*a_end, *b_end);
 } else {
-high_eq = Optional<bool>(false);
+const Interval &null_side = a_end ? other : *this;
+high_eq = null_side.high_closed ? NullOpt<bool>() : Optional<bool>(false);
 }
 if (!low_eq.has_value() || !high_eq.has_value()) {
 return NullOpt<bool>();
@@ -1034,8 +1140,8 @@ Optional<bool> Interval::properly_contains_point_nullable(const BoundValue &poin
 }
 
 Optional<bool> Interval::meets_before_nullable(const Interval &other) const {
-	auto this_end = effective_end_bound(*this);
-	auto other_start = effective_start_bound(other);
+	auto this_end = sentinel_end_bound(*this);
+	auto other_start = sentinel_start_bound(other);
 	if (!this_end || !other_start) {
 		if (interval_definitely_after(*this, other)) {
 			return Optional<bool>(false);
@@ -1044,7 +1150,10 @@ Optional<bool> Interval::meets_before_nullable(const Interval &other) const {
 	}
 	auto successor = successor_bound(*this_end);
 	if (!successor) {
-		return NullOpt<bool>();
+		// Successor overflow (this_end is the maximum point-type sentinel,
+		// e.g. a closed null high bound): no value can follow it, so the
+		// intervals cannot meet (reference isMax guard returns false).
+		return Optional<bool>(false);
 	}
 	auto cmp = compare_interval_order_nullable(*successor, *other_start);
 	if (!cmp) {
@@ -1158,6 +1267,22 @@ return *high->int_val - *low->int_val;
 return NullOpt<int64_t>();
 }
 
+
+// CQL-17 HISTORIAN QA-003: mixed Integer/Decimal interval bounds must be
+// computed numerically after CQL §2 implicit Integer->Decimal conversion.
+// Interval::parse sets bound_type from the LOW bound only, so a
+// mixed interval (e.g. Interval[1, 5.5]) needs a cross-type fallback here,
+// mirroring the BoundValue::compare numeric cross-type fix (CQL-16 QA-002).
+static cql::Optional<double> NumericBoundValue(const cql::BoundValue &bound) {
+	if (bound.dec_val) {
+		return cql::Optional<double>(*bound.dec_val);
+	}
+	if (bound.int_val) {
+		return cql::Optional<double>(static_cast<double>(*bound.int_val));
+	}
+	return cql::NullOpt<double>();
+}
+
 Optional<std::string> Interval::width_string() const {
 auto start = effective_start_bound(*this);
 auto end = effective_end_bound(*this);
@@ -1176,10 +1301,22 @@ uint64_t end_u = static_cast<uint64_t>(*end->int_val);
 oss << (end_u - start_u);
 return Optional<std::string>(oss.str());
 }
+// CQL-17 HISTORIAN QA-003: mixed Integer/Decimal bounds.
+if (auto s_num = NumericBoundValue(*start)) {
+if (auto e_num = NumericBoundValue(*end)) {
+return Optional<std::string>(format_decimal_value(*e_num - *s_num));
+}
+}
 break;
 case BoundType::Decimal:
 if (start->dec_val && end->dec_val) {
 return Optional<std::string>(format_decimal_value(*end->dec_val - *start->dec_val));
+}
+// CQL-17 HISTORIAN QA-003: mixed Integer/Decimal bounds.
+if (auto s_num = NumericBoundValue(*start)) {
+if (auto e_num = NumericBoundValue(*end)) {
+return Optional<std::string>(format_decimal_value(*e_num - *s_num));
+}
 }
 break;
 case BoundType::Quantity:
@@ -1234,10 +1371,22 @@ if (start->int_val && end->int_val) {
 	}
 	return Optional<std::string>(std::string(buf + pos + 1));
 }
+// CQL-17 HISTORIAN QA-003: mixed Integer/Decimal bounds.
+if (auto s_num = NumericBoundValue(*start)) {
+	if (auto e_num = NumericBoundValue(*end)) {
+		return Optional<std::string>(format_decimal_value(*e_num - *s_num + 1e-8));
+	}
+}
 break;
 case BoundType::Decimal:
 if (start->dec_val && end->dec_val) {
 	return Optional<std::string>(format_decimal_value(*end->dec_val - *start->dec_val + 1e-8));
+}
+// CQL-17 HISTORIAN QA-003: mixed Integer/Decimal bounds.
+if (auto s_num = NumericBoundValue(*start)) {
+	if (auto e_num = NumericBoundValue(*end)) {
+		return Optional<std::string>(format_decimal_value(*e_num - *s_num + 1e-8));
+	}
 }
 break;
 case BoundType::Quantity:
@@ -1341,8 +1490,8 @@ return result;
 // =====================================================================
 
 Optional<bool> Interval::on_or_after(const Interval &a, const Interval &b) {
-	auto a_start = effective_start_bound(a);
-	auto b_end = effective_end_bound(b);
+	auto a_start = sentinel_start_bound(a);
+	auto b_end = sentinel_end_bound(b);
 	if (!a_start || !b_end) return NullOpt<bool>();
 	auto cmp = compare_interval_order_nullable(*a_start, *b_end);
 	if (!cmp) return NullOpt<bool>();
@@ -1350,15 +1499,54 @@ Optional<bool> Interval::on_or_after(const Interval &a, const Interval &b) {
 }
 
 Optional<bool> Interval::on_or_before(const Interval &a, const Interval &b) {
-	auto a_end = effective_end_bound(a);
-	auto b_start = effective_start_bound(b);
+	auto a_end = sentinel_end_bound(a);
+	auto b_start = sentinel_start_bound(b);
 	if (!a_end || !b_start) return NullOpt<bool>();
 	auto cmp = compare_interval_order_nullable(*a_end, *b_start);
 	if (!cmp) return NullOpt<bool>();
 	return Optional<bool>(*cmp <= 0);
 }
 
-Optional<Interval> Interval::intersect(const Interval &a, const Interval &b) {
+Optional<Interval> Interval::intersect(const Interval &a_raw, const Interval &b_raw) {
+// CQL 1.5 §9.9 Intersect is defined in terms of the Start and End operators
+// (§9.14/§9.15): open discrete bounds participate through their effective
+// successor/predecessor values, and the result bounds are closed (reference
+// IntersectEvaluator: new Interval(max, true, min, true)). Normalize open
+// finite bounds before the raw-bound min/max so Interval[1,5) intersect
+// Interval[4,8] is [4,4], matching the Python authority (which normalizes
+// open bounds at parse time). Null-bound semantics (closed null = unbounded
+// sentinel per the campaign doctrine, open null = unknown) are untouched.
+Interval a = a_raw;
+if (a.low && !a.low_closed) {
+auto eff = successor_bound(*a.low);
+if (eff) {
+a.low = eff;
+a.low_closed = true;
+}
+}
+if (a.high && !a.high_closed) {
+auto eff = predecessor_bound(*a.high);
+if (eff) {
+a.high = eff;
+a.high_closed = true;
+}
+}
+Interval b = b_raw;
+if (b.low && !b.low_closed) {
+auto eff = successor_bound(*b.low);
+if (eff) {
+b.low = eff;
+b.low_closed = true;
+}
+}
+if (b.high && !b.high_closed) {
+auto eff = predecessor_bound(*b.high);
+if (eff) {
+b.high = eff;
+b.high_closed = true;
+}
+}
+
 // New low = max(a.low, b.low)
 // New high = min(a.high, b.high)
 Interval result;

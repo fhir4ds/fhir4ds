@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import duckdb
+import pytest
 
 from fhir4ds.fhirpath.duckdb import register_fhirpath
 from fhir4ds.fhirpath.duckdb.udf import (
@@ -401,8 +402,14 @@ def test_boolean_comparison_is_not_ordered(monkeypatch) -> None:
             "falsity": False,
         }
     )
+    # FP-02 EXPLORER QA-003 (2026-08-16): §6.2 omits Boolean from the
+    # orderable types, so boolean-vs-boolean ordering is an execution type
+    # error of the SAME class as mixed-type ordering (`1 > true`), which
+    # classifies as valid per the is_valid doctrine. The old pin
+    # (is_valid=False) contradicted the mixed-type classification of the
+    # identical error class.
     cases = {
-        "true > false": ([], None, None, False),
+        "true > false": ([], None, None, True),
         "truth > falsity": ([], None, None, True),
     }
 
@@ -455,10 +462,18 @@ def test_calendar_duration_ucum_duration_comparisons_above_seconds_are_empty(mon
     cases = {
         "1 year > 1 'a'": ([], None, None, True),
         "1 month <= 1 'mo'": ([], None, None, True),
-        "1 week > 1 'wk'": ([], None, None, True),
-        "1 day > 1 'd'": ([], None, None, True),
-        "1 hour > 1 'h'": ([], None, None, True),
-        "1 minute > 1 'min'": ([], None, None, True),
+        # FP-02 HISTORIAN QA-003 (2026-08-16): calendar week/day/time
+        # keywords vs their exact UCUM counterparts are now ORDERABLE,
+        # consistent with the equality surface (official fixture
+        # testQuantity6 pins `7 days = 1 'wk'` -> true, so equal values
+        # order as not-greater). Only year/month keyword-vs-'a'/'mo'
+        # pairs stay empty (fixture-pinned indeterminate).
+        "1 week > 1 'wk'": (["false"], "[false]", False, True),
+        "1 day > 1 'd'": (["false"], "[false]", False, True),
+        "1 hour > 1 'h'": (["false"], "[false]", False, True),
+        "1 minute > 1 'min'": (["false"], "[false]", False, True),
+        "1 day > 23 'h'": (["true"], "[true]", True, True),
+        "1 hour > 59 'min'": (["true"], "[true]", True, True),
         "10 seconds > 1 's'": (["true"], "[true]", True, True),
         "10 milliseconds > 1 'ms'": (["true"], "[true]", True, True),
     }
@@ -664,6 +679,324 @@ def test_decimal_arithmetic_feeding_comparison_preserves_adjacent_integers_fp14_
                     f"wrong bool result for {expression!r}: expected {expected_bool}, "
                     f"got native={cpp[0]!r}"
                 )
+    finally:
+        native.close()
+        fallback.close()
+
+
+@pytest.mark.parametrize(
+    ("expression", "expected_scalar"),
+    [
+        # FP-02 SKEPTIC QA-004 (found in FIX, 2026-08-16): §6.2 quantity
+        # ordering must use the UCUM base-table comparability that §6.1.1
+        # equality already uses. `1 'mm[Hg]' < 200 'Pa'` ordered natively
+        # but returned empty in the Python fallback because compare() only
+        # consulted the special conversion groups.
+        ("1 'mm[Hg]' < 200 'Pa'", "true"),
+        ("1 'mm[Hg]' > 200 'Pa'", "false"),
+        ("200 'Pa' < 1 'mm[Hg]'", "false"),
+        # Offset temperatures and unknown units stay incomparable.
+        ("1 'Cel' < 2 'K'", None),
+        ("1 'K' < 2 'Cel'", None),
+        ("1 'xyz' < 2 'abc'", None),
+        ("1 'm' < 1 'g'", None),
+        # Reduced multi-term units order through the same base path.
+        ("1 'm2/m' < 2 'm'", "true"),
+        ("5 'cm3' < 1 'm3'", "true"),
+        # Calendar-vs-UCUM guards keep §6.1/§6.2 indeterminacy.
+        ("1 'mo' > 29 days", None),
+        ("1 year > 1 'a'", None),
+    ],
+)
+def test_quantity_ordering_base_table_parity_fp02_skeptic(
+    expression: str,
+    expected_scalar: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-02 QA-004: quantity ordering parity via the UCUM base table."""
+    resource = json.dumps({"resourceType": "Observation"})
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for con in (native, fallback):
+            row = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert row == ([expected_scalar] if expected_scalar is not None else []), (
+                f"{expression!r}: result={row!r} expected={expected_scalar!r}"
+            )
+    finally:
+        native.close()
+        fallback.close()
+
+
+@pytest.mark.parametrize(
+    ("expression", "expected"),
+    [
+        # FP-13 SKEPTIC QA-001: §6.1.2 decimal equivalence rounds to the
+        # precision of the LEAST precise operand; an integral operand
+        # (precision 0 after trailing-zero strip) means integer rounding.
+        ("1.0 ~ 1.0001", "true"),
+        ("1 ~ 1.4", "true"),
+        ("0 ~ 0.4", "true"),
+        ("1.0 ~ 1.06", "true"),
+        ("3.0 ~ 3.04", "true"),
+        ("1.00 ~ 1", "true"),
+        # Half-away-from-zero rounding at the least precision boundary.
+        ("1 ~ 1.5", "false"),
+        ("5.0 ~ 5.5", "false"),
+        ("2 ~ 2.5", "false"),
+        ("10 ~ 14", "false"),
+        ("1.0 !~ 1.0001", "false"),
+        # Both operands fractional: min precision (pre-existing correct path).
+        ("1.2 ~ 1.24", "true"),
+        ("1.2 ~ 1.25", "false"),
+        ("1.2 / 1.8 ~ 0.67", "true"),
+    ],
+)
+def test_decimal_equivalence_least_precision_parity_fp13_skeptic(
+    expression: str,
+    expected: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-13 QA-001: native `~` must round to the least precise operand.
+
+    The native singleton equivalence path used the precision of the MORE
+    precise operand whenever one side was integral (max() fallback),
+    returning false for spec-true expressions like ``1.0 ~ 1.0001`` and
+    diverging from the Python fallback (equality.py ``is_equivalent``).
+    """
+    resource = json.dumps({"resourceType": "Patient"})
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for con in (native, fallback):
+            row = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert row == [expected], (
+                f"{expression!r}: result={row!r} expected=[{expected!r}]"
+            )
+    finally:
+        native.close()
+        fallback.close()
+
+
+@pytest.mark.parametrize(
+    "expression,expected",
+    [
+        # FP-13 HISTORIAN QA-001: §6.1.2 String Equivalence normalizes
+        # whitespace "as defined in the Whitespace lexical category",
+        # which is ONLY tab, LF, CR and space — not NBSP, U+001C-001F,
+        # U+2028/2029, U+202F, U+205F, U+3000 or other Unicode whitespace.
+        ("'a\\tb' ~ 'a b'", "true"),
+        ("'a\\nb' ~ 'a b'", "true"),
+        ("'a\\rb' ~ 'a b'", "true"),
+        ("'a b' ~ 'a b'", "true"),
+        ("'a\\u00a0b' ~ 'a b'", "false"),
+        ("'a\\u2028b' ~ 'a b'", "false"),
+        ("'a\\u2029b' ~ 'a b'", "false"),
+        ("'a\\u202fb' ~ 'a b'", "false"),
+        ("'a\\u205fb' ~ 'a b'", "false"),
+        ("'a\\u3000b' ~ 'a b'", "false"),
+        ("'a\\u0085b' ~ 'a b'", "false"),
+        ("'a\\u1680b' ~ 'a b'", "false"),
+        # U+001C-001F: whitespace for str.isspace() (old fallback bug) but
+        # never whitespace per the lexical category — must be false in BOTH.
+        ("'a\\u001cb' ~ 'a b'", "false"),
+        ("'a\\u001db' ~ 'a b'", "false"),
+        ("'a\\u001eb' ~ 'a b'", "false"),
+        ("'a\\u001fb' ~ 'a b'", "false"),
+        # Zero-width space is not whitespace in either engine (guard).
+        ("'a\\u200bb' ~ 'a b'", "false"),
+        # Equals stays exact (Unicode value comparison) for these pairs.
+        ("'a\\tb' = 'a b'", "false"),
+        ("'a\\u00a0b' = 'a b'", "false"),
+        # Negation mirrors equivalence.
+        ("'a\\u00a0b' !~ 'a b'", "true"),
+    ],
+)
+def test_string_equivalence_whitespace_lexical_category_parity_fp13_historian(
+    expression: str,
+    expected: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-13 HISTORIAN QA-001: `~` whitespace class is the lexical category.
+
+    Both engines previously normalized the full Unicode whitespace set
+    (native normalizeEquivalentString; Python str.isspace()), making
+    ``'a\\u00a0b' ~ 'a b'`` true, and the fallback additionally accepted
+    U+001C-001F (native-vs-fallback parity break).
+    """
+    resource = json.dumps({"resourceType": "Patient"})
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for con in (native, fallback):
+            row = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert row == [expected], (
+                f"{expression!r}: result={row!r} expected=[{expected!r}]"
+            )
+    finally:
+        native.close()
+        fallback.close()
+
+
+@pytest.mark.parametrize(
+    "expression,expected",
+    [
+        # FP-13 EXPLORER QA-001: §6.1.2 Quantity equivalence tolerance uses
+        # the precision of the least precise operand with trailing zeros
+        # IGNORED — `1.0 'g'` has precision 0 (half-width 0.5), so
+        # `1.0 'g' ~ 1.06 'g'` is true. Native countDecimalPlaces kept
+        # trailing zeros (precision 1) and returned false, diverging from
+        # the Python fallback (equality.py decimal_places rstrips '0').
+        ("1.0 'g' ~ 1.06 'g'", "true"),
+        ("1.00 'g' ~ 1.006 'g'", "true"),
+        ("1.0 'g' !~ 1.06 'g'", "false"),
+        ("1.0 'g' ~ 1.6 'g'", "false"),
+        ("1.5 'g' ~ 1.54 'g'", "true"),
+        ("1.5 'g' ~ 1.56 'g'", "false"),
+        ("1 'g' ~ 1.4 'g'", "true"),
+        ("1 'g' ~ 1.6 'g'", "false"),
+        ("0.0 'g' ~ 0.4 'g'", "true"),
+        # Cross-unit tolerance: half-width scales through the conversion.
+        ("1.0 'kg' ~ 1006 'g'", "true"),
+        # half-width 0.5 kg = 500 g for precision-0 `1.0 'kg'`
+        ("1.0 'kg' ~ 1400 'g'", "true"),
+        ("1.0 'kg' ~ 1600 'g'", "false"),
+        # Inside iteration criteria (where the divergence changed results).
+        ("(1.0 'g' | 2 'g').where($this ~ 1.06 'g').count()", "1"),
+        ("iif(1.0 'g' ~ 1.06 'g', 'y', 'n')", "y"),
+        # Equality (=) is exact and unaffected by the tolerance rule.
+        ("1.0 'g' = 1.06 'g'", "false"),
+        ("1.0 'g' = 1.0 'g'", "true"),
+    ],
+)
+def test_quantity_equivalence_least_precision_parity_fp13_explorer(
+    expression: str,
+    expected: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-13 EXPLORER: native Quantity `~` must use least precision."""
+    resource = json.dumps({"resourceType": "Patient"})
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for con in (native, fallback):
+            row = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert row == [expected], (
+                f"{expression!r}: result={row!r} expected=[{expected!r}]"
+            )
+    finally:
+        native.close()
+        fallback.close()
+
+
+@pytest.mark.parametrize(
+    "expression,expected",
+    [
+        # FP-14 HISTORIAN QA-001: §6.2 treats seconds and fractional seconds
+        # as a single precision compared "using a decimal, with decimal
+        # comparison semantics". The native evaluator truncated fractional
+        # seconds to 3 digits, so sub-millisecond ordering/equality diverged
+        # from the Python fallback (which compares full precision).
+        ("@2018-03-01T10:30:00.1234 < @2018-03-01T10:30:00.1236", "true"),
+        ("@2018-03-01T10:30:00.1236 < @2018-03-01T10:30:00.1234", "false"),
+        ("@2018-03-01T10:30:00.1234 > @2018-03-01T10:30:00.1230", "true"),
+        ("@2018-03-01T10:30:00.1234 <= @2018-03-01T10:30:00.1236", "true"),
+        ("@2018-03-01T10:30:00.1234 >= @2018-03-01T10:30:00.1236", "false"),
+        ("@2018-03-01T10:30:00.1234 = @2018-03-01T10:30:00.1236", "false"),
+        ("@2018-03-01T10:30:00.1234 != @2018-03-01T10:30:00.1236", "true"),
+        ("@2018-03-01T10:30:00.12345 < @2018-03-01T10:30:00.12346", "true"),
+        ("@T10:30:00.1234 < @T10:30:00.1236", "true"),
+        ("@T10:30:00.1234 = @T10:30:00.1236", "false"),
+        # Decimal semantics: trailing zeros do not change the value.
+        ("@2018-03-01T10:30:00.1 = @2018-03-01T10:30:00.100", "true"),
+        ("@T10:30:00.10 = @T10:30:00.1", "true"),
+        # Fraction vs no-fraction stays a definitive decimal compare.
+        ("@2018-03-01T10:30:00.5 > @2018-03-01T10:30:00", "true"),
+        ("@T10:30:00.9 > @T10:30:00", "true"),
+        # Anchors that must not regress (fixture-verified forms).
+        ("@2018-03-01T10:30:00 < @2018-03-01T10:30:00.0", "false"),
+        ("@2018-03-01T10:30:00 <= @2018-03-01T10:30:00.0", "true"),
+        ("@T10:30:00 < @T10:30:00.0", "false"),
+        # Sub-second with timezone offsets keeps instant semantics.
+        (
+            "@2017-11-05T01:30:00.1234-04:00 < @2017-11-05T01:15:00.1236-05:00",
+            "true",
+        ),
+    ],
+)
+def test_subsecond_decimal_comparison_parity_fp14_historian(
+    expression: str,
+    expected: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-14 HISTORIAN: sub-second comparisons use decimal semantics in both engines."""
+    resource = json.dumps({"resourceType": "Patient"})
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for con in (native, fallback):
+            row = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert row == [expected], (
+                f"{expression!r}: result={row!r} expected=[{expected!r}]"
+            )
+    finally:
+        native.close()
+        fallback.close()
+
+
+@pytest.mark.parametrize(
+    "expression,expected",
+    [
+        # FP-14 EXPLORER QA-001/QA-002: the Python fallback truncated
+        # fractional seconds at microseconds (datetime/strptime cap), so
+        # 7-9 digit fractions compared wrong (DateTime) or errored to
+        # empty (Time literals). §6.2 requires decimal comparison
+        # semantics on the full fraction digit string.
+        ("@2018-03-01T10:30:00.1234567 < @2018-03-01T10:30:00.1234568", "true"),
+        ("@2018-03-01T10:30:00.1234567 = @2018-03-01T10:30:00.1234568", "false"),
+        ("@2018-03-01T10:30:00.123456789 < @2018-03-01T10:30:00.123456790", "true"),
+        ("@2018-03-01T10:30:00.000000001 > @2018-03-01T10:30:00", "true"),
+        ("@2018-03-01T10:30:00.000000001 > @2018-03-01T10:30:00.0", "true"),
+        ("@T10:30:00.1234567 < @T10:30:00.1234568", "true"),
+        ("@T10:30:00.999999999 < @T10:30:01", "true"),
+        ("@T10:30:00.123456789 < @T10:30:00.123456790", "true"),
+        ("@T23:59:59.999999999 < @T00:00:00", "false"),
+        # FP-14 EXPLORER QA-003: equal-precision Date-vs-DateTime ordering
+        # must not mix FP_Date multiplier-sum ints with FP_DateTime epoch
+        # timestamps (incommensurate scales flipped the result).
+        ("@2015-01-01 < '2016-01-01'.toDateTime()", "true"),
+        ("'2016-01-01'.toDateTime() > @2015-01-01", "true"),
+        ("@2015-01-01 <= @2016-01-01T", "true"),
+        ("@2016-01-01T > @2015-01-01", "true"),
+    ],
+)
+def test_subsecond_and_cross_type_comparison_parity_fp14_explorer(
+    expression: str,
+    expected: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-14 EXPLORER: exact-fraction and cross-type ordering parity."""
+    resource = json.dumps({"resourceType": "Patient"})
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for con in (native, fallback):
+            row = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert row == [expected], (
+                f"{expression!r}: result={row!r} expected=[{expected!r}]"
+            )
     finally:
         native.close()
         fallback.close()

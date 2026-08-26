@@ -10,6 +10,7 @@ upstream; see the release checklist in fhir4ds-private/docs/.
 
 import json
 import os
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -433,7 +434,8 @@ class TestSpecConstantTypes:
 
         vd = parse_view_definition(json.dumps(view))
         assert len(vd.constants) == 1
-        assert vd.constants[0].valueDecimal == 1.2
+        # Decimal constants parse losslessly (Decimal, not binary float).
+        assert vd.constants[0].valueDecimal == Decimal("1.2")
 
     def test_constant_instant(self, generator):
         """Test instant constant."""

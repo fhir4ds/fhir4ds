@@ -65,8 +65,26 @@ def is_type(ctx: dict, coll: List[Any], type_info: Any) -> List[bool]:
         target_type = type_info.name
         target_namespace = getattr(type_info, 'namespace', None)
     elif isinstance(type_info, str):
-        target_type = type_info
-        target_namespace = None
+        # String type specifiers must resolve namespaces the same way the
+        # engine parser does (FP-15 SKEPTIC QA-004, 2026-08-18):
+        # - "System.Integer" / "FHIR.boolean" -> explicit namespace
+        # - unqualified distinct System names (Integer, Boolean, String,
+        #   Decimal, Date, DateTime, Time, Quantity, Any) -> System
+        # - everything else (Patient, HumanName, uri, boolean, ...) -> FHIR
+        # Previously an unqualified "Integer" got namespace None and fell
+        # into the FHIR-type branch, so `5 as Integer` returned [] while
+        # the engine returns 5.
+        spec = type_info.strip('`')
+        if '.' in spec:
+            target_namespace, _, target_type = spec.partition('.')
+            target_type = target_type.strip('`')
+        elif spec in ('Any', 'Boolean', 'Integer', 'Decimal', 'String',
+                      'Date', 'DateTime', 'Time', 'Quantity'):
+            target_namespace = 'System'
+            target_type = spec
+        else:
+            target_namespace = 'FHIR'
+            target_type = spec
     elif isinstance(type_info, dict):
         target_type = type_info.get('name', '')
         target_namespace = type_info.get('namespace')

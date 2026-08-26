@@ -29,14 +29,27 @@ SCRIPTS = [
 def run_script(name, path):
     """Run a conformance script and handle output."""
     print(f"\n>>> Running {name} conformance suite...")
+    # SOF-VD-11 EXPLORER QA-002: on WSL/drvfs the working directory can
+    # become momentarily unreadable under heavy IO, which makes a relative
+    # script path crash the child at its first stdlib import (FileNotFoundError
+    # from FileFinder) and even makes os.getcwd() fail in this parent. Use an
+    # absolute script path resolved up front, and retry a child that died from
+    # that transient filesystem error once before reporting failure.
     try:
-        # Run and capture output to prevent it from cluttering the master summary
-        # but print a progress indicator.
-        subprocess.run([sys.executable, path], check=True, capture_output=False)
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"  Error: {name} suite failed with exit code {e.returncode}")
-        return False
+        absolute = str(Path(path).resolve())
+    except FileNotFoundError:
+        absolute = str((Path(__file__).resolve().parent / Path(path).name))
+    for attempt in (1, 2):
+        try:
+            subprocess.run([sys.executable, absolute], check=True, capture_output=False)
+            return True
+        except subprocess.CalledProcessError as e:
+            if attempt == 1 and e.returncode == 1:
+                print("  Transient child failure (drvfs cwd flake) — retrying once...")
+                continue
+            print(f"  Error: {name} suite failed with exit code {e.returncode}")
+            return False
+    return False
 
 def get_summary(report_path):
     """Parse a JSON report and return (passed, total, rate)."""

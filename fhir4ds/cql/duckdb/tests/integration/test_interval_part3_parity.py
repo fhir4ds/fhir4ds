@@ -129,6 +129,22 @@ def test_cql_interval_part3_translated_sql_matches_cpp_registration() -> None:
         "SizeTypedNullInterval": (None,),
         # List Size of null list still returns 0 per CQL §12.4 (unchanged).
         "SizeTypedNullList": (0,),
+        # CQL-17 SKEPTIC QA-001: §19.31 Union (Interval) — either argument
+        # null → null. Typed-null interval operands must NOT fall into
+        # list-union semantics (jsonConcat / []).
+        "UnionNullLeft": (None,),
+        "UnionNullRight2": (None,),
+        "UnionNullBoth": (None,),
+        # CQL-17 SKEPTIC QA-002: Start/End of a Quantity interval returns the
+        # Quantity point as valid JSON (not a Python dict repr).
+        # CQL-17 HISTORIAN QA-004 (2nd launch): the JSON is the canonical
+        # Quantity shape with code+system, matching Width/Size output.
+        "StartOfQty": (
+            '{"value":1.0,"unit":"g","code":"g","system":"http://unitsofmeasure.org"}',
+        ),
+        "EndOfQty": (
+            '{"value":3.0,"unit":"g","code":"g","system":"http://unitsofmeasure.org"}',
+        ),
     }
 
     py = _python_only_connection()
@@ -334,6 +350,15 @@ def test_cql_interval_part3_direct_udf_surface_matches_cpp_registration() -> Non
             [],
             ("g",),
         ),
+        # CQL-17 SKEPTIC QA-003: intervalWidth Quantity output includes the
+        # UCUM system field, matching interval_size and the native extension.
+        (
+            "SELECT json_extract_string(intervalWidth(intervalFromBounds("
+            "'{\"value\":1,\"unit\":\"g\"}', '{\"value\":2000,\"unit\":\"mg\"}', true, true)), "
+            "'$.system')",
+            [],
+            ("http://unitsofmeasure.org",),
+        ),
         (
             "SELECT expand([intervalFromBounds('1', '3', true, true)], "
             "'{\"value\":\"bad\",\"unit\":\"1\"}')",
@@ -430,6 +455,11 @@ define DecimalOpenSize: Size(Interval[1.0, 5.0))
 define DecimalOpenPointFrom: point from Interval(1.0, 1.00000002)
 define SizeTypedNullInterval: Size(null as Interval<Integer>)
 define SizeTypedNullList: Size(null as List<Integer>)
+define UnionNullLeft: (null as Interval<Integer>) union Interval[1, 5]
+define UnionNullRight2: Interval[1, 5] union (null as Interval<Integer>)
+define UnionNullBoth: (null as Interval<Integer>) union (null as Interval<Date>)
+define StartOfQty: start of Interval[1 'g', 3 'g']
+define EndOfQty: end of Interval[1 'g', 3 'g']
 """
 
 
@@ -591,6 +621,222 @@ def test_cql_interval_part3_explorer_long_minmax_width_size_exact_per_spec() -> 
                 assert py_r[0] == expected, (
                     f"{sql} returned {py_r[0]!r}, expected {expected!r}"
                 )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part3_historian2_numeric_same_family_per_spec() -> None:
+    """CQL-17 HISTORIAN (2nd launch) regression: no-precision interval
+    ``same as`` / ``same or after`` / ``same or before`` with numeric
+    (Integer/Decimal, incl. mixed) and Quantity point types.
+
+    Spec: CQL v1.5.3 §19.27/§19.28/§19.29 apply to any interval point type;
+    boundary comparisons use the point-type comparison semantics (§9).
+
+    Previously the translator unconditionally lowered these to the temporal
+    UDFs (cqlDateTimeEqual / cqlSameOrAfter / cqlSameOrBefore): Decimal
+    bounds raised ValueError on the Python path (int('1.0')) and returned
+    NULL on native. Integer intervals only worked by accident of the
+    datetime parser reading '1' as year 1.
+    """
+    library = """library H2a version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define DecSameAs: Interval[1.0, 5.0] same as Interval[1.00, 5.0]
+define DecSameAsFalse: Interval[1.0, 5.0] same as Interval[1.0, 5.5]
+define MixedSameAs: Interval[1, 5.5] same as Interval[1.0, 5.5]
+define IntSameAs: Interval[1, 5] same as Interval[1, 5]
+define DecSameOrAfter: Interval[3.0, 5.0] same or after Interval[1.0, 2.0]
+define DecSameOrAfterFalse: Interval[1.0, 2.0] same or after Interval[3.0, 5.0]
+define DecSameOrBefore: Interval[1.0, 2.0] same or before Interval[3.0, 5.0]
+define IntSameOrAfter: Interval[3, 5] same or after Interval[1, 2]
+define QtySameAs: Interval[1 'g', 2 'g'] same as Interval[1 'g', 2 'g']
+define QtySameOrAfter: Interval[3 'g', 5 'g'] same or after Interval[1 'g', 2 'g']
+define SameAsNull: Interval[1, 5] same as (null as Interval<Integer>)
+define SameOrAfterNull: (null as Interval<Integer>) same or after Interval[1, 5]
+define DateSameAsStillTemporal: Interval[@2024-01-01, @2024-01-31] same as Interval[@2024-01-01, @2024-01-31]
+define DateSameAsFalseStillTemporal: Interval[@2024-01-01, @2024-01-10] same as Interval[@2024-01-01, @2024-01-31]
+"""
+    expected = {
+        "DecSameAs": (True,),
+        "DecSameAsFalse": (False,),
+        "MixedSameAs": (True,),
+        "IntSameAs": (True,),
+        "DecSameOrAfter": (True,),
+        "DecSameOrAfterFalse": (False,),
+        "DecSameOrBefore": (True,),
+        "IntSameOrAfter": (True,),
+        "QtySameAs": (True,),
+        "QtySameOrAfter": (True,),
+        "SameAsNull": (None,),
+        "SameOrAfterNull": (None,),
+        "DateSameAsStillTemporal": (True,),
+        "DateSameAsFalseStillTemporal": (False,),
+    }
+    translated = translate_cql(library)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, exp in expected.items():
+                sql = f"SELECT {translated[name].to_sql()}"
+                py_r = py.execute(sql).fetchone()
+                cpp_r = cpp.execute(sql).fetchone()
+                no_py_r = no_py.execute(sql).fetchone()
+                assert py_r == cpp_r == no_py_r, (name, py_r, cpp_r, no_py_r)
+                assert py_r == exp, (name, py_r, exp)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part3_historian2_mixed_width_size_per_spec() -> None:
+    """CQL-17 HISTORIAN (2nd launch) regression: Width/Size of intervals with
+    mixed Integer/Decimal bounds (CQL §2 implicit Integer->Decimal
+    conversion) must compute numerically on ALL engines.
+
+    Spec: CQL v1.5.3 §19.25 Width / §19.18 Size with §2 implicit
+    conversions. Previously the native extension returned NULL: the
+    width_string/size_string switch keyed on the LOW bound's type and
+    required BOTH bounds of that numeric type.
+    """
+    library = """library H2b version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define MixedWidth: width of Interval[1, 5.5]
+define MixedSize: Size(Interval[1, 5.5])
+define MixedWidthDecimalLow: width of Interval[1.0, 6]
+define MixedSizeDecimalLow: Size(Interval[1.0, 6])
+"""
+    expected = {
+        "MixedWidth": ("4.5",),
+        "MixedSize": ("4.50000001",),
+        "MixedWidthDecimalLow": ("5.0",),
+        "MixedSizeDecimalLow": ("5.00000001",),
+    }
+    translated = translate_cql(library)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, exp in expected.items():
+                sql = f"SELECT {translated[name].to_sql()}"
+                py_r = py.execute(sql).fetchone()
+                cpp_r = cpp.execute(sql).fetchone()
+                no_py_r = no_py.execute(sql).fetchone()
+                assert py_r == cpp_r == no_py_r, (name, py_r, cpp_r, no_py_r)
+                assert py_r == exp, (name, py_r, exp)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part3_historian2_quantity_bound_json_canonical() -> None:
+    """CQL-17 HISTORIAN (2nd launch) regression: start of/end of/point from
+    on Quantity intervals emit the canonical Quantity JSON shape
+    (value/unit/code/system), matching Width/Size output on all engines.
+    """
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for sql in [
+                "SELECT intervalStart(intervalFromBounds("
+                "'{\"value\":1,\"unit\":\"g\"}', '{\"value\":3,\"unit\":\"g\"}', true, true))",
+                "SELECT intervalEnd(intervalFromBounds("
+                "'{\"value\":1,\"unit\":\"g\"}', '{\"value\":3,\"unit\":\"g\"}', true, true))",
+                "SELECT pointFrom(intervalFromBounds("
+                "'{\"value\":4,\"unit\":\"g\"}', '{\"value\":4,\"unit\":\"g\"}', true, true))",
+            ]:
+                py_r = py.execute(sql).fetchone()
+                cpp_r = cpp.execute(sql).fetchone()
+                no_py_r = no_py.execute(sql).fetchone()
+                assert py_r == cpp_r == no_py_r, (sql, py_r, cpp_r, no_py_r)
+                import json as _json
+
+                obj = _json.loads(py_r[0])
+                assert obj.get("system") == "http://unitsofmeasure.org", obj
+                assert obj.get("code") == obj.get("unit") == "g", obj
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part3_explorer3_interval_scalar_arithmetic_numeric_quantity() -> None:
+    """CQL-17 EXPLORER (3rd launch) regression: arithmetic over interval-derived
+    scalars (start of / end of / point from / width of / Size) must follow the
+    interval's point type.
+
+    Spec: CQL v1.5.3 §19.19 Start (and §19.15 End, §19.22 Point From,
+    §19.25 Width, §19.18 Size) return the interval's point type, so
+    ``(start of Interval[1, 5]) + 1`` is Integer addition (§9 Add), and
+    Quantity interval scalars use Quantity arithmetic.
+
+    Previously the Integer-literal case lowered to dateAddQuantity(...,
+    1 'year') (NULL for numeric points) and the decimal/width cases fell
+    through to raw SQL '+'(VARCHAR, x) binder errors.
+    """
+    library = """library E3 version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define StartPlusOne: (start of Interval[1, 5]) + 1
+define EndMinusOne: (end of Interval[1, 5]) - 1
+define DecStartPlus: (start of Interval[1.5, 5]) + 1
+define WidthPlusOne: (width of Interval[1, 5]) + 1
+define SizeTimesTwo: Size(Interval[1, 5]) * 2
+define PointFromPlus: (point from Interval[4, 4]) + 1
+define SentinelStartPlusOne: (start of Interval[null as Integer, 5]) + 1
+define ReversedPlus: 1 + (end of Interval[1, 5])
+define QtyStartPlus: (start of Interval[1 'g', 3 'g']) + 1 'g'
+define QtyWidthMinus: (width of Interval[1 'g', 3 'g']) - 1 'g'
+define QtyEndDiv: (end of Interval[1 'g', 3 'g']) / 2
+define DateStartPlusDay: (start of Interval[@2024-01-01, @2024-02-01]) + 1 day
+"""
+    translated = translate_cql(library)
+
+    def _num(value):
+        return None if value is None else float(value)
+
+    cases = [
+        # (define, expected-python-value, expected-native-value)
+        ("StartPlusOne", 2, 2),
+        ("EndMinusOne", 4, 4),
+        ("DecStartPlus", 2.5, 2.5),
+        ("WidthPlusOne", 5, 5),
+        ("SizeTimesTwo", 10, 10),
+        ("PointFromPlus", 5, 5),
+        ("SentinelStartPlusOne", -2147483647, -2147483647),
+        ("ReversedPlus", 6, 6),
+        ("QtyStartPlus", '{"value":2.0,"unit":"g","code":"g","system":"http://unitsofmeasure.org"}', None),
+        ("QtyWidthMinus", '{"value":1.0,"unit":"g","code":"g","system":"http://unitsofmeasure.org"}', None),
+        ("QtyEndDiv", '{"value":1.5,"code":"g","system":"http://unitsofmeasure.org","unit":"g"}', None),
+        ("DateStartPlusDay", "2024-01-02", "2024-01-02"),
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expected_py, expected_cpp in cases:
+                sql = f"SELECT {translated[name].to_sql()}"
+                py_r = py.execute(sql).fetchone()[0]
+                cpp_r = cpp.execute(sql).fetchone()[0]
+                no_py_r = no_py.execute(sql).fetchone()[0]
+                if expected_py is not None:
+                    if isinstance(expected_py, (int, float)) and not isinstance(expected_py, bool):
+                        assert _num(py_r) == expected_py, (name, py_r)
+                    elif expected_py.startswith("{"):
+                        import json as _json
+                        assert _json.loads(py_r) == _json.loads(expected_py), (name, py_r)
+                    else:
+                        assert py_r == expected_py, (name, py_r)
+                if expected_cpp is not None:
+                    if isinstance(expected_cpp, (int, float)) and not isinstance(expected_cpp, bool):
+                        assert _num(cpp_r) == expected_cpp, (name, cpp_r)
+                        assert _num(no_py_r) == expected_cpp, (name, no_py_r)
+                    else:
+                        assert cpp_r == expected_cpp, (name, cpp_r)
+                        assert no_py_r == expected_cpp, (name, no_py_r)
     finally:
         py.close()
         cpp.close()

@@ -6,6 +6,7 @@ This module contains implementations of FHIRPath functions organized by category
 
 from ..functions.string import (
     length,
+    index_of,
     substring,
     starts_with,
     ends_with,
@@ -116,6 +117,16 @@ from ..functions.filter import (
     PYTHON_TO_FHIR_TYPE,
 )
 
+from ..functions.navigation import (
+    # Tree navigation (§5.8)
+    children,
+    descendants,
+    # Utility functions (§5.9.1)
+    trace,
+    # Function registry
+    NAVIGATION_FUNCTIONS,
+)
+
 __all__ = [
     # String functions
     "length",
@@ -212,4 +223,9 @@ __all__ = [
     "infer_fhir_type",
     "FHIR_TYPE_MAP",
     "PYTHON_TO_FHIR_TYPE",
+    # Tree navigation / utility functions (§5.8/§5.9)
+    "children",
+    "descendants",
+    "trace",
+    "NAVIGATION_FUNCTIONS",
 ]

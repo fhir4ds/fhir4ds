@@ -45,3 +45,43 @@ def test_standalone_extension_value_matches_python_fallback() -> None:
         assert cpp == (["x"], "x", '["x"]')
     finally:
         con.close()
+
+
+def test_unsigned_bundled_extension_falls_back_with_warning(caplog) -> None:
+    """SOF-VD-11 QA-001 regression.
+
+    ``allow_unsigned_extensions`` cannot be enabled after the database is
+    running, so a plain ``duckdb.connect()`` must fall back to the Python
+    UDFs (not error) and surface an actionable warning naming the connect
+    config. The old code attempted a ``SET allow_unsigned_extensions``
+    retry that DuckDB always rejects mid-session (dead branch).
+    """
+    import logging
+    from pathlib import Path
+
+    import fhir4ds.fhirpath.duckdb.extension as ext_module
+
+    bundled = (
+        Path(ext_module.__file__).parent / "extensions" / "fhirpath.duckdb_extension"
+    )
+    if not bundled.exists() or not duckdb.__version__.startswith("1.5."):
+        import pytest
+
+        pytest.skip("bundled unsigned C++ extension not present for this build")
+
+    con = duckdb.connect()  # deliberately WITHOUT allow_unsigned_extensions
+    try:
+        with caplog.at_level(logging.WARNING, logger=ext_module._logger.name):
+            native_active = ext_module.register_fhirpath(con)
+        assert native_active is False
+        # Python fallback UDFs must be registered and functional.
+        assert con.execute(
+            "SELECT fhirpath('{\"resourceType\":\"Patient\",\"id\":\"1\"}', 'id')"
+        ).fetchone() == (["1"],)
+        warning_text = " ".join(r.message for r in caplog.records)
+        assert "allow_unsigned_extensions" in warning_text
+        # No dead mid-session SET is attempted: the connection remains usable
+        # and the extension was not half-loaded.
+        assert not ext_module._is_cpp_extension_loaded(con)
+    finally:
+        con.close()

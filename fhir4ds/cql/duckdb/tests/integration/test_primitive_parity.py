@@ -666,7 +666,10 @@ def test_cql_primitive_conversion_translation_uses_spec_boundaries() -> None:
             None,
             None,
             None,
-            None,
+            # CQL-01 doctrine: beyond-scale decimals are ROUNDED to the
+            # implementation scale (DECIMAL(38,8)), not rejected; only
+            # malformed strings return null.
+            __import__("decimal").Decimal("1.12345679"),
             None,
         )
     finally:

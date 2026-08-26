@@ -45,12 +45,24 @@ def parse_value(value):
         return FP_Quantity(num_value, f"'{unit}'")
 
     # Handle ResourceNode with type info
+    # FP-12 SKEPTIC QA-001 (2026-08-17): parse_complex_value returns None for
+    # "not a valid Quantity" (e.g. a unit-less {"value": 120} wrapper reached
+    # through children()/descendants()). Returning that None directly made
+    # equality() compare None == None -> True, so distinct unitless Quantity
+    # objects collapsed as equal (breaking repeat(children()) == descendants()
+    # and distinct/contains over such nodes). Fall through to the original
+    # value so structural comparison proceeds instead.
     if getattr(value, "get_type_info", lambda: None)() and value.get_type_info().name == "Quantity":
-        return parse_complex_value(value.data)
+        parsed = parse_complex_value(value.data)
+        return parsed if parsed is not None else value
 
     # Handle plain dict that looks like a Quantity (has value and code/unit keys)
+    # FP-12 SKEPTIC QA-001: same None fall-through as the typed-node branch —
+    # an invalid Quantity-shaped dict must remain a dict for structural
+    # comparison, not become None.
     if isinstance(value, dict) and "value" in value and ("code" in value or "unit" in value):
-        return parse_complex_value(value)
+        parsed = parse_complex_value(value)
+        return parsed if parsed is not None else value
 
     return value
 

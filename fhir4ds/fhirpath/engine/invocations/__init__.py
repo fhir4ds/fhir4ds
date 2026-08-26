@@ -136,10 +136,15 @@ invocation_registry = {
     "and": {"fn": logic.and_op, "arity": {2: [["Any"], ["Any"]]}},
     "xor": {"fn": logic.xor_op, "arity": {2: [["Any"], ["Any"]]}},
     "implies": {"fn": logic.implies_op, "arity": {2: [["Any"], ["Any"]]}},
-    "avg": {"fn": aggregate.avg_fn},
-    "sum": {"fn": aggregate.sum_fn},
-    "min": {"fn": aggregate.min_fn},
-    "max": {"fn": aggregate.max_fn},
+    # FP-02 EXPLORER QA-001 (2026-08-16): sum/min/max/avg are NOT FHIRPath
+    # N1/R4 functions (verified against the full hl7.org/fhirpath/N1
+    # function list). The native extension treats them as unknown functions
+    # (-> empty/NULL at the UDF boundary), and fhirpath_is_valid rejects
+    # them on both surfaces. The legacy fhirpathpy-lineage registry entries
+    # made the Python fallback silently evaluate expressions its own
+    # validator rejects ({}.sum() -> 0 even violates the spec-wide
+    # empty-input convention). The public direct-helper API in
+    # fhir4ds/fhirpath/duckdb/functions/math.py is unaffected.
     "aggregate": {"fn": aggregate.aggregate_macro, "arity": {1: ["Expr"], 2: ["Expr", "Any"]}},
     "convertsToBoolean": {"fn": misc.create_converts_to_fn(misc.to_boolean, 'bool'), "arity": {0: []}},
     "convertsToInteger": {"fn": misc.create_converts_to_fn(misc.to_integer, 'int'), "arity": {0: []}},

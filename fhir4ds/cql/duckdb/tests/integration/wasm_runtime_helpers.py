@@ -95,6 +95,7 @@ _IGNORED_SQL_NAMES = {
     "and",
     "case",
     "cast",
+    "decimal",
     "coalesce",
     "else",
     "end",

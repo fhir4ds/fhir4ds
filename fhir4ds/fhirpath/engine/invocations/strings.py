@@ -51,12 +51,108 @@ def _regex_flags(flags: str | None = "") -> int:
     return compiled_flags
 
 
+# FP-10 QA-003: FHIRPath §5.6.9 recommends the PCRE dialect, whose default
+# character classes are ASCII-only (PCRE_UCP off), matching the native
+# std::regex engine. Python re str patterns are Unicode-aware, so \\w/\\d/\\s/
+# \\b and POSIX bracket classes are translated textually to their ASCII-PCRE
+# equivalents. re.ASCII is deliberately NOT used because it would also disable
+# Unicode case-insensitive matching ('É'.matches('é','i') must stay true).
+_POSIX_CLASS_EXPANSIONS = {
+    "alpha": "a-zA-Z",
+    "digit": "0-9",
+    "alnum": "0-9a-zA-Z",
+    "upper": "A-Z",
+    "lower": "a-z",
+    "space": r" \t\n\r\f\v",
+    "blank": r" \t",
+    "punct": r"!-/:-@\[-`{-~",
+    "print": r" -~",
+    "graph": r"!-~",
+    "cntrl": r"\x00-\x1f\x7f",
+    "xdigit": "0-9A-Fa-f",
+    "word": "0-9A-Za-z_",
+}
+
+_ASCII_WORD_CHARS = "0-9A-Za-z_"
+
+
+def _translate_pcre_ascii_classes(pattern: str) -> str:
+    """Translate PCRE-default (ASCII) class semantics into Python re syntax.
+
+    - POSIX bracket classes [[:name:]] (PCRE/std::regex support them; Python
+      re does not) expand to their ASCII sets, both standalone and nested
+      inside another bracket class.
+    - \\w/\\W/\\d/\\D/\\s/\\S outside bracket classes become explicit ASCII
+      classes; inside bracket classes \\w/\\d/\\s expand to set members
+      (negated shorthand inside a class has no textual equivalent and is
+      left untouched, as has \\b, which means backspace there).
+    - \\b/\\B outside bracket classes become ASCII word-boundary lookaround
+      alternations.
+    """
+
+    def posix_sub(match):
+        expansion = _POSIX_CLASS_EXPANSIONS.get(match.group(1))
+        return expansion if expansion is not None else match.group(0)
+
+    pattern = re.sub(r"\[:([a-z]+):\]", posix_sub, pattern)
+
+    word_boundary = (
+        "(?:(?<![" + _ASCII_WORD_CHARS + "])(?=[" + _ASCII_WORD_CHARS + "])"
+        "|(?<=[" + _ASCII_WORD_CHARS + "])(?![" + _ASCII_WORD_CHARS + "]))"
+    )
+    not_word_boundary = (
+        "(?:(?<![" + _ASCII_WORD_CHARS + "])(?!=[" + _ASCII_WORD_CHARS + "])"
+        "|(?<=[" + _ASCII_WORD_CHARS + "])(?=[" + _ASCII_WORD_CHARS + "]))"
+    )
+
+    out = []
+    in_bracket = False
+    i = 0
+    while i < len(pattern):
+        c = pattern[i]
+        if c == "\\" and i + 1 < len(pattern):
+            nxt = pattern[i + 1]
+            if not in_bracket and nxt == "w":
+                out.append("[" + _ASCII_WORD_CHARS + "]")
+            elif not in_bracket and nxt == "W":
+                out.append("[^" + _ASCII_WORD_CHARS + "]")
+            elif not in_bracket and nxt == "d":
+                out.append("[0-9]")
+            elif not in_bracket and nxt == "D":
+                out.append("[^0-9]")
+            elif not in_bracket and nxt == "s":
+                out.append(r"[ \t\n\r\f\v]")
+            elif not in_bracket and nxt == "S":
+                out.append(r"[^ \t\n\r\f\v]")
+            elif not in_bracket and nxt == "b":
+                out.append(word_boundary)
+            elif not in_bracket and nxt == "B":
+                out.append(not_word_boundary)
+            elif in_bracket and nxt == "w":
+                out.append(_ASCII_WORD_CHARS)
+            elif in_bracket and nxt == "d":
+                out.append("0-9")
+            elif in_bracket and nxt == "s":
+                out.append(r" \t\n\r\f\v")
+            else:
+                out.append(pattern[i : i + 2])
+            i += 2
+            continue
+        if c == "[" and not in_bracket:
+            in_bracket = True
+        elif c == "]" and in_bracket:
+            in_bracket = False
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
 @functools.lru_cache(maxsize=256)
 def _compile_regex(pattern: str, flags: int = 0) -> re.Pattern:
     """Cache compiled regex patterns to avoid recompilation."""
     _validate_regex(pattern)
     try:
-        return re.compile(pattern, flags)
+        return re.compile(_translate_pcre_ascii_classes(pattern), flags)
     except re.error as exc:
         raise FHIRPathError(f"Invalid regular expression: {exc}") from exc
 
@@ -245,13 +341,23 @@ def join(ctx, coll, separator=""):
     return separator.join(stringValues)
 
 
+def _translate_named_groups(regex: str) -> str:
+    # Translate (?<name>...) → (?P<name>...) so Python can parse the spec's
+    # canonical named-group syntax (FHIRPath §5.6.10 example). Only translates
+    # when the char after (?< is an identifier start (skips (?<= and (?<!
+    # lookbehind syntax). Falls through to compile error if syntax is invalid.
+    return re.sub(r"\(\?<([A-Za-z_][A-Za-z0-9_]*)>", r"(?P<\1>", regex)
+
+
 def matches(ctx, coll, regex, flags=""):
     """FHIRPath matches() uses regex search semantics."""
     if not coll or util.is_empty(regex) or regex is None:
         return []
 
     string = ensure_string_singleton(coll)
-    valid = _compile_regex(regex, _regex_flags(flags))
+    # FP-10 HISTORIAN QA-001: named groups must parse in matches() too (the
+    # §5.6.10 canonical syntax is shared across §5.6.9/§5.6.10).
+    valid = _compile_regex(_translate_named_groups(regex), _regex_flags(flags))
     return valid.search(string) is not None
 
 
@@ -281,14 +387,9 @@ def replace_matches(ctx, coll, regex, repl, flags=""):
         return string
 
     # Translate (?<name>...) → (?P<name>...) so Python can parse the spec's
-    # canonical named-group syntax (FHIRPath §5.6.10 example). Only translates
-    # when the char after (?< is an identifier start (skips (?<= and (?<!
-    # lookbehind syntax). Falls through to compile error if syntax is invalid.
-    regex_translated = re.sub(
-        r"\(\?<([A-Za-z_][A-Za-z0-9_]*)>",
-        r"(?P<\1>",
-        regex,
-    )
+    # canonical named-group syntax (FHIRPath §5.6.10 example); see
+    # _translate_named_groups.
+    regex_translated = _translate_named_groups(regex)
 
     try:
         valid = _compile_regex(regex_translated, _regex_flags(flags))

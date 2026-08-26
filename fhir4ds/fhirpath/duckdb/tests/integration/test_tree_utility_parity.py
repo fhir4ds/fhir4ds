@@ -861,3 +861,346 @@ def test_json_decimal_primitive_text_rendering_fp12_explorer(
     finally:
         native.close()
         fallback.close()
+
+
+def test_unitless_quantity_wrapper_equality_parity_fp12_skeptic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-12 SKEPTIC QA-001: unitless Quantity-typed wrappers must not compare equal.
+
+    util.parse_value() previously returned None for Quantity-typed nodes
+    lacking unit/code, so {'value':120} = {'value':80} compared None == None
+    -> True in the Python fallback while native returned false. This also
+    broke repeat(children()) == descendants() equivalence (§5.8.2) by
+    de-duplicating distinct unitless Quantity wrappers and their values.
+    """
+    resource = json.dumps({
+        "resourceType": "Observation",
+        "status": "final",
+        "component": [
+            {"valueQuantity": {"value": 120}},
+            {"valueQuantity": {"value": 80}},
+        ],
+    })
+    expressions = [
+        "component.children()[0] = component.children()[1]",
+        "repeat(children()).count()",
+        "descendants().count()",
+        "descendants().select(value).count()",
+    ]
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in expressions:
+            native_row = native.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()
+            fallback_row = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()
+            assert native_row == fallback_row, (
+                f"expression={expression!r}: native={native_row!r}, "
+                f"fallback={fallback_row!r}"
+            )
+        # Spec anchors: distinct wrappers are unequal; repeat(children())
+        # equals descendants() (§5.8.2 shorthand).
+        assert native.execute(
+            "SELECT fhirpath(?::JSON, ?)",
+            [resource, "component.children()[0] = component.children()[1]"],
+        ).fetchone()[0] == ["false"]
+        assert native.execute(
+            "SELECT fhirpath(?::JSON, ?)",
+            [resource, "repeat(children()).count()"],
+        ).fetchone()[0] == native.execute(
+            "SELECT fhirpath(?::JSON, ?)",
+            [resource, "descendants().count()"],
+        ).fetchone()[0]
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_children_type_operators_match_direct_navigation_fp12_historian2(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-12 HISTORIAN iteration-1 QA-001/QA-002 regression.
+
+    §5.8.1 children()/descendants() must expose nodes carrying the same model
+    type metadata as direct navigation, so §6.3 type operators agree between
+    the native extension and the Python fallback (and with direct field
+    access in each engine). The fallback's choice-suffix propName rewrite
+    previously emitted a malformed `None.`-prefixed path at the resource
+    root, breaking unqualified choice-primitive ofType matching.
+    """
+    primitive = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p3",
+            "gender": "female",
+            "multipleBirthInteger": 3,
+            "deceasedBoolean": False,
+        }
+    )
+    tree = json.dumps(
+        {
+            "resourceType": "Observation",
+            "status": "final",
+            "valueQuantity": {"value": 120, "unit": "mmHg"},
+            "component": [
+                {"valueQuantity": {"value": 120}},
+                {"valueQuantity": {"value": 120}},
+                {"valueString": "120"},
+                {"valueInteger": 120},
+            ],
+        }
+    )
+    cases = [
+        (primitive, "children().ofType(FHIR.string).count()", "0"),
+        (primitive, "children().ofType(FHIR.code).count()", "1"),
+        (primitive, "children().ofType(FHIR.id).count()", "1"),
+        (primitive, "children().ofType(Integer).count()", "1"),
+        (primitive, "children().ofType(Boolean).count()", "1"),
+        (primitive, "children().ofType(FHIR.integer).count()", "1"),
+        (primitive, "children().ofType(FHIR.boolean).count()", "1"),
+        (tree, "component.children()[0].ofType(Quantity).count()", "1"),
+        (tree, "component.children()[3].ofType(Integer).count()", "1"),
+    ]
+    # Direct navigation must agree with children() typing in each engine.
+    direct_cases = [
+        (primitive, "multipleBirthInteger.ofType(Integer).count()", "1"),
+        (primitive, "deceasedBoolean.ofType(Boolean).count()", "1"),
+        (primitive, "gender.ofType(FHIR.code).count()", "1"),
+        (primitive, "id.ofType(FHIR.id).count()", "1"),
+    ]
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for resource, expression, expected in cases + direct_cases:
+            native_row = native.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()
+            fallback_row = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()
+            assert native_row == fallback_row == ([expected],), (
+                f"expression={expression!r}: native={native_row!r}, "
+                f"fallback={fallback_row!r}, expected={[expected]!r}"
+            )
+        # QA-002: a Quantity-typed child is not equal to the Integer peer
+        # (§6.1.1 — non-convertible operand types yield empty, not false,
+        # consistent with `= 120 '1'` on the same tree in both engines).
+        for expression in (
+            "component.children()[0] = component.children()[3]",
+            "component.children()[0] = 120 '1'",
+        ):
+            native_row = native.execute(
+                "SELECT fhirpath(?::JSON, ?)", [tree, expression]
+            ).fetchone()
+            fallback_row = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?)", [tree, expression]
+            ).fetchone()
+            assert native_row == fallback_row, (
+                f"expression={expression!r}: native={native_row!r}, "
+                f"fallback={fallback_row!r}"
+            )
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_children_null_child_to_string_and_nested_arrays_fp12_historian2(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-12 HISTORIAN iteration-1 QA-003/QA-004 regression.
+
+    §5.5.2: toString() of a preserved JSON-null child returns empty, never
+    the Python None repr. §5.8: children()/descendants() on arbitrary JSON
+    (arrays inside arrays) must not crash the fallback engine.
+    """
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p1",
+            "active": True,
+            "gender": "male",
+            "birthDate": "1990-05-01",
+            "name": [
+                {
+                    "use": "official",
+                    "family": "Chalmers",
+                    "given": ["John", "Peter"],
+                }
+            ],
+            "contact": [{"name": {"family": "Doe", "given": [None, "Jane"]}}],
+            "address": None,
+        }
+    )
+    nested_arrays = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "x2",
+            "name": [{"given": ["a", ["b", "c"], "d"]}],
+            "contact": [{"name": None}, {"telecom": [{"value": None}]}],
+        }
+    )
+    expressions = [
+        (resource, "children().last().toString()"),
+        (resource, "address.toString()"),
+        (resource, "contact.first().name.children().last().toString()"),
+        (nested_arrays, "children().count()"),
+        (nested_arrays, "descendants().count()"),
+    ]
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for res, expression in expressions:
+            native_row = native.execute(
+                "SELECT fhirpath(?::JSON, ?)", [res, expression]
+            ).fetchone()
+            fallback_row = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?)", [res, expression]
+            ).fetchone()
+            assert native_row == fallback_row, (
+                f"expression={expression!r}: native={native_row!r}, "
+                f"fallback={fallback_row!r}"
+            )
+        # Spec anchors: null child has no String representation (§5.5.2);
+        # the non-null sibling still stringifies.
+        assert native.execute(
+            "SELECT fhirpath(?::JSON, ?)",
+            [resource, "children().last().toString()"],
+        ).fetchone()[0] == []
+        assert native.execute(
+            "SELECT fhirpath(?::JSON, ?)",
+            [resource, "contact.first().name.children().last().toString()"],
+        ).fetchone()[0] == ["Jane"]
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_nested_complex_type_typing_parity_fp12_explorer3(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FP-12 EXPLORER QA-001: children()/descendants() and direct navigation
+    must carry FHIR complex typing on paths absent from path metadata —
+    recursive backbone paths (Questionnaire.item.item) and choice-suffixed
+    nested paths (Observation.component.valueCodeableConcept.coding). The
+    `type` field must resolve as FHIR.code (R4 Questionnaire.item.type),
+    not string."""
+    questionnaire = json.dumps(
+        {
+            "resourceType": "Questionnaire",
+            "status": "active",
+            "item": [
+                {
+                    "linkId": "1",
+                    "text": "q1",
+                    "type": "group",
+                    "item": [
+                        {"linkId": "1.1", "text": "same", "type": "string",
+                         "item": [{"linkId": "1.1.1", "text": "leaf", "type": "boolean"}]},
+                    ],
+                }
+            ],
+        }
+    )
+    observation = json.dumps(
+        {
+            "resourceType": "Observation",
+            "status": "final",
+            "component": [
+                {"valueCodeableConcept": {"coding": [{"system": "s", "code": "x"}]}},
+            ],
+        }
+    )
+    cases = [
+        (questionnaire, "item.item.type().name"),
+        (questionnaire, "item.item.ofType(FHIR.BackboneElement).count()"),
+        (questionnaire, "item.children().type().name"),
+        (questionnaire, "item.children().ofType(FHIR.BackboneElement).count()"),
+        (questionnaire, "descendants().where($this.is(FHIR.BackboneElement)).count()"),
+        (questionnaire, "descendants().ofType(FHIR.string).count()"),
+        (observation, "component.valueCodeableConcept.coding.ofType(FHIR.Coding).count()"),
+        (observation, "component.valueCodeableConcept.children().type().name"),
+        (observation, "descendants().type().name.distinct()"),
+    ]
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for res, expression in cases:
+            native_row = native.execute(
+                "SELECT fhirpath(?::JSON, ?)", [res, expression]
+            ).fetchone()
+            fallback_row = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?)", [res, expression]
+            ).fetchone()
+            assert native_row == fallback_row, (
+                f"expression={expression!r}: native={native_row!r}, "
+                f"fallback={fallback_row!r}"
+            )
+        # Spec anchors: R4 typing of the probe trees.
+        assert native.execute(
+            "SELECT fhirpath(?::JSON, ?)",
+            [questionnaire, "item.item.ofType(FHIR.BackboneElement).count()"],
+        ).fetchone()[0] == ["1"]
+        assert native.execute(
+            "SELECT fhirpath(?::JSON, ?)",
+            [observation, "component.valueCodeableConcept.coding.ofType(FHIR.Coding).count()"],
+        ).fetchone()[0] == ["1"]
+        # `type` field is FHIR.code, so descendants().ofType(FHIR.string)
+        # matches only the `text` values (q1, same, leaf) — not the code field.
+        assert native.execute(
+            "SELECT fhirpath(?::JSON, ?)",
+            [questionnaire, "descendants().ofType(FHIR.string).count()"],
+        ).fetchone()[0] == ["3"]
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_extension_elements_typed_as_fhir_extension_fp12_explorer3(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FP-12 EXPLORER QA-002: extension-array elements must type as
+    FHIR.Extension for type()/ofType()/is() in both engines, whether reached
+    through direct navigation, children(), or descendants()."""
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "pe1",
+            "birthDate": "1980-01-01",
+            "_birthDate": {"extension": [{"url": "http://x/acc", "valueString": "approx"}]},
+            "extension": [{"url": "u1", "valueString": "v"}],
+        }
+    )
+    expressions = [
+        "extension.type().name",
+        "extension.ofType(FHIR.Extension).count()",
+        "_birthDate.extension.type().name",
+        "_birthDate.extension.ofType(FHIR.Extension).count()",
+        "_birthDate.children().type().name",
+        "descendants().ofType(FHIR.Extension).count()",
+        "descendants().type().name.distinct()",
+    ]
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in expressions:
+            native_row = native.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()
+            fallback_row = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()
+            assert native_row == fallback_row, (
+                f"expression={expression!r}: native={native_row!r}, "
+                f"fallback={fallback_row!r}"
+            )
+        assert native.execute(
+            "SELECT fhirpath(?::JSON, ?)",
+            [resource, "extension.ofType(FHIR.Extension).count()"],
+        ).fetchone()[0] == ["1"]
+        assert native.execute(
+            "SELECT fhirpath(?::JSON, ?)",
+            [resource, "descendants().ofType(FHIR.Extension).count()"],
+        ).fetchone()[0] == ["2"]
+    finally:
+        native.close()
+        fallback.close()

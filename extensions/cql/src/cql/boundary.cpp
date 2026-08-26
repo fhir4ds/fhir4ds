@@ -685,6 +685,25 @@ static Optional<std::string> step_date_or_datetime(const std::string &value, int
 }
 
 // =====================================================================
+
+// CQL 1.5 §6.7 HighBoundary / §6.9 LowBoundary for Decimal inputs.
+// Mirrors the HL7 reference implementation: HighBoundary appends
+// "99999999" to the input's plain string then truncates DOWN at the
+// requested precision; LowBoundary is setScale(precision, DOWN). So
+// HighBoundary(1.587, 2) -> "1.58" (truncated at the precision, never
+// the unchanged input) and HighBoundary(1.587, 8) -> "1.58799999".
+static std::string decimal_boundary_text(const std::string &value, int precision, char fill) {
+	std::string d_str = normalize_numeric_text(value);
+	size_t dot = d_str.find('.');
+	std::string int_part = (dot != std::string::npos) ? d_str.substr(0, dot) : d_str;
+	std::string frac = (dot != std::string::npos) ? d_str.substr(dot + 1) : "";
+	if (precision <= 0) return int_part;
+	std::string padded = frac;
+	for (int i = 0; i < 8; i++) padded += fill;
+	if (static_cast<int>(padded.size()) > precision) padded = padded.substr(0, precision);
+	return int_part + "." + padded;
+}
+
 // HighBoundary
 // =====================================================================
 Optional<std::string> high_boundary(const std::string &value, int precision) {
@@ -694,15 +713,7 @@ Optional<std::string> high_boundary(const std::string &value, int precision) {
 
 	if (kind == ValueKind::Numeric) {
 		if (precision > 8) return NullOpt<std::string>();
-		// Decimal: fill remaining digits with 9s
-		std::string d_str = normalize_numeric_text(value);
-		size_t dot = d_str.find('.');
-		int current_dec = (dot != std::string::npos) ? static_cast<int>(d_str.size() - dot - 1) : 0;
-		int to_fill = precision - current_dec;
-		if (to_fill <= 0) return Optional<std::string>(d_str);
-		if (dot == std::string::npos) d_str += ".";
-		for (int i = 0; i < to_fill; i++) d_str += "9";
-		return Optional<std::string>(d_str);
+		return Optional<std::string>(decimal_boundary_text(value, precision, '9'));
 	}
 
 	if (kind == ValueKind::Time) {
@@ -767,14 +778,7 @@ Optional<std::string> low_boundary(const std::string &value, int precision) {
 
 	if (kind == ValueKind::Numeric) {
 		if (precision > 8) return NullOpt<std::string>();
-		std::string d_str = normalize_numeric_text(value);
-		size_t dot = d_str.find('.');
-		int current_dec = (dot != std::string::npos) ? static_cast<int>(d_str.size() - dot - 1) : 0;
-		int to_fill = precision - current_dec;
-		if (to_fill <= 0) return Optional<std::string>(d_str);
-		if (dot == std::string::npos) d_str += ".";
-		for (int i = 0; i < to_fill; i++) d_str += "0";
-		return Optional<std::string>(d_str);
+		return Optional<std::string>(decimal_boundary_text(value, precision, '0'));
 	}
 
 	if (kind == ValueKind::Time) {

@@ -465,3 +465,35 @@ def test_collection_operators_use_quantity_equality_for_fhir_quantity_paths(monk
     finally:
         cpp.close()
         py.close()
+
+
+def test_membership_helper_singleton_violations_raise_fhirpath_error() -> None:
+    """FP-16 QA-001 regression: exported helper API must match engine semantics.
+
+    FHIRPath §6.4.2/§6.4.3 mandate an exception when the singleton operand
+    of `in`/`contains` has multiple items. The core engine and native C++
+    evaluator raise; the exported ``operators.membership``/``operators.contains``
+    helpers previously swallowed the error and returned ``{}``.
+    """
+    import pytest
+
+    from fhir4ds.fhirpath.duckdb.collection import FHIRPathCollection
+    from fhir4ds.fhirpath.duckdb.errors import FHIRPathError
+    from fhir4ds.fhirpath.duckdb.operators import contains, membership
+
+    multi = FHIRPathCollection([1, 2])
+    coll = FHIRPathCollection([1, 2, 3])
+    single = FHIRPathCollection([1])
+    empty = FHIRPathCollection([])
+
+    with pytest.raises(FHIRPathError, match="in requires the left operand"):
+        membership(multi, coll)
+    with pytest.raises(FHIRPathError, match="contains requires the right operand"):
+        contains(coll, multi)
+
+    # Spec §6.4.2/§6.4.3 empty-operand semantics preserved.
+    assert membership(empty, coll).values == []
+    assert membership(single, coll).values == [True]
+    assert membership(FHIRPathCollection([9]), coll).values == [False]
+    assert contains(coll, empty).values == []
+    assert contains(coll, single).values == [True]

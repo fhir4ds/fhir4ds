@@ -46,7 +46,14 @@ Optional<std::string> math_abs(const std::string &x) {
 Optional<std::string> math_ceiling(const std::string &x) {
 	double val;
 	if (!parse_double(x, val)) return NullOpt<std::string>();
-	return Optional<std::string>(format_result(std::ceil(val)));
+	// CQL 1.5 Appendix B: Ceiling(Decimal) returns Integer; results that
+	// cannot be represented as an Integer are null.
+	double result = std::ceil(val);
+	if (std::isnan(result) || std::isinf(result) ||
+	    result < -2147483648.0 || result > 2147483647.0) {
+		return NullOpt<std::string>();
+	}
+	return Optional<std::string>(format_result(result));
 }
 
 // =====================================================================
@@ -55,7 +62,14 @@ Optional<std::string> math_ceiling(const std::string &x) {
 Optional<std::string> math_floor(const std::string &x) {
 	double val;
 	if (!parse_double(x, val)) return NullOpt<std::string>();
-	return Optional<std::string>(format_result(std::floor(val)));
+	// CQL 1.5 Appendix B: Floor(Decimal) returns Integer; results that
+	// cannot be represented as an Integer are null.
+	double result = std::floor(val);
+	if (std::isnan(result) || std::isinf(result) ||
+	    result < -2147483648.0 || result > 2147483647.0) {
+		return NullOpt<std::string>();
+	}
+	return Optional<std::string>(format_result(result));
 }
 
 // =====================================================================
@@ -111,6 +125,16 @@ Optional<std::string> math_power(const std::string &x, const std::string &exp) {
 	if (!parse_double(x, xval) || !parse_double(exp, eval)) return NullOpt<std::string>();
 	double result = std::pow(xval, eval);
 	if (std::isinf(result) || std::isnan(result)) return NullOpt<std::string>();
+	if (result != 0.0 && std::fabs(result) < 1e-4) {
+		// Sub-scale magnitudes must be emitted in fixed notation at the
+		// implementation scale (8): '%.15g'-style scientific text is
+		// rounded UP to 1E-8 by DuckDB's VARCHAR->DECIMAL(38,8) cast,
+		// so Power(2, -30) returned 0.00000001 instead of the
+		// correctly quantized 0.00000000.
+		char buf[64];
+		std::snprintf(buf, sizeof(buf), "%.8f", result);
+		return Optional<std::string>(std::string(buf));
+	}
 	return Optional<std::string>(format_result(result));
 }
 

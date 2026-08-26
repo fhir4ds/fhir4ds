@@ -87,17 +87,24 @@ def _adapt_sql_for_resources_table(sql: str) -> str:
     return re.sub(r'FROM\s+\w+\s+t\b', 'FROM resources t', sql)
 
 def _add_resource_type_filter(sql: str, resource_type: str) -> str:
-    """Add a WHERE clause to filter by resourceType for the resources table."""
-    type_filter = f"json_extract_string(t.resource, '$.resourceType') = '{resource_type}'"
-    branches = sql.split("\nUNION ALL\n")
-    adapted_branches = []
-    for branch in branches:
-        has_where = bool(re.search(r'^\s*WHERE\s', branch, re.MULTILINE | re.IGNORECASE))
-        if has_where:
-            adapted_branches.append(branch + f"\n  AND {type_filter}")
-        else:
-            adapted_branches.append(branch + f"\nWHERE {type_filter}")
-    return "\nUNION ALL\n".join(adapted_branches)
+    """Filter by resourceType inside the adapted ``resources`` table reference.
+
+    FP-01 SKEPTIC QA-008 (2026-08-16): the previous implementation appended
+    ``AND <filter>`` to the tail of any UNION ALL branch containing a
+    line-starting WHERE. For ``repeat`` nested inside ``forEachOrNull`` the
+    only WHERE lives inside the LATERAL subquery, so the appended AND
+    dangled after ``) as ..._table`` and DuckDB rejected the SQL with a
+    parser error even though the generated SQL was correct. Push the
+    predicate into every ``FROM resources t`` reference instead: it is
+    depth-agnostic, applies per referencing subquery, and preserves the
+    exact filtered-row semantics.
+    """
+    safe_type = resource_type.replace("'", "''")
+    replacement = (
+        "FROM (SELECT * FROM resources "
+        f"WHERE json_extract_string(resource, '$.resourceType') = '{safe_type}') t"
+    )
+    return re.sub(r"FROM\s+resources\s+t\b", replacement, sql)
 
 def run_test(con, generator, test, resources) -> tuple[bool, str]:
     view = test.get("view", {})

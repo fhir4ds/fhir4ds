@@ -88,6 +88,10 @@ def registerConversionMacros(con: "duckdb.DuckDBPyConnection") -> None:
             WHEN x IS NULL THEN NULL
             WHEN typeof(x) = 'BOOLEAN' THEN CASE WHEN TRY_CAST(x AS BOOLEAN) THEN 1 ELSE 0 END
             WHEN typeof(x) IN ('TINYINT', 'SMALLINT', 'INTEGER', 'BIGINT') THEN TRY_CAST(x AS INTEGER)
+            -- CQL 1.5 Appendix B Table 9-E defines NO Decimal->Integer
+            -- conversion and ToInteger has no Decimal overload (only
+            -- Boolean/String/Long), so a Decimal argument yields NULL.
+            -- Truncation is the separate Truncate operator, not a conversion.
             WHEN typeof(x) = 'VARCHAR' AND regexp_full_match(CAST(x AS VARCHAR), '^[+-]?[0-9]+$') THEN TRY_CAST(x AS INTEGER)
             ELSE NULL
         END
@@ -101,7 +105,7 @@ def registerConversionMacros(con: "duckdb.DuckDBPyConnection") -> None:
                 OR starts_with(typeof(x), 'DECIMAL')
                 THEN TRY_CAST(x AS DECIMAL(38, 8))
             WHEN typeof(x) = 'VARCHAR'
-                AND regexp_full_match(CAST(x AS VARCHAR), '^[+-]?[0-9]+(\\.[0-9]{1,8})?$')
+                AND regexp_full_match(CAST(x AS VARCHAR), '^[+-]?[0-9]+(\\.[0-9]+)?$')
                 AND TRY_CAST(x AS DECIMAL(38, 8)) IS NOT NULL
                 THEN TRY_CAST(x AS DECIMAL(38, 8))
             ELSE NULL
@@ -137,7 +141,17 @@ def registerConversionMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute('CREATE OR REPLACE MACRO ToDateTime(x) AS "__cql_to_datetime"(x)')
     con.execute('CREATE OR REPLACE MACRO ToTime(x) AS "__cql_to_time"(x)')
 
-    # Quantity to string: CQL §22.31 — format as "<value> '<unit>'"
+    # Quantity to string: CQL 1.5 Appendix B §ToString (Table 9-G) — Quantity
+    # format is (-)?#0.0# (('<unit>')|(<unit>)): UCUM units are rendered as a
+    # quoted string literal, while calendar duration keywords are rendered as
+    # a bare keyword ("ToString(4 days) results in `4 days`, i.e. not
+    # `4 'd'`"). The keyword set is data-driven from the calendar-duration
+    # registry in udf/quantity.py.
+    from ..udf.quantity import _CQL_CALENDAR_DURATION_UNITS
+
+    _calendar_units_sql = ", ".join(
+        f"'{u}'" for u in sorted(_CQL_CALENDAR_DURATION_UNITS)
+    )
     con.execute(
         "CREATE OR REPLACE MACRO QuantityToString(q) AS "
         "CASE WHEN q IS NULL THEN NULL "
@@ -147,9 +161,17 @@ def registerConversionMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "regexp_replace("
         "CAST(TRY_CAST(json_extract_string(CAST(q AS VARCHAR), '$.value') AS DECIMAL(38, 8)) AS VARCHAR), "
         "'0+$', ''), "
-        "'\\.$', '') || ' ''' || "
-        "COALESCE(json_extract_string(CAST(q AS VARCHAR), '$.unit'), "
-        "json_extract_string(CAST(q AS VARCHAR), '$.code'), '1') || '''' "
+        "'\\.$', '') || "
+        "CASE WHEN COALESCE("
+        "json_extract_string(CAST(q AS VARCHAR), '$.unit'), "
+        "json_extract_string(CAST(q AS VARCHAR), '$.code'), '1') "
+        f"IN ({_calendar_units_sql}) "
+        "THEN ' ' || COALESCE("
+        "json_extract_string(CAST(q AS VARCHAR), '$.unit'), "
+        "json_extract_string(CAST(q AS VARCHAR), '$.code'), '1') "
+        "ELSE ' ''' || COALESCE("
+        "json_extract_string(CAST(q AS VARCHAR), '$.unit'), "
+        "json_extract_string(CAST(q AS VARCHAR), '$.code'), '1') || '''' END "
         "ELSE CAST(q AS VARCHAR) END"
     )
 

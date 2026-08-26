@@ -741,6 +741,20 @@ def _quantity_from_ratio_json(value: str) -> str | None:
     return quantityDivide(orjson.dumps(numerator).decode("utf-8"), orjson.dumps(denominator).decode("utf-8"))
 
 
+def _quantity_identity_from_json(value: str) -> str | None:
+    """CQL 1.5 Appendix B §ToQuantity (Table 9-E): Quantity -> Quantity is the
+    identity conversion; re-emit the canonical form after shape/unit validation."""
+    try:
+        data = orjson.loads(value)
+    except JSONDecodeError:
+        return None
+    if not is_valid_quantity_object(data):
+        return None
+    return _format_cql_quantity(
+        data["value"], data.get("unit") or data.get("code") or "1"
+    )
+
+
 # ========================================
 # Core Functions
 # ========================================
@@ -796,6 +810,104 @@ def quantityUnit(quantity_json: str | None) -> str | None:
     return q.get("code")
 
 
+# Canonical UCUM symbol set for structural same-code validity. Mirrors the
+# native conversion-table keys in
+# extensions/cql/src/include/shared/ucum_units.hpp (85 entries) plus 'l'
+# (liter) and 'G' (gauss), which are valid UCUM symbols without a local
+# conversion factor. Keep in lockstep with the C++ is_known_ucum_symbol().
+_UCUM_VALIDITY_SYMBOLS = frozenset({
+    "%", "[ft_i]", "[in_i]", "[lb_av]", "[oz_av]", "cm", "cm2", "d", "g", "h",
+    "kg", "km", "m", "m2", "mg", "min", "mm", "ms", "s", "ug", "wk",
+    "Cel", "K", "L", "Pa", "[degF]", "cmH2O", "cm[H2O]", "degF", "dL",
+    "day", "days", "foot", "ft", "g/dL", "hour", "hours", "in", "inch",
+    "kPa", "lb", "mL", "mg/dL", "millisecond", "milliseconds", "minute",
+    "minutes", "mmHg", "mm[Hg]", "mmol/L", "mo", "month", "months", "oz",
+    "second", "seconds", "uL", "ug/mL", "week", "weeks", "year", "years",
+    "a", "'cm'", "'m'", "'mm'", "'km'", "'kg'", "'g'", "'[ft_i]'",
+    "'[in_i]'", "'[lb_av]'", "'[oz_av]'", "/min", "l", "G",
+})
+
+# UCUM case-sensitive metric prefixes (single-char, plus two-char 'da').
+_UCUM_METRIC_PREFIX_CHARS = frozenset("YZEPTGMkhdcunpfazy")
+
+
+def _is_valid_ucum_atom(atom: str) -> bool:
+    """Structural validity of a separator-free, annotation-free UCUM term.
+
+    Mirrors the native is_valid_ucum_atom(): power-of-ten terms ('10*3',
+    '10^-6'), known symbols, or a metric prefix applied to a known symbol
+    ('Mg', 'ML', 'dag'). A bare prefix ('M') or unknown code ('xyz') is
+    invalid.
+    """
+    if len(atom) > 3 and atom[:2] == "10" and atom[2] in "*^":
+        digits = atom[3:]
+        stripped = digits.lstrip("+-")
+        if stripped and stripped.isdigit():
+            return True
+    if atom in _UCUM_VALIDITY_SYMBOLS:
+        return True
+    # Exponent-suffixed symbols ('m2', 'cm3'): a known symbol plus one
+    # trailing exponent digit (1-9) is a valid UCUM atom.
+    if len(atom) > 1 and atom[-1] in "123456789" and atom[:-1] in _UCUM_VALIDITY_SYMBOLS:
+        return True
+    if len(atom) > 2 and atom.startswith("da") and atom[2:] in _UCUM_VALIDITY_SYMBOLS:
+        return True
+    if (
+        len(atom) > 1
+        and atom[0] in _UCUM_METRIC_PREFIX_CHARS
+        and atom[1:] in _UCUM_VALIDITY_SYMBOLS
+    ):
+        return True
+    return False
+
+
+def _same_code_unit_valid_for_compare(unit: str | None) -> bool:
+    """Mirror of the native C++ ``same_code_unit_valid_for_compare`` guard.
+
+    CQL 1.5 §Equal (Quantity): operating on quantities with invalid units
+    yields null. Identical unit codes may compare by value only when the
+    unit is valid — a known UCUM/calendar unit, a UCUM annotation
+    ('{dose}', '[pH]'), an annotated known unit ('mm[Hg]' -> 'mm'), or a
+    compound of valid components ('mg/m2'). Bare unknown codes ('xyz') are
+    invalid. Keeps the Python fallback in lockstep with the native
+    quantity_compare() same-code fast path.
+    """
+    if unit is None or unit == "1" or unit in _CQL_CALENDAR_DURATION_UNITS:
+        return True
+    core = ""
+    i = 0
+    while i < len(unit):
+        c = unit[i]
+        if c in "{[":
+            closer = "}" if c == "{" else "]"
+            close = unit.find(closer, i + 1)
+            if close == -1:
+                return False  # unterminated annotation
+            i = close + 1
+            continue
+        core += c
+        i += 1
+    if not core:
+        return True  # pure annotation ('{dose}', '[pH]')
+    # Structural UCUM grammar, not pint: metric-prefixed symbols ('Mg',
+    # 'ML') and power-of-ten terms ('10*3/uL') are valid UCUM that pint
+    # cannot reliably judge, while invalid bare prefixes ('M') must not be
+    # rescued by pint's case-insensitive parsing. Mirrors the native
+    # same_code_unit_valid_for_compare() atom check.
+    seps = "/."
+    if not any(s in core for s in seps):
+        return _is_valid_ucum_atom(core)
+    component = ""
+    for i, ch in enumerate(core):
+        if ch in seps:
+            if not component or not _same_code_unit_valid_for_compare(component):
+                return False
+            component = ""
+        else:
+            component += ch
+    return bool(component) and _same_code_unit_valid_for_compare(component)
+
+
 def quantityCompare(q1_json: str | None, q2_json: str | None, op: str) -> bool | None:
     """Compare two quantities with unit-aware comparison.
 
@@ -829,6 +941,42 @@ def quantityCompare(q1_json: str | None, q2_json: str | None, op: str) -> bool |
     offset_result = _compare_offset_temperature(q1_dict, q2_dict, op)
     if offset_result is not _OFFSET_NOT_APPLICABLE:
         return offset_result
+
+    # CQL 1.5 §Equal (Quantity): identical unit codes compare by value only
+    # when the unit is valid; unknown UCUM codes ('xyz') yield null. This
+    # mirrors the native quantity_compare() same-code fast path including
+    # annotation ('{dose}') and compound ('mg/m2') units that pint cannot
+    # resolve directly.
+    code1 = q1_dict.get("code") or "1"
+    code2 = q2_dict.get("code") or "1"
+    if code1 == code2 and _same_code_unit_valid_for_compare(code1):
+        v1 = float(q1_dict.get("value"))
+        v2 = float(q2_dict.get("value"))
+        if op == ">":
+            return v1 > v2
+        if op == "<":
+            return v1 < v2
+        if op == ">=":
+            return v1 >= v2
+        if op == "<=":
+            return v1 <= v2
+        if op == "==":
+            return v1 == v2
+        if op == "!=":
+            return v1 != v2
+        if op in ("~", "!~"):
+            return _apply_quantity_compare(
+                Decimal(str(v1)),
+                Decimal(str(v2)),
+                op,
+                _decimal_equivalence_precision(q1_dict),
+                _decimal_equivalence_precision(q2_dict),
+            )
+    elif code1 == code2:
+        # Identical but INVALID unit codes must not be rescued by pint's
+        # case-insensitive parsing (it accepts the bare prefix 'M'); the
+        # native same-code path returns null here.
+        return None
 
     pint_q1 = _quantity_to_pint(q1_dict)
     pint_q2 = _quantity_to_pint(q2_dict)
@@ -977,20 +1125,45 @@ def quantityConvert(q_json: str | None, target_unit: str) -> str | None:
 def quantityNegate(q_json: str | None) -> str | None:
     """Negate a quantity (CQL unary minus on Quantity).
 
-    CQL Spec §16.8: Negation.
+    CQL Spec §16.8: Negation. "When negating quantities, the unit is
+    unchanged." Mirror the native C++ ``quantity_negate``: flip the value
+    sign and re-serialize with the original unit preserved verbatim. Do
+    NOT round-trip through pint — pint normalizes calendar-duration
+    keywords ('day') to UCUM ('d'), which diverges from the native engine
+    for temporals like `-(3 days)` (CQL-11 EXPLORER QA-003).
     """
-    q_dict = _parse_quantity(q_json)
-    if not q_dict:
+    from decimal import Decimal, InvalidOperation
+
+    if not q_json:
         return None
-    pint_q = _quantity_to_pint(q_dict)
-    if pint_q is None:
+    match = _JSON_VALUE_RE.search(q_json)
+    if not match:
         return None
     try:
-        result = -pint_q
-        return _format_quantity(result)
-    except Exception as e:
-        _logger.warning("UDF quantityNegate failed: %s", e)
+        current = Decimal(match.group(1))
+    except (InvalidOperation, TypeError):
         return None
+    try:
+        data = orjson.loads(q_json)
+    except JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    unit = data.get("unit")
+    code = data.get("code") or unit or "1"
+    return (
+        '{"value":'
+        + str(float(-current))
+        + ',"unit":'
+        + orjson.dumps(unit if unit is not None else code).decode("utf-8")
+        + ',"code":'
+        + orjson.dumps(code).decode("utf-8")
+        + ',"system":'
+        + orjson.dumps(
+            data.get("system", "http://unitsofmeasure.org")
+        ).decode("utf-8")
+        + "}"
+    )
 
 
 def quantityAbs(q_json: str | None) -> str | None:
@@ -1050,6 +1223,14 @@ def quantityDivide(q1_json: str | None, q2_json: str | None) -> str | None:
         if pint_q2.magnitude == 0:
             return None  # CQL §16.4: division by zero → null
         result = pint_q1 / pint_q2
+        # CQL 1.5 §9.4 Divide: "For division operations involving quantities,
+        # the resulting quantity will have the appropriate unit." Reference
+        # engine (DivideEvaluator.kt) uses ucumService.divideBy, which applies
+        # the unit conversion factor and cancels commensurable units, so
+        # 1000 'mg' / 1 'g' is 1.0 '1' — not 1000 'mg/g'. pint only performs
+        # that cancellation for equal-unit exponents, so reduce explicitly.
+        # Incommensurable compound units (e.g. 'mg'/'mL') are unchanged.
+        result = result.to_reduced_units()
         return _format_quantity(result)
     except Exception as e:
         _logger.warning("UDF quantityDivide failed: %s", e)
@@ -1126,14 +1307,29 @@ def toQuantity(s) -> str | None:
         return _format_cql_quantity(s)
     s = str(s)
     if s.strip().startswith("{"):
-        return _quantity_from_ratio_json(s)
+        # CQL 1.5 Appendix B §ToQuantity (Table 9-E): a Ratio input is
+        # converted by dividing numerator by denominator; a Quantity input is
+        # the identity conversion ("the quantity itself").
+        ratio_result = _quantity_from_ratio_json(s)
+        if ratio_result is not None:
+            return ratio_result
+        return _quantity_identity_from_json(s)
     import re
     # Match the CQL ToQuantity string grammar: (+|-)?#0(.0#)?('<unit>')?
+    # CQL 1.5 Appendix B §ToQuantity: the unit designator is "a valid,
+    # case-sensitive UCUM unit of measure or calendar duration keyword,
+    # singular or plural. Spaces are allowed between the quantity value and
+    # the unit designator." Table 9-G additionally requires ToString output
+    # (`4 days`, i.e. a bare calendar keyword) to be round-trippable, so a
+    # bare calendar duration keyword is a valid unit designator, while bare
+    # UCUM units are not (they must appear as a quoted string literal).
     number = r"[+-]?\d+(?:\.\d+)?"
-    m = re.match(rf"^({number})(?:\s*'([^']+)')?$", s)
+    m = re.match(rf"^({number})(?:\s*(?:'([^']+)'|(\S+)))?$", s)
     if not m:
         return None
-    unit = m.group(2) or "1"
+    unit = m.group(2) or m.group(3) or "1"
+    if m.group(3) is not None and unit not in _CQL_CALENDAR_DURATION_UNITS:
+        return None
     return _format_cql_quantity(m.group(1), unit)
 
 

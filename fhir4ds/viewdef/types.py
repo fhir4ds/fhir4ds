@@ -22,7 +22,9 @@ from .metadata import (
     KNOWN_FHIR_RESOURCE_TYPES,
     PUBLICATION_STATUS_CODES,
     SHAREABLE_VIEWDEFINITION_PROFILE,
+    SHAREABLE_VIEWDEFINITION_PROFILE_CANONICALS,
     TABULAR_VIEWDEFINITION_PROFILE,
+    TABULAR_VIEWDEFINITION_PROFILE_CANONICALS,
     VIEWDEFINITION_RESOURCE_TYPE,
 )
 
@@ -48,16 +50,30 @@ def validate_required_string(value: Any, field_name: str) -> str:
     """Validate a required non-empty string field and return it.
 
     Per the SQL-on-FHIR v2 logical model, required string fields such as
-    ``column.path``, ``where.path``, and ``column.tag.name``/``value`` carry
-    meaningful FHIRPath expressions or identifiers. A whitespace-only string
-    is functionally empty and must be rejected at the model boundary instead
-    of being deferred to a downstream layer (SQL generation, FHIRPath
-    parsing) that produces a misleading "must be a non-empty string" error
-    for a value that is technically non-empty.
+    ``column.path`` and ``where.path`` carry meaningful FHIRPath expressions.
+    A whitespace-only string is functionally empty and must be rejected at
+    the model boundary instead of being deferred to a downstream layer
+    (SQL generation, FHIRPath parsing) that produces a misleading
+    "must be a non-empty string" error for a value that is technically
+    non-empty.
     """
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field_name} must be a non-empty string")
     if not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string")
+    return value
+
+
+def validate_tag_string(value: Any, field_name: str) -> str:
+    """Validate a required tag metadata string (whitespace allowed).
+
+    The v2 StructureDefinition defines ``column.tag.name`` and
+    ``column.tag.value`` as plain ``string`` elements with cardinality 1..1
+    and NO minLength constraint: they are opaque metadata, not FHIRPath
+    expressions, so a whitespace-only value like ``' '`` is spec-valid and
+    must not be rejected. Only non-strings and truly empty values fail.
+    """
+    if not isinstance(value, str) or not value:
         raise ValueError(f"{field_name} must be a non-empty string")
     return value
 
@@ -103,24 +119,44 @@ def validate_optional_uri_string(value: Any, field_name: str) -> Optional[str]:
 
 
 def validate_canonical_string(value: Any, field_name: str) -> Optional[str]:
-    """Validate an optional canonical URL field, enforcing SQL-on-FHIR v2 cnl-1.
+    """Validate an optional canonical URL field (e.g. ``ViewDefinition.url``).
 
-    cnl-1: `exists() implies matches('^[^|# ]+$')` — forbids pipe, hash, and
-    space in canonical URLs. Use this for `ViewDefinition.url`, `profile[]`,
-    and `meta.profile[]`. For `Column.type` keep `validate_optional_uri_string`,
-    which accepts the relative URIs and element-ID references the spec allows
-    there.
+    Enforces only the lexical rules that are errors: non-empty string and the
+    ``uri`` type lexical space (``^\\S*$`` — no whitespace). The SQL-on-FHIR v2
+    cnl-1 invariant (``exists() implies matches('^[^|# ]+$')``) is declared
+    WARNING severity in the official StructureDefinition-ViewDefinition
+    (element ViewDefinition.url, source MetadataResource) and is not enforced
+    by the sql-on-fhir.js reference implementation, so ``|`` and ``#`` are
+    reported as warnings by the parser's ``validate_view_definition`` (see
+    ``cnl1_url_warning``), not raised here. For arrays of ``canonical`` values
+    (``profile``, ``meta.profile``) use ``validate_canonical_array``. For
+    ``Column.type`` keep ``validate_optional_uri_string``, which accepts the
+    relative URIs and element-ID references the spec allows there.
     """
     if value is None:
         return None
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field_name} must be a non-empty canonical string")
-    if not _CANONICAL_RE.fullmatch(value):
-        raise ValueError(
-            f"{field_name} must be a valid canonical URL per cnl-1 "
-            f"(no pipe, hash, or space): {value!r}"
-        )
+    if not _URI_RE.fullmatch(value):
+        raise ValueError(f"{field_name} must be a valid URI string (no whitespace)")
     return value
+
+
+def cnl1_url_warning(url: Optional[str], field_name: str = "ViewDefinition.url") -> Optional[str]:
+    """Return a cnl-1 WARNING message for a canonical URL, or None if conformant.
+
+    cnl-1 (WARNING severity per the official ViewDefinition SD):
+    ``exists() implies matches('^[^|# ]+$')`` — `|` and `#` make processing
+    canonical references problematic. Whitespace is already a lexical ``uri``
+    error and never reaches this check through validated fields.
+    """
+    if url and not _CANONICAL_RE.fullmatch(url):
+        return (
+            f"{field_name} {url!r} violates cnl-1 (WARNING): must not contain "
+            f"'|', '#', or space — these characters make processing canonical "
+            f"references problematic"
+        )
+    return None
 
 
 def validate_canonical_array(value: Any, field_name: str) -> List[str]:
@@ -299,6 +335,38 @@ _DATETIME_RE = re.compile(
     r"(?:T(?P<time>(?:[01][0-9]|2[0-3]):[0-5][0-9]:(?:[0-5][0-9]|60)(?:\.[0-9]{1,9})?)"
     r"(?P<tz>Z|[+-](?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00)))?$"
 )
+
+
+def _json_number_value(value: Any, name: str) -> Any:
+    """Normalize a constant number to a JSON-serializable Python value.
+
+    ``parse_view_definition`` parses JSON strings with ``parse_float=Decimal``
+    (lossless FHIR decimal doctrine: constant ``valueDecimal`` is substituted
+    verbatim into FHIRPath literals, so binary float rounding must never touch
+    it). The dataclass keeps the ``Decimal`` — the generator depends on it —
+    but ``to_dict`` must emit a valid FHIR JSON number so that
+    ``json.dumps(vd.to_dict())`` round-trips. Emitting the ``Decimal`` verbatim
+    broke that contract (TypeError) and made the output type depend on whether
+    the input arrived as a JSON string (``Decimal``) or a dict (``float``).
+
+    Conversion rules, all lossless:
+    - integral ``Decimal`` -> ``int``
+    - ``Decimal`` exactly representable by a float's shortest repr -> ``float``
+    - anything else (more than ~17 significant digits) cannot be serialized as
+      a JSON number without corruption, so fail fast with a typed error.
+    """
+    if isinstance(value, Decimal):
+        if value == value.to_integral_value():
+            return int(value)
+        as_float = float(value)
+        if Decimal(repr(as_float)) == value:
+            return as_float
+        raise ValueError(
+            f"Constant {name!r} valueDecimal {value} exceeds the precision "
+            "representable in a JSON number and cannot be serialized without "
+            "corruption; author it with at most 17 significant digits."
+        )
+    return value
 
 
 def _validate_partial_date(value: str, field_name: str) -> None:
@@ -561,22 +629,29 @@ class ColumnTag:
     value: str
 
     def __post_init__(self) -> None:
-        validate_required_string(self.name, "Column.tag.name")
-        validate_required_string(self.value, "Column.tag.value")
+        validate_tag_string(self.name, "Column.tag.name")
+        validate_tag_string(self.value, "Column.tag.value")
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ColumnTag":
         if not isinstance(data, dict):
             raise ValueError(f"Column.tag item must be a JSON object, got {type(data).__name__}")
+        unknown_fields = set(data) - {"name", "value"}
+        if unknown_fields:
+            raise ValueError(
+                "Unsupported Column.tag field(s): "
+                + ", ".join(sorted(repr(f) for f in unknown_fields))
+                + ". Column.tag items may only use 'name' and 'value'."
+            )
         return cls(
-            name=validate_required_string(data.get("name"), "Column.tag.name"),
-            value=validate_required_string(data.get("value"), "Column.tag.value"),
+            name=validate_tag_string(data.get("name"), "Column.tag.name"),
+            value=validate_tag_string(data.get("value"), "Column.tag.value"),
         )
 
     def to_dict(self) -> Dict[str, str]:
         return {
-            "name": validate_required_string(self.name, "Column.tag.name"),
-            "value": validate_required_string(self.value, "Column.tag.value"),
+            "name": validate_tag_string(self.name, "Column.tag.name"),
+            "value": validate_tag_string(self.value, "Column.tag.value"),
         }
 
 
@@ -910,7 +985,9 @@ class Constant:
         )
         return {
             "name": name,
-            CONSTANT_VALUE_TYPE_FIELDS[value_type]: self.value,
+            CONSTANT_VALUE_TYPE_FIELDS[value_type]: _json_number_value(
+                self.value, name
+            ),
         }
 
 
@@ -1305,8 +1382,14 @@ def validate_root_metadata_fields(
 
 def validate_supported_view_profiles(view_definition: ViewDefinition) -> None:
     """Validate profile constraints supported by this implementation."""
-    has_shareable_profile = view_definition.has_profile(SHAREABLE_VIEWDEFINITION_PROFILE)
-    has_tabular_profile = view_definition.has_profile(TABULAR_VIEWDEFINITION_PROFILE)
+    has_shareable_profile = any(
+        view_definition.has_profile(canonical)
+        for canonical in SHAREABLE_VIEWDEFINITION_PROFILE_CANONICALS
+    )
+    has_tabular_profile = any(
+        view_definition.has_profile(canonical)
+        for canonical in TABULAR_VIEWDEFINITION_PROFILE_CANONICALS
+    )
 
     if has_shareable_profile or has_tabular_profile:
         profile_names = []

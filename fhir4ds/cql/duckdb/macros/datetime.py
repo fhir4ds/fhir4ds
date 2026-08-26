@@ -29,8 +29,12 @@ def registerDateTimeMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # Current time functions (no conflict with built-ins)
     # ============================================
     con.execute(
+        # CQL 1.5 §8.9 + DateTime model: millisecond max precision — truncate
+        # the microsecond fractional seconds of CURRENT_TIMESTAMP to 3 digits.
         "CREATE MACRO IF NOT EXISTS Now() AS "
+        "regexp_replace("
         "regexp_replace(REPLACE(CAST(CURRENT_TIMESTAMP AS VARCHAR), ' ', 'T'), "
+        "'\\.([0-9]{3})[0-9]+', '.\\1'), "
         "'([+-][0-9]{2})$', '\\1:00')"
     )
     con.execute("CREATE MACRO IF NOT EXISTS Today() AS CURRENT_DATE")

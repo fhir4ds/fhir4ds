@@ -19,8 +19,21 @@ from ...translator.types import (
     SQLUnaryOp,
 )
 
+from ...parser.ast_nodes import FunctionRef
+from ...parser.ast_nodes import Interval as IntervalAst
+from ...parser.ast_nodes import Literal as LiteralAst
+from ...parser.ast_nodes import UnaryExpression
+
 if TYPE_CHECKING:
     from ...parser.ast_nodes import BinaryExpression
+
+_NUMERIC_POINT_KINDS = {"Integer", "Long", "Decimal"}
+
+# Unary operators that extract a scalar from an interval operand; the
+# result point type is the interval's point type (CQL §19.19 Start,
+# §19.15 End, §19.22 Point From, §19.25 Width). Size (§19.18) is a
+# FunctionRef handled alongside these.
+_INTERVAL_SCALAR_OPERATORS = {"start of", "end of", "point from", "width of"}
 
 
 class TemporalComparisonMixin:
@@ -31,8 +44,99 @@ class TemporalComparisonMixin:
     other helpers available on ExpressionTranslator.
     """
 
+    def _numeric_interval_point_kind(self, expr) -> str | None:
+        """Classify the point type of a no-precision same/same-or interval
+        comparison when it is statically known to be NON-temporal.
+
+        Returns "numeric" for Integer/Long/Decimal points (including mixed
+        Integer/Decimal literals, which structural typing reports as
+        Interval<Any>), "quantity" for Quantity points, and None when the
+        operands are temporal or the point type cannot be determined
+        statically (in which case the existing temporal lowering must be
+        preserved).
+        """
+        if expr is None:
+            return None
+        for side in (getattr(expr, "left", None), getattr(expr, "right", None)):
+            name = self._static_structural_type_name(side)
+            if name and name.startswith("Interval<"):
+                point = name[len("Interval<"):-1]
+                if point in _NUMERIC_POINT_KINDS:
+                    return "numeric"
+                if point == "Quantity":
+                    return "quantity"
+                if point in ("Date", "DateTime", "Time"):
+                    return None
+                # Interval<Any> or unknown point type: peek at literal
+                # bounds — a numeric/Quantity literal bound can never be a
+                # temporal interval.
+                if isinstance(side, IntervalAst):
+                    for bound in (side.low, side.high):
+                        if isinstance(bound, LiteralAst) and getattr(bound, "value", None) is not None:
+                            bound_type = (
+                                getattr(bound, "type", None)
+                                or self._static_structural_type_name(bound)
+                            )
+                            if bound_type in _NUMERIC_POINT_KINDS:
+                                return "numeric"
+                            if bound_type == "Quantity":
+                                return "quantity"
+                return None
+        return None
+
+    def _interval_scalar_point_kind(self, node) -> str | None:
+        """Classify the point kind of an interval-derived scalar operand.
+
+        ``start of``/``end of``/``point from``/``width of`` (unary) and
+        ``Size`` (function) extract a scalar whose type is the interval's
+        point type (CQL §19.19/§19.15/§19.22/§19.25/§19.18). Returns
+        "numeric", "quantity", or None (temporal / not an interval scalar).
+        Used by arithmetic dispatch so numeric interval scalars never route
+        through temporal dateAddQuantity or raw SQL over VARCHAR
+        (CQL-17 EXPLORER QA-001).
+        """
+        if node is None:
+            return None
+        operand = None
+        if isinstance(node, UnaryExpression) and node.operator in _INTERVAL_SCALAR_OPERATORS:
+            operand = node.operand
+        elif (
+            isinstance(node, FunctionRef)
+            and getattr(node, "name", "") in ("Size", "size")
+            and node.arguments
+        ):
+            operand = node.arguments[0]
+        if operand is None:
+            return None
+        from ...parser.ast_nodes import BinaryExpression as _BinaryExpression
+
+        return self._numeric_interval_point_kind(
+            _BinaryExpression(operator="and", left=operand, right=None)
+        )
+
+    @staticmethod
+    def _numeric_point_compare(
+        left_value: SQLExpression, right_value: SQLExpression, sql_op: str, kind: str
+    ) -> SQLExpression:
+        """Compare two extracted interval boundary points with CQL §9
+        Integer/Decimal/Quantity comparison semantics (never temporal)."""
+        if kind == "quantity":
+            return SQLFunctionCall(
+                name="quantityCompare",
+                args=[
+                    SQLCast(expression=left_value, target_type="VARCHAR"),
+                    SQLCast(expression=right_value, target_type="VARCHAR"),
+                    SQLLiteral(value={"=": "==", ">=": ">=", "<=": "<="}[sql_op]),
+                ],
+            )
+        return SQLBinaryOp(
+            operator=sql_op,
+            left=SQLCast(expression=left_value, target_type="DECIMAL(38,10)"),
+            right=SQLCast(expression=right_value, target_type="DECIMAL(38,10)"),
+        )
+
     def _translate_same_operator(
-        self, operator: str, left: SQLExpression, right: SQLExpression
+        self, operator: str, left: SQLExpression, right: SQLExpression, expr=None
     ) -> SQLExpression:
         """
         Translate same precision operators to SQL.
@@ -115,27 +219,93 @@ class TemporalComparisonMixin:
                 return _same_call("cqlSameAsP", left, right, precision)
 
         # Handle generic "same or before/after" without precision.
-        # CQL §19.15-16: compare at minimum precision of both operands,
-        # returning null when precision is insufficient to determine ordering.
-        if operator == "same or before":
+        # CQL §9.25/§9.26: for interval operands, "the first interval starts
+        # on or after the second one ends" (same or after) / "the first
+        # interval ends on or before the second one starts" (same or before);
+        # point operands are used directly. Comparisons then proceed at the
+        # finest precision specified in either input (§19.16-17), returning
+        # null when precision is insufficient to determine ordering.
+        if operator == "same or before" or operator == "same or after":
+            # CQL-17 HISTORIAN QA-002: §19.28/§19.29 apply to any point type.
+            # Numeric (Integer/Long/Decimal) and Quantity interval bounds
+            # must compare numerically — routing them through the temporal
+            # UDFs returns NULL (native) or raises (Python) on decimal
+            # strings like '1.0'. Temporal operands keep the temporal path.
+            numeric_kind = self._numeric_interval_point_kind(expr)
+            if operator == "same or before":
+                left_value = SQLFunctionCall(name="intervalEnd", args=[left]) if _is_interval(left) else left
+                right_value = SQLFunctionCall(name="intervalStart", args=[right]) if _is_interval(right) else right
+                if numeric_kind:
+                    return self._numeric_point_compare(left_value, right_value, "<=", numeric_kind)
+                udf_name = "cqlSameOrBefore"
+            else:
+                left_value = SQLFunctionCall(name="intervalStart", args=[left]) if _is_interval(left) else left
+                right_value = SQLFunctionCall(name="intervalEnd", args=[right]) if _is_interval(right) else right
+                if numeric_kind:
+                    return self._numeric_point_compare(left_value, right_value, ">=", numeric_kind)
+                udf_name = "cqlSameOrAfter"
             return SQLFunctionCall(
-                name="cqlSameOrBefore",
+                name=udf_name,
                 args=[
-                    SQLCast(expression=left, target_type="VARCHAR"),
-                    SQLCast(expression=right, target_type="VARCHAR"),
-                ],
-            )
-
-        if operator == "same or after":
-            return SQLFunctionCall(
-                name="cqlSameOrAfter",
-                args=[
-                    SQLCast(expression=left, target_type="VARCHAR"),
-                    SQLCast(expression=right, target_type="VARCHAR"),
+                    SQLCast(expression=left_value, target_type="VARCHAR"),
+                    SQLCast(expression=right_value, target_type="VARCHAR"),
                 ],
             )
 
         if operator == "same as":
+            # CQL 1.5 §8.12 (points) / §9.24 (intervals), no precision:
+            # compare at the finest precision specified in either input,
+            # null when uncertain. Intervals compare start AND end points.
+            if _is_interval(left) or _is_interval(right):
+                left_interval = _as_interval(left)
+                right_interval = _as_interval(right)
+                # CQL-17 HISTORIAN QA-001: §19.27 applies to any point type.
+                # Numeric (Integer/Long/Decimal) and Quantity interval bounds
+                # must compare with CQL §9 numeric/Quantity equality — the
+                # temporal cqlDateTimeEqual path raises (Python) or returns
+                # NULL (native) on decimal bound strings like '1.0'.
+                numeric_kind = self._numeric_interval_point_kind(expr)
+                if numeric_kind:
+                    starts_same = self._numeric_point_compare(
+                        SQLFunctionCall(name="intervalStart", args=[left_interval]),
+                        SQLFunctionCall(name="intervalStart", args=[right_interval]),
+                        "=",
+                        numeric_kind,
+                    )
+                    ends_same = self._numeric_point_compare(
+                        SQLFunctionCall(name="intervalEnd", args=[left_interval]),
+                        SQLFunctionCall(name="intervalEnd", args=[right_interval]),
+                        "=",
+                        numeric_kind,
+                    )
+                    return SQLBinaryOp(operator="AND", left=starts_same, right=ends_same)
+                starts_same = SQLFunctionCall(
+                    name="cqlDateTimeEqual",
+                    args=[
+                        SQLCast(
+                            expression=SQLFunctionCall(name="intervalStart", args=[left_interval]),
+                            target_type="VARCHAR",
+                        ),
+                        SQLCast(
+                            expression=SQLFunctionCall(name="intervalStart", args=[right_interval]),
+                            target_type="VARCHAR",
+                        ),
+                    ],
+                )
+                ends_same = SQLFunctionCall(
+                    name="cqlDateTimeEqual",
+                    args=[
+                        SQLCast(
+                            expression=SQLFunctionCall(name="intervalEnd", args=[left_interval]),
+                            target_type="VARCHAR",
+                        ),
+                        SQLCast(
+                            expression=SQLFunctionCall(name="intervalEnd", args=[right_interval]),
+                            target_type="VARCHAR",
+                        ),
+                    ],
+                )
+                return SQLBinaryOp(operator="AND", left=starts_same, right=ends_same)
             return SQLFunctionCall(
                 name="cqlDateTimeEqual",
                 args=[

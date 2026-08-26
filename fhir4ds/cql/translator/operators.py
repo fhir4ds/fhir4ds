@@ -246,6 +246,23 @@ class OperatorTranslator:
             return SQLUnaryOp(operator="IS NOT NULL", operand=operand, prefix=False)
 
         if op_lower == "-":
+            # CQL-21 HISTORIAN QA-003: uncertainty-capable operands (the
+            # §22.21 VARCHAR age/duration family) cannot take SQL unary
+            # negation. Per CQL Negate semantics, -x ≡ x * -1, which is
+            # interval-aware through cqlUncertainMultiply.
+            from .expressions._operators import _is_uncertain_between_sql
+
+            if _is_uncertain_between_sql(operand):
+                return SQLFunctionCall(
+                    name="cqlUncertainMultiply",
+                    args=[
+                        operand,
+                        SQLCast(
+                            expression=SQLLiteral(value="-1"),
+                            target_type="VARCHAR",
+                        ),
+                    ],
+                )
             return SQLUnaryOp(operator="-", operand=operand, prefix=True)
 
         if op_lower == "+":

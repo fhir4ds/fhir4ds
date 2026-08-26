@@ -778,3 +778,38 @@ class TestFHIRPathSemantics:
         assert add(True, False) == []
         assert add(True, 1) == []
         assert sum_fn([True, False, True]) == []
+
+
+class TestFp11HistorianMathHelperEngineContract:
+    """FP-11 HISTORIAN (2026-08-17): direct math helpers must mirror §5.7
+    engine semantics — power Integer typing, exact Decimal power, negative
+    Integer exponent empty, round negative-zero normalization."""
+
+    def test_power_integer_typing_fp11_historian(self):
+        # §5.7: Integer base + Integer exponent -> Integer result
+        assert power(2, 3) == [8]
+        assert isinstance(power(2, 3)[0], int)
+        assert power(-2, 3) == [-8]
+        # Negative Integer exponent on Integer base -> empty (STU3)
+        assert power(2, -3) == []
+        assert power(10, -2) == []
+        # Beyond int64: exact Decimal-shaped digits
+        r = power(2, 62)[0]
+        assert r == 4611686018427387904
+
+    def test_power_decimal_exact_no_binary64_noise_fp11_historian(self):
+        assert float(power(1.1, 2)[0]) == 1.21
+        assert power(4, 0.5) == [2.0]  # transcendental: binary64
+
+    def test_power_undefined_domains_fp11_historian(self):
+        assert power(0, 0) == []
+        assert power(0, -2) == []
+        assert power(-2, 0.5) == []
+        assert power(2, "x") == []
+        assert power(None, 2) == []
+
+    def test_round_negative_zero_normalized_fp11_historian(self):
+        r = round_fn(-0.4)[0]
+        assert str(r) == "0.0"
+        assert str(round_fn(-0.5)[0]) == "-1.0"
+        assert str(round_fn(0.5)[0]) == "1.0"

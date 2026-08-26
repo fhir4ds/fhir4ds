@@ -34,6 +34,47 @@ if TYPE_CHECKING:
     from ..translator.types import SQLExpression
 
 
+# Data-driven FHIR R4 primitive/complex type name → CQL/System type mapping
+# (FHIR R4 modelinfo).  Used for type inference and for `is`/`as` runtime
+# type checks so FHIR string-family primitives (code, id, uri, ...) satisfy
+# `is String` / `is FHIR.string` per the CQL FHIR model mapping appendix.
+FHIR_TYPE_TO_CQL_TYPE: Dict[str, str] = {
+    "boolean": "Boolean",
+    "integer": "Integer",
+    "positiveInt": "Integer",
+    "unsignedInt": "Integer",
+    "integer64": "Long",
+    "decimal": "Decimal",
+    "string": "String",
+    "code": "String",
+    "id": "String",
+    "markdown": "String",
+    "oid": "String",
+    "uri": "String",
+    "url": "String",
+    "uuid": "String",
+    "canonical": "String",
+    "base64Binary": "String",
+    "date": "Date",
+    "dateTime": "DateTime",
+    "instant": "DateTime",
+    "time": "Time",
+    "Quantity": "Quantity",
+    "Ratio": "Ratio",
+    "CodeableConcept": "Concept",
+    "Coding": "Code",
+}
+
+
+def fhir_type_names_for_cql_type(cql_type: str) -> List[str]:
+    """FHIR primitive type names whose values are of the given CQL type."""
+    return [
+        fhir_name
+        for fhir_name, cql_name in FHIR_TYPE_TO_CQL_TYPE.items()
+        if cql_name == cql_type
+    ]
+
+
 class InferenceMixin:
     """Mixin providing inference methods for CQLToSQLTranslator."""
 
@@ -356,6 +397,16 @@ class InferenceMixin:
                                 children.append(child_expr)
 
         return children
+
+    def _definition_result_is_list_returning(self, result: Any) -> bool:
+        """CQL-18 EXPLORER QA-004: True when a definition's translated SQL
+        result is a list-returning expression (e.g. ``list_distinct`` over a
+        stored-list alias reference). Combined with PATIENT_SCALAR shape and
+        a List<...> CQL type, this proves the define's CTE value column
+        stores a whole per-patient element list (CQL 1.5 App B §10.x).
+        """
+        from .expressions._utils import _is_list_returning_sql
+        return _is_list_returning_sql(result)
 
     def _infer_row_shape(self, ast_node: Any, _visited: set | None = None) -> "RowShape":
         """
@@ -796,32 +847,7 @@ class InferenceMixin:
     def _fhir_type_to_cql_type(fhir_type: Optional[str]) -> Optional[str]:
         if not fhir_type:
             return None
-        return {
-            "boolean": "Boolean",
-            "integer": "Integer",
-            "positiveInt": "Integer",
-            "unsignedInt": "Integer",
-            "integer64": "Long",
-            "decimal": "Decimal",
-            "string": "String",
-            "code": "String",
-            "id": "String",
-            "markdown": "String",
-            "oid": "String",
-            "uri": "String",
-            "url": "String",
-            "uuid": "String",
-            "canonical": "String",
-            "base64Binary": "String",
-            "date": "Date",
-            "dateTime": "DateTime",
-            "instant": "DateTime",
-            "time": "Time",
-            "Quantity": "Quantity",
-            "Ratio": "Ratio",
-            "CodeableConcept": "Concept",
-            "Coding": "Code",
-        }.get(fhir_type)
+        return FHIR_TYPE_TO_CQL_TYPE.get(fhir_type)
 
     def _infer_fhir_property_type(self, resource_type: str, path: str) -> Optional[str]:
         """Infer CQL type for a FHIR property path from schema metadata."""

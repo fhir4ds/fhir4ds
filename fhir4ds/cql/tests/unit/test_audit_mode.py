@@ -461,3 +461,85 @@ class TestMinMaxAttribution:
             lib, output_columns={"check": "Check"}
         )
         assert "arg_min" not in sql
+
+
+class TestMinMaxQuantityEvidenceEndToEnd:
+    """MT-008: Min/Max on quantity queries — value, comparison, and attribution."""
+
+    def _con(self):
+        import duckdb
+        import fhir4ds
+        from fhir4ds.cql.loader.fhir_loader import FHIRDataLoader
+        con = fhir4ds.create_connection()
+        loader = FHIRDataLoader(con)
+        loader.load_resource({"resourceType": "Patient", "id": "pat1"})
+        loader.load_resources([
+            {"resourceType": "Observation", "id": "obs-high",
+             "subject": {"reference": "Patient/pat1"},
+             "valueQuantity": {"value": 160, "unit": "mmHg"}},
+            {"resourceType": "Observation", "id": "obs-low",
+             "subject": {"reference": "Patient/pat1"},
+             "valueQuantity": {"value": 118, "unit": "mmHg"}},
+        ])
+        return con
+
+    def test_quantity_min_comparison_and_target_attribution(self, tmp_path):
+        import json
+        from fhir4ds.cql import evaluate_measure
+        lib = tmp_path / "BP.cql"
+        lib.write_text(
+            "library BP\nusing FHIR version '4.0.1'\n"
+            "include FHIRHelpers version '4.0.1'\ncontext Patient\n"
+            "define \"BPs\": [Observation] O\n"
+            "define \"MinBP\": Min(\"BPs\" O return O.value as Quantity)\n"
+            "define \"Check\": \"MinBP\" < 140 'mmHg'\n"
+        )
+        con = self._con()
+        df = evaluate_measure(str(lib), conn=con, output_columns={"chk": "Check"})
+        assert bool(df.iloc[0]["chk"]) is True
+
+        dfa = evaluate_measure(
+            str(lib), conn=con, output_columns={"chk": "Check"}, audit_mode="full"
+        )
+        result = dfa.iloc[0]["chk"]
+        assert result["result"] is True
+        evidence = result["evidence"]
+        assert evidence, "expected audit evidence"
+        targets = [e.get("target") for e in evidence]
+        assert "Observation/obs-low" in targets, targets
+
+
+class TestAuditEvidenceRowContract:
+    """QA-018: evidence JOINs must not fan out definition rows per patient."""
+
+    def test_multi_definition_full_audit_one_row_per_patient(self, tmp_path):
+        import fhir4ds
+        from fhir4ds.cql import evaluate_measure
+        from fhir4ds.cql.loader.fhir_loader import FHIRDataLoader
+
+        lib = tmp_path / "Ex.cql"
+        lib.write_text(
+            "library Ex\nusing FHIR version '4.0.1'\n"
+            "include FHIRHelpers version '4.0.1'\ncontext Patient\n"
+            "define \"HasObs\": exists([Observation] O where O.status = 'final')\n"
+            "define \"NotFinal\": not exists([Observation] O where O.status = 'final')\n"
+        )
+        con = fhir4ds.create_connection()
+        loader = FHIRDataLoader(con)
+        loader.load_resource({"resourceType": "Patient", "id": "pa"})
+        loader.load_resources([
+            {"resourceType": "Observation", "id": "oa1",
+             "subject": {"reference": "Patient/pa"}, "status": "final"},
+            {"resourceType": "Observation", "id": "oa2",
+             "subject": {"reference": "Patient/pa"}, "status": "final"},
+        ])
+        df = evaluate_measure(
+            str(lib), conn=con, output_columns={"h": "HasObs", "nf": "NotFinal"},
+            audit_mode="full",
+        )
+        assert len(df) == 1, f"one row per patient, got {len(df)}"
+        row = df.iloc[0]
+        assert row["h"]["result"] is True
+        assert row["nf"]["result"] is False
+        targets = sorted(e["target"] for e in row["h"]["evidence"])
+        assert targets == ["Observation/oa1", "Observation/oa2"]

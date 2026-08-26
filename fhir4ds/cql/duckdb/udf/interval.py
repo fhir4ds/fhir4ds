@@ -134,6 +134,10 @@ def _successor(value: Any) -> Any:
     - DateTime: +1 ms
     """
     if isinstance(value, int):
+        # Appendix C Successor: the successor of the maximum Long value
+        # is null (mirrors the native successor_bound int64 guard).
+        if value >= 9223372036854775807:
+            return None
         return value + 1
     if isinstance(value, float):
         # CQL Decimal minimum step is 10^-8
@@ -158,6 +162,10 @@ def _predecessor(value: Any) -> Any:
     - DateTime: -1 ms
     """
     if isinstance(value, int):
+        # Appendix C Predecessor: the predecessor of the minimum Long value
+        # is null (mirrors the native predecessor_bound int64 guard).
+        if value <= -9223372036854775808:
+            return None
         return value - 1
     if isinstance(value, float):
         # CQL Decimal minimum step is 10^-8
@@ -188,6 +196,32 @@ def _effective_start(iv: dict) -> Any:
     if iv.get("low_closed", True):
         return iv["low"]
     return _successor_for_bound(iv["low"], iv.get("low_raw"))
+
+
+def _sentinel_effective_start(iv: dict) -> Any:
+    """Effective Start with CQL §9.14 null-bound sentinel semantics.
+
+    A closed null low boundary resolves to the minimum value of the point
+    type (inferred from the high peer bound) instead of unknown, so
+    Meets / On Or After / On Or Before / Overlaps produce determined
+    results per the reference engine (Interval.start getter).
+    """
+    v = _effective_start(iv)
+    if v is None and iv.get("low_closed", True) and iv.get("high") is not None:
+        sent = _cql_minimum_for_peer_bound(iv["high"], iv.get("high_raw"))
+        if sent is not None:
+            return _parse_interval_bound(sent)
+    return v
+
+
+def _sentinel_effective_end(iv: dict) -> Any:
+    """Effective End with CQL §9.15 null-bound sentinel semantics."""
+    v = _effective_end(iv)
+    if v is None and iv.get("high_closed", True) and iv.get("low") is not None:
+        sent = _cql_maximum_for_peer_bound(iv["low"], iv.get("low_raw"))
+        if sent is not None:
+            return _parse_interval_bound(sent)
+    return v
 # Pattern matching valid point values: dates, datetimes, numbers
 _POINT_VALUE_RE = re.compile(
     r'^\d{4}(-\d{2}(-\d{2}(T\d{2}:\d{2}(:\d{2})?)?)?)?([+-]\d{2}:\d{2}|Z)?$'
@@ -301,18 +335,27 @@ def _format_adjusted_bound_for_raw(value: Any, raw_value: Any = None) -> Any:
 
 def _successor_for_bound(value: Any, raw_value: Any = None) -> Any:
     """Return successor using raw precision markers when available."""
-    temporal_step = _add_temporal_precision_step(value, raw_value, 1)
-    if temporal_step is not None:
-        return temporal_step
-    return _successor(value)
+    try:
+        temporal_step = _add_temporal_precision_step(value, raw_value, 1)
+        if temporal_step is not None:
+            return temporal_step
+        return _successor(value)
+    except (OverflowError, ValueError):
+        # CQL Appendix C Successor: unrepresentable results (e.g. successor
+        # of the maximum DateTime sentinel 9999-12-31T23:59:59.999) are null.
+        return None
 
 
 def _predecessor_for_bound(value: Any, raw_value: Any = None) -> Any:
     """Return predecessor using raw precision markers when available."""
-    temporal_step = _add_temporal_precision_step(value, raw_value, -1)
-    if temporal_step is not None:
-        return temporal_step
-    return _predecessor(value)
+    try:
+        temporal_step = _add_temporal_precision_step(value, raw_value, -1)
+        if temporal_step is not None:
+            return temporal_step
+        return _predecessor(value)
+    except (OverflowError, ValueError):
+        # CQL Appendix C Predecessor: unrepresentable results are null.
+        return None
 
 
 def _parse_interval_bound(value: Any) -> Any:
@@ -542,6 +585,31 @@ def _parse_interval(value: str) -> dict | None:
     }
 
 
+def _canonicalize_quantity_bound(raw_bound):
+    """Canonicalize a structured interval bound to the canonical Quantity
+    JSON shape (CQL-17 HISTORIAN QA-004).
+
+    Quantity bounds round-trip with the full {"value","unit","code","system"}
+    shape used by ``format_quantity_json`` (native) and the Width/Size UDFs;
+    non-Quantity structured bounds pass through unchanged.
+    """
+    if isinstance(raw_bound, dict) and "value" in raw_bound:
+        try:
+            value = float(raw_bound["value"])
+        except (TypeError, ValueError):
+            return raw_bound
+        unit = raw_bound.get("code") or raw_bound.get("unit") or "1"
+        # Canonical key order (value, unit, code, system) matches the
+        # native extension's format_quantity_json output byte-for-byte.
+        return {
+            "value": value,
+            "unit": raw_bound.get("unit") or unit,
+            "code": unit,
+            "system": raw_bound.get("system") or "http://unitsofmeasure.org",
+        }
+    return raw_bound
+
+
 def _raw_closed_bound(interval: str, primary_key: str, fhir_key: str, closed_key: str) -> str | None:
     """Return an explicit closed/default-closed raw interval bound.
 
@@ -564,7 +632,18 @@ def _raw_closed_bound(interval: str, primary_key: str, fhir_key: str, closed_key
         return None
     if raw_bound == "__null__":
         return None
-    return raw_bound if isinstance(raw_bound, str) else str(raw_bound)
+    if isinstance(raw_bound, str):
+        return raw_bound
+    # CQL-17 SKEPTIC QA-002: structured bounds (Quantity interval points)
+    # must serialize as JSON to match the native extension output;
+    # str(dict) emits a Python repr that is not valid JSON.
+    # CQL-17 HISTORIAN QA-004: Quantity dict bounds canonicalize to the
+    # full Quantity JSON shape (value/unit/code/system) to match the
+    # native extension and the Width/Size UDF output.
+    if isinstance(raw_bound, (dict, list)):
+        serialized = orjson.dumps(_canonicalize_quantity_bound(raw_bound)).decode("utf-8")
+        return serialized
+    return str(raw_bound)
 
 
 def _authored_closed_temporal_raw(iv: dict, raw_key: str, closed_key: str, open_key: str) -> str | None:
@@ -634,6 +713,37 @@ def _parse_date_or_datetime(value: str | date | datetime | None) -> date | datet
         return None
 
 
+def _quantity_unit_for_sentinel(peer: Any, raw_peer: Any) -> str:
+    """Extract the UCUM unit of a quantity peer bound for sentinel construction.
+
+    Falls back to the unitless '1' when no unit is recoverable.
+    """
+    for cand in (peer, raw_peer):
+        if cand is None:
+            continue
+        qj = _quantity_json(cand)
+        if qj:
+            try:
+                unit = orjson.loads(qj).get("unit")
+                if isinstance(unit, str) and unit:
+                    return unit
+            except (JSONDecodeError, TypeError, ValueError):
+                pass
+    return "1"
+
+
+def _is_long_peer(peer: Any) -> bool:
+    """True when an integer peer bound is outside the Integer (int32) range.
+
+    Authored Long-ness (the `L` suffix) is erased at translation, so magnitude
+    is the only recoverable Long signal; int32-range Long peers keep Integer
+    sentinels (documented boundary, unpinned by fixtures).
+    """
+    return isinstance(peer, int) and not isinstance(peer, bool) and (
+        peer > 2147483647 or peer < -2147483648
+    )
+
+
 def _cql_minimum_for_peer_bound(peer: Any, raw_peer: Any) -> str | None:
     """Return CQL point-type minimum for a closed null low boundary."""
     if _is_time_like_string(raw_peer):
@@ -641,11 +751,17 @@ def _cql_minimum_for_peer_bound(peer: Any, raw_peer: Any) -> str | None:
     if isinstance(peer, bool):
         return None
     if isinstance(peer, int):
-        return "-2147483648"
+        # §9.14 Start: minimum of the point type — Long (peer beyond int32)
+        # sentinels at int64 min (reference Constants.MIN_LONG).
+        return "-9223372036854775808" if _is_long_peer(peer) else "-2147483648"
     if isinstance(peer, float):
         return "-99999999999999999999.99999999"
     if _is_quantity_bound(peer):
-        return None
+        # Reference Interval.start getter: Quantity(MIN_DECIMAL, unit).
+        unit = _quantity_unit_for_sentinel(peer, raw_peer)
+        return orjson.dumps(
+            {"value": -99999999999999999999.99999999, "unit": unit}
+        ).decode("utf-8")
     if isinstance(peer, datetime):
         if isinstance(raw_peer, str) and ("T" in raw_peer or " " in raw_peer):
             return "0001-01-01T00:00:00.000+00:00"
@@ -662,11 +778,17 @@ def _cql_maximum_for_peer_bound(peer: Any, raw_peer: Any) -> str | None:
     if isinstance(peer, bool):
         return None
     if isinstance(peer, int):
-        return "2147483647"
+        # §9.15 End: maximum of the point type — Long sentinels at int64 max
+        # (reference Constants.MAX_LONG).
+        return "9223372036854775807" if _is_long_peer(peer) else "2147483647"
     if isinstance(peer, float):
         return "99999999999999999999.99999999"
     if _is_quantity_bound(peer):
-        return None
+        # Reference Interval.end getter: Quantity(MAX_DECIMAL, unit).
+        unit = _quantity_unit_for_sentinel(peer, raw_peer)
+        return orjson.dumps(
+            {"value": 99999999999999999999.99999999, "unit": unit}
+        ).decode("utf-8")
     if isinstance(peer, datetime):
         if isinstance(raw_peer, str) and ("T" in raw_peer or " " in raw_peer):
             return "9999-12-31T23:59:59.999+00:00"
@@ -809,6 +931,18 @@ def pointFrom(interval: str | None) -> str | None:
             return low_raw
 
     formatted = _format_adjusted_bound_for_raw(low, iv.get("low_raw"))
+    # CQL-17 HISTORIAN QA-004: Quantity points canonicalize to the full
+    # Quantity JSON shape (value/unit/code/system), matching the native
+    # extension and the Width/Size UDF output.
+    if isinstance(formatted, str) and formatted.startswith("{"):
+        try:
+            parsed_bound = orjson.loads(formatted)
+        except orjson.JSONDecodeError:
+            parsed_bound = None
+        if isinstance(parsed_bound, dict):
+            formatted = orjson.dumps(
+                _canonicalize_quantity_bound(parsed_bound)
+            ).decode("utf-8")
     if isinstance(formatted, (date, datetime)):
         return formatted.isoformat()
     if isinstance(formatted, float):
@@ -842,11 +976,15 @@ def intervalWidth(interval: str | None) -> str | None:
                 return None
             high_converted = high_pint.to(low_pint.units)
             unit = (low_parsed or {}).get("code") or (low_parsed or {}).get("unit") or "1"
+            # CQL-17 SKEPTIC QA-003: include the UCUM system to match
+            # interval_size and the native extension's Quantity JSON shape.
+            system = (low_parsed or {}).get("system") or "http://unitsofmeasure.org"
             import json as _json
             return _json.dumps({
                 "value": float(high_converted.magnitude - low_pint.magnitude),
                 "unit": unit,
                 "code": unit,
+                "system": system,
             })
         except Exception as e:
             _logger.debug("Unexpected error in UDF intervalWidth quantity comparison: %s", e)
@@ -1156,6 +1294,12 @@ def _precision_aware_compare(a, b) -> int | None:
                         a_s,
                         b_s,
                         promote_date_to_datetime=True,
+                        # Official CqlIntervalOperatorsTest.xml
+                        # DateTimeIncludedInNull pins interval-boundary
+                        # second-vs-millisecond precision mismatch as
+                        # UNCERTAIN; fixtures outrank the combined-decimal
+                        # rule for public comparisons.
+                        combined_seconds_ms=False,
                     )
                     if not certain:
                         return None  # Uncertain due to precision mismatch
@@ -1440,11 +1584,10 @@ def _unwrap_bound_for_json(val):
             try:
                 parsed = orjson.loads(stripped)
                 if isinstance(parsed, dict) and "value" in parsed:
-                    quantity = {"value": parsed["value"]}
-                    unit = parsed.get("unit") or parsed.get("code")
-                    if unit is not None:
-                        quantity["unit"] = unit
-                    return quantity
+                    # CQL-17 HISTORIAN QA-004: canonical Quantity JSON shape
+                    # (value/unit/code/system), matching the native
+                    # extension and the Width/Size UDFs.
+                    return _canonicalize_quantity_bound(parsed)
                 return parsed
             except (JSONDecodeError, TypeError, ValueError):
                 pass
@@ -1557,9 +1700,11 @@ def intervalOnOrAfter(interval1: str | None, interval2: str | None) -> bool | No
     iv2 = _parse_interval(interval2)
     if not iv1 or not iv2:
         return None
-    # start of first >= end of second
-    start1 = _effective_start(iv1)
-    end2 = _effective_end(iv2)
+    # start of first >= end of second; closed null bounds sentinelize to
+    # the min/max of the point type (CQL §9.14 Start / §9.15 End) so
+    # unbounded intervals produce determined results instead of null.
+    start1 = _sentinel_effective_start(iv1)
+    end2 = _sentinel_effective_end(iv2)
     if start1 is None or end2 is None:
         return None
     start1_raw = _authored_closed_temporal_raw(iv1, "low_raw", "low_closed", "low_was_open")
@@ -1586,9 +1731,11 @@ def intervalOnOrBefore(interval1: str | None, interval2: str | None) -> bool | N
     iv2 = _parse_interval(interval2)
     if not iv1 or not iv2:
         return None
-    # end of first <= start of second
-    end1 = _effective_end(iv1)
-    start2 = _effective_start(iv2)
+    # end of first <= start of second; closed null bounds sentinelize to
+    # the min/max of the point type (CQL §9.14 Start / §9.15 End) so
+    # unbounded intervals produce determined results instead of null.
+    end1 = _sentinel_effective_end(iv1)
+    start2 = _sentinel_effective_start(iv2)
     if end1 is None or start2 is None:
         return None
     end1_raw = _authored_closed_temporal_raw(iv1, "high_raw", "high_closed", "high_was_open")
@@ -1617,8 +1764,11 @@ def intervalMeets(interval1: str | None, interval2: str | None) -> bool | None:
         return None
 
     # Check iv1 meets iv2: successor(effective end of iv1) == effective start of iv2
-    end1 = _effective_end(iv1)
-    start2 = _effective_start(iv2)
+    # Closed null bounds sentinelize to the min/max of the point type
+    # (CQL §9.14 Start / §9.15 End), so unbounded intervals produce
+    # determined results instead of null.
+    end1 = _sentinel_effective_end(iv1)
+    start2 = _sentinel_effective_start(iv2)
     if end1 is not None and start2 is not None:
         succ = _successor_for_bound(end1, iv1.get("high_raw"))
         if succ is not None:
@@ -1627,8 +1777,8 @@ def intervalMeets(interval1: str | None, interval2: str | None) -> bool | None:
                 return True
 
     # Check iv2 meets iv1: successor(effective end of iv2) == effective start of iv1
-    end2 = _effective_end(iv2)
-    start1 = _effective_start(iv1)
+    end2 = _sentinel_effective_end(iv2)
+    start1 = _sentinel_effective_start(iv1)
     if end2 is not None and start1 is not None:
         succ = _successor_for_bound(end2, iv2.get("high_raw"))
         if succ is not None:
@@ -1931,6 +2081,18 @@ def _interval_bound_equals_nullable(
     raw_key = f"{side}_raw"
     closed_key = f"{side}_closed"
     open_key = f"{side}_was_open"
+    bound1 = iv1.get(side)
+    bound2 = iv2.get(side)
+    if bound1 is None or bound2 is None:
+        if bound1 is None and bound2 is None:
+            return True
+        # CQL 1.5 §Equal (interval, via Start/End): a one-sided CLOSED null
+        # bound is unknown, so the equality is uncertain (null). An OPEN null
+        # bound is unbounded, which is definitely unequal to a finite bound.
+        null_iv = iv1 if bound1 is None else iv2
+        if null_iv.get(closed_key, True):
+            return None
+        return False
     raw1 = _authored_closed_temporal_raw(iv1, raw_key, closed_key, open_key)
     raw2 = _authored_closed_temporal_raw(iv2, raw_key, closed_key, open_key)
     if raw1 is not None and raw2 is not None:
@@ -2150,15 +2312,18 @@ def intervalMeetsBefore(interval1: str | None, interval2: str | None) -> bool | 
     iv2 = _parse_interval(interval2)
     if not iv1 or not iv2:
         return None
-    end1 = _effective_end(iv1)
-    start2 = _effective_start(iv2)
+    end1 = _sentinel_effective_end(iv1)
+    start2 = _sentinel_effective_start(iv2)
     if end1 is None or start2 is None:
         if _interval_definitely_after(iv1, iv2):
             return False
         return None
     succ = _successor_for_bound(end1, iv1.get("high_raw"))
     if succ is None:
-        return None
+        # Successor overflow at the maximum point-type sentinel (Appendix C):
+        # end1 is the maximum representable value, so no start2 can meet it —
+        # mirror the native meets_before_nullable isMax guard (false, not null).
+        return False
     s, t = _normalize_for_compare(succ, start2)
     return s == t
 
@@ -2694,21 +2859,198 @@ def intervalExcept(interval1: str | None, interval2: str | None) -> str | None:
     return None
 
 
-def collapse_intervals(intervals_json: str | None) -> str | None:
+def _parse_collapse_per(per_json: Any) -> Any:
+    """Parse the Collapse ``per`` quantity JSON into (value, unit).
+
+    Returns None when per is null (default per semantics: no extension).
+    Returns "INVALID" when per is present but unparseable or non-positive
+    in a way that cannot drive merge semantics (→ SQL NULL result).
+    """
+    if per_json is None:
+        return None
+    try:
+        payload = orjson.loads(per_json) if isinstance(per_json, str) else per_json
+    except (JSONDecodeError, TypeError, ValueError):
+        return "INVALID"
+    if not isinstance(payload, dict):
+        return "INVALID"
+    value = payload.get("value")
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return "INVALID"
+    if value < 0:
+        return "INVALID"
+    unit = payload.get("unit") or payload.get("code") or ""
+    return (float(value), str(unit))
+
+
+def _extend_bound_by_per(iv: dict, per_ext: tuple) -> tuple | str | None:
+    """Extend an interval's high bound by the Collapse per quantity.
+
+    Returns (extended_value, extended_raw) for the merge-window decision,
+    None when no extension applies (incompatible units → treated upstream),
+    or the sentinel "PRECISION_MEETS" for a temporal per of exactly 0 or 1
+    unit: per reference CollapseEvaluator, the interval is NOT extended but
+    the overlaps/meets decision runs at the per-unit precision.
+    """
+    per_value, per_unit = per_ext
+    high = iv["high"]
+    if high is None:
+        return None
+    unit_l = per_unit.strip().lower()
+    is_temporal_unit = unit_l in {
+        "year", "years", "a", "month", "months", "mo", "week", "weeks", "wk",
+        "day", "days", "d", "hour", "hours", "h", "minute", "minutes", "min",
+        "second", "seconds", "s", "millisecond", "milliseconds", "ms",
+    }
+    if isinstance(high, (date, datetime)):
+        # Temporal per with value 1 (or 0): no extension — the merge
+        # decision runs at the per-unit precision (reference
+        # CollapseEvaluator: applyPer = interval unchanged, precision =
+        # per.unit). Weeks have no native comparison precision, so they
+        # extend numerically by 7 days per unit instead.
+        if not is_temporal_unit:
+            return None
+        if per_value in (0.0, 1.0):
+            if unit_l in ("week", "weeks", "wk"):
+                return _extend_bound_by_per(
+                    iv, (7.0 * (per_value if per_value else 1.0), "days")
+                )
+            return "PRECISION_MEETS"
+        from .datetime import dateAddQuantity
+        raw = iv.get("high_raw")
+        raw_str = str(raw) if raw is not None else str(high)
+        per_json_text = orjson.dumps(
+            {"value": per_value, "unit": per_unit}
+        ).decode("utf-8")
+        extended_raw = dateAddQuantity(raw_str, per_json_text)
+        if extended_raw is None:
+            return None
+        extended_val = _parse_interval_bound(extended_raw)
+        if extended_val is None:
+            return None
+        return (extended_val, extended_raw)
+    if _is_quantity_bound(high):
+        if is_temporal_unit or unit_l in ("", "1"):
+            return None
+        numeric = _quantity_numeric(high)
+        if numeric is None:
+            return None
+        extended = _quantity_bound_with_numeric(high, numeric + per_value)
+        return (extended, None)
+    # Numeric bounds (int/float): per must use the default unit '1'
+    if is_temporal_unit:
+        return None
+    if per_value == 0.0:
+        return None
+    if isinstance(high, int) and float(per_value).is_integer():
+        return (high + int(per_value), None)
+    return (high + per_value, None)
+
+
+_TEMPORAL_UNIT_TRUNC_LEN = {
+    "year": 4, "years": 4, "a": 4,
+    "month": 7, "months": 7, "mo": 7,
+    "week": 10, "weeks": 10, "wk": 10,
+    "day": 10, "days": 10, "d": 10,
+    "hour": 13, "hours": 13, "h": 13,
+    "minute": 16, "minutes": 16, "min": 16,
+    "second": 19, "seconds": 19, "s": 19,
+}
+
+
+def _temporal_precision_meets_or_overlaps(
+    high_bound: Any, low_bound: Any, unit: str
+) -> bool | None:
+    """Collapse per 0/1 merge decision at the per-unit precision.
+
+    Reference CollapseEvaluator keeps the interval unextended for a
+    temporal per of 0 or 1 but passes ``precision = per.unit`` to the
+    Overlaps/Meets evaluators. Equivalent formulation: truncate both
+    bounds to the per-unit precision; the intervals overlap-or-meet iff
+    the truncated low is <= the successor (at that precision) of the
+    truncated high. Returns None when the bounds are not comparable
+    temporal strings (caller should not merge).
+    """
+    n = _TEMPORAL_UNIT_TRUNC_LEN.get(str(unit).strip().lower())
+    if n is None:
+        return None
+
+    def _iso(bound: Any) -> str | None:
+        if bound is None:
+            return None
+        s = str(bound).strip().replace(" ", "T")
+        if s.startswith("T") or len(s) < 4:
+            return None
+        # Reject timezone-suffixed values: naive prefix truncation is
+        # unsafe across offsets.
+        core = s[10:] if len(s) > 10 else ""
+        if any(c in core for c in ("+", "Z", "z")):
+            return None
+        return s
+
+    h = _iso(high_bound)
+    l = _iso(low_bound)
+    if h is None or l is None:
+        return None
+    h_t = h[:n]
+    l_t = l[:n]
+    if len(h) < n or len(l) < n:
+        # A bound coarser than the requested precision: reference
+        # comparisons at a precision finer than a boundary are
+        # uncertain — do not merge on uncertain data.
+        return None
+    unit_l = str(unit).strip().lower()
+    if unit_l in ("year", "years", "a"):
+        succ = f"{int(h_t) + 1:04d}"
+    elif unit_l in ("month", "months", "mo"):
+        y, m = int(h_t[:4]), int(h_t[5:7])
+        m += 1
+        if m > 12:
+            y, m = y + 1, 1
+        succ = f"{y:04d}-{m:02d}"
+    else:
+        # day/week/hour/minute/second successor at the truncated
+        # precision: convert to the parsed precision just coarser and
+        # use the datetime successor.
+        try:
+            if unit_l in ("day", "days", "d", "week", "weeks", "wk"):
+                base = date.fromisoformat(h_t)
+                succ = (base + timedelta(days=1)).isoformat()
+            elif unit_l in ("hour", "hours", "h"):
+                base = datetime.fromisoformat(h_t)
+                succ = (base + timedelta(hours=1)).isoformat()
+            elif unit_l in ("minute", "minutes", "min"):
+                base = datetime.fromisoformat(h_t)
+                succ = (base + timedelta(minutes=1)).isoformat()
+            else:
+                base = datetime.fromisoformat(h_t)
+                succ = (base + timedelta(seconds=1)).isoformat()
+        except ValueError:
+            return None
+    return l_t <= succ[:n]
+
+
+def collapse_intervals(intervals_json: str | None, per_json: Any = None) -> str | None:
     """Collapse a list of intervals into non-overlapping, merged intervals.
 
     In CQL, ``collapse`` merges overlapping or adjacent intervals into a
-    minimal set of disjoint intervals.
+    minimal set of disjoint intervals. With ``per`` (CQL 1.5 §9), each
+    interval's end is extended by ``per`` for the merge decision only;
+    output intervals keep their original boundaries.
 
     Args:
         intervals_json: JSON array of interval objects, each with
             ``low``, ``high``, ``lowClosed``, ``highClosed`` keys.
+        per_json: optional quantity JSON for the per argument.
 
     Returns:
         JSON array of collapsed interval objects, or None on invalid input.
     """
     import json as _json
 
+    per_ext = _parse_collapse_per(per_json)
+    if per_ext == "INVALID":
+        return None
     if not intervals_json:
         return None
     try:
@@ -2807,12 +3149,39 @@ def collapse_intervals(intervals_json: str | None) -> str | None:
                 last["high_closed"] = current.get("high_closed", True)
             continue
         last_high, cur_low = _normalize_for_compare(last["high"], current["low"])
-        succ_high = _successor_for_bound(last["high"], last.get("high_raw"))
-        if succ_high is not None:
-            succ_norm, cur_low_norm = _normalize_for_compare(succ_high, current["low"])
-            adjacent_or_overlap = succ_norm >= cur_low_norm
+        # CQL 1.5 §9 Collapse(argument, per): the per argument widens the
+        # merge window — each interval's end is extended by `per` for the
+        # overlap/meets decision only; the output intervals keep their
+        # ORIGINAL boundaries (reference CollapseEvaluator.
+        # getIntervalWithPerApplied). Temporal per with value 1 (or 0)
+        # performs precision-based meets/overlaps instead of extension.
+        adj_value, adj_raw = last["high"], last.get("high_raw")
+        precision_unit = None
+        if per_ext is not None:
+            extended = _extend_bound_by_per(last, per_ext)
+            if extended == "PRECISION_MEETS":
+                precision_unit = per_ext[1]
+            elif extended is not None:
+                adj_value, adj_raw = extended
+        if precision_unit is not None:
+            cur_raw = current.get("low_raw")
+            cur_raw = cur_raw if cur_raw is not None else current["low"]
+            adjacent_or_overlap = bool(
+                _temporal_precision_meets_or_overlaps(
+                    adj_raw if adj_raw is not None else adj_value,
+                    cur_raw,
+                    precision_unit,
+                )
+            )
         else:
-            adjacent_or_overlap = last_high >= cur_low
+            succ_high = _successor_for_bound(adj_value, adj_raw)
+            if succ_high is not None:
+                succ_norm, cur_low_norm = _normalize_for_compare(succ_high, current["low"])
+                adjacent_or_overlap = succ_norm >= cur_low_norm
+            else:
+                adjacent_or_overlap = (
+                    _normalize_for_compare(adj_value, current["low"])[0] >= cur_low
+                )
         if adjacent_or_overlap:
             if current["high"] is None:
                 last["high"] = None
@@ -2830,10 +3199,21 @@ def collapse_intervals(intervals_json: str | None) -> str | None:
         else:
             merged.append(current)
 
-    def _format_bound(val):
+    def _format_bound(val, raw=None):
         """Format a bound value back to its original type representation."""
         if val is None:
             return None
+        if (
+            isinstance(val, (date, datetime))
+            and isinstance(raw, str)
+            and len(raw) in (4, 7, 10, 13, 16, 19)
+            and raw[:4].isdigit()
+        ):
+            # Temporal bound: preserve the authored precision in the
+            # output (mirrors the native extension's
+            # DateTimeValue::to_string, which serializes at the parsed
+            # precision). Both engines round-trip authored boundaries.
+            return raw
         if input_type == "time" and isinstance(val, (int, float)):
             ms = int(val)
             h = ms // 3600000
@@ -2855,8 +3235,8 @@ def collapse_intervals(intervals_json: str | None) -> str | None:
     result = []
     for iv in merged:
         result.append({
-            "low": _format_bound(iv["low"]),
-            "high": _format_bound(iv["high"]),
+            "low": _format_bound(iv["low"], iv.get("low_raw")),
+            "high": _format_bound(iv["high"], iv.get("high_raw")),
             "lowClosed": iv["low_closed"],
             "highClosed": iv["high_closed"],
         })
@@ -3171,6 +3551,20 @@ def _expand_impl(interval_or_list, per) -> str | None:
         high_is_null = high_raw is None or high_raw == "__null__"
         if low_is_null and high_is_null:
             return None
+        # CQL 1.5 §9 Expand: "For intervals with null boundaries..., if
+        # the boundary is open (e.g., Interval[0, null)), the interval
+        # will not contribute any results to the output." A single
+        # interval with an OPEN null bound therefore yields an empty
+        # list. If the null boundary is CLOSED, "implementations are
+        # allowed to not return results for such an interval"; we
+        # return null, matching the native C++ extension (the two
+        # engines must not diverge on this surface).
+        if low_is_null or high_is_null:
+            low_closed = only.get("lowClosed", True)
+            high_closed = only.get("highClosed", True)
+            if (low_is_null and not low_closed) or (high_is_null and not high_closed):
+                return "[]"
+            return None
 
     result = []
     for iv in intervals:
@@ -3318,13 +3712,37 @@ def _expand_temporal(low_raw, high_raw, low_parsed, high_parsed,
     """Expand a date/datetime interval into unit intervals."""
     # Determine default step
     if step_unit is None:
-        # Default based on type
-        if isinstance(low_parsed, datetime):
-            step_unit = "millisecond"
-            step_value = 1.0
-        else:
-            step_unit = "day"
-            step_value = 1.0
+        # CQL §9 Expand: "If the per argument is null, a per value will be
+        # constructed based on the coarsest precision of the boundaries of
+        # the intervals in the input set." (CQL-15 EXPLORER QA-002: this
+        # replaces the previous type-based millisecond/day default.)
+        _rank_units = {0: "year", 1: "month", 2: "day", 3: "hour",
+                       4: "minute", 5: "second", 6: "millisecond"}
+
+        def _raw_dt_rank_default(raw: Any) -> int:
+            s = str(raw).strip()
+            rank = 0
+            if len(s) >= 7 and s[4] == "-":
+                rank = 1
+            else:
+                return 0
+            if len(s) >= 10 and s[7] == "-":
+                rank = 2
+            if "T" in s or " " in s:
+                t_part = s.replace(" ", "T").split("T", 1)[1]
+                rank = 3
+                if ":" in t_part:
+                    rank = 4
+                    rest = t_part.split(":", 1)[1]
+                    if ":" in rest:
+                        rank = 5
+                    if "." in t_part:
+                        rank = 6
+            return rank
+
+        _coarsest = min(_raw_dt_rank_default(low_raw), _raw_dt_rank_default(high_raw))
+        step_unit = _rank_units.get(_coarsest, "day")
+        step_value = 1.0
     elif not _is_temporal_expand_unit(step_unit):
         return []
     if step_value is None:
@@ -3392,11 +3810,84 @@ def _expand_temporal(low_raw, high_raw, low_parsed, high_parsed,
         if isinstance(low_parsed, datetime):
             high_parsed = datetime(high_parsed.year, high_parsed.month, high_parsed.day)
 
+    # CQL §9 Expand: "If the interval boundaries are more precise than the
+    # per quantity, the more precise values will be truncated to the
+    # precision specified by the per quantity." And: for Date/DateTime
+    # values "where the lack of precision indicates uncertainty, the
+    # interval will not contribute any results to the output, because
+    # adding the per to the lower boundary of the input interval results
+    # in null" (boundaries LESS precise than per → no contribution).
+    # CQL-15 EXPLORER QA-002: mirror the Time-overload behavior for
+    # Date/DateTime boundaries (spec examples use exactly these rules).
+    _per_rank_map = {
+        "years": 0, "months": 1, "weeks": 2, "days": 2,
+        "hours": 3, "minutes": 4, "seconds": 5, "milliseconds": 6,
+    }
+    _per_rank = _per_rank_map.get(td_unit, 2)
+
+    def _raw_dt_rank(raw: Any) -> int:
+        s = str(raw).strip()
+        rank = 0
+        if len(s) >= 7 and s[4] == "-":
+            rank = 1
+        else:
+            return 0
+        if len(s) >= 10 and s[7] == "-":
+            rank = 2
+        if "T" in s or " " in s:
+            t_part = s.replace(" ", "T").split("T", 1)[1]
+            rank = 3
+            if ":" in t_part:
+                rank = 4
+                rest = t_part.split(":", 1)[1]
+                if ":" in rest:
+                    rank = 5
+                if "." in t_part:
+                    rank = 6
+        return rank
+
+    def _truncate_dt_to_rank(dt: Any, rank: int) -> Any:
+        if not isinstance(dt, datetime):
+            # Plain date: only month/day components exist.
+            if rank <= 0:
+                return dt.replace(month=1, day=1)
+            if rank == 1:
+                return dt.replace(day=1)
+            return dt
+        if rank <= 0:
+            return dt.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        if rank == 1:
+            return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if rank == 2:
+            return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        if rank == 3:
+            return dt.replace(minute=0, second=0, microsecond=0)
+        if rank == 4:
+            return dt.replace(second=0, microsecond=0)
+        if rank == 5:
+            return dt.replace(microsecond=0)
+        return dt
+
+    if _raw_dt_rank(low_raw) < _per_rank:
+        # Boundary less precise than per: adding per to the lower boundary
+        # is null → the interval contributes nothing.
+        return []
+    if _raw_dt_rank(low_raw) > _per_rank:
+        low_parsed = _truncate_dt_to_rank(low_parsed, _per_rank)
+
     start = low_parsed
     end = high_parsed
     if not low_closed:
         start = _add_step(start)
-    if not high_closed:
+    # When the high boundary is MORE precise than the per, keep the
+    # ORIGINAL bound for the loop comparison: only the low boundary is
+    # truncated to the per grid, and partitions on the grid compare
+    # against the authored high (official fixture: expand
+    # Interval[@T10:00, @T12:30) per hour -> {T10, T11, T12}). The
+    # predecessor (_sub_step) rule applies only when the high boundary is
+    # at or coarser than the per precision.
+    _high_more_precise = _raw_dt_rank(high_raw) > _per_rank
+    if not high_closed and not _high_more_precise:
         end = _sub_step(end)
 
     def _format_dt(dt):
@@ -3498,6 +3989,20 @@ def _expand_time(low_raw, high_raw, low_parsed_millis, high_parsed_millis,
     # If per is more precise than boundary, return empty
     if per_rank > input_rank:
         return []
+
+    # CQL 1.5 §9 Expand: "If the interval boundaries are more precise than
+    # the per quantity, the more precise values will be truncated to the
+    # precision specified by the per quantity." (CQL-15 EXPLORER QA-002;
+    # mirrors _expand_temporal's _raw_dt_rank handling.) Truncate to ONE
+    # per-unit boundary (precision truncation, not step-grid alignment):
+    # Interval[@T10:30, @T12:00] per hour -> {T10, T11, T12}.
+    if input_rank > per_rank:
+        _unit_ms = millis_per.get(step_unit.lower(), 3600000)
+        # Only the LOW boundary is truncated to the per grid; the loop
+        # compares grid starts against the ORIGINAL high bound (official
+        # fixture: expand Interval[@T10:00, @T12:30) per hour ->
+        # {T10, T11, T12}).
+        low_parsed_millis = (int(low_parsed_millis) // _unit_ms) * _unit_ms
 
     step_ms = int(step_value * millis_per.get(step_unit.lower(), 3600000))
 
@@ -3602,7 +4107,23 @@ def registerIntervalUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("intervalUnion", intervalUnion, null_handling="special")
     con.create_function("intervalExcept", intervalExcept, null_handling="special")
     con.create_function("pointFrom", pointFrom, null_handling="special")
-    con.create_function("collapse_intervals", collapse_intervals, null_handling="special")
+    def _collapse_intervals_single(intervals_json):  # noqa: ANN001
+        return collapse_intervals(intervals_json, None)
+
+    con.create_function(
+        "collapse_intervals",
+        _collapse_intervals_single,
+        parameters=["VARCHAR"],
+        return_type="VARCHAR",
+        null_handling="special",
+    )
+    con.create_function(
+        "collapse_intervals_per",
+        collapse_intervals,
+        parameters=["VARCHAR", "VARCHAR"],
+        return_type="VARCHAR",
+        null_handling="special",
+    )
     con.create_function("expand", expand, parameters=["VARCHAR[]", "VARCHAR"], return_type="VARCHAR", null_handling="special")
     con.create_function("expand1", expand1, parameters=["VARCHAR[]"], return_type="VARCHAR", null_handling="special")
     con.create_function("expand_points", expand_points, parameters=["VARCHAR", "VARCHAR"], return_type="VARCHAR", null_handling="special")

@@ -1,6 +1,168 @@
 # ViewDefinition Agent Notes
 
 ## Known Fragile Areas
+- SOF-VD-10 HISTORIAN pass verified clean (2026-08-23), zero fixes. New
+  pins from a fresh fetch of the official validator
+  `FHIR/sql-on-fhir.js@main/sof-js/src/validate.js` (cached at
+  `.temp/qa/sof_vd10_historian_2026_08_23/validate.js`) plus a full SD
+  element/invariant dump: (1) constant items have NO
+  `additionalProperties:false` in the official validator — unknown fields
+  on a constant item are ACCEPTED (do not "tighten" this to match
+  column/select/where; they genuinely differ). value[x] is a oneOf over 20
+  typed fields: dual/missing/null value[x], valueInteger=1.5,
+  valuePositiveInt=0, valueUnsignedInt=-1 are all rejected — matches
+  official. (2) `valueInteger: 3.0` is rejected by fhir4ds but ACCEPTED by
+  Ajv (`Number.isInteger(3.0)` is true) — intended stricter boundary per
+  FHIR integer representation (no decimal point); do not loosen. (3) The
+  2.0.0 SD snapshot has NO `select.where` and NO `select.repeat` elements;
+  both are accepted per reference-validator/doctrine (SOF-VD-05/09) —
+  re-confirmed, not drift. (4) validation-order: resource and select
+  required-field errors surface before name/constant/iterator errors;
+  deeply multi-fault VDs yield a single typed ParseError (no stacks).
+  (5) `Constant.to_dict()` emits `decimal.Decimal` on the strict
+  JSON-string parse path, so `json.dumps(vd.to_dict())` raises TypeError
+  for decimal constants, and dict-input vs string-input parses give float
+  vs Decimal (dataclass inequality across entry points). DEFERRED with
+  doctrine: Decimal is the canonical lossless in-memory repr
+  (parse_float=Decimal doctrine); callers serializing to JSON must use a
+  Decimal-aware encoder; stdlib json cannot losslessly encode FHIR's
+  18-digit decimals as a built-in. No production consumer today.
+  Probes: `.temp/qa/sof_vd10_historian_2026_08_23/{probe,probe2}.py`
+  (33+13 assertions, maximal-VD round-trip, dual-engine decimal constant).
+
+- SOF-VD-10 SKEPTIC cross-cutting sweep verified clean (2026-08-23):
+  re-verified the whole validation surface against a freshly fetched
+  ig/2.0.0 StructureDefinition (saved at
+  `.temp/qa/sof_vd10_skeptic_2026_08_23/sd-vd-v2.json`). Pins for future
+  chunks: (1) sql-name has NO length cap in the SD — 65/300/1000-char names
+  and SQL-keyword names (`select`) are VALID; do not add a length limit.
+  (2) `ViewDefinition.profile` carries NO constraint in SD 2.0.0, and FHIR
+  canonical is `<url>[|<version>[|<fragment>]]` with regex `\S*` — accepting
+  `|` and `#` in profile arrays is spec-compliant (space rejection is the
+  only normative lexical rule); cnl-1 on single-value `ViewDefinition.url` is
+  WARNING severity per the official SD (FHIR/sql-on-fhir-v2
+  StructureDefinition-ViewDefinition.xml element ViewDefinition.url,
+  severity=warning; sql-on-fhir.js reference implementation does not check it
+  at all) — `|`/`#` urls parse and round-trip; the warning is produced by
+  `cnl1_url_warning` (types.py) from validate_view_definition (parser.py);
+  whitespace stays a lexical `uri` error in `validate_canonical_string`.
+  (3) sql-expressions in SD 2.0.0 is `(forEach|forEachOrNull).count()<=1`
+  only — repeat is absent from the SD; fhir4ds' <=1-of-3 rule is the
+  fixture-pinned superset (keep it). (4) expectError official fixtures
+  (11/144) are asserted explicitly via `assert_spec_error_is_raised`
+  (pytest.fail on acceptance) at generation and execution — the parse-level
+  test intentionally tolerates either outcome because the error may surface
+  at generation. (5) types.py validators raise plain ValueError; the strict
+  parser boundary wraps them into typed ParseError, and direct-dataclass
+  __post_init__ surfaces ValueError — acceptable because SQLOnFHIRError
+  subclasses ValueError (SOF-VD-01); do not churn raise sites for this.
+  Probes: `.temp/qa/sof_vd10_skeptic_2026_08_23/{probe,probe2}.py`
+  (95 assertions, dual-engine execution parity).
+
+- SOF-VD-09 SKEPTIC fresh rerun fixed (2026-08-23): `_parse_where`
+  (`fhir4ds/viewdef/parser.py`) delegated wholly to the permissive
+  `validate_where_conditions` convenience validator, so the strict official
+  JSON boundary accepted non-array `where` (bare string, single object),
+  list-of-string items, and where items with unknown extra keys. The official
+  validator (FHIR/sql-on-fhir.js sof-js/src/validate.js) declares
+  ViewDefinition.where as {type: array, items: {type: object, required:
+  ['path'], additionalProperties: false, properties: {path, description}}},
+  and FHIR JSON repeating (max="*") elements MUST be arrays. `_parse_where`
+  now enforces that shape with typed ParseError; `validate_where_conditions`
+  (types.py) intentionally remains permissive for direct-dataclass /
+  serializer boundaries (SOF-VD-10 strict/permissive split). Regression class
+  `TestWhereOfficialJsonShapePerSpecSofVd09Skeptic` in tests/unit/test_parser.py;
+  three tests that encoded the string shorthand were updated. All other
+  chunk behaviors re-verified conformant on BOTH engines (32-assertion probe
+  `.temp/qa/sof_vd09_skeptic_2026_08_23/probe.py`): 0..* where AND semantics,
+  false/empty/missing/non-boolean/multi-item exclusion via exact
+  `fhirpath_json(...) = '[true]'`, description retention + null/numeric
+  rejection, %constants in where incl. backtick %`name` (spaced names
+  unreachable: Constant.name is sql-name-locked per SD), constants inside
+  where() args, complex FHIRPath (exists/iif/where()/substring), root-scope
+  preservation before top-level forEach rows, %resource/%rootResource in
+  where, resourceType-filter composition. Post-fix: viewdef pytest 1216/1216,
+  conformance 2832/2832.
+- SOF-VD-05 SKEPTIC fresh rerun fixed (2026-08-23): `_parse_select`
+  (`fhir4ds/viewdef/parser.py`) silently accepted unknown select-level fields
+  (e.g. a FHIR StructureDefinition-style `contentReference` or a `columns`
+  typo), dropping them and evaluating remaining columns in the parent context
+  — silent wrong results. The official validator
+  (`FHIR/sql-on-fhir.js sof-js/src/validate.js`) declares select items
+  `additionalProperties:false` (column, select, unionAll, forEach,
+  forEachOrNull, repeat), and neither SD 2.0.0 (releases) nor 3.0.0-ballot
+  (main) defines any other select element. `_parse_select` now rejects unknown
+  fields with a typed ParseError (allowlist keeps `where` per established
+  select-level-where doctrine, SOF-VD-09). Same fix also parses `column` and
+  nested `select` arrays with `require_non_empty=True` (validator minItems:1;
+  unionAll/repeat already had their guards). Regression class
+  `TestSelectUnknownFieldAndEmptyContainerRejectionPerSpecSofVd05Skeptic` in
+  tests/unit/test_parser.py. Probe:
+  `/mnt/d/fhir4ds/.temp/qa/sof_vd05_skeptic/probe.py` (17 behavioral
+  hypotheses + native/fallback parity — all nesting semantics verified
+  conformant: child context = foci per item under parent iterators else
+  parent $this; cross-join rowset composition; null-preserved rows with
+  collection columns NULL; %rowIndex reset per level; nested where null-guard;
+  %resource at depth; nested unionAll under non-iterator parent).
+- SOF-VD-04 EXPLORER fixed (2026-08-23): `ColumnTag` (types.py) reused the
+  whitespace-stripping `validate_required_string` — a doctrine correct for
+  FHIRPath-bearing fields (column.path, where.path) but overreach for opaque tag
+  metadata. The canonical v2 SD defines tag.name/tag.value as plain string 1..1
+  with NO minLength, so whitespace-only values like ' ' are spec-valid and were
+  wrongly rejected at parse. New `validate_tag_string` (non-empty, whitespace
+  allowed) is now used at all three ColumnTag validation sites; regression test
+  `test_column_tag_whitespace_only_strings_accepted` in tests/unit/test_parser.py.
+  DOCTRINE: each field validator must encode its OWN SD constraint — never borrow
+  strictness across semantically different field kinds. Also verified conformant
+  this launch (native/fallback parity): mixed-type multi-value collections,
+  nested collections in forEach/forEachOrNull, type-URI form matrix, 125-tag
+  volume/duplicate/`ansi/type`/unicode/5KB round-trips, unionAll collection-flag
+  mismatch rejection, collection on %constant paths, absent-field depth behavior.
+- SOF-VD-02 EXPLORER fixed (2026-08-23): `generator.py:_path_supports_runtime_type_guard`
+  classified the FHIRPath keyword literals `true`/`false` as simple navigation
+  (they lexically match `_SIMPLE_FHIRPATH_NAV_RE`), sending bare boolean
+  literal/constant columns (`column: [{name: flag, path: '%Flag'}] with
+  valueBoolean) into the simple-path runtime type guard whose type-unset
+  allowed set has only lowercase FHIR primitive names — `type().name` reports
+  System `Boolean`, so the row was rejected as "non-primitive outputs require
+  column.type". Spec: column.type is required only for non-primitive returns.
+  Fix routes bare `true`/`false` to the expression complex guard; dual-engine
+  regression tests in `tests/integration/test_duckdb.py::test_boolean_constant_column_without_type_*`.
+- SOF-VD-02 SKEPTIC fixed (2026-08-23): `constants.py:resolve_constant` silently
+  substituted integer64 constants outside the FHIRPath Integer (32-bit) literal
+  range as bare numeric literals; BOTH engines (native + Python fallback) fold
+  out-of-range literals to the empty collection with no error — silent NULL
+  columns / filtered-out rows. Now raises typed `ConstantResolutionError` at
+  resolution (and end-to-end via `SQLGenerator.generate`). Regression tests in
+  `tests/unit/test_constants.py::TestInteger64Range`. Note: full 64-bit
+  FHIRPath literal support would be net-new engine functionality (FP-chunk
+  scope); the guard converts silent wrong results into an explicit error.
+- SOF-VD-01 EXPLORER fixed (2026-08-23): `FHIR_VERSION_CODES` in
+  `fhir4ds/viewdef/metadata.py` had been populated with only the 24
+  top-level `[publication].[major]` codes of
+  http://hl7.org/fhir/FHIR-version. The required binding
+  http://hl7.org/fhir/ValueSet/FHIR-version includes the codesystem with
+  NO filter, so every child concept is in scope: full versions
+  (`4.0.1`, `4.3.0`, `5.0.0`, `6.0.0`, `1.0.2`, `0.0.82`), milestone
+  suffixes (`4.3.0-cibuild`, `4.3.0-snapshot1`, `5.0.0-snapshot1..3`,
+  `5.0.0-ballot`, `5.0.0-draft-final`, `6.0.0-ballot1..4`). The set now
+  carries the full 60-code 6.0.0-ballot4 list. Warning for future
+  refreshes: when re-deriving a FHIR value set, check whether the compose
+  include uses a `filter` or `concept` list — an unfiltered codesystem
+  include pulls ALL concepts including hierarchical children, and matching
+  only parent codes silently inverts validity (the old test asserted
+  `4.0.1` is INVALID). Also verified clean this launch (no action needed):
+  resource case/whitespace/empty/unicode/long forms all rejected by the
+  ResourceType binding; `profile` is informative (relative URLs, `|version`,
+  urn, `#frag`, duplicates, 150 entries all parse and never filter rows);
+  shared-table resourceType filter matches only top-level `$.resourceType`
+  (contained and Bundle-entry-nested same-type resources excluded);
+  `SQLGenerator` reuse across `generate()` calls rebinds
+  `_current_resource_type` per call (no cross-view leakage in one DuckDB
+  session); zero-row VDs yield [] through where/forEach; a VD declaring
+  `fhirVersion: ["4.0"]` still evaluates R6-only paths (returns NULL,
+  no filtering — informative semantics).
+
 - §G-5 spec suite refresh (2026-08-11): Pulled current
   `FHIR/sql-on-fhir.js` tests/ snapshot (134 → 144 tests; 12 new
   `repeat.json` tests covering recursive-traversal + forEach + unionAll
@@ -801,6 +963,50 @@
 
 ## NOT A BUG Registry
 
+- SOF-VD-07 HISTORIAN (2026-08-23): repeat paths accept full FHIRPath
+  expressions (where()-filters, `|` unions, children(), $this), not just dotted
+  paths — verified conformant with native==fallback parity on both engines
+  (fixture-untested but SD-permitted: "A list of FHIRPath expressions").
+  Invalid FHIRPath in a repeat path is rejected at generate time with a typed
+  ValidationError, identical to column-path treatment (the UDF-level catch is
+  defense-in-depth). `%resource`/`%context` inside repeat paths bind to the
+  per-node evaluation root on BOTH engines (fhirpath.js per-node evaluate
+  semantics). `%`-constants in repeat paths are VALUES, not path fragments:
+  `repeat: ['%P']` with valueString 'item' yields empty (string filtered by
+  dict-only collection) — correct FHIRPath semantics, do not "fix" by textual
+  substitution. Cycle-equivalent fixpoints (`$this`, `$this | item`,
+  `children() | $this.children()`) terminate via dedup on both engines. Deep
+  repeat is TIME-bound beyond ~10k JSON depth on WSL (O(n²) serialized
+  subtrees); timeout-without-crash is expected, not a defect (recursion-budget
+  segfault fix re-verified at depth 6000 exercising the worker-thread branch).
+  Probes: .temp/qa/sof_vd07_historian/{probe,probe2}.py.
+- SOF-VD-05 SKEPTIC (2026-08-23): `select.select` is the StructureDefinition
+  contentReference recursion to `ViewDefinition#ViewDefinition.select` — an SD
+  mechanism, NOT a user-facing field. No v2 SD version (2.0.0 or 3.0.0-ballot)
+  defines a per-select `contentReference`; "contentReference changes context
+  without creating rows" is FHIR StructureDefinition terminology and must not
+  be implemented. Child select context per functional-model.md: parent
+  forEach/forEachOrNull foci per item, else parent's `$this`. Related spec
+  fact: `where` is root-only in SD 2.0.0/3.0.0-ballot and absent from the
+  official validator's select schema; fhir4ds select-level `where` is a tested
+  superset (SOF-VD-09 doctrine) and remains supported. Also NOT A BUG: an
+  empty select object `{}` (no columns/children/iterator) is schema-valid per
+  the official validator (no required select-item fields) and behaves as an
+  identity rowset; present-empty `select: []`/`column: []` arrays ARE invalid
+  (minItems:1) and now rejected.
+
+- SOF-VD-02 SKEPTIC (2026-08-23): Temporal constants (date/dateTime/time/
+  instant) substitute as quoted STRING literals, not `@`-literals. The engine
+  coerces strings with semantics identical to native temporal literals
+  (equality works; precision-mismatch comparisons are empty in both forms),
+  and all official `constant_types.json` fixtures pass end-to-end. Also NOT A
+  BUG: `.hour` on a time constant is empty because the engine lacks
+  time-literal `.hour` natively too (`@T12:30:00.hour` -> []) — engine gap,
+  not constant-substitution divergence. Also NOT A BUG: unknown extra fields
+  inside `constant` items are tolerated, consistent with §G-3 unknown-field
+  roundtrip preservation; typo'd `value*` fields ARE rejected by the value[x]
+  extractor.
+
 - SOF-VD-05 HISTORIAN iter 3 (2026-07-05): String constants substituted into
   `forEach` paths produce literal-string foci, not navigation. Per FHIRPath
   `%Const` substitutes the constant's *value* into the expression — a string
@@ -999,3 +1205,204 @@
   constants centralized in `constants.py`; generator validation and substitution
   must share the same scanner so `%name` handling cannot drift between
   preflight and execution.
+- SOF-VD-01 SKEPTIC fixed (2026-08-23): `FHIR_VERSION_CODES` in
+  `fhir4ds/viewdef/metadata.py` is a stale R4B-era 42-code three-segment set.
+  The SQL-on-FHIR IG (3.0.0-ballot) builds on FHIR 6.0.0-ballot5 whose
+  REQUIRED FHIR-version binding (http://hl7.org/fhir/ValueSet/FHIR-version,
+  R6 code system) contains only 24 two-segment codes (`4.0`, `5.0`, `6.0`,
+  ...). Spec-valid codes were rejected and spec-invalid codes accepted. Fix:
+replaced the set with the official 24-code binding (two-segment
+[publication].[major]: 4.0, 5.0, 6.0, ...); three-segment (4.0.1) and
+milestone codes (5.0.0-snapshot1) are now correctly REJECTED per the
+required binding. When FHIR publishes new versions, refresh this set from
+https://build.fhir.org/codesystem-FHIR-version.json.
+  All other chunk elements verified clean (resource binding, profile
+  informative semantics + canonical validation, shared-table resourceType
+  root-row filter incl. unionAll branches and contained-resource
+  non-leakage, zero/multi-row semantics, default per-type table, generator
+  reuse state, official view_resource.json incl. expectError). Probe:
+  `.temp/qa/sof_vd01_skeptic_2026_08_23/probe.py`.
+
+- SOF-VD-02 EXPLORER (2026-08-23): `birthDate + %Years years` is REJECTED with
+  an explicit ValidationError by design: FHIRPath quantity literals are
+  Number + unit, and an external constant is a term, so `%Years years` is
+  ungrammatical even though the substituted text would lex as a quantity.
+  Grammar validation runs on the pre-substitution expression; keep it that
+  way. Also verified (fixed, see Known Fragile Areas): bare boolean-constant
+  columns must execute without column.type — Boolean is a FHIR primitive;
+  `true`/`false` are literals, not navigation, and must NOT match
+  `_SIMPLE_FHIRPATH_NAV_RE` guard routing. OPEN DEFERRAL (QA-002 LOW):
+  constants named after FHIRPath builtins (`resource`, `context`, `ucum`,
+  `rootResource`, `rowIndex`) parse but the builtin always wins at
+  `%name` resolution — spec is silent; consider a parse-time warning/error
+  when upstream clarifies.
+
+- SOF-VD-03 SKEPTIC (2026-08-23): Select chunk verified compliant. NOT A BUG:
+  sibling top-level `select` blocks are CROSS JOINED (per IG notes "Multiple
+  Select Expressions"), not UNIONed — do not "fix" this. NOT A BUG: unionAll
+  branch column matching is enforced at generation time (not parse time) with
+  a branch-diff error — spec only requires implementations to report an error.
+  NOT A BUG: `column.description` is retained via `to_dict()` roundtrip but not
+  emitted as a DDL COMMENT — spec defines it as documentation only. NOT A BUG:
+  SQL-reserved keywords as column names (`select`, `order`, ...) parse and
+  execute (identifiers are quoted). Fixed this launch: permissive-mode
+  collection preflight warning falsely claimed truncation ("only the first
+  will be used"); text now states the runtime guard raises per spec
+  (Select.column.collection SHALL). Deferred (LOW): runtime guard message
+  conflates multi-value cardinality violations with missing column.type
+  (single boolean guard condition; suite pins the fragment).
+
+- SOF-VD-04 HISTORIAN (2026-08-23): Column chunk (collection/type/tag) verified
+  against the canonical v2 2.0.0 StructureDefinition (HL7/sql-on-fhir releases
+  branch, ig/2.0.0/StructureDefinition-ViewDefinition.json; saved at
+  `.temp/qa/sof_vd04_historian/sd-viewdefinition-v2.json` — the live CI build now
+  serves v3.0.0-ballot). Conformant incl. sql-name on column.name, duplicate
+  column-name rejection, complex/primitive collection LIST output, decimal<-int
+  widening, string<-code acceptance, complex-under-primitive-declaration runtime
+  errors, native/fallback parity throughout. Fixed this launch (LOW diagnostic):
+  `_is_element_id_type` previously classified ANY dotted string as element-ID
+  notation, so absolute URIs with dots ('HTTP://…', third-party SD URLs,
+  'urn:oid:…') got the misleading cross-resource element-ID error; it now
+  requires a colon-free dotted path and such URIs raise the actionable
+  "Unsupported ViewDefinition column type" error. NOT A BUG: same-resource
+  element-ID misdeclaration (type 'Patient.contact' on a HumanName path) is
+  unreported — spec verb is "should", backbones are not runtime-typeable
+  (portable runtime-guard doctrine, SOF-VD-04 SKEPTIC).
+
+- SOF-VD-05 HISTORIAN (2026-08-23): nested-select chunk re-audited with new
+  composition probes (19/19, `/mnt/d/fhir4ds/.temp/qa/sof_vd05_historian/probe.py`)
+  on top of the SKEPTIC fixes (unknown select-field rejection + minItems:1 empty
+  containers — both re-verified at depth-3 and inside unionAll branches). Newly
+  pinned conformant: forEachOrNull-parent + child-forEach empty-part suppression
+  and null-preservation; per-focus `where` under forEach; unionAll branch
+  containing a nested select+forEach (rows set-equal; unionAll row order is
+  explicitly unpinned by the spec — never order-assert across union branches);
+  %rowIndex reset in a nested unionAll branch; nested select under repeat;
+  constants in depth-3 nested where; duplicate names across nested select vs
+  unionAll branch and at depth 4; 25-level identity nesting; %resource at depth.
+  NOT A BUG (QA-001 LOW INTENDED): `fhirpath_repeat` collects only complex (dict)
+  elements (udf.py `_evaluate_repeat_expression` isinstance-dict filter), so
+  primitive-yielding repeat paths like ["contact.name.given"] return empty on BOTH
+  engines. The v2 SD (2.0.0 releases) defines NO select.repeat element — repeat is
+  pinned solely by the legacy sql-on-fhir.js fixture suite, whose repeat paths all
+  traverse objects, and upstream sof-js (main) no longer implements repeat. Do not
+  "fix" without a fixture pin. Also re-pinned: column `type` must match the FHIR
+  primitive type of the path at runtime ("string" on birthDate errors — declare
+  "date"), and `repeat` is an array of FHIRPath strings.
+
+- SOF-VD-06 SKEPTIC (2026-08-23): forEach/forEachOrNull chunk re-audited against
+  the canonical v2 `StructureDefinition-ViewDefinition-notes.md` Process(S,N)
+  formal semantics (fetched from FHIR/sql-on-fhir-v2 main) plus the sql-on-fhir.js
+  reference implementation (`forEach()`/`forEachOrNull()`/`select()` in
+  sof-js/src/index.js). Zero CRITICAL/HIGH/MEDIUM divergences; 144/144 conformance
+  and 1185 pytest green. Pinned conformant behaviors (do not regress): singleton
+  foci (e.g. `forEach: "gender"`, `count()`, boolean) yield exactly one row on
+  both forEach and forEachOrNull; collection=true column is `[]` on a real focus
+  with empty result (Process step 2) but SQL NULL on the forEachOrNull-preserved
+  null row (step 3 binds null, not []); `%rowIndex` is 0 on the preserved null row
+  (step 3.1) and 0 at top level; sibling iterators carry independent
+  `%rowIndex` sequences; `%context` tracks the iterated focus (Process evaluates
+  `fhirpath(col.path, f)`, consistent with reference envVars); duplicate
+  `forEach` JSON keys fall through JSON last-wins exactly like the reference
+  JSON.parse (NOT A BUG); local spec_tests foreach/row_index/where JSONs are
+  byte-identical to upstream FHIR/sql-on-fhir.js tests. Doctrine note: v2 removed
+  `Select.where` (moved to `ViewDefinition.where`); our select-level where
+  (SOF-VD-09 superset) is evaluated per iterated focus when combined with forEach
+  on the same select — the reference impl instead drops such where entirely; our
+  per-focus reading follows Process step 2 and is the pinned behavior.
+
+- SOF-VD-06 EXPLORER (2026-08-23): third clean launch, chunk closed. New
+  parity-verified pins: heavy-FHIRPath forEach targets (exists-gated,
+  where().first(), iif-driven, extension.where, contained.ofType fast path),
+  JSON-null array elements excluded from iteration with %rowIndex counting the
+  filtered collection, evaluation-error forEach degrades to tolerant-empty
+  (forEach 0 rows / forEachOrNull 1 null row, both engines — Process(S,N)
+  silent on errors), list-valued %constants inexpressible per SD (parser
+  rejection correct), %rowIndex arithmetic/where at depth 3-5, depth-5 = one
+  flat JOIN LATERAL per level. Do NOT raise on iterator evaluation errors or
+  iterate null elements — both are pinned.
+
+- SOF-VD-09 EXPLORER (2026-08-23): fourth launch, clean — chunk SOF-VD-09
+  (root ViewDefinition.where) closed. Boundary pins, all native==fallback:
+  56 AND-chained root wheres lower to ONE flat WHERE (no nested subqueries);
+  heavy where trees (nested where()/exists()/iif + `birthDate + 10 years >
+  @2000-01-01`) correct; HISTORIAN's prefix-mixed-focus fail-loud guard holds
+  at forEach depth, inside unionAll branches, and under 3-level iterator
+  stacks; absent/JSON-null where operands exclude on every probed type;
+  collection-boolean where results ({true,true}, {true,false} via
+  `name.select(...)`) EXCLUDE the row (FHIRPath: only singleton true is true)
+  — NOT A BUG registry; where.description round-trips 5KB unicode/markdown
+  exactly; root where composes with resourceType guard on mixed shared tables
+  at 400 rows; non-boolean where results (numeric/string/string-collection)
+  exclude; `%constant` refs in where work; unknown `%bogus` builtins fail loud.
+  Probe trap to avoid: when hand-rolling P(...) builders, `"female" if i % 2
+  else "male"` maps ODD→female — verify builder vs expectation before logging
+  volume-test diffs (cost ~1h this launch).
+
+- SOF-VD-12 SKEPTIC (2026-08-23): chunk Profiling/Shareable/Tabular/Mappings/
+  XML/JSON closed CLEAN at iteration 1 after 1 fix. PIN: the Shareable/
+  Tabular profile SDs exist ONLY in the 3.0.0-ballot era (upstream added
+  2026-08-06/07, commits b5c475b2/ea6a303d "Ballot prep fixes"); their
+  canonical URLs have ALWAYS been http://hl7.org/fhir/uv/sql-on-fhir/
+  StructureDefinition/{Shareable,Tabular}ViewDefinition (also the form the
+  official ShareablePatientDemographics example declares). metadata.py now
+  recognizes BOTH those and the legacy https://sql-on-fhir.org/ig/... via
+  SHAREABLE/TABULAR_VIEWDEFINITION_PROFILE_CANONICALS alias frozensets —
+  add future canonicals to the registry, never as branch logic. Verified-good:
+  full CanonicalResource metadata (publisher/experimental/purpose/copyright/
+  contact/useContext/identifier/mapping/language/text/extension) round-trips
+  verbatim via extra_fields; versioned meta.profile canonicals (url|ver)
+  recognized; XML rejected with explicit ParseError (documented unsupported);
+  profiled VDs execute end-to-end; ShareablePatientDemographics output exact
+  (getResourceKey()→"Patient/<id>"). Engine stance (NOT A BUG registry):
+  profile conformance is validator-level; this engine enforces the two
+  profiles it knows at parse AND to_dict; unknown profile canonicals are
+  accepted without enforcement. Gates: viewdef pytest 1232, ViewDef 144/144,
+  master 2832/2832; md5 fhirpath 57d0634b…, cql c5b22d58… repo==site-packages
+  (Python-only fix). Probes: .temp/qa/sof_vd12_skeptic/.
+- SOF-VD-12 HISTORIAN 2nd launch (2026-08-23): Shareable/Tabular rule set is
+  COMPLETE. Enumerated every differential constraint from the ACTUAL upstream
+  profile SDs (HL7/sql-on-fhir HEAD `input/resources/viewdefinition/
+  StructureDefinition-{Shareable,Tabular}ViewDefinition.xml` AND the canonical
+  ig/2.0.0 build — both identical): Shareable = url/name/fhirVersion/
+  select.column.type min=1; Tabular = INV no-collections + INV primitives-only
+  (18-type list byte-identical to TABULAR_PRIMITIVE_TYPE_NAMES). Enforcement
+  holds at ALL nesting depths (select.select AND select.unionAll via
+  _iter_select_columns). Versioned canonicals enforce; foreign unknown
+  canonicals ignored + retained (official sof-js validator never inspects
+  meta.profile). NOT A BUG pins: (1) plain VD without `status` parses — base
+  SD snapshot says 1..1 but official validator requires only
+  ['resource','select'] (validator outranks prose); profiled VDs missing
+  status ARE rejected (engine stricter, documented). (2) Full-URI Column.type
+  (http://hl7.org/fhir/StructureDefinition/code) accepted + normalized to the
+  primitive name — 2.0.0 column.type is `uri`; ColumnType.normalize_name
+  doctrine. Official 2.0.0 Binary-ShareablePatientDemographics round-trips
+  BYTE-IDENTICAL and executes (0 rows without `use='official'` name is correct
+  — forEach inner-join). Gates: viewdef pytest 1232, ViewDef 144/144, master
+  2832/2832, md5 57d0634b/c5b22d58 repo==site-packages. Probes:
+  .temp/qa/sof_vd12_historian2/.
+
+## SOF-VD-13 EXPLORER launch note (2026-08-24)
+- Fixed QA-001 (LOW): cnl-0 name warning in `parser.py:validate_view_definition`
+  gated on unicode-aware `str.isupper()`; spec regex first-char class [A-Z] is
+  ASCII-only. Now an explicit `"A" <= name[0] <= "Z"` range check. Regression:
+  `TestCnl0NameWarningPerSpecG2::test_non_ascii_capital_name_warns`. Only
+  reachable via directly-constructed ViewDefinition objects — JSON parse raises
+  the sql-name ParseError first.
+- NOT A BUG Registry additions:
+  - `generate_view_sql()` intentionally does not log/return validator warnings;
+    programmatic capture is the exported `validate_view_definition()` list.
+    The sql-on-fhir.js reference surfaces no cnl warnings either.
+  - Empty-string `column.tag.name` is a parse error (1..1 string, opaque
+    metadata but non-empty).
+  - Non-string (numeric/None) top-level dict keys — impossible in JSON — are
+    stringified into extra_fields and round-trip JSON-serializably.
+- Verified clean: cnl-1 warns exactly once for any |/# combo incl. multiple;
+  warn-worthy urls generate SQL and execute end-to-end in DuckDB; urn:uuid,
+  unicode, and 3000-char urls parse without spurious warnings; cnl-0 warns
+  once at 256 chars and 1 char; tag 'ansi/type'-style slashed names do NOT
+  warn (SOF-VD-04 note confirmed); extra_fields retains nested nulls, 100KB
+  values, case-colliding keys (Note/URL); text.div retention-only for CDATA,
+  entities, xmlns, malformed xhtml; profile[]/meta.profile[] accept |version.
+- Probes: /mnt/d/fhir4ds/.temp/qa/ (inline heredocs); gate log
+  .temp/qa/gate.log (2832/2832).

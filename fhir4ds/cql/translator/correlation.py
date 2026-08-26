@@ -442,9 +442,21 @@ class CorrelationMixin:
                 ):
                     # FROM clause is a subquery/set operation with alias
                     # (e.g., (SELECT ... UNION SELECT ...) AS HIVDiagnosis)
-                    from_alias = inner_select.from_clause.alias
-                    if from_alias:
-                        from_identifier = from_alias
+                    _from_sub = inner_select.from_clause.expr
+                    if (
+                        isinstance(_from_sub, SQLSubquery)
+                        and isinstance(_from_sub.query, SQLSelect)
+                        and _from_sub.query.from_clause is None
+                    ):
+                        # Element-value sources such as
+                        # (SELECT unnest([...]) AS N) AS _list have no
+                        # patient_id column; correlation is impossible and
+                        # unnecessary (the list is patient-independent).
+                        pass
+                    else:
+                        from_alias = inner_select.from_clause.alias
+                        if from_alias:
+                            from_identifier = from_alias
 
                 if from_identifier is not None:
                     # Use the alias if present, otherwise the CTE name

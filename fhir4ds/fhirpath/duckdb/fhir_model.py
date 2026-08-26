@@ -293,6 +293,10 @@ def _get_common_path_to_type_mappings() -> Dict[str, str]:
         ".meta": "Meta",
         ".implicitRules": "uri",
         ".language": "code",
+        # FP-15 EXPLORER QA-002/QA-003: R4 types AuditEvent/Provenance.recorded
+        # and Meta.lastUpdated as `instant`.
+        ".recorded": "instant",
+        ".lastUpdated": "instant",
         ".extension": "Extension",
         ".modifierExtension": "Extension",
         ".status": "code",

@@ -33,6 +33,7 @@ from typing import Any, Optional
 from urllib.parse import urlparse
 
 from ..duckdb.udf.system_resolver import SystemResolver
+from .system_mappings import category_to_system_param
 from .types import CodeRef, SearchResult
 
 _logger = logging.getLogger(__name__)
@@ -394,8 +395,20 @@ class HTTPTerminologyEndpoint:
             return []
         try:
             url = f"{self._base_url}{_VALUESET_EXPAND_PATH}"
+            # MT-003: medterm4ds defaults count to 20 (vs 1000
+            # in-process) and activeOnly to True (deliberate divergence
+            # from R4). count=1000 is the server max. activeOnly=false
+            # includes retired codes — expansion feeds membership
+            # resolution, which includes retired per the settled policy.
             with self._client() as client:
-                response = client.get(url, params={"url": valueset_url})
+                response = client.get(
+                    url,
+                    params={
+                        "url": valueset_url,
+                        "count": 1000,
+                        "activeOnly": "false",
+                    },
+                )
                 response.raise_for_status()
                 payload = response.json()
             result = self._contains_to_coderefs(self._parse_contains(payload))
@@ -422,8 +435,19 @@ class HTTPTerminologyEndpoint:
             return []
         try:
             url = f"{self._base_url}{_VALUESET_EXPAND_PATH}"
+            # MT-003: same count/activeOnly rationale as expand() —
+            # medterm4ds defaults (count=20, activeOnly=true) would
+            # silently truncate and drop retired codes; intensional
+            # expansion also feeds membership resolution.
             with self._client() as client:
-                response = client.post(url, json=value_set)
+                response = client.post(
+                    url,
+                    json=value_set,
+                    params={
+                        "count": 1000,
+                        "activeOnly": "false",
+                    },
+                )
                 response.raise_for_status()
                 payload = response.json()
             result = self._contains_to_coderefs(self._parse_contains(payload))
@@ -456,11 +480,22 @@ class HTTPTerminologyEndpoint:
             return []
         try:
             url = f"{self._base_url}{_CODESYSTEM_SEARCH_PATH}"
-            params = {
+            # MT-002: medterm4ds $search reads ``system`` (canonical
+            # URL, comma-joined for multiple) and ``searchMode``
+            # (lexical|hybrid|semantic|canonical). The legacy
+            # ``category``/``mode`` params were silently dropped by
+            # FastAPI, making every HTTP search all-systems lexical.
+            # Unknown/empty category → omit ``system`` (all-systems is
+            # the medterm semantic). count=25 = parity with the
+            # in-process discovery limit.
+            params: dict[str, str] = {
                 "query": query,
-                "category": category,
-                "mode": mode,
+                "searchMode": mode,
+                "count": "25",
             }
+            system_param = category_to_system_param(category)
+            if system_param:
+                params["system"] = system_param
             with self._client() as client:
                 response = client.get(url, params=params)
                 response.raise_for_status()

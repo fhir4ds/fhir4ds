@@ -671,10 +671,22 @@ class FunctionTranslator:
             return SQLFunctionCall(name="ABS", args=args)
 
         if name == "ceiling":
-            return SQLFunctionCall(name="CEIL", args=args)
+            # CQL 1.5 Appendix B: Ceiling(Decimal) returns Integer; results
+            # that cannot be represented as an Integer are null.
+            return SQLCast(
+                expression=SQLFunctionCall(name="CEIL", args=args),
+                target_type="INTEGER",
+                try_cast=True,
+            )
 
         if name == "floor":
-            return SQLFunctionCall(name="FLOOR", args=args)
+            # CQL 1.5 Appendix B: Floor(Decimal) returns Integer; results
+            # that cannot be represented as an Integer are null.
+            return SQLCast(
+                expression=SQLFunctionCall(name="FLOOR", args=args),
+                target_type="INTEGER",
+                try_cast=True,
+            )
 
         if name == "round":
             return SQLFunctionCall(name="ROUND", args=args)

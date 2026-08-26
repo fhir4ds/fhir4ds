@@ -30,6 +30,8 @@ _TIME_ZONE_SUFFIX_RE = re.compile(r"(Z|[+-]\d{2}:\d{2})$")
 _MAX_DECIMAL_BOUNDARY_EXPONENT = 1000
 _CQL_LONG_MIN = -9223372036854775808
 _CQL_LONG_MAX = 9223372036854775807
+_CQL_INTEGER_MIN = -2147483648
+_CQL_INTEGER_MAX = 2147483647
 _CQL_DECIMAL_MIN = Decimal("-99999999999999999999.99999999")
 _CQL_DECIMAL_MAX = Decimal("99999999999999999999.99999999")
 
@@ -113,6 +115,17 @@ def _is_year_precision_date_string(value_str: str) -> bool:
 
 
 def _decimal_boundary_text(value_str: str, precision: int, fill: str) -> str | None:
+    """CQL §6.7 HighBoundary / §6.9 LowBoundary for Decimal inputs.
+
+    Mirrors the HL7 reference implementation
+    (``HighBoundaryEvaluator``/``LowBoundaryEvaluator`` in
+    cqframework/clinical_quality_language): HighBoundary appends
+    ``99999999`` to the input's plain string and truncates DOWN at the
+    requested precision; LowBoundary is ``setScale(precision, DOWN)``.
+    Consequences: ``HighBoundary(1.587, 8)`` -> ``1.58799999``,
+    ``HighBoundary(1.587, 2)`` -> ``1.58`` (truncated at precision, NOT
+    the unchanged input), ``LowBoundary(1.587, 2)`` -> ``1.58``.
+    """
     if precision > 8:
         return None
     d_str = value_str.strip()
@@ -129,16 +142,16 @@ def _decimal_boundary_text(value_str: str, precision: int, fill: str) -> str | N
             return None
         d_str = format(decimal_value, "f")
     if "." in d_str:
-        current_dec_places = len(d_str.split(".")[1])
+        int_part, frac = d_str.split(".", 1)
     else:
-        current_dec_places = 0
-    digits_to_fill = precision - current_dec_places
-    if digits_to_fill <= 0:
-        return d_str
-    if "." not in d_str:
-        d_str += "."
-    d_str += fill * digits_to_fill
-    return d_str
+        int_part, frac = d_str, ""
+    # Pad with the fill digit (9 for high, 0 for low) then truncate the
+    # fractional part to exactly `precision` digits (ROUND_DOWN / toward
+    # zero, matching BigDecimal.setScale(precision, RoundingMode.DOWN)).
+    new_frac = (frac + fill * 8)[:precision] if precision > 0 else ""
+    if precision > 0:
+        return f"{int_part}.{new_frac}"
+    return int_part
 
 
 def _validate_time_parts(time_part: str, suffix: str) -> bool:
@@ -240,19 +253,35 @@ def mathRound(x: str | None, precision: str | None = "0") -> str | None:
 
 
 def mathFloor(x: str | None) -> str | None:
-    """CQL Floor(x)."""
+    """CQL Floor(x).
+
+    CQL 1.5 Appendix B: Floor(Decimal) returns Integer; "If the result of
+    the operation cannot be represented as an Integer, the result is
+    null" (e.g. Floor(2147483648.2) -> null).
+    """
     value = _parse_math_number(x)
     if value is None:
         return None
-    return _format_math_result(math.floor(value))
+    result = math.floor(value)
+    if result < _CQL_INTEGER_MIN or result > _CQL_INTEGER_MAX:
+        return None
+    return _format_math_result(result)
 
 
 def mathCeiling(x: str | None) -> str | None:
-    """CQL Ceiling(x)."""
+    """CQL Ceiling(x).
+
+    CQL 1.5 Appendix B: Ceiling(Decimal) returns Integer; "If the result
+    of the operation cannot be represented as an Integer, the result is
+    null" (e.g. Ceiling(3147483647.05) -> null).
+    """
     value = _parse_math_number(x)
     if value is None:
         return None
-    return _format_math_result(math.ceil(value))
+    result = math.ceil(value)
+    if result < _CQL_INTEGER_MIN or result > _CQL_INTEGER_MAX:
+        return None
+    return _format_math_result(result)
 
 
 def mathSqrt(x: str | None) -> str | None:
@@ -323,10 +352,18 @@ def mathPower(x: str | None, exponent: str | None) -> str | None:
     if value is None or exponent_value is None:
         return None
     try:
-        return _format_math_result(math.pow(value, exponent_value))
+        result = math.pow(value, exponent_value)
     except (OverflowError, ValueError) as e:
         _logger.warning("UDF mathPower failed: %s", e)
         return None
+    if result != 0 and abs(result) < 1e-4:
+        # Sub-scale magnitudes must be emitted in fixed notation at the
+        # implementation scale (8): '%.15g' scientific text (e.g.
+        # '9.09494701772928e-10') is rounded UP to 1E-8 by DuckDB's
+        # VARCHAR->DECIMAL(38,8) cast, so Power(2, -30) returned
+        # 0.00000001 instead of the correctly quantized 0.00000000.
+        return f"{result:.8f}"
+    return _format_math_result(result)
 
 
 def mathTruncate(x: str | None) -> str | None:
@@ -613,20 +650,12 @@ def highBoundary(value, precision: int | None = None) -> str | float | None:
     if isinstance(value, (int, float, _Decimal)):
         if precision > 8:
             return None
-        d_str = str(value)
-        # Count current decimal places
-        if '.' in d_str:
-            current_dec_places = len(d_str.split('.')[1])
-        else:
-            current_dec_places = 0
-        # precision = target number of decimal places
-        digits_to_fill = precision - current_dec_places
-        if digits_to_fill <= 0:
-            return float(value)
-        if '.' not in d_str:
-            d_str += '.'
-        d_str += '9' * digits_to_fill
-        return float(d_str)
+        bounded = _decimal_boundary_text(str(value), precision, "9")
+        # Return the exact text (like the native extension's string result),
+        # never float(): a DOUBLE round-trip corrupts >15-significant-digit
+        # Decimals (CQL-10 HISTORIAN QA-001) and loses the fixture-mandated
+        # scale-8 rendering. Callers transport via VARCHAR/DECIMAL(38,8).
+        return bounded
 
     if isinstance(value, str):
         stripped = value.strip()
@@ -739,18 +768,10 @@ def lowBoundary(value, precision: int | None = None) -> str | float | None:
     if isinstance(value, (int, float, _Decimal)):
         if precision > 8:
             return None
-        d_str = str(value)
-        if '.' in d_str:
-            current_dec_places = len(d_str.split('.')[1])
-        else:
-            current_dec_places = 0
-        digits_to_fill = precision - current_dec_places
-        if digits_to_fill <= 0:
-            return float(value)
-        if '.' not in d_str:
-            d_str += '.'
-        d_str += '0' * digits_to_fill
-        return float(d_str)
+        bounded = _decimal_boundary_text(str(value), precision, "0")
+        # Exact text, matching the native extension string result — see
+        # highBoundary() for the QA-001 DOUBLE-corruption rationale.
+        return bounded
 
     if isinstance(value, str):
         stripped = value.strip()

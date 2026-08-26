@@ -85,10 +85,14 @@ def _validate_resource_identity(resource: dict) -> tuple[str, str | None]:
 def _serialize_resource(resource: dict) -> str:
     try:
         return json.dumps(resource, allow_nan=False)
+    except RecursionError as exc:
+        raise ValueError(
+            "Resource nesting is too deep to serialize as standard JSON."
+        ) from exc
     except ValueError as exc:
         raise ValueError(
             "Resource contains values that cannot be represented as standard JSON "
-            "(for example NaN or Infinity)."
+            "(for example NaN/Infinity values or circular references)."
         ) from exc
 
 
@@ -221,28 +225,36 @@ class FHIRDataLoader:
         The macro performs a correlated subquery against the resources table
         to look up the referenced resource by ``ResourceType/id``, a full URL
         ending in ``ResourceType/id``, a bare resource id, or a JSON Reference
-        object containing any of those reference forms.
+        object containing any of those reference forms. Version-specific
+        references (``ResourceType/id/_history/{vid}``, FHIR R4
+        references.html §2.3.0.4) have the version suffix stripped and
+        resolve to the current stored version of the resource.
         """
         tbl = self._quoted_table_name
         try:
             self.con.execute(f"""
                 CREATE OR REPLACE MACRO resolve(ref) AS (
-                    WITH _ref AS (
+                    WITH _raw AS (
                         SELECT CASE
                             WHEN ref IS NULL THEN NULL
                             WHEN LTRIM(ref::VARCHAR) LIKE '{{%'
                                 THEN json_extract_string(ref::VARCHAR, '$.reference')
                             ELSE TRIM(BOTH '"' FROM ref::VARCHAR)
                         END AS raw_ref
+                    ),
+                    _ref AS (
+                        SELECT raw_ref,
+                               regexp_replace(raw_ref, '/_history/[^/]+$', '') AS path_ref
+                        FROM _raw
                     )
                     SELECT r.resource FROM {tbl} r
                     CROSS JOIN _ref
                     WHERE ref IS NOT NULL
                     AND raw_ref IS NOT NULL
-                    AND r.id = regexp_replace(split_part(raw_ref, '/', -1), '^urn:uuid:', '')
+                    AND r.id = regexp_replace(split_part(path_ref, '/', -1), '^urn:uuid:', '')
                     AND (
-                        split_part(raw_ref, '/', -2) = ''
-                        OR r.resourceType = split_part(raw_ref, '/', -2)
+                        split_part(path_ref, '/', -2) = ''
+                        OR r.resourceType = split_part(path_ref, '/', -2)
                     )
                     LIMIT 1
                 )
@@ -252,11 +264,19 @@ class FHIRDataLoader:
 
     def _extract_patient_ref(self, resource: dict) -> Optional[str]:
         """
-        Extract patient reference from a FHIR resource.
+        Extract the patient identity from a FHIR resource.
 
-        - For Patient resources: returns the resource id
-        - For other resources: extracts from subject.reference or patient.reference
-        - Returns None if no patient link found
+        - For Patient resources: returns the resource id.
+        - For other resources: extracts from ``subject``, ``patient``, or
+          ``beneficiary`` when the reference is Patient-typed
+          (``Patient/{id}``, an absolute URL ending ``/Patient/{id}``, or a
+          version-specific ``Patient/{id}/_history/{vid}`` resolved to the
+          current id), or a bundle-local ``urn:uuid:`` reference whose
+          target type is not expressed in the URL.
+        - Returns None when the reference targets another resource type
+          (e.g. ``Group/{id}``, ``Location/{id}``) or is a bare id, so
+          non-patient subjects cannot fabricate phantom patient ids in
+          patient-context evaluation.
         """
         resource_type = resource.get("resourceType")
 
@@ -264,16 +284,29 @@ class FHIRDataLoader:
             return resource.get("id")
 
         for path in ("subject", "patient", "beneficiary"):
-            ref_obj = resource.get(path)
-            if ref_obj and isinstance(ref_obj, dict):
-                reference = ref_obj.get("reference", "")
-                if reference:
-                    # Strip urn:uuid: prefix for bundle-local references
-                    if reference.startswith("urn:uuid:"):
-                        return reference[9:]  # len("urn:uuid:") == 9
-                    if "/" in reference:
-                        return reference.split("/")[-1]
-                    return reference
+            value = resource.get(path)
+            # List-valued patient references (e.g. Appointment.patient 0..*
+            # in FHIR R4) are scanned for the first Patient-typed entry.
+            candidates = value if isinstance(value, list) else [value]
+            for ref_obj in candidates:
+                if not isinstance(ref_obj, dict):
+                    continue
+                reference = ref_obj.get("reference")
+                if not reference or not isinstance(reference, str):
+                    continue
+                if reference.startswith("urn:uuid:"):
+                    # Bundle-local references carry no target type in the URL.
+                    return reference[9:]  # len("urn:uuid:") == 9
+                if "/" not in reference:
+                    # Bare ids are not valid FHIR R4 references (which must
+                    # be Type/id, absolute, or a URN) and carry no target
+                    # type, so they cannot be safely attributed to a patient.
+                    continue
+                segments = [s for s in reference.split("/") if s]
+                if len(segments) >= 2 and segments[-2] == "_history":
+                    segments = segments[:-2]
+                if len(segments) >= 2 and segments[-2] == "Patient":
+                    return segments[-1]
 
         return None
 
@@ -499,19 +532,63 @@ class FHIRDataLoader:
                 len(final_rows), dedup_count,
             )
 
-        # Remove existing duplicates in batch
+        # Remove existing duplicates in batch, then bulk insert. Prefer the
+        # Arrow register + INSERT SELECT path (mirroring ``load_valuesets``):
+        # duckdb ``executemany`` executes one prepared statement per row
+        # (~150x slower than the bulk path for 10k+ resource batches).
         dedup_keys = [(rid, rtype) for rid, rtype in seen.keys()]
-        if dedup_keys:
-            self.con.executemany(
-                f"DELETE FROM {self._quoted_table_name} WHERE id = ? AND resourceType = ?",
-                dedup_keys,
-            )
+        used_arrow = False
+        try:
+            import pyarrow as pa
 
-        # Batch insert
-        self.con.executemany(
-            f"INSERT INTO {self._quoted_table_name} VALUES (?, ?, ?, ?)",
-            final_rows,
-        )
+            if dedup_keys:
+                key_table = pa.table({
+                    "id": pa.array([k[0] for k in dedup_keys], pa.string()),
+                    "resourceType": pa.array([k[1] for k in dedup_keys], pa.string()),
+                })
+                key_temp = f"_{self.table_name}_bulk_dedup"
+                quoted_key_temp = quote_identifier(key_temp)
+                self.con.register(key_temp, key_table)
+                try:
+                    self.con.execute(
+                        f"DELETE FROM {self._quoted_table_name} "
+                        f"WHERE (id, resourceType) IN "
+                        f"(SELECT id, resourceType FROM {quoted_key_temp})"
+                    )
+                finally:
+                    self.con.unregister(key_temp)
+            if final_rows:
+                arrow_table = pa.table({
+                    "id": pa.array([r[0] for r in final_rows], pa.string()),
+                    "resourceType": pa.array([r[1] for r in final_rows], pa.string()),
+                    "resource": pa.array([r[2] for r in final_rows], pa.string()),
+                    "patient_ref": pa.array([r[3] for r in final_rows], pa.string()),
+                })
+                row_temp = f"_{self.table_name}_bulk_rows"
+                quoted_row_temp = quote_identifier(row_temp)
+                self.con.register(row_temp, arrow_table)
+                try:
+                    self.con.execute(
+                        f"INSERT INTO {self._quoted_table_name} "
+                        f"SELECT id, resourceType, resource::JSON, patient_ref "
+                        f"FROM {quoted_row_temp}"
+                    )
+                finally:
+                    self.con.unregister(row_temp)
+            used_arrow = True
+        except ImportError:
+            used_arrow = False
+
+        if not used_arrow:
+            if dedup_keys:
+                self.con.executemany(
+                    f"DELETE FROM {self._quoted_table_name} WHERE id = ? AND resourceType = ?",
+                    dedup_keys,
+                )
+            self.con.executemany(
+                f"INSERT INTO {self._quoted_table_name} VALUES (?, ?, ?, ?)",
+                final_rows,
+            )
         return len(final_rows)
 
     def load_bundle(self, bundle: dict) -> int:
@@ -522,9 +599,12 @@ class FHIRDataLoader:
 
         Raises:
             TypeError: If bundle is not a dict.
-            ValueError: If bundle is not a FHIR Bundle resource, or if
+            ValueError: If bundle is not a FHIR Bundle resource, if
                 Bundle.type is missing/invalid (FHIR R4 requires 1..1
-                Bundle.type with required binding to BundleType).
+                Bundle.type with required binding to BundleType), or if
+                any entry resource is not a valid FHIR resource. Invalid
+                entries are reported with their entry index (mirroring
+                the ``load_ndjson`` per-line attribution).
         """
         if not isinstance(bundle, dict):
             raise TypeError(
@@ -566,8 +646,21 @@ class FHIRDataLoader:
                 continue
             if not isinstance(resource, dict):
                 raise TypeError(f"Bundle.entry[{index}].resource must be an object")
-            if resource:
-                resources.append(resource)
+            if not resource:
+                raise ValueError(
+                    f"Bundle.entry[{index}].resource is empty; a bundled "
+                    "resource must carry at least 'resourceType'"
+                )
+            # Per-entry FHIR validation with index attribution, mirroring
+            # the load_ndjson per-line contract.
+            try:
+                _validate_resource_identity(resource)
+                _serialize_resource(resource)
+            except (TypeError, ValueError) as e:
+                raise ValueError(
+                    f"Invalid FHIR resource at Bundle.entry[{index}]: {e}"
+                ) from e
+            resources.append(resource)
 
         if resources:
             return self.load_resources(resources)
@@ -589,7 +682,10 @@ class FHIRDataLoader:
         """
         path = Path(path) if not isinstance(path, Path) else path
         try:
-            data = json.loads(path.read_text())
+            # utf-8-sig tolerates a UTF-8 BOM (RFC 8259 §8.1 permits
+            # ignoring it) common in Windows-origin exports, and decodes
+            # plain UTF-8 identically when no BOM is present.
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
         except json.JSONDecodeError as e:
             raise ValueError(
                 f"Malformed JSON in {path}: {e}"
@@ -634,7 +730,9 @@ class FHIRDataLoader:
         _logger = logging.getLogger("fhir4ds.loader")
         path = Path(path) if not isinstance(path, Path) else path
         resources = []
-        with open(path) as f:
+        # utf-8-sig tolerates a UTF-8 BOM (RFC 8259 §8.1 permits ignoring
+        # it) on the first line of Windows-origin exports.
+        with open(path, encoding="utf-8-sig") as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
                 if line:
@@ -710,18 +808,19 @@ class FHIRDataLoader:
 
         if extensions is None:
             extensions = [".json", ".ndjson"]
+        extensions_lower = [ext.lower() for ext in extensions]
 
         total = 0
         pattern = "**/*" if recursive else "*"
 
         for file_path in path.glob(pattern):
-            if file_path.is_file() and file_path.suffix in extensions:
+            if file_path.is_file() and file_path.suffix.lower() in extensions_lower:
                 try:
-                    if file_path.suffix == ".ndjson":
+                    if file_path.suffix.lower() == ".ndjson":
                         total += self.load_ndjson(file_path, strict=False)
                     else:
                         total += self.load_file(file_path)
-                except (json.JSONDecodeError, TypeError, ValueError, KeyError) as e:
+                except (json.JSONDecodeError, TypeError, ValueError, KeyError, OSError) as e:
                     _logger.warning("Skipping non-FHIR file %s: %s", file_path, e)
 
         return total

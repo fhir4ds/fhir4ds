@@ -82,13 +82,15 @@ def test_cql_clinical_expressions_parse_and_translate() -> None:
 
 def test_cql_clinical_translated_sql_matches_cpp_registration() -> None:
     translated = translate_cql(_cql_clinical_library())
+    # §Age: scalar strings (certain results); partial-precision inputs
+    # would surface interval JSON instead.
     expected = {
-        "CalcYearsAt": (26,),
-        "CalcMonthsAt": (313,),
-        "CalcWeeksAt": (2,),
-        "CalcDaysAt": (2,),
-        "CalcLeapYearsAt": (21,),
-        "CalcLeapMonthsAt": (12,),
+        "CalcYearsAt": ('26',),
+        "CalcMonthsAt": ('313',),
+        "CalcWeeksAt": ('2',),
+        "CalcDaysAt": ('2',),
+        "CalcLeapYearsAt": ('21',),
+        "CalcLeapMonthsAt": ('12',),
     }
 
     py = _python_only_connection()
@@ -123,24 +125,30 @@ def test_cql_clinical_direct_surface_matches_cpp_registration() -> None:
     )
 
     cases = [
-        ("SELECT AgeInYearsAt(?, ?)", [patient, "2026-05-14"], (26,)),
-        ("SELECT AgeInMonthsAt(?, ?)", [patient, "2026-06-14"], (313,)),
-        ("SELECT AgeInWeeksAt(?, ?)", [patient, "2000-05-28"], (2,)),
-        ("SELECT AgeInDaysAt(?, ?)", [patient, "2000-05-16"], (2,)),
-        ("SELECT AgeInHoursAt(?, ?)", [patient, "2000-05-14T01:00:00Z"], (1,)),
-        ("SELECT AgeInMinutesAt(?, ?)", [patient, "2000-05-14T00:01:00Z"], (1,)),
-        ("SELECT AgeInSecondsAt(?, ?)", [patient, "2000-05-14T00:00:01Z"], (1,)),
-        ("SELECT AgeInYearsAt(?, ?)", [leap_patient, "2021-02-28"], (1,)),
-        ("SELECT AgeInMonthsAt(?, ?)", [leap_patient, "2021-02-28"], (12,)),
-        ("SELECT CalculateAgeInYearsAt(?, ?)", ["2000-05-14", "2026-05-14"], (26,)),
-        ("SELECT CalculateAgeInMonthsAt(?, ?)", ["2000-05-14", "2026-06-14"], (313,)),
-        ("SELECT CalculateAgeInWeeksAt(?, ?)", ["2000-05-14", "2000-05-28"], (2,)),
-        ("SELECT CalculateAgeInDaysAt(?, ?)", ["2000-05-14", "2000-05-16"], (2,)),
-        ("SELECT CalculateAgeInHoursAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T01:00:00Z"], (1,)),
-        ("SELECT CalculateAgeInMinutesAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T00:01:00Z"], (1,)),
-        ("SELECT CalculateAgeInSecondsAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T00:00:01Z"], (1,)),
-        ("SELECT CalculateAgeInYearsAt(?, ?)", ["2000-02-29", "2021-02-28"], (21,)),
-        ("SELECT CalculateAgeInMonthsAt(?, ?)", ["2020-02-29", "2021-02-28"], (12,)),
+        ("SELECT AgeInYearsAt(?, ?)", [patient, "2026-05-14"], ('26',)),
+        ("SELECT AgeInMonthsAt(?, ?)", [patient, "2026-06-14"], ('313',)),
+        ("SELECT AgeInWeeksAt(?, ?)", [patient, "2000-05-28"], ('2',)),
+        ("SELECT AgeInDaysAt(?, ?)", [patient, "2000-05-16"], ('2',)),
+        # Day-precision birthDate at hour-or-finer precision is a §Age
+        # uncertainty interval (time-of-day unknown); the high bound is the
+        # age assuming a midnight birth.
+        ("SELECT AgeInHoursAt(?, ?)", [patient, "2000-05-14T01:00:00Z"],
+         ('{"start":-22,"end":1,"lowClosed":true,"highClosed":true}',)),
+        ("SELECT AgeInMinutesAt(?, ?)", [patient, "2000-05-14T00:01:00Z"],
+         ('{"start":-1438,"end":1,"lowClosed":true,"highClosed":true}',)),
+        ("SELECT AgeInSecondsAt(?, ?)", [patient, "2000-05-14T00:00:01Z"],
+         ('{"start":-86398,"end":1,"lowClosed":true,"highClosed":true}',)),
+        ("SELECT AgeInYearsAt(?, ?)", [leap_patient, "2021-02-28"], ('1',)),
+        ("SELECT AgeInMonthsAt(?, ?)", [leap_patient, "2021-02-28"], ('12',)),
+        ("SELECT CalculateAgeInYearsAt(?, ?)", ["2000-05-14", "2026-05-14"], ('26',)),
+        ("SELECT CalculateAgeInMonthsAt(?, ?)", ["2000-05-14", "2026-06-14"], ('313',)),
+        ("SELECT CalculateAgeInWeeksAt(?, ?)", ["2000-05-14", "2000-05-28"], ('2',)),
+        ("SELECT CalculateAgeInDaysAt(?, ?)", ["2000-05-14", "2000-05-16"], ('2',)),
+        ("SELECT CalculateAgeInHoursAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T01:00:00Z"], ('1',)),
+        ("SELECT CalculateAgeInMinutesAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T00:01:00Z"], ('1',)),
+        ("SELECT CalculateAgeInSecondsAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T00:00:01Z"], ('1',)),
+        ("SELECT CalculateAgeInYearsAt(?, ?)", ["2000-02-29", "2021-02-28"], ('21',)),
+        ("SELECT CalculateAgeInMonthsAt(?, ?)", ["2020-02-29", "2021-02-28"], ('12',)),
         ("SELECT extractFirstCode(?, 'code')", [observation], ("http://loinc.org|8867-4",)),
         ("SELECT extractFirstCodeValue(?, 'code')", [observation], ("8867-4",)),
         ("SELECT in_valueset(?, 'code', ?)", [observation, VALUESET_URL], (True,)),
@@ -162,16 +170,19 @@ def test_cql_clinical_age_direct_surface_matches_no_python_registration() -> Non
     patient = json.dumps({"resourceType": "Patient", "birthDate": "2000-05-14"})
     leap_patient = json.dumps({"resourceType": "Patient", "birthDate": "2020-02-29"})
     cases = [
-        ("SELECT AgeInYearsAt(?, ?)", [leap_patient, "2021-02-28"], (1,)),
-        ("SELECT AgeInMonthsAt(?, ?)", [leap_patient, "2021-02-28"], (12,)),
-        ("SELECT AgeInHoursAt(?, ?)", [patient, "2000-05-14T01:00:00Z"], (1,)),
-        ("SELECT AgeInMinutesAt(?, ?)", [patient, "2000-05-14T00:01:00Z"], (1,)),
-        ("SELECT AgeInSecondsAt(?, ?)", [patient, "2000-05-14T00:00:01Z"], (1,)),
-        ("SELECT CalculateAgeInYearsAt(?, ?)", ["2000-02-29", "2021-02-28"], (21,)),
-        ("SELECT CalculateAgeInMonthsAt(?, ?)", ["2020-02-29", "2021-02-28"], (12,)),
-        ("SELECT CalculateAgeInHoursAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T01:00:00Z"], (1,)),
-        ("SELECT CalculateAgeInMinutesAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T00:01:00Z"], (1,)),
-        ("SELECT CalculateAgeInSecondsAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T00:00:01Z"], (1,)),
+        ("SELECT AgeInYearsAt(?, ?)", [leap_patient, "2021-02-28"], ('1',)),
+        ("SELECT AgeInMonthsAt(?, ?)", [leap_patient, "2021-02-28"], ('12',)),
+        ("SELECT AgeInHoursAt(?, ?)", [patient, "2000-05-14T01:00:00Z"],
+         ('{"start":-22,"end":1,"lowClosed":true,"highClosed":true}',)),
+        ("SELECT AgeInMinutesAt(?, ?)", [patient, "2000-05-14T00:01:00Z"],
+         ('{"start":-1438,"end":1,"lowClosed":true,"highClosed":true}',)),
+        ("SELECT AgeInSecondsAt(?, ?)", [patient, "2000-05-14T00:00:01Z"],
+         ('{"start":-86398,"end":1,"lowClosed":true,"highClosed":true}',)),
+        ("SELECT CalculateAgeInYearsAt(?, ?)", ["2000-02-29", "2021-02-28"], ('21',)),
+        ("SELECT CalculateAgeInMonthsAt(?, ?)", ["2020-02-29", "2021-02-28"], ('12',)),
+        ("SELECT CalculateAgeInHoursAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T01:00:00Z"], ('1',)),
+        ("SELECT CalculateAgeInMinutesAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T00:01:00Z"], ('1',)),
+        ("SELECT CalculateAgeInSecondsAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T00:00:01Z"], ('1',)),
     ]
 
     with no_python_connection() as con:
@@ -226,9 +237,14 @@ define AgeSecondsAt: AgeInSecondsAt(@2000-05-14T00:00:01Z)
             con.execute("INSERT INTO resources VALUES ('p1', 'Patient', ?::JSON, 'p1')", [patient])
             row = con.execute(sql).fetchone()
             assert row[0] == "p1"
-            assert row[1] is not None
-            assert row[2] is not None
-            assert row[3:] == (2, 1, 1, 1)
+            assert row[1] is not None  # AgeWeeks (current-date dependent)
+            assert row[2] is not None  # AgeHours (§Age interval, day-precision birth)
+            # AgeWeeksAt certain; hour-or-finer At on a day-precision birthDate
+            # are §Age uncertainty intervals whose high bound assumes midnight.
+            assert row[3] == "2"
+            assert json.loads(row[4])["end"] == 1
+            assert json.loads(row[5])["end"] == 1
+            assert json.loads(row[6])["end"] == 1
     finally:
         py.close()
         cpp.close()
@@ -258,10 +274,10 @@ define AgeMonthsAt: AgeInMonthsAt(@2021-02-28)
                 "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
             )
             con.execute("INSERT INTO resources VALUES ('p1', 'Patient', ?::JSON, 'p1')", [patient])
-            assert con.execute(sql).fetchone() == ("p1", 1, 12)
+            assert con.execute(sql).fetchone() == ("p1", "1", "12")
         with no_python_connection() as no_py:
             no_py.execute("INSERT INTO resources VALUES ('p1', 'Patient', ?::JSON, 'p1')", [patient])
-            assert no_py.execute(sql).fetchone() == ("p1", 1, 12)
+            assert no_py.execute(sql).fetchone() == ("p1", "1", "12")
     finally:
         py.close()
         cpp.close()
@@ -729,6 +745,215 @@ define ConceptSingleNoMatch:
             cpp_row = cpp.execute(sql).fetchone()
             assert py_row == (expected_value,), f"{name}: py={py_row!r}"
             assert cpp_row == (expected_value,), f"{name}: cpp={cpp_row!r}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_clinical_age_partial_birthdate_uncertainty_matches_cpp_registration() -> None:
+    """CQL-21 QA-001 regression: §Age/§CalculateAgeAt partial birthDates.
+
+    CQL 1.5 Appendix B: age operators are duration calculations; when the
+    birthDate precision is below the operator precision the result is an
+    uncertainty over the range of possible values (closed interval JSON),
+    on both the Python fallback and the native C++ extension.
+    """
+    interval = '{"start":%d,"end":%d,"lowClosed":true,"highClosed":true}'
+    cases = [
+        # (sql, params, expected)
+        ("SELECT CalculateAgeInYearsAt(?, ?)", ["2012", "2026-05-14"], interval % (13, 14)),
+        ("SELECT CalculateAgeInYearsAt(?, ?)", ["2012-06", "2026-05-14"], "13"),
+        ("SELECT CalculateAgeInMonthsAt(?, ?)", ["2012-06", "2026-05-14"], interval % (166, 167)),
+        ("SELECT CalculateAgeInDaysAt(?, ?)", ["2012", "2012-02-28"], interval % (-307, 58)),
+        ("SELECT CalculateAgeInYearsAt(?, ?)", ["2000-05-14", "2026-05-14"], "26"),
+        ("SELECT cqlUncertainCompare(CalculateAgeInYearsAt(?, ?), '13', '>=')",
+         ["2012", "2026-05-14"], True),
+        ("SELECT cqlUncertainCompare(CalculateAgeInYearsAt(?, ?), '14', '>=')",
+         ["2012", "2026-05-14"], None),
+        ("SELECT cqlUncertainCompare(CalculateAgeInYearsAt(?, ?), '15', '>=')",
+         ["2012", "2026-05-14"], False),
+        # Uncertain [18, 19] vs an adult threshold: true only when certain.
+        ("SELECT cqlUncertainCompare(CalculateAgeInYearsAt(?, ?), '18', '>=')",
+         ["2007", "2026-05-14"], True),
+        ("SELECT cqlUncertainCompare(CalculateAgeInYearsAt(?, ?), '19', '>=')",
+         ["2007", "2026-05-14"], None),
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    for sql, params, expected in cases:
+        py_row = py.execute(sql, params).fetchone()
+        cpp_row = cpp.execute(sql, params).fetchone()
+        assert py_row == (expected,), f"py {sql}: {py_row!r} != {(expected,)!r}"
+        assert cpp_row == (expected,), f"cpp {sql}: {cpp_row!r} != {(expected,)!r}"
+    # Patient-context population SQL: year-precision FHIR birthDate '1990'
+    # at @2026-05-14 must surface the [35, 36] uncertainty interval. The
+    # boolean define B is filter-based in population mode (uncertain NULL
+    # excludes the row -> False at the define boundary), so the scalar
+    # NULL-vs-false distinction is asserted above via cqlUncertainCompare.
+    cql = """library PartialAge version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define A: AgeInYearsAt(@2026-05-14)
+define B: AgeInYearsAt(@2026-05-14) >= 36
+"""
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql),
+        output_columns={"A": "A", "B": "B"},
+    )
+    patient = json.dumps({"resourceType": "Patient", "id": "p1", "birthDate": "1990"})
+    for con in (py, cpp):
+        con.execute(
+            "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
+        )
+        con.execute("INSERT INTO resources VALUES ('p1', 'Patient', ?::JSON, 'p1')", [patient])
+        row = con.execute(sql).fetchone()
+        assert row[1] == interval % (35, 36), row
+        assert row[2] is False, row
+    py.close()
+    cpp.close()
+
+
+def test_cql_clinical_age_in_list_negate_minmax_uncertainty_matches_cpp_registration() -> None:
+    """CQL-21 HISTORIAN QA-001..003 regression.
+
+    Post-uncertainty-fix age operands are §22.21 VARCHAR; generic
+    lowerings must stay uncertainty-aware: In (list) equality,
+    unary negation (-x ≡ x * -1), and scalar/list Min/Max.
+    """
+    crisp = {"resourceType": "Patient", "id": "p1", "birthDate": "1990-05-14"}
+    partial = {"resourceType": "Patient", "id": "p2", "birthDate": "1990"}
+    cases = [
+        # (expression, patient_id, expected)
+        ("AgeInYearsAt(@2026-05-14) in { 9, 36 }", "p1", True),
+        ("AgeInYearsAt(@2026-05-14) in { 9, 40 }", "p1", False),
+        # Uncertain [35,36] vs 36: could be 35 or 36 -> population filter
+        # excludes the row (NULL -> False at the define boundary).
+        ("AgeInYearsAt(@2026-05-14) in { 9, 36 }", "p2", False),
+        ("- AgeInYearsAt(@2026-05-14)", "p1", "-36"),
+        ("- AgeInYearsAt(@2026-05-14)", "p2",
+         '{"start":-36,"end":-35,"lowClosed":true,"highClosed":true}'),
+        ("Max(AgeInYearsAt(@2026-05-14), 30)", "p1", "36"),
+        ("Min(AgeInYearsAt(@2026-05-14), 30)", "p1", "30"),
+        ("Min({ AgeInYearsAt(@2026-05-14), AgeInYearsAt(@2017-05-14) })", "p1", "27"),
+        ("Max({ AgeInYearsAt(@2026-05-14), AgeInYearsAt(@2017-05-14) })", "p1", "36"),
+        ("Min({ AgeInYearsAt(@2026-05-14), AgeInYearsAt(@2017-05-14) })", "p2",
+         '{"start":26,"end":27,"lowClosed":true,"highClosed":true}'),
+    ]
+    sql_by_case = []
+    for expression, _pid, _expected in cases:
+        cql = (
+            "library L\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            f"define X: {expression}"
+        )
+        sql_by_case.append(
+            CQLToSQLTranslator().translate_library_to_population_sql(
+                parse_cql(cql), output_columns={"X": "X"}
+            )
+        )
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            con.execute(
+                "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
+            )
+            for pid, source in (("p1", crisp), ("p2", partial)):
+                con.execute(
+                    "INSERT INTO resources VALUES (?, 'Patient', ?::JSON, ?)",
+                    [pid, json.dumps(source), pid],
+                )
+            for (expression, pid, expected), sql in zip(cases, sql_by_case):
+                rows = {r[0]: r[-1] for r in con.execute(sql).fetchall()}
+                got = rows.get(pid)
+                assert got == expected, f"{expression} [{pid}]: {got!r} != {expected!r}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_clinical_explorer_dynamic_code_equal_and_aggregates_regression() -> None:
+    """CQL-21 EXPLORER QA-001..003 regression.
+
+    QA-001: `=` between a dynamically retrieved code and a literal Code is
+    an exact match on code/system/version/display (Authors Guide); the old
+    raw CodeableConcept-JSON vs Code-JSON lowering could never match.
+    QA-002: Sum over a literal list with §22.21 uncertainty elements must
+    propagate ([Σ lows, Σ highs]), never silently drop intervals; Avg/Median
+    over uncertain elements surface null rather than a wrong crisp value.
+    QA-003: `Average` must resolve to the avg aggregate lowering, not leak
+    an unregistered `Average(...)` SQL call.
+    """
+    observation = json.dumps(
+        {
+            "resourceType": "Observation",
+            "id": "o1",
+            "subject": {"reference": "Patient/p1"},
+            "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4",
+                                 "display": "Heart rate"}]},
+        }
+    )
+    cases = [
+        # QA-001: exact-match Equal on retrieved coding (all components match)
+        ("First([Observation] O return O.code) = HR", "p1", True),
+        # display differs (coding has no display) -> not an exact match
+        ("First([Observation] O return O.code) = HRNoDisplay", "p1", False),
+        ("First([Observation] O return O.code) != HR", "p1", False),
+        # QA-002: uncertainty propagates through Sum (26 + [35,36] -> [61,62])
+        ("Sum({ AgeInYearsAt(@2026-06-01), CalculateAgeInYears(@2000-01-01) })",
+         "p2", '{"start":61,"end":62,"lowClosed":true,"highClosed":true}'),
+        # crisp-only lists keep the exact typed sum
+        ("Sum({ CalculateAgeInYears(@2000-01-01), CalculateAgeInYears(@1994-06-01) })",
+         "p2", "58"),
+        # Avg/Median over an uncertain element cannot be represented -> null
+        ("Median({ AgeInYearsAt(@2026-06-01), CalculateAgeInYears(@2000-01-01) })",
+         "p2", None),
+        # QA-003: Average lowers to a registered aggregate (exact Decimal)
+        ("Average({ 1, 2, 3 })", "p2", "2.00000000"),
+    ]
+    sql_by_case = []
+    for expression, _pid, _expected in cases:
+        cql = (
+            "library L\nusing FHIR version '4.0.1'\n"
+            "codesystem LOINC: 'http://loinc.org'\n"
+            "code HR: '8867-4' from LOINC display 'Heart rate'\n"
+            "code HRNoDisplay: '8867-4' from LOINC\n"
+            "context Patient\n"
+            f"define X: {expression}"
+        )
+        sql_by_case.append(
+            CQLToSQLTranslator().translate_library_to_population_sql(
+                parse_cql(cql), output_columns={"X": "X"}
+            )
+        )
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            con.execute(
+                "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
+            )
+            con.execute(
+                "INSERT INTO resources VALUES ('p1', 'Patient', ?::JSON, 'p1')",
+                [json.dumps({"resourceType": "Patient", "id": "p1",
+                             "birthDate": "1990-05-14"})],
+            )
+            con.execute(
+                "INSERT INTO resources VALUES ('p2', 'Patient', ?::JSON, 'p2')",
+                [json.dumps({"resourceType": "Patient", "id": "p2",
+                             "birthDate": "1990"})],
+            )
+            con.execute(
+                "INSERT INTO resources VALUES ('o1', 'Observation', ?::JSON, 'p1')",
+                [observation],
+            )
+            for (expression, pid, expected), sql in zip(cases, sql_by_case):
+                rows = {r[0]: r[-1] for r in con.execute(sql).fetchall()}
+                got = rows.get(pid)
+                if expected is not None and isinstance(got, str) and expected != "None":
+                    got = str(got)
+                assert got == expected or str(got) == expected, (
+                    f"{expression} [{pid}]: {got!r} != {expected!r}"
+                )
     finally:
         py.close()
         cpp.close()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from decimal import Decimal
 
 import duckdb
 import pytest
@@ -51,7 +52,7 @@ def test_cql_aggregate_expressions_parse_and_translate() -> None:
     translated = translate_cql(_cql_aggregate_library())
     assert "logicalAllTrue" in str(translated["AllTrueList"])
     assert "logicalAnyTrue" in str(translated["AnyTrueList"])
-    assert "avg" in translated["AvgList"].to_sql()
+    assert "avg" in translated["AvgList"].to_sql().lower() or "cqlDivide" in translated["AvgList"].to_sql()
     assert "list_filter" in str(translated["CountList"])
     assert "GeometricMean" in str(translated["GeometricMeanList"])
     assert "list_max" in str(translated["MaxList"])
@@ -425,7 +426,10 @@ def test_cql_quantity_aggregate_translation_is_unit_aware_across_surfaces() -> N
 
 def _assert_equal_or_close(actual, expected, context: str) -> None:
     if isinstance(expected, float):
-        assert math.isclose(actual, expected, rel_tol=1e-12, abs_tol=1e-12), context
+        # CQL-01 doctrine: translated aggregates return exact DECIMAL(38,8)
+        # results (cqlDivide / TRY_CAST narrowing), so irrational results such
+        # as PopulationStdDev({1,2,3}) are rounded at scale 8.
+        assert math.isclose(actual, expected, rel_tol=1e-7, abs_tol=1e-7), context
     else:
         assert actual == expected, context
 
@@ -499,3 +503,300 @@ define QuantityProductSameUnit: Product({2 'mg', 3 'mg'})
 define QuantityNamedSumMixed: Sum(QuantityList)
 define QuantityNamedAvgMixed: Avg(QuantityList)
 """
+
+
+# ---------------------------------------------------------------------------
+# CQL-20 SKEPTIC iteration: aggregates over query-derived / rows-define /
+# dynamic operands (end-to-end population SQL; py == cpp == no-python).
+# ---------------------------------------------------------------------------
+
+_CQL20_RESOURCES_SQL = """
+CREATE TABLE IF NOT EXISTS resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR);
+DELETE FROM resources;
+INSERT INTO resources VALUES
+('P1','Patient','{"resourceType":"Patient","id":"P1","active":true,"name":[{"family":"Chalmers","given":["Peter","James"]},{"family":"Gray","given":["Kim"]}]}',NULL),
+('P2','Patient','{"resourceType":"Patient","id":"P2","active":true}',NULL),
+('O1','Observation','{"resourceType":"Observation","id":"O1","status":"final","code":{"coding":[{"system":"http://loinc.org","code":"29463-7"}]},"subject":{"reference":"Patient/P1"},"effectiveDateTime":"2024-01-02T00:00:00","valueQuantity":{"value":120,"unit":"mg"}}','P1'),
+('O2','Observation','{"resourceType":"Observation","id":"O2","status":"preliminary","code":{"coding":[{"system":"http://loinc.org","code":"29463-7"}]},"subject":{"reference":"Patient/P1"},"effectiveDateTime":"2024-01-05T00:00:00","valueQuantity":{"value":80,"unit":"mg"}}','P1'),
+('O3','Observation','{"resourceType":"Observation","id":"O3","status":"final","code":{"coding":[{"system":"http://loinc.org","code":"8867-4"}]},"subject":{"reference":"Patient/P2"},"effectiveDateTime":"2024-02-01T00:00:00","valueQuantity":{"value":60,"unit":"mg"}}','P2')
+"""
+
+_CQL20_DYNAMIC_HEADER = """library Cql20AggDynamic version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define G: Patient.name.given
+define Vals: (from [Observation] O return O.value as Quantity)
+define Dates: (from [Observation] O return O.effective as dateTime)
+define Nums: (from { 1.0, 2.0, null as Decimal, 5.0 } X return X)
+"""
+
+
+def _run_cql20_population_case(cql: str) -> dict:
+    from fhir4ds.cql.parser import parse_cql
+    from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql), output_columns={"R": "R"}
+    )
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    no_py_cm = no_python_connection()
+    no_py = no_py_cm.__enter__()
+    try:
+        results = {}
+        for label, con in (("py", py), ("cpp", cpp), ("nopy", no_py)):
+            con.execute(_CQL20_RESOURCES_SQL)
+            results[label] = con.execute(sql).fetchall()
+        return results
+    finally:
+        no_py_cm.__exit__(None, None, None)
+        py.close()
+        cpp.close()
+
+
+def _quantity_value(raw) -> float | None:
+    import json as _json
+
+    if raw is None:
+        return None
+    return float(_json.loads(raw)["value"])
+
+
+@pytest.mark.parametrize(
+    "expr,expected_p1,expected_p2,quantity",
+    [
+        # QA-001/QA-002: query-derived Quantity define aggregates see ALL rows
+        ("Count(Vals)", 2, 1, False),
+        ("Sum(Vals)", 200.0, 60.0, True),
+        ("Avg(Vals)", 100.0, 60.0, True),
+        ("Min(Vals)", 80.0, 60.0, True),
+        ("Max(Vals)", 120.0, 60.0, True),
+        ("Median(Vals)", 100.0, 60.0, True),
+        ("Variance(Vals)", 800.0, None, True),
+        ("PopulationVariance(Vals)", 400.0, 0.0, True),
+        ("Product(Vals)", 9600.0, 60.0, True),
+        # QA-003: FHIR choice-cast dateTime defines accept Min/Max
+        ("Min(Dates)", "2024-01-02T00:00:00", "2024-02-01T00:00:00", False),
+        ("Max(Dates)", "2024-01-05T00:00:00", "2024-02-01T00:00:00", False),
+        ("Count(Dates)", 2, 1, False),
+        # QA-004: boolean aggregates over retrieve-backed query sources
+        ("AllTrue((from [Observation] O return O.status = 'final'))", False, True, False),
+        ("AnyTrue((from [Observation] O return O.status = 'final'))", True, True, False),
+        # QA-005: Mode over dynamic multi-valued field (all-unique -> tie -> null)
+        ("Mode(Patient.name.given)", None, None, False),
+        # element-rows numeric define: all rows, nulls ignored
+        ("Count(Nums)", 3, 3, False),
+        ("Sum(Nums)", 8.0, 8.0, False),
+        ("Min(Nums)", 1.0, 1.0, False),
+        ("Max(Nums)", 5.0, 5.0, False),
+    ],
+)
+def test_cql20_dynamic_operand_aggregates_end_to_end(expr, expected_p1, expected_p2, quantity) -> None:
+    cql = _CQL20_DYNAMIC_HEADER + "define R: " + expr + "\n"
+    results = _run_cql20_population_case(cql)
+    assert results["cpp"] == results["py"], expr
+    assert results["nopy"] == results["py"], expr
+    values = {pid: value for pid, value in results["py"]}
+    if quantity:
+        got_p1 = _quantity_value(values.get("P1"))
+        got_p2 = _quantity_value(values.get("P2"))
+    else:
+        got_p1, got_p2 = values.get("P1"), values.get("P2")
+        if isinstance(got_p1, float):
+            got_p1 = round(got_p1, 6)
+        if isinstance(got_p2, float):
+            got_p2 = round(got_p2, 6)
+        if isinstance(expected_p1, float):
+            expected_p1 = round(expected_p1, 6)
+        if isinstance(expected_p2, float):
+            expected_p2 = round(expected_p2, 6)
+    assert got_p1 == expected_p1, expr
+    assert got_p2 == expected_p2, expr
+
+
+def test_cql20_product_integer_list_is_integer_typed() -> None:
+    """CQL Appendix B Product(List<Integer>) Integer — typed result width."""
+    translated = translate_cql(
+        """library ProductIntType version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define R: Product({1, 2, 3, 4})
+"""
+    )
+    sql = f"SELECT {translated['R'].to_sql()}"
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        py_value = py.execute(sql).fetchone()[0]
+        cpp_value = cpp.execute(sql).fetchone()[0]
+        assert py_value == 24
+        assert isinstance(py_value, int)
+        assert cpp_value == py_value
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql20_datetime_cast_query_min_max_translate_and_execute() -> None:
+    """`O.effective as dateTime` lists accept Min/Max end-to-end (QA-003)."""
+    cql = (
+        _CQL20_DYNAMIC_HEADER
+        + "define R: Min((from [Observation] O return O.effective as dateTime))\n"
+    )
+    results = _run_cql20_population_case(cql)
+    assert results["cpp"] == results["py"]
+    values = dict(results["py"])
+    assert values["P1"] == "2024-01-02T00:00:00"
+    assert values["P2"] == "2024-02-01T00:00:00"
+
+
+def test_cql20_dynamic_numeric_query_aggregates_are_exact_typed() -> None:
+    """CQL-20 HISTORIAN QA-001: numeric-returning queries aggregate through
+    the exact-typed list lowering (CQL 1.5 §2.3 Decimal is exact; Appendix B
+    Sum(List<Integer>) -> Integer), not the DOUBLE row aggregate."""
+    for expr, expected_p1, type_check in [
+        ("Sum((from [Observation] O return O.valueQuantity.value as Integer))", 200, lambda v: isinstance(v, int)),
+        ("Product((from [Observation] O return O.valueQuantity.value as Integer))", 9600, lambda v: isinstance(v, int)),
+        ("Sum((from [Observation] O return ToDecimal(O.valueQuantity.value)))", 200, lambda v: isinstance(v, Decimal)),
+    ]:
+        cql = _CQL20_DYNAMIC_HEADER + "define R: " + expr + "\n"
+        results = _run_cql20_population_case(cql)
+        assert results["cpp"] == results["py"], expr
+        assert results["nopy"] == results["py"], expr
+        values = dict(results["py"])
+        assert values["P1"] == expected_p1 and type_check(values["P1"]), expr
+        assert values["P2"] == 60 and type_check(values["P2"]), expr
+
+
+def test_cql20_dynamic_decimal_sum_is_exact_not_floating_point() -> None:
+    """CQL 1.5 §2.3: Decimal is exact — dynamic Decimal-element Sum of
+    {0.1, 0.2} must equal 0.3, not a DOUBLE artifact (QA-001)."""
+    translated = translate_cql(
+        """library DynExactSum version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define R: Sum((from { 0.1, 0.2 } D return D + 0.0))
+"""
+    )
+    sql = f"SELECT {translated['R'].to_sql()}"
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        py_value = py.execute(sql).fetchone()[0]
+        cpp_value = cpp.execute(sql).fetchone()[0]
+        assert py_value == Decimal("0.3")
+        assert cpp_value == py_value
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql20_dynamic_boolean_operand_aggregates_raise_typed_error() -> None:
+    """CQL-20 HISTORIAN QA-002: dynamically derived Boolean operands are
+    rejected at translation with the typed CQL error, not a raw engine
+    binder error."""
+    for definition in [
+        "define BadDynSum: Sum(Dates is null)",
+        "define BadDynMedian: Median(Dates is null)",
+        "define BadDynProduct: Product(G is null)",
+    ]:
+        with pytest.raises(TranslationError):
+            translate_cql(
+                f"""library BadDynamicAggTypes version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define Dates: (from [Observation] O return O.effective as dateTime)
+define G: Patient.name.given
+{definition}
+"""
+            )
+
+
+def test_cql20_statistical_aggregates_are_exact_at_large_decimal_magnitudes() -> None:
+    """CQL-20 EXPLORER QA-001: Variance/StdDev/Median over large DECIMAL(38,8)
+    values must not lose the sub-centesimal deviations to a DOUBLE cast.
+
+    CQL 1.5 Appendix B Decimal carries >= 28 significant digits; the shifted
+    (deviation-from-anchor) lowering keeps the arithmetic exact where DOUBLE
+    produced 0.00020024 / 100000000000.02000896 artifacts."""
+    translated = translate_cql(
+        """library StatExact version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define VarLarge: Variance({ 100000000000.01, 100000000000.03 })
+define PopVarLarge: PopulationVariance({ 100000000000.01, 100000000000.03 })
+define StdDevLarge: StdDev({ 100000000000.01, 100000000000.03 })
+define MedianLargeOdd: Median({ 100000000000.01, 100000000000.03, 100000000000.02 })
+define MedianLargeEven: Median({ 100000000000.01, 100000000000.02, 100000000000.03, 100000000000.04 })
+define MedianNegativePair: Median({ -100000000000.03, -100000000000.01 })
+define VarianceNegativePair: Variance({ -100000000000.03, -100000000000.01 })
+define VarianceAllEqual: Variance({ 7.0, 7.0, 7.0 })
+"""
+    )
+    expected = {
+        "VarLarge": Decimal("0.00020000"),
+        "PopVarLarge": Decimal("0.00010000"),
+        "StdDevLarge": Decimal("0.01414214"),
+        "MedianLargeOdd": Decimal("100000000000.02000000"),
+        "MedianLargeEven": Decimal("100000000000.02500000"),
+        "MedianNegativePair": Decimal("-100000000000.02000000"),
+        "VarianceNegativePair": Decimal("0.00020000"),
+        "VarianceAllEqual": Decimal("0E-8"),
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    no_py_cm = no_python_connection()
+    no_py = no_py_cm.__enter__()
+    try:
+        for name, expr in translated.items():
+            sql = f"SELECT {expr.to_sql()}"
+            for label, con in (("py", py), ("cpp", cpp), ("nopy", no_py)):
+                value = con.execute(sql).fetchone()[0]
+                assert value == expected[name], (name, label, value, expected[name])
+    finally:
+        no_py_cm.__exit__(None, None, None)
+        py.close()
+        cpp.close()
+
+
+def test_cql20_statistical_macro_direct_surface_is_exact_for_decimal_lists() -> None:
+    """CQL-20 EXPLORER QA-001: the Variance/Median SQL macros (used by the
+    direct SQL surface and dynamic sources) use the shifted exact-decimal
+    form for DECIMAL lists."""
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    no_py_cm = no_python_connection()
+    no_py = no_py_cm.__enter__()
+    try:
+        cases = [
+            (
+                "SELECT Variance([TRY_CAST(100000000000.01 AS DECIMAL(38,8)), "
+                "TRY_CAST(100000000000.03 AS DECIMAL(38,8))])",
+                Decimal("0.00020000"),
+            ),
+            (
+                "SELECT PopulationVariance([TRY_CAST(100000000000.01 AS DECIMAL(38,8)), "
+                "TRY_CAST(100000000000.03 AS DECIMAL(38,8))])",
+                Decimal("0.00010000"),
+            ),
+            (
+                "SELECT Median([TRY_CAST(100000000000.01 AS DECIMAL(38,8)), "
+                "TRY_CAST(100000000000.02 AS DECIMAL(38,8)), "
+                "TRY_CAST(100000000000.03 AS DECIMAL(38,8))])",
+                Decimal("100000000000.02000000"),
+            ),
+            ("SELECT Variance([5.0::DECIMAL(38,8)])", None),
+            ("SELECT Variance([]::DECIMAL(38,8)[])", None),
+        ]
+        for sql, want in cases:
+            for label, con in (("py", py), ("cpp", cpp), ("nopy", no_py)):
+                got = con.execute(sql).fetchone()[0]
+                # The macro surface returns DOUBLE (callers cast to the CQL
+                # Decimal type); compare numerically.
+                got_cmp = None if got is None else Decimal(str(got))
+                want_cmp = None if want is None else Decimal(str(want))
+                assert got_cmp == want_cmp, (sql, label, got, want)
+    finally:
+        no_py_cm.__exit__(None, None, None)
+        py.close()
+        cpp.close()

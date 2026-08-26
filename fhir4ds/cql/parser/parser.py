@@ -556,41 +556,93 @@ class CQLParser:
 
         return left
 
+    def parse_not_expression(self) -> Expression:
+        """Parse the operand tier for and/or/xor/implies.
+
+        Unary ``not`` binds TIGHTER than and/or/xor/implies, so a NOT
+        primary is consumed by the equality/comparison operand tiers below
+        (:meth:`parse_equality_operand` / :meth:`parse_comparison_operand`)
+        and this tier is simply the equality level. See the grammar
+        analysis on :meth:`parse_equality_operand`.
+        """
+        return self.parse_equality_expression()
+
+    def parse_not_operand(self) -> Expression:
+        """Operand tier for unary ``not`` (typeExpression level).
+
+        Per the official CQL grammar (HL7/cql v1.5 ``cql.g4``, verified
+        empirically with an ANTLR 4.13.1-generated parser), earlier
+        ``expression`` alternatives bind TIGHTER. ``#notExpression`` is
+        listed AFTER ``is [not] null/true/false`` and ``is``/``as`` but
+        BEFORE between/set/inequality/equality/membership/and/or/implies,
+        so the operand of ``not`` is parsed at the typeExpression level:
+        ``not X is null`` is ``not (X is null)``, while ``not A = B`` is
+        ``(not A) = B`` and ``not X in Y`` is ``(not X) in Y`` (both static
+        type errors unless the operand is Boolean).
+        """
+        if self.match_and_advance(TokenType.NOT):
+            operand = self.parse_not_operand()
+            return UnaryExpression(operator="not", operand=operand)
+        return self.parse_type_expression()
+
     def parse_and_expression(self) -> Expression:
         """Parse AND expression."""
-        left = self.parse_equality_expression()
+        left = self.parse_not_expression()
 
         while self.match_and_advance(TokenType.AND):
-            right = self.parse_equality_expression()
+            right = self.parse_not_expression()
             left = BinaryExpression(operator="and", left=left, right=right)
 
         return left
 
     def parse_equality_expression(self) -> Expression:
         """Parse equality expression (=, !=, ~, !~)."""
-        left = self.parse_comparison_expression()
+        left = self.parse_equality_operand()
 
         while True:
             if self.match_and_advance(TokenType.EQUALS):
-                right = self.parse_comparison_expression()
+                right = self.parse_equality_operand()
                 left = BinaryExpression(operator="=", left=left, right=right)
             elif self.match_and_advance(TokenType.NOT_EQUALS):
-                right = self.parse_comparison_expression()
+                right = self.parse_equality_operand()
                 left = BinaryExpression(operator="!=", left=left, right=right)
             elif self.match_and_advance(TokenType.TILDE):
-                right = self.parse_comparison_expression()
+                right = self.parse_equality_operand()
                 left = BinaryExpression(operator="~", left=left, right=right)
             elif self.match_and_advance(TokenType.NOT_EQUIVALENT):
-                right = self.parse_comparison_expression()
+                right = self.parse_equality_operand()
                 left = BinaryExpression(operator="!~", left=left, right=right)
             else:
                 break
 
         return left
 
-    def parse_comparison_expression(self) -> Expression:
-        """Parse comparison expression (<, >, <=, >=) and list/interval membership operators."""
-        left = self.parse_type_expression()
+    def parse_equality_operand(self) -> Expression:
+        """Operand tier for ``=``/``!=``/``~``/``!~``.
+
+        Unary ``not`` binds tighter than equality per the official grammar,
+        so a NOT primary may be the (left or right) operand of an equality
+        comparison: ``not true = false`` parses as ``(not true) = false``.
+        The NOT's own operand is parsed at the typeExpression level
+        (:meth:`parse_not_operand`), and any comparison/membership operators
+        following the NOT primary attach to it (``not 3 < 2`` is
+        ``(not 3) < 2``).
+        """
+        if self.match_and_advance(TokenType.NOT):
+            operand = self.parse_not_operand()
+            return self.parse_comparison_expression(
+                left=UnaryExpression(operator="not", operand=operand)
+            )
+        return self.parse_comparison_expression()
+
+    def parse_comparison_expression(self, left: Expression | None = None) -> Expression:
+        """Parse comparison expression (<, >, <=, >=) and list/interval membership operators.
+
+        ``left`` may be supplied by :meth:`parse_equality_operand` when a
+        NOT primary starts the expression (e.g. ``(not 5) in {1, 2}``).
+        """
+        if left is None:
+            left = self.parse_type_expression()
 
         while True:
             if self.match_and_advance(TokenType.LESS_THAN):
@@ -684,20 +736,30 @@ class CQLParser:
                 right = self.parse_type_expression()
                 left = BinaryExpression(operator="meets after", left=left, right=right)
             elif self.match_and_advance(TokenType.STARTS):
-                # Handle "starts same [precision] as EXPR" temporal operator
+                # Handle "starts same [precision] (as|or after|or before) EXPR"
+                # temporal operator (CQL 1.5 grammar: 'same' dateTimePrecision?
+                # (relativeQualifier | 'as')).
                 if self.match(TokenType.IDENTIFIER) and self.current().value.lower() == "same" \
-                        and (self.peek().type == TokenType.AS or self.peek().type in (
-                            TokenType.YEAR, TokenType.MONTH, TokenType.DAY, TokenType.HOUR,
-                            TokenType.MINUTE, TokenType.SECOND, TokenType.MILLISECOND, TokenType.WEEK)):
+                        and (self.peek().type in (TokenType.AS, TokenType.OR_AFTER, TokenType.OR_BEFORE)
+                             or self.peek().type in (
+                                 TokenType.YEAR, TokenType.MONTH, TokenType.DAY, TokenType.HOUR,
+                                 TokenType.MINUTE, TokenType.SECOND, TokenType.MILLISECOND, TokenType.WEEK)):
                     self.advance()  # consume 'same'
                     # Optionally consume precision unit (e.g. "day" in "same day as")
                     precision = ""
                     if self.match(TokenType.YEAR, TokenType.MONTH, TokenType.DAY, TokenType.HOUR,
                                   TokenType.MINUTE, TokenType.SECOND, TokenType.MILLISECOND, TokenType.WEEK):
                         precision = " " + self.advance().value
-                    self.advance()  # consume 'as'
+                    qualifier = ""
+                    if self.match_and_advance(TokenType.AS):
+                        qualifier = " as"
+                    elif self.match_and_advance(TokenType.OR_AFTER):
+                        qualifier = " or after"
+                    elif self.match_and_advance(TokenType.OR_BEFORE):
+                        qualifier = " or before"
                     right = self.parse_type_expression()
-                    left = BinaryExpression(operator=f"starts same{precision} as", left=left, right=right)
+                    left = BinaryExpression(
+                        operator=f"starts same{precision}{qualifier}", left=left, right=right)
                 # Handle "starts before or on EXPR" = "starts on or before EXPR"
                 elif self.match(TokenType.BEFORE) and self.peek().type == TokenType.OR and \
                         self.peek(2).type == TokenType.IDENTIFIER and self.peek(2).value.lower() == "on":
@@ -747,20 +809,30 @@ class CQLParser:
                         right = self.parse_type_expression()
                     left = BinaryExpression(operator="starts", left=left, right=right)
             elif self.match_and_advance(TokenType.ENDS):
-                # Handle "ends same [precision] as EXPR" temporal operator
+                # Handle "ends same [precision] (as|or after|or before) EXPR"
+                # temporal operator (CQL 1.5 grammar: 'same' dateTimePrecision?
+                # (relativeQualifier | 'as')).
                 if self.match(TokenType.IDENTIFIER) and self.current().value.lower() == "same" \
-                        and (self.peek().type == TokenType.AS or self.peek().type in (
-                            TokenType.YEAR, TokenType.MONTH, TokenType.DAY, TokenType.HOUR,
-                            TokenType.MINUTE, TokenType.SECOND, TokenType.MILLISECOND, TokenType.WEEK)):
+                        and (self.peek().type in (TokenType.AS, TokenType.OR_AFTER, TokenType.OR_BEFORE)
+                             or self.peek().type in (
+                                 TokenType.YEAR, TokenType.MONTH, TokenType.DAY, TokenType.HOUR,
+                                 TokenType.MINUTE, TokenType.SECOND, TokenType.MILLISECOND, TokenType.WEEK)):
                     self.advance()  # consume 'same'
                     # Optionally consume precision unit (e.g. "day" in "same day as")
                     precision = ""
                     if self.match(TokenType.YEAR, TokenType.MONTH, TokenType.DAY, TokenType.HOUR,
                                   TokenType.MINUTE, TokenType.SECOND, TokenType.MILLISECOND, TokenType.WEEK):
                         precision = " " + self.advance().value
-                    self.advance()  # consume 'as'
+                    qualifier = ""
+                    if self.match_and_advance(TokenType.AS):
+                        qualifier = " as"
+                    elif self.match_and_advance(TokenType.OR_AFTER):
+                        qualifier = " or after"
+                    elif self.match_and_advance(TokenType.OR_BEFORE):
+                        qualifier = " or before"
                     right = self.parse_type_expression()
-                    left = BinaryExpression(operator=f"ends same{precision} as", left=left, right=right)
+                    left = BinaryExpression(
+                        operator=f"ends same{precision}{qualifier}", left=left, right=right)
                 # Handle "ends before or on EXPR" = "ends on or before EXPR"
                 elif self.match(TokenType.BEFORE) and self.peek().type == TokenType.OR and \
                         self.peek(2).type == TokenType.IDENTIFIER and self.peek(2).value.lower() == "on":
@@ -959,6 +1031,14 @@ class CQLParser:
                         self.expect(TokenType.AS, "Expected 'as'")
                         right = self.parse_type_expression()
                         left = BinaryExpression(operator=f"same {precision} as", left=left, right=right)
+                elif self.peek().type == TokenType.AS:
+                    # Bare "same as" (no precision): CQL 1.5 §8.12/§9.24 and
+                    # Cql.g4 concurrentWithIntervalOperatorPhrase allow
+                    # 'same' dateTimePrecision? (relativeQualifier | 'as').
+                    self.advance()  # consume 'same'
+                    self.advance()  # consume 'as'
+                    right = self.parse_type_expression()
+                    left = BinaryExpression(operator="same as", left=left, right=right)
                 else:
                     # Just "same" as identifier
                     break
@@ -1088,10 +1168,12 @@ class CQLParser:
         return left
 
     def parse_unary_expression(self) -> Expression:
-        """Parse unary expression (not, -, exists, distinct, start of, end of, point from)."""
-        if self.match_and_advance(TokenType.NOT):
-            operand = self.parse_unary_expression()
-            return UnaryExpression(operator="not", operand=operand)
+        """Parse unary expression (-, exists, distinct, start of, end of, point from).
+
+        NOTE: unary ``not`` is intentionally NOT parsed here. It lives at
+        ``parse_not_expression`` between the AND and equality levels to match
+        the CQL 1.5 grammar precedence (see that method's docstring).
+        """
 
         if self.match_and_advance(TokenType.MINUS):
             # CQL §Types/Ratio + §ToString RatioOverload example uses a
@@ -1566,6 +1648,7 @@ class CQLParser:
             return Literal(value=value, type="Long")
         elif token.type == TokenType.DECIMAL:
             value = float(token.value)
+            raw_str_override = None
             # Check for temporal unit (e.g., 3.5 hours)
             if self.match(TokenType.YEAR, TokenType.YEARS, TokenType.MONTH, TokenType.MONTHS,
                           TokenType.WEEK, TokenType.WEEKS, TokenType.DAY, TokenType.DAYS,
@@ -1584,24 +1667,34 @@ class CQLParser:
             raw_decimal = token.value.lstrip('+').lstrip('-')
             if '.' in raw_decimal:
                 int_part, frac_part = raw_decimal.split('.', 1)
-                if len(frac_part) > 8:
-                    raise ValueError(
-                        f"Decimal literal '{token.value}' exceeds maximum 8 fractional digits "
-                        f"(CQL §2.3)"
-                    )
+                # CQL 1.5 grammar decimalLiteral allows any number of
+                # fractional digits; the resulting value is limited to the
+                # implementation's maximum precision and scale (>= 28 digits
+                # precision, 8 scale per the spec ToDecimal note). Limit by
+                # rounding half-up to 8 fractional digits instead of
+                # rejecting the literal.
                 int_digits = int_part.lstrip('0') or '0'
                 if len(int_digits) > 28:
                     raise ValueError(
                         f"Decimal literal '{token.value}' exceeds maximum 28 integer digits "
                         f"(CQL §2.3)"
                     )
+                if len(frac_part) > 8:
+                    from decimal import Decimal, ROUND_HALF_UP
+                    limited = Decimal(token.value).quantize(
+                        Decimal('1.00000000'), rounding=ROUND_HALF_UP
+                    )
+                    value = float(limited)
+                    token = type(token)(type=token.type, value=format(limited, 'f'),
+                                        line=token.line, column=token.column)
+                    raw_str_override = format(limited, 'f')
             # CQL §Types/Ratio: bare numeric ratio literal.
             if self.match(TokenType.COLON):
                 ratio = self._maybe_parse_ratio_literal(Quantity(value=value, unit="1"))
                 if isinstance(ratio, FunctionRef):
                     return ratio
-                return Literal(value=value, type="Decimal", raw_str=token.value)
-            return Literal(value=value, type="Decimal", raw_str=token.value)
+                return Literal(value=value, type="Decimal", raw_str=raw_str_override or token.value)
+            return Literal(value=value, type="Decimal", raw_str=raw_str_override or token.value)
         elif token.type == TokenType.STRING:
             return Literal(value=token.value, type="String")
         elif token.type == TokenType.TRUE:
@@ -2807,6 +2900,11 @@ class CQLParser:
             return self.advance().value
         elif self.match(TokenType.QUOTED_IDENTIFIER):
             return self.advance().value
+        elif self.match(TokenType.TIMEZONE_FROM):
+            # 'timezoneoffset' is a CQL dateTimeComponent and a reserved
+            # keyword usable as a property name (cql.g4 keywordIdentifier):
+            # `(@2024-01-01T12:00:00+02:00).timezoneOffset`.
+            return self.advance().value
         elif self.match(TokenType.PATIENT, TokenType.PRACTITIONER, TokenType.ORGANIZATION,
                         TokenType.LOCATION, TokenType.RESOURCE, TokenType.BUNDLE):
             return self.advance().value
@@ -2901,7 +2999,19 @@ def parse_expression(source: str) -> Expression:
     lexer = Lexer(source)
     tokens = lexer.tokenize()
     parser = CQLParser(tokens)
-    return parser.parse_expression()
+    expression = parser.parse_expression()
+    # A well-formed expression must consume the entire input. Without this
+    # check, malformed sources such as `successor of T05:30` (bare Time
+    # literals require the @ prefix) silently parse a prefix and drop the
+    # remainder (CQL-11 EXPLORER QA-004).
+    if not parser.check(TokenType.EOF):
+        token = parser.current()
+        raise ParseError(
+            f"Unexpected trailing tokens after expression at line "
+            f"{token.line}, column {token.column}: {token.type.name} "
+            f"'{token.value}'"
+        )
+    return expression
 
 
 __all__ = [

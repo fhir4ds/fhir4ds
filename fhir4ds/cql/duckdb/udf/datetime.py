@@ -322,7 +322,20 @@ def _add_calendar_months(value: datetime, months: int) -> datetime:
     return value.replace(year=year, month=month, day=day)
 
 
+def _wall_clock(value: datetime) -> datetime:
+    """Drop tzinfo so calendar-duration math compares wall components.
+
+    Matches the native engine (DurationInCalendarYears/Months compare the
+    parsed components as written). Also avoids Python TypeError when one
+    operand is offset-naive and the other offset-aware.
+    """
+    if value.tzinfo is not None:
+        return value.replace(tzinfo=None)
+    return value
+
+
 def _duration_in_calendar_months(s: datetime, e: datetime) -> int:
+    s, e = _wall_clock(s), _wall_clock(e)
     if e < s:
         return -_duration_in_calendar_months(e, s)
 
@@ -333,6 +346,7 @@ def _duration_in_calendar_months(s: datetime, e: datetime) -> int:
 
 
 def _duration_in_calendar_years(s: datetime, e: datetime) -> int:
+    s, e = _wall_clock(s), _wall_clock(e)
     if e < s:
         return -_duration_in_calendar_years(e, s)
 
@@ -381,6 +395,35 @@ def _compute_duration(s: datetime, e: datetime, unit: str, is_week: bool) -> int
     return int(total_seconds / 86400)
 
 
+_SUBDAY_BOUNDARY_MS: dict[str, int] = {
+    'hour': 3_600_000,
+    'minute': 60_000,
+    'second': 1_000,
+    'millisecond': 1,
+}
+
+
+def _subday_boundary_difference(s: datetime, e: datetime, unit_ms: int) -> int | None:
+    """Count sub-day precision boundaries crossed between two instants.
+
+    CQL 1.5 §8.7 Difference: "returns the number of boundaries crossed for
+    the specified precision" — for hour/minute/second/millisecond precision
+    a boundary is a unit mark on the (UTC-normalized for timezone-aware
+    operands) timeline, so the count is the difference of floor(epoch/unit)
+    boundary indices, NOT truncation of the elapsed duration (that is
+    §8.8 Duration semantics).
+    """
+    if (s.tzinfo is None) != (e.tzinfo is None):
+        return None
+    epoch = _dt_class(1970, 1, 1)
+    if s.tzinfo is not None:
+        s = s.astimezone(timezone.utc).replace(tzinfo=None)
+        e = e.astimezone(timezone.utc).replace(tzinfo=None)
+    s_ms = round((s - epoch).total_seconds() * 1000)
+    e_ms = round((e - epoch).total_seconds() * 1000)
+    return (e_ms // unit_ms) - (s_ms // unit_ms)
+
+
 def _compute_difference(s: datetime, e: datetime, unit: str, is_week: bool) -> int | None:
     """Compute CQL difference boundary crossings between two datetimes."""
     if unit in ('year', 'years'):
@@ -388,20 +431,21 @@ def _compute_difference(s: datetime, e: datetime, unit: str, is_week: bool) -> i
     if unit in ('month', 'months'):
         return (e.year - s.year) * 12 + (e.month - s.month)
     if is_week or unit in ('week', 'weeks'):
-        return int((e.date() - s.date()).days / 7)
+        # CQL 1.5 §8.7 Difference: "For calculations involving weeks, Sunday
+        # is considered to be the first day of the week for the purposes of
+        # determining the number of boundaries crossed." Count Sunday
+        # boundaries, not whole elapsed weeks. In the proleptic Gregorian
+        # ordinal calendar, ordinal 7 (0001-01-07) is a Sunday, so Sunday
+        # ordinals are ≡ 0 (mod 7) and ordinal // 7 is the Sunday-based week
+        # index; the difference increments exactly once per Sunday crossed.
+        s_ord = s.date().toordinal()
+        e_ord = e.date().toordinal()
+        return (e_ord // 7) - (s_ord // 7)
     if unit in ('day', 'days'):
         return (e.date() - s.date()).days
-    total_seconds = _elapsed_seconds(s, e)
-    if total_seconds is None:
-        return None
-    if unit in ('hour', 'hours'):
-        return int(total_seconds / 3600)
-    if unit in ('minute', 'minutes'):
-        return int(total_seconds / 60)
-    if unit in ('second', 'seconds'):
-        return int(total_seconds)
-    if unit in ('millisecond', 'milliseconds'):
-        return int(total_seconds * 1000)
+    for unit_key, unit_ms in _SUBDAY_BOUNDARY_MS.items():
+        if unit in (unit_key, unit_key + 's'):
+            return _subday_boundary_difference(s, e, unit_ms)
     return (e.date() - s.date()).days
 
 
@@ -452,7 +496,14 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
     is_date_only = 'T' not in start_str and 'T' not in end_str
     date_unit = unit_key in ('year', 'month', 'day', 'week')
     date_fully_specified = is_date_only and date_unit and s_prec == 'day' and e_prec == 'day'
-    if date_unit and not date_fully_specified:
+    if date_unit and unit_key in ('year', 'month'):
+        # Calendar year/month durations depend on the (possibly unknown)
+        # day-of-month of both operands, so a certain result requires at
+        # least day precision on BOTH sides. A month-precision operand
+        # yields an uncertainty interval, mirroring the official test
+        # `years between DateTime(2005) and DateTime(2010) // Interval[4,5]`.
+        both_sufficient_precision = s_idx >= 2 and e_idx >= 2
+    elif date_unit and not date_fully_specified:
         both_sufficient_precision = s_idx > unit_idx and e_idx > unit_idx
     else:
         both_sufficient_precision = s_idx >= unit_idx and e_idx >= unit_idx
@@ -468,6 +519,14 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
     # Uncertainty: compute min/max by using low/high boundaries
     s_low = _low_boundary(start_str)
     s_high = _high_boundary(start_str)
+    if date_unit and unit_key in ('year', 'month') and 'T' not in start_str:
+        # Date-only operands follow the midnight convention for calendar
+        # (year/month) durations — the crisp day-precision path parses
+        # them at midnight — so the uncertain start's latest possible
+        # instant must not inject a phantom 23:59:59.999 that would flip
+        # an exact anniversary boundary (e.g. years between @1975-03 and
+        # @2020-03-31 must stay 45, not Interval[44,45]).
+        s_high = s_high.replace(hour=0, minute=0, second=0, microsecond=0)
     e_low = _low_boundary(end_str)
     e_high = _duration_high_boundary(end_str, unit_key)
 
@@ -786,6 +845,128 @@ def cqlUncertainCompare(a: str | None, b: str | None, op: str | None) -> bool | 
     return None
 
 
+def _uncertain_bounds(val: str) -> tuple[int, int]:
+    """Parse an int-or-interval VARCHAR into (low, high)."""
+    parsed = _parse_int_or_interval(val)
+    if isinstance(parsed, int):
+        return parsed, parsed
+    return int(parsed.get('start', 0)), int(parsed.get('end', 0))
+
+
+def _format_int_or_interval(low: int, high: int) -> str:
+    if low == high:
+        return str(low)
+    return orjson.dumps({
+        "start": low, "end": high, "lowClosed": True, "highClosed": True
+    }).decode('utf-8')
+
+
+def cqlUncertainMin(a: str | None, b: str | None) -> str | None:
+    """CQL 1.5 Min (scalar) over uncertainty-capable operands.
+
+    Interval-aware minimum: Min(Interval[a,b], Interval[c,d]) covers the
+    range of possible minima = Interval[min(a,c), min(b,d)]; collapses to a
+    crisp integer when both operands are crisp (or the range degenerates).
+    """
+    if a is None or b is None:
+        return None
+    try:
+        a_low, a_high = _uncertain_bounds(str(a))
+        b_low, b_high = _uncertain_bounds(str(b))
+    except (ValueError, TypeError, orjson.JSONDecodeError):
+        return None
+    return _format_int_or_interval(min(a_low, b_low), min(a_high, b_high))
+
+
+def cqlUncertainMax(a: str | None, b: str | None) -> str | None:
+    """CQL 1.5 Max (scalar) over uncertainty-capable operands.
+
+    Interval-aware maximum: Max(Interval[a,b], Interval[c,d]) =
+    Interval[max(a,c), max(b,d)] over possible maxima; collapses when crisp.
+    """
+    if a is None or b is None:
+        return None
+    try:
+        a_low, a_high = _uncertain_bounds(str(a))
+        b_low, b_high = _uncertain_bounds(str(b))
+    except (ValueError, TypeError, orjson.JSONDecodeError):
+        return None
+    return _format_int_or_interval(max(a_low, b_low), max(a_high, b_high))
+
+
+def cqlUncertainListMin(values) -> str | None:
+    """CQL 1.5 Min (list aggregate) over uncertainty-capable elements.
+
+    Null elements are ignored (CQL aggregate null handling); empty or
+    all-null lists return null. Interval-aware: the minimum over uncertain
+    elements ranges from the min of lows to the min of highs.
+    """
+    if values is None:
+        return None
+    low = high = None
+    for v in values:
+        if v is None:
+            continue
+        try:
+            v_low, v_high = _uncertain_bounds(str(v))
+        except (ValueError, TypeError, orjson.JSONDecodeError):
+            return None
+        low = v_low if low is None else min(low, v_low)
+        high = v_high if high is None else min(high, v_high)
+    if low is None or high is None:
+        return None
+    return _format_int_or_interval(low, high)
+
+
+def cqlUncertainListMax(values) -> str | None:
+    """CQL 1.5 Max (list aggregate) over uncertainty-capable elements.
+
+    Null elements are ignored; empty or all-null lists return null. The
+    maximum over uncertain elements ranges from the max of lows to the max
+    of highs.
+    """
+    if values is None:
+        return None
+    low = high = None
+    for v in values:
+        if v is None:
+            continue
+        try:
+            v_low, v_high = _uncertain_bounds(str(v))
+        except (ValueError, TypeError, orjson.JSONDecodeError):
+            return None
+        low = v_low if low is None else max(low, v_low)
+        high = v_high if high is None else max(high, v_high)
+    if low is None or high is None:
+        return None
+    return _format_int_or_interval(low, high)
+
+
+def cqlUncertainListSum(values) -> str | None:
+    """CQL 1.5 Sum (list aggregate) over uncertainty-capable elements.
+
+    Null elements are ignored (CQL aggregate null handling); empty or
+    all-null lists return null. Interval-aware (§22.21): the sum of
+    uncertain elements ranges from the sum of lows to the sum of highs —
+    uncertain elements are never silently dropped as null.
+    """
+    if values is None:
+        return None
+    low = high = None
+    for v in values:
+        if v is None:
+            continue
+        try:
+            v_low, v_high = _uncertain_bounds(str(v))
+        except (ValueError, TypeError, orjson.JSONDecodeError):
+            return None
+        low = v_low if low is None else low + v_low
+        high = v_high if high is None else high + v_high
+    if low is None or high is None:
+        return None
+    return _format_int_or_interval(low, high)
+
+
 # ========================================
 # Now/Today/TimeOfDay Functions
 # ========================================
@@ -863,11 +1044,21 @@ def differenceInDays(start: str | None, end: str | None) -> int | None:
 
 
 def differenceInWeeks(start: str | None, end: str | None) -> int | None:
-    """Calculate difference in weeks (CQL §19.2 — boundary crossings)."""
+    """Calculate difference in weeks (boundary crossings).
+
+    CQL 1.5 §8.7 Difference: Sunday is the first day of the week for
+    boundary counting; count Sunday boundaries crossed, not whole elapsed
+    weeks (ordinal // 7 is the Sunday-based week index because proleptic
+    Gregorian ordinal 7, 0001-01-07, is a Sunday).
+    """
     days = differenceInDays(start, end)
     if days is None:
         return None
-    return int(days / 7)
+    s = _parse_date(start)
+    e = _parse_date(end)
+    if not s or not e:
+        return None
+    return (e.toordinal() // 7) - (s.toordinal() // 7)
 
 
 def _parse_difference_datetime(value: str) -> datetime | None:
@@ -889,10 +1080,7 @@ def differenceInHours(start: str | None, end: str | None) -> int | None:
         e = _parse_difference_datetime(end)
         if not s or not e:
             return None
-        total_seconds = _elapsed_seconds(s, e)
-        if total_seconds is None:
-            return None
-        return int(total_seconds / 3600)
+        return _subday_boundary_difference(s, e, 3_600_000)
     except (ValueError, TypeError, AttributeError) as ex:
         _logger.warning("UDF differenceInHours failed: %s", ex)
         return None
@@ -907,10 +1095,7 @@ def differenceInMinutes(start: str | None, end: str | None) -> int | None:
         e = _parse_difference_datetime(end)
         if not s or not e:
             return None
-        total_seconds = _elapsed_seconds(s, e)
-        if total_seconds is None:
-            return None
-        return int(total_seconds / 60)
+        return _subday_boundary_difference(s, e, 60_000)
     except (ValueError, TypeError, AttributeError) as ex:
         _logger.warning("UDF differenceInMinutes failed: %s", ex)
         return None
@@ -925,10 +1110,7 @@ def differenceInSeconds(start: str | None, end: str | None) -> int | None:
         e = _parse_difference_datetime(end)
         if not s or not e:
             return None
-        total_seconds = _elapsed_seconds(s, e)
-        if total_seconds is None:
-            return None
-        return int(total_seconds)
+        return _subday_boundary_difference(s, e, 1_000)
     except (ValueError, TypeError, AttributeError) as ex:
         _logger.warning("UDF differenceInSeconds failed: %s", ex)
         return None
@@ -1315,10 +1497,35 @@ def dateAddQuantity(date_val: str | None, quantity_json: str | None) -> str | No
         # Time-only value (e.g. 'T15:59:59.999')
         t = _parse_time(date_val)
         if t is not None:
+            # CQL 1.5 §8.1 Add / §8.15 Subtract: "For Time values, the
+            # quantity unit must be one of: hours, minutes, seconds, or
+            # milliseconds." Day-level units (year/month/week/day, keyword
+            # or UCUM) on Time values return null rather than silently
+            # no-opping (the reference-date shift is invisible at time
+            # precision).
+            if unit_lower not in (
+                "hour", "hours", "h",
+                "minute", "minutes", "min",
+                "second", "seconds", "s",
+                "millisecond", "milliseconds", "ms",
+            ):
+                return None
             ref_dt = _dt_class(2000, 1, 1, t.hour, t.minute, t.second, t.microsecond)
             if unit_lower in _TIMEDELTA_UNITS:
                 result_dt = ref_dt + timedelta(**{_TIMEDELTA_UNITS[unit_lower]: value})
                 return _format_time_result_at_input_precision(result_dt, str(date_val))
+            return None
+
+        # CQL 1.5 §8.1 Add / §8.15 Subtract: "For Date values, the quantity
+        # unit must be one of: years, months, weeks, or days." Date values
+        # carry no 'T' marker; sub-day units on them are invalid and return
+        # null rather than silently converting down to zero days.
+        if "T" not in str(date_val) and unit_lower in (
+            "hour", "hours", "h",
+            "minute", "minutes", "min",
+            "second", "seconds", "s",
+            "millisecond", "milliseconds", "ms",
+        ):
             return None
 
         input_prec = _infer_precision(date_val)
@@ -1694,6 +1901,7 @@ def _compare_at_min_precision(
     b_str: str,
     *,
     promote_date_to_datetime: bool = False,
+    combined_seconds_ms: bool = True,
 ) -> tuple:
     """Compare two datetime strings at min(a_precision, b_precision).
 
@@ -1705,6 +1913,13 @@ def _compare_at_min_precision(
     component by component. If one value is specified at a precision and the
     other is not, the result is null (uncertain).
     """
+    # CQL 1.5 comparison signatures are same-type (Time,Time)/(Date,Date)/
+    # (DateTime,DateTime); there is no implicit Time<->DateTime conversion.
+    # A mixed Time/DateTime pair is undefined — report uncertain, never a
+    # definitive ordering from zero-filled date components.
+    if _is_time_only_text(a_str) != _is_time_only_text(b_str):
+        return (0, False)
+
     # Guard: reject non-datetime strings (interval JSON, quantity JSON, etc.)
     for s in (a_str, b_str):
         stripped = s.strip()
@@ -1716,6 +1931,17 @@ def _compare_at_min_precision(
     a_idx = _PRECISION_INDEX[a_prec]
     b_idx = _PRECISION_INDEX[b_prec]
     min_idx = min(a_idx, b_idx)
+
+    # CQL 1.5 (DateTime/Time type semantics, §Equal): seconds and milliseconds
+    # are combined and represented as a single decimal precision for the
+    # purposes of comparison, with an unspecified milliseconds component
+    # treated as 0. So `@T10:00:00.0 = @T10:00:00` is TRUE (not uncertain)
+    # and `@T10:00:00.5 = @T10:00:00` is FALSE (certain).
+    combined_sec_ms = (
+        combined_seconds_ms and {a_prec, b_prec} == {'second', 'millisecond'}
+    )
+    if combined_sec_ms:
+        min_idx = _PRECISION_INDEX['millisecond']
 
     a_comps = _parse_components(a_str)
     b_comps = _parse_components(b_str)
@@ -1737,7 +1963,9 @@ def _compare_at_min_precision(
     # All compared components are equal. Public CQL comparison operators must
     # treat differing precision as uncertain, but interval-boundary helpers use
     # closed endpoint normalization and need full-day Date bounds promoted.
-    if a_idx != b_idx:
+    # The second/millisecond pair is exempt: they are one combined decimal
+    # precision, so equality there is certain.
+    if a_idx != b_idx and not combined_sec_ms:
         if not promote_date_to_datetime:
             return (0, False)
 
@@ -1918,6 +2146,12 @@ def _compare_at_specified_precision(a_str: str, b_str: str, precision: str) -> t
 
     a_str = _extract_datetime_from_interval(a_str)
     b_str = _extract_datetime_from_interval(b_str)
+
+    # CQL 1.5 comparison signatures are same-type; a mixed Time/DateTime
+    # operand pair is undefined — uncertain (null), never a definitive
+    # ordering derived from zero-filled date components.
+    if _is_time_only_text(a_str) != _is_time_only_text(b_str):
+        return (0, False)
 
     a_prec = _infer_precision(a_str)
     b_prec = _infer_precision(b_str)
@@ -2161,6 +2395,13 @@ def registerDatetimeUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("cqlUncertainSubtract", cqlUncertainSubtract, null_handling="special")
     con.create_function("cqlUncertainMultiply", cqlUncertainMultiply, null_handling="special")
     con.create_function("cqlUncertainCompare", cqlUncertainCompare, null_handling="special")
+    # CQL-21 HISTORIAN QA-001..003: uncertainty-aware Min/Max for age-family
+    # (§22.21 VARCHAR) operands — scalar pair form and list-aggregate form.
+    con.create_function("cqlUncertainMin", cqlUncertainMin, null_handling="special")
+    con.create_function("cqlUncertainMax", cqlUncertainMax, null_handling="special")
+    con.create_function("cqlUncertainListMin", cqlUncertainListMin, null_handling="special")
+    con.create_function("cqlUncertainListMax", cqlUncertainListMax, null_handling="special")
+    con.create_function("cqlUncertainListSum", cqlUncertainListSum, null_handling="special")
     # Uncertainty-aware DurationBetween (returns VARCHAR — int string or interval JSON)
     con.create_function("cqlDurationBetween", cqlDurationBetween, null_handling="special")
     con.create_function("cqlDifferenceBetween", cqlDifferenceBetween, null_handling="special")

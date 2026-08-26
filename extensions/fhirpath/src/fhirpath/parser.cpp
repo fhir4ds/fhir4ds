@@ -226,10 +226,18 @@ ASTNodePtr Parser::parseUnionExpression() {
 	return left;
 }
 
-// typeExpression: additiveExpression ('is' | 'as') typeSpecifier
+// typeExpression: additiveExpression (('is' | 'as') typeSpecifier)*
+// FHIRPath N1 grammar: `expression ('is' | 'as') typeSpecifier #typeExpression`
+// is LEFT-RECURSIVE on the expression rule, so chained type specifiers such as
+// `A as Resource is FHIR.Patient` or `A is T is U` are valid official syntax
+// and must associate LEFT: ((A as T) as U) is V.
+// FP-15 EXPLORER QA-001 (2026-08-18): the previous single-shot `if` consumed
+// at most one typeSpecifier, leaving a trailing `is`/`as` unconsumed, which
+// surfaced as empty native results while the Python fallback evaluated the
+// chain correctly.
 ASTNodePtr Parser::parseTypeExpression() {
 	auto left = parseAdditiveExpression();
-	if (check(TokenType::Is) || check(TokenType::As)) {
+	while (check(TokenType::Is) || check(TokenType::As)) {
 		std::string op = current().text;
 		advance();
 		Token type_token = consume(TokenType::Identifier, "Expected type specifier after '" + op + "'");
@@ -246,7 +254,7 @@ ASTNodePtr Parser::parseTypeExpression() {
 		node->op = op;
 		node->name = type_name;
 		node->children = {left};
-		return node;
+		left = node;
 	}
 	return left;
 }

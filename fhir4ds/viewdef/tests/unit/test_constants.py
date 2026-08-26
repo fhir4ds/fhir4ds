@@ -5,7 +5,10 @@ into SQL values, including simple values, Codings, and
 CodeableConcepts.
 """
 
+import json
+
 import pytest
+from decimal import Decimal
 
 from ...errors import ConstantResolutionError
 from ...types import Constant
@@ -87,11 +90,15 @@ class TestResolveConstant:
         assert result == r"'O\'Reilly \\ lab\n'"
 
     def test_resolve_integer64_string_as_numeric_literal(self):
-        """FHIR JSON encodes integer64 as string, but FHIRPath receives a number."""
-        const = Constant(name="Large", value="1234567890123", value_type="integer64")
+        """FHIR JSON encodes integer64 as string, but FHIRPath receives a number.
+
+        Values beyond the FHIRPath Integer (32-bit) literal range raise an
+        explicit ConstantResolutionError — see TestInteger64Range.
+        """
+        const = Constant(name="Large", value="2147483646", value_type="integer64")
         result = resolve_constant(const)
 
-        assert result == "1234567890123"
+        assert result == "2147483646"
 
 
 class TestResolveCodingConstant:
@@ -669,3 +676,275 @@ class TestBuiltinVariablePrecedencePerSpecSofVd02Explorer:
             [Constant(name="MyConst", value="hello", value_type="string")]
         )
         assert resolver.resolve_in_path("%MyConst") == "'hello'"
+
+
+class TestInteger64Range:
+    """SOF-VD-02: integer64 constants must be representable as FHIRPath
+    Integer literals (32-bit signed) when substituted textually."""
+
+    def test_integer64_in_range_resolves(self):
+        const = Constant(name="Big", value="2147483647", value_type="integer64")
+        assert resolve_constant(const) == "2147483647"
+
+    def test_integer64_in_range_negative_resolves(self):
+        const = Constant(name="Small", value="-2147483648", value_type="integer64")
+        assert resolve_constant(const) == "-2147483648"
+
+    def test_integer64_out_of_range_raises(self):
+        const = Constant(name="Big", value="5000000000", value_type="integer64")
+        with pytest.raises(ConstantResolutionError, match="FHIRPath Integer literal range"):
+            resolve_constant(const)
+
+    def test_integer64_max_int64_raises(self):
+        const = Constant(name="Max", value="9223372036854775807", value_type="integer64")
+        with pytest.raises(ConstantResolutionError):
+            resolve_constant(const)
+
+    def test_out_of_range_integer64_reference_raises_at_resolution(self):
+        resolver = ConstantResolver.from_list(
+            [{"name": "big", "valueInteger64": "5000000000"}]
+        )
+        with pytest.raises(ConstantResolutionError, match="big"):
+            resolver.resolve_in_path("%big = 5000000000")
+
+    def test_undefined_reference_still_raises(self):
+        resolver = ConstantResolver.from_list(
+            [{"name": "big", "valueInteger64": "5000000000"}]
+        )
+        with pytest.raises(ConstantResolutionError, match="Undefined constant"):
+            resolver.resolve_in_path("%other")
+
+
+class TestDecimalPlainNotation:
+    """Decimal constants must substitute as valid FHIRPath Number literals.
+
+    The FHIRPath N1 grammar has no exponent notation, so Python ``str()``
+    scientific notation (|v| < 1e-4 or |v| >= 1e16) would silently produce
+    empty results in both evaluation engines (SQL-on-FHIR v2 constant
+    value[x] "effectively converts the FHIR literal ... to a FHIRPath
+    literal").
+    """
+
+    def test_small_decimal_not_scientific(self):
+        const = Constant(name="Tiny", value=0.00001, value_type="decimal")
+        assert resolve_constant(const) == "0.00001"
+
+    def test_very_small_decimal_not_scientific(self):
+        const = Constant(name="Tiny", value=0.0000001, value_type="decimal")
+        assert resolve_constant(const) == "0.0000001"
+
+    def test_large_decimal_not_scientific(self):
+        const = Constant(name="Big", value=1e21, value_type="decimal")
+        assert resolve_constant(const) == "1000000000000000000000.0"
+
+    def test_decimal_integral_value_has_fractional_part(self):
+        const = Constant(name="Whole", value=3, value_type="decimal")
+        assert resolve_constant(const) == "3.0"
+
+    def test_decimal_preserves_authored_precision(self):
+        const = Constant(
+            name="Precise",
+            value=Decimal("12345678901234567890.12345"),
+            value_type="decimal",
+        )
+        assert resolve_constant(const) == "12345678901234567890.12345"
+
+    def test_negative_exponent_float_round_trips(self):
+        const = Constant(name="Neg", value=-1.5e-8, value_type="decimal")
+        assert resolve_constant(const) == "-0.000000015"
+
+    def test_ordinary_decimal_unchanged(self):
+        const = Constant(name="Ratio", value=3.14, value_type="decimal")
+        assert resolve_constant(const) == "3.14"
+
+
+class TestDecimalLosslessParsing:
+    """ViewDefinition JSON decimals must parse without float precision loss."""
+
+    def test_parser_preserves_18_digit_decimal_constant(self):
+        from ...parser import parse_view_definition
+
+        view = parse_view_definition(
+            '{"resource":"Patient",'
+            '"constant":[{"name":"Precise","valueDecimal":12345678901234567890.12345}],'
+            '"select":[{"column":[{"name":"pid","path":"id"}]}]}'
+        )
+        value = view.constants[0].value
+        assert isinstance(value, Decimal)
+        assert str(value) == "12345678901234567890.12345"
+        assert resolve_constant(view.constants[0]) == "12345678901234567890.12345"
+
+    def test_parser_decimal_substitutes_plain_literal_end_to_end(self):
+        from ...parser import parse_view_definition
+        from ...generator import SQLGenerator
+
+        view = parse_view_definition(
+            '{"resource":"Patient",'
+            '"constant":[{"name":"Tiny","valueDecimal":0.00001}],'
+            '"select":[{"column":[{"name":"flag","path":"%Tiny < 0.001","type":"boolean"}]}]}'
+        )
+        sql = SQLGenerator().generate(view)
+        assert "0.00001 < 0.001" in sql
+        assert "1e-05" not in sql
+
+
+class TestBacktickConstantReferences:
+    """FHIRPath permits backtick-delimited environment variable names (%`name`).
+
+    SQL-on-FHIR constants are substituted before evaluation, so the backtick
+    spelling must resolve identically to the plain %name form (FHIRPath spec,
+    Environment Variables; SQL-on-FHIR v2 notes: placeholders are "effectively
+    replaced by the value of the constant before the FHIRPath expression is
+    evaluated"). Regression for SOF-VD-08 EXPLORER QA-001: the backtick form
+    previously fell through to the delimited-identifier skip-region and
+    silently evaluated to an empty collection (NULL columns, all-rows-dropped
+    where filters).
+    """
+
+    def _consts(self):
+        return {"lbl": Constant(name="lbl", value="LAB", value_type="string")}
+
+    def test_backtick_reference_resolves(self):
+        assert (
+            resolve_constants_in_path("x = %`lbl`", self._consts()) == "x = 'LAB'"
+        )
+
+    def test_backtick_reference_inside_string_literal_untouched(self):
+        path = "'%`lbl`'"
+        assert resolve_constants_in_path(path, self._consts()) == path
+
+    def test_plain_reference_unchanged(self):
+        assert resolve_constants_in_path("x = %lbl", self._consts()) == "x = 'LAB'"
+
+    def test_builtin_runtime_variable_normalized_to_plain_form(self):
+        # Runtime variables are resolved by the engines, which do not accept
+        # the backtick form; normalize %`rowIndex` -> %rowIndex.
+        assert resolve_constants_in_path("%`rowIndex`", {}) == "%rowIndex"
+
+    def test_undefined_backtick_reference_raises_loudly(self):
+        with pytest.raises(ConstantResolutionError):
+            resolve_constants_in_path("x = %`nope`", self._consts())
+
+    def test_escaped_backtick_name_cannot_be_defined_so_raises(self):
+        # Constant names must satisfy the sql-name invariant (no backticks),
+        # so a backtick-escaped name is never defined and must fail loudly
+        # rather than silently evaluating to an empty collection.
+        with pytest.raises(ConstantResolutionError):
+            resolve_constants_in_path(r"%`a\`b`", self._consts())
+
+    def test_backtick_constant_in_unionall_branch_end_to_end(self):
+        import duckdb
+
+        from ...parser import parse_view_definition
+        from ...generator import SQLGenerator
+        from ....fhirpath.duckdb import register_fhirpath
+
+        view = parse_view_definition(
+            '{"resource":"Patient",'
+            '"constant":[{"name":"lbl","valueString":"LAB"}],'
+            '"select":[{"unionAll":[{"column":['
+            '{"name":"v","path":"%`lbl`"},{"name":"pid","path":"id"}]}]}]}'
+        )
+        sql = SQLGenerator().generate(view)
+        con = duckdb.connect()
+        try:
+            register_fhirpath(con)
+            con.execute("CREATE TABLE patients (resource JSON)")
+            con.execute(
+                "INSERT INTO patients VALUES (?)",
+                [json.dumps({"resourceType": "Patient", "id": "p1"})],
+            )
+            assert con.execute(sql).fetchall() == [("LAB", "p1")]
+        finally:
+            con.close()
+
+    def test_backtick_constant_in_where_end_to_end(self):
+        import duckdb
+
+        from ...parser import parse_view_definition
+        from ...generator import SQLGenerator
+        from ....fhirpath.duckdb import register_fhirpath
+
+        view = parse_view_definition(
+            '{"resource":"Patient",'
+            '"constant":[{"name":"lbl","valueString":"LAB"}],'
+            '"where":[{"path":"%`lbl` = \'LAB\'"}],'
+            '"select":[{"column":[{"name":"pid","path":"id"}]}]}'
+        )
+        sql = SQLGenerator().generate(view)
+        con = duckdb.connect()
+        try:
+            register_fhirpath(con)
+            con.execute("CREATE TABLE patients (resource JSON)")
+            con.execute(
+                "INSERT INTO patients VALUES (?)",
+                [json.dumps({"resourceType": "Patient", "id": "p1"})],
+            )
+            assert con.execute(sql).fetchall() == [("p1",)]
+        finally:
+            con.close()
+
+
+class TestDecimalToDictJsonSerialization:
+    """SOF-VD-12 EXPLORER QA-001: to_dict must emit JSON-serializable numbers.
+
+    The parser keeps valueDecimal as Decimal (lossless FHIRPath literal
+    doctrine), but Constant.to_dict previously emitted the Decimal verbatim,
+    so json.dumps(vd.to_dict()) raised TypeError and the output type depended
+    on the input path (JSON string -> Decimal, dict -> float).
+    """
+
+    def test_to_dict_output_is_json_serializable(self):
+        from ...parser import parse_view_definition
+
+        view = parse_view_definition(
+            '{"resource":"Patient",'
+            '"constant":[{"name":"Ratio","valueDecimal":1.2}],'
+            '"select":[{"column":[{"name":"pid","path":"id"}]}]}'
+        )
+        encoded = json.dumps(view.to_dict())
+        assert json.loads(encoded)["constant"][0]["valueDecimal"] == 1.2
+
+    def test_to_dict_matches_dict_input_path(self):
+        from ...parser import parse_view_definition
+
+        via_string = parse_view_definition(
+            '{"resource":"Patient",'
+            '"constant":[{"name":"Ratio","valueDecimal":1.2}],'
+            '"select":[{"column":[{"name":"pid","path":"id"}]}]}'
+        )
+        via_dict = parse_view_definition(
+            {
+                "resource": "Patient",
+                "constant": [{"name": "Ratio", "valueDecimal": 1.2}],
+                "select": [{"column": [{"name": "pid", "path": "id"}]}],
+            }
+        )
+        assert via_string.to_dict() == via_dict.to_dict()
+
+    def test_integral_decimal_serializes_as_int(self):
+        const = Constant(name="Whole", value=Decimal("2.0"), value_type="decimal")
+        assert const.to_dict() == {"name": "Whole", "valueDecimal": 2}
+
+    def test_float_passthrough_unchanged(self):
+        const = Constant(name="Half", value=1.5, value_type="decimal")
+        assert const.to_dict() == {"name": "Half", "valueDecimal": 1.5}
+
+    def test_unrepresentable_decimal_fails_fast(self):
+        const = Constant(
+            name="Precise", value=Decimal("1.23456789012345678"),
+            value_type="decimal",
+        )
+        with pytest.raises(ValueError, match="valueDecimal"):
+            const.to_dict()
+
+    def test_dataclass_value_stays_decimal_for_generator(self):
+        from ...parser import parse_view_definition
+
+        view = parse_view_definition(
+            '{"resource":"Patient",'
+            '"constant":[{"name":"Tiny","valueDecimal":0.00001}],'
+            '"select":[{"column":[{"name":"pid","path":"id"}]}]}'
+        )
+        assert isinstance(view.constants[0].value, Decimal)
+        assert resolve_constant(view.constants[0]) == "0.00001"

@@ -5,6 +5,7 @@ Parses JSON ViewDefinitions into Python dataclasses for SQL generation.
 """
 
 from typing import List, Dict, Any, Union
+from decimal import Decimal
 import json
 
 from .types import (
@@ -12,6 +13,7 @@ from .types import (
     Column,
     ColumnTag,
     Select,
+    cnl1_url_warning,
     Constant,
     Join,
     JoinType,
@@ -32,6 +34,13 @@ from .types import (
 )
 from .errors import ParseError
 from .metadata import KNOWN_FHIR_RESOURCE_TYPES
+
+# Fields allowed in a SQL-on-FHIR v2 column object (models.fsh
+# ViewDefinition.select.column; the reference validator schema sets
+# additionalProperties:false).
+_COLUMN_FIELDS = frozenset(
+    {"name", "path", "description", "collection", "type", "tag"}
+)
 
 
 def _parse_optional_sql_name(data: Dict[str, Any], field_name: str) -> str | None:
@@ -130,6 +139,14 @@ def _parse_column(col_data: Dict[str, Any]) -> Column:
             "Unsupported field 'tags'. SQL-on-FHIR ViewDefinition uses "
             "the singular 'tag' array for column metadata."
         )
+    unknown_fields = set(col_data) - _COLUMN_FIELDS
+    if unknown_fields:
+        raise ParseError(
+            "Unsupported column field(s): "
+            + ", ".join(sorted(f"'{f}'" for f in unknown_fields))
+            + ". SQL-on-FHIR ViewDefinition columns may only use: "
+            + ", ".join(sorted(_COLUMN_FIELDS)) + "."
+        )
     raw_tag = col_data.get("tag", [])
     if raw_tag is None or not isinstance(raw_tag, list):
         raise ParseError(
@@ -173,21 +190,49 @@ def _parse_column(col_data: Dict[str, Any]) -> Column:
     )
 
 
-def _parse_where(where_data: Union[List[Any], Dict[str, Any], str]) -> List[Dict[str, str]]:
-    """Parse where conditions from JSON.
+_WHERE_ITEM_ALLOWED_FIELDS = ("path", "description")
 
-    Accepts both spec-compliant dict format ({"path": "expr"}) and
-    convenience string format ("expr") which is wrapped automatically.
+
+def _parse_where(where_data: Union[List[Any], Dict[str, Any], str]) -> List[Dict[str, str]]:
+    """Parse where conditions from strict official JSON.
+
+    Enforces the official validator schema for ``ViewDefinition.where``
+    (FHIR/sql-on-fhir.js sof-js/src/validate.js): a JSON array of objects
+    with ``path`` (required) and optional ``description``, and no additional
+    properties. Per FHIR JSON rules, repeating (``max="*"``) elements MUST
+    be arrays, so a bare string or single object is invalid official JSON
+    shape at the strict parser boundary. The permissive
+    ``validate_where_conditions`` convenience normalization remains
+    available for direct dataclass boundaries.
 
     Args:
-        where_data: Where condition object, string, or list of either form
+        where_data: Where condition array (list of {path, description} objects)
 
     Returns:
         List of condition dictionaries with 'path' keys
 
     Raises:
-        ParseError: If a where condition has an unsupported type
+        ParseError: If a where condition has an unsupported shape
     """
+    if not isinstance(where_data, list):
+        raise ParseError(
+            "Where must be a JSON array of objects with a 'path' field "
+            "(repeating elements are arrays); got "
+            f"{type(where_data).__name__}"
+        )
+    for index, item in enumerate(where_data):
+        if not isinstance(item, dict):
+            raise ParseError(
+                f"Where[{index}] must be an object with a 'path' field; got "
+                f"{type(item).__name__}"
+            )
+        unknown = set(item) - set(_WHERE_ITEM_ALLOWED_FIELDS)
+        if unknown:
+            raise ParseError(
+                f"Where[{index}] contains unknown field(s): "
+                f"{', '.join(sorted(unknown))}; allowed fields are "
+                "'path' and 'description'"
+            )
     try:
         return validate_where_conditions(where_data, "Where")
     except ValueError as exc:
@@ -234,14 +279,37 @@ def _parse_select(select_data: Dict[str, Any]) -> Select:
                 )
         return raw
 
-    # Parse columns
+    # Unknown select-level fields are spec-invalid: the official SQL-on-FHIR
+    # validator (sof-js/src/validate.js) declares select items with
+    # additionalProperties:false, and neither v2 SD (2.0.0 / 3.0.0-ballot)
+    # defines any other select element. Silently dropping unknown fields
+    # (e.g. a FHIR StructureDefinition-style `contentReference` or a
+    # `columns` typo) would evaluate remaining columns in the wrong context
+    # or silently lose them.
+    _SELECT_FIELDS = {
+        'column', 'select', 'unionAll', 'forEach', 'forEachOrNull',
+        'repeat', 'where',
+    }
+    unknown_fields = set(select_data) - _SELECT_FIELDS
+    if unknown_fields:
+        raise ParseError(
+            "Select contains unknown field(s): "
+            + ", ".join(sorted(f"'{f}'" for f in unknown_fields))
+            + ". SQL-on-FHIR select structures only allow 'column', "
+            "'select', 'unionAll', 'forEach', 'forEachOrNull', 'repeat', "
+            "and 'where'."
+        )
+
+    # Parse columns; the official validator requires column arrays, when
+    # present, to contain at least one item (minItems: 1).
     columns = []
-    for col in _parse_object_array('column'):
+    for col in _parse_object_array('column', require_non_empty=True):
         columns.append(_parse_column(col))
 
-    # Parse nested selects
+    # Parse nested selects; the official validator requires select arrays,
+    # when present, to contain at least one item (minItems: 1).
     nested_selects = []
-    for sel in _parse_object_array('select'):
+    for sel in _parse_object_array('select', require_non_empty=True):
         nested_selects.append(_parse_select(sel))
 
     # Parse unionAll
@@ -397,9 +465,24 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
         ViewDefinition dataclass instance
 
     Raises:
-        ParseError: If JSON is invalid or required fields are missing
+        ParseError: If JSON is invalid, required fields are missing, or the
+            document is nested too deeply to parse (adversarial deeply
+            nested ``select`` trees raise a typed ParseError instead of an
+            uncaught interpreter ``RecursionError``)
         TypeError: If the input type is not supported
     """
+    try:
+        return _parse_view_definition(json_str_or_dict)
+    except RecursionError as exc:
+        raise ParseError(
+            "ViewDefinition is nested too deeply to parse. The select tree "
+            "exceeds the interpreter recursion limit; reduce the nesting "
+            "depth of 'select'/'unionAll' structures."
+        ) from exc
+
+
+def _parse_view_definition(json_str_or_dict) -> ViewDefinition:
+    """Parse implementation; recursion depth guarded by parse_view_definition."""
     if isinstance(json_str_or_dict, dict):
         data = json_str_or_dict
     elif isinstance(json_str_or_dict, str):
@@ -409,7 +492,11 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
                 "SQL-on-FHIR JSON representation instead."
             )
         try:
-            data = json.loads(json_str_or_dict)
+            # Parse decimal literals losslessly: FHIR decimal precision is 18
+            # digits and constant value[x] is substituted verbatim into
+            # FHIRPath expressions, so binary float rounding would silently
+            # corrupt authored ViewDefinition constants.
+            data = json.loads(json_str_or_dict, parse_float=Decimal)
         except json.JSONDecodeError as e:
             raise ParseError(f"Invalid JSON: {e}")
     else:
@@ -632,14 +719,26 @@ def validate_view_definition(vd: ViewDefinition) -> List[str]:
         description=vd.description,
     )
 
+    # SQL-on-FHIR v2 cnl-1 WARNING invariant on ViewDefinition.url: the
+    # official StructureDefinition-ViewDefinition declares cnl-1 with
+    # severity=warning on ViewDefinition.url, and the sql-on-fhir.js
+    # reference implementation does not enforce it at all. Do not promote
+    # to an error; the uri lexical (no-whitespace) error stays.
+    cnl1_warning = cnl1_url_warning(vd.url, "ViewDefinition.url")
+    if cnl1_warning is not None:
+        warnings.append(cnl1_warning)
+
     if vd.name is not None:
         _warn_from_validator(validate_sql_name, vd.name, "ViewDefinition.name")
         # SQL-on-FHIR v2 cnl-0 warning invariant on ViewDefinition.name:
         # when present, must match ^[A-Z]([A-Za-z0-9_]){1,254}$ (leading
         # capital, 2-255 chars total). Warning severity per spec — do not
         # promote to error. The sql-name error invariant above stays.
+        # The spec regex class [A-Z] is ASCII-only; Python str.isupper()
+        # accepts non-ASCII capitals (e.g. 'É'), so use an explicit range
+        # check to keep the warning aligned with the normative regex.
         if vd.name and (
-            not vd.name[0].isupper() or len(vd.name) > 255 or len(vd.name) < 2
+            not ("A" <= vd.name[0] <= "Z") or len(vd.name) > 255 or len(vd.name) < 2
         ):
             warnings.append(
                 f"ViewDefinition.name {vd.name!r} violates cnl-0: must start "

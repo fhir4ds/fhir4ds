@@ -14,27 +14,28 @@ from typing import Any, Dict, Optional, Union
 
 from .errors import SQLQueryParseError
 from .types import (
+    LIBRARY_TYPES_CODESYSTEM_CANONICALS,
     SQLQUERY_LIBRARY_TYPE_CODE,
-    SQLQUERY_PROFILE_CANONICAL,
-    SQLVIEW_PROFILE_CANONICAL,
+    SQLQUERY_PROFILE_CANONICALS,
+    SQLVIEW_LIBRARY_TYPE_CODE,
+    SQLVIEW_PROFILE_CANONICALS,
     SQLContent,
     SQLParameter,
     SQLQuery,
     SQLRelatedArtifact,
     SQLView,
+    matches_profile_canonical,
 )
 from .validator import validate_sql_library
 
 
-_KNOWN_LIBRARY_KEYS = frozenset({
+# Top-level Library keys emitted by ``to_dict`` from dataclass fields.
+# Every other key (known FHIR fields like ``description`` / ``publisher``
+# as well as unknown/custom keys) flows into the verbatim ``extra_fields``
+# bag so the parse -> serialize roundtrip loses nothing.
+_MODELED_LIBRARY_KEYS = frozenset({
     "resourceType", "id", "meta", "url", "version", "name", "title",
     "status", "type", "content", "relatedArtifact", "parameter",
-    "subject[x]", "description", "purpose", "usage", "copyright",
-    "approvalDate", "lastReviewDate", "effectivePeriod", "topic",
-    "author", "editor", "reviewer", "endorser", "relatedArtifact",
-    "identifier", "publisher", "contact", "useContext", "jurisdiction",
-    "language", "text", "contained", "extension", "modifierExtension",
-    "experimental", "date", "subtitle",
 })
 
 
@@ -51,18 +52,17 @@ def _extract_profile_urls(data: Dict[str, Any]) -> list[str]:
 def _detect_profile(data: Dict[str, Any]) -> str:
     """Return 'SQLQuery' or 'SQLView' based on meta.profile declaration.
 
+    Accepts every published canonical form (official
+    ``hl7.org/fhir/uv/sql-on-fhir`` base plus the engine-legacy
+    ``sql-on-fhir.org`` spellings), optionally version-pinned with ``|``.
+
     Raises:
-        SQLQueryParseError: when neither profile canonical is present.
+        SQLQueryParseError: when neither profile canonical is present, or
+            both are declared (ambiguous).
     """
     profiles = _extract_profile_urls(data)
-    has_query = any(
-        p == SQLQUERY_PROFILE_CANONICAL or p.startswith(SQLQUERY_PROFILE_CANONICAL + "|")
-        for p in profiles
-    )
-    has_view = any(
-        p == SQLVIEW_PROFILE_CANONICAL or p.startswith(SQLVIEW_PROFILE_CANONICAL + "|")
-        for p in profiles
-    )
+    has_query = any(matches_profile_canonical(p, SQLQUERY_PROFILE_CANONICALS) for p in profiles)
+    has_view = any(matches_profile_canonical(p, SQLVIEW_PROFILE_CANONICALS) for p in profiles)
     if has_query and has_view:
         raise SQLQueryParseError(
             f"Library declares both SQLQuery and SQLView profiles; pick one. "
@@ -74,18 +74,23 @@ def _detect_profile(data: Dict[str, Any]) -> str:
         return "SQLView"
     raise SQLQueryParseError(
         f"Library does not declare a SQL-on-FHIR v2 Analytics Layer profile. "
-        f"meta.profile must contain {SQLQUERY_PROFILE_CANONICAL!r} or "
-        f"{SQLVIEW_PROFILE_CANONICAL!r}. Got: {profiles}"
+        f"meta.profile must contain a SQLQuery or SQLView canonical "
+        f"(e.g. 'http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery'). "
+        f"Got: {profiles}"
     )
 
 
-def _require_type_coding(data: Dict[str, Any]) -> None:
-    """Enforce Library.type.coding contains the sql-query code."""
+def _require_type_coding(data: Dict[str, Any], expected_code: str) -> None:
+    """Enforce Library.type.coding contains the profile's type code.
+
+    The SQLQuery profile fixes ``type = LibraryTypesCodes#sql-query`` and
+    the SQLView profile fixes ``type = LibraryTypesCodes#sql-view``.
+    """
     raw_type = data.get("type")
     if not isinstance(raw_type, dict):
         raise SQLQueryParseError(
             "Library.type must be a CodeableConcept with coding "
-            f"[{SQLQUERY_LIBRARY_TYPE_CODE!r}]"
+            f"[{expected_code!r}]"
         )
     codings = raw_type.get("coding") or []
     if not isinstance(codings, list) or not codings:
@@ -95,10 +100,20 @@ def _require_type_coding(data: Dict[str, Any]) -> None:
     for coding in codings:
         if not isinstance(coding, dict):
             continue
-        if coding.get("code") == SQLQUERY_LIBRARY_TYPE_CODE:
-            return
+        if coding.get("code") != expected_code:
+            continue
+        system = coding.get("system")
+        # The profiles fix the type to LibraryTypesCodes; a coding that
+        # pins a *different* code system is a different concept and must
+        # not satisfy the fixed type. An absent system is tolerated.
+        if system is not None and system not in LIBRARY_TYPES_CODESYSTEM_CANONICALS:
+            raise SQLQueryParseError(
+                f"Library.type.coding code {expected_code!r} must come from the "
+                f"LibraryTypesCodes code system (or omit 'system'); got system {system!r}"
+            )
+        return
     raise SQLQueryParseError(
-        f"Library.type.coding must include code {SQLQUERY_LIBRARY_TYPE_CODE!r}"
+        f"Library.type.coding must include code {expected_code!r}"
     )
 
 
@@ -122,7 +137,7 @@ def _parse_content(entries: Any) -> list[SQLContent]:
                 f"content[{i}].data must be a base64-encoded SQL string"
             )
         try:
-            decoded = base64.b64decode(raw_data).decode("utf-8")
+            decoded = base64.b64decode(raw_data, validate=True).decode("utf-8")
         except Exception as exc:
             raise SQLQueryParseError(
                 f"content[{i}].data is not valid base64-encoded UTF-8: {exc}"
@@ -132,7 +147,14 @@ def _parse_content(entries: Any) -> list[SQLContent]:
             if isinstance(ext, dict) and ext.get("url", "").endswith("sqlText"):
                 sql_text = ext.get("valueString")
                 break
-        parsed.append(SQLContent(content_type=content_type, data=decoded, sql_text=sql_text))
+        extras = {
+            k: v for k, v in entry.items()
+            if k not in ("contentType", "data")
+        }
+        parsed.append(SQLContent(
+            content_type=content_type, data=decoded, sql_text=sql_text,
+            extra_fields=extras,
+        ))
     return parsed
 
 
@@ -160,7 +182,13 @@ def _parse_related_artifact(entries: Any) -> list[SQLRelatedArtifact]:
             raise SQLQueryParseError(
                 f"relatedArtifact[{i}].resource must be a non-empty canonical"
             )
-        parsed.append(SQLRelatedArtifact(label=label, resource=resource))
+        parsed.append(SQLRelatedArtifact(
+            label=label, resource=resource,
+            extra_fields={
+                k: v for k, v in entry.items()
+                if k not in ("type", "label", "resource")
+            },
+        ))
     return parsed
 
 
@@ -179,19 +207,45 @@ def _parse_parameter(entries: Any) -> list[SQLParameter]:
         ptype = entry.get("type")
         if not isinstance(ptype, str) or not ptype:
             raise SQLQueryParseError(f"parameter[{i}].type must be a FHIR type string")
-        use = entry.get("use", "in")
+        # Library.parameter.type is bound (required) to the FHIR all-types
+        # value set; the FHIR-type registry is the data-driven authority.
+        from ..viewdef.types import fhir_type_to_duckdb
+
+        try:
+            fhir_type_to_duckdb(ptype)
+        except ValueError as exc:
+            raise SQLQueryParseError(
+                f"parameter[{i}].type must be a FHIR primitive type: {exc}"
+            ) from exc
+        use = entry.get("use")
+        if use is None:
+            raise SQLQueryParseError(
+                f"parameter[{i}].use is required (cardinality 1..1) and must be 'in'"
+            )
         if use != "in":
             raise SQLQueryParseError(
                 f"parameter[{i}].use must be 'in' (got {use!r})"
             )
-        parsed.append(SQLParameter(name=name, type=ptype, use=use))
+        parsed.append(SQLParameter(
+            name=name, type=ptype, use=use,
+            extra_fields={
+                k: v for k, v in entry.items()
+                if k not in ("name", "type", "use")
+            },
+        ))
     return parsed
 
 
 def _collect_extra_fields(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Preserve unknown Library keys verbatim (mirrors §G-3 extra_fields bag)."""
+    """Preserve every unmodeled Library key verbatim.
+
+    Mirrors §G-3: both known-but-unmodeled FHIR fields (``description``,
+    ``publisher``, ``extension``, ...) and unknown/custom keys roundtrip
+    losslessly; only the keys ``to_dict`` re-emits from dataclass fields
+    are excluded.
+    """
     return {
-        k: v for k, v in data.items() if k not in _KNOWN_LIBRARY_KEYS
+        k: v for k, v in data.items() if k not in _MODELED_LIBRARY_KEYS
     }
 
 
@@ -232,11 +286,28 @@ def parse_library(input_: Union[Dict[str, Any], str]) -> Union[SQLQuery, SQLView
         )
 
     profile_kind = _detect_profile(data)
-    _require_type_coding(data)
+    expected_type_code = (
+        SQLQUERY_LIBRARY_TYPE_CODE
+        if profile_kind == "SQLQuery"
+        else SQLVIEW_LIBRARY_TYPE_CODE
+    )
+    _require_type_coding(data, expected_type_code)
+
+    # Library.status is 1..1 on the base Library resource.
+    status = data.get("status")
+    if not isinstance(status, str) or not status:
+        raise SQLQueryParseError(
+            "Library.status is required (cardinality 1..1 on the base "
+            "Library resource) and must be a non-empty string"
+        )
 
     content = _parse_content(data.get("content"))
     related_artifact = _parse_related_artifact(data.get("relatedArtifact"))
     extensions = _collect_extra_fields(data)
+    raw_meta = data.get("meta")
+    meta = raw_meta if isinstance(raw_meta, dict) else {}
+    raw_type = data.get("type")
+    type_concept = raw_type if isinstance(raw_type, dict) else None
 
     common_kwargs = dict(
         id=data.get("id"),
@@ -244,10 +315,12 @@ def parse_library(input_: Union[Dict[str, Any], str]) -> Union[SQLQuery, SQLView
         name=data.get("name"),
         version=data.get("version"),
         title=data.get("title"),
-        status=data.get("status"),
+        status=status,
         content=content,
         related_artifact=related_artifact,
         extra_fields=extensions,
+        meta=meta,
+        type_concept=type_concept,
     )
 
     if profile_kind == "SQLQuery":

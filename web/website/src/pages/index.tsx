@@ -7,7 +7,7 @@ import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
-const PRODUCT_VERSION = '0.0.11';
+const PRODUCT_VERSION = '0.0.12';
 const SQL_EXECUTION_MEAN_ALL_MEASURES = '~3.9ms';
 const SQL_EXECUTION_MEAN_SHARED_MEASURES = '~6.9ms';
 const JAVA_EXECUTION_MEAN_SHARED_MEASURES = '~936ms';
@@ -356,7 +356,7 @@ function Hero() {
               transition: 'background 0.15s ease',
             }}
           >
-            New in 0.0.11: Terminology &amp; Clinical NLP →
+            New in 0.0.12: Spec Compliance &amp; Audit &amp; Clinical NLP →
           </Link>
         </div>
         <p style={{fontSize: '1.35rem', fontWeight: 600, color: '#e2e8f0', margin: '0.4rem 0 0.6rem'}}>

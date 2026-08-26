@@ -31,11 +31,14 @@ def _b64(s: str) -> str:
 
 def _make_library_dict(*, profile: str, sql: str = "SELECT 1 AS x",
                        params=None, related=None, dialect: str = "application/sql"):
+    # SQLQuery profile fixes type=sql-query; SQLView fixes type=sql-view.
+    type_code = "sql-view" if "SQLView" in profile else "sql-query"
     lib = {
         "resourceType": "Library",
         "id": "lib1",
         "meta": {"profile": [profile]},
-        "type": {"coding": [{"code": "sql-query"}]},
+        "status": "active",
+        "type": {"coding": [{"code": type_code}]},
         "content": [{"contentType": dialect, "data": _b64(sql)}],
     }
     if params is not None:

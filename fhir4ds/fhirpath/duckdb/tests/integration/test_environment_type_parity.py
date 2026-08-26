@@ -712,3 +712,80 @@ def test_is_valid_accepts_undefined_env_var_forms_fp20_skeptic(monkeypatch) -> N
     finally:
         con.close()
         fallback.close()
+
+
+def test_structural_complex_type_tests_match_cpp_fp04_skeptic(monkeypatch) -> None:
+    """FP-04 SKEPTIC QA-001 (2026-08-17): `is`/`as`/`ofType`/`type()` on JSON
+    objects reached through unmodelled fields must agree between engines.
+
+    The Python fallback infers complex types structurally
+    (nodes.py TypeInfo.create_by_value_in_namespace); the native engine now
+    mirrors it (evaluator.cpp structuralFHIRComplexType) instead of
+    blanket-inferring BackboneElement for any object under a known field
+    name. FHIRPath N1 §5.2.4, §6.3.1, §6.3.3.
+    """
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p",
+            "qs": [
+                {"value": 1, "code": "cm", "system": "http://unitsofmeasure.org"},
+                {"value": 10, "code": "mm", "system": "http://unitsofmeasure.org"},
+            ],
+            "objs": [
+                {"coding": [{"system": "s", "code": "c"}]},
+                {"system": "s2", "code": "c2"},
+                {"reference": "Patient/p"},
+                {"contentType": "text/plain"},
+                {"low": {"value": 1}, "high": {"value": 2}},
+                {"start": "2020", "end": "2021"},
+                {"foo": "bar"},
+            ],
+            "contact": [{"relationship": [{"text": "friend"}], "name": {"family": "Jones"}}],
+        }
+    )
+    expressions = [
+        "qs.ofType(Quantity).count()",
+        "qs.where($this is Quantity).count()",
+        "qs.ofType(Quantity).distinct().count()",
+        "qs.first() as Quantity",
+        "qs.first().type().name",
+        "objs.ofType(CodeableConcept).count()",
+        "objs.ofType(Coding).count()",
+        "objs.ofType(Reference).count()",
+        "objs.ofType(Attachment).count()",
+        "objs.ofType(Range).count()",
+        "objs.ofType(Period).count()",
+        "objs.ofType(BackboneElement).count()",
+        "objs.first().type().name",
+        "objs.where($this is Coding).count()",
+        # Known backbone-element fields keep BackboneElement in both engines.
+        "contact.is(BackboneElement)",
+        "contact.ofType(BackboneElement).count()",
+        "contact.first().type().name",
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = duckdb.connect(config={"allow_unsigned_extensions": True})
+    assert register_fhirpath(fallback) is False
+    try:
+        for expression in expressions:
+            cpp = con.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp == py, expression
+        assert con.execute(
+            "SELECT fhirpath_text(?::JSON, 'qs.ofType(Quantity).count()')", [resource]
+        ).fetchone() == ("2",)
+        assert con.execute(
+            "SELECT fhirpath_text(?::JSON, 'objs.ofType(BackboneElement).count()')", [resource]
+        ).fetchone() == ("0",)
+    finally:
+        con.close()
+        fallback.close()

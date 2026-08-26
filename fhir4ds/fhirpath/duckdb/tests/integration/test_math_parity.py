@@ -183,10 +183,13 @@ def test_round_omitted_precision_returns_decimal_like_explicit_zero(monkeypatch)
             "9223372036854775807.0",
             '["9223372036854775807.0"]',
         ),
+        # FP-11 SKEPTIC QA-001 (2026-08-17): §5.7 power — Integer in,
+        # Integer out; exp 1 is the identity so Long-typed bases keep the
+        # integer rendering (previously pinned as Decimal "...807.0").
         "9223372036854775807L.power(1).toString()": (
-            ["9223372036854775807.0"],
-            "9223372036854775807.0",
-            '["9223372036854775807.0"]',
+            ["9223372036854775807"],
+            "9223372036854775807",
+            '["9223372036854775807"]',
         ),
         "9223372036854774785L.ceiling()": (
             ["9223372036854774785"],
@@ -208,10 +211,12 @@ def test_round_omitted_precision_returns_decimal_like_explicit_zero(monkeypatch)
             "9223372036854775807",
             "[9223372036854775807]",
         ),
-        "2.power(3).type().name": (["Decimal"], "Decimal", '["Decimal"]'),
-        "2.power(3) is Decimal": (["true"], "true", "[true]"),
-        "2.power(3) is Integer": (["false"], "false", "[false]"),
-        "2.power(3).toString()": (["8.0"], "8.0", '["8.0"]'),
+        # FP-11 SKEPTIC QA-001 (2026-08-17): §5.7 power — Integer base with
+        # Integer exponent yields an Integer (previously pinned Decimal).
+        "2.power(3).type().name": (["Integer"], "Integer", '["Integer"]'),
+        "2.power(3) is Decimal": (["false"], "false", "[false]"),
+        "2.power(3) is Integer": (["true"], "true", "[true]"),
+        "2.power(3).toString()": (["8"], "8", '["8"]'),
     }
 
     cpp = _cpp_connection()
@@ -378,7 +383,8 @@ def test_math_incompatible_constants_and_dynamic_arguments_match_fallback(monkey
             "SELECT fhirpath(?::JSON, '2.power(3)'), fhirpath_text(?::JSON, '2.power(3)'), fhirpath_json(?::JSON, '2.power(3)')",
             [resource, resource, resource],
         ).fetchone()
-        assert cpp_power == py_power == (["8.0"], "8.0", "[8.0]")
+        # FP-11 SKEPTIC QA-001 (2026-08-17): Integer in -> Integer out.
+        assert cpp_power == py_power == (["8"], "8", "[8]")
     finally:
         cpp.close()
         py.close()
@@ -479,12 +485,18 @@ def test_power_integer_overflow_and_decimal_shape_fp11_explorer(monkeypatch) -> 
     resource = json.dumps({"resourceType": "Observation"})
     try:
         cases = [
-            # Integer base, integer exponent — exact Decimal text expected.
-            ("(2).power(10)", "1024.0"),
-            ("(5).power(3)", "125.0"),
-            ("(2).power(32)", "4294967296.0"),
-            ("(2).power(53)", "9007199254740992.0"),
-            # Above 2^53 — previously scientific notation in native
+            # FP-11 SKEPTIC QA-001 (2026-08-17): Integer base + Integer
+            # exponent now yields an Integer result (§5.7 "If this function
+            # is used with Integers, the result is an Integer") while the
+            # magnitude fits 64 bits; beyond int64 the exact Decimal-shaped
+            # text is preserved.
+            ("(2).power(10)", "1024"),
+            ("(5).power(3)", "125"),
+            ("(2).power(32)", "4294967296"),
+            ("(2).power(53)", "9007199254740992"),
+            ("(2).power(62)", "4611686018427387904"),
+            # Above 2^63-1 — previously scientific notation in native;
+            # Decimal-shaped exact text (Integer cannot represent).
             ("(2).power(63)", "9223372036854775808.0"),
             ("(2).power(64)", "18446744073709551616.0"),
             ("(10).power(20)", "100000000000000000000.0"),
@@ -665,6 +677,103 @@ def test_exp_subnormal_rendering_fp11_explorer(monkeypatch) -> None:
             assert "e" in cpp_text, (
                 f"FP-11 EXPLORER exp() subnormal should use scientific notation: "
                 f"got {cpp_text!r}"
+            )
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_transcendental_tiny_decimal_rendering_parity_fp11_explorer2(monkeypatch) -> None:
+    """FP-11 EXPLORER (2026-08-17) QA-001: non-integer |value|<1 transcendental
+    results must render the full shortest-round-trip fixed expansion
+    (``format(Decimal(str(float)), 'f')``), not a 15-fractional-digit
+    truncation that eats significant digits behind leading fractional zeros.
+
+    Previously the native ``formatDecimalNumber`` path rendered
+    ``0.000000000000001.sqrt()`` as '0.000000031622777' (fallback
+    '0.00000003162277660168379'), 1e-27.sqrt() as '0.000000000000032'
+    (~1% error), and 1e-28.sqrt() as '0.0'. Scientific form stays reserved
+    for subnormals <1e-300.
+    """
+    cpp = _cpp_connection()
+    py = _python_fallback_connection(monkeypatch)
+    resource = json.dumps({"resourceType": "Observation"})
+    try:
+        cases = [
+            ("0.000000000000001.sqrt()", "0.00000003162277660168379"),
+            ("0.000000000000000000000000001.sqrt()", "0.000000000000031622776601683796"),
+            (
+                "0.0000000000000000000000000000001.sqrt()",
+                "0.00000000000000031622776601683793",
+            ),
+            ("0.0000001.sqrt()", "0.00031622776601683794"),
+            ("0.000000000000000000000000001.power(0.5)", "0.000000000000031622776601683796"),
+            # Large values render the Decimal(str(float)) shortest expansion
+            ("(2.0.power(1023)).sqrt()", None),
+        ]
+        for expr, expected_text in cases:
+            cpp_text = cpp.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expr]
+            ).fetchone()[0]
+            py_text = py.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expr]
+            ).fetchone()[0]
+            if expected_text is not None:
+                assert cpp_text == expected_text, (
+                    f"FP-11 EXPLORER native sqrt rendering mismatch on {expr}: "
+                    f"got {cpp_text!r}, expected {expected_text!r}"
+                )
+            assert cpp_text == py_text, (
+                f"FP-11 EXPLORER sqrt/power(0.5) rendering parity drift on {expr}: "
+                f"native={cpp_text!r}, fallback={py_text!r}"
+            )
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_power_exact_decimal_no_bailout_parity_fp11_explorer2(monkeypatch) -> None:
+    """FP-11 EXPLORER (2026-08-17) QA-002: integral-exponent power() must
+    compute exact Decimal (28 significant digits) in the native engine for
+    inputs that previously bailed to ``std::pow`` (base scale>20, magnitude
+    >10000 digits, negative-exponent total scale>100).
+
+    Previously ``1.0000001.power(1000000)`` returned the binary64
+    1.1051709126143208 (wrong at the 11th significant digit) and
+    1e-27.power(2) collapsed to '0.0' while the Python fallback computed the
+    exact Decimal values.
+    """
+    cpp = _cpp_connection()
+    py = _python_fallback_connection(monkeypatch)
+    resource = json.dumps({"resourceType": "Observation"})
+    try:
+        cases = [
+            ("1.0000001.power(1000000)", "1.105170912549793416638382709"),
+            ("1.0000001.power(100)", "1.000010000049500161700392123"),
+            ("1.000001.power(1000000)", "2.718280469319376883819799708"),
+            (
+                "0.000000000000000000000000001.power(2)",
+                "0.000000000000000000000000000000000000000000000000000001",
+            ),
+        ]
+        for expr, expected_text in cases:
+            cpp_text = cpp.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expr]
+            ).fetchone()[0]
+            py_text = py.execute(
+                "SELECT fhirpath_text(?::JSON, ?)", [resource, expr]
+            ).fetchone()[0]
+            assert cpp_text == expected_text, (
+                f"FP-11 EXPLORER native exact power mismatch on {expr}: "
+                f"got {cpp_text!r}, expected {expected_text!r}"
+            )
+            assert py_text == expected_text, (
+                f"FP-11 EXPLORER fallback exact power mismatch on {expr}: "
+                f"got {py_text!r}, expected {expected_text!r}"
+            )
+            assert cpp_text == py_text, (
+                f"FP-11 EXPLORER exact power parity drift on {expr}: "
+                f"native={cpp_text!r}, fallback={py_text!r}"
             )
     finally:
         cpp.close()

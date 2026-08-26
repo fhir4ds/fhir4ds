@@ -437,3 +437,243 @@ define E: not (5 > 3)
     finally:
         py.close()
         cpp.close()
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "null and true",
+        "true and null",
+        "null or false",
+        "false or null",
+        "not null",
+        "true implies null",
+        "null implies false",
+        "null implies null",
+        "null xor true",
+        "null xor null",
+    ],
+)
+def test_cql_logical_null_propagates_in_lowered_sql_and_collapses_to_false_at_population_surface(
+    expression: str,
+) -> None:
+    """CQL-04 SKEPTIC QA-001 doctrine pin (INTENDED classification).
+
+    CQL 1.5 Appendix B logical operator truth tables are Kleene 3VL: the
+    lowered SQL must preserve SQL NULL for null operands (verified here via
+    the per-definition expression SQL, which yields NULL). The
+    *population-SQL* output surface intentionally collapses a null Boolean
+    define to FALSE because measure population membership treats null
+    criteria as "not in population" (null == false for membership), and
+    boolean define CTEs are row-presence based (EXISTS-referenced
+    invariants). This test pins both layers on both engine paths.
+    """
+    cql = (
+        "library CQL04NullLogical version '1.0.0'\n"
+        "using FHIR version '4.0.1'\n"
+        "context Patient\n"
+        f"define TheNullLogical: {expression}\n"
+    )
+    lib = parse_cql(cql)
+    translated = CQLToSQLTranslator().translate_library(lib)
+    expr_sql = f"SELECT {translated['TheNullLogical'].to_sql()}"
+
+    population_sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql),
+        output_columns={"TheNullLogical": "TheNullLogical"},
+    )
+
+    patient = json.dumps({"resourceType": "Patient", "id": "p1"})
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            # Layer 1: expression-level 3VL — null operands produce SQL NULL.
+            assert con.execute(expr_sql).fetchone() == (None,), expression
+            # Layer 2: population surface — null Boolean define reports FALSE
+            # (membership semantics), identically on both engine paths.
+            con.execute(
+                "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
+            )
+            con.execute(
+                "INSERT INTO resources VALUES ('p1', 'Patient', ?::JSON, 'p1')",
+                [patient],
+            )
+            assert con.execute(population_sql).fetchone() == ("p1", False), expression
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_not_precedence_tighter_than_comparisons_per_grammar() -> None:
+    """CQL 1.5 grammar (HL7/cql v1.5.3 cql.g4, verified with an ANTLR
+    4.13.1-generated parser): earlier `expression` alternatives bind
+    TIGHTER. #notExpression is listed BEFORE between/set/inequality/
+    equality/membership/and/or/implies, so `not A = B` parses as
+    `(not A) = B` — a static type error unless A is Boolean — and
+    `not X in Y` parses as `(not X) in Y`. `not` binds LOOSER than
+    `is [not] null/true/false` and `is`/`as`: `not X is null` is
+    `not (X is null)`. `not` binds TIGHTER than and/or/xor/implies."""
+    # Spec-correct parses that must RAISE: non-Boolean operand for `not`.
+    for spec_wrong_parse in [
+        "not 1 = 2",        # grammar: (not 1) = 2 -> not on Integer
+        "not 1 != 2",
+        "not 5 in { 1, 2 }",
+        "not 1 in { 1, 2 }",
+        "not 3 < 2",
+        "not 2 <= 3",
+        "not 1 between 1 and 10",
+    ]:
+        with pytest.raises(TranslationError):
+            CQLToSQLTranslator().translate_library(
+                parse_cql(
+                    "library E version '1'\ndefine Bad: " + spec_wrong_parse + "\n"
+                )
+            )
+
+    cql = """
+library CQL04NotPrecedence version '1.0.0'
+
+define NotBooleanOperandEqTrue: not true = false
+define NotBooleanOperandEqFalse: not true = true
+define NotIsNullPresent: not true is null
+define NotIsNullAbsent: not null is null
+define NotTighterThanAnd: not true and false
+define NotTighterThanOr: not true or true
+define NotTighterThanImplies: not true implies false
+define DoubleNot: not not true
+"""
+    translated = CQLToSQLTranslator().translate_library(parse_cql(cql))
+
+    expected = {
+        # (not true) = false -> false = false -> true
+        "NotBooleanOperandEqTrue": True,
+        # (not true) = true -> false = true -> false
+        "NotBooleanOperandEqFalse": False,
+        "NotIsNullPresent": True,
+        "NotIsNullAbsent": False,
+        "NotTighterThanAnd": False,
+        "NotTighterThanOr": True,
+        # (not true) implies false -> false implies false -> true
+        "NotTighterThanImplies": True,
+        "DoubleNot": True,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (expected_value,), name
+            assert cpp.execute(sql).fetchone() == (expected_value,), name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_case_first_match_semantics_with_later_literal_true_when() -> None:
+    """CQL 1.5 §Case: when-conditionals match in order; a later literal-true
+    when is only a fallback and must NOT discard earlier dynamic whens."""
+    cql = """
+library CQL04CaseTail version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+
+define LaterTrueWhen: case when Patient.active then 1 when true then 3 else 2 end
+define TwoDynamicWhens: case when 1 = 1 then 1 when 1 = 2 then 5 else 2 end
+define FirstWhenTrue: case when true then 1 when 1 = 2 then 3 else 2 end
+define FalseWhenSkipped: case when false then 9 when 1 = 1 then 1 else 2 end
+"""
+    population_sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql), output_columns={"LaterTrueWhen": "LaterTrueWhen"}
+    )
+
+    patients = [
+        {"resourceType": "Patient", "id": "p1", "active": True},
+        {"resourceType": "Patient", "id": "p2"},
+        {"resourceType": "Patient", "id": "p3", "active": False},
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            con.execute(
+                "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
+            )
+            for p in patients:
+                con.execute(
+                    "INSERT INTO resources VALUES (?, 'Patient', ?::JSON, ?)",
+                    [p["id"], json.dumps(p), p["id"]],
+                )
+            # LaterTrueWhen: p1 first when matches -> 1; p2/p3 fall to the
+            # literal-true tail -> 3.
+            got = dict(con.execute(population_sql).fetchall())
+            assert got == {"p1": 1, "p2": 3, "p3": 3}, got
+    finally:
+        py.close()
+        cpp.close()
+
+    # Expression-level checks for the remaining shapes.
+    translated = CQLToSQLTranslator().translate_library(parse_cql(cql))
+    py = _python_only_connection()
+    try:
+        # TwoDynamicWhens over a true literal: first when matches.
+        sql = f"SELECT {translated['TwoDynamicWhens'].to_sql()}"
+        assert py.execute(sql).fetchone() == (1,)
+        sql = f"SELECT {translated['FirstWhenTrue'].to_sql()}"
+        assert py.execute(sql).fetchone() == (1,)
+        sql = f"SELECT {translated['FalseWhenSkipped'].to_sql()}"
+        assert py.execute(sql).fetchone() == (1,)
+    finally:
+        py.close()
+
+
+def test_cql_boolean_define_alias_feeds_logic_by_value() -> None:
+    """A value-bearing Boolean define alias must contribute its VALUE under
+    CQL 3VL when used with and/or/not — not row presence (EXISTS), which is
+    always-true for per-patient value CTEs (CQL-04 EXPLORER QA-003)."""
+    cql = """
+library CQL04AliasLogic version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+
+define F: Patient.active
+define AndTrue: F and true
+define AndFalse: F and false
+define NotF: not F
+define OrFalse: F or false
+define XorTrue: F xor true
+"""
+    population_sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql),
+        output_columns={"AndTrue": "AndTrue", "NotF": "NotF", "XorTrue": "XorTrue"},
+    )
+
+    patients = [
+        {"resourceType": "Patient", "id": "p1", "active": True},
+        {"resourceType": "Patient", "id": "p2"},          # absent -> null
+        {"resourceType": "Patient", "id": "p3", "active": False},
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            con.execute(
+                "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
+            )
+            for p in patients:
+                con.execute(
+                    "INSERT INTO resources VALUES (?, 'Patient', ?::JSON, ?)",
+                    [p["id"], json.dumps(p), p["id"]],
+                )
+            # null collapses to FALSE on the population surface (doctrine).
+            cols = [d[0] for d in con.execute(population_sql).description]
+            rows = con.execute(population_sql).fetchall()
+            table = {r[0]: dict(zip(cols, r)) for r in rows}
+            assert table["p1"]["AndTrue"] is True and table["p2"]["AndTrue"] is False \
+                and table["p3"]["AndTrue"] is False, table
+            assert table["p1"]["NotF"] is False and table["p3"]["NotF"] is True, table
+            assert table["p1"]["XorTrue"] is False and table["p3"]["XorTrue"] is True, table
+    finally:
+        py.close()
+        cpp.close()

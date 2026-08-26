@@ -72,6 +72,9 @@ def test_as_operator_accepts_fhir_supertypes(patient_resource):
 
 
 def test_as_operator_preserves_fhir_primitive_exact_cast(patient_resource):
+    """FP-15 HISTORIAN (2026-08-18): exact-match `as` for FHIR primitives is
+    pinned by official fixture testFHIRPathAsFunction11 (`gender.as(string)`
+    -> EMPTY) even though `is` is subtype-based (`is string` -> true)."""
     assert evaluate(patient_resource, "Patient.gender.as(string)") == []
     assert evaluate(patient_resource, "Patient.gender.as(code)") == ["male"]
 
@@ -138,3 +141,34 @@ def test_aggregate_restores_iteration_scope_after_evaluation():
         3,
         resource,
     ]
+
+
+# FP-17 EXPLORER (2026-08-18): official R4 fixtures testIntegerBooleanNotTrue
+# (`(0).not() = false` -> true) and testIntegerBooleanNotFalse (`(1).not() = false`
+# -> true) require non-boolean singletons to be TRUTHY in Singleton Evaluation
+# of Collections for boolean logic — toBoolean conversion criteria do NOT apply
+# to and/or/xor/implies/not() operands. Guards against re-flagging as a bug.
+def test_boolean_operators_treat_non_boolean_singletons_as_truthy():
+    cases = [
+        ("0 and true", [True]),
+        ("0.0 and true", [True]),
+        ("'false' and true", [True]),
+        ("0 xor false", [True]),
+        ("'false' implies false", [False]),
+        ("true implies 'false'", [True]),
+        ("'x' and false", [False]),
+        ("5 and false", [False]),
+    ]
+    resource = {"resourceType": "Patient"}
+    for expression, expected in cases:
+        actual, error = evaluate_fhirpath(expression, resource)
+        assert error is None, expression
+        assert actual == expected, expression
+
+
+def test_not_treats_non_boolean_singletons_as_truthy():
+    resource = {"resourceType": "Patient", "s": "false", "n": 0, "x": "x"}
+    assert evaluate(resource, "s.not()") == [False]
+    assert evaluate(resource, "n.not()") == [False]
+    assert evaluate(resource, "x.not()") == [False]
+    assert evaluate(resource, "{}.not()") == []

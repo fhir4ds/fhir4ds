@@ -130,7 +130,17 @@ def cqlRegexSplitOnMatches(s: str | None, pattern: str | None) -> list[str] | No
     if pattern == "":
         return list(s)
     regex = _compile_cql_regex(pattern)
-    return regex.split(s)
+    parts = regex.split(s)
+    if regex.groups:
+        # Python re.split interleaves capture-group values into the split
+        # result (e.g. 'a1b2'.split(r'(\d)') -> ['a','1','b','2','']).
+        # CQL SplitOnMatches (Appendix B) has no group-inclusion clause and
+        # the reference engine uses Java Pattern.split semantics, which
+        # exclude capture groups. Keep only the separator-delimited
+        # segments: with N groups the segments sit at indices
+        # 0, N+1, 2(N+1), ... (matches the native C++ extension).
+        parts = parts[:: regex.groups + 1]
+    return parts
 
 
 def _cql_replacement_to_python(replacement: str) -> str:

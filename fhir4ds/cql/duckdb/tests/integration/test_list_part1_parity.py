@@ -162,10 +162,10 @@ def test_cql_list_part1_edge_cases_match_no_python_runtime() -> None:
         "InMixedFalse": (False,),
         "InBigMixedNumericFalse": (False,),
         "IncludesNullList": (True,),
-        "IncludesNullSingletonAbsent": (None,),
+        "IncludesNullSingletonAbsent": (False,),  # CQL 1.5 §10.10: null element -> true iff list contains nulls (EXPLORER QA-003)
         "IncludesQuantityEquivalent": (True,),
         "IncludedInNullList": (True,),
-        "IncludedInNullSingleton": (None,),
+        "IncludedInNullSingleton": (False,),  # CQL 1.5 §10.11: null element -> true iff list contains nulls (EXPLORER QA-003)
         "IncludedInQuantityEquivalent": (True,),
         "IndexOfNullElement": (None,),
         "IndexOfMissing": (-1,),
@@ -635,3 +635,449 @@ define IntersectDateTimeTz: { @2024-01-01T10:00:00+00:00 } intersect { @2024-01-
 define IndexOfDateTimePrecision: IndexOf({ @2024-01-01 }, @2024-01-01T12)
 """
 
+
+
+def test_cql_list_part1_dynamic_fhir_lists_execute_and_match_cpp_registration() -> None:
+    """CQL-18 SKEPTIC re-launch regression: list operators over retrieved
+    multi-valued FHIR fields (name.given) in patient-context population SQL.
+
+    Before the fix, dynamic multi-valued properties lowered to scalar
+    fhirpath_text (first-node truncation): `exists` returned false with data
+    present, `contains` used substring semantics over one node, and Distinct,
+    Equal/Equivalent, Except/Intersect, IndexOf, Includes/IncludedIn and
+    Flatten-of-list-literal raised DuckDB BinderExceptions. CQL 1.5 §10.x
+    requires full-list equality semantics for every operator.
+    """
+    cql = """library List1Dynamic version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define GivenExists: exists Patient.name.given
+define GivenContainsHit: Patient.name.given contains 'Peter'
+define GivenContainsPartial: Patient.name.given contains 'Ji'
+define GivenIn: 'Peter' in Patient.name.given
+define GivenDistinct: distinct Patient.name.given
+define GivenEqual: Patient.name.given = { 'Jim', 'Peter', 'Jim' }
+define GivenEquivalent: Patient.name.given ~ { 'Jim', 'Peter', 'Jim' }
+define GivenExcept: Patient.name.given except { 'Jim' }
+define GivenIntersect: Patient.name.given intersect { 'Jim', 'Peter' }
+define GivenIncludes: Patient.name.given includes { 'Peter' }
+define GivenIncludedIn: { 'Peter' } included in Patient.name.given
+define GivenIndexOf: IndexOf(Patient.name.given, 'Peter')
+define GivenFlattenCount: Count(flatten { Patient.name.given })
+define TelecomExists: exists Patient.telecom.system
+define NoTelecomExists: exists Patient.contact.name.given
+"""
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql),
+        output_columns={
+            name: name
+            for name in (
+                "GivenExists", "GivenContainsHit", "GivenContainsPartial",
+                "GivenIn", "GivenDistinct", "GivenEqual", "GivenEquivalent",
+                "GivenExcept", "GivenIntersect", "GivenIncludes",
+                "GivenIncludedIn", "GivenIndexOf", "GivenFlattenCount",
+                "TelecomExists", "NoTelecomExists",
+            )
+        },
+    )
+    patient = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p1",
+            "name": [{"given": ["Jim", "Peter"]}, {"given": ["Jim"]}],
+            "telecom": [{"system": "phone", "value": "555"}],
+        }
+    )
+    expected = {
+        "GivenExists": True,
+        "GivenContainsHit": True,
+        # Equality semantics (§10.1), not substring over the first node.
+        "GivenContainsPartial": False,
+        "GivenIn": True,
+        # First-occurrence order preserved (§10.2).
+        "GivenDistinct": ["Jim", "Peter"],
+        "GivenEqual": True,
+        "GivenEquivalent": True,
+        # Set semantics with duplicates eliminated (§10.5).
+        "GivenExcept": ["Peter"],
+        "GivenIntersect": ["Jim", "Peter"],
+        "GivenIncludes": True,
+        "GivenIncludedIn": True,
+        "GivenIndexOf": 1,
+        "GivenFlattenCount": 3,
+        "TelecomExists": True,
+        "NoTelecomExists": False,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            con.execute(
+                "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
+            )
+            con.execute("DELETE FROM resources")
+            con.execute(
+                "INSERT INTO resources VALUES ('p1', 'Patient', ?::JSON, 'p1')",
+                [patient],
+            )
+            row = con.execute(sql).fetchone()
+            columns = [d[0] for d in con.execute(sql).description]
+            values = dict(zip(columns, row))
+            for name, want in expected.items():
+                got = _normalize((values[name],))[0]
+                assert got == want, f"{name}: got {got!r}, want {want!r}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_list_part1_historian_relaunch_alias_and_dynamic_list_ops() -> None:
+    """CQL-18 HISTORIAN relaunch QA-001/QA-002 regression coverage.
+
+    A define alias bound to a dynamic multi-valued FHIR property
+    (``define G: Patient.name.given``) must behave like List<String> in
+    every list operator (CQL 1.5 Appendix B §10.x), and
+    ``A includes B`` with both operands dynamic must use list has-all
+    semantics (§10.10), not interval containment.
+    """
+    patient = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p1",
+            "name": [
+                {"given": ["Jim", "Peter"], "family": "Chalmers"},
+                {"given": ["Jim"], "family": "Chalmers"},
+            ],
+        }
+    )
+    cql = """
+    library F version '1.0.0'
+    using FHIR version '4.0.1'
+    context Patient
+    define G: Patient.name.given
+    define AliasDistinct: distinct G
+    define AliasCount: Count(G)
+    define AliasExcept: G except { 'Jim' }
+    define AliasIndexOf: IndexOf(G, 'Peter')
+    define AliasContains: G contains 'Peter'
+    define AliasIn: 'Peter' in G
+    define AliasFirst: First(G)
+    define IncludesSelf: Patient.name.given includes Patient.name.given
+    define IncludedInSelf: Patient.name.given included in Patient.name.given
+    """
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql),
+        output_columns={
+            "AliasDistinct": "AliasDistinct",
+            "AliasCount": "AliasCount",
+            "AliasExcept": "AliasExcept",
+            "AliasIndexOf": "AliasIndexOf",
+            "AliasContains": "AliasContains",
+            "AliasIn": "AliasIn",
+            "AliasFirst": "AliasFirst",
+            "IncludesSelf": "IncludesSelf",
+            "IncludedInSelf": "IncludedInSelf",
+        },
+    )
+    expected = {
+        "AliasDistinct": ["Jim", "Peter"],
+        "AliasCount": 3,
+        "AliasExcept": ["Peter"],
+        "AliasIndexOf": 1,
+        "AliasContains": True,
+        "AliasIn": True,
+        "AliasFirst": "Jim",
+        "IncludesSelf": True,
+        "IncludedInSelf": True,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            con.execute(
+                "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
+            )
+            con.execute("DELETE FROM resources")
+            con.execute(
+                "INSERT INTO resources VALUES ('p1', 'Patient', ?::JSON, 'p1')",
+                [patient],
+            )
+            row = con.execute(sql).fetchone()
+            columns = [d[0] for d in con.execute(sql).description]
+            values = dict(zip(columns, row))
+            for name, want in expected.items():
+                got = _normalize((values[name],))[0]
+                assert got == want, f"{name}: got {got!r}, want {want!r}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_list_part1_historian_relaunch_first_rejects_string() -> None:
+    """CQL 1.5 §10.8: First(argument List<T>) has no String overload.
+
+    A bare String must not be silently sliced as a character list
+    (First('final') used to return 'f').
+    """
+    from fhir4ds.cql.errors import TranslationError
+
+    cql = (
+        "library F version '1.0.0'\n"
+        "using FHIR version '4.0.1'\n"
+        "context Patient\n"
+        "define D: First('final')\n"
+    )
+    with pytest.raises(TranslationError, match="First requires a list argument"):
+        CQLToSQLTranslator().translate_library_to_population_sql(
+            parse_cql(cql), output_columns={"D": "D"}
+        )
+
+
+def test_cql_list_part1_historian_relaunch_retrieve_alias_multivalued_navigation() -> None:
+    """CQL-18 HISTORIAN relaunch QA-004 regression coverage.
+
+    Navigating a multi-valued element over a retrieve-alias define must
+    aggregate all matching nodes across rows (CQL 1.5 Appendix B Property
+    semantics): Count(O.component) counts elements, not CTE rows, and
+    membership tests over the flattened list see every code.
+    """
+    patient = json.dumps({"resourceType": "Patient", "id": "p1"})
+    obs = json.dumps(
+        {
+            "resourceType": "Observation",
+            "id": "o1",
+            "status": "final",
+            "subject": {"reference": "Patient/p1"},
+            "component": [
+                {"code": {"coding": [{"system": "http://loinc.org", "code": "29463-7"}]}},
+                {"code": {"coding": [{"system": "http://loinc.org", "code": "8302-2"}]}},
+            ],
+        }
+    )
+    cql = """
+    library F version '1.0.0'
+    using FHIR version '4.0.1'
+    context Patient
+    define O: [Observation]
+    define ComponentCount: Count(O.component)
+    define CodingIn: '29463-7' in O.component.code.coding.code
+    define CodingDistinct: Count(distinct O.component.code.coding.code)
+    """
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql),
+        output_columns={
+            "ComponentCount": "ComponentCount",
+            "CodingIn": "CodingIn",
+            "CodingDistinct": "CodingDistinct",
+        },
+    )
+    expected = {
+        "ComponentCount": 2,
+        "CodingIn": True,
+        "CodingDistinct": 2,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            con.execute(
+                "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
+            )
+            con.execute("DELETE FROM resources")
+            con.execute(
+                "INSERT INTO resources VALUES ('p1', 'Patient', ?::JSON, 'p1')",
+                [patient],
+            )
+            con.execute(
+                "INSERT INTO resources VALUES ('o1', 'Observation', ?::JSON, 'p1')",
+                [obs],
+            )
+            row = con.execute(sql).fetchone()
+            columns = [d[0] for d in con.execute(sql).description]
+            values = dict(zip(columns, row))
+            for name, want in expected.items():
+                got = _normalize((values[name],))[0]
+                assert got == want, f"{name}: got {got!r}, want {want!r}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+# ── CQL-18 EXPLORER launch regressions (2026-08-22) ─────────────────────
+
+_P1_RESOURCE = (
+    '{"resourceType":"Patient","id":"p1"}'
+)
+# Two-component Observation (8480-6, 8462-4) for p1; single-component (8867-4) for p2.
+_P1_OBS = (
+    '{"resourceType":"Observation","id":"o1","status":"final",'
+    '"code":{"coding":[{"system":"http://loinc.org","code":"29463-7"}]},'
+    '"subject":{"reference":"Patient/p1"},'
+    '"component":[{"code":{"coding":[{"system":"http://loinc.org","code":"8480-6"}]}},'
+    '{"code":{"coding":[{"system":"http://loinc.org","code":"8462-4"}]}}]}'
+)
+_P2_RESOURCE = (
+    '{"resourceType":"Patient","id":"p2"}'
+)
+_P2_OBS = (
+    '{"resourceType":"Observation","id":"o2","status":"final",'
+    '"code":{"coding":[{"system":"http://loinc.org","code":"8867-4"}]},'
+    '"subject":{"reference":"Patient/p2"},'
+    '"component":[{"code":{"coding":[{"system":"http://loinc.org","code":"8867-4"}]}},'
+    '{"code":{"coding":[{"system":"http://loinc.org","code":"8867-4"}]}}]}'
+)
+
+
+def _seed_two_patients(con: duckdb.DuckDBPyConnection) -> None:
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
+    )
+    con.execute("DELETE FROM resources")
+    con.execute("INSERT INTO resources VALUES ('p1','Patient',?::JSON,'p1')", [_P1_RESOURCE])
+    con.execute("INSERT INTO resources VALUES ('o1','Observation',?::JSON,'p1')", [_P1_OBS])
+    con.execute("INSERT INTO resources VALUES ('p2','Patient',?::JSON,'p2')", [_P2_RESOURCE])
+    con.execute("INSERT INTO resources VALUES ('o2','Observation',?::JSON,'p2')", [_P2_OBS])
+
+
+def _population_rows(cql: str, names: list[str]) -> tuple[dict, dict]:
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql), output_columns={n: n for n in names}
+    )
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    out: dict[str, dict] = {}
+    try:
+        for label, con in (("python", py), ("native", cpp)):
+            _seed_two_patients(con)
+            rows = con.execute(sql).fetchall()
+            columns = [d[0] for d in con.execute(sql).description]
+            per_patient = {}
+            for row in rows:
+                values = dict(zip(columns, row))
+                pid = values.get("patient_id")
+                per_patient[pid] = _normalize(tuple(values[n] for n in names))
+            out[label] = per_patient
+    finally:
+        py.close()
+        cpp.close()
+    return out["python"], out["native"]
+
+
+def test_explorer_qa001_deep_navigation_define_alias() -> None:
+    """QA-001: `define CC: Obs.component.code.coding.code` must be usable by
+    every list operator consumer (CQL 1.5 define referential transparency)."""
+    cql = """
+library T version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define Obs: [Observation]
+define CC: Obs.component.code.coding.code
+define CountCC: Count(CC)
+define FirstCC: First(CC)
+define ContainsHR: CC contains '8867-4'
+define IncludesBP: CC includes '8480-6'
+define DistinctCount: Count(distinct CC)
+define ExceptHR: Count(CC except '8867-4')
+define IntersectHR: Count(CC intersect { '8867-4' })
+"""
+    names = ["CountCC", "FirstCC", "ContainsHR", "IncludesBP",
+             "DistinctCount", "ExceptHR", "IntersectHR"]
+    py, native = _population_rows(cql, names)
+    assert py == native
+    assert py["p1"] == (2, "8480-6", False, True, 2, 2, 0)
+    assert py["p2"] == (2, "8867-4", True, False, 1, 0, 1)  # 2 dup components -> Count 2, distinct 1
+
+
+def test_explorer_qa002_chained_list_operators() -> None:
+    """QA-002: inline chaining (except/intersect/distinct/flatten feeding
+    includes) must translate to executable SQL (CQL 1.5 App B List Ops)."""
+    cases = [
+        ("({1,3,5} except {1}) includes 5", True),
+        ("({ 1, 1, 3, 5, 5 } except distinct { 1, 3 }) includes 5", True),
+        ("({1,3,5} intersect {3,5}) includes 5", True),
+        ("{1,3,5} includes (distinct {5,5})", True),
+        ("(Flatten({{1,2},{3}})) includes 3", True),
+        ("{1,3,5} except 3", [1, 5]),
+    ]
+    for expr, expected in cases:
+        cql = f"""
+library T version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define R: {expr}
+"""
+        py, native = _population_rows(cql, ["R"])
+        assert py == native, expr
+        assert py["p1"][0] == expected, (expr, py["p1"])
+
+
+def test_explorer_qa003_includes_null_semantics() -> None:
+    """QA-003: includes/included-in singleton overload follows contains/in
+    null-element semantics (CQL 1.5 §10.10/§10.11)."""
+    cases = [
+        ("{null, 1} includes null", True),
+        ("{1, 3} includes null", False),
+        ("null included in {1, null, 3}", True),
+        ("null included in {1, 3}", False),
+    ]
+    for expr, expected in cases:
+        cql = f"""
+library T version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define R: {expr}
+"""
+        py, native = _population_rows(cql, ["R"])
+        assert py == native, expr
+        assert py["p1"][0] == expected, (expr, py["p1"])
+    # List-list overload with a typed-null list lowers to a NULL expression
+    # (rendered False by the boolean population convention).
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(
+            "library T version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            "define R: {1,3} includes (null as List<Integer>)\n"
+        ),
+        output_columns={"R": "R"},
+    )
+    assert "WHERE NULL" in sql
+
+
+def test_explorer_qa004_first_through_two_alias_levels() -> None:
+    """QA-004: First over an alias-of-distinct-of-alias returns the first
+    element, not the whole list (CQL 1.5 §10.8 First)."""
+    cql = """
+library T version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define A_Lit: {10, 20, 30}
+define A2: distinct A_Lit
+define FirstA2: First(A2)
+define LastA2: Last(A2)
+"""
+    py, native = _population_rows(cql, ["FirstA2", "LastA2"])
+    assert py == native
+    assert py["p1"] == (10, 30)
+
+
+def test_explorer_qa005_heterogeneous_list_literal_translation_error() -> None:
+    """QA-005: a String/numeric heterogeneous list literal has no common
+    element type and must fail at translation time (CQL 1.5 App B List
+    selector), not as a DuckDB conversion error."""
+    from fhir4ds.cql.errors import TranslationError
+
+    for expr in ("{1, 'x'}", "distinct { 1, 1.0, 2, 2.0, 'x', null, null }"):
+        with pytest.raises(TranslationError):
+            CQLToSQLTranslator().translate_library_to_sql(
+                parse_cql(
+                    "library T version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n"
+                    f"define R: {expr}\n"
+                )
+            )
+    # Compatible lists still translate.
+    CQLToSQLTranslator().translate_library_to_sql(
+        parse_cql(
+            "library T version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            "define R: {1, 1.0, 2, null}\n"
+        )
+    )

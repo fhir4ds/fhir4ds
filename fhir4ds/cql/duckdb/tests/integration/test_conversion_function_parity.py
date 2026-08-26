@@ -372,3 +372,201 @@ define FromInt: ToDecimal(ToString(ToDecimal('42')))
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_to_integer_to_long_reject_decimals_cql08_historian() -> None:
+    """CQL 1.5 Appendix B Table 9-E defines NO Decimal->Integer/Long
+    conversion, and ToInteger/ToLong have no Decimal overloads (verified
+    against cql.hl7.org 2026-08-20). Decimal arguments therefore yield
+    null/false — the truncation behavior previously pinned here (CQL-07
+    master) was a spec misread; truncation is the separate Truncate
+    operator, not a conversion. Integer/Long/String inputs keep their
+    spec-defined conversions including range checks.
+    """
+    expressions = [
+        # (sql, expected)
+        ("SELECT ToInteger(ToDecimal('1.9'))", None),
+        ("SELECT ToInteger(ToDecimal('-1.9'))", None),
+        ("SELECT ToInteger(ToDecimal('2.0'))", None),
+        ("SELECT ToInteger(1.9)", None),
+        ("SELECT ToInteger(-1.9)", None),
+        ("SELECT ToInteger(ToDecimal('2147483647.9'))", None),
+        ("SELECT ToLong(ToDecimal('2.5'))", None),
+        ("SELECT ToLong(ToDecimal('-2.5'))", None),
+        ("SELECT ToLong(ToDecimal('9223372036854775807'))", None),
+        ("SELECT ConvertsToInteger(ToDecimal('1.9'))", False),
+        ("SELECT ConvertsToLong(ToDecimal('1.9'))", False),
+        ("SELECT ConvertsToInteger(ToDecimal('2147483648.5'))", False),
+        # Spec-defined overloads still hold on both backends.
+        ("SELECT ToInteger('-25')", -25),
+        ("SELECT ToInteger('1.5')", None),
+        ("SELECT ToInteger(true)", 1),
+        ("SELECT ToInteger(2147483648)", None),
+        ("SELECT ToLong(2147483648)", 2147483648),
+        ("SELECT ToInteger(42)", 42),
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for sql, expected in expressions:
+            py_result = py.execute(sql).fetchone()[0]
+            cpp_result = cpp.execute(sql).fetchone()[0]
+            assert py_result == expected, f"PY {sql}: {py_result!r} != {expected!r}"
+            assert cpp_result == expected, f"CPP {sql}: {cpp_result!r} != {expected!r}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_convert_decimal_to_integer_null_in_translation_cql08_historian() -> None:
+    """`convert <decimal> to Integer` lowers through the same ToInteger macro
+    and must yield null end-to-end: CQL 1.5 Table 9-E defines no
+    Decimal->Integer/Long conversion (verified 2026-08-20). Use Truncate()
+    for explicit truncation."""
+    cql = """library TruncConvert version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define Trunc: ToInteger(1.9)
+define TruncNeg: ToInteger(-1.9)
+define ConvertForm: convert 2.7 to Integer
+define LongDec: ToLong(12345.678)
+define IntOverflow: ToInteger(2147483648.5)
+"""
+    translated = translate_cql(cql)
+    expected = {"Trunc": None, "TruncNeg": None, "ConvertForm": None,
+                "LongDec": None, "IntOverflow": None}
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone()[0] == expected_value, name
+            assert cpp.execute(sql).fetchone()[0] == expected_value, name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_patient_context_singleton_value_accessor_cql07_master() -> None:
+    """CQL-06 doctrine: the FHIR-to-System `.value` accessor must work on
+    every FHIR primitive path, including the patient-context singleton
+    (`Patient.birthDate.value`). The retrieve-alias form worked; the context
+    singleton lowered to fhirpath_text(_pt.patient_resource, 'birthDate.value')
+    which returns empty. _resource_type_for_resource_ref must resolve the
+    patient_resource singleton column to the declared context type."""
+    cql = """library SingletonValue version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define ObsNum: exists ([Observation] O where ToInteger((O.value as FHIR.string).value) > 40)
+define Birth: ToDate(Patient.birthDate.value)
+define Twin: ToBoolean(Patient.multipleBirthBoolean.value)
+"""
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql),
+        output_columns={
+            "obs_num": "ObsNum",
+            "birth": "Birth",
+            "twin": "Twin",
+        },
+    )
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            con.execute(
+                """
+                CREATE TABLE resources (
+                    patient_ref VARCHAR,
+                    resourceType VARCHAR,
+                    id VARCHAR,
+                    resource JSON
+                )
+                """
+            )
+            con.execute(
+                """
+                INSERT INTO resources VALUES
+                ('p1','Patient','p1','{"resourceType":"Patient","id":"p1","birthDate":"1980-06-15","multipleBirthBoolean":false}'),
+                ('p1','Observation','o1','{"resourceType":"Observation","status":"final","valueString":"42"}'),
+                ('p1','Observation','o2','{"resourceType":"Observation","status":"final","valueString":"abc"}')
+                """
+            )
+            assert con.execute(sql).fetchone() == ("p1", True, "1980-06-15", False)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_to_quantity_identity_conversion_cql07_historian() -> None:
+    """CQL 1.5 Appendix B §ToQuantity (Table 9-E): a Quantity input is the
+    identity conversion ("the quantity itself"). Previously every JSON object
+    was routed to the Ratio branch and a plain Quantity JSON returned null,
+    violating the CQL-06 twin invariant (ConvertsToQuantity accepted it while
+    ToQuantity returned null).
+    """
+    quantity_json = (
+        '{"value":5,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}'
+    )
+    canonical = (
+        '{"value":5,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}'
+    )
+    expressions = [
+        ("SELECT ToQuantity(ToQuantity('5 ''mg'''))", canonical),
+        (f"SELECT ToQuantity('{quantity_json}')", canonical),
+        ("SELECT ToQuantity(ToQuantity('5 years'))",
+         '{"value":5,"unit":"years","code":"years",'
+         '"system":"http://unitsofmeasure.org"}'),
+        # Ratio input keeps its Table 9-E division semantics.
+        ("SELECT ToQuantity(ToRatio('1.0 ''mg'':2.0 ''mg'''))",
+         '{"value":0.5,"unit":"1","code":"1",'
+         '"system":"http://unitsofmeasure.org"}'),
+        # Twin invariant: what ConvertsToQuantity accepts, ToQuantity converts.
+        ("SELECT ConvertsToQuantity(ToQuantity('5 ''mg'''))", True),
+        # Invalid shapes still return null (no silent fallbacks).
+        ('SELECT ToQuantity(\'{"value":5,"unit":"not a unit!"}\')', None),
+        ("SELECT ToQuantity('{oops}')", None),
+        ('SELECT ToQuantity(\'{"code":"x"}\')', None),
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for sql, expected in expressions:
+            py_result = py.execute(sql).fetchone()[0]
+            cpp_result = cpp.execute(sql).fetchone()[0]
+            assert py_result == expected, f"PY {sql}: {py_result!r} != {expected!r}"
+            assert cpp_result == expected, f"CPP {sql}: {cpp_result!r} != {expected!r}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_to_quantity_identity_e2e_translation_cql07_historian() -> None:
+    """`ToQuantity(<Quantity>)` end-to-end: quantity literals and nested
+    ToQuantity calls must survive translation and DuckDB execution as the
+    identity conversion on both backends."""
+    cql = """library QtyIdentity version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define Nested: ToQuantity(ToQuantity('5 ''mg'''))
+define Literal: ToQuantity(5 'mg')
+"""
+    translated = translate_cql(cql)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    expected = (
+        '{"value":5,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}'
+    )
+    expected_by_define = {
+        # The literal path transports the value as a DuckDB DOUBLE (5.0);
+        # the nested-call path keeps the exact Decimal text (5).
+        "Nested": expected,
+        "Literal": expected.replace('"value":5,', '"value":5.0,'),
+    }
+    try:
+        for name, expected_value in expected_by_define.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone()[0] == expected_value, name
+            assert cpp.execute(sql).fetchone()[0] == expected_value, name
+    finally:
+        py.close()
+        cpp.close()
