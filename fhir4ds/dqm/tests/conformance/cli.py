@@ -8,12 +8,14 @@ import re
 import sys
 from pathlib import Path
 
-# Deeply-nested CQL libraries (e.g. with many included fluent functions)
-# can exceed Python's default recursion limit during AST translation.
-sys.setrecursionlimit(8000)
-
 
 def main():
+    # Deeply-nested CQL libraries (e.g. with many included fluent functions)
+    # can exceed Python's default recursion limit during AST translation.
+    # Scoped to execution: a module-level call here leaks a raised limit
+    # into every importer's process (unit tests import helpers from this
+    # module and downstream tests then see the inflated limit).
+    sys.setrecursionlimit(8000)
     parser = argparse.ArgumentParser(
         description="Run CQL measure benchmarks"
     )

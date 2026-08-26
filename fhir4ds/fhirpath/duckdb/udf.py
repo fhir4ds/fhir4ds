@@ -201,7 +201,11 @@ def _parse_json(resource: str) -> dict:
     try:
         return orjson.loads(resource)
     except orjson.JSONDecodeError as exc:
-        if "recursion depth" not in str(exc):
+        # orjson's depth-limit wording differs across releases: <=3.11 says
+        # "array and object recursion depth exceeded", 3.12+ says "depth
+        # limit exceeded". Match both rather than pinning orjson.
+        msg = str(exc).lower()
+        if "recursion depth" not in msg and "depth limit" not in msg:
             raise
 
         current_limit = sys.getrecursionlimit()
