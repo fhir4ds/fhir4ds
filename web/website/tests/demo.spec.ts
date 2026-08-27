@@ -7,7 +7,7 @@ test.describe("Landing page", () => {
     await page.goto(".");
     await expect(page).toHaveTitle(/FHIR for Data Science/);
     await expect(page.getByRole("heading", { level: 1, name: "FHIR for Data Science" })).toBeVisible();
-    await expect(page.getByText("v0.0.12")).toBeVisible();
+    await expect(page.getByText("v0.0.13")).toBeVisible();
 
     // Hero secondary line
     await expect(page.getByText("Production-Scale FHIR Analytics. Running Anywhere.")).toBeVisible();
@@ -29,7 +29,7 @@ test.describe("Landing page", () => {
     await page.goto(".");
     await expect(page.getByRole("heading", { name: "Columnar Speed" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Zero Infrastructure" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "SQL-on-FHIR v2" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Full Auditability" })).toBeVisible();
   });
 
   test("comparison table references FHIR4DS vs CQF Clinical Reasoning", async ({ page }) => {

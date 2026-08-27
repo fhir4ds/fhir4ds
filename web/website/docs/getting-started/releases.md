@@ -7,6 +7,67 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.13
+*August 2026*
+
+Version 0.0.13 is a reliability and integration release. It ships the
+**post-0.0.12 reliability fixes**, upgrades the **medterm4ds integration to
+0.0.3**, and lands a broad QA hardening pass over the ingestion,
+error-handling, audit, installation, and API surfaces. The conformance
+baseline holds at **2832/2832** (ViewDefinition 144, FHIRPath 935, CQL
+1706, DQM 47), now verified on the full **CI invocation across Python 3.10
+and 3.11** with fresh orjson.
+
+**Reliability fixes**
+
+- **orjson 3.12 compatibility**: deep-nesting decode recovery now matches
+  both orjson depth-limit wordings (≤3.11 "recursion depth", 3.12+ "depth
+  limit") instead of pinning a message — the published 0.0.12 wheel broke
+  on orjson 3.12; 0.0.13 is the patch.
+- **DQM evaluator**: population truthiness is numpy-safe (sequence
+  semantics instead of `bool()` on array-likes — warns on old numpy,
+  raises on new).
+- **DQM CLI**: runtime parameters are filtered to library-declared names
+  (typos can no longer fail measures that never declared them).
+- **Recursion-limit import leak**: the raised limit is scoped to script
+  execution instead of leaking into every importer's process.
+
+**medterm4ds 0.0.3**
+
+- Bounded dependency bumped on both extras: `medterm4ds>=0.0.3,<0.0.4`
+  (`terminology`) and `medterm4ds[extraction]>=0.0.3,<0.0.4` (`ner`).
+- The full integration surface (adapters, factory, ValueSet expansion with
+  the active-only/retired policy split, code search, annotation, the NER
+  notes pipeline) was diff-audited and re-verified against 0.0.3. Note:
+  medterm4ds 0.0.3 defaults its model revision to `v0.0.2`
+  (`MEDTERM4DS_HF_REVISION`) and adds device auto-detection
+  (`MEDTERM4DS_DEVICE`).
+
+**Hardening highlights**
+
+- Native engine restorations: exact digit-string `div`/`mod` (never
+  binary64 mediators — values beyond 2^53 are exact), 2^63 literal
+  contracts, named-group regexes (`(?<name>…)` + `${name}` substitution),
+  leading inline regex flags, and PCRE `$` trailing-newline semantics.
+- FHIRPath validity contract: §6.7 temporal unit/precision violations now
+  classify as invalid in `fhirpath_is_valid` on both engines.
+- Loader error contracts: duplicate JSON members rejected per FHIR
+  json.html, lone-surrogate and non-JSON-native value guards, wrapped
+  closed-connection errors, BOM/URL parity, and a shared patient-reference
+  doctrine across the loader and `FileSystemSource` (including versioned
+  absolute references and list-valued references).
+- `FileSystemSource` directory paths work everywhere (scans and incremental
+  delta scans), and bundle files are documented as inert rows.
+- API surface: README examples verified verbatim (including the
+  `evaluate_measure` DataFrame contract) and the full documented entry
+  point set exercised on both engines.
+
+**Known limitation**: five pre-release parity tests from a 0.0.12
+release-commit source-loss incident remain carried (structural-type trio,
+ratio tuple comparison, WASM no-Python gate); they sit outside the 2832
+conformance gate and the CI suite selection and are tracked for upstream
+tree recovery.
+
 ## Version 0.0.12
 *August 2026*
 
@@ -19,6 +80,19 @@ upgrades the **medterm4ds integration to 0.0.2** (bounded dependency
 `>=0.0.2,<0.0.3`, retired-code policy split, in-process intensional ValueSet
 expansion). Conformance rises to **2832/2832** across all four suites
 (ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47).
+
+### New: SQLQuery / SQLView (the SQL-on-FHIR v2 Analytics Layer)
+
+- FHIR `Library` resources conforming to the
+  [SQLQuery](https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery) and
+  [SQLView](https://sql-on-fhir.org/ig/StructureDefinition/SQLView)
+  profiles: typed, FHIR-declared parameters, versioned SQL content, and
+  canonical-URL dependencies that materialize as virtual tables.
+- `fhir4ds.sqlquery` ships `parse_library` / `parse_sqlquery` /
+  `parse_sqlview` plus `SQLQueryRunner`, with typed errors for missing
+  dependencies, dependency cycles, and parameter type mismatches.
+- See the [sqlquery API reference](/docs/api-reference/sqlquery) for the
+  profile model and a runnable example.
 
 ### Data ingestion correctness
 

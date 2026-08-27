@@ -116,7 +116,7 @@ const config: Config = {
         {to: '/docs/user-guide/index', label: 'User Guide', position: 'left'},
         {to: '/docs/integrations/wasm-engine', label: 'Integrations', position: 'left'},
         {to: '/docs/api-reference/fhir4ds', label: 'API', position: 'left'},
-        {to: '/docs/examples/cql-playground', label: 'Examples', position: 'left'},
+        {to: '/docs/examples/dqm-recipes', label: 'Examples', position: 'left'},
         {
           href: 'https://github.com/fhir4ds/fhir4ds',
           position: 'right',
