@@ -955,13 +955,16 @@ define PredLongMin: predecessor of Coalesce({-9223372036854775808L})
 
 
 def test_cql_negate_duration_between_cql11_explorer2() -> None:
-    """CQL-11 EXPLORER2 QA-002: Negate over duration/difference between.
+    """CQL-11 EXPLORER2 QA-002 (superseded by CQL-21 HISTORIAN QA-003):
+    Negate over duration/difference between.
 
     CQL 1.5 Negate has Integer/Long/Decimal/Quantity overloads and duration
     between is Integer-valued, so `-(days between A and B)` is valid CQL.
-    The lowering must normalize the VARCHAR-returning cqlDurationBetween /
-    cqlDifferenceBetween helpers to a numeric type before applying prefix
-    minus, otherwise DuckDB binder-fails with -(VARCHAR).
+    The VARCHAR-returning cqlDurationBetween / cqlDifferenceBetween helpers
+    cannot take SQL unary negation; per CQL Negate semantics -x == x * -1,
+    lowering goes through the interval-aware cqlUncertainMultiply (the old
+    cqlDurationBetween-only BIGINT cast silently NULLed uncertain ranges and
+    was removed by CQL-21 HISTORIAN QA-003).
     """
     cql = """library NegDur version '1.0.0'
 using FHIR version '4.0.1'
@@ -972,12 +975,16 @@ define NegDiffDays: -(difference in days between @2024-01-01 and @2024-01-10)
 """
     translated = translate_cql(cql)
     for name in ("NegDays", "NegMonths", "NegDiffDays"):
-        assert "TRY_CAST(" in translated[name].to_sql(), name
+        sql = translated[name].to_sql()
+        assert "cqlUncertainMultiply(" in sql, name
+        assert "'-1'" in sql, name
 
     py = _python_only_connection()
     cpp = _cpp_connection()
     try:
-        expected = {"NegDays": -9, "NegMonths": -14, "NegDiffDays": -9}
+        # §22.21 VARCHAR family convention: crisp uncertain-multiply results
+        # surface as VARCHAR scalar text (both engines).
+        expected = {"NegDays": "-9", "NegMonths": "-14", "NegDiffDays": "-9"}
         for name, want in expected.items():
             sql = "SELECT " + translated[name].to_sql()
             for label, con in (("python", py), ("cpp", cpp)):

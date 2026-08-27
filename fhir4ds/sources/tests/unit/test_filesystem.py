@@ -422,6 +422,61 @@ class TestRawFhirPatientRefDoctrine:
                 "o1": "p1", "o2": "p2", "o3": "p3", "o4": "uu1", "px1": "px1",
             }
 
+    def test_directory_path_expands_to_recursive_glob(self):
+        """A bare directory path_pattern must work (0.0.13 QA-006): local
+        directories expand to a recursive glob for DuckDB read functions."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, "sub"))
+            with open(os.path.join(tmpdir, "a.ndjson"), "w") as f:
+                f.write(json.dumps({"resourceType": "Patient", "id": "p1"}) + "\n")
+            with open(os.path.join(tmpdir, "sub", "b.ndjson"), "w") as f:
+                f.write(json.dumps({"resourceType": "Patient", "id": "p2"}) + "\n")
+            con = _make_con()
+            FileSystemSource(tmpdir, format="ndjson").register(con)
+            ids = sorted(r[0] for r in con.execute("SELECT id FROM resources").fetchall())
+            assert ids == ["p1", "p2"]
+
+    def test_get_changed_patients_directory_pattern(self):
+        """Directory path_patterns work for the incremental delta scan
+        (0.0.13 QA-010) and patient_ref is derived for raw-FHIR files with
+        the shared doctrine."""
+        import datetime
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "a.ndjson"), "w") as f:
+                f.write(json.dumps({
+                    "resourceType": "Observation", "id": "o1",
+                    "subject": {"reference": "Patient/p1"},
+                }) + "\n")
+            con = _make_con()
+            src = FileSystemSource(tmpdir, format="ndjson")
+            src.register(con)
+            changed = src.get_changed_patients(datetime.datetime(1970, 1, 1))
+            assert changed == ["p1"]
+
+    def test_versioned_absolute_ref_attributed(self):
+        """Version-specific absolute refs resolve to the current id (0.0.13 QA-001)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            got = self._mount(tmpdir, [
+                {"resourceType": "Condition", "id": "c1",
+                 "subject": {"reference": "https://example.org/fhir/Patient/p9/_history/4"}},
+            ])
+            assert got == {"c1": "p9"}
+
+    def test_list_form_ref_scans_first_patient_typed_entry(self):
+        """List-valued reference elements scan for the first typed entry (0.0.13 QA-005),
+        mirroring FHIRDataLoader._extract_patient_ref instead of extracting
+        only the first array element."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            got = self._mount(tmpdir, [
+                {"resourceType": "Appointment", "id": "a1",
+                 "patient": [{"reference": "Group/g7"}, {"reference": "Patient/p2"}]},
+                {"resourceType": "Appointment", "id": "a2",
+                 "patient": [{"reference": "Group/g7"}, {"reference": "Location/l1"}]},
+                {"resourceType": "Appointment", "id": "a3",
+                 "patient": [{"reference": "urn:uuid:uu2"}, {"reference": "Patient/p3"}]},
+            ])
+            assert got == {"a1": "p2", "a2": None, "a3": "uu2"}
+
     def test_bare_id_and_other_types_not_attributed(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             got = self._mount(tmpdir, [

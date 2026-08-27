@@ -188,11 +188,14 @@ class TestIsValidContract:
         for expr in ["1 'cm' div 2", "2 div 1 'cm'", "1 'cm' mod 2", "true div 1"]:
             assert fhirpath_is_valid_udf(expr) is True
 
-    def test_invalid_temporal_units_are_valid(self) -> None:
+    def test_invalid_temporal_units_are_invalid(self) -> None:
         from ...duckdb.udf import fhirpath_is_valid_udf
 
+        # SUPERSEDED (0.0.13 iteration 8): FP-18 QA-005's valid doctrine is
+        # replaced by the temporal spec-edges validity contract — §6.7
+        # unit/precision violations classify as INVALID on both engines.
         for expr in ["@2012-01-01 + 25 hours", "@T10:00:00 + 1 day"]:
-            assert fhirpath_is_valid_udf(expr) is True
+            assert fhirpath_is_valid_udf(expr) is False
 
     def test_out_of_range_integer_literal_is_invalid(self) -> None:
         from ...duckdb.udf import fhirpath_is_valid_udf

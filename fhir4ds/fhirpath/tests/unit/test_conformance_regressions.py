@@ -172,3 +172,21 @@ def test_not_treats_non_boolean_singletons_as_truthy():
     assert evaluate(resource, "n.not()") == [False]
     assert evaluate(resource, "x.not()") == [False]
     assert evaluate(resource, "{}.not()") == []
+
+
+def test_evaluate_dict_path_missing_expression_is_typed_error():
+    """A dict path lacking 'expression' raises the typed syntax error via
+    parse()'s guard (0.0.13 QA-014), not a raw KeyError."""
+    import pytest
+    from fhir4ds.fhirpath.engine.errors import FHIRPathSyntaxError
+
+    with pytest.raises(FHIRPathSyntaxError, match="must be a string"):
+        evaluate({"resourceType": "Patient"}, {"base": "Patient"})
+
+
+def test_evaluate_dict_path_with_expression_still_works():
+    out = evaluate(
+        {"resourceType": "Patient", "id": "p1"},
+        {"expression": "id"},
+    )
+    assert out == ["p1"]

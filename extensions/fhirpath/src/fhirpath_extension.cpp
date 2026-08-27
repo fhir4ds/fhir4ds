@@ -1361,9 +1361,35 @@ static void FhirpathBoolFunction(DataChunk &args, ExpressionState &state, Vector
 		if (fp_results.empty()) {
 			result_mask.SetInvalid(i);
 		} else {
+			auto &val = fp_results[0];
+			// Python-parity convenience coercion (fhirpath_bool_udf): numeric
+			// 0/1 map to false/true on this DuckDB BOOLEAN surface; any other
+			// numeric stays NULL. Applies to both typed and JSON-backed
+			// numbers.
+			if (val.type == fhirpath::FPValue::Type::Integer) {
+				if (val.int_val == 0) { result_data[i] = false; continue; }
+				if (val.int_val == 1) { result_data[i] = true; continue; }
+				result_mask.SetInvalid(i);
+				continue;
+			}
+			if (val.type == fhirpath::FPValue::Type::Decimal) {
+				if (val.decimal_val == 0.0) { result_data[i] = false; continue; }
+				if (val.decimal_val == 1.0) { result_data[i] = true; continue; }
+				result_mask.SetInvalid(i);
+				continue;
+			}
+			if (val.type == fhirpath::FPValue::Type::JsonVal && val.json_val &&
+			    !yyjson_is_str(val.json_val) && !yyjson_is_bool(val.json_val)) {
+				if (yyjson_is_num(val.json_val)) {
+					double num = yyjson_get_num(val.json_val);
+					if (num == 0.0) { result_data[i] = false; continue; }
+					if (num == 1.0) { result_data[i] = true; continue; }
+				}
+				result_mask.SetInvalid(i);
+				continue;
+			}
 			// Validate string values: only "true"/"false" are valid boolean strings.
 			// Other strings (e.g., "yes", "1") are not booleans per FHIRPath spec.
-			auto &val = fp_results[0];
 			bool valid_bool = true;
 			if (val.type == fhirpath::FPValue::Type::String) {
 				std::string lower;

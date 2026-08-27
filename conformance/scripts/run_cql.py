@@ -417,7 +417,7 @@ def run_test(conn, test_elem) -> tuple[bool, str]:
             # rounded half-up to 8 fractional digits is a pass.
             stripped = cql_expr.strip()
             try:
-                from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+                from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
                 literal_text = stripped
                 if literal_text.startswith(("+", "-")):
                     literal_text = literal_text[1:]

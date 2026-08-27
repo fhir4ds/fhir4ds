@@ -15,7 +15,7 @@ from .engine.util import arraify, get_data, set_paths, process_user_invocation_t
 from .engine.nodes import FP_Type, ResourceNode
 
 __title__ = "fhir4ds.fhirpath"
-__version__ = "0.0.12"
+__version__ = "0.0.13"
 __author__ = "FHIR4DS Team"
 __license__ = "AGPL-3.0-only"
 __copyright__ = "Copyright 2026 FHIR4DS Team"
@@ -136,7 +136,9 @@ def evaluate(resource, path, context=None, model=None, options=None):
     """
     _strict = (options or {}).get("strict_mode", False)
     if isinstance(path, dict):
-        node = parse(path["expression"], strict_mode=_strict)
+        # Route through parse()'s type guard so a dict path missing
+        # 'expression' raises the typed syntax error instead of a KeyError.
+        node = parse(path.get("expression"), strict_mode=_strict)
         if "base" in path:
             resource = ResourceNode.create_node(resource, path["base"])
     else:

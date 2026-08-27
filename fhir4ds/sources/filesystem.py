@@ -7,6 +7,7 @@ files on local disk or cloud object storage (S3, Azure Blob, GCS).
 
 from __future__ import annotations
 
+import os
 import warnings
 from typing import Any
 
@@ -108,7 +109,7 @@ class CloudCredentials:
 
 
 class FileSystemSource:
-    """
+    r"""
     SourceAdapter for FHIR resources stored as Parquet, NDJSON, or
     Iceberg files on local disk or cloud object storage (S3, Azure, GCS).
 
@@ -124,7 +125,12 @@ class FileSystemSource:
             - ``'/data/fhir/ndjson/'``
 
         format: File format — ``'parquet'``, ``'ndjson'``, ``'json'``, or
-            ``'iceberg'``.  Defaults to ``'parquet'``.
+            ``'iceberg'``.  Defaults to ``'parquet'``.  In raw-FHIR
+            ``ndjson``/``json`` mode every file (or line) maps to one row:
+            a Bundle file is stored as a single inert ``Bundle`` row and is
+            NOT expanded — use :class:`~fhir4ds.cql.loader.fhir_loader.
+            FHIRDataLoader`\ ``.load_file``/``load_directory`` for bundle
+            expansion.
         credentials: Optional :class:`CloudCredentials` for cloud storage
             access.  If ``None`` and *path_pattern* begins with a cloud
             prefix, a :exc:`UserWarning` is emitted that DuckDB secrets
@@ -200,11 +206,30 @@ class FileSystemSource:
                     )
                     return
 
+    def _effective_path_pattern(self) -> str:
+        """Return the path pattern with local directory paths expanded.
+
+        DuckDB read_* functions and ``glob`` require a glob; a bare directory
+        path matches no files ("No files found that match the pattern").
+        Local directory paths expand to a recursive glob so the documented
+        directory usage works everywhere the pattern is consumed (scan
+        expression and incremental delta scan). Cloud prefixes and explicit
+        globs pass through untouched.
+        """
+        path_pattern = self._path_pattern
+        if not any(ch in path_pattern for ch in "*?["):
+            try:
+                if os.path.isdir(path_pattern):
+                    return path_pattern.rstrip("/\\") + "/**"
+            except (OSError, ValueError):
+                pass
+        return path_pattern
+
     def _build_scan_expression(self) -> str:
         """Builds the DuckDB scan expression for the configured format."""
         # Path is passed to DuckDB's own parser — do not quote as identifier.
         # DuckDB handles glob patterns natively in these functions.
-        path_literal = quote_sql_literal(self._path_pattern)
+        path_literal = quote_sql_literal(self._effective_path_pattern())
         if self._format == "parquet":
             options = []
             if self._hive_partitioning:
@@ -229,17 +254,31 @@ class FileSystemSource:
         Follows the shared patient-identity doctrine (see
         ``FHIRDataLoader._extract_patient_ref``): only Patient-typed
         references (relative ``Patient/{id}``, absolute URLs ending
-        ``/Patient/{id}``, and version-specific variants resolved to the
-        current id) and bundle-local ``urn:uuid:`` references populate
-        patient_ref; references targeting other resource types (e.g.
+        ``/Patient/{id}``, and version-specific variants of either form
+        resolved to the current id) and bundle-local ``urn:uuid:`` references
+        populate patient_ref; references targeting other resource types (e.g.
         ``Group/{id}``) and bare ids yield NULL so they cannot fabricate
-        phantom patient ids downstream.
+        phantom patient ids downstream.  List-valued reference elements are
+        scanned for the first urn:uuid or Patient-typed entry, mirroring the
+        loader's candidate scan.
         """
         candidates = [
             "CASE WHEN src.resourceType = 'Patient' THEN src.id::VARCHAR END"
         ]
-        for path in ("$.subject.reference", "$.patient.reference", "$.beneficiary.reference"):
-            ref_expr = f"json_extract_string({resource_expr}, '{path}')"
+        # First candidate entry per element path: an urn:uuid or Patient-typed
+        # reference (relative/absolute, optionally version-specific).
+        first_typed = (
+            r'^(urn:uuid:.+|Patient/[^/]+|https?://.*/Patient/[^/]+)'
+            r'(/_history/[^/]+)?$'
+        )
+        for path in ("$.subject", "$.patient", "$.beneficiary"):
+            ref_expr = (
+                f"CASE WHEN json_type({resource_expr}, '{path}') = 'ARRAY' THEN "
+                f"list_extract(list_filter(from_json(json_extract({resource_expr}, "
+                f"'{path}[*].reference'), '[\"VARCHAR\"]'), "
+                f"r -> regexp_matches(r, '{first_typed}')), 1) "
+                f"ELSE json_extract_string({resource_expr}, '{path}.reference') END"
+            )
             candidates.append(
                 f"NULLIF(regexp_extract({ref_expr}, '^Patient/([^/]+)$', 1), '')"
             )
@@ -248,6 +287,10 @@ class FileSystemSource:
             )
             candidates.append(
                 f"NULLIF(regexp_extract({ref_expr}, '^Patient/([^/]+)/_history/[^/]+$', 1), '')"
+            )
+            candidates.append(
+                f"NULLIF(regexp_extract({ref_expr}, "
+                f"'^https?://.*/Patient/([^/]+)/_history/[^/]+$', 1), '')"
             )
             candidates.append(
                 f"NULLIF(regexp_extract({ref_expr}, '^urn:uuid:(.+)$', 1), '')"
@@ -396,8 +439,9 @@ class FileSystemSource:
 
         changed_files = [
             f
-            for f in glob_module.glob(self._path_pattern, recursive=True)
-            if datetime.utcfromtimestamp(os.path.getmtime(f)) > since
+            for f in glob_module.glob(self._effective_path_pattern(), recursive=True)
+            if os.path.isfile(f)
+            and datetime.utcfromtimestamp(os.path.getmtime(f)) > since
         ]
 
         if not changed_files:
@@ -410,8 +454,16 @@ class FileSystemSource:
             paths = ", ".join(quote_sql_literal(path) for path in changed_files)
             scan = f"read_json_auto([{paths}])"
 
-        rows = self._con.execute(f"""
-            SELECT DISTINCT patient_ref FROM {scan}
-        """).fetchall()
+        if "patient_ref" in self._scan_column_names(self._con, scan):
+            rows = self._con.execute(f"""
+                SELECT DISTINCT patient_ref FROM {scan}
+            """).fetchall()
+        else:
+            # Raw-FHIR files have no patient_ref column; derive it with the
+            # shared patient-identity doctrine, mirroring _resources_view_sql.
+            ref_expr = self._raw_fhir_patient_ref_sql("to_json(src)")
+            rows = self._con.execute(f"""
+                SELECT DISTINCT {ref_expr}::VARCHAR AS patient_ref FROM {scan} AS src
+            """).fetchall()
 
         return [row[0] for row in rows if row[0] is not None]

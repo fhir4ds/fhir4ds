@@ -2653,13 +2653,13 @@ def _is_valid_empty_result_error(exc: FHIRPathError) -> bool:
     # FP-18 SKEPTIC QA-005 (2026-08-18): §6.7.1/§6.7.2 unit restrictions
     # (e.g. `@2012-01-01 + 25 hours`, `@T10:00:00 + 1 day`) signal at
     # evaluation; the native engine returns empty, so the expressions
-    # remain valid.
-    if message.startswith("For date arithmetic,"):
-        return True
-    if message.startswith("For time arithmetic,"):
-        return True
-    if message.startswith("For date/time arithmetic,"):
-        return True
+    # remain valid. SUPERSEDED (0.0.13 iteration 8): the temporal
+    # spec-edges validity contract
+    # (test_temporal_arithmetic_spec_edges_native_and_fallback) pins
+    # §6.7 unit/precision violations ('@2016 + 1 a''', '@T12 + 1 day',
+    # '@1974-12-25 - 1 cm''') as INVALID in fhirpath_is_valid on BOTH
+    # engines (the native classifier already rejects them), so these
+    # messages must NOT be accepted here.
     if message.startswith("Indexer requires an integer index"):
         return True
     return False

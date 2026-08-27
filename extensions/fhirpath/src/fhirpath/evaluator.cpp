@@ -294,6 +294,12 @@ static std::regex_constants::syntax_option_type fhirpathRegexCompileOptions(cons
 			options = options | std::regex_constants::icase;
 		} else if (flag == 'm') {
 			// Handled by normalizeFHIRPathRegex()/line-wise replacement below.
+		} else if (flag == 's') {
+			// ECMAScript std::regex has no dotall option; '.' is translated
+			// per-codepoint by normalizeFHIRPathRegex and does not cross
+			// line terminators. Accepted so leading (?s) groups parse; the
+			// dotall-over-newline case rides the deferred inline-flag
+			// dialect note (FP-10 QA-003).
 		} else {
 			throw FHIRPathSpecError("FHIRPath: invalid regex flags");
 		}
@@ -583,6 +589,106 @@ static bool isRegexQuantifierAhead(const std::string &pattern, size_t i) {
 // std::regex operates over UTF-8 bytes. FHIRPath §5.6.9 requires regex behavior
 // that allows Unicode characters, so codepoint-level constructs are expanded
 // before std::regex sees them.
+// FHIRPath §5.6.10 named-group syntax `(?<name>...)` (FP-10 SKEPTIC QA-001):
+// std::regex ECMAScript cannot parse it, so normalizeFHIRPathRegex strips the
+// names to plain capturing groups (group order/numbering preserved) and
+// replaceMatches rewrites `${name}` for existing groups to numbered `$N`.
+// Lookbehind `(?<=`/`(?<!` deliberately stays on the invalid path (spec
+// sanctions only what its own examples need). Identifier scanning must accept
+// single-char names.
+static bool isFHIRPathGroupNameStart(char ch) {
+	return std::isalpha(static_cast<unsigned char>(ch)) || ch == '_';
+}
+
+static bool isFHIRPathGroupNameChar(char ch) {
+	return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_';
+}
+
+// Matches `(?<name>` at position i (identifier start required so `(?<=` and
+// `(?<!` lookbehind fall through unhandled). Returns the end of the group
+// opening (index of '>') or npos.
+static size_t fhirPathNamedGroupOpenEnd(const std::string &pattern, size_t i) {
+	if (i + 3 >= pattern.size()) return std::string::npos;
+	if (pattern[i] != '(' || pattern[i + 1] != '?' || pattern[i + 2] != '<') return std::string::npos;
+	if (!isFHIRPathGroupNameStart(pattern[i + 3])) return std::string::npos;
+	size_t j = i + 4;
+	while (j < pattern.size() && isFHIRPathGroupNameChar(pattern[j])) ++j;
+	if (j >= pattern.size() || pattern[j] != '>') return std::string::npos;
+	return j;
+}
+
+// Ordered named-group names from the raw pattern (escapes and character
+// classes respected). Position + 1 is the group number after translation.
+static std::vector<std::string> fhirpathNamedGroupNumbers(const std::string &pattern) {
+	std::vector<std::string> names;
+	bool in_bracket = false;
+	for (size_t i = 0; i < pattern.size(); ++i) {
+		if (pattern[i] == '\\' && i + 1 < pattern.size()) {
+			++i;
+			continue;
+		}
+		if (pattern[i] == '[') {
+			in_bracket = true;
+		} else if (pattern[i] == ']') {
+			in_bracket = false;
+		} else if (!in_bracket) {
+			size_t open_end = fhirPathNamedGroupOpenEnd(pattern, i);
+			if (open_end != std::string::npos) {
+				names.push_back(pattern.substr(i + 3, open_end - (i + 3)));
+				i = open_end;
+			}
+		}
+	}
+	return names;
+}
+
+// Rewrite `${name}` for EXISTING named groups to `$N`. Everything else —
+// `$N`, `$$`, `$word`, `${unknown}`, `${N}` (numeric braces) — passes through
+// EXACTLY as the Python engine does (FP-10 substitution pass-through
+// doctrine).
+static std::string translateNamedGroupSubstitution(const std::string &sub,
+                                                   const std::vector<std::string> &names) {
+	if (names.empty() || sub.empty()) return sub;
+	std::string out;
+	for (size_t i = 0; i < sub.size(); ++i) {
+		if (sub[i] == '$' && i + 1 < sub.size() && sub[i + 1] == '{') {
+			size_t close = sub.find('}', i + 2);
+			if (close != std::string::npos) {
+				std::string ref = sub.substr(i + 2, close - (i + 2));
+				bool numeric = !ref.empty() && ref.find_first_not_of("0123456789") == std::string::npos;
+				if (!numeric) {
+					for (size_t g = 0; g < names.size(); ++g) {
+						if (names[g] == ref) {
+							out += "$";
+							out += std::to_string(g + 1);
+							i = close;
+							goto appended;
+						}
+					}
+				}
+			}
+		}
+		out += sub[i];
+	appended:;
+	}
+	return out;
+}
+
+// Absorb a LEADING inline flag group `(?ims)` from the pattern into
+// flags_text (FP-10 QA-002 doctrine). Only a pure flag group at position 0
+// is absorbed; mid-pattern flags stay on the deferred dialect path (QA-003).
+static std::string absorbLeadingInlineRegexFlags(const std::string &pattern, std::string &flags_text) {
+	if (pattern.size() < 4 || pattern[0] != '(' || pattern[1] != '?') return pattern;
+	size_t close = pattern.find(')');
+	if (close == std::string::npos || close < 3) return pattern;
+	std::string letters = pattern.substr(2, close - 2);
+	if (letters.empty() || letters.find_first_not_of("ims") != std::string::npos) return pattern;
+	for (char ch : letters) {
+		if (flags_text.find(ch) == std::string::npos) flags_text += ch;
+	}
+	return pattern.substr(close + 1);
+}
+
 static std::string normalizeFHIRPathRegex(const std::string &pattern, bool multiline, bool ignore_case) {
 	std::string normalized;
 	bool in_bracket = false;
@@ -591,7 +697,19 @@ static std::string normalizeFHIRPathRegex(const std::string &pattern, bool multi
 			normalized += pattern[i];
 			normalized += pattern[i + 1];
 			++i;
-		} else if (pattern[i] == '[') {
+			continue;
+		}
+		if (!in_bracket) {
+			size_t open_end = fhirPathNamedGroupOpenEnd(pattern, i);
+			if (open_end != std::string::npos) {
+				// FP-10 SKEPTIC QA-001: `(?<name>...)` -> plain capturing
+				// group; numbering preserved so `$N` references keep working.
+				normalized += '(';
+				i = open_end;
+				continue;
+			}
+		}
+		if (pattern[i] == '[') {
 			size_t class_end = std::string::npos;
 			if (appendNormalizedRegexCharacterClass(normalized, pattern, i, class_end, ignore_case)) {
 				i = class_end;
@@ -606,6 +724,12 @@ static std::string normalizeFHIRPathRegex(const std::string &pattern, bool multi
 			normalized += "(?:^|\\r\\n|\\r|\\n)";
 		} else if (multiline && pattern[i] == '$' && !in_bracket) {
 			normalized += "(?:$|(?=\\r\\n|\\r|\\n))";
+		} else if (pattern[i] == '$' && !in_bracket) {
+			// PCRE $ (non-multiline): end of input, or immediately before a
+			// single FINAL LF — the \r of CRLF is an ordinary character and
+			// only the last newline counts ('ab\n' true, 'ab\r\n' /
+			// 'ab\n\n' false), matching Python re and the fallback engine.
+			normalized += "(?:$|(?=\\n$))";
 		} else if (pattern[i] == '.' && !in_bracket) {
 			normalized += utf8CodepointRegex();
 		} else if (ignore_case && !in_bracket && static_cast<unsigned char>(pattern[i]) >= 0x80) {
@@ -640,7 +764,6 @@ static std::string normalizeFHIRPathRegex(const std::string &pattern, bool multi
 	}
 	return normalized;
 }
-
 // Forward declarations
 static int countDecimalPlaces(const FPValue &val);
 static std::string escapeJsonString(const std::string &s);
@@ -3612,6 +3735,10 @@ FPCollection Evaluator::eval(const ASTNode &node, const FPCollection &input, yyj
 		int64_t ival = node_value_get<int64_t>(node.value);
 		std::string source = node.value.string_val;
 		if (source == "9223372036854775808L") {
+			// Unsigned 2^63 overflows Long; the bare literal is invalid. Only
+			// the unary-minus wrapper (evalUnaryOp special case) re-interprets
+			// it as INT64_MIN, matching the fallback and the fp07/fp18
+			// conversion contracts.
 			throw FHIRPathSpecError("Long literal out of range");
 		}
 		FPValue v = FPValue::FromInteger(ival);
@@ -5385,7 +5512,9 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 				throw FHIRPathSpecError("matchesFull() requires a String regex argument");
 			}
 			std::string pattern = toString(arg[0]);
-			validateFHIRPathRegex(pattern);
+			std::string fullmatch_flags;
+			pattern = absorbLeadingInlineRegexFlags(pattern, fullmatch_flags);
+			validateFHIRPathRegex(pattern, fullmatch_flags);
 			if (input.empty()) return {};
 			if (input.size() > 1) {
 				throw FHIRPathSpecError("matchesFull() requires a single item input");
@@ -5395,7 +5524,10 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 			}
 			try {
 				std::string s = toString(input[0]);
-				const auto &re = get_cached_regex(normalizeFHIRPathRegex(pattern));
+				const auto &re = get_cached_regex(
+				    normalizeFHIRPathRegex(pattern, fhirpathRegexMultiline(fullmatch_flags),
+				                           fhirpathRegexIgnoreCase(fullmatch_flags)),
+				    fhirpathRegexCompileOptions(fullmatch_flags));
 				return {FPValue::FromBoolean(std::regex_match(s, re))};
 			} catch (const std::regex_error &e) {
 				throw FHIRPathSpecError(std::string("matchesFull() invalid regular expression: ") + e.what());
@@ -5429,7 +5561,7 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 				}
 				flags_text = toString(flags_col[0]);
 			}
-			std::string pattern = toString(arg[0]);
+			std::string pattern = absorbLeadingInlineRegexFlags(toString(arg[0]), flags_text);
 			if (!pattern.empty()) {
 				validateFHIRPathRegex(pattern, flags_text);
 			} else {
@@ -5443,7 +5575,8 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 				throw FHIRPathSpecError("replaceMatches() requires a String input");
 			}
 			std::string s = toString(input[0]);
-			std::string sub = toString(sub_col[0]);
+			std::string sub = translateNamedGroupSubstitution(
+			    toString(sub_col[0]), fhirpathNamedGroupNumbers(pattern));
 			if (pattern.empty()) return {FPValue::FromString(s)};
 			try {
 				auto options = fhirpathRegexCompileOptions(flags_text);
@@ -5873,6 +6006,7 @@ FPCollection Evaluator::fn_matches(const FPCollection &input, const FPCollection
 		}
 		flags_text = toString((*flags)[0]);
 	}
+	pattern = absorbLeadingInlineRegexFlags(pattern, flags_text);
 	validateFHIRPathRegex(pattern, flags_text);
 	if (input.empty()) {
 		return {};
@@ -7382,13 +7516,72 @@ static std::string fpDecToPlainText(const FpDecimalDigits &d) {
 // Exact Decimal arithmetic for +, -, *, / over operands that carry exact
 // decimal digits. Returns the canonical plain source text; false defers to
 // the binary64 path (division-by-zero is the caller's responsibility).
+// Compare non-negative decimal digit strings by numeric magnitude.
+// Leading zeros are tolerated on either side.
+static int compareDigitMagnitudes(const std::string &a, const std::string &b) {
+	size_t as = a.find_first_not_of('0');
+	size_t bs = b.find_first_not_of('0');
+	if (as == std::string::npos && bs == std::string::npos) return 0;
+	if (as == std::string::npos) return -1;
+	if (bs == std::string::npos) return 1;
+	size_t alen = a.size() - as;
+	size_t blen = b.size() - bs;
+	if (alen != blen) return alen < blen ? -1 : 1;
+	for (size_t i = 0; i < alen; ++i) {
+		if (a[as + i] != b[bs + i]) return a[as + i] < b[bs + i] ? -1 : 1;
+	}
+	return 0;
+}
+
+// a -= b in place for digit magnitudes with a >= b.
+static void subtractDigitMagnitudesInPlace(std::string &a, const std::string &b) {
+	int borrow = 0;
+	int ai = static_cast<int>(a.size()) - 1;
+	int bi = static_cast<int>(b.size()) - 1;
+	while (ai >= 0 || bi >= 0 || borrow) {
+		int cur = (ai >= 0 ? a[static_cast<size_t>(ai)] - '0' : 0)
+		          - borrow
+		          - (bi >= 0 ? b[static_cast<size_t>(bi)] - '0' : 0);
+		if (cur < 0) {
+			cur += 10;
+			borrow = 1;
+		} else {
+			borrow = 0;
+		}
+		if (ai >= 0) a[static_cast<size_t>(ai)] = static_cast<char>('0' + cur);
+		--ai;
+		--bi;
+	}
+}
+
+// Truncated long division over digit magnitudes: n = q*d + r, 0 <= r < d.
+static void divModDigitMagnitudes(const std::string &n, const std::string &d,
+                                  std::string &q, std::string &r) {
+	q.clear();
+	std::string rem;
+	for (char ch : n) {
+		// Appending a digit to the remainder string is rem*10 + digit.
+		rem += ch;
+		rem = stripLeadingIntegerZeros(rem);
+		int qd = 0;
+		while (compareDigitMagnitudes(rem, d) >= 0) {
+			subtractDigitMagnitudesInPlace(rem, d);
+			rem = stripLeadingIntegerZeros(rem);
+			++qd;
+		}
+		q += static_cast<char>('0' + qd);
+	}
+	q = stripLeadingIntegerZeros(q);
+	r = rem.empty() ? "0" : stripLeadingIntegerZeros(rem);
+}
+
 static bool tryDecimalArithmeticText(const FPValue &lv, const FPValue &rv,
                                      const std::string &op, std::string &out) {
-	if (op != "+" && op != "-" && op != "*" && op != "/") return false;
+	if (op != "+" && op != "-" && op != "*" && op != "/" && op != "div" && op != "mod") return false;
 	FpDecimalDigits a, b;
 	if (!parseFpDecimalDigits(lv, a)) return false;
 	if (!parseFpDecimalDigits(rv, b)) return false;
-	if (op == "/" && b.digits == "0") return false;
+	if ((op == "/" || op == "div" || op == "mod") && b.digits == "0") return false;
 	FpDecimalDigits r;
 	if (op == "+") {
 		r = fpDecAddSub(a, b, false);
@@ -7396,6 +7589,32 @@ static bool tryDecimalArithmeticText(const FPValue &lv, const FPValue &rv,
 		r = fpDecAddSub(a, b, true);
 	} else if (op == "*") {
 		r = fpDecMul(a, b);
+	} else if (op == "div" || op == "mod") {
+		// FHIRPath §6.6.5/§6.6.6 truncated division and its remainder,
+		// computed exactly over the operand digit strings (FP-18 doctrine:
+		// never through binary64 trunc/fmod, which silently round operands
+		// beyond 2^53). Aligned exponents cancel: a = A'*10^e, b = B'*10^e,
+		// so a/b = A'/B' exactly; the remainder carries exponent e with the
+		// dividend's sign (truncated-division convention, mirroring the
+		// Python fallback's Decimal semantics).
+		int e = std::min(a.exp, b.exp);
+		if (a.exp > e) a.digits.append(static_cast<size_t>(a.exp - e), '0');
+		if (b.exp > e) b.digits.append(static_cast<size_t>(b.exp - e), '0');
+		std::string qdigits, rdigits;
+		divModDigitMagnitudes(a.digits, b.digits, qdigits, rdigits);
+		if (op == "div") {
+			bool qneg = (a.neg != b.neg) && qdigits != "0";
+			out = (qneg ? "-" : "") + qdigits;
+			return true;
+		}
+		FpDecimalDigits m;
+		m.neg = a.neg && rdigits != "0";
+		m.digits = rdigits;
+		m.exp = e;
+		out = (e >= 0)
+			? (m.neg ? "-" : "") + rdigits
+			: fpDecToPlainText(m);
+		return true;
 	} else {
 		r = fpDecDiv(a, b);
 		// FP-18 HISTORIAN QA-003 + FP-01 EXPLORER QA-002: the fallback's
@@ -9866,7 +10085,7 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		// §4.1.3 (Integer is 32-bit signed); overflow-to-Decimal is handled
 		// below. Operands without exact decimal digits (JSON reals,
 		// text-less Decimals) still defer to the binary64 path below.
-		if (op == "/" || !(l_is_int_type && r_is_int_type)) {
+		if (op == "/" || op == "div" || op == "mod" || !(l_is_int_type && r_is_int_type)) {
 			std::string exact_text;
 			if (tryDecimalArithmeticText(lv, rv, op, exact_text)) {
 				FPValue v = FPValue::FromDecimal(strtod(exact_text.c_str(), nullptr));
@@ -10019,7 +10238,12 @@ FPCollection Evaluator::evalUnaryOp(const ASTNode &node, const FPCollection &inp
 				value = yyjson_get_sint(operand[0].json_val);
 			}
 			if (value == LLONG_MIN) {
-				return {};
+				// Unary negation of int64 min overflows into the Decimal
+				// domain; 2^63 is exactly representable as binary64 and the
+				// fallback renders it exactly (FP-18 dual-engine parity).
+				FPValue v = FPValue::FromDecimal(9223372036854775808.0);
+				v.source_text = "9223372036854775808.0";
+				return {v};
 			}
 			return {FPValue::FromInteger(-value)};
 		}
