@@ -319,3 +319,27 @@ class TestAuditEngine:
         row = {"numerator": {"result": True, "evidence": []}}
         result = engine.prune_evidence(row, "numerator", AuditPersona.NUMERATOR)
         assert result == []
+
+
+def test_compaction_handles_unhashable_thresholds():
+    """JSON-sourced evidence thresholds may be objects (Quantity criteria);
+    grouping must not crash on them (0.0.13 domain 9 EXPLORER)."""
+    from fhir4ds.dqm.audit import AuditEngine
+    from fhir4ds.dqm.types import AuditPersona
+
+    grouped = AuditEngine().prune_evidence(
+        {
+            "numerator": {
+                "result": True,
+                "evidence": [
+                    {"trace": [], "threshold": {"value": 5, "unit": "mg"}, "target": "Obs/1"},
+                    {"trace": [], "threshold": {"value": 5, "unit": "mg"}, "target": "Obs/2"},
+                ],
+            }
+        },
+        "numerator",
+        AuditPersona.INCLUSION,
+    )
+    assert len(grouped) == 1
+    assert len(grouped[0]["findings"]) == 2
+    assert grouped[0]["threshold"] == {"value": 5, "unit": "mg"}

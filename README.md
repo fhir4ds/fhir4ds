@@ -79,7 +79,7 @@ result = fhir4ds.evaluate_measure(
         "numer": "Numerator",
     }
 )
-print(result.df())
+print(result)
 ```
 
 ### SQL-on-FHIR ViewDefinitions

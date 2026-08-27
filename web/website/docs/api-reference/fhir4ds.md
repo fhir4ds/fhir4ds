@@ -14,6 +14,7 @@ graph TD
     fhir4ds[fhir4ds] --> fhirpath[fhirpath]
     fhir4ds --> cql[cql]
     fhir4ds --> viewdef[viewdef]
+    fhir4ds --> sqlquery[sqlquery]
     fhir4ds --> dqm[dqm]
     fhir4ds --> sources[sources]
     

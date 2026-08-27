@@ -38,7 +38,7 @@ def run_script(name, path):
     try:
         absolute = str(Path(path).resolve())
     except FileNotFoundError:
-        absolute = str((Path(__file__).resolve().parent / Path(path).name))
+        absolute = str(Path(__file__).resolve().parent / Path(path).name)
     for attempt in (1, 2):
         try:
             subprocess.run([sys.executable, absolute], check=True, capture_output=False)

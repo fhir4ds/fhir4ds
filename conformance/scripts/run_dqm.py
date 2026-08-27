@@ -19,9 +19,6 @@ sys.path.insert(0, os.getcwd())
 sys.path.insert(0, str(Path(__file__).parent))
 from conformance_log import log_run  # noqa: E402
 
-# Deeply-nested CQL libraries can exceed Python's default recursion limit
-sys.setrecursionlimit(8000)
-
 from fhir4ds.dqm.tests.conformance.cli import _discover_measures  # noqa: E402
 from fhir4ds.dqm.tests.conformance.config import SKIP_ON_FAILURE  # noqa: E402
 from fhir4ds.dqm.tests.conformance.database import BenchmarkDatabase  # noqa: E402
@@ -61,6 +58,9 @@ def _print_slowest(report: dict, timing_key: str, label: str, limit: int = 8) ->
 
 
 def main():
+    # Deeply-nested CQL libraries can exceed Python's default recursion
+    # limit during AST translation. Scoped to execution, not import time.
+    sys.setrecursionlimit(8000)
     parser = argparse.ArgumentParser(
         description="Run DQM (Data Quality Measures) conformance tests."
     )

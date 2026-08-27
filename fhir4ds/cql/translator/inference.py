@@ -1434,6 +1434,20 @@ class InferenceMixin:
                     ast_def = self._context.expression_definitions.get(prefixed)
                     if ast_def is not None:
                         return self._infer_cql_type(ast_def)
+                # CQL-04 EXPLORER QA-003 (restored): element access on a FHIR
+                # resource-typed source (the context resource `Patient.active`,
+                # retrieve aliases, profile names) infers its CQL type from
+                # schema metadata so value-bearing Boolean/Date/String
+                # defines feed logical/string operators by VALUE instead of
+                # failing operand validation with List<Any>.
+                source_name = ast_node.source.name
+                context_resource = str(getattr(self._context, "current_context", "") or "")
+                if self._is_fhir_resource_type(source_name) or (
+                    context_resource and source_name == context_resource
+                ):
+                    fhir_type = self._infer_fhir_property_type(source_name, ast_node.path)
+                    if fhir_type:
+                        return fhir_type
             return "Any"
 
         # Check if it's an identifier referencing a known definition

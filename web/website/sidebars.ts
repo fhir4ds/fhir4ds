@@ -140,6 +140,11 @@ const sidebars: SidebarsConfig = {
             },
             {
               type: 'doc',
+              id: 'api-reference/sqlquery/sqlquery',
+              label: 'sqlquery',
+            },
+            {
+              type: 'doc',
               id: 'api-reference/dqm/dqm',
               label: 'dqm',
             },

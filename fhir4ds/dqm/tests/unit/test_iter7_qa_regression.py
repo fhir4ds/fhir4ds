@@ -27,9 +27,9 @@ from fhir4ds.dqm.artifacts import FileArtifactResolver
 from fhir4ds.dqm.evaluator import MeasureEvaluator
 from fhir4ds.dqm.models import MeasureResult
 from fhir4ds.dqm.tests.conformance.config import (
-    MeasureConfig,
     SUPPLEMENTAL_VALUESET_DIR,
     VALIDATOR_VALUESET_DIR,
+    MeasureConfig,
     get_suite_paths,
 )
 from fhir4ds.dqm.tests.conformance.database import BenchmarkDatabase
@@ -39,13 +39,11 @@ from fhir4ds.dqm.tests.conformance.runner import (
     _translate_measure,
 )
 from fhir4ds.dqm.types import (
-    AuditMode,
     AuditPersona,
     GroupMap,
     PopulationEntry,
     PopulationMap,
 )
-
 
 SUITE = get_suite_paths("2025")
 

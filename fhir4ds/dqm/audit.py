@@ -55,7 +55,14 @@ class AuditEngine:
             op = item.get("operator")
             thresh = item.get("threshold")
 
-            group_key = (trace, attr, op, thresh)
+            # Evidence structs are JSON-sourced: thresholds can arrive as
+            # objects (e.g. Quantity/tuple criteria) — keep the group key
+            # hashable so compaction cannot crash on them.
+            try:
+                group_key = (trace, attr, op, thresh)
+                hash(group_key)
+            except TypeError:
+                group_key = (trace, attr, op, repr(thresh))
             if group_key not in compacted:
                 compacted[group_key] = {
                     "trace": list(trace),

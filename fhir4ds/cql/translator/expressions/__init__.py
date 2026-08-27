@@ -550,9 +550,14 @@ class ExpressionTranslator(
         # rows when false. A value-bearing define (e.g. `define F: Patient
         # .active`) keeps one row per patient with a NULL/false value column,
         # so EXISTS would be always-true and destroy CQL three-valued logic.
-        # Contribute the VALUE instead, via a correlated scalar lookup.
+        # Contribute the VALUE instead, via a correlated scalar lookup. The
+        # same applies to stored-list value defines (navigation lowering
+        # wraps the 0..1 element as a one-element list); the caller unwraps
+        # element 1 before the Boolean cast.
         if usage == ExprUsage.BOOLEAN:
-            if not is_boolean_scalar and meta is not None and meta.has_resource:
+            if not is_boolean_scalar and meta is not None and (
+                meta.has_resource or getattr(meta, "stores_list_value", False)
+            ):
                 col = meta.value_column or "resource"
                 return _RefStrategy(kind=_RefKind.CORRELATED_SCALAR, column=col)
             return _RefStrategy(kind=_RefKind.EXISTS)

@@ -430,6 +430,32 @@ def test_load_valuesets_from_raw_fhir_valueset(loader):
     assert loader.count_valueset_codes("http://example.org/ValueSet/Raw") == 2
 
 
+def test_load_valuesets_null_expansion_compose_treated_as_absent(loader):
+    """FHIR JSON null members are absent (0.0.13 QA-002): a null expansion
+    must not crash extraction and must not mask compose codes."""
+    null_expansion = {
+        "resourceType": "ValueSet",
+        "url": "http://example.org/ValueSet/NullExpansion",
+        "expansion": None,
+        "compose": {
+            "include": [
+                {"system": "http://loinc.org", "concept": [{"code": "la"}]}
+            ]
+        },
+    }
+    null_compose = {
+        "resourceType": "ValueSet",
+        "url": "http://example.org/ValueSet/NullCompose",
+        "compose": None,
+        "expansion": {"contains": [{"system": "http://snomed.info/sct", "code": "ec"}]},
+    }
+
+    assert loader.load_valuesets([null_expansion]) == 1
+    assert loader.count_valueset_codes("http://example.org/ValueSet/NullExpansion") == 1
+    assert loader.load_valuesets([null_compose]) == 1
+    assert loader.count_valueset_codes("http://example.org/ValueSet/NullCompose") == 1
+
+
 def test_load_valuesets_rejects_invalid_inputs(loader):
     with pytest.raises(TypeError, match="valuesets must be a list"):
         loader.load_valuesets(None)
@@ -622,6 +648,156 @@ def test_load_from_url_rejects_non_object_json(loader, monkeypatch):
 
     with pytest.raises(TypeError, match="object resource or Bundle.*list"):
         loader.load_from_url("http://example.org/fhir")
+
+
+def test_load_from_url_wraps_malformed_json(loader, monkeypatch):
+    """Malformed server payloads raise a wrapped ValueError with url context
+    (0.0.13 QA-004), not a raw json.JSONDecodeError."""
+    import urllib.request
+
+    class MockResponse:
+        def read(self):
+            return b'{"resourceType": "Patient", '
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: MockResponse())
+
+    with pytest.raises(ValueError, match=r"Malformed JSON from http://example.org/fhir"):
+        loader.load_from_url("http://example.org/fhir")
+
+
+def test_load_from_url_tolerates_utf8_bom(loader, monkeypatch):
+    """A UTF-8 BOM in the server payload is tolerated (0.0.13 QA-004)."""
+    import urllib.request
+
+    patient = {"resourceType": "Patient", "id": "bom-p1"}
+    bom_bytes = b"\xef\xbb\xbf" + json.dumps(patient).encode("utf-8")
+
+    class MockResponse:
+        def read(self):
+            return bom_bytes
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: MockResponse())
+
+    assert loader.load_from_url("http://example.org/fhir/Patient/bom-p1") == 1
+    assert loader.count("Patient") == 1
+
+
+def test_serialize_rejects_non_json_native_values(loader):
+    """Non-JSON-native values (datetime etc.) raise a wrapped ValueError on
+    every entry point (0.0.13 QA-003), mirroring the bundle/ndjson contract."""
+    import datetime
+
+    resource = {
+        "resourceType": "Observation",
+        "id": "o-dt",
+        "effectiveDateTime": datetime.datetime(2020, 1, 1),
+    }
+    message = r"cannot be represented as standard JSON.*datetime"
+
+    with pytest.raises(ValueError, match=message):
+        loader.load_resource(resource)
+    with pytest.raises(ValueError, match=message):
+        loader.load_resources([resource])
+
+
+def test_rejects_duplicate_json_members(loader, tmp_path):
+    """FHIR json.html: property names SHALL be unique (0.0.13 QA-007) —
+    strict decode boundaries reject duplicates with location attribution
+    instead of silently keeping the last member."""
+    dup_ndjson = tmp_path / "dup.ndjson"
+    dup_ndjson.write_text(
+        '{"resourceType": "Patient", "id": "a", "id": "b"}\n'
+    )
+    with pytest.raises(ValueError, match=r"line 1.*Duplicate JSON member 'id'"):
+        loader.load_ndjson(dup_ndjson)
+
+    dup_json = tmp_path / "dup.json"
+    dup_json.write_text('{"resourceType": "Patient", "id": "a", "id": "b"}')
+    with pytest.raises(ValueError, match=r"Invalid FHIR JSON in .*dup\.json.*Duplicate JSON member 'id'"):
+        loader.load_file(dup_json)
+
+
+def test_ndjson_non_strict_skips_duplicate_member_lines(loader, tmp_path, caplog):
+    dup_ndjson = tmp_path / "dup.ndjson"
+    dup_ndjson.write_text(
+        '{"resourceType": "Patient", "id": "ok"}\n'
+        '{"resourceType": "Patient", "id": "a", "id": "b"}\n'
+    )
+    count = loader.load_ndjson(dup_ndjson, strict=False)
+    assert count == 1
+    assert loader.count("Patient") == 1
+
+
+def test_ndjson_deep_nesting_raises_wrapped_valueerror(loader, tmp_path):
+    """Parse-side deep nesting raises a wrapped ValueError with line
+    attribution (0.0.13 QA-011), not a raw RecursionError."""
+    deep = tmp_path / "deep.ndjson"
+    deep.write_text('{"resourceType": "Patient", "id": "d1", "x": '
+                    + "[" * 20000 + "]" * 20000 + "}\n")
+    with pytest.raises(ValueError, match=r"line 1.*nesting is too deep to parse"):
+        loader.load_ndjson(deep)
+
+
+def test_load_valuesets_object_missing_codes_is_typed_error(loader):
+    """Duck-typed .url-without-.codes raises a typed, indexed TypeError
+    (0.0.13 QA-012), not a raw AttributeError."""
+    class Partial:
+        url = "http://example.org/VS"
+    with pytest.raises(TypeError, match=r"valuesets\[0\].*\.codes"):
+        loader.load_valuesets([Partial()])
+
+
+def test_ndjson_rejects_lone_surrogates(loader, tmp_path):
+    """Unpaired surrogates are rejected at the validation boundary with line
+    attribution (0.0.13 QA-013); non-strict mode skips the bad line; real
+    surrogate pairs (emoji) load fine."""
+    bad = tmp_path / "surrogate.ndjson"
+    bad.write_text(
+        '{"resourceType": "Patient", "id": "ok1"}\n'
+        '{"resourceType": "Patient", "id": "bad1", "name": "x\\ud800y"}\n'
+    )
+    with pytest.raises(ValueError, match=r"line 2.*unpaired Unicode surrogates"):
+        loader.load_ndjson(bad)
+
+    loader.clear()
+    count = loader.load_ndjson(bad, strict=False)
+    assert count == 1
+    assert loader.count("Patient") == 1
+
+    emoji = tmp_path / "emoji.ndjson"
+    emoji.write_text(
+        '{"resourceType": "Patient", "id": "e1", "name": "😀"}\n', encoding="utf-8"
+    )
+    assert loader.load_ndjson(emoji) == 1
+    stored = loader.con.execute(
+        "SELECT json_extract_string(resource, '$.name') FROM resources "
+        "WHERE id = 'e1'").fetchone()[0]
+    assert stored == "😀"
+
+
+def test_load_from_url_rejects_duplicate_members(loader, monkeypatch):
+    import urllib.request
+
+    class MockResponse:
+        def read(self):
+            return b'{"resourceType": "Patient", "id": "a", "id": "b"}'
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: MockResponse())
+
+    with pytest.raises(ValueError, match=r"Invalid FHIR JSON from http://.*Duplicate JSON member 'id'"):
+        loader.load_from_url("http://example.org/fhir/Patient")
 
 
 def test_resource_json_stored_correctly(loader, duckdb_con):
@@ -958,3 +1134,14 @@ def test_load_resources_mixed_null_ids_bulk(loader, duckdb_con):
         "SELECT id, patient_ref FROM resources ORDER BY resourceType, id NULLS FIRST"
     ).fetchall()
     assert rows == [(None, "x1"), (None, None), ("x1", "x1")]
+
+
+def test_loader_constructor_on_closed_connection_is_wrapped():
+    """FHIRDataLoader(closed_con) fails with the actionable wrap (0.0.13
+    QA-015), mirroring load_resource's closed-connection guard."""
+    import duckdb as _duckdb
+
+    con = _duckdb.connect(":memory:")
+    con.close()
+    with pytest.raises(_duckdb.ConnectionException, match="Cannot create FHIRDataLoader.*closed"):
+        FHIRDataLoader(con)

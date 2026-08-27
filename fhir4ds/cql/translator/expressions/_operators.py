@@ -1169,6 +1169,30 @@ class OperatorsMixin:
         right_sql = _promote_fhirpath_text_list(right_sql)
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
 
+    def _logical_operand_property_cql_type(self, ast_def: object) -> Optional[str]:
+        """Schema-metadata CQL type for a Property AST (InferenceMixin-free)."""
+        from ...parser.ast_nodes import Identifier as _Id, Property as _Prop
+        from ..inference import FHIR_TYPE_TO_CQL_TYPE
+
+        if not (isinstance(ast_def, _Prop) and isinstance(ast_def.source, _Id) and ast_def.path):
+            return None
+        schema = getattr(self.context, "fhir_schema", None)
+        if schema is None:
+            return None
+        mapped = FHIR_TYPE_TO_CQL_TYPE.get(
+            schema.get_element_type(ast_def.source.name, ast_def.path)
+        )
+        if mapped is None and "." in ast_def.path:
+            head, tail = ast_def.path.split(".", 1)
+            if schema.get_element_type(ast_def.source.name, head) == "Quantity":
+                mapped = {
+                    "value": "Decimal",
+                    "unit": "String",
+                    "system": "String",
+                    "code": "String",
+                }.get(tail)
+        return mapped
+
     def _infer_static_cql_type_for_logical_operand(self, operand: object) -> str:
         if isinstance(operand, Literal):
             if operand.value is None:
@@ -1213,6 +1237,26 @@ class OperatorsMixin:
         if isinstance(operand, Identifier):
             meta = self.context.definition_meta.get(operand.name)
             if meta:
+                # CQL-04 EXPLORER QA-003: a value-bearing primitive define
+                # (`define F: Patient.active`) may be stored as a per-patient
+                # element list (navigation lowering) yet still contribute its
+                # VALUE under CQL 3VL. Fall back to the definition AST's
+                # inferred element type so Boolean values validate; List<Any>
+                # alone must not veto a statically Boolean define.
+                cql_type = str(meta.cql_type)
+                if cql_type.startswith("List<"):
+                    ast_defs = getattr(self.context, "_definition_cql_asts", {})
+                    ast_def = ast_defs.get(operand.name)
+                    if ast_def is not None and ast_def is not operand:
+                        element_type = self._infer_static_cql_type_for_logical_operand(ast_def)
+                        if element_type in ("Any", None):
+                            # The ExpressionTranslator mixin stack has no
+                            # InferenceMixin; infer primitive Property defines
+                            # straight from FHIR schema metadata so Boolean
+                            # elements validate (CQL-04 EXPLORER QA-003).
+                            element_type = self._logical_operand_property_cql_type(ast_def)
+                        if element_type not in ("Any", None):
+                            return element_type
                 return meta.cql_type
             param_info = self.context.parameters.get(operand.name)
             if param_info and getattr(param_info, "cql_type", None):

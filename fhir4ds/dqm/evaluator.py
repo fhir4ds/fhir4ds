@@ -1490,11 +1490,21 @@ class MeasureEvaluator:
             def _population_mask(col_name: str) -> pd.Series:
                 if col_name not in df.columns:
                     return pd.Series(False, index=df.index)
-                return df[col_name].apply(
-                    lambda value: bool(value.get("result", False))
-                    if isinstance(value, dict)
-                    else bool(value)
-                )
+
+                def _truthy(value: Any) -> bool:
+                    if isinstance(value, dict):
+                        return bool(value.get("result", False))
+                    # numpy arrays (and other array-likes) have ambiguous
+                    # truth values; bool() warns today and raises on newer
+                    # numpy. Use Python sequence semantics instead:
+                    # non-empty -> True.
+                    if hasattr(value, "__len__") and not isinstance(
+                        value, (str, bytes, dict)
+                    ):
+                        return len(value) > 0
+                    return bool(value)
+
+                return df[col_name].apply(_truthy)
 
             population_masks = self._population_masks(df, _population_mask)
             denom_exception_mask = (

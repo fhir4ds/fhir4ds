@@ -34,6 +34,14 @@ _VALUESET_UDF_CACHE_BY_CONNECTION = WeakKeyDictionary()
 _VALUESET_UDF_REGISTERED_CONNECTIONS = WeakSet()
 _FHIR_RESOURCE_TYPE_RE = re.compile(r"^[A-Z][A-Za-z0-9]*$")
 _FHIR_ID_RE = re.compile(r"^[A-Za-z0-9\-.]{1,64}$")
+#: Lone surrogate escapes in serialized JSON. A real surrogate pair
+#: (U+1F600 etc.) is an adjacent high+low escape pair and must NOT match;
+#: a literal backslash-u text sequence is double-escaped by json.dumps and
+#: rejected by the leading lookbehind.
+_LONE_SURROGATE_JSON_RE = re.compile(
+    r'(?<!\\)(?:\\ud[89ab][0-9a-f]{2}(?!\\ud[c-f][0-9a-f]{2})'
+    r'|(?<!\\ud[89ab][0-9a-f]{2})\\ud[c-f][0-9a-f]{2})'
+)
 
 #: FHIR R4 Bundle.type is 1..1, code, required binding to BundleType.
 #: Source: https://hl7.org/fhir/R4/valueset-bundle-type.html
@@ -48,6 +56,33 @@ _FHIR_BUNDLE_TYPES: frozenset[str] = frozenset({
     "searchset",
     "collection",
 })
+
+
+def _fhir_json_loads(text: str) -> Any:
+    """json.loads rejecting duplicate JSON members.
+
+    FHIR R4 json.html: "Property names SHALL be unique." — a FHIR JSON
+    document with duplicate members is invalid, so decode boundaries reject
+    it instead of silently keeping the last value.
+    """
+
+    def _unique_members(pairs: list[tuple[str, Any]]) -> dict:
+        obj: dict = {}
+        for key, value in pairs:
+            if key in obj:
+                raise ValueError(
+                    f"Duplicate JSON member {key!r}; FHIR requires property "
+                    "names to be unique (FHIR R4 json.html)"
+                )
+            obj[key] = value
+        return obj
+
+    try:
+        return json.loads(text, object_pairs_hook=_unique_members)
+    except RecursionError:
+        raise ValueError(
+            "Resource nesting is too deep to parse as standard JSON."
+        ) from None
 
 
 def _validate_resource_identity(resource: dict) -> tuple[str, str | None]:
@@ -84,7 +119,7 @@ def _validate_resource_identity(resource: dict) -> tuple[str, str | None]:
 
 def _serialize_resource(resource: dict) -> str:
     try:
-        return json.dumps(resource, allow_nan=False)
+        serialized = json.dumps(resource, allow_nan=False)
     except RecursionError as exc:
         raise ValueError(
             "Resource nesting is too deep to serialize as standard JSON."
@@ -94,13 +129,29 @@ def _serialize_resource(resource: dict) -> str:
             "Resource contains values that cannot be represented as standard JSON "
             "(for example NaN/Infinity values or circular references)."
         ) from exc
+    except TypeError as exc:
+        raise ValueError(
+            "Resource contains values that cannot be represented as standard JSON "
+            f"(for example datetime, Decimal, bytes, or set values): {exc}"
+        ) from exc
+    if _LONE_SURROGATE_JSON_RE.search(serialized):
+        # DuckDB rejects lone surrogates at INSERT time with a byte-offset
+        # ConversionException and no location attribution; fail at the
+        # validation boundary instead (RFC 8259 §7).
+        raise ValueError(
+            "Resource contains unpaired Unicode surrogates that cannot be "
+            "represented in standard JSON (RFC 8259 §7)."
+        )
+    return serialized
 
 
 def _extract_codes_from_valueset_resource(valueset: dict) -> list[dict[str, str | None]]:
     """Extract codes from a raw FHIR ValueSet compose/expansion resource."""
     codes: list[dict[str, str | None]] = []
 
-    expansion_contains = valueset.get("expansion", {}).get("contains", [])
+    # FHIR JSON parsing treats null members as absent (FHIR R4 json.html);
+    # "expansion": null must not crash extraction.
+    expansion_contains = (valueset.get("expansion") or {}).get("contains") or []
     if isinstance(expansion_contains, list):
         for item in expansion_contains:
             if not isinstance(item, dict):
@@ -114,7 +165,7 @@ def _extract_codes_from_valueset_resource(valueset: dict) -> list[dict[str, str 
                     "display": item.get("display"),
                 })
 
-    compose_includes = valueset.get("compose", {}).get("include", [])
+    compose_includes = (valueset.get("compose") or {}).get("include") or []
     if isinstance(compose_includes, list):
         for include in compose_includes:
             if not isinstance(include, dict):
@@ -168,6 +219,17 @@ class FHIRDataLoader:
             raise TypeError(
                 f"Expected a DuckDB connection for 'con', got {type(con).__name__}"
             )
+        # Closed-connection guard, mirroring load_resource so construction
+        # fails with the same actionable wrap instead of a raw error from
+        # _create_table.
+        try:
+            con.execute("SELECT 1").fetchone()
+        except duckdb.ConnectionException:
+            raise duckdb.ConnectionException(
+                "Cannot create FHIRDataLoader: DuckDB connection is closed"
+            ) from None
+        except duckdb.Error:
+            pass  # connection is alive, other DuckDB errors are expected
         self.con = con
         if not isinstance(table_name, str) or not table_name.isidentifier():
             raise ValueError(
@@ -685,10 +747,14 @@ class FHIRDataLoader:
             # utf-8-sig tolerates a UTF-8 BOM (RFC 8259 §8.1 permits
             # ignoring it) common in Windows-origin exports, and decodes
             # plain UTF-8 identically when no BOM is present.
-            data = json.loads(path.read_text(encoding="utf-8-sig"))
+            data = _fhir_json_loads(path.read_text(encoding="utf-8-sig"))
         except json.JSONDecodeError as e:
             raise ValueError(
                 f"Malformed JSON in {path}: {e}"
+            ) from e
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid FHIR JSON in {path}: {e}"
             ) from e
         if not isinstance(data, dict):
             raise TypeError(
@@ -737,7 +803,7 @@ class FHIRDataLoader:
                 line = line.strip()
                 if line:
                     try:
-                        resource = json.loads(line)
+                        resource = _fhir_json_loads(line)
                     except json.JSONDecodeError as e:
                         if strict:
                             raise ValueError(
@@ -745,6 +811,16 @@ class FHIRDataLoader:
                             ) from e
                         _logger.warning(
                             "Skipping malformed JSON at line %d in %s: %s",
+                            line_num, path, e,
+                        )
+                        continue
+                    except ValueError as e:
+                        if strict:
+                            raise ValueError(
+                                f"Invalid FHIR JSON at line {line_num} in {path}: {e}"
+                            ) from e
+                        _logger.warning(
+                            "Skipping invalid FHIR JSON at line %d in %s: %s",
                             line_num, path, e,
                         )
                         continue
@@ -845,7 +921,18 @@ class FHIRDataLoader:
 
         req = urllib.request.Request(url, headers=headers or {})
         with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode())
+            # utf-8-sig tolerates a UTF-8 BOM (RFC 8259 §8.1) in server
+            # payloads, mirroring load_file/load_ndjson.
+            try:
+                data = _fhir_json_loads(response.read().decode("utf-8-sig"))
+            except json.JSONDecodeError as e:
+                raise ValueError(
+                    f"Malformed JSON from {url}: {e}"
+                ) from e
+            except ValueError as e:
+                raise ValueError(
+                    f"Invalid FHIR JSON from {url}: {e}"
+                ) from e
 
         if not isinstance(data, dict):
             raise TypeError(
@@ -932,7 +1019,12 @@ class FHIRDataLoader:
             # Handle both object with .url/.codes attributes and dict with 'url'/'codes' keys
             if hasattr(vs, 'url'):
                 vs_url = vs.url
-                codes = vs.codes
+                codes = getattr(vs, 'codes', None)
+                if codes is None:
+                    raise TypeError(
+                        f"valuesets[{index}] object exposes .url but not .codes; "
+                        "expected a ResolvedValueSet-like object"
+                    )
             elif isinstance(vs, dict):
                 vs_url = vs.get("url")
                 codes = vs.get("codes")

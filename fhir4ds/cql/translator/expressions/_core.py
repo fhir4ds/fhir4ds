@@ -517,7 +517,14 @@ class CoreMixin:
         if usage == ExprUsage.BOOLEAN and strategy.kind == _RefKind.CORRELATED_SCALAR:
             # Value-bearing Boolean define consumed by a logical operator:
             # force an explicit Boolean cast so CQL 3VL applies to the VALUE
-            # instead of inheriting DuckDB string truthiness.
+            # instead of inheriting DuckDB string truthiness. Stored-list
+            # defines carry the 0..1 element as a one-element list — unwrap
+            # element 1 first (empty/absent -> NULL, preserving 3VL).
+            if meta is not None and getattr(meta, "stores_list_value", False):
+                res = SQLFunctionCall(
+                    name="list_extract",
+                    args=[res, SQLLiteral(value=1)],
+                )
             return SQLCast(expression=res, target_type="BOOLEAN")
         return res
 

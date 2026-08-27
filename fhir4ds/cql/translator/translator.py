@@ -1728,11 +1728,27 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # element, so store the list-valued projection and mark the
             # definition List-typed (matching static list-literal defines,
             # which every list operator already handles correctly).
-            _definition_is_dynamic_list = (
+            # EXCEPTION: FHIRCommon ext(url).value chains (fused FHIRPath
+            # `extension.where(url='...').value`) are by-URL 0..1 scalars —
+            # keeping them scalar fhirpath_text yields NULL on a non-
+            # matching URL (CQL null semantics) instead of an empty list.
+            _definition_is_dynamic_list = False
+            if (
                 isinstance(result, SQLFunctionCall)
                 and result.name == "fhirpath_text"
                 and len(result.args) == 2
-            )
+            ):
+                _dyn_path = (
+                    result.args[1].value
+                    if isinstance(result.args[1], SQLLiteral)
+                    else None
+                )
+                import re as _re_mod
+                if not (
+                    isinstance(_dyn_path, str)
+                    and _re_mod.search(r"extension\.where\(.+\)\.value$", _dyn_path)
+                ):
+                    _definition_is_dynamic_list = True
             # CQL-18 EXPLORER QA-001: deep multi-valued navigation over a
             # retrieve define (`define CC: Obs.component.code.coding.code`)
             # lowers to a correlated scalar subquery that yields the whole

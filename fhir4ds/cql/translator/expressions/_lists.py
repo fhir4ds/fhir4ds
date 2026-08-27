@@ -939,11 +939,16 @@ class ListsMixin:
                 bare = str(meta_type or "Any").split(".")[-1]
                 if bare == "String":
                     return True
-                # Untyped scalar (cql_type Any): only String indexing is
-                # defined for scalars in CQL, so use the string Indexer.
-                # Typed non-String scalars fall through to the list path,
-                # which surfaces the invalid indexer.
-                return bare == "Any"
+                # Untyped scalar (cql_type Any) and scalar stored-list
+                # defines (navigation lowering wraps the element as a list,
+                # e.g. First([Patient]).name.family): only String indexing
+                # is defined for scalars in CQL, so use the string Indexer —
+                # never LIST_EXTRACT (pinned CQL-12 string-indexer doctrine:
+                # scalar definitions route through the public Indexer macro,
+                # null on out-of-range). Typed non-String scalars fall
+                # through to the list path, which surfaces the invalid
+                # indexer.
+                return bare in ("Any", "List<Any>")
         if isinstance(ast_expr, BinaryExpression) and ast_expr.operator == "as":
             target = ast_expr.right
             if isinstance(target, NamedTypeSpecifier) and target.name.split(".")[-1] == "String":
@@ -1012,6 +1017,18 @@ class ListsMixin:
                 )
         source = self.translate(expr.source, boolean_context=False)
         index = self.translate(expr.index, boolean_context=False)
+
+        # Stored-list defines hold the element(s) as a per-patient LIST in
+        # the CTE value column; scalar string indexing (CQL §17.6) unwraps
+        # element 1 so the Indexer macro receives a VARCHAR (array_extract:
+        # the list_extract alias — empty/absent lists yield NULL, so
+        # out-of-range stays null per the Indexer contract).
+        if isinstance(expr.source, Identifier):
+            _src_meta = self.context.definition_meta.get(expr.source.name)
+            if _src_meta is not None and getattr(_src_meta, "stores_list_value", False):
+                source = SQLFunctionCall(
+                    name="array_extract", args=[source, SQLLiteral(value=1)]
+                )
 
         if self._is_string_index_source(expr.source, source):
             return SQLFunctionCall(name="Indexer", args=[source, index])
