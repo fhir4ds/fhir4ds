@@ -307,10 +307,15 @@ body {
 }
 
 /* Absolute-fill makes Monaco track the pane exactly regardless of content:
-   the editor stretches, the footer anchors, drawers shrink it. */
+   the editor stretches, the footer anchors. */
 .editor .editor-body > div {
   position: absolute;
   inset: 0;
+}
+
+/* Editor / diff layers: both mounted, one visible at a time. */
+.editor-layer--hidden {
+  display: none;
 }
 
 .editor-footer {
@@ -324,74 +329,11 @@ body {
   margin-top: auto;
 }
 
-.editor-sql {
-  max-height: 40vh;
-  min-height: 160px;
-  margin: 0 10px 10px;
-}
-
 /* The results pane is a column: toolbar + tab bar + scrollable tab body. */
 .panel.results {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-/* ---------- Editor drawers (solution / generated SQL) ----------
-   Rendered in normal flow BELOW the footer: buttons stay visible and
-   clickable; the editor shrinks instead of being overlaid. */
-.editor-drawer {
-  flex: 0 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  margin: 0 10px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #161616;
-  overflow: hidden;
-  max-height: 45%;
-}
-
-.drawer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
-  font-size: 11px;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.drawer-close {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  font-size: 14px;
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
-}
-
-.drawer-close:hover {
-  color: var(--text);
-}
-
-.drawer-body {
-  margin: 0;
-  padding: 10px;
-  flex: 1 1 auto;
-  min-height: 100px;
-  overflow-y: auto;
-  overflow-y: auto;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #b8b8b8;
 }
 
 /* ---------- Empty states ---------- */
@@ -653,6 +595,11 @@ body {
 
 .btn-ghost {
   background: transparent;
+}
+
+.btn-ghost--active {
+  background: rgba(78, 201, 176, 0.12);
+  border-color: var(--pass);
 }
 
 .error-box {

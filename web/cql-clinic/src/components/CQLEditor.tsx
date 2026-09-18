@@ -1,5 +1,5 @@
 import { useState } from "react";
-import Editor, { type OnMount, type BeforeMount } from "@monaco-editor/react";
+import Editor, { DiffEditor, type OnMount, type BeforeMount } from "@monaco-editor/react";
 import type * as MonacoEditor from "monaco-editor";
 import { registerCQLLanguage } from "../lib/monaco-cql-language";
 import { fixMonacoInputArea } from "../lib/monaco-shadow-fix";
@@ -9,7 +9,7 @@ type Monaco = typeof MonacoEditor;
 interface Props {
   value: string;
   onChange: (next: string) => void;
-  /** Reference solution CQL shown/loaded via the pane footer. */
+  /** Reference solution CQL compared via the diff toggle / loaded via the footer. */
   solution: string;
 }
 
@@ -21,8 +21,18 @@ const onMount: OnMount = (editor) => {
   fixMonacoInputArea(editor as any);
 };
 
+const editorOptions = {
+  fontSize: 14,
+  minimap: { enabled: false },
+  scrollBeyondLastLine: false,
+  automaticLayout: true,
+  tabSize: 2,
+  wordWrap: "on",
+  padding: { top: 12, bottom: 12 },
+} as const;
+
 export default function CQLEditor({ value, onChange, solution }: Props) {
-  const [showSolution, setShowSolution] = useState(false);
+  const [compare, setCompare] = useState(false);
   const [confirmLoad, setConfirmLoad] = useState(false);
 
   const handleLoadSolution = () => {
@@ -34,7 +44,7 @@ export default function CQLEditor({ value, onChange, solution }: Props) {
     if (confirmLoad) {
       onChange(solution);
       setConfirmLoad(false);
-      setShowSolution(false);
+      setCompare(false);
     } else {
       setConfirmLoad(true);
     }
@@ -42,45 +52,50 @@ export default function CQLEditor({ value, onChange, solution }: Props) {
 
   return (
     <div className="panel editor">
+      {/* Both editors stay mounted; layers toggle visibility. Unmounting a
+          DiffEditor and remounting a plain Editor races Monaco's model
+          disposal ("TextModel got disposed before DiffEditorWidget model got
+          reset") and leaves the restored editor without an input area. */}
       <div className="editor-body">
-        <Editor
-          theme="cql-dark"
-          defaultLanguage="cql"
-          value={value}
-          beforeMount={beforeMount}
-          onMount={onMount}
-          onChange={(v) => onChange(v ?? "")}
-          options={{
-            fontSize: 14,
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-            tabSize: 2,
-            wordWrap: "on",
-            padding: { top: 12, bottom: 12 },
-          }}
-        />
+        <div className={`editor-layer${compare ? " editor-layer--hidden" : ""}`}>
+          <Editor
+            theme="cql-dark"
+            defaultLanguage="cql"
+            value={value}
+            beforeMount={beforeMount}
+            onMount={onMount}
+            onChange={(v) => onChange(v ?? "")}
+            options={editorOptions}
+          />
+        </div>
+        <div className={`editor-layer${compare ? "" : " editor-layer--hidden"}`}>
+          <DiffEditor
+            theme="cql-dark"
+            language="cql"
+            original={solution}
+            modified={value}
+            beforeMount={beforeMount}
+            options={{
+              ...editorOptions,
+              readOnly: true,
+              renderOverviewRuler: false,
+              renderSideBySide: true,
+              originalEditable: false,
+            }}
+          />
+        </div>
       </div>
       <div className="editor-footer">
-        <button className="btn btn-ghost" onClick={() => { setShowSolution((s) => !s); setConfirmLoad(false); }}>
-          {showSolution ? "Hide solution" : "Show solution"}
+        <button
+          className={`btn btn-ghost${compare ? " btn-ghost--active" : ""}`}
+          onClick={() => { setCompare((c) => !c); setConfirmLoad(false); }}
+        >
+          {compare ? "← Back to editor" : "Compare with solution"}
         </button>
         <button className="btn btn-ghost" onClick={handleLoadSolution}>
           {confirmLoad ? "Overwrite editor with solution?" : "Load solution"}
         </button>
       </div>
-      {/* Solution drawer renders BELOW the footer in normal flow — buttons
-          stay visible and clickable; the editor shrinks instead of being
-          overlaid. */}
-      {showSolution && (
-        <div className="editor-drawer">
-          <div className="drawer-header">
-            <span>Solution</span>
-            <button className="drawer-close" onClick={() => setShowSolution(false)} aria-label="Close solution">×</button>
-          </div>
-          <pre className="drawer-body">{solution}</pre>
-        </div>
-      )}
     </div>
   );
 }
