@@ -4,7 +4,7 @@ import { usePyodide } from "../hooks/usePyodide";
 import { useDuckDB, type FHIRResource } from "../hooks/useDuckDB";
 import InstructionsPanel from "./InstructionsPanel";
 import CQLEditor from "./CQLEditor";
-import ResultsPanel, { gradeResults, type GradeReport } from "./ResultsPanel";
+import ResultsPanel, { gradeResults, type GradeReport, type Drill, type ResultsTab } from "./ResultsPanel";
 import type { LessonProgress } from "../lib/progress";
 
 interface Props {
@@ -30,6 +30,11 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
   const [completed, setCompleted] = useState(progress?.completed ?? false);
   const cqlRef = useRef(cql);
   cqlRef.current = cql;
+
+  // Right-pane tab + shared cross-tab state (patient selection, drill-down).
+  const [activeTab, setActiveTab] = useState<ResultsTab>("checks");
+  const [selectedPatient, setSelectedPatient] = useState("");
+  const [drill, setDrill] = useState<Drill | null>(null);
 
   // persist editor content (lastCql) as it changes
   useEffect(() => {
@@ -67,6 +72,9 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
         setCompleted(true);
         onProgressUpdate(lessonId, { completed: true });
       }
+      // The point of Run is the grading — surface the fresh checks even if
+      // the learner was studying the SQL when they clicked.
+      setActiveTab("checks");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setResult(null);
@@ -87,7 +95,7 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
     onProgressUpdate(lessonId, { completed: false, lastCql: lesson.template });
   }, [lesson, lessonId, onProgressUpdate]);
 
-  /** Translate the CURRENT editor content on demand (View generated SQL). */
+  /** Translate the CURRENT editor content on demand (SQL tab refresh). */
   const handleTranslate = useCallback(async (): Promise<{ sql: string; timeMs: number } | null> => {
     if (!pyodide.ready) {
       setError("CQL engine is still loading — try again in a moment.");
@@ -119,9 +127,11 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
         <h1>{lesson.title}</h1>
         {runtimeStatus ? <span className="runtime-status">{runtimeStatus}</span> : <span className="runtime-status ok">engine ready</span>}
       </header>
-      <div className="lesson-grid-3">
-        <InstructionsPanel lesson={lesson} cql={cql} completed={completed} onResetProgress={handleReset} />
-        <CQLEditor value={cql} onChange={setCql} solution={lesson.solution} onTranslate={handleTranslate} />
+      <div className="lesson-grid-2">
+        <div className="lesson-left">
+          <InstructionsPanel lesson={lesson} cql={cql} completed={completed} onResetProgress={handleReset} />
+          <CQLEditor value={cql} onChange={setCql} solution={lesson.solution} />
+        </div>
         <ResultsPanel
           running={running}
           error={error}
@@ -133,6 +143,15 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
           lessonCql={lesson.solution}
           executeQuery={duckdb.executeQuery}
           duckdbReady={duckdb.ready}
+          sql={sql}
+          engineReady={pyodide.ready}
+          onTranslate={handleTranslate}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          selectedPatient={selectedPatient}
+          onSelectPatient={setSelectedPatient}
+          drill={drill}
+          onDrillChange={setDrill}
           onRun={handleRun}
         />
       </div>

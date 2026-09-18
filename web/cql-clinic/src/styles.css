@@ -179,14 +179,35 @@ body {
   color: var(--pass);
 }
 
-.lesson-grid-3 {
+.lesson-grid-2 {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);
   flex: 1;
   min-height: 0;
   /* Panes fill the full page height; internal sections scroll. */
   grid-auto-rows: 100%;
   align-items: stretch;
+}
+
+/* Left pane: instructions above, editor filling the rest. */
+.lesson-left {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+}
+
+.lesson-left .instructions {
+  flex: 0 1 auto;
+  max-height: 40%;
+  border-bottom: 1px solid var(--border);
+  border-right: none;
+}
+
+.lesson-left .editor {
+  flex: 1 1 auto;
+  border-right: none;
 }
 
 .panel {
@@ -307,6 +328,13 @@ body {
   max-height: 40vh;
   min-height: 160px;
   margin: 0 10px 10px;
+}
+
+/* The results pane is a column: toolbar + tab bar + scrollable tab body. */
+.panel.results {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ---------- Editor drawers (solution / generated SQL) ----------
@@ -436,19 +464,75 @@ body {
   font-weight: 700;
 }
 
-.data-section {
-  margin-top: 14px;
-  border-top: 1px solid var(--border);
-  padding-top: 10px;
+/* ---------- Right-pane tabs ---------- */
+
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft);
 }
 
-.data-header {
-  font-size: 12px;
-  font-weight: 600;
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
   color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.tab-btn:hover {
+  color: var(--text);
+}
+
+.tab-btn--active {
+  color: var(--text);
+  border-bottom-color: var(--pass);
+}
+
+.tab-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.sql-tab {
+  display: flex;
+  flex-direction: column;
+}
+
+.sql-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 8px;
+}
+
+.sql-body {
+  margin: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  color: #cfe8df;
+  background: #101010;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.drill-jump {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 12px;
 }
 
 .resource-list {
@@ -756,10 +840,19 @@ body {
 /* ---------- Responsive ---------- */
 
 @media (max-width: 1100px) {
-  .lesson-grid-3 {
+  .lesson-grid-2 {
     grid-template-columns: 1fr;
     grid-auto-rows: auto;
     overflow-y: auto;
+  }
+
+  .lesson-left {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .lesson-left .instructions {
+    max-height: none;
   }
 
   .panel {
