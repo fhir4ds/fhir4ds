@@ -5,27 +5,12 @@ import { LocationField } from "../LocationField";
 import type { GeoPoint } from "../../lib/geo";
 
 /** Known $bulk-publish endpoints the user can switch between. */
-export interface PresetDefaults {
-  status: string;
-  dateFrom: string;
-  dateTo: string;
-  /** Default location to pre-fill, or null for "use browser geolocation" */
-  geo: { lat: number; lon: number; label: string } | null;
-}
-
 export interface Preset {
   id: string;
   label: string;
   url: string;
   proxy: boolean;
   hint: string;
-  defaults: PresetDefaults;
-}
-
-function daysFromNow(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
 }
 
 const PRESETS: Preset[] = [
@@ -35,7 +20,6 @@ const PRESETS: Preset[] = [
     url: "https://raw.githubusercontent.com/culby/smart-scheduling-links/master/examples/$bulk-publish",
     proxy: false,
     hint: "Adam Culbertson's reference publisher — 10k MA slots, weeks 40-44 of 2026. CORS-friendly.",
-    defaults: { status: "free", dateFrom: "2026-09-28", dateTo: "2026-11-02", geo: { lat: 42.36, lon: -71.06, label: "Boston, MA 02114" } },
   },
   {
     id: "defacto",
@@ -43,7 +27,6 @@ const PRESETS: Preset[] = [
     url: "https://smart-scheduling-defacto.s3.us-east-2.amazonaws.com/public/$bulk-publish",
     proxy: false,
     hint: "Ron Urwongse's publisher on S3 — 1k Tampa slots. CORS-friendly.",
-    defaults: { status: "free", dateFrom: daysFromNow(0), dateTo: daysFromNow(90), geo: { lat: 27.96, lon: -82.46, label: "Tampa, FL 33603" } },
   },
   {
     id: "parker-apex",
@@ -51,7 +34,6 @@ const PRESETS: Preset[] = [
     url: "https://raw.githubusercontent.com/ParkerApex/apex-atlas/main/samples/cms-connectathon-2026/scheduling/$bulk-publish",
     proxy: false,
     hint: "Parker Apex CMS Connectathon 2026 publisher — scheduling samples from the apex-atlas repo. CORS-friendly.",
-    defaults: { status: "free", dateFrom: daysFromNow(0), dateTo: daysFromNow(90), geo: null },
   },
   {
     id: "haau3",
@@ -59,7 +41,6 @@ const PRESETS: Preset[] = [
     url: "https://api.haau3.com/scheduling/$bulk-publish",
     proxy: true,
     hint: "Brian Fung's publisher — 750 slots in CA and FL.",
-    defaults: { status: "free", dateFrom: "2026-06-01", dateTo: "2026-12-31", geo: null },
   },
   {
     id: "custom",
@@ -67,14 +48,12 @@ const PRESETS: Preset[] = [
     url: "",
     proxy: false,
     hint: "Enter any Bulk Publish endpoint URL yourself.",
-    defaults: { status: "free", dateFrom: daysFromNow(0), dateTo: daysFromNow(90), geo: null },
   },
 ];
 
 interface ConnectSectionProps {
   publisherUrl: string;
   onPublisherUrl: (v: string) => void;
-  onPresetDefaults?: (defaults: PresetDefaults) => void;
   onConnect: (url?: string) => void;
   onDisconnect: (url: string) => void;
   connections: Connection[];
@@ -98,7 +77,6 @@ interface ConnectSectionProps {
 export function ConnectSection({
   publisherUrl,
   onPublisherUrl,
-  onPresetDefaults,
   onConnect,
   onDisconnect,
   connections,
@@ -118,7 +96,6 @@ export function ConnectSection({
 
   function applyPreset(preset: Preset) {
     onPublisherUrl(preset.url);
-    onPresetDefaults?.(preset.defaults);
   }
 
   return (

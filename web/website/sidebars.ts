@@ -181,6 +181,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'examples/cql-clinic',
+          label: 'CQL Clinic',
+        },
+        {
+          type: 'doc',
           id: 'examples/cms-measures',
           label: 'Quality Measures',
         },

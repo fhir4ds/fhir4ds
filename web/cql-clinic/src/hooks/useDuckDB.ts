@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { clearStaleDuckDBStorage, createDuckDBConnection } from "../lib/duckdb-wasm";
+import { RESOLVE_MACRO_SQL } from "../lib/cql-macros";
 
 export interface QueryResult {
   columns: string[];
@@ -60,6 +61,10 @@ export function useDuckDB(wasmAppUrl?: string, enabled = true) {
             patient_ref VARCHAR
           )
         `);
+
+        // resolve() references the resources table, so it can only be
+        // macro-created once the table exists.
+        await conn.query(RESOLVE_MACRO_SQL);
 
         if (!cancelled) {
           dbRef.current = db;

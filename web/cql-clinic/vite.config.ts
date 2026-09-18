@@ -143,7 +143,14 @@ export default defineConfig({
             ? "cql-clinic.js"
             : "assets/[name]-[hash].js",
         chunkFileNames: "assets/[name]-[hash].js",
-        assetFileNames: "assets/[name]-[hash][extname]",
+        // The shared chunk's CSS (Monaco's stylesheet) also needs a stable
+        // name: module-script consumers (the web component) never link CSS
+        // chunks, so it is fetched into the shadow root at runtime by name.
+        assetFileNames: (assetInfo: any) => {
+          // names include the extension ("App.css")
+          const name = (assetInfo.names?.[0] ?? assetInfo.name ?? "").replace(/\.[^.]*$/, "");
+          return name === "App" ? "assets/app.css" : "assets/[name]-[hash][extname]";
+        },
       },
     },
   },

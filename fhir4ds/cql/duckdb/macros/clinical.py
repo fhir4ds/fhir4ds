@@ -12,26 +12,26 @@ if TYPE_CHECKING:
 
 _RESOLVE_MACRO_SQL = """\
 CREATE OR REPLACE MACRO resolve(ref) AS (
-    WITH _raw AS (
+    WITH __fhir4ds_resolve_raw AS (
         SELECT CASE
             WHEN ref IS NULL THEN NULL
             WHEN LTRIM(ref::VARCHAR) LIKE '{%' THEN json_extract_string(ref::VARCHAR, '$.reference')
             ELSE regexp_replace(ref::VARCHAR, '^"|"$', '', 'g')
         END AS raw_ref
     ),
-    _ref AS (
+    __fhir4ds_resolve_ref AS (
         SELECT raw_ref,
                regexp_replace(raw_ref, '/_history/[^/]+$', '') AS path_ref
-        FROM _raw
+        FROM __fhir4ds_resolve_raw
     )
-    SELECT r.resource FROM resources r
-    CROSS JOIN _ref
+    SELECT __fhir4ds_resolve_res.resource FROM resources __fhir4ds_resolve_res
+    CROSS JOIN __fhir4ds_resolve_ref
     WHERE ref IS NOT NULL
     AND raw_ref IS NOT NULL
-    AND r.id = regexp_replace(split_part(path_ref, '/', -1), '^urn:uuid:', '')
+    AND __fhir4ds_resolve_res.id = regexp_replace(split_part(path_ref, '/', -1), '^urn:uuid:', '')
     AND (
         split_part(path_ref, '/', -2) = ''
-        OR r.resourceType = split_part(path_ref, '/', -2)
+        OR __fhir4ds_resolve_res.resourceType = split_part(path_ref, '/', -2)
     )
     LIMIT 1
 )

@@ -16,7 +16,9 @@
  */
 
 import { createRoot, type Root } from "react-dom/client";
+import "./lib/monaco-setup";
 import App from "./App";
+import { startMonacoStylePorting } from "./lib/monaco-shadow-fix";
 
 // Import full app CSS as a string for Shadow DOM injection.
 import appStyles from "./styles.css?inline";
@@ -61,6 +63,7 @@ if (typeof window !== "undefined") {
 class CqlClinicElement extends HTMLElement {
   private root: Root | null = null;
   private container: HTMLDivElement | null = null;
+  private stopStylePorting: (() => void) | null = null;
 
   static get observedAttributes(): string[] {
     return ["height"];
@@ -74,6 +77,24 @@ class CqlClinicElement extends HTMLElement {
     this.container.style.height = this.getAttribute("height") ?? "85vh";
 
     const shadow = this.attachShadow({ mode: "open" });
+    // Monaco loads at runtime and injects its CSS into document.head, which
+    // doesn't cross the shadow boundary — port those styles in as they appear.
+    this.stopStylePorting = startMonacoStylePorting(shadow);
+    // Monaco's bundled stylesheet (assets/app.css) is never linked in the
+    // module-script context — fetch it into the shadow root. Its raw
+    // body/:root rules match nothing inside the shadow (the scoped copy of
+    // the app styles above already handles those).
+    fetch(new URL("assets/app.css", APP_BASE).href, { mode: "same-origin" })
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+      .then((css) => {
+        const style = document.createElement("style");
+        style.setAttribute("data-clinic-monaco-css", "");
+        style.textContent = css;
+        shadow.appendChild(style);
+      })
+      .catch(() => {
+        // Dev server (no built asset) — vite injects styles there anyway.
+      });
     const style = document.createElement("style");
     style.textContent = scopeStyles(appStyles) + `
       :host { display: block; }
@@ -98,6 +119,8 @@ class CqlClinicElement extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this.stopStylePorting?.();
+    this.stopStylePorting = null;
     this.root?.unmount();
     this.root = null;
     this.container = null;

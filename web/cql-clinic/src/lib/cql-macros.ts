@@ -211,6 +211,40 @@ const CQL_MACRO_SQL = [
   "CREATE MACRO IF NOT EXISTS ConvertsToInteger(x) AS CASE WHEN x IS NULL THEN NULL WHEN typeof(x) = 'BOOLEAN' THEN TRUE WHEN typeof(x) IN ('TINYINT','SMALLINT','INTEGER') THEN TRUE WHEN typeof(x) = 'BIGINT' THEN CAST(x AS BIGINT) BETWEEN -2147483648 AND 2147483647 WHEN starts_with(typeof(x), 'DECIMAL') OR typeof(x) IN ('FLOAT','DOUBLE') THEN FALSE WHEN typeof(x) = 'VARCHAR' AND regexp_full_match(CAST(x AS VARCHAR), '^[+-]?[0-9]+$') THEN TRY_CAST(CAST(x AS VARCHAR) AS BIGINT) BETWEEN -2147483648 AND 2147483647 ELSE FALSE END",
 ];
 
+
+/**
+ * resolve(ref) — follow a FHIR reference ('Type/id' string or Reference
+ * object JSON) to the target resource in the `resources` table. Ported
+ * verbatim from fhir4ds/cql/duckdb/macros/clinical.py (internal aliases
+ * are __fhir4ds-namespaced so caller aliases like `R` can't capture them
+ * under DuckDB's case-insensitive identifiers). Must be registered AFTER
+ * the resources table exists.
+ */
+export const RESOLVE_MACRO_SQL = `CREATE OR REPLACE MACRO resolve(ref) AS (
+    WITH __fhir4ds_resolve_raw AS (
+        SELECT CASE
+            WHEN ref IS NULL THEN NULL
+            WHEN LTRIM(ref::VARCHAR) LIKE '{%' THEN json_extract_string(ref::VARCHAR, '$.reference')
+            ELSE regexp_replace(ref::VARCHAR, '^"|"$', '', 'g')
+        END AS raw_ref
+    ),
+    __fhir4ds_resolve_ref AS (
+        SELECT raw_ref,
+               regexp_replace(raw_ref, '/_history/[^/]+$', '') AS path_ref
+        FROM __fhir4ds_resolve_raw
+    )
+    SELECT __fhir4ds_resolve_res.resource FROM resources __fhir4ds_resolve_res
+    CROSS JOIN __fhir4ds_resolve_ref
+    WHERE ref IS NOT NULL
+    AND raw_ref IS NOT NULL
+    AND __fhir4ds_resolve_res.id = regexp_replace(split_part(path_ref, '/', -1), '^urn:uuid:', '')
+    AND (
+        split_part(path_ref, '/', -2) = ''
+        OR __fhir4ds_resolve_res.resourceType = split_part(path_ref, '/', -2)
+    )
+    LIMIT 1
+)`;
+
 export async function registerCQLMacros(conn: any): Promise<void> {
   for (const sql of CQL_MACRO_SQL) {
     await conn.query(sql);

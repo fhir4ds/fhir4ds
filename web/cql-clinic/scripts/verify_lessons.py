@@ -90,12 +90,14 @@ def setup_connection(fixtures: list[dict]) -> duckdb.DuckDBPyConnection:
     from fhir4ds import register
 
     con = duckdb.connect(config={"allow_unsigned_extensions": True})
-    flags = register(con)
-    if not flags.get("cql_cpp", False):
-        print(f"  WARNING: cql_cpp=False (flags={flags}) — browser uses native ext", file=sys.stderr)
+    # The resolve() macro references the resources table, so create the
+    # table BEFORE register() or the macro registration is silently skipped.
     con.execute(
         "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
     )
+    flags = register(con)
+    if not flags.get("cql_cpp", False):
+        print(f"  WARNING: cql_cpp=False (flags={flags}) — browser uses native ext", file=sys.stderr)
     for res in fixtures:
         con.execute(
             "INSERT INTO resources VALUES (?, ?, ?, ?)",

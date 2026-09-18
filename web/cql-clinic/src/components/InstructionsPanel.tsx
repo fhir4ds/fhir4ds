@@ -53,7 +53,7 @@ export default function InstructionsPanel({ lesson, cql, completed, onResetProgr
         <button className="btn btn-ghost" onClick={onResetProgress}>
           Reset lesson
         </button>
-        <span className="meta">~{lesson.estimatedTime} min · {lesson.difficulty}</span>
+        <span className="meta">~{lesson.estimatedTime} · {lesson.difficulty}</span>
       </footer>
     </aside>
   );

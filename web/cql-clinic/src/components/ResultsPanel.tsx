@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { Lesson, LessonExpected } from "../lessons/types";
 import { PatientDataViewer } from "./PatientDataViewer";
 
@@ -161,11 +161,50 @@ export function retrieveTypesForDefine(cql: string, defineName: string): string[
   return [...types];
 }
 
-interface FixtureResource {
-  id: string;
-  resourceType: string;
-  patientRef: string | null;
-  resource: unknown;
+export interface Drill {
+  define: string;
+  types: string[];
+  patientId: string;
+}
+
+export type ResultsTab = "checks" | "sql" | "patient";
+
+interface Props {
+  running: boolean;
+  error: string | null;
+  report: GradeReport | null;
+  /** Last run's timings, shown in the pane footer. */
+  translateTimeMs: number | null;
+  executionTimeMs: number | null;
+  result: { columns: string[]; rows: unknown[][] } | null;
+  /** Lesson fixtures (for patient/resource derivation). */
+  fixtures: unknown[];
+  /** Full lesson CQL (solution preferred) for retrieve-type drill-down. */
+  lessonCql: string;
+  /** DuckDB query interface for the patient data viewer. */
+  executeQuery: (sql: string) => Promise<any>;
+  duckdbReady: boolean;
+  /** Generated SQL from the last run, for the SQL tab. */
+  sql: string | null;
+  /** Active right-pane tab + switcher. */
+  activeTab: ResultsTab;
+  onTabChange: (tab: ResultsTab) => void;
+  /** Shared patient selection (Checks + Patient tabs stay in sync). */
+  selectedPatient: string;
+  onSelectPatient: (patientId: string) => void;
+  /** Active failed-check drill-down (highlights resources in Patient tab). */
+  drill: Drill | null;
+  onDrillChange: (drill: Drill | null) => void;
+}
+
+/** Shared per-tab empty state: one wording pattern before the first run. */
+function TabEmptyState({ what }: { what: string }) {
+  return (
+    <div className="empty-state">
+      <span className="loading-spinner" />
+      <span>{what} will appear here as you type — every run grades your CQL against the lesson patients.</span>
+    </div>
+  );
 }
 
 function CellValue({ v }: { v: unknown }) {
@@ -174,37 +213,25 @@ function CellValue({ v }: { v: unknown }) {
   return <span title={text}>{text}</span>;
 }
 
-interface Props {
-  running: boolean;
-  error: string | null;
-  translateTimeMs: number | null;
-  executionTimeMs: number | null;
-  report: GradeReport | null;
-  result: { columns: string[]; rows: unknown[][] } | null;
-  onRun: () => void;
-  /** Lesson fixtures (for patient/resource derivation). */
-  fixtures: unknown[];
-  /** Full lesson CQL (solution preferred) for retrieve-type drill-down. */
-  lessonCql: string;
-  /** DuckDB query interface for the patient data viewer. */
-  executeQuery: (sql: string) => Promise<any>;
-  duckdbReady: boolean;
-}
-
 export default function ResultsPanel({
   running,
   error,
+  report,
   translateTimeMs,
   executionTimeMs,
-  report,
   result,
-  onRun,
   fixtures,
   lessonCql,
   executeQuery,
   duckdbReady,
+  sql,
+  activeTab,
+  onTabChange,
+  selectedPatient,
+  onSelectPatient,
+  drill,
+  onDrillChange,
 }: Props) {
-  const [drill, setDrill] = useState<{ define: string; types: string[]; patientId: string } | null>(null);
 
   /** Patient ids + display labels ("Johnson, Alice" — the same derivation
    *  the PatientDataViewer uses in its dropdown, so the two stay in sync). */
@@ -222,23 +249,6 @@ export default function ResultsPanel({
     return out;
   }, [fixtures]);
 
-  const resourcesByPatient = useMemo(() => {
-    const map: Record<string, FixtureResource[]> = {};
-    for (const f of fixtures as any[]) {
-      if (!f?.id || !f?.resourceType) continue;
-      let pid: string | null = null;
-      if (f.resourceType === "Patient") pid = f.id;
-      else {
-        const ref = f.subject?.reference ?? f.patient?.reference ?? f.beneficiary?.reference;
-        if (typeof ref === "string") pid = ref.split("/").pop() ?? null;
-      }
-      if (!pid) continue;
-      (map[pid] ??= []).push({ id: f.id, resourceType: f.resourceType, patientRef: pid, resource: f });
-    }
-    return map;
-  }, [fixtures]);
-
-  const [selectedPatient, setSelectedPatient] = useState<string>("");
   const activePatient = selectedPatient || patients[0]?.id || "";
   const showAllPatients = activePatient === "__all__";
 
@@ -262,163 +272,181 @@ export default function ResultsPanel({
     });
   }, [report, selectedCells, activePatient]);
 
+  const tabBtn = (tab: ResultsTab, label: string) => (
+    <button
+      className={`tab-btn${activeTab === tab ? " tab-btn--active" : ""}`}
+      onClick={() => onTabChange(tab)}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <div className="panel results">
-      <div className="results-toolbar">
-        <button className="btn btn-run" onClick={onRun} disabled={running}>
-          {running ? "Running…" : "▶ Run & Check"}
-        </button>
-        {translateTimeMs !== null && (
-          <span className="meta">translated in {translateTimeMs.toFixed(1)} ms</span>
-        )}
-        {executionTimeMs !== null && (
-          <span className="meta">executed in {executionTimeMs.toFixed(1)} ms</span>
-        )}
-        {report?.allPassed && (
-          <span className="all-passed-inline">All checks passed — lesson complete! 🎉</span>
-        )}
+      <div className="tab-bar" role="tablist">
+        {tabBtn("checks", `Checks${report ? ` (${report.checks.filter((c) => c.graded && c.pass).length}/${report.checks.filter((c) => c.graded).length})` : ""}`)}
+        {tabBtn("sql", "Generated SQL")}
+        {tabBtn("patient", "Patient Data")}
       </div>
 
-      {error && <div className="error-box">{error}</div>}
+      {activeTab === "checks" && (
+        <div className="tab-content">
+          {!report && !error && <TabEmptyState what="Your checks" />}
 
-      {!report && !error && (
-        <div className="empty-state">
-          <span className="empty-icon">▶</span>
-          <span>Run &amp; Check to translate your CQL, execute it against the lesson patients, and grade every define.</span>
-        </div>
-      )}
+          {report && (
+            <div className="patient-section">
+              <div className="patient-picker">
+                <select
+                  id="patient-select"
+                  aria-label="Test user"
+                  value={activePatient}
+                  onChange={(e) => { onSelectPatient(e.target.value); onDrillChange(null); }}
+                >
+                  {patients.map((p) => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                  ))}
+                  {patients.length > 1 && <option value="__all__">All patients (table)</option>}
+                </select>
+              </div>
 
-      {report && (
-        <div className="patient-section">
-          <div className="patient-picker">
-            <label htmlFor="patient-select">Test user</label>
-            <select
-              id="patient-select"
-              value={activePatient}
-              onChange={(e) => { setSelectedPatient(e.target.value); setDrill(null); }}
-            >
-              {patients.map((p) => (
-                <option key={p.id} value={p.id}>{p.label}</option>
-              ))}
-              {patients.length > 1 && <option value="__all__">All patients (table)</option>}
-            </select>
-          </div>
-
-          {!showAllPatients && (
-          <table className="checks-table">
-            <thead>
-              <tr>
-                <th>Check</th>
-                <th>Value</th>
-                <th>Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              {patientChecks.map((c) => {
-                const value = selectedCells?.[c.name];
-                const failed = c.graded && c.pass === false;
-                const drillable = failed && retrieveTypesForDefine(lessonCql, c.name).length > 0;
-                return (
-                  <tr
-                    key={c.name}
-                    className={`check-row ${failed ? "check-row-fail" : ""} ${drillable ? "check-row-drill" : ""}`}
-                    onClick={drillable ? () =>
-                      setDrill(d => (d?.define === c.name ? null : { define: c.name, types: retrieveTypesForDefine(lessonCql, c.name), patientId: activePatient }))
-                    : undefined}
-                  >
-                    <td>{c.name}</td>
-                    <td className="checks-value"><CellValue v={value} /></td>
-                    <td>
-                      {!c.graded ? <span className="meta">n/g</span> : c.pass ? <span className="pass-icon">✓</span> : <span className="fail-icon">✗</span>}
-                      {drillable && <span className="meta" style={{ marginLeft: 4 }}>why?</span>}
-                    </td>
+              {!showAllPatients && (
+              <table className="checks-table">
+                <thead>
+                  <tr>
+                    <th>Check</th>
+                    <th>Value</th>
+                    <th>Result</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {patientChecks.map((c) => {
+                    const value = selectedCells?.[c.name];
+                    const failed = c.graded && c.pass === false;
+                    const drillable = failed && retrieveTypesForDefine(lessonCql, c.name).length > 0;
+                    return (
+                      <tr
+                        key={c.name}
+                        className={`check-row ${failed ? "check-row-fail" : ""} ${drillable ? "check-row-drill" : ""}`}
+                        onClick={drillable ? () =>
+                          onDrillChange(drill?.define === c.name ? null : { define: c.name, types: retrieveTypesForDefine(lessonCql, c.name), patientId: activePatient })
+                        : undefined}
+                      >
+                        <td>{c.name}</td>
+                        <td className="checks-value"><CellValue v={value} /></td>
+                        <td>
+                          {!c.graded ? (
+                            <span
+                              className="meta"
+                              title="Not graded — this define's value varies by run (e.g. Today() or the measurement period), so only its output is shown."
+                              style={{ cursor: "help" }}
+                            >
+                              —
+                            </span>
+                          ) : c.pass ? (
+                            <span className="pass-icon">✓</span>
+                          ) : (
+                            <span className="fail-icon">✗</span>
+                          )}
+                          {drillable && <span className="meta" style={{ marginLeft: 4 }}>why?</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              )}
+
+              {drill && (
+                <div className="drill-note">
+                  <b>{drill.define}</b> reads <b>{drill.types.join(", ")}</b> for <b>{drill.patientId}</b>.
+                  <button className="btn btn-ghost drill-jump" onClick={() => onTabChange("patient")}>
+                    Inspect resources →
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
-          {drill && (
-            <div className="drill-note">
-              <b>{drill.define}</b> reads <b>{drill.types.join(", ")}</b> for <b>{drill.patientId}</b> —
-              inspect {drill.types.length > 1 ? "those resources" : "that resource"} in the data panel below.
+          {report && showAllPatients && result && (
+            <div className="result-table-wrap">
+              <table className="result-table">
+                <thead>
+                  <tr>
+                    {result.columns.map((c) => (
+                      <th key={c}>{c}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.rows.map((row, i) => (
+                    <tr key={i}>
+                      {row.map((v, j) => (
+                        <td key={j}>
+                          <CellValue v={v} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
       )}
 
-      {report && showAllPatients && result && (
-        <div className="result-table-wrap">
-          <table className="result-table">
-            <thead>
-              <tr>
-                {result.columns.map((c) => (
-                  <th key={c}>{c}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {result.rows.map((row, i) => (
-                <tr key={i}>
-                  {row.map((v, j) => (
-                    <td key={j}>
-                      <CellValue v={v} />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {activeTab === "sql" && (
+        <div className="tab-content sql-tab">
+          {sql ? (
+            <pre className="sql-body">{sql}</pre>
+          ) : (
+            <TabEmptyState what="The SQL your CQL compiles to" />
+          )}
         </div>
       )}
 
-      <div className="data-section">
-        <div className="data-header">Patient data</div>
-        {!activePatient || showAllPatients ? (
-          <div className="meta" style={{ padding: "8px 10px" }}>
-            {showAllPatients ? "Pick a single test user to inspect their resources." : "No fixture patients."}
-          </div>
-        ) : (
-          <PatientDataViewer
-            executeQuery={executeQuery}
-            duckdbReady={duckdbReady}
-            selectedPatientId={activePatient}
-            onPatientSelect={(pid) => { if (pid !== activePatient) { setSelectedPatient(pid); setDrill(null); } }}
-            highlightTypes={drill?.types ?? null}
-            dataVersion={report ? report.runId : 0}
-          />
+      {activeTab === "patient" && (
+        <div className="tab-content">
+          {!activePatient || showAllPatients ? (
+            showAllPatients ? (
+              <div className="meta" style={{ padding: "8px 10px" }}>
+                Pick a single test user (Checks tab) to inspect their resources.
+              </div>
+            ) : (
+              <TabEmptyState what="Patient data" />
+            )
+          ) : (
+            <PatientDataViewer
+              executeQuery={executeQuery}
+              duckdbReady={duckdbReady}
+              selectedPatientId={activePatient}
+              onPatientSelect={(pid) => { if (pid !== activePatient) { onSelectPatient(pid); onDrillChange(null); } }}
+              highlightTypes={drill?.types ?? null}
+              dataVersion={report ? report.runId : 0}
+            />
+          )}
+        </div>
+      )}
+
+      <div className="results-footer">
+        {running && (
+          <span className="status-running">
+            <span className="loading-spinner" /> running…
+          </span>
+        )}
+        {!running && report?.allPassed && (
+          <span className="all-passed-inline">All checks passed — lesson complete! 🎉</span>
+        )}
+        {!running && error && (
+          <span className="status-error" title={error}>
+            {error.length > 90 ? error.slice(0, 90) + "…" : error}
+          </span>
+        )}
+        {translateTimeMs !== null && executionTimeMs !== null && (
+          <span className="meta results-footer__timings" title="last run — auto-runs 1.2s after you stop typing">
+            translated {translateTimeMs.toFixed(1)} ms · executed {executionTimeMs.toFixed(1)} ms
+          </span>
         )}
       </div>
-    </div>
-  );
-}
-
-function ResourceList({ resources, highlightTypes }: { resources: FixtureResource[]; highlightTypes: string[] | null }) {
-  // First resource starts expanded so the patient data panel opens with
-  // visible content instead of collapsed rows.
-  const [expanded, setExpanded] = useState<string | null>(resources[0]?.id ?? null);
-  if (resources.length === 0) {
-    return <div className="meta" style={{ padding: "8px 10px" }}>No resources for this patient.</div>;
-  }
-  return (
-    <div className="resource-list">
-      {resources.map((r) => {
-        const highlighted = highlightTypes?.includes(r.resourceType) ?? false;
-        const open = expanded === r.id;
-        return (
-          <div key={r.id} className={`resource-item${highlighted ? " resource-highlight" : ""}`}>
-            <button className="resource-toggle" onClick={() => setExpanded(open ? null : r.id)}>
-              <span className="resource-type-badge">{r.resourceType}</span>
-              <span className="resource-id">{r.id}</span>
-              <span className="meta">{open ? "▾" : "▸"}</span>
-            </button>
-            {open && (
-              <pre className="resource-json">{JSON.stringify(r.resource, null, 2)}</pre>
-            )}
-          </div>
-        );
-      })}
     </div>
   );
 }

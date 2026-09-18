@@ -1,4 +1,6 @@
 import "./styles.css";
+import useBaseUrl from "@docusaurus/useBaseUrl";
+import PopoutPill from "../PopoutPill";
 import { BulkPublishDemoProvider, useDemoState } from "./provider";
 import { MermaidDiagram } from "./components/MermaidDiagram";
 import { ConnectSection } from "./components/sections/ConnectSection";
@@ -52,7 +54,6 @@ export function ConnectBlock() {
       <ConnectSection
         publisherUrl={s.publisherUrl}
         onPublisherUrl={s.setPublisherUrl}
-        onPresetDefaults={s.setPresetDefaults}
         onConnect={s.doConnect}
         onDisconnect={s.disconnect}
         connections={s.connections}
@@ -144,23 +145,57 @@ export function QueryBlock() {
           s.isSynthetic ? s.regenerateNearLocation : undefined
         }
         regenerating={s.regenerating}
-        defaults={s.presetDefaults}
+        defaults={s.defaults}
       />
     </div>
   );
 }
 
+/** localStorage hand-off from the demo to the pop-out scheduling app: the
+ *  popup window can't share React state, so the button writes the live
+ *  connection list right before opening it. Search defaults are derived
+ *  from the data on both sides, so only the endpoints need handing off. */
+const SCHEDULING_APP_SEED_KEY = "fhir4ds.scheduling-app.seed";
+const SCHEDULING_APP_SEED_TTL_MS = 10 * 60 * 1000;
+
+export function readSchedulingAppSeed(): { urls: string[] } | null {
+  try {
+    const raw = localStorage.getItem(SCHEDULING_APP_SEED_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Date.now() - parsed.ts > SCHEDULING_APP_SEED_TTL_MS) return null;
+    if (!Array.isArray(parsed.urls) || parsed.urls.length === 0) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export function ProductionBlock() {
   const s = useDemoState();
+  const schedulingAppUrl = useBaseUrl("apps/scheduling");
+
+  function writeSeed() {
+    try {
+      localStorage.setItem(
+        SCHEDULING_APP_SEED_KEY,
+        JSON.stringify({ ts: Date.now(), urls: s.connections.map((c) => c.url) }),
+      );
+    } catch {
+      // Private mode / storage disabled — the popup falls back to default.
+    }
+  }
+
   return (
     <div className="bulk-publish-demo-app">
+      <PopoutPill url={schedulingAppUrl} onBeforeOpen={writeSeed} />
       <ProductionSection
         materialized={s.materialized}
         executeQuery={s.executeQuery}
         lookupZip={s.lookupZip}
         lookupCityState={s.lookupCityState}
         reverseGeocode={s.reverseGeocode}
-        defaults={s.presetDefaults}
+        defaults={s.defaults}
       />
     </div>
   );

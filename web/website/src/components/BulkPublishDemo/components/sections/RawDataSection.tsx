@@ -31,21 +31,20 @@ export function RawDataSection({ ready, executeQuery, providerRefresh = 0 }: Raw
   // Dynamic provider list with display labels, derived from the ingested
   // resources table (id prefix convention "<provider>-..."). Falls back to
   // the raw prefix when no nicer label matches.
-  const [providers, setProviders] = useState<{ id: string; label: string; count: number }[]>([]);
+  const [providers, setProviders] = useState<{ id: string; label: string }[]>([]);
 
   useEffect(() => {
     if (!ready) return;
     (async () => {
       try {
         const result = await executeQuery(
-          `SELECT COALESCE(publisher, 'unknown') AS provider, COUNT(*) AS n
+          `SELECT COALESCE(publisher, 'unknown') AS provider
            FROM resources GROUP BY 1 ORDER BY 1;`,
         );
         setProviders(
           result.rows.map((r: any[]) => ({
             id: String(r[0]),
-            label: `${String(r[0])} (${Number(r[1]).toLocaleString()})`,
-            count: Number(r[1]),
+            label: String(r[0]),
           })),
         );
       } catch {
@@ -54,10 +53,11 @@ export function RawDataSection({ ready, executeQuery, providerRefresh = 0 }: Raw
     })();
   }, [ready, executeQuery, providerRefresh]);
 
-  // Reset to first resource whenever the type or provider filter changes
+  // Reset to first resource whenever the type or provider filter changes,
+  // or a new connection is ingested (the pool under the filter changed).
   useEffect(() => {
     setIndex(0);
-  }, [resourceType, provider]);
+  }, [resourceType, provider, providerRefresh]);
 
   // Load count + current resource whenever filters or index change
   useEffect(() => {
@@ -90,7 +90,7 @@ export function RawDataSection({ ready, executeQuery, providerRefresh = 0 }: Raw
         setLoading(false);
       }
     })();
-  }, [ready, resourceType, provider, index, executeQuery]);
+  }, [ready, resourceType, provider, index, executeQuery, providerRefresh]);
 
   if (!ready) {
     return (

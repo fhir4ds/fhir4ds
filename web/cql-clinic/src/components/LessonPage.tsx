@@ -4,7 +4,7 @@ import { usePyodide } from "../hooks/usePyodide";
 import { useDuckDB, type FHIRResource } from "../hooks/useDuckDB";
 import InstructionsPanel from "./InstructionsPanel";
 import CQLEditor from "./CQLEditor";
-import ResultsPanel, { gradeResults, type GradeReport } from "./ResultsPanel";
+import ResultsPanel, { gradeResults, type GradeReport, type Drill, type ResultsTab } from "./ResultsPanel";
 import type { LessonProgress } from "../lib/progress";
 
 interface Props {
@@ -13,6 +13,9 @@ interface Props {
   onBack: () => void;
   onProgressUpdate: (lessonId: string, patch: { completed?: boolean; lastCql?: string | null }) => void;
 }
+
+/** Idle delay before an edited CQL buffer re-runs automatically. */
+const AUTO_RUN_DEBOUNCE_MS = 1200;
 
 export default function LessonPage({ lessonId, progress, onBack, onProgressUpdate }: Props) {
   const lesson = getLesson(lessonId);
@@ -30,6 +33,17 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
   const [completed, setCompleted] = useState(progress?.completed ?? false);
   const cqlRef = useRef(cql);
   cqlRef.current = cql;
+
+  // Right-pane tab + shared cross-tab state (patient selection, drill-down).
+  const [activeTab, setActiveTab] = useState<ResultsTab>("checks");
+  const [selectedPatient, setSelectedPatient] = useState("");
+  const [drill, setDrill] = useState<Drill | null>(null);
+
+  // Monotonic run token: a slow older run that finishes after a newer one
+  // started must not overwrite fresh results.
+  const runTokenRef = useRef(0);
+  // First run after engines are ready is immediate (no debounce).
+  const firstAutoRunRef = useRef(true);
 
   // persist editor content (lastCql) as it changes
   useEffect(() => {
@@ -49,15 +63,22 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
       );
       return;
     }
+    const token = ++runTokenRef.current;
     setRunning(true);
     setError(null);
     try {
       const { sql: translated, timeMs } = await pyodide.translate(cqlRef.current);
+      if (token !== runTokenRef.current) return;
+
       setSql(translated);
       setTranslateTimeMs(timeMs);
 
       await duckdb.loadFixtures(lesson.fixtures as FHIRResource[]);
+      if (token !== runTokenRef.current) return;
+
       const rows = await duckdb.executeQuery(translated);
+      if (token !== runTokenRef.current) return;
+
       setExecutionTimeMs(rows.executionTimeMs);
       setResult({ columns: rows.columns, rows: rows.rows });
 
@@ -68,13 +89,30 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
         onProgressUpdate(lessonId, { completed: true });
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setResult(null);
-      setReport(null);
+      if (token === runTokenRef.current) {
+        setError(e instanceof Error ? e.message : String(e));
+        setResult(null);
+        setReport(null);
+      }
     } finally {
-      setRunning(false);
+      if (token === runTokenRef.current) setRunning(false);
     }
   }, [pyodide, duckdb, lesson, completed, lessonId, onProgressUpdate]);
+
+  // Auto-run: immediate once engines are ready, then debounced after CQL
+  // edits so the right pane stays live as the learner types.
+  useEffect(() => {
+    if (!lesson || !pyodide.ready || !duckdb.ready) return;
+    if (firstAutoRunRef.current) {
+      firstAutoRunRef.current = false;
+      handleRun();
+      return;
+    }
+    const id = window.setTimeout(() => handleRun(), AUTO_RUN_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  // handleRun/lesson are stable per lesson mount; deps are the triggers.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cql, pyodide.ready, duckdb.ready]);
 
   const handleReset = useCallback(() => {
     if (!lesson) return;
@@ -86,23 +124,6 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
     setCompleted(false);
     onProgressUpdate(lessonId, { completed: false, lastCql: lesson.template });
   }, [lesson, lessonId, onProgressUpdate]);
-
-  /** Translate the CURRENT editor content on demand (View generated SQL). */
-  const handleTranslate = useCallback(async (): Promise<{ sql: string; timeMs: number } | null> => {
-    if (!pyodide.ready) {
-      setError("CQL engine is still loading — try again in a moment.");
-      return null;
-    }
-    try {
-      const { sql: translated, timeMs } = await pyodide.translate(cqlRef.current);
-      setSql(translated);
-      setTranslateTimeMs(timeMs);
-      return { sql: translated, timeMs };
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      return null;
-    }
-  }, [pyodide]);
 
   if (!lesson) return null;
 
@@ -119,21 +140,33 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
         <h1>{lesson.title}</h1>
         {runtimeStatus ? <span className="runtime-status">{runtimeStatus}</span> : <span className="runtime-status ok">engine ready</span>}
       </header>
-      <div className="lesson-grid-3">
-        <InstructionsPanel lesson={lesson} cql={cql} completed={completed} onResetProgress={handleReset} />
-        <CQLEditor value={cql} onChange={setCql} solution={lesson.solution} onTranslate={handleTranslate} />
+      <div className="lesson-grid-2">
+        <div className="lesson-left">
+          <InstructionsPanel lesson={lesson} cql={cql} completed={completed} onResetProgress={handleReset} />
+          <CQLEditor
+            value={cql}
+            onChange={setCql}
+            solution={lesson.solution}
+          />
+        </div>
         <ResultsPanel
           running={running}
           error={error}
+          report={report}
           translateTimeMs={translateTimeMs}
           executionTimeMs={executionTimeMs}
-          report={report}
           result={result}
           fixtures={lesson.fixtures}
           lessonCql={lesson.solution}
           executeQuery={duckdb.executeQuery}
           duckdbReady={duckdb.ready}
-          onRun={handleRun}
+          sql={sql}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          selectedPatient={selectedPatient}
+          onSelectPatient={setSelectedPatient}
+          drill={drill}
+          onDrillChange={setDrill}
         />
       </div>
     </div>

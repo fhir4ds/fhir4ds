@@ -1,5 +1,5 @@
-import { useState } from "react";
-import Editor, { type OnMount, type BeforeMount } from "@monaco-editor/react";
+import { useEffect, useRef, useState } from "react";
+import Editor, { DiffEditor, type OnMount, type DiffOnMount, type BeforeMount } from "@monaco-editor/react";
 import type * as MonacoEditor from "monaco-editor";
 import { registerCQLLanguage } from "../lib/monaco-cql-language";
 import { fixMonacoInputArea } from "../lib/monaco-shadow-fix";
@@ -9,27 +9,49 @@ type Monaco = typeof MonacoEditor;
 interface Props {
   value: string;
   onChange: (next: string) => void;
-  /** Reference solution CQL shown/loaded via the pane footer. */
+  /** Reference solution CQL compared via the diff toggle / loaded via the footer. */
   solution: string;
-  /** Translate the current editor content on demand (View generated SQL). */
-  onTranslate: () => Promise<{ sql: string; timeMs: number } | null>;
 }
 
 const beforeMount: BeforeMount = (monaco: Monaco) => {
   registerCQLLanguage(monaco as any);
 };
 
-const onMount: OnMount = (editor) => {
-  fixMonacoInputArea(editor as any);
-};
+const editorOptions = {
+  fontSize: 14,
+  minimap: { enabled: false },
+  scrollBeyondLastLine: false,
+  automaticLayout: true,
+  tabSize: 2,
+  wordWrap: "on",
+  padding: { top: 12, bottom: 12 },
+} as const;
 
-export default function CQLEditor({ value, onChange, solution, onTranslate }: Props) {
-  const [showSolution, setShowSolution] = useState(false);
+export default function CQLEditor({ value, onChange, solution }: Props) {
+  const [compare, setCompare] = useState(false);
   const [confirmLoad, setConfirmLoad] = useState(false);
-  const [showSql, setShowSql] = useState(false);
-  const [sqlText, setSqlText] = useState<string | null>(null);
-  const [sqlTimeMs, setSqlTimeMs] = useState<number | null>(null);
-  const [translating, setTranslating] = useState(false);
+  const editorRef = useRef<MonacoEditor.editor.IStandaloneCodeEditor | null>(null);
+  const diffRef = useRef<MonacoEditor.editor.IStandaloneDiffEditor | null>(null);
+
+  // Both layers stay mounted, so the revealed one was laid out while
+  // display:none — its geometry is stale (worst inside the web component's
+  // shadow DOM, where the diff editor's gutter overflows onto the footer and
+  // swallows clicks). Force a relayout on whichever editor becomes visible.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      (compare ? diffRef.current : editorRef.current)?.layout();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [compare]);
+
+  const handleEditorMount: OnMount = (editor) => {
+    editorRef.current = editor;
+    fixMonacoInputArea(editor as any);
+  };
+
+  const handleDiffMount: DiffOnMount = (diffEditor) => {
+    diffRef.current = diffEditor;
+  };
 
   const handleLoadSolution = () => {
     if (value.trim() === solution.trim()) {
@@ -40,84 +62,63 @@ export default function CQLEditor({ value, onChange, solution, onTranslate }: Pr
     if (confirmLoad) {
       onChange(solution);
       setConfirmLoad(false);
-      setShowSolution(false);
+      setCompare(false);
     } else {
       setConfirmLoad(true);
     }
   };
 
-  /** Re-translate the CURRENT editor content on every click — this is the
-   *  "refresh for changes" affordance: edit CQL, click again, see new SQL. */
-  const handleViewSql = async () => {
-    if (showSql) {
-      setShowSql(false);
-      return;
-    }
-    setShowSolution(false);
-    setTranslating(true);
-    const result = await onTranslate();
-    setTranslating(false);
-    if (result) {
-      setSqlText(result.sql);
-      setSqlTimeMs(result.timeMs);
-      setShowSql(true);
-    }
-  };
-
   return (
     <div className="panel editor">
+      {/* Both editors stay mounted; layers toggle visibility. Unmounting a
+          DiffEditor and remounting a plain Editor races Monaco's model
+          disposal ("TextModel got disposed before DiffEditorWidget model got
+          reset") and leaves the restored editor without an input area. */}
       <div className="editor-body">
-        <Editor
-          theme="cql-dark"
-          defaultLanguage="cql"
-          value={value}
-          beforeMount={beforeMount}
-          onMount={onMount}
-          onChange={(v) => onChange(v ?? "")}
-          options={{
-            fontSize: 14,
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-            tabSize: 2,
-            wordWrap: "on",
-            padding: { top: 12, bottom: 12 },
-          }}
-        />
+        <div className={`editor-layer${compare ? " editor-layer--hidden" : ""}`}>
+          <Editor
+            theme="cql-dark"
+            defaultLanguage="cql"
+            value={value}
+            beforeMount={beforeMount}
+            onMount={handleEditorMount}
+            onChange={(v) => onChange(v ?? "")}
+            options={editorOptions}
+          />
+        </div>
+        <div className={`editor-layer${compare ? "" : " editor-layer--hidden"}`}>
+          <DiffEditor
+            theme="cql-dark"
+            language="cql"
+            original={solution}
+            modified={value}
+            beforeMount={beforeMount}
+            onMount={handleDiffMount}
+            options={{
+              ...editorOptions,
+              readOnly: true,
+              renderOverviewRuler: false,
+              // Inline (GitHub-style) diff: the editor pane is ~half the
+              // clinic width, and side-by-side panes that narrow wrap long
+              // CQL lines at different points, so the two sides drift out
+              // of visual sync. Inline keeps removed/added rows stacked.
+              renderSideBySide: false,
+              originalEditable: false,
+            }}
+          />
+        </div>
       </div>
       <div className="editor-footer">
-        <button className="btn btn-ghost" onClick={() => { setShowSolution((s) => !s); setConfirmLoad(false); if (!showSolution) setShowSql(false); }}>
-          {showSolution ? "Hide solution" : "Show solution"}
+        <button
+          className={`btn btn-ghost${compare ? " btn-ghost--active" : ""}`}
+          onClick={() => { setCompare((c) => !c); setConfirmLoad(false); }}
+        >
+          {compare ? "← Back to editor" : "Compare with solution"}
         </button>
         <button className="btn btn-ghost" onClick={handleLoadSolution}>
           {confirmLoad ? "Overwrite editor with solution?" : "Load solution"}
         </button>
-        {/* View generated SQL hidden pending fix — do not ship broken button.
-<button className="btn btn-ghost" onClick={handleViewSql} disabled={translating}>
-          {translating ? "Translating…" : showSql ? "Hide generated SQL" : "View generated SQL"}
-        </button> */}
       </div>
-      {/* Drawers render BELOW the footer in normal flow — buttons stay
-          visible and clickable; the editor shrinks instead of being
-          overlaid. Only one drawer at a time. */}
-      {showSolution && (
-        <div className="editor-drawer">
-          <div className="drawer-header">
-            <span>Solution</span>
-            <button className="drawer-close" onClick={() => setShowSolution(false)} aria-label="Close solution">×</button>
-          </div>
-          <pre className="drawer-body">{solution}</pre>
-        </div>
-      )}
-      {false && showSql && (
-        <div className="editor-drawer">
-          <div className="drawer-header">
-            <span>Generated SQL{sqlTimeMs !== null ? ` · ${sqlTimeMs?.toFixed(1)} ms` : ""}</span>
-            <button className="drawer-close" onClick={() => setShowSql(false)} aria-label="Close SQL">×</button>
-          </div>
-          <pre className="drawer-body">{sqlText ?? "-- Translate to see SQL"}</pre>
-        </div>
-      )}
     </div>
   );
 }

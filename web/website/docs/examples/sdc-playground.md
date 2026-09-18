@@ -8,7 +8,7 @@ Explore Structured Data Capture (SDC) forms with real-time FHIRPath evaluation a
 
 import WasmDemoWC from '@site/src/components/WasmDemoWC';
 
-<WasmDemoWC scenario="sdc-forms" height="85vh" />
+<WasmDemoWC scenario="sdc-forms" height="85vh" popout />
 
 ## Key Capabilities
 *   **Calculated Expressions:** Complex logic like the PHQ-9 total score is evaluated instantly using the FHIR4DS engine.

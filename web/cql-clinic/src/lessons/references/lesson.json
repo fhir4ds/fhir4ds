@@ -1,0 +1,42 @@
+{
+  "id": "references",
+  "title": "References: Resolving Between Resources",
+  "description": "FHIR is normalized: a MedicationRequest doesn't embed the drug — it points at a Medication resource by reference string. Learn the reference anatomy (type prefix + logical id), extract ids with string functions, follow references to their target with resolve(), and detect dangling references that point at nothing.",
+  "difficulty": "intermediate",
+  "estimatedTime": "30 min",
+  "learningObjectives": [
+    "Read the raw reference string from a Reference element via the choice-type cast",
+    "Extract the logical id from 'Type/id' with Split and Last",
+    "Check a reference's type prefix with StartsWith",
+    "Follow a reference to its target resource with resolve()",
+    "Filter and match on the resolved resource's coding (RxNorm)",
+    "Detect dangling references — resolve() of a missing target is null"
+  ],
+  "ungradedDefines": [],
+  "hints": [
+    {
+      "trigger": "FHIR.Reference",
+      "message": "(R.medication as FHIR.Reference).reference — medication is a choice type; cast it to Reference, then take .reference for the string."
+    },
+    {
+      "trigger": "Referenced Med Id",
+      "message": "Last(Split((R.medication as FHIR.Reference).reference, '/')) — split on the slash and take the final segment: the logical id."
+    },
+    {
+      "trigger": "StartsWith",
+      "message": "StartsWith((R.medication as FHIR.Reference).reference, 'Medication/') — the type prefix comes before the slash."
+    },
+    {
+      "trigger": "resolve(",
+      "message": "resolve((R.medication as FHIR.Reference)) returns the referenced resource itself (found in the resources table by type + id) — or null if it doesn't exist."
+    },
+    {
+      "trigger": "On Ibuprofen",
+      "message": "exists([MedicationRequest] R where R.status = 'active' and exists(resolve(R.medication as FHIR.Reference).code.coding C where C.code = '5640' and C.system = 'http://www.nlm.nih.gov/research/umls/rxnorm')) — navigate the resolved resource like any other."
+    },
+    {
+      "trigger": "Dangling Reference",
+      "message": "resolve() of a missing target is null — \"Active Request Count\" > 0 and \"Resolved Med Code\" is null flags a request whose medication can't be resolved."
+    }
+  ]
+}

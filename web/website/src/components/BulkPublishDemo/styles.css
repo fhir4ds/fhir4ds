@@ -1191,6 +1191,9 @@
 }
 
 /* ─── §5 Production ────────────────────────────────────────────────── */
+/* The "Open in new window ↗" launcher above the production widget is the
+   shared PopoutPill component (src/components/PopoutPill.tsx); the pop-out
+   window shell lives in src/components/DemoAppWindow.module.css. */
 
 .production {
   padding: 1.5rem;

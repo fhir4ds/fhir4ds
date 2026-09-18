@@ -1,0 +1,54 @@
+{
+  "id": "cervical-screening",
+  "title": "Cervical Cancer Screening: Age-Banded Windows",
+  "description": "Build CMS124's shape — the cervical cancer screening measure. Women 23-64 with a visit form the Initial Population; screening counts via a 3-year cytology window OR a 5-year HPV window; hysterectomy and hospice exclude. Simplified to single representative codes (LOINC 10524-7 cytology, LOINC 21440-3 HPV DNA, SNOMED 116140006 total hysterectomy) — production measures expand these to full VSAC value sets.",
+  "difficulty": "advanced",
+  "estimatedTime": "40 min",
+  "learningObjectives": [
+    "Define the measurement period plus 3-year cytology and 5-year HPV lookback intervals",
+    "Build the Initial Population from gender, an age window, and a visit during the period",
+    "Match screening observations by LOINC code AND system",
+    "Apply two Denominator Exclusions: hysterectomy and hospice",
+    "Compose the Numerator from two alternative screening windows (or)",
+    "Read population membership across an 8-patient cohort with every branch represented"
+  ],
+  "ungradedDefines": [],
+  "hints": [
+    {
+      "trigger": "Cytology Lookback",
+      "message": "Interval[@2022-01-01, @2024-12-31] — the measurement period or the two years prior, i.e. a 3-year window."
+    },
+    {
+      "trigger": "HPV Lookback",
+      "message": "Interval[@2020-01-01, @2024-12-31] — the measurement period or the four years prior, i.e. a 5-year window."
+    },
+    {
+      "trigger": "Is Female",
+      "message": "Patient.gender = 'female' — direct element access on the Patient context resource."
+    },
+    {
+      "trigger": "Initial Population",
+      "message": "\"Is Female\" and \"Age At Start\" between 23 and 64 and \"Had Office Visit\" — three criteria and-ed together."
+    },
+    {
+      "trigger": "Had Hysterectomy",
+      "message": "exists([Procedure] P where exists(P.code.coding cod where cod.code = '116140006' and cod.system = 'http://snomed.info/sct')) — SNOMED total hysterectomy."
+    },
+    {
+      "trigger": "Denominator Exclusion",
+      "message": "\"Denominator\" and (\"Had Hysterectomy\" or \"In Hospice\") — two exclusion paths, parenthesized."
+    },
+    {
+      "trigger": "Had Recent Cytology",
+      "message": "exists([Observation] O where exists(O.code.coding cod where cod.code = '10524-7' and cod.system = 'http://loinc.org') and (O.effective as FHIR.dateTime) during \"Cytology Lookback\") — remember the choice-type cast."
+    },
+    {
+      "trigger": "Had Recent HPV",
+      "message": "Same shape with LOINC 21440-3 against \"HPV Lookback\" — Faye's 2019 HPV test falls outside this window."
+    },
+    {
+      "trigger": "Numerator",
+      "message": "\"Denominator\" and not \"Denominator Exclusion\" and (\"Had Recent Cytology\" or \"Had Recent HPV\") — either screening window qualifies."
+    }
+  ]
+}

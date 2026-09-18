@@ -1,11 +1,11 @@
 WITH _patients AS (
 SELECT DISTINCT _outer.patient_ref AS patient_id, (SELECT _pt_resource.resource FROM resources AS _pt_resource WHERE _pt_resource.resourceType = 'Patient' AND _pt_resource.id = _outer.patient_ref LIMIT 1) AS patient_resource, CAST(fhirpath_date((SELECT _pt_resource.resource FROM resources AS _pt_resource WHERE _pt_resource.resourceType = 'Patient' AND _pt_resource.id = _outer.patient_ref LIMIT 1), 'birthDate') AS VARCHAR) AS birth_date FROM resources AS _outer WHERE _outer.patient_ref IS NOT NULL AND EXISTS (SELECT 1 FROM resources AS _pt WHERE _pt.resourceType = 'Patient' AND _pt.id = _outer.patient_ref)
 ),
-"Observation" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'effective') AS effective, COALESCE(json_extract_string(r.resource, '$.effectivePeriod.start'), json_extract_string(r.resource, '$.effectiveDateTime'), json_extract_string(r.resource, '$.effectiveDate'), json_extract_string(r.resource, '$.effectiveInstant')) AS effective_start, COALESCE(json_extract_string(r.resource, '$.effectivePeriod.end'), json_extract_string(r.resource, '$.effectiveDateTime'), json_extract_string(r.resource, '$.effectiveDate'), json_extract_string(r.resource, '$.effectiveInstant')) AS effective_end, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Observation'
-),
 "Encounter" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'period') AS period, json_extract_string(r.resource, '$.period.start') AS period_start, json_extract_string(r.resource, '$.period.end') AS period_end, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter'
+),
+"Observation" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'effective') AS effective, COALESCE(json_extract_string(r.resource, '$.effectivePeriod.start'), json_extract_string(r.resource, '$.effectiveDateTime'), json_extract_string(r.resource, '$.effectiveDate'), json_extract_string(r.resource, '$.effectiveInstant')) AS effective_start, COALESCE(json_extract_string(r.resource, '$.effectivePeriod.end'), json_extract_string(r.resource, '$.effectiveDateTime'), json_extract_string(r.resource, '$.effectiveDate'), json_extract_string(r.resource, '$.effectiveInstant')) AS effective_end, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Observation'
 ),
 "Adjacent Or After" AS (
 SELECT _pt.patient_id FROM _patients AS _pt WHERE CAST(intervalStart(intervalFromBounds('2024-04-01', '2024-06-30', TRUE, TRUE)) AS TIMESTAMP) - INTERVAL '30 day' <= CAST(intervalStart(intervalFromBounds('2024-03-01', '2024-06-30', TRUE, TRUE)) AS TIMESTAMP) AND CAST(intervalStart(intervalFromBounds('2024-03-01', '2024-06-30', TRUE, TRUE)) AS TIMESTAMP) < CAST(intervalStart(intervalFromBounds('2024-04-01', '2024-06-30', TRUE, TRUE)) AS TIMESTAMP)
