@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { IngestProgress, IngestResult } from "../../hooks/useDuckDB";
+import type { Connection } from "../../provider";
 import { LocationField } from "../LocationField";
 import type { GeoPoint } from "../../lib/geo";
 
@@ -45,6 +46,14 @@ const PRESETS: Preset[] = [
     defaults: { status: "free", dateFrom: daysFromNow(0), dateTo: daysFromNow(90), geo: { lat: 27.96, lon: -82.46, label: "Tampa, FL 33603" } },
   },
   {
+    id: "parker-apex",
+    label: "Parker Apex",
+    url: "https://raw.githubusercontent.com/ParkerApex/apex-atlas/main/samples/cms-connectathon-2026/scheduling/$bulk-publish",
+    proxy: false,
+    hint: "Parker Apex CMS Connectathon 2026 publisher — scheduling samples from the apex-atlas repo. CORS-friendly.",
+    defaults: { status: "free", dateFrom: daysFromNow(0), dateTo: daysFromNow(90), geo: null },
+  },
+  {
     id: "haau3",
     label: "haau3",
     url: "https://api.haau3.com/scheduling/$bulk-publish",
@@ -66,7 +75,9 @@ interface ConnectSectionProps {
   publisherUrl: string;
   onPublisherUrl: (v: string) => void;
   onPresetDefaults?: (defaults: PresetDefaults) => void;
-  onConnect: () => void;
+  onConnect: (url?: string) => void;
+  onDisconnect: (url: string) => void;
+  connections: Connection[];
   ingest: IngestResult | null;
   ingestLog: IngestProgress[];
   connecting: boolean;
@@ -80,17 +91,17 @@ interface ConnectSectionProps {
 }
 
 /**
- * §1: Endpoint selector + connected publishers roster.
- *
- * For the synthetic preset, an optional location field lets the user generate
- * data near their location instead of the default Twin Cities. For
- * cross-origin endpoints (CVS), a CORS proxy field is provided.
+ * §1: Endpoint selector + connected endpoints list. Multiple endpoints can
+ * be connected at once — their published NDJSON is federated in the shared
+ * in-browser `resources` table. Each connected endpoint can be removed.
  */
 export function ConnectSection({
   publisherUrl,
   onPublisherUrl,
   onPresetDefaults,
   onConnect,
+  onDisconnect,
+  connections,
   ingest,
   ingestLog,
   connecting,
@@ -145,7 +156,7 @@ export function ConnectSection({
         />
         <button
           className="connect-button"
-          onClick={onConnect}
+          onClick={() => onConnect()}
           disabled={connecting || publisherUrl.trim().length === 0}
         >
           {connecting ? "Connecting…" : "Connect"}
@@ -186,49 +197,83 @@ export function ConnectSection({
 
       {error && <div className="widget__error">{error}</div>}
 
-      <PublisherRoster ingest={ingest} log={ingestLog} />
+      <ConnectionList
+        connections={connections}
+        ingest={ingest}
+        log={ingestLog}
+        connecting={connecting}
+        onDisconnect={onDisconnect}
+      />
     </div>
   );
 }
 
-function PublisherRoster({
+function ConnectionList({
+  connections,
   ingest,
   log,
+  connecting,
+  onDisconnect,
 }: {
+  connections: Connection[];
   ingest: IngestResult | null;
   log: IngestProgress[];
+  connecting: boolean;
+  onDisconnect: (url: string) => void;
 }) {
-  const publishers = ingest
-    ? Object.keys(ingest.providerCounts).sort()
-    : uniquePublishersFromLog(log);
-
-  if (publishers.length === 0) {
+  if (connections.length === 0) {
     return (
       <div className="roster roster--empty">
-        No publishers connected yet. Click Connect to ingest the aggregator feed.
+        No endpoints connected yet. Click Connect to ingest a Bulk Publish feed.
       </div>
     );
   }
 
   return (
     <ul className="roster roster--grid">
-      {publishers.map((p) => {
-        const counts = ingest?.providerCounts[p];
-        const state = publisherState(p, log, !!counts);
-        const slotCount = counts?.Slot ?? 0;
-        const pracCount = counts?.Practitioner ?? 0;
+      {connections.map((c) => {
+        // Per-connection state: loading while this endpoint is ingesting,
+        // ready (with slot/provider counts) once the ingest it belongs to
+        // completed, "queued" otherwise.
+        const state: "pending" | "loading" | "ready" = c.connecting
+          ? "loading"
+          : c.ingest
+            ? "ready"
+            : connecting
+              ? "pending"
+              : "ready";
+        const publishersForConnection = publishersForUrl(c, ingest);
+        const slotCount = publishersForConnection.reduce(
+          (n, p) => n + (ingest?.providerCounts[p]?.Slot ?? 0),
+          0,
+        );
+        const pracCount = publishersForConnection.reduce(
+          (n, p) => n + (ingest?.providerCounts[p]?.Practitioner ?? 0),
+          0,
+        );
         return (
-          <li key={p} className={`roster__item roster__item--${state}`}>
-            <div className="roster__name">{p}</div>
-            <div className="roster__status">
-              {state === "loading" && "loading…"}
-              {state === "ready" && (
-                <span>
-                  {slotCount.toLocaleString()} slots · {pracCount} providers
-                </span>
-              )}
-              {state === "pending" && "queued"}
+          <li key={c.url} className={`roster__item roster__item--${state}`}>
+            <div className="roster__main">
+              <div className="roster__name">{c.label}</div>
+              <div className="roster__status">
+                {state === "loading" && "loading…"}
+                {state === "pending" && "queued"}
+                {state === "ready" && (
+                  <span>
+                    {slotCount.toLocaleString()} slots · {pracCount} providers
+                  </span>
+                )}
+              </div>
             </div>
+            <button
+              className="roster__remove"
+              onClick={() => onDisconnect(c.url)}
+              disabled={connecting}
+              title={`Disconnect ${c.url}`}
+              aria-label={`Disconnect ${c.label}`}
+            >
+              ✕
+            </button>
           </li>
         );
       })}
@@ -236,24 +281,32 @@ function PublisherRoster({
   );
 }
 
-function uniquePublishersFromLog(log: IngestProgress[]): string[] {
-  const seen = new Set<string>();
-  for (const ev of log) {
-    if ("publisher" in ev) seen.add(ev.publisher);
+/**
+ * Which publisher-id rows in `ingest.providerCounts` belong to a given
+ * connection URL. Mirrors the heuristic in useDuckDB's publisherFromUrl:
+ * raw.githubusercontent URLs map to the GitHub user, S3 buckets to the
+ * bucket name's last dash segment, hostnames to the second-level domain.
+ */
+function publishersForUrl(c: Connection, ingest: IngestResult | null): string[] {
+  if (!ingest) return [];
+  let key: string | null = null;
+  try {
+    const u = new URL(c.url);
+    const host = u.hostname.replace(/^www\./, "");
+    if (host === "raw.githubusercontent.com") {
+      key = u.pathname.split("/").filter(Boolean)[0] ?? null;
+    } else if (host.includes(".s3.") || host.includes(".s3-")) {
+      const bucket = host.split(".")[0];
+      key = bucket.split("-").pop() ?? bucket;
+    } else {
+      const parts = host.split(".");
+      key = parts.length >= 2 ? parts[parts.length - 2] : host;
+    }
+  } catch {
+    key = null;
   }
-  return [...seen].sort();
-}
-
-function publisherState(
-  publisher: string,
-  log: IngestProgress[],
-  hasFinalCounts: boolean,
-): "pending" | "loading" | "ready" {
-  if (hasFinalCounts) return "ready";
-  const events = log.filter(
-    (e) => "publisher" in e && e.publisher === publisher,
-  );
-  if (events.length === 0) return "pending";
-  if (events.some((e) => e.phase === "publisher_done")) return "ready";
-  return "loading";
+  if (key && ingest.providerCounts[key]) return [key];
+  // Fallback: publishers seen in the log for this URL's key, or all.
+  const all = Object.keys(ingest.providerCounts).sort();
+  return all;
 }

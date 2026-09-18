@@ -190,4 +190,217 @@ Optional<std::string> math_truncate(const std::string &x) {
 	return Optional<std::string>(format_result(result));
 }
 
+// =====================================================================
+// cqlDivide — exact Decimal division at the implementation scale (8).
+//
+// CQL §16.4 divide: the result is a Decimal quantized half-up (ties away
+// from zero) to 8 fractional digits. DuckDB's native `/` promotes DECIMAL
+// operands to DOUBLE (9.9 / 3.0 -> 3.3000000000000003), so the exact
+// quotient must be computed with base-10 long division over digit
+// strings. Mirrors the Python authority `_cql_divide`
+// (fhir4ds/cql/duckdb/macros/math.py): NULL for NULL operands (handled
+// by the UDF wrapper), non-numeric operands, a zero divisor, or a result
+// whose magnitude reaches 10^28 (28 integer digits after rounding).
+//
+// Rounding-equivalence note: the Python authority divides at prec=60 and
+// then quantizes ROUND_HALF_UP to scale 8. For every result Python
+// returns (integer part <= 28 digits, so quantize never overflows the
+// 60-digit context), the scale-8 guard digit at fractional position 9
+// lies inside the preserved 60-significant-digit window, and half-even
+// carries beyond position 60 can only reach position 9 through a run of
+// 9s that HALF_UP rounds up anyway. Direct HALF_UP rounding of the true
+// quotient at scale 8 is therefore byte-identical to the two-step
+// Python result.
+// =====================================================================
+namespace {
+
+const size_t CQL_DIVIDE_MAX_DIGITS = 5000;
+const long long CQL_DIVIDE_MAX_EXP = 5000;
+
+int compare_digit_strings(const std::string &a, const std::string &b) {
+	if (a.size() != b.size()) return a.size() < b.size() ? -1 : 1;
+	int c = a.compare(b);
+	return c < 0 ? -1 : (c > 0 ? 1 : 0);
+}
+
+std::string subtract_digit_strings(const std::string &a, const std::string &b) {
+	// a >= b, both without leading zeros ("0" allowed)
+	std::string res(a.size(), '0');
+	int borrow = 0;
+	for (int i = static_cast<int>(a.size()) - 1, j = static_cast<int>(b.size()) - 1; i >= 0; --i, --j) {
+		int da = a[i] - '0';
+		int db = (j >= 0 ? b[j] - '0' : 0) + borrow;
+		if (da < db) {
+			da += 10;
+			borrow = 1;
+		} else {
+			borrow = 0;
+		}
+		res[i] = static_cast<char>('0' + da - db);
+	}
+	size_t nz = res.find_first_not_of('0');
+	return nz == std::string::npos ? "0" : res.substr(nz);
+}
+
+struct DecimalParts {
+	int sign;
+	std::string digits; // no leading zeros; "0" for the value 0
+	long long exp10;    // value = sign * digits * 10^exp10
+};
+
+bool parse_cql_decimal_text(const std::string &raw, DecimalParts &out) {
+	size_t b = 0, e = raw.size();
+	auto is_ws = [](char c) {
+		return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
+	};
+	while (b < e && is_ws(raw[b])) b++;
+	while (e > b && is_ws(raw[e - 1])) e--;
+	if (b >= e) return false;
+	size_t p = b;
+	out.sign = 1;
+	if (raw[p] == '+' || raw[p] == '-') {
+		if (raw[p] == '-') out.sign = -1;
+		p++;
+	}
+	std::string int_digits, frac_digits;
+	bool seen_dot = false, seen_digit = false;
+	for (; p < e; ++p) {
+		char c = raw[p];
+		if (c >= '0' && c <= '9') {
+			(seen_dot ? frac_digits : int_digits).push_back(c);
+			seen_digit = true;
+		} else if (c == '.' && !seen_dot) {
+			seen_dot = true;
+		} else {
+			break;
+		}
+	}
+	if (!seen_digit) return false;
+	long long exp = 0;
+	if (p < e && (raw[p] == 'e' || raw[p] == 'E')) {
+		p++;
+		bool eneg = false;
+		if (p < e && (raw[p] == '+' || raw[p] == '-')) {
+			eneg = raw[p] == '-';
+			p++;
+		}
+		if (p >= e) return false;
+		long long ev = 0;
+		for (; p < e; ++p) {
+			char c = raw[p];
+			if (c < '0' || c > '9') return false;
+			ev = ev * 10 + (c - '0');
+			if (ev > CQL_DIVIDE_MAX_EXP) return false;
+		}
+		exp = eneg ? -ev : ev;
+	} else if (p != e) {
+		return false;
+	}
+	out.digits = int_digits + frac_digits;
+	out.exp10 = exp - static_cast<long long>(frac_digits.size());
+	if (out.digits.size() > CQL_DIVIDE_MAX_DIGITS) return false;
+	size_t nz = out.digits.find_first_not_of('0');
+	if (nz == std::string::npos) {
+		out.digits = "0";
+		out.sign = 1;
+		return true;
+	}
+	// Stripping LEADING zeros does not change the value's exponent
+	// ("05"e-1 == "5"e-1); only trailing-zero stripping would.
+	out.digits = out.digits.substr(nz);
+	if (out.exp10 > CQL_DIVIDE_MAX_EXP || out.exp10 < -CQL_DIVIDE_MAX_EXP) return false;
+	return true;
+}
+
+std::string increment_digit_string(const std::string &s) {
+	std::string res = s;
+	int carry = 1;
+	for (int i = static_cast<int>(res.size()) - 1; i >= 0 && carry; --i) {
+		int d = res[i] - '0' + carry;
+		carry = d / 10;
+		res[i] = static_cast<char>('0' + d % 10);
+	}
+	if (carry) res.insert(res.begin(), '1');
+	return res;
+}
+
+} // namespace
+
+Optional<CqlDivideResult> cql_divide_text(const std::string &a, const std::string &b) {
+	DecimalParts pa, pb;
+	if (!parse_cql_decimal_text(a, pa)) return NullOpt<CqlDivideResult>();
+	if (!parse_cql_decimal_text(b, pb)) return NullOpt<CqlDivideResult>();
+	if (pb.digits == "0") return NullOpt<CqlDivideResult>();
+	if (pa.digits == "0") {
+		CqlDivideResult r;
+		r.negative = false;
+		r.unscaled = std::string(8, '0');
+		return Optional<CqlDivideResult>(r);
+	}
+
+	// quotient magnitude = (Da / Db) * 10^(ea - eb) as N / D
+	long long shift = pa.exp10 - pb.exp10;
+	std::string num = pa.digits;
+	std::string den = pb.digits;
+	if (shift > 0) {
+		num.append(static_cast<size_t>(shift), '0');
+	} else if (shift < 0) {
+		den.append(static_cast<size_t>(-shift), '0');
+	}
+
+	// Integer part: schoolbook long division. When num < den the integer
+	// part is 0 and the remainder is num itself.
+	std::string int_part = "0";
+	std::string rem = "0";
+	if (compare_digit_strings(num, den) >= 0) {
+		int_part.clear();
+		for (char cd : num) {
+			if (rem == "0") {
+				rem = std::string(1, cd);
+			} else {
+				rem.push_back(cd);
+			}
+			int qd = 0;
+			while (qd < 9 && compare_digit_strings(rem, den) >= 0) {
+				rem = subtract_digit_strings(rem, den);
+				qd++;
+			}
+			int_part.push_back(static_cast<char>('0' + qd));
+		}
+		size_t nz = int_part.find_first_not_of('0');
+		int_part = (nz == std::string::npos) ? "0" : int_part.substr(nz);
+	} else {
+		rem = num;
+	}
+
+	// Nine fractional digits: 8 scale digits + the HALF_UP guard digit.
+	std::string frac(9, '0');
+	for (int k = 0; k < 9; ++k) {
+		if (rem == "0") break;
+		rem.push_back('0');
+		int qd = 0;
+		while (qd < 9 && compare_digit_strings(rem, den) >= 0) {
+			rem = subtract_digit_strings(rem, den);
+			qd++;
+		}
+		frac[k] = static_cast<char>('0' + qd);
+	}
+
+	std::string magnitude = int_part + frac.substr(0, 8);
+	if (frac[8] >= '5') {
+		magnitude = increment_digit_string(magnitude);
+	}
+
+	// Implementation Decimal range: magnitude < 10^28 means at most 28
+	// integer digits after rounding (the scale-8 suffix is 8 digits).
+	if (magnitude.size() > 8 && magnitude.size() - 8 > 28) {
+		return NullOpt<CqlDivideResult>();
+	}
+
+	CqlDivideResult r;
+	r.negative = (pa.sign != pb.sign);
+	r.unscaled = magnitude;
+	return Optional<CqlDivideResult>(r);
+}
+
 } // namespace cql

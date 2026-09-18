@@ -1,0 +1,48 @@
+{
+  "columns": [
+    "Codings Per Condition",
+    "Declared Code Display",
+    "Diabetes By Any System",
+    "First SNOMED Display",
+    "Has Hypertension",
+    "Has ICD T2DM",
+    "Has SNOMED Diabetes",
+    "ICD Condition Count",
+    "SNOMED Condition Count"
+  ],
+  "rows": {
+    "patient-a": [
+      3,
+      "Diabetes mellitus",
+      true,
+      "Diabetes",
+      false,
+      true,
+      true,
+      1,
+      2
+    ],
+    "patient-b": [
+      1,
+      "Diabetes mellitus",
+      false,
+      null,
+      false,
+      false,
+      false,
+      1,
+      0
+    ],
+    "patient-c": [
+      0,
+      "Diabetes mellitus",
+      false,
+      null,
+      false,
+      false,
+      false,
+      0,
+      0
+    ]
+  }
+}

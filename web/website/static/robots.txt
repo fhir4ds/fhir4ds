@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# AI crawlers are welcome.
+Sitemap: https://fhir4ds.com/sitemap.xml

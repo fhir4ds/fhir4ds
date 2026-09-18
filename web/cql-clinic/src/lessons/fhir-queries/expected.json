@@ -1,0 +1,40 @@
+{
+  "columns": [
+    "Active Med Count",
+    "Full Name",
+    "Has Diabetes",
+    "Is Male",
+    "Lab Count",
+    "Observation Count",
+    "Systolic BP"
+  ],
+  "rows": {
+    "patient-a": [
+      1,
+      "Alice Johnson",
+      true,
+      false,
+      2,
+      2,
+      "120"
+    ],
+    "patient-b": [
+      0,
+      "Bob Smith",
+      false,
+      true,
+      1,
+      1,
+      "145"
+    ],
+    "patient-c": [
+      0,
+      "Cara Williams",
+      false,
+      false,
+      0,
+      0,
+      null
+    ]
+  }
+}

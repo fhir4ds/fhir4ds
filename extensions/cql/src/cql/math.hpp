@@ -35,4 +35,16 @@ Optional<std::string> math_sqrt(const std::string &x);
 // CQL §16.20: Truncate
 Optional<std::string> math_truncate(const std::string &x);
 
+// Result of cql_divide_text: sign plus the rounded-to-scale-8 unscaled
+// magnitude digit string (8 trailing fractional digits included).
+struct CqlDivideResult {
+	bool negative;
+	std::string unscaled; // decimal digits, no sign, no dot
+};
+
+// CQL §16.4 divide: exact Decimal division at the implementation scale
+// (8), quantized half-up. NULL-equivalent (NullOpt) for non-numeric
+// operands, zero divisor, or out-of-range results.
+Optional<CqlDivideResult> cql_divide_text(const std::string &a, const std::string &b);
+
 } // namespace cql

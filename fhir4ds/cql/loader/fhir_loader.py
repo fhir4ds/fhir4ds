@@ -301,7 +301,7 @@ class FHIRDataLoader:
                             WHEN ref IS NULL THEN NULL
                             WHEN LTRIM(ref::VARCHAR) LIKE '{{%'
                                 THEN json_extract_string(ref::VARCHAR, '$.reference')
-                            ELSE TRIM(BOTH '"' FROM ref::VARCHAR)
+                            ELSE regexp_replace(ref::VARCHAR, '^"|"$', '', 'g')
                         END AS raw_ref
                     ),
                     _ref AS (
@@ -1259,16 +1259,16 @@ class FHIRDataLoader:
                 f"FROM {quoted_table_name}"
             ).fetchall()
             # Remove stale Python macros from prior refreshes so SQL resolves to
-            # the native in_valueset function. Keep the fhirpath_* alias as a macro.
+            # the native functions. The C++ extension now registers BOTH
+            # in_valueset and the translator-facing fhirpath_in_valueset alias
+            # (same InValuesetFunc), so no aliasing macro is needed on the
+            # native path. On pure-Python connections the fallback branch
+            # below recreates the Python-UDF macros.
             for macro_name in ("in_valueset", "fhirpath_in_valueset"):
                 try:
                     self.con.execute(f"DROP MACRO IF EXISTS {macro_name}")
                 except Exception:
                     pass
-            self.con.execute(
-                "CREATE OR REPLACE MACRO fhirpath_in_valueset(res, path, vs_url) AS "
-                "in_valueset(res, path, vs_url)"
-            )
             return True
         except Exception as e:
             _logger.warning("Failed to populate C++ valueset cache; using Python UDF: %s", e)

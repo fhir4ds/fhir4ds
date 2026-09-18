@@ -655,4 +655,255 @@ bool has_not_done_valueset(const std::string &resource_json, const std::string &
 	return found;
 }
 
+// =====================================================================
+// coding_matches / coding_matches_exact — Python parity ports
+// (fhir4ds/cql/duckdb/udf/valueset.py codingMatches/codingMatchesExact).
+// The translator only emits simple dotted paths (translator/types.py
+// _CODING_EXISTS_RE and _operators.py _translate_dynamic_code_equality),
+// so complex FHIRPath .where() traversal is not required here.
+// =====================================================================
+namespace {
+
+const std::string &code_system_alias(const std::string &system) {
+	static const std::unordered_map<std::string, std::string> aliases = {
+	    {"QICoreCommon.SNOMEDCT", "http://snomed.info/sct"},
+	    {"SNOMEDCT", "http://snomed.info/sct"},
+	    {"LOINC", "http://loinc.org"},
+	};
+	auto it = aliases.find(system);
+	return it != aliases.end() ? it->second : system;
+}
+
+std::vector<std::string> split_dot_path(const std::string &path) {
+	std::vector<std::string> parts;
+	std::string current;
+	for (char c : path) {
+		if (c == '.') {
+			parts.push_back(current);
+			current.clear();
+		} else {
+			current.push_back(c);
+		}
+	}
+	parts.push_back(current);
+	return parts;
+}
+
+// Extract (system, code) pairs mirroring Python _extractAllCodes over
+// simple dotted paths, with the coding_matches fallback: when traversal
+// yields no codes and path == "code", treat `data` itself as the element.
+void extract_simple_codes(yyjson_val *data, const std::string &path, std::vector<CodeValue> &codes) {
+	yyjson_val *current = data;
+	bool ok = true;
+	for (const auto &part : split_dot_path(path)) {
+		if (current && yyjson_is_arr(current)) {
+			current = first_list_item(current);
+		}
+		if (!current || !yyjson_is_obj(current)) {
+			ok = false;
+			break;
+		}
+		yyjson_val *value = yyjson_obj_get(current, part.c_str());
+		if (!value) {
+			static const char *suffixes[] = {"CodeableConcept", "Coding"};
+			for (auto *suffix : suffixes) {
+				value = yyjson_obj_get(current, (part + suffix).c_str());
+				if (value) {
+					break;
+				}
+			}
+		}
+		if (!value) {
+			const auto &props = qicore_extension_props();
+			auto it = props.find(part);
+			if (it != props.end()) {
+				value = resolve_extension_value(current, it->second);
+			}
+		}
+		if (!value) {
+			ok = false;
+			break;
+		}
+		current = value;
+	}
+	if (ok) {
+		extract_codes_from_val(current, codes);
+	}
+	// Python fallback: path == "code" and data is itself the element.
+	if (codes.empty() && path == "code") {
+		extract_codes_from_val(data, codes);
+	}
+}
+
+struct CodingDict {
+	std::string system;
+	std::string code;
+	bool has_display = false;
+	std::string display;
+	bool has_version = false;
+	std::string version;
+};
+
+// Extract full Coding dicts mirroring Python _extract_coding_dicts_for_match
+// over simple dotted paths: plain key navigation only (no choice suffixes,
+// no extensions); on miss, `data` itself is the element.
+void extract_coding_dicts(yyjson_val *data, const std::string &path, std::vector<CodingDict> &out) {
+	yyjson_val *element = nullptr;
+	if (data && yyjson_is_obj(data)) {
+		yyjson_val *node = data;
+		bool navigated = true;
+		for (const auto &seg : split_dot_path(path)) {
+			if (!seg.empty() && node && yyjson_is_obj(node)) {
+				yyjson_val *next = yyjson_obj_get(node, seg.c_str());
+				if (next) {
+					node = next;
+					continue;
+				}
+			}
+			navigated = false;
+			break;
+		}
+		if (navigated) {
+			element = node;
+		}
+	}
+	if (!element) {
+		element = data;
+	}
+
+	auto from_element = [&](yyjson_val *el) {
+		if (!el || !yyjson_is_obj(el)) {
+			return;
+		}
+		yyjson_val *coding = yyjson_obj_get(el, "coding");
+		if (coding && yyjson_is_arr(coding)) {
+			size_t idx, max;
+			yyjson_val *item;
+			yyjson_arr_foreach(coding, idx, max, item) {
+				if (item && yyjson_is_obj(item)) {
+					CodingDict d;
+					yyjson_val *sys = yyjson_obj_get(item, "system");
+					yyjson_val *code = yyjson_obj_get(item, "code");
+					yyjson_val *disp = yyjson_obj_get(item, "display");
+					yyjson_val *ver = yyjson_obj_get(item, "version");
+					if (sys && yyjson_is_str(sys)) d.system = yyjson_get_str(sys);
+					if (code && yyjson_is_str(code)) d.code = yyjson_get_str(code);
+					if (disp && yyjson_is_str(disp)) {
+						d.has_display = true;
+						d.display = yyjson_get_str(disp);
+					}
+					if (ver && yyjson_is_str(ver)) {
+						d.has_version = true;
+						d.version = yyjson_get_str(ver);
+					}
+					out.push_back(d);
+				}
+			}
+			return;
+		}
+		yyjson_val *code = yyjson_obj_get(el, "code");
+		if (code) {
+			CodingDict d;
+			yyjson_val *sys = yyjson_obj_get(el, "system");
+			yyjson_val *disp = yyjson_obj_get(el, "display");
+			yyjson_val *ver = yyjson_obj_get(el, "version");
+			if (sys && yyjson_is_str(sys)) d.system = yyjson_get_str(sys);
+			if (code && yyjson_is_str(code)) d.code = yyjson_get_str(code);
+			if (disp && yyjson_is_str(disp)) {
+				d.has_display = true;
+				d.display = yyjson_get_str(disp);
+			}
+			if (ver && yyjson_is_str(ver)) {
+				d.has_version = true;
+				d.version = yyjson_get_str(ver);
+			}
+			out.push_back(d);
+		}
+	};
+
+	if (element && yyjson_is_arr(element)) {
+		size_t idx, max;
+		yyjson_val *item;
+		yyjson_arr_foreach(element, idx, max, item) { from_element(item); }
+	} else {
+		from_element(element);
+	}
+}
+
+} // namespace
+
+Optional<bool> coding_matches(const std::string &resource_json, const std::string &path, const std::string &system,
+                              const std::string &code) {
+	if (resource_json.empty() || path.empty() || code.empty()) {
+		return NullOpt<bool>();
+	}
+	yyjson_doc *doc = yyjson_read(resource_json.c_str(), resource_json.size(), 0);
+	if (!doc) {
+		return NullOpt<bool>();
+	}
+	yyjson_val *root = yyjson_doc_get_root(doc);
+	std::vector<CodeValue> codes;
+	extract_simple_codes(root, path, codes);
+
+	const std::string &expected_system = code_system_alias(system);
+	const std::string expected_normalized = normalize_system(expected_system);
+	bool matched = false;
+	for (const auto &c : codes) {
+		if (c.code != code) {
+			continue;
+		}
+		const std::string normalized_actual = normalize_system(c.system);
+		if (normalized_actual == expected_normalized || c.system == system) {
+			matched = true;
+			break;
+		}
+	}
+	yyjson_doc_free(doc);
+	return Optional<bool>(matched);
+}
+
+Optional<bool> coding_matches_exact(const std::string &resource_json, const std::string &path,
+                                   const std::string &system, const std::string &code, const char *display,
+                                   const char *version) {
+	if (resource_json.empty() || path.empty() || code.empty()) {
+		return NullOpt<bool>();
+	}
+	yyjson_doc *doc = yyjson_read(resource_json.c_str(), resource_json.size(), 0);
+	if (!doc) {
+		return NullOpt<bool>();
+	}
+	yyjson_val *root = yyjson_doc_get_root(doc);
+	std::vector<CodingDict> codings;
+	extract_coding_dicts(root, path, codings);
+
+	const std::string &expected_system = code_system_alias(system);
+	const std::string expected_normalized = normalize_system(expected_system);
+	bool matched = false;
+	for (const auto &coding : codings) {
+		if (coding.code != code) {
+			continue;
+		}
+		const std::string normalized = normalize_system(coding.system);
+		if (!(normalized == expected_normalized || coding.system == system)) {
+			continue;
+		}
+		// Exact match: an element absent from the literal (null argument)
+		// must be absent from the coding as well.
+		const bool display_matches = display ? coding.has_display && coding.display == display
+		                                     : !coding.has_display;
+		if (!display_matches) {
+			continue;
+		}
+		const bool version_matches =
+		    version ? coding.has_version && coding.version == version : !coding.has_version;
+		if (!version_matches) {
+			continue;
+		}
+		matched = true;
+		break;
+	}
+	yyjson_doc_free(doc);
+	return Optional<bool>(matched);
+}
+
 } // namespace cql

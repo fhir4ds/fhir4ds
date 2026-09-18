@@ -1,0 +1,40 @@
+{
+  "columns": [
+    "Avg Value",
+    "BP With Let",
+    "Distinct Statuses",
+    "Earliest Obs Id",
+    "Final Obs Count",
+    "First Tuple",
+    "High Final Count",
+    "Max Value",
+    "Singleton Value",
+    "Union Count"
+  ],
+  "rows": {
+    "patient-a": [
+      90.5,
+      2,
+      2,
+      "obs-1",
+      2,
+      "{\"id\":\"obs-1\",\"status\":\"final\"}",
+      1,
+      "138",
+      "138",
+      4
+    ],
+    "patient-b": [
+      72.0,
+      0,
+      1,
+      "obs-4",
+      1,
+      "{\"id\":\"obs-4\",\"status\":\"final\"}",
+      0,
+      "72",
+      null,
+      1
+    ]
+  }
+}

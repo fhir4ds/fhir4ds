@@ -72,6 +72,46 @@ def test_resolve_macro_accepts_common_reference_forms(loader, duckdb_con, refere
     assert result == ("p1",)
 
 
+@pytest.mark.parametrize("register_first", [True, False])
+def test_resolve_macro_survives_cql_macro_registration(register_first):
+    """resolve() must keep working when CQL macros are registered.
+
+    The CQL ``Trim(s)`` macro shadows DuckDB's 2-arg builtin ``trim(x, chars)``
+    for every connection that registers CQL macros, so the resolve() macro
+    body must not use ``TRIM(BOTH '"' FROM ...)`` (regression: resolve()
+    was broken at bind time in the standard register()+FHIRDataLoader flow,
+    both load orders, since 2026-05). Also pins versioned-ref stripping in
+    BOTH macro definitions (loader's and macros/clinical.py's).
+    """
+    from fhir4ds.cql.duckdb import register as register_cql
+
+    con = duckdb.connect(":memory:")
+    if register_first:
+        register_cql(con)
+        loader = FHIRDataLoader(con)
+        loader.load_resource({"resourceType": "Patient", "id": "p1"})
+    else:
+        loader = FHIRDataLoader(con)
+        loader.load_resource({"resourceType": "Patient", "id": "p1"})
+        register_cql(con)
+
+    for ref, expected in [
+        ("Patient/p1", "p1"),
+        ('"Patient/p1"', "p1"),
+        (json.dumps({"reference": "Patient/p1"}), "p1"),
+        ("Patient/p1/_history/9", "p1"),
+        ("https://example.org/fhir/Patient/p1", "p1"),
+        ("Patient/missing", None),
+        (None, None),
+    ]:
+        result = con.execute(
+            "SELECT json_extract_string(resolve(?::VARCHAR), '$.id')",
+            [ref],
+        ).fetchone()
+        assert result == (expected,), f"resolve({ref!r}) -> {result!r}, expected {expected!r}"
+    con.close()
+
+
 def test_load_resource_rejects_non_standard_json_numbers(loader):
     with pytest.raises(ValueError, match="standard JSON"):
         loader.load_resource({"resourceType": "Patient", "id": "nan", "value": float("nan")})

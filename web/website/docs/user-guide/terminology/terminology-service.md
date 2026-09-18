@@ -8,7 +8,7 @@ sidebar_label: Terminology Service
 
 The terminology service abstraction (`fhir4ds.cql.terminology`) is the seam between fhir4ds and any FHIR R4 terminology provider. By default it ships **disabled** — `import fhir4ds` pulls no terminology dependencies. Opt in via an install extra and an environment variable, and the CQL translator, the auto-coder, and the closure-table builder all start resolving ValueSets and subsumption relationships against your chosen terminology server.
 
-The reference backend is [medterm4ds](https://github.com/joelmontavon/medterm4ds) — a UMLS-backed FHIR R4 terminology server with `$expand`, `$lookup`, `$validate-code`, `$translate`, `$subsumes`, `$closure`, plus a custom `$search` operation for lexical/hybrid/semantic concept discovery.
+The reference backend is [medterm4ds](https://terminology.fhir4ds.com) — a UMLS-backed FHIR R4 terminology server with `$expand`, `$lookup`, `$validate-code`, `$translate`, `$subsumes`, `$closure`, plus a custom `$search` operation for lexical/hybrid/semantic concept discovery.
 
 ## 1. Install
 

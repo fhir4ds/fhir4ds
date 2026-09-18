@@ -66,7 +66,8 @@ export function useDuckDB(enabled = true) {
             id VARCHAR,
             resourceType VARCHAR,
             resource JSON,
-            patient_ref VARCHAR
+            patient_ref VARCHAR,
+            publisher VARCHAR
           )
         `);
 
@@ -140,7 +141,7 @@ export function useDuckDB(enabled = true) {
       const start = performance.now();
       await conn.query(`TRUNCATE resources`);
       const stmt = await conn.prepare(
-        "INSERT INTO resources (id, resourceType, resource, patient_ref) VALUES (?, ?, ?, ?)",
+        "INSERT INTO resources (id, resourceType, resource, patient_ref, publisher) VALUES (?, ?, ?, ?, ?)",
       );
 
       const providerCounts: Record<string, Record<string, number>> = {};
@@ -156,6 +157,55 @@ export function useDuckDB(enabled = true) {
       );
 
       await stmt.close();
+      onProgress?.({ phase: "all_done", totalTimeMs: performance.now() - start });
+
+      return {
+        providerCounts,
+        resourceCounts,
+        totalTimeMs: performance.now() - start,
+      };
+    },
+    [],
+  );
+
+  /**
+   * Ingest multiple Bulk Publish endpoints into the shared `resources`
+   * table as one federated dataset. TRUNCATEs once up front (so this is
+   * also the "refresh all connections" path), then walks every manifest.
+   * Publisher counts are merged across endpoints.
+   */
+  const ingestManifests = useCallback(
+    async (
+      manifestUrls: string[],
+      onProgress?: (p: IngestProgress) => void,
+      proxyUrl?: string | null,
+    ): Promise<IngestResult> => {
+      const conn = connRef.current;
+      if (!conn) throw new Error("DuckDB not initialized");
+
+      const start = performance.now();
+      await conn.query(`TRUNCATE resources`);
+      const stmt = await conn.prepare(
+        "INSERT INTO resources (id, resourceType, resource, patient_ref, publisher) VALUES (?, ?, ?, ?, ?)",
+      );
+
+      const providerCounts: Record<string, Record<string, number>> = {};
+      const resourceCounts: Record<string, number> = {};
+
+      try {
+        for (const url of manifestUrls) {
+          await ingestManifestRecursive(
+            url,
+            stmt,
+            providerCounts,
+            resourceCounts,
+            onProgress,
+            proxyUrl ?? null,
+          );
+        }
+      } finally {
+        await stmt.close();
+      }
       onProgress?.({ phase: "all_done", totalTimeMs: performance.now() - start });
 
       return {
@@ -366,7 +416,7 @@ export function useDuckDB(enabled = true) {
     [],
   );
 
-  return { ready, error, ingestManifest, executeQuery, materializeSlotsView, lookupZip, lookupCityState, reverseGeocode };
+  return { ready, error, ingestManifest, ingestManifests, executeQuery, materializeSlotsView, lookupZip, lookupCityState, reverseGeocode };
 }
 
 /** Resolve a possibly-relative URL against the manifest URL (or page origin). */
@@ -529,6 +579,7 @@ async function ingestManifestRecursive(
         parsed.resourceType,
         line,
         extractPatientRef(parsed),
+        publisher,
       );
       count++;
     }

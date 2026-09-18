@@ -178,7 +178,11 @@ function removeListExtractFhirpathWrappers(sql: string): string {
 
       const innerExpr = result.slice(idx + NEEDLE.length, lastTopComma).trim();
 
-      if (/fhirpath/i.test(innerExpr)) {
+      // Only strip the LEGACY broken form list_extract(fhirpath_text(...), N)
+      // (fhirpath_text returns VARCHAR; list_extract sliced a character).
+      // list_extract(fhirpath(...), N) is CORRECT with the C++ UDF (JSON[]) —
+      // stripping it produces invalid nested fhirpath(fhirpath(...)).
+      if (/fhirpath_text/i.test(innerExpr) && !/\bfhirpath\(/.test(innerExpr)) {
         // Replace list_extract(innerExpr, N) with just innerExpr
         out += result.slice(pos, idx) + innerExpr;
         result = out + result.slice(i + 1);

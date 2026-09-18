@@ -73,6 +73,16 @@ _PYTHON_PREFERRED_CPP_CONFLICTS = {
     "quantityToInterval",
     "dateAddQuantity",
     "dateSubtractQuantity",
+    # cqlDateTimeAdd delegates to the dateAddQuantity core; the C++ core
+    # nulls sub-input-precision quantity units where the Python authority
+    # truncates-and-returns, so Python stays the desktop conformance
+    # authority for this name too (C++ remains the WASM fallback).
+    "cqlDateTimeAdd",
+    # ratioCompare equivalence routes through quantity_compare on divided
+    # compound units (mg/mL vs g/mL); the C++ quantity layer cannot convert
+    # metric prefixes inside compound units (CQL-03 HISTORIAN QA-004
+    # deferred family), so Python stays the desktop authority.
+    "ratioCompare",
     "HighBoundary",
     "LowBoundary",
     "predecessorOf",

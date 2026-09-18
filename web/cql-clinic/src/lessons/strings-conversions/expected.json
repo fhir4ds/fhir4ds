@@ -1,0 +1,42 @@
+{
+  "columns": [
+    "B Position",
+    "Birth Year String",
+    "Date Reformat",
+    "First Segment",
+    "First Word",
+    "Gender Shouted",
+    "Int To String",
+    "Integer Convertible",
+    "Is Http",
+    "Is Pdf",
+    "Joined",
+    "Name Length",
+    "Not Integer Convertible",
+    "Shout",
+    "String To Decimal",
+    "String To Integer",
+    "Whisper"
+  ],
+  "rows": {
+    "patient-a": [
+      1,
+      "1990",
+      "2024/03/01",
+      "a",
+      "FHIR",
+      "FEMALE",
+      "42",
+      true,
+      true,
+      true,
+      "a-b-c",
+      4,
+      false,
+      "HELLO",
+      "3.50000000",
+      42,
+      "world"
+    ]
+  }
+}

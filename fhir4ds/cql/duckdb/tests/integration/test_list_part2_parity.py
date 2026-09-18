@@ -1001,3 +1001,51 @@ def test_cql19_explorer_not_equivalent_null_list_operand_is_true() -> None:
     values = {pid: value for pid, value in results["py"]}
     assert values.get("P1") is True
     assert values.get("P2") is True
+
+
+# =====================================================================
+# v0.0.14 ext D4 EXPLORER (2026-09-10): postfix .first()/.last() over
+# multi-valued FHIR navigation used the scalar fhirpath_text UDF as the
+# list_extract source — DuckDB then sliced a single CHARACTER from the
+# first-match VARCHAR ('{' for object navigation) instead of selecting
+# the first element. The method-form source must use the list-returning
+# fhirpath UDF (the First(...)/Last(...) function forms already did).
+# =====================================================================
+
+def test_postfix_first_last_over_multivalued_navigation_selects_elements_v14ext():
+    """Patient.address.first().city must navigate the first address element,
+    not character-slice the first-match VARCHAR."""
+    import duckdb as _duckdb
+
+    from fhir4ds.cql.duckdb import register as _register_cql
+    from fhir4ds.cql.loader.fhir_loader import FHIRDataLoader as _Loader
+    from fhir4ds.cql.parser.parser import parse_cql as _parse_cql
+    from fhir4ds.cql.translator.translator import CQLToSQLTranslator as _T
+
+    lib = """
+library MPost version '1.0'
+using FHIR version '4.0.1'
+context Patient
+define "FirstCity": Patient.address.first().city
+define "LastCity": Patient.address.last().city
+define "FirstGiven": Patient.name.first().given
+"""
+    for cpp in (True, False):
+        con = _duckdb.connect(":memory:", config={"allow_unsigned_extensions": True} if cpp else {})
+        _register_cql(con)
+        _Loader(con).load_resources([
+            {"resourceType": "Patient", "id": "p0",
+             "address": [{"city": "Boston"}, {"city": "Denver"}],
+             "name": [{"family": "F", "given": ["John", "Jim"]}]},
+            {"resourceType": "Patient", "id": "p1"},
+        ])
+        sql = _T().translate_library_to_population_sql(_parse_cql(lib))
+        con.execute("CREATE OR REPLACE TEMP TABLE r AS " + sql)
+        rows = con.execute(
+            "SELECT patient_id, FirstCity, LastCity, FirstGiven FROM r ORDER BY patient_id"
+        ).fetchall()
+        con.close()
+        assert rows[0][1] == ["Boston"], rows[0]
+        assert rows[0][2] == ["Denver"], rows[0]
+        assert rows[0][3] == ["John", "Jim"], rows[0]
+        assert rows[1][1:] == (None, None, None), rows[1]

@@ -317,6 +317,20 @@
 
 ## Known Fragile Areas
 
+- `fhir4ds/cql/duckdb/macros/clinical.py` (`_RESOLVE_MACRO_SQL`) and
+  `fhir4ds/cql/loader/fhir_loader.py` (`_register_resolve_macro`): the
+  resolve() macro body MUST NOT use `TRIM(BOTH '<char>' FROM x)` — the CQL
+  `Trim(s)` macro (macros/string.py) shadows DuckDB's 2-arg builtin
+  `trim(x, chars)` on every connection that registers CQL macros, breaking
+  resolve() at bind time in the standard register()+FHIRDataLoader flow
+  (BOTH load orders; found 2026-09-09 v0.0.14 iter 2 after being latent
+  since 2026-05). Use `regexp_replace(x, '^"|"$', '', 'g')`. The two macro
+  definitions MUST stay semantically aligned: the clinical.py copy also
+  carries the versioned-ref `/_history/{vid}` strip and urn:uuid handling.
+  Regression: `test_resolve_macro_survives_cql_macro_registration`
+  (fhir4ds/cql/tests/unit/test_fhir_loader.py). General rule: no SQL
+  emitted into CQL-macro-bearing connections may call the 3-arg
+  TRIM(BOTH/LEADING/TRAILING ... FROM ...) form.
 - `fhir4ds/cql/duckdb/udf/valueset.py:544-595` (`fhirpath_in_valueset`
   String-overload branch) and `extensions/cql/src/cql_extension.cpp:4199-4266`
   (`InValuesetFunc` mirror): CQL 1.5.3 §In (Valueset) String overload

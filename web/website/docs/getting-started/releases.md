@@ -7,6 +7,56 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.14
+*September 2026*
+
+Version 0.0.14 is the **WASM C++ parity release**. Ten translator-reachable
+CQL functions that previously existed only as Python UDFs now ship in the
+native C++ DuckDB extension, closing the last gaps between the desktop
+runtime and the no-Python browser (WebAssembly) runtime. The conformance
+baseline holds at **2832/2832** (ViewDefinition 144, FHIRPath 935, CQL
+1706, DQM 47).
+
+**WASM C++ parity**
+
+- Ported to the C++ extension: `cqlDivide` (exact scale-8 half-up decimal
+  division), `CQLMessage`, `coding_matches`/`coding_matches_exact`,
+  `fhirpath_in_valueset`, `cqlChildren`/`cqlDescendants` (with CQL-05
+  transport markers), `cqlDateTimeAdd`, `ratioCompare`, and
+  `ConceptToListCode`. Every port is differential-tested against the Python
+  authority (3,000+ randomized `cqlDivide` cases, 1,200 coding-match cases,
+  800 structural-traversal cases — zero divergences on the conformant
+  input classes).
+- Three dead Python registrations removed (`ConvertQuantity`,
+  `cqlDateTimeSubtract`, `cqlNormalizeTZ`) and the between-family casing
+  reconciled with the translator's emit spellings.
+- `cqlDateTimeAdd` and `ratioCompare` remain Python-authoritative on
+  desktop (documented divergent input classes); the C++ scalars serve the
+  no-Python/WASM runtimes.
+- Both DuckDB extensions rebuilt for native and WASM; the browser demos
+  run identical binaries. The CQL playground gained an
+  exact-decimal-division end-to-end case (`10.0 / 3.0 → 3.33` display),
+  verified against the rebuilt WebAssembly — including the previously
+  failing decimal division case.
+
+**Fixes**
+
+- **`resolve()` macro bind failure** (latent since May): registering CQL
+  macros shadowed DuckDB's built-in `trim(x, chars)`, breaking any
+  translated CQL using `resolve()` in the standard registration flow. The
+  macro body now uses `regexp_replace`, with regression coverage in both
+  load orders.
+- Browser runtime: Arrow DECIMAL columns now render with their fractional
+  part (unscaled-BigInt rescale), and the four type-disambiguation macros
+  required by quantity comparisons are registered in both web apps.
+
+**Integration**
+
+- medterm4ds dependency bumped to **0.0.4** (`>=0.0.4,<0.0.5`) — CDC
+  CPT↔CVX crosswalk, annotation fields on all surfaces, and
+  whitespace-code 400s. Verified against the 0.0.4 candidate (runtime
+  frozen at the release commit).
+
 ## Version 0.0.13
 *August 2026*
 

@@ -1,0 +1,46 @@
+{
+  "id": "fhir-queries",
+  "title": "FHIR Data Access and Queries",
+  "description": "Query real FHIR resources in Patient context: navigate Patient elements, retrieve observations with code filters, count lab results, and detect conditions and active medications.",
+  "difficulty": "advanced",
+  "estimatedTime": "40 min",
+  "learningObjectives": [
+    "Write a library with using FHIR and context Patient",
+    "Navigate Patient elements like name and gender",
+    "Retrieve resource types with [Observation], [Condition], [MedicationRequest]",
+    "Filter retrieves with where clauses",
+    "Test list membership with exists() over category codings",
+    "Return scalar values with First(... return ...)"
+  ],
+  "ungradedDefines": [],
+  "hints": [
+    {
+      "trigger": "Full Name",
+      "message": "Patient.name is a list; use .first() to get one HumanName, then navigate .given.first() and .family, joined with + ' ' +."
+    },
+    {
+      "trigger": "Is Male",
+      "message": "Patient.gender is a string: Patient.gender = 'male'."
+    },
+    {
+      "trigger": "Observation Count",
+      "message": "Count([Observation]) counts every Observation retrieve for this patient."
+    },
+    {
+      "trigger": "Lab Count",
+      "message": "O.category is a list — test it with exists(O.category C where C.coding.code = 'laboratory')."
+    },
+    {
+      "trigger": "Systolic BP",
+      "message": "Filter by LOINC code 8480-6 (O.code.coding.code = '8480-6') and return O.valueQuantity.value inside First(... return ...)."
+    },
+    {
+      "trigger": "Has Diabetes",
+      "message": "exists([Condition] C where C.code.coding.code = '44054006') — 44054006 is the SNOMED code for diabetes."
+    },
+    {
+      "trigger": "Active Med Count",
+      "message": "Combine two field filters: MR.status = 'active' and MR.intent = 'order'."
+    }
+  ]
+}

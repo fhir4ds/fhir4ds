@@ -56,7 +56,7 @@ def test_core_register_conversion_checks_forced_python_fallback_matches_cpp(monk
         "SELECT ConvertsToTime('T10:30:00Z')",
         "SELECT ConvertsToTime('T25:00:00')",
         "SELECT CanConvertQuantity('1000 ''mg''', 'g')",
-        "SELECT ConvertQuantity('1000 ''mg''', 'g')",
+        "SELECT quantityConvert('1000 ''mg''', 'g')",
         "SELECT ToDateTime('2024-01-15T10:30:00+05:00')",
         "SELECT ToDateTime('2024-01-15T10:30:00+99:99')",
         "SELECT ToTime('T10:30:00Z')",

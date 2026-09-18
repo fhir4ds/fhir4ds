@@ -1,0 +1,54 @@
+{
+  "id": "terminology",
+  "title": "Codes, Code Systems, and Terminology",
+  "description": "Clinical logic runs on coded data. Declare code systems and named codes, match codings by BOTH code and system, and count conditions per terminology — the pattern behind every diabetes/hypertension eCQM criterion.",
+  "difficulty": "intermediate",
+  "estimatedTime": "30 min",
+  "learningObjectives": [
+    "Declare codesystem and code references",
+    "Match a coding by code AND system (the safe pattern)",
+    "Count conditions per code system",
+    "Extract display text from codings",
+    "Access declared-code properties (.code, .system, .display)",
+    "Understand why system matching matters (same code, different meaning)"
+  ],
+  "ungradedDefines": [],
+  "hints": [
+    {
+      "trigger": "Has SNOMED Diabetes",
+      "message": "exists([Condition] C where exists(C.code.coding cod where cod.code = \"Diabetes SNOMED\".code and cod.system = \"Diabetes SNOMED\".system)) — match BOTH fields."
+    },
+    {
+      "trigger": "Has ICD T2DM",
+      "message": "Same pattern with \"T2DM ICD\" — patient-a has an ICD E11.9 condition."
+    },
+    {
+      "trigger": "SNOMED Condition Count",
+      "message": "Count([Condition] C where exists(C.code.coding cod where cod.system = 'http://snomed.info/sct')) — compare the system URL directly."
+    },
+    {
+      "trigger": "ICD Condition Count",
+      "message": "The ICD-10-CM system URL is http://hl7.org/fhir/sid/icd-10-cm — patient-b's hypertension is coded in ICD, not SNOMED."
+    },
+    {
+      "trigger": "First SNOMED Display",
+      "message": "First([Condition] C where exists(...SNOMED...) return First(C.code.coding).display) — navigate into the first coding of the matching condition."
+    },
+    {
+      "trigger": "Declared Code Display",
+      "message": "A declared code carries its display: \"Diabetes SNOMED\".display — it's the display YOU wrote in the declaration."
+    },
+    {
+      "trigger": "Diabetes By Any System",
+      "message": "C.code.coding.code contains \"Diabetes SNOMED\".code — system-agnostic match. Convenient, but risky across terminologies."
+    },
+    {
+      "trigger": "Codings Per Condition",
+      "message": "Count([Condition] C return Count(C.code.coding)) — a query with return can build per-row values; Alice has 3 conditions."
+    },
+    {
+      "trigger": "Has Hypertension",
+      "message": "Match SNOMED 38341003 (hypertension): patient-b's hypertension is ICD I10 — so SNOMED-only matching misses it. The result should be false for everyone."
+    }
+  ]
+}

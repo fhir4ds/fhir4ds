@@ -503,6 +503,39 @@
   border-left: 3px solid var(--text-faint);
   font-size: 0.8rem;
   transition: border-color 0.2s, background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.roster__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.roster__remove {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 0.75rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.roster__remove:hover:not(:disabled) {
+  color: var(--danger, #f87171);
+  border-color: var(--danger, #f87171);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.roster__remove:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .roster__item--loading {

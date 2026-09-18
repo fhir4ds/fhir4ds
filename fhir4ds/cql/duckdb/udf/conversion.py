@@ -498,7 +498,7 @@ def registerConversionCheckUdfs(con: "duckdb.DuckDBPyConnection") -> None:
         ("ToRatio", ToRatio),
     ]:
         con.create_function(name, fn, null_handling="special")
-    con.create_function("ConvertQuantity", ConvertQuantity, null_handling="special")
+
 
 
 __all__ = [
@@ -514,7 +514,6 @@ __all__ = [
     "ConvertsToString",
     "ConvertsToTime",
     "CanConvertQuantity",
-    "ConvertQuantity",
     "ToDate",
     "ToDateTime",
     "ToLong",

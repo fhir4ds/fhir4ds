@@ -2952,6 +2952,40 @@ Fresh CQL-05 EXPLORER rerun (2026-05-30) added two recursive/inlining guardrails
 
 ---
 
+## v0.0.14 WASM C++ Parity Campaign (2026-09-09, feature_implementation)
+
+10 translator-reachable Python-only CQL UDFs ported to the C++ extension
+(cqlDivide exact scale-8 HALF_UP long division; CQLMessage; coding_matches/
+coding_matches_exact; fhirpath_in_valueset alias of InValuesetFunc; cqlChildren/
+cqlDescendants with CQL-05 transport markers; cqlDateTimeAdd; ratioCompare;
+ConceptToListCode), 3 dead Python registrations deleted (ConvertQuantity,
+cqlDateTimeSubtract + its skip-redundant-cast whitelist entry, cqlNormalizeTZ),
+and Weeks/MillisecondsBetween Python registrations renamed to the translator's
+camelCase emit spellings. cqlDateTimeAdd and ratioCompare joined
+_PYTHON_PREFERRED_CPP_CONFLICTS (their C++ cores null on the documented
+dateAddQuantity sub-input-precision and CQL-03 QA-004 compound-prefix classes;
+Python stays desktop authority, C++ serves WASM). fhir_loader native mode no
+longer recreates the fhirpath_in_valueset aliasing macro (the C++ scalar now
+registers BOTH names). Gate held 2832/2832; wasm-demo playground gained the
+`10.0 / 3.0` native-cqlDivide e2e case; cql-clinic all 3 lessons green with
+the rebuilt wasm (original cqlDivide Catalog Error repro now grades
+3.33333333). Gotchas: (1) extensions/*/build/wasm_eh accumulate stale CMake
+caches — move CMakeCache.txt aside + rm -rf CMakeFiles Makefile before
+`make wasm_eh` or configure fails with "System is unknown to cmake";
+(2) duckdb-wasm Arrow surfaces DECIMAL as unscaled BigInt-like OBJECTS
+(String() drops the scale) — both web apps' useDuckDB.ts now rescale via
+schema typeId 7 + f.type.scale; (3) cql-macros.ts must carry the 4 BENCH-001
+disambiguation macros (cql_value_is_period/range/interval_like,
+cql_quantity_value) or every browser quantity comparison Catalog-errors;
+(4) yyjson emits \uXXXX uppercase hex while Python json.dumps uses lowercase —
+C++ serializers needing Python byte-parity must post-process escapes;
+(5) cql-clinic mounts FRESH pyodide+duckdb workers per LessonPage — browser
+tests must wait for the "Loading CQL engine"/"Loading DuckDB" text to clear
+AFTER entering a lesson (~40-60s CDN pyodide init). Residuals owned elsewhere:
+fhirpath test_math_parity one.ln()/zero.sqrt() cpp-bool-False vs py-bool-None
+is source-level (the 0.0.13 deployed binary predated the Aug-26 evaluator.cpp
+edit; the v0.0.14 wasm/native rebuild exposed it — FP-11 chunk owner).
+
 ## WASM / Pyodide Release Checklist
 
 This section documents the recurring release steps required to keep the WASM demo working. Missing any of these steps causes Pyodide initialization failures in the CQL playground.

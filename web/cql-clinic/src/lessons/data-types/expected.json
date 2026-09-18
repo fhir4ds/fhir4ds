@@ -1,0 +1,32 @@
+{
+  "columns": [
+    "Boolean And",
+    "Boolean Or",
+    "Coalesce Example",
+    "Date Arithmetic",
+    "Decimal Division",
+    "Height",
+    "Integer Math",
+    "Null Comparison",
+    "String Comparison",
+    "String Concatenation",
+    "Today",
+    "Weight"
+  ],
+  "rows": {
+    "patient-a": [
+      false,
+      true,
+      "Default Value",
+      "2026-10-17",
+      "3.33333333",
+      "{\"value\":175.0,\"code\":\"cm\",\"system\":\"http://unitsofmeasure.org\",\"unit\":\"cm\"}",
+      20,
+      true,
+      true,
+      "Hello World",
+      "2026-09-17",
+      "{\"value\":70.0,\"code\":\"kg\",\"system\":\"http://unitsofmeasure.org\",\"unit\":\"kg\"}"
+    ]
+  }
+}

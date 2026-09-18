@@ -8674,20 +8674,39 @@ class OperatorsMixin:
                 return SQLUnaryOp(operator="IS NULL", operand=operand, prefix=False)
             if operator == "is not null":
                 return SQLUnaryOp(operator="IS NOT NULL", operand=operand, prefix=False)
+
+            # In audit mode the operand may be an audit STRUCT (e.g.
+            # `(X > 100) is true` lowers to IsTrue(audit_comparison(...)));
+            # IsTrue/IsFalse on a STRUCT returns False per their type-guard
+            # macro, silently inverting audit-wrapped boolean tests. Extract
+            # the `.result` member first.
+            def _audit_result(opnd):
+                from ...translator.types import SQLFunctionCall as _FC
+                if (
+                    isinstance(opnd, _FC)
+                    and opnd.name in _AUDIT_MACRO_NAMES
+                ):
+                    from ...translator.types import SQLFunctionCall as _FC2
+                    return _FC2(
+                        name="struct_extract",
+                        args=[opnd, SQLLiteral(value="result")],
+                    )
+                return opnd
+
             if operator == "is true":
-                return SQLFunctionCall(name="IsTrue", args=[operand])
+                return SQLFunctionCall(name="IsTrue", args=[_audit_result(operand)])
             if operator == "is false":
-                return SQLFunctionCall(name="IsFalse", args=[operand])
+                return SQLFunctionCall(name="IsFalse", args=[_audit_result(operand)])
             if operator == "is not true":
                 return SQLUnaryOp(
                     operator="NOT",
-                    operand=SQLFunctionCall(name="IsTrue", args=[operand]),
+                    operand=SQLFunctionCall(name="IsTrue", args=[_audit_result(operand)]),
                     prefix=True,
                 )
             if operator == "is not false":
                 return SQLUnaryOp(
                     operator="NOT",
-                    operand=SQLFunctionCall(name="IsFalse", args=[operand]),
+                    operand=SQLFunctionCall(name="IsFalse", args=[_audit_result(operand)]),
                     prefix=True,
                 )
 

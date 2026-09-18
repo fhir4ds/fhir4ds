@@ -1873,29 +1873,6 @@ def _normalize_to_utc(comps: dict) -> dict:
     }
 
 
-def cqlNormalizeTZ(dt: str | None) -> str | None:
-    """Normalize a timezone-aware ISO 8601 datetime string to UTC.
-
-    CQL §22.1: Timezone-aware values are compared by normalizing to UTC.
-    Preserves the original precision (e.g., hour-precision stays hour-precision).
-    If no timezone is present, returns the value unchanged.
-    Time-only values (HH:MM:SS or THH:MM:SS) are returned unchanged.
-    """
-    if dt is None:
-        return None
-    s = str(dt).strip()
-    # Time-only values don't have timezone context — pass through
-    if s.startswith('T') or (len(s) <= 12 and ':' in s and '-' not in s[:4]):
-        return s
-    comps = _parse_components(s)
-    tz = comps.get('tz', '')
-    if not tz or tz == 'Z':
-        return s.replace('Z', '').rstrip('+')  # strip 'Z' for clean comparison
-    prec = _infer_precision(s)
-    utc_comps = _normalize_to_utc(comps)
-    return _format_at_precision(utc_comps, prec)
-
-
 def _compare_at_min_precision(
     a_str: str,
     b_str: str,
@@ -2297,31 +2274,6 @@ def cqlDateTimeAdd(dt_str: str | None, qty_json: str | None) -> str | None:
     return _format_at_precision(result_comps, input_prec)
 
 
-def cqlDateTimeSubtract(dt_str: str | None, qty_json: str | None) -> str | None:
-    """CQL DateTime subtract with precision preservation (§18.10).
-
-    Subtracts a quantity from a datetime, preserving the input precision.
-    E.g., subtracting 25 months from '2014-06' (month precision) returns
-    '2012' (year precision if remainder).
-    """
-    if dt_str is None or qty_json is None:
-        return None
-
-    # Delegate to dateSubtractQuantity for the actual computation
-    full_result = dateSubtractQuantity(str(dt_str), str(qty_json))
-    if full_result is None:
-        return None
-
-    # Preserve the input precision in the output
-    input_prec = _infer_precision(str(dt_str))
-    result_comps = _parse_components(full_result)
-    return _format_at_precision(result_comps, input_prec)
-
-
-# ========================================
-# Registration
-# ========================================
-
 def registerDatetimeUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     """
     Register datetime UDFs.
@@ -2345,12 +2297,16 @@ def registerDatetimeUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     # DuckDB function names are case-insensitive — register once only.
     con.create_function("YearsBetween", yearsBetween, null_handling="special")
     con.create_function("MonthsBetween", monthsBetween, null_handling="special")
-    con.create_function("WeeksBetween", weeksBetween, null_handling="special")
+    # weeks/milliseconds: the translator emits the camelCase spellings
+    # (weeksBetween / millisecondsBetween — matching the C++ registration);
+    # DuckDB names are case-insensitive so this covers both spellings on
+    # pure-Python connections.
+    con.create_function("weeksBetween", weeksBetween, null_handling="special")
     con.create_function("DaysBetween", daysBetween, null_handling="special")
     con.create_function("HoursBetween", hoursBetween, null_handling="special")
     con.create_function("MinutesBetween", minutesBetween, null_handling="special")
     con.create_function("SecondsBetween", secondsBetween, null_handling="special")
-    con.create_function("MillisecondsBetween", millisecondsBetween, null_handling="special")
+    con.create_function("millisecondsBetween", millisecondsBetween, null_handling="special")
     # Now/Today/TimeOfDay with different names (not conflicting with macros)
     con.create_function("dateTimeNow", dateTimeNow, null_handling="special")
     con.create_function("dateTimeToday", dateTimeToday, null_handling="special")
@@ -2381,9 +2337,6 @@ def registerDatetimeUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("cqlDateTimeEqual", cqlDateTimeEqual, null_handling="special")
     # Precision-aware arithmetic (preserves input precision in output)
     con.create_function("cqlDateTimeAdd", cqlDateTimeAdd, null_handling="special")
-    con.create_function("cqlDateTimeSubtract", cqlDateTimeSubtract, null_handling="special")
-    # Timezone normalization (CQL §22.1)
-    con.create_function("cqlNormalizeTZ", cqlNormalizeTZ, null_handling="special")
     # Precision-qualified temporal comparison UDFs (CQL §19.14-21)
     con.create_function("cqlSameOrBeforeP", cqlSameOrBeforeP, null_handling="special")
     con.create_function("cqlSameOrAfterP", cqlSameOrAfterP, null_handling="special")

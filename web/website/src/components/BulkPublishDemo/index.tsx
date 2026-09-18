@@ -54,11 +54,13 @@ export function ConnectBlock() {
         onPublisherUrl={s.setPublisherUrl}
         onPresetDefaults={s.setPresetDefaults}
         onConnect={s.doConnect}
+        onDisconnect={s.disconnect}
+        connections={s.connections}
         ingest={s.ingest}
         ingestLog={s.ingestLog}
         connecting={s.connecting}
         connected={!!s.ingest}
-        error={null}
+        error={s.error}
         lookupZip={s.lookupZip}
         lookupCityState={s.lookupCityState}
         reverseGeocode={s.reverseGeocode}
@@ -73,40 +75,41 @@ export function ExploreBlock() {
   const s = useDemoState();
   return (
     <div className="bulk-publish-demo-app">
-      <RawDataSection ready={!!s.ingest} executeQuery={s.executeQuery} />
+      <RawDataSection ready={!!s.ingest} executeQuery={s.executeQuery} providerRefresh={s.ingest?.totalTimeMs ?? 0} />
     </div>
   );
 }
 
 export function ResourceDiagram() {
-  // The Slot → Schedule → PractitionerRole → Practitioner/Location diagram.
-  // Kept as a component because mermaid source is awkward to inline in MDX.
+  // Slot at the top; Schedule + EHR booking at the next level; the
+  // practitioner-related resources Schedule points at on the third level.
+  // Arrows follow reference direction (who points at whom).
   return (
     <div className="bulk-publish-demo-app">
       <MermaidDiagram
         chart={`flowchart TD
           Slot["Slot<br/><small>appointment window</small>"]
           Sched["Schedule<br/><small>service at a location</small>"]
+          Book["EHR booking<br/><small>via deep link</small>"]
           Role["PractitionerRole<br/><small>links provider + location</small>"]
           Prac["Practitioner<br/><small>the provider</small>"]
-          Loc["Location<br/><small>physical site</small>"]
           HCS["HealthcareService<br/><small>service line</small>"]
-          Book["→ EHR booking<br/><small>via deep link</small>"]
+          Loc["Location<br/><small>physical site</small>"]
 
           Slot -->|"Slot.schedule"| Sched
-          Sched -->|"Schedule.actor"| Role
-          Role -->|"PractitionerRole.practitioner"| Prac
-          Role -->|"PractitionerRole.location"| Loc
-          Role -.->|"PractitionerRole.healthcareService"| HCS
           Slot -.->|"Slot.booking-deep-link"| Book
+          Sched -->|"Schedule.actor"| Role
+          Sched -->|"Schedule.actor"| Prac
+          Sched -->|"Schedule.actor"| HCS
+          Sched -->|"Schedule.actor"| Loc
 
           style Slot fill:#131c30,stroke:#38bdf8,color:#e6ecf5
           style Sched fill:#131c30,stroke:#38bdf8,color:#e6ecf5
+          style Book fill:#131c30,stroke:#fbbf24,color:#e6ecf5
           style Role fill:#1c2741,stroke:#5fed83,color:#e6ecf5
           style Prac fill:#1c2741,stroke:#5fed83,color:#e6ecf5
-          style Loc fill:#1c2741,stroke:#5fed83,color:#e6ecf5
           style HCS fill:#1c2741,stroke:#5fed83,color:#e6ecf5
-          style Book fill:#131c30,stroke:#fbbf24,color:#e6ecf5
+          style Loc fill:#1c2741,stroke:#5fed83,color:#e6ecf5
         `}
       />
     </div>

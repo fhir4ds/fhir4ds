@@ -4658,6 +4658,545 @@ static void ValuesetCacheClearFunc(DataChunk &args, ExpressionState &state, Vect
 	ConstantVector::GetData<bool>(result)[0] = true;
 }
 
+// =====================================================================
+// ConceptToListCode — C++ port of udf/quantity.py::conceptToListCode.
+// Concept JSON -> List<Code JSON>. Normalized code objects keep Python
+// orjson key order (code, system?, version?, display?) and compact
+// separators; Quantity lookalikes ({"value": ...}) are rejected.
+// =====================================================================
+static cql::Optional<std::string> NormalizeCodeObjectJson(duckdb_yyjson::yyjson_val *data) {
+	using namespace duckdb_yyjson;
+	if (!data || !yyjson_is_obj(data)) {
+		return cql::NullOpt<std::string>();
+	}
+	yyjson_val *code_val = yyjson_obj_get(data, "code");
+	if (!code_val || yyjson_is_null(code_val)) {
+		return cql::NullOpt<std::string>();
+	}
+	if (yyjson_obj_get(data, "value") != nullptr) {
+		return cql::NullOpt<std::string>(); // Quantity lookalike
+	}
+	std::string out = "{\"code\":";
+	size_t len = 0;
+	char *code_buf = yyjson_val_write_opts(code_val, YYJSON_WRITE_NOFLAG, nullptr, &len, nullptr);
+	if (!code_buf) {
+		return cql::NullOpt<std::string>();
+	}
+	out.append(code_buf, len);
+	free(code_buf);
+	auto append_opt = [&](const char *key, const char *json_key) {
+		yyjson_val *v = yyjson_obj_get(data, key);
+		if (key == std::string("system")) {
+			// system falls back to codesystem
+			if (!v || yyjson_is_null(v)) {
+				v = yyjson_obj_get(data, "codesystem");
+			}
+		}
+		if (v && !yyjson_is_null(v)) {
+			char *buf = yyjson_val_write_opts(v, YYJSON_WRITE_NOFLAG, nullptr, &len, nullptr);
+			if (buf) {
+				out += ",";
+				out += "\"";
+				out += json_key;
+				out += "\":";
+				out.append(buf, len);
+				free(buf);
+			}
+		}
+	};
+	append_opt("system", "system");
+	append_opt("version", "version");
+	append_opt("display", "display");
+	out += "}";
+	return out;
+}
+
+static void ConceptToListCodeFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	using namespace duckdb_yyjson;
+	idx_t count = args.size();
+	UnifiedVectorFormat in_data;
+	args.data[0].ToUnifiedFormat(count, in_data);
+	auto inputs = UnifiedVectorFormat::GetData<string_t>(in_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto &result_validity = FlatVector::Validity(result);
+
+	std::vector<idx_t> row_offsets(count);
+	std::vector<idx_t> row_counts(count);
+	idx_t total_size = 0;
+
+	for (idx_t i = 0; i < count; i++) {
+		auto v_idx = in_data.sel->get_index(i);
+		row_offsets[i] = total_size;
+		row_counts[i] = 0;
+		if (!in_data.validity.RowIsValid(v_idx)) {
+			result_validity.SetInvalid(i);
+			continue;
+		}
+		auto input_text = inputs[v_idx].GetString();
+		yyjson_doc *doc = yyjson_read(input_text.c_str(), input_text.size(), 0);
+		if (!doc) {
+			result_validity.SetInvalid(i);
+			continue;
+		}
+		yyjson_val *root = yyjson_doc_get_root(doc);
+		if (!root || !yyjson_is_obj(root)) {
+			yyjson_doc_free(doc);
+			result_validity.SetInvalid(i);
+			continue;
+		}
+		yyjson_val *raw_codes = yyjson_obj_get(root, "codes");
+		if (!raw_codes || yyjson_is_null(raw_codes)) {
+			raw_codes = yyjson_obj_get(root, "coding");
+		}
+		if (!raw_codes || !yyjson_is_arr(raw_codes)) {
+			yyjson_doc_free(doc);
+			result_validity.SetInvalid(i);
+			continue;
+		}
+		bool ok = true;
+		yyjson_val *elem;
+		size_t idx, max;
+		yyjson_arr_foreach(raw_codes, idx, max, elem) {
+			auto code_json = NormalizeCodeObjectJson(elem);
+			if (!code_json.has_value()) {
+				ok = false;
+				break;
+			}
+			ListVector::PushBack(result, Value(*code_json));
+			row_counts[i]++;
+		}
+		if (!ok) {
+			// Python returns None when any element is not a Code -> SQL NULL
+			// row; the partially pushed entries are dropped by zeroing the
+			// count (they remain in the child vector but are unreferenced).
+			row_counts[i] = 0;
+			result_validity.SetInvalid(i);
+		}
+		total_size += row_counts[i];
+		yyjson_doc_free(doc);
+	}
+
+	auto list_entries = ListVector::GetData(result);
+	for (idx_t i = 0; i < count; i++) {
+		list_entries[i] = {row_offsets[i], row_counts[i]};
+	}
+	ListVector::SetListSize(result, total_size);
+}
+
+// =====================================================================
+// cqlChildren / cqlDescendants — C++ ports of the Python structural
+// traversal UDFs (udf/list.py). Input is VARCHAR (resource JSON, JSON
+// literal, or a __fhir4ds_cql_type transport-marker object); output is
+// VARCHAR[] of encoded structural items (compact JSON for dict/list,
+// __fhir4ds_cql_type markers for Boolean/Integer/Decimal/String
+// primitives, SQL NULL for null items). Typed-marker inputs return an
+// empty list (primitives have no children) per CQL-05 doctrine.
+// =====================================================================
+namespace cqlstructural {
+
+// Serialize one JSON value compactly (Python json.dumps separators=(",",":")
+// + ensure_ascii=True equivalent) using the writer's default allocator;
+// caller frees with free(). yyjson emits \uXXXX escapes with UPPERCASE hex
+// while Python json.dumps uses lowercase — normalized here for byte parity
+// with the Python authority (conformance doctrine).
+static std::string LowercaseUnicodeEscapes(const char *buf, size_t len) {
+	std::string out;
+	out.reserve(len);
+	for (size_t i = 0; i < len; i++) {
+		char c = buf[i];
+		if (c == '\\' && i + 1 < len && buf[i + 1] == 'u') {
+			out += "\\u";
+			i++;
+			for (int k = 0; k < 4 && i + 1 < len; k++) {
+				i++;
+				char h = buf[i];
+				out += (h >= 'A' && h <= 'F') ? static_cast<char>(h - 'A' + 'a') : h;
+			}
+		} else {
+			out += c;
+		}
+	}
+	return out;
+}
+
+static std::string WriteValCompact(duckdb_yyjson::yyjson_val *val) {
+	size_t len = 0;
+	char *buf = duckdb_yyjson::yyjson_val_write_opts(val, duckdb_yyjson::YYJSON_WRITE_ESCAPE_UNICODE, nullptr, &len, nullptr);
+	if (!buf) {
+		return std::string();
+	}
+	std::string out = LowercaseUnicodeEscapes(buf, len);
+	free(buf);
+	return out;
+}
+
+// Encode a Python-side structural item:
+//   dict/list   -> compact JSON text
+//   bool        -> {"__fhir4ds_cql_type":"Boolean","value":true|false}
+//   int64       -> Integer marker
+//   double      -> Decimal marker
+//   string      -> String marker
+//   null        -> SQL NULL list element (handled by caller)
+struct EncodedItem {
+	bool is_null = false;
+	std::string text;
+};
+
+// Serialize {"__fhir4ds_cql_type":<marker>,"value":<raw value JSON>} by
+// composing compact serializations (key order matches Python json.dumps
+// insertion order: __fhir4ds_cql_type first, then value).
+EncodedItem EncodeMarker(const char *marker, duckdb_yyjson::yyjson_val *value) {
+	EncodedItem out;
+	std::string value_json = WriteValCompact(value);
+	if (value_json.empty()) {
+		out.is_null = true;
+		return out;
+	}
+	out.text = std::string("{\"__fhir4ds_cql_type\":\"") + marker +
+	           "\",\"value\":" + value_json + "}";
+	return out;
+}
+
+EncodedItem EncodeItem(duckdb_yyjson::yyjson_val *val) {
+	EncodedItem out;
+	if (!val || duckdb_yyjson::yyjson_is_null(val)) {
+		out.is_null = true;
+		return out;
+	}
+	if (duckdb_yyjson::yyjson_is_obj(val) || duckdb_yyjson::yyjson_is_arr(val)) {
+		out.text = WriteValCompact(val);
+		if (out.text.empty() && !duckdb_yyjson::yyjson_is_str(val)) {
+			// Empty serialization only happens on writer failure, except for
+			// empty objects/arrays which serialize as {}/[] (non-empty text).
+			out.is_null = true;
+		}
+		return out;
+	}
+	if (duckdb_yyjson::yyjson_is_bool(val)) {
+		return EncodeMarker("Boolean", val);
+	}
+	if (duckdb_yyjson::yyjson_is_int(val)) {
+		return EncodeMarker("Integer", val);
+	}
+	if (duckdb_yyjson::yyjson_is_real(val)) {
+		return EncodeMarker("Decimal", val);
+	}
+	if (duckdb_yyjson::yyjson_is_str(val)) {
+		return EncodeMarker("String", val);
+	}
+	out.is_null = true;
+	return out;
+}
+
+// True when val is exactly {__fhir4ds_cql_type: T, value: V} with T in the
+// known marker set (Python _is_cql_typed_structural_item).
+bool IsTypedMarker(duckdb_yyjson::yyjson_val *val) {
+	if (!val || !duckdb_yyjson::yyjson_is_obj(val) || duckdb_yyjson::yyjson_obj_size(val) != 2) {
+		return false;
+	}
+	duckdb_yyjson::yyjson_val *t = duckdb_yyjson::yyjson_obj_get(val, "__fhir4ds_cql_type");
+	duckdb_yyjson::yyjson_val *v = duckdb_yyjson::yyjson_obj_get(val, "value");
+	if (!t || !v || !duckdb_yyjson::yyjson_is_str(t)) {
+		return false;
+	}
+	static const char *kTypes[] = {"Boolean", "Integer", "Decimal", "String",
+	                               "Long",    "Date",   "DateTime", "Time"};
+	auto name = duckdb_yyjson::yyjson_get_str(t);
+	for (auto *k : kTypes) {
+		if (strcmp(name, k) == 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// Owns docs parsed from string-embedded JSON inside one UDF call.
+struct DocKeepalive {
+	std::vector<duckdb_yyjson::yyjson_doc *> docs;
+	~DocKeepalive() {
+		for (auto *d : docs) {
+			duckdb_yyjson::yyjson_doc_free(d);
+		}
+	}
+};
+
+// Python _decode_structural_value for a string: parse leading-{/[ JSON.
+duckdb_yyjson::yyjson_val *DecodeStringValue(duckdb_yyjson::yyjson_val *str_val, DocKeepalive &keep) {
+	const char *raw = duckdb_yyjson::yyjson_get_str(str_val);
+	size_t len = duckdb_yyjson::yyjson_get_len(str_val);
+	size_t first = 0;
+	while (first < len &&
+	       (raw[first] == ' ' || raw[first] == '\t' || raw[first] == '\r' || raw[first] == '\n')) {
+		first++;
+	}
+	if (first < len && (raw[first] == '{' || raw[first] == '[')) {
+		duckdb_yyjson::yyjson_doc *doc = duckdb_yyjson::yyjson_read(raw + first, len - first, 0);
+		if (doc) {
+			keep.docs.push_back(doc);
+			return duckdb_yyjson::yyjson_doc_get_root(doc);
+		}
+	}
+	return str_val; // not JSON-shaped: keep the string itself
+}
+
+// Python _children_values over an ALREADY-DECODED non-null value.
+// Children are collected RAW (may be string-embedded JSON); the caller
+// decodes each collected child via DecodeStringValue.
+void ChildrenValues(duckdb_yyjson::yyjson_val *val, std::vector<duckdb_yyjson::yyjson_val *> &out) {
+	if (IsTypedMarker(val)) {
+		return;
+	}
+	if (duckdb_yyjson::yyjson_is_obj(val)) {
+		duckdb_yyjson::yyjson_obj_iter it = duckdb_yyjson::yyjson_obj_iter_with(val);
+		duckdb_yyjson::yyjson_val *key;
+		while ((key = duckdb_yyjson::yyjson_obj_iter_next(&it)) != nullptr) {
+			duckdb_yyjson::yyjson_val *child = duckdb_yyjson::yyjson_obj_iter_get_val(key);
+			if (duckdb_yyjson::yyjson_is_arr(child)) {
+				// Python: decoded list -> extend with each decoded item.
+				// Items are pushed raw; caller decodes.
+				duckdb_yyjson::yyjson_val *elem;
+				size_t idx, max;
+				yyjson_arr_foreach(child, idx, max, elem) {
+					out.push_back(elem);
+				}
+			} else {
+				out.push_back(child);
+			}
+		}
+		return;
+	}
+	if (duckdb_yyjson::yyjson_is_arr(val)) {
+		duckdb_yyjson::yyjson_val *elem;
+		size_t idx, max;
+		yyjson_arr_foreach(val, idx, max, elem) {
+			// Python recurses per item (flattening nested lists).
+			std::vector<duckdb_yyjson::yyjson_val *> sub;
+			ChildrenValues(elem, sub);
+			for (auto *s : sub) {
+				out.push_back(s);
+			}
+		}
+	}
+	// Scalars (string/int/bool): no children.
+}
+
+} // namespace cqlstructural
+
+// Shared driver for cqlChildren/cqlDescendants. descendants=false emits the
+// decoded children; descendants=true emits depth-first child-then-subtree
+// order (Python _descendant_values).
+static void CqlStructuralTraversalFunc(DataChunk &args, ExpressionState &state, Vector &result,
+                                       bool descendants) {
+	idx_t count = args.size();
+	UnifiedVectorFormat in_data;
+	args.data[0].ToUnifiedFormat(count, in_data);
+	auto inputs = UnifiedVectorFormat::GetData<string_t>(in_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto &result_validity = FlatVector::Validity(result);
+
+	std::vector<idx_t> row_offsets(count);
+	std::vector<idx_t> row_counts(count);
+	idx_t total_size = 0;
+
+	for (idx_t i = 0; i < count; i++) {
+		auto v_idx = in_data.sel->get_index(i);
+		row_offsets[i] = total_size;
+		row_counts[i] = 0;
+		if (!in_data.validity.RowIsValid(v_idx)) {
+			result_validity.SetInvalid(i); // SQL NULL input -> SQL NULL row
+			continue;
+		}
+		auto input_text = inputs[v_idx].GetString();
+		duckdb_yyjson::yyjson_doc *doc = duckdb_yyjson::yyjson_read(input_text.c_str(), input_text.size(), 0);
+		if (!doc) {
+			continue; // non-JSON scalar string -> children [] (empty list)
+		}
+		duckdb_yyjson::yyjson_val *root = duckdb_yyjson::yyjson_doc_get_root(doc);
+		if (!root || duckdb_yyjson::yyjson_is_null(root)) {
+			// JSON null text: Python decodes to None -> [] (empty list)
+			duckdb_yyjson::yyjson_doc_free(doc);
+			continue;
+		}
+		cqlstructural::DocKeepalive keep;
+		// Decode the input itself (string-embedded JSON input shape).
+		duckdb_yyjson::yyjson_val *decoded_root = duckdb_yyjson::yyjson_is_str(root) ? cqlstructural::DecodeStringValue(root, keep)
+		                                              : root;
+		if (!decoded_root || duckdb_yyjson::yyjson_is_null(decoded_root)) {
+			duckdb_yyjson::yyjson_doc_free(doc);
+			continue;
+		}
+		row_counts[i] = 0;
+		if (!descendants) {
+			std::vector<duckdb_yyjson::yyjson_val *> children;
+			cqlstructural::ChildrenValues(decoded_root, children);
+			for (auto *c : children) {
+				duckdb_yyjson::yyjson_val *decoded = (c && duckdb_yyjson::yyjson_is_str(c)) ? cqlstructural::DecodeStringValue(c, keep)
+				                                             : c;
+				if (!decoded || duckdb_yyjson::yyjson_is_null(decoded)) {
+					ListVector::PushBack(result, Value());
+				} else {
+					auto enc = cqlstructural::EncodeItem(decoded);
+					if (enc.is_null) {
+						ListVector::PushBack(result, Value());
+					} else {
+						ListVector::PushBack(result, Value(enc.text));
+					}
+				}
+				row_counts[i]++;
+			}
+		} else {
+			// Depth-first: stack of decoded values. Push root's children in
+			// reverse; popping yields document order; each popped value is
+			// emitted then its (decoded, reversed) children pushed.
+			struct Frame {
+				duckdb_yyjson::yyjson_val *val;
+			};
+			std::vector<Frame> stack;
+			std::vector<duckdb_yyjson::yyjson_val *> root_children;
+			cqlstructural::ChildrenValues(decoded_root, root_children);
+			for (auto it = root_children.rbegin(); it != root_children.rend(); ++it) {
+				duckdb_yyjson::yyjson_val *c = *it;
+				duckdb_yyjson::yyjson_val *decoded =
+				    (c && duckdb_yyjson::yyjson_is_str(c)) ? cqlstructural::DecodeStringValue(c, keep) : c;
+				stack.push_back({decoded});
+			}
+			while (!stack.empty()) {
+				Frame f = stack.back();
+				stack.pop_back();
+				duckdb_yyjson::yyjson_val *v = f.val;
+				if (!v || duckdb_yyjson::yyjson_is_null(v)) {
+					ListVector::PushBack(result, Value());
+					row_counts[i]++;
+					continue;
+				}
+				auto enc = cqlstructural::EncodeItem(v);
+				if (enc.is_null) {
+					ListVector::PushBack(result, Value());
+				} else {
+					ListVector::PushBack(result, Value(enc.text));
+				}
+				row_counts[i]++;
+				std::vector<duckdb_yyjson::yyjson_val *> kids;
+				cqlstructural::ChildrenValues(v, kids);
+				for (auto it = kids.rbegin(); it != kids.rend(); ++it) {
+					duckdb_yyjson::yyjson_val *c = *it;
+					duckdb_yyjson::yyjson_val *decoded =
+					    (c && duckdb_yyjson::yyjson_is_str(c)) ? cqlstructural::DecodeStringValue(c, keep) : c;
+					stack.push_back({decoded});
+				}
+			}
+		}
+		total_size += row_counts[i];
+		duckdb_yyjson::yyjson_doc_free(doc);
+	}
+
+	auto list_entries = ListVector::GetData(result);
+	for (idx_t i = 0; i < count; i++) {
+		list_entries[i] = {row_offsets[i], row_counts[i]};
+	}
+	ListVector::SetListSize(result, total_size);
+}
+
+static void CqlChildrenFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	CqlStructuralTraversalFunc(args, state, result, false);
+}
+
+static void CqlDescendantsFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	CqlStructuralTraversalFunc(args, state, result, true);
+}
+
+// =====================================================================
+// coding_matches / coding_matches_exact — NULL-able BOOLEAN wrappers.
+// NULL display/version arguments mean "the literal does not constrain
+// that element" (must be absent in the coding for an exact match).
+// =====================================================================
+static void CodingMatchesFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat r_data, p_data, s_data, c_data;
+	args.data[0].ToUnifiedFormat(count, r_data);
+	args.data[1].ToUnifiedFormat(count, p_data);
+	args.data[2].ToUnifiedFormat(count, s_data);
+	args.data[3].ToUnifiedFormat(count, c_data);
+	auto rs = UnifiedVectorFormat::GetData<string_t>(r_data);
+	auto ps = UnifiedVectorFormat::GetData<string_t>(p_data);
+	auto ss = UnifiedVectorFormat::GetData<string_t>(s_data);
+	auto cs = UnifiedVectorFormat::GetData<string_t>(c_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto r_idx = r_data.sel->get_index(i);
+		auto p_idx = p_data.sel->get_index(i);
+		auto s_idx = s_data.sel->get_index(i);
+		auto c_idx = c_data.sel->get_index(i);
+		if (!r_data.validity.RowIsValid(r_idx) || !p_data.validity.RowIsValid(p_idx) ||
+		    !s_data.validity.RowIsValid(s_idx) || !c_data.validity.RowIsValid(c_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto res = cql::coding_matches(rs[r_idx].GetString(), ps[p_idx].GetString(), ss[s_idx].GetString(),
+		                               cs[c_idx].GetString());
+		if (!res) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = *res;
+	}
+}
+
+static void CodingMatchesExactFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat r_data, p_data, s_data, c_data, d_data, v_data;
+	args.data[0].ToUnifiedFormat(count, r_data);
+	args.data[1].ToUnifiedFormat(count, p_data);
+	args.data[2].ToUnifiedFormat(count, s_data);
+	args.data[3].ToUnifiedFormat(count, c_data);
+	args.data[4].ToUnifiedFormat(count, d_data);
+	args.data[5].ToUnifiedFormat(count, v_data);
+	auto rs = UnifiedVectorFormat::GetData<string_t>(r_data);
+	auto ps = UnifiedVectorFormat::GetData<string_t>(p_data);
+	auto ss = UnifiedVectorFormat::GetData<string_t>(s_data);
+	auto cs = UnifiedVectorFormat::GetData<string_t>(c_data);
+	auto ds = UnifiedVectorFormat::GetData<string_t>(d_data);
+	auto vs = UnifiedVectorFormat::GetData<string_t>(v_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto r_idx = r_data.sel->get_index(i);
+		auto p_idx = p_data.sel->get_index(i);
+		auto s_idx = s_data.sel->get_index(i);
+		auto c_idx = c_data.sel->get_index(i);
+		auto d_idx = d_data.sel->get_index(i);
+		auto v_idx = v_data.sel->get_index(i);
+		if (!r_data.validity.RowIsValid(r_idx) || !p_data.validity.RowIsValid(p_idx) ||
+		    !s_data.validity.RowIsValid(s_idx) || !c_data.validity.RowIsValid(c_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		// GetString() returns a temporary std::string; materialize before
+		// use (a c_str() on the temporary would dangle).
+		bool has_display = d_data.validity.RowIsValid(d_idx);
+		std::string display_text = has_display ? ds[d_idx].GetString() : "";
+		bool has_version = v_data.validity.RowIsValid(v_idx);
+		std::string version_text = has_version ? vs[v_idx].GetString() : "";
+		auto res = cql::coding_matches_exact(rs[r_idx].GetString(), ps[p_idx].GetString(), ss[s_idx].GetString(),
+		                                     cs[c_idx].GetString(), has_display ? display_text.c_str() : nullptr,
+		                                     has_version ? version_text.c_str() : nullptr);
+		if (!res) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = *res;
+	}
+}
+
 static void ValuesetCacheAddFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat url_data, system_data, code_data;
@@ -5349,6 +5888,100 @@ static void DateSubtractQuantityFunc(DataChunk &args, ExpressionState &state, Ve
 	}
 }
 
+// cqlDateTimeAdd — Python-authority precision-preserving wrapper. Same
+// quantity guards as DateAddQuantityFunc; rendering differs ONLY for
+// Time-value inputs, where the Python implementation
+// (udf/datetime.py::cqlDateTimeAdd -> _format_at_precision) always emits
+// the 0001-01-01T date prefix. Byte-parity with the Python UDF is the
+// contract (direct-SQL surface; the translator itself emits
+// dateAddQuantity for CQL +- Quantity).
+static void CqlDateTimeAddFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat date_data, q_data;
+	args.data[0].ToUnifiedFormat(count, date_data);
+	args.data[1].ToUnifiedFormat(count, q_data);
+
+	auto dates = UnifiedVectorFormat::GetData<string_t>(date_data);
+	auto quantities = UnifiedVectorFormat::GetData<string_t>(q_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto d_idx = date_data.sel->get_index(i);
+		auto q_idx = q_data.sel->get_index(i);
+
+		if (!date_data.validity.RowIsValid(d_idx) || !q_data.validity.RowIsValid(q_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
+		std::string input = dates[d_idx].GetString();
+		auto dt = cql::DateTimeValue::parse(input);
+		if (!dt) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
+		std::string q_str = quantities[q_idx].GetString();
+		auto parsed = cql::parse_quantity_json(q_str);
+		if (!parsed.has_value() || parsed->code.empty() ||
+		    !IsSupportedDateQuantityUnit(parsed->code) ||
+		    !IsSupportedDateQuantityValue(parsed->value, parsed->code)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		double value = parsed->value;
+		std::string unit = parsed->code;
+
+		// Same CQL §8.1 unit restrictions as dateAddQuantity.
+		if (!dt->is_time && input.find('T') == std::string::npos &&
+		    input.find(' ') == std::string::npos && IsSubDayUnit(LowerAscii(unit))) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		if (dt->is_time && IsDayLevelUnit(LowerAscii(unit))) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
+		cql::DateTimeValue new_dt = ApplyQuantityAtInputPrecision(*dt, value, unit);
+		if (dt->is_time) {
+			// Python-authority rendering for Time inputs: date components
+			// (0001-01-01) + T + time at the input's precision. The Python
+			// core computes on a 0001-01-01 reference date, so the wrapped
+			// day (midnight rollover) reflects in the date part only when
+			// the arithmetic crossed midnight — new_dt.day/month/year carry
+			// that. Render Python-style: full date + T + time components at
+			// input precision.
+			char buf[40];
+			switch (new_dt.precision) {
+			case cql::DateTimeValue::Precision::Hour:
+				std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d", new_dt.year, new_dt.month,
+				              new_dt.day, new_dt.hour);
+				break;
+			case cql::DateTimeValue::Precision::Minute:
+				std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d", new_dt.year, new_dt.month,
+				              new_dt.day, new_dt.hour, new_dt.minute);
+				break;
+			case cql::DateTimeValue::Precision::Second:
+				std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d", new_dt.year,
+				              new_dt.month, new_dt.day, new_dt.hour, new_dt.minute, new_dt.second);
+				break;
+			default: // Millisecond
+				std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03d", new_dt.year,
+				              new_dt.month, new_dt.day, new_dt.hour, new_dt.minute, new_dt.second,
+				              new_dt.millisecond);
+				break;
+			}
+			result_data[i] = StringVector::AddString(result, std::string(buf));
+		} else {
+			result_data[i] = StringVector::AddString(result, FormatQuantityDateTimeResult(new_dt, input));
+		}
+	}
+}
+
 // =====================================================================
 // collapse_intervals(intervals_json VARCHAR) → VARCHAR
 // =====================================================================
@@ -5711,6 +6344,41 @@ DEFINE_RATIO_DOUBLE_UDF(RatioValueFunc, cql::ratio_value)
 DEFINE_RATIO_STR_UDF(RatioNumeratorUnitFunc, cql::ratio_numerator_unit)
 DEFINE_RATIO_STR_UDF(RatioDenominatorUnitFunc, cql::ratio_denominator_unit)
 DEFINE_RATIO_STR_UDF(RatioToStringFunc, cql::ratio_to_string)
+
+// ratioCompare(left VARCHAR, right VARCHAR, op VARCHAR) → BOOLEAN (3VL)
+static void RatioCompareFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat l_data, r_data, o_data;
+	args.data[0].ToUnifiedFormat(count, l_data);
+	args.data[1].ToUnifiedFormat(count, r_data);
+	args.data[2].ToUnifiedFormat(count, o_data);
+	auto l_vals = UnifiedVectorFormat::GetData<string_t>(l_data);
+	auto r_vals = UnifiedVectorFormat::GetData<string_t>(r_data);
+	auto o_vals = UnifiedVectorFormat::GetData<string_t>(o_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto l_idx = l_data.sel->get_index(i);
+		auto r_idx = r_data.sel->get_index(i);
+		auto o_idx = o_data.sel->get_index(i);
+		if (!o_data.validity.RowIsValid(o_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		// Python null_handling="special": NULL ratio operands arrive as
+		// None and hit the semantic null branches (None ~ None == true).
+		// Map SQL NULL ratio text to the empty-string null sentinel.
+		std::string l_text = l_data.validity.RowIsValid(l_idx) ? l_vals[l_idx].GetString() : std::string();
+		std::string r_text = r_data.validity.RowIsValid(r_idx) ? r_vals[r_idx].GetString() : std::string();
+		auto val = cql::ratio_compare(l_text, r_text, o_vals[o_idx].GetString());
+		if (val.has_value()) {
+			result_data[i] = val.value();
+		} else {
+			result_mask.SetInvalid(i);
+		}
+	}
+}
 
 // =====================================================================
 // Quantity UDFs (7)
@@ -6912,6 +7580,109 @@ DEFINE_ONE_STR_STR_UDF(MathTruncateFunc, {
 })
 
 // =====================================================================
+// cqlDivide — exact Decimal division at implementation scale 8.
+// Returns DECIMAL(38,8); physical representation is hugeint_t (INT128),
+// which is layout-compatible with __int128. The Python authority
+// (_cql_divide in fhir4ds/cql/duckdb/macros/math.py) returns
+// duckdb.decimal_type(38, 8); this C++ port must stay byte-identical on
+// every non-NULL result (verified by the differential parity corpus).
+// =====================================================================
+static void CqlDivideFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, b_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<hugeint_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto b_idx = b_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx) || !b_data.validity.RowIsValid(b_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto res = cql::cql_divide_text(a_vals[a_idx].GetString(), b_vals[b_idx].GetString());
+		if (!res) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		// magnitude < 10^28, so the scaled integer fits __int128.
+		__int128 value = 0;
+		for (char c : res->unscaled) {
+			value = value * 10 + (c - '0');
+		}
+		if (res->negative) value = -value;
+		memcpy(&result_data[i], &value, sizeof(__int128));
+	}
+}
+
+// =====================================================================
+// CQLMessage(source, condition, code, severity, message) — §22.15.
+// Mirrors the desktop SQL macro / Python UDF: source passes through
+// unmodified unless condition is TRUE and lower(severity) = 'error',
+// then error(COALESCE(code, '') || ': ' || COALESCE(message, '')).
+// NULL condition is false (COALESCE(condition, FALSE)); NULL severity
+// is never 'error'. DuckDB casts the source argument to VARCHAR at the
+// call boundary (the translator emits CQLMessage(5, TRUE, ...) and the
+// desktop macro returns the same VARCHAR-transported value).
+// =====================================================================
+static void CqlMessageFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat src_data, cond_data, code_data, sev_data, msg_data;
+	args.data[0].ToUnifiedFormat(count, src_data);
+	args.data[1].ToUnifiedFormat(count, cond_data);
+	args.data[2].ToUnifiedFormat(count, code_data);
+	args.data[3].ToUnifiedFormat(count, sev_data);
+	args.data[4].ToUnifiedFormat(count, msg_data);
+	auto src_vals = UnifiedVectorFormat::GetData<string_t>(src_data);
+	auto cond_vals = UnifiedVectorFormat::GetData<bool>(cond_data);
+	auto code_vals = UnifiedVectorFormat::GetData<string_t>(code_data);
+	auto sev_vals = UnifiedVectorFormat::GetData<string_t>(sev_data);
+	auto msg_vals = UnifiedVectorFormat::GetData<string_t>(msg_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto src_idx = src_data.sel->get_index(i);
+		auto cond_idx = cond_data.sel->get_index(i);
+		auto code_idx = code_data.sel->get_index(i);
+		auto sev_idx = sev_data.sel->get_index(i);
+		auto msg_idx = msg_data.sel->get_index(i);
+
+		bool condition = cond_data.validity.RowIsValid(cond_idx) && cond_vals[cond_idx];
+		if (condition) {
+			bool is_error = false;
+			if (sev_data.validity.RowIsValid(sev_idx)) {
+				std::string sev = sev_vals[sev_idx].GetString();
+				std::transform(sev.begin(), sev.end(), sev.begin(), ::tolower);
+				is_error = (sev == "error");
+			}
+			if (is_error) {
+				std::string code = code_data.validity.RowIsValid(code_idx)
+				                       ? code_vals[code_idx].GetString()
+				                       : "";
+				std::string msg = msg_data.validity.RowIsValid(msg_idx)
+				                      ? msg_vals[msg_idx].GetString()
+				                      : "";
+				throw InvalidInputException(code + ": " + msg);
+			}
+		}
+		if (!src_data.validity.RowIsValid(src_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = StringVector::AddString(result, src_vals[src_idx]);
+	}
+}
+
+// =====================================================================
 // Phase 6: Quantity arithmetic UDFs
 // =====================================================================
 DEFINE_TWO_STR_STR_UDF(QuantityMultiplyFunc, {
@@ -7635,6 +8406,15 @@ static void LoadInternal(ExtensionLoader &loader) {
 	RegisterSpecialScalar(loader, "dateSubtractQuantity", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, DateSubtractQuantityFunc);
 
+	// cqlDateTimeAdd — precision-preserving DateTime + Quantity wrapper
+	// (Python udf/datetime.py cqlDateTimeAdd port). Delegates to the same
+	// quantity-arithmetic core as dateAddQuantity; for Time-value inputs the
+	// PYTHON AUTHORITY renders a 0001-01-01T date prefix (its
+	// _format_at_precision always emits date components), so the C++ port
+	// replicates that byte-for-byte for direct-SQL parity.
+	RegisterSpecialScalar(loader, "cqlDateTimeAdd", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, CqlDateTimeAddFunc);
+
 	// Clinical UDFs (4)
 	RegisterSpecialScalar(loader, "Latest",
 	                      {LogicalType::LIST(LogicalType::VARCHAR), LogicalType::VARCHAR}, LogicalType::VARCHAR,
@@ -7672,6 +8452,13 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// in_valueset (stub — cache not yet populated)
 	RegisterSpecialScalar(loader, "in_valueset", {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, InValuesetFunc);
+	// fhirpath_in_valueset — the name the CQL translator emits for dynamic
+	// terminology filters (translator/queries.py). Same 3VL semantics as
+	// in_valueset: NULL on null input / unloaded valueset / String-overload
+	// ambiguity, false only on definitive membership miss.
+	RegisterSpecialScalar(loader, "fhirpath_in_valueset",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, InValuesetFunc);
 	RegisterSpecialScalar(loader, "cql_valueset_cache_clear", {}, LogicalType::BOOLEAN, ValuesetCacheClearFunc);
 	RegisterSpecialScalar(loader, "cql_valueset_cache_add",
 	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
@@ -7679,6 +8466,27 @@ static void LoadInternal(ExtensionLoader &loader) {
 	RegisterSpecialScalar(loader, "cql_valueset_cache_size", {}, LogicalType::BIGINT, ValuesetCacheSizeFunc);
 	RegisterSpecialScalar(loader, "cql_valueset_profile_clear", {}, LogicalType::BOOLEAN, ValuesetProfileClearFunc);
 	RegisterSpecialScalar(loader, "cql_valueset_profile_json", {}, LogicalType::VARCHAR, ValuesetProfileJsonFunc);
+
+	// coding_matches / coding_matches_exact (C++ ports of the Python
+	// supplements; translator emits only simple dotted paths)
+	RegisterSpecialScalar(loader, "coding_matches",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, CodingMatchesFunc);
+	RegisterSpecialScalar(loader, "coding_matches_exact",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR,
+	                       LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, CodingMatchesExactFunc);
+
+	// cqlChildren / cqlDescendants — structural traversal (C++ ports of the
+	// Python udf/list.py implementations; CQL-05 transport-marker doctrine).
+	{
+		auto child_type = LogicalType::LIST(LogicalType::VARCHAR);
+		RegisterSpecialScalar(loader, "cqlChildren", {LogicalType::VARCHAR},
+		                      LogicalType::LIST(LogicalType::VARCHAR), CqlChildrenFunc);
+		RegisterSpecialScalar(loader, "cqlDescendants", {LogicalType::VARCHAR},
+		                      LogicalType::LIST(LogicalType::VARCHAR), CqlDescendantsFunc);
+		(void)child_type;
+	}
 
 	// Ratio UDFs (6)
 	RegisterSpecialScalar(loader, "ratioNumeratorValue", {LogicalType::VARCHAR}, LogicalType::DOUBLE,
@@ -7692,6 +8500,14 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      RatioDenominatorUnitFunc);
 	RegisterSpecialScalar(loader, "RatioToString", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      RatioToStringFunc);
+	// ratioCompare — C++ port of udf/ratio.py::ratioCompare (3VL; equality
+	// component-wise, equivalence via to_quantity division).
+	RegisterSpecialScalar(loader, "ratioCompare",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, RatioCompareFunc);
+	// ConceptToListCode — C++ port of udf/quantity.py::conceptToListCode.
+	RegisterSpecialScalar(loader, "ConceptToListCode", {LogicalType::VARCHAR},
+	                      LogicalType::LIST(LogicalType::VARCHAR), ConceptToListCodeFunc);
 
 	// Quantity UDFs (7 + 7 snake_case aliases = 14)
 	RegisterSpecialScalar(loader, "parseQuantity", {LogicalType::VARCHAR}, LogicalType::VARCHAR, ParseQuantityFunc);
@@ -7812,6 +8628,20 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::VARCHAR, MathSqrtFunc);
 	RegisterSpecialScalar(loader, "mathTruncate", {LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, MathTruncateFunc);
+	RegisterSpecialScalar(loader, "cqlDivide", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::DECIMAL(38, 8), CqlDivideFunc);
+
+	// CQL §22.15 Message: return source unchanged unless condition is true
+	// and severity (case-insensitive) is 'error', in which case raise with
+	// the coalesced "code: message" text — byte-identical to the desktop
+	// SQL macro (fhir4ds/cql/duckdb/macros/math.py CQLMessage), which still
+	// shadows this registration on macro-bearing connections. The C++
+	// registration serves LOAD-only/browser-style runtimes (the TS macro
+	// list intentionally does not cover CQLMessage).
+	RegisterSpecialScalar(loader, "CQLMessage",
+	                      {LogicalType::VARCHAR, LogicalType::BOOLEAN, LogicalType::VARCHAR,
+	                       LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, CqlMessageFunc);
 
 	// Phase 6: Quantity arithmetic UDFs
 	RegisterSpecialScalar(loader, "quantityMultiply", {LogicalType::VARCHAR, LogicalType::VARCHAR},

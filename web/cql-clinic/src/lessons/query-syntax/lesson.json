@@ -1,0 +1,58 @@
+{
+  "id": "query-syntax",
+  "title": "Query Sources: Where, Return, Let, and Sort",
+  "description": "CQL queries are the workhorse of data extraction: [Resource] alias where / return / sort by clauses, let bindings for computed intermediates, singleton from for exactly-one extractions, and Tuple construction for shaped results.",
+  "difficulty": "advanced",
+  "estimatedTime": "35 min",
+  "learningObjectives": [
+    "Filter with where and compose Boolean conditions",
+    "Project with return (values, Tuples)",
+    "Name intermediate expressions with let",
+    "Order results with sort by",
+    "Extract exactly-one results with singleton from",
+    "Combine retrieves with union and deduplicate with distinct"
+  ],
+  "ungradedDefines": [],
+  "hints": [
+    {
+      "trigger": "Final Obs Count",
+      "message": "Count([Observation] O where O.status = 'final') — alias O binds each row."
+    },
+    {
+      "trigger": "Max Value",
+      "message": "Max(...) over a return projection: [Observation] O where O.valueQuantity.value is not null return O.valueQuantity.value."
+    },
+    {
+      "trigger": "Avg Value",
+      "message": "Avg([Observation] O return O.valueQuantity.value) — (120 + 138 + 13.5) / 3 = 90.5 for Alice."
+    },
+    {
+      "trigger": "Earliest Obs Id",
+      "message": "First([Observation] O sort by (O.effective as FHIR.dateTime) return O.id) — sort by the choice-type effective, cast to FHIR.dateTime."
+    },
+    {
+      "trigger": "Singleton Value",
+      "message": "singleton from (query) returns the single element or errors if the result doesn't have exactly one item — obs-2's 138 for Alice."
+    },
+    {
+      "trigger": "First Tuple",
+      "message": "Tuple { id: O.id, status: O.status } builds a structured value; the result renders as JSON."
+    },
+    {
+      "trigger": "Distinct Statuses",
+      "message": "Count(distinct (query)) deduplicates the projected values — Alice has final + preliminary = 2."
+    },
+    {
+      "trigger": "BP With Let",
+      "message": "let isBP: O.code.coding.code contains '8488-6'... careful: the LOINC code here is 8480-6. let names a per-row intermediate you can reuse in where/return."
+    },
+    {
+      "trigger": "High Final Count",
+      "message": "Compose conditions with and: O.status = 'final' and O.valueQuantity.value > 100 — only obs-2 (138) qualifies, but it's preliminary! So 0... wait, is it? obs-1 is 120 and final — so 1."
+    },
+    {
+      "trigger": "Union Count",
+      "message": "[Observation] union [Condition] combines retrieves before Count — Alice has 3 obs + 1 condition = 4."
+    }
+  ]
+}
