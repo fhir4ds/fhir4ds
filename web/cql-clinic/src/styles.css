@@ -329,6 +329,10 @@ body {
   margin-top: auto;
 }
 
+.editor-footer__timings {
+  margin-left: auto;
+}
+
 /* The results pane is a column: toolbar + tab bar + scrollable tab body. */
 .panel.results {
   display: flex;
@@ -600,6 +604,11 @@ body {
   max-width: 100%;
 }
 
+.empty-state .loading-spinner {
+  width: 16px;
+  height: 16px;
+}
+
 .btn {
   border: 1px solid var(--border);
   background: var(--bg-panel);
@@ -866,6 +875,11 @@ body {
   padding: 8px 12px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
+}
+
+/* Mirrors the Checks tab's "Test user" label so both tabs read the same. */
+.patient-viewer-label {
+  color: var(--text-dim);
 }
 
 .patient-viewer-select {

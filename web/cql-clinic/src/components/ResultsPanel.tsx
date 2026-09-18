@@ -172,8 +172,6 @@ export type ResultsTab = "checks" | "sql" | "patient";
 interface Props {
   running: boolean;
   error: string | null;
-  translateTimeMs: number | null;
-  executionTimeMs: number | null;
   report: GradeReport | null;
   result: { columns: string[]; rows: unknown[][] } | null;
   /** Lesson fixtures (for patient/resource derivation). */
@@ -200,7 +198,7 @@ interface Props {
 function TabEmptyState({ what }: { what: string }) {
   return (
     <div className="empty-state">
-      <span className="empty-icon">▶</span>
+      <span className="loading-spinner" />
       <span>{what} will appear here as you type — every run grades your CQL against the lesson patients.</span>
     </div>
   );
@@ -215,8 +213,6 @@ function CellValue({ v }: { v: unknown }) {
 export default function ResultsPanel({
   running,
   error,
-  translateTimeMs,
-  executionTimeMs,
   report,
   result,
   fixtures,
@@ -288,11 +284,6 @@ export default function ResultsPanel({
             <span className="loading-spinner" /> running…
           </span>
         )}
-        {!running && translateTimeMs !== null && executionTimeMs !== null && (
-          <span className="meta">
-            translated {translateTimeMs.toFixed(1)} ms · executed {executionTimeMs.toFixed(1)} ms
-          </span>
-        )}
         {!running && report?.allPassed && (
           <span className="all-passed-inline">All checks passed — lesson complete! 🎉</span>
         )}
@@ -306,7 +297,7 @@ export default function ResultsPanel({
       <div className="tab-bar" role="tablist">
         {tabBtn("checks", `Checks${report ? ` (${report.checks.filter((c) => c.graded && c.pass).length}/${report.checks.filter((c) => c.graded).length})` : ""}`)}
         {tabBtn("sql", "Generated SQL")}
-        {tabBtn("patient", "Patient data")}
+        {tabBtn("patient", "Patient Data")}
       </div>
 
       {activeTab === "checks" && (

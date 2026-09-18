@@ -11,10 +11,9 @@ interface Props {
   onChange: (next: string) => void;
   /** Reference solution CQL compared via the diff toggle / loaded via the footer. */
   solution: string;
-  /** True while a run is executing (disables the Run button). */
-  running: boolean;
-  /** Run & Check now — skips the auto-run debounce. */
-  onRun: () => void;
+  /** Last run's timings, shown right-aligned in the footer. */
+  translateTimeMs: number | null;
+  executionTimeMs: number | null;
 }
 
 const beforeMount: BeforeMount = (monaco: Monaco) => {
@@ -35,7 +34,7 @@ const editorOptions = {
   padding: { top: 12, bottom: 12 },
 } as const;
 
-export default function CQLEditor({ value, onChange, solution, running, onRun }: Props) {
+export default function CQLEditor({ value, onChange, solution, translateTimeMs, executionTimeMs }: Props) {
   const [compare, setCompare] = useState(false);
   const [confirmLoad, setConfirmLoad] = useState(false);
 
@@ -90,9 +89,6 @@ export default function CQLEditor({ value, onChange, solution, running, onRun }:
         </div>
       </div>
       <div className="editor-footer">
-        <button className="btn btn-run" onClick={onRun} disabled={running}>
-          {running ? "Running…" : "▶ Run & Check"}
-        </button>
         <button
           className={`btn btn-ghost${compare ? " btn-ghost--active" : ""}`}
           onClick={() => { setCompare((c) => !c); setConfirmLoad(false); }}
@@ -102,6 +98,11 @@ export default function CQLEditor({ value, onChange, solution, running, onRun }:
         <button className="btn btn-ghost" onClick={handleLoadSolution}>
           {confirmLoad ? "Overwrite editor with solution?" : "Load solution"}
         </button>
+        {translateTimeMs !== null && executionTimeMs !== null && (
+          <span className="meta editor-footer__timings" title="last run — auto-runs 1.2s after you stop typing">
+            translated {translateTimeMs.toFixed(1)} ms · executed {executionTimeMs.toFixed(1)} ms
+          </span>
+        )}
       </div>
     </div>
   );

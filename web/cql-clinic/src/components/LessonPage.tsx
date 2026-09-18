@@ -53,7 +53,7 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
     return () => window.clearTimeout(id);
   }, [cql, lessonId, onProgressUpdate]);
 
-  const handleRun = useCallback(async (explicit = false) => {
+  const handleRun = useCallback(async () => {
     if (!lesson) return;
     if (!pyodide.ready || !duckdb.ready) {
       setError(
@@ -88,9 +88,6 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
         setCompleted(true);
         onProgressUpdate(lessonId, { completed: true });
       }
-      // Only a deliberate Run click yanks the view to the fresh checks —
-      // auto-runs never pull the learner away from the tab they're studying.
-      if (explicit) setActiveTab("checks");
     } catch (e) {
       if (token === runTokenRef.current) {
         setError(e instanceof Error ? e.message : String(e));
@@ -150,15 +147,13 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
             value={cql}
             onChange={setCql}
             solution={lesson.solution}
-            running={running}
-            onRun={() => handleRun(true)}
+            translateTimeMs={translateTimeMs}
+            executionTimeMs={executionTimeMs}
           />
         </div>
         <ResultsPanel
           running={running}
           error={error}
-          translateTimeMs={translateTimeMs}
-          executionTimeMs={executionTimeMs}
           report={report}
           result={result}
           fixtures={lesson.fixtures}
