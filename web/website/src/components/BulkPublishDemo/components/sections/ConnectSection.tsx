@@ -243,14 +243,19 @@ function ConnectionList({
               ? "pending"
               : "ready";
         const publishersForConnection = publishersForUrl(c, ingest);
-        const slotCount = publishersForConnection.reduce(
-          (n, p) => n + (ingest?.providerCounts[p]?.Slot ?? 0),
-          0,
-        );
-        const pracCount = publishersForConnection.reduce(
-          (n, p) => n + (ingest?.providerCounts[p]?.Practitioner ?? 0),
-          0,
-        );
+        // Per-resource-type counts for this connection, largest first. The
+        // roster shows what each feed actually ships — no rolled-up
+        // "providers" stat (feeds publish Practitioner, PractitionerRole,
+        // or neither, so any single number is arbitrary).
+        const typeCounts = new Map<string, number>();
+        for (const p of publishersForConnection) {
+          for (const [type, n] of Object.entries(ingest?.providerCounts[p] ?? {})) {
+            typeCounts.set(type, (typeCounts.get(type) ?? 0) + n);
+          }
+        }
+        const byCount = [...typeCounts.entries()].sort((a, b) => b[1] - a[1]);
+        const shown = byCount.slice(0, 4);
+        const extraTypes = byCount.length - shown.length;
         return (
           <li key={c.url} className={`roster__item roster__item--${state}`}>
             <div className="roster__main">
@@ -258,11 +263,20 @@ function ConnectionList({
               <div className="roster__status">
                 {state === "loading" && "loading…"}
                 {state === "pending" && "queued"}
-                {state === "ready" && (
-                  <span>
-                    {slotCount.toLocaleString()} slots · {pracCount} providers
-                  </span>
-                )}
+                {state === "ready" &&
+                  (byCount.length === 0 ? (
+                    "connected"
+                  ) : (
+                    <span>
+                      {shown
+                        .map(
+                          ([type, n]) =>
+                            `${n.toLocaleString()} ${type}${n === 1 ? "" : "s"}`,
+                        )
+                        .join(" · ")}
+                      {extraTypes > 0 && ` · +${extraTypes} more`}
+                    </span>
+                  ))}
               </div>
             </div>
             <button
