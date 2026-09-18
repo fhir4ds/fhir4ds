@@ -66,3 +66,45 @@ export function fixMonacoInputArea(
 
   editor.onDidDispose(() => observer.disconnect());
 }
+
+/**
+ * startMonacoStylePorting — copy Monaco's runtime-injected styles into the
+ * Shadow DOM root.
+ *
+ * Monaco (loaded at runtime by @monaco-editor/react) injects its CSS as
+ * <style> tags into document.head. Those rules do not cross the shadow
+ * boundary, so inside the web component the editor runs essentially
+ * unstyled: the plain Editor limps along (see fixMonacoInputArea), but the
+ * DiffEditor renders an unclickable overlay. Port every head style that
+ * looks like Monaco's (selectors mention .monaco-/​.codicon-) into the
+ * shadow root, and keep watching head for late injections.
+ *
+ * Returns a stop function.
+ */
+export function startMonacoStylePorting(shadow: ShadowRoot): () => void {
+  const isMonacoStyle = (s: HTMLStyleElement) =>
+    /\.monaco-|\.codicon-/i.test(s.textContent ?? "");
+
+  const portOne = (source: HTMLStyleElement) => {
+    if (source.dataset.clinicPorted) return;
+    source.dataset.clinicPorted = "1";
+    const clone = document.createElement("style");
+    clone.textContent = source.textContent;
+    clone.setAttribute("data-clinic-monaco-port", "");
+    shadow.appendChild(clone);
+  };
+
+  const sweep = () => {
+    document.head
+      .querySelectorAll<HTMLStyleElement>("style:not([data-clinic-monaco-port])")
+      .forEach((s) => {
+        if (isMonacoStyle(s)) portOne(s);
+      });
+  };
+
+  sweep();
+  const observer = new MutationObserver(() => sweep());
+  observer.observe(document.head, { childList: true, subtree: false });
+
+  return () => observer.disconnect();
+}

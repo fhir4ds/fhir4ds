@@ -1,5 +1,5 @@
-import { useState } from "react";
-import Editor, { DiffEditor, type OnMount, type BeforeMount } from "@monaco-editor/react";
+import { useEffect, useRef, useState } from "react";
+import Editor, { DiffEditor, type OnMount, type DiffOnMount, type BeforeMount } from "@monaco-editor/react";
 import type * as MonacoEditor from "monaco-editor";
 import { registerCQLLanguage } from "../lib/monaco-cql-language";
 import { fixMonacoInputArea } from "../lib/monaco-shadow-fix";
@@ -17,10 +17,6 @@ const beforeMount: BeforeMount = (monaco: Monaco) => {
   registerCQLLanguage(monaco as any);
 };
 
-const onMount: OnMount = (editor) => {
-  fixMonacoInputArea(editor as any);
-};
-
 const editorOptions = {
   fontSize: 14,
   minimap: { enabled: false },
@@ -34,6 +30,28 @@ const editorOptions = {
 export default function CQLEditor({ value, onChange, solution }: Props) {
   const [compare, setCompare] = useState(false);
   const [confirmLoad, setConfirmLoad] = useState(false);
+  const editorRef = useRef<MonacoEditor.editor.IStandaloneCodeEditor | null>(null);
+  const diffRef = useRef<MonacoEditor.editor.IStandaloneDiffEditor | null>(null);
+
+  // Both layers stay mounted, so the revealed one was laid out while
+  // display:none — its geometry is stale (worst inside the web component's
+  // shadow DOM, where the diff editor's gutter overflows onto the footer and
+  // swallows clicks). Force a relayout on whichever editor becomes visible.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      (compare ? diffRef.current : editorRef.current)?.layout();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [compare]);
+
+  const handleEditorMount: OnMount = (editor) => {
+    editorRef.current = editor;
+    fixMonacoInputArea(editor as any);
+  };
+
+  const handleDiffMount: DiffOnMount = (diffEditor) => {
+    diffRef.current = diffEditor;
+  };
 
   const handleLoadSolution = () => {
     if (value.trim() === solution.trim()) {
@@ -63,7 +81,7 @@ export default function CQLEditor({ value, onChange, solution }: Props) {
             defaultLanguage="cql"
             value={value}
             beforeMount={beforeMount}
-            onMount={onMount}
+            onMount={handleEditorMount}
             onChange={(v) => onChange(v ?? "")}
             options={editorOptions}
           />
@@ -75,6 +93,7 @@ export default function CQLEditor({ value, onChange, solution }: Props) {
             original={solution}
             modified={value}
             beforeMount={beforeMount}
+            onMount={handleDiffMount}
             options={{
               ...editorOptions,
               readOnly: true,

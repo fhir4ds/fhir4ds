@@ -313,7 +313,13 @@ body {
   inset: 0;
 }
 
-/* Editor / diff layers: both mounted, one visible at a time. */
+/* Editor / diff layers: both mounted, one visible at a time. Overflow is
+   clipped so a stale Monaco layout can't spill the editor's gutter onto
+   the footer and swallow its clicks. */
+.editor-layer {
+  overflow: hidden;
+}
+
 .editor-layer--hidden {
   display: none;
 }
