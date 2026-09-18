@@ -16,6 +16,8 @@ import { useState, useCallback } from "react";
 import type { ReactNode } from "react";
 import BrowserOnly from "@docusaurus/BrowserOnly";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
+import useBaseUrl from "@docusaurus/useBaseUrl";
+import PopoutPill from "./PopoutPill";
 import styles from "./WasmDemo.module.css";
 
 const SCRIPT_ID = "fhir4ds-wc-bundle";
@@ -52,6 +54,9 @@ interface WasmDemoWCProps {
   height?: string;
   /** Show a "Launch Demo" splash screen before loading the heavy WASM bundle. */
   lazyLaunch?: boolean;
+  /** Show an "Open in new window ↗" pill above the demo that opens the
+   *  standalone chrome-less /apps/* page for this scenario. */
+  popout?: boolean;
   /** Override display title in the lazy launch card */
   title?: string;
   /** Override description in the lazy launch card */
@@ -59,6 +64,14 @@ interface WasmDemoWCProps {
   /** Override the SMART OAuth redirect URI */
   redirectUri?: string;
 }
+
+/** Standalone pop-out route for each scenario that has one. */
+const POPOUT_ROUTES: Partial<Record<Scenario, string>> = {
+  "cql-sandbox": "apps/cql-playground",
+  "cms-measures": "apps/quality-measures",
+  "sdc-forms": "apps/sdc-forms",
+  "smart-flow": "apps/smart",
+};
 
 const SCENARIO_META: Record<string, { title: string; desc: string }> = {
   workbench: {
@@ -155,6 +168,7 @@ export default function WasmDemoWC({
   scenario = "workbench",
   height = "80vh",
   lazyLaunch = false,
+  popout = false,
   title,
   description,
   redirectUri,
@@ -162,6 +176,8 @@ export default function WasmDemoWC({
   const { siteConfig } = useDocusaurusContext();
   const baseUrl = siteConfig.baseUrl.replace(/\/$/, "");
   const scriptSrc = `${baseUrl}/wasm-app/fhir4ds-demo.js`;
+  const popoutRoute = POPOUT_ROUTES[scenario];
+  const popoutUrl = useBaseUrl(popoutRoute ?? "/");
 
   // Detect OAuth callback params in URL (?code= + ?state=)
   const hasOAuthParams =
@@ -196,31 +212,34 @@ export default function WasmDemoWC({
   }
 
   return (
-    <BrowserOnly
-      fallback={
-        <div style={{ height, background: "#0f172a", borderRadius: 8 }} />
-      }
-    >
-      {() => {
-        if (!launched) {
+    <>
+      {popout && popoutRoute && <PopoutPill url={popoutUrl} />}
+      <BrowserOnly
+        fallback={
+          <div style={{ height, background: "#0f172a", borderRadius: 8 }} />
+        }
+      >
+        {() => {
+          if (!launched) {
+            return (
+              <LaunchCard
+                scenario={scenario}
+                title={title}
+                description={description}
+                onLaunch={launch}
+              />
+            );
+          }
           return (
-            <LaunchCard
+            <WcEmbed
               scenario={scenario}
-              title={title}
-              description={description}
-              onLaunch={launch}
+              height={height}
+              scriptSrc={scriptSrc}
+              redirectUri={redirectUri}
             />
           );
-        }
-        return (
-          <WcEmbed
-            scenario={scenario}
-            height={height}
-            scriptSrc={scriptSrc}
-            redirectUri={redirectUri}
-          />
-        );
-      }}
-    </BrowserOnly>
+        }}
+      </BrowserOnly>
+    </>
   );
 }

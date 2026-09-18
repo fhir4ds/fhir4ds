@@ -1,22 +1,22 @@
-import Head from "@docusaurus/Head";
 import BrowserOnly from "@docusaurus/BrowserOnly";
 import { useState, type ReactElement } from "react";
+import DemoAppWindow from "@site/src/components/DemoAppWindow";
+import windowStyles from "@site/src/components/DemoAppWindow.module.css";
 import {
   BulkPublishDemoProvider,
-  readPatientAppSeed,
+  readSchedulingAppSeed,
   useDemoState,
 } from "@site/src/components/BulkPublishDemo";
 import { ProductionSection } from "@site/src/components/BulkPublishDemo/components/sections/ProductionSection";
 
 /**
  * Chrome-less standalone rendering of the §5 production widget: the
- * patient-facing scheduling app with none of the docs site around it. The
- * provider auto-connects to the default publisher on mount, so this window
- * boots, ingests, materializes, and searches on its own.
- *
- * Opened from the bulk-publish example's "Open patient app ↗" button.
+ * scheduling demo app with none of the docs site around it. The provider
+ * auto-connects on mount — inheriting the demo page's live connections
+ * when opened via "Open in new window ↗" — then ingests, materializes,
+ * and searches on its own.
  */
-function PatientApp() {
+function SchedulingApp() {
   const s = useDemoState();
 
   const status = !s.duckdbReady
@@ -28,30 +28,23 @@ function PatientApp() {
         : null;
 
   return (
-    <div className="bulk-publish-demo-app patient-app">
-      <Head>
-        <title>Find care — patient app · FHIR4DS</title>
-        <meta name="description" content="Search published FHIR scheduling data — entirely in your browser." />
-      </Head>
-
-      <header className="patient-app__header">
-        <span className="patient-app__brand">Find care</span>
-        <span className="patient-app__tag">FHIR4DS · queries run 100% in your browser</span>
-      </header>
-
-      <main className="patient-app__main">
+    <DemoAppWindow
+      title="Find Care"
+      documentTitle="Find Care · FHIR4DS scheduling demo"
+    >
+      <div className={`bulk-publish-demo-app ${windowStyles.fill}`}>
         {s.error && (
-          <div className="patient-app__error">
-            <div className="widget__error">{s.error}</div>
-            <button className="patient-app__retry" onClick={() => s.doConnect()}>
+          <div className={windowStyles.error}>
+            <div className={windowStyles.widgetError}>{s.error}</div>
+            <button className={windowStyles.retry} onClick={() => s.doConnect()}>
               Retry
             </button>
           </div>
         )}
 
         {status && !s.error && (
-          <div className="patient-app__loading">
-            <span className="patient-app__spinner" />
+          <div className={windowStyles.loading}>
+            <span className={windowStyles.spinner} />
             <div>
               <strong>Finding available appointments…</strong>
               <p>{status}</p>
@@ -69,26 +62,28 @@ function PatientApp() {
             defaults={s.defaults}
           />
         )}
-      </main>
-    </div>
+      </div>
+    </DemoAppWindow>
   );
 }
 
-export default function PatientAppPage(): ReactElement {
+export default function SchedulingAppPage(): ReactElement {
   return (
-    <BrowserOnly fallback={<div className="patient-app patient-app--boot" />}>
-      {() => <PatientAppWindow />}
+    <BrowserOnly fallback={<div className={windowStyles.boot} />}>
+      {() => (
+        <SchedulingAppWindow />
+      )}
     </BrowserOnly>
   );
 }
 
-function PatientAppWindow() {
+function SchedulingAppWindow() {
   // One-shot read at mount: if the demo page just popped this window open,
   // inherit its live connections. Search defaults derive from the data.
-  const [seed] = useState(() => readPatientAppSeed());
+  const [seed] = useState(() => readSchedulingAppSeed());
   return (
     <BulkPublishDemoProvider seedConnections={seed?.urls}>
-      <PatientApp />
+      <SchedulingApp />
     </BulkPublishDemoProvider>
   );
 }

@@ -12,7 +12,7 @@ This playground uses **synthetic sample data** for 28 patients. To test against 
 
 import WasmDemoWC from '@site/src/components/WasmDemoWC';
 
-<WasmDemoWC scenario="cql-sandbox" height="85vh" />
+<WasmDemoWC scenario="cql-sandbox" height="85vh" popout />
 
 ## Features
 *   **Live Translation:** See the optimized DuckDB SQL generated from your CQL in real-time.

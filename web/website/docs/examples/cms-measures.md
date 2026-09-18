@@ -8,7 +8,7 @@ Execute and audit standard CMS Quality Measures (eCQMs) directly against patient
 
 import WasmDemoWC from '@site/src/components/WasmDemoWC';
 
-<WasmDemoWC scenario="cms-measures" height="85vh" />
+<WasmDemoWC scenario="cms-measures" height="85vh" popout />
 
 ## Audit & Verification
 *   **Population Logic:** Switch between measures to see aggregate statistics for the Initial Population, Denominator, and Numerator.

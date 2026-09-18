@@ -1,5 +1,6 @@
 import "./styles.css";
 import useBaseUrl from "@docusaurus/useBaseUrl";
+import PopoutPill from "../PopoutPill";
 import { BulkPublishDemoProvider, useDemoState } from "./provider";
 import { MermaidDiagram } from "./components/MermaidDiagram";
 import { ConnectSection } from "./components/sections/ConnectSection";
@@ -150,19 +151,19 @@ export function QueryBlock() {
   );
 }
 
-/** localStorage hand-off from the demo to the pop-out patient app: the
+/** localStorage hand-off from the demo to the pop-out scheduling app: the
  *  popup window can't share React state, so the button writes the live
  *  connection list right before opening it. Search defaults are derived
  *  from the data on both sides, so only the endpoints need handing off. */
-const PATIENT_APP_SEED_KEY = "fhir4ds.patient-app.seed";
-const PATIENT_APP_SEED_TTL_MS = 10 * 60 * 1000;
+const SCHEDULING_APP_SEED_KEY = "fhir4ds.scheduling-app.seed";
+const SCHEDULING_APP_SEED_TTL_MS = 10 * 60 * 1000;
 
-export function readPatientAppSeed(): { urls: string[] } | null {
+export function readSchedulingAppSeed(): { urls: string[] } | null {
   try {
-    const raw = localStorage.getItem(PATIENT_APP_SEED_KEY);
+    const raw = localStorage.getItem(SCHEDULING_APP_SEED_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (Date.now() - parsed.ts > PATIENT_APP_SEED_TTL_MS) return null;
+    if (Date.now() - parsed.ts > SCHEDULING_APP_SEED_TTL_MS) return null;
     if (!Array.isArray(parsed.urls) || parsed.urls.length === 0) return null;
     return parsed;
   } catch {
@@ -172,27 +173,22 @@ export function readPatientAppSeed(): { urls: string[] } | null {
 
 export function ProductionBlock() {
   const s = useDemoState();
-  const patientAppUrl = useBaseUrl("patient-app");
+  const schedulingAppUrl = useBaseUrl("apps/scheduling");
 
-  function openPatientApp() {
+  function writeSeed() {
     try {
       localStorage.setItem(
-        PATIENT_APP_SEED_KEY,
+        SCHEDULING_APP_SEED_KEY,
         JSON.stringify({ ts: Date.now(), urls: s.connections.map((c) => c.url) }),
       );
     } catch {
       // Private mode / storage disabled — the popup falls back to default.
     }
-    window.open(patientAppUrl, "_blank");
   }
 
   return (
     <div className="bulk-publish-demo-app">
-      <div className="production-popout">
-        <button className="production-popout__btn" onClick={openPatientApp}>
-          Open patient app ↗
-        </button>
-      </div>
+      <PopoutPill url={schedulingAppUrl} onBeforeOpen={writeSeed} />
       <ProductionSection
         materialized={s.materialized}
         executeQuery={s.executeQuery}

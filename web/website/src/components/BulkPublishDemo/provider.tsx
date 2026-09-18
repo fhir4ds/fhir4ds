@@ -48,7 +48,7 @@ export interface DemoState {
   setPublisherUrl: (url: string) => void;
   /** Search defaults derived from the ingested data (min/max slot dates,
    *  first location's city/state). Applied by the query + production
-   *  sections and the pop-out patient app. */
+   *  sections and the pop-out scheduling app. */
   defaults: any;
   /** All currently-connected endpoints (add via connect, remove via disconnect). */
   connections: Connection[];
@@ -92,7 +92,7 @@ export function BulkPublishDemoProvider({
   seedConnections,
 }: {
   children: ReactNode;
-  /** Initial endpoints to connect on mount (e.g. the pop-out patient app
+  /** Initial endpoints to connect on mount (e.g. the pop-out scheduling app
    *  inherits the demo page's live connections). Falls back to default. */
   seedConnections?: string[];
 }) {
@@ -239,7 +239,7 @@ export function BulkPublishDemoProvider({
   );
 
   // Connect a fixed set of endpoints in one ingest (fresh mount, no prior
-  // connections to preserve). Used to seed the pop-out patient app with the
+  // connections to preserve). Used to seed the pop-out scheduling app with the
   // demo page's live connections.
   const connectMany = useCallback(
     async (urls: string[]) => {
