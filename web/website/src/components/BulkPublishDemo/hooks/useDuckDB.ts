@@ -295,15 +295,18 @@ export function useDuckDB(enabled = true) {
             COALESCE(NULLIF(slot.specialty, ''), sched.schedule_specialty_code) AS specialty,
             COALESCE(NULLIF(sched.schedule_specialty_display, ''), NULLIF(slot.specialty, ''), 'Unknown') AS specialty_display,
             slot.schedule_ref,
-            regexp_extract(slot.slot_id, '^[^-]+', 0) AS provider,
+            COALESCE(NULLIF(src.publisher, ''), regexp_extract(slot.slot_id, '^[^-]+', 0)) AS provider,
             sched.practitioner_given || ' ' || sched.practitioner_family AS practitioner_name,
             sched.location_name,
             sched.location_city,
+            sched.location_state,
             CAST(sched.location_lat AS DOUBLE) AS location_lat,
             CAST(sched.location_lon AS DOUBLE) AS location_lon
         FROM v_slot_flat slot
         LEFT JOIN v_schedules sched
-            ON sched.schedule_id = regexp_extract(slot.schedule_ref, 'Schedule/(.*)', 1);
+            ON sched.schedule_id = regexp_extract(slot.schedule_ref, 'Schedule/(.*)', 1)
+        LEFT JOIN resources src
+            ON src.resourceType = 'Slot' AND src.id = slot.slot_id;
       `);
     },
     [],

@@ -1,8 +1,9 @@
 import Head from "@docusaurus/Head";
 import BrowserOnly from "@docusaurus/BrowserOnly";
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import {
   BulkPublishDemoProvider,
+  readPatientAppSeed,
   useDemoState,
 } from "@site/src/components/BulkPublishDemo";
 import { ProductionSection } from "@site/src/components/BulkPublishDemo/components/sections/ProductionSection";
@@ -65,7 +66,7 @@ function PatientApp() {
             lookupZip={s.lookupZip}
             lookupCityState={s.lookupCityState}
             reverseGeocode={s.reverseGeocode}
-            defaults={s.presetDefaults}
+            defaults={s.defaults}
           />
         )}
       </main>
@@ -76,11 +77,18 @@ function PatientApp() {
 export default function PatientAppPage(): ReactElement {
   return (
     <BrowserOnly fallback={<div className="patient-app patient-app--boot" />}>
-      {() => (
-        <BulkPublishDemoProvider>
-          <PatientApp />
-        </BulkPublishDemoProvider>
-      )}
+      {() => <PatientAppWindow />}
     </BrowserOnly>
+  );
+}
+
+function PatientAppWindow() {
+  // One-shot read at mount: if the demo page just popped this window open,
+  // inherit its live connections. Search defaults derive from the data.
+  const [seed] = useState(() => readPatientAppSeed());
+  return (
+    <BulkPublishDemoProvider seedConnections={seed?.urls}>
+      <PatientApp />
+    </BulkPublishDemoProvider>
   );
 }

@@ -16,6 +16,7 @@ import {
 import { usePyodide } from "./hooks/usePyodide";
 import { SLOTS_VIEW, viewDefToJson } from "./lib/viewdef";
 import { buildScheduleNormalizationCTEs } from "./lib/cross-resource";
+import { toTitleCase } from "./lib/geo";
 import { findNearbyZips, generateDataset, ingestGeneratedDataset } from "./lib/synthesize";
 
 const DEFAULT_PUBLISHER = "https://raw.githubusercontent.com/culby/smart-scheduling-links/master/examples/$bulk-publish";
@@ -45,8 +46,10 @@ export interface Connection {
 export interface DemoState {
   publisherUrl: string;
   setPublisherUrl: (url: string) => void;
-  presetDefaults: any;
-  setPresetDefaults: (defaults: any) => void;
+  /** Search defaults derived from the ingested data (min/max slot dates,
+   *  first location's city/state). Applied by the query + production
+   *  sections and the pop-out patient app. */
+  defaults: any;
   /** All currently-connected endpoints (add via connect, remove via disconnect). */
   connections: Connection[];
   /** Combined ingest across every connected endpoint. */
@@ -84,15 +87,18 @@ export function useDemoState(): DemoState {
   return v;
 }
 
-export function BulkPublishDemoProvider({ children }: { children: ReactNode }) {
+export function BulkPublishDemoProvider({
+  children,
+  seedConnections,
+}: {
+  children: ReactNode;
+  /** Initial endpoints to connect on mount (e.g. the pop-out patient app
+   *  inherits the demo page's live connections). Falls back to default. */
+  seedConnections?: string[];
+}) {
   const [publisherUrl, setPublisherUrl] = useState(DEFAULT_PUBLISHER);
   const proxyUrl = "https://fhir-api-proxy.fhir4ds.workers.dev";
-  const [presetDefaults, setPresetDefaults] = useState<any>({
-    status: "free",
-    dateFrom: "2026-09-28",
-    dateTo: "2026-11-02",
-    geo: { lat: 42.36, lon: -71.06, label: "Boston, MA 02114" },
-  });
+  const [defaults, setDefaults] = useState<any>(null);
   const [ingest, setIngest] = useState<IngestResult | null>(null);
   const [ingestLog, setIngestLog] = useState<IngestProgress[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -232,6 +238,36 @@ export function BulkPublishDemoProvider({ children }: { children: ReactNode }) {
     [connections, ingestAll],
   );
 
+  // Connect a fixed set of endpoints in one ingest (fresh mount, no prior
+  // connections to preserve). Used to seed the pop-out patient app with the
+  // demo page's live connections.
+  const connectMany = useCallback(
+    async (urls: string[]) => {
+      if (!duckdbReady || urls.length === 0) return;
+      setError(null);
+      setMaterialized(false);
+      setConnections(
+        urls.map((u) => ({ url: u, label: hostLabel(u), connecting: true, ingest: null })),
+      );
+      setConnecting(true);
+      ingestedFor.current = urls.join("|");
+      try {
+        const result = await ingestAll(urls);
+        setConnections(() =>
+          urls.map((u) => ({ url: u, label: hostLabel(u), connecting: false, ingest: result })),
+        );
+      } catch (e: any) {
+        setError(e?.message ?? String(e));
+        setConnections([]);
+        setIngest(null);
+        ingestedFor.current = null;
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [duckdbReady, ingestAll],
+  );
+
   // Geolocation request on mount — if granted, the demo can generate synthetic
   // data near the user; if denied, it falls back to the default publisher.
   useEffect(() => {
@@ -273,18 +309,54 @@ export function BulkPublishDemoProvider({ children }: { children: ReactNode }) {
   }, [pyodideReady, translate]);
 
   // Materialize v_slot_flat + v_schedules + v_slots once both ingest and
-  // ViewDefinition translation have completed.
+  // ViewDefinition translation have completed, then derive search defaults
+  // from the actual data: date range = min/max slot start, location = the
+  // city/state of the earliest scheduled slot.
   useEffect(() => {
     if (!duckdbReady || !ingest || !generatedSql) return;
     (async () => {
       try {
         await materializeSlotsView(generatedSql, crossSql.current);
         setMaterialized(true);
+        try {
+          const [dates, loc] = await Promise.all([
+            executeQuery(
+              // strftime keeps the value a plain YYYY-MM-DD string — DuckDB's
+              // DATE arrow values JS-serialize as "Mon Sep 28 2026…", which
+              // date inputs and the runtime SQL both reject.
+              `SELECT STRFTIME(CAST(MIN("start") AS DATE), '%Y-%m-%d'),
+                      STRFTIME(CAST(MAX("start") AS DATE), '%Y-%m-%d')
+               FROM v_slots`,
+            ),
+            executeQuery(
+              `SELECT location_city, location_state, location_lat, location_lon
+               FROM v_slots
+               WHERE location_city IS NOT NULL AND location_state IS NOT NULL
+                 AND location_lat IS NOT NULL
+               ORDER BY "start" LIMIT 1`,
+            ),
+          ]);
+          const locRow = loc.rows[0];
+          setDefaults({
+            status: "free",
+            dateFrom: String(dates.rows[0]?.[0] ?? ""),
+            dateTo: String(dates.rows[0]?.[1] ?? ""),
+            geo: locRow
+              ? {
+                  lat: Number(locRow[2]),
+                  lon: Number(locRow[3]),
+                  label: `${toTitleCase(String(locRow[0]))}, ${String(locRow[1])}`,
+                }
+              : null,
+          });
+        } catch {
+          // Defaults stay null — sections keep their built-in initial filters.
+        }
       } catch (e: any) {
         setError(`Materialization failed: ${e?.message ?? String(e)}`);
       }
     })();
-  }, [duckdbReady, ingest, generatedSql, materializeSlotsView]);
+  }, [duckdbReady, ingest, generatedSql, materializeSlotsView, executeQuery]);
 
   const regenerateNearLocation = useCallback(
     async (lat: number, lon: number) => {
@@ -337,6 +409,8 @@ export function BulkPublishDemoProvider({ children }: { children: ReactNode }) {
     if (geoCoords && publisherUrl === "/$bulk-publish") {
       ingestedFor.current = "geo";
       regenerateNearLocation(geoCoords.lat, geoCoords.lon);
+    } else if (seedConnections && seedConnections.length > 0) {
+      connectMany(seedConnections);
     } else {
       doConnect();
     }
@@ -346,14 +420,15 @@ export function BulkPublishDemoProvider({ children }: { children: ReactNode }) {
     geoCoords,
     publisherUrl,
     doConnect,
+    connectMany,
+    seedConnections,
     regenerateNearLocation,
   ]);
 
   const value: DemoState = {
     publisherUrl,
     setPublisherUrl,
-    presetDefaults,
-    setPresetDefaults,
+    defaults,
     connections,
     ingest,
     ingestLog,

@@ -53,7 +53,6 @@ export function ConnectBlock() {
       <ConnectSection
         publisherUrl={s.publisherUrl}
         onPublisherUrl={s.setPublisherUrl}
-        onPresetDefaults={s.setPresetDefaults}
         onConnect={s.doConnect}
         onDisconnect={s.disconnect}
         connections={s.connections}
@@ -145,22 +144,52 @@ export function QueryBlock() {
           s.isSynthetic ? s.regenerateNearLocation : undefined
         }
         regenerating={s.regenerating}
-        defaults={s.presetDefaults}
+        defaults={s.defaults}
       />
     </div>
   );
 }
 
+/** localStorage hand-off from the demo to the pop-out patient app: the
+ *  popup window can't share React state, so the button writes the live
+ *  connection list right before opening it. Search defaults are derived
+ *  from the data on both sides, so only the endpoints need handing off. */
+const PATIENT_APP_SEED_KEY = "fhir4ds.patient-app.seed";
+const PATIENT_APP_SEED_TTL_MS = 10 * 60 * 1000;
+
+export function readPatientAppSeed(): { urls: string[] } | null {
+  try {
+    const raw = localStorage.getItem(PATIENT_APP_SEED_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Date.now() - parsed.ts > PATIENT_APP_SEED_TTL_MS) return null;
+    if (!Array.isArray(parsed.urls) || parsed.urls.length === 0) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export function ProductionBlock() {
   const s = useDemoState();
   const patientAppUrl = useBaseUrl("patient-app");
+
+  function openPatientApp() {
+    try {
+      localStorage.setItem(
+        PATIENT_APP_SEED_KEY,
+        JSON.stringify({ ts: Date.now(), urls: s.connections.map((c) => c.url) }),
+      );
+    } catch {
+      // Private mode / storage disabled — the popup falls back to default.
+    }
+    window.open(patientAppUrl, "_blank");
+  }
+
   return (
     <div className="bulk-publish-demo-app">
       <div className="production-popout">
-        <button
-          className="production-popout__btn"
-          onClick={() => window.open(patientAppUrl, "_blank")}
-        >
+        <button className="production-popout__btn" onClick={openPatientApp}>
           Open patient app ↗
         </button>
       </div>
@@ -170,7 +199,7 @@ export function ProductionBlock() {
         lookupZip={s.lookupZip}
         lookupCityState={s.lookupCityState}
         reverseGeocode={s.reverseGeocode}
-        defaults={s.presetDefaults}
+        defaults={s.defaults}
       />
     </div>
   );
