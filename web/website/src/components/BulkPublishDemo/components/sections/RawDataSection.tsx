@@ -8,6 +8,8 @@ interface RawDataSectionProps {
   ready: boolean;
   /** Function that executes a SQL query against the in-browser DuckDB. */
   executeQuery: (sql: string) => Promise<QueryResult>;
+  /** Bump to refresh the provider list (e.g. after a new ingest). */
+  providerRefresh?: number;
 }
 
 /**
@@ -18,7 +20,7 @@ interface RawDataSectionProps {
  * The data comes from the `resources` table populated during ingest. Each row
  * is one FHIR resource; the `resource` column holds the raw JSON.
  */
-export function RawDataSection({ ready, executeQuery }: RawDataSectionProps) {
+export function RawDataSection({ ready, executeQuery, providerRefresh = 0 }: RawDataSectionProps) {
   const [resourceType, setResourceType] = useState("Slot");
   const [provider, setProvider] = useState("");
   const [index, setIndex] = useState(0);
@@ -26,6 +28,31 @@ export function RawDataSection({ ready, executeQuery }: RawDataSectionProps) {
   const [resource, setResource] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Dynamic provider list with display labels, derived from the ingested
+  // resources table (id prefix convention "<provider>-..."). Falls back to
+  // the raw prefix when no nicer label matches.
+  const [providers, setProviders] = useState<{ id: string; label: string; count: number }[]>([]);
+
+  useEffect(() => {
+    if (!ready) return;
+    (async () => {
+      try {
+        const result = await executeQuery(
+          `SELECT COALESCE(publisher, 'unknown') AS provider, COUNT(*) AS n
+           FROM resources GROUP BY 1 ORDER BY 1;`,
+        );
+        setProviders(
+          result.rows.map((r: any[]) => ({
+            id: String(r[0]),
+            label: `${String(r[0])} (${Number(r[1]).toLocaleString()})`,
+            count: Number(r[1]),
+          })),
+        );
+      } catch {
+        setProviders([]);
+      }
+    })();
+  }, [ready, executeQuery, providerRefresh]);
 
   // Reset to first resource whenever the type or provider filter changes
   useEffect(() => {
@@ -40,7 +67,7 @@ export function RawDataSection({ ready, executeQuery }: RawDataSectionProps) {
     (async () => {
       try {
         const providerFilter = provider
-          ? `AND id LIKE '${provider}-%'`
+          ? `AND publisher = '${provider.replace(/'/g, "''")}'`
           : "";
         const countResult = await executeQuery(
           `SELECT COUNT(*) AS n FROM resources WHERE resourceType = '${resourceType}' ${providerFilter};`,
@@ -73,8 +100,6 @@ export function RawDataSection({ ready, executeQuery }: RawDataSectionProps) {
     );
   }
 
-  const providers = ["allina", "childrens", "mayo", "hennepin", "fairview"];
-
   return (
     <div className="widget">
       <div className="raw-controls">
@@ -93,8 +118,8 @@ export function RawDataSection({ ready, executeQuery }: RawDataSectionProps) {
           <select value={provider} onChange={(e) => setProvider(e.target.value)}>
             <option value="">(any)</option>
             {providers.map((p) => (
-              <option key={p} value={p}>
-                {p}
+              <option key={p.id} value={p.id}>
+                {p.label}
               </option>
             ))}
           </select>

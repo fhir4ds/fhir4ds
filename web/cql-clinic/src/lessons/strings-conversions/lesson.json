@@ -1,0 +1,87 @@
+{
+  "id": "strings-conversions",
+  "title": "String Functions and Type Conversions",
+  "description": "Clean, transform, and convert: case functions, substring, split/combine, prefix/suffix tests, regex replacement — plus ToInteger/ToDecimal/ToString and the ConvertsTo* checkers for safe parsing.",
+  "difficulty": "beginner",
+  "estimatedTime": "25 min",
+  "learningObjectives": [
+    "Change case with Upper / Lower",
+    "Slice with Substring and measure with Length",
+    "Test prefixes/suffixes with StartsWith / EndsWith",
+    "Transform with ReplaceMatches (regex!)",
+    "Split strings and join lists with Combine",
+    "Convert types with ToInteger / ToDecimal / ToString",
+    "Check convertibility with ConvertsToInteger"
+  ],
+  "ungradedDefines": [],
+  "hints": [
+    {
+      "trigger": "Shout",
+      "message": "Upper('hello') → 'HELLO'. CQL strings use single quotes."
+    },
+    {
+      "trigger": "Whisper",
+      "message": "Lower('WORLD') → 'world'."
+    },
+    {
+      "trigger": "Name Length",
+      "message": "Length('FHIR') counts characters: 4."
+    },
+    {
+      "trigger": "First Word",
+      "message": "Substring(s, start, length) — zero-indexed: Substring('FHIRPath', 0, 4) → 'FHIR'."
+    },
+    {
+      "trigger": "Is Http",
+      "message": "StartsWith(string, prefix) — case-sensitive."
+    },
+    {
+      "trigger": "Is Pdf",
+      "message": "EndsWith(string, suffix)."
+    },
+    {
+      "trigger": "Date Reformat",
+      "message": "ReplaceMatches(input, pattern, replacement) uses REGEX: ReplaceMatches('2024-03-01', '-', '/') → '2024/03/01'."
+    },
+    {
+      "trigger": "First Segment",
+      "message": "Split(s, sep) returns a LIST — wrap in First(...) to get one element."
+    },
+    {
+      "trigger": "Joined",
+      "message": "Combine({'a','b','c'}, '-') joins a list with a separator: 'a-b-c'."
+    },
+    {
+      "trigger": "B Position",
+      "message": "PositionOf(find, within) is zero-indexed: 'b' in 'abc' → 1."
+    },
+    {
+      "trigger": "Gender Shouted",
+      "message": "String functions accept FHIR fields: Upper(Patient.gender)."
+    },
+    {
+      "trigger": "Int To String",
+      "message": "ToString(42) → '42' — any type can render as a string."
+    },
+    {
+      "trigger": "String To Integer",
+      "message": "ToInteger('42') → 42 (Integer). Invalid strings return null, not an error."
+    },
+    {
+      "trigger": "String To Decimal",
+      "message": "ToDecimal('3.5') → 3.5 with Decimal precision (8 scale)."
+    },
+    {
+      "trigger": "Integer Convertible",
+      "message": "ConvertsToInteger('42') → true — check before you convert."
+    },
+    {
+      "trigger": "Not Integer Convertible",
+      "message": "ConvertsToInteger('3.5') → false — decimals are NOT integer-convertible (no truncation)."
+    },
+    {
+      "trigger": "Birth Year String",
+      "message": "Components chain with conversions: ToString(year from Patient.birthDate.value) → '1990'."
+    }
+  ]
+}

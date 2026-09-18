@@ -266,7 +266,7 @@ class TemporalUtilsMixin:
                     "dateaddquantity", "datesubtractquantity",
                     "intervalstart", "intervalend",
                     "cqlsameoafter", "cqlsameorbefore", "cqlbefore", "cqlafter",
-                    "cqldatetimeadd", "cqldatetimesubtract",
+                    "cqldatetimeadd",
                     "fhirpath_date", "fhirpath_text",
                 ):
                     return expr

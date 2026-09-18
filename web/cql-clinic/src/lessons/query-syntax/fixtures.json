@@ -1,0 +1,9 @@
+[
+  {"resourceType": "Patient", "id": "patient-a", "name": [{"family": "Johnson", "given": ["Alice"]}], "gender": "female", "birthDate": "1990-05-15"},
+  {"resourceType": "Observation", "id": "obs-1", "status": "final", "code": {"coding": [{"system": "http://loinc.org", "code": "8480-6", "display": "Systolic BP"}]}, "subject": {"reference": "Patient/patient-a"}, "effectiveDateTime": "2024-03-01", "valueQuantity": {"value": 120, "unit": "mmHg", "code": "mm[Hg]", "system": "http://unitsofmeasure.org"}},
+  {"resourceType": "Observation", "id": "obs-2", "status": "preliminary", "code": {"coding": [{"system": "http://loinc.org", "code": "8480-6", "display": "Systolic BP"}]}, "subject": {"reference": "Patient/patient-a"}, "effectiveDateTime": "2024-04-01", "valueQuantity": {"value": 138, "unit": "mmHg", "code": "mm[Hg]", "system": "http://unitsofmeasure.org"}},
+  {"resourceType": "Observation", "id": "obs-3", "status": "final", "code": {"coding": [{"system": "http://loinc.org", "code": "718-7", "display": "Hemoglobin"}]}, "subject": {"reference": "Patient/patient-a"}, "effectiveDateTime": "2024-05-01", "valueQuantity": {"value": 13.5, "unit": "g/dL", "code": "g/dL", "system": "http://unitsofmeasure.org"}},
+  {"resourceType": "Condition", "id": "cond-1", "code": {"coding": [{"system": "http://snomed.info/sct", "code": "44054006", "display": "Diabetes"}]}, "subject": {"reference": "Patient/patient-a"}, "clinicalStatus": {"coding": [{"code": "active"}]}},
+  {"resourceType": "Patient", "id": "patient-b", "name": [{"family": "Smith", "given": ["Bob"]}], "gender": "male", "birthDate": "1972-07-23"},
+  {"resourceType": "Observation", "id": "obs-4", "status": "final", "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4", "display": "Heart rate"}]}, "subject": {"reference": "Patient/patient-b"}, "effectiveDateTime": "2024-01-20", "valueQuantity": {"value": 72, "unit": "beats/minute", "code": "/min", "system": "http://unitsofmeasure.org"}}
+]

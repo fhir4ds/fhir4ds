@@ -1,0 +1,9 @@
+[
+  {"resourceType": "Patient", "id": "patient-a", "name": [{"family": "Johnson", "given": ["Alice"]}], "gender": "female", "birthDate": "1985-03-12"},
+  {"resourceType": "Condition", "id": "cond-a1", "code": {"coding": [{"system": "http://snomed.info/sct", "code": "44054006", "display": "Diabetes"}]}, "subject": {"reference": "Patient/patient-a"}, "clinicalStatus": {"coding": [{"code": "active"}]}},
+  {"resourceType": "Condition", "id": "cond-a2", "code": {"coding": [{"system": "http://hl7.org/fhir/sid/icd-10-cm", "code": "E11.9", "display": "T2DM"}]}, "subject": {"reference": "Patient/patient-a"}, "clinicalStatus": {"coding": [{"code": "active"}]}},
+  {"resourceType": "Condition", "id": "cond-a3", "code": {"coding": [{"system": "http://snomed.info/sct", "code": "195967001", "display": "Asthma"}]}, "subject": {"reference": "Patient/patient-a"}, "clinicalStatus": {"coding": [{"code": "active"}]}},
+  {"resourceType": "Patient", "id": "patient-b", "name": [{"family": "Smith", "given": ["Bob"]}], "gender": "male", "birthDate": "1972-07-23"},
+  {"resourceType": "Condition", "id": "cond-b1", "code": {"coding": [{"system": "http://hl7.org/fhir/sid/icd-10-cm", "code": "I10", "display": "Hypertension"}]}, "subject": {"reference": "Patient/patient-b"}, "clinicalStatus": {"coding": [{"code": "active"}]}},
+  {"resourceType": "Patient", "id": "patient-c", "name": [{"family": "Williams", "given": ["Cara"]}], "gender": "female", "birthDate": "1998-11-30"}
+]

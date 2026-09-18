@@ -1,0 +1,36 @@
+{
+  "columns": [
+    "Calendar Duration Compare",
+    "Cross Unit Sum",
+    "Dose In Range",
+    "Dose Literal",
+    "Quantity As String",
+    "Quantity Unit",
+    "Quantity Value",
+    "Same Unit Sum",
+    "Scalar Multiply",
+    "Temperature Compare",
+    "Unit Aware Equality",
+    "Unit Aware Ordering"
+  ],
+  "rows": {
+    "patient-a": [
+      true,
+      "{\"value\":1500.0,\"unit\":\"mg\",\"code\":\"mg\",\"system\":\"http://unitsofmeasure.org\"}",
+      true,
+      "{\"value\":5.0,\"code\":\"mg\",\"system\":\"http://unitsofmeasure.org\",\"unit\":\"mg\"}",
+      "5 'mg'",
+      [
+        "mg"
+      ],
+      [
+        "5.0"
+      ],
+      "{\"value\":10.0,\"unit\":\"mg\",\"code\":\"mg\",\"system\":\"http://unitsofmeasure.org\"}",
+      "{\"value\":10.0,\"code\":\"mg\",\"system\":\"http://unitsofmeasure.org\",\"unit\":\"mg\"}",
+      true,
+      true,
+      true
+    ]
+  }
+}

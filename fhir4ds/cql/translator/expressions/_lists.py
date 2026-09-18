@@ -702,6 +702,33 @@ class ListsMixin:
         source = self.translate(expr.source, usage=source_usage)
         args = [self.translate(arg, boolean_context=False) for arg in expr.arguments]
 
+        # Element-selection methods need the LIST-returning fhirpath UDF as
+        # their source. `fhirpath_text` returns the FIRST match as a VARCHAR
+        # scalar, so `list_extract(fhirpath_text(...), 1)` slices a single
+        # CHARACTER out of that string instead of selecting the first list
+        # element (e.g. Patient.address.first().city navigated from '{').
+        # The property translator emits fhirpath_text even under LIST usage,
+        # so repair the source here by swapping the scalar UDF for the list
+        # form (both take the same resource/path arguments).
+        if _method_lower in {"first", "last", "singletonfrom"} and isinstance(source, SQLFunctionCall):
+            if source.name == "fhirpath_text" and len(source.args) >= 1:
+                source = SQLFunctionCall(name="fhirpath", args=list(source.args))
+            elif (
+                source.name == "from_json"
+                and len(source.args) >= 1
+                and isinstance(source.args[0], SQLFunctionCall)
+                and source.args[0].name == "fhirpath_text"
+            ):
+                # from_json(fhirpath_text(x, p), '["VARCHAR"]') — swap the
+                # inner scalar call for the list form and drop the from_json
+                # wrapper (fhirpath already returns a typed list).
+                source = SQLFunctionCall(
+                    name="from_json",
+                    args=[
+                        SQLFunctionCall(name="fhirpath", args=list(source.args[0].args))
+                    ] + list(source.args[1:]),
+                )
+
         # Handle common method invocations
         if method.lower() == "first":
             # DuckDB uses list_extract with 1-based indexing

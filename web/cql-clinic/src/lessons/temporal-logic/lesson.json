@@ -1,0 +1,58 @@
+{
+  "id": "temporal-logic",
+  "title": "Ages, Durations, and Intervals",
+  "description": "Master CQL's temporal toolkit: compute ages with AgeInYearsAt, measure elapsed time with 'between', extract date components, and reason about clinical intervals with during, contains, and overlaps — the building blocks of every eCQM measurement period.",
+  "difficulty": "intermediate",
+  "estimatedTime": "30 min",
+  "learningObjectives": [
+    "Compute age at a reference date with AgeInYearsAt / AgeInMonthsAt",
+    "Measure elapsed time with 'days between' and 'difference in'",
+    "Extract components from dates with 'month from'",
+    "Filter resources by when they occurred ('during' a measurement period)",
+    "Test interval relationships: contains, overlaps",
+    "Use start of / end of on interval literals"
+  ],
+  "ungradedDefines": [],
+  "hints": [
+    {
+      "trigger": "Age In Months",
+      "message": "AgeInMonthsAt(@2024-03-12) works exactly like AgeInYearsAt but returns whole months."
+    },
+    {
+      "trigger": "Days Since Birth",
+      "message": "days between <earlier> and <later> counts elapsed days. The birthDate needs FHIRHelpers.ToDate() to become a Date."
+    },
+    {
+      "trigger": "Birthday Month",
+      "message": "Extract components with: month from <date>. Other components: year, day, hour, minute."
+    },
+    {
+      "trigger": "First Obs In 2024",
+      "message": "First([Observation] O where O.effective during Interval[@2024-01-01, @2024-06-30] return O.effective as String) — 'during' is inclusive on both ends."
+    },
+    {
+      "trigger": "Latest Effective",
+      "message": "Last([Observation] O return O.effective as String) returns the chronologically last value."
+    },
+    {
+      "trigger": "In Measurement Period",
+      "message": "Interval[low, high] contains <point> is true when the point falls inside (inclusive)."
+    },
+    {
+      "trigger": "Enclosure Count",
+      "message": "E.period during Interval[...] checks the WHOLE encounter period falls inside. One of the three encounters extends past June 30."
+    },
+    {
+      "trigger": "Measurement Period Width",
+      "message": "days between start of I and end of I counts ELAPSED days: 2024 is a leap year — Jan(31)+Feb(29)+Mar(31)+Apr(30)+May(31)+Jun(30) = 182 days in the period, so elapsed = 181."
+    },
+    {
+      "trigger": "Overlapping Intervals",
+      "message": "A overlaps B when they share at least one point: [Jan 1, Mar 31] and [Mar 1, Jun 30] share all of March."
+    },
+    {
+      "trigger": "Adjacent Or After",
+      "message": "Interval A starts 30 days or less before start of B: Apr 1 minus Mar 1 = 31 days — so this should be false."
+    }
+  ]
+}

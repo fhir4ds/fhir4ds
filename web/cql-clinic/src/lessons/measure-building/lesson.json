@@ -1,0 +1,58 @@
+{
+  "id": "measure-building",
+  "title": "Building an eCQM: Populations and Exclusions",
+  "description": "Put it all together: build a real measure with Initial Population (diabetes + age window), Denominator (office visit), Denominator Exclusion (hospice), and Numerator (recent HbA1c) — the exact shape of CMS quality measures.",
+  "difficulty": "advanced",
+  "estimatedTime": "40 min",
+  "learningObjectives": [
+    "Define a named measurement-period interval",
+    "Build Initial Population from condition + age criteria",
+    "Gate the Denominator on encounters during the period",
+    "Apply a Denominator Exclusion (hospice)",
+    "Compose the Numerator with 'not <exclusion>'",
+    "Read per-patient population membership across a 5-patient cohort"
+  ],
+  "ungradedDefines": [],
+  "hints": [
+    {
+      "trigger": "Measurement Period",
+      "message": "define \"Measurement Period\": Interval[@2024-01-01, @2024-12-31] — a named interval you can reuse everywhere."
+    },
+    {
+      "trigger": "Has Diabetes",
+      "message": "exists([Condition] C where exists(C.code.coding cod where cod.code = '44054006' and cod.system = 'http://snomed.info/sct')) — SNOMED diabetes code with system match."
+    },
+    {
+      "trigger": "Age At Start",
+      "message": "AgeInYearsAt(start of \"Measurement Period\") — measures age at the period start (2024-01-01)."
+    },
+    {
+      "trigger": "Initial Population",
+      "message": "\"Has Diabetes\" and \"Age At Start\" between 18 and 75 — reference earlier defines by name; between is inclusive."
+    },
+    {
+      "trigger": "Had Office Visit",
+      "message": "exists([Encounter] E where E.class.code = 'AMB' and E.period during \"Measurement Period\") — the whole encounter must fall inside the period."
+    },
+    {
+      "trigger": "In Hospice",
+      "message": "Hospice care shows as Encounter class 'HH' (home health/hospice) — same during test as office visits."
+    },
+    {
+      "trigger": "Denominator",
+      "message": "\"Initial Population\" and \"Had Office Visit\" — populations build on each other with and."
+    },
+    {
+      "trigger": "Denominator Exclusion",
+      "message": "\"Denominator\" and \"In Hospice\" — exclusions only apply INSIDE the denominator."
+    },
+    {
+      "trigger": "Has Recent A1c",
+      "message": "LOINC 4548-4 (Hemoglobin A1c), effective during the period — remember the choice-type cast: (O.effective as FHIR.dateTime) during \"Measurement Period\"."
+    },
+    {
+      "trigger": "Numerator",
+      "message": "\"Denominator\" and not \"Denominator Exclusion\" and \"Has Recent A1c\" — exclude first, then require the metric. Bob has an A1c but is hospice-excluded!"
+    }
+  ]
+}

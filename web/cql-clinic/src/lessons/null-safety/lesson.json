@@ -1,0 +1,57 @@
+{
+  "id": "null-safety",
+  "title": "Null Handling and Three-Valued Logic",
+  "description": "CQL's null is UNKNOWN, not false. Learn how null flows through comparisons, Boolean operators, and functions — and how Coalesce, is null, and Count each treat it. This is the single most common source of silent eCQM bugs.",
+  "difficulty": "intermediate",
+  "estimatedTime": "25 min",
+  "learningObjectives": [
+    "Test for null with 'is null' on absent fields",
+    "See how null != x collapses to null (not false)",
+    "Apply the and/or truth tables with null operands",
+    "Use Coalesce to supply defaults",
+    "Observe Count skipping null list elements"
+  ],
+  "ungradedDefines": [],
+  "hints": [
+    {
+      "trigger": "Deceased Is Null",
+      "message": "Patient.deceased is null — this patient has no deathDate, so the field is absent (null)."
+    },
+    {
+      "trigger": "Null Not Equal",
+      "message": "null != 'x' is null (UNKNOWN) — not false! But watch the results panel: the row is still present."
+    },
+    {
+      "trigger": "Null And False",
+      "message": "Three-valued and: null and false = false (false wins), null and true = null."
+    },
+    {
+      "trigger": "Null Or True",
+      "message": "Three-valued or: null or true = true (true wins), null or false = null."
+    },
+    {
+      "trigger": "Null Not Propagates",
+      "message": "not null is still null — negation does not make unknown known."
+    },
+    {
+      "trigger": "Coalesce First NonNull",
+      "message": "Coalesce(a, b, c, ...) returns the first non-null argument, or null if all are null."
+    },
+    {
+      "trigger": "Missing Field Is Null",
+      "message": "Absent JSON fields are null in CQL — Patient.telecom is null for this patient."
+    },
+    {
+      "trigger": "Coalesce Field Default",
+      "message": "Coalesce(Patient.deceased.value, 'still alive') — .value on a null field stays null, so the default wins."
+    },
+    {
+      "trigger": "Count Ignores Null",
+      "message": "Count({null, 'a', null, 'b'}) = 2 — Count skips null elements."
+    },
+    {
+      "trigger": "IsNull Vs IsTrue",
+      "message": "(X is null) is true — wrap an is-null test in is true to get a definite Boolean you can branch on."
+    }
+  ]
+}

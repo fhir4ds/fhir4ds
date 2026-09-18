@@ -14,16 +14,16 @@ test.describe("Bulk Publish demo", () => {
 
     await expect(page).toHaveTitle(/Bulk Publish Demo/);
 
-    // H1 from the MDX frontmatter title.
+    // H1 from the MDX body heading.
     await expect(
-      page.getByRole("heading", { level: 1, name: "Bulk Publish + FHIR4DS Demo" }),
+      page.getByRole("heading", { level: 1, name: "Bulk Publish" }),
     ).toBeVisible();
 
     // Section headings — the five vertical sections of the walkthrough.
-    // They render as H2s inside the demo's Section component, but they can
-    // also appear in the right-side ToC. Scope to .bulk-publish-demo-app
-    // so we only count the in-page ones.
-    const demoRoot = page.locator(".bulk-publish-demo-app");
+    // They render as H2s in the MDX body (the demo component itself renders
+    // no headings). Scope to the docs article so the right-side ToC anchors
+    // are not counted.
+    const demoRoot = page.locator("article");
     const expectedHeadings = [
       /Connect to a Bulk Publish endpoint/i,
       /Browse the raw published FHIR resources/i,

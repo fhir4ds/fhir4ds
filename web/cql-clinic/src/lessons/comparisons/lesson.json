@@ -1,0 +1,42 @@
+{
+  "id": "comparisons",
+  "title": "Comparisons and Arithmetic Operations",
+  "description": "Master CQL comparison operators: equality vs equivalence, arithmetic functions, conditional logic with if/case, and date component extraction.",
+  "difficulty": "beginner",
+  "estimatedTime": "25 min",
+  "learningObjectives": [
+    "Distinguish = (equality) from ~ (equivalence)",
+    "Use Abs, Sqrt, and Power",
+    "Write if/then/else conditionals",
+    "Write multi-branch case expressions",
+    "Extract components from dates with from",
+    "Control operator precedence with parentheses"
+  ],
+  "ungradedDefines": [],
+  "hints": [
+    {
+      "trigger": "Equivalence",
+      "message": "~ is case-insensitive equivalence: 'ABC' ~ 'abc' is true."
+    },
+    {
+      "trigger": "Square Root",
+      "message": "Sqrt(16) returns 4 — it is a built-in math function."
+    },
+    {
+      "trigger": "Power",
+      "message": "Exponentiation uses ^: 2 ^ 3 is 8."
+    },
+    {
+      "trigger": "Grade Category",
+      "message": "case when 85 >= 90 then 'A' when 85 >= 80 then 'B' ... else 'F' end — branches are evaluated in order."
+    },
+    {
+      "trigger": "Date Range",
+      "message": "Extract a component with `year from @2024-06-15` and compare it to 2024."
+    },
+    {
+      "trigger": "Forced Precedence",
+      "message": "Parentheses override * before +: (2 + 3) * 4 is 20."
+    }
+  ]
+}

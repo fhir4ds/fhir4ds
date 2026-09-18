@@ -1,0 +1,30 @@
+{
+  "columns": [
+    "Coalesce Field Default",
+    "Coalesce First NonNull",
+    "Count Ignores Null",
+    "Deceased Is Null",
+    "Explicit Null Is Null",
+    "IsNull Vs IsTrue",
+    "Missing Field Is Null",
+    "Null And False",
+    "Null Not Equal",
+    "Null Not Propagates",
+    "Null Or True"
+  ],
+  "rows": {
+    "patient-a": [
+      "still alive",
+      "found me",
+      2,
+      true,
+      true,
+      "no death date",
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  }
+}

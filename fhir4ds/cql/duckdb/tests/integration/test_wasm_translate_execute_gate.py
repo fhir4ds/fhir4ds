@@ -77,8 +77,10 @@ EXPECTED = {
     "HighBoundaryDecimal": Decimal("1.58799999"),
     "LowBoundaryDecimal": Decimal("1.58700000"),
     "PredecessorDecimal": 0.99999999,
-    "AgeYearsAt": 44,
-    "AgeWeeksAt": 2,
+    # CQL §22.21 age surfaces return VARCHAR (integer string when certain)
+    # per the CQL-21 uncertainty doctrine.
+    "AgeYearsAt": "44",
+    "AgeWeeksAt": "2",
     "NullInterval": None,
     "IntervalIntersectOpenNullHigh": '{"low": "5", "high": null, "lowClosed": true, "highClosed": false}',
     "DateTimeIncludedInPrecisionNull": None,

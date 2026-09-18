@@ -1,0 +1,52 @@
+# FHIR4DS — FHIR for Data Science
+
+> High-performance FHIR analytics on DuckDB: a unified suite for CQL quality
+> measures, FHIRPath queries, and SQL-on-FHIR v2 ViewDefinitions — in Python
+> or fully in the browser via WebAssembly.
+
+FHIR4DS (fhir4ds.com) translates clinical query languages to SQL so FHIR data
+can be analyzed at analytical-engine speed. It ships native DuckDB extensions
+(C++ FHIRPath/CQL engines) with a Python fallback, passes official HL7
+conformance suites (FHIRPath R4, CQL, SQL-on-FHIR v2), and runs the same
+translation stack in Pyodide/DuckDB-WASM for zero-install browser demos.
+
+## Install
+
+```bash
+pip install fhir4ds-v2
+```
+
+Pure-Python + prebuilt native extensions; no server, no JVM, no FHIR store
+required — query NDJSON or Parquet directly.
+
+## Key features
+
+- **CQL → SQL translation**: Clinical Quality Language measures evaluated as
+  patient-level population SQL, with full audit evidence and MeasureReport
+  generation (CMS/eCQM compatible).
+- **FHIRPath engine**: parser + evaluator (Python core and C++ DuckDB UDFs)
+  covering the FHIRPath R4 spec.
+- **SQL-on-FHIR v2 ViewDefinitions**: turn FHIR resources into relational
+  tables/views for analytics.
+- **DQM orchestrator**: Digital Quality Measure evaluation end-to-end.
+- **DuckDB-native**: `fhirpath()`, `fhirpath_text()`, `AgeInYears()`,
+  `DurationInDays()` and friends as fast vectorized UDFs/macros.
+
+## Docs
+
+- [Installation](https://fhir4ds.com/docs/getting-started/installation)
+- [Quickstart](https://fhir4ds.com/docs/getting-started/quickstart)
+- [Whitepaper](https://fhir4ds.com/docs/getting-started/whitepaper)
+- [User Guide](https://fhir4ds.com/docs/user-guide/index)
+- [API Reference](https://fhir4ds.com/docs/api-reference/fhir4ds)
+- [CQL Playground (in-browser demo)](https://fhir4ds.com/docs/examples/cql-playground)
+- [CMS Measure Examples](https://fhir4ds.com/docs/examples/cms-measures)
+- [DQM Recipes](https://fhir4ds.com/docs/examples/dqm-recipes)
+- [WASM / Browser Integration](https://fhir4ds.com/docs/integrations/wasm-engine)
+- [Licensing](https://fhir4ds.com/docs/getting-started/licensing)
+
+## Source
+
+- GitHub: https://github.com/fhir4ds/fhir4ds
+- PyPI: https://pypi.org/project/fhir4ds-v2/
+- Contact: contact@fhir4ds.com

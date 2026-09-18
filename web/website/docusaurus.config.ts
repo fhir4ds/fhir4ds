@@ -30,6 +30,26 @@ const config: Config = {
   },
 
   headTags: [
+    // Suppress Monaco's benign "ResizeObserver loop" errors in CAPTURE phase,
+    // before webpack-dev-server's overlay listener can see them.
+    {
+      tagName: 'script',
+      attributes: {},
+      innerHTML: `
+        (function () {
+          window.addEventListener(
+            'error',
+            function (e) {
+              if (e && e.message && e.message.indexOf('ResizeObserver loop') !== -1) {
+                e.stopImmediatePropagation();
+                e.preventDefault();
+              }
+            },
+            { capture: true }
+          );
+        })();
+      `,
+    },
     // COI service worker registration for SharedArrayBuffer (DuckDB-WASM on GitHub Pages).
     // The document must be loaded through the service worker before
     // crossOriginIsolated becomes true, so reload once after activation.
@@ -95,7 +115,11 @@ const config: Config = {
   ],
 
   themeConfig: {
-    image: 'img/fhir4ds-social-card.png',
+    image: 'img/docusaurus-social-card.jpg',
+    metadata: [
+      {name: 'description', content: 'High-performance FHIR analytics on DuckDB: CQL quality measures, FHIRPath queries, and SQL-on-FHIR v2 ViewDefinitions translated to SQL — in Python or fully in the browser via WebAssembly.'},
+      {name: 'keywords', content: 'FHIR, FHIR analytics, CQL, FHIRPath, SQL-on-FHIR, ViewDefinition, DuckDB, quality measures, eCQM, healthcare data science'},
+    ],
     colorMode: {
       defaultMode: 'dark',
       disableSwitch: true,
@@ -129,7 +153,7 @@ const config: Config = {
       style: 'dark',
       links: [
         {
-          title: 'Product',
+          title: 'Learn More',
           items: [
             {label: 'Live Demo', to: '/docs/examples/cql-playground'},
             {label: 'Documentation', to: '/docs/user-guide/index'},
@@ -139,8 +163,8 @@ const config: Config = {
         {
           title: 'Standards',
           items: [
-            {label: 'FHIRPath Spec', href: 'https://hl7.org/fhirpath/'},
-            {label: 'CQL Spec', href: 'https://cql.hl7.org/'},
+            {label: 'FHIRPath', href: 'https://hl7.org/fhirpath/'},
+            {label: 'CQL', href: 'https://cql.hl7.org/'},
             {label: 'SQL-on-FHIR v2', href: 'https://github.com/FHIR/sql-on-fhir-v2'},
           ],
         },
@@ -149,13 +173,14 @@ const config: Config = {
           items: [
             {label: 'Dual Licensing', to: '/docs/getting-started/licensing'},
             {label: 'Commercial Inquiries', href: 'mailto:contact@fhir4ds.com'},
+            {label: 'GitHub', href: 'https://github.com/fhir4ds/fhir4ds'},
           ],
         },
         {
-          title: 'Resources',
+          title: 'Projects',
           items: [
-            {label: 'GitHub', href: 'https://github.com/fhir4ds/fhir4ds'},
-            {label: 'API Reference', to: '/docs/api-reference/fhir4ds'},
+            {label: 'fhir4ds', href: 'https://fhir4ds.com/'},
+            {label: 'medterm4ds', href: 'https://terminology.fhir4ds.com/'},
           ],
         },
       ],

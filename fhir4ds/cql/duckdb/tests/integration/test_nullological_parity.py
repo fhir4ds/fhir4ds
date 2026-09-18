@@ -670,3 +670,37 @@ def test_cql_is_null_over_query_valued_lists_fixture_semantics_cql08_explorer() 
     finally:
         py.close()
         cpp.close()
+
+
+def test_is_true_over_audit_wrapped_comparison_extracts_result_v14ext():
+    """`(X > 100) is true` under audit_mode must not feed the audit STRUCT
+    to IsTrue (IsTrue on a STRUCT returns False, silently inverting the
+    population). Extract struct['result'] first."""
+    import duckdb as _duckdb
+
+    from fhir4ds.cql.duckdb import register as _register_cql
+    from fhir4ds.cql.loader.fhir_loader import FHIRDataLoader as _Loader
+    from fhir4ds.cql.parser.parser import parse_cql as _parse_cql
+    from fhir4ds.cql.translator.translator import CQLToSQLTranslator as _T
+
+    lib = """
+library MIsTrue version '1.0'
+using FHIR version '4.0.1'
+context Patient
+define "IsTruePop": exists([Observation] O where (O.valueQuantity.value > 100) is true)
+define "IsNotTrueLow": exists([Observation] O where (O.valueQuantity.value < 100) is not true)
+"""
+    for cpp in (True, False):
+        con = _duckdb.connect(":memory:", config={"allow_unsigned_extensions": True} if cpp else {})
+        _register_cql(con)
+        _Loader(con).load_resources([
+            {"resourceType": "Patient", "id": "p0"},
+            {"resourceType": "Observation", "id": "o0", "subject": {"reference": "Patient/p0"},
+             "status": "final", "valueQuantity": {"value": 150, "unit": "mmHg"}},
+        ])
+        sql = _T(audit_mode=True).translate_library_to_population_sql(_parse_cql(lib))
+        con.execute("CREATE OR REPLACE TEMP TABLE r AS " + sql)
+        row = con.execute("SELECT IsTruePop, IsNotTrueLow FROM r").fetchone()
+        con.close()
+        vals = [v.get("result") if isinstance(v, dict) else v for v in row]
+        assert vals == [True, True], (cpp, vals)

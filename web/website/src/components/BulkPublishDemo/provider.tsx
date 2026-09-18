@@ -18,7 +18,23 @@ import { SLOTS_VIEW, viewDefToJson } from "./lib/viewdef";
 import { buildScheduleNormalizationCTEs } from "./lib/cross-resource";
 import { findNearbyZips, generateDataset, ingestGeneratedDataset } from "./lib/synthesize";
 
-const DEFAULT_PUBLISHER = "https://smart-scheduling-defacto.s3.us-east-2.amazonaws.com/public/$bulk-publish";
+const DEFAULT_PUBLISHER = "https://raw.githubusercontent.com/culby/smart-scheduling-links/master/examples/$bulk-publish";
+
+/**
+ * One connected endpoint. Multiple endpoints can be connected at once —
+ * their NDJSON all lands in the shared `resources` table, federated by the
+ * cross-resource normalization SQL.
+ */
+export interface Connection {
+  /** Endpoint URL as entered (or preset). */
+  url: string;
+  /** Display label (preset label or hostname). */
+  label: string;
+  /** Whether this endpoint is currently ingesting. */
+  connecting: boolean;
+  /** Ingest result once loaded, null while connecting. */
+  ingest: IngestResult | null;
+}
 
 /**
  * Shape of the shared demo state. Every block (ConnectBlock, ExploreBlock,
@@ -31,6 +47,9 @@ export interface DemoState {
   setPublisherUrl: (url: string) => void;
   presetDefaults: any;
   setPresetDefaults: (defaults: any) => void;
+  /** All currently-connected endpoints (add via connect, remove via disconnect). */
+  connections: Connection[];
+  /** Combined ingest across every connected endpoint. */
   ingest: IngestResult | null;
   ingestLog: IngestProgress[];
   generatedSql: string;
@@ -48,7 +67,10 @@ export interface DemoState {
   lookupZip: (zip: string) => Promise<any>;
   lookupCityState: (city: string, state: string) => Promise<any>;
   reverseGeocode: (lat: number, lon: number) => Promise<any>;
-  doConnect: () => Promise<void>;
+  /** Connect one more endpoint (keeps existing connections). */
+  doConnect: (url?: string) => Promise<void>;
+  /** Disconnect one endpoint and re-ingest the remaining ones. */
+  disconnect: (url: string) => Promise<void>;
   regenerateNearLocation: (lat: number, lon: number) => Promise<void>;
 }
 
@@ -67,12 +89,13 @@ export function BulkPublishDemoProvider({ children }: { children: ReactNode }) {
   const proxyUrl = "https://fhir-api-proxy.fhir4ds.workers.dev";
   const [presetDefaults, setPresetDefaults] = useState<any>({
     status: "free",
-    dateFrom: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
-    dateTo: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
-    geo: { lat: 27.96, lon: -82.46, label: "Tampa, FL 33603" },
+    dateFrom: "2026-09-28",
+    dateTo: "2026-11-02",
+    geo: { lat: 42.36, lon: -71.06, label: "Boston, MA 02114" },
   });
   const [ingest, setIngest] = useState<IngestResult | null>(null);
   const [ingestLog, setIngestLog] = useState<IngestProgress[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
   const [generatedSql, setGeneratedSql] = useState<string>("");
   const [translateMs, setTranslateMs] = useState<number | null>(null);
   const [materialized, setMaterialized] = useState(false);
@@ -85,7 +108,7 @@ export function BulkPublishDemoProvider({ children }: { children: ReactNode }) {
   const pyodide = usePyodide();
   const {
     ready: duckdbReady,
-    ingestManifest,
+    ingestManifests,
     executeQuery,
     materializeSlotsView,
     lookupZip,
@@ -97,6 +120,117 @@ export function BulkPublishDemoProvider({ children }: { children: ReactNode }) {
   const ingestedFor = useRef<string | null>(null);
   const viewDefJson = useRef(viewDefToJson(SLOTS_VIEW));
   const crossSql = useRef(buildScheduleNormalizationCTEs());
+
+  const ingestAll = useCallback(
+    async (urls: string[]): Promise<IngestResult> => {
+      // Drive the hook's multi-manifest ingest: TRUNCATE once, then load
+      // every endpoint into the shared `resources` table (federation).
+      const combined: IngestResult = {
+        providerCounts: {},
+        resourceCounts: {},
+        totalTimeMs: 0,
+      };
+      const start = performance.now();
+      await ingestManifests(
+        urls,
+        (p) => setIngestLog((prev) => [...prev, p]),
+        proxyUrl || null,
+      ).then((r) => {
+        Object.assign(combined.providerCounts, r.providerCounts);
+        Object.assign(combined.resourceCounts, r.resourceCounts);
+      });
+      combined.totalTimeMs = performance.now() - start;
+      setIngest(combined);
+      return combined;
+    },
+    [ingestManifests, proxyUrl],
+  );
+
+  const doConnect = useCallback(
+    async (url?: string) => {
+      const targetUrl = (url ?? publisherUrl).trim();
+      if (!duckdbReady || !targetUrl) return;
+      setError(null);
+      setMaterialized(false);
+
+      const label = hostLabel(targetUrl);
+      const existingUrls = connections.map((c) => c.url);
+      const isRefresh = existingUrls.includes(targetUrl);
+
+      // New connection: append. Refresh: re-ingest everything (simplest
+      // correct model — no incremental merge).
+      const urls = isRefresh ? existingUrls : [...existingUrls, targetUrl];
+      const labelMap = new Map(connections.map((c) => [c.url, c.label]));
+      labelMap.set(targetUrl, label);
+
+      setConnections((prev) => {
+        const without = prev.filter((c) => c.url !== targetUrl);
+        return [...without, { url: targetUrl, label, connecting: true, ingest: null }];
+      });
+      setConnecting(true);
+      ingestedFor.current = urls.join("|");
+      try {
+        const result = await ingestAll(urls);
+        setConnections(() =>
+          urls.map((u) => ({
+            url: u,
+            label: labelMap.get(u) ?? hostLabel(u),
+            connecting: false,
+            ingest: result,
+          })),
+        );
+      } catch (e: any) {
+        setError(e?.message ?? String(e));
+        // Drop the failed endpoint again; keep prior connections.
+        const keep = urls.filter((u) => u !== targetUrl);
+        if (keep.length === 0) {
+          setConnections([]);
+          setIngest(null);
+          ingestedFor.current = null;
+        } else {
+          setConnections(() =>
+            keep.map((u) => ({
+              url: u,
+              label: labelMap.get(u) ?? hostLabel(u),
+              connecting: false,
+              ingest: null,
+            })),
+          );
+        }
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [duckdbReady, ingestAll, publisherUrl, connections],
+  );
+
+  const disconnect = useCallback(
+    async (url: string) => {
+      const remaining = connections.filter((c) => c.url !== url);
+      setConnections(remaining);
+      setError(null);
+      setMaterialized(false);
+      setIngestLog([]);
+      if (remaining.length === 0) {
+        setIngest(null);
+        ingestedFor.current = null;
+        return;
+      }
+      setConnecting(true);
+      ingestedFor.current = remaining.map((c) => c.url).join("|");
+      try {
+        const result = await ingestAll(remaining.map((c) => c.url));
+        setConnections(() =>
+          remaining.map((c) => ({ ...c, connecting: false, ingest: result })),
+        );
+      } catch (e: any) {
+        setError(e?.message ?? String(e));
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [connections, ingestAll],
+  );
 
   // Geolocation request on mount — if granted, the demo can generate synthetic
   // data near the user; if denied, it falls back to the default publisher.
@@ -138,27 +272,6 @@ export function BulkPublishDemoProvider({ children }: { children: ReactNode }) {
       .catch((e) => setError(`ViewDefinition translation failed: ${e.message}`));
   }, [pyodideReady, translate]);
 
-  const doConnect = useCallback(async () => {
-    if (!duckdbReady) return;
-    setConnecting(true);
-    setError(null);
-    setIngest(null);
-    setIngestLog([]);
-    setMaterialized(false);
-    ingestedFor.current = publisherUrl;
-    try {
-      const result = await ingestManifest(publisherUrl, (p) => {
-        setIngestLog((prev) => [...prev, p]);
-      }, proxyUrl || null);
-      setIngest(result);
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
-      ingestedFor.current = null;
-    } finally {
-      setConnecting(false);
-    }
-  }, [duckdbReady, ingestManifest, publisherUrl]);
-
   // Materialize v_slot_flat + v_schedules + v_slots once both ingest and
   // ViewDefinition translation have completed.
   useEffect(() => {
@@ -179,6 +292,7 @@ export function BulkPublishDemoProvider({ children }: { children: ReactNode }) {
       setRegenerating(true);
       setMaterialized(false);
       setError(null);
+      setConnections([]);
       try {
         const zips = await findNearbyZips(executeQuery, lat, lon, 25);
         const dataset = generateDataset(lat, lon, zips);
@@ -240,6 +354,7 @@ export function BulkPublishDemoProvider({ children }: { children: ReactNode }) {
     setPublisherUrl,
     presetDefaults,
     setPresetDefaults,
+    connections,
     ingest,
     ingestLog,
     generatedSql,
@@ -258,8 +373,29 @@ export function BulkPublishDemoProvider({ children }: { children: ReactNode }) {
     lookupCityState,
     reverseGeocode,
     doConnect,
+    disconnect,
     regenerateNearLocation,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/** Short human label for a connection row (hostname or first path segment). */
+function hostLabel(url: string): string {
+  try {
+    if (!/^https?:\/\//.test(url)) return url || "endpoint";
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, "");
+    // raw.githubusercontent.com/<user>/... → user
+    if (host === "raw.githubusercontent.com") {
+      const seg = u.pathname.split("/").filter(Boolean)[0];
+      if (seg) return seg;
+    }
+    // bucket.s3... → bucket
+    if (host.includes(".s3.")) return host.split(".")[0];
+    const parts = host.split(".");
+    return parts.length >= 2 ? parts[parts.length - 2] : host;
+  } catch {
+    return url;
+  }
 }

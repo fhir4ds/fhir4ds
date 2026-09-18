@@ -1,5 +1,7 @@
 #pragma once
 
+#include "optional.hpp"
+
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -33,5 +35,20 @@ bool in_valueset(const std::string &code, const std::string &system, const std::
 std::string normalize_system(const std::string &system);
 std::string canonicalize_url(const std::string &url);
 bool has_not_done_valueset(const std::string &resource_json, const std::string &path, const std::string &valueset_url);
+
+// CQL dynamic Code ~ / = against a retrieved coding at `path`.
+// Both return NullOpt for NULL-equivalent inputs (null resource, empty
+// path/code); FALSE when no coding matches; TRUE on match. Match rule:
+// code equality plus system equality after normalization (OID aliases,
+// SNOMED module URLs) OR raw system equality; the Python aliases
+// QICoreCommon.SNOMEDCT / SNOMEDCT / LOINC are folded into the expected
+// system before comparison. `coding_matches_exact` additionally requires
+// display and version equality where an absent literal element (null)
+// must also be absent in the coding (CQL Equal on Code semantics).
+Optional<bool> coding_matches(const std::string &resource_json, const std::string &path, const std::string &system,
+                              const std::string &code);
+Optional<bool> coding_matches_exact(const std::string &resource_json, const std::string &path,
+                                   const std::string &system, const std::string &code,
+                                   const char *display, const char *version);
 
 } // namespace cql

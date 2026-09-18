@@ -12,10 +12,39 @@ interface WorkerMessage {
 
 const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
 
-// Hardcoded for the Docusaurus embed. In the standalone Vite demo this was
-// injected via `define` after globbing public/; here we ship exactly one
-// wheel under static/bulk-publisher-app/ so the name is a constant.
-const FHIR4DS_WHEEL_NAME = "fhir4ds_v2-0.0.10-py3-none-any.whl";
+// Hardcoded path prefix for the Docusaurus embed. In the standalone Vite
+// demo this was injected via `define` after globbing public/; here we ship
+// exactly one wheel under static/bulk-publisher-app/. The version is
+// discovered at init time by fetching the directory listing (works for the
+// dev server and GitHub Pages' auto-index) so bumping the wheel doesn't
+// require touching this constant. Falls back to the single-wheel guess.
+const FHIR4DS_WHEEL_GLOB = "fhir4ds_v2-*-py3-none-any.whl";
+const FHIR4DS_WHEEL_FALLBACK = "fhir4ds_v2-0.0.14-py3-none-any.whl";
+
+async function findWheelUrl(): Promise<string> {
+  const base = getAssetBase();
+  try {
+    const res = await fetch(`${base}/`);
+    if (res.ok) {
+      const html = await res.text();
+      // Directory index: href="fhir4ds_v2-0.0.14-py3-none-any.whl"
+      const matches = [...html.matchAll(/href="([^"]*fhir4ds_v2-[^"]*-py3-none-any\.whl)"/g)];
+      if (matches.length > 0) {
+        const name = matches[matches.length - 1][1].split("/").pop()!;
+        return `${base}/${name}`;
+      }
+      // GitHub Pages serves JSON listings in some configurations.
+      const json = (() => { try { return JSON.parse(html); } catch { return null; } })();
+      if (Array.isArray(json)) {
+        const hit = json.filter((x: any) => typeof x?.name === "string" && FHIR4DS_WHEEL_GLOB.replace("*", "") !== "" && x.name.startsWith("fhir4ds_v2-") && x.name.endsWith(".whl"));
+        if (hit.length > 0) return `${base}/${hit[hit.length - 1].name}`;
+      }
+    }
+  } catch {
+    // fall through to fallback
+  }
+  return `${base}/${FHIR4DS_WHEEL_FALLBACK}`;
+}
 
 // Workers don't see the page's window.location; use self.location.origin +
 // the known static path. Matches lib/asset-base.ts.
@@ -72,8 +101,8 @@ async function initPyodide() {
   await pyodide.loadPackage(["micropip", "duckdb", "orjson", "pyarrow"]);
 
   // Wheel is served from /bulk-publisher-app/ alongside the duckdb wasm
-  // and the synthesized NDJSON data. No build-time injection needed.
-  const wheelUrl = `${getAssetBase()}/${FHIR4DS_WHEEL_NAME}`;
+  // and the synthesized NDJSON data. Version discovered at runtime.
+  const wheelUrl = await findWheelUrl();
   console.log("[Pyodide Worker] Installing fhir4ds-v2 from:", wheelUrl);
 
   pyodide.globals.set("__wheel_url__", wheelUrl);

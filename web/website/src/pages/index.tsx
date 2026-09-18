@@ -7,7 +7,7 @@ import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
-const PRODUCT_VERSION = '0.0.13';
+const PRODUCT_VERSION = '0.0.14';
 const SQL_EXECUTION_MEAN_ALL_MEASURES = '~3.9ms';
 const SQL_EXECUTION_MEAN_SHARED_MEASURES = '~6.9ms';
 const JAVA_EXECUTION_MEAN_SHARED_MEASURES = '~936ms';
@@ -342,22 +342,6 @@ function Hero() {
             FHIR for Data Science
           </Heading>
           <span className={styles.versionBadge}>v{PRODUCT_VERSION}</span>
-          <Link
-            to="/docs/user-guide/terminology/terminology-service"
-            style={{
-              background: 'rgba(95, 237, 131, 0.12)',
-              border: '1px solid rgba(95, 237, 131, 0.4)',
-              color: 'rgb(95, 237, 131)',
-              padding: '0.2rem 0.75rem',
-              borderRadius: '20px',
-              fontSize: '0.78rem',
-              fontWeight: 600,
-              textDecoration: 'none',
-              transition: 'background 0.15s ease',
-            }}
-          >
-            New in 0.0.13: Native Engine Restorations &amp; medterm4ds 0.0.3 →
-          </Link>
         </div>
         <p style={{fontSize: '1.35rem', fontWeight: 600, color: '#e2e8f0', margin: '0.4rem 0 0.6rem'}}>
           Production-Scale FHIR Analytics. Running Anywhere.

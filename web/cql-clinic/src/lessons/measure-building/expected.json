@@ -1,0 +1,76 @@
+{
+  "columns": [
+    "Has Diabetes",
+    "Measurement Period",
+    "Age At Start",
+    "Had Office Visit",
+    "Has Recent A1c",
+    "In Hospice",
+    "Initial Population",
+    "Denominator",
+    "Denominator Exclusion",
+    "Numerator"
+  ],
+  "rows": {
+    "patient-a": [
+      true,
+      "{\"low\": \"2024-01-01\", \"high\": \"2024-12-31\", \"lowClosed\": true, \"highClosed\": true}",
+      "38",
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true
+    ],
+    "patient-b": [
+      true,
+      "{\"low\": \"2024-01-01\", \"high\": \"2024-12-31\", \"lowClosed\": true, \"highClosed\": true}",
+      "51",
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ],
+    "patient-c": [
+      false,
+      "{\"low\": \"2024-01-01\", \"high\": \"2024-12-31\", \"lowClosed\": true, \"highClosed\": true}",
+      "25",
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "patient-d": [
+      true,
+      "{\"low\": \"2024-01-01\", \"high\": \"2024-12-31\", \"lowClosed\": true, \"highClosed\": true}",
+      "83",
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "patient-e": [
+      true,
+      "{\"low\": \"2024-01-01\", \"high\": \"2024-12-31\", \"lowClosed\": true, \"highClosed\": true}",
+      "43",
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  }
+}

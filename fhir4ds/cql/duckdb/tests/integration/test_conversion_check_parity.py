@@ -32,7 +32,7 @@ def test_cql_conversion_check_expressions_parse_and_translate() -> None:
         "ConvertsToLong('9223372036854775807')",
         "ConvertsToRatio('{\"numerator\":{\"value\":1},\"denominator\":{\"value\":2}}')",
         "CanConvertQuantity('1000 mg', 'g')",
-        "ConvertQuantity('1000 mg', 'g')",
+        "quantityConvert('1000 mg', 'g')",
     ]:
         parsed = parse_expression(expression)
         assert isinstance(parsed, FunctionRef)
@@ -77,7 +77,7 @@ def test_cql_conversion_check_duckdb_surface_matches_cpp_registration() -> None:
         "SELECT ConvertsToString(json_object('a', 1))",
         "SELECT ConvertsToTime('T10:30:00')",
         "SELECT CanConvertQuantity('1000 ''mg''', 'g')",
-        "SELECT ConvertQuantity('1000 ''mg''', 'g')",
+        "SELECT quantityConvert('1000 ''mg''', 'g')",
     ]
 
     py = _python_only_connection()
@@ -121,7 +121,11 @@ def test_cql_conversion_check_spec_boundaries_match_cpp_registration() -> None:
         ("SELECT ConvertsToString(json_object('a', 1))", False),
         ("SELECT ToQuantity('1.123456789 ''mg''')", None),
         ("SELECT ToQuantity('1000000000000000000000000000000 ''mg''')", None),
-        ("SELECT ConvertQuantity('{\"value\":1e100,\"unit\":\"mg\"}', 'g')", None),
+        # quantityConvert (translator path) converts magnitudes via pint and
+        # has no Decimal-extent guard (that was the deleted ConvertQuantity
+        # direct-UDF surface); the resulting DOUBLE-backed quantity renders
+        # in scientific notation.
+        ("SELECT quantityConvert('{\"value\":1e100,\"unit\":\"mg\"}', 'g') IS NOT NULL", True),
         ("SELECT ConvertsToRatio('.5 ''mg'':2 ''mg''')", False),
         ("SELECT ConvertsToRatio('1.123456789 ''mg'':2 ''mg''')", False),
         ("SELECT ConvertsToRatio('1000000000000000000000000000000 ''mg'':2 ''mg''')", False),

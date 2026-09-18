@@ -24,6 +24,12 @@ This live demo runs a browser-side consumer of a FHIR Bulk Publish feed end-to-e
   {() => <IntroDiagram />}
 </BrowserOnly>
 
+The published feed centers on `Slot` — the bookable appointment window. Each slot points at a `Schedule`, which in turn references the people and places involved. The diagram below shows the resource relationships this demo navigates; the sections that follow walk each step live.
+
+<BrowserOnly>
+  {() => <ResourceDiagram />}
+</BrowserOnly>
+
 :::note
 First load takes ~10 seconds for Pyodide to bring up FHIR4DS + DuckDB-WASM. If the page asks for geolocation permission, that's so the **Production** section can filter slots near you.
 :::
@@ -43,10 +49,6 @@ The demo defaults to a public synthetic endpoint. Connect to load it into the in
 ## Browse the raw published FHIR resources
 
 Each line in the published NDJSON is one FHIR resource. `Slot` resources carry the `booking-deep-link` extension from the SMART Scheduling Links spec. `Schedule` resources vary in how they reference practitioners — some go through `PractitionerRole`, some point at `Practitioner` directly, some route through `HealthcareService`. Page through to see the shapes.
-
-<BrowserOnly>
-  {() => <ResourceDiagram />}
-</BrowserOnly>
 
 <BrowserOnly>
   {() => <ExploreBlock />}

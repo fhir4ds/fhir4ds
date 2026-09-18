@@ -1,0 +1,43 @@
+{
+  "columns": [
+    "Adjacent Or After",
+    "Age In Months",
+    "Age In Years",
+    "Birthday Month",
+    "Days Since Birth",
+    "Enclosure Count",
+    "First Obs In 2024",
+    "In Measurement Period",
+    "Latest Effective",
+    "Measurement Period Width",
+    "Overlapping Intervals"
+  ],
+  "rows": {
+    "patient-a": [
+      false,
+      "468",
+      "39",
+      3,
+      "14245",
+      1,
+      "2024-03-01",
+      true,
+      "2024-03-01",
+      "181",
+      true
+    ],
+    "patient-b": [
+      false,
+      "619",
+      "51",
+      7,
+      "18860",
+      1,
+      "2024-01-20",
+      true,
+      "2024-01-20",
+      "181",
+      true
+    ]
+  }
+}

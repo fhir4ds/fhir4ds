@@ -1,0 +1,41 @@
+{
+  "id": "data-types",
+  "title": "Basic Data Types and Operations",
+  "description": "Explore CQL's primitive data types: Booleans, Strings, Integers, Decimals, Dates, and Quantities. Write defines that produce each type and learn how null and Coalesce work.",
+  "difficulty": "beginner",
+  "estimatedTime": "20 min",
+  "learningObjectives": [
+    "Write Boolean expressions with and / or",
+    "Concatenate and compare strings",
+    "Distinguish Integer and Decimal arithmetic",
+    "Use calendar duration quantities",
+    "Handle null with is null and Coalesce"
+  ],
+  "ungradedDefines": ["Today", "Date Arithmetic"],
+  "hints": [
+    {
+      "trigger": "Boolean Or",
+      "message": "Boolean operators are and, or, not. 'true or false' evaluates to true."
+    },
+    {
+      "trigger": "String Comparison",
+      "message": "Strings use single quotes in CQL and compare with = for exact equality."
+    },
+    {
+      "trigger": "Decimal Division",
+      "message": "10 / 3 is Integer division. Make one operand a Decimal literal: 10.0 / 3.0."
+    },
+    {
+      "trigger": "Date Arithmetic",
+      "message": "Add a calendar duration quantity to Today(): Today() + 30 days."
+    },
+    {
+      "trigger": "Height",
+      "message": "Quantity literals look like 175 'cm' — number, space, quoted UCUM unit."
+    },
+    {
+      "trigger": "Coalesce",
+      "message": "Coalesce(null, 'Default Value') returns the first non-null argument."
+    }
+  ]
+}

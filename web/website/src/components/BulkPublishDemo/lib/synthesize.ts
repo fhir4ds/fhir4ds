@@ -340,8 +340,8 @@ export async function ingestGeneratedDataset(
   for (let i = 0; i < dataset.resources.length; i += batchSize) {
     const batch = dataset.resources.slice(i, i + batchSize);
     const values = batch
-      .map(r => `('${r.id.replace(/'/g, "''")}', '${r.resourceType}', '${r.resource.replace(/'/g, "''")}', NULL)`)
+      .map(r => `('${r.id.replace(/'/g, "''")}', '${r.resourceType}', '${r.resource.replace(/'/g, "''")}', NULL, '${r.id.split("-")[0].replace(/'/g, "''")}')`)
       .join(", ");
-    await executeQuery(`INSERT INTO resources (id, resourceType, resource, patient_ref) VALUES ${values};`);
+    await executeQuery(`INSERT INTO resources (id, resourceType, resource, patient_ref, publisher) VALUES ${values};`);
   }
 }

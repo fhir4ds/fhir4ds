@@ -95,12 +95,35 @@ export function useDuckDB(wasmAppUrl?: string, enabled = true) {
 
       const columns = result.schema.fields.map((f: any) => f.name);
       const rows: unknown[][] = [];
+      // Arrow renders DECIMAL columns as unscaled BigInt (decimal128; the
+      // duckdb-wasm bundle surfaces it as a BigInt-like object whose
+      // String() form drops the scale). Rescale to Number using the field
+      // metadata so DuckDB DECIMAL(38,8) values (cqlDivide, Round, ...)
+      // display with their fractional part.
+      const decimalScales = result.schema.fields.map((f: any) =>
+        f.type?.typeId === 7 /* Arrow Type.Decimal */ && typeof f.type.scale === "number"
+          ? f.type.scale
+          : null,
+      );
+      const asNumber = (v: unknown, scale: number | null): unknown => {
+        if (scale === null) return v;
+        if (typeof v === "bigint") return Number(v) / Math.pow(10, scale);
+        if (typeof v === "object" && v !== null) {
+          try {
+            const n = Number(v);
+            if (Number.isFinite(n)) return n / Math.pow(10, scale);
+          } catch {
+            /* not numeric-shaped */
+          }
+        }
+        return v;
+      };
       for (let i = 0; i < result.numRows; i++) {
         const row: unknown[] = [];
-        for (const col of columns) {
+        columns.forEach((col: string, colIdx: number) => {
           const vec = result.getChild(col);
-          row.push(vec?.get(i));
-        }
+          row.push(asNumber(vec?.get(i), decimalScales[colIdx]));
+        });
         rows.push(row);
       }
 

@@ -1,0 +1,30 @@
+{
+  "columns": [
+    "Absolute Value",
+    "Age Category",
+    "Date Difference",
+    "Date Range",
+    "Equality",
+    "Equivalence",
+    "Forced Precedence",
+    "Grade Category",
+    "Power",
+    "Precedence Test",
+    "Square Root"
+  ],
+  "rows": {
+    "patient-a": [
+      5,
+      "Adult",
+      "30",
+      true,
+      true,
+      true,
+      20,
+      "B",
+      8,
+      14,
+      4.0
+    ]
+  }
+}

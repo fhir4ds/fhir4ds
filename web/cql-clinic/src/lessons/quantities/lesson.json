@@ -1,0 +1,66 @@
+{
+  "id": "quantities",
+  "title": "Quantities and Unit-Aware Arithmetic",
+  "description": "CQL Quantities are numbers WITH units — 1 'g' equals 1000 'mg' because comparisons are unit-aware. Write quantity literals, combine them across units, project .value/.unit, and compare calendar durations.",
+  "difficulty": "intermediate",
+  "estimatedTime": "25 min",
+  "learningObjectives": [
+    "Write UCUM quantity literals (5 'mg')",
+    "Compare quantities across units (1 'g' = 1000 'mg')",
+    "Add quantities with different units",
+    "Multiply a quantity by a scalar",
+    "Project .value and .unit from a quantity",
+    "Compare calendar durations (1 year > 11 months)"
+  ],
+  "ungradedDefines": [],
+  "hints": [
+    {
+      "trigger": "Dose Literal",
+      "message": "Quantity literal syntax: number, space, quoted UCUM unit — 5 'mg'."
+    },
+    {
+      "trigger": "Unit Aware Equality",
+      "message": "1 'g' = 1000 'mg' is TRUE — CQL converts to a common unit before comparing."
+    },
+    {
+      "trigger": "Unit Aware Ordering",
+      "message": "180 'cm' < 2 'm' — same conversion logic applies to < and >."
+    },
+    {
+      "trigger": "Same Unit Sum",
+      "message": "5 'mg' + 5 'mg' keeps the mg unit: 10 'mg'."
+    },
+    {
+      "trigger": "Cross Unit Sum",
+      "message": "1 'g' + 500 'mg' — the result converts to the most granular unit: 1500 'mg'."
+    },
+    {
+      "trigger": "Scalar Multiply",
+      "message": "Quantity * number scales the value and keeps the unit: 10 'mg'."
+    },
+    {
+      "trigger": "Quantity As String",
+      "message": "ToString(5 'mg') renders the CQL literal form: 5 'mg' with the unit quoted."
+    },
+    {
+      "trigger": "Quantity Value",
+      "message": "(5 'mg').value projects the numeric value; note it comes back as the Decimal 5.0."
+    },
+    {
+      "trigger": "Quantity Unit",
+      "message": "(5 'mg').unit projects the unit string 'mg'."
+    },
+    {
+      "trigger": "Temperature Compare",
+      "message": "UCUM temperatures: 37 'Cel' > 30 'Cel' — Celsius has its own UCUM code, not 'C'."
+    },
+    {
+      "trigger": "Calendar Duration Compare",
+      "message": "Calendar durations compare by conversion: 1 year > 11 months is true."
+    },
+    {
+      "trigger": "Dose In Range",
+      "message": "between works on quantities, unit-aware: 7.5 'mg' between 5 'mg' and 10 'mg'."
+    }
+  ]
+}

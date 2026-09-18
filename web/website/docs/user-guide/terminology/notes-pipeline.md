@@ -8,7 +8,7 @@ sidebar_label: Notes Pipeline
 
 The `NotesPipeline` (`fhir4ds.cql.loader.notes_pipeline`) derives structured FHIR Condition resources from free-text clinical notes. It extracts text from configured note paths on a FHIR resource, runs each fragment through `medterm4ds.extract()` (a medspaCy + GLiNER + SapBERT cascade), and wraps every affirmed concept in a synthetic Condition carrying both [Auto-Coding](./autocoding.md)'s autocoding extension (`engine="medterm4ds-ner"`) and a `derived-from-text` extension for full audit.
 
-This is Phase 4 of the medterm4ds integration. The reference NER backend is documented in the [medterm4ds extraction service](https://github.com/joelmontavon/medterm4ds).
+This is Phase 4 of the medterm4ds integration. The reference NER backend is documented in the [medterm4ds extraction service](https://terminology.fhir4ds.com).
 
 ## 1. Install
 
