@@ -12,6 +12,7 @@ window.addEventListener("error", suppressResizeLoop);
 
 import React from "react";
 import { createRoot } from "react-dom/client";
+import "./lib/monaco-setup";
 import App from "./App";
 import "./styles.css";
 
