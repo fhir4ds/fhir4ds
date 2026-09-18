@@ -1,0 +1,124 @@
+[
+  {
+    "resourceType": "Patient",
+    "id": "patient-r1",
+    "gender": "female",
+    "birthDate": "1990-02-11",
+    "name": [
+      {
+        "family": "Rivera",
+        "given": [
+          "Ana"
+        ]
+      }
+    ]
+  },
+  {
+    "resourceType": "Medication",
+    "id": "med-ator",
+    "status": "active",
+    "code": {
+      "coding": [
+        {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "268490",
+          "display": "atorvastatin"
+        }
+      ]
+    }
+  },
+  {
+    "resourceType": "Medication",
+    "id": "med-ibu",
+    "status": "active",
+    "code": {
+      "coding": [
+        {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "5640",
+          "display": "ibuprofen"
+        }
+      ]
+    }
+  },
+  {
+    "resourceType": "MedicationRequest",
+    "id": "mr-1",
+    "status": "active",
+    "intent": "order",
+    "subject": {
+      "reference": "Patient/patient-r1"
+    },
+    "medication": {
+      "reference": "Medication/med-ator"
+    },
+    "authoredOn": "2024-03-01"
+  },
+  {
+    "resourceType": "MedicationRequest",
+    "id": "mr-2",
+    "status": "completed",
+    "intent": "order",
+    "subject": {
+      "reference": "Patient/patient-r1"
+    },
+    "medication": {
+      "reference": "Medication/med-ibu"
+    },
+    "authoredOn": "2023-11-15"
+  },
+  {
+    "resourceType": "Patient",
+    "id": "patient-r2",
+    "gender": "male",
+    "birthDate": "1985-08-22",
+    "name": [
+      {
+        "family": "Chen",
+        "given": [
+          "Bob"
+        ]
+      }
+    ]
+  },
+  {
+    "resourceType": "MedicationRequest",
+    "id": "mr-3",
+    "status": "active",
+    "intent": "order",
+    "subject": {
+      "reference": "Patient/patient-r2"
+    },
+    "medication": {
+      "reference": "Medication/med-ibu"
+    },
+    "authoredOn": "2024-05-10"
+  },
+  {
+    "resourceType": "Patient",
+    "id": "patient-r3",
+    "gender": "female",
+    "birthDate": "1980-12-03",
+    "name": [
+      {
+        "family": "Diaz",
+        "given": [
+          "Cara"
+        ]
+      }
+    ]
+  },
+  {
+    "resourceType": "MedicationRequest",
+    "id": "mr-4",
+    "status": "active",
+    "intent": "order",
+    "subject": {
+      "reference": "Patient/patient-r3"
+    },
+    "medication": {
+      "reference": "Medication/med-gone"
+    },
+    "authoredOn": "2024-06-20"
+  }
+]

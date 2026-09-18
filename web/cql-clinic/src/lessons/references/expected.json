@@ -1,0 +1,44 @@
+{
+  "columns": [
+    "Active Request Count",
+    "All Request Count",
+    "On Ibuprofen",
+    "Reference String",
+    "Referenced Med Id",
+    "Resolved Med Code",
+    "Dangling Reference",
+    "Uses Medication Reference"
+  ],
+  "rows": {
+    "patient-r1": [
+      1,
+      2,
+      false,
+      "Medication/med-ator",
+      "med-ator",
+      "268490",
+      false,
+      true
+    ],
+    "patient-r2": [
+      1,
+      1,
+      true,
+      "Medication/med-ibu",
+      "med-ibu",
+      "5640",
+      false,
+      true
+    ],
+    "patient-r3": [
+      1,
+      1,
+      false,
+      "Medication/med-gone",
+      "med-gone",
+      null,
+      true,
+      true
+    ]
+  }
+}

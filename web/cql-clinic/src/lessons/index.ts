@@ -8,6 +8,8 @@ import temporalLogic from "./temporal-logic";
 import terminology from "./terminology";
 import querySyntax from "./query-syntax";
 import measureBuilding from "./measure-building";
+import cervicalScreening from "./cervical-screening";
+import references from "./references";
 import type { Lesson } from "./types";
 
 export const LESSONS: Lesson[] = [
@@ -21,6 +23,8 @@ export const LESSONS: Lesson[] = [
   terminology,
   querySyntax,
   measureBuilding,
+  cervicalScreening,
+  references,
 ];
 
 export function getLesson(id: string): Lesson | undefined {
