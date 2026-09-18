@@ -98,7 +98,11 @@ export default function CQLEditor({ value, onChange, solution }: Props) {
               ...editorOptions,
               readOnly: true,
               renderOverviewRuler: false,
-              renderSideBySide: true,
+              // Inline (GitHub-style) diff: the editor pane is ~half the
+              // clinic width, and side-by-side panes that narrow wrap long
+              // CQL lines at different points, so the two sides drift out
+              // of visual sync. Inline keeps removed/added rows stacked.
+              renderSideBySide: false,
               originalEditable: false,
             }}
           />
