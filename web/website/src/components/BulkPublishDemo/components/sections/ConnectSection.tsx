@@ -248,7 +248,10 @@ function ConnectionList({
           0,
         );
         const pracCount = publishersForConnection.reduce(
-          (n, p) => n + (ingest?.providerCounts[p]?.Practitioner ?? 0),
+          (n, p) =>
+            n +
+            (ingest?.providerCounts[p]?.Practitioner ?? 0) +
+            (ingest?.providerCounts[p]?.PractitionerRole ?? 0),
           0,
         );
         return (

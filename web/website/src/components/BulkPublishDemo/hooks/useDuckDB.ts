@@ -584,7 +584,8 @@ async function ingestManifestRecursive(
       count++;
     }
     if (!providerCounts[publisher]) providerCounts[publisher] = {};
-    providerCounts[publisher][entry.type] = count;
+    providerCounts[publisher][entry.type] =
+      (providerCounts[publisher][entry.type] ?? 0) + count;
     resourceCounts[entry.type] = (resourceCounts[entry.type] ?? 0) + count;
     onProgress?.({
       phase: "resource",
