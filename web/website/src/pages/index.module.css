@@ -44,9 +44,10 @@
 
 .newBadge {
   position: absolute;
-  top: -9px;
-  right: -12px;
-  background: rgba(95, 237, 131, 0.15);
+  top: -10px;
+  right: -14px;
+  z-index: 10;
+  background: #020617;
   border: 1px solid rgba(95, 237, 131, 0.55);
   color: rgb(95, 237, 131);
   padding: 0.05rem 0.45rem;

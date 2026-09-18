@@ -334,7 +334,19 @@ export default function ResultsPanel({
                         <td>{c.name}</td>
                         <td className="checks-value"><CellValue v={value} /></td>
                         <td>
-                          {!c.graded ? <span className="meta">n/g</span> : c.pass ? <span className="pass-icon">✓</span> : <span className="fail-icon">✗</span>}
+                          {!c.graded ? (
+                            <span
+                              className="meta"
+                              title="Not graded — this define's value varies by run (e.g. Today() or the measurement period), so only its output is shown."
+                              style={{ cursor: "help" }}
+                            >
+                              —
+                            </span>
+                          ) : c.pass ? (
+                            <span className="pass-icon">✓</span>
+                          ) : (
+                            <span className="fail-icon">✗</span>
+                          )}
                           {drillable && <span className="meta" style={{ marginLeft: 4 }}>why?</span>}
                         </td>
                       </tr>
