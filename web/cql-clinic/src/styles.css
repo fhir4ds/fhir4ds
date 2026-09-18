@@ -325,12 +325,6 @@ body {
   flex-wrap: wrap;
   padding: 10px;
   border-top: 1px solid var(--border);
-  /* Anchor at the pane bottom regardless of editor height. */
-  margin-top: auto;
-}
-
-.editor-footer__timings {
-  margin-left: auto;
 }
 
 /* The results pane is a column: toolbar + tab bar + scrollable tab body. */
@@ -357,11 +351,6 @@ body {
 .empty-state .empty-icon {
   font-size: 22px;
   opacity: 0.6;
-}
-
-.editor-solution {
-  max-height: 180px;
-  margin: 8px 10px 10px;
 }
 
 /* Monaco's scrollbar sits flush against the editor edge; pad it so it
@@ -545,12 +534,6 @@ body {
   overflow-y: auto;
 }
 
-.editor .monaco-editor,
-.editor > div {
-  flex: 1;
-  min-height: 0;
-}
-
 /* ---------- Results panel ---------- */
 
 .results {
@@ -558,16 +541,25 @@ body {
   flex-direction: column;
 }
 
-/* Slim status strip above the tabs: run state, timings, badge, calm error. */
-.results-status {
+/* Footer strip below the tab content: run state, error, timings, badge. */
+.results-footer {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
   min-height: 20px;
   padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   background: var(--bg-soft);
+}
+
+.results-footer__spacer {
+  flex: 1;
+}
+
+.results-footer .status-error {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .status-running {

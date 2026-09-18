@@ -147,14 +147,14 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
             value={cql}
             onChange={setCql}
             solution={lesson.solution}
-            translateTimeMs={translateTimeMs}
-            executionTimeMs={executionTimeMs}
           />
         </div>
         <ResultsPanel
           running={running}
           error={error}
           report={report}
+          translateTimeMs={translateTimeMs}
+          executionTimeMs={executionTimeMs}
           result={result}
           fixtures={lesson.fixtures}
           lessonCql={lesson.solution}

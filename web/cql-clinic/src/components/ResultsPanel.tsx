@@ -173,6 +173,9 @@ interface Props {
   running: boolean;
   error: string | null;
   report: GradeReport | null;
+  /** Last run's timings, shown in the pane footer. */
+  translateTimeMs: number | null;
+  executionTimeMs: number | null;
   result: { columns: string[]; rows: unknown[][] } | null;
   /** Lesson fixtures (for patient/resource derivation). */
   fixtures: unknown[];
@@ -214,6 +217,8 @@ export default function ResultsPanel({
   running,
   error,
   report,
+  translateTimeMs,
+  executionTimeMs,
   result,
   fixtures,
   lessonCql,
@@ -278,22 +283,6 @@ export default function ResultsPanel({
 
   return (
     <div className="panel results">
-      <div className="results-status">
-        {running && (
-          <span className="status-running">
-            <span className="loading-spinner" /> running…
-          </span>
-        )}
-        {!running && report?.allPassed && (
-          <span className="all-passed-inline">All checks passed — lesson complete! 🎉</span>
-        )}
-        {!running && error && (
-          <span className="status-error" title={error}>
-            {error.length > 90 ? error.slice(0, 90) + "…" : error}
-          </span>
-        )}
-      </div>
-
       <div className="tab-bar" role="tablist">
         {tabBtn("checks", `Checks${report ? ` (${report.checks.filter((c) => c.graded && c.pass).length}/${report.checks.filter((c) => c.graded).length})` : ""}`)}
         {tabBtn("sql", "Generated SQL")}
@@ -425,6 +414,28 @@ export default function ResultsPanel({
           )}
         </div>
       )}
+
+      <div className="results-footer">
+        {running && (
+          <span className="status-running">
+            <span className="loading-spinner" /> running…
+          </span>
+        )}
+        {!running && error && (
+          <span className="status-error" title={error}>
+            {error.length > 90 ? error.slice(0, 90) + "…" : error}
+          </span>
+        )}
+        <span className="results-footer__spacer" />
+        {translateTimeMs !== null && executionTimeMs !== null && (
+          <span className="meta results-footer__timings" title="last run — auto-runs 1.2s after you stop typing">
+            translated {translateTimeMs.toFixed(1)} ms · executed {executionTimeMs.toFixed(1)} ms
+          </span>
+        )}
+        {!running && report?.allPassed && (
+          <span className="all-passed-inline">All checks passed — lesson complete! 🎉</span>
+        )}
+      </div>
     </div>
   );
 }
