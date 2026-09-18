@@ -37,6 +37,26 @@
   font-family: monospace;
 }
 
+/* Hero button carrying a floating "NEW" tag — used to call out new examples. */
+.clinicButton {
+  position: relative;
+}
+
+.newBadge {
+  position: absolute;
+  top: -9px;
+  right: -12px;
+  background: rgba(95, 237, 131, 0.15);
+  border: 1px solid rgba(95, 237, 131, 0.55);
+  color: rgb(95, 237, 131);
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 /* ── Stats Bar ── */
 .statsBar {
   background: #0f172a;
