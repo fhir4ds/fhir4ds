@@ -553,8 +553,8 @@ body {
   background: var(--bg-soft);
 }
 
-.results-footer__spacer {
-  flex: 1;
+.results-footer__timings {
+  margin-left: auto;
 }
 
 .results-footer .status-error {
@@ -867,11 +867,6 @@ body {
   padding: 8px 12px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
-}
-
-/* Mirrors the Checks tab's "Test user" label so both tabs read the same. */
-.patient-viewer-label {
-  color: var(--text-dim);
 }
 
 .patient-viewer-select {

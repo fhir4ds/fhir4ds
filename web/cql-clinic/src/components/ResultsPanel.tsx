@@ -296,9 +296,9 @@ export default function ResultsPanel({
           {report && (
             <div className="patient-section">
               <div className="patient-picker">
-                <label htmlFor="patient-select">Test user</label>
                 <select
                   id="patient-select"
+                  aria-label="Test user"
                   value={activePatient}
                   onChange={(e) => { onSelectPatient(e.target.value); onDrillChange(null); }}
                 >
@@ -421,19 +421,18 @@ export default function ResultsPanel({
             <span className="loading-spinner" /> running…
           </span>
         )}
+        {!running && report?.allPassed && (
+          <span className="all-passed-inline">All checks passed — lesson complete! 🎉</span>
+        )}
         {!running && error && (
           <span className="status-error" title={error}>
             {error.length > 90 ? error.slice(0, 90) + "…" : error}
           </span>
         )}
-        <span className="results-footer__spacer" />
         {translateTimeMs !== null && executionTimeMs !== null && (
           <span className="meta results-footer__timings" title="last run — auto-runs 1.2s after you stop typing">
             translated {translateTimeMs.toFixed(1)} ms · executed {executionTimeMs.toFixed(1)} ms
           </span>
-        )}
-        {!running && report?.allPassed && (
-          <span className="all-passed-inline">All checks passed — lesson complete! 🎉</span>
         )}
       </div>
     </div>

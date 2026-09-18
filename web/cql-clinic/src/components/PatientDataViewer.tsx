@@ -162,12 +162,10 @@ export function PatientDataViewer({
   return (
     <div className="patient-viewer" data-testid="patient-data-viewer">
       <div className="patient-viewer-controls">
-        <label className="patient-viewer-label" htmlFor="patient-viewer-select">
-          Test user
-        </label>
         <select
           id="patient-viewer-select"
           className="sample-select patient-viewer-select"
+          aria-label="Test user"
           value={activePatientId}
           onChange={(e) => handleChange(e.target.value)}
           disabled={patients.length === 0}
