@@ -1192,6 +1192,126 @@
 
 /* ─── §5 Production ────────────────────────────────────────────────── */
 
+/* Pop-out launcher above the production widget: opens the chrome-less
+   /patient-app window that boots the same engine standalone. */
+.production-popout {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.6rem;
+}
+
+.production-popout__btn {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  padding: 0.35rem 0.9rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.production-popout__btn:hover {
+  filter: brightness(1.2);
+}
+
+/* ─── Standalone /patient-app window ───────────────────────────────── */
+
+.patient-app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #0b1220;
+  color: #e6ecf5;
+  padding: 0 1.5rem 3rem;
+  max-width: 1080px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.patient-app--boot {
+  min-height: 100vh;
+  background: #0b1220;
+}
+
+.patient-app__header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 1.5rem;
+}
+
+.patient-app__brand {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.patient-app__tag {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+.patient-app__main {
+  flex: 1;
+}
+
+.patient-app__loading {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 0.6rem;
+  padding: 1.5rem;
+  margin-top: 12vh;
+}
+
+.patient-app__loading strong {
+  color: #e6ecf5;
+  font-size: 0.95rem;
+}
+
+.patient-app__loading p {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+}
+
+.patient-app__spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: patient-app-spin 0.9s linear infinite;
+  flex: none;
+}
+
+@keyframes patient-app-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.patient-app__error {
+  margin-top: 12vh;
+}
+
+.patient-app__retry {
+  margin-top: 0.75rem;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  border-radius: 0.375rem;
+  padding: 0.45rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .production {
   padding: 1.5rem;
   background: linear-gradient(180deg, var(--bg-elev) 0%, var(--bg-elev-2) 100%);

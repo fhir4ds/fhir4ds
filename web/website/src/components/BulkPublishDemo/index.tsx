@@ -1,4 +1,5 @@
 import "./styles.css";
+import useBaseUrl from "@docusaurus/useBaseUrl";
 import { BulkPublishDemoProvider, useDemoState } from "./provider";
 import { MermaidDiagram } from "./components/MermaidDiagram";
 import { ConnectSection } from "./components/sections/ConnectSection";
@@ -152,8 +153,17 @@ export function QueryBlock() {
 
 export function ProductionBlock() {
   const s = useDemoState();
+  const patientAppUrl = useBaseUrl("patient-app");
   return (
     <div className="bulk-publish-demo-app">
+      <div className="production-popout">
+        <button
+          className="production-popout__btn"
+          onClick={() => window.open(patientAppUrl, "_blank")}
+        >
+          Open patient app ↗
+        </button>
+      </div>
       <ProductionSection
         materialized={s.materialized}
         executeQuery={s.executeQuery}
