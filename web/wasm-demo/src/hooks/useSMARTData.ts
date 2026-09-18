@@ -21,6 +21,20 @@ export interface SMARTDataState {
   resourceCount: number;
 }
 
+/**
+ * Fired on window whenever this hook replaces the contents of the DuckDB
+ * `resources` table (SMART load or clear). Views that snapshot the table
+ * (e.g. PatientDataViewer's patient list) listen for this to re-query
+ * instead of showing stale rows until a manual refresh.
+ */
+export const RESOURCES_CHANGED_EVENT = "fhir4ds:resources-changed";
+
+function announceResourcesChanged(source: string, patientId?: string) {
+  window.dispatchEvent(
+    new CustomEvent(RESOURCES_CHANGED_EVENT, { detail: { source, patientId } }),
+  );
+}
+
 // ── Patient reference extraction ─────────────────────────────────────────────
 
 function extractPatientRef(resource: FHIRResource): string | null {
@@ -116,6 +130,7 @@ export function useSMARTData(getConnection: () => any | null) {
           progress: null,
           resourceCount: count,
         });
+        announceResourcesChanged("smart-load", token.patientId ?? undefined);
 
         console.log(
           `[SMARTData] Loaded ${count} resources for patient ${token.patientId}`,
@@ -153,6 +168,7 @@ export function useSMARTData(getConnection: () => any | null) {
       progress: null,
       resourceCount: 0,
     });
+    announceResourcesChanged("smart-clear");
   }, [getConnection]);
 
   return { ...state, loadPatientData, clearData };

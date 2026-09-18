@@ -5,6 +5,7 @@
  * - External selection support: a parent component can set selectedPatientId.
  */
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { RESOURCES_CHANGED_EVENT } from "../hooks/useSMARTData";
 
 interface PatientInfo {
   id: string;
@@ -54,7 +55,10 @@ export function PatientDataViewer({
         label: String(row[1]),
       }));
       setPatients(list);
-      if (list.length > 0 && !activePatientId) {
+      // Adopt the first patient when there is no selection yet OR the current
+      // selection no longer exists (e.g. SMART auth replaced the table's
+      // sample patients with a single logged-in patient).
+      if (list.length > 0 && !list.some((p) => p.id === activePatientId)) {
         setActivePatientId(list[0].id);
         onPatientSelect?.(list[0].id);
       }
@@ -65,6 +69,16 @@ export function PatientDataViewer({
 
   useEffect(() => {
     refreshPatients();
+  }, [refreshPatients]);
+
+  // The resources table can be replaced underneath us (SMART on FHIR load or
+  // clear) — re-query instead of serving a stale patient list until the user
+  // clicks the refresh button.
+  useEffect(() => {
+    const onResourcesChanged = () => refreshPatients();
+    window.addEventListener(RESOURCES_CHANGED_EVENT, onResourcesChanged);
+    return () =>
+      window.removeEventListener(RESOURCES_CHANGED_EVENT, onResourcesChanged);
   }, [refreshPatients]);
 
   // Respond to external patient selection
