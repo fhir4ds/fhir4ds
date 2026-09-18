@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { Lesson, LessonExpected } from "../lessons/types";
 import { PatientDataViewer } from "./PatientDataViewer";
 
@@ -176,7 +176,6 @@ interface Props {
   executionTimeMs: number | null;
   report: GradeReport | null;
   result: { columns: string[]; rows: unknown[][] } | null;
-  onRun: () => void;
   /** Lesson fixtures (for patient/resource derivation). */
   fixtures: unknown[];
   /** Full lesson CQL (solution preferred) for retrieve-type drill-down. */
@@ -184,12 +183,8 @@ interface Props {
   /** DuckDB query interface for the patient data viewer. */
   executeQuery: (sql: string) => Promise<any>;
   duckdbReady: boolean;
-  /** Generated SQL from the last run/translate, for the SQL tab. */
+  /** Generated SQL from the last run, for the SQL tab. */
   sql: string | null;
-  /** True while the CQL engine is still booting (disables Translate). */
-  engineReady: boolean;
-  /** Translate the CURRENT editor content on demand (SQL tab refresh). */
-  onTranslate: () => Promise<{ sql: string; timeMs: number } | null>;
   /** Active right-pane tab + switcher. */
   activeTab: ResultsTab;
   onTabChange: (tab: ResultsTab) => void;
@@ -199,6 +194,16 @@ interface Props {
   /** Active failed-check drill-down (highlights resources in Patient tab). */
   drill: Drill | null;
   onDrillChange: (drill: Drill | null) => void;
+}
+
+/** Shared per-tab empty state: one wording pattern before the first run. */
+function TabEmptyState({ what }: { what: string }) {
+  return (
+    <div className="empty-state">
+      <span className="empty-icon">▶</span>
+      <span>{what} will appear here as you type — every run grades your CQL against the lesson patients.</span>
+    </div>
+  );
 }
 
 function CellValue({ v }: { v: unknown }) {
@@ -214,14 +219,11 @@ export default function ResultsPanel({
   executionTimeMs,
   report,
   result,
-  onRun,
   fixtures,
   lessonCql,
   executeQuery,
   duckdbReady,
   sql,
-  engineReady,
-  onTranslate,
   activeTab,
   onTabChange,
   selectedPatient,
@@ -229,7 +231,6 @@ export default function ResultsPanel({
   drill,
   onDrillChange,
 }: Props) {
-  const [translating, setTranslating] = useState(false);
 
   /** Patient ids + display labels ("Johnson, Alice" — the same derivation
    *  the PatientDataViewer uses in its dropdown, so the two stay in sync). */
@@ -270,12 +271,6 @@ export default function ResultsPanel({
     });
   }, [report, selectedCells, activePatient]);
 
-  const handleTranslateNow = async () => {
-    setTranslating(true);
-    await onTranslate();
-    setTranslating(false);
-  };
-
   const tabBtn = (tab: ResultsTab, label: string) => (
     <button
       className={`tab-btn${activeTab === tab ? " tab-btn--active" : ""}`}
@@ -287,18 +282,24 @@ export default function ResultsPanel({
 
   return (
     <div className="panel results">
-      <div className="results-toolbar">
-        <button className="btn btn-run" onClick={onRun} disabled={running}>
-          {running ? "Running…" : "▶ Run & Check"}
-        </button>
-        {translateTimeMs !== null && (
-          <span className="meta">translated in {translateTimeMs.toFixed(1)} ms</span>
+      <div className="results-status">
+        {running && (
+          <span className="status-running">
+            <span className="loading-spinner" /> running…
+          </span>
         )}
-        {executionTimeMs !== null && (
-          <span className="meta">executed in {executionTimeMs.toFixed(1)} ms</span>
+        {!running && translateTimeMs !== null && executionTimeMs !== null && (
+          <span className="meta">
+            translated {translateTimeMs.toFixed(1)} ms · executed {executionTimeMs.toFixed(1)} ms
+          </span>
         )}
-        {report?.allPassed && (
+        {!running && report?.allPassed && (
           <span className="all-passed-inline">All checks passed — lesson complete! 🎉</span>
+        )}
+        {!running && error && (
+          <span className="status-error" title={error}>
+            {error.length > 90 ? error.slice(0, 90) + "…" : error}
+          </span>
         )}
       </div>
 
@@ -310,14 +311,7 @@ export default function ResultsPanel({
 
       {activeTab === "checks" && (
         <div className="tab-content">
-          {error && <div className="error-box">{error}</div>}
-
-          {!report && !error && (
-            <div className="empty-state">
-              <span className="empty-icon">▶</span>
-              <span>Run &amp; Check to translate your CQL, execute it against the lesson patients, and grade every define.</span>
-            </div>
-          )}
+          {!report && !error && <TabEmptyState what="Your checks" />}
 
           {report && (
             <div className="patient-section">
@@ -410,26 +404,10 @@ export default function ResultsPanel({
 
       {activeTab === "sql" && (
         <div className="tab-content sql-tab">
-          <div className="sql-toolbar">
-            <span className="meta">
-              {translateTimeMs !== null ? `translated in ${translateTimeMs.toFixed(1)} ms` : "not translated yet"}
-            </span>
-            <button
-              className="btn btn-ghost"
-              onClick={handleTranslateNow}
-              disabled={translating || !engineReady}
-              title={engineReady ? "Re-translate the current editor content" : "CQL engine still loading"}
-            >
-              {translating ? "Translating…" : "⟳ Translate current editor"}
-            </button>
-          </div>
           {sql ? (
             <pre className="sql-body">{sql}</pre>
           ) : (
-            <div className="empty-state">
-              <span className="empty-icon">SQL</span>
-              <span>Run &amp; Check or Translate to see the SQL your CQL compiles to.</span>
-            </div>
+            <TabEmptyState what="The SQL your CQL compiles to" />
           )}
         </div>
       )}
@@ -437,9 +415,13 @@ export default function ResultsPanel({
       {activeTab === "patient" && (
         <div className="tab-content">
           {!activePatient || showAllPatients ? (
-            <div className="meta" style={{ padding: "8px 10px" }}>
-              {showAllPatients ? "Pick a single test user (Checks tab) to inspect their resources." : "No fixture patients."}
-            </div>
+            showAllPatients ? (
+              <div className="meta" style={{ padding: "8px 10px" }}>
+                Pick a single test user (Checks tab) to inspect their resources.
+              </div>
+            ) : (
+              <TabEmptyState what="Patient data" />
+            )
           ) : (
             <PatientDataViewer
               executeQuery={executeQuery}

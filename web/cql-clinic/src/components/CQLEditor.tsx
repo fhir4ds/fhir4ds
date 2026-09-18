@@ -11,6 +11,10 @@ interface Props {
   onChange: (next: string) => void;
   /** Reference solution CQL compared via the diff toggle / loaded via the footer. */
   solution: string;
+  /** True while a run is executing (disables the Run button). */
+  running: boolean;
+  /** Run & Check now — skips the auto-run debounce. */
+  onRun: () => void;
 }
 
 const beforeMount: BeforeMount = (monaco: Monaco) => {
@@ -31,7 +35,7 @@ const editorOptions = {
   padding: { top: 12, bottom: 12 },
 } as const;
 
-export default function CQLEditor({ value, onChange, solution }: Props) {
+export default function CQLEditor({ value, onChange, solution, running, onRun }: Props) {
   const [compare, setCompare] = useState(false);
   const [confirmLoad, setConfirmLoad] = useState(false);
 
@@ -86,6 +90,9 @@ export default function CQLEditor({ value, onChange, solution }: Props) {
         </div>
       </div>
       <div className="editor-footer">
+        <button className="btn btn-run" onClick={onRun} disabled={running}>
+          {running ? "Running…" : "▶ Run & Check"}
+        </button>
         <button
           className={`btn btn-ghost${compare ? " btn-ghost--active" : ""}`}
           onClick={() => { setCompare((c) => !c); setConfirmLoad(false); }}
