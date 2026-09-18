@@ -47,8 +47,7 @@ export default function LessonList({ progress, onOpenLesson }: Props) {
               <h2>{lesson.title}</h2>
               <p>{lesson.description}</p>
               <div className="lesson-card-meta">
-                <span>~{lesson.estimatedTime} min</span>
-                <span>{lesson.learningObjectives.length} objectives</span>
+                ~{lesson.estimatedTime} · {lesson.learningObjectives.length} objectives
               </div>
             </button>
           );

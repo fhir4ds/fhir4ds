@@ -7,7 +7,7 @@ hide_table_of_contents: true
 This live CQL sandbox allows you to write and execute Clinical Quality Language (CQL) queries directly in your browser using the FHIR4DS engine.
 
 :::info
-This playground uses **synthetic sample data** for 28 patients. To test against real EHR data, visit the [SMART on FHIR Demo](./smart-demo).
+This playground uses **synthetic sample data** for 28 patients. To test against real EHR data, visit the [SMART on FHIR Demo](./smart-demo). New to CQL? Start with the [CQL Clinic](./cql-clinic) lessons.
 :::
 
 import WasmDemoWC from '@site/src/components/WasmDemoWC';

@@ -13,6 +13,7 @@
 
 import BrowserOnly from "@docusaurus/BrowserOnly";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
+import PopoutPill from "./PopoutPill";
 
 const SCRIPT_ID = "cql-clinic-wc-bundle";
 
@@ -28,19 +29,25 @@ function injectWcScript(scriptSrc: string): void {
 interface CqlClinicWCProps {
   /** CSS height. Default: '85vh' */
   height?: string;
+  /** Show an "Open in new window ↗" pill above the clinic that opens the
+   *  standalone app (the clinic's static build is a full page on its own). */
+  popout?: boolean;
 }
 
-function CqlClinicComponent({ height = "85vh" }: CqlClinicWCProps) {
+function CqlClinicComponent({ height = "85vh", popout = false }: CqlClinicWCProps) {
   const {
     siteConfig: { baseUrl },
   } = useDocusaurusContext();
   injectWcScript(`${baseUrl}cql-clinic-app/cql-clinic.js`);
 
   return (
-    <div style={{ margin: "1rem 0" }}>
-      {/* @ts-expect-error cql-clinic is a custom element defined by the clinic bundle */}
-      {typeof window !== "undefined" && <cql-clinic height={height} />}
-    </div>
+    <>
+      {popout && <PopoutPill url={`${baseUrl}cql-clinic-app/`} />}
+      <div style={{ margin: "1rem 0" }}>
+        {/* @ts-expect-error cql-clinic is a custom element defined by the clinic bundle */}
+        {typeof window !== "undefined" && <cql-clinic height={height} />}
+      </div>
+    </>
   );
 }
 

@@ -21,7 +21,7 @@ the browser.
 
 import CqlClinicWC from '@site/src/components/CqlClinicWC';
 
-<CqlClinicWC height="90vh" />
+<CqlClinicWC height="90vh" popout />
 
 ## Curriculum
 
