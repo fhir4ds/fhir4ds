@@ -67,9 +67,60 @@ from ...translator.expressions._utils import (
     _is_list_returning_sql,
 )
 
+# Spec-published FHIR resource types (valueset-resource-types R4-R6 superset)
+# used to validate CQL retrieve primary source types at translation time.
+# Lazily imported to avoid a hard cql -> viewdef package dependency.
+_SPEC_RETRIEVE_RESOURCE_TYPES: frozenset = frozenset()
+
+
+def _spec_resource_types() -> frozenset:
+    global _SPEC_RETRIEVE_RESOURCE_TYPES
+    if not _SPEC_RETRIEVE_RESOURCE_TYPES:
+        from ....viewdef.metadata import KNOWN_FHIR_RESOURCE_TYPES
+        _SPEC_RETRIEVE_RESOURCE_TYPES = KNOWN_FHIR_RESOURCE_TYPES
+    return _SPEC_RETRIEVE_RESOURCE_TYPES
+
 if TYPE_CHECKING:
     from ...translator.context import SQLTranslationContext
     from ...translator.expressions import ExpressionTranslator
+
+
+def _patient_correlated_where(existing_where, row_alias: str, outer_pid: str):
+    """AND a patient correlation predicate onto an existing WHERE.
+
+    Iteration 8 QA-013: per-patient element lists materialized from rows
+    sources (aggregate folds over retrieves) must filter rows to the
+    outer patient context (`<row_alias>.patient_id = <outer>.patient_id`)
+    so elements do not leak across patients.
+    """
+    correlation = SQLBinaryOp(
+        operator="=",
+        left=SQLQualifiedIdentifier(parts=[row_alias, "patient_id"]),
+        right=SQLQualifiedIdentifier(parts=[outer_pid, "patient_id"]),
+    )
+    if existing_where is None:
+        return correlation
+    return SQLBinaryOp(
+        operator="AND", left=existing_where, right=correlation
+    )
+
+
+def _src_list_projection_is_list_valued(source_expr) -> bool:
+    """True when a query-source SQL subquery projects a LIST value.
+
+    Iteration 12: the `{ <query> }` list selector (iteration 10 QA-017)
+    lowers to ``SELECT COALESCE(list(...), []) FROM (...)`` — a scalar
+    LIST subquery. Such sources UNNEST like array sources.
+    """
+    from ._utils import _is_list_valued_projection
+
+    if not isinstance(source_expr, SQLSubquery) or not isinstance(source_expr.query, SQLSelect):
+        return False
+    if not source_expr.query.columns:
+        return False
+    first = source_expr.query.columns[0]
+    expr = first.expr if isinstance(first, SQLAlias) else first
+    return _is_list_valued_projection(expr)
 
 
 def _demote_audit_struct_to_bool(expr: SQLExpression) -> SQLExpression:
@@ -1335,6 +1386,25 @@ class QueryMixin:
         resolved = registry.resolve_named_profile(resource_type)
         if resolved is not None:
             resource_type, profile_url = resolved
+
+        # Reject unknown resource types at translation time (BUGFIX-002/U1):
+        # an unrecognized type would otherwise lower to an empty CTE
+        # (`WHERE r.resourceType = '<type>'`) and silently evaluate to
+        # false/empty in boolean contexts. Accept the spec-published
+        # resource-type value set (viewdef metadata) plus any resource
+        # loaded in the active FHIR schema registry (custom schemas).
+        schema = getattr(self.context, "fhir_schema", None)
+        schema_types = set(getattr(schema, "resources", {}) or {})
+        if (
+            resource_type not in _spec_resource_types()
+            and resource_type not in schema_types
+        ):
+            from ...errors import TranslationError
+            raise TranslationError(
+                f"Unknown FHIR resource type '{resource_type}' in retrieve "
+                f"[{resource_type}]. Use a resource type from the FHIR "
+                f"specification or load a custom schema containing it."
+            )
 
         # Get terminology filter if present
         terminology = getattr(node, 'terminology', None)
@@ -3757,6 +3827,26 @@ class QueryMixin:
                     self.context._alias_source_asts[alias] = _src0_expr
                 elif (
                     alias
+                    and isinstance(_src0_expr, ListExpression)
+                    and isinstance(source_expr, SQLSubquery)
+                    and isinstance(source_expr.query, SQLSelect)
+                    and source_expr.query.columns
+                    and _src_list_projection_is_list_valued(source_expr)
+                ):
+                    # Iteration 12 (f1/f8): `{ <query> }` list-selector source —
+                    # the selector lowers to a scalar LIST subquery (iteration
+                    # 10 QA-017). UNNEST it like an array source so the alias
+                    # iterates the query's result elements.
+                    _unnest_call = SQLFunctionCall(name="unnest", args=[source_expr])
+                    _inner = SQLSelect(columns=[SQLAlias(expr=_unnest_call, alias=alias)])
+                    source_expr = SQLSelect(
+                        columns=[SQLIdentifier(name=alias)],
+                        from_clause=SQLAlias(expr=SQLSubquery(query=_inner), alias="_list"),
+                    )
+                    self.context.add_alias(alias, table_alias=alias)
+                    self.context._alias_source_asts[alias] = _src0_expr
+                elif (
+                    alias
                     and isinstance(source_expr, SQLFunctionCall)
                     and source_expr.name.lower() in ("cqlchildren", "cqldescendants")
                 ):
@@ -4274,6 +4364,32 @@ class QueryMixin:
                         _inner = SQLSelect(columns=[SQLAlias(expr=_unnest_call, alias=alias)])
                         source_expr = SQLSelect(
                             columns=[SQLIdentifier(name=alias)],
+                            from_clause=SQLAlias(expr=SQLSubquery(query=_inner), alias="_list"),
+                        )
+                        self.context.add_alias(alias, table_alias=alias)
+                        self.context._alias_source_asts[alias] = source_expr_node
+                    elif (
+                        alias
+                        and (node.where or node.return_clause)
+                        and isinstance(source_expr_node, ListExpression)
+                        and len(source_expr_node.elements) == 1
+                        and _src_list_projection_is_list_valued(source_expr)
+                    ):
+                        # Iteration 12 (f1/f8): `{ <query> }` list-selector as
+                        # query source — lowers to a scalar LIST subquery
+                        # (iteration 10 QA-017). UNNEST it like the array
+                        # source so the alias iterates the elements.
+                        _unnest_call = SQLFunctionCall(name="unnest", args=[source_expr])
+                        _outer_pid = self.context.patient_alias or "_pt"
+                        _inner = SQLSelect(columns=[
+                            SQLAlias(expr=_unnest_call, alias=alias),
+                            SQLAlias(
+                                expr=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+                                alias="patient_id",
+                            ),
+                        ])
+                        source_expr = SQLSelect(
+                            columns=[SQLIdentifier(name=alias), SQLIdentifier(name="patient_id")],
                             from_clause=SQLAlias(expr=SQLSubquery(query=_inner), alias="_list"),
                         )
                         self.context.add_alias(alias, table_alias=alias)
@@ -5072,127 +5188,180 @@ class QueryMixin:
         # Handle with/without clauses (relationship queries)
 
         if hasattr(node, 'with_clauses') and node.with_clauses:
-            for with_clause in node.with_clauses:
-                is_without = getattr(with_clause, 'is_without', False)
-                wc_alias = with_clause.alias
-                wc_expr = with_clause.expression
-                such_that = with_clause.such_that
+            # Iteration 11 QA-018: chained with-clauses where a later
+            # such_that references an EARLIER with alias (CMS71-style,
+            # `with E1 such that ... with V such that V.x during E1.y`)
+            # require the alias bindings to stay in scope across clauses
+            # AND require the later EXISTS to be nested inside the earlier
+            # clause's EXISTS subquery (the earlier alias is only bound by
+            # that EXISTS's FROM). Build all clauses with a shared scope,
+            # then compose NESTED: clause i's EXISTS lands in clause i-1's
+            # EXISTS WHERE with its patient correlation pointing at the
+            # previous clause's alias (transitively linked to the outer
+            # patient through clause 1). Single-with queries produce the
+            # same flat shape as before (no behavioral change).
+            _with_parts = []  # (exists_expr, without, alias) per clause
+            self.context.push_scope()
+            try:
+                _prior_with_aliases: list[str] = []
+                for with_clause in node.with_clauses:
+                    is_without = getattr(with_clause, 'is_without', False)
+                    wc_alias = with_clause.alias
+                    wc_expr = with_clause.expression
+                    such_that = with_clause.such_that
 
-                # Translate the source expression for the with clause
-                # For definition references, bypass query_builder tracking to avoid
-                # picking up the outer query's tracked alias (e.g., j1.resource)
-                if isinstance(wc_expr, Identifier) and wc_expr.name in self.context._definition_names:
-                    wc_source_sql = SQLSubquery(query=SQLSelect(
-                        columns=[SQLIdentifier(name="*")],
-                        from_clause=SQLIdentifier(name=wc_expr.name, quoted=True),
-                    ))
-                else:
-                    wc_source_sql = self.translate(wc_expr, usage=ExprUsage.LIST)
+                    # Translate the source expression for the with clause
+                    # For definition references, bypass query_builder tracking to avoid
+                    # picking up the outer query's tracked alias (e.g., j1.resource)
+                    if isinstance(wc_expr, Identifier) and wc_expr.name in self.context._definition_names:
+                        wc_source_sql = SQLSubquery(query=SQLSelect(
+                            columns=[SQLIdentifier(name="*")],
+                            from_clause=SQLIdentifier(name=wc_expr.name, quoted=True),
+                        ))
+                    else:
+                        wc_source_sql = self.translate(wc_expr, usage=ExprUsage.LIST)
 
-                # Register alias with table_alias so property access uses
-                # wc_alias.resource for fhirpath extraction.
-                # Pass cte_name for definition references so scalar access
-                # resolves to alias.resource/value instead of bare alias.
-                _wc_cte_name = wc_expr.name if isinstance(wc_expr, Identifier) and wc_expr.name in self.context._definition_names else None
-                self.context.push_scope()
-                try:
+                    # Register alias with table_alias so property access uses
+                    # wc_alias.resource for fhirpath extraction. Aliases stay
+                    # registered for the remainder of the with-chain (the
+                    # shared scope) so later clauses can reference them.
+                    _wc_cte_name = wc_expr.name if isinstance(wc_expr, Identifier) and wc_expr.name in self.context._definition_names else None
                     self.context.add_alias(wc_alias, table_alias=wc_alias, cte_name=_wc_cte_name)
+                    _prior_with_aliases.append(wc_alias)
+
                     # Set resource_alias so Patient correlation uses the with-clause alias
                     old_resource_alias = self.context.resource_alias
                     self.context.resource_alias = wc_alias
-                    # Translate the such_that condition
-                    condition_sql = self.translate(such_that, usage=ExprUsage.BOOLEAN) if such_that else SQLLiteral(value=True)
-                    self.context.resource_alias = old_resource_alias
-                finally:
-                    self.context.pop_scope()
+                    try:
+                        condition_sql = self.translate(such_that, usage=ExprUsage.BOOLEAN) if such_that else SQLLiteral(value=True)
+                    finally:
+                        self.context.resource_alias = old_resource_alias
 
-                # Build the FROM clause for the EXISTS subquery
-                # When the with-clause expression is a scalar (e.g., a CASE
-                # expression from inlined fluent functions over sub-elements
-                # like Claim.item), wrap it in a SELECT that provides
-                # resource and patient_id columns so property access works.
-                outer_corr_alias = alias or self.context.resource_alias or "_pt"
-                if not isinstance(wc_source_sql, (SQLSelect, SQLSubquery, SQLUnion, SQLIntersect, SQLExcept, SQLIdentifier, SQLQualifiedIdentifier, SQLAlias, RetrievePlaceholder)):
-                    wc_source_sql = SQLSubquery(query=SQLSelect(
-                        columns=[
-                            SQLAlias(expr=wc_source_sql, alias="resource"),
-                            SQLAlias(
-                                expr=SQLQualifiedIdentifier(parts=[outer_corr_alias, "patient_id"]),
-                                alias="patient_id",
-                            ),
-                        ],
-                    ))
-                wc_from = SQLAlias(expr=wc_source_sql, alias=wc_alias) if not isinstance(wc_source_sql, SQLAlias) else wc_source_sql
-                # Add patient_id correlation: correlate with the outer query alias
-                patient_corr = SQLBinaryOp(
-                    left=SQLQualifiedIdentifier(parts=[wc_alias, "patient_id"]),
-                    operator="=",
-                    right=SQLQualifiedIdentifier(parts=[outer_corr_alias, "patient_id"]),
-                )
-                if condition_sql and not isinstance(condition_sql, SQLLiteral):
-                    # QA-016 fix: when the such_that condition contains an
-                    # audit_leaf wrapping a complex argument (EXISTS subquery
-                    # or non-trivial function call), DuckDB's binder fails
-                    # with "Need named argument for struct pack" when the
-                    # condition is emitted in the WHERE clause of a
-                    # correlated EXISTS subquery (the with-such-that site).
-                    # _fully_demote_audit_to_bool eliminates every
-                    # audit_and/or/not/leaf macro in the boolean expression,
-                    # producing a plain boolean that the binder can plan
-                    # safely. The audit evidence (the whole point of the
-                    # macros) is preserved by the OUTER audit CTE in
-                    # cte_manager.py: the outer definition (Numerator) is
-                    # wrapped as `audit_leaf(EXISTS(...))` at the per-patient
-                    # level, and its `_audit_result` column carries the
-                    # evidence. The inner with-such-that condition's audit
-                    # macros would have produced duplicate evidence that the
-                    # outer CTE already captures.
-                    demoted_cond = _fully_demote_audit_to_bool(condition_sql)
-                    full_condition = SQLBinaryOp(left=demoted_cond, operator="AND", right=patient_corr)
-                else:
-                    full_condition = patient_corr
-
-                exists_subquery = SQLSubquery(query=SQLSelect(
-                    columns=[SQLLiteral(value=1)],
-                    from_clause=wc_from,
-                    where=full_condition,
-                ))
-                exists_expr = SQLExists(subquery=exists_subquery) if not is_without else SQLUnaryOp(operator="NOT", operand=SQLExists(subquery=exists_subquery))
-
-                # Add to existing WHERE clause
-                if isinstance(result, SQLSelect):
-                    if result.where:
-                        new_where = SQLBinaryOp(left=result.where, operator="AND", right=exists_expr)
+                    # Build the FROM clause for the EXISTS subquery
+                    # When the with-clause expression is a scalar (e.g., a CASE
+                    # expression from inlined fluent functions over sub-elements
+                    # like Claim.item), wrap it in a SELECT that provides
+                    # resource and patient_id columns so property access works.
+                    outer_corr_alias = alias or self.context.resource_alias or "_pt"
+                    if not isinstance(wc_source_sql, (SQLSelect, SQLSubquery, SQLUnion, SQLIntersect, SQLExcept, SQLIdentifier, SQLQualifiedIdentifier, SQLAlias, RetrievePlaceholder)):
+                        wc_source_sql = SQLSubquery(query=SQLSelect(
+                            columns=[
+                                SQLAlias(expr=wc_source_sql, alias="resource"),
+                                SQLAlias(
+                                    expr=SQLQualifiedIdentifier(parts=[outer_corr_alias, "patient_id"]),
+                                    alias="patient_id",
+                                ),
+                            ],
+                        ))
+                    wc_from = SQLAlias(expr=wc_source_sql, alias=wc_alias) if not isinstance(wc_source_sql, SQLAlias) else wc_source_sql
+                    # Patient correlation: the FIRST clause correlates with the
+                    # outer query alias; later clauses correlate with the
+                    # previous with alias (their EXISTS nests inside it).
+                    if len(_with_parts) == 0:
+                        corr_target = outer_corr_alias
                     else:
-                        new_where = exists_expr
-                    result = SQLSelect(
-                        columns=result.columns,
-                        from_clause=result.from_clause,
-                        where=new_where,
-                        joins=result.joins,
-                        group_by=result.group_by,
-                        having=result.having,
-                        order_by=result.order_by,
-                        distinct=result.distinct,
-                        limit=result.limit,
+                        corr_target = _with_parts[-1][2]
+                    patient_corr = SQLBinaryOp(
+                        left=SQLQualifiedIdentifier(parts=[wc_alias, "patient_id"]),
+                        operator="=",
+                        right=SQLQualifiedIdentifier(parts=[corr_target, "patient_id"]),
                     )
-                elif isinstance(result, SQLSubquery) and isinstance(result.query, SQLSelect):
-                    inner = result.query
-                    if inner.where:
-                        new_where = SQLBinaryOp(left=inner.where, operator="AND", right=exists_expr)
+                    if condition_sql and not isinstance(condition_sql, SQLLiteral):
+                        # QA-016 fix: when the such_that condition contains an
+                        # audit_leaf wrapping a complex argument (EXISTS subquery
+                        # or non-trivial function call), DuckDB's binder fails
+                        # with "Need named argument for struct pack" when the
+                        # condition is emitted in the WHERE clause of a
+                        # correlated EXISTS subquery (the with-such-that site).
+                        # _fully_demote_audit_to_bool eliminates every
+                        # audit_and/or/not/leaf macro in the boolean expression,
+                        # producing a plain boolean that the binder can plan
+                        # safely. The audit evidence (the whole point of the
+                        # macros) is preserved by the OUTER audit CTE in
+                        # cte_manager.py: the outer definition (Numerator) is
+                        # wrapped as `audit_leaf(EXISTS(...))` at the per-patient
+                        # level, and its `_audit_result` column carries the
+                        # evidence. The inner with-such-that condition's audit
+                        # macros would have produced duplicate evidence that the
+                        # outer CTE already captures.
+                        demoted_cond = _fully_demote_audit_to_bool(condition_sql)
+                        full_condition = SQLBinaryOp(left=demoted_cond, operator="AND", right=patient_corr)
                     else:
-                        new_where = exists_expr
-                    result = SQLSubquery(query=SQLSelect(
-                        columns=inner.columns,
-                        from_clause=inner.from_clause,
-                        where=new_where,
-                        joins=inner.joins,
-                        group_by=inner.group_by,
-                        having=inner.having,
-                        order_by=inner.order_by,
-                        distinct=inner.distinct,
-                        limit=inner.limit,
+                        full_condition = patient_corr
+
+                    exists_subquery = SQLSubquery(query=SQLSelect(
+                        columns=[SQLLiteral(value=1)],
+                        from_clause=wc_from,
+                        where=full_condition,
                     ))
+                    exists_expr = SQLExists(subquery=exists_subquery) if not is_without else SQLUnaryOp(operator="NOT", operand=SQLExists(subquery=exists_subquery))
+                    _with_parts.append((exists_expr, is_without, wc_alias))
+            finally:
+                self.context.pop_scope()
+
+            # Compose: clause 1's EXISTS goes to the outer WHERE; clause i>1
+            # nests inside clause i-1's EXISTS WHERE (before its patient_corr
+            # is irrelevant — appended via AND; the previous alias binds).
+            for _idx in range(1, len(_with_parts)):
+                _prev_exists, _prev_without, _prev_alias = _with_parts[_idx - 1]
+                _this_exists = _with_parts[_idx][0]
+                _prev_sel = _prev_exists.subquery if isinstance(_prev_exists, SQLExists) else _prev_exists.operand.subquery
+                _inner_sel = _prev_sel.query
+                _inner_where = _inner_sel.where
+                if isinstance(_inner_where, SQLBinaryOp) and _inner_where.operator == "AND":
+                    _new_where = SQLBinaryOp(left=_inner_where, operator="AND", right=_this_exists)
+                elif _inner_where is not None:
+                    _new_where = SQLBinaryOp(left=_inner_where, operator="AND", right=_this_exists)
+                else:
+                    _new_where = _this_exists
+                _prev_sel.query = SQLSelect(
+                    columns=_inner_sel.columns,
+                    from_clause=_inner_sel.from_clause,
+                    where=_new_where,
+                    joins=_inner_sel.joins,
+                    group_by=_inner_sel.group_by,
+                    having=_inner_sel.having,
+                    order_by=_inner_sel.order_by,
+                    distinct=_inner_sel.distinct,
+                    limit=_inner_sel.limit,
+                )
+
+            exists_expr = _with_parts[0][0]
+
+            # Add to existing WHERE clause
+            if isinstance(result, SQLSelect):
+                if result.where:
+                    new_where = SQLBinaryOp(left=result.where, operator="AND", right=exists_expr)
+                else:
+                    new_where = exists_expr
+                result = SQLSelect(
+                    columns=result.columns,
+                    from_clause=result.from_clause,
+                    where=new_where,
+                    joins=result.joins,
+                    group_by=result.group_by,
+                    having=result.having,
+                    order_by=result.order_by,
+                    distinct=result.distinct,
+                    limit=result.limit,
+                )
+            elif isinstance(result, SQLSubquery) and isinstance(result.query, SQLSelect):
+                inner = result.query
+                if inner.where:
+                    new_where = SQLBinaryOp(left=inner.where, operator="AND", right=exists_expr)
+                else:
+                    new_where = exists_expr
+                result = SQLSubquery(query=SQLSelect(
+                    columns=inner.columns,
+                    from_clause=inner.from_clause,
+                    where=new_where,
+                    joins=inner.joins,
+                    group_by=inner.group_by,
+                    having=inner.having,
+                    order_by=inner.order_by,
+                    distinct=inner.distinct,
+                    limit=inner.limit,
+                ))
 
         # Apply RETURN clause if present (skip when multi-source already handled it)
         if not _multi_source_done and node.return_clause:
@@ -5426,6 +5595,125 @@ class QueryMixin:
             agg = node.aggregate
             accum_name = agg.identifier   # accumulator variable name (e.g., "Result")
             source_list = result
+            # Iteration 8 QA-013: when the rows source was coerced to a
+            # resource-JSON element list, the lambda element param must use
+            # the _lt_ prefix convention so Property access on the alias
+            # routes through fhirpath (the element is a JSON string, not a
+            # struct — see _translate_property's _lt_ handling).
+            _agg_element_is_json = False
+
+            # Iteration 8 QA-013: a rows-shaped source (bare retrieve or
+            # multi-column query: `[Observation] O aggregate T starting 0:
+            # T + 1`) cannot feed list_prepend/list_reduce — `(SELECT *
+            # FROM retrieve)` returns N columns and binder-fails ("Subquery
+            # returns 6 columns - expected 1"). Materialize the per-patient
+            # element LIST first: keep the single value column when the
+            # query projects one; otherwise fold over the resource column.
+            if (
+                isinstance(source_list, SQLFunctionCall)
+                and source_list.name in (
+                    "expand", "expand1", "expand_points", "expand_points1",
+                    "collapse_intervals", "collapse_intervals_per",
+                )
+            ):
+                # Iteration 9 QA-015: JSON-array-string list sources
+                # (expand/collapse UDF output) parse to a DuckDB list before
+                # list_prepend/list_reduce — a VARCHAR start over the raw
+                # JSON text binder-fails (list_concat(INTEGER[], VARCHAR)).
+                source_list = SQLFunctionCall(
+                    name="from_json",
+                    args=[source_list, SQLLiteral(value='["VARCHAR"]')],
+                )
+                # Elements are the JSON/point text — the element alias uses
+                # the _lt_ prefix convention so Property access routes
+                # through fhirpath (consistent with the retrieve fold path).
+                _agg_element_is_json = True
+            elif isinstance(source_list, (SQLSelect, SQLSubquery)):
+                _sel = source_list.query if isinstance(source_list, SQLSubquery) else source_list
+                if isinstance(_sel, SQLSelect):
+                    # Correlate against the outer patient row. NOTE: the
+                    # query alias (resource_alias) is the ROW alias inside
+                    # this CTE — the outer patient context is always _pt
+                    # when the enclosing define projects FROM _patients.
+                    _outer_pid = "_pt"
+                    _row_alias = alias or "__agg_row"
+                    # Determine a single projected VALUE column that is not
+                    # a plain star/struct (a retrieve projects `SELECT *`).
+                    _cols = _sel.columns or []
+                    _value_expr = None
+                    if len(_cols) == 1:
+                        _c = _cols[0]
+                        _inner_expr = _c.expr if isinstance(_c, SQLAlias) else _c
+                        # SELECT * (star) has no expr payload we can list()
+                        # per-row safely — treat as multi-column rows.
+                        if not isinstance(_inner_expr, type(None)):
+                            _star_shaped = (
+                                getattr(_inner_expr, "name", None) == "*"
+                                or isinstance(_inner_expr, SQLQualifiedIdentifier)
+                                and _inner_expr.parts[-1] == "*"
+                            )
+                            if not _star_shaped:
+                                _value_expr = _inner_expr
+                    if _value_expr is not None:
+                        from ._utils import _coerce_query_rows_to_list
+                        _coerced = _coerce_query_rows_to_list(source_list)
+                        if _coerced is not source_list:
+                            source_list = _coerced
+                            if isinstance(source_list, SQLSubquery) and isinstance(source_list.query, SQLSelect):
+                                source_list.query.where = _patient_correlated_where(
+                                    source_list.query.where, _row_alias, _outer_pid
+                                )
+                    else:
+                        # Retrieve/multi-column rows: fold over the resource
+                        # column of each row, patient-correlated so rows do
+                        # not leak across patients. Elements are cast to
+                        # VARCHAR: the retrieve CTE resource column is JSON,
+                        # and list_prepend(<starting>, JSON[]) unifies the
+                        # starting value to JSON, making accumulator
+                        # arithmetic (`T + ...`) binder-fail on JSON.
+                        _from = _sel.from_clause
+                        if isinstance(_from, SQLAlias):
+                            _row_alias = _from.alias
+                        else:
+                            # Unaliased rows source — alias it so the
+                            # correlation predicate can qualify patient_id.
+                            _from = SQLAlias(expr=_from, alias=_row_alias)
+                        _inner = SQLSelect(
+                            columns=[
+                                SQLFunctionCall(
+                                    name="COALESCE",
+                                    args=[
+                                        SQLFunctionCall(
+                                            name="list_transform",
+                                            args=[
+                                                SQLFunctionCall(
+                                                    name="list",
+                                                    args=[SQLQualifiedIdentifier(
+                                                        parts=[_row_alias, "resource"]
+                                                    )],
+                                                ),
+                                                SQLLambda(
+                                                    param="__agg_e",
+                                                    body=SQLCast(
+                                                        expression=SQLIdentifier(name="__agg_e"),
+                                                        target_type="VARCHAR",
+                                                    ),
+                                                ),
+                                            ],
+                                        ),
+                                        SQLArray(elements=[]),
+                                    ],
+                                )
+                            ],
+                            from_clause=_from,
+                        )
+                        if _sel.where is not None:
+                            _inner.where = _sel.where
+                        _inner.where = _patient_correlated_where(
+                            _inner.where, _row_alias, _outer_pid
+                        )
+                        source_list = SQLSubquery(query=_inner)
+                        _agg_element_is_json = True
 
             # ── Multi-source + aggregate: recursive CTE fold ──────────
             # DuckDB's list_reduce can't handle multi-source aggregates because
@@ -5587,10 +5875,30 @@ class QueryMixin:
                     # The body references both the accumulator and the iteration alias
                     _agg_lambda_x = f"_agg_x"  # accumulator param
                     _agg_lambda_y = f"_agg_y"  # element param
+                    # JSON-element sources use the _lt_ prefix so Property
+                    # access on the alias routes through fhirpath.
+                    if _agg_element_is_json and alias:
+                        _agg_lambda_y = f"_lt_{alias}"
 
                     self.context.push_scope()
                     try:
-                        self.context.add_alias(accum_name, ast_expr=SQLIdentifier(name=_agg_lambda_x))
+                        # Numeric starting value over a JSON-element fold:
+                        # bind the accumulator alias as a DECIMAL cast so
+                        # body arithmetic (`T + <CASE int>`) binds instead of
+                        # `+(VARCHAR, INTEGER)`/`+(JSON, INTEGER)`.
+                        _acc_binding = SQLIdentifier(name=_agg_lambda_x)
+                        if (
+                            _agg_element_is_json
+                            and isinstance(agg.starting, _ASTLiteral)
+                            and isinstance(agg.starting.value, (int, float))
+                            and not isinstance(agg.starting.value, bool)
+                        ):
+                            _acc_binding = SQLCast(
+                                expression=_acc_binding,
+                                target_type="DECIMAL(38,8)",
+                                try_cast=True,
+                            )
+                        self.context.add_alias(accum_name, ast_expr=_acc_binding)
                         if alias:
                             self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_agg_lambda_y))
                         agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
@@ -5600,6 +5908,17 @@ class QueryMixin:
                     # Build list_reduce call
                     if starting_sql is not None:
                         # Prepend starting value so list_reduce uses it as initial accumulator
+                        if _agg_element_is_json:
+                            # Element list is VARCHAR (JSON resource text) —
+                            # align the starting value's physical type so
+                            # list_prepend does not binder-fail mixing
+                            # INTEGER[]/VARCHAR[]. Numeric starts cast to
+                            # DECIMAL(38,8) to match the accumulator binding.
+                            starting_sql = SQLCast(
+                                expression=starting_sql,
+                                target_type="VARCHAR",
+                                try_cast=True,
+                            )
                         source_with_start = SQLFunctionCall(
                             name="list_prepend",
                             args=[starting_sql, source_list],

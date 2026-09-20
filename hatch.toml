@@ -1,0 +1,14 @@
+# Hatch configuration for this checkout.
+#
+# FIX (2026-09-20): `hatch build` crashed with
+#   TypeError: str expected, not NoneType
+# Root cause chain: hatch's internal `build` env defaults to
+# installer=uv -> expose_uv() emits {"HATCH_UV": <uv_path>} ->
+# uv_path resolves via shutil.which("uv"), which returns None in
+# non-login shells whose PATH lacks ~/.local/bin (where uv lives).
+# hatch 1.16.5 then calls os.environ.update() with HATCH_UV=None and dies.
+#
+# Setting the explicit uv-path option short-circuits which() with a
+# guaranteed string, fixing `hatch build` in every shell.
+[envs.hatch-build]
+uv-path = "/home/jmontavon/.local/bin/uv"

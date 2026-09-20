@@ -122,12 +122,12 @@ Used internally by `PostgresSource` and `ExistingTableSource` to safely handle u
 
 | Adapter | Purpose | Details |
 |---------|---------|---------|
-| [`FileSystemSource`](/docs/api-reference/sources/sources-filesystem) | Parquet, NDJSON, Iceberg (local or cloud) | [API Reference →](/docs/api-reference/sources/sources-filesystem) |
-| [`PostgresSource`](/docs/api-reference/sources/sources-relational) | FHIR JSON in Postgres columns | [API Reference →](/docs/api-reference/sources/sources-relational) |
+| [`FileSystemSource`](/docs/api-reference/sources/filesystem) | Parquet, NDJSON, Iceberg (local or cloud) | [API Reference →](/docs/api-reference/sources/filesystem) |
+| [`PostgresSource`](/docs/api-reference/sources/relational) | FHIR JSON in Postgres columns | [API Reference →](/docs/api-reference/sources/relational) |
 | [`HapiPostgresSource`](/docs/api-reference/sources/hapi-postgres) | HAPI FHIR JPA Server on PostgreSQL | [API Reference →](/docs/api-reference/sources/hapi-postgres) |
 | [`MongoFhirServerSource`](/docs/api-reference/sources/mongo-fhir-server) | Mongo-backed FHIR servers via DuckDB `mongo_scan` | [API Reference →](/docs/api-reference/sources/mongo-fhir-server) |
-| [`ExistingTableSource`](/docs/api-reference/sources/sources-existing) | Wrap pre-loaded DuckDB tables | [API Reference →](/docs/api-reference/sources/sources-existing) |
-| [`CSVSource`](/docs/api-reference/sources/sources-csv) | CSV files with user-defined projection | [API Reference →](/docs/api-reference/sources/sources-csv) |
+| [`ExistingTableSource`](/docs/api-reference/sources/existing) | Wrap pre-loaded DuckDB tables | [API Reference →](/docs/api-reference/sources/existing) |
+| [`CSVSource`](/docs/api-reference/sources/csv) | CSV files with user-defined projection | [API Reference →](/docs/api-reference/sources/csv) |
 
 ### CloudCredentials
 

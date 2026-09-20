@@ -44,7 +44,7 @@ from fhir4ds import (
 ## 2. Function Reference
 
 ### `create_connection`
-`create_connection(database=":memory:", *, allow_unsigned_extensions=True, register_udfs=True, source=None, **kwargs) -> duckdb.DuckDBPyConnection`
+`create_connection(database=":memory:", *, allow_unsigned_extensions=True, register_udfs=True, valueset_cache=None, source=None, **kwargs) -> duckdb.DuckDBPyConnection`
 
 The recommended way to start. Returns a DuckDB connection with all FHIRPath and CQL extensions pre-registered.
 
@@ -54,7 +54,7 @@ The recommended way to start. Returns a DuckDB connection with all FHIRPath and 
 | `allow_unsigned_extensions` | `bool` | `True` | Allow loading unsigned (dev-build) DuckDB extensions. |
 | `register_udfs` | `bool` | `True` | Automatically register all UDFs on the connection. |
 | `source` | `SourceAdapter` | `None` | A data source to attach during initialization. |
-| `valueset_cache` | `dict` | `None` | Pre-expanded terminology map for `in_valueset`. |
+| `valueset_cache` | `dict` | `None` | Pre-expanded terminology map for `in_valueset`. Values may be sets of `(system, code)` tuples or sets of bare code strings. |
 | `**kwargs` | `Any` | - | Additional arguments passed to `duckdb.connect()`. |
 
 ---
@@ -98,23 +98,26 @@ Prepares an existing DuckDB connection for FHIR4DS tasks. Prefers C++ extensions
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `con` | `duckdb.DuckDBPyConnection` | The connection to prepare. |
-| `valueset_cache` | `dict` | (Optional) Pre-expanded terminology map. |
+| `valueset_cache` | `dict` | (Optional) Pre-expanded terminology map (sets of `(system, code)` tuples or bare code strings). |
 
 **Returns**: `dict` showing which C++ extensions were successfully loaded.
 
 ---
 
 ### `evaluate_measure`
-`evaluate_measure(library_path, conn, *, output_columns=None, parameters=None) -> duckdb.DuckDBPyRelation`
+`evaluate_measure(library_path, conn, *, output_columns=None, parameters=None, audit_mode='none', terminology_endpoint=None, closure_loaded=False, **kwargs) -> Any`
 
-The primary API for quality measure evaluation. Translates CQL to SQL and executes it in one step.
+The primary API for quality measure evaluation. Translates CQL to SQL and executes it in one step. Returns a `duckdb.DuckDBPyRelation` (use `.df()` for a pandas DataFrame).
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `library_path` | `str` | Path to the CQL library file. |
-| `conn` | `duckdb.DuckDBPyConnection` | The database connection. |
+| `conn` | `duckdb.DuckDBPyConnection` | The database connection (UDFs must be registered, e.g. via `fhir4ds.register(con)` or `fhir4ds.create_connection()`). |
 | `output_columns` | `dict` | (Optional) Mapping of SQL column names to CQL definition names. |
 | `parameters` | `dict` | (Optional) Key-value pairs for CQL parameters (e.g. Measurement Period). |
+| `audit_mode` | `str` | `'none'` (default), `'full'`, or `'compact'` — controls population evidence collection. |
+| `terminology_endpoint` | `TerminologyEndpoint` | (Optional) terminology server for ValueSet expansion. |
+| `closure_loaded` | `bool` | Whether the terminology closure table has already been loaded. |
 
 ```python
 result = fhir4ds.evaluate_measure(

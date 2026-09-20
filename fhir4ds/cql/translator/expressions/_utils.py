@@ -91,7 +91,12 @@ def _is_list_returning_sql(node) -> bool:
                          "Skip", "Take", "Tail",
                          "CQLListDistinctEq", "CQLListExceptEq",
                          "CQLListIntersectEq", "jsonConcat",
-                         "cqlChildren", "cqlDescendants", "ExpandValueSet"):
+                         "cqlChildren", "cqlDescendants", "ExpandValueSet",
+                         # Iteration 7 QA-011: expand/collapse UDF forms return
+                         # a JSON array string (VARCHAR) holding the whole
+                         # element list — one value per patient.
+                         "expand", "expand1", "expand_points", "expand_points1",
+                         "collapse_intervals", "collapse_intervals_per"):
             return True
         if node.name == "from_json" and len(node.args) >= 2:
             return True
@@ -124,6 +129,22 @@ def _canonical_fhir_r4_type_name(type_name: str | None) -> str | None:
     return _FHIR_R4_TYPE_NAMES_BY_LOWER.get(bare.lower())
 
 
+def _is_list_valued_projection(expr) -> bool:
+    """True when a projected expression already evaluates to a LIST value.
+
+    Iteration 10 QA-017: the `{ <query> }` list selector lowers to
+    ``SELECT COALESCE(list(...), [])`` — a scalar LIST projection.
+    Re-coercing such a node (as many consumer sites do) would wrap
+    ``list(list(...))`` and nest lists. Idempotence guard.
+    """
+    if isinstance(expr, SQLFunctionCall):
+        if expr.name in ("list", "LIST"):
+            return True
+        if expr.name == "COALESCE" and expr.args:
+            return _is_list_valued_projection(expr.args[0])
+    return False
+
+
 def _coerce_query_rows_to_list(node):
     """Convert a row-producing single-column query into a scalar DuckDB list."""
     inner_select = None
@@ -142,6 +163,11 @@ def _coerce_query_rows_to_list(node):
         first_expr = first_col.expr
     else:
         first_expr = first_col
+
+    # Idempotence (iteration 10 QA-017): a projection that already
+    # evaluates to a LIST value needs no rows-to-list coercion.
+    if _is_list_valued_projection(first_expr):
+        return node
 
     value_alias = "__cql_list_value"
     projected = SQLSelect(

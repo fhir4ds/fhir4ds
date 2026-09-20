@@ -609,6 +609,11 @@ class InferenceMixin:
         # Query with return clause: shape depends on what's returned
         # Query without return clause inherits shape from source
         if isinstance(ast_node, Query):
+            # Iteration 8 QA-013: an aggregate clause folds the source
+            # rows into ONE value per patient (CQL 1.5 §19.27) — scalar
+            # shape, regardless of the source's rows shape.
+            if getattr(ast_node, "aggregate", None) is not None:
+                return RowShape.PATIENT_SCALAR
             if ast_node.return_clause:
                 from ..parser.ast_nodes import TupleExpression
                 ret_expr = ast_node.return_clause.expression

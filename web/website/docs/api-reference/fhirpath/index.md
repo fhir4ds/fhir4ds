@@ -69,17 +69,22 @@ The FHIR4DS engine provides **100% coverage** for the following FHIRPath R4 feat
 ## 5. Advanced Configuration
 
 ### Strict Mode
-Enable strict validation to catch common authoring mistakes:
-- Choice-type suffix validation (e.g. `valueQuantity`).
-- Property name validation.
-- Polymorphic type narrowing enforcement.
+Enable strict grammar validation to catch malformed expressions:
+- Strict ANTLR grammar parsing (rejects trailing junk, malformed operators).
+- Choice-type suffix and polymorphic narrowing are enforced by the grammar.
 
 ```python
-evaluate(res, "Patient.typo", options={"strict_mode": True}) # Raises error
+evaluate(res, "Patient.name.", options={"strict_mode": True}) # Raises FHIRPathSyntaxError
 ```
 
+Note: `strict_mode` affects *parsing strictness* only. Unknown property names
+on known resources evaluate to an empty collection (spec-conformant FHIRPath
+behavior); they do not raise in either mode.
+
 ### Custom Resource Types
-The evaluator supports non-standard FHIR profiles:
+The evaluator resolves resource-type prefixes from the resource itself:
 ```python
-evaluate(resource, "MyCustom.field", resource_type="MyCustomResource")
+# resourceType is read from the resource; the prefix acts as a type filter
+evaluate({"resourceType": "MyCustomResource", "field": [1]}, "MyCustomResource.field")
+# -> [1]
 ```

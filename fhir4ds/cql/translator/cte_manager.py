@@ -738,7 +738,16 @@ class CTEManagerMixin:
                     all_joins = list(joins) if joins else []
                     all_joins.extend(evidence_joins)
                     from ..translator.types import SQLAuditStruct, SQLRaw, SQLSubquery
-                    if evidence_joins and isinstance(audit_expr, SQLAuditStruct):
+                    # Iteration 27 QA-021: the per-patient aggregation guard
+                    # previously fired ONLY for bare SQLAuditStruct audit
+                    # expressions. Comparison-wrapped audit expressions
+                    # (COALESCE((SELECT __pre_X ...), audit_leaf(false)) from
+                    # Count(alias) >= N definitions) fell through to the raw
+                    # JOIN form — N evidence rows per patient made downstream
+                    # scalar subqueries raise "More than one row returned by
+                    # a subquery". Aggregate EVERY evidence-JOIN shape: the
+                    # audited value is patient-deterministic.
+                    if evidence_joins:
                         # Evidence JOINs fan out one row per joined resource
                         # row; multiple evidence-bearing definitions then
                         # cartesian in the final population SELECT (N obs x M

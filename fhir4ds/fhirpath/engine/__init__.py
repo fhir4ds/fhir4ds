@@ -249,14 +249,40 @@ def infix_invoke(ctx, fn_name, data, raw_params):
     if argTypes is not None:
         params = [ctx]
 
-        for i in range(0, paramsNumber):
-            argType = argTypes[i]
-            rawParam = raw_params[i]
-            params.append(make_param(ctx, data, argType, rawParam))
-
+        # Evolution iter 6 QA-007 (2026-09-20): §4.4.1 empty propagation
+        # takes precedence over operand type/singleton errors for nullable
+        # operators. make_param raises 'Unexpected collection' for multi-item
+        # Number/String/... operands BEFORE the nullable check below could
+        # see an EMPTY sibling param, so `('a'|'b') / {}` aborted the whole
+        # expression while native returned empty. For nullable invocations,
+        # evaluate all params deferring captured errors; if any param
+        # GENUINELY evaluated to empty, empty wins (return []). If a param
+        # errored with no empty sibling, re-raise (`1 / 'a'` inside a union
+        # operand must still abort the enclosing expression — FP-19
+        # EXPLORER doctrine). Non-nullable invocations keep the original
+        # eager behavior (e.g. `{} ~ {}` is true; empties must reach fn).
         if "nullable" in invocation:
+            _PARAM_ERROR = object()
+            deferred_error = None
+            for i in range(0, paramsNumber):
+                argType = argTypes[i]
+                rawParam = raw_params[i]
+                try:
+                    params.append(make_param(ctx, data, argType, rawParam))
+                except (FHIRPathError, ValueError) as exc:
+                    if deferred_error is None:
+                        deferred_error = exc
+                    params.append(_PARAM_ERROR)
+
             if any(util.is_nullable(x) for x in params):
                 return []
+            if deferred_error is not None:
+                raise deferred_error
+        else:
+            for i in range(0, paramsNumber):
+                argType = argTypes[i]
+                rawParam = raw_params[i]
+                params.append(make_param(ctx, data, argType, rawParam))
 
         res = invocation["fn"](*params)
         return util.arraify(res)

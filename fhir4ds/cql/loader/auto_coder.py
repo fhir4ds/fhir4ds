@@ -164,8 +164,10 @@ class AutoCoderConfig:
         ``max(1, ...)`` clamp in :meth:`AutoCoder.augment_resources`
         would otherwise discard user intent silently. The dataclass is
         frozen, so the caller MUST be told at construction time.
-        Raises ``ValueError`` for any non-positive ``workers`` or
-        ``batch_size``.
+        Raises ``ValueError`` for any non-positive ``workers``,
+        ``batch_size``, or ``top_k`` (``top_k <= 0`` truncates every
+        result list via ``kept[:top_k]`` slice semantics, silently
+        dropping all autocodings).
         """
         if not isinstance(self.workers, int) or self.workers < 1:
             raise ValueError(
@@ -176,6 +178,11 @@ class AutoCoderConfig:
             raise ValueError(
                 f"AutoCoderConfig.batch_size must be a positive int (>=1), "
                 f"got {self.batch_size!r}"
+            )
+        if not isinstance(self.top_k, int) or self.top_k < 1:
+            raise ValueError(
+                f"AutoCoderConfig.top_k must be a positive int (>=1), "
+                f"got {self.top_k!r}"
             )
 
 

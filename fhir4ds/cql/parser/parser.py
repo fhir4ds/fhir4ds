@@ -2325,8 +2325,13 @@ class CQLParser:
 
         # Special handling for 'expand'/'collapse' without braces: expand/collapse X per ...
         if name.lower() in ("expand", "collapse"):
-            # Parse the list/interval argument (could be Interval[...] or identifier)
-            interval_arg = self.parse_primary_expression()
+            # Parse the list/interval argument (could be Interval[...] or identifier).
+            # parse_postfix_expression (not parse_primary_expression) so a
+            # property-path operand (`expand E1.period per day`) consumes its
+            # full DOT/invocation chain here; parse_primary_expression stops
+            # after the primary and leaves `.period` dangling, which the outer
+            # parse_expression then rejects as trailing tokens at PER.
+            interval_arg = self.parse_postfix_expression()
             # Check for 'per' keyword
             if self.match_and_advance(TokenType.PER):
                 per_value = self._parse_per_value()

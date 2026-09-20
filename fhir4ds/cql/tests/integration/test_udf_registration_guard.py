@@ -89,3 +89,67 @@ def test_parameters_type_guard(library):
     con = fhir4ds_conn()
     with pytest.raises(TypeError, match="parameters must be a dict"):
         evaluate_measure(library, conn=con, parameters="not-a-dict")
+
+
+# --- BUGFIX-002/U1: unknown retrieve resource type (0.0.15 campaign) ---
+
+
+def test_unknown_retrieve_resource_type_raises_translation_error():
+    """Unknown retrieve types must fail at translation time, not silently
+    lower to an empty CTE that evaluates false."""
+    from fhir4ds.cql import parse_cql
+    from fhir4ds.cql.translator import CQLToSQLTranslator
+    from fhir4ds.cql.errors import TranslationError
+
+    lib = parse_cql(
+        "library BadRetrieve\n"
+        "using FHIR version '4.0.1'\n"
+        "context Patient\n"
+        'define "X": exists [NotAResourceType]\n'
+    )
+    with pytest.raises(TranslationError, match="NotAResourceType"):
+        CQLToSQLTranslator(lib).translate_library_to_population_sql(lib)
+
+
+def test_known_and_profiled_retrieves_still_translate():
+    from fhir4ds.cql import parse_cql
+    from fhir4ds.cql.translator import CQLToSQLTranslator
+
+    for name, cql in [
+        (
+            "plain",
+            "library L\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            'define "X": exists [Observation]\n',
+        ),
+        (
+            "qicore_profile",
+            "library L\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            'define "X": exists [QICore.SimpleObservation]\n',
+        ),
+        (
+            "terminology",
+            "library L\nusing FHIR version '4.0.1'\n"
+            'valueset "VS": \'http://example.org/vs\'\ncontext Patient\n'
+            'define "X": exists [Condition: "VS"]\n',
+        ),
+    ]:
+        lib = parse_cql(cql)
+        sql = CQLToSQLTranslator(lib).translate_library_to_population_sql(lib)
+        assert sql, name
+
+
+# --- BUGFIX-004/U3: unknown criteria name -> typed error (0.0.15 campaign) ---
+
+
+def test_unknown_population_definition_raises_value_error_listing_definitions():
+    """translate_library_to_population_sql must reject unknown output
+    definition names up front instead of emitting broken SQL that fails
+    with a raw CatalogException at execution (DQM criteria-name typos)."""
+    from fhir4ds.cql import parse_cql
+    from fhir4ds.cql.translator import CQLToSQLTranslator
+
+    lib = parse_cql(_CQL)
+    with pytest.raises(ValueError, match="NoSuchDef"):
+        CQLToSQLTranslator(lib).translate_library_to_population_sql(
+            lib, output_columns={"x": "NoSuchDef"}
+        )

@@ -3909,3 +3909,140 @@
   failures, scalar wrappers, and native-vs-forced-fallback registration found
   no parity mismatch; keep `test_existence_parity.py` and `test_type_parity.py`
   as guardrails.
+
+## Evolution iter 1 / Domain 1 SKEPTIC (2026-09-19, duckdb 1.5.5 campaign)
+
+- **QA-001 FIXED (fhirpath_bool Decimal parity):** Python fallback
+  `fhirpath_bool_udf` (udf.py) numeric branch only recognized int/float,
+  so Decimal-typed 0/1 results (`one.ln()` → Decimal 0.0,
+  `zero.sqrt()` → Decimal 0.0) returned NULL while native converted to
+  False. This was the documented v0.0.14 FP-11 residual that broke
+  `test_math_parity.py::test_math_functions_match_cpp` after the 1.5.5
+  native rebuild. Numeric branch now isinstance-checks Decimal and accepts
+  Decimal(0)/Decimal(1). Guard:
+  `test_evol_it1_domain1_skeptic.py::test_fhirpath_bool_decimal_{zero,nonzero}_parity_evol_it1`.
+- **QA-002 FIXED (empty-expression row resilience):** native
+  `EvaluateFhirpath` (fhirpath_extension.cpp) threw
+  `FHIRPath expression cannot be empty` on `fhirpath(res, '')`, killing
+  the whole SQL query, while the fallback returned empty/NULL. Native now
+  returns `{}` (row-resilience contract) matching the fallback; affects all
+  6 wrapper UDFs. Extension rebuilt + deployed (md5
+  c7e9b2e3dc01983551f0a6177ddeb5c6; repo bundle == site-packages;
+  ~/.duckdb cache cleared). Guard:
+  `test_empty_expression_row_resilient_both_engines_evol_it1` (6 UDFs ×
+  2 engines). Rebuild+redeploy after touching EvaluateFhirpath input
+  guards.
+- 40-case hypothesis battery (null propagation, type system, singleton
+  enforcement, `=`/`~` whitespace, numeric rendering/sign, lambda scope,
+  choice fast paths, JSON-null collections) + 25-case wrapper-boundary
+  battery: 0 further parity diffs. Battery-1 H1-H8 and battery-2 B1-B25
+  probes: `.temp/qa/evol_it1_d1_skeptic/probe{,2,3}.py`.
+
+### Evolution iter 2 / Domain 1 HISTORIAN (2026-09-19, duckdb 1.5.5 campaign)
+
+CLEAN iteration — no code changes. 39-case dual-path (native vs forced
+Python fallback) systematic walkthrough of FHIRPath 2018Sep §5.1
+Existence (empty/exists/all/allTrue/anyTrue/allFalse/anyFalse/subsetOf/
+supersetOf/count/distinct/isDistinct) and §5.2 Filtering/Projection
+(where/select/repeat/ofType + compositions): 0 parity diffs, 0 spec
+violations. Probe: `.temp/qa/evol_it2_d1_historian/probe.py`.
+
+NOT A BUG registry additions (probe-expectation traps, verified live):
+- `where()` on a non-Boolean singleton criterion (e.g. `name.where(family)`)
+  is a singleton-Boolean criteria ERROR → row-resilient empty at the UDF
+  boundary; §4.5 truthiness applies to Boolean operators, NOT where criteria.
+- `isDistinct()` on distinct elements (`name.isDistinct()`) is `true` —
+  per-element distinctness, not whole-collection uniqueness intuitions.
+- `repeat('x')` returns only the projection (['x']); input seeds are not
+  added (FP-04 projection-only dedup doctrine re-confirmed).
+- select() flattens single-element nested lists (`select(given)` → 'Andy'
+  when given has one element).
+- fhirpath() UDF serializes `$index` results as strings — probe
+  expectations must use string-forms (recurring trap, now 3rd instance).
+
+### Evolution iter 3 / Domain 1 EXPLORER (2026-09-19, duckdb 1.5.5 campaign)
+
+2 native fixes (extension rebuilt + deployed, md5 fd81a7c2fd30c16dfd7f990624592099;
+repo bundle == site-packages; ~/.duckdb cache cleared):
+
+- **QA-003 (`+` concat on temporal-typed fields):** `evalBinaryOp`'s String
+  concat branch gated on physical String type before the temporal guard, so
+  `extension.valueString + birthDate` concatenated ('ex2000-02-29') while the
+  Python fallback raised the §6.6 type error -> empty. The concat branch now
+  consults ONLY `fhir_type` metadata (date/datetime/instant/time block
+  concat). Plain strings that lexically look temporal still concat (no
+  metadata), mirroring the Python fallback where only path-metadata temporal
+  fields parse to FP_Date/FP_DateTime nodes.
+- **QA-004 (cross-kind JSON equality):** `jsonValuesEqualState` returned
+  definitive 0 for obj/arr-vs-scalar JSON pairs (`extension !=
+  extension.valueString` -> true), violating the repo-wide
+  incompatible-types-empty doctrine (FP-03 QA-001). A `jsonKindClass` guard
+  (structural-vs-scalar -> -1) now sits after the null doctrine and before
+  the scalar guards. `~` keeps §6.1.2 false via the caller's op-aware
+  handling. NOTE for future edits: the scalar guards (bool/num/str) preempt
+  obj/arr guards in this function — cross-kind fixes must be hoisted ABOVE
+  them (first attempt at the arr/obj guards alone was unreachable).
+- Discovery method: 600-case generative dual-path fuzz (seed 20260919,
+  random expression trees over resource paths, leaf/arg functions, literals,
+  binary ops). Regression:
+  `test_evol_it3_domain1_explorer.py` (5 tests). Post-fix: fuzz 0 diffs,
+  focused parity 411 pass, fhirpath integration 1047 pass, master gate
+  2832/2832.
+- Probes: `.temp/qa/evol_it3_d1_explorer/{probe,fuzz}.py`.
+
+## Evolution iter 5 / Domain 2 HISTORIAN (2026-09-19, duckdb 1.5.5 campaign)
+
+148-case N1 spec-example walkthrough (dual-path native C++ vs forced Python
+fallback): §5.5.3-§5.5.7 conversion tables, §6.1 Date/DateTime equality +
+equivalence + quantity equality/tolerance, §6.6/§6.7 arithmetic verbatim
+examples (`12 'cm' * 3 'cm'`→`36 'cm2'`, `3 'm' + 3 'cm'`→`303 'cm'`,
+`12 'cm2' / 3 'cm'`→`4.0 'cm'`), §6.2 comparisons, §5.6 strings, §5.1
+existence. ZERO parity diffs, ZERO spec violations. NOT A BUG pins:
+multi-item toDecimal/toInteger/toQuantity signal error → `[]` at UDF
+boundary; `1.toQuantity('m')` empty (Integer→`1 '1'` dimensionless, not
+UCUM-convertible to 'm'); `1 + 1 'cm'` empty (dimension mismatch — spec:
+"dimensions must be the same"); Date + millisecond empty (§6.7.1 unit
+allowlist); `5 'mg'.convertsToQuantity('cel')` false (convertsTo* false,
+never empty); `(1 'a').toQuantity('mo')` → `12 'mo'` (UCUM a=12mo);
+`1 'g' ~ 1.1 'g'` true (§6.1.2 least-precision tolerance half-width 0.5);
+division always renders Decimal (`5.0 '1'`, `4.0 'cm'`);
+`(1|2).exists(1)`/`.all(1)` empty (singleton-Boolean iteration criteria
+doctrine — §4.5 truthiness does NOT extend to where/exists/all criteria).
+Probe: .temp/qa/evol_it5_d2_historian/probe.py.
+
+## Evolution iter 6 / Domain 2 EXPLORER (2026-09-20, duckdb 1.5.5 campaign)
+
+4 Python-fallback fixes (native correct in all; NO native rebuild — md5
+fd81a7c2fd30c16dfd7f990624592099 unchanged). Found via 800-case
+generative dual-path fuzz (seed 20260920) + boundary probes; post-fix
+fuzz 0 diffs. Regression:
+`fhir4ds/fhirpath/duckdb/tests/integration/test_evol_it6_domain2_explorer.py` (53 cases).
+
+- **QA-005 (HIGH) minute-precision DateTime ± minutes → []**: `_plus_datetime`
+  minute/second/ms branch looked up `divs[('minute','minute')]` — the
+  `_UNIT_DIVISORS` table has NO diagonal entries → KeyError → []. Same-unit
+  addition at the target precision now applies the value directly.
+- **QA-006 (MEDIUM) arith results lost temporal typing**: `plus()` returned
+  raw `_extractDateByPrecision` strings, so `(@2016-02-29 - 1 month) > 'abc'`
+  was False (string ordering) vs native empty. Results now wrap in
+  FP_DateTime/FP_Date. Native render rules pinned: bare-T day-precision
+  DateTime (`@2024-01-01T`) = hour-precision hour-0 (renders `T00`,
+  `+1 hour`→`T01`, `+90 minutes`→`T01`); month/year precision + sub-month
+  units = no-op truncate; precision 1-2 renders keep marker-free strings.
+  Documented boundary: `.type().name` on precision 1-2 partial-DateTime
+  results reports 'Date' (FP_Date wrap for the T-less lexical form) —
+  pre-existing partial-DateTime type-inference gap, not observable in
+  equality/ordering.
+- **QA-007 (MEDIUM) `('a'|'b') / {}` aborted the whole enclosing expr**:
+  `infix_invoke`'s make_param raised 'Unexpected collection' before the
+  nullable check could see the empty sibling. §4.4.1 empty propagation now
+  wins: nullable invocations evaluate all params with deferred errors
+  (sentinel), return [] if any param is genuinely empty, re-raise otherwise
+  (`true | 1 / 'a'` still aborts — FP-19 EXPLORER `(1+'x')|99` doctrine).
+  Non-nullable invocations (`~`, `!~`, `|`, logic ops) unchanged.
+- **QA-008 (MEDIUM) `{} contains (1|2)` → False**: `contains`/`inn` checked
+  operand emptiness before the §6.4.3 multi-item singleton guard; native
+  signals the singleton error first (empty at the UDF boundary). Singleton
+  guard now hoisted above the empty short-circuits.
+- Native render evidence: probes /tmp/opencode/it6_trender_probe{,2,3}.py;
+  fuzz at .temp/qa/evol_it6_d2_explorer/fuzz.py.

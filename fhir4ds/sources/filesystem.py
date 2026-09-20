@@ -17,28 +17,56 @@ _CLOUD_PREFIXES = ("s3://", "az://", "abfs://", "gs://", "gcs://")
 
 _SUPPORTED_FORMATS = ("parquet", "ndjson", "json", "iceberg")
 
-_ALLOWED_SECRET_OPTIONS = {
+# Credential kwarg name -> DuckDB 1.5.x secret option name.  DuckDB's
+# config-credential providers accept these option names case-insensitively;
+# the legacy snake_case spellings remain the documented fhir4ds API and are
+# translated at SQL-build time.
+_SECRET_OPTION_ALIASES = {
     "S3": {
-        "access_key_id",
-        "secret_access_key",
-        "session_token",
-        "region",
-        "endpoint_url",
-        "url_style",
-        "use_ssl",
+        "access_key_id": "KEY_ID",
+        "key_id": "KEY_ID",
+        "secret_access_key": "SECRET",
+        "secret": "SECRET",
+        "session_token": "SESSION_TOKEN",
+        "region": "REGION",
+        "endpoint_url": "ENDPOINT",
+        "endpoint": "ENDPOINT",
+        "url_style": "URL_STYLE",
+        "use_ssl": "USE_SSL",
     },
     "AZURE": {
-        "connection_string",
-        "account_name",
-        "account_key",
-        "tenant_id",
-        "client_id",
-        "client_secret",
+        "connection_string": "CONNECTION_STRING",
+        "account_name": "ACCOUNT_NAME",
+        "endpoint": "ENDPOINT",
+        "tenant_id": "TENANT_ID",
+        "client_id": "CLIENT_ID",
+        "client_secret": "CLIENT_SECRET",
     },
     "GCS": {
-        "service_account_json",
+        "key_id": "KEY_ID",
+        "secret": "SECRET",
+        "session_token": "SESSION_TOKEN",
+        "bearer_token": "BEARER_TOKEN",
     },
 }
+
+# Options removed by DuckDB 1.5+ — rejected with actionable guidance instead
+# of a raw DuckDB BinderException at CREATE SECRET time.
+_REMOVED_SECRET_OPTIONS = {
+    ("AZURE", "account_key"): (
+        "DuckDB 1.5+ removed the Azure 'account_key' secret option. Use "
+        "'connection_string' (or 'account_name' with an externally "
+        "configured credential provider) instead."
+    ),
+    ("GCS", "service_account_json"): (
+        "DuckDB 1.5+ GCS secrets accept S3-interoperable HMAC credentials "
+        "('key_id' + 'secret') or 'bearer_token'; 'service_account_json' is "
+        "no longer accepted."
+    ),
+}
+
+# Azure service-principal credentials require an explicit PROVIDER clause.
+_AZURE_SERVICE_PRINCIPAL_KEYS = {"tenant_id", "client_id", "client_secret"}
 
 
 class CloudCredentials:
@@ -49,15 +77,20 @@ class CloudCredentials:
         provider: Cloud provider — ``'S3'``, ``'AZURE'``, or ``'GCS'``.
         secret_name: Optional name for the DuckDB secret.  Defaults to
             ``'fhir4ds_{provider}_secret'``.
-        **kwargs: Provider-specific credential fields.
+        **kwargs: Provider-specific credential fields.  Names are the
+            documented snake_case spellings; they are translated to the
+            DuckDB secret option names at ``configure()`` time.
 
-            S3: ``access_key_id``, ``secret_access_key``, ``region``,
-            ``endpoint_url``.
+            S3: ``access_key_id``, ``secret_access_key``,
+            ``session_token``, ``region``, ``endpoint_url``, ``url_style``,
+            ``use_ssl``.
 
-            Azure: ``connection_string``, or ``account_name`` +
-            ``account_key``.
+            Azure: ``connection_string``, or ``account_name``.  Service
+            principals: ``tenant_id`` + ``client_id`` + ``client_secret``
+            (emits ``PROVIDER service_principal``).
 
-            GCS: ``service_account_json``.
+            GCS: ``key_id`` + ``secret`` (S3-interoperable HMAC), or
+            ``bearer_token``.
 
     Example::
 
@@ -77,33 +110,49 @@ class CloudCredentials:
         **kwargs: Any,
     ) -> None:
         self.provider = provider.upper()
-        if self.provider not in _ALLOWED_SECRET_OPTIONS:
+        if self.provider not in _SECRET_OPTION_ALIASES:
             raise ValueError(
                 f"Unsupported cloud provider '{provider}'. "
-                f"Supported providers: {tuple(_ALLOWED_SECRET_OPTIONS)}"
+                f"Supported providers: {tuple(_SECRET_OPTION_ALIASES)}"
             )
         self.secret_name = secret_name or f"fhir4ds_{self.provider.lower()}_secret"
         self.kwargs = kwargs
 
     def configure(self, con: Any) -> None:
         """Registers a DuckDB secret for this provider on *con*."""
-        allowed = _ALLOWED_SECRET_OPTIONS[self.provider]
-        invalid = sorted(set(self.kwargs) - allowed)
+        aliases = _SECRET_OPTION_ALIASES[self.provider]
+        invalid = sorted(set(self.kwargs) - set(aliases))
         if invalid:
+            for option in invalid:
+                guidance = _REMOVED_SECRET_OPTIONS.get((self.provider, option))
+                if guidance:
+                    raise ValueError(
+                        f"Unsupported credential option '{option}' for "
+                        f"{self.provider}: {guidance}"
+                    )
             raise ValueError(
                 f"Unsupported credential option(s) for {self.provider}: {invalid}. "
-                f"Supported options: {sorted(allowed)}"
+                f"Supported options: {sorted(aliases)}"
             )
 
+        option_items = sorted(
+            (aliases[key], str(value)) for key, value in self.kwargs.items()
+        )
+        provider_clause = ""
+        if self.provider == "AZURE" and (
+            _AZURE_SERVICE_PRINCIPAL_KEYS & set(self.kwargs)
+        ):
+            provider_clause = "PROVIDER service_principal,\n                "
+
         kv_pairs = ",\n                ".join(
-            f"{key} {quote_sql_literal(str(value))}"
-            for key, value in self.kwargs.items()
+            f"{option} {quote_sql_literal(value)}"
+            for option, value in option_items
         )
         separator = "," if kv_pairs else ""
         con.execute(f"""
             CREATE OR REPLACE SECRET {quote_identifier(self.secret_name)} (
                 TYPE {self.provider}{separator}
-                {kv_pairs}
+                {provider_clause}{kv_pairs}
             )
         """)
 

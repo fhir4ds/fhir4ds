@@ -872,7 +872,9 @@ static fhirpath::FPCollection EvaluateFhirpath(FhirpathState &state, const char 
                                                 const std::string &expr_str,
                                                 fhirpath::ArenaAllocator *arena = nullptr) {
 	if (expr_str.empty()) {
-		throw std::runtime_error("FHIRPath expression cannot be empty");
+		// Row resilience: empty expression yields an empty collection, matching the
+		// Python fallback wrapper contract (warn-and-empty), not a query-killing throw.
+		return {};
 	}
 	auto ast = GetOrCompile(state, expr_str);
 	if (!ast) {

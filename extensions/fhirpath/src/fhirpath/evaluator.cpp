@@ -1921,6 +1921,19 @@ static int jsonValuesEqualState(yyjson_val *left, yyjson_val *right) {
 	if (yyjson_is_null(left) || yyjson_is_null(right)) {
 		return yyjson_is_null(left) && yyjson_is_null(right) ? 1 : 0;
 	}
+	// Evolution iter 3 / Domain 1 EXPLORER (2026-09-19): a JSON object or
+	// array compared against a scalar kind (string/number/bool) is an
+	// incompatible-type pair for `=`/`!=` — §6.1.1 requires operands of the
+	// same type or implicitly convertible ones, and the repo-wide doctrine
+	// (FP-03 QA-001; Python equality.py returns None for dict-vs-str) makes
+	// that EMPTY, not definitively false. The null guard above stays
+	// definitive (null-vs-value is 0 per the null doctrine); the scalar
+	// guards below would otherwise preempt the obj/arr mismatch with 0.
+	auto jsonKindClass = [](yyjson_val *v) -> int {
+		if (yyjson_is_obj(v) || yyjson_is_arr(v)) return 2; // structural
+		return 1;                                            // scalar
+	};
+	if (jsonKindClass(left) != jsonKindClass(right)) return -1;
 	if (yyjson_is_bool(left) || yyjson_is_bool(right)) {
 		return (yyjson_is_bool(left) && yyjson_is_bool(right) &&
 		        yyjson_get_bool(left) == yyjson_get_bool(right)) ? 1 : 0;
@@ -1933,8 +1946,16 @@ static int jsonValuesEqualState(yyjson_val *left, yyjson_val *right) {
 		return (yyjson_is_str(left) && yyjson_is_str(right) &&
 		        std::string(yyjson_get_str(left)) == std::string(yyjson_get_str(right))) ? 1 : 0;
 	}
+	// Evolution iter 3 / Domain 1 EXPLORER (2026-09-19): a JSON object or
+	// array compared against a scalar kind (string/number/bool/null above)
+	// is an incompatible-type pair for `=`/`!=` — §6.1.1 requires operands
+	// of the same type or implicitly convertible ones, and the repo-wide
+	// doctrine (FP-03 QA-001; Python equality.py returns None for
+	// dict-vs-str) makes that EMPTY, not definitively false. Both scalar
+	// guards above already return 0 when only one side is a scalar; the
+	// remaining mixed case reaching here is obj/arr vs obj/arr mismatch.
 	if (yyjson_is_arr(left) || yyjson_is_arr(right)) {
-		if (!(yyjson_is_arr(left) && yyjson_is_arr(right))) return 0;
+		if (!(yyjson_is_arr(left) && yyjson_is_arr(right))) return -1;
 		size_t left_size = yyjson_arr_size(left);
 		size_t right_size = yyjson_arr_size(right);
 		if (left_size != right_size) return 0;
@@ -1949,7 +1970,7 @@ static int jsonValuesEqualState(yyjson_val *left, yyjson_val *right) {
 		return 1;
 	}
 	if (yyjson_is_obj(left) || yyjson_is_obj(right)) {
-		if (!(yyjson_is_obj(left) && yyjson_is_obj(right))) return 0;
+		if (!(yyjson_is_obj(left) && yyjson_is_obj(right))) return -1;
 		if (yyjson_obj_size(left) != yyjson_obj_size(right)) return 0;
 		yyjson_obj_iter iter;
 		yyjson_obj_iter_init(left, &iter);
@@ -9847,8 +9868,27 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		auto &rv = right[0];
 
 		// String concatenation with +
+		// Evolution iter 3 / Domain 1 EXPLORER (2026-09-19): only fire when
+		// BOTH operands are SEMANTICALLY Strings. Model-typed temporal fields
+		// (birthDate -> fhir_type "date") arrive as physical Strings but are
+		// Date/DateTime/Time values per §4.1.5-§4.1.7; concatenating them
+		// (`extension.valueString + birthDate` // 'ex2000-02-29') diverged
+		// from the Python fallback, which raises the type error -> empty.
+		// The gate consults ONLY fhir_type metadata (not lexical shape):
+		// plain string fields whose CONTENT looks like a date still concat,
+		// mirroring the Python fallback where only path-metadata temporal
+		// fields are parsed to FP_Date/FP_DateTime nodes.
 		if (op == "+") {
-			if (effectiveType(lv) == FPValue::Type::String && effectiveType(rv) == FPValue::Type::String) {
+			auto metadataTemporal = [](const FPValue &v) -> bool {
+				if (v.fhir_type.empty()) return false;
+				std::string ft = v.fhir_type;
+				std::transform(ft.begin(), ft.end(), ft.begin(), [](unsigned char c) {
+					return static_cast<char>(std::tolower(c));
+				});
+				return ft == "date" || ft == "datetime" || ft == "instant" || ft == "time";
+			};
+			if (effectiveType(lv) == FPValue::Type::String && effectiveType(rv) == FPValue::Type::String &&
+			    !metadataTemporal(lv) && !metadataTemporal(rv)) {
 				return {FPValue::FromString(toString(lv) + toString(rv))};
 			}
 		}

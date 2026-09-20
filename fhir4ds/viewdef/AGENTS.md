@@ -1406,3 +1406,37 @@ https://build.fhir.org/codesystem-FHIR-version.json.
   entities, xmlns, malformed xhtml; profile[]/meta.profile[] accept |version.
 - Probes: /mnt/d/fhir4ds/.temp/qa/ (inline heredocs); gate log
   .temp/qa/gate.log (2832/2832).
+
+## Evolution iter 13 / Domain 5 SKEPTIC (2026-09-20, duckdb 1.5.5 campaign)
+
+CLEAN — 20+ case battery, zero defects. Pins re-verified on duckdb
+1.5.5: forEachOrNull preserves rows for absent paths (root-level,
+unionAll branches, sibling selects); forEach empty suppression
+(cartesian zero); typed columns (boolean/date/decimal, absent → NULL);
+collection=true flattening; collection=false runtime multi-value typed
+error; name-collision rejection; unionAll arm model (no standalone base
+row); %rowIndex; %rootResource at depth; forEach over singleton
+collections; constants (int/bool/tiny decimal; int64 beyond int32 range
+raises typed ConstantResolutionError per SOF-VD-02).
+
+INTENDED pin (select-level where is the fhir4ds draft-spec extension):
+where conditions inside a forEachOrNull context are null-wrapped
+(`({var} IS NULL OR cond)`) so the null-preserved row survives where
+filters — by design (generator.py `_process_selects`), keep wrapped.
+
+## Evolution iters 14-15 / Domain 5 HISTORIAN+EXPLORER (2026-09-20)
+
+- it14 HISTORIAN CLEAN: 144/144 official spec_tests across all 22
+  categories on live duckdb 1.5.5; API surface (generate_view_sql
+  facade with dict AND ViewDefinition input, CREATE VIEW
+  materialization, parse/to_dict round-trip regeneration) all
+  row-identical. NOTE: bare SQLGenerator() defaults to per-type tables
+  (`patients`) — pass source_table="resources" for a shared table.
+- it15 EXPLORER CLEAN: deep nesting (children() chains suppress via
+  cartesian-zero when primitives have no children — spec semantics),
+  250-column wide views, exotic FHIRPath column paths, constants in
+  forEach where-paths, unionAll combinatorics, empty/null/unicode
+  inputs. Duplicate column names across the select tree correctly
+  rejected (official unionAll form = sibling selects with matching
+  branch column names — distinct from enclosing+branch names).
+- Domain 5 CLOSED (iters 13-15: three consecutive CLEAN personalities).
