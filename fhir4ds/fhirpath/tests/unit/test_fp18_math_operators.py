@@ -138,14 +138,18 @@ class TestDualEngineParity:
         duckdb = pytest.importorskip("duckdb")
         import json
 
-        ext = (
-            __file__.rsplit("fhir4ds", 1)[0]
-            + "extensions/fhirpath/build/release/repository/v1.5.2/"
-            "linux_amd64/fhirpath.duckdb_extension"
+        import glob
+
+        candidates = sorted(
+            glob.glob(
+                __file__.rsplit("fhir4ds", 1)[0]
+                + "extensions/fhirpath/build/release/repository/v*/linux_amd64/fhirpath.duckdb_extension"
+            )
         )
+        ext = candidates[-1] if candidates else ""
         import os
 
-        if not os.path.exists(ext):
+        if not ext or not os.path.exists(ext):
             pytest.skip("native fhirpath extension not built")
         native = duckdb.connect(config={"allow_unsigned_extensions": True})
         native.execute(f"LOAD '{ext}'")
@@ -257,15 +261,14 @@ class TestDualEngineParityHistorianFP18:
     @pytest.fixture(scope="class")
     def connections(self):
         duckdb = pytest.importorskip("duckdb")
+        import glob
         import json
         import os
 
-        ext = (
-            __file__.rsplit("fhir4ds", 1)[0]
-            + "extensions/fhirpath/build/release/repository/v1.5.2/"
-            "linux_amd64/fhirpath.duckdb_extension"
-        )
-        if not os.path.exists(ext):
+        _candidates = sorted(glob.glob(__file__.rsplit("fhir4ds", 1)[0]
+            + "extensions/fhirpath/build/release/repository/v*/linux_amd64/fhirpath.duckdb_extension"))
+        ext = _candidates[-1] if _candidates else ""
+        if not ext or not os.path.exists(ext):
             pytest.skip("native fhirpath extension not built")
         native = duckdb.connect(config={"allow_unsigned_extensions": True})
         native.execute(f"LOAD '{ext}'")
@@ -342,15 +345,14 @@ class TestDualEngineParityExplorerFP18:
     @pytest.fixture(scope="class")
     def connections(self):
         duckdb = pytest.importorskip("duckdb")
+        import glob
         import json
         import os
 
-        ext = (
-            __file__.rsplit("fhir4ds", 1)[0]
-            + "extensions/fhirpath/build/release/repository/v1.5.2/"
-            "linux_amd64/fhirpath.duckdb_extension"
-        )
-        if not os.path.exists(ext):
+        _candidates = sorted(glob.glob(__file__.rsplit("fhir4ds", 1)[0]
+            + "extensions/fhirpath/build/release/repository/v*/linux_amd64/fhirpath.duckdb_extension"))
+        ext = _candidates[-1] if _candidates else ""
+        if not ext or not os.path.exists(ext):
             pytest.skip("native fhirpath extension not built")
         native = duckdb.connect(config={"allow_unsigned_extensions": True})
         native.execute(f"LOAD '{ext}'")

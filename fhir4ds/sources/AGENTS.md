@@ -170,3 +170,20 @@ for full details. The `resources` view schema contract
 VARCHAR`) is enforced by `validate_schema()` and is NOT affected by these
 loader-layer issues — adapters that bypass the loader and register their
 own `resources` view are unaffected.
+
+## Cloud Secret Option Doctrine (DuckDB 1.5.5, 2026-09-19 bug_fix workflow)
+
+`FileSystemSource`/`CloudCredentials` build CREATE SECRET SQL through
+`_SECRET_OPTION_ALIASES` (fhir4ds/sources/filesystem.py): snake_case
+kwargs map to native DuckDB option names — S3 `access_key_id→KEY_ID`,
+`secret_access_key→SECRET`, `session_token→SESSION_TOKEN`, `region→REGION`,
+`endpoint_url→ENDPOINT`, `url_style→URL_STYLE`, `use_ssl→USE_SSL`; AZURE
+`connection_string→CONNECTION_STRING`, `account_name→ACCOUNT_NAME`,
+`endpoint→ENDPOINT`, plus `tenant_id`/`client_id`/`client_secret` which
+emit an unquoted `PROVIDER service_principal` clause; GCS accepts native
+HMAC `key_id`/`secret`/`session_token` (+`bearer_token`). AZURE
+`account_key` and GCS `service_account_json` were REMOVED by DuckDB and
+raise typed ValueError with guidance. When bumping DuckDB, re-probe the
+option surface (`SHOW SECRET OPTIONS`-equivalent via trial CREATE SECRET)
+and keep values quote_sql_literal'd; injection tests in
+tests/unit/test_filesystem.py pin the quoting.

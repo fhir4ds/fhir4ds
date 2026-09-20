@@ -1316,6 +1316,23 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         """
         from ..translator.context import RowShape
 
+        # Validate requested output definitions up front (BUGFIX-004/U3):
+        # an unknown definition name would otherwise fall into the generic
+        # UNKNOWN-shape branch below, emit broken SQL referencing a
+        # nonexistent CTE, and surface as an opaque DuckDB
+        # CatalogException at execution. Fail typed and actionable here.
+        missing = [
+            def_name
+            for def_name in column_mapping.values()
+            if def_name not in self._context.definition_meta
+        ]
+        if missing:
+            available = sorted(self._context.definition_meta)
+            raise ValueError(
+                f"Unknown definition name(s) in output columns: {missing}. "
+                f"Available definitions: {available}"
+            )
+
         # Build SELECT columns
         columns: List[SQLExpression] = [
             SQLQualifiedIdentifier(parts=["_pt", "patient_id"])
@@ -1816,6 +1833,21 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             ):
                 # Reuse the navigation-list path below: sets cql_type
                 # List<Any>, stores_list_value, and shape PATIENT_SCALAR.
+                _definition_is_navigation_list = True
+
+            # Iteration 7 QA-011: expand/collapse defines
+            # (`define X: expand Interval[...] per day`,
+            # `define C: collapse {...} per 2`) hold ONE row per patient
+            # whose value column is the whole element list (JSON array
+            # text for the UDF forms, a DuckDB list for the
+            # generate_series/list_transform integer form). Without the
+            # stored-list marker, Count(X) aggregates CTE rows (1) and
+            # First(X) character-slices the JSON text (CQL 1.5 §10.x
+            # stored-list consumer doctrine; CQL-18 HISTORIAN family).
+            from ..parser.ast_nodes import FunctionRef as _DefFunctionRef
+            if isinstance(_uexpr, _DefFunctionRef) and (
+                _uexpr.name or ""
+            ).lower() in ("expand", "collapse"):
                 _definition_is_navigation_list = True
 
             # Populate DefinitionMeta for this definition

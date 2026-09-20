@@ -108,7 +108,7 @@ def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
                 "duckdb_fhirpath_py: bundled C++ extension is an unsigned dev "
                 "build and cannot be loaded on this connection. Reconnect with "
                 "duckdb.connect(config={'allow_unsigned_extensions': True}) "
-                "(or fhir4ds.connect(), which sets it by default) to enable "
+                "(or fhir4ds.create_connection(), which sets it by default) to enable "
                 "the native engine. Falling back to Python UDFs."
             )
         else:

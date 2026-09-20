@@ -346,22 +346,31 @@ def contains_impl(ctx, a, b):
 
 
 def contains(ctx, a, b):
+    # Evolution iter 6 QA-008 (2026-09-20): the multi-item singleton
+    # violation must be signaled BEFORE the empty-operand short-circuits.
+    # Native raises the §6.4.3 singleton error for `{} contains (1|2)`
+    # (empty at the UDF boundary) while this path returned False because
+    # the left-empty check ran first. Empty-propagation semantics
+    # (right-empty -> [], left-empty -> False) are unchanged for
+    # singleton operands.
+    if len(b) > 1:
+        raise FHIRPathError("contains requires the right operand to contain at most one item")
     if len(b) == 0:
         return []
     if len(a) == 0:
         return False
-    if len(b) > 1:
-        raise FHIRPathError("contains requires the right operand to contain at most one item")
 
     return contains_impl(ctx, a, b)
 
 
 def inn(ctx, a, b):
+    # Evolution iter 6 QA-008 (2026-09-20): same singleton-before-empty
+    # ordering as `contains` — native raises for `{} in (1|2)`.
+    if len(a) > 1:
+        raise FHIRPathError("in requires the left operand to contain at most one item")
     if len(a) == 0:
         return []
     if len(b) == 0:
         return False
-    if len(a) > 1:
-        raise FHIRPathError("in requires the left operand to contain at most one item")
 
     return contains_impl(ctx, b, a)

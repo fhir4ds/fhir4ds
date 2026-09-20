@@ -537,8 +537,33 @@ def _synthesize_target_from_resource_select(
         resource_ref = SQLRaw(resource_sql)
 
     id_expr = _build_resource_id_expr(resource_ref)
+    # Iteration 27 QA-021: the synthesized target twin must return EXACTLY
+    # ONE row — multi-row sources (Count over a rows define with N resource
+    # rows) made the scalar subquery raise "More than one row returned by a
+    # subquery". Aggregate all matching resource ids into one VARCHAR
+    # (comma-joined, sorted for determinism); single-row sources are
+    # unaffected (one-element list string_agg).
     target_select = SQLSelect(
-        columns=[id_expr],
+        columns=[
+            SQLFunctionCall(
+                name="COALESCE",
+                args=[
+                    SQLFunctionCall(
+                        name="array_to_string",
+                        args=[
+                            SQLFunctionCall(
+                                name="list_sort",
+                                args=[SQLFunctionCall(name="list_distinct", args=[
+                                    SQLFunctionCall(name="list", args=[id_expr]),
+                                ])],
+                            ),
+                            SQLLiteral(value=","),
+                        ],
+                    ),
+                    SQLCast(expression=SQLNull(), target_type="VARCHAR"),
+                ],
+            ),
+        ],
         from_clause=select.from_clause,
         where=select.where,
         order_by=select.order_by,
@@ -962,6 +987,15 @@ class OperatorsMixin:
             and self.context.audit_mode
             and self.context.audit_expressions
         ):
+            # Iteration 25 QA-020: the audit fast path skipped the
+            # fhirpath_text -> full-list promotion (CQL-18 SKEPTIC QA-002),
+            # emitting list_contains(VARCHAR, ...) binder errors for dynamic
+            # multi-valued FHIR properties in audit SQL. Promote before the
+            # raw builtin call (from_json(fhirpath(...)) IS a plain scalar
+            # expression — no macro expansion — so the struct_pack binder
+            # workaround still holds).
+            from ._utils import _promote_fhirpath_text_list as _promote
+            list_sql = _promote(list_sql)
             return SQLFunctionCall(
                 name="list_contains",
                 args=[list_sql, element_sql],
@@ -4499,6 +4533,16 @@ class OperatorsMixin:
 
         _right_peer_rows = _operand_rows_shaped(right, getattr(expr, "right", None))
         _left_peer_rows = _operand_rows_shaped(left, getattr(expr, "left", None))
+        # Capture the PRE-promotion operands for interval detection: a
+        # dynamic FHIR Period operand (`E1.period`) translates to
+        # fhirpath_text(resource, 'period'), which _is_fhir_interval_expression
+        # recognizes — but _union_operand_as_list's last-resort promotion
+        # rewrites it to from_json(fhirpath(...), '["VARCHAR"]') which the
+        # recognizer misses, dropping the union into list semantics
+        # (BinderException on the mixed CASE, or list_concat of Period JSON
+        # strings instead of §19.31 interval union).
+        _left_pre_promotion = left
+        _right_pre_promotion = right
         left, _left_converted = _union_operand_as_list(
             left, getattr(expr, "left", None), left_is_rows, peer_rows=_right_peer_rows
         )
@@ -4519,8 +4563,15 @@ class OperatorsMixin:
         # null when intervals do not overlap or meet.
         # Null propagation for intervals: §19.31 says null → null.
         if not left_is_rows and not right_is_rows:
-            left_is_interval = self._is_fhir_interval_expression(left)
-            right_is_interval = self._is_fhir_interval_expression(right)
+            # Interval detection must consider the PRE-promotion operands:
+            # `E1.period` is fhirpath_text(...,'period') pre-promotion
+            # (interval-recognized) but from_json(...) post-promotion (not).
+            left_is_interval = self._is_fhir_interval_expression(
+                left
+            ) or self._is_fhir_interval_expression(_left_pre_promotion)
+            right_is_interval = self._is_fhir_interval_expression(
+                right
+            ) or self._is_fhir_interval_expression(_right_pre_promotion)
             # CQL-17 SKEPTIC QA-001: `(null as Interval<T>)` lowers to a null
             # CASE that is neither an SQLNull nor recognized by
             # _is_fhir_interval_expression, so the union dispatch fell into
@@ -4535,7 +4586,22 @@ class OperatorsMixin:
                     else:
                         right_is_interval = True
             if left_is_interval and right_is_interval:
-                return SQLFunctionCall(name="intervalUnion", args=[left, right])
+                # Pass the interval-shaped operand variant to intervalUnion:
+                # a promoted dynamic Period (from_json list) is not parseable
+                # by the UDF — fall back to the pre-promotion fhirpath_text
+                # (Period JSON string) when that is the interval-shaped side.
+                def _interval_operand(promoted, original):
+                    if self._is_fhir_interval_expression(promoted):
+                        return promoted
+                    return original
+
+                return SQLFunctionCall(
+                    name="intervalUnion",
+                    args=[
+                        _interval_operand(left, _left_pre_promotion),
+                        _interval_operand(right, _right_pre_promotion),
+                    ],
+                )
             if (left_is_interval or right_is_interval) and (isinstance(left, SQLNull) or isinstance(right, SQLNull)):
                 return SQLNull()
 

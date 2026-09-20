@@ -272,3 +272,50 @@ def test_translated_population_sql_uses_native_name():
     translator = CQLToSQLTranslator()
     sql = translator.translate_library_to_population_sql(lib)
     assert "fhirpath_in_valueset" in sql
+
+
+# --- BUGFIX-003/U2: bare-string valueset cache support (0.0.15 campaign) ---
+
+
+def test_bare_string_cache_entries_match_membership():
+    """The documented cache shape in createValuesetMembershipUdf's docstring
+    is Dict[str, Set[str]] (bare string codes). Those entries must satisfy
+    membership checks instead of silently never matching."""
+    from fhir4ds.cql.duckdb.udf.valueset import createValuesetMembershipUdf
+
+    con = duckdb.connect()
+    try:
+        udf = createValuesetMembershipUdf(
+            {VS_URL: {"8867-4", "another-code"}}
+        )
+        con.create_function("fhirpath_in_valueset", udf, null_handling="special")
+        # Source carries a system; bare cache entry is system-less, but the
+        # code matches -> per the empty-system scan doctrine this is True.
+        assert con.execute(
+            "SELECT fhirpath_in_valueset(?, 'code', ?)", [_RESOURCE, VS_URL]
+        ).fetchone()[0] is True
+        # A code definitely absent from the cache is False.
+        assert con.execute(
+            "SELECT fhirpath_in_valueset(?, 'code', ?)", [_NO_CODE_RESOURCE, VS_URL]
+        ).fetchone()[0] is False
+    finally:
+        con.close()
+
+
+def test_zero_code_valueset_load_warns(caplog):
+    """BUGFIX-003/U2(a): loading a ValueSet with zero codes warns instead of
+    silently producing an always-false membership table."""
+    import fhir4ds
+    from fhir4ds.cql.loader.fhir_loader import FHIRDataLoader
+
+    con = fhir4ds.create_connection()
+    try:
+        loader = FHIRDataLoader(con)
+        with caplog.at_level("WARNING", logger="fhir4ds.cql.loader.fhir_loader"):
+            count = loader.load_valuesets([{"url": "http://empty/vs", "codes": []}])
+        assert count == 0
+        assert any(
+            "contains no codes" in rec.message for rec in caplog.records
+        ), [r.message for r in caplog.records]
+    finally:
+        con.close()

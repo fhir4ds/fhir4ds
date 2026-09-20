@@ -599,7 +599,18 @@ def createValuesetMembershipUdf(
         udf_func = createValuesetMembershipUdf(cache)
         con.create_function("fhirpath_in_valueset", udf_func)
         con.create_function("in_valueset", udf_func)  # Alias with snake_case
+
+    The cache accepts both documented entry shapes: bare string codes
+    (treated as system-less ``("", code)`` entries) and ``(system, code)``
+    tuples. Mixed shapes are normalized once at factory time.
     """
+    normalized_cache: Dict[str, Set[tuple] | Set[str]] = {}
+    for url, entries in valueset_codes_cache.items():
+        if all(isinstance(entry, str) for entry in entries):
+            normalized_cache[url] = {("", code) for code in entries}
+        else:
+            normalized_cache[url] = entries
+
     def fhirpath_in_valueset(resource: str | None, path: str, valueset_url: str) -> bool | None:
         """Check if a code in the resource is in the specified valueset.
 
@@ -611,9 +622,9 @@ def createValuesetMembershipUdf(
             return None
 
         try:
-            vs_codes = valueset_codes_cache.get(valueset_url, set())
+            vs_codes = normalized_cache.get(valueset_url, set())
             if not vs_codes:
-                if not valueset_codes_cache:
+                if not normalized_cache:
                     _logger.warning(
                         "in_valueset called but no valueset data is loaded. "
                         "Load valuesets first with registerValuesetUdfs()."

@@ -1042,6 +1042,14 @@ class FHIRDataLoader:
             if not isinstance(codes, list):
                 raise TypeError(f"valuesets[{index}].codes must be a list, got {type(codes).__name__}")
 
+            if not codes:
+                _logger.warning(
+                    "ValueSet '%s' (valuesets[%d]) contains no codes; "
+                    "membership checks against it will always be false",
+                    vs_url,
+                    index,
+                )
+
             for code_index, code_entry in enumerate(codes):
                 if code_entry is None:
                     raise TypeError(

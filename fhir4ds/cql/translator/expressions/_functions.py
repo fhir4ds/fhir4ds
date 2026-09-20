@@ -809,6 +809,23 @@ class FunctionsMixin:
                 "bool_or": "list_bool_or", "bool_and": "list_bool_and",
             }
             list_func = _list_agg_map.get(agg_func)
+            # Iteration 7 QA-011: JSON-array-string list sources (expand /
+            # expand_points / collapse_intervals families return VARCHAR
+            # JSON text, not a DuckDB list) cannot feed list_* functions —
+            # Count uses json_array_length directly; other aggregates are
+            # not meaningful over interval JSON and defer to the caller.
+            if (
+                isinstance(source_sql, SQLFunctionCall)
+                and source_sql.name in (
+                    "expand", "expand1", "expand_points", "expand_points1",
+                    "collapse_intervals", "collapse_intervals_per",
+                )
+            ):
+                if agg_func == "COUNT":
+                    return SQLFunctionCall(
+                        name="json_array_length", args=[source_sql]
+                    )
+                return None
             if list_func:
                 return SQLFunctionCall(name=list_func, args=[source_sql])
             # Fallback for less common aggregates: unnest into subquery
@@ -2478,6 +2495,25 @@ class FunctionsMixin:
                 and cql_type != "List<Quantity>"
             ):
                 source_sql = self.translate(arg, usage=ExprUsage.SCALAR)
+                # Iteration 7 QA-011: expand/collapse stored-list defines
+                # hold a JSON array STRING in the CTE value column (the UDF
+                # output shape). list_* consumers need the parsed list; for
+                # Count, json_array_length directly counts elements.
+                _def_ast_json = getattr(self.context, "_definition_cql_asts", {}).get(
+                    arg.name
+                )
+                if (
+                    isinstance(_def_ast_json, FunctionRef)
+                    and (_def_ast_json.name or "").lower() in ("expand", "collapse")
+                ):
+                    if name.lower() == "count":
+                        return SQLFunctionCall(
+                            name="json_array_length", args=[source_sql]
+                        )
+                    source_sql = SQLFunctionCall(
+                        name="from_json",
+                        args=[source_sql, SQLLiteral(value='["VARCHAR"]')],
+                    )
                 if name.lower() == "count":
                     filtered = SQLFunctionCall(
                         name="list_filter",
@@ -2881,8 +2917,15 @@ class FunctionsMixin:
         _list_src = self._unwrap_list_source(arg)
         if _list_src is not None:
             source_sql = self.translate(_list_src, usage=ExprUsage.SCALAR)
-            # JSON-returning list functions (collapse_intervals, expand) need json_array_length
-            _JSON_LIST_FUNCS = {"collapse_intervals", "collapse_intervals_per", "expand"}
+            # JSON-returning list functions (collapse_intervals, expand)
+            # need json_array_length. Iteration 7 QA-011: the
+            # single-interval expand_points family also returns a JSON
+            # array string — list_count over the VARCHAR text is a
+            # BinderException.
+            _JSON_LIST_FUNCS = {
+                "collapse_intervals", "collapse_intervals_per", "expand",
+                "expand1", "expand_points", "expand_points1",
+            }
             _is_json_list = isinstance(source_sql, SQLFunctionCall) and source_sql.name in _JSON_LIST_FUNCS
             if _is_json_list:
                 if name.lower() == "count":
@@ -3762,11 +3805,30 @@ class FunctionsMixin:
             return SQLFunctionCall(name="fhirpath", args=list(expr.args))
         return expr
 
+    @staticmethod
+    def _json_list_source_for_extract(source: SQLExpression) -> SQLExpression:
+        """Iteration 9 QA-014: expand/collapse UDF forms return a JSON
+        array STRING — LIST_EXTRACT would character-slice the text
+        (First(collapse ...) -> '['). Parse to a DuckDB list first."""
+        if (
+            isinstance(source, SQLFunctionCall)
+            and source.name in (
+                "expand", "expand1", "expand_points", "expand_points1",
+                "collapse_intervals", "collapse_intervals_per",
+            )
+        ):
+            return SQLFunctionCall(
+                name="from_json",
+                args=[source, SQLLiteral(value='["VARCHAR"]')],
+            )
+        return source
+
     def _translate_first(self, args: list) -> SQLExpression:
         """Translate CQL First to DuckDB LIST_EXTRACT(list, 1)."""
         self._reject_scalar_string_list_function_arg(args, "First")
         if args:
             source = self._coerce_fhirpath_text_to_list(args[0])
+            source = self._json_list_source_for_extract(source)
             return SQLFunctionCall(name="LIST_EXTRACT", args=[source, SQLLiteral(value=1)])
         return SQLNull()
 
@@ -3775,6 +3837,7 @@ class FunctionsMixin:
         self._reject_scalar_string_list_function_arg(args, "Last")
         if args:
             source = self._coerce_fhirpath_text_to_list(args[0])
+            source = self._json_list_source_for_extract(source)
             return SQLFunctionCall(name="LIST_EXTRACT", args=[source, SQLLiteral(value=-1)])
         return SQLNull()
 
@@ -3801,6 +3864,18 @@ class FunctionsMixin:
         ):
             return None
         src = self.translate(arg, usage=ExprUsage.SCALAR)
+        # Iteration 7 QA-011: expand/collapse stored-list defines hold a
+        # JSON array STRING in the CTE value column — LIST_EXTRACT would
+        # character-slice the JSON text. Parse to a list first.
+        _def_ast = getattr(self.context, "_definition_cql_asts", {}).get(arg.name)
+        if (
+            isinstance(_def_ast, FunctionRef)
+            and (_def_ast.name or "").lower() in ("expand", "collapse")
+        ):
+            src = SQLFunctionCall(
+                name="from_json",
+                args=[src, SQLLiteral(value='["VARCHAR"]')],
+            )
         idx = 1 if func.name.lower() == "first" else -1
         return SQLFunctionCall(name="LIST_EXTRACT", args=[src, SQLLiteral(value=idx)])
 

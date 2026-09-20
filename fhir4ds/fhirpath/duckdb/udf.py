@@ -2879,8 +2879,8 @@ def fhirpath_bool_udf(resource: str | None, expression: str | None) -> bool | No
             )
             return None
         return low == "true"
-    if isinstance(val, (int, float)):
-        if val in (0, 1, 0.0, 1.0):
+    if isinstance(val, (int, float, Decimal)):
+        if val in (0, 1, 0.0, 1.0, Decimal(0), Decimal(1)):
             return bool(val)
         _logger.warning(
             "Unexpected numeric boolean value %r for expression '%s'; returning NULL",

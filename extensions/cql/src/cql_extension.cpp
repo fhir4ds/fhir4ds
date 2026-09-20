@@ -2207,6 +2207,13 @@ ExpandTemporalInterval(const cql::Interval &iv, const ExpandStep &step) {
 			[[fallthrough]];
 		case cql::DateTimeValue::Precision::Day:
 			dt.hour = 0;
+			// Iteration 9 QA-016: truncating a has_time DateTime to a
+			// date-only per precision must also clear has_time — the
+			// point renders through to_string()'s !has_time branch
+			// ("2024-06-15"), matching the Python fallback's per-
+			// precision _format_dt (native previously rendered
+			// "2024-06-15T00" for a DateTime input expanded per day).
+			dt.has_time = false;
 			[[fallthrough]];
 		case cql::DateTimeValue::Precision::Hour:
 			dt.minute = 0;

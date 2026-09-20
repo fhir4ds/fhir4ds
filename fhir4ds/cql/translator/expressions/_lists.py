@@ -154,6 +154,63 @@ class ListsMixin:
     def _translate_list_expression(self, lst: ListExpression, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL list to SQL array."""
         self._validate_list_selector_common_type(lst)
+        # CQL 1.5 listSelector grammar: '{' (query | expression)? '}' — a
+        # query element makes the selector the query's result rows as a
+        # list value. Wrapping a rows subquery inside SQLArray produces
+        # `[(SELECT * FROM ...)]` — a multi-column subquery in scalar
+        # position that DuckDB rejects. Coerce the single query element to
+        # a per-row-value LIST instead (exists/Count/First/flatten/
+        # singleton-from consumers all operate on the LIST shape).
+        from ...parser.ast_nodes import Query as _QueryAST
+        if len(lst.elements) == 1 and isinstance(lst.elements[0], _QueryAST):
+            element_sql = self.translate(lst.elements[0], usage=ExprUsage.LIST)
+            # Rows-shaped query translations (subquery over a retrieve CTE)
+            # take the rows-to-list coercion path below. In list-source
+            # contexts (aggregate folds iterating an unnest element, query
+            # over a literal list), the query translation is the per-row
+            # element expression itself — keep the SQLArray single-element
+            # wrap (the pre-iteration-10 shape) so list-type union/concat
+            # consumers still see a LIST.
+            _is_rows_shaped = isinstance(element_sql, (SQLSubquery, SQLSelect))
+            if _is_rows_shaped:
+                # Star-shaped where-only queries (`SELECT * FROM ... AS C`)
+                # project `*` — DuckDB would resolve it to the FIRST column
+                # (patient_id), but the query's element type is the resource
+                # (matching the unbraced query-define path: elements are
+                # CQL resources, value column = row.resource).
+                _inner = element_sql.query if isinstance(element_sql, SQLSubquery) else element_sql
+                if isinstance(_inner, SQLSelect) and _inner.columns and isinstance(_inner.columns[0], SQLIdentifier) and _inner.columns[0].name == "*":
+                    row_alias = None
+                    if isinstance(_inner.from_clause, SQLAlias):
+                        row_alias = _inner.from_clause.alias
+                    if row_alias:
+                        _inner.columns = [SQLQualifiedIdentifier(parts=[row_alias, "resource"])]
+                coerced = _coerce_query_rows_to_list(element_sql)
+                # Patient correlation (iteration 10 QA-017): the coerced
+                # inner SELECT projects the query's value column but,
+                # unlike the query-as-define path, carries no patient
+                # predicate — without the correlation the per-patient LIST
+                # leaks rows across patients. AND
+                # `<row_alias>.patient_id = _pt.patient_id` onto the inner
+                # projection (matching the QA-013 aggregate convention;
+                # replace_qualified_alias fixes the alias later).
+                inner_select = None
+                if isinstance(coerced, SQLSubquery) and isinstance(coerced.query, SQLSelect):
+                    from_clause = coerced.query.from_clause
+                    if isinstance(from_clause, SQLAlias) and isinstance(from_clause.expr, SQLSubquery):
+                        inner_select = from_clause.expr.query
+                if isinstance(inner_select, SQLSelect) and inner_select.from_clause is not None:
+                    row_alias = None
+                    if isinstance(inner_select.from_clause, SQLAlias):
+                        row_alias = inner_select.from_clause.alias
+                    if row_alias:
+                        from ._query import _patient_correlated_where
+                        outer = self.context.patient_alias or "_pt"
+                        inner_select.where = _patient_correlated_where(
+                            inner_select.where, row_alias, outer
+                        )
+                return coerced
+            return SQLArray(elements=[element_sql])
         elements = []
         for element in lst.elements:
             source = self._static_conversion_source_node(element)
@@ -1235,6 +1292,16 @@ class ListsMixin:
         source = _promote_fhirpath_text_list(source)
         if _is_list_returning_sql(source):
             return SQLFunctionCall(name='"Distinct"', args=[source])
+        # Iteration 8 QA-012: a row-shaped source (query return over a
+        # retrieve: `distinct ([Observation] O return O.status)`) must be
+        # coerced to the scalar per-patient list subquery BEFORE wrapping —
+        # the bare `LIST((SELECT ...))` put an aggregate next to the outer
+        # `_pt.patient_id` projection (DuckDB GROUP BY BinderException).
+        if isinstance(source, (SQLSelect, SQLSubquery)):
+            from ._utils import _coerce_query_rows_to_list
+            coerced = _coerce_query_rows_to_list(source)
+            if coerced is not source and _is_list_returning_sql(coerced):
+                return SQLFunctionCall(name='"Distinct"', args=[coerced])
         return SQLFunctionCall(name='"Distinct"',
                                args=[SQLFunctionCall(name="LIST", args=[source])])
 
@@ -1432,6 +1499,22 @@ class ListsMixin:
         # which should use list_extract, not the window function path.
         if _is_list_returning_sql(source_sql):
             list_expr = source_sql
+            # JSON-array-string sources (expand/collapse UDF families,
+            # Iteration 7 QA-011) are VARCHAR text — parse to a DuckDB
+            # list before any list_sort/list_extract so sort-by clauses
+            # over collapsed drug periods do not binder-fail
+            # (CMS135/144/145/645/646 regression).
+            if (
+                isinstance(list_expr, SQLFunctionCall)
+                and list_expr.name in (
+                    "expand", "expand1", "expand_points", "expand_points1",
+                    "collapse_intervals", "collapse_intervals_per",
+                )
+            ):
+                list_expr = SQLFunctionCall(
+                    name="from_json",
+                    args=[list_expr, SQLLiteral(value='["VARCHAR"]')],
+                )
             # Apply sorting if the query has a sort clause, but only if the
             # inner list() aggregate doesn't already include ORDER BY (backbone
             # UNNEST queries produce list(x ORDER BY sort_key) directly).
@@ -1461,6 +1544,19 @@ class ListsMixin:
             # the first/last element from the list.
             if _is_list_returning_sql(source_sql):
                 list_expr = source_sql
+                # JSON-array-string sources (expand/collapse UDF families,
+                # Iteration 7 QA-011) — parse before sort/extract.
+                if (
+                    isinstance(list_expr, SQLFunctionCall)
+                    and list_expr.name in (
+                        "expand", "expand1", "expand_points", "expand_points1",
+                        "collapse_intervals", "collapse_intervals_per",
+                    )
+                ):
+                    list_expr = SQLFunctionCall(
+                        name="from_json",
+                        args=[list_expr, SQLLiteral(value='["VARCHAR"]')],
+                    )
                 # Apply sorting if the query has a sort clause, but only if the
                 # inner list() aggregate doesn't already include ORDER BY.
                 if query.sort and not _list_has_order_by(source_sql):
@@ -1475,11 +1571,17 @@ class ListsMixin:
                     name="list_extract",
                     args=[list_expr, SQLLiteral(value=idx)],
                 )
-            # collapse_intervals returns a JSON array string (VARCHAR),
-            # not a DuckDB list.  Convert to list so First/Last can extract.
+            # collapse_intervals / expand UDF forms return a JSON array
+            # string (VARCHAR), not a DuckDB list.  Convert to list so
+            # First/Last can extract (Iteration 7 QA-011: expand family
+            # joined the collapse pair — without it, First(X) character-
+            # slices the JSON text).
             if (
                 isinstance(source_sql, SQLFunctionCall)
-                and source_sql.name in ("collapse_intervals", "collapse_intervals_per")
+                and source_sql.name in (
+                    "collapse_intervals", "collapse_intervals_per",
+                    "expand", "expand1", "expand_points", "expand_points1",
+                )
             ):
                 list_expr = SQLFunctionCall(
                     name="from_json",
@@ -2720,6 +2822,21 @@ class ListsMixin:
         # For backward compatibility with old callers
         if isinstance(usage, bool):
             usage = ExprUsage.BOOLEAN if usage else ExprUsage.LIST
+
+        # CQL 1.5 listSelector: exists ({ <query> }) — the braced query
+        # list selector is a 1-element list of the query's result rows.
+        # exists tests non-emptiness, identical to the unbraced
+        # exists (<query>) form; unwrap the selector and apply the
+        # query directly (the LIST coercion shape cannot be reused by
+        # the EXISTS rewrite below — its aggregate projection breaks
+        # the correlated-EXISTS FROM clause).
+        from ...parser.ast_nodes import Query as _QueryAST
+        if (
+            isinstance(node.source, ListExpression)
+            and len(node.source.elements) == 1
+            and isinstance(node.source.elements[0], _QueryAST)
+        ):
+            node = ExistsExpression(source=node.source.elements[0])
 
         if self._is_list_typed_ast(node.source) and not isinstance(node.source, ListExpression):
             source = self.translate(node.source, usage=ExprUsage.SCALAR)

@@ -123,6 +123,25 @@ def test_qa007_default_configs_still_construct():
 
 
 # ======================================================================
+# Evolution iter 35 QA-024: AutoCoderConfig validates top_k
+# ======================================================================
+
+
+@pytest.mark.parametrize("top_k", [0, -1, -10])
+def test_qa024_auto_coder_config_rejects_non_positive_top_k(top_k):
+    """top_k <= 0 truncates every result via kept[:top_k] slice semantics
+    (0 drops all autocodings; negatives keep all-but-last-N). The frozen
+    dataclass must reject at construction like workers/batch_size."""
+    with pytest.raises(ValueError, match="top_k must be a positive int"):
+        AutoCoderConfig(top_k=top_k)
+
+
+def test_qa024_auto_coder_config_positive_top_k_still_constructs():
+    assert AutoCoderConfig(top_k=1).top_k == 1
+    assert AutoCoderConfig().top_k == 3
+
+
+# ======================================================================
 # QA-008: Bundle.type 1..1 cardinality enforcement
 # ======================================================================
 

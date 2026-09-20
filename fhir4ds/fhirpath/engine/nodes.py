@@ -1475,14 +1475,41 @@ class FP_TimeBase(FP_Type):
         )
         dt_list = self._getMatchAsList()
         if isinstance(self, FP_DateTime):
-            return self._plus_datetime(value, time_unit, dt_list)
+            result = self._plus_datetime(value, time_unit, dt_list)
+            # Evolution iter 6 QA-006 (2026-09-20): arithmetic results must
+            # keep temporal typing so downstream comparisons do not fall
+            # into plain-string ordering (`(@2016-02-29 - 1 month) > 'abc'`
+            # must be empty like native, not False). Precision 1-2 renders
+            # ('2025', '2024-02') carry no 'T' and cannot re-parse through
+            # dateTimeRE; FP_Date accepts the same lexical form with an
+            # identical string rendering, so it preserves render parity and
+            # string-equality parity while restoring temporal ordering.
+            # (.type().name for these partial-DateTime results reports
+            # 'Date' — pre-existing partial-DateTime type-inference gap,
+            # documented in fhirpath/AGENTS.md.)
+            typed = FP_DateTime(result)
+            if typed is None:
+                typed = FP_Date(result)
+            return typed if typed is not None else result
         if isinstance(self, FP_Date):
-            return self._plus_date(value, time_unit, dt_list)
+            result = self._plus_date(value, time_unit, dt_list)
+            typed = FP_Date(result)
+            return typed if typed is not None else result
         if isinstance(self, FP_Time):
             return self._plus_time(value, time_unit, dt_list, time_quantity)
 
     def _plus_datetime(self, value, time_unit, dt_list):
         precision = self._calculatePrecision(dt_list)
+        # Evolution iter 6 QA-006 (2026-09-20): native fn_dateArith treats a
+        # DateTime literal with a bare trailing 'T' (time marker present,
+        # hour absent) as hour-precision hour 0 — results render with a
+        # 'T00' hour component (`@2024-01-01T + 1 day` -> '2024-01-02T00')
+        # and sub-day quantities apply at hour granularity
+        # (`+ 1 hour` -> '...T01').
+        if precision == 3 and isinstance(self.asStr, str) and self.asStr.endswith("T"):
+            precision = 4
+            dt_list = list(dt_list)
+            dt_list[3] = "00"
         date_obj = self._convertDatetimeLocal(dt_list)
         trunc = FP_TimeBase._truncate_toward_zero
         divs = FP_TimeBase._UNIT_DIVISORS
@@ -1513,9 +1540,18 @@ class FP_TimeBase(FP_Type):
             target_unit_by_precision = {4: "hour", 5: "minute"}
             target = target_unit_by_precision.get(precision)
             if target is not None:
-                result = date_obj + relativedelta(
-                    **{target + "s": trunc(value, divs[(time_unit, target)])}
-                )
+                if time_unit == target:
+                    # Evolution iter 6 QA-005 (2026-09-20): same-unit
+                    # addition at the input precision applies the value
+                    # directly (no truncation lookup). _UNIT_DIVISORS has no
+                    # diagonal entries, so the previous divs[(unit, unit)]
+                    # lookup raised KeyError and minute-precision
+                    # DateTimes ± minutes returned empty.
+                    result = date_obj + relativedelta(**{target + "s": value})
+                else:
+                    result = date_obj + relativedelta(
+                        **{target + "s": trunc(value, divs[(time_unit, target)])}
+                    )
             elif precision >= 6:
                 if time_unit == "second":
                     result = date_obj + timedelta(seconds=value)

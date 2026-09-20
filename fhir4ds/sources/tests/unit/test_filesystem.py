@@ -312,7 +312,7 @@ class TestCloudCredentials:
         assert creds.secret_name == "my_s3_secret"
 
     def test_provider_is_uppercased(self):
-        creds = CloudCredentials("gcs", service_account_json="{}")
+        creds = CloudCredentials("gcs", key_id="k", secret="s")
         assert creds.provider == "GCS"
 
     def test_rejects_unsupported_provider(self):
@@ -324,7 +324,7 @@ class TestCloudCredentials:
         with pytest.raises(ValueError, match="Unsupported credential option"):
             creds.configure(type("FakeCon", (), {"execute": lambda self, sql: None})())
 
-    def test_configure_generates_create_secret_sql(self, monkeypatch):
+    def test_configure_generates_create_secret_sql(self):
         executed = []
 
         class FakeCon:
@@ -337,8 +337,70 @@ class TestCloudCredentials:
         sql = executed[0]
         assert "CREATE OR REPLACE SECRET" in sql
         assert "TYPE S3" in sql
-        assert "access_key_id" in sql
-        assert "secret_access_key" in sql
+        assert "KEY_ID 'AKID'" in sql
+        assert "SECRET 'SAK'" in sql
+
+    def test_configure_maps_legacy_aliases_to_native_options(self):
+        executed = []
+
+        class FakeCon:
+            def execute(self, sql):
+                executed.append(sql)
+
+        creds = CloudCredentials(
+            "S3",
+            access_key_id="AKID",
+            secret_access_key="SAK",
+            session_token="TOK",
+            region="us-east-1",
+            endpoint_url="http://minio:9000",
+            url_style="path_style",
+            use_ssl="false",
+        )
+        creds.configure(FakeCon())
+        sql = executed[0]
+        assert "KEY_ID 'AKID'" in sql
+        assert "SECRET 'SAK'" in sql
+        assert "SESSION_TOKEN 'TOK'" in sql
+        assert "REGION 'us-east-1'" in sql
+        assert "ENDPOINT 'http://minio:9000'" in sql
+        assert "URL_STYLE 'path_style'" in sql
+        assert "USE_SSL 'false'" in sql
+        # Legacy names must NOT leak into the SQL
+        assert "access_key_id" not in sql
+        assert "secret_access_key" not in sql
+        assert "endpoint_url" not in sql
+
+    def test_configure_azure_service_principal_emits_provider(self):
+        executed = []
+
+        class FakeCon:
+            def execute(self, sql):
+                executed.append(sql)
+
+        creds = CloudCredentials(
+            "AZURE",
+            tenant_id="tid",
+            client_id="cid",
+            client_secret="csecret",
+        )
+        creds.configure(FakeCon())
+        sql = executed[0]
+        assert "TYPE AZURE" in sql
+        assert "PROVIDER service_principal" in sql
+        assert "TENANT_ID 'tid'" in sql
+        assert "CLIENT_ID 'cid'" in sql
+        assert "CLIENT_SECRET 'csecret'" in sql
+
+    def test_configure_azure_account_key_removed_actionable_error(self):
+        creds = CloudCredentials("AZURE", account_key="k")
+        with pytest.raises(ValueError, match="account_key.*connection_string"):
+            creds.configure(type("FakeCon", (), {"execute": lambda self, sql: None})())
+
+    def test_configure_gcs_service_account_json_removed_actionable_error(self):
+        creds = CloudCredentials("GCS", service_account_json="{}")
+        with pytest.raises(ValueError, match="service_account_json.*bearer_token"):
+            creds.configure(type("FakeCon", (), {"execute": lambda self, sql: None})())
 
     def test_configure_escapes_secret_name_and_values(self):
         executed = []
@@ -355,8 +417,8 @@ class TestCloudCredentials:
         creds.configure(FakeCon())
         sql = executed[0]
         assert 'CREATE OR REPLACE SECRET "s""; DROP SECRET x; --"' in sql
-        assert "access_key_id 'AK''; DROP TABLE resources; --'" in sql
-        assert "access_key_id 'AK'; DROP" not in sql
+        assert "KEY_ID 'AK''; DROP TABLE resources; --'" in sql
+        assert "KEY_ID 'AK'; DROP" not in sql
 
 
 # ---------------------------------------------------------------------------
