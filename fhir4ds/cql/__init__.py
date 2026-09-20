@@ -79,7 +79,7 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
-__version__ = "0.0.14"
+__version__ = "0.0.15"
 
 
 def parse_cql(cql_text: str):
@@ -760,13 +760,6 @@ __all__ = [
     "ResolvedCodeSystem",
     "ResolvedMeasure",
     "ResolutionContext",
-    # SQL generation
-    "SQLGenerator",
-    "FHIRPathResult",
-    "LibraryResult",
-    "CTEBuilder",
-    "PopulationSQLBuilder",
-    "PopulationSQLConfig",
     # Evaluation contexts
     "EvaluationContext",
     "PatientContext",

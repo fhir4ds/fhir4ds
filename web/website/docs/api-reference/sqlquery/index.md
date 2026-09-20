@@ -7,8 +7,8 @@ sidebar_label: sqlquery
 # `fhir4ds.sqlquery`
 
 The SQL-on-FHIR v2 **Analytics Layer**: FHIR `Library` resources that
-conform to the [SQLQuery](https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery)
-and [SQLView](https://sql-on-fhir.org/ig/StructureDefinition/SQLView)
+conform to the [SQLQuery](https://build.fhir.org/ig/HL7/sql-on-fhir/StructureDefinition-SQLQuery.html)
+and [SQLView](https://build.fhir.org/ig/HL7/sql-on-fhir/StructureDefinition-SQLView.html)
 profiles. A SQLQuery carries typed, FHIR-declared parameters plus SQL
 content, so reusable analytics queries can travel as FHIR resources —
 stored in repositories, referenced by canonical URL, and executed
@@ -42,7 +42,9 @@ reusable named query that other queries can depend on.
 `parse_library(input_) -> SQLQuery | SQLView`
 
 Parse a Library dict or JSON string into its profiled form. The profile
-is detected from `meta.profile`; unknown profiles fall back to SQLQuery.
+is detected from `meta.profile`; a Library that declares neither the
+SQLQuery nor the SQLView canonical profile is rejected with a typed
+`SQLQueryParseError` (it does not silently fall back).
 
 | Parameter | Type | Description |
 |-----------|------|-------------|

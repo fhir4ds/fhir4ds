@@ -21,7 +21,7 @@ Subpackages::
     fhir4ds.dqm            - Digital Quality Measures
 """
 
-__version__ = "0.0.14"
+__version__ = "0.0.15"
 
 # Core convenience functions
 from .core import register, register_fhirpath, register_cql

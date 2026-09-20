@@ -12,7 +12,7 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "@duckdb/duckdb-wasm": "^1.33.1-dev41.0",
+    "@duckdb/duckdb-wasm": "1.33.1-dev64.0",
     "@monaco-editor/react": "^4.7.0",
     "apache-arrow": "^21.1.0",
     "monaco-editor": "^0.52.0",

@@ -7,6 +7,53 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.15
+*September 2026*
+
+Version 0.0.15 is the **DuckDB 1.5.5 reliability release**. The embedded
+engine is upgraded from DuckDB 1.5.2 to **1.5.5** (native and WebAssembly
+binaries rebuilt and redeployed in lockstep), and a full 36-iteration QA
+campaign across all twelve product domains hardened the FHIRPath engine,
+the CQL translator, ingestion, and the terminology surface. The conformance
+baseline holds at **2832/2832** (ViewDefinition 144, FHIRPath 935, CQL
+1706, DQM 47).
+
+**Platform**
+
+- DuckDB upgraded 1.5.2 → 1.5.5 (wheel pin, native extensions,
+  duckdb-wasm 1.33.1-dev64.0, submodule trees). Cloud credential options
+  realigned to the DuckDB 1.5.x secret surface: S3/Azure/GCS snake_case
+  aliases map to native option names, Azure service principals emit
+  `PROVIDER service_principal`, and options removed upstream
+  (`account_key`, `service_account_json`) now raise actionable errors.
+
+**FHIRPath engine (24 fixes, QA-001..QA-008)**
+
+- Native/fallback parity: Decimal-typed `0/1` booleans, empty-expression
+  row resilience, metadata-gated temporal `+` concatenation, JSON
+  cross-kind equality (object/array vs scalar → empty), minute-precision
+  DateTime ± minutes arithmetic, temporal typing of arithmetic results
+  (`(@2016-02-29 - 1 month) > 'abc'` is now empty), §4.4.1 empty
+  propagation precedence in `('a'|'b') / {}`, and singleton-violation
+  ordering for `in`/`contains`.
+
+**CQL translator (QA-009..QA-021)**
+
+- Dynamic FHIR interval `union`, bare `expand X.period per day` parsing,
+  stored-list `expand`/`collapse` defines (`Count`/`First` consumers),
+  query aggregates over retrieves (patient-correlated folds), braced
+  `{ <query> }` list selectors in every consumer, chained `with` clauses
+  (CMS71-style), `{ <query> }` as query source, audit-mode `contains` over
+  multi-valued properties, and audit `Count(...) >= N` evidence fan-out.
+- `evaluate_measure` output-columns and retrieve type validation now fail
+  typed and actionable (`ValueError` / `TranslationError`) instead of
+  leaking DuckDB CatalogExceptions.
+
+**Terminology (medterm4ds)**
+
+- `AutoCoderConfig.top_k` validated at construction; autocoding extension
+  roundtrip and closure-table surfaces verified end-to-end.
+
 ## Version 0.0.14
 *September 2026*
 
@@ -134,8 +181,8 @@ expansion). Conformance rises to **2832/2832** across all four suites
 ### New: SQLQuery / SQLView (the SQL-on-FHIR v2 Analytics Layer)
 
 - FHIR `Library` resources conforming to the
-  [SQLQuery](https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery) and
-  [SQLView](https://sql-on-fhir.org/ig/StructureDefinition/SQLView)
+  [SQLQuery](https://build.fhir.org/ig/HL7/sql-on-fhir/StructureDefinition-SQLQuery.html) and
+  [SQLView](https://build.fhir.org/ig/HL7/sql-on-fhir/StructureDefinition-SQLView.html)
   profiles: typed, FHIR-declared parameters, versioned SQL content, and
   canonical-URL dependencies that materialize as virtual tables.
 - `fhir4ds.sqlquery` ships `parse_library` / `parse_sqlquery` /

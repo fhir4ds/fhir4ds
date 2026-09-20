@@ -6172,3 +6172,449 @@ engine modes (content + dedup conformant) — observation, not a bug.
   values, but `$search`'s `system` is a single URI — dead path today (every
   category maps to one mnemonic); if a multi-mnemonic category is ever added,
   send `system` per-request instead of comma-joining.
+
+## bug_fix workflow entries (2026-09-19, target 0.0.15)
+
+### Unknown retrieve resource types raise at translation (BUGFIX-002/U1)
+
+`_translate_retrieve` (`expressions/_query.py`) now validates the literal
+resource type AFTER named-profile resolution: anything outside
+`KNOWN_FHIR_RESOURCE_TYPES` (viewdef.metadata, 120-code spec-published
+valueset superset, lazy import) ∪ `context.fhir_schema.resources` keys
+raises a typed `TranslationError` naming the retrieve. Previously an
+unknown type lowered to an empty CTE → silent False for every patient.
+Custom schemas loaded into the FHIR schema registry stay valid; profiled
+retrieves (`[Observation: profile]`, QICore prefix) resolve before the
+guard. Regression: `cql/tests/integration/test_udf_registration_guard.py`.
+
+### Valueset zero-code WARN + bare-string cache normalization (BUGFIX-003/U2)
+
+- `load_valuesets` logs a WARNING per ValueSet whose expansion/compose
+  yields zero codes ("membership checks against it will always be
+  false"); runtime behavior unchanged.
+- `createValuesetMembershipUdf` (`duckdb/udf/valueset.py`) normalizes the
+  cache at factory entry: sets whose entries are all bare strings become
+  `{('', code)}` tuples; `(system, code)` tuple sets pass through. Both
+  cache shapes are now documented in the docstring and both match via the
+  empty-source-system scan doctrine.
+
+### Population output-columns definition guard (BUGFIX-004/U3)
+
+`translate_library_to_population_sql`'s final-select builder raises
+`ValueError("Unknown definition name(s) in output columns: [...]. Available
+definitions: [...sorted...]")` up front, before any SQL emission. Covers
+both `cql.evaluate_measure` and the DQM `compile_measure` path (evaluator
+wraps it into `DQMError("Compilation failed for group ...")`). Previously
+unknown criteria names fell into the UNKNOWN-shape branch and surfaced as
+raw DuckDB CatalogExceptions.
+
+### Stale-test repairs (this workflow, not bugs)
+
+`test_structural_type_parity.py` pinned pre-0.0.14 shapes: mixed-type list
+selectors `{1, 'x'}` now correctly raise per the CQL-18 common-element-type
+doctrine (test switched to homogeneous lists), and `.status`/`.contained`
+projections may surface as singleton LISTS under the CQL-05 QA-106
+list-returning fhirpath UDF lowering (assertions unwrap singletons).
+`test_temporal_complex_parity.py::test_cql_ratio_tuple_selector_compares_as_ratio_per_spec`
+is `xfail(strict=False)` — the `.numerator.value` accessor returning a list
+is the documented CQL-20 HISTORIAN deferred gap (owner: CQL-03 ratio
+surface).
+
+## Evolution iter 7 / Domain 3 SKEPTIC (2026-09-20, duckdb 1.5.5 campaign)
+
+Three translator/parser defects fixed (regression file
+`fhir4ds/cql/duckdb/tests/integration/test_evol_it7_domain3_skeptic.py`;
+all fixes Python-side, native extensions unchanged):
+
+- **QA-009 (HIGH) — interval union dispatch ran AFTER operand
+  list-promotion.** `E1.period union Interval[...]` raised BinderException
+  (VARCHAR[]/VARCHAR CASE mix) and `E1.period union E2.period`
+  list_concat'd Period JSON strings — both fell into §20 list-union
+  semantics instead of §19.31 interval union. Root cause:
+  `_translate_union_op` (`expressions/_operators.py`) checked
+  `_is_fhir_interval_expression` on POST-promotion operands;
+  `_union_operand_as_list`'s last-resort `_promote_fhirpath_text_list`
+  rewrites `fhirpath_text(res,'period')` (interval-recognized) to
+  `from_json(fhirpath(...),'["VARCHAR"]')` (not recognized). Fix:
+  capture pre-promotion operands and OR them into interval detection;
+  `intervalUnion` receives the interval-shaped variant (pre-promotion
+  Period JSON when the promoted side is not parseable). DQM retrieve
+  unions unaffected (rows-shaped operands never reach the interval
+  branch; peer_rows gating intact).
+- **QA-010 (MEDIUM) — bare expand/collapse property-path operand.**
+  `expand E1.period per day` was a ParseError ('trailing tokens: PER'):
+  the bare branch (`parser.py` ~2329) used `parse_primary_expression`,
+  leaving the `.period` chain to the outer postfix loop which dangles
+  at PER. Fix: use `parse_postfix_expression` (consumes the full
+  DOT/invocation chain, stops cleanly at PER).
+- **QA-011 (MEDIUM) — expand/collapse defines are stored-list.** The
+  define CTE value column holds the whole element list as a JSON array
+  string (UDF forms) — but no `stores_list_value` marker was set:
+  Count(X) counted CTE rows (1), First(X) character-sliced the JSON
+  text ('['), inline `Count(expand ...)` BinderException'd
+  (`list_count` over VARCHAR). Fix: (a) translator.py marks
+  FunctionRef(expand/collapse) define bodies stored-list
+  (List<Any>/PATIENT_SCALAR via the navigation-list path); (b)
+  `_is_list_returning_sql` (`expressions/_utils.py`) recognizes
+  expand/expand1/expand_points/expand_points1/collapse_intervals/
+  collapse_intervals_per; (c) `_translate_aggregate_pre` stored-list
+  branch routes Count→json_array_length and others→from_json when the
+  define AST is expand/collapse; (d)
+  `_translate_first_last_list_define_pre` wraps the reference in
+  from_json before LIST_EXTRACT; (e) `_wrap_list_aggregate` JSON-list
+  guard returns json_array_length for COUNT over the 6 UDF names
+  (inline path); (f) `_lists.py` First/Last JSON wrap extended to the
+  expand family.
+
+NOT A BUG registry additions (probed dual-engine, py==cpp):
+
+- `intersects` is not CQL grammar (SQL-ism) — ParseError is correct;
+  CQL uses `overlaps`/`intersect`.
+- `E1.period meets E2.period` where end1==start2 at DateTime
+  millisecond precision is FALSE, not true — the §19.31 successor at
+  ms precision (…:00.001) does not equal start2 (…:00). Matches
+  reference semantics; both engines agree.
+- dynamic-bounds `Interval[start of E.period, end of E.period]`,
+  union/intersect/collapse/expand on dynamic periods, starts/ends vs
+  literals, properly includes, same day as, Coalesce-wrapped intervals
+  all conformant.
+
+### Iter 7 follow-up (same launch): sort-by over collapse JSON
+
+Recognizing the expand/collapse UDF names in `_is_list_returning_sql`
+made `First((collapse(...) X return ...) Y sort by start of $this)`
+(CMS145 BetaBlocker pattern; also CMS135/144/645/646 via shared
+libraries) hit the list branch and emit `list_sort(VARCHAR JSON text)`
+→ BinderException (DQM gate caught it at 42/47). Fix: both First/Last
+list branches in `_lists.py` parse JSON-array-string sources
+(expand/expand1/expand_points/expand_points1/collapse_intervals/
+collapse_intervals_per) via `from_json(..., '["VARCHAR"]')` BEFORE
+list_sort/list_extract. LESSON (repeat of CQL-15 HISTORIAN): every new
+JSON-list UDF recognition must be paired with from_json conversion at
+EVERY consumer that assumes a DuckDB list (sort, extract, aggregate,
+transform); grep for `list_sort|list_extract|list_transform|list_filter`
+consumers when extending `_is_list_returning_sql`. Final gate 2832/2832
+incl. DQM 47/47.
+
+## Evolution iter 8 / Domain 3 HISTORIAN (2026-09-20, duckdb 1.5.5 campaign)
+
+Systematic query-construct walkthrough (12 dual-engine cases, all
+parity-clean) found 2 pre-existing translator defects (both verified
+pre-existing on clean HEAD via git-checkout bisect; regression file
+`fhir4ds/cql/duckdb/tests/integration/test_evol_it8_domain3_historian.py`;
+all fixes Python-side):
+
+- **QA-012 (MEDIUM) — distinct(<query>) GROUP BY binder failure.**
+  `distinct ([Observation] O return O.status)` emitted
+  `"Distinct"(LIST((SELECT ...)))` — the LIST aggregate next to the outer
+  `_pt.patient_id` projection raised "column patient_id must appear in
+  the GROUP BY clause". Fix: `_translate_distinct_expression` generic
+  fallback (`_lists.py`) coerces rows-shaped sources via
+  `_coerce_query_rows_to_list` to the per-patient list subquery before
+  the Distinct wrap.
+- **QA-013 (MEDIUM) — aggregate over a retrieve broken end-to-end.**
+  `[Observation] O aggregate T starting 0: T + 1` fed
+  `list_prepend(0, (SELECT * FROM "Observation"))` — "Subquery returns 6
+  columns"; no patient correlation (row-leak risk); element/accumulator
+  types did not bind (`+(JSON, INTEGER)` / VARCHAR[] vs INTEGER[] mix);
+  and the define was classified RESOURCE_ROWS so the final projection
+  json_extract'd the scalar. Fix in `_query.py` aggregate lowering:
+  rows-shaped sources materialize the patient-correlated per-patient
+  resource element list (`list_transform(list(resource), e -> CAST(e AS
+  VARCHAR))` — the JSON element type would unify numeric starts to JSON),
+  the lambda element param uses the `_lt_<alias>` prefix convention so
+  Property access on the alias routes through fhirpath (`fhirpath_text(_lt_O,
+  'status')`), numeric literal starts bind the accumulator alias as
+  `TRY_CAST(_agg_x AS DECIMAL(38,8))` and the prepended start casts to
+  VARCHAR; `inference.py` classifies aggregate queries PATIENT_SCALAR
+  (§19.27 single value per patient). New helper
+  `_patient_correlated_where` (module scope, `_query.py`).
+
+NOT A BUG registry additions (dual-engine, probed this iteration):
+
+- Query result row ORDER is nondeterministic across engine modes
+  (py vs cpp) — content equality only; never order-assert query outputs.
+- `First(<retrieve> query sort by <field>)` returns the resource JSON
+  (the retrieve's element type), not a projected id.
+- List-typed defines transport through a per-patient LIST() projection
+  (singleton outer list) at the population surface.
+- List literal element ORDER (`Patient.name.given`) is author order in
+  both engines but spec-unspecified; cross-engine order may differ.
+- `First((query) return ...)` — `return` after a parenthesized query is
+  not CQL grammar (ParseError correct); the query-alias form
+  `(<query>) X return ...` or aggregate-clause form is the grammar.
+- `aggregate` is a query CLAUSE (`<source> aggregate <acc> starting
+  <init>: <body>`), not a postfix operator on a parenthesized query.
+
+## Evolution iter 9 / Domain 3 EXPLORER (2026-09-20, duckdb 1.5.5 campaign)
+
+20-case adversarial composition fuzz over the it7/it8 fix surfaces found
+3 defects (regression tests appended to
+`fhir4ds/cql/duckdb/tests/integration/test_evol_it8_domain3_historian.py`;
+post-fix fuzz 0 parity diffs):
+
+- **QA-014 (MEDIUM) — First/Last over INLINE expand/collapse
+  character-sliced JSON.** `First(collapse {...} per day)` returned `'['`:
+  `_translate_first`/`_translate_last` (`_functions.py`) emitted
+  `LIST_EXTRACT(<JSON text>, 1)` — the it7 from_json wrap existed only in
+  the query-source and stored-list-define paths. New
+  `_json_list_source_for_extract` helper parses the 6 expand/collapse UDF
+  names before LIST_EXTRACT. `start of First(collapse ...)` composes
+  again.
+- **QA-015 (MEDIUM) — aggregate over an expand query source.**
+  `(expand Interval[...] per day) D aggregate T starting 0: T+1` raised
+  `list_concat(INTEGER[], VARCHAR)`: the aggregate fold coerced
+  rows-shaped sources but not JSON-array-string SQLFunctionCall sources.
+  Aggregate lowering now from_json-parses them (and the QA-013
+  _lt_-alias/start-cast machinery applies).
+- **QA-016 (LOW, native) — expand per day of a has_time DateTime rendered
+  '2024-06-15T00'.** The native `ExpandTemporalInterval` truncate lambda
+  cleared time components but left `has_time=true`, so `to_string()` used
+  the DateTime-with-time branch. Per CQL §9 (boundaries more precise than
+  per are truncated to per precision; CQL-15 EXPLORER doctrine) the
+  canonical render is `'2024-06-15'`. truncate() now clears has_time in
+  the Day case. **cql.duckdb_extension rebuilt + deployed: NEW md5
+  4e4ff1e3fcbe3cf92157510727cdcf26 (repo bundle == site-packages;
+  supersedes 18a91a64).**
+
+DEFERRED (LOW): the parenthesized operand form `expand (X).period per
+day` mis-parses (top-level `expand` + parenthesized primary takes a
+different parse route; result is a Property with `per day` silently
+dropped or a trailing-tokens error depending on shape). The bare form
+(QA-010) is the common spelling; fix needs a parser-branch audit.
+
+NOT A BUG: retrieve-order-dependent `First([Encounter])` results differ
+across engine modes AND across runs (row-order nondeterminism) — probe
+determinism by filtering the retrieve (E where E.status = ...).
+`(e1 period 06-15→06-25) union Interval[06-26→06-27] contains 06-26` is
+False/NULL — 1-day gap, ms-precision successor ≠ meet (correct).
+
+## Evolution iter 10 / Domain 4 SKEPTIC (2026-09-20, duckdb 1.5.5 campaign)
+
+eCQM population-attribution probe (13 edge-case patients through a
+full 6-population measure with valueset retrieves, chained
+`with`/`such that`, Measurement Period threading): attribution CORRECT
+in every boundary case (denominator exclusion wins over numerator;
+denominator exception applies only to non-numator denominator members;
+numerator exclusion applies inside numerator; `O.value as Quantity >
+9 'g/dL'` excludes boundary 9.0; encounter-at-MP-boundary exclusion is
+the pinned DateTimeIncludedInNull precision doctrine, NOT A BUG).
+
+### QA-017 (HIGH) — `{ <query> }` braced-query list selector
+
+CQL 1.5 listSelector grammar `'{' (query | expression)? '}'` allows a
+query element. `_translate_list_expression` wrapped it in SQLArray as
+`[(SELECT * FROM ...)]` — a multi-column subquery in scalar position:
+`exists ({ [Condition: VS] C where ... })`, `Count/First/Last/
+singleton from/distinct/flatten/indexer/Sum` over the form ALL raised
+BinderException. Fix (3 parts, all Python):
+
+1. `_lists.py::_translate_list_expression`: single-Query selectors
+   whose translation is rows-shaped coerce via
+   `_coerce_query_rows_to_list` into a per-patient LIST **with patient
+   correlation** (`_patient_correlated_where`, QA-013 convention —
+   without it the LIST leaks rows across patients) and **resource
+   projection** for star-shaped where-only queries (`SELECT *` resolves
+   to patient_id as first column; elements are CQL resources → project
+   `row_alias.resource`, matching the unbraced query-define path).
+   List-source contexts (aggregate folds iterating unnest elements,
+   e.g. RolledOutIntervals) keep the SQLArray single-element wrap —
+   the element expression arrives bare and the wrap is what keeps
+   list-type union/concat typed.
+2. `_utils.py::_is_list_valued_projection` idempotence guard in
+   `_coerce_query_rows_to_list`: a projection already evaluating to
+   `list(...)` is returned unchanged — consumer sites that re-coerce
+   (First/Last args path) previously produced `list(list(...))` and
+   LIST_EXTRACT returned the whole inner list.
+3. `_lists.py::_translate_exists_expression`: `exists ({ query })`
+   unwraps to the plain-query EXISTS form; the LIST coercion shape
+   cannot survive the correlated-EXISTS rewrite (aggregate projection
+   breaks the FROM clause reference).
+
+REGRESSION CAUGHT BY GATE (fixed same iteration): the first fix made
+`RolledOutIntervals` (CqlAggregateTest) fail 2831/2832 — the coercion
+applied inside the recursive-aggregate fold where the query translation
+is the bare per-element expression, feeding jsonConcat(VARCHAR[],
+VARCHAR). The rows-shaped guard (part 1) restores the array wrap in
+list-source contexts. Final gate 2832/2832.
+
+Regression: `test_evol_it10_domain4_skeptic.py` (13 tests incl.
+cross-patient isolation). NOT A BUG: First/Last/indexer over unordered
+retrieves may return either element (row order nondeterministic —
+assert membership, not order).
+
+## Evolution iter 11 / Domain 4 HISTORIAN (2026-09-20, duckdb 1.5.5 campaign)
+
+Systematic walkthrough of MeasureEvaluator surfaces: multi-group
+measures (independent per-group attribution + stratifier stratum
+counts), parameter override threading (runtime "Measurement Period"
+window shifts correctly re-filter), per-encounter row shaping,
+let-bound date arithmetic, duration-in-days boundaries — ALL CORRECT.
+
+### QA-018 (HIGH) — chained `with` clauses cross-alias references
+
+`with E1 such that P1 with V such that V.effective during E1.period`
+(CMS71-style; 19 real eCQM files use >=2 with-clauses per query)
+raised BinderException "Referenced table E1 not found": the
+with-clause loop popped each alias scope per clause AND emitted FLAT
+correlated EXISTSes — the later clause's E1 references had no bound
+FROM. Fix in `_query.py` with-clause handling: ONE shared scope for
+the whole chain (later such_that translations see all earlier with
+aliases), clauses compose NESTED — clause i>1's EXISTS lands in
+clause i-1's EXISTS subquery WHERE, correlated to the PREVIOUS clause
+alias (transitively linked to the outer patient through clause 1).
+Single-with queries keep the exact prior flat shape (no regression:
+715-test integration suite, DQM 47/47, gate 2832/2832).
+
+NOT A BUG registry: referencing a with alias in the query's outer
+`where` clause was equally unsupported before this fix (aliases never
+reached where translation) and no real eCQM in the 300+ file corpus
+does it — probe patterns must keep with-alias predicates inside
+`such that` clauses.
+
+Regression: `test_evol_it11_domain4_historian.py` (4 tests incl.
+SQL-shape assertion that V's EXISTS nests inside E1's and correlates
+`V.patient_id = E1.patient_id`).
+
+## Evolution iter 12 / Domain 4 EXPLORER (2026-09-20, duckdb 1.5.5 campaign)
+
+Adversarial composition fuzz over eCQM translation surfaces.
+without-in-chain, population define-alias chains, starts/ends during
+MP, aggregates over with-queries: all correct.
+
+### QA-019 (MEDIUM) — `({ <query> }) Alias <clauses>` query source
+
+The iteration-10 coerced LIST subquery fell through the query-source
+handling into the nested-query-source branch, producing self-
+referential derived tables (BinderException `_cql_list_source`/`_list`
+not found). Fix in `_query.py` query-source path: ListExpression AST
+sources (single element) with list-valued subquery SQL UNNEST like
+array sources (alias binding + projected patient_id).
+
+**GATE CAUGHT A REGRESSION IN THE FIRST VERSION**: without the
+`isinstance(source_expr_node, ListExpression)` AST guard, ANY query
+source translating to a list-valued subquery hit the branch and DQM
+CMS0334/CMS71/CMS832 dropped to 85-96% accuracy. LESSON: query-source
+shape dispatch must be AST-narrowed — SQL-shape recognition alone
+over-triggers on shapes other lowering paths legitimately produce.
+
+### Known boundaries (documented, no real-eCQM usage — do NOT chase)
+
+- `({a}) union ({b})` braced-query list unions (real eCQMs use
+  retrieve unions).
+- Post-union aliases with sort: `(... union ...) U return ... sort by`.
+- Braced alias re-referenced inside braces: `({...}) L return
+  First({L}).id`.
+- Bare `({1,2,3}) Z return 1` literal return-only source (pre-existing
+  row-shape family, CQL-05 QA-107; where-bearing variants work).
+
+Regression: `test_evol_it12_domain4_explorer.py` (2 tests). Gate
+2832/2832 after the guard narrowing. Domain 4 CLOSED (iters 10-12:
+QA-017, QA-018, QA-019 fixed; population attribution verified correct).
+
+## Evolution iters 16-18 / Domain 6 ingestion (2026-09-20, duckdb 1.5.5)
+
+Three CLEAN personalities (SKEPTIC 14-case loader battery, HISTORIAN
+12-case Bundle-spec walkthrough, EXPLORER adversarial fuzz) — zero
+code changes; the 0.0.12/0.0.13 hardening holds on duckdb 1.5.5.
+
+Pins updated:
+- `patient_ref` stores the BARE patient id (not `Patient/<id>`) — the
+  `_patients` CTE correlates `_pt.id = patient_ref`.
+- `Bundle.entry[].resource = null` entries are SKIPPED by design
+  (FHIR-legal DELETE/score-only entries); only non-empty non-dict
+  resources raise TypeError and `{}` raises ValueError with index.
+- Duplicate JSON member keys raise a typed FHIR error with line
+  attribution in strict NDJSON (STRICTER than the 2026-08-24
+  last-wins registry note — strict rejection is the current behavior).
+- FHIR id charset enforced ([A-Za-z0-9-.]) — probe fixtures must not
+  use underscores.
+- Domain 6 CLOSED.
+
+## Evolution iters 19-21 / Domain 7 performance (2026-09-20, duckdb 1.5.5)
+
+Three CLEAN personalities: loader throughput linear (per-row flat
+~40us post-warm-up, 4k/20k/40k rows), no tracemalloc leak (6x reload
+growth 1.00), ViewDef execution linear, CQL translation sub-linear
+(per-def cost FALLS with library size after warm-up), translation
+deterministic (byte-identical), translator memory stable.
+
+ENVIRONMENT/UPSTREAM boundary (NOT a fhir4ds defect): duckdb-python
+1.5.5 shared-connection cross-thread reads fail intermittently
+(TypeError, reproduced 2/4 on VANILLA duckdb with no fhir4ds
+registered). Connections are not thread-safe — use per-thread
+connections or cursor(). Domain 7 CLOSED.
+
+## Evolution iter 25 / Domain 9 SKEPTIC (2026-09-20, duckdb 1.5.5 campaign)
+
+### QA-020 (HIGH) — audit-mode `contains` list promotion
+
+`C.clinicalStatus.coding.code contains 'x'` inside audit_mode='full'
+measures raised `list_contains(VARCHAR, STRING_LITERAL)` binder
+errors. The audit fast path in `_list_contains_call`
+(`expressions/_operators.py` — added to dodge a DuckDB struct_pack
+binder bug with CQLListContainsEq macros inside audit_leaf chains)
+skipped the CQL-18 `_promote_fhirpath_text_list` promotion. Fix:
+promote before the raw builtin call; `from_json(fhirpath(...))` is a
+plain scalar expression so the struct_pack workaround still holds.
+
+Audit-evidence causality verified: findings.target names winning
+resources; Denominator narratives carry the exclusion evidence
+(operator exists, trace [Denom Exclusion ESRD, Denominator]).
+Exclusion-population CELLS carry empty evidence by design — the
+evidence lives in the DENOMINATOR cell narrative (0.0.7 Domain 9
+attribution design); effective_result follows the same gating masks
+as summary attribution.
+
+Regression: `test_evol_it25_domain9_skeptic.py` (3 tests; audit
+executes with correct results + SQL-shape assertion).
+
+## Evolution iters 26-27 / Domain 9 audit/DQM (2026-09-20, duckdb 1.5.5)
+
+- it26 HISTORIAN CLEAN: stratifier summaries appear at TOP LEVEL of
+  `summary_report` for single-group measures (under `groups[gid]` only
+  when the DataFrame carries `_group_id`) — probe gotcha, not a bug;
+  `to_measure_report` requires period_start/period_end (typed DQMError
+  with remedy text) and exports valid MeasureReport summaries.
+
+### QA-021 (HIGH) — audit-full Count comparison crash
+
+`Count("Encs") >= N` (rows-define alias) under audit_mode='full'
+raised "More than one row returned by a subquery". Two audit-layer
+defects:
+1. `cte_manager.py` evidence-JOIN fan-out aggregated ONLY bare
+   SQLAuditStruct expressions; comparison-wrapped audit expressions
+   (COALESCE(__pre ...)) fell through to the raw N-row JOIN. Fix:
+   aggregate EVERY evidence-JOIN shape (ANY_VALUE + GROUP BY
+   patient_id).
+2. `_synthesize_target_from_resource_select` (`_operators.py`) built
+   the audit-target twin as a per-row scalar subquery. Fix:
+   `array_to_string(list_sort(list_distinct(list(<id>))), ',')` —
+   exactly one row; multi-winner evidence renders comma-joined sorted
+   resource ids (single-row sources unchanged).
+
+Regression: `test_evol_it27_domain9_explorer.py` (3 tests). Domain 9
+CLOSED (QA-020 audit-contains promotion + QA-021; audit causality
+verified: findings.target names winning resources).
+
+### Evolution iter 35 / Domain 12 HISTORIAN (2026-09-20, duckdb 1.5.5 campaign)
+
+- **AutoCoderConfig.top_k must be a positive int (>=1)** — added
+  `__post_init__` validation (`fhir4ds/cql/loader/auto_coder.py`);
+  the iter-4 workers/batch_size sweep had missed top_k, whose
+  `kept[:top_k]` slice semantics made 0 silently drop ALL autocodings
+  and -1 keep all-but-last. Regression:
+  `test_iter4_qa_regression.py::test_qa024_auto_coder_config_*`.
+- autocoding_extension doctrine (verified clean): build/parse roundtrip
+  with keyword-only args engine/engine_version/search_mode/score/
+  match_grade/index_version; index_version None→'unknown'; deterministic
+  extension field order [engine, engine-version, search-mode, score,
+  match-grade, index-version]; score NaN/±inf → ValueError, uncoercible →
+  TypeError; missing sub-fields → None (forward compat). Module is
+  `fhir4ds/cql/loader/autocoding_extension.py`.
+- closure doctrine: `fhir4ds/cql/terminology/closure.py`
+  `build_closure_table(library, endpoint, con, *, on_expand_error='warn')`
+  requires the endpoint protocol to return `CodeRef` objects
+  (`fhir4ds/cql/terminology/types.py`) — plain dicts raise AttributeError;
+  `clear_closure_table(con)` takes the connection positionally. Reference
+  pattern: `fhir4ds/cql/tests/integration/test_medterm4ds_in_process.py:160-215`.

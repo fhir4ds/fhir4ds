@@ -7,15 +7,15 @@ import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
-const PRODUCT_VERSION = '0.0.14';
+const PRODUCT_VERSION = '0.0.15';
 const SQL_EXECUTION_MEAN_ALL_MEASURES = '~3.9ms';
 const SQL_EXECUTION_MEAN_SHARED_MEASURES = '~6.9ms';
 const JAVA_EXECUTION_MEAN_SHARED_MEASURES = '~936ms';
 const MEAN_SPEEDUP_SHARED_MEASURES = '~137×';
-const TOTAL_CONFORMANCE_TESTS = '2,822';
+const TOTAL_CONFORMANCE_TESTS = '2,832';
 const CQL_CONFORMANCE_TESTS = '1,706';
 const FHIRPATH_CONFORMANCE_TESTS = '935';
-const VIEWDEF_CONFORMANCE_TESTS = '134';
+const VIEWDEF_CONFORMANCE_TESTS = '144';
 const ECQM_MEASURES = '47/47';
 
 // ── Stats bar ────────────────────────────────────────────────────────────────
