@@ -1,11 +1,11 @@
 {
-  "runner_ref": "local-patched",
-  "server_url": "http://127.0.0.1:43397/fhir",
+  "runner_ref": "local-patched-cpp",
+  "server_url": "http://127.0.0.1:59641/fhir",
   "quick": false,
   "only": [],
   "status": "pass",
   "returncode": 0,
-  "raw_results_path": "/tmp/cql_tests_runner_raw/results/202609202107_results.json",
+  "raw_results_path": "/tmp/cql_tests_runner_raw/results/202609210014_results.json",
   "pass_count": 1691,
   "skip_count": 40,
   "fail_count": 0,
@@ -51,7 +51,7 @@
     "Test ValueLiteralsAndSelectors:Decimal:Decimal10Pow28 status: skip skipMessage: No output specified",
     "Test ValueLiteralsAndSelectors:Decimal:DecimalPos10Pow28 status: skip skipMessage: No output specified",
     "Test ValueLiteralsAndSelectors:Decimal:DecimalNeg10Pow28 status: skip skipMessage: No output specified",
-    "Results saved to: /tmp/cql_tests_runner_raw/results/202609202107_results.json"
+    "Results saved to: /tmp/cql_tests_runner_raw/results/202609210014_results.json"
   ],
   "stderr_tail": [],
   "unsupported": []
