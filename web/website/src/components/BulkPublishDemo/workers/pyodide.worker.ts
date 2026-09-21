@@ -19,7 +19,7 @@ const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
 // dev server and GitHub Pages' auto-index) so bumping the wheel doesn't
 // require touching this constant. Falls back to the single-wheel guess.
 const FHIR4DS_WHEEL_GLOB = "fhir4ds_v2-*-py3-none-any.whl";
-const FHIR4DS_WHEEL_FALLBACK = "fhir4ds_v2-0.0.15-py3-none-any.whl";
+const FHIR4DS_WHEEL_FALLBACK = "fhir4ds_v2-0.0.16-py3-none-any.whl";
 
 async function findWheelUrl(): Promise<string> {
   const base = getAssetBase();
@@ -27,7 +27,7 @@ async function findWheelUrl(): Promise<string> {
     const res = await fetch(`${base}/`);
     if (res.ok) {
       const html = await res.text();
-      // Directory index: href="fhir4ds_v2-0.0.15-py3-none-any.whl"
+      // Directory index: href="fhir4ds_v2-0.0.16-py3-none-any.whl"
       const matches = [...html.matchAll(/href="([^"]*fhir4ds_v2-[^"]*-py3-none-any\.whl)"/g)];
       if (matches.length > 0) {
         const name = matches[matches.length - 1][1].split("/").pop()!;
