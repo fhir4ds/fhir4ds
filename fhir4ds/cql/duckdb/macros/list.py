@@ -262,7 +262,7 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "CASE "
         "WHEN left_value IS NULL AND right_value IS NULL THEN TRUE "
         "WHEN left_value IS NULL OR right_value IS NULL THEN FALSE "
-        "ELSE cqlDateTimeEqual(CAST(left_value AS VARCHAR), CAST(right_value AS VARCHAR)) END"
+        "ELSE cqlDateTimeEqualListElement(CAST(left_value AS VARCHAR), CAST(right_value AS VARCHAR)) END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO CQLListContainsTemporalEq(lst, elem) AS "

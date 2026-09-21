@@ -44,7 +44,14 @@ def evaluate_cql_request(request: CQLRequest, config: CQLServerConfig | None = N
 
     conn = None
     try:
-        conn = duckdb.connect()
+        if config.use_cpp_extensions:
+            # The bundled C++ extensions are unsigned dev builds; they can
+            # only load on connections that opt in. Without this config the
+            # register() path silently degrades to Python UDFs even when
+            # use_cpp_extensions=True.
+            conn = duckdb.connect(config={"allow_unsigned_extensions": True})
+        else:
+            conn = duckdb.connect()
         register_udfs(conn, use_cpp_extensions=config.use_cpp_extensions)
         translator = CQLToSQLTranslator(
             connection=conn,

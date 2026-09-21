@@ -1,6 +1,6 @@
 {
   "FhirServer": {
-    "BaseUrl": "http://127.0.0.1:44887/fhir",
+    "BaseUrl": "http://127.0.0.1:34289/fhir",
     "CqlOperation": "$cql"
   },
   "Build": {
@@ -9,9 +9,9 @@
     "CqlVersion": "1.5",
     "testsRunDescription": "FHIR4DS local $cql facade test run",
     "cqlTranslator": "FHIR4DS",
-    "cqlTranslatorVersion": "0.0.7",
+    "cqlTranslatorVersion": "0.0.16",
     "cqlEngine": "FHIR4DS",
-    "cqlEngineVersion": "0.0.7"
+    "cqlEngineVersion": "0.0.16"
   },
   "Debug": {
     "QuickTest": false

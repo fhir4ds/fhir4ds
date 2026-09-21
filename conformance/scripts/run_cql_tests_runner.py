@@ -31,6 +31,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--runner-image", help="Optional Docker image for the runner")
     parser.add_argument("--runner-ref", default="main", help="Informational runner ref for reports")
     parser.add_argument(
+        "--cpp",
+        action="store_true",
+        help="Run the facade with native C++ extensions (default: Python UDFs)",
+    )
+    parser.add_argument(
         "--report",
         default="conformance/reports/cql_tests_runner_report.json",
         help="Report path",
@@ -38,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     port = args.port or _free_port(args.host)
-    config = CQLServerConfig(host=args.host, port=port, use_cpp_extensions=False)
+    config = CQLServerConfig(host=args.host, port=port, use_cpp_extensions=args.cpp)
     server = create_http_server(config)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

@@ -6618,3 +6618,41 @@ verified: findings.target names winning resources).
   (`fhir4ds/cql/terminology/types.py`) — plain dicts raise AttributeError;
   `clear_closure_table(con)` takes the connection positionally. Reference
   pattern: `fhir4ds/cql/tests/integration/test_medterm4ds_in_process.py:160-215`.
+
+## cql-tests-runner gate + dual-engine facade doctrine (2026-09-21)
+
+- **Runner gate is GREEN on BOTH engines**: 1691/0/40 (Python UDFs and native
+  C++ via `run_cql_tests_runner.py --cpp --runner-path
+  /mnt/d/claude/cql-tests-runner`). Reports:
+  `conformance/reports/cql_tests_runner_report{,_cpp}.json`. The 40 skips are
+  all "No output specified" fixtures (invalid="true" / EXPECT comments) —
+  identical set to the June clean baseline; not a coverage gap.
+- **Facade native mode**: `evaluate_cql_request` opens
+  `duckdb.connect(config={'allow_unsigned_extensions': True})` when
+  `use_cpp_extensions=True`. Without it the bundled unsigned dev extensions
+  NEVER loaded and the facade silently ran Python UDFs even in "cpp" mode.
+- **includes/included-in null-element uncertainty**: the element overload of
+  `includes`/`included in` returns NULL for a definitely-null element unless
+  the list itself contains a null element (emitted as a CASE over
+  `array_length(COALESCE(lst,[])) != list_count(...)`). Official fixtures
+  IncludesNullRight/IncludedInNullLeft outrank the §10.10/§10.11 "synonym of
+  contains/in" prose. `contains`/`in` KEEP the true/false semantics
+  (ContainsNullIn1Null/InNullAnd1Null).
+- **List-element temporal equality is precision-strict**: the macro
+  `CQLListTemporalElementEqual` routes to the new
+  `cqlDateTimeEqualListElement` UDF (Python `udf/datetime.py` + native
+  `CqlDateTimeEqualListElementFunc` in cql_extension.cpp — keep both in
+  lockstep; extension rebuild+deploy required after native edits). Unlike
+  direct `=` (§12.1 combined seconds/milliseconds decimal precision),
+  second-vs-millisecond precision mismatch on LIST ELEMENTS is uncertain
+  (null) per ProperContainsTimeNull/ProperInTimeNull; the null propagates
+  through contains/in/list =/!= per 3VL.
+- **Serializer rescue scope**: runtime String inference MAY rescue failed
+  `List<T>` metadata (translator produced a scalar — Coalesce over a list
+  literal, non-list query sources). String never rescues scalar metadata
+  (VARCHAR transport doctrine).
+- **Internal-runner caveat**: `run_cql.py compare_results` treats
+  False ≡ None as equal (line ~236 leniency hack). The external
+  cql-tests-runner is the strict authority for null-vs-false semantics;
+  when fixing nullological bugs, verify against the external runner, not
+  only the internal suite.

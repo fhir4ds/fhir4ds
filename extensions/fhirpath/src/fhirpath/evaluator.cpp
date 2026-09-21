@@ -11583,10 +11583,17 @@ FPCollection Evaluator::fn_lowBoundary(const FPCollection &input, const FPCollec
 			std::string result = formatDateTimeBoundary(p, digit_prec, false, "", true);
 			FPValue v; v.type = FPValue::Type::Time; v.string_val = result; return {v};
 		}
+		// Implicit precision (mirrors Python _time_boundary with low fill
+		// 00/000): preserve specified components; zero-fill below precision.
+		// lowBoundary(12:34:56) = 12:34:56.000; lowBoundary(12:34) = 12:34:00.000.
 		std::ostringstream oss;
 		oss << std::setfill('0') << std::setw(2) << p.hour
-		    << ":" << std::setfill('0') << std::setw(2) << (p.precision >= 5 ? p.minute : 0)
-		    << ":00.000";
+		    << ":" << std::setfill('0') << std::setw(2)
+		    << (p.precision >= 5 ? p.minute : 0)
+		    << ":" << std::setfill('0') << std::setw(2)
+		    << (p.precision >= 6 ? p.second : 0)
+		    << "." << std::setfill('0') << std::setw(3)
+		    << (p.precision >= 7 ? p.millisecond : 0);
 		FPValue v; v.type = FPValue::Type::Time; v.string_val = oss.str(); return {v};
 	}
 	return {};
@@ -11687,10 +11694,20 @@ FPCollection Evaluator::fn_highBoundary(const FPCollection &input, const FPColle
 			std::string result = formatDateTimeBoundary(p, digit_prec, true, "", true);
 			FPValue v; v.type = FPValue::Type::Time; v.string_val = result; return {v};
 		}
+		// Implicit precision (FHIRPath N1 5.7; mirrors the Python fallback
+		// _time_boundary): components present in the input are preserved;
+		// components BELOW the input's precision are filled with the high
+		// boundary value (59 / 999). highBoundary(12:34:00) = 12:34:00.999
+		// (seconds specified, fractional filled); highBoundary(12:34) =
+		// 12:34:59.999 (seconds+fractional both filled).
 		std::ostringstream oss;
 		oss << std::setfill('0') << std::setw(2) << p.hour
-		    << ":" << std::setfill('0') << std::setw(2) << (p.precision >= 5 ? p.minute : 59)
-		    << ":59.999";
+		    << ":" << std::setfill('0') << std::setw(2)
+		    << (p.precision >= 5 ? p.minute : 59)
+		    << ":" << std::setfill('0') << std::setw(2)
+		    << (p.precision >= 6 ? p.second : 59)
+		    << "." << std::setfill('0') << std::setw(3)
+		    << (p.precision >= 7 ? p.millisecond : 999);
 		FPValue v; v.type = FPValue::Type::Time; v.string_val = oss.str(); return {v};
 	}
 	return {};

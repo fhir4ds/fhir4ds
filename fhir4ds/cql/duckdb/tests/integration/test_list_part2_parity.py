@@ -323,19 +323,20 @@ def test_cql_list_part2_query_produced_lists_remain_lists() -> None:
 
 def test_cql_list_part2_temporal_uncertainty_matches_no_python_cpp() -> None:
     translated = translate_cql(_cql_list_part2_temporal_uncertainty_library())
-    # CQL 1.5.3 §1.6/§1.11 (DateTime/Time types): "seconds and milliseconds
-    # are combined and represented as a Decimal for the purposes of
-    # comparison... When milliseconds are null, they are combined as .0."
-    # So @T15:59:59 compares to @T15:59:59.999 deterministically (as .0),
-    # making these boundary results certain rather than uncertain.
-    # (CQL-03 EXPLORER QA-003.)
+    # Official fixture doctrine (ProperContainsTimeNull / ProperInTimeNull):
+    # list-ELEMENT temporal comparisons treat second-vs-millisecond precision
+    # mismatch as UNCERTAIN (null) — the §1.6 combined-decimal rule applies
+    # to direct `=` (§12.1), not to list element equality. Element-equality
+    # null propagates through contains/in/=/!= per three-valued logic.
+    # (Supersedes the CQL-03 EXPLORER QA-003 combined-sec-ms pin for the
+    # list surface; direct `=` keeps the combined rule.)
     expected = {
-        "ProperIncludesTimeUncertain": (False,),   # point .0 < low .999
-        "ProperIncludedInTimeUncertain": (False,),
-        "ContainsTimeUncertain": (False,),
-        "InTimeUncertain": (False,),
-        "EqualTimeUncertain": (False,),            # .999 != .0
-        "NotEqualTimeUncertain": (True,),
+        "ProperIncludesTimeUncertain": (None,),   # element equality uncertain
+        "ProperIncludedInTimeUncertain": (None,),
+        "ContainsTimeUncertain": (None,),
+        "InTimeUncertain": (None,),
+        "EqualTimeUncertain": (None,),            # element null -> list equality null
+        "NotEqualTimeUncertain": (None,),         # not(null) -> null
     }
 
     py = _python_only_connection()
@@ -353,11 +354,13 @@ def test_cql_list_part2_temporal_uncertainty_matches_no_python_cpp() -> None:
             assert py_result == expected[name], name
 
         direct_cases = [
-            # Combined-decimal precision: .999 vs null-ms (.0) is certain.
-            ("SELECT CQLListContainsTemporalEq(['T15:59:59.999'], 'T15:59:59')", (False,)),
+            # Official-fixture doctrine: element temporal equality with a
+            # second-vs-millisecond precision mismatch is UNCERTAIN (null);
+            # certain false only when the second components differ too.
+            ("SELECT CQLListContainsTemporalEq(['T15:59:59.999'], 'T15:59:59')", (None,)),
             ("SELECT CQLListContainsTemporalEq(['T14:59:59.999'], 'T15:59:59')", (False,)),
-            ("SELECT CQLListHasAllTemporalEq(['T15:59:59.999'], ['T15:59:59'])", (False,)),
-            ("SELECT CQLListEqualTemporalEq(['T15:59:59.999'], ['T15:59:59'])", (False,)),
+            ("SELECT CQLListHasAllTemporalEq(['T15:59:59.999'], ['T15:59:59'])", (None,)),
+            ("SELECT CQLListEqualTemporalEq(['T15:59:59.999'], ['T15:59:59'])", (None,)),
         ]
         for sql, expected_row in direct_cases:
             assert py.execute(sql).fetchone() == expected_row, sql

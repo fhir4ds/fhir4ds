@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import logging
 from decimal import Decimal
 from typing import Any
 
@@ -20,10 +21,16 @@ from .types import (
     json_number,
 )
 
+logger = logging.getLogger(__name__)
 
-def serialize_evaluation_result(result: CQLEvaluationResult) -> dict[str, Any]:
+
+def serialize_evaluation_result(
+    result: CQLEvaluationResult, *, metadata_first: bool = True
+) -> dict[str, Any]:
     """Return a FHIR Parameters response for an evaluated CQL expression."""
-    params = serialize_value(RETURN_PARAMETER, result.value, result.metadata.type_ref, result.metadata)
+    params = serialize_value(
+        RETURN_PARAMETER, result.value, result.metadata.type_ref, result.metadata, metadata_first=metadata_first
+    )
     return {"resourceType": FHIR_PARAMETERS, "parameter": params}
 
 
@@ -32,12 +39,73 @@ def serialize_value(
     value: Any,
     type_ref: CQLTypeRef,
     metadata: CQLResultMetadata | None = None,
+    *,
+    metadata_first: bool = True,
 ) -> list[dict[str, Any]]:
-    """Serialize one CQL value as one or more Parameters.parameter entries."""
-    type_ref = _reconcile_type_ref(value, type_ref)
+    """Serialize one CQL value as one or more Parameters.parameter entries.
+
+    Metadata-first contract (``metadata_first=True``, the default):
+    known metadata (non-Any ``type_ref``) is trusted for dispatch.
+    Runtime inference participates only through
+
+    1. the silent ``Any`` path (no metadata -> infer, no log), and
+    2. the would-crash rescue: when serialization under known metadata
+       raises (typed ``CQLFacadeError`` included), the runtime-inferred
+       type is retried once with a WARNING log. The rescue applies
+       recursively (list elements, tuple fields, interval bounds) because
+       this function is the recursion point.
+
+    Runtime inference yielding ``String`` never triggers a rescue: VARCHAR
+    is the SQL transport shape for temporals/quantities/codes, so a
+    string-looking value under structured metadata is expected.
+
+    ``metadata_first=False`` restores the legacy value-first reconcile
+    order (A/B debugging and the documented rollback path).
+    """
+    if not metadata_first:
+        type_ref = _reconcile_type_ref(value, type_ref)
     bare = type_ref.bare_name
     if value is None:
         return [null_parameter(name)]
+    if not metadata_first:
+        return _serialize_known(name, value, type_ref, metadata, metadata_first=False)
+    if bare == "Any":
+        runtime_name = _infer_runtime_type(value)
+        if runtime_name != "Any":
+            type_ref = CQLTypeRef.parse(runtime_name)
+        return _serialize_known(name, value, type_ref, metadata)
+    try:
+        return _serialize_known(name, value, type_ref, metadata)
+    except CQLFacadeError:
+        runtime_name = _infer_runtime_type(value)
+        if runtime_name == "Any":
+            raise
+        if runtime_name == "String" and type_ref.bare_name != "List":
+            # String runtime evidence is too weak to override scalar
+            # metadata (VARCHAR is the SQL transport shape for temporals,
+            # quantities, and codes) — EXCEPT when the failed metadata is
+            # a List: a scalar runtime value under List metadata means the
+            # translator produced a single element (e.g. Coalesce over a
+            # list literal, non-list query sources), and the scalar form
+            # is the correct serialization.
+            raise
+        logger.warning(
+            "CQL result serialization under metadata %s failed; rescued by runtime type %s",
+            type_ref.canonical(),
+            runtime_name,
+        )
+        return _serialize_known(name, value, CQLTypeRef.parse(runtime_name), metadata)
+
+
+def _serialize_known(
+    name: str,
+    value: Any,
+    type_ref: CQLTypeRef,
+    metadata: CQLResultMetadata | None,
+    *,
+    metadata_first: bool = True,
+) -> list[dict[str, Any]]:
+    bare = type_ref.bare_name
     if bare == "List":
         values = _as_python_list(value)
         if not values:
@@ -55,13 +123,16 @@ def serialize_value(
                                 item,
                                 type_ref.element_type,
                                 metadata,
+                                metadata_first=metadata_first,
                             )
                             for part in [nested]
                         ],
                     }
                 )
             else:
-                result.extend(serialize_value(name, item, type_ref.element_type, metadata))
+                result.extend(
+                    serialize_value(name, item, type_ref.element_type, metadata, metadata_first=metadata_first)
+                )
         return result
     if bare == "Tuple":
         obj = _as_json_object(value)
@@ -71,7 +142,9 @@ def serialize_value(
         parts = []
         for field_name, field_value in obj.items():
             field_type = fields.get(field_name, CQLTypeRef.parse("Any"))
-            parts.extend(serialize_value(field_name, field_value, field_type, metadata))
+            parts.extend(
+                serialize_value(field_name, field_value, field_type, metadata, metadata_first=metadata_first)
+            )
         return [{"name": name, "part": parts}]
     return [_serialize_scalar(name, value, type_ref, metadata)]
 
@@ -93,8 +166,26 @@ def _serialize_scalar(
             status_code=200,
         )
     if bare == "Boolean":
-        return {"name": name, "valueBoolean": bool(value)}
+        if isinstance(value, (dict, list, tuple)):
+            raise CQLFacadeError(
+                "CQL Boolean result is a structured value",
+                category=CQLErrorCategory.SERIALIZER_GAP,
+                status_code=200,
+            )
+        if not isinstance(value, bool):
+            raise CQLFacadeError(
+                "CQL Boolean result is not a Boolean value",
+                category=CQLErrorCategory.SERIALIZER_GAP,
+                status_code=200,
+            )
+        return {"name": name, "valueBoolean": value}
     if bare == "Integer":
+        if isinstance(value, bool):
+            raise CQLFacadeError(
+                "CQL Integer result is Boolean",
+                category=CQLErrorCategory.SERIALIZER_GAP,
+                status_code=200,
+            )
         try:
             return {"name": name, "valueInteger": int(value)}
         except (TypeError, ValueError) as exc:
@@ -104,6 +195,12 @@ def _serialize_scalar(
                 status_code=200,
             ) from exc
     if bare == "Long":
+        if isinstance(value, bool):
+            raise CQLFacadeError(
+                "CQL Long result is Boolean",
+                category=CQLErrorCategory.SERIALIZER_GAP,
+                status_code=200,
+            )
         try:
             return _with_cql_type({"name": name, "valueString": _format_long_literal(value)}, "System.Long")
         except (TypeError, ValueError) as exc:
@@ -300,7 +397,13 @@ def _format_interval_temporal(value: Any, point_type: str) -> str:
 
 
 def _strip_temporal_marker(value: Any, type_name: str) -> str:
-    text = str(value)
+    if not isinstance(value, str):
+        raise CQLFacadeError(
+            f"CQL {type_name} result is not a temporal string",
+            category=CQLErrorCategory.SERIALIZER_GAP,
+            status_code=200,
+        )
+    text = value
     if text.startswith("@"):
         text = text[1:]
     if type_name == "Time":
@@ -370,7 +473,11 @@ def _format_long_literal(value: Any) -> str:
 
 
 def _reconcile_type_ref(value: Any, type_ref: CQLTypeRef) -> CQLTypeRef:
-    """Prefer runtime structural evidence when static metadata is too weak."""
+    """Legacy value-first reconcile (``metadata_first=False`` rollback path).
+
+    Prefers runtime structural evidence when static metadata is too weak
+    or wrong; this was the pre-0.0.16 serializer contract.
+    """
     runtime_name = _infer_runtime_type(value)
     if runtime_name == "Any":
         return type_ref

@@ -162,10 +162,10 @@ def test_cql_list_part1_edge_cases_match_no_python_runtime() -> None:
         "InMixedFalse": (False,),
         "InBigMixedNumericFalse": (False,),
         "IncludesNullList": (True,),
-        "IncludesNullSingletonAbsent": (False,),  # CQL 1.5 §10.10: null element -> true iff list contains nulls (EXPLORER QA-003)
+        "IncludesNullSingletonAbsent": (None,),  # official IncludesNullRight fixture: null element -> NULL unless list has nulls (uncertainty doctrine; supersedes EXPLORER QA-003 pin)
         "IncludesQuantityEquivalent": (True,),
         "IncludedInNullList": (True,),
-        "IncludedInNullSingleton": (False,),  # CQL 1.5 §10.11: null element -> true iff list contains nulls (EXPLORER QA-003)
+        "IncludedInNullSingleton": (None,),  # official IncludedInNullLeft fixture: null element -> NULL unless list has nulls (uncertainty doctrine; supersedes EXPLORER QA-003 pin)
         "IncludedInQuantityEquivalent": (True,),
         "IndexOfNullElement": (None,),
         "IndexOfMissing": (-1,),

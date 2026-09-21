@@ -7,6 +7,50 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.16
+*September 2026*
+
+Version 0.0.16 is the **CQL type system release**. A complete, authoritative
+CQL type-inference layer (`TypeMapBuilder`) now runs after translation and
+attaches typed metadata (`cql_type_ref`) to every library definition, and the
+`$cql` facade serializer flips to a **metadata-first** contract: declared
+types drive FHIR Parameters serialization, with runtime shape inference only
+as a silent fallback for `Any` or a logged rescue when known metadata would
+fail. The conformance baseline holds at **2832/2832** (ViewDefinition 144,
+FHIRPath 935, CQL 1706, DQM 47) and generated SQL is **byte-identical** to
+0.0.15 across the 47-measure DQM corpus — this is a metadata-only release.
+
+**Type system**
+
+- New `fhir4ds/cql/types/typeref.py` canonical `CQLTypeRef` representation
+  (List/Interval/Tuple generics) shared by the translator and the FHIR
+  facade; legacy stub modules removed.
+- `TypeMapBuilder` (`fhir4ds/cql/translator/type_map.py`) types 70.3% of the
+  1354 definitions in the DQM-47 corpus (952 non-Any); the remaining Any
+  results are the documented gap backlog (Property/Query-heavy defines).
+- Uncertainty-returning operators (`AgeIn*`, `duration/difference between`
+  on imprecise operands) are deliberately typed `Any` so runtime interval
+  results serialize correctly.
+
+**Facade (`$cql`)**
+
+- `CQLResultMetadata` fallback chain is now `cql_type_ref → cql_type →
+  sql_result_type → Any`.
+- Serializer trusts known metadata; rescue is failure-driven, recursive
+  per-level, and logs a WARNING naming both types when it fires. Long
+  values, empty-list/tuple extensions, and interval `part` shapes are
+  unchanged.
+- Rollback flag: `CQLServerConfig.metadata_first_serialization=False`
+  restores the 0.0.15 value-first reconcile verbatim.
+
+**Consolidation**
+
+- The legacy `_infer_cql_type` is now a thin wrapper over a verbatim
+  compatibility port (byte-exactness proven by a 1049-define snapshot
+  diff); two duplicated helpers were deleted and their callers now share
+  `type_map` module functions; a CI drift tripwire pins builder-vs-legacy
+  equivalence on a shared corpus.
+
 ## Version 0.0.15
 *September 2026*
 

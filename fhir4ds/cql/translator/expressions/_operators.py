@@ -71,6 +71,7 @@ from ...parser.ast_nodes import (
 from ...translator.context import ExprUsage, RowShape, DefinitionMeta
 from ...translator.function_inliner import ParameterPlaceholder
 from ...translator.placeholder import RetrievePlaceholder
+from ...translator.type_map import infer_fhir_property_type_str, static_source_cql_type
 from ...translator.types import (
     PRECEDENCE,
     SQLAlias,
@@ -1203,30 +1204,6 @@ class OperatorsMixin:
         right_sql = _promote_fhirpath_text_list(right_sql)
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
 
-    def _logical_operand_property_cql_type(self, ast_def: object) -> Optional[str]:
-        """Schema-metadata CQL type for a Property AST (InferenceMixin-free)."""
-        from ...parser.ast_nodes import Identifier as _Id, Property as _Prop
-        from ..inference import FHIR_TYPE_TO_CQL_TYPE
-
-        if not (isinstance(ast_def, _Prop) and isinstance(ast_def.source, _Id) and ast_def.path):
-            return None
-        schema = getattr(self.context, "fhir_schema", None)
-        if schema is None:
-            return None
-        mapped = FHIR_TYPE_TO_CQL_TYPE.get(
-            schema.get_element_type(ast_def.source.name, ast_def.path)
-        )
-        if mapped is None and "." in ast_def.path:
-            head, tail = ast_def.path.split(".", 1)
-            if schema.get_element_type(ast_def.source.name, head) == "Quantity":
-                mapped = {
-                    "value": "Decimal",
-                    "unit": "String",
-                    "system": "String",
-                    "code": "String",
-                }.get(tail)
-        return mapped
-
     def _infer_static_cql_type_for_logical_operand(self, operand: object) -> str:
         if isinstance(operand, Literal):
             if operand.value is None:
@@ -1288,7 +1265,9 @@ class OperatorsMixin:
                             # InferenceMixin; infer primitive Property defines
                             # straight from FHIR schema metadata so Boolean
                             # elements validate (CQL-04 EXPLORER QA-003).
-                            element_type = self._logical_operand_property_cql_type(ast_def)
+                            element_type = infer_fhir_property_type_str(
+                                self.context, ast_def.source.name, ast_def.path
+                            )
                         if element_type not in ("Any", None):
                             return element_type
                 return meta.cql_type
@@ -1822,7 +1801,7 @@ class OperatorsMixin:
         # CQL-03 QA-004: Ratio component accessors (.numerator/.denominator)
         # yield Quantity values and must participate in Quantity arithmetic.
         if isinstance(node, Property) and getattr(node, "path", None) in ("numerator", "denominator"):
-            if self._static_source_cql_type(getattr(node, "source", None)) == "Ratio":
+            if static_source_cql_type(getattr(node, "source", None)) == "Ratio":
                 return True
         if isinstance(node, UnaryExpression):
             op = node.operator.lower() if isinstance(node.operator, str) else node.operator
@@ -2842,13 +2821,33 @@ class OperatorsMixin:
                 left_is_list = self._is_single_list_expr(left, getattr(expr, 'left', None))
                 right_is_list = self._is_single_list_expr(right, getattr(expr, 'right', None))
                 if left_is_list and not right_is_list:
-                    # List includes element → list_contains. CQL 1.5 §10.10
-                    # Includes: "For the list-singleton overload, this
-                    # operator is a synonym for the contains operator." A
-                    # null element therefore keeps contains semantics
-                    # (true iff the list contains any null elements) — do
-                    # NOT short-circuit to null before the equality macro.
-                    return self._list_contains_call(left, right, expr.left, expr.right)
+                    # List includes element. CQL 1.5 §10.10 prose calls this
+                    # a synonym of contains, but the OFFICIAL fixtures pin
+                    # different null-element semantics: IncludesNullRight
+                    # ({'s','a','m'} includes null -> null) and
+                    # ProperContainsNullRightFalse ({'s','u','n'} properly
+                    # includes null -> false) vs ContainsNullIn1Null
+                    # ({'a',null} contains null -> true). The reference
+                    # IncludesEvaluator routes the element overload through
+                    # InEvaluator with an uncertainty-preserving null
+                    # element comparison: a null element is uncertain
+                    # membership unless the list HAS a null element.
+                    # Fixtures outrank prose: wrap the contains result so a
+                    # null RIGHT operand yields null unless the list itself
+                    # contains a null element.
+                    contains_call = self._list_contains_call(left, right, expr.left, expr.right)
+                    if self._definitely_null_operand(expr.right, right):
+                        coalesced = SQLFunctionCall(name="COALESCE", args=[left, SQLArray(elements=[])])
+                        has_null_elem = SQLBinaryOp(
+                            operator="!=",
+                            left=SQLFunctionCall(name="system.array_length", args=[coalesced]),
+                            right=SQLFunctionCall(name="list_count", args=[coalesced]),
+                        )
+                        return SQLCase(
+                            when_clauses=[(has_null_elem, SQLLiteral(value=True))],
+                            else_clause=SQLNull(),
+                        )
+                    return contains_call
                 # List-list overload: "If either argument is null, the
                 # result is null" (CQL 1.5 §10.10). Detect typed-null list
                 # operands (`(null as List<T>)` lowers to an all-NULL CASE)
@@ -2953,13 +2952,25 @@ class OperatorsMixin:
                 left_is_list = self._is_single_list_expr(left, getattr(expr, 'left', None))
                 right_is_list = self._is_single_list_expr(right, getattr(expr, 'right', None))
                 if right_is_list and not left_is_list:
-                    # Element included in list → list_contains. CQL 1.5
-                    # §10.11 Included In: "For the singleton-list overload,
-                    # this operator is a synonym for the in operator." A
-                    # null element keeps in semantics (true iff the list
-                    # contains any null elements) — do NOT short-circuit to
-                    # null before the equality macro.
-                    return self._list_contains_call(right, left, expr.right, expr.left)
+                    # Element included in list. Like `includes`, the OFFICIAL
+                    # fixtures pin uncertainty semantics over the §10.11
+                    # "synonym of in" prose: IncludedInNullLeft (null
+                    # included in {2} -> null). A null LEFT element yields
+                    # null unless the list itself contains a null element
+                    # (InNullAnd1Null: null in {1, null} -> true).
+                    contains_call = self._list_contains_call(right, left, expr.right, expr.left)
+                    if self._definitely_null_operand(expr.left, left):
+                        coalesced = SQLFunctionCall(name="COALESCE", args=[right, SQLArray(elements=[])])
+                        has_null_elem = SQLBinaryOp(
+                            operator="!=",
+                            left=SQLFunctionCall(name="system.array_length", args=[coalesced]),
+                            right=SQLFunctionCall(name="list_count", args=[coalesced]),
+                        )
+                        return SQLCase(
+                            when_clauses=[(has_null_elem, SQLLiteral(value=True))],
+                            else_clause=SQLNull(),
+                        )
+                    return contains_call
                 # List-list overload: "If either argument is null, the
                 # result is null" (CQL 1.5 §10.11).
                 if self._definitely_null_operand(expr.left, left) or self._definitely_null_operand(expr.right, right):
