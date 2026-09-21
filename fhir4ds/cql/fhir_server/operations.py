@@ -31,7 +31,9 @@ def handle_cql_operation(
 
     try:
         result = evaluate_cql_request(request, config)
-        return 200, serialize_evaluation_result(result)
+        return 200, serialize_evaluation_result(
+            result, metadata_first=config.metadata_first_serialization
+        )
     except CQLFacadeError as exc:
         if exc.category in {
             CQLErrorCategory.PARSE_ERROR,

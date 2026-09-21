@@ -490,6 +490,13 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # Also store AST for structural analysis (fixes A11)
             self._context.add_definition(name, ast_expr=ast)
 
+        # Post-translation type map (v0.0.16 CQL type system): attach the
+        # additive cql_type_ref to every DefinitionMeta. Runs after ALL
+        # definition metadata (stores_list_value, sql_result_type, ...)
+        # has been recorded and before get_definition_meta() deep-copies.
+        from .type_map import TypeMapBuilder
+        TypeMapBuilder(self._context).attach()
+
         return results
 
     def translate_library_to_sql(

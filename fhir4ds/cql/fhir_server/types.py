@@ -7,6 +7,29 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
+from fhir4ds.cql.types.typeref import ANY_TYPE, CQLTypeRef, _TypeParser
+
+__all__ = [
+    "ANY_TYPE",
+    "CQLTypeRef",
+    "CQLResultMetadata",
+    "CQLEvaluationResult",
+    "InputParameter",
+    "CQLRequest",
+    "CQLServerConfig",
+    "CQLErrorCategory",
+    "CQLFacadeError",
+    "json_number",
+    "FHIR_PARAMETERS",
+    "FHIR_OPERATION_OUTCOME",
+    "RETURN_PARAMETER",
+    "EVALUATION_ERROR_PARAMETER",
+    "CQF_CQL_TYPE_URL",
+    "DATA_ABSENT_REASON_URL",
+    "CQF_EMPTY_LIST_URL",
+    "CQF_EMPTY_TUPLE_URL",
+]
+
 
 FHIR_PARAMETERS = "Parameters"
 FHIR_OPERATION_OUTCOME = "OperationOutcome"
@@ -30,55 +53,6 @@ class CQLErrorCategory(str, Enum):
 
 
 @dataclass(frozen=True)
-class CQLTypeRef:
-    """Small structural representation of a CQL type name."""
-
-    name: str
-    args: tuple["CQLTypeRef", ...] = ()
-    fields: tuple[tuple[str, "CQLTypeRef"], ...] = ()
-    raw: str | None = None
-
-    @property
-    def bare_name(self) -> str:
-        name = self.name.split(".")[-1]
-        if name.startswith("System."):
-            name = name.split(".")[-1]
-        return name
-
-    @property
-    def element_type(self) -> "CQLTypeRef":
-        if self.bare_name == "List" and self.args:
-            return self.args[0]
-        return ANY_TYPE
-
-    @property
-    def point_type(self) -> "CQLTypeRef":
-        if self.bare_name == "Interval" and self.args:
-            return self.args[0]
-        return ANY_TYPE
-
-    def canonical(self) -> str:
-        if self.bare_name == "Tuple":
-            inner = ", ".join(f"{name}: {field.canonical()}" for name, field in self.fields)
-            return f"Tuple{{{inner}}}"
-        if self.args:
-            return f"{self.bare_name}<{', '.join(arg.canonical() for arg in self.args)}>"
-        return self.bare_name
-
-    @classmethod
-    def parse(cls, value: str | None) -> "CQLTypeRef":
-        text = (value or "Any").strip()
-        if not text:
-            return ANY_TYPE
-        parser = _TypeParser(text)
-        parsed = parser.parse()
-        return parsed
-
-
-ANY_TYPE = CQLTypeRef("Any", raw="Any")
-
-
-@dataclass(frozen=True)
 class CQLResultMetadata:
     """Semantic metadata used to serialize CQL results to FHIR values."""
 
@@ -89,15 +63,30 @@ class CQLResultMetadata:
 
     @classmethod
     def from_definition_meta(cls, definition_name: str, meta: Any) -> "CQLResultMetadata":
+        """Build metadata preferring the builder-attached ``cql_type_ref``.
+
+        Fallback chain: ``cql_type_ref`` (TypeMapBuilder) -> ``cql_type``
+        (legacy lowering inference) -> ``sql_result_type`` (SQL shape hint)
+        -> ``Any``. The builder already consumes ``sql_result_type`` as an
+        input type source, so the facade never trusts the physical hint
+        blindly when a builder ref exists.
+        """
+        builder_ref = getattr(meta, "cql_type_ref", None)
         cql_type = getattr(meta, "cql_type", None) or "Any"
         sql_result_type = getattr(meta, "sql_result_type", None)
-        if cql_type == "Any" and sql_result_type:
-            cql_type = sql_result_type
+        if isinstance(builder_ref, CQLTypeRef):
+            type_ref = builder_ref
+            if cql_type == "Any":
+                cql_type = type_ref.canonical()
+        else:
+            if cql_type == "Any" and sql_result_type:
+                cql_type = sql_result_type
+            type_ref = CQLTypeRef.parse(cql_type)
         return cls(
             cql_type=cql_type,
             definition_name=definition_name,
             sql_result_type=sql_result_type,
-            type_ref=CQLTypeRef.parse(cql_type),
+            type_ref=type_ref,
         )
 
 
@@ -140,6 +129,7 @@ class CQLServerConfig:
     fhir_version: str = "4.0.1"
     library_name: str = "FHIR4DSCqlRunner"
     max_request_bytes: int = 1_000_000
+    metadata_first_serialization: bool = True
 
     @property
     def cql_paths(self) -> tuple[str, ...]:
@@ -178,80 +168,3 @@ def json_number(value: Any) -> int | float:
     if isinstance(value, float):
         return value
     return float(value)
-
-
-class _TypeParser:
-    """Tiny parser for CQL type names such as ``List<Tuple{a: Integer}>``."""
-
-    def __init__(self, text: str) -> None:
-        self.text = text
-        self.pos = 0
-
-    def parse(self) -> CQLTypeRef:
-        result = self._parse_type()
-        self._skip_ws()
-        if self.pos != len(self.text):
-            return CQLTypeRef(self.text, raw=self.text)
-        return result
-
-    def _parse_type(self) -> CQLTypeRef:
-        self._skip_ws()
-        name = self._parse_name()
-        bare = name.split(".")[-1]
-        self._skip_ws()
-        if bare == "Tuple" and self._peek() == "{":
-            self.pos += 1
-            fields: list[tuple[str, CQLTypeRef]] = []
-            while True:
-                self._skip_ws()
-                if self._peek() == "}":
-                    self.pos += 1
-                    break
-                field_name = self._parse_name()
-                self._skip_ws()
-                if self._peek() == ":":
-                    self.pos += 1
-                self._skip_ws()
-                fields.append((field_name, self._parse_type()))
-                self._skip_ws()
-                if self._peek() == ",":
-                    self.pos += 1
-                    continue
-                if self._peek() == "}":
-                    self.pos += 1
-                    break
-                break
-            return CQLTypeRef("Tuple", fields=tuple(fields), raw=self.text)
-        if self._peek() == "<":
-            self.pos += 1
-            args: list[CQLTypeRef] = []
-            while True:
-                args.append(self._parse_type())
-                self._skip_ws()
-                if self._peek() == ",":
-                    self.pos += 1
-                    continue
-                if self._peek() == ">":
-                    self.pos += 1
-                    break
-                break
-            return CQLTypeRef(bare, args=tuple(args), raw=self.text)
-        return CQLTypeRef(bare, raw=self.text)
-
-    def _parse_name(self) -> str:
-        self._skip_ws()
-        start = self.pos
-        while self.pos < len(self.text):
-            char = self.text[self.pos]
-            if char.isalnum() or char in "._":
-                self.pos += 1
-                continue
-            break
-        return self.text[start:self.pos] or "Any"
-
-    def _skip_ws(self) -> None:
-        while self.pos < len(self.text) and self.text[self.pos].isspace():
-            self.pos += 1
-
-    def _peek(self) -> str:
-        return self.text[self.pos] if self.pos < len(self.text) else ""

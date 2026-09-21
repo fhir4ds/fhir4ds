@@ -322,6 +322,13 @@ class DefinitionMeta:
     # source, the winning resource's ID subquery is stored here so that downstream
     # comparisons can populate the `target` field even after CTE serialization.
 
+    # Authoritative structural CQL type from the post-translation TypeMapBuilder
+    # (fhir4ds/cql/translator/type_map.py). Additive in v0.0.16: the legacy
+    # cql_type string above remains the lowering-dispatch surface and is NEVER
+    # back-filled by the builder; cql_type_ref is consumed by the $cql facade
+    # serializer (metadata-first) and downstream tooling.
+    cql_type_ref: Optional[Any] = None  # CQLTypeRef; Any-typed to avoid an import cycle
+
     @property
     def is_scalar(self) -> bool:
         """True if definition produces exactly one value per patient."""

@@ -11,6 +11,7 @@ from typing import List, Optional
 
 from ...parser.ast_nodes import DateComponent, DateTimeLiteral, Literal, TimeLiteral
 from ...translator.context import ExprUsage
+from ...translator.type_map import static_source_cql_type
 from ...translator.types import (
     SQLBinaryOp,
     SQLCase,
@@ -795,33 +796,6 @@ class DateComponentMixin:
         'date', 'time', 'timezoneoffset',
     })
 
-    def _static_source_cql_type(self, source) -> str:
-        """Standalone static CQL type resolution for temporal/complex literals.
-
-        The full ``_infer_cql_type`` machinery lives on the library-level
-        translator, not on the ExpressionTranslator mixin stack; expression
-        contexts only need the literal/function-ref subset resolved here.
-        """
-        from ...parser.ast_nodes import FunctionRef as _FunctionRef
-        if isinstance(source, DateTimeLiteral):
-            value = str(getattr(source, "value", "") or "")
-            if value.startswith("T"):
-                return "Time"
-            return "DateTime" if "T" in value else "Date"
-        if isinstance(source, TimeLiteral):
-            return "Time"
-        if isinstance(source, _FunctionRef):
-            name = (getattr(source, "name", "") or "").lower()
-            if name == "totime":
-                return "Time"
-            if name == "todate":
-                return "Date"
-            if name == "todatetime":
-                return "DateTime"
-            if name == "toratio":
-                return "Ratio"
-        return "Any"
-
     def _translate_temporal_component_property(self, prop) -> Optional[SQLExpression]:
         """Route ``<temporal>.month``-style property access through dateComponent.
 
@@ -837,7 +811,7 @@ class DateComponentMixin:
         source = getattr(prop, 'source', None)
         if source is None:
             return None
-        source_type = self._static_source_cql_type(source)
+        source_type = static_source_cql_type(source)
         if source_type not in ('Date', 'DateTime', 'Time'):
             # Define aliases of temporal literals resolve through their
             # definition AST chains (CQL-03 QA-002 inlining makes the
