@@ -2083,6 +2083,34 @@ def cqlDateTimeEqual(a: str | None, b: str | None) -> bool | None:
     return True
 
 
+def cqlDateTimeEqualListElement(a: str | None, b: str | None) -> bool | None:
+    """List-element temporal equality (§10.3/§10.4 Equal (List) elements).
+
+    Unlike direct ``=`` (where seconds+milliseconds are one combined decimal
+    precision per §12.1, making ``T10:00:00.0 = T10:00:00`` certain), list
+    element comparisons follow the §Equal precision-uncertainty rule: a
+    second-vs-millisecond precision mismatch on the element type is
+    UNCERTAIN (null), pinned by the official fixtures ProperContainsTimeNull
+    / ProperInTimeNull (``{...@T15:59:59.999...} properly includes @T15:59:59``
+    -> null) with no counter-pinning fixture for direct element equality.
+    """
+    if a is None or b is None:
+        return None
+    a_s, b_s = str(a), str(b)
+    try:
+        cmp, certain = _compare_at_min_precision(a_s, b_s, combined_seconds_ms=False)
+    except (ValueError, KeyError, OverflowError):
+        # Malformed temporal text: match the native C++
+        # CqlDateTimeEqualListElementFunc, which returns NULL (validity
+        # mask) on unparseable input instead of raising.
+        return None
+    if cmp != 0:
+        return False
+    if not certain:
+        return None
+    return True
+
+
 def _extract_datetime_from_interval(s: str) -> str:
     """If *s* is an interval/period JSON string, return its start datetime.
 
@@ -2335,6 +2363,7 @@ def registerDatetimeUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("cqlBefore", cqlBefore, null_handling="special")
     con.create_function("cqlAfter", cqlAfter, null_handling="special")
     con.create_function("cqlDateTimeEqual", cqlDateTimeEqual, null_handling="special")
+    con.create_function("cqlDateTimeEqualListElement", cqlDateTimeEqualListElement, null_handling="special")
     # Precision-aware arithmetic (preserves input precision in output)
     con.create_function("cqlDateTimeAdd", cqlDateTimeAdd, null_handling="special")
     # Precision-qualified temporal comparison UDFs (CQL §19.14-21)
