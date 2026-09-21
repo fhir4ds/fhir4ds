@@ -198,3 +198,134 @@ def test_malformed_semantic_json_is_serializer_gap():
         serialize_value("return", "{not-json", CQLTypeRef.parse("Quantity"))
 
     assert exc_info.value.category == "serializer-gap"
+
+
+def test_metadata_first_contract_u6():
+    """Known metadata is trusted; rescue is failure-driven and per-level."""
+    from fhir4ds.cql.fhir_server.types import CQLResultMetadata
+
+    # from_definition_meta prefers the builder-attached cql_type_ref.
+    class _Meta:
+        cql_type = "Any"
+        sql_result_type = "Decimal"
+
+        def __init__(self):
+            from fhir4ds.cql.types import CQLTypeRef
+
+            self.cql_type_ref = CQLTypeRef.parse("Quantity")
+
+    metadata = CQLResultMetadata.from_definition_meta("return", _Meta())
+    assert metadata.cql_type == "Quantity"
+    # Quantity metadata trusted: dict value serializes as valueQuantity,
+    # no Integer/Decimal inference overrides.
+    param = serialize_value("return", {"value": 5, "unit": "mg"}, metadata.type_ref, metadata)
+    assert param[0]["valueQuantity"]["code"] == "mg"
+
+    # Long metadata with an int value is trusted (runtime Integer inference
+    # never rescues without a crash): renders the Long literal form.
+    param = serialize_value("return", 42, CQLTypeRef.parse("Long"))[0]
+    assert param["valueString"] == "42L"
+
+    # String metadata is trusted even for structured-looking string values
+    # (VARCHAR is the transport shape for temporals/quantities/codes).
+    param = serialize_value("return", '{"value": 5, "unit": "mg"}', CQLTypeRef.parse("String"))
+    assert param == [{"name": "return", "valueString": '{"value": 5, "unit": "mg"}'}]
+
+    # Rescue is failure-driven: logs a WARNING and retries once.
+    quantity_json = '{"value":15.0,"unit":"mL","code":"mL"}'
+    with caplog_context() as captured:
+        param = serialize_value("return", quantity_json, CQLTypeRef.parse("Decimal"))
+    assert param[0]["valueQuantity"]["unit"] == "ml"
+    assert any("rescued by runtime type" in record.getMessage() for record in captured.records)
+
+    # Rescue applies per-level (list elements), recursively.
+    mixed = ["2024-01-01", {"start": 4, "end": 5, "lowClosed": True, "highClosed": True}]
+    params = serialize_value("return", mixed, CQLTypeRef.parse("List<DateTime>"))
+    assert params[0] == {"name": "return", "valueDateTime": "2024-01-01"}
+    second = params[1]
+    assert second["part"] == [
+        {"name": "lowClosed", "valueBoolean": True},
+        {"name": "low", "valueInteger": 4},
+        {"name": "highClosed", "valueBoolean": True},
+        {"name": "high", "valueInteger": 5},
+    ]
+
+    # String runtime inference never rescues: malformed JSON under Quantity
+    # metadata stays a serializer-gap even though it "looks like" a String.
+    with pytest.raises(CQLFacadeError) as exc_info:
+        serialize_value("return", "{not-json", CQLTypeRef.parse("Quantity"))
+    assert exc_info.value.category == "serializer-gap"
+
+
+class caplog_context:
+    """Minimal logging capture compatible with module-level test functions."""
+
+    def __init__(self):
+        import logging
+        from contextlib import contextmanager
+
+        self.records = []
+        self._handler = logging.Handler()
+        self._handler.emit = lambda record: self.records.append(record)
+        self._cm = contextmanager(self._ctx)()
+
+    def _ctx(self):
+        import logging
+
+        root = logging.getLogger("fhir4ds.cql.fhir_server.result_serializer")
+        old_level = root.level
+        root.addHandler(self._handler)
+        root.setLevel(logging.WARNING)
+        try:
+            yield self
+        finally:
+            root.removeHandler(self._handler)
+            root.setLevel(old_level)
+
+    def __enter__(self):
+        return self._cm.__enter__()
+
+    def __exit__(self, *args):
+        return self._cm.__exit__(*args)
+
+
+def test_metadata_first_rollback_flag_restores_legacy_reconcile():
+    """metadata_first=False restores the pre-0.0.16 value-first reconcile.
+
+    Rollback path per the FDD: CQLServerConfig.metadata_first_serialization
+    threads serialize_evaluation_result(..., metadata_first=False) which
+    reconciles the type from runtime evidence BEFORE dispatch.
+    """
+    from fhir4ds.cql.fhir_server.result_serializer import serialize_evaluation_result
+    from fhir4ds.cql.fhir_server.types import CQLResultMetadata
+
+    from fhir4ds.cql.types import CQLTypeRef
+
+    class _Metadata:
+        cql_type = "Decimal"
+        definition_name = "return"
+        sql_result_type = None
+        type_ref = CQLTypeRef.parse("Decimal")
+
+    class _Result:
+        metadata = _Metadata()
+        value = '{"value":15.0,"unit":"mL","code":"mL"}'
+
+    result = _Result()
+    out = serialize_evaluation_result(result, metadata_first=False)
+    param = out["parameter"][0]
+    # Legacy reconcile promoted the Quantity JSON over Decimal metadata
+    # BEFORE dispatch (no crash-and-rescue needed).
+    assert param["valueQuantity"]["unit"] == "ml"
+
+    # Metadata-first keeps Decimal trusted -> Decimal branch raises on
+    # dict-shaped string parse -> rescue fires (same output, logged).
+    with caplog_context() as captured:
+        out = serialize_evaluation_result(result, metadata_first=True)
+    assert out["parameter"][0]["valueQuantity"]["unit"] == "ml"
+    assert any("rescued by runtime type" in r.getMessage() for r in captured.records)
+
+    # Flag plumbing: CQLServerConfig carries the documented default.
+    from fhir4ds.cql.fhir_server.types import CQLServerConfig
+
+    assert CQLServerConfig().metadata_first_serialization is True
