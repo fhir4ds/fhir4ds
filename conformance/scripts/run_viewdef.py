@@ -203,7 +203,10 @@ def main():
         print(f"Error: Spec tests directory not found at {SPEC_TESTS_DIR}")
         sys.exit(1)
 
-    con = duckdb.connect()
+    # allow_unsigned_extensions: the bundled fhirpath C++ extension is an
+    # unsigned dev build; without this flag DuckDB refuses to LOAD it and
+    # the gate silently exercises the (slower) Python fallback UDFs.
+    con = duckdb.connect(config={"allow_unsigned_extensions": True})
     register_fhirpath(con)
     generator = SQLGenerator(strict_collection=True)
 
