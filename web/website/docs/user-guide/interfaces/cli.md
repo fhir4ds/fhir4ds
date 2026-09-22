@@ -97,7 +97,7 @@ Depending on the output config, each measure directory can include:
 | `definitions.<format>` | Machine-friendly CQL define outputs. |
 | `definitions.schema.json` | Mapping from output columns to authored CQL define names. |
 
-For full output details, see [Digital Quality Measures](./quality/dqm) and
+For full output details, see [Digital Quality Measures](../quality/dqm) and
 [Source-to-DQM Production Recipes](/docs/examples/dqm-recipes).
 
 ## CQL Facade Command
@@ -201,3 +201,49 @@ fhir4ds dqm run --config dqm-run.json
 For performance-sensitive jobs, capture the root `run.json` and per-measure
 `summary.json` files as CI artifacts. For spec conformance and timing reports in
 this repository, use the conformance scripts under `conformance/scripts/`.
+
+
+## Verify Command
+
+`fhir4ds verify` is the one-shot verification surface for CQL authoring: it
+evaluates a library against a dataset, optionally checks declarative test
+cases, and prints a JSON envelope to stdout that agents (or CI) can act on.
+
+```bash
+fhir4ds verify --library MEASURE.cql
+               [--include-dir DIR ...]        # resolve includes from directories
+               [--data DATA.ndjson | --data FILE.json | --data DIR ...]
+               [--valueset FILE.json ...]
+               [--tests cases.json]           # declarative test cases
+               [--parameters '{"Measurement Period": ...}']
+               [--output-columns '{"IPP": "Initial Population", ...}']
+               [--emit-sql]                   # include generated SQL in output
+               [--format json|text]           # default: json
+```
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success — all test cases passed (or plain evaluation completed) |
+| `1` | Run completed but test cases failed, or the run reported diagnostics |
+| `2` | Invalid CLI input (missing files, malformed JSON arguments) |
+
+### Test cases
+
+The cases file is a versioned JSON document (`schema: 1`). Each case asserts
+one patient's membership in a population column or the value of any define:
+
+```json
+{
+  "schema": 1,
+  "cases": [
+    {"patient": "pt-1", "population": "IPP", "expect": true},
+    {"patient": "pt-2", "define": "Has Diabetes", "expect": false}
+  ]
+}
+```
+
+Unknown patients or defines become case failures with a reason — never a
+crash. See the [Operations Layer](./operations) page for the shared envelope
+and diagnostics contract behind this command.

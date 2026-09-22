@@ -29,7 +29,7 @@ custom applications, use `MeasureEvaluator` directly.
 For source-specific examples, see
 [Source-to-DQM Production Recipes](/docs/examples/dqm-recipes). For
 CLI behavior and exit codes, see the
-[Command Line Interface](/docs/user-guide/cli).
+[Command Line Interface](/docs/user-guide/interfaces/cli).
 
 For HAPI FHIR PostgreSQL deployments that need event-driven recalculation and
 persisted patient-level measure results, see

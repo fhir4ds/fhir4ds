@@ -77,9 +77,14 @@ const sidebars: SidebarsConfig = {
           ],
         },
         {
-          type: 'doc',
-          id: 'user-guide/cli',
-          label: 'Command Line Interface',
+          type: 'category',
+          label: 'Interfaces',
+          link: {type: 'doc', id: 'user-guide/interfaces/operations'},
+          items: [
+            'user-guide/interfaces/operations',
+            'user-guide/interfaces/cli',
+            'user-guide/interfaces/mcp',
+          ],
         },
       ],
     },
