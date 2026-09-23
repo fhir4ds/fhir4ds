@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
@@ -202,12 +203,25 @@ def _rows_from_relation(relation: Any) -> tuple[list[str], list[dict[str, Any]]]
 
 
 def _column_types(library: Any, columns: tuple[str, ...], output_columns: dict[str, str] | None) -> dict[str, str]:
-    """CQL type per output column from definition metadata (0.0.16 type map)."""
+    """CQL type per output column from definition metadata (0.0.16 type map).
+
+    ``library`` may be a translator-like object exposing
+    ``_definition_meta``/``context.definition_meta``, or a plain dict
+    (name -> meta view with cql_type_ref), as produced by
+    ``_definition_meta_map``.
+    """
     meta_by_name: dict[str, Any] = {}
-    translator_meta = getattr(library, "_definition_meta", None)
-    if translator_meta:
-        for name, meta in translator_meta.items():
-            meta_by_name[name] = meta
+    if isinstance(library, dict):
+        meta_by_name = library
+    else:
+        translator_meta = getattr(library, "_definition_meta", None)
+        if translator_meta is None:
+            translator_meta = getattr(
+                getattr(library, "context", None), "definition_meta", None
+            )
+        if translator_meta:
+            for name, meta in translator_meta.items():
+                meta_by_name[name] = meta
     types: dict[str, str] = {}
     for col in columns:
         if col == "patient_id":
@@ -217,6 +231,9 @@ def _column_types(library: Any, columns: tuple[str, ...], output_columns: dict[s
         if meta is None:
             types[col] = "Any"
             continue
+        if isinstance(meta, dict):
+            types[col] = str(meta.get("cql_type_ref") or "Any")
+            continue
         ref = getattr(meta, "cql_type_ref", None)
         if ref is not None and str(ref) not in ("Any", ""):
             types[col] = str(ref)
@@ -225,6 +242,62 @@ def _column_types(library: Any, columns: tuple[str, ...], output_columns: dict[s
         else:
             types[col] = "Any"
     return types
+
+
+_DEFINITION_META_CACHE: OrderedDict[tuple, dict] = OrderedDict()
+_DEFINITION_META_CACHE_MAX = 32
+
+
+def _definition_meta_map(
+    libraries: list[LibraryText], main: LibraryText
+) -> dict[str, Any]:
+    """Definition metadata (name -> meta view) via the same resolution chain.
+
+    Adapter-only metadata recovery: evaluate_measure does not expose its
+    translator, so we re-run the stateless translation to harvest
+    definition meta (cql_type_ref). The map feeds _column_types; misses
+    degrade to "Any" exactly as before. Metadata is best-effort typing
+    on top of a succeeded evaluation — never an evaluation failure.
+
+    REV-C1-002: the re-translation is cached (LRU, 32 entries) keyed on
+    the library texts — repeated evaluate_library/run_tests calls on the
+    same library skip the duplicate parse+translate round.
+    """
+    key = (
+        tuple((lib.name, lib.text) for lib in libraries),
+        (main.name, main.text),
+    )
+    cached = _DEFINITION_META_CACHE.get(key)
+    if cached is not None:
+        _DEFINITION_META_CACHE.move_to_end(key)
+        return cached
+    try:
+        from fhir4ds.cql import parse_cql as engine_parse
+        from fhir4ds.cql.translator import CQLToSQLTranslator
+
+        from ..library_sources import LibraryResolver
+
+        main_ast = engine_parse(main.text)
+        inline_others = [lib for lib in libraries if lib.name != main.name]
+        resolver = LibraryResolver(inline=[main, *inline_others])
+        translator = CQLToSQLTranslator()
+        translator.set_library_loader(resolver.resolve)
+        translator.translate_library_to_sql(main_ast)
+        from .translate import _type_ref_name
+
+        meta: dict[str, Any] = {}
+        for name, entry in (translator.context.definition_meta or {}).items():
+            ref = getattr(entry, "cql_type_ref", None)
+            rendered = _type_ref_name(ref) if ref is not None else None
+            if rendered is None or rendered in ("Any", ""):
+                rendered = str(getattr(entry, "cql_type", None) or "Any")
+            meta[name] = {"cql_type_ref": rendered}
+    except Exception:
+        meta = {}
+    _DEFINITION_META_CACHE[key] = meta
+    if len(_DEFINITION_META_CACHE) > _DEFINITION_META_CACHE_MAX:
+        _DEFINITION_META_CACHE.popitem(last=False)
+    return meta
 
 
 def _evaluate(
@@ -324,7 +397,11 @@ def evaluate_library(
         return EvaluateResult(ok=False, diagnostics=tuple(diag))
     kwargs, relation = payload
     return EvaluateResult(
-        column_types=_column_types(None, kwargs["columns"], output_columns),
+        column_types=_column_types(
+            _definition_meta_map(libraries, main),
+            kwargs["columns"],
+            output_columns,
+        ),
         **kwargs,
     )
 

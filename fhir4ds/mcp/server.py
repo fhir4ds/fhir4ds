@@ -215,6 +215,24 @@ def build_server() -> Any:
             parameters=parameters, output_columns=output_columns,
         ).to_dict()
 
+    @mcp.tool()
+    def compare_evidence_tool(
+        baseline: dict,
+        current: dict,
+        output_columns: dict | None = None,
+    ) -> dict:
+        """Diff two evidence payloads (baseline vs current run).
+
+        Accepts EvidenceResult envelopes (single patient) or
+        {"patients": {id: {"populations": {...}}}} collections; returns
+        the compare_evidence delta envelope.
+        """
+        from fhir4ds.operations import compare_evidence
+
+        return compare_evidence(
+            baseline, current, output_columns=output_columns
+        ).to_dict()
+
     return mcp
 
 

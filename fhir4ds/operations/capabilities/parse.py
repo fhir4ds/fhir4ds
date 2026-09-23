@@ -18,6 +18,7 @@ class ParseResult(_EnvelopeFields):
     definition_names: tuple[str, ...] = ()
     parameter_names: tuple[str, ...] = ()
     declarations: tuple[dict[str, Any], ...] = ()
+    ast: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -36,6 +37,8 @@ class ParseResult(_EnvelopeFields):
                 "declarations": list(self.declarations),
             }
         )
+        if self.ast is not None:
+            out["ast"] = self.ast
         return out
 
 
@@ -73,11 +76,45 @@ def _declarations(library: Any) -> tuple[dict[str, Any], ...]:
     return tuple(out)
 
 
-def parse_cql(cql_text: str) -> ParseResult:
+def _ast_to_dict(node: Any) -> Any:
+    """Serialize the CQL AST to JSON-safe dicts (client-side tree view).
+
+    Nodes serialize as {"kind": <class name>, "children": [...]}; leaf
+    values pass through. Recursion is depth-capped defensively (the
+    parser rejects pathological nesting long before this, but the
+    envelope boundary stays row-resilient).
+    """
+    import dataclasses as _dc
+
+    def conv(obj: Any, depth: int) -> Any:
+        if depth > 200:
+            return None
+        if obj is None or isinstance(obj, (bool, int, float, str)):
+            return obj
+        if isinstance(obj, (list, tuple)):
+            return [conv(v, depth + 1) for v in obj]
+        if _dc.is_dataclass(obj):
+            fields = {}
+            for f in _dc.fields(obj):
+                v = getattr(obj, f.name, None)
+                if callable(v):
+                    continue
+                fields[f.name] = conv(v, depth + 1)
+            return {"kind": type(obj).__name__, "children": fields}
+        return str(obj)
+
+    return conv(node, 0)
+
+
+def parse_cql(cql_text: str, *, include_ast: bool = False) -> ParseResult:
     """Parse CQL text into a declaration-metadata envelope.
 
     Engine seam: fhir4ds.cql.parse_cql (typed ParseError/LexerError ->
     PARSE_ERROR diagnostics with structured location).
+
+    ``include_ast=True`` additionally exposes the statement-level AST
+    (one serialized tree per define) via ``statements`` — the AstPane
+    surface. Default False keeps the envelope cheap for live typing.
     """
     try:
         from fhir4ds.cql import parse_cql as engine_parse
@@ -90,18 +127,28 @@ def parse_cql(cql_text: str) -> ParseResult:
         )
     from fhir4ds.cql.parser.ast_nodes import Definition, FunctionDefinition
 
-    definition_names = tuple(
-        stmt.name
+    definitions = [
+        stmt
         for stmt in getattr(library, "statements", [])
         if isinstance(stmt, (Definition, FunctionDefinition))
-    )
+    ]
+    definition_names = tuple(stmt.name for stmt in definitions)
     decls = _declarations(library)
     parameter_names = tuple(
         d["name"] for d in decls if d.get("kind") == "parameter"
     )
+    ast: dict[str, Any] | None = None
+    if include_ast:
+        ast = {
+            "library": getattr(library, "identifier", "") or "",
+            "statements": {
+                stmt.name: _ast_to_dict(stmt.expression) for stmt in definitions
+            },
+        }
     return ParseResult(
         library_name=getattr(library, "identifier", "") or "",
         definition_names=definition_names,
         parameter_names=parameter_names,
         declarations=decls,
+        ast=ast,
     )

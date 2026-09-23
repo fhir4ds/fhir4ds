@@ -16,7 +16,14 @@ from .capabilities.evaluate import (
 )
 from .capabilities.fhirpath import FhirpathResult, fhirpath_eval
 from .capabilities.parse import ParseResult, parse_cql
+from .capabilities.schema import ResourceSchemaResult, resource_schema
 from .capabilities.translate import TranslateResult, translate_cql
+from .capabilities.compare import (
+    CompareEvidenceResult,
+    compare_evidence,
+    evidence_payload_from_dict,
+)
+from .capabilities.validate import ValidateResourceResult, validate_resource
 from .envelopes import (
     DatasetSpec,
     DiagnosticCode,
@@ -32,6 +39,7 @@ from .errors import OperationError, diagnostic_from_exception
 from .library_sources import LibraryResolver, bundled_library_names
 
 __all__ = [
+    "CompareEvidenceResult",
     "DatasetResult",
     "DatasetSpec",
     "DiagnosticCode",
@@ -44,19 +52,25 @@ __all__ = [
     "LibraryText",
     "OperationError",
     "ParseResult",
+    "ResourceSchemaResult",
     "TestCase",
     "TestsInput",
     "TranslateResult",
+    "ValidateResourceResult",
     "VerifyEnvelope",
     "bundled_library_names",
+    "compare_evidence",
     "dataset_spec_from_dict",
     "diagnostic_from_exception",
     "evaluate_library",
+    "evidence_payload_from_dict",
     "explain_patient",
     "fhirpath_eval",
     "load_dataset",
     "parse_cql",
+    "resource_schema",
     "run_tests",
     "tests_input_from_dict",
     "translate_cql",
+    "validate_resource",
 ]

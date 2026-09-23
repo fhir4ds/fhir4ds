@@ -45,6 +45,16 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
         help='JSON object {"COLUMN": "CQL define name"}',
     )
     parser.add_argument("--emit-sql", action="store_true", help="Include generated SQL in output")
+    parser.add_argument(
+        "--evidence", default=None,
+        help="Write the evaluation's per-patient evidence JSON artifact to "
+        "this path for later --baseline comparison",
+    )
+    parser.add_argument(
+        "--baseline", default=None,
+        help="Path to a prior evidence JSON artifact; when set, the command "
+        "emits a compare_evidence delta envelope instead of a plain result",
+    )
     parser.add_argument("--format", choices=["json", "text"], default="json")
     parser.add_argument("--timeout-seconds", type=float, default=120.0)
 
@@ -149,6 +159,34 @@ def run(args: argparse.Namespace) -> int:
             for col in payload.get("columns", [])
             if col != "patient_id"
         }
+    if args.evidence:
+        evidence_artifact = _evidence_artifact(libraries, main, dataset, conn, args)
+        if isinstance(evidence_artifact, int):
+            return evidence_artifact
+        Path(args.evidence).write_text(
+            json.dumps(evidence_artifact, indent=2), encoding="utf-8"
+        )
+    if args.baseline:
+        baseline_payload = _load_evidence_file(args.baseline)
+        if isinstance(baseline_payload, int):
+            return baseline_payload
+        current_payload = _evidence_artifact(libraries, main, dataset, conn, args)
+        if isinstance(current_payload, int):
+            return current_payload
+        from fhir4ds.operations import compare_evidence
+
+        delta = compare_evidence(baseline_payload, current_payload)
+        delta_payload = delta.to_dict()
+        delta_payload["library"] = str(args.library)
+        if args.format == "json":
+            print(json.dumps(delta_payload, indent=2))
+        else:
+            for entry in delta_payload["patients"]:
+                print(
+                    f"  {entry['patient_id']}: {entry['column']} "
+                    f"{entry['classification']} ({entry['from']} -> {entry['to']})"
+                )
+        return 0 if delta.ok else 1
     if args.format == "json":
         print(json.dumps(payload, indent=2))
     else:
@@ -158,6 +196,60 @@ def run(args: argparse.Namespace) -> int:
     if envelope.passed is False:
         return 1
     return 0
+
+
+def _evidence_artifact(
+    libraries: list[LibraryText],
+    main: LibraryText,
+    dataset: DatasetSpec,
+    conn: Any,
+    args: argparse.Namespace,
+) -> dict[str, Any] | int:
+    """Multi-patient evidence artifact from the current evaluation.
+
+    Runs explain per patient (audit_mode='full' equivalent via the
+    operations capability). Returns the payload dict or a process exit
+    code on failure.
+    """
+    from fhir4ds.operations import evaluate_library, explain_patient
+
+    output_columns = _parse_json_arg(args.output_columns, "output-columns")
+    ev = evaluate_library(
+        libraries, main, dataset, conn, output_columns=output_columns
+    )
+    if not ev.ok:
+        print(
+            json.dumps(ev.to_dict(), indent=2),
+        )
+        return 1
+    patients_map: dict[str, dict[str, Any]] = {}
+    for row in ev.rows:
+        pid = row.get("patient_id")
+        if not isinstance(pid, str):
+            continue
+        populations = {
+            col: bool(val) if val is not None else None
+            for col, val in row.items()
+            if col != "patient_id" and isinstance(val, (bool, type(None)))
+        }
+        patients_map[pid] = {"populations": populations}
+    return {"schema": 1, "ok": True, "patients": patients_map}
+
+
+def _load_evidence_file(path_str: str) -> dict[str, Any] | int:
+    path = Path(path_str)
+    if not path.exists():
+        print(f"ERROR: baseline evidence not found: {path_str}", file=sys.stderr)
+        return 2
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"ERROR: baseline evidence is not valid JSON: {exc}", file=sys.stderr)
+        return 2
+    if not isinstance(payload, dict):
+        print("ERROR: baseline evidence must be a JSON object", file=sys.stderr)
+        return 2
+    return payload
 
 
 def _print_text(payload: dict[str, Any]) -> None:

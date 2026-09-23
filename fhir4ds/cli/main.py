@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from . import cql_server, dqm
+from . import cql_server, dqm, verify
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -20,11 +20,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     cql_server.configure_parser(cql_server_parser)
 
+    verify_parser = subparsers.add_parser(
+        "verify",
+        help="Evaluate a CQL library against a dataset with optional test cases",
+    )
+    verify.configure_parser(verify_parser)
+
     args = parser.parse_args(argv)
     if args.command == "dqm":
         return dqm.run(args)
     if args.command == "cql-server":
         return cql_server.run(args)
+    if args.command == "verify":
+        return verify.run(args)
 
     parser.print_help()
     return 2
