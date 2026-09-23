@@ -16,13 +16,23 @@ surface produces identical results for the same inputs.
 
 | Operation | Purpose |
 |-----------|---------|
-| `parse_cql` | Parse/validate CQL; library, definition, parameter, and include metadata |
-| `translate_cql` | Emit the generated SQL for a library |
-| `evaluate_library` | Evaluate populations; one row per patient |
+| `parse_cql` | Parse/validate CQL; library, definition, parameter, and include metadata. `include_ast=True` additionally returns statement-level AST trees (the browser AST pane surface) |
+| `translate_cql` | Emit the generated SQL for a library. `audit_mode` selects the shape (`none` = one-row CTE SQL, `population` = one-row-per-patient plain booleans, `full` = audit structs with optional `patient_ids` pushdown); `output_columns` aliases result columns to CQL defines |
+| `evaluate_library` | Evaluate populations; one row per patient; `column_types` carries CQL types |
 | `run_tests` | Run declarative test cases (the `fhir4ds verify` core) |
 | `fhirpath_eval` | Evaluate a FHIRPath expression against one resource |
 | `load_dataset` | Load inline resources or NDJSON/Bundle files; per-type counts |
 | `explain_patient` | Audit-evidence drill-in: why a patient is in/out of each population |
+| `validate_resource` | Loader-identity validation (resourceType/id rules, JSON-safety guards) — a resource that passes always loads cleanly |
+| `resource_schema` | FHIR R4 StructureDefinition-driven field metadata (types, cardinality, choices, reference targets) for a resource type |
+| `compare_evidence` | Strict diff of two evidence payloads with moved/added/removed/flipped classifications per patient × population |
+
+The CLI exposes evidence workflows via `fhir4ds verify --evidence PATH`
+(write a baseline artifact) and `--baseline PATH` (print the delta); MCP
+exposes the same as `compare_evidence_tool`. The browser workbench
+([CQL Cleanroom](/docs/examples/cql-cleanroom)) is the third adapter —
+a three-way matrix test asserts identical envelopes across CLI, MCP, and
+the browser for `run_tests` and `compare_evidence`.
 
 ## Envelopes
 

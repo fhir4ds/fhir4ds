@@ -104,7 +104,7 @@ The `dqm` (Digital Quality Measures) module manages the full lifecycle of evalua
 
 For repeatable batch runs and project automation, use the operations guides:
 
-- **CLI**: [Command Line Interface](./cli)
+- **CLI**: [Command Line Interface](./interfaces/cli)
 
 ---
 
