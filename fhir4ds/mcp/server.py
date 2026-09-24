@@ -233,6 +233,107 @@ def build_server() -> Any:
             baseline, current, output_columns=output_columns
         ).to_dict()
 
+    @mcp.tool()
+    def measure_from_definitions_tool(
+        libraries: list[dict],
+        main: str = "",
+        mapping: list[dict] | None = None,
+        measure_name: str | None = None,
+        group_id: str | None = None,
+    ) -> dict:
+        """Build/validate a FHIR Measure from a define->population-code
+        mapping (explicit mapping only; no heuristics)."""
+        from fhir4ds.operations import measure_from_definitions
+
+        libs = _libraries(libraries)
+        main_lib = _resolve_main(libs, main)
+        return measure_from_definitions(
+            libs, main_lib, mapping, measure_name=measure_name, group_id=group_id
+        ).to_dict()
+
+    @mcp.tool()
+    def measure_population_map_tool(measure: dict) -> dict:
+        """Measure -> [(population code, CQL define)] pairs (DQM
+        MeasureParser authority)."""
+        from fhir4ds.operations import measure_population_map
+
+        pairs, diag = measure_population_map(measure)
+        if diag is not None:
+            return {"schema": 1, "ok": False, "diagnostics": [diag.to_dict()]}
+        return {
+            "schema": 1,
+            "ok": True,
+            "pairs": [{"code": c, "define": d} for c, d in pairs],
+        }
+
+    @mcp.tool()
+    def measure_report_from_rows_tool(
+        measure: dict,
+        rows: list[dict],
+        columns: list[str],
+        period_start: str | None = None,
+        period_end: str | None = None,
+    ) -> dict:
+        """Evaluation rows -> per-patient individual MeasureReports
+        (0/1 boolean-basis membership counts)."""
+        from fhir4ds.operations import measure_report_from_rows
+
+        return measure_report_from_rows(
+            measure, rows, columns,
+            period_start=period_start, period_end=period_end,
+        ).to_dict()
+
+    @mcp.tool()
+    def rows_from_measure_reports_tool(
+        reports: dict | list,
+        population_codes: list[str] | None = None,
+    ) -> dict:
+        """MeasureReports (single/list/Bundle) -> normalized boolean
+        rows (patient_id + snake_case population columns)."""
+        from fhir4ds.operations import rows_from_measure_reports
+
+        return rows_from_measure_reports(
+            reports, population_codes=population_codes
+        ).to_dict()
+
+    @mcp.tool()
+    def measure_roundtrip_tool(
+        libraries: list[dict],
+        mapping: list[dict],
+        dataset: dict | None = None,
+        main: str = "",
+    ) -> dict:
+        """Composed Measure flow: build the Measure from the mapping,
+        evaluate with Measure-derived output columns, materialize
+        per-patient MeasureReports, and invert them back to rows."""
+        from fhir4ds.operations import (
+            evaluate_library,
+            measure_from_definitions,
+            measure_report_from_rows,
+            rows_from_measure_reports,
+        )
+        from fhir4ds.operations.capabilities.measure import (
+            output_columns_from_measure,
+        )
+
+        libs = _libraries(libraries)
+        main_lib = _resolve_main(libs, main)
+        m_env = measure_from_definitions(libs, main_lib, mapping=mapping)
+        if not m_env.ok:
+            return m_env.to_dict()
+        out_cols = output_columns_from_measure(m_env.measure)
+        spec = _dataset(dataset)
+        ev = evaluate_library(libs, main_lib, spec, _conn(), output_columns=out_cols)
+        if not ev.ok:
+            return ev.to_dict()
+        rep = measure_report_from_rows(m_env.measure, ev.rows, ev.columns)
+        if not rep.ok:
+            return rep.to_dict()
+        return rows_from_measure_reports(
+            list(rep.reports),
+            population_codes=[e["code"] for e in mapping],
+        ).to_dict()
+
     return mcp
 
 

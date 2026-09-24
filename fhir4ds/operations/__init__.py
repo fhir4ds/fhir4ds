@@ -17,6 +17,10 @@ from .capabilities.evaluate import (
 from .capabilities.fhirpath import FhirpathResult, fhirpath_eval
 from .capabilities.parse import ParseResult, parse_cql
 from .capabilities.schema import ResourceSchemaResult, resource_schema
+from .capabilities.schema_tree import (
+    SchemaTreeResult,
+    resource_schema_tree,
+)
 from .capabilities.translate import TranslateResult, translate_cql
 from .capabilities.compare import (
     CompareEvidenceResult,
@@ -24,6 +28,20 @@ from .capabilities.compare import (
     evidence_payload_from_dict,
 )
 from .capabilities.validate import ValidateResourceResult, validate_resource
+from .capabilities.measure import (
+    DEFAULT_MEASURE_REPORT_VIEW,
+    POPULATION_ORDER,
+    FlattenViewResult,
+    MeasureReportResult,
+    MeasureResult,
+    MeasureRowsResult,
+    flatten_view,
+    measure_from_definitions,
+    measure_population_map,
+    measure_report_from_rows,
+    output_columns_from_measure,
+    rows_from_measure_reports,
+)
 from .envelopes import (
     DatasetSpec,
     DiagnosticCode,
@@ -47,10 +65,15 @@ __all__ = [
     "ErrorLocation",
     "EvaluateResult",
     "EvidenceResult",
+    "FlattenViewResult",
     "FhirpathResult",
     "LibraryResolver",
     "LibraryText",
+    "MeasureReportResult",
+    "MeasureResult",
+    "MeasureRowsResult",
     "OperationError",
+    "POPULATION_ORDER",
     "ParseResult",
     "ResourceSchemaResult",
     "TestCase",
@@ -66,9 +89,16 @@ __all__ = [
     "evidence_payload_from_dict",
     "explain_patient",
     "fhirpath_eval",
+    "flatten_view",
     "load_dataset",
+    "measure_from_definitions",
+    "measure_population_map",
+    "measure_report_from_rows",
+    "output_columns_from_measure",
     "parse_cql",
     "resource_schema",
+    "resource_schema_tree",
+    "rows_from_measure_reports",
     "run_tests",
     "tests_input_from_dict",
     "translate_cql",

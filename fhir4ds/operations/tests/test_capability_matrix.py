@@ -27,6 +27,8 @@ import pytest
 from .fixtures import (
     MATRIX_CASES,
     MATRIX_LIBRARY,
+    MATRIX_MEASURE_EXPECTED_ROWS,
+    MATRIX_MEASURE_MAPPING,
     MATRIX_OUTPUT_COLUMNS,
     MATRIX_RESOURCES,
     normalized_verify_envelope,
@@ -347,3 +349,168 @@ def test_capability_matrix_compare_three_way(tmp_path):
         "pt-3:IPP:removed",
         "pt-3:NAME:removed",
     ]
+
+
+# ---------------------------------------------------------------------------
+# Measure-reports campaign: measure capability legs (CLI == MCP == browser)
+# ---------------------------------------------------------------------------
+
+def _normalized_measure_rows(envelope: dict) -> dict:
+    """Normalize a rows_from_measure_reports envelope for leg comparison."""
+    out = json.loads(json.dumps(envelope, default=str))
+    # Info diagnostics for skipped codes are order/transport-stable but
+    # not contract-bearing; keep error-severity only.
+    diags = [
+        d for d in out.get("diagnostics", [])
+        if d.get("severity") == "error"
+    ]
+    if diags:
+        out["diagnostics"] = diags
+    else:
+        out.pop("diagnostics", None)
+    return out
+
+
+def _measure_roundtrip_rows(
+    libraries: list,
+    main: dict,
+    resources: list,
+) -> dict:
+    """In-process reference flow: measure_from_definitions -> evaluate ->
+    measure_report_from_rows -> rows_from_measure_reports."""
+    from fhir4ds.operations import (
+        evaluate_library,
+        measure_from_definitions,
+        measure_report_from_rows,
+        rows_from_measure_reports,
+    )
+    from fhir4ds.operations.capabilities.measure import (
+        output_columns_from_measure,
+    )
+    from fhir4ds.operations.envelopes import DatasetSpec, LibraryText
+
+    libs = [LibraryText(name=l["name"], text=l["text"]) for l in libraries]
+    main_lib = LibraryText(name=main["name"], text=main["text"])
+    m_env = measure_from_definitions(libs, main_lib, mapping=MATRIX_MEASURE_MAPPING)
+    assert m_env.ok, [d.message for d in m_env.diagnostics]
+    out_cols = output_columns_from_measure(m_env.measure)
+    conn = _fresh_conn()
+    ev = evaluate_library(
+        libs, main_lib, DatasetSpec(resources=resources), conn,
+        output_columns=out_cols,
+    )
+    assert ev.ok, [d.message for d in ev.diagnostics]
+    rep = measure_report_from_rows(m_env.measure, ev.rows, ev.columns)
+    assert rep.ok, [d.message for d in rep.diagnostics]
+    back = rows_from_measure_reports(
+        list(rep.reports),
+        population_codes=[e["code"] for e in MATRIX_MEASURE_MAPPING],
+    )
+    return _normalized_measure_rows(back.to_dict())
+
+
+def _fresh_conn():
+    import duckdb
+
+    import fhir4ds
+
+    conn = fhir4ds.create_connection() if hasattr(fhir4ds, "create_connection") else duckdb.connect()
+    return conn
+
+
+def test_measure_capability_reference_roundtrip(tmp_path):
+    """Reference flow sanity (Python in-process): the Measure-derived
+    output columns produce the expected population truths, and the
+    MeasureReport round-trip preserves them."""
+    rows_env = _measure_roundtrip_rows(
+        [{"name": "MatrixSimple", "text": MATRIX_LIBRARY}],
+        {"name": "MatrixSimple", "text": MATRIX_LIBRARY},
+        MATRIX_RESOURCES,
+    )
+    assert rows_env["ok"] is True
+    got = sorted(rows_env["rows"], key=lambda r: r["patient_id"])
+    expected = sorted(
+        [dict(r) for r in MATRIX_MEASURE_EXPECTED_ROWS],
+        key=lambda r: r["patient_id"],
+    )
+    assert got == expected
+
+
+def test_measure_capability_three_way(tmp_path):
+    """Measure capabilities on CLI (in-process), MCP, and the cleanroom
+    browser worker must agree: measure_from_definitions -> report ->
+    rows round-trip envelope."""
+    pytest.importorskip("mcp")
+
+    # MCP leg: the tool surface composes the same capabilities.
+    from fhir4ds.mcp.server import build_server
+
+    server = build_server()
+
+    async def call():
+        return await server._tool_manager.call_tool(
+            "measure_roundtrip_tool",
+            arguments={
+                "libraries": [{"name": "MatrixSimple", "text": MATRIX_LIBRARY}],
+                "main": "MatrixSimple",
+                "mapping": MATRIX_MEASURE_MAPPING,
+                "dataset": {"resources": MATRIX_RESOURCES},
+            },
+        )
+
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        mcp_result = asyncio.run(call())
+    mcp = _normalized_measure_rows(mcp_result)
+
+    # Cleanroom leg via the shared fixture mechanism.
+    cleanroom: dict | None = None
+    if _cleanroom_available():
+        fixture_path = tmp_path / "matrix_measure_fixture.json"
+        fixture_path.write_text(
+            json.dumps(
+                {
+                    "library": {"name": "MatrixSimple", "text": MATRIX_LIBRARY},
+                    "resources": MATRIX_RESOURCES,
+                    "cases": MATRIX_CASES,
+                    "output_columns": MATRIX_OUTPUT_COLUMNS,
+                    "measure": {
+                        "mapping": MATRIX_MEASURE_MAPPING,
+                        "expected_rows": MATRIX_MEASURE_EXPECTED_ROWS,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        env = {**os.environ, "CLEANROOM_MATRIX_FIXTURE": str(fixture_path)}
+        proc = subprocess.run(
+            ["npx", "playwright", "test", "tests/e2e/matrix-leg.spec.ts", "--reporter=line"],
+            capture_output=True, text=True, cwd=str(CLEANROOM_DIR), env=env,
+            timeout=420,
+        )
+        combined = proc.stdout + proc.stderr
+        marker = "CLEANROOM_MEASURE_BEGIN"
+        if marker in combined:
+            raw = combined.split(marker, 1)[1].split("CLEANROOM_MEASURE_END", 1)[0]
+            cleanroom = _normalized_measure_rows(json.loads(raw))
+        else:
+            pytest.skip(
+                f"cleanroom measure leg did not emit envelope (exit {proc.returncode}): {combined[-300:]}"
+            )
+    else:
+        pytest.skip("cleanroom tooling/preview unavailable for measure leg")
+
+    reference = _normalized_measure_rows(
+        _measure_roundtrip_rows(
+            [{"name": "MatrixSimple", "text": MATRIX_LIBRARY}],
+            {"name": "MatrixSimple", "text": MATRIX_LIBRARY},
+            MATRIX_RESOURCES,
+        )
+    )
+    assert reference == mcp == cleanroom
+    got = sorted(cleanroom["rows"], key=lambda r: r["patient_id"])
+    expected = sorted(
+        [dict(r) for r in MATRIX_MEASURE_EXPECTED_ROWS],
+        key=lambda r: r["patient_id"],
+    )
+    assert got == expected

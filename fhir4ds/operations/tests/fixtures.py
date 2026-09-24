@@ -45,6 +45,23 @@ MATRIX_CASES = {
 
 MATRIX_LIBRARY_NAME = "MatrixSimple"
 
+# Measure-reports campaign matrix fixture (FDD v2 §3.8 extension): the
+# same library/dataset, expressed through the Measure capabilities.
+# Mapping mirrors MATRIX_OUTPUT_COLUMNS: initial-population -> Initial
+# Population, numerator -> Has Name.
+MATRIX_MEASURE_MAPPING = [
+    {"define": "Initial Population", "code": "initial-population"},
+    {"define": "Has Name", "code": "numerator"},
+]
+# Expected rows after evaluation + measure_report_from_rows +
+# rows_from_measure_reports round-trip (population truths of the
+# 3-patient fixture; columns snake_case the FHIR codes).
+MATRIX_MEASURE_EXPECTED_ROWS = [
+    {"patient_id": "pt-1", "initial_population": True, "numerator": True},
+    {"patient_id": "pt-2", "initial_population": False, "numerator": True},
+    {"patient_id": "pt-3", "initial_population": True, "numerator": False},
+]
+
 
 def write_matrix_fixture(tmp_dir: Path) -> dict[str, str]:
     """Materialize the fixture to files (CLI leg); returns paths."""

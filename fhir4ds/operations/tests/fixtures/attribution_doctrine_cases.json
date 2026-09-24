@@ -1,0 +1,125 @@
+{
+  "description": "Loader patient-attribution doctrine mirror cases (FEATURE_CLEANROOM_TEST_DATA_AUTHORING.md §3.2). Shared by pytest (fhir4ds/operations/tests/test_measure_capabilities.py::TestAttributionDoctrineMirror or dedicated test) and vitest (web/cql-cleanroom/tests/unit/attribution.test.ts). The TS attributePatient() helper must produce IDENTICAL results to fhir4ds/cql/loader/fhir_loader.py::_extract_patient_ref for every case. Do not edit one side without the other.",
+  "cases": [
+    {
+      "id": "patient-self",
+      "why": "Patient resources attribute to their own id",
+      "resource": {"resourceType": "Patient", "id": "p1"},
+      "expected": "p1"
+    },
+    {
+      "id": "subject-relative",
+      "why": "Patient-typed relative reference on subject",
+      "resource": {"resourceType": "Observation", "id": "o1", "subject": {"reference": "Patient/p1"}},
+      "expected": "p1"
+    },
+    {
+      "id": "patient-field",
+      "why": "patient field scanned after subject",
+      "resource": {"resourceType": "Coverage", "id": "c1", "patient": {"reference": "Patient/p2"}},
+      "expected": "p2"
+    },
+    {
+      "id": "beneficiary-field",
+      "why": "beneficiary field (Coverage-style)",
+      "resource": {"resourceType": "Coverage", "id": "c2", "beneficiary": {"reference": "Patient/p3"}},
+      "expected": "p3"
+    },
+    {
+      "id": "field-priority",
+      "why": "subject wins over patient when both present",
+      "resource": {"resourceType": "Encounter", "id": "e1", "subject": {"reference": "Patient/pa"}, "patient": {"reference": "Patient/pb"}},
+      "expected": "pa"
+    },
+    {
+      "id": "subject-group",
+      "why": "Group-typed subject does NOT attribute (phantom-patient guard)",
+      "resource": {"resourceType": "Observation", "id": "o2", "subject": {"reference": "Group/g7"}},
+      "expected": null
+    },
+    {
+      "id": "subject-location",
+      "why": "Location-typed subject does not attribute",
+      "resource": {"resourceType": "Device", "id": "d1", "subject": {"reference": "Location/loc1"}},
+      "expected": null
+    },
+    {
+      "id": "performer-patient-typed",
+      "why": "patient-typed performer does NOT attribute — loader scans ONLY subject/patient/beneficiary",
+      "resource": {"resourceType": "Observation", "id": "o3", "performer": {"reference": "Patient/p9"}},
+      "expected": null
+    },
+    {
+      "id": "reference-object-required",
+      "why": "string-valued reference field is not a Reference object; skipped",
+      "resource": {"resourceType": "Observation", "id": "o4", "subject": "Patient/p1"},
+      "expected": null
+    },
+    {
+      "id": "display-only",
+      "why": "Reference object without a string reference; skipped",
+      "resource": {"resourceType": "Observation", "id": "o5", "subject": {"display": "who"}},
+      "expected": null
+    },
+    {
+      "id": "bare-id",
+      "why": "bare id carries no target type; skipped",
+      "resource": {"resourceType": "Observation", "id": "o6", "subject": {"reference": "p1"}},
+      "expected": null
+    },
+    {
+      "id": "absolute-url",
+      "why": "absolute URL ending /Patient/{id}",
+      "resource": {"resourceType": "Observation", "id": "o7", "subject": {"reference": "https://fhir.example.org/base/Patient/p7"}},
+      "expected": "p7"
+    },
+    {
+      "id": "versioned-relative",
+      "why": "version-specific relative reference resolves to current id",
+      "resource": {"resourceType": "Observation", "id": "o8", "subject": {"reference": "Patient/p8/_history/2"}},
+      "expected": "p8"
+    },
+    {
+      "id": "versioned-absolute",
+      "why": "version-specific absolute reference resolves to current id",
+      "resource": {"resourceType": "Observation", "id": "o9", "subject": {"reference": "https://fhir.example.org/base/Patient/p9/_history/5"}},
+      "expected": "p9"
+    },
+    {
+      "id": "urn-uuid",
+      "why": "bundle-local urn:uuid reference attributes unconditionally (no type in URL)",
+      "resource": {"resourceType": "Observation", "id": "o10", "subject": {"reference": "urn:uuid:2b3c4d5e-6f70-4a8b-9c0d-1e2f3a4b5c6d"}},
+      "expected": "2b3c4d5e-6f70-4a8b-9c0d-1e2f3a4b5c6d"
+    },
+    {
+      "id": "list-first-patient-entry",
+      "why": "list-valued patient field scans for the first Patient-typed entry",
+      "resource": {"resourceType": "Appointment", "id": "a1", "patient": [{"reference": "Group/g1"}, {"reference": "Patient/p5"}, {"reference": "Patient/p6"}]},
+      "expected": "p5"
+    },
+    {
+      "id": "list-no-patient-entry",
+      "why": "list-valued field with no Patient-typed entry does not attribute",
+      "resource": {"resourceType": "Appointment", "id": "a2", "patient": [{"reference": "Group/g1"}, {"reference": "Location/l1"}]},
+      "expected": null
+    },
+    {
+      "id": "list-non-object-entries",
+      "why": "non-object list entries are skipped",
+      "resource": {"resourceType": "Appointment", "id": "a3", "patient": ["p1", null, {"reference": "Patient/p4"}]},
+      "expected": "p4"
+    },
+    {
+      "id": "no-ref-fields",
+      "why": "resource with none of the three fields",
+      "resource": {"resourceType": "Medication", "id": "m1"},
+      "expected": null
+    },
+    {
+      "id": "subject-null-object",
+      "why": "explicit null falls through to the next field",
+      "resource": {"resourceType": "Encounter", "id": "e2", "subject": null, "patient": {"reference": "Patient/p10"}},
+      "expected": "p10"
+    }
+  ]
+}
