@@ -116,10 +116,6 @@ body { margin: 0; }
 .failures { margin: 0; padding-left: 18px; color: #ff9d9b; }
 .failures em { color: #8fa3bf; }
 .dataset-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.stat-chip {
-  background: #101822; border: 1px solid #2c4a6e; border-radius: 10px;
-  color: #a8c8ff; font-size: 11px; padding: 2px 8px;
-}
 .dataset-loaded { color: #8fa3bf; font-size: 11px; margin-top: 6px; }
 .pane-empty { color: #5d6f8a; font-size: 12px; }
 
@@ -140,6 +136,10 @@ body { margin: 0; }
 .app-main { display: grid; grid-template-columns: 1.2fr 1fr 0.9fr; gap: 10px; padding: 10px; overflow: auto; flex: 1; }
 .evidence-pane .ev-controls { display: flex; gap: 8px; padding: 8px 12px; align-items: center; flex-wrap: wrap; }
 .evidence-pane .ev-controls input { background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; width: 140px; }
+.evidence-pane .ev-controls select { background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; width: 200px; }
+.fp-resource-select { width: 100%; background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; font-size: 12px; box-sizing: border-box; }
+.fp-selected { margin-top: 6px; }
+.fp-selected summary { color: #8fa3bf; font-size: 11px; cursor: pointer; }
 .ev-error, .pane-error { color: #f85149; padding: 6px 12px; font-size: 12px; }
 .ev-body { padding: 8px 12px; }
 .ev-patient { font-weight: 600; margin-bottom: 6px; }
@@ -196,13 +196,6 @@ body { margin: 0; }
 }
 .ev-delta {
   margin-top: 8px;
-}
-.ev-delta-summary {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: 6px;
 }
 .badge {
   font-size: 10px;
@@ -377,6 +370,34 @@ body { margin: 0; }
 .dataset-row-id { font-family: var(--mono, monospace); font-size: 11px; opacity: 0.9; }
 .dataset-row-actions { display: flex; gap: 4px; }
 .dataset-row-actions button { padding: 0 6px; font-size: 11px; line-height: 18px; }
+
+/* ── 0.0.18b §3.2: patient-grouped dataset tree ──────────────── */
+.dataset-view-toggle { display: inline-flex; gap: 2px; margin-left: auto; }
+.dataset-view-toggle button {
+  background: #1c2634; color: #a8b8cf; border: 1px solid #2c3644;
+  border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 11px;
+}
+.dataset-view-toggle button.active { color: #a8c8ff; border-color: #2c4a6e; }
+.dataset-tree { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; margin-top: 6px; }
+.dataset-group { border-left: 2px solid #2c4a6e; padding-left: 6px; }
+.dataset-group[data-unattributed="true"] { border-left-color: #6b4f2c; }
+.dataset-group[data-phantom="true"] { border-left-color: #7a3b3b; }
+.dataset-group-header { display: flex; align-items: center; gap: 6px; padding: 1px 0; }
+.dataset-group-label { font-size: 12px; font-weight: 600; color: #a8c8ff; }
+.dataset-group-label.muted { color: #8fa3bf; font-weight: 500; }
+.dataset-group-label.phantom { color: #e0a0a0; font-weight: 500; }
+.dataset-group-hint { color: #5d6f8a; font-weight: 400; font-size: 11px; }
+.dataset-group .dataset-row { margin-top: 2px; }
+.dataset-add-btn {
+  background: #12321e; color: #6ee7a0; border: 1px solid #1e4a30;
+  border-radius: 6px; padding: 0 8px; cursor: pointer; font-size: 12px;
+  line-height: 18px;
+}
+.dataset-why {
+  display: inline-block; margin-left: 5px; width: 14px; height: 14px;
+  border-radius: 50%; background: #3a2c14; color: #f5c26b; font-size: 10px;
+  text-align: center; line-height: 14px; cursor: help; font-weight: 700;
+}
 .status-note { font-size: 11px; color: #f59e0b; margin-right: 8px; }
 
 /* ── C3-U6: visual editor ────────────────────────────────────── */
@@ -468,4 +489,219 @@ body { margin: 0; }
 }
 .graph-node strong {
   color: #8cf;
+}
+
+/* ---------------------------------------------------------------------------
+   Results drawers (§3.5) + View drawer overrides table
+   --------------------------------------------------------------------------- */
+.results-drawer {
+  margin-top: 12px;
+  border: 1px solid #2a2f3a;
+  border-radius: 6px;
+  background: #141821;
+}
+.drawer-toggle {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: #9fb0c3;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.drawer-toggle:hover {
+  color: #dce7f5;
+}
+.drawer-body {
+  padding: 0 10px 10px;
+}
+.drawer-body .pane {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.vd-columns {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.vd-columns th {
+  text-align: left;
+  color: #9fb0c3;
+  padding: 4px 6px;
+  border-bottom: 1px solid #2a2f3a;
+}
+.vd-columns td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #1d222b;
+  vertical-align: top;
+}
+.vd-columns input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0f131a;
+  border: 1px solid #2a2f3a;
+  border-radius: 4px;
+  color: #dce7f5;
+  padding: 3px 6px;
+  font-size: 12px;
+}
+.vd-columns input::placeholder {
+  color: #5b6a7d;
+}
+.vd-path-input {
+  font-family: ui-monospace, monospace;
+}
+.vd-override-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  color: #e8c268;
+  border: 1px solid #6b5a1f;
+  border-radius: 3px;
+  padding: 0 4px;
+}
+.vd-base {
+  margin-left: 6px;
+  font-size: 10px;
+  color: #5b6a7d;
+}
+.orphan-note {
+  font-size: 12px;
+  color: #e8c268;
+  padding: 4px 8px;
+  border: 1px solid #6b5a1f;
+  border-radius: 4px;
+  margin: 6px 0;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: #7ab7ff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* ===== WORKBENCH_REORG (§3.1/§3.3/§3.4/§3.5) ===== */
+
+/* Hidden tab panels: .pane display:flex defeats the UA hidden attr */
+.tab-panel[hidden] { display: none !important; }
+
+.results-tabs { margin-bottom: 8px; }
+.results-tabs .tab {
+  background: transparent;
+  border: 1px solid var(--border, #444);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  padding: 4px 12px;
+  color: var(--fg-muted, #aaa);
+  cursor: pointer;
+}
+.results-tabs .tab.active {
+  color: var(--fg, #eee);
+  background: var(--bg-raised, #2a2a2a);
+  font-weight: 600;
+}
+
+/* Run history compare */
+.ev-run-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+.ev-run-count { color: var(--fg-muted, #999); font-weight: 400; font-size: 0.85em; }
+.drift-warning {
+  background: rgba(204, 133, 63, 0.15);
+  border: 1px solid rgba(204, 133, 63, 0.5);
+  color: #e0a35c;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin: 6px 0;
+  font-size: 0.9em;
+}
+
+/* Dataset tree §3.4: type groups + scale controls */
+.dataset-tree-controls {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0;
+  align-items: center;
+}
+.dataset-tree-controls input {
+  flex: 1;
+  min-width: 120px;
+}
+.dataset-type-group { margin: 2px 0 2px 10px; }
+.dataset-type-toggle {
+  background: transparent;
+  border: none;
+  color: var(--fg-muted, #aaa);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 0.9em;
+  font-family: inherit;
+}
+.dataset-type-toggle:hover { color: var(--fg, #eee); }
+.dataset-more {
+  background: transparent;
+  border: none;
+  color: var(--link, #6ea8dc);
+  cursor: pointer;
+  padding: 1px 6px;
+  font-size: 0.85em;
+}
+
+/* Builder styling §3.4: section cards + nesting tint */
+.builder-form .nested-object {
+  background: var(--bg-raised, #262626);
+  border: 1px solid var(--border, #3a3a3a);
+  border-left: 3px solid var(--nest-line, #4a7a9b);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 6px 0;
+}
+.builder-form .nested-object[data-depth="2"] { border-left-color: #6a8a5b; }
+.builder-form .nested-object[data-depth="3"] { border-left-color: #9b7a4a; }
+.builder-form .nested-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9em;
+  color: var(--fg-muted, #aaa);
+  cursor: pointer;
+}
+.builder-form .field-row {
+  display: grid;
+  grid-template-columns: minmax(110px, auto) 1fr auto;
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0;
+}
+.builder-form .field-row label { font-size: 0.85em; color: var(--fg-muted, #aaa); }
+.item-tools { display: flex; gap: 2px; }
+.item-tools button {
+  background: transparent;
+  border: none;
+  color: var(--fg-muted, #888);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.item-tools button:hover { color: var(--fg, #eee); }
+
+/* AST §3.4: filter + kind badges */
+.ast-filter-row { margin: 6px 0; display: flex; gap: 8px; }
+.ast-kind-badge {
+  font-size: 0.75em;
+  padding: 0 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #444);
+  color: var(--fg-muted, #aaa);
+  margin-left: 6px;
 }

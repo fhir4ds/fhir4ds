@@ -30,7 +30,12 @@ define "D1":
       console.log("AST_OP:", ast.ast.statements.D1.children.operator);
     }
 
-    // UI: click Parse AST in the AstPane
+    // UI: AST now lives in Results — run an evaluation, then Show AST.
+    await page.click("[data-testid=run-eval]");
+    await page.waitForSelector("[data-testid=results-table]", {
+      timeout: 60_000,
+    });
+    await page.click('[data-testid=show-ast]');
     await page.click('[data-testid=ast-load]');
     await page.waitForSelector('[data-testid^=ast-def-]', { timeout: 30_000 });
     const defName = await page
@@ -49,10 +54,10 @@ define "D1":
       const r = await (window as any).__cleanroom({
         type: "compare_evidence",
         baseline: {
-          patients: { p1: { populations: { IPP: true } }, p2: { populations: { IPP: false } } },
+          patients: { p1: { populations: { initial_population: true } }, p2: { populations: { initial_population: false } } },
         },
         current: {
-          patients: { p1: { populations: { IPP: false } }, p3: { populations: { IPP: true } } },
+          patients: { p1: { populations: { initial_population: false } }, p3: { populations: { initial_population: true } } },
         },
       });
       return JSON.parse(r.envelope);

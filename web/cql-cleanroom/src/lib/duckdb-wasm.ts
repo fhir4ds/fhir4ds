@@ -1,5 +1,10 @@
 import { getAssetBase } from "./asset-base";
 
+// Build-time content hashes (vite.config.ts define) — cache-bust the
+// same-filename wheel/extension assets after in-place rebuilds.
+declare const __FHIR4DS_FHIRPATH_EXT_HASH__: string;
+declare const __FHIR4DS_CQL_EXT_HASH__: string;
+
 // Vite resolves these ?url imports to same-origin local paths. DuckDB's
 // Emscripten loader can then resolve extension side modules correctly.
 import duckdbWorkerUrl from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
@@ -62,13 +67,13 @@ async function loadFHIR4DSExtensions(db: any, conn: any, wasmAppUrl?: string) {
   try {
     await db.registerFileURL(
       "fhirpath.duckdb_extension.wasm",
-      extBase + "fhirpath.duckdb_extension.wasm",
+      extBase + `fhirpath.duckdb_extension.wasm?v=${__FHIR4DS_FHIRPATH_EXT_HASH__}`,
       4 /* DuckDBDataProtocol.HTTP */,
       false,
     );
     await db.registerFileURL(
       "cql.duckdb_extension.wasm",
-      extBase + "cql.duckdb_extension.wasm",
+      extBase + `cql.duckdb_extension.wasm?v=${__FHIR4DS_CQL_EXT_HASH__}`,
       4 /* DuckDBDataProtocol.HTTP */,
       false,
     );

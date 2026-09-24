@@ -122,7 +122,7 @@ define "Has Name":
           libraries,
           main: libraries[0],
           dataset,
-          output_columns: { IPP: "Initial Population", NAME: "Has Name" },
+          output_columns: { initial_population: "Initial Population", numerator: "Has Name" },
         }),
       { libraries: [MAIN_LIB], dataset: { resources: PATIENTS } },
     );
@@ -131,10 +131,10 @@ define "Has Name":
     expect(env.patient_count).toBe(3);
     const byId: Record<string, any> = {};
     for (const row of env.rows) byId[row.patient_id] = row;
-    expect(byId.p1.IPP).toBe(true);
-    expect(byId.p2.IPP).toBe(false);
-    expect(byId.p3.NAME).toBe(false);
-    expect(env.column_types.IPP).toBe("Boolean");
+    expect(byId.p1.initial_population).toBe(true);
+    expect(byId.p2.initial_population).toBe(false);
+    expect(byId.p3.numerator).toBe(false);
+    expect(env.column_types.initial_population).toBe("Boolean");
   });
 
   test("run_tests envelope parity", async () => {
@@ -174,14 +174,14 @@ define "Has Name":
           main: libraries[0],
           dataset,
           patient_id: "p1",
-          output_columns: { IPP: "Initial Population" },
+          output_columns: { initial_population: "Initial Population" },
         }),
       { libraries: [MAIN_LIB], dataset: { resources: PATIENTS } },
     );
     const env = JSON.parse(resp.envelope);
     expect(env.ok).toBe(true);
     expect(env.patient_id).toBe("p1");
-    expect(env.populations.IPP).toBe(true);
+    expect(env.populations.initial_population).toBe(true);
     expect(Array.isArray(env.definitions)).toBe(true);
   });
 });

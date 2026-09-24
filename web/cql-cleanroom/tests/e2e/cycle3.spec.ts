@@ -10,30 +10,82 @@ async function bootReady(page: import("@playwright/test").Page) {
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
 }
 
-test.describe("cleanroom cycle-3 capabilities", () => {
-  test("compare mode shows a moved delta", async ({ page }) => {
-    await bootReady(page);
 
-    // 1. load dataset + explain p1 (fills the "current" evidence)
+async function setMaleLibrary(page: import("@playwright/test").Page) {
+  // Monaco doesn't honor fill() on its textarea — focus, select all, type.
+  await page.click("[data-testid=cql-editor]");
+  await page.keyboard.press("Control+Home");
+  await page.keyboard.press("Control+Shift+End");
+  await page.keyboard.insertText('library CleanroomDemo version \'1.0.0\'\nusing FHIR version \'4.0.1\'\ninclude FHIRHelpers version \'4.0.1\' called FHIRHelpers\n\ndefine "Initial Population":\n  exists([Patient] P where P.gender = \'male\')\n\ndefine "Has Name":\n  exists([Patient] P where P.name.first().given.first() is not null)\n');
+  // Debounced parse
+  await page.waitForTimeout(1200);
+}
+
+test.describe("cleanroom cycle-3 capabilities", () => {
+  test("run-history compare shows a moved delta", async ({ page }) => {
+    await bootReady(page);
+    await page.click('[data-testid=workspace-reset]');
+    await page.waitForTimeout(600);
+
+    // 1. load dataset + ensure the Evidence drawer is open (starts
+    //    open; only click when the <details> is actually closed).
     await page.click('[data-testid=load-dataset]');
     await page.waitForSelector('[data-testid=dataset-loaded]', { timeout: 30_000 });
-
-    await page.fill('[data-testid=evidence-patient-input]', 'p1');
-    await page.click('[data-testid=explain-btn]');
-    await page.waitForSelector('[data-testid^=ev-pop-]', { timeout: 30_000 });
-
-    // 2. paste a baseline that differs on IPP: p1 was true → moved to false
-    await page.fill(
-      '[data-testid=compare-baseline]',
-      JSON.stringify({ patients: { p1: { populations: { IPP: false, NAME: true } } } }),
+    const evOpen = await page.evaluate(
+      () =>
+        (document.querySelector(
+          "[data-testid=drawer-evidence] details",
+        ) as HTMLDetailsElement | null)?.open ?? false,
     );
+    if (!evOpen) {
+      await page.click('[data-testid=drawer-evidence-toggle]');
+    }
+
+    await page.click('[data-testid=run-eval]');
+    await page.waitForSelector('[data-testid=results-table]', { timeout: 60_000 });
+    await page.waitForFunction(
+      () =>
+        document.querySelectorAll(
+          '[data-testid=compare-select] option[value]:not([value=""])',
+        ).length >= 1,
+      undefined,
+      { timeout: 30_000 },
+    );
+
+    // 2. change the logic: female-only → male-only flips p1/p2 IPP
+    await setMaleLibrary(page);
+
+    // 3. evaluate again — the new current differs from the saved run
+    await page.click('[data-testid=run-eval]');
+    await page.waitForFunction(
+      () =>
+        document.querySelectorAll(
+          '[data-testid=compare-select] option[value]:not([value=""])',
+        ).length >= 2,
+      undefined,
+      { timeout: 60_000 },
+    );
+
+    // 4. compare current vs the first saved run (list is
+    //    newest-first; the female baseline is the LAST option)
+    const runCount = await page
+      .locator('[data-testid=compare-select] option')
+      .count();
+    await page.selectOption('[data-testid=compare-select]', {
+      index: runCount - 1,
+    });
     await page.click('[data-testid=compare-run]');
     await page.waitForSelector('[data-testid=compare-delta]', { timeout: 30_000 });
 
-    const changed = await page.textContent('[data-testid=compare-changed]');
-    console.log("COMPARE_BADGE:", (changed ?? "").trim());
     const rows = await page.locator('[data-testid=compare-row]').allTextContents();
     console.log("COMPARE_ROWS:", JSON.stringify(rows));
+    // p1/p2 initial_population must appear as moved deltas
+    const moved = rows.filter((r) => r.includes("initial_population") && r.includes("moved"));
+    if (moved.length === 0) throw new Error(`no moved rows: ${JSON.stringify(rows)}`);
+
+    // reset so later tests start clean
+    await page.click('[data-testid=workspace-reset]');
+    await page.waitForTimeout(400);
   });
 
   test("share link round-trips libraries", async ({ page }) => {

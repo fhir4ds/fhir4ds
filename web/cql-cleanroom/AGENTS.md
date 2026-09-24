@@ -53,5 +53,30 @@ npx playwright test        # e2e (needs vite preview on :5176, see below)
 - Share links (`src/lib/share.ts`) carry libraries/cases/params ONLY —
   never datasets; fragments capped at 100 KB.
 
+## Layout (workbench-reorg, schemaVersion 3)
+
+- Editor column: library tabs + Monaco + two drawers — Visual editor
+  (graph→CQL, apply-only) and FHIRPath scratchpad (both default
+  collapsed).
+- Run column: Results with THREE tabs — CQL output (table + Evidence
+  drawer: explain + run-history compare), MeasureReport output (Measure
+  mapping + Tests expected grid + rendered reports + the single Sankey),
+  ViewDefinition output (VD over MeasureReports only). One shared
+  Evaluate; tabs never re-execute. Show SQL is contextual (translation
+  SQL on CQL/MR, flatten SQL on View); Show AST is global with a
+  define-name filter.
+- Side column: Dataset tree (patient-grouped, per-type subgroups,
+  25-row cap + show-more + filter) and the recursive Resource Builder.
+- Tab panels stay MOUNTED but hidden (`.tab-panel[hidden]` CSS guard);
+  e2e must use `state: "hidden"`, not `detached`, for inactive panes.
+- Run history: every evaluate appends a row-shaped run to IndexedDB
+  (cap 20; `src/lib/runHistory.ts`); compare = current vs selected
+  prior run via compare_evidence; drift warning compares SHA-256
+  library/dataset hashes (never blocks). Runs NEVER enter zips or
+  share links. The Evidence drawer is a `<details open>` — e2e toggles
+  must check the DOM `open` property (attribute renders as `""`).
+
 FDDs: `fhir4ds-private/docs/architecture/plans/FEATURE_CQL_CLEANROOM*.md`
-(cycles 1-3).
+(cycles 1-3), `FEATURE_CLEANROOM_MEASURE_REPORTS.md`,
+`FEATURE_CLEANROOM_TEST_DATA_AUTHORING.md`,
+`FEATURE_CLEANROOM_WORKBENCH_REORG.md`.

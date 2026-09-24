@@ -116,6 +116,23 @@ export function EditorPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Sync external text changes (tab switch, Apply, share, import) into
+  // the once-mounted Monaco instance — guarded so user typing (which
+  // flows text→state→props) does not reset cursor/scroll position.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (editor.getValue() !== text) {
+      const pos = editor.getPosition();
+      const reveal = editor.getVisibleRanges()[0]?.top ?? null;
+      editor.setValue(text);
+      if (pos) {
+        editor.setPosition(pos);
+        if (reveal != null) editor.setScrollTop(reveal);
+      }
+    }
+  }, [text]);
+
   // Debounced parse → markers
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);

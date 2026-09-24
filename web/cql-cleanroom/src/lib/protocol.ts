@@ -127,6 +127,21 @@ export interface ResourceSchemaResult extends EnvelopeBase {
   fields: SchemaField[];
 }
 
+export interface SchemaTreeNode {
+  name: string;
+  type?: string;
+  types?: string[];
+  cardinality?: string;
+  reference_targets?: string[];
+  children?: SchemaTreeNode[];
+  hatch?: boolean;
+}
+
+export interface SchemaTreeResult extends EnvelopeBase {
+  resource_type: string;
+  root: SchemaTreeNode | null;
+}
+
 export interface EvaluateResult extends EnvelopeBase {
   patient_count: number;
   columns: string[];
@@ -134,6 +149,8 @@ export interface EvaluateResult extends EnvelopeBase {
   column_types: Record<string, string>;
   timing_ms: Record<string, number>;
   sql?: string;
+  /** Client-side wall-clock of when this result was produced (ms epoch). */
+  evaluated_at?: number;
 }
 
 export interface VerifyEnvelope extends EnvelopeBase {
@@ -190,6 +207,63 @@ export interface CompareEvidenceResult extends EnvelopeBase {
 }
 
 // ---------------------------------------------------------------------------
+// Measure / MeasureReport capabilities (FEATURE_CLEANROOM_MEASURE_REPORTS)
+// ---------------------------------------------------------------------------
+
+export const POPULATION_ORDER: readonly string[] = [
+  "initial-population",
+  "denominator",
+  "denominator-exclusion",
+  "denominator-exception",
+  "numerator",
+  "numerator-exclusion",
+  "measure-population",
+  "measure-population-exclusion",
+];
+
+export interface MeasureMappingEntry {
+  define: string;
+  code: string;
+}
+
+export interface MeasureResult extends EnvelopeBase {
+  measure: Record<string, unknown>;
+  mapping: MeasureMappingEntry[];
+}
+
+export interface MeasureReportResult extends EnvelopeBase {
+  reports: Array<Record<string, unknown>>;
+}
+
+export interface MeasureRowsResult extends EnvelopeBase {
+  rows: Array<Record<string, unknown>>;
+  columns: string[];
+}
+
+export interface FlattenViewResult extends EnvelopeBase {
+  sql: string;
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+}
+
+/** Default MeasureReport flatten ViewDefinition (capability twin). */
+export const DEFAULT_MEASURE_REPORT_VIEW: Record<string, unknown> = {
+  resource: "MeasureReport",
+  name: "MeasureReportFlat",
+  select: [
+    {
+      column: [
+        { name: "patient_id", path: "%resource.subject.reference", type: "string" },
+        { name: "group_id", path: "id", type: "string" },
+        { name: "population_code", path: "population.code.coding.code", type: "string" },
+        { name: "population_count", path: "population.count", type: "integer" },
+      ],
+      forEach: "group",
+    },
+  ],
+};
+
+// ---------------------------------------------------------------------------
 // Worker protocol: requests 1:1 with operations signatures
 // ---------------------------------------------------------------------------
 
@@ -224,6 +298,12 @@ export type WorkerRequest =
       id: number;
       type: "resource_schema";
       resource_type: string;
+    }
+  | {
+      id: number;
+      type: "resource_schema_tree";
+      resource_type: string;
+      depth?: number;
     }
   | {
       id: number;
@@ -266,6 +346,39 @@ export type WorkerRequest =
       baseline: Record<string, unknown>;
       current: Record<string, unknown>;
       output_columns?: Record<string, string> | null;
+    }
+  | {
+      id: number;
+      type: "measure_from_definitions";
+      libraries: LibraryText[];
+      main: LibraryText;
+      mapping?: MeasureMappingEntry[] | null;
+    }
+  | {
+      id: number;
+      type: "measure_population_map";
+      measure: Record<string, unknown>;
+    }
+  | {
+      id: number;
+      type: "measure_report_from_rows";
+      measure: Record<string, unknown>;
+      rows: Array<Record<string, unknown>>;
+      columns: string[];
+      period_start?: string | null;
+      period_end?: string | null;
+    }
+  | {
+      id: number;
+      type: "rows_from_measure_reports";
+      reports: unknown;
+      population_codes?: string[] | null;
+    }
+  | {
+      id: number;
+      type: "flatten_view";
+      view_definition: Record<string, unknown>;
+      resources: Array<Record<string, unknown>>;
     };
 
 export type WorkerResponse =

@@ -13,11 +13,30 @@ import { zipSync, unzipSync } from "fflate";
 
 const DB_NAME = "cql-cleanroom";
 const STORE = "workspace";
-export const WORKSPACE_SCHEMA_VERSION = 1;
+export const WORKSPACE_SCHEMA_VERSION = 3;
+
+/** WORKBENCH_REORG §3.3/§3.5 — a saved evaluation run. Local-only
+ * (IndexedDB document; NEVER in zip or share links — INV-4). */
+export interface RunEntry {
+  id: string;
+  name: string;
+  createdAt: number;
+  libraryHash: string;
+  datasetHash: string;
+  /** Row-shaped memberships {patients: {pid: {populations: ...}}}. */
+  artifact: { patients: Record<string, { populations: Record<string, boolean | null> }> };
+}
+
+export const RUN_HISTORY_CAP = 20;
 
 export interface WorkspaceLibrary {
   name: string;
   text: string;
+}
+
+/** §3.5 View drawer config — MeasureReport VD overrides (F8). */
+export interface WorkspaceViewConfig {
+  overrides: Record<string, { name?: string; path?: string }>;
 }
 
 export interface WorkspaceState {
@@ -26,13 +45,24 @@ export interface WorkspaceState {
   dataset: { resources: unknown[] } | null;
   cases: unknown[] | null;
   prefs: Record<string, unknown>;
+  /** FHIR Measure resource (population mapping authority); null = none. */
+  measure: Record<string, unknown> | null;
+  viewConfig: WorkspaceViewConfig | null;
+  /** Local run history (§3.3); capped, pruned oldest-first. */
+  runHistory: RunEntry[];
+  /** Preferred Results tab (§3.1): cql | measure | view. */
+  activeTabPref: string;
   savedAt: number;
 }
 
 /** v1 → vN migrations run in order; each returns the upgraded state. */
 const MIGRATIONS: Record<number, (s: Record<string, unknown>) => Record<string, unknown>> = {
-  // example for future versions:
-  // 1: (s) => ({ ...s, newField: defaultValue }),
+  // v1 -> v2: View drawer config (§3.5). F8: overrides persist in
+  // workspace.json ONLY (no loose zip entry); migrate defaults null.
+  1: (s) => ({ ...s, viewConfig: null }),
+  // v2 -> v3 (WORKBENCH_REORG): local run history + Results tab pref.
+  // Runs are IndexedDB-only — the zip never carries them (INV-4).
+  2: (s) => ({ ...s, runHistory: [], activeTabPref: "cql" }),
 };
 
 export function migrate(state: Record<string, unknown>): WorkspaceState {
@@ -49,6 +79,10 @@ export function migrate(state: Record<string, unknown>): WorkspaceState {
     dataset: (current.dataset as { resources: unknown[] } | null) ?? null,
     cases: (current.cases as unknown[]) ?? null,
     prefs: (current.prefs as Record<string, unknown>) ?? {},
+    measure: (current.measure as Record<string, unknown> | null) ?? null,
+    viewConfig: (current.viewConfig as WorkspaceViewConfig | null) ?? null,
+    runHistory: (current.runHistory as RunEntry[]) ?? [],
+    activeTabPref: (current.activeTabPref as string) ?? "cql",
     savedAt: (current.savedAt as number) ?? Date.now(),
   };
 }
@@ -113,19 +147,9 @@ export async function clearWorkspace(): Promise<void> {
 
 export function exportWorkspaceZip(state: Omit<WorkspaceState, "schemaVersion" | "savedAt">): Uint8Array {
   const files: Record<string, Uint8Array> = {
-    "workspace.json": utf8Encode(
-      JSON.stringify(
-        {
-          schemaVersion: WORKSPACE_SCHEMA_VERSION,
-          format: "cql-cleanroom-workspace",
-          libraries: state.libraries,
-          prefs: state.prefs,
-        },
-        null,
-        1,
-      ),
-    ),
+    "00-placeholder": new Uint8Array(0),
   };
+  delete files["00-placeholder"];
   state.libraries.forEach((lib, i) => {
     const name = `${String(i + 1).padStart(2, "0")}-${safe(lib.name)}.cql`;
     files[name] = utf8Encode(lib.text);
@@ -138,6 +162,22 @@ export function exportWorkspaceZip(state: Omit<WorkspaceState, "schemaVersion" |
   if (state.cases?.length) {
     files["cases.json"] = utf8Encode(JSON.stringify(state.cases, null, 1));
   }
+  if (state.measure) {
+    files["measure.json"] = utf8Encode(JSON.stringify(state.measure, null, 1));
+  }
+  // F8: view overrides ride INSIDE workspace.json (not a loose entry).
+  // INV-4: runHistory is local-only — deliberately absent from the zip.
+  const metaOut: Record<string, unknown> = {
+    schemaVersion: WORKSPACE_SCHEMA_VERSION,
+    format: "cql-cleanroom-workspace",
+    libraries: state.libraries,
+    prefs: state.prefs,
+    activeTabPref: state.activeTabPref,
+  };
+  if (state.viewConfig) {
+    metaOut.viewConfig = state.viewConfig;
+  }
+  files["workspace.json"] = utf8Encode(JSON.stringify(metaOut, null, 1));
   return zipSync(files);
 }
 
@@ -166,10 +206,25 @@ export function importWorkspaceZip(bytes: Uint8Array): Omit<WorkspaceState, "sch
   if (files["cases.json"]) {
     cases = JSON.parse(decode(files["cases.json"]));
   }
+  let measure: Record<string, unknown> | null = null;
+  if (files["measure.json"]) {
+    const parsed = JSON.parse(decode(files["measure.json"]));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      measure = parsed as Record<string, unknown>;
+    }
+  }
+  let viewConfig: WorkspaceViewConfig | null = null;
+  if (meta.viewConfig && typeof meta.viewConfig === "object") {
+    viewConfig = meta.viewConfig as WorkspaceViewConfig;
+  }
   return {
     libraries,
     dataset,
     cases,
+    measure,
+    viewConfig,
+    runHistory: [], // local-only: imports never restore runs (INV-4)
+    activeTabPref: (meta.activeTabPref as string) ?? "cql",
     prefs: (meta.prefs as Record<string, unknown>) ?? {},
   };
 }

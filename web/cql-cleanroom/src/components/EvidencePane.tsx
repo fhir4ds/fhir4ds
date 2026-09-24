@@ -2,11 +2,8 @@ import { useRef, useState } from "react";
 import { workerRequest } from "./BootOverlay";
 import type { CompareEvidenceResult } from "../lib/protocol";
 import type { EvidenceResult, LibraryText } from "../lib/protocol";
-import {
-  PopulationSankey,
-  buildPopulationFlow,
-  type SankeyData,
-} from "./PopulationSankey";
+import type { RunEntry } from "../state/workspace";
+import { driftKind, formatRunTimestamp } from "../lib/runHistory";
 
 /**
  * C1-U7 EvidencePane: explain_patient drill-in + population Sankey +
@@ -69,19 +66,33 @@ export function EvidencePane({
   main,
   dataset,
   outputColumns,
+  runHistory,
+  currentArtifact,
+  currentLibraryHash,
+  currentDatasetHash,
+  onDeleteRun,
+  onRenameRun,
 }: {
   libraries: LibraryText[];
   main: LibraryText;
   dataset: { resources: unknown[] } | null;
-  outputColumns: Record<string, string>;
+  outputColumns: Record<string, string> | null;
+  /** Local run history (WORKBENCH_REORG §3.3). */
+  runHistory: RunEntry[];
+  /** Row-shaped memberships of the latest evaluation (compare target). */
+  currentArtifact: RunEntry["artifact"] | null;
+  currentLibraryHash: string | null;
+  currentDatasetHash: string | null;
+  onDeleteRun: (id: string) => void;
+  onRenameRun: (id: string, name: string) => void;
 }) {
   const [patientId, setPatientId] = useState("p1");
   const [env, setEnv] = useState<EvidenceResult | null>(null);
-  const [flow, setFlow] = useState<SankeyData | null>(null);
   const [running, setRunning] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // C2-U3 Compare mode: baseline artifact JSON + delta envelope
-  const [baseline, setBaseline] = useState<string>("");
+  // §3.3 Compare: selected prior run + delta envelope. The current
+  // side is the latest evaluation artifact (not Explain output).
+  const [selectedRun, setSelectedRun] = useState<string>("");
   const [delta, setDelta] = useState<CompareEvidenceResult | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -103,37 +114,6 @@ export function EvidencePane({
       });
       const parsed: EvidenceResult = JSON.parse(resp.envelope);
       setEnv(parsed);
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setRunning(false);
-    }
-  };
-
-  const buildFlow = async () => {
-    if (!dataset) {
-      setErr("load a dataset first");
-      return;
-    }
-    setRunning(true);
-    setErr(null);
-    try {
-      const resp = await workerRequest({
-        type: "evaluate_library",
-        libraries,
-        main,
-        dataset,
-        output_columns: outputColumns,
-      });
-      const parsed = JSON.parse(resp.envelope);
-      if (!parsed.ok) {
-        setErr(parsed.diagnostics?.[0]?.message ?? "evaluation failed");
-        return;
-      }
-      const columns = (parsed.columns as string[]).filter(
-        (c) => c !== "patient_id",
-      );
-      setFlow(buildPopulationFlow(parsed.rows, columns));
     } catch (e) {
       setErr(String(e));
     } finally {
@@ -163,20 +143,19 @@ export function EvidencePane({
     }
   };
 
+  const selected = runHistory.find((r) => r.id === selectedRun) ?? null;
+  const drift =
+    selected && currentLibraryHash && currentDatasetHash
+      ? driftKind(selected, currentLibraryHash, currentDatasetHash)
+      : null;
+
   const runCompare = async () => {
-    if (!env?.ok) {
-      setErr("run Explain first — the current evidence is the compare target");
+    if (!currentArtifact) {
+      setErr("run an evaluation first — the latest result is the compare target");
       return;
     }
-    let baselinePayload: unknown;
-    try {
-      baselinePayload = baseline.trim() ? JSON.parse(baseline) : null;
-    } catch (e) {
-      setErr(`baseline is not valid JSON: ${String(e)}`);
-      return;
-    }
-    if (!baselinePayload) {
-      setErr("paste a baseline evidence artifact (JSON)");
+    if (!selected) {
+      setErr("select a prior run to compare against");
       return;
     }
     setRunning(true);
@@ -184,12 +163,8 @@ export function EvidencePane({
     try {
       const resp = await workerRequest({
         type: "compare_evidence",
-        baseline: baselinePayload,
-        current: {
-          patients: {
-            [env.patient_id || "p1"]: { populations: env.populations ?? {} },
-          },
-        },
+        baseline: selected.artifact,
+        current: currentArtifact,
       });
       const parsed: CompareEvidenceResult = JSON.parse(resp.envelope);
       setDelta(parsed);
@@ -206,22 +181,58 @@ export function EvidencePane({
         <h2>Evidence</h2>
       </div>
       <div className="ev-controls">
-        <input
-          data-testid="evidence-patient-input"
-          value={patientId}
-          onChange={(e) => setPatientId(e.target.value)}
-          placeholder="patient id"
-          aria-label="patient id"
-        />
+        {(dataset?.resources ?? []).some(
+          (r) =>
+            (r as Record<string, unknown>).resourceType === "Patient",
+        ) ? (
+          <select
+            data-testid="evidence-patient-input"
+            value={patientId}
+            onChange={(e) => setPatientId(e.target.value)}
+            aria-label="patient id"
+          >
+            {(dataset?.resources ?? [])
+              .filter(
+                (r) =>
+                  (r as Record<string, unknown>).resourceType === "Patient",
+              )
+              .map((r, i, arr) => {
+                const p = r as Record<string, unknown>;
+                const id = String(p.id ?? `#${i}`);
+                const given = Array.isArray(
+                  (p.name as Array<Record<string, unknown>> | undefined)?.[0]
+                    ?.given,
+                )
+                  ? String(
+                      (
+                        (p.name as Array<Record<string, unknown>>)[0]
+                          .given as unknown[]
+                      )[0] ?? "",
+                    )
+                  : "";
+                return (
+                  <option key={`${id}-${i}`} value={id}>
+                    {given ? `${id} — ${given}` : id}
+                    {arr.length > 1 ? "" : ""}
+                  </option>
+                );
+              })}
+          </select>
+        ) : (
+          <input
+            data-testid="evidence-patient-input"
+            value={patientId}
+            onChange={(e) => setPatientId(e.target.value)}
+            placeholder="patient id"
+            aria-label="patient id"
+          />
+        )}
         <button
           data-testid="explain-btn"
           onClick={runExplain}
           disabled={running || !dataset}
         >
           {running ? "working…" : "Explain"}
-        </button>
-        <button data-testid="sankey-btn" onClick={buildFlow} disabled={running || !dataset}>
-          Population flow
         </button>
         <button data-testid="import-evidence-btn" onClick={() => fileRef.current?.click()}>
           Import evidence.json
@@ -249,34 +260,87 @@ export function EvidencePane({
           ))}
         </div>
       )}
-      {flow && <PopulationSankey data={flow} />}
       <div className="ev-compare" data-testid="ev-compare">
-        <h3>Compare</h3>
-        <textarea
-          data-testid="compare-baseline"
-          value={baseline}
-          onChange={(e) => setBaseline(e.target.value)}
-          placeholder='baseline evidence JSON, e.g. {"patients":{"p1":{"populations":{"IPP":true}}}}'
-          rows={3}
-        />
-        <button data-testid="compare-run" onClick={runCompare} disabled={running}>
-          Compare
-        </button>
+        <h3>
+          Compare against prior run{" "}
+          <span className="ev-run-count">
+            ({runHistory.length}/20 runs)
+          </span>
+        </h3>
+        {runHistory.length === 0 ? (
+          <p className="pane-hint" data-testid="compare-no-runs">
+            No saved runs yet — each evaluation saves one automatically.
+          </p>
+        ) : (
+          <>
+            <div className="ev-run-controls">
+              <select
+                data-testid="compare-select"
+                value={selectedRun}
+                onChange={(e) => {
+                  setSelectedRun(e.target.value);
+                  setDelta(null);
+                }}
+                aria-label="prior run"
+              >
+                <option value="">— select run —</option>
+                {runHistory
+                  .slice()
+                  .reverse()
+                  .map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name !== formatRunTimestamp(r.createdAt)
+                        ? `${r.name} · ${formatRunTimestamp(r.createdAt)}`
+                        : r.name}
+                    </option>
+                  ))}
+              </select>
+              <button
+                data-testid="compare-run"
+                onClick={runCompare}
+                disabled={running || !selectedRun || !currentArtifact}
+              >
+                Compare
+              </button>
+              {selected && (
+                <button
+                  className="link-btn"
+                  data-testid="run-rename"
+                  onClick={() => {
+                    const name = prompt("run name", selected.name);
+                    if (name && name.trim()) onRenameRun(selected.id, name.trim());
+                  }}
+                >
+                  rename
+                </button>
+              )}
+              {selected && (
+                <button
+                  className="link-btn"
+                  data-testid="run-delete"
+                  onClick={() => {
+                    onDeleteRun(selected.id);
+                    setSelectedRun("");
+                    setDelta(null);
+                  }}
+                >
+                  delete
+                </button>
+              )}
+            </div>
+            {drift && (drift.library || drift.dataset) && (
+              <div className="drift-warning" data-testid="compare-drift">
+                ⚠ {drift.library ? "library" : ""}
+                {drift.library && drift.dataset ? " + " : ""}
+                {drift.dataset ? "dataset" : ""} changed since this run —
+                differences may be data, not logic.
+              </div>
+            )}
+          </>
+        )}
       </div>
       {delta && (
         <div className="ev-delta" data-testid="compare-delta">
-          <div className="ev-delta-summary">
-            <span className={`badge ${delta.changed ? "badge-changed" : "badge-clean"}`} data-testid="compare-changed">
-              {delta.changed ? "CHANGED" : "no changes"}
-            </span>
-            {Object.entries(delta.summary ?? {}).map(([k, v]) =>
-              v > 0 ? (
-                <span key={k} className={`stat-chip delta-${k}`} data-testid={`compare-summary-${k}`}>
-                  {k}: {v}
-                </span>
-              ) : null,
-            )}
-          </div>
           {(delta.patients ?? []).length > 0 && (
             <table className="results-table delta-table">
               <thead>

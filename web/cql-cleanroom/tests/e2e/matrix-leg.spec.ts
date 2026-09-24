@@ -28,6 +28,10 @@ interface MatrixFixture {
     current: Record<string, unknown>;
     output_columns?: Record<string, string> | null;
   };
+  measure?: {
+    mapping: Array<{ define: string; code: string }>;
+    expected_rows?: Array<Record<string, unknown>>;
+  };
 }
 
 test("cleanroom matrix leg run_tests", async ({ page }, testInfo) => {
@@ -75,5 +79,56 @@ test("cleanroom matrix leg run_tests", async ({ page }, testInfo) => {
       return resp.envelope as string;
     }, fixture.compare);
     console.log(`CLEANROOM_COMPARE_BEGIN${delta}CLEANROOM_COMPARE_END`);
+  }
+
+  // Measure-reports campaign: composed round-trip through the worker —
+  // measure_from_definitions -> evaluate (Measure-derived columns) ->
+  // measure_report_from_rows -> rows_from_measure_reports.
+  if (fixture.measure) {
+    const rowsEnv = await page.evaluate(async (fx: MatrixFixture) => {
+      const mapping = fx.measure!.mapping;
+      const mResp = await (window as any).__cleanroom({
+        type: "measure_from_definitions",
+        libraries: [fx.library],
+        main: fx.library,
+        mapping,
+      });
+      const mEnv = JSON.parse(mResp.envelope);
+      if (!mEnv.ok) return JSON.stringify(mEnv);
+      // Measure -> output columns (snake_case codes), same derivation
+      // as the app (App.tsx outputColumnsFromMeasure).
+      const outCols: Record<string, string> = {};
+      for (const g of mEnv.measure.group ?? []) {
+        for (const pop of g.population ?? []) {
+          const code = pop.code?.coding?.[0]?.code;
+          const define = pop.criteria?.expression;
+          if (code && define) outCols[code.replace(/-/g, "_")] = define;
+        }
+      }
+      const evResp = await (window as any).__cleanroom({
+        type: "evaluate_library",
+        libraries: [fx.library],
+        main: fx.library,
+        dataset: { resources: fx.resources },
+        output_columns: outCols,
+      });
+      const evEnv = JSON.parse(evResp.envelope);
+      if (!evEnv.ok) return JSON.stringify(evEnv);
+      const repResp = await (window as any).__cleanroom({
+        type: "measure_report_from_rows",
+        measure: mEnv.measure,
+        rows: evEnv.rows,
+        columns: evEnv.columns,
+      });
+      const repEnv = JSON.parse(repResp.envelope);
+      if (!repEnv.ok) return JSON.stringify(repEnv);
+      const backResp = await (window as any).__cleanroom({
+        type: "rows_from_measure_reports",
+        reports: repEnv.reports,
+        population_codes: mapping.map((m) => m.code),
+      });
+      return (backResp as { envelope: string }).envelope as string;
+    }, fixture);
+    console.log(`CLEANROOM_MEASURE_BEGIN${rowsEnv}CLEANROOM_MEASURE_END`);
   }
 });

@@ -2,87 +2,118 @@ import { useEffect, useMemo, useState } from "react";
 import { workerRequest } from "./BootOverlay";
 import {
   BUILDER_RESOURCE_TYPES,
-  choiceKey,
   emptyForm,
+  emptyObject,
   formToJson,
-  isPrimitive,
+  isPrimitiveType,
   isRepeatable,
   jsonToForm,
+  newKey,
+  scalarValue,
+  type FieldValue,
   type FormState,
+  type ObjectValue,
 } from "../lib/resourceForm";
 import type {
   Diagnostics,
-  ResourceSchemaResult,
-  SchemaField,
+  DatasetSpec,
+  SchemaTreeResult,
+  SchemaTreeNode,
   ValidateResourceResult,
 } from "../lib/protocol";
 
 /**
- * C3-U2: Resource Builder pane (studio FDD §F8).
+ * v2 recursive Resource Builder (FEATURE_CLEANROOM_TEST_DATA_AUTHORING §3.3).
  *
- * ResourceTypePicker → resource_schema(type) → SchemaForm:
- * - top-level primitive inputs (absent ≠ "")
- * - 0..* fields as repeat rows (+ / −)
- * - choice fields ([x]) pick one concrete arm
- * - reference inputs plain text with a targets hint (S-C3-A: no
- *   autocomplete in v1)
- * - non-primitive / deeper fields surface in the passthrough drawer
- *   (S-C3-B) — edited as raw JSON, never silently dropped (INV-C3-3)
+ * Drives off resource_schema_tree: primitives render inputs, References
+ * render pickers (dataset resources + free text, emitting {reference}
+ * objects — F4), complex/backbone nodes render NESTED sub-forms, arrays
+ * render add/remove item lists with persistent _keys, and hatch nodes
+ * (depth cap / extension / contained / unknown) render JSON hatches.
+ * Passthrough drawers exist at EVERY object level (INV-5).
  *
- * INV-C3-2: the ONLY validation authority is validate_resource; the
- * Add-to-dataset button requires a FRESH ok (stale-ok guard: any form
- * edit after validate disables Add until revalidated).
- * INV-C3-6: the JSON preview IS the payload (same object).
+ * INV-C3-2 unchanged: validate_resource is the only authority; Add
+ * requires a FRESH ok (stale guard on any edit).
+ * INV-C3-6: preview == payload.
  */
 
 interface Props {
   onAddResource: (resource: Record<string, unknown>) => void;
   /** C3-U3 edit flow: prefills the builder from a dataset row. */
   prefill?: { resource: Record<string, unknown>; nonce: number } | null;
+  /** §3.2 per-patient `+` context: subject-class references default to
+   *  Patient/<id>. Consumed on schema fetch; user-changeable. */
+  context?: { patientId: string; nonce: number } | null;
+  /** Dataset for reference pickers (target-typed + generic). */
+  dataset: DatasetSpec | null;
 }
 
-export function ResourceBuilderPane({ onAddResource, prefill }: Props) {
+export function ResourceBuilderPane({
+  onAddResource,
+  prefill,
+  context,
+  dataset,
+}: Props) {
   const [resourceType, setResourceType] = useState<string>(
-    prefill?.resource?.resourceType && typeof prefill.resource.resourceType === "string"
+    prefill?.resource?.resourceType &&
+      typeof prefill.resource.resourceType === "string"
       ? prefill.resource.resourceType
       : "Patient",
   );
   const [useRaw, setUseRaw] = useState(false);
-  const [schema, setSchema] = useState<ResourceSchemaResult | null>(null);
+  const [tree, setTree] = useState<SchemaTreeResult | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm("Patient"));
   const [rawText, setRawText] = useState("");
-  const [validation, setValidation] = useState<ValidateResourceResult | null>(null);
+  const [validation, setValidation] = useState<ValidateResourceResult | null>(
+    null,
+  );
   const [staleOk, setStaleOk] = useState(true);
-  const [passthroughOpen, setPassthroughOpen] = useState(false);
-  const [passthroughText, setPassthroughText] = useState("");
-  const [passthroughError, setPassthroughError] = useState<string | null>(null);
 
-  // Fetch the schema whenever the picked type changes.
+  const contextNonce = context?.nonce ?? 0;
   useEffect(() => {
     let cancelled = false;
-    setSchema(null);
+    setTree(null);
     setValidation(null);
     setStaleOk(true);
     if (useRaw) return;
     (async () => {
       const resp = await workerRequest({
-        type: "resource_schema",
+        type: "resource_schema_tree",
         resource_type: resourceType,
       });
       if (cancelled || !resp?.ok || !resp.envelope) return;
-      const env: ResourceSchemaResult = JSON.parse(resp.envelope);
+      const env: SchemaTreeResult = JSON.parse(resp.envelope);
       if (!cancelled && env.resource_type === resourceType) {
-        setSchema(env);
-        setForm(emptyForm(resourceType));
+        setTree(env);
+        setForm((f) => {
+          void f;
+          const fresh = emptyForm(resourceType);
+          if (context && contextNonce !== 0 && resourceType !== "Patient") {
+            const refNode = (env.root?.children ?? []).find(
+              (c) =>
+                (c.name === "subject" ||
+                  c.name === "patient" ||
+                  c.name === "beneficiary") &&
+                c.type === "Reference" &&
+                (c.reference_targets ?? []).includes("Patient"),
+            );
+            if (refNode) {
+              fresh.values[refNode.name] = {
+                kind: "ref",
+                reference: `Patient/${context.patientId}`,
+              };
+            }
+          }
+          return fresh;
+        });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [resourceType, useRaw]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resourceType, useRaw, contextNonce]);
 
-  // C3-U3: when a prefill arrives (dataset-row Edit), load its schema
-  // and map the resource into the form (passthrough preserves unknowns).
   const prefillNonce = prefill?.nonce ?? 0;
   useEffect(() => {
     if (!prefill || prefillNonce === 0) return;
@@ -92,31 +123,21 @@ export function ResourceBuilderPane({ onAddResource, prefill }: Props) {
     setUseRaw(false);
     (async () => {
       const resp = await workerRequest({
-        type: "resource_schema",
+        type: "resource_schema_tree",
         resource_type: rt,
       });
       if (!resp?.ok || !resp.envelope) return;
-      const env: ResourceSchemaResult = JSON.parse(resp.envelope);
+      const env: SchemaTreeResult = JSON.parse(resp.envelope);
       if (!env.ok) return;
-      setSchema(env);
-      setForm(prefillBuilder(prefill.resource, env.fields));
+      setTree(env);
+      setForm(jsonToForm(prefill.resource, env.root));
       setValidation(null);
       setStaleOk(true);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillNonce]);
 
-  const fields = useMemo(
-    () => (schema?.ok ? schema.fields : []),
-    [schema],
-  );
-
-  // Passthrough drawer editing state sync.
-  useEffect(() => {
-    setPassthroughText(JSON.stringify(form.passthrough, null, 2));
-    setPassthroughError(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [Object.keys(form.passthrough).join(",")]);
+  const root = useMemo(() => (tree?.ok ? tree.root : null), [tree]);
 
   const draft = useMemo(() => {
     if (useRaw) {
@@ -129,21 +150,11 @@ export function ResourceBuilderPane({ onAddResource, prefill }: Props) {
         return null;
       }
     }
-    return formToJson(form, fields);
-  }, [useRaw, rawText, form, fields]);
+    return formToJson(form, root);
+  }, [useRaw, rawText, form, root]);
 
   const invalidate = () => {
     if (validation?.valid === true) setStaleOk(false);
-  };
-
-  const setField = (name: string, value: string | string[]) => {
-    invalidate();
-    setForm((f) => ({ ...f, values: { ...f.values, [name]: value } }));
-  };
-
-  const setChoice = (name: string, arm: string) => {
-    invalidate();
-    setForm((f) => ({ ...f, choices: { ...f.choices, [name]: arm } }));
   };
 
   const validate = async () => {
@@ -161,7 +172,6 @@ export function ResourceBuilderPane({ onAddResource, prefill }: Props) {
   const addToDataset = () => {
     if (!draft || !validation?.ok || !staleOk) return;
     onAddResource(draft);
-    // Reset draft, keep the type for fast repeated entry.
     setForm(emptyForm(resourceType));
     setRawText("");
     setValidation(null);
@@ -172,7 +182,13 @@ export function ResourceBuilderPane({ onAddResource, prefill }: Props) {
     draft && validation?.ok && validation.valid === true && staleOk,
   );
 
-  const passthroughKeys = Object.keys(form.passthrough);
+  const resourceOptions = useMemo(() => {
+    const rs = dataset?.resources ?? [];
+    return rs.filter(
+      (r): r is Record<string, unknown> =>
+        typeof r === "object" && r !== null && "resourceType" in r,
+    );
+  }, [dataset]);
 
   return (
     <section className="pane builder-pane" data-testid="builder-pane">
@@ -188,9 +204,7 @@ export function ResourceBuilderPane({ onAddResource, prefill }: Props) {
               setValidation(null);
               setStaleOk(true);
               if (e.target.checked) {
-                setRawText(
-                  JSON.stringify({ resourceType }, null, 2),
-                );
+                setRawText(JSON.stringify({ resourceType }, null, 2));
               }
             }}
           />{" "}
@@ -230,75 +244,50 @@ export function ResourceBuilderPane({ onAddResource, prefill }: Props) {
         />
       ) : (
         <div className="builder-form" data-testid="builder-form">
-          <label className="builder-row">
-            <span className="builder-label">id</span>
-            <input
-              data-testid="builder-field-id"
-              value={(form.values.id as string) ?? ""}
-              onChange={(e) => setField("id", e.target.value)}
-              placeholder="resource id"
-            />
-          </label>
-          {fields.map((f) => (
-            <FieldInput
-              key={f.name}
-              field={f}
-              form={form}
-              onField={setField}
-              onChoice={setChoice}
-            />
-          ))}
-          {passthroughKeys.length > 0 && (
-            <div className="builder-passthrough">
-              <button
-                type="button"
-                className="linkish"
-                data-testid="builder-passthrough-toggle"
-                onClick={() => setPassthroughOpen((o) => !o)}
-              >
-                {passthroughOpen ? "▾" : "▸"} {passthroughKeys.length} field(s)
-                not shown (preserved verbatim)
-              </button>
-              {passthroughOpen && (
-                <>
-                  <textarea
-                    data-testid="builder-passthrough-text"
-                    rows={6}
-                    spellCheck={false}
-                    value={passthroughText}
-                    onChange={(e) => setPassthroughText(e.target.value)}
-                  />
-                  {passthroughError && (
-                    <div className="diag-row diag-error">{passthroughError}</div>
-                  )}
-                  <button
-                    type="button"
-                    data-testid="builder-passthrough-apply"
-                    onClick={() => {
-                      try {
-                        const parsed = JSON.parse(passthroughText || "{}");
-                        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-                          throw new Error("passthrough must be a JSON object");
-                        }
-                        invalidate();
-                        setForm((f) => ({
-                          ...f,
-                          passthrough: parsed as Record<string, unknown>,
-                        }));
-                        setPassthroughError(null);
-                      } catch (err) {
-                        setPassthroughError(
-                          err instanceof Error ? err.message : String(err),
-                        );
-                      }
-                    }}
-                  >
-                    Apply passthrough
-                  </button>
-                </>
-              )}
-            </div>
-          )}
+          <FieldRow
+            node={{
+              name: "id",
+              type: "string",
+              cardinality: "0..1",
+            }}
+            value={form.values.id}
+            resources={resourceOptions}
+            onChange={(v) => {
+              invalidate();
+              setForm((f) => {
+                const values = { ...f.values };
+                if (v === undefined) delete values.id;
+                else values.id = v;
+                return { ...f, values };
+              });
+            }}
+          />
+          {(root?.children ?? [])
+            .filter((c) => c.name !== "id")
+            .map((c) => (
+              <FieldRow
+                key={c.name}
+                node={c}
+                value={form.values[c.name]}
+                resources={resourceOptions}
+                onChange={(v) => {
+                  invalidate();
+                  setForm((f) => {
+                    const values = { ...f.values };
+                    if (v === undefined) delete values[c.name];
+                    else values[c.name] = v;
+                    return { ...f, values };
+                  });
+                }}
+              />
+            ))}
+          <PassthroughDrawer
+            passthrough={form.passthrough}
+            onApply={(p) => {
+              invalidate();
+              setForm((f) => ({ ...f, passthrough: p }));
+            }}
+          />
         </div>
       )}
 
@@ -355,129 +344,403 @@ export function ResourceBuilderPane({ onAddResource, prefill }: Props) {
   );
 }
 
-function FieldInput({
-  field,
-  form,
-  onField,
-  onChoice,
+/**
+ * One field row: dispatches by node kind (primitive / reference / nested
+ * object / items / hatch). Purely presentational — state flows through
+ * onChange(v) with the parent owning the FieldValue.
+ */
+function FieldRow({
+  node,
+  value,
+  resources,
+  onChange,
+  depth = 0,
 }: {
-  field: SchemaField;
-  form: FormState;
-  onField: (name: string, value: string | string[]) => void;
-  onChoice: (name: string, arm: string) => void;
+  node: SchemaTreeNode;
+  value: FieldValue | undefined;
+  resources: Array<Record<string, unknown>>;
+  onChange: (v: FieldValue | undefined) => void;
+  depth?: number;
 }) {
-  if (field.choice) {
-    const arm = form.choices[field.name] ?? "";
+  const repeatable = isRepeatable(node.cardinality);
+
+  if (repeatable) {
+    const items =
+      value?.kind === "items"
+        ? value.items
+        : value
+          ? [{ key: newKey(), value }]
+          : [];
     return (
-      <label className="builder-row builder-choice">
-        <span className="builder-label">{field.name}</span>
-        <select
-          data-testid={`builder-choice-${field.name}`}
-          value={arm}
-          onChange={(e) => onChoice(field.name, e.target.value)}
-        >
-          <option value="">— none —</option>
-          {field.types.map((t) => (
-            <option key={t} value={t}>
-              {choiceKey(field.name, t)}
-            </option>
-          ))}
-        </select>
-        {arm && isPrimitive([arm]) && (
-          <input
-            data-testid={`builder-field-${field.name}`}
-            value={(form.values[field.name] as string) ?? ""}
-            onChange={(e) => onField(field.name, e.target.value)}
-            placeholder={field.types.includes("integer") ? "number" : "value"}
-          />
-        )}
-      </label>
-    );
-  }
-  if (!isPrimitive(field.types)) {
-    // Complex field → raw JSON input bound to a single-slot value.
-    return (
-      <label className="builder-row">
-        <span className="builder-label">{field.name}</span>
-        <input
-          data-testid={`builder-field-${field.name}`}
-          value={(form.values[field.name] as string) ?? ""}
-          onChange={(e) => onField(field.name, e.target.value)}
-          placeholder={
-            field.reference_targets.length
-              ? `${field.reference_targets[0]}/id`
-              : "JSON"
-          }
-        />
-        {field.reference_targets.length > 0 && (
-          <span className="builder-hint">
-            targets: {field.reference_targets.join(", ")}
-          </span>
-        )}
-      </label>
-    );
-  }
-  if (isRepeatable(field.cardinality)) {
-    const rows = Array.isArray(form.values[field.name])
-      ? (form.values[field.name] as string[])
-      : form.values[field.name] !== undefined
-        ? [form.values[field.name] as string]
-        : [""];
-    return (
-      <div className="builder-row builder-repeat">
-        <span className="builder-label">{field.name}</span>
-        {rows.map((r, i) => (
-          <span key={i} className="builder-repeat-row">
-            <input
-              data-testid={`builder-field-${field.name}-${i}`}
-              value={r}
-              onChange={(e) => {
-                const next = [...rows];
-                next[i] = e.target.value;
-                onField(field.name, next);
-              }}
-              placeholder={field.types[0]}
-            />
-          </span>
-        ))}
-        <span className="builder-repeat-actions">
+      <div className="builder-row builder-nested" data-testid={`builder-rep-${node.name}`}>
+        <div className="builder-row-head">
+          <span className="builder-label">{node.name}</span>
+          <span className="builder-card">{node.cardinality}</span>
           <button
             type="button"
-            onClick={() => onField(field.name, [...rows, ""])}
-            aria-label={`add ${field.name} row`}
+            className="builder-item-add"
+            aria-label={`add ${node.name} item`}
+            data-testid={`builder-add-${node.name}`}
+            onClick={() =>
+              onChange({
+                kind: "items",
+                items: [...items, { key: newKey(), value: defaultValue(node) }],
+              })
+            }
           >
             +
           </button>
-          {rows.length > 1 && (
+        </div>
+        {items.map((it, i) => (
+          <div className="builder-item" key={it.key} data-testid={`builder-item-${node.name}-${i}`}>
+            <SingleField
+              node={node}
+              value={it.value}
+              resources={resources}
+              onChange={(v) => {
+                if (v === undefined) return;
+                const next = items
+                  .map((x) => (x.key === it.key ? { key: it.key, value: v } : x));
+                onChange({ kind: "items", items: next });
+              }}
+              depth={depth}
+              itemIndex={i}
+            />
             <button
               type="button"
-              onClick={() => onField(field.name, rows.slice(0, -1))}
-              aria-label={`remove ${field.name} row`}
+              className="builder-item-remove"
+              aria-label={`remove ${node.name} item ${i + 1}`}
+              data-testid={`builder-remove-${node.name}-${i}`}
+              onClick={() =>
+                onChange({
+                  kind: "items",
+                  items: items.filter((x) => x.key !== it.key),
+                })
+              }
             >
               −
             </button>
-          )}
-        </span>
+          </div>
+        ))}
       </div>
     );
   }
+
   return (
-    <label className="builder-row">
-      <span className="builder-label">{field.name}</span>
-      <input
-        data-testid={`builder-field-${field.name}`}
-        value={(form.values[field.name] as string) ?? ""}
-        onChange={(e) => onField(field.name, e.target.value)}
-        placeholder={field.types[0]}
-      />
-    </label>
+    <SingleField
+      node={node}
+      value={value}
+      resources={resources}
+      onChange={onChange}
+      depth={depth}
+    />
   );
 }
 
-/** Prefill hook used by the dataset edit flow (C3-U3). */
-export function prefillBuilder(
-  resource: Record<string, unknown>,
-  fields: SchemaField[],
-): FormState {
-  return jsonToForm(resource, fields);
+function defaultValue(node: SchemaTreeNode): FieldValue {
+  if (node.hatch) return { kind: "hatch", json: "" };
+  if (node.type === "Reference") return { kind: "ref", reference: "" };
+  if (isPrimitiveType(node.type)) return { kind: "scalar", value: "" };
+  return emptyObject();
+}
+
+function SingleField({
+  node,
+  value,
+  resources,
+  onChange,
+  depth,
+  itemIndex,
+}: {
+  node: SchemaTreeNode;
+  value: FieldValue | undefined;
+  resources: Array<Record<string, unknown>>;
+  onChange: (v: FieldValue | undefined) => void;
+  depth: number;
+  /** Repeatable-item position: suffixes testids (builder-field-name-0). */
+  itemIndex?: number;
+}) {
+  const tid = (base: string) =>
+    itemIndex === undefined ? base : `${base}-${itemIndex}`;
+  // Hatch nodes: JSON hatch (depth cap / extension / contained / unknown).
+  if (node.hatch) {
+    const json = value?.kind === "hatch" ? value.json : "";
+    return (
+      <label className="builder-row builder-hatch-row">
+        <span className="builder-label">{node.name}</span>
+        <textarea
+          className="builder-hatch"
+          data-testid={tid(`builder-hatch-${node.name}`)}
+          rows={3}
+          spellCheck={false}
+          placeholder="JSON"
+          value={json}
+          onChange={(e) =>
+            onChange({ kind: "hatch", json: e.target.value })
+          }
+        />
+      </label>
+    );
+  }
+
+  if (node.type === "Reference") {
+    const v = value?.kind === "ref" ? value : undefined;
+    const targets = node.reference_targets ?? [];
+    const options = resources
+      .map((r) => {
+        const rt = String(r.resourceType ?? "");
+        const id = typeof r.id === "string" ? r.id : "";
+        return { ref: rt && id ? `${rt}/${id}` : "", rt };
+      })
+      .filter((o) => o.ref && (targets.length === 0 || targets.includes(o.rt)));
+    const current = v ? v.reference : "";
+    const dangling =
+      current !== "" &&
+      !options.some((o) => o.ref === current) &&
+      !/^https?:|^urn:|\/_history\//.test(current);
+    return (
+      <div className="builder-row builder-ref">
+        <span className="builder-label">{node.name}</span>
+        <input
+          list={`builder-refs-${node.name}`}
+          data-testid={tid(`builder-field-${node.name}`)}
+          value={current}
+          placeholder={
+            targets.length ? `${targets[0]}/id` : "Type/id or URL"
+          }
+          onChange={(e) =>
+            onChange({ kind: "ref", reference: e.target.value })
+          }
+        />
+        <datalist id={`builder-refs-${node.name}`}>
+          {options.map((o) => (
+            <option key={o.ref} value={o.ref} />
+          ))}
+        </datalist>
+        {targets.length > 0 && (
+          <span className="builder-hint">targets: {targets.join(", ")}</span>
+        )}
+        {dangling && (
+          <span className="builder-hint builder-warn" data-testid={tid(`builder-dangling-${node.name}`)}>
+            not in dataset (allowed)
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  if (isPrimitiveType(node.type)) {
+    const current = scalarValue(value);
+    const inputType =
+      node.type === "boolean"
+        ? "text"
+        : node.type === "date"
+          ? "date"
+          : "text";
+    return (
+      <label className="builder-row">
+        <span className="builder-label">{node.name}</span>
+        <input
+          type={inputType}
+          data-testid={tid(`builder-field-${node.name}`)}
+          value={current}
+          onChange={(e) => onChange({ kind: "scalar", value: e.target.value })}
+          placeholder={node.type}
+        />
+      </label>
+    );
+  }
+
+  // Complex datatype / backbone: nested sub-form.
+  const childNodes =
+    node.children && node.children.some((c) => c.name === "__hatch__")
+      ? null
+      : node.children;
+  if (!childNodes) {
+    const json = value?.kind === "hatch" ? value.json : "";
+    return (
+      <label className="builder-row builder-hatch-row">
+        <span className="builder-label">{node.name}</span>
+        <textarea
+          className="builder-hatch"
+          data-testid={tid(`builder-hatch-${node.name}`)}
+          rows={3}
+          spellCheck={false}
+          placeholder="JSON (depth cap reached)"
+          value={json}
+          onChange={(e) => onChange({ kind: "hatch", json: e.target.value })}
+        />
+      </label>
+    );
+  }
+
+  const obj =
+    value?.kind === "object"
+      ? value
+      : value
+        ? undefined // mismatched shape — hatch below
+        : emptyObject();
+
+  if (value && !obj) {
+    const json = value.kind === "hatch" ? value.json : "";
+    return (
+      <label className="builder-row builder-hatch-row">
+        <span className="builder-label">{node.name}</span>
+        <textarea
+          className="builder-hatch"
+          data-testid={tid(`builder-hatch-${node.name}`)}
+          rows={3}
+          spellCheck={false}
+          placeholder="JSON"
+          value={json}
+          onChange={(e) => onChange({ kind: "hatch", json: e.target.value })}
+        />
+      </label>
+    );
+  }
+
+  return (
+    <NestedObject
+      node={node}
+      value={obj!}
+      resources={resources}
+      onChange={onChange}
+      depth={depth}
+    />
+  );
+}
+
+function NestedObject({
+  node,
+  value,
+  resources,
+  onChange,
+  depth,
+}: {
+  node: SchemaTreeNode;
+  value: ObjectValue;
+  resources: Array<Record<string, unknown>>;
+  onChange: (v: FieldValue | undefined) => void;
+  depth: number;
+}) {
+  const [open, setOpen] = useState(depth < 1);
+  return (
+    <div
+      className="builder-row builder-nested nested-object"
+      data-testid={`builder-nested-${node.name}`}
+      data-depth={Math.min(depth, 3)}
+    >
+      <div className="builder-row-head nested-head">
+        <button
+          type="button"
+          className="linkish"
+          onClick={() => setOpen((o) => !o)}
+        >
+          {open ? "▾" : "▸"} {node.name}
+        </button>
+        <span className="builder-card">
+          {node.type}
+          {node.cardinality ? ` ${node.cardinality}` : ""}
+        </span>
+      </div>
+      {open && (
+        <div className="builder-children">
+          {node.children
+            ?.filter((c) => c.name !== "__hatch__")
+            .map((c) => (
+              <FieldRow
+                key={c.name}
+                node={c}
+                value={value.children[c.name]}
+                resources={resources}
+                onChange={(v) => {
+                  const children = { ...value.children };
+                  if (v === undefined) delete children[c.name];
+                  else children[c.name] = v;
+                  onChange({ ...value, children });
+                }}
+                depth={depth + 1}
+              />
+            ))}
+          {(node.children ?? []).some((c) => c.name === "__hatch__") && (
+            <div className="diag-row diag-info">
+              deeper fields via JSON hatch at the field level
+            </div>
+          )}
+          <PassthroughDrawer
+            passthrough={value.passthrough}
+            compact
+            onApply={(p) => onChange({ ...value, passthrough: p })}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PassthroughDrawer({
+  passthrough,
+  onApply,
+  compact = false,
+}: {
+  passthrough: Record<string, unknown>;
+  onApply: (p: Record<string, unknown>) => void;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const keys = Object.keys(passthrough);
+  useEffect(() => {
+    setText(JSON.stringify(passthrough, null, 2));
+    setError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Object.keys(passthrough).join(",")]);
+  if (keys.length === 0) return null;
+  return (
+    <div className={`builder-passthrough${compact ? " compact" : ""}`}>
+      <button
+        type="button"
+        className="linkish"
+        data-testid="builder-passthrough-toggle"
+        onClick={() => setOpen((o) => !o)}
+      >
+        {open ? "▾" : "▸"} {keys.length} field(s) not shown (preserved verbatim)
+      </button>
+      {open && (
+        <>
+          <textarea
+            data-testid="builder-passthrough-text"
+            rows={compact ? 4 : 6}
+            spellCheck={false}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+          {error && <div className="diag-row diag-error">{error}</div>}
+          <button
+            type="button"
+            data-testid="builder-passthrough-apply"
+            onClick={() => {
+              try {
+                const parsed = JSON.parse(text || "{}");
+                if (
+                  typeof parsed !== "object" ||
+                  parsed === null ||
+                  Array.isArray(parsed)
+                ) {
+                  throw new Error("passthrough must be a JSON object");
+                }
+                onApply(parsed as Record<string, unknown>);
+                setError(null);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+              }
+            }}
+          >
+            Apply passthrough
+          </button>
+        </>
+      )}
+    </div>
+  );
 }

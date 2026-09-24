@@ -33,28 +33,52 @@ test("editor parses and evaluates with typed results", async ({ page }) => {
   await page.waitForSelector("[data-testid=results-table]", {
     timeout: 60_000,
   });
-  const badge = await page.textContent("[data-testid=type-badge-IPP]");
+  const badge = await page.textContent("[data-testid=type-badge-initial_population]");
   if (badge !== "Boolean") throw new Error(`IPP badge: ${badge}`);
   const meta = await page.textContent("[data-testid=eval-meta]");
   if (!meta?.includes("3 patients")) throw new Error(`meta: ${meta}`);
-  await page.click("[data-testid=sql-toggle]");
+  await page.click("[data-testid=show-sql]");
   const sql = await page.textContent(".sql-pre");
   if (!sql || !sql.includes("ORDER BY")) throw new Error("sql viewer empty");
 });
 
 test("tests run against the loaded dataset", async ({ page }) => {
   await bootReady(page);
+  // Deterministic start: clear any workspace persisted by prior specs
+  // (IndexedDB survives browser-context isolation — same origin).
+  await page.click("[data-testid=workspace-reset]");
+  await page.waitForTimeout(600);
   await page.click("[data-testid=load-dataset]");
   await page.waitForSelector("[data-testid=dataset-loaded]");
 
-  // Default cases (p1 IPP true, p2 IPP false) all pass
+  // Tests live in the MeasureReport tab now.
+  await page.click("[data-testid=results-tab-measure]");
+  const drawer = page.locator("[data-testid=drawer-populations]");
+  if ((await drawer.count()) > 0 && !(await drawer.isVisible())) {
+    await page.click("[data-testid=drawer-populations-toggle]");
+  }
+
+  // Expected-value grid renders (Measure-backed, TestsPane v2)
+  await page.waitForSelector("[data-testid=expected-grid]", {
+    timeout: 30_000,
+  });
+
+  // Author explicit expectations for every cell: seed all-true, then
+  // uncheck the false cells (unchecking an unchecked controlled box is
+  // a no-op, so seed first to guarantee every cell has an entry).
+  await page.click("[data-testid=tests-set-all-true]");
+  // p1 female+name (both), p2 male+name (numerator only),
+  // p3 female+no-name (initial_population only).
+  await page.uncheck("[data-testid=expected-p2-initial-population]");
+  await page.uncheck("[data-testid=expected-p3-numerator]");
+
   await page.click("[data-testid=run-tests]");
   await page.waitForSelector("[data-testid=tests-summary]", {
     timeout: 90_000,
   });
-  // The summary badge renders "N/N passed" (tests-summary carries the counts).
+  // 6 cases (3 patients × 2 populations), all matching.
   const counts = await page.textContent("[data-testid=tests-summary]");
-  if (!counts?.includes("2/2")) throw new Error(`counts: ${counts}`);
+  if (!counts?.includes("6/6")) throw new Error(`counts: ${counts}`);
 });
 
 test("broken library surfaces diagnostics", async ({ page }) => {

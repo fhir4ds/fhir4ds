@@ -102,7 +102,7 @@ describe("C3-U5: graphToCql emitter", () => {
         ),
         edges: [{ source: "n1", target: "o" }],
       }),
-    ).toThrow(/malformed subgraph/);
+    ).toThrow(/incomplete expression/);
   });
 
   it("string literals escape single quotes", () => {

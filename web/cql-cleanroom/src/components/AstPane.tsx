@@ -64,6 +64,11 @@ function AstTreeNode({
         onClick={() => setOpen((o) => !o)}
       >
         {open ? "▾" : "▸"} {title}
+        {isNode && (
+          <span className="ast-kind-badge" data-testid={`ast-kind-${(node as AstNode).kind}`}>
+            {(node as AstNode).kind}
+          </span>
+        )}
       </button>
       {open &&
         children.map(([k, v]) => (
@@ -73,9 +78,10 @@ function AstTreeNode({
   );
 }
 
-export function AstPane({ cqlText }: Props) {
+export function AstTree({ cqlText }: Props) {
   const [parse, setParse] = useState<ParseResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [filterText, setFilterText] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -93,15 +99,15 @@ export function AstPane({ cqlText }: Props) {
     }
   };
 
-  const statements = useMemo(
-    () => Object.entries(parse?.ast?.statements ?? {}),
-    [parse],
-  );
+  const statements = useMemo(() => {
+    const all = Object.entries(parse?.ast?.statements ?? {});
+    const q = filterText.trim().toLowerCase();
+    return q ? all.filter(([name]) => name.toLowerCase().includes(q)) : all;
+  }, [parse, filterText]);
 
   return (
-    <section className="pane ast-pane" data-testid="ast-pane">
-      <div className="pane-header">
-        <h2>AST</h2>
+    <div className="ast-inline" data-testid="ast-inline">
+      <div className="inspection-row ast-filter-row">
         <button
           type="button"
           data-testid="ast-load"
@@ -110,6 +116,13 @@ export function AstPane({ cqlText }: Props) {
         >
           {loading ? "…" : "Parse AST"}
         </button>
+        <input
+          data-testid="ast-filter"
+          value={filterText}
+          onChange={(e) => setFilterText(e.target.value)}
+          placeholder="filter defines"
+          aria-label="filter defines"
+        />
       </div>
       {parse && !parse.ok && (
         <div className="diag-list" data-testid="ast-error">
@@ -135,6 +148,6 @@ export function AstPane({ cqlText }: Props) {
       {parse?.ok && statements.length === 0 && (
         <p className="ast-empty">No defines in library.</p>
       )}
-    </section>
+    </div>
   );
 }

@@ -1,5 +1,6 @@
 import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -25,7 +26,29 @@ function discoverWheelName(root: string): string {
 
 const WHEEL_NAME = discoverWheelName(__dirname);
 
+// Content hash for immutable-cached assets whose FILENAME does not change
+// between rebuilds within a version (wheel + wasm extensions). Appended as
+// ?v=<hash> so a rebuilt asset busts the browser cache automatically.
+function assetHash(file: string): string {
+  try {
+    return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex").slice(0, 12);
+  } catch {
+    return "none";
+  }
+}
+
+const WHEEL_HASH = assetHash(path.join(__dirname, "public", WHEEL_NAME));
+const FHIRPATH_EXT_HASH = assetHash(
+  path.join(__dirname, "public", "extensions", "fhirpath.duckdb_extension.wasm"),
+);
+const CQL_EXT_HASH = assetHash(
+  path.join(__dirname, "public", "extensions", "cql.duckdb_extension.wasm"),
+);
+
 declare const __FHIR4DS_WHEEL_NAME__: string;
+declare const __FHIR4DS_WHEEL_HASH__: string;
+declare const __FHIR4DS_FHIRPATH_EXT_HASH__: string;
+declare const __FHIR4DS_CQL_EXT_HASH__: string;
 
 // ---------------------------------------------------------------------------
 // Cross-origin isolation: DuckDB-WASM needs SharedArrayBuffer (COOP/COEP).
@@ -52,15 +75,16 @@ function assetMiddleware(): Plugin {
 
 function handler(publicDir: string) {
   return (req: any, res: any, next: () => void) => {
-    const url = req.url ?? "";
+    // Strip cache-bust query before matching (?v=<hash>).
+    const url = (req.url ?? "").split("?")[0];
     try {
       if (url.endsWith(".duckdb_extension.wasm")) {
         const file = path.join(publicDir, "extensions", path.basename(url));
         if (fs.existsSync(file)) {
           res.setHeader("Content-Type", "application/wasm");
           res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-          // Boot perf (C2-U3): the bundled wasm extensions are immutable
-          // per build — let the browser cache them across sessions.
+          // Boot perf (C2-U3): cached per content hash (?v=) — a rebuilt
+          // extension changes the hash and busts the cache.
           res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
           fs.createReadStream(file).pipe(res);
           return;
@@ -71,7 +95,7 @@ function handler(publicDir: string) {
         if (fs.existsSync(file)) {
           res.setHeader("Content-Type", "application/x-wheel+zip");
           res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-          // Versioned filename (fhir4ds_v2-X.Y.Z) — safe to cache hard.
+          // Cached per content hash (?v=) — same-name rebuilds bust the cache.
           res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
           fs.createReadStream(file).pipe(res);
           return;
@@ -117,6 +141,9 @@ export default defineConfig({
   base: "",
   define: {
     __FHIR4DS_WHEEL_NAME__: JSON.stringify(WHEEL_NAME),
+    __FHIR4DS_WHEEL_HASH__: JSON.stringify(WHEEL_HASH),
+    __FHIR4DS_FHIRPATH_EXT_HASH__: JSON.stringify(FHIRPATH_EXT_HASH),
+    __FHIR4DS_CQL_EXT_HASH__: JSON.stringify(CQL_EXT_HASH),
   },
   plugins: [react(), assetMiddleware(), copyAssetsToDist()],
   build: {

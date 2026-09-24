@@ -89,7 +89,7 @@ test.describe("cleanroom cycle-3 dataset editing", () => {
     await page.waitForSelector('[data-testid=eval-meta]', { timeout: 60_000 });
     const meta = await page.textContent('[data-testid=eval-meta]');
     console.log("EVAL_META:", meta);
-    const badge = await page.textContent('[data-testid=type-badge-IPP]');
+    const badge = await page.textContent('[data-testid=type-badge-initial_population]');
     console.log("TYPE_BADGE_IPP:", badge);
   });
 });

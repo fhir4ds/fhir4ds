@@ -201,12 +201,32 @@ export function graphToCql(graph: Graph, libraryName = "Visual"): string {
     incoming.set(e.target, list);
   }
 
+  /** m1081 #2: pre-flight per-node validation so emit failures name
+   *  the offending node + field instead of a generic subgraph error. */
+  const describe = (n: GraphNode) =>
+    `${n.id} (${n.kind}${n.data.label ? ` "${n.data.label}"` : ""})`;
+  for (const n of graph.nodes) {
+    if (n.kind === "Retrieve") {
+      const rt = n.data.label ?? n.data.path;
+      if (!rt || !rt.trim()) {
+        throw new Error(
+          `node ${describe(n)}: resource type is required (set the node label, e.g. "Patient")`,
+        );
+      }
+    }
+    if (n.kind === "Property" && !(n.data.path ?? n.data.label)?.trim()) {
+      throw new Error(
+        `node ${describe(n)}: property path is required (set the node path, e.g. "gender")`,
+      );
+    }
+  }
+
   const outputs = graph.nodes
     .filter((n) => n.kind === "DefineOutput")
     .sort((a, b) => a.id.localeCompare(b.id));
 
   if (!outputs.length) {
-    throw new Error("graph has no DefineOutput node — nothing to emit");
+    throw new Error("graph has no DefineOutput node — add an Output node to emit a define");
   }
 
   const lines: string[] = [
@@ -219,7 +239,9 @@ export function graphToCql(graph: Graph, libraryName = "Visual"): string {
   for (const out of outputs) {
     const expr = emitNodeExpression(out.id, graph, byId, incoming, 0);
     if (expr === null) {
-      throw new Error(`node ${out.id}: malformed subgraph (missing operand)`);
+      throw new Error(
+        `node ${describe(out)}: incomplete expression — check that every operator node has all its input edges connected`,
+      );
     }
     const name = out.data.label ?? out.id;
     lines.push(`define "${cqlDefineLabel(name)}":`);

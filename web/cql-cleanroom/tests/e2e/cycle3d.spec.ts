@@ -9,6 +9,9 @@ test("visual editor: emit → apply → library parses", async ({ page }) => {
   await page.waitForSelector(".version-badge", { timeout: 150_000 });
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
 
+  // Visual editor is now an editor-column drawer — open it first.
+  await page.click('[data-testid=drawer-graph-toggle]');
+
   // Emit from the default graph (Retrieve Patient → Exists → Output)
   await page.click('[data-testid=graph-emit]');
   const preview = await page.textContent('[data-testid=graph-preview]');

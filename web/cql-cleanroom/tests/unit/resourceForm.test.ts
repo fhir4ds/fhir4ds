@@ -1,123 +1,297 @@
 /**
- * C3-U1: resourceForm pure-helper tests (INV-C3-3 round-trip, INV-C3-6
- * preview==payload discipline, absent≠empty semantics).
+ * v2 recursive form-model tests (FEATURE_CLEANROOM_TEST_DATA_AUTHORING §3.3):
+ * round-trip losslessness at depth (INV-5), Reference objects not scalars
+ * (F4), persistent _key passthrough attachment (F2), per-level hatches,
+ * absent≠"" discipline, array/choice emit semantics.
  */
 import { describe, expect, it } from "vitest";
 import {
   choiceKey,
   emptyForm,
+  emptyObject,
   formToJson,
-  isPrimitive,
+  isPrimitiveType,
   isRepeatable,
   jsonToForm,
+  newKey,
 } from "../../src/lib/resourceForm";
-import type { SchemaField } from "../../src/lib/protocol";
+import type { SchemaTreeNode } from "../../src/lib/protocol";
 
-const PATIENT_FIELDS: SchemaField[] = [
-  { name: "id", types: ["string"], cardinality: "0..1", choice: false, reference_targets: [] },
-  { name: "active", types: ["boolean"], cardinality: "0..1", choice: false, reference_targets: [] },
-  { name: "gender", types: ["code"], cardinality: "0..1", choice: false, reference_targets: [] },
-  { name: "birthDate", types: ["date"], cardinality: "0..1", choice: false, reference_targets: [] },
-  { name: "multipleBirthInteger", types: ["integer"], cardinality: "0..1", choice: false, reference_targets: [] },
-  { name: "name", types: ["HumanName"], cardinality: "0..*", choice: false, reference_targets: [] },
-  { name: "address", types: ["Address"], cardinality: "0..*", choice: false, reference_targets: [] },
-  { name: "deceased[x]", types: ["boolean", "dateTime"], cardinality: "0..1", choice: true, reference_targets: [] },
-  { name: "generalPractitioner", types: ["Reference"], cardinality: "0..*", choice: false, reference_targets: ["Organization", "Practitioner"] },
-];
+const n = (
+  name: string,
+  type: string,
+  cardinality = "0..1",
+  extra: Partial<SchemaTreeNode> = {},
+): SchemaTreeNode => ({ name, type, cardinality, ...extra });
 
-const OBSERVATION_FIELDS: SchemaField[] = [
-  { name: "id", types: ["string"], cardinality: "0..1", choice: false, reference_targets: [] },
-  { name: "status", types: ["code"], cardinality: "1..1", choice: false, reference_targets: [] },
-  { name: "value[x]", types: ["Quantity", "CodeableConcept", "string", "boolean"], cardinality: "0..1", choice: true, reference_targets: [] },
-  { name: "effective[x]", types: ["dateTime", "Period"], cardinality: "0..1", choice: true, reference_targets: [] },
-  { name: "subject", types: ["Reference"], cardinality: "0..1", choice: false, reference_targets: ["Patient", "Group"] },
-];
+function patientTree(): SchemaTreeNode {
+  return {
+    name: "Patient",
+    type: "Patient",
+    cardinality: "0..1",
+    children: [
+      n("id", "string"),
+      n("active", "boolean"),
+      n("gender", "code"),
+      n("birthDate", "date"),
+      n("multipleBirthInteger", "integer"),
+      {
+        name: "name",
+        type: "HumanName",
+        cardinality: "0..*",
+        children: [
+          n("family", "string"),
+          { name: "given", type: "string", cardinality: "0..*", children: [] },
+        ],
+      },
+      n("deceasedBoolean", "boolean"),
+      n("deceasedDateTime", "dateTime"),
+      {
+        name: "generalPractitioner",
+        type: "Reference",
+        cardinality: "0..*",
+        reference_targets: ["Organization", "Practitioner"],
+      },
+      {
+        name: "subject",
+        type: "Reference",
+        reference_targets: ["Patient"],
+        children: [],
+      },
+      { name: "meta", type: "Meta", children: [n("versionId", "string")] },
+    ],
+  };
+}
 
-describe("C3-U1 formToJson", () => {
+function observationTree(): SchemaTreeNode {
+  return {
+    name: "Observation",
+    type: "Observation",
+    children: [
+      n("status", "code", "1..1"),
+      n("valueString", "string"),
+      {
+        name: "valueQuantity",
+        type: "Quantity",
+        children: [
+          n("value", "decimal"),
+          n("unit", "string"),
+          n("system", "uri"),
+          n("code", "code"),
+        ],
+      },
+      n("effectiveDateTime", "dateTime"),
+      {
+        name: "component",
+        type: "BackboneElement",
+        cardinality: "0..*",
+        children: [
+          {
+            name: "code",
+            type: "CodeableConcept",
+            children: [
+              {
+                name: "coding",
+                type: "Coding",
+                cardinality: "0..*",
+                children: [
+                  n("system", "uri"),
+                  n("code", "code"),
+                  n("display", "string"),
+                ],
+              },
+              n("text", "string"),
+            ],
+          },
+          n("valueBoolean", "boolean"),
+        ],
+      },
+    ],
+  };
+}
+
+describe("v2 formToJson", () => {
   it("empty fields are ABSENT, not empty strings (preview==payload)", () => {
     const form = emptyForm("Patient");
-    form.values.id = "p1";
-    const json = formToJson(form, PATIENT_FIELDS);
+    form.values.id = { kind: "scalar", value: "p1" };
+    const json = formToJson(form, patientTree());
     expect(json).toEqual({ resourceType: "Patient", id: "p1" });
   });
 
-  it("coerces booleans and integers by schema type", () => {
+  it("coerces booleans/integers/decimals by node type", () => {
     const form = emptyForm("Patient");
-    form.values.id = "p9";
-    form.values.active = "true";
-    form.values.multipleBirthInteger = "3";
-    const json = formToJson(form, PATIENT_FIELDS) as any;
+    form.values.active = { kind: "scalar", value: "true" };
+    form.values.multipleBirthInteger = { kind: "scalar", value: "3" };
+    const json = formToJson(form, patientTree()) as any;
     expect(json.active).toBe(true);
     expect(json.multipleBirthInteger).toBe(3);
   });
 
-  it("repeatable fields emit arrays with empty rows dropped", () => {
+  it("nested complex values emit deep objects", () => {
     const form = emptyForm("Patient");
-    form.values.generalPractitioner = ["Organization/o1", ""];
-    const json = formToJson(form, PATIENT_FIELDS) as any;
-    expect(json.generalPractitioner).toEqual(["Organization/o1"]);
+    form.values.name = {
+      kind: "items",
+      items: [
+        {
+          key: newKey(),
+          value: {
+            kind: "object",
+            children: {
+              family: { kind: "scalar", value: "Doe" },
+              given: {
+                kind: "items",
+                items: [
+                  { key: newKey(), value: { kind: "scalar", value: "Ann" } },
+                  { key: newKey(), value: { kind: "scalar", value: "" } },
+                ],
+              },
+            },
+            passthrough: {},
+          },
+        },
+      ],
+    };
+    const json = formToJson(form, patientTree()) as any;
+    expect(json.name).toEqual([{ family: "Doe", given: ["Ann"] }]);
   });
 
-  it("choice fields emit the chosen concrete key", () => {
-    const form = emptyForm("Observation");
-    form.choices["value[x]"] = "string";
-    form.values["value[x]"] = "severe";
-    const json = formToJson(form, OBSERVATION_FIELDS) as any;
-    expect(json.valueString).toBe("severe");
-    expect("value[x]" in json).toBe(false);
+  it("references emit {reference} OBJECTS, never scalar strings (F4)", () => {
+    const form = emptyForm("Patient");
+    form.values.generalPractitioner = {
+      kind: "items",
+      items: [
+        { key: newKey(), value: { kind: "ref", reference: "Organization/o1" } },
+        { key: newKey(), value: { kind: "ref", reference: "" } },
+      ],
+    };
+    const json = formToJson(form, patientTree()) as any;
+    expect(json.generalPractitioner).toEqual([
+      { reference: "Organization/o1" },
+    ]);
   });
 
-  it("passthrough merges back verbatim and survives round-trips", () => {
+  it("top-level passthrough merges back verbatim", () => {
+    const form = emptyForm("Patient");
+    form.passthrough.text = { div: "<p>hi</p>" };
+    const json = formToJson(form, patientTree()) as any;
+    expect(json.text).toEqual({ div: "<p>hi</p>" });
+  });
+});
+
+describe("v2 jsonToForm round-trips (INV-5)", () => {
+  it("deep resources round-trip losslessly with unknown keys at depth", () => {
+    const original = {
+      resourceType: "Observation",
+      status: "final",
+      valueQuantity: { value: 120, unit: "mmHg", unknownDeep: [1, 2] },
+      component: [
+        {
+          code: { coding: [{ system: "http://loinc.org", code: "8480-6" }] },
+          valueBoolean: true,
+          notModeled: "kept",
+        },
+      ],
+      meta: { versionId: "2", extra: { x: 1 } },
+    };
+    const form = jsonToForm(original, observationTree());
+    const round = formToJson(form, observationTree());
+    expect(round).toEqual(original);
+  });
+
+  it("Reference OBJECTS prefill to ref values (F4 inverse)", () => {
+    const original = {
+      resourceType: "Patient",
+      subject: { reference: "Patient/p9", display: "Self" },
+    };
+    const form = jsonToForm(original, patientTree());
+    expect(form.values.subject).toEqual({
+      kind: "ref",
+      reference: "Patient/p9",
+      display: "Self",
+    });
+    expect(formToJson(form, patientTree())).toEqual(original);
+  });
+
+  it("scalar string in a Reference slot hatches (malformed input)", () => {
+    const original = {
+      resourceType: "Patient",
+      subject: "Patient/p9", // scalar string — NOT a Reference object
+    };
+    const form = jsonToForm(original, patientTree());
+    const v = form.values.subject;
+    expect(v?.kind).toBe("hatch");
+    expect(formToJson(form, patientTree())).toEqual(original);
+  });
+
+  it("unknown top-level keys land in top-level passthrough", () => {
     const original = {
       resourceType: "Patient",
       id: "p1",
       gender: "female",
-      name: [{ given: ["Ann"], family: "Doe" }],
-      meta: { versionId: "2", lastUpdated: "2026-01-01T00:00:00Z" },
-      unknownExtension: { deep: [1, 2, { x: true }] },
+      contained: [{ resourceType: "Organization", id: "o1" }],
     };
-    const form = jsonToForm(original, PATIENT_FIELDS);
-    expect(form.values.gender).toBe("female");
-    expect(form.passthrough.name).toEqual(original.name);
-    expect(form.passthrough.meta).toEqual(original.meta);
-    expect(form.passthrough.unknownExtension).toEqual(original.unknownExtension);
-    const round = formToJson(form, PATIENT_FIELDS);
-    expect(round).toEqual(original); // INV-C3-3: no silent data loss
+    const form = jsonToForm(original, patientTree());
+    expect(form.values.id).toEqual({ kind: "scalar", value: "p1" });
+    expect(form.passthrough.contained).toEqual(original.contained);
+    expect(formToJson(form, patientTree())).toEqual(original);
   });
 
-  it("scalar choice arm prefills; object choice arm passes through", () => {
+  it("choice arms (valueQuantity/valueString) map to their own nodes", () => {
     const withQuantity = {
       resourceType: "Observation",
       status: "final",
       valueQuantity: { value: 120, unit: "mmHg" },
     };
-    const form = jsonToForm(withQuantity, OBSERVATION_FIELDS);
-    expect(form.passthrough.valueQuantity).toEqual({ value: 120, unit: "mmHg" });
-    const round = formToJson(form, OBSERVATION_FIELDS);
-    expect(round).toEqual(withQuantity);
+    const form = jsonToForm(withQuantity, observationTree());
+    const q = form.values.valueQuantity;
+    expect(q?.kind).toBe("object");
+    expect(formToJson(form, observationTree())).toEqual(withQuantity);
+  });
 
-    const withString = {
-      resourceType: "Observation",
-      status: "final",
-      valueString: "severe",
+  it("repeatable singleton JSON becomes a 1-item list (normalized)", () => {
+    const original = {
+      resourceType: "Patient",
+      name: { family: "Doe" }, // object where array expected
     };
-    const form2 = jsonToForm(withString, OBSERVATION_FIELDS);
-    expect(form2.choices["value[x]"]).toBe("string");
-    expect(form2.values["value[x]"]).toBe("severe");
-    expect(formToJson(form2, OBSERVATION_FIELDS)).toEqual(withString);
+    const form = jsonToForm(original, patientTree());
+    const v = form.values.name;
+    expect(v?.kind).toBe("items");
+    expect(v?.kind === "items" && v.items).toHaveLength(1);
+    // emit normalizes to the FHIR list shape
+    expect(formToJson(form, patientTree())).toEqual({
+      resourceType: "Patient",
+      name: [{ family: "Doe" }],
+    });
   });
 });
 
-describe("C3-U1 helpers", () => {
+describe("v2 helpers", () => {
   it("choiceKey maps value[x] + Quantity → valueQuantity", () => {
     expect(choiceKey("value[x]", "Quantity")).toBe("valueQuantity");
     expect(choiceKey("deceased[x]", "dateTime")).toBe("deceasedDateTime");
   });
 
-  it("isPrimitive / isRepeatable classify schema fields", () => {
-    expect(isPrimitive(["code"])).toBe(true);
-    expect(isPrimitive(["Reference"])).toBe(false);
+  it("isPrimitiveType / isRepeatable classify nodes", () => {
+    expect(isPrimitiveType("code")).toBe(true);
+    expect(isPrimitiveType("Reference")).toBe(false);
     expect(isRepeatable("0..*")).toBe(true);
     expect(isRepeatable("0..1")).toBe(false);
+    expect(isRepeatable(undefined)).toBe(false);
+  });
+
+  it("keys are unique and monotonic (F2 passthrough attachment)", () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 100; i++) {
+      const k = newKey();
+      expect(seen.has(k)).toBe(false);
+      seen.add(k);
+    }
+  });
+
+  it("emptyObject carries per-level passthrough", () => {
+    const o = emptyObject();
+    expect(o.kind).toBe("object");
+    expect(o.children).toEqual({});
+    expect(o.passthrough).toEqual({});
   });
 });

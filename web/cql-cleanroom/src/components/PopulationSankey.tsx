@@ -25,22 +25,26 @@ export interface SankeyData {
   nodes: SankeyNode[];
   links: SankeyLink[];
 }
-
 /**
  * Population-flow transitions follow the FHIR CQM attribution order the
  * DQM summary_report uses (operations AGENTS.md doctrine):
  *   DEN ⊆ IPP; DENEX removed from DEN; NUM ⊆ DEN∖DENEX;
  *   NUMEX removed from NUM; DEX (exceptions) ⊆ DEN∖DENEX∖NUM.
+ *
+ * Column order comes from the Measure resource (population codes via
+ * measure_population_map + POPULATION_ORDER) — INV-3; the legacy
+ * name-prefix heuristic (ORDERED_PREFIXES) is DELETED.
  */
-const ORDERED_PREFIXES = ["IPP", "DENOM", "DENEX", "NUMER", "NUMEX", "DEXCEP"];
+
+import { POPULATION_ORDER } from "../lib/protocol";
 
 function orderedColumnIndex(name: string): number {
-  const up = name.toUpperCase();
-  for (let i = 0; i < ORDERED_PREFIXES.length; i++) {
-    if (up.startsWith(ORDERED_PREFIXES[i])) return i;
-  }
+  // Columns are population-code convention (initial_population, ...).
+  const code = name.replace(/_/g, "-");
+  const idx = POPULATION_ORDER.indexOf(code);
+  if (idx >= 0) return idx;
   // Unknown naming: fall back to the definition order in the data.
-  return ORDERED_PREFIXES.length;
+  return POPULATION_ORDER.length;
 }
 
 export function buildPopulationFlow(

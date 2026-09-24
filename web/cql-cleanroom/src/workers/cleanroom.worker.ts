@@ -17,6 +17,7 @@
 /// <reference lib="webworker" />
 declare const self: any;
 declare const __FHIR4DS_WHEEL_NAME__: string;
+declare const __FHIR4DS_WHEEL_HASH__: string;
 
 import type {
   DatasetSpec,
@@ -101,10 +102,61 @@ async function route(msg: WorkerRequest): Promise<WorkerResponse> {
       return envelope(msg, "resource_schema", {
         resource_type: msg.resource_type,
       });
+    case "resource_schema_tree":
+      return envelope(msg, "resource_schema_tree", {
+        resource_type: msg.resource_type,
+        depth: msg.depth ?? null,
+      });
     case "load_dataset":
       return envelope(msg, "load_dataset", {
         dataset: msg.dataset,
       });
+    case "measure_from_definitions":
+      return envelope(msg, "measure_from_definitions", {
+        libraries: msg.libraries,
+        main: msg.main,
+        mapping: msg.mapping ?? null,
+      });
+    case "measure_population_map":
+      return envelope(msg, "measure_population_map", {
+        measure: msg.measure,
+      });
+    case "measure_report_from_rows":
+      return envelope(msg, "measure_report_from_rows", {
+        measure: msg.measure,
+        rows: msg.rows,
+        columns: msg.columns,
+        period_start: msg.period_start ?? null,
+        period_end: msg.period_end ?? null,
+      });
+    case "rows_from_measure_reports":
+      return envelope(msg, "rows_from_measure_reports", {
+        reports: msg.reports,
+        population_codes: msg.population_codes ?? null,
+      });
+    case "flatten_view": {
+      // Parse+generate the VD SQL in Pyodide (pure-Python viewdef
+      // engine), stage resources + execute VERBATIM on duckdb-wasm —
+      // same exact-SQL doctrine as evaluate (SO-3 temp-table staging).
+      const gen = await generateViewSql(msg.view_definition);
+      if (!gen.ok) {
+        return {
+          id: msg.id,
+          type: msg.type,
+          ok: true,
+          envelope: JSON.stringify({
+            schema: 1,
+            ok: false,
+            diagnostics: gen.diagnostics,
+          }),
+        } as WorkerResponse;
+      }
+      const resultJson = await stageAndRunFlat(
+        gen.sql!,
+        msg.resources,
+      );
+      return { id: msg.id, type: msg.type, ok: true, envelope: resultJson } as WorkerResponse;
+    }
     case "evaluate_library":
     case "run_tests":
     case "explain_patient":
@@ -141,12 +193,31 @@ async function envelope(
   }
   pyodide.globals.set("_op_name", op);
   pyodide.globals.set("__cleanroom_args", JSON.stringify(args));
-  const json: string = pyodide.runPython(`
+    const json: string = pyodide.runPython(`
 import json
 from fhir4ds import operations as _ops
 from fhir4ds.operations import LibraryText
 
+class _Envelope:
+    """Minimal schema:1 carrier for adapter-composed results."""
+    @staticmethod
+    def ok(payload):
+        class _R:
+            def to_dict(self_inner):
+                return {"schema": 1, "ok": True, **payload}
+        return _R()
+
+    @staticmethod
+    def from_error(diag):
+        class _R:
+            def to_dict(self_inner):
+                return {"schema": 1, "ok": False, "diagnostics": [diag.to_dict()]}
+        return _R()
+
 _args = json.loads(__cleanroom_args)
+
+
+
 
 def _run(op, a):
     # Per-op signature adapters: operations signatures are NOT uniform
@@ -173,6 +244,31 @@ def _run(op, a):
         return _ops.validate_resource(a["resource"])
     if op == "resource_schema":
         return _ops.resource_schema(a["resource_type"])
+    if op == "resource_schema_tree":
+        return _ops.resource_schema_tree(
+            a["resource_type"], depth=a.get("depth")
+        )
+    if op == "measure_from_definitions":
+        libs = [LibraryText(name=l["name"], text=l["text"]) for l in a["libraries"]]
+        main = LibraryText(name=a["main"]["name"], text=a["main"]["text"])
+        return _ops.measure_from_definitions(
+            libs, main, mapping=a.get("mapping")
+        )
+    if op == "measure_population_map":
+        pairs, diag = _ops.measure_population_map(a["measure"])
+        if diag is not None:
+            return _Envelope.from_error(diag)
+        return _Envelope.ok({"pairs": [{"code": c, "define": d} for c, d in pairs]})
+    if op == "measure_report_from_rows":
+        return _ops.measure_report_from_rows(
+            a["measure"], a["rows"], a["columns"],
+            period_start=a.get("period_start"),
+            period_end=a.get("period_end"),
+        )
+    if op == "rows_from_measure_reports":
+        return _ops.rows_from_measure_reports(
+            a["reports"], population_codes=a.get("population_codes")
+        )
     raise ValueError(f"unknown op: {op}")
 
 result = _run(_op_name, _args)
@@ -311,6 +407,93 @@ async function runSqlOnDuckDBRaw(sql: string): Promise<unknown> {
 }
 
 // ---------------------------------------------------------------------------
+// flatten_view helpers (Pyodide generates VD SQL; duckdb-wasm executes)
+// ---------------------------------------------------------------------------
+
+interface ViewSqlResult {
+  ok: boolean;
+  sql: string | null;
+  diagnostics: Array<Record<string, unknown>> | null;
+}
+
+async function generateViewSql(
+  viewDefinition: Record<string, unknown>,
+): Promise<ViewSqlResult> {
+  await waitForBoot();
+  pyodide.globals.set("__vd_json", JSON.stringify(viewDefinition));
+  const out: string = pyodide.runPython(`
+import json
+from fhir4ds.viewdef.parser import parse_view_definition
+from fhir4ds.viewdef.generator import SQLGenerator
+
+try:
+    vd = parse_view_definition(json.loads(__vd_json))
+    gen = SQLGenerator(source_table="__cleanroom_flatten_src")
+    sql = gen.generate(vd)
+    result = {"ok": True, "sql": sql}
+except Exception as exc:
+    from fhir4ds.operations.errors import diagnostic_from_exception
+    diag = diagnostic_from_exception(exc, context="flatten_view")
+    result = {"ok": False, "diagnostics": [diag.to_dict()]}
+json.dumps(result)
+`);
+  return JSON.parse(out) as ViewSqlResult;
+}
+
+/** Stage resources into the isolated SO-3 temp table, run VD SQL verbatim. */
+async function stageAndRunFlat(
+  sql: string,
+  resources: Array<Record<string, unknown>>,
+): Promise<string> {
+  await initDuckDB();
+  const values = resources
+    .map((r) => `('${JSON.stringify(r).replace(/'/g, "''")}')`)
+    .join(", ");
+  const staged = [
+    "CREATE OR REPLACE TEMP TABLE __cleanroom_flatten_src (resource JSON)",
+    values
+      ? `INSERT INTO __cleanroom_flatten_src VALUES ${values}`
+      : "INSERT INTO __cleanroom_flatten_src SELECT NULL WHERE false",
+  ];
+  const envelope: Record<string, unknown> = { schema: 1, ok: true };
+  try {
+    for (const stmt of staged) await runSqlOnDuckDBRaw(stmt);
+    const result = (await runSqlOnDuckDBRaw(sql)) as {
+      schema: { fields: Array<{ name: string }> };
+      toArray: () => Promise<Array<Record<string, unknown>>>;
+    };
+    const columns = result.schema.fields.map((f) => f.name);
+    const rowsRaw = await result.toArray();
+    const rows = rowsRaw.map((row) => {
+      const out: Record<string, unknown> = {};
+      for (const c of columns) {
+        out[c] = row[c] === undefined ? null : row[c];
+      }
+      return out;
+    });
+    envelope.sql = sql;
+    envelope.columns = columns;
+    envelope.rows = JSON.parse(JSON.stringify(rows));
+  } catch (err) {
+    envelope.ok = false;
+    envelope.diagnostics = [
+      {
+        code: "evaluation_error",
+        severity: "error",
+        message: String(err instanceof Error ? err.message : err),
+      },
+    ];
+  } finally {
+    try {
+      await runSqlOnDuckDBRaw("DROP TABLE IF EXISTS __cleanroom_flatten_src");
+    } catch {
+      /* cleanup best-effort */
+    }
+  }
+  return JSON.stringify(envelope);
+}
+
+// ---------------------------------------------------------------------------
 // boot
 // ---------------------------------------------------------------------------
 
@@ -332,7 +515,7 @@ async function boot(): Promise<WorkerResponse> {
     await pyodide.loadPackage(["micropip", "duckdb", "orjson", "pyarrow"]);
 
     const wheelUrl = new URL(
-      /* @vite-ignore */ `./${__FHIR4DS_WHEEL_NAME__}`,
+      /* @vite-ignore */ `./${__FHIR4DS_WHEEL_NAME__}?v=${__FHIR4DS_WHEEL_HASH__}`,
       import.meta.url,
     ).href;
     pyodide.globals.set("__wheel_url__", wheelUrl);
@@ -377,6 +560,9 @@ assert _v.valid is True, "validate_resource boot smoke failed"
 _s = _ops.resource_schema("Patient")
 assert _s.ok and any(f["name"] == "gender" for f in _s.fields), \\
     "resource_schema boot smoke failed"
+_t = _ops.resource_schema_tree("Observation")
+assert _t.ok and any(c["name"] == "valueQuantity" for c in _t.root["children"]), \\
+    "resource_schema_tree boot smoke failed"
 `);
 
     // duckdb-wasm on the same worker (execution runtime)
