@@ -19,6 +19,7 @@ from .column_generation import (
 )
 from .temporal_fields import TEMPORAL_BOUND_COLUMN_NAMES
 from .fhirpath_builder import escape_fhirpath_string_literal
+from ..errors import TranslationError
 
 
 # SQL reserved words that must be quoted when used as identifiers/aliases
@@ -820,6 +821,118 @@ class SQLList(SQLExpression):
         return f"({items_sql})"
 
 
+# CQL list macros whose DuckDB expansions contain subqueries (e.g.
+# CQLListDistinctEq's (SELECT list(...) FROM unnest ...)). DuckDB forbids
+# subqueries inside lambda bodies, so these must never render there.
+# Distinct has a lambda-safe twin for primitive-element lists: DuckDB's
+# list_distinct (order-insensitive, null-dropping — acceptable inside
+# lambda bodies where SDE tuple-building consumes code lists; the
+# order-preserving macro remains correct everywhere else).
+_LAMBDA_UNSAFE_MACROS = frozenset({'"Distinct"'})
+
+
+def _rewrite_distinct_calls(text: str) -> str:
+    """Recursively rewrite `"Distinct"(...)` → `list_distinct(...)` in a
+    rendered argument string (nested calls inside lambda bodies)."""
+    m = re.search('"Distinct"\s*\(', text)
+    if not m:
+        return text
+    start = m.start()
+    depth = 1
+    j = m.end()
+    while depth > 0 and j < len(text):
+        c = text[j]
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+        j += 1
+    if depth != 0:
+        raise TranslationError(
+            "Unbalanced parentheses while rewriting nested Distinct."
+        )
+    call = text[start:j]
+    if "(SELECT" in call.upper():
+        raise TranslationError(
+            "Distinct over a subquery cannot be used inside a list lambda "
+            "(DuckDB forbids subqueries in lambda bodies)."
+        )
+    arg = _rewrite_distinct_calls(call[m.end():])
+    return text[:start] + "list_distinct(" + arg + text[j:]
+
+
+def _render_lambda_body(body: SQLExpression) -> str:
+    """Render a lambda body, guarding against subquery-carrying macros.
+
+    DuckDB raises an opaque Binder Error when a lambda body contains a
+    subquery. The only reachable source is CQL list macros implemented
+    via (SELECT ...). If one appears in the rendered body:
+
+    - ``"Distinct"(<arg>)`` is rewritten to ``list_distinct(<arg>)`` —
+      semantically valid for the primitive-element lists that reach
+      lambda bodies (SDE code lists); CQL §10.2 order/null nuances are
+      documented as outside the lambda-safe subset.
+    - any other unsafe macro raises a typed error naming the construct,
+      so the failure is actionable at translate time instead of an
+      opaque bind failure at execution.
+    """
+    rendered = body.to_sql()
+    for macro in _LAMBDA_UNSAFE_MACROS:
+        if macro not in rendered:
+            continue
+        if macro == '"Distinct"':
+            # Balanced scan: rewrite complete "Distinct"(...) calls whose
+            # arguments contain no subqueries themselves; raise on any
+            # subquery-carrying argument (not lambda-safe either way).
+            # RECURSES on rewritten args so nested Distinct calls inside
+            # the argument also become list_distinct.
+            out: list[str] = []
+            i = 0
+            while True:
+                m = re.search('"Distinct"\s*\(', rendered[i:])
+                if not m:
+                    out.append(rendered[i:])
+                    break
+                start = i + m.start()
+                out.append(rendered[i:start])
+                depth = 1
+                j = i + m.end()  # m offsets are relative to rendered[i:]
+                while depth > 0 and j < len(rendered):
+                    c = rendered[j]
+                    if c == "(":
+                        depth += 1
+                    elif c == ")":
+                        depth -= 1
+                    j += 1
+                if depth != 0:
+                    raise TranslationError(
+                        "Unbalanced parentheses in lambda body while "
+                        "rewriting Distinct (internal render invariant)."
+                    )
+                call = rendered[start:j]
+                if "(SELECT" in call.upper():
+                    raise TranslationError(
+                        "Distinct over a subquery cannot be used inside a "
+                        "list lambda (DuckDB forbids subqueries in lambda "
+                        "bodies). Rewrite the CQL to hoist the Distinct "
+                        "outside the iteration."
+                    )
+                # m is matched against rendered[i:]; m.end() - m.start()
+                # is the macro+open-paren length within the SAME slice
+                # coordinate as call's start.
+                arg = call[m.end() - m.start():]
+                arg = _rewrite_distinct_calls(arg)  # nested calls
+                out.append("list_distinct(" + arg)
+                i = j
+            rendered = "".join(out)
+        else:  # pragma: no cover - registry has one entry today
+            raise TranslationError(
+                f"{macro} cannot be used inside a list lambda body "
+                "(subquery-carrying macro); hoist it outside the iteration."
+            )
+    return rendered
+
+
 @dataclass
 class SQLLambda(SQLExpression):
     """
@@ -837,7 +950,7 @@ class SQLLambda(SQLExpression):
     precedence: int = PRECEDENCE["PRIMARY"]
 
     def to_sql(self, parent_precedence: int = 0) -> str:
-        return f"{self.param} -> {self.body.to_sql()}"
+        return f"{self.param} -> {_render_lambda_body(self.body)}"
 
 
 @dataclass
@@ -855,7 +968,7 @@ class SQLLambda2(SQLExpression):
     precedence: int = PRECEDENCE["PRIMARY"]
 
     def to_sql(self, parent_precedence: int = 0) -> str:
-        return f"({', '.join(self.params)}) -> {self.body.to_sql()}"
+        return f"({', '.join(self.params)}) -> {_render_lambda_body(self.body)}"
 
 
 @dataclass

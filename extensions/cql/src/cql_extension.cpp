@@ -3138,6 +3138,61 @@ DEFINE_CQL_TEMPORAL_TWO_UDF(CqlSameOrAfterFunc, TemporalPredicate::SameOrAfter)
 DEFINE_CQL_TEMPORAL_TWO_UDF(CqlBeforeFunc, TemporalPredicate::Before)
 DEFINE_CQL_TEMPORAL_TWO_UDF(CqlAfterFunc, TemporalPredicate::After)
 DEFINE_CQL_TEMPORAL_TWO_UDF(CqlDateTimeEqualFunc, TemporalPredicate::SameAs)
+
+// List-element temporal equality (§10.3/§10.4 Equal (List) elements):
+// unlike direct `=` (§12.1 combined seconds/milliseconds decimal
+// precision), element comparisons treat a second-vs-millisecond precision
+// mismatch as UNCERTAIN (null) per the official fixtures
+// ProperContainsTimeNull / ProperInTimeNull. This variant wraps
+// CompareTemporal and clears certainty when precisions differ at the
+// second/millisecond boundary.
+static void CqlDateTimeEqualListElementFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, b_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto b_idx = b_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx) || !b_data.validity.RowIsValid(b_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto a_dt = cql::DateTimeValue::parse(ExtractTemporalOperand(a_vals[a_idx].GetString()));
+		auto b_dt = cql::DateTimeValue::parse(ExtractTemporalOperand(b_vals[b_idx].GetString()));
+		if (!a_dt || !b_dt || (*a_dt).is_time != (*b_dt).is_time) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto a_rank = PrecisionRank((*a_dt).precision);
+		auto b_rank = PrecisionRank((*b_dt).precision);
+		auto target = PrecisionByRank(std::min(a_rank, b_rank));
+		auto a_use = (*a_dt), b_use = (*b_dt);
+		if (((*a_dt).has_tz || (*b_dt).has_tz) && !(*a_dt).is_time && !(*b_dt).is_time &&
+		    PrecisionRank(target) >= PrecisionRank(cql::DateTimeValue::Precision::Hour)) {
+			a_use = NormalizeForTemporalCompare(*a_dt);
+			b_use = NormalizeForTemporalCompare(*b_dt);
+		}
+		int cmp = CompareTemporalComponents(a_use, b_use, target);
+		if (cmp != 0) {
+			result_data[i] = false;
+			continue;
+		}
+		// Equal at min precision: uncertain whenever precisions differ
+		// (including the second-vs-millisecond boundary — NO combined
+		// decimal precision shortcut for list elements).
+		if (a_rank != b_rank) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = true;
+	}
+}
 DEFINE_CQL_TEMPORAL_THREE_UDF(CqlSameOrBeforePFunc, TemporalPredicate::SameOrBefore)
 DEFINE_CQL_TEMPORAL_THREE_UDF(CqlSameOrAfterPFunc, TemporalPredicate::SameOrAfter)
 DEFINE_CQL_TEMPORAL_THREE_UDF(CqlBeforePFunc, TemporalPredicate::Before)
@@ -8356,6 +8411,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::BOOLEAN, CqlAfterFunc);
 	RegisterSpecialScalar(loader, "cqlDateTimeEqual", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, CqlDateTimeEqualFunc);
+	RegisterSpecialScalar(loader, "cqlDateTimeEqualListElement", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, CqlDateTimeEqualListElementFunc);
 	RegisterSpecialScalar(loader, "cqlSameOrBeforeP",
 	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
 	                      CqlSameOrBeforePFunc);
