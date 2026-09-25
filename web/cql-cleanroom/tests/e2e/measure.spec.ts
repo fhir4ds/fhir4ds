@@ -172,7 +172,6 @@ test.describe("view pane flatten", () => {
     await loadDataset(page);
 
     // Evaluate first so MeasureReports exist for the reports source.
-    await page.click("[data-testid=run-eval]");
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
@@ -180,7 +179,6 @@ test.describe("view pane flatten", () => {
 
     // Derived mode is the default: ONE ROW PER PATIENT (m1081 #9),
     // one integer count column per population (wide format, no forEach).
-    await page.click("[data-testid=view-run]");
     await page.waitForSelector("[data-testid=view-table]", {
       timeout: 60_000,
     });
@@ -207,7 +205,6 @@ test.describe("view pane flatten", () => {
   test("per-column override forks the derived name", async ({ page }) => {
     await bootReady(page);
     await loadDataset(page);
-    await page.click("[data-testid=run-eval]");
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
@@ -218,7 +215,6 @@ test.describe("view pane flatten", () => {
       "[data-testid=view-col-name-numerator]",
       "num_count",
     );
-    await page.click("[data-testid=view-run]");
     await page.waitForSelector("[data-testid=view-table]", {
       timeout: 60_000,
     });
@@ -232,7 +228,6 @@ test.describe("view pane flatten", () => {
   test("custom VD flattens MeasureReports", async ({ page }) => {
     await bootReady(page);
     await loadDataset(page);
-    await page.click("[data-testid=run-eval]");
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
@@ -255,7 +250,6 @@ test.describe("view pane flatten", () => {
         ],
       }),
     );
-    await page.click("[data-testid=view-run]");
     await page.waitForSelector("[data-testid=view-table]", {
       timeout: 60_000,
     });

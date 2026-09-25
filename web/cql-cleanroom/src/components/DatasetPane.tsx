@@ -316,7 +316,9 @@ function PatientGroupNode({
                 }
               }}
             >
-              {isOpen ? "▾" : "▸"} {type} ({rows.length})
+              <span className="dataset-caret">{isOpen ? "▾" : "▸"}</span>
+              <span className="dataset-type-name">{type}</span>
+              <span className="dataset-count-pill">{rows.length}</span>
             </button>
             {isOpen &&
               visible.map((r) => (

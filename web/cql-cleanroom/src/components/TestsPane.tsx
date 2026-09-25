@@ -213,7 +213,7 @@ export function TestsPane({
   const measureAvailable = populationCodes.length > 0 && !!measure;
 
   return (
-    <section className="pane" data-testid="tests-pane">
+    <section className="pane tests-scroll" data-testid="tests-pane">
       <header className="pane-header">
         <h2>Tests</h2>
         <div className="pane-actions">

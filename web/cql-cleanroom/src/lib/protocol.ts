@@ -135,6 +135,8 @@ export interface SchemaTreeNode {
   reference_targets?: string[];
   children?: SchemaTreeNode[];
   hatch?: boolean;
+  /** Present on choice arms: the shared base name (e.g. "value[x]"). */
+  choice_group?: string;
 }
 
 export interface SchemaTreeResult extends EnvelopeBase {
@@ -353,6 +355,13 @@ export type WorkerRequest =
       libraries: LibraryText[];
       main: LibraryText;
       mapping?: MeasureMappingEntry[] | null;
+      library_urls?: string[] | null;
+    }
+  | {
+      id: number;
+      type: "dependency_closure";
+      libraries: LibraryText[];
+      main: LibraryText;
     }
   | {
       id: number;

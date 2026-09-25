@@ -76,16 +76,19 @@ test.describe("cleanroom cycle-3 dataset editing", () => {
       { timeout: 30_000 },
     );
     await page.click('[data-testid=builder-add]');
+    // App boots with the DEFAULT demo dataset (3 resources) since the
+    // evaluate-button removal; adding px makes 4.
     await page.waitForFunction(
       () =>
         document.querySelector('[data-testid=dataset-loaded]')?.textContent ===
-        "Active: 1 resources",
+        "Active: 4 resources",
+      undefined,
+      { timeout: 30_000 },
     );
     console.log("BUILT_ADDED: true");
 
     // Load the default dataset on top (append flow covered elsewhere);
     // here evaluate with just the built patient: IPP should be 1/1.
-    await page.click('[data-testid=run-eval]');
     await page.waitForSelector('[data-testid=eval-meta]', { timeout: 60_000 });
     const meta = await page.textContent('[data-testid=eval-meta]');
     console.log("EVAL_META:", meta);

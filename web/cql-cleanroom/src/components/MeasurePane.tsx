@@ -99,10 +99,20 @@ export function MeasurePane({ libraries, main, measure, onChange }: Props) {
       setDraft(next);
       return;
     }
+    // Preserve the measure's IDENTITY (name/version/url/id/status) —
+    // editing populations must never rename or re-version the resource
+    // (imported MADiE measures keep their name through edits).
+    const identity: Record<string, unknown> = {};
+    for (const k of ["name", "version", "url", "id", "status", "library", "scoring"]) {
+      if (measure && k in (measure as Record<string, unknown>)) {
+        identity[k] = (measure as Record<string, unknown>)[k];
+      }
+    }
+    if (!("name" in identity)) identity.name = "CleanroomMeasure";
+    if (!("status" in identity)) identity.status = "draft";
     const measureOut: Record<string, unknown> = {
       resourceType: "Measure",
-      name: "CleanroomMeasure",
-      status: "draft",
+      ...identity,
       group: [
         {
           id: groupId(),
@@ -207,6 +217,13 @@ export function MeasurePane({ libraries, main, measure, onChange }: Props) {
         libraries,
         main,
         mapping,
+        // Keep the current resource identity through validation rebuilds.
+        library_urls:
+          Array.isArray(
+            (measure as Record<string, unknown> | null)?.library,
+          )
+            ? ((measure as Record<string, unknown>).library as string[])
+            : null,
       });
       const env: MeasureResult = JSON.parse(
         (resp as { envelope: string }).envelope,

@@ -6,6 +6,11 @@ import {
   workerRequest,
 } from "./components/BootOverlay";
 import { EditorPane } from "./components/EditorPane";
+import { NavRail } from "./components/NavRail";
+import { TerminologyPane } from "./components/TerminologyPane";
+import { ParametersDrawer, coerceParam, detectParams } from "./components/ParametersDrawer";
+import { importMadiePackage } from "./lib/madiePackage";
+import { exportMadiePackage } from "./lib/madieExport";
 import {
   buildShareUrl,
   decodeShareFragment,
@@ -22,7 +27,8 @@ import {
   importBundle,
   mergeDatasets,
 } from "./lib/bundleIo";
-import { EvidencePane } from "./components/EvidencePane";
+import { RunCompare } from "./components/RunCompare";
+import { DropdownMenu } from "./components/DropdownMenu";
 import { FhirpathPane } from "./components/FhirpathPane";
 import type { RunEntry } from "./state/workspace";
 import { RUN_HISTORY_CAP } from "./state/workspace";
@@ -36,7 +42,7 @@ import {
 } from "./lib/runHistory";
 import type { ResultsTab } from "./components/ResultsPane";
 import { GraphPane } from "./components/GraphPane";
-import type { DatasetSpec, LibraryText } from "./lib/protocol";
+import type { DatasetSpec, LibraryText, FlattenViewResult } from "./lib/protocol";
 import {
   clearWorkspace,
   exportWorkspaceZip,
@@ -72,6 +78,15 @@ define "Has Name":
  * output_columns_from_measure (column = population_code with the DQM
  * underscore convention).
  */
+// Demo dataset (mirrors the raw-view default NDJSON): shipped so the
+// workbench always has something to evaluate — auto-recalc fires on
+// first paint with no clicks (U5 companion).
+const DEFAULT_DATASET_RESOURCES: Array<Record<string, unknown>> = [
+  { resourceType: "Patient", id: "p1", gender: "female", name: [{ given: ["Ann"] }] },
+  { resourceType: "Patient", id: "p2", gender: "male", name: [{ given: ["Bob"] }] },
+  { resourceType: "Patient", id: "p3", gender: "female" },
+];
+
 const DEFAULT_MEASURE: Record<string, unknown> = {
   resourceType: "Measure",
   name: "CleanroomMeasure",
@@ -172,12 +187,28 @@ export default function App() {
     { name: "CleanroomDemo", text: DEFAULT_CQL },
   ]);
   const [activeTab, setActiveTab] = useState(0);
-  const [dataset, setDataset] = useState<DatasetSpec | null>(null);
+  // PASS2 G1: entrypoint decouples evaluated root from edited tab.
+  const [entrypoint, setEntrypoint] = useState(0);
+  // Parameters drawer: declared names derive from the ENTRYPOINT CQL;
+  // values are user-bound and flow to every evaluate/tests/explain call.
+  const [paramValues, setParamValues] = useState<Record<string, string>>({});
+  const [paramsOpen, setParamsOpen] = useState(false);
+  // Per-library parse-error map (rail badges), fed by EditorPane
+  // diagnostics for the active library. activeTabRef mirrors activeTab
+  // so the callback always reads the CURRENT tab (the render-captured
+  // activeTab goes stale across fast tab switches).
+  const [libErrors, setLibErrors] = useState<Record<number, boolean>>({});
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  const [dataset, setDataset] = useState<DatasetSpec | null>({
+    resources: DEFAULT_DATASET_RESOURCES,
+  });
   // Measure resource: population-mapping authority (INV-3). NULL when
   // the workspace has none — evaluation falls back to raw define names.
   const [measure, setMeasure] = useState<Record<string, unknown> | null>(
     DEFAULT_MEASURE,
   );
+
   const [expectedValues, setExpectedValues] = useState<{
     [pid: string]: { [code: string]: boolean };
   } | null>(null);
@@ -187,6 +218,7 @@ export default function App() {
   >(null);
   // Editor-column visual-editor drawer (default collapsed).
   const [graphOpen, setGraphOpen] = useState(false);
+  const [terminologyOpen, setTerminologyOpen] = useState(false);
   // Editor-column FHIRPath scratchpad drawer (default collapsed).
   const [fhirpathOpen, setFhirpathOpen] = useState(false);
   // WORKBENCH_REORG §3.1/§3.3 — Results tab pref + local run history.
@@ -194,6 +226,7 @@ export default function App() {
   const [runHistory, setRunHistory] = useState<RunEntry[]>([]);
   // Flatten SQL of the last View run (Show-SQL context for the View tab).
   const [viewSql, setViewSql] = useState<string | null>(null);
+  const [viewResult, setViewResult] = useState<FlattenViewResult | null>(null);
   // Row-shaped memberships + hashes of the LATEST evaluation (compare
   // target + drift reference). Cleared when inputs change.
   const [currentRun, setCurrentRun] = useState<{
@@ -205,6 +238,31 @@ export default function App() {
   const [viewConfig, setViewConfig] = useState<{
     overrides: Record<string, { name?: string; path?: string }>;
   } | null>(null);
+  // PASS2 G2: workspace terminology overrides (ValueSet resources).
+  const [terminology, setTerminology] = useState<{
+    valuesets: Array<Record<string, unknown>>;
+  }>({ valuesets: [] });
+
+  // G2: the dataset every evaluation/explain/tests call sees — workspace
+  // terminology OVERRIDES dataset valueset_resources (url-deduped).
+  const evalDataset = useMemo(() => {
+    const baseVs = dataset?.valueset_resources ?? [];
+    const wsVs = terminology.valuesets;
+    if (!wsVs.length) return dataset;
+    const wsUrls = new Set(
+      wsVs
+        .map((v) => (typeof v?.url === "string" ? v.url : null))
+        .filter(Boolean),
+    );
+    const merged = [
+      ...baseVs.filter((v) => {
+        const url = (v as Record<string, unknown>)?.url;
+        return !(typeof url === "string" && wsUrls.has(url));
+      }),
+      ...wsVs,
+    ];
+    return { ...(dataset ?? { resources: [] }), valueset_resources: merged };
+  }, [dataset, terminology]);
   // C3-U3: builder prefill for dataset-row editing (nonce re-triggers).
   const [builderPrefill, setBuilderPrefill] = useState<{
     resource: Record<string, unknown>;
@@ -217,8 +275,85 @@ export default function App() {
     nonce: number;
   } | null>(null);
   const [restored, setRestored] = useState(false);
+  // Resolves once the mount-time workspace restore/share-load settles —
+  // imports must wait on THIS (not the `restored` closure) so a late
+  // restore can never clobber an import.
+  // Initialized EAGERLY (not inside the effect) so any consumer that
+  // reads it before the effect runs still awaits the same promise.
+  const restoreDoneRef = useRef<Promise<void> | null>(null);
+  const restoreDoneResolveRef = useRef<(() => void) | null>(null);
+  if (restoreDoneRef.current === null) {
+    restoreDoneRef.current = new Promise<void>((resolve) => {
+      restoreDoneResolveRef.current = resolve;
+    });
+  }
   const [statusNote, setStatusNote] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const madieFileRef = useRef<HTMLInputElement | null>(null);
+
+  // Built-in eCQM example (CMS69 conformance bundle: 62 patients,
+  // 22 ValueSets, real CQL). Loaded from public/examples/.
+  const loadExample = async (example: string) => {
+    try {
+      const base = `examples/${example}`;
+      const [cql, measure, valuesets, ndjson] = await Promise.all([
+        fetch(`${base}/main.cql`).then((r) => r.text()),
+        fetch(`${base}/measure.json`).then((r) => r.json()),
+        fetch(`${base}/valuesets.json`).then((r) => r.json()),
+        fetch(`${base}/dataset.ndjson`).then((r) => r.text()),
+      ]);
+      const m = cql.match(/^\s*library\s+([A-Za-z][A-Za-z0-9_]*)/m);
+      const name = m ? m[1] : example;
+      // Included libraries become VIEWABLE tabs: resolve each include
+      // against the bundled copies (examples/<ex>/includes/<Lib>.cql,
+      // falling back to versionless bundled names served at
+      // /examples/includes/<Lib>.cql).
+      const includeTabs: Array<{ name: string; text: string }> = [];
+      const seenIncludes = new Set<string>([name]);
+      for (const inc of cql.matchAll(/include\s+([A-Za-z][A-Za-z0-9_]*)\s+version\s+'([^']+)'/g)) {
+        const incName = inc[1];
+        if (incName === "FHIRHelpers" || seenIncludes.has(incName)) continue;
+        seenIncludes.add(incName);
+        try {
+          const r = await fetch(`${base}/includes/${incName}.cql`);
+          if (r.ok) {
+            includeTabs.push({ name: incName, text: await r.text() });
+          }
+        } catch {
+          // optional include tab — bundled engine libraries resolve
+          // server-side without a tab
+        }
+      }
+      setLibraries([{ name, text: cql }, ...includeTabs]);
+      setActiveTab(0);
+      setEntrypoint(0);
+      setMeasure(measure);
+      setTerminology({ valuesets: Array.isArray(valuesets) ? valuesets : [] });
+      const resources = ndjson
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((l) => JSON.parse(l));
+      setDataset({ resources });
+      // Pre-fill declared parameters with sensible defaults where known:
+      // Measurement Period uses the eCQM reporting period the
+      // conformance fixtures encode (2019 calendar year).
+      const defaults: Record<string, string> = {};
+      for (const pm of cql.matchAll(
+        /parameter\s+"([^"]+)"(?!.*default)/g,
+      )) {
+        if (pm[1] === "Measurement Period") {
+          // eCQM reporting period the conformance fixture encodes
+          // (expected MeasureReport period 2026-01-01..2026-12-31).
+          defaults[pm[1]] = "2026-01-01T00:00:00.0..2026-12-31T23:59:59.999";
+        }
+      }
+      if (Object.keys(defaults).length) setParamValues(defaults);
+      setStatusNote(`loaded example ${example}: ${resources.length} resources`);
+    } catch (e) {
+      setStatusNote(`example load failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
 
   // Derived from the Measure — the ONLY alias/order source (INV-3).
   const outputColumns = useMemo(
@@ -270,9 +405,15 @@ export default function App() {
         ) {
           setResultsTab(ws.activeTabPref);
         }
+        if (ws && ws.terminology?.valuesets?.length) {
+          setTerminology(ws.terminology);
+        }
       })
       .catch(() => undefined)
-      .finally(() => setRestored(true));
+      .finally(() => {
+        setRestored(true);
+        restoreDoneResolveRef.current?.();
+      });
   }, []);
 
   useEffect(() => {
@@ -297,6 +438,7 @@ export default function App() {
         viewConfig,
         runHistory,
         activeTabPref: resultsTab,
+        terminology,
       }).catch(() => undefined);
     }, 800);
     return () => clearTimeout(t);
@@ -308,11 +450,97 @@ export default function App() {
     viewConfig,
     runHistory,
     resultsTab,
+    terminology,
     restored,
   ]);
 
   const active = libraries[activeTab] ?? libraries[0];
-  const main: LibraryText = { name: active.name, text: active.text };
+  // G1 invariant: evaluation always uses the ENTRYPOINT library, never
+  // merely the edited tab (multi-library include flows).
+  const mainLib = libraries[entrypoint] ?? active;
+  // Stable identity across re-renders (same name+text → same object):
+  // ResultsPane's auto-eval effect keys on [main, [main]] — a fresh
+  // object per render would re-trigger the 2s debounce forever.
+  const main = useMemo<LibraryText>(
+    () => ({ name: mainLib.name, text: mainLib.text }),
+    [mainLib.name, mainLib.text],
+  );
+  const mainLibs = useMemo<LibraryText[]>(() => [main], [main]);
+
+  // Runtime parameter bindings (drawer values, coerced): empty strings
+  // are absent — a half-filled binding never reaches the engine.
+  const runtimeParameters = useMemo(() => {
+    const out: Record<string, unknown> = {};
+    for (const [name, raw] of Object.entries(paramValues)) {
+      if (raw.trim() === "") continue;
+      out[name] = coerceParam(raw);
+    }
+    return out;
+  }, [paramValues]);
+
+  // M1 write-through: Measure.library[] mirrors the entrypoint pin —
+  // primary first, then the dependency closure of that library. Keeps
+  // the exported Measure self-describing without touching the mapping.
+  useEffect(() => {
+    if (!measure || !mainLib || !restored) return;
+    setMeasure((m) => {
+      if (!m) return m;
+      const closure = [mainLib.name];
+      // Cheap client-side closure via include declarations of each
+      // library below the entrypoint (worker round-trip is overkill
+      // for the common single-include case; the capability remains
+      // the authority at export time).
+      const byName = new Map(libraries.map((l) => [l.name, l]));
+      const seen = new Set([mainLib.name]);
+      const queue = [mainLib.name];
+      while (queue.length) {
+        const name = queue.shift()!;
+        const lib = byName.get(name);
+        if (!lib) continue;
+        const includes = [...lib.text.matchAll(/include\s+([A-Za-z][A-Za-z0-9_]*)/g)].map(
+          (mm) => mm[1],
+        );
+        for (const inc of includes) {
+          if (byName.has(inc) && !seen.has(inc)) {
+            seen.add(inc);
+            closure.push(inc);
+            queue.push(inc);
+          }
+        }
+      }
+      const libraryUrls = closure.map((n) => `urn:cleanroom:lib:${n}`);
+      const current = Array.isArray(m.library) ? (m.library as string[]) : [];
+      if (
+        current.length === libraryUrls.length &&
+        current.every((u, i) => u === libraryUrls[i])
+      ) {
+        return m; // unchanged
+      }
+      return { ...m, library: libraryUrls };
+    });
+  }, [entrypoint, libraries, mainLib, restored]);
+
+
+  // G2: ValueSet declarations of the ACTIVE library (for the rail-linked
+  // Terminology pane); parsed debounced through the worker.
+  const [activeDeclarations, setActiveDeclarations] = useState<
+    Array<Record<string, unknown>>
+  >([]);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void workerRequest({ type: "parse_cql", text: active.text })
+        .then((resp) => {
+          const env = JSON.parse(resp.envelope) as {
+            ok: boolean;
+            declarations?: Array<Record<string, unknown>>;
+          };
+          setActiveDeclarations(env.ok ? env.declarations ?? [] : []);
+        })
+        .catch(() => undefined);
+    }, 600);
+    return () => clearTimeout(t);
+  }, [active.text]);
+
 
   const updateActiveText = (text: string) => {
     setLibraries((libs) =>
@@ -331,6 +559,7 @@ export default function App() {
     if (libraries.length === 1) return;
     setLibraries((libs) => libs.filter((_, idx) => idx !== i));
     setActiveTab((t) => (i < t ? t - 1 : Math.min(t, libraries.length - 2)));
+    setEntrypoint((e) => (i < e ? e - 1 : Math.min(e, libraries.length - 2)));
   };
 
 
@@ -356,6 +585,59 @@ export default function App() {
     }
   };
 
+  const exportMadieZip = () => {
+    try {
+      const primaryName = libraries[entrypoint]?.name ?? libraries[0]?.name;
+      if (!primaryName || !measure) {
+        setStatusNote("nothing to export — need a library and a Measure");
+        return;
+      }
+      const bytes = exportMadiePackage({
+        libraries,
+        primaryName,
+        measure,
+        valuesets: terminology.valuesets,
+      });
+      const blob = new Blob([bytes as unknown as BlobPart], { type: "application/zip" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${String(measure.name ?? "measure")}-package.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatusNote("measure package exported");
+    } catch (e) {
+      setStatusNote(`package export failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  const importMadieZip = async (file: File) => {
+    // Guard: the mount-time workspace restore can clobber an import
+    // that lands mid-restore. Await the restore's completion signal.
+    await Promise.race([
+      restoreDoneRef.current ?? Promise.resolve(),
+      new Promise((r) => setTimeout(r, 10_000)),
+    ]);
+    try {
+      const pkg = importMadiePackage(new Uint8Array(await file.arrayBuffer()));
+      if (!pkg.libraries.length) {
+        setStatusNote("package contained no readable CQL libraries");
+        return;
+      }
+      setLibraries(pkg.libraries.map((l) => ({ name: l.name, text: l.text })));
+      setActiveTab(0);
+      setEntrypoint(0);
+      if (pkg.measure) setMeasure(pkg.measure);
+      if (pkg.warnings.length) {
+        setStatusNote(`imported with ${pkg.warnings.length} warning(s): ${pkg.warnings[0]}`);
+      } else {
+        setStatusNote(`imported measure package (${pkg.libraries.length} libraries, primary ${pkg.primary})`);
+      }
+    } catch (e) {
+      setStatusNote(`package import failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   const exportZip = () => {
     const bytes = exportWorkspaceZip({
       libraries,
@@ -376,6 +658,7 @@ export default function App() {
       viewConfig,
       runHistory,
       activeTabPref: resultsTab,
+      terminology,
     });
     const blob = new Blob([bytes as unknown as BlobPart], {
       type: "application/zip",
@@ -458,6 +741,7 @@ export default function App() {
       }
       setMeasure(state.measure ?? DEFAULT_MEASURE);
       setViewConfig(state.viewConfig ?? null);
+      setTerminology(state.terminology ?? { valuesets: [] });
       if (Array.isArray(state.cases)) {
         const ev: { [pid: string]: { [code: string]: boolean } } = {};
         for (const c of state.cases as Array<{ patient?: string; population?: string; expect?: boolean }>) {
@@ -498,47 +782,97 @@ export default function App() {
           <button data-testid="share-btn" onClick={shareLink}>
             Share
           </button>
-          <button data-testid="workspace-export" onClick={exportZip}>
-            Export zip
-          </button>
-          <button data-testid="bundle-export" onClick={exportBundleFile}>
-            Export Bundle
-          </button>
-          <button
-            data-testid="bundle-import"
-            onClick={() => bundleFileRef.current?.click()}
-            title={`import mode: ${bundleMode} (click mode to toggle)`}
-          >
-            Import Bundle
-          </button>
+          <DropdownMenu label="Import" testId="import-menu">
+            <button
+              className="dropdown-item"
+              data-testid="workspace-import"
+              onClick={() => {
+                fileRef.current?.click();
+              }}
+            >
+              Workspace zip
+            </button>
+            <button
+              className="dropdown-item"
+              data-testid="bundle-import"
+              onClick={() => bundleFileRef.current?.click()}
+              title={`bundle import mode: ${bundleMode}`}
+            >
+              FHIR Bundle ({bundleMode})
+            </button>
+            <button
+              className="dropdown-item"
+              data-testid="madie-import"
+              onClick={() => madieFileRef.current?.click()}
+            >
+              Measure package (MADiE)
+            </button>
+            <div className="dropdown-sep" />
+            <div className="dropdown-header">Examples</div>
+            <button
+              className="dropdown-item"
+              data-testid="load-example-cms69"
+              onClick={() => void loadExample("cms69")}
+            >
+              CMS69 BMI Screening
+            </button>
+          </DropdownMenu>
+          <DropdownMenu label="Export" testId="export-menu">
+            <button
+              className="dropdown-item"
+              data-testid="workspace-export"
+              onClick={exportZip}
+            >
+              Workspace zip
+            </button>
+            <button
+              className="dropdown-item"
+              data-testid="bundle-export"
+              onClick={exportBundleFile}
+            >
+              FHIR Bundle
+            </button>
+            <button
+              className="dropdown-item"
+              data-testid="madie-export"
+              onClick={exportMadieZip}
+            >
+              Measure package (MADiE)
+            </button>
+          </DropdownMenu>
           <button
             data-testid="bundle-mode"
             onClick={() =>
               setBundleMode((m) => (m === "merge" ? "replace" : "merge"))
             }
+            title="bundle import mode"
           >
             mode: {bundleMode}
           </button>
           <button
-            data-testid="workspace-import"
-            onClick={() => fileRef.current?.click()}
-          >
-            Import zip
-          </button>
-          <button
             data-testid="workspace-reset"
             onClick={() => {
-              clearWorkspace().catch(() => undefined);
-              setLibraries([{ name: "CleanroomDemo", text: DEFAULT_CQL }]);
-              setActiveTab(0);
-              setDataset(null);
-              setMeasure(DEFAULT_MEASURE);
-              setExpectedValues(null);
-              setLastReports(null);
-              setViewConfig(null);
-              setRunHistory([]);
-              setResultsTab("cql");
-              setCurrentRun(null);
+              // Await the clear BEFORE setting state — fire-and-forget
+              // raced the debounced autosave, resurrecting stale prefs
+              // (notably resultsTab) on the next reload.
+              {
+                // Reset state SYNCHRONOUSLY; clear IndexedDB in the
+                // background. (The old order — await clearWorkspace()
+                // THEN set defaults — let a slow IndexedDB clear land
+                // its .then() seconds later, clobbering any state that
+                // changed in between, e.g. an import.)
+                setLibraries([{ name: "CleanroomDemo", text: DEFAULT_CQL }]);
+                setActiveTab(0);
+                setDataset({ resources: DEFAULT_DATASET_RESOURCES });
+                setMeasure(DEFAULT_MEASURE);
+                setExpectedValues(null);
+                setLastReports(null);
+                setViewConfig(null);
+                setRunHistory([]);
+                setResultsTab("cql");
+                setCurrentRun(null);
+                void clearWorkspace().catch(() => undefined);
+              }
             }}
           >
             Reset
@@ -551,6 +885,18 @@ export default function App() {
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) void importZip(f);
+              e.target.value = "";
+            }}
+          />
+          <input
+            ref={madieFileRef}
+            type="file"
+            accept=".zip"
+            hidden
+            data-testid="madie-import-input"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void importMadieZip(f);
               e.target.value = "";
             }}
           />
@@ -569,36 +915,58 @@ export default function App() {
         </div>
       </header>
       <main className="app-main" data-testid="app-main">
+        <NavRail
+          libraries={libraries.map((l, i) => ({
+            name: l.name,
+            hasError: libErrors[i] === true,
+          }))}
+          activeIndex={activeTab}
+          entrypointIndex={entrypoint}
+          onSelect={setActiveTab}
+          onClose={closeTab}
+          onAdd={addTab}
+          onSetEntrypoint={setEntrypoint}
+          onNavigateDataset={() => {
+            document
+              .querySelector("[data-testid=dataset-pane]")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+          onNavigateTerminology={() => {
+            document
+              .querySelector("[data-testid=terminology-pane]")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+          datasetActive={false}
+          terminologyActive={false}
+        />
         <div className="pane-col editor-col">
-          <div className="tab-strip" data-testid="library-tabs">
-            {libraries.map((lib, i) => (
-              <span
-                key={lib.name + i}
-                className={`tab ${i === activeTab ? "active" : ""}`}
-                data-testid={`library-tab-${i}`}
-              >
-                <button onClick={() => setActiveTab(i)}>{lib.name}</button>
-                {libraries.length > 1 && (
-                  <button
-                    className="tab-close"
-                    data-testid={`library-tab-${i}-close`}
-                    onClick={() => closeTab(i)}
-                    aria-label={`close ${lib.name}`}
-                  >
-                    ×
-                  </button>
-                )}
-              </span>
-            ))}
-            <button
-              className="tab-add"
-              data-testid="library-tab-add"
-              onClick={addTab}
-            >
-              +
-            </button>
-          </div>
-          <EditorPane text={active.text} onTextChange={updateActiveText} />
+          <EditorPane
+            text={active.text}
+            onTextChange={updateActiveText}
+            onDiagnostics={(diags) => {
+              const idx = activeTabRef.current;
+              setLibErrors((prev) => {
+                const hasErr = (diags ?? []).some(
+                  (d) => d.severity === "error" || d.code === "parse_error",
+                );
+                if ((prev[idx] ?? false) === hasErr) return prev;
+                return { ...prev, [idx]: hasErr };
+              });
+            }}
+          />
+          <ParametersDrawer
+            params={detectParams(mainLib.text).map((name) => ({
+              name,
+              value: paramValues[name] ?? "",
+            }))}
+            onChange={(next) => {
+              const vals: Record<string, string> = {};
+              for (const p of next) vals[p.name] = p.value;
+              setParamValues(vals);
+            }}
+            open={paramsOpen}
+            onToggle={() => setParamsOpen((o) => !o)}
+          />
           <div className="results-drawer editor-drawer" data-testid="drawer-graph">
             <button
               className="drawer-toggle"
@@ -632,12 +1000,35 @@ export default function App() {
               </div>
             )}
           </div>
+          <div className="results-drawer editor-drawer" data-testid="drawer-terminology">
+            <button
+              className="drawer-toggle"
+              data-testid="drawer-terminology-toggle"
+              onClick={() => setTerminologyOpen((o) => !o)}
+            >
+              {terminologyOpen ? "▾" : "▸"} Terminology (ValueSets)
+            </button>
+            {terminologyOpen && (
+              <div className="drawer-body">
+                <TerminologyPane
+                  cqlDeclarations={activeDeclarations}
+                  datasetValuesets={(dataset?.valueset_resources ?? []) as Array<Record<string, unknown>>}
+                  workspaceValuesets={terminology.valuesets}
+                  onWorkspaceChange={(valuesets) =>
+                    setTerminology({ valuesets })
+                  }
+                />
+              </div>
+            )}
+          </div>
         </div>
         <div className="pane-col run-col">
           <ResultsPane
-            libraries={[main]}
+            libraries={mainLibs}
             main={main}
-            dataset={dataset}
+            dataset={evalDataset}
+            parameters={runtimeParameters}
+            viewResult={viewResult}
             outputColumns={outputColumns}
             measure={measure}
             onReports={(reports) => {
@@ -674,7 +1065,7 @@ export default function App() {
             }}
             measureSlot={
               <MeasurePane
-                libraries={[main]}
+                libraries={mainLibs}
                 main={main}
                 measure={measure}
                 onChange={(m) => {
@@ -690,18 +1081,11 @@ export default function App() {
                 viewConfig={viewConfig?.overrides ?? null}
                 onViewConfigChange={(overrides) => setViewConfig({ overrides })}
                 onSql={setViewSql}
+                onResult={setViewResult}
               />
             }
             evidenceSlot={
-              <EvidencePane
-                libraries={[main]}
-                main={main}
-                dataset={
-                  dataset?.resources?.length
-                    ? { resources: dataset.resources as unknown[] }
-                    : null
-                }
-                outputColumns={outputColumns}
+              <RunCompare
                 runHistory={runHistory}
                 currentArtifact={currentRun?.artifact ?? null}
                 currentLibraryHash={currentRun?.libraryHash ?? null}
@@ -718,9 +1102,9 @@ export default function App() {
             }
             testsSlot={
               <TestsPane
-                libraries={[main]}
+                libraries={mainLibs}
                 main={main}
-                dataset={dataset}
+                dataset={evalDataset}
                 outputColumns={outputColumns}
                 populationCodes={populationCodes}
                 expectedValues={expectedValues}
@@ -758,6 +1142,14 @@ export default function App() {
             prefill={builderPrefill}
             context={builderContext}
             dataset={dataset}
+          />
+          <TerminologyPane
+            cqlDeclarations={activeDeclarations}
+            datasetValuesets={(dataset?.valueset_resources ?? []) as Array<Record<string, unknown>>}
+            workspaceValuesets={terminology.valuesets}
+            onWorkspaceChange={(valuesets) =>
+              setTerminology({ valuesets })
+            }
           />
         </div>
       </main>

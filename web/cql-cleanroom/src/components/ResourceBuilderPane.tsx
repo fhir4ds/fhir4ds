@@ -262,25 +262,21 @@ export function ResourceBuilderPane({
               });
             }}
           />
-          {(root?.children ?? [])
-            .filter((c) => c.name !== "id")
-            .map((c) => (
-              <FieldRow
-                key={c.name}
-                node={c}
-                value={form.values[c.name]}
-                resources={resourceOptions}
-                onChange={(v) => {
-                  invalidate();
-                  setForm((f) => {
-                    const values = { ...f.values };
-                    if (v === undefined) delete values[c.name];
-                    else values[c.name] = v;
-                    return { ...f, values };
-                  });
-                }}
-              />
-            ))}
+          <TreeFields
+            nodes={(root?.children ?? []).filter((c) => c.name !== "id")}
+            values={form.values as Record<string, FieldValue>}
+            resources={resourceOptions}
+            onChildChange={(name, v) => {
+              invalidate();
+              setForm((f) => {
+                const values = { ...f.values };
+                if (v === undefined) delete values[name];
+                else values[name] = v;
+                return { ...f, values };
+              });
+            }}
+            depth={0}
+          />
           <PassthroughDrawer
             passthrough={form.passthrough}
             onApply={(p) => {
@@ -355,12 +351,14 @@ function FieldRow({
   resources,
   onChange,
   depth = 0,
+  hideHeader = false,
 }: {
   node: SchemaTreeNode;
   value: FieldValue | undefined;
   resources: Array<Record<string, unknown>>;
   onChange: (v: FieldValue | undefined) => void;
   depth?: number;
+  hideHeader?: boolean;
 }) {
   const repeatable = isRepeatable(node.cardinality);
 
@@ -372,10 +370,10 @@ function FieldRow({
           ? [{ key: newKey(), value }]
           : [];
     return (
-      <div className="builder-row builder-nested" data-testid={`builder-rep-${node.name}`}>
-        <div className="builder-row-head">
+      <div className="builder-tree-group" data-testid={`builder-rep-${node.name}`}>
+        <div className="builder-tree-row builder-tree-head">
+          <span className="builder-caret placeholder">▾</span>
           <span className="builder-label">{node.name}</span>
-          <span className="builder-card">{node.cardinality}</span>
           <button
             type="button"
             className="builder-item-add"
@@ -392,7 +390,34 @@ function FieldRow({
           </button>
         </div>
         {items.map((it, i) => (
-          <div className="builder-item" key={it.key} data-testid={`builder-item-${node.name}-${i}`}>
+          <div
+            className="builder-tree-children builder-item"
+            key={it.key}
+            data-testid={`builder-item-${node.name}-${i}`}
+          >
+            <div
+              className="builder-tree-row builder-tree-head builder-item-head"
+              data-testid={`builder-item-head-${node.name}-${i}`}
+            >
+              <span className="builder-caret placeholder" aria-hidden="true" />
+              <span className="builder-label">
+                {node.name} - {i + 1}
+              </span>
+              <button
+                type="button"
+                className="builder-item-remove"
+                aria-label={`remove ${node.name} item ${i + 1}`}
+                data-testid={`builder-remove-${node.name}-${i}`}
+                onClick={() =>
+                  onChange({
+                    kind: "items",
+                    items: items.filter((x) => x.key !== it.key),
+                  })
+                }
+              >
+                −
+              </button>
+            </div>
             <SingleField
               node={node}
               value={it.value}
@@ -405,21 +430,8 @@ function FieldRow({
               }}
               depth={depth}
               itemIndex={i}
+              hideHeader
             />
-            <button
-              type="button"
-              className="builder-item-remove"
-              aria-label={`remove ${node.name} item ${i + 1}`}
-              data-testid={`builder-remove-${node.name}-${i}`}
-              onClick={() =>
-                onChange({
-                  kind: "items",
-                  items: items.filter((x) => x.key !== it.key),
-                })
-              }
-            >
-              −
-            </button>
           </div>
         ))}
       </div>
@@ -433,6 +445,7 @@ function FieldRow({
       resources={resources}
       onChange={onChange}
       depth={depth}
+      hideHeader={hideHeader}
     />
   );
 }
@@ -451,6 +464,7 @@ function SingleField({
   onChange,
   depth,
   itemIndex,
+  hideHeader = false,
 }: {
   node: SchemaTreeNode;
   value: FieldValue | undefined;
@@ -459,6 +473,8 @@ function SingleField({
   depth: number;
   /** Repeatable-item position: suffixes testids (builder-field-name-0). */
   itemIndex?: number;
+  /** Choice arms render headerless under their picker. */
+  hideHeader?: boolean;
 }) {
   const tid = (base: string) =>
     itemIndex === undefined ? base : `${base}-${itemIndex}`;
@@ -466,7 +482,8 @@ function SingleField({
   if (node.hatch) {
     const json = value?.kind === "hatch" ? value.json : "";
     return (
-      <label className="builder-row builder-hatch-row">
+      <label className="builder-tree-row builder-hatch-row">
+        <span className="builder-caret placeholder" aria-hidden="true" />
         <span className="builder-label">{node.name}</span>
         <textarea
           className="builder-hatch"
@@ -499,7 +516,8 @@ function SingleField({
       !options.some((o) => o.ref === current) &&
       !/^https?:|^urn:|\/_history\//.test(current);
     return (
-      <div className="builder-row builder-ref">
+      <div className="builder-tree-row builder-ref">
+        <span className="builder-caret placeholder" aria-hidden="true" />
         <span className="builder-label">{node.name}</span>
         <input
           list={`builder-refs-${node.name}`}
@@ -518,7 +536,17 @@ function SingleField({
           ))}
         </datalist>
         {targets.length > 0 && (
-          <span className="builder-hint">targets: {targets.join(", ")}</span>
+          <span className="ref-target-pills">
+            {targets.map((tg) => (
+              <span
+                key={tg}
+                className="ref-target-pill"
+                data-testid={tid(`builder-target-${node.name}-${tg}`)}
+              >
+                {tg}
+              </span>
+            ))}
+          </span>
         )}
         {dangling && (
           <span className="builder-hint builder-warn" data-testid={tid(`builder-dangling-${node.name}`)}>
@@ -538,7 +566,8 @@ function SingleField({
           ? "date"
           : "text";
     return (
-      <label className="builder-row">
+      <label className="builder-tree-row">
+        <span className="builder-caret placeholder" aria-hidden="true" />
         <span className="builder-label">{node.name}</span>
         <input
           type={inputType}
@@ -559,7 +588,8 @@ function SingleField({
   if (!childNodes) {
     const json = value?.kind === "hatch" ? value.json : "";
     return (
-      <label className="builder-row builder-hatch-row">
+      <label className="builder-tree-row builder-hatch-row">
+        <span className="builder-caret placeholder" aria-hidden="true" />
         <span className="builder-label">{node.name}</span>
         <textarea
           className="builder-hatch"
@@ -584,7 +614,8 @@ function SingleField({
   if (value && !obj) {
     const json = value.kind === "hatch" ? value.json : "";
     return (
-      <label className="builder-row builder-hatch-row">
+      <label className="builder-tree-row builder-hatch-row">
+        <span className="builder-caret placeholder" aria-hidden="true" />
         <span className="builder-label">{node.name}</span>
         <textarea
           className="builder-hatch"
@@ -606,62 +637,71 @@ function SingleField({
       resources={resources}
       onChange={onChange}
       depth={depth}
+      hideHeader={hideHeader}
     />
   );
 }
 
+/**
+ * A complex field rendered as a TREE ROW: caret + name on a header line,
+ * children indented under left guide lines (no card chrome, no pills).
+ */
 function NestedObject({
   node,
   value,
   resources,
   onChange,
   depth,
+  hideHeader = false,
 }: {
   node: SchemaTreeNode;
   value: ObjectValue;
   resources: Array<Record<string, unknown>>;
   onChange: (v: FieldValue | undefined) => void;
   depth: number;
+  /** Choice arms render headerless under their picker. */
+  hideHeader?: boolean;
 }) {
-  const [open, setOpen] = useState(depth < 1);
+  const [open, setOpen] = useState(true);
   return (
     <div
-      className="builder-row builder-nested nested-object"
+      className={`builder-tree-group${open ? "" : " collapsed"}`}
       data-testid={`builder-nested-${node.name}`}
-      data-depth={Math.min(depth, 3)}
+      data-depth={Math.min(depth, 6)}
     >
-      <div className="builder-row-head nested-head">
-        <button
-          type="button"
-          className="linkish"
+      {!hideHeader && (
+        <div
+          className="builder-tree-row builder-tree-head"
           onClick={() => setOpen((o) => !o)}
         >
-          {open ? "▾" : "▸"} {node.name}
-        </button>
-        <span className="builder-card">
-          {node.type}
-          {node.cardinality ? ` ${node.cardinality}` : ""}
-        </span>
-      </div>
+          <button
+            type="button"
+            className="builder-caret"
+            aria-label={open ? `collapse ${node.name}` : `expand ${node.name}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen((o) => !o);
+            }}
+          >
+            {open ? "▾" : "▸"}
+          </button>
+          <span className="builder-label">{node.name}</span>
+        </div>
+      )}
       {open && (
-        <div className="builder-children">
-          {node.children
-            ?.filter((c) => c.name !== "__hatch__")
-            .map((c) => (
-              <FieldRow
-                key={c.name}
-                node={c}
-                value={value.children[c.name]}
-                resources={resources}
-                onChange={(v) => {
-                  const children = { ...value.children };
-                  if (v === undefined) delete children[c.name];
-                  else children[c.name] = v;
-                  onChange({ ...value, children });
-                }}
-                depth={depth + 1}
-              />
-            ))}
+        <div className="builder-tree-children">
+          <TreeFields
+            nodes={(node.children ?? []).filter((c) => c.name !== "__hatch__")}
+            values={value.children}
+            resources={resources}
+            onChildChange={(name, v) => {
+              const children = { ...value.children };
+              if (v === undefined) delete children[name];
+              else children[name] = v;
+              onChange({ ...value, children });
+            }}
+            depth={depth + 1}
+          />
           {(node.children ?? []).some((c) => c.name === "__hatch__") && (
             <div className="diag-row diag-info">
               deeper fields via JSON hatch at the field level
@@ -671,6 +711,137 @@ function NestedObject({
             passthrough={value.passthrough}
             compact
             onApply={(p) => onChange({ ...value, passthrough: p })}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Renders sibling field nodes as tree rows, GROUPING choice arms
+ * (nodes sharing choice_group, e.g. value[x] → valueQuantity…) into a
+ * single pick-one control: only the selected (populated) arm renders.
+ */
+function TreeFields({
+  nodes,
+  values,
+  resources,
+  onChildChange,
+  depth,
+}: {
+  nodes: SchemaTreeNode[];
+  values: Record<string, FieldValue>;
+  resources: Array<Record<string, unknown>>;
+  onChildChange: (name: string, v: FieldValue | undefined) => void;
+  depth: number;
+}) {
+  // Group consecutive choice arms by their choice_group.
+  const groups: Array<{ kind: "single"; node: SchemaTreeNode } | { kind: "choice"; base: string; arms: SchemaTreeNode[] }> = [];
+  const byGroup = new Map<string, { kind: "choice"; base: string; arms: SchemaTreeNode[] }>();
+  for (const n of nodes) {
+    const g = n.choice_group;
+    if (!g) {
+      groups.push({ kind: "single", node: n });
+      continue;
+    }
+    let entry = byGroup.get(g);
+    if (!entry) {
+      entry = { kind: "choice", base: g, arms: [] };
+      byGroup.set(g, entry);
+      groups.push(entry);
+    }
+    entry.arms.push(n);
+  }
+
+  return (
+    <>
+      {groups.map((g, gi) =>
+        g.kind === "single" ? (
+          <FieldRow
+            key={g.node.name}
+            node={g.node}
+            value={values[g.node.name]}
+            resources={resources}
+            onChange={(v) => onChildChange(g.node.name, v)}
+            depth={depth}
+          />
+        ) : (
+          <ChoiceGroup
+            key={`cg-${gi}`}
+            base={g.base}
+            arms={g.arms}
+            values={values}
+            resources={resources}
+            onChildChange={onChildChange}
+            depth={depth}
+          />
+        ),
+      )}
+    </>
+  );
+}
+
+/**
+ * Pick-one choice group: a dropdown selects the arm; only that arm's
+ * fields render. Selection is VALUE-DRIVEN — the populated arm is the
+ * selection; switching arms clears the old one and seeds the new.
+ */
+function ChoiceGroup({
+  base,
+  arms,
+  values,
+  resources,
+  onChildChange,
+  depth,
+}: {
+  base: string;
+  arms: SchemaTreeNode[];
+  values: Record<string, FieldValue>;
+  resources: Array<Record<string, unknown>>;
+  onChildChange: (name: string, v: FieldValue | undefined) => void;
+  depth: number;
+}) {
+  const populated = arms.find((a) => values[a.name] !== undefined);
+  const selected = populated ?? null;
+  return (
+    <div className="builder-choice" data-testid={`builder-choice-${base}`}>
+      <div className="builder-tree-row builder-tree-head">
+        <span className="builder-caret placeholder">▸</span>
+        <span className="builder-label">{base}</span>
+        <select
+          className="builder-choice-select"
+          data-testid={`builder-choice-select-${base}`}
+          value={selected?.name ?? ""}
+          onChange={(e) => {
+          const nextName = e.target.value;
+          for (const a of arms) {
+            if (a.name !== nextName && values[a.name] !== undefined) {
+              onChildChange(a.name, undefined);
+            }
+          }
+          if (nextName && !values[nextName]) {
+            onChildChange(nextName, defaultValue(arms.find((a) => a.name === nextName)!));
+          }
+        }}
+        >
+          <option value="">— none —</option>
+          {arms.map((a) => (
+            <option key={a.name} value={a.name}>
+              {a.name.slice(base.length - 3)}
+            </option>
+          ))}
+        </select>
+      </div>
+      {selected && (
+        <div className="builder-tree-children">
+          <FieldRow
+            node={selected}
+            value={values[selected.name]}
+            resources={resources}
+            onChange={(v) => onChildChange(selected.name, v)}
+            depth={depth}
+            hideHeader
           />
         </div>
       )}

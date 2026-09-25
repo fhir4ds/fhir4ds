@@ -116,6 +116,12 @@ async function route(msg: WorkerRequest): Promise<WorkerResponse> {
         libraries: msg.libraries,
         main: msg.main,
         mapping: msg.mapping ?? null,
+        library_urls: msg.library_urls ?? null,
+      });
+    case "dependency_closure":
+      return envelope(msg, "dependency_closure", {
+        libraries: msg.libraries,
+        main: msg.main,
       });
     case "measure_population_map":
       return envelope(msg, "measure_population_map", {
@@ -252,8 +258,16 @@ def _run(op, a):
         libs = [LibraryText(name=l["name"], text=l["text"]) for l in a["libraries"]]
         main = LibraryText(name=a["main"]["name"], text=a["main"]["text"])
         return _ops.measure_from_definitions(
-            libs, main, mapping=a.get("mapping")
+            libs, main, mapping=a.get("mapping"), library_urls=a.get("library_urls")
         )
+    if op == "dependency_closure":
+        libs = [LibraryText(name=l["name"], text=l["text"]) for l in a["libraries"]]
+        main = LibraryText(name=a["main"]["name"], text=a["main"]["text"])
+        ordered, missing = _ops.dependency_closure(libs, main)
+        return _Envelope.ok({
+            "libraries": [{"name": l.name, "text": l.text} for l in ordered],
+            "missing": missing,
+        })
     if op == "measure_population_map":
         pairs, diag = _ops.measure_population_map(a["measure"])
         if diag is not None:
@@ -293,6 +307,7 @@ async function executeCapability(msg: ExecCapabilityMsg): Promise<WorkerResponse
     audit_mode: isExplain ? "full" : "population",
     patient_ids: isExplain ? [msg.patient_id] : null,
     output_columns: (msg as { output_columns?: Record<string, string> | null }).output_columns ?? null,
+    parameters: (msg as { parameters?: Record<string, unknown> | null }).parameters ?? null,
   };
   pyodide.globals.set("__cleanroom_args", JSON.stringify(trArgs));
   pyodide.globals.set("_op_name", "translate_cql");
@@ -307,7 +322,8 @@ _main = LibraryText(name=_args["main"]["name"], text=_args["main"]["text"])
 _pids = _args.get("patient_ids")
 _mode = _args.get("audit_mode") or "population"
 _oc = _args.get("output_columns")
-_r = _ops.translate_cql(_libs, _main, audit_mode=_mode, patient_ids=_pids, output_columns=_oc)
+_params = _args.get("parameters")
+_r = _ops.translate_cql(_libs, _main, audit_mode=_mode, patient_ids=_pids, output_columns=_oc, parameters=_params)
 json.dumps(_r.to_dict())
 `);
   const tr = JSON.parse(trJson);
@@ -348,8 +364,8 @@ async function loadIntoDuckDB(ds: DatasetSpec): Promise<void> {
       resource: JSON.stringify(r),
     });
   }
+  await initDuckDB();
   if (rows.length) {
-    await initDuckDB();
     // Fresh dataset per load: clear prior rows so runs are deterministic.
     const stmts = [
       "DELETE FROM resources",
@@ -379,6 +395,26 @@ async function loadIntoDuckDB(ds: DatasetSpec): Promise<void> {
       }
     }
   }
+  // PASS2 G2: bridge ValueSet resources into the WASM engine's
+  // g_valueset_cache (in_valueset reads the C++ cache, not a table).
+  // Workspace terminology arrives via DatasetSpec.valueset_resources.
+  if (ds.valueset_resources?.length) {
+    const { valuesetToRows, seedValuesetCache } = await import(
+      "../lib/valuesetBridge"
+    );
+    const { rows: vsRows, warnings } = valuesetToRows(
+      ds.valueset_resources as Array<Record<string, unknown>>,
+    );
+    for (const w of warnings) {
+      console.warn("[valuesetBridge]", w);
+    }
+    await seedValuesetCache(vsRows, runSqlOnDuckDBRaw);
+  }
+  // NOTE: an absent valueset_resources does NOT clear the cache — an
+  // in-flight un-terminologied evaluation racing a seeded one would
+  // wipe it between load and execute. seedValuesetCache() clears
+  // before seeding (fresh state per load); an empty run simply reuses
+  // the session cache.
 }
 
 function patientRefOf(r: Record<string, unknown>): string | null {

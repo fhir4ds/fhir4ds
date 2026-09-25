@@ -13,7 +13,7 @@ import { zipSync, unzipSync } from "fflate";
 
 const DB_NAME = "cql-cleanroom";
 const STORE = "workspace";
-export const WORKSPACE_SCHEMA_VERSION = 3;
+export const WORKSPACE_SCHEMA_VERSION = 4;
 
 /** WORKBENCH_REORG §3.3/§3.5 — a saved evaluation run. Local-only
  * (IndexedDB document; NEVER in zip or share links — INV-4). */
@@ -52,6 +52,9 @@ export interface WorkspaceState {
   runHistory: RunEntry[];
   /** Preferred Results tab (§3.1): cql | measure | view. */
   activeTabPref: string;
+  /** Terminology (PASS2 G2): workspace ValueSet resources, url-deduped,
+   *  overriding dataset valueset_resources on evaluate. Never null. */
+  terminology: { valuesets: Array<Record<string, unknown>> };
   savedAt: number;
 }
 
@@ -63,6 +66,9 @@ const MIGRATIONS: Record<number, (s: Record<string, unknown>) => Record<string, 
   // v2 -> v3 (WORKBENCH_REORG): local run history + Results tab pref.
   // Runs are IndexedDB-only — the zip never carries them (INV-4).
   2: (s) => ({ ...s, runHistory: [], activeTabPref: "cql" }),
+  // v3 -> v4 (PASS2): terminology override storage. Default is an EMPTY
+  // list, never null — consumers iterate without guards.
+  3: (s) => ({ ...s, terminology: { valuesets: [] } }),
 };
 
 export function migrate(state: Record<string, unknown>): WorkspaceState {
@@ -83,6 +89,10 @@ export function migrate(state: Record<string, unknown>): WorkspaceState {
     viewConfig: (current.viewConfig as WorkspaceViewConfig | null) ?? null,
     runHistory: (current.runHistory as RunEntry[]) ?? [],
     activeTabPref: (current.activeTabPref as string) ?? "cql",
+    terminology:
+      (current.terminology as WorkspaceState["terminology"] | undefined) ?? {
+        valuesets: [],
+      },
     savedAt: (current.savedAt as number) ?? Date.now(),
   };
 }
@@ -165,6 +175,13 @@ export function exportWorkspaceZip(state: Omit<WorkspaceState, "schemaVersion" |
   if (state.measure) {
     files["measure.json"] = utf8Encode(JSON.stringify(state.measure, null, 1));
   }
+  // PASS2 G2: terminology rides as a LOOSE valuesets.json entry (the
+  // dataset.ndjson convention) — mega ValueSets would bloat workspace.json.
+  if (state.terminology?.valuesets?.length) {
+    files["valuesets.json"] = utf8Encode(
+      JSON.stringify(state.terminology.valuesets, null, 1),
+    );
+  }
   // F8: view overrides ride INSIDE workspace.json (not a loose entry).
   // INV-4: runHistory is local-only — deliberately absent from the zip.
   const metaOut: Record<string, unknown> = {
@@ -213,19 +230,40 @@ export function importWorkspaceZip(bytes: Uint8Array): Omit<WorkspaceState, "sch
       measure = parsed as Record<string, unknown>;
     }
   }
-  let viewConfig: WorkspaceViewConfig | null = null;
-  if (meta.viewConfig && typeof meta.viewConfig === "object") {
-    viewConfig = meta.viewConfig as WorkspaceViewConfig;
+  let valuesets: Array<Record<string, unknown>> = [];
+  if (files["valuesets.json"]) {
+    const parsed = JSON.parse(decode(files["valuesets.json"]));
+    if (Array.isArray(parsed)) {
+      valuesets = parsed.filter(
+        (v) => v && typeof v === "object" && !Array.isArray(v),
+      ) as Array<Record<string, unknown>>;
+    }
   }
-  return {
+  // SO-caught bug: route the parsed payload through migrate() so OLD
+  // zips (schemaVersion < 4) gain every defaulted field — direct field
+  // reads would yield undefined terminology on v3 zips.
+  const migrated = migrate({
+    schemaVersion: (meta.schemaVersion as number) ?? 1,
     libraries,
     dataset,
     cases,
-    measure,
-    viewConfig,
-    runHistory: [], // local-only: imports never restore runs (INV-4)
-    activeTabPref: (meta.activeTabPref as string) ?? "cql",
     prefs: (meta.prefs as Record<string, unknown>) ?? {},
+    measure,
+    viewConfig: meta.viewConfig ?? null,
+    activeTabPref: (meta.activeTabPref as string) ?? "cql",
+    terminology: { valuesets },
+    savedAt: Date.now(),
+  });
+  return {
+    libraries: migrated.libraries,
+    dataset,
+    cases,
+    measure,
+    viewConfig: migrated.viewConfig,
+    runHistory: [], // local-only: imports never restore runs (INV-4)
+    activeTabPref: migrated.activeTabPref,
+    prefs: migrated.prefs,
+    terminology: migrated.terminology,
   };
 }
 

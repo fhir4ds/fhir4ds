@@ -38,46 +38,34 @@ test("workspace persists libraries and dataset across reload", async ({ page }) 
   await page.waitForTimeout(1200);
 });
 
-test("evidence drill-in and population flow", async ({ page }) => {
+test("cell evidence drill-in and population flow", async ({ page }) => {
   await bootReady(page);
   await page.click("[data-testid=load-dataset]");
   await page.waitForSelector("[data-testid=dataset-loaded]");
 
-  // Evidence lives in the CQL tab drawer — it starts OPEN; only
-  // click the toggle when the <details> is actually closed.
-  const evOpen = await page.evaluate(
-    () =>
-      (document.querySelector(
-        "[data-testid=drawer-evidence] details",
-      ) as HTMLDetailsElement | null)?.open ?? false,
-  );
-  if (!evOpen) {
-    await page.click("[data-testid=drawer-evidence-toggle]");
-  }
-
-  // Explain p1: IPP population badge + evidence rows (patient picker —
-  // dataset is loaded so the input renders as a <select>).
-  await page.selectOption("[data-testid=evidence-patient-input]", {
-    label: "p1 — Ann",
+  // Auto-evaluation runs (no Evaluate button) — wait for results.
+  await page.waitForSelector("[data-testid=results-table]", {
+    timeout: 90_000,
   });
-  await page.click("[data-testid=explain-btn]");
-  await page.waitForSelector("[data-testid=evidence-body]", {
+
+  // Evidence drill-in is now the CELL POPOVER: click p1's IPP cell.
+  await page.click('[data-testid="cell-p1-initial_population"]');
+  await page.waitForSelector("[data-testid=evidence-popover]", {
     timeout: 60_000,
   });
-  const ipp = await page.textContent("[data-testid=ev-pop-initial_population]");
-  if (!ipp?.includes("true")) throw new Error(`IPP: ${ipp}`);
-  const defs = await page.locator("[data-testid^=ev-def-]").count();
-  if (defs < 1) throw new Error("no evidence definitions rendered");
+  await page.waitForSelector("[data-testid=evidence-verdict]", {
+    timeout: 60_000,
+  });
+  const ipp = await page.textContent("[data-testid=evidence-verdict]");
+  if (!ipp?.includes("true")) throw new Error(`IPP verdict: ${ipp}`);
+  const rows = await page.locator("[data-testid^=evidence-row-]").count();
+  if (rows < 1) throw new Error("no evidence rows rendered");
 
   // Population flow (Sankey): rendered in the MeasureReport tab after
   // an evaluation — initial_population node with count 2.
-  await page.click("[data-testid=run-eval]");
-  await page.waitForSelector("[data-testid=results-table]", {
-    timeout: 60_000,
-  });
   await page.click("[data-testid=results-tab-measure]");
   await page.waitForSelector("[data-testid=population-sankey]", {
-    timeout: 60_000,
+    timeout: 90_000,
   });
   const ippNode = await page.textContent(
     "[data-testid=sankey-node-initial_population]",

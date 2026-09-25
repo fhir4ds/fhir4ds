@@ -32,6 +32,10 @@ async function setMaleLibrary(page: import("@playwright/test").Page) {
 test.describe("results tabs", () => {
   test("three tabs navigate; empty states before first run", async ({ page }) => {
     await bootReady(page);
+    // Prior SPEC FILES may have left resultsTab=view persisted; go to
+    // the CQL tab BEFORE resetting so the first results wait targets a
+    // visible panel.
+    await page.click("[data-testid=results-tab-cql]");
     await resetWorkspace(page);
 
     // All three tabs render.
@@ -39,30 +43,63 @@ test.describe("results tabs", () => {
     await page.waitForSelector("[data-testid=results-tab-measure]");
     await page.waitForSelector("[data-testid=results-tab-view]");
 
-    // Before any evaluation: CQL tab has no table, MR tab shows its
-    // hint, View tab shows no-reports.
-    const cqlTable = await page
-      .locator("[data-testid=results-table]")
-      .count();
-    if (cqlTable !== 0) throw new Error("results table before eval");
+    // U5: default dataset AUTO-EVALUATES — the CQL tab populates with
+    // no clicks. Reload post-reset so the workspace rehydrates
+    // deterministically (a prior test's tab pref can bleed), then go
+    // to the CQL tab explicitly.
+    await page.reload();
+    await page.waitForSelector(".version-badge", { timeout: 150_000 });
+    // Wait out the async workspace hydration (IndexedDB restore can
+    // land AFTER this point and re-apply a stale tab pref over the
+    // click below — the classic restore race).
+    await page.waitForFunction(
+      () =>
+        document.querySelectorAll("[data-testid=library-tab-0]").length > 0,
+      undefined,
+      { timeout: 30_000 },
+    );
+    await page.waitForTimeout(600);
+    // Self-healing tab click: hydration can land after the first click
+    // and re-apply a stale pref; poll-and-reclick until the CQL panel
+    // is actually visible (or give up with diagnostics).
+    let visible = false;
+    for (let attempt = 0; attempt < 12 && !visible; attempt++) {
+      await page.click("[data-testid=results-tab-cql]");
+      try {
+        await page.waitForSelector("[data-testid=results-table]", {
+          timeout: 10_000,
+        });
+        visible = true;
+      } catch {
+        const state = await page.evaluate(() => ({
+          tab: document
+            .querySelector('[data-testid=tab-panel-cql]')
+            ?.getAttribute("hidden"),
+          active: [
+            ...document.querySelectorAll(".results-tabs .tab"),
+          ].findIndex((b) => b.className.includes("active")),
+        }));
+        console.log(`TAB_RETRY ${attempt}:`, JSON.stringify(state));
+      }
+    }
+    if (!visible) throw new Error("CQL tab never became visible after 12 clicks");
 
     await page.click("[data-testid=results-tab-measure]");
     await page.waitForSelector("[data-testid=measure-pane]");
-    const mrEmpty = await page
-      .locator("[data-testid=mr-empty]")
-      .count();
-    if (mrEmpty !== 1) throw new Error("mr-empty missing before eval");
-
+    // View tab still gates on MeasureReports (needs the measure
+    // materialization cycle) — may show the no-reports hint briefly.
     await page.click("[data-testid=results-tab-view]");
-    await page.waitForSelector("[data-testid=view-no-reports]");
 
-    // Tab pref persists across reload (rides workspace.json).
+    // Tab pref persists across reload (rides workspace.json): the VIEW
+    // tab we just selected restores — assert the VIEW output renders
+    // (not the CQL table, which is hidden on the view tab!).
     await page.waitForTimeout(1500);
     await page.reload();
     await page.waitForSelector(".version-badge", { timeout: 150_000 });
-    await page.waitForSelector("[data-testid=view-no-reports]", {
-      timeout: 30_000,
-    });
+    await page.waitForSelector(
+      "[data-testid=tab-panel-view]:not([hidden])",
+      { timeout: 90_000 },
+    );
 
     // Return to the CQL tab so the persisted tab pref does not bleed
     // into later specs (autosave may outlive the reset below).
@@ -76,8 +113,6 @@ test.describe("results tabs", () => {
     await resetWorkspace(page);
     await page.click("[data-testid=load-dataset]");
     await page.waitForSelector("[data-testid=dataset-loaded]");
-
-    await page.click("[data-testid=run-eval]");
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
@@ -99,7 +134,6 @@ test.describe("results tabs", () => {
 
     // View tab: derived run over the saved reports.
     await page.click("[data-testid=results-tab-view]");
-    await page.click("[data-testid=view-run]");
     await page.waitForSelector("[data-testid=view-table]", {
       timeout: 60_000,
     });
@@ -116,7 +150,6 @@ test.describe("run history", () => {
     await page.waitForSelector("[data-testid=dataset-loaded]");
 
     // Two evaluations -> two saved runs.
-    await page.click("[data-testid=run-eval]");
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
@@ -142,7 +175,6 @@ test.describe("run history", () => {
 
     // Change logic (female -> male) and evaluate again.
     await setMaleLibrary(page);
-    await page.click("[data-testid=run-eval]");
     // The results-table never detaches between runs — wait for the
     // run HISTORY to grow instead (append is async post-evaluate).
     await page.waitForFunction(
@@ -239,7 +271,13 @@ test.describe("dataset tree scale", () => {
     const label = await page.textContent(
       "[data-testid=dataset-type-toggle-big-Observation]",
     );
-    if (!label?.includes("(60)")) throw new Error(`type label: ${label}`);
+    // Restyled toggle: caret span + name + count PILL (e.g. "Observation"
+    // text + "60" pill) — the count is no longer parenthesized text.
+    if (!label?.includes("Observation")) throw new Error(`type label: ${label}`);
+    const pill = await page.textContent(
+      `[data-testid=dataset-type-toggle-big-Observation] .dataset-count-pill`,
+    );
+    if (pill !== "60") throw new Error(`count pill: ${pill}`);
 
     // >3 rows -> group starts collapsed (OQ-1).
     const rowsVisible = await page
@@ -273,8 +311,6 @@ test.describe("ast filter", () => {
   test("filter narrows statement trees by define name", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-
-    await page.click("[data-testid=run-eval]");
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });

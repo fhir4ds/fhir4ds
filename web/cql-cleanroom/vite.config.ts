@@ -78,6 +78,17 @@ function handler(publicDir: string) {
     // Strip cache-bust query before matching (?v=<hash>).
     const url = (req.url ?? "").split("?")[0];
     try {
+      // Examples: serve .cql/.ndjson as TEXT (unknown extensions would
+      // otherwise arrive as base64-encoded blobs via r.text()).
+      if (url.startsWith("/examples/") && (url.endsWith(".cql") || url.endsWith(".ndjson"))) {
+        const file = path.join(publicDir, url);
+        if (fs.existsSync(file)) {
+          res.setHeader("Content-Type", "text/plain; charset=utf-8");
+          res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+          fs.createReadStream(file).pipe(res);
+          return;
+        }
+      }
       if (url.endsWith(".duckdb_extension.wasm")) {
         const file = path.join(publicDir, "extensions", path.basename(url));
         if (fs.existsSync(file)) {

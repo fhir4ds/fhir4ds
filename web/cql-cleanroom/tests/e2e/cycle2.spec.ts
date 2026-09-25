@@ -31,7 +31,6 @@ define "D1":
     }
 
     // UI: AST now lives in Results — run an evaluation, then Show AST.
-    await page.click("[data-testid=run-eval]");
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });

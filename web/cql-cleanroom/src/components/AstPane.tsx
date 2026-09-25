@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { workerRequest } from "./BootOverlay";
 import type { AstNode, ParseResult } from "../lib/protocol";
 
@@ -35,45 +35,55 @@ function AstTreeNode({
           ? `"${node}"`
           : String(node);
     return (
-      <div className="ast-leaf" style={{ marginLeft: depth * 12 }}>
+      <div className="ast-row ast-leaf">
+        <span className="ast-caret-placeholder" aria-hidden="true" />
         <span className="ast-key">{label}</span>
         <span className="ast-value">{text}</span>
       </div>
     );
   }
   const isNode = "kind" in (node as Record<string, unknown>);
-  const title = isNode
-    ? (node as AstNode).kind
-    : label;
+  const title = isNode ? (node as AstNode).kind : label;
   const children = isNode
     ? Object.entries((node as AstNode).children ?? {})
     : Object.entries(node as Record<string, unknown>);
   if (children.length === 0) {
     return (
-      <div className="ast-leaf" style={{ marginLeft: depth * 12 }}>
-        <span className="ast-kind">{title}</span>
+      <div className="ast-row ast-leaf">
+        <span className="ast-caret-placeholder" aria-hidden="true" />
+        <span className="ast-key">{title}</span>
       </div>
     );
   }
   return (
-    <div className="ast-branch" style={{ marginLeft: depth * 12 }}>
-      <button
-        type="button"
-        className="ast-toggle"
+    <div className={`ast-group${open ? "" : " collapsed"}`}>
+      <div
+        className="ast-row ast-head"
         data-testid="ast-toggle"
         onClick={() => setOpen((o) => !o)}
       >
-        {open ? "▾" : "▸"} {title}
+        <span
+          className="ast-caret"
+          role="button"
+          aria-label={open ? `collapse ${title}` : `expand ${title}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {open ? "▾" : "▸"}
+        </span>
+        <span className="ast-key">{title}</span>
         {isNode && (
           <span className="ast-kind-badge" data-testid={`ast-kind-${(node as AstNode).kind}`}>
             {(node as AstNode).kind}
           </span>
         )}
-      </button>
-      {open &&
-        children.map(([k, v]) => (
-          <AstTreeNode key={k} label={k} node={v} depth={depth + 1} />
-        ))}
+      </div>
+      {open && (
+        <div className="ast-children">
+          {children.map(([k, v]) => (
+            <AstTreeNode key={k} label={k} node={v} depth={depth + 1} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -83,7 +93,9 @@ export function AstTree({ cqlText }: Props) {
   const [loading, setLoading] = useState(false);
   const [filterText, setFilterText] = useState("");
 
-  const load = async () => {
+  // Auto-parse on mount AND on text change — the tree opens ready;
+  // the Refresh button re-runs the same parse.
+  const runParse = async () => {
     setLoading(true);
     try {
       const resp = await workerRequest({
@@ -98,6 +110,10 @@ export function AstTree({ cqlText }: Props) {
       setLoading(false);
     }
   };
+  useEffect(() => {
+    void runParse();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cqlText]);
 
   const statements = useMemo(() => {
     const all = Object.entries(parse?.ast?.statements ?? {});
@@ -108,13 +124,16 @@ export function AstTree({ cqlText }: Props) {
   return (
     <div className="ast-inline" data-testid="ast-inline">
       <div className="inspection-row ast-filter-row">
+        <span className="pane-meta">
+          {loading ? "parsing…" : parse ? "parsed" : ""}
+        </span>
         <button
           type="button"
           data-testid="ast-load"
-          onClick={load}
+          onClick={() => void runParse()}
           disabled={loading}
         >
-          {loading ? "…" : "Parse AST"}
+          Refresh
         </button>
         <input
           data-testid="ast-filter"

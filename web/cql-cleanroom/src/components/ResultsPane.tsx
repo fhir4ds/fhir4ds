@@ -1,8 +1,15 @@
-import { useState } from "react";
-import type { EvaluateResult, Diagnostics } from "../lib/protocol";
+import { useEffect, useRef, useState } from "react";
+import type {
+  EvaluateResult,
+  Diagnostics,
+  EvidenceResult,
+  FlattenViewResult,
+} from "../lib/protocol";
 import { workerRequest } from "./BootOverlay";
 import type { LibraryText } from "../lib/protocol";
 import { AstTree } from "./AstPane";
+import { EvidencePopover } from "./EvidencePopover";
+import { PaginatedTable } from "./PaginatedTable";
 import { PopulationSankey } from "./PopulationSankey";
 
 /**
@@ -36,6 +43,8 @@ export function ResultsPane({
   activeTab,
   onTabChange,
   viewSql,
+  viewResult,
+  parameters,
   reports,
   onEvaluated,
 }: {
@@ -52,6 +61,8 @@ export function ResultsPane({
   activeTab: ResultsTab;
   onTabChange: (t: ResultsTab) => void;
   viewSql: string | null;
+  viewResult: FlattenViewResult | null;
+  parameters: Record<string, unknown> | null;
   reports: Array<Record<string, unknown>> | null;
   onEvaluated: (env: EvaluateResult) => void | Promise<void>;
 }) {
@@ -60,12 +71,81 @@ export function ResultsPane({
   const [busy, setBusy] = useState(false);
   const [showSql, setShowSql] = useState(false);
   const [showAst, setShowAst] = useState(false);
+  // Cell-level evidence drill-in: (patient, population) → explain.
+  const [cellEvidence, setCellEvidence] = useState<{
+    patientId: string;
+    population: string;
+    evidence: EvidenceResult | null;
+  } | null>(null);
+
+  async function explainCell(patientId: string, population: string) {
+    setCellEvidence({ patientId, population, evidence: null });
+    try {
+      const resp = await workerRequest({
+        type: "explain_patient",
+        libraries,
+        main,
+        dataset,
+        patient_id: patientId,
+        parameters,
+        output_columns: outputColumns,
+      });
+      const env: EvidenceResult = JSON.parse(resp.envelope);
+      setCellEvidence((cur) =>
+        cur && cur.patientId === patientId && cur.population === population
+          ? { patientId, population, evidence: env }
+          : cur,
+      );
+    } catch (e) {
+      setCellEvidence({
+        patientId,
+        population,
+        evidence: {
+          schema: 1,
+          ok: false,
+          diagnostics: [
+            {
+              code: "evaluation_error" as const,
+              severity: "error" as const,
+              message: e instanceof Error ? e.message : String(e),
+            },
+          ],
+          patient_id: patientId,
+          populations: {},
+          definitions: [],
+        },
+      });
+    }
+  }
 
   const populationColumns = (result?.columns ?? []).filter(
     (c) => c !== "patient_id",
   );
 
-  async function run() {
+  // AUTO-EVALUATE: after the first run ATTEMPT (success or failure),
+  // keep results live — recompute 2s after any input settles. Arming
+  // on ANY attempt matters: a first run that fails on a missing
+  // parameter must still arm, so filling the parameter auto-heals the
+  // results without another manual click. Auto runs never record run
+  // history (noise).
+  const busyRef = useRef(false);
+  // U5: NO manual Evaluate — evaluation auto-runs (2s debounce) whenever
+  // the inputs change AND there is a dataset to evaluate against.
+  const canAutoRun = !!dataset && !!main?.text;
+  useEffect(() => {
+    if (!canAutoRun) return;
+    const t = setTimeout(() => {
+      if (busyRef.current) return;
+      void run(true);
+    }, 2000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libraries, main, dataset, outputColumns, measure, parameters, canAutoRun]);
+
+  const runSeq = useRef(0);
+  async function run(recordRun = true) {
+    const seq = ++runSeq.current;
+    busyRef.current = true;
     setBusy(true);
     setDiags(null);
     try {
@@ -74,14 +154,16 @@ export function ResultsPane({
         libraries,
         main,
         dataset,
+        parameters,
         output_columns: outputColumns,
         emit_sql: true,
       });
       const env: EvaluateResult = JSON.parse(resp.envelope);
+      if (seq !== runSeq.current) return; // superseded by a newer run
       if (env.ok) {
         env.evaluated_at = Date.now();
         setResult(env);
-        void onEvaluated(env);
+        if (recordRun) void onEvaluated(env);
         // Materialize per-patient MeasureReports from the evaluation
         // rows (feature point 3) — the MR tab's render source and the
         // View tab's default source.
@@ -109,14 +191,15 @@ export function ResultsPane({
         onReports(null);
       }
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
 
   const tabs: Array<{ id: ResultsTab; label: string; testid: string }> = [
-    { id: "cql", label: "CQL output", testid: "results-tab-cql" },
-    { id: "measure", label: "MeasureReport output", testid: "results-tab-measure" },
-    { id: "view", label: "ViewDefinition output", testid: "results-tab-view" },
+    { id: "cql", label: "CQL", testid: "results-tab-cql" },
+    { id: "measure", label: "Measure Report", testid: "results-tab-measure" },
+    { id: "view", label: "View Definition", testid: "results-tab-view" },
   ];
 
   const activeSql = activeTab === "view" ? viewSql : (result?.sql ?? null);
@@ -141,9 +224,11 @@ export function ResultsPane({
           <button onClick={() => setShowAst(!showAst)} data-testid="show-ast">
             {showAst ? "Hide AST" : "Show AST"}
           </button>
-          <button onClick={run} disabled={busy} data-testid="run-eval">
-            {busy ? "Running…" : "Evaluate"}
-          </button>
+          {busy && (
+            <span className="pane-meta" data-testid="run-busy">
+              recalculating…
+            </span>
+          )}
         </div>
       </header>
       <div className="tab-strip results-tabs" data-testid="results-tabs">
@@ -169,18 +254,17 @@ export function ResultsPane({
         </ul>
       )}
 
-      {/* CQL output tab: rows table + Evidence drawer */}
+      {/* CQL tab: Output pane (table + meta) first, Evidence drawer last */}
       <div className="tab-panel" hidden={activeTab !== "cql"} data-testid="tab-panel-cql">
         {result && (
-          <>
-            <div className="eval-meta" data-testid="eval-meta">
-              {result.evaluated_at
-                ? `${new Date(result.evaluated_at).toLocaleString()} · `
-                : ""}
-              {result.patient_count} patients · {result.timing_ms.evaluate}ms
-            </div>
-            <table className="results-table" data-testid="results-table">
-              <thead>
+          <div className="pane output-pane" data-testid="output-cql">
+            <header className="pane-header">
+              <h3>Output</h3>
+            </header>
+            <PaginatedTable
+              testId="results-table"
+              rowCount={result.rows.length}
+              header={
                 <tr>
                   {result.columns.map((c) => (
                     <th key={c}>
@@ -197,18 +281,58 @@ export function ResultsPane({
                     </th>
                   ))}
                 </tr>
-              </thead>
-              <tbody>
-                {result.rows.map((row, i) => (
-                  <tr key={i}>
-                    {result.columns.map((c) => (
-                      <td key={c}>{renderValue(row[c])}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </>
+              }
+              renderRows={({ slice }) =>
+                slice(result.rows).map((row) => {
+                  const pid = String(row.patient_id ?? "");
+                  return (
+                    <tr key={pid}>
+                      {result.columns.map((c) => {
+                        const isPopulation =
+                          c !== "patient_id" && row[c] !== undefined;
+                        return (
+                          <td
+                            key={c}
+                            className={
+                              isPopulation ? "cell-evidence" : undefined
+                            }
+                            data-testid={
+                              isPopulation ? `cell-${pid}-${c}` : undefined
+                            }
+                            title={
+                              isPopulation ? `why: ${pid} · ${c}` : undefined
+                            }
+                            onClick={
+                              isPopulation
+                                ? () => void explainCell(pid, c)
+                                : undefined
+                            }
+                          >
+                            {renderValue(row[c])}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })
+              }
+            />
+            <div className="eval-meta" data-testid="eval-meta">
+              {result.rows.length} rows · {result.columns.length} columns ·{" "}
+              {result.evaluated_at
+                ? `${new Date(result.evaluated_at).toLocaleString()} · `
+                : ""}
+              {result.timing_ms.evaluate}ms
+            </div>
+            {cellEvidence && (
+              <EvidencePopover
+                evidence={cellEvidence.evidence}
+                patientId={cellEvidence.patientId}
+                population={cellEvidence.population}
+                onClose={() => setCellEvidence(null)}
+              />
+            )}
+          </div>
         )}
         <div className="results-drawer" data-testid="drawer-evidence">
           <details open>
@@ -220,20 +344,15 @@ export function ResultsPane({
         </div>
       </div>
 
-      {/* MeasureReport tab: Measure config + Tests + reports + Sankey */}
+      {/* MeasureReport tab: pivot table first, then Sankey, config drawers last */}
       <div className="tab-panel" hidden={activeTab !== "measure"} data-testid="tab-panel-measure">
-        <div className="results-drawer" data-testid="drawer-populations">
-          <details open>
-            <summary className="drawer-toggle" data-testid="drawer-populations-toggle">
-              Populations / Measure
-            </summary>
-            <div className="drawer-body">{measureSlot}</div>
-          </details>
-        </div>
-        {testsSlot}
         {reports && reports.length > 0 ? (
-          <div className="mr-render" data-testid="mr-reports">
+          <div className="pane output-pane" data-testid="mr-reports">
+            <header className="pane-header">
+              <h3>Output</h3>
+            </header>
             <MrPivotTable reports={reports} />
+            <MrMeta reports={reports} evaluatedAt={result?.evaluated_at} />
           </div>
         ) : (
           <p className="pane-hint" data-testid="mr-empty">
@@ -243,17 +362,72 @@ export function ResultsPane({
           </p>
         )}
         {result && populationColumns.length > 0 && (
-          <SankeyFromRows columns={populationColumns} rows={result.rows} />
+          <div className="pane output-pane" data-testid="attrition-pane">
+            <header className="pane-header">
+              <h3>Attrition</h3>
+            </header>
+            <SankeyFromRows columns={populationColumns} rows={result.rows} />
+          </div>
         )}
+        {testsSlot}
+        <div className="results-drawer" data-testid="drawer-populations">
+          <details open>
+            <summary className="drawer-toggle" data-testid="drawer-populations-toggle">
+              Populations / Measure
+            </summary>
+            <div className="drawer-body">{measureSlot}</div>
+          </details>
+        </div>
       </div>
 
-      {/* ViewDefinition tab: VD config + flatten table */}
+      {/* View Definition tab: Output pane (flatten results) first, VD config last */}
       <div className="tab-panel" hidden={activeTab !== "view"} data-testid="tab-panel-view">
+        {viewResult?.ok && viewResult.columns.length > 0 && (
+          <div className="pane output-pane" data-testid="output-view">
+            <header className="pane-header">
+              <h3>Output</h3>
+            </header>
+            <PaginatedTable
+              testId="view-table"
+              rowCount={viewResult.rows.length}
+              header={
+                <tr>
+                  {viewResult.columns.map((c) => (
+                    <th key={c}>{c}</th>
+                  ))}
+                </tr>
+              }
+              renderRows={({ slice }) =>
+                slice(viewResult.rows).map((r, i) => (
+                  <tr key={i}>
+                    {viewResult.columns.map((c) => (
+                      <td key="x">
+                        {r[c] === null || r[c] === undefined
+                          ? "—"
+                          : String(r[c])}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              }
+            />
+            <div className="eval-meta" data-testid="view-meta">
+              {viewResult.rows.length} rows · {viewResult.columns.length} columns
+            </div>
+          </div>
+        )}
         {viewSlot}
       </div>
 
       {activeSql && showSql && <SqlViewer sql={activeSql} />}
-      {showAst && <AstTree cqlText={main.text} />}
+      {showAst && (
+        <div className="pane output-pane" data-testid="ast-pane">
+          <header className="pane-header">
+            <h3>AST</h3>
+          </header>
+          <AstTree cqlText={main.text} />
+        </div>
+      )}
     </section>
   );
 }
@@ -302,8 +476,10 @@ function MrPivotTable({
   }
   const sortedPatients = [...cells.keys()].sort();
   return (
-    <table className="results-table" data-testid="mr-table">
-      <thead>
+    <PaginatedTable
+      testId="mr-table"
+      rowCount={sortedPatients.length}
+      header={
         <tr>
           <th>patient</th>
           {multiGroup && <th>group</th>}
@@ -311,12 +487,12 @@ function MrPivotTable({
             <th key={c}>{c}</th>
           ))}
         </tr>
-      </thead>
-      <tbody>
-        {sortedPatients.map((pid, i) => {
+      }
+      renderRows={({ slice }) =>
+        slice(sortedPatients).map((pid) => {
           const row = cells.get(pid)!;
           return (
-            <tr key={pid} data-testid={`mr-row-${i}`}>
+            <tr key={pid} data-testid={`mr-row-${pid}`}>
               <td>{row.patient}</td>
               {multiGroup && <td>{row.gid}</td>}
               {codes.map((c) => (
@@ -324,9 +500,26 @@ function MrPivotTable({
               ))}
             </tr>
           );
-        })}
-      </tbody>
-    </table>
+        })
+      }
+    />
+  );
+}
+
+/** Meta line under the MR pivot table: rows · columns · timestamp. */
+function MrMeta({
+  reports,
+  evaluatedAt,
+}: {
+  reports: Array<Record<string, unknown>>;
+  evaluatedAt?: number;
+}) {
+  const cols = (reports[0] && (reports[0].group as Array<unknown>)?.length) ?? 0;
+  return (
+    <div className="eval-meta" data-testid="mr-meta">
+      {reports.length} reports · {cols > 1 ? `${cols} groups · ` : ""}
+      {evaluatedAt ? `${new Date(evaluatedAt).toLocaleString()}` : ""}
+    </div>
   );
 }
 

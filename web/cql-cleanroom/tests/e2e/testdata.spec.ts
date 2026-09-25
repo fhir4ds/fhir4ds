@@ -132,7 +132,10 @@ test.describe("bundle export/import", () => {
 
     const [download] = await Promise.all([
       page.waitForEvent("download", { timeout: 60_000 }),
-      page.click("[data-testid=bundle-export]"),
+      (async () => {
+        await page.click("[data-testid=export-menu]");
+        await page.click("[data-testid=bundle-export]");
+      })(),
     ]);
     const path = await download.path();
     if (!path) throw new Error("no download path");

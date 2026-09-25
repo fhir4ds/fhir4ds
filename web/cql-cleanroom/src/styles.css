@@ -34,13 +34,12 @@ body { margin: 0; }
 .boot-hint { color: #5d6f8a; font-size: 12px; margin-top: 6px; }
 .boot-error { color: #ff7b72; font-size: 13px; max-width: 560px; }
 
-/* Panes (C1-U5/U6) */
-.app-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 0.8fr);
-  gap: 12px;
-  align-items: start;
-}
+/* Panes (C1-U5/U6) — grid lives in the single later .app-main rule
+   (PASS2 G1: the earlier duplicate 3-column def is retired; the rail
+   column is added there). */
+.pane-col > .pane { min-width: 0; max-width: 100%; }
+.pane table { max-width: 100%; }
+
 .pane {
   border: 1px solid #232a35;
   border-radius: 8px;
@@ -84,7 +83,14 @@ body { margin: 0; }
   color: #e6e9ef; padding: 4px 8px; font-size: 12px; min-width: 140px;
 }
 .param-panel input::placeholder { color: #5d6f8a; }
-.results-table-wrap { overflow: auto; max-height: 300px; }
+.results-table-wrap { overflow-x: auto; overflow-y: auto; max-height: 320px; border: 1px solid #1c2534; border-radius: 4px; }
+.results-table { min-width: max-content; }
+.table-pager {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 6px; font-size: 11px; color: #8aa0b8;
+  border-top: 1px solid #1c2534; position: sticky; left: 0;
+}
+.table-pager button:disabled { opacity: 0.35; cursor: default; }
 .results-table { border-collapse: collapse; width: 100%; font-size: 12px; }
 .results-table th, .results-table td {
   border: 1px solid #232a35; padding: 4px 8px; text-align: left; white-space: nowrap;
@@ -133,7 +139,73 @@ body { margin: 0; }
 .bottom-pane { flex: 1; min-height: 260px; background: #16191e; border-top: 1px solid #2d333b; overflow: auto; }
 .bottom-pane .pane { height: 100%; }
 .app { display: flex; flex-direction: column; height: 100vh; }
-.app-main { display: grid; grid-template-columns: 1.2fr 1fr 0.9fr; gap: 10px; padding: 10px; overflow: auto; flex: 1; }
+.app-main { display: grid; grid-template-columns: 52px minmax(380px, 1.1fr) minmax(440px, 1.1fr) minmax(300px, 0.9fr); gap: 10px; padding: 10px; overflow: auto; flex: 1; align-items: start; }
+
+/* PASS2 G1: left navigation rail */
+.nav-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 6px;
+  border: 1px solid #232a35;
+  border-radius: 8px;
+  background: #161b24;
+  min-height: 120px;
+  position: sticky;
+  top: 10px;
+}
+.nav-rail .rail-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #7b8698;
+  padding: 4px 2px 2px;
+}
+.rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #aab4c3;
+  font-size: 12px;
+  cursor: pointer;
+}
+.rail-item:hover { background: #1f2733; color: #e6ebf2; }
+.rail-item.active { background: #1f2733; border-color: #3b82f6; color: #e6ebf2; }
+.rail-item .rail-glyph { font-weight: 600; }
+.rail-item .rail-name {
+  display: none;
+  position: absolute;
+  left: 46px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #0d1117;
+  border: 1px solid #232a35;
+  border-radius: 6px;
+  padding: 4px 10px;
+  color: #e6ebf2;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 30;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+.rail-item:hover .rail-name, .rail-item:focus-visible .rail-name { display: block; }
+.rail-item .rail-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.rail-badge.err { background: #ef4444; }
+.rail-badge.entry { background: #3b82f6; bottom: 3px; top: auto; width: 6px; height: 6px; }
+.rail-sep { border-top: 1px solid #232a35; margin: 4px 2px; }
 .evidence-pane .ev-controls { display: flex; gap: 8px; padding: 8px 12px; align-items: center; flex-wrap: wrap; }
 .evidence-pane .ev-controls input { background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; width: 140px; }
 .evidence-pane .ev-controls select { background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; width: 200px; }
@@ -658,50 +730,386 @@ body { margin: 0; }
   font-size: 0.85em;
 }
 
-/* Builder styling §3.4: section cards + nesting tint */
-.builder-form .nested-object {
-  background: var(--bg-raised, #262626);
-  border: 1px solid var(--border, #3a3a3a);
-  border-left: 3px solid var(--nest-line, #4a7a9b);
-  border-radius: 6px;
-  padding: 8px 10px;
-  margin: 6px 0;
-}
-.builder-form .nested-object[data-depth="2"] { border-left-color: #6a8a5b; }
-.builder-form .nested-object[data-depth="3"] { border-left-color: #9b7a4a; }
-.builder-form .nested-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.9em;
-  color: var(--fg-muted, #aaa);
-  cursor: pointer;
-}
-.builder-form .field-row {
+/* AST tree — mirrors the builder tree look (caret gutter, indent
+   guides, hover rows, key/value columns). */
+.ast-filter-row { margin: 6px 0; display: flex; gap: 8px; }
+.ast-row {
   display: grid;
-  grid-template-columns: minmax(110px, auto) 1fr auto;
-  gap: 8px;
+  grid-template-columns: 20px minmax(0, max-content) minmax(0, 1fr) auto;
+  column-gap: 6px;
   align-items: center;
-  margin: 4px 0;
+  padding: 1px 0;
+  min-height: 24px;
+  border-radius: 2px;
 }
-.builder-form .field-row label { font-size: 0.85em; color: var(--fg-muted, #aaa); }
-.item-tools { display: flex; gap: 2px; }
-.item-tools button {
+.ast-row:hover { background: #1a212c; }
+.ast-caret, .ast-caret-placeholder {
+  grid-column: 1;
+  width: 20px;
+  height: 20px;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+}
+.ast-caret {
   background: transparent;
   border: none;
-  color: var(--fg-muted, #888);
+  color: #8fa3bd;
   cursor: pointer;
+  padding: 0;
+}
+.ast-caret:hover { color: #d7e2f0; }
+.ast-caret-placeholder { visibility: hidden; }
+.ast-key {
+  grid-column: 2;
+  color: #c9d4e3;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ast-head .ast-key { font-weight: 600; }
+.ast-value {
+  grid-column: 3 / -1;
+  color: #9db0c5;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ast-head {
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid #1c2534;
+  margin-top: 4px;
+  min-height: 26px;
+}
+.ast-group.collapsed > .ast-children { display: none; }
+.ast-children {
+  margin-left: 10px;
+  border-left: 1px solid #2c4a6e;
+  padding-left: 10px;
+}
+.ast-kind-badge {
+  grid-column: 4;
+  justify-self: end;
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  padding: 0 7px;
+  line-height: 16px;
+  border-radius: 8px;
+  border: 1px solid #2c4257;
+  color: #8fb3d9;
+  background: #101822;
+  white-space: nowrap;
+}
+
+/* PASS2 G2: terminology pane */
+.terminology-pane { display: flex; flex-direction: column; gap: 8px; }
+.terminology-list { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow: auto; }
+.terminology-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border: 1px solid #232a35; border-radius: 6px;
+  background: #161b24; color: #aab4c3; cursor: pointer; text-align: left;
+}
+.terminology-item.active { border-color: #3b82f6; color: #e6ebf2; }
+.terminology-name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.terminology-prov { font-size: 10px; color: #7b8698; text-transform: uppercase; letter-spacing: 0.05em; }
+.terminology-missing { font-size: 10px; color: #d97706; }
+.terminology-editor { display: flex; flex-direction: column; gap: 8px; }
+.terminology-editor-head { display: flex; align-items: center; gap: 8px; }
+.terminology-url { font-size: 11px; color: #8aa0b8; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.terminology-prov-badge { font-size: 10px; border: 1px solid #232a35; border-radius: 4px; padding: 1px 6px; color: #7b8698; }
+.terminology-warnings { margin: 0; padding-left: 18px; color: #d97706; font-size: 12px; }
+.terminology-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.terminology-table th { text-align: left; color: #7b8698; font-weight: 500; padding: 3px 4px; border-bottom: 1px solid #232a35; }
+.terminology-table td { padding: 2px 4px; border-bottom: 1px solid #1c232e; }
+.terminology-table input { width: 100%; min-width: 60px; }
+.terminology-add-code { align-self: flex-start; }
+.terminology-raw { display: flex; flex-direction: column; gap: 6px; }
+.raw-json-editor { font-family: ui-monospace, monospace; font-size: 12px; }
+.terminology-status { font-size: 12px; color: #7b8698; margin: 0; }
+
+/* Output pane: results table + meta wrapped per tab */
+.output-pane { margin-bottom: 12px; }
+.output-pane .pane-header h3 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #7b8698; }
+.output-pane .eval-meta { margin-top: 6px; }
+
+/* PASS2 tree-view builder: caret gutter + indent guides, no cards.
+   NARROW-COLUMN two-line rows: caret + label on line 1, full-width
+   input on line 2 — inputs get ~290px instead of ~120px in the side
+   column, and labels never compress or wrap. */
+.builder-form .builder-tree-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  column-gap: 6px;
+  row-gap: 3px;
+  align-items: center;
+  padding: 2px 0;
+  min-height: 26px;
+}
+.builder-form .builder-tree-row > .builder-caret {
+  grid-column: 1;
+  grid-row: 1;
+}
+.builder-form .builder-tree-row > .builder-label {
+  grid-column: 2;
+  grid-row: 1;
+  white-space: nowrap;
+  overflow: visible;
+}
+.builder-form .builder-tree-row > input,
+.builder-form .builder-tree-row > select,
+.builder-form .builder-tree-row > textarea {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+/* Repeatable + buttons sit right of the label on line 1. */
+.builder-form .builder-tree-row > .builder-item-add,
+.builder-form .builder-tree-row > .builder-item-remove {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+}
+/* Item heads: subtle row so list members read as numbered entries. */
+.builder-form .builder-item-head {
+  border-bottom: none;
+  margin-top: 2px;
+  background: #18202b;
+  border-radius: 4px;
   padding: 0 4px;
 }
-.item-tools button:hover { color: var(--fg, #eee); }
-
-/* AST §3.4: filter + kind badges */
-.ast-filter-row { margin: 6px 0; display: flex; gap: 8px; }
-.ast-kind-badge {
-  font-size: 0.75em;
-  padding: 0 6px;
-  border-radius: 8px;
-  border: 1px solid var(--border, #444);
-  color: var(--fg-muted, #aaa);
-  margin-left: 6px;
+/* Choice select: LEFT-aligned right after the label on line 1. */
+/* Choice select: sits RIGHT of the label, never overlapping — the
+   label column becomes flexible and the select flows after it. */
+.builder-form .builder-choice .builder-tree-row.builder-tree-head {
+  grid-template-columns: 20px minmax(0, max-content) minmax(0, 1fr);
 }
+.builder-form .builder-tree-row.builder-tree-head select {
+  grid-row: 1;
+  grid-column: 3;
+  justify-self: end;
+  width: auto;
+  max-width: 150px;
+  align-self: center;
+}
+.builder-form .builder-tree-row:hover { background: #1a212c; }
+.builder-form .builder-caret {
+  background: transparent;
+  border: none;
+  color: #5f8f6f;
+  cursor: pointer;
+  padding: 0;
+  width: 20px;
+  height: 22px;
+  font-size: 15px;
+  line-height: 22px;
+  text-align: center;
+}
+.builder-form .builder-caret:hover { color: #9fd0af; }
+.builder-form .builder-caret.placeholder { visibility: hidden; }
+.builder-form .builder-tree-group { margin: 0; }
+.builder-form .builder-tree-group.collapsed > .builder-tree-children { display: none; }
+.builder-form .builder-tree-children {
+  margin-left: 8px;
+  border-left: 1px solid #2c4a6e;
+  padding-left: 10px;
+}
+.builder-form .builder-tree-head {
+  margin-top: 6px;
+  min-height: 28px;
+  border-bottom: 1px solid #24402f;
+  border-radius: 2px;
+  cursor: pointer;
+  user-select: none;
+}
+.builder-form .builder-tree-head .builder-caret {
+  color: #6b7d95;
+}
+.builder-form .builder-tree-head:first-child { margin-top: 0; }
+.builder-form .builder-tree-head .builder-label { font-weight: 600; color: #c9d4e3; }
+.builder-form .builder-choice-select {
+  justify-self: end;
+  max-width: 170px;
+  font-size: 12px;
+}
+.builder-form .builder-choice .builder-tree-children { border-left-style: dashed; }
+
+/* Tree-row internals: consistent grid inside every row */
+.builder-form .builder-tree-row {
+  align-items: start;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.builder-form .builder-tree-row input,
+.builder-form .builder-tree-row select,
+.builder-form .builder-tree-row textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+/* Hatch textareas: full width on line 2 like other inputs. */
+.builder-form .builder-tree-row.builder-hatch-row .builder-hatch {
+  grid-column: 2 / -1;
+  width: 100%;
+  min-width: 0;
+}
+/* Ref rows: target pills ride line 1 right after the label; the
+   dangling hint (if any) goes under the input. */
+/* Ref line 1: label and pills flow together; input full-width line 2. */
+.builder-form .builder-tree-row.builder-ref .ref-target-pills {
+  grid-column: 2 / -1;
+  grid-row: 1;
+  justify-self: end;
+  margin-top: 0;
+  align-self: center;
+}
+.builder-form .builder-tree-row.builder-ref .builder-hint {
+  grid-column: 2 / -1;
+  grid-row: 3;
+  justify-self: start;
+}
+/* Array + buttons hug the label, not the far edge. */
+.builder-form .builder-tree-head .builder-item-add {
+  justify-self: start;
+  margin-left: 2px;
+}
+
+/* Reference target pills (row 2 of ref rows, under the input) */
+.builder-form .ref-target-pills {
+  justify-self: start;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 1px;
+}
+.ref-target-pill {
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  border: 1px solid #2c4257;
+  border-radius: 8px;
+  padding: 0 6px;
+  line-height: 15px;
+  color: #8fb3d9;
+  background: #101822;
+  white-space: nowrap;
+}
+
+/* Parameters drawer rows reuse the builder tree look */
+.param-row { display: grid; grid-template-columns: 20px minmax(96px, max-content) minmax(0, 1fr); column-gap: 8px; align-items: center; padding: 2px 0; min-height: 28px; }
+.param-row .builder-label { font-size: 12px; color: #c9d4e3; }
+.param-row input { width: 100%; min-width: 0; box-sizing: border-box; font-size: 12px; }
+
+/* Dataset tree — builder-tree look (caret gutter, guides, hover rows) */
+.dataset-group { border-left: none; padding-left: 0; }
+.dataset-group-header.dataset-tree-head,
+.dataset-type-toggle.dataset-tree-head {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  column-gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 2px 2px;
+  min-height: 26px;
+  border-bottom: 1px solid #1c2534;
+  background: transparent;
+  border-radius: 2px;
+}
+.dataset-type-toggle.dataset-tree-head:hover { background: #1a212c; }
+.dataset-caret, .dataset-caret-placeholder {
+  grid-column: 1;
+  width: 20px;
+  height: 20px;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+  color: #8fa3bd;
+}
+.dataset-caret-placeholder { visibility: hidden; }
+.dataset-type-toggle { text-align: left; cursor: pointer; border: none; color: inherit; }
+.dataset-type-name { font-weight: 600; color: #c9d4e3; font-size: 12px; }
+.dataset-count-pill {
+  grid-column: 3;
+  justify-self: end;
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  border: 1px solid #2c4257;
+  border-radius: 8px;
+  padding: 0 7px;
+  line-height: 16px;
+  color: #8fb3d9;
+  background: #101822;
+}
+.dataset-type-group { margin-left: 10px; border-left: 1px solid #2c4a6e; padding-left: 10px; }
+.dataset-rows { gap: 0; }
+.dataset-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 2px 4px; border-radius: 2px; background: transparent;
+  min-height: 24px;
+}
+.dataset-row:hover { background: #1a212c; }
+.dataset-group-label { font-weight: 600; color: #c9d4e3; font-size: 12px; }
+
+/* Cell-level evidence drill-in */
+.results-table td.cell-evidence {
+  cursor: pointer;
+  text-decoration: underline dotted #3b4c63;
+  text-underline-offset: 3px;
+}
+.results-table td.cell-evidence:hover { background: #1e2a3c; color: #cfe0f5; }
+.evidence-popover { margin-top: 10px; border-color: #2c4257; }
+.evidence-popover .pane-header h3 {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; text-transform: none; letter-spacing: 0;
+}
+.evidence-verdict {
+  font-size: 10px; font-family: ui-monospace, monospace;
+  border-radius: 8px; padding: 0 8px; line-height: 16px;
+}
+.evidence-verdict.true { color: #7fbf7f; border: 1px solid #2e5b2e; background: #101a10; }
+.evidence-verdict.false { color: #d98a8a; border: 1px solid #5b2e2e; background: #1a1010; }
+.evidence-def { margin-bottom: 8px; }
+.evidence-def-head, .evidence-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, max-content) minmax(0, 1fr) auto;
+  column-gap: 6px; align-items: center;
+  padding: 1px 0; min-height: 24px;
+}
+.evidence-def-head { border-bottom: 1px solid #1c2534; }
+.evidence-def-head .evidence-verdict { grid-column: 4; justify-self: end; }
+.evidence-row:hover { background: #1a212c; border-radius: 2px; }
+
+/* Header dropdown menus (U4) */
+.dropdown-menu { position: relative; display: inline-block; }
+.dropdown-list {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 60;
+  display: flex; flex-direction: column; min-width: 220px;
+  background: #10151d; border: 1px solid #2c3848; border-radius: 8px;
+  padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.dropdown-item {
+  text-align: left; background: transparent; border: none;
+  color: #c9d4e3; padding: 7px 10px; border-radius: 5px; cursor: pointer;
+  font-size: 12px;
+}
+.dropdown-item:hover { background: #1f2733; }
+.dropdown-sep { border-top: 1px solid #232a35; margin: 4px 2px; }
+.dropdown-header {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: #7b8698; padding: 4px 10px 2px;
+}
+
+/* Pager pinned BELOW the scroll region (never scrolls away) */
+.results-table-block { display: flex; flex-direction: column; }
+.results-table-block .results-table-wrap {
+  overflow-x: auto; overflow-y: auto; max-height: 320px;
+  border: 1px solid #1c2534; border-bottom: none; border-radius: 4px 4px 0 0;
+}
+.results-table-block .table-pager {
+  border: 1px solid #1c2534; border-radius: 0 0 4px 4px; background: #10151d;
+}
+/* Tests pane: independent scroll (results tab, measure report) */
+.tests-scroll { max-height: 420px; overflow-y: auto; }

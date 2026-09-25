@@ -29,14 +29,13 @@ test("editor parses and evaluates with typed results", async ({ page }) => {
   if (!loaded?.includes("3")) throw new Error(`expected 3 resources: ${loaded}`);
 
   // Evaluate → typed results table + SQL viewer
-  await page.click("[data-testid=run-eval]");
   await page.waitForSelector("[data-testid=results-table]", {
     timeout: 60_000,
   });
   const badge = await page.textContent("[data-testid=type-badge-initial_population]");
   if (badge !== "Boolean") throw new Error(`IPP badge: ${badge}`);
   const meta = await page.textContent("[data-testid=eval-meta]");
-  if (!meta?.includes("3 patients")) throw new Error(`meta: ${meta}`);
+  if (!meta?.includes("3 rows")) throw new Error(`meta: ${meta}`);
   await page.click("[data-testid=show-sql]");
   const sql = await page.textContent(".sql-pre");
   if (!sql || !sql.includes("ORDER BY")) throw new Error("sql viewer empty");

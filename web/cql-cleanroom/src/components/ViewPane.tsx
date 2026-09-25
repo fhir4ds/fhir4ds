@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FlattenViewResult } from "../lib/protocol";
 import { workerRequest } from "./BootOverlay";
 import {
@@ -25,6 +25,7 @@ export function ViewPane({
   viewConfig,
   onViewConfigChange,
   onSql,
+  onResult,
 }: {
   measure: Record<string, unknown> | null;
   measureReports: Array<Record<string, unknown>> | null;
@@ -32,6 +33,8 @@ export function ViewPane({
   onViewConfigChange: (v: ViewOverrides) => void;
   /** Reports the flatten SQL upward (Results Show-SQL context). */
   onSql?: (sql: string | null) => void;
+  /** Reports the flatten RESULT upward — Results renders the Output pane. */
+  onResult?: (r: FlattenViewResult | null) => void;
 }) {
   const overrides = viewConfig ?? {};
   const columns = useMemo(
@@ -44,7 +47,6 @@ export function ViewPane({
   );
   const [mode, setMode] = useState<"derived" | "custom">("derived");
   const [customVd, setCustomVd] = useState("");
-  const [result, setResult] = useState<FlattenViewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -56,7 +58,22 @@ export function ViewPane({
     onViewConfigChange(next);
   };
 
+  // U6: NO manual Run — the view recomputes 2s after the reports or VD
+  // config change, whenever there are MeasureReports to flatten.
+  const busyRef = useRef(false);
+  const canAutoRun = (measureReports?.length ?? 0) > 0;
+  useEffect(() => {
+    if (!canAutoRun) return;
+    const t = setTimeout(() => {
+      if (busyRef.current) return;
+      void run();
+    }, 2000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [measureReports, mode, customVd, overrides, canAutoRun]);
+
   async function run() {
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -73,26 +90,30 @@ export function ViewPane({
       const env: FlattenViewResult = JSON.parse(
         (resp as { envelope: string }).envelope,
       );
-      setResult(env);
       onSql?.(env.ok ? (env.sql ?? null) : null);
+      onResult?.(env.ok ? env : null);
       if (!env.ok) {
         setError(env.diagnostics?.map((d) => d.message).join("; ") ?? "view failed");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      onResult?.(null);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
-
-  const outColumns = result?.ok ? result.columns : [];
-  const rows = result?.ok ? result.rows : [];
 
   return (
     <section className="pane" data-testid="view-pane">
       <header className="pane-header">
         <h2>View</h2>
         <div className="pane-actions">
+          {busy && (
+            <span className="pane-meta" data-testid="view-busy">
+              running view…
+            </span>
+          )}
           <select
             value={mode}
             onChange={(e) => setMode(e.target.value as "derived" | "custom")}
@@ -101,9 +122,6 @@ export function ViewPane({
             <option value="derived">From Measure</option>
             <option value="custom">Custom VD</option>
           </select>
-          <button onClick={run} disabled={busy} data-testid="view-run">
-            {busy ? "Running…" : "Run view"}
-          </button>
         </div>
       </header>
       {error && (
@@ -199,31 +217,6 @@ export function ViewPane({
           placeholder='{"resource": "Patient", "select": [...]}'
           spellCheck={false}
         />
-      )}
-      {result?.ok && (
-        <div className="view-result" data-testid="view-result">
-          <div className="sql-summary" data-testid="view-sql">
-            {outColumns.length} column(s), {rows.length} row(s)
-          </div>
-          <table className="result-table" data-testid="view-table">
-            <thead>
-              <tr>
-                {outColumns.map((c) => (
-                  <th key={c}>{c}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={i}>
-                  {outColumns.map((c) => (
-                    <td key={c}>{r[c] === null || r[c] === undefined ? "—" : String(r[c])}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       )}
     </section>
   );

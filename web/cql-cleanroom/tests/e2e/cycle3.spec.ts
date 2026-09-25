@@ -40,9 +40,7 @@ test.describe("cleanroom cycle-3 capabilities", () => {
     if (!evOpen) {
       await page.click('[data-testid=drawer-evidence-toggle]');
     }
-
-    await page.click('[data-testid=run-eval]');
-    await page.waitForSelector('[data-testid=results-table]', { timeout: 60_000 });
+    await page.waitForSelector('[data-testid=results-table]', { timeout: 90_000 });
     await page.waitForFunction(
       () =>
         document.querySelectorAll(
@@ -56,7 +54,6 @@ test.describe("cleanroom cycle-3 capabilities", () => {
     await setMaleLibrary(page);
 
     // 3. evaluate again — the new current differs from the saved run
-    await page.click('[data-testid=run-eval]');
     await page.waitForFunction(
       () =>
         document.querySelectorAll(

@@ -68,7 +68,6 @@ export function EditorPane({
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
   const [diags, setDiags] = useState<Diagnostics[]>([]);
-  const [params, setParams] = useState<ParamBinding[]>([]);
   const [parseMs, setParseMs] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -77,15 +76,15 @@ export function EditorPane({
   // textual scan so the panel stays live even pre-parse).
   const declared = useMemo(() => detectParams(text), [text]);
   useEffect(() => {
-    setParams((prev) => {
-      const byName = new Map(prev.map((p) => [p.name, p]));
-      return declared.map((name) => byName.get(name) ?? { name, value: "" });
-    });
     onParamsDetected?.(declared);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [declared.join(",")]);
 
   // Monaco mount (once)
+  // Latest-callback ref for the mount-only Monaco listener.
+  const onTextChangeRef = useRef(onTextChange);
+  onTextChangeRef.current = onTextChange;
+
   useEffect(() => {
     let disposed = false;
     (async () => {
@@ -104,7 +103,10 @@ export function EditorPane({
         renderWhitespace: "none",
       });
       editor.onDidChangeModelContent(() => {
-        onTextChange(editor.getValue());
+        // Mount-only listener: route through a ref so the CURRENT
+        // onTextChange closure is used (the captured one goes stale on
+        // tab switches and would write into the wrong library).
+        onTextChangeRef.current(editor.getValue());
       });
       editorRef.current = editor;
       monacoRef.current = monaco;
@@ -200,27 +202,6 @@ export function EditorPane({
         </span>
       </div>
       <div className="editor-host" data-testid="cql-editor" ref={editorDiv} />
-      {params.length > 0 && (
-        <div className="param-panel" data-testid="param-panel">
-          <h3>Parameters</h3>
-          {params.map((p, i) => (
-            <label key={p.name} className="param-row">
-              <span className="param-name">{p.name}</span>
-              <input
-                data-testid={`param-input-${p.name}`}
-                value={p.value}
-                placeholder="value"
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setParams((prev) =>
-                    prev.map((x, j) => (j === i ? { ...x, value: v } : x)),
-                  );
-                }}
-              />
-            </label>
-          ))}
-        </div>
-      )}
       {diags.length > 0 && (
         <div className="diag-list" data-testid="diag-list">
           {diags.map((d, i) => (
