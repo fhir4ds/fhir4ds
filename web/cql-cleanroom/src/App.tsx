@@ -27,7 +27,6 @@ import {
   importBundle,
   mergeDatasets,
 } from "./lib/bundleIo";
-import { RunCompare } from "./components/RunCompare";
 import { DropdownMenu } from "./components/DropdownMenu";
 import { FhirpathPane } from "./components/FhirpathPane";
 import type { RunEntry } from "./state/workspace";
@@ -228,8 +227,10 @@ export default function App() {
   const [viewSql, setViewSql] = useState<string | null>(null);
   const [viewResult, setViewResult] = useState<FlattenViewResult | null>(null);
   // Row-shaped memberships + hashes of the LATEST evaluation (compare
-  // target + drift reference). Cleared when inputs change.
-  const [currentRun, setCurrentRun] = useState<{
+  // target + drift reference). Cleared when inputs change. The read side
+  // rides baselineArtifact via runHistory; currentRun itself is the
+  // write-side holder (set by onEvaluated).
+  const [, setCurrentRun] = useState<{
     artifact: RunEntry["artifact"];
     libraryHash: string;
     datasetHash: string;
@@ -408,6 +409,9 @@ export default function App() {
         if (ws && ws.terminology?.valuesets?.length) {
           setTerminology(ws.terminology);
         }
+        if (ws && ws.paramValues && Object.keys(ws.paramValues).length) {
+          setParamValues(ws.paramValues);
+        }
       })
       .catch(() => undefined)
       .finally(() => {
@@ -439,6 +443,7 @@ export default function App() {
         runHistory,
         activeTabPref: resultsTab,
         terminology,
+        paramValues,
       }).catch(() => undefined);
     }, 800);
     return () => clearTimeout(t);
@@ -451,6 +456,7 @@ export default function App() {
     runHistory,
     resultsTab,
     terminology,
+    paramValues,
     restored,
   ]);
 
@@ -659,6 +665,7 @@ export default function App() {
       runHistory,
       activeTabPref: resultsTab,
       terminology,
+      paramValues,
     });
     const blob = new Blob([bytes as unknown as BlobPart], {
       type: "application/zip",
@@ -742,6 +749,7 @@ export default function App() {
       setMeasure(state.measure ?? DEFAULT_MEASURE);
       setViewConfig(state.viewConfig ?? null);
       setTerminology(state.terminology ?? { valuesets: [] });
+      setParamValues(state.paramValues ?? {});
       if (Array.isArray(state.cases)) {
         const ev: { [pid: string]: { [code: string]: boolean } } = {};
         for (const c of state.cases as Array<{ patient?: string; population?: string; expect?: boolean }>) {
@@ -871,6 +879,7 @@ export default function App() {
                 setRunHistory([]);
                 setResultsTab("cql");
                 setCurrentRun(null);
+                setParamValues({});
                 void clearWorkspace().catch(() => undefined);
               }
             }}
@@ -1038,29 +1047,60 @@ export default function App() {
             onTabChange={setResultsTab}
             viewSql={viewSql}
             reports={lastReports}
-            onEvaluated={async (env) => {
+            baselineArtifact={
+              // Prior run = second-to-last history entry; falls back to the
+              // in-flight currentRun artifact when history is pruned short.
+              runHistory.length >= 2
+                ? runHistory[runHistory.length - 2].artifact.patients != null
+                  ? Object.fromEntries(
+                      Object.entries(
+                        runHistory[runHistory.length - 2].artifact.patients,
+                      ).map(([pid, p]) => [
+                        pid,
+                        (p as { populations: Record<string, boolean | null> })
+                          .populations,
+                      ]),
+                    )
+                  : null
+                : null
+            }
+            onEvaluated={(env) => {
               // §3.3: capture the run (row-shaped artifact + hashes).
-              const [libHash, dsHash] = await Promise.all([
-                computeLibraryHash(main.text),
-                computeDatasetHash(
-                  dataset?.resources?.length
-                    ? { resources: dataset.resources as unknown[] }
-                    : null,
-                ),
-              ]);
+              // The artifact append is SYNCHRONOUS (the diff baseline must
+              // exist before any follow-up run evaluates); hashes are
+              // patched in afterwards (Web Crypto is async).
               const entry: RunEntry = {
                 id: newRunId(),
                 name: defaultRunName(Date.now()),
                 createdAt: Date.now(),
-                libraryHash: libHash,
-                datasetHash: dsHash,
+                libraryHash: "",
+                datasetHash: "",
                 artifact: artifactFromRows(env.rows, env.columns),
               };
               setRunHistory((h) => appendRun(h, entry, RUN_HISTORY_CAP));
               setCurrentRun({
                 artifact: entry.artifact,
-                libraryHash: libHash,
-                datasetHash: dsHash,
+                libraryHash: "",
+                datasetHash: "",
+              });
+              const libText = main.text;
+              const dsRes = dataset?.resources?.length
+                ? { resources: dataset.resources as unknown[] }
+                : null;
+              void Promise.all([
+                computeLibraryHash(libText),
+                computeDatasetHash(dsRes),
+              ]).then(([libHash, dsHash]) => {
+                setRunHistory((h) =>
+                  h.map((r) =>
+                    r.id === entry.id
+                      ? { ...r, libraryHash: libHash, datasetHash: dsHash }
+                      : r,
+                  ),
+                );
+                setCurrentRun((c) =>
+                  c ? { ...c, libraryHash: libHash, datasetHash: dsHash } : c,
+                );
               });
             }}
             measureSlot={
@@ -1082,22 +1122,6 @@ export default function App() {
                 onViewConfigChange={(overrides) => setViewConfig({ overrides })}
                 onSql={setViewSql}
                 onResult={setViewResult}
-              />
-            }
-            evidenceSlot={
-              <RunCompare
-                runHistory={runHistory}
-                currentArtifact={currentRun?.artifact ?? null}
-                currentLibraryHash={currentRun?.libraryHash ?? null}
-                currentDatasetHash={currentRun?.datasetHash ?? null}
-                onDeleteRun={(id) =>
-                  setRunHistory((h) => h.filter((r) => r.id !== id))
-                }
-                onRenameRun={(id, name) =>
-                  setRunHistory((h) =>
-                    h.map((r) => (r.id === id ? { ...r, name } : r)),
-                  )
-                }
               />
             }
             testsSlot={
@@ -1124,6 +1148,7 @@ export default function App() {
                 setBuilderPrefill((prev) => ({
                   resource: r as Record<string, unknown>,
                   nonce: (prev?.nonce ?? 0) + 1,
+                  sourceIndex: index,
                 }));
               }
             }}
@@ -1139,17 +1164,14 @@ export default function App() {
               setBuilderPrefill(null);
               setBuilderContext(null);
             }}
+            onReplaceResource={(index, resource) => {
+              const resources = [...(dataset?.resources ?? [])];
+              resources[index] = resource;
+              setDataset(dataset ? { ...dataset, resources } : { resources });
+            }}
             prefill={builderPrefill}
             context={builderContext}
             dataset={dataset}
-          />
-          <TerminologyPane
-            cqlDeclarations={activeDeclarations}
-            datasetValuesets={(dataset?.valueset_resources ?? []) as Array<Record<string, unknown>>}
-            workspaceValuesets={terminology.valuesets}
-            onWorkspaceChange={(valuesets) =>
-              setTerminology({ valuesets })
-            }
           />
         </div>
       </main>

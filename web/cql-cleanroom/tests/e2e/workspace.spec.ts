@@ -13,9 +13,20 @@ async function bootReady(page: Page) {
 
 test("workspace persists libraries and dataset across reload", async ({ page }) => {
   await bootReady(page);
+  // Deterministic start: prior specs' auto-commits persist (same
+  // origin). Reset restores the 3-resource demo synchronously; wait
+  // for the count AND the autosave flush before reloading.
+  await page.click("[data-testid=workspace-reset]");
+  await page.waitForFunction(
+    () =>
+      document.querySelector("[data-testid=dataset-loaded]")?.textContent ===
+      "Active: 3 resources",
+    undefined,
+    { timeout: 10_000 },
+  );
+  await page.waitForTimeout(1500);
 
   // Load dataset + add a second library tab
-  await page.click("[data-testid=load-dataset]");
   await page.waitForSelector("[data-testid=dataset-loaded]");
   await page.click("[data-testid=library-tab-add]");
   await page.waitForSelector("[data-testid=library-tab-1]");
@@ -40,7 +51,6 @@ test("workspace persists libraries and dataset across reload", async ({ page }) 
 
 test("cell evidence drill-in and population flow", async ({ page }) => {
   await bootReady(page);
-  await page.click("[data-testid=load-dataset]");
   await page.waitForSelector("[data-testid=dataset-loaded]");
 
   // Auto-evaluation runs (no Evaluate button) — wait for results.
@@ -78,7 +88,6 @@ test("fhirpath playground evaluates dataset resource via picker", async ({
 }) => {
   await bootReady(page);
   // Dataset first so the picker has resources; then open the drawer.
-  await page.click("[data-testid=load-dataset]");
   await page.waitForSelector("[data-testid=dataset-loaded]", {
     timeout: 30_000,
   });

@@ -21,12 +21,18 @@ test.describe("dataset patient tree", () => {
   test("groups demo resources by patient with flat-index rows", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.click("[data-testid=load-dataset]");
     await page.waitForSelector("[data-testid=dataset-loaded]", {
       timeout: 30_000,
     });
 
-    // Tree view is the default: patient groups appear.
+    // Tree view is the default: patient groups appear. Type groups
+    // default COLLAPSED now — expand them (deterministic order).
+    for (const key of ["p1", "p2", "p3"]) {
+      const toggle = page.locator(
+        `[data-testid=dataset-type-toggle-${key}-Patient]`,
+      );
+      if (await toggle.count()) await toggle.click();
+    }
     await page.waitForSelector("[data-testid=dataset-tree]", {
       timeout: 10_000,
     });
@@ -45,7 +51,6 @@ test.describe("dataset patient tree", () => {
   test("raw view toggle keeps the legacy NDJSON editor", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.click("[data-testid=load-dataset]");
     await page.waitForSelector("[data-testid=dataset-loaded]", {
       timeout: 30_000,
     });
@@ -70,33 +75,26 @@ test.describe("builder v2 recursion", () => {
     await page.waitForSelector("[data-testid=builder-item-name-0]", {
       timeout: 10_000,
     });
+    // Empty objects start COLLAPSED: expand the new name item first.
+    await page.locator("[data-testid=builder-nested-name] .builder-tree-head")
+      .first().click();
+    await page.waitForTimeout(300);
     await page.fill("[data-testid=builder-field-family]", "Roe");
     await page.click("[data-testid=builder-add-given]");
     await page.fill("[data-testid=builder-field-given-0]", "Mary");
     await page.click("[data-testid=builder-add-given]");
     await page.fill("[data-testid=builder-field-given-1]", "Jane");
 
-    await page.click("[data-testid=builder-validate]");
-    await page.waitForSelector("[data-testid=builder-valid]", {
-      timeout: 30_000,
-    });
-
-    // Add to dataset: the F8 chain (green form => loads).
-    await page.click("[data-testid=builder-add]");
-    await page.waitForSelector("[data-testid=dataset-loaded]", {
-      timeout: 10_000,
-    });
-
-    // The new patient appears as its own tree group.
+    // AUTO-SAVE: the valid form commits itself (~2s debounce); the new
+    // patient appears as its own tree group.
     await page.waitForSelector("[data-testid=dataset-group-p-tree-1]", {
-      timeout: 10_000,
+      timeout: 30_000,
     });
   });
 
   test("reference picker emits Reference objects with context default", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.click("[data-testid=load-dataset]");
     await page.waitForSelector("[data-testid=dataset-loaded]");
 
     // Per-patient + on p1: opens the builder for a new resource with
@@ -106,12 +104,15 @@ test.describe("builder v2 recursion", () => {
     await page.click("[data-testid=dataset-add-p1]");
     await page.selectOption("[data-testid=builder-type]", "Condition");
     await page.fill("[data-testid=builder-field-id]", "cond-p1-1");
-    await page.click("[data-testid=builder-validate]");
-    await page.waitForSelector("[data-testid=builder-valid]", {
-      timeout: 30_000,
-    });
-    await page.click("[data-testid=builder-add]");
-    await page.waitForSelector("[data-testid=dataset-loaded]");
+    // AUTO-SAVE: commits when valid; wait for the row to appear in p1.
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector("[data-testid=dataset-group-p1]")
+          ?.textContent?.includes("Condition") ?? false,
+      undefined,
+      { timeout: 30_000 },
+    );
 
     // The condition lands INSIDE p1's group (subject preseed).
     const groupText = await page.textContent(
@@ -127,7 +128,6 @@ test.describe("bundle export/import", () => {
   test("export then replace-import round-trips the dataset", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.click("[data-testid=load-dataset]");
     await page.waitForSelector("[data-testid=dataset-loaded]");
 
     const [download] = await Promise.all([

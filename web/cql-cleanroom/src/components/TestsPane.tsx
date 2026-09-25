@@ -273,6 +273,7 @@ export function TestsPane({
           population codes.
         </p>
       ) : (
+        <div className="expected-grid-wrap">
         <table className="expected-grid" data-testid="expected-grid">
           <thead>
             <tr>
@@ -303,6 +304,7 @@ export function TestsPane({
             ))}
           </tbody>
         </table>
+        </div>
       )}
       {result && (
         <div className="tests-summary" data-testid="tests-summary">
@@ -310,6 +312,7 @@ export function TestsPane({
             {result.tests.passed}/{result.tests.total} passed
           </span>
           {result.tests.failures.length > 0 && (
+            <div className="failures-wrap">
             <table className="failures-table" data-testid="failures-table">
               <thead>
                 <tr>
@@ -332,6 +335,7 @@ export function TestsPane({
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}

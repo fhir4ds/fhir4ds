@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   EvaluateResult,
   Diagnostics,
@@ -10,6 +10,12 @@ import type { LibraryText } from "../lib/protocol";
 import { AstTree } from "./AstPane";
 import { EvidencePopover } from "./EvidencePopover";
 import { PaginatedTable } from "./PaginatedTable";
+import {
+  diffRuns,
+  cellDiffClass,
+  diffSummary,
+  type Artifact,
+} from "../lib/runDiff";
 import { PopulationSankey } from "./PopulationSankey";
 
 /**
@@ -29,6 +35,14 @@ import { PopulationSankey } from "./PopulationSankey";
 
 export type ResultsTab = "cql" | "measure" | "view";
 
+// Map a display column name to the diff's CQL column-key space:
+// hyphenated FHIR population codes (initial-population) -> snake_case,
+// multi-group prefixed names (g1_initial_population) -> bare name.
+function diffPopKey(col: string): string {
+  const snake = col.replace(/-/g, "_");
+  return snake.replace(/^g[a-zA-Z0-9]*_/, "");
+}
+
 export function ResultsPane({
   libraries,
   main,
@@ -39,12 +53,12 @@ export function ResultsPane({
   measureSlot,
   testsSlot,
   viewSlot,
-  evidenceSlot,
   activeTab,
   onTabChange,
   viewSql,
   viewResult,
   parameters,
+  baselineArtifact,
   reports,
   onEvaluated,
 }: {
@@ -57,12 +71,13 @@ export function ResultsPane({
   measureSlot: React.ReactNode;
   testsSlot: React.ReactNode;
   viewSlot: React.ReactNode;
-  evidenceSlot: React.ReactNode;
   activeTab: ResultsTab;
   onTabChange: (t: ResultsTab) => void;
   viewSql: string | null;
   viewResult: FlattenViewResult | null;
   parameters: Record<string, unknown> | null;
+  /** Prior-run artifact for change highlighting (rows shape). */
+  baselineArtifact: Artifact | null;
   reports: Array<Record<string, unknown>> | null;
   onEvaluated: (env: EvaluateResult) => void | Promise<void>;
 }) {
@@ -72,6 +87,27 @@ export function ResultsPane({
   const [showSql, setShowSql] = useState(false);
   const [showAst, setShowAst] = useState(false);
   // Cell-level evidence drill-in: (patient, population) → explain.
+  // Rows-shaped artifact of the CURRENT result for diffing.
+  const currentArtifact: Artifact | null = result
+    ? Object.fromEntries(
+        result.rows.map((r) => {
+          const pid = String(r.patient_id ?? "");
+          const pops: Record<string, boolean | null> = {};
+          for (const c of result.columns) {
+            if (c === "patient_id") continue;
+            const v = r[c];
+            pops[c] = v === true ? true : v === false ? false : null;
+          }
+          return [pid, pops];
+        }),
+      )
+    : null;
+  const runDiff = useMemo(
+    () => diffRuns(currentArtifact, baselineArtifact),
+    [currentArtifact, baselineArtifact],
+  );
+  const dsum = diffSummary(runDiff);
+
   const [cellEvidence, setCellEvidence] = useState<{
     patientId: string;
     population: string;
@@ -209,6 +245,27 @@ export function ResultsPane({
       <header className="pane-header">
         <h2>Results</h2>
         <div className="pane-actions">
+          {runDiff && (dsum.changed || dsum.added || dsum.removed) ? (
+            <span className="diff-chips" data-testid="diff-chips">
+              <span className="diff-chip up" data-testid="diff-chip-changed">
+                {dsum.changed} changed
+              </span>
+              {dsum.added > 0 && (
+                <span className="diff-chip add" data-testid="diff-chip-added">
+                  {dsum.added} added
+                </span>
+              )}
+              {dsum.removed > 0 && (
+                <span
+                  className="diff-chip rem"
+                  data-testid="diff-chip-removed"
+                  title={runDiff.removedPatients.join(", ")}
+                >
+                  {dsum.removed} removed
+                </span>
+              )}
+            </span>
+          ) : null}
           <button
             onClick={() => setShowSql(!showSql)}
             disabled={!activeSql}
@@ -264,6 +321,15 @@ export function ResultsPane({
             <PaginatedTable
               testId="results-table"
               rowCount={result.rows.length}
+              stats={
+                <>
+                  {result.rows.length} rows · {result.columns.length} columns
+                  {result.evaluated_at
+                    ? ` · ${new Date(result.evaluated_at).toLocaleString()}`
+                    : ""}
+                  {` · ${result.timing_ms.evaluate}ms`}
+                </>
+              }
               header={
                 <tr>
                   {result.columns.map((c) => (
@@ -290,17 +356,26 @@ export function ResultsPane({
                       {result.columns.map((c) => {
                         const isPopulation =
                           c !== "patient_id" && row[c] !== undefined;
+                        const dcls = isPopulation
+                          ? cellDiffClass(runDiff, pid, c)
+                          : null;
                         return (
                           <td
                             key={c}
                             className={
-                              isPopulation ? "cell-evidence" : undefined
+                              isPopulation
+                                ? `cell-evidence${dcls ? " " + dcls : ""}`
+                                : dcls
+                                  ? dcls
+                                  : undefined
                             }
                             data-testid={
                               isPopulation ? `cell-${pid}-${c}` : undefined
                             }
                             title={
-                              isPopulation ? `why: ${pid} · ${c}` : undefined
+                              isPopulation
+                                ? `why: ${pid} · ${c}${dcls ? " · changed" : ""}`
+                                : undefined
                             }
                             onClick={
                               isPopulation
@@ -317,13 +392,6 @@ export function ResultsPane({
                 })
               }
             />
-            <div className="eval-meta" data-testid="eval-meta">
-              {result.rows.length} rows · {result.columns.length} columns ·{" "}
-              {result.evaluated_at
-                ? `${new Date(result.evaluated_at).toLocaleString()} · `
-                : ""}
-              {result.timing_ms.evaluate}ms
-            </div>
             {cellEvidence && (
               <EvidencePopover
                 evidence={cellEvidence.evidence}
@@ -334,14 +402,6 @@ export function ResultsPane({
             )}
           </div>
         )}
-        <div className="results-drawer" data-testid="drawer-evidence">
-          <details open>
-            <summary className="drawer-toggle" data-testid="drawer-evidence-toggle">
-              Evidence
-            </summary>
-            <div className="drawer-body">{evidenceSlot}</div>
-          </details>
-        </div>
       </div>
 
       {/* MeasureReport tab: pivot table first, then Sankey, config drawers last */}
@@ -351,8 +411,7 @@ export function ResultsPane({
             <header className="pane-header">
               <h3>Output</h3>
             </header>
-            <MrPivotTable reports={reports} />
-            <MrMeta reports={reports} evaluatedAt={result?.evaluated_at} />
+            <MrPivotTable reports={reports} runDiff={runDiff} />
           </div>
         ) : (
           <p className="pane-hint" data-testid="mr-empty">
@@ -390,6 +449,7 @@ export function ResultsPane({
             <PaginatedTable
               testId="view-table"
               rowCount={viewResult.rows.length}
+              stats={`${viewResult.rows.length} rows · ${viewResult.columns.length} columns`}
               header={
                 <tr>
                   {viewResult.columns.map((c) => (
@@ -398,22 +458,29 @@ export function ResultsPane({
                 </tr>
               }
               renderRows={({ slice }) =>
-                slice(viewResult.rows).map((r, i) => (
-                  <tr key={i}>
-                    {viewResult.columns.map((c) => (
-                      <td key="x">
-                        {r[c] === null || r[c] === undefined
-                          ? "—"
-                          : String(r[c])}
-                      </td>
-                    ))}
-                  </tr>
-                ))
+                slice(viewResult.rows).map((r, i) => {
+                  const pid = String(r.patient_id ?? r.subject ?? "");
+                  const barePid = pid.replace(/^Patient\//, "");
+                  return (
+                    <tr key={i}>
+                      {viewResult.columns.map((c) => {
+                        const dcls =
+                          c === "patient_id" || c === "subject"
+                            ? null
+                            : cellDiffClass(runDiff, barePid, diffPopKey(c));
+                        return (
+                          <td key="x" className={dcls ?? undefined}>
+                            {r[c] === null || r[c] === undefined
+                              ? "—"
+                              : String(r[c])}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })
               }
             />
-            <div className="eval-meta" data-testid="view-meta">
-              {viewResult.rows.length} rows · {viewResult.columns.length} columns
-            </div>
           </div>
         )}
         {viewSlot}
@@ -439,8 +506,10 @@ export function ResultsPane({
  */
 function MrPivotTable({
   reports,
+  runDiff,
 }: {
   reports: Array<Record<string, unknown>>;
+  runDiff: import("../lib/runDiff").RunDiff | null;
 }) {
   const multiGroup = reports.some(
     (r) => ((r.group as Array<unknown>) ?? []).length > 1,
@@ -475,10 +544,18 @@ function MrPivotTable({
     }
   }
   const sortedPatients = [...cells.keys()].sort();
+  const groups =
+    (reports[0] && (reports[0].group as Array<unknown>)?.length) ?? 0;
   return (
     <PaginatedTable
       testId="mr-table"
       rowCount={sortedPatients.length}
+      stats={
+        <>
+          {reports.length} reports
+          {groups > 1 ? ` · ${groups} groups` : ""}
+        </>
+      }
       header={
         <tr>
           <th>patient</th>
@@ -491,35 +568,25 @@ function MrPivotTable({
       renderRows={({ slice }) =>
         slice(sortedPatients).map((pid) => {
           const row = cells.get(pid)!;
+          const barePid = pid.replace(/^Patient\//, "");
           return (
             <tr key={pid} data-testid={`mr-row-${pid}`}>
               <td>{row.patient}</td>
               {multiGroup && <td>{row.gid}</td>}
-              {codes.map((c) => (
-                <td key={c}>{row.counts.get(c) ?? "—"}</td>
-              ))}
+              {codes.map((c) => {
+                const pop = c.includes(":") ? c.split(":")[1] : c;
+                const dcls = cellDiffClass(runDiff, barePid, diffPopKey(pop));
+                return (
+                  <td key={c} className={dcls ?? undefined}>
+                    {row.counts.get(c) ?? "—"}
+                  </td>
+                );
+              })}
             </tr>
           );
         })
       }
     />
-  );
-}
-
-/** Meta line under the MR pivot table: rows · columns · timestamp. */
-function MrMeta({
-  reports,
-  evaluatedAt,
-}: {
-  reports: Array<Record<string, unknown>>;
-  evaluatedAt?: number;
-}) {
-  const cols = (reports[0] && (reports[0].group as Array<unknown>)?.length) ?? 0;
-  return (
-    <div className="eval-meta" data-testid="mr-meta">
-      {reports.length} reports · {cols > 1 ? `${cols} groups · ` : ""}
-      {evaluatedAt ? `${new Date(evaluatedAt).toLocaleString()}` : ""}
-    </div>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { workerRequest } from "./BootOverlay";
 import {
   BUILDER_RESOURCE_TYPES,
@@ -39,8 +39,15 @@ import type {
 
 interface Props {
   onAddResource: (resource: Record<string, unknown>) => void;
+  /** Edit mode: replace dataset row at index instead of appending. */
+  onReplaceResource?: (index: number, resource: Record<string, unknown>) => void;
   /** C3-U3 edit flow: prefills the builder from a dataset row. */
-  prefill?: { resource: Record<string, unknown>; nonce: number } | null;
+  prefill?: {
+    resource: Record<string, unknown>;
+    nonce: number;
+    /** Dataset row index this edit REPLACES (edit mode). */
+    sourceIndex?: number;
+  } | null;
   /** §3.2 per-patient `+` context: subject-class references default to
    *  Patient/<id>. Consumed on schema fetch; user-changeable. */
   context?: { patientId: string; nonce: number } | null;
@@ -50,6 +57,7 @@ interface Props {
 
 export function ResourceBuilderPane({
   onAddResource,
+  onReplaceResource,
   prefill,
   context,
   dataset,
@@ -71,7 +79,14 @@ export function ResourceBuilderPane({
 
   const contextNonce = context?.nonce ?? 0;
   useEffect(() => {
+    // A prefill targeting this exact type owns the schema fetch + form
+    // population; the type-change effect would otherwise re-fetch and
+    // overwrite the prefilled form with an empty one.
+    if (prefill && prefillNonce !== 0 && prefill.resource.resourceType === resourceType) {
+      return;
+    }
     let cancelled = false;
+    const token = ++schemaReqRef.current;
     setTree(null);
     setValidation(null);
     setStaleOk(true);
@@ -81,7 +96,8 @@ export function ResourceBuilderPane({
         type: "resource_schema_tree",
         resource_type: resourceType,
       });
-      if (cancelled || !resp?.ok || !resp.envelope) return;
+      if (cancelled || token !== schemaReqRef.current) return;
+      if (!resp?.ok || !resp.envelope) return;
       const env: SchemaTreeResult = JSON.parse(resp.envelope);
       if (!cancelled && env.resource_type === resourceType) {
         setTree(env);
@@ -114,6 +130,7 @@ export function ResourceBuilderPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resourceType, useRaw, contextNonce]);
 
+  const schemaReqRef = useRef(0);
   const prefillNonce = prefill?.nonce ?? 0;
   useEffect(() => {
     if (!prefill || prefillNonce === 0) return;
@@ -121,11 +138,16 @@ export function ResourceBuilderPane({
     if (typeof rt !== "string") return;
     setResourceType(rt);
     setUseRaw(false);
+    // Claim the schema-request slot: when the prefill's type differs
+    // from the current one, the type-change effect ALSO fires a fetch;
+    // whoever claims last wins and the loser's response is dropped.
+    const token = ++schemaReqRef.current;
     (async () => {
       const resp = await workerRequest({
         type: "resource_schema_tree",
         resource_type: rt,
       });
+      if (token !== schemaReqRef.current) return; // superseded
       if (!resp?.ok || !resp.envelope) return;
       const env: SchemaTreeResult = JSON.parse(resp.envelope);
       if (!env.ok) return;
@@ -156,6 +178,47 @@ export function ResourceBuilderPane({
   const invalidate = () => {
     if (validation?.valid === true) setStaleOk(false);
   };
+
+  // AUTO-SAVE: debounce ~2s after draft changes → validate → commit when
+  // valid (add, or replace when editing). Invalid/half-typed drafts are
+  // no-ops. Empty forms never commit. Identical re-commits are skipped.
+  const lastCommittedRef = useRef<string>("");
+  const rawSeedRef = useRef<string>("");
+  const draftJson = draft ? JSON.stringify(draft) : "";
+  const prefillIndex = prefill?.sourceIndex;
+  useEffect(() => {
+    if (!draftJson) return; // empty form
+    // Raw mode's SEEDED text ({"resourceType": "X"}) is not an authored
+    // draft — entering raw mode alone must not commit anything.
+    if (useRaw && draftJson === rawSeedRef.current) return;
+    const timer = setTimeout(async () => {
+      try {
+        const resp = await workerRequest({
+          type: "validate_resource",
+          resource: JSON.parse(draftJson),
+        });
+        if (!resp?.ok || !resp.envelope) return;
+        const env: ValidateResourceResult = JSON.parse(resp.envelope);
+        setValidation(env);
+        setStaleOk(true);
+        if (env.ok && env.valid === true) {
+          const commitKey = `${prefillIndex ?? "new"}:${draftJson}`;
+          if (commitKey === lastCommittedRef.current) return; // no-op
+          lastCommittedRef.current = commitKey;
+          const committed = JSON.parse(draftJson);
+          if (prefillIndex !== undefined && onReplaceResource) {
+            onReplaceResource(prefillIndex, committed);
+          } else {
+            onAddResource(committed);
+          }
+        }
+      } catch {
+        // invalid draft mid-edit — leave as-is
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftJson, prefillIndex, useRaw]);
 
   const validate = async () => {
     if (!draft) return;
@@ -205,6 +268,7 @@ export function ResourceBuilderPane({
               setStaleOk(true);
               if (e.target.checked) {
                 setRawText(JSON.stringify({ resourceType }, null, 2));
+                rawSeedRef.current = JSON.stringify({ resourceType });
               }
             }}
           />{" "}
@@ -294,7 +358,7 @@ export function ResourceBuilderPane({
         </pre>
       </div>
 
-      <div className="builder-actions">
+      <div className="builder-actions" hidden>
         <button
           type="button"
           data-testid="builder-validate"
@@ -352,6 +416,7 @@ function FieldRow({
   onChange,
   depth = 0,
   hideHeader = false,
+  startOpen,
 }: {
   node: SchemaTreeNode;
   value: FieldValue | undefined;
@@ -359,6 +424,7 @@ function FieldRow({
   onChange: (v: FieldValue | undefined) => void;
   depth?: number;
   hideHeader?: boolean;
+  startOpen?: boolean;
 }) {
   const repeatable = isRepeatable(node.cardinality);
 
@@ -431,6 +497,7 @@ function FieldRow({
               depth={depth}
               itemIndex={i}
               hideHeader
+              startOpen
             />
           </div>
         ))}
@@ -446,6 +513,7 @@ function FieldRow({
       onChange={onChange}
       depth={depth}
       hideHeader={hideHeader}
+      startOpen={startOpen}
     />
   );
 }
@@ -465,6 +533,7 @@ function SingleField({
   depth,
   itemIndex,
   hideHeader = false,
+  startOpen,
 }: {
   node: SchemaTreeNode;
   value: FieldValue | undefined;
@@ -475,6 +544,8 @@ function SingleField({
   itemIndex?: number;
   /** Choice arms render headerless under their picker. */
   hideHeader?: boolean;
+  /** Forwarded to NestedObject: items open on add. */
+  startOpen?: boolean;
 }) {
   const tid = (base: string) =>
     itemIndex === undefined ? base : `${base}-${itemIndex}`;
@@ -638,6 +709,7 @@ function SingleField({
       onChange={onChange}
       depth={depth}
       hideHeader={hideHeader}
+      startOpen={startOpen}
     />
   );
 }
@@ -653,6 +725,7 @@ function NestedObject({
   onChange,
   depth,
   hideHeader = false,
+  startOpen,
 }: {
   node: SchemaTreeNode;
   value: ObjectValue;
@@ -661,8 +734,17 @@ function NestedObject({
   depth: number;
   /** Choice arms render headerless under their picker. */
   hideHeader?: boolean;
+  /** Explicit open state (repeatable items open on add). */
+  startOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(true);
+  // Populated objects stay open; EMPTY ones start collapsed (a brand-new
+  // resource shows just the field names; anything with data is laid out).
+  // startOpen overrides (user explicitly added the item).
+  const hasData =
+    startOpen ??
+    (Object.keys(value.children).length > 0 ||
+      Object.keys(value.passthrough).length > 0);
+  const [open, setOpen] = useState(hasData);
   return (
     <div
       className={`builder-tree-group${open ? "" : " collapsed"}`}

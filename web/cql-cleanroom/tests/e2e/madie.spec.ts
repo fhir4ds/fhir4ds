@@ -85,7 +85,6 @@ test("MADiE package import → evaluate → export round-trip", async ({ page })
   );
 
   // Load dataset + evaluate — Measure came from the package.
-  await page.click("[data-testid=load-dataset]");
   await page.waitForSelector("[data-testid=dataset-loaded]");
   await page.waitForSelector("[data-testid=results-table]", { timeout: 90_000 });
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DatasetSpec } from "../lib/protocol";
 import {
   attributionWhy,
@@ -25,6 +25,7 @@ export function DatasetPane({
   const [filter, setFilter] = useState("");
   const [collapsedTypes, setCollapsedTypes] = useState<Set<string>>(new Set());
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [uncappedTypes, setUncappedTypes] = useState<Set<string>>(new Set());
   const TYPE_ROW_CAP = 25;
 
@@ -55,10 +56,28 @@ export function DatasetPane({
     [dataset],
   );
 
+  // AUTO-COMMIT: Raw NDJSON edits apply to the active dataset ~2s after
+  // the text settles, when every line parses. Invalid text is a no-op.
+  // (The Use-dataset button is hidden — kept for spec compat.)
+  const lastRawCommitRef = useRef("");
+  useEffect(() => {
+    if (view !== "raw") return;
+    if (parsed.error || parsed.resources.length === 0) return;
+    const key = JSON.stringify(parsed.resources);
+    const timer = setTimeout(() => {
+      if (key === lastRawCommitRef.current) return;
+      lastRawCommitRef.current = key;
+      onDatasetChange({ resources: parsed.resources });
+    }, 2000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, view]);
+
+
   return (
     <section className="pane" data-testid="dataset-pane">
       <header className="pane-header">
-        <h2>Dataset</h2>
+        <h2>Resources</h2>
         <span className="dataset-view-toggle">
           <button
             type="button"
@@ -79,6 +98,7 @@ export function DatasetPane({
         </span>
         <button
           data-testid="load-dataset"
+          hidden
           disabled={!!parsed.error || !parsed.resources.length}
           onClick={() => onDatasetChange({ resources: parsed.resources })}
         >
@@ -152,6 +172,8 @@ export function DatasetPane({
                   matches={matches}
                   collapsedTypes={collapsedTypes}
                   setCollapsedTypes={setCollapsedTypes}
+                  collapsedGroups={collapsedGroups}
+                  setCollapsedGroups={setCollapsedGroups}
                   expandedTypes={expandedTypes}
                   uncappedTypes={uncappedTypes}
                   setUncappedTypes={setUncappedTypes}
@@ -191,6 +213,8 @@ function PatientGroupNode({
   matches,
   collapsedTypes,
   setCollapsedTypes,
+  collapsedGroups,
+  setCollapsedGroups,
   expandedTypes,
   setExpandedTypes,
   uncappedTypes,
@@ -205,6 +229,8 @@ function PatientGroupNode({
   matches: (r: { resourceType: string; id: string }) => boolean;
   collapsedTypes: Set<string>;
   setCollapsedTypes: (s: Set<string>) => void;
+  collapsedGroups: Set<string>;
+  setCollapsedGroups: (s: Set<string>) => void;
   expandedTypes: Set<string>;
   setExpandedTypes: (s: Set<string>) => void;
   uncappedTypes: Set<string>;
@@ -216,6 +242,8 @@ function PatientGroupNode({
 }) {
   const filterActive = filter.trim().length > 0;
   const typeKey = (type: string) => `${group.key}::${type}`;
+  const groupCollapsed = !filterActive && collapsedGroups.has(group.key);
+  const totalRows = group.rows.length;
   const patientRow = group.rows.find((r) => r.resourceType === "Patient");
   const hint = patientRow
     ? patientHint(patientRow.resource)
@@ -231,11 +259,27 @@ function PatientGroupNode({
       data-phantom={group.phantom ? "true" : undefined}
       data-unattributed={group.unattributed ? "true" : undefined}
     >
-      <div className="dataset-group-header">
+      <div
+        className="dataset-group-header"
+        data-testid={`dataset-group-toggle-${group.key}`}
+        onClick={() => {
+          if (filterActive) return;
+          const next = new Set(collapsedGroups);
+          if (next.has(group.key)) next.delete(group.key);
+          else next.add(group.key);
+          setCollapsedGroups(next);
+        }}
+        style={{ cursor: filterActive ? undefined : "pointer" }}
+      >
+        <span className="dataset-caret" aria-hidden="true">
+          {groupCollapsed ? "▸" : "▾"}
+        </span>
         <span
           className={`dataset-group-label${group.unattributed ? " muted" : ""}${group.phantom ? " phantom" : ""}`}
         >
           {group.unattributed ? "Unattributed" : group.label}
+          {" "}
+          <span className="dataset-count-pill">{totalRows}</span>
           {hint && (
             <span className="dataset-group-hint" title={hint}>
               {" "}
@@ -248,7 +292,11 @@ function PatientGroupNode({
             type="button"
             className="dataset-add-btn"
             data-testid={`dataset-add-${group.key}`}
-            onClick={() => onAddForPatient(group.key)}
+            onClick={(e) => {
+              e.stopPropagation(); // the header toggles collapse — the +
+              // button must ADD, not toggle the group shut.
+              onAddForPatient(group.key);
+            }}
             title={`New resource for ${group.label} (subject defaults to Patient/${group.key})`}
           >
             +
@@ -263,7 +311,7 @@ function PatientGroupNode({
           </span>
         )}
       </div>
-      {groupTypes(group).map((type) => {
+      {groupCollapsed ? null : groupTypes(group).map((type) => {
         const rows = group.rows.filter((r) => r.resourceType === type);
         const matching = rows.filter(matches);
         if (filterActive && matching.length === 0) return null;
@@ -273,15 +321,14 @@ function PatientGroupNode({
         const userCollapsed = collapsedTypes.has(typeKey(type));
         const userExpanded = expandedTypes.has(typeKey(type));
         const uncapped = uncappedTypes.has(typeKey(type));
-        // OQ-1: small groups (≤3) default open; big groups default
-        // collapsed until opened (userCollapsed wins over everything
-        // except an active filter). capBypassed = show-more lifted the
-        // 25-row cap for THIS group (opening alone stays capped).
+        // Default COLLAPSED: every type group starts closed (filter
+        // auto-expands; user toggles win). capBypassed = show-more
+        // lifted the 25-row cap for THIS group.
         const isOpen = filterActive
           ? true
           : userCollapsed
-            ? false
-            : userExpanded || rows.length <= 3;
+            ? false // explicit collapse wins (re-open clears the flag now)
+            : userExpanded;
         const capBypassed = filterActive || uncapped;
         const candidates = filterActive ? matching : rows;
         const visible = isOpen
@@ -301,18 +348,25 @@ function PatientGroupNode({
               className="dataset-type-toggle"
               data-testid={`dataset-type-toggle-${group.key}-${type}`}
               onClick={() => {
+                // Symmetric toggle: OPEN clears the collapsed flag AND
+                // sets expand (big groups render capped + show-more);
+                // COLLAPSE clears expand AND sets collapsed. The old
+                // code only set flags — a re-opened group stayed
+                // collapsed because userCollapsed outranked userExpanded.
                 if (!isOpen) {
-                  // Opening a big (default-collapsed) group: explicit
-                  // expand flag — renders the capped list + show-more.
                   const ex = new Set(expandedTypes);
                   ex.add(typeKey(type));
                   setExpandedTypes(ex);
+                  const cx = new Set(collapsedTypes);
+                  cx.delete(typeKey(type));
+                  if (cx.size !== collapsedTypes.size) setCollapsedTypes(cx);
                 } else {
-                  // Collapse any open group (explicitly expanded or
-                  // small-default); expanding again reopens it.
-                  const next = new Set(collapsedTypes);
-                  next.add(typeKey(type));
-                  setCollapsedTypes(next);
+                  const cx = new Set(collapsedTypes);
+                  cx.add(typeKey(type));
+                  setCollapsedTypes(cx);
+                  const ex = new Set(expandedTypes);
+                  ex.delete(typeKey(type));
+                  if (ex.size !== expandedTypes.size) setExpandedTypes(ex);
                 }
               }}
             >

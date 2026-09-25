@@ -10,7 +10,6 @@ test("population cell click opens evidence popover", async ({ page }) => {
   await page.waitForSelector(".version-badge", { timeout: 150_000 });
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
 
-  await page.click("[data-testid=load-dataset]");
   await page.waitForSelector("[data-testid=dataset-loaded]");
   await page.waitForSelector("[data-testid=results-table]", { timeout: 90_000 });
 

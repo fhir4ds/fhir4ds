@@ -135,11 +135,11 @@ export function NavRail({
       <button
         className={`rail-item ${datasetActive ? "active" : ""}`}
         data-testid="rail-dataset"
-        title="Dataset"
+        title="Resources"
         onClick={onNavigateDataset}
       >
         <span className="rail-glyph">▦</span>
-        <span className="rail-name">Dataset</span>
+        <span className="rail-name">Resources</span>
       </button>
       <button
         className={`rail-item ${terminologyActive ? "active" : ""}`}

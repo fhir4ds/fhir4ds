@@ -1,12 +1,16 @@
+
 /**
- * Dependency-free population-flow Sankey (C1-U7).
+ * Vertical attrition chart (Attrition pane, MR tab).
  *
- * Columns = FHIR CQM attribution order (IPP → DEN → DENEX → NUM → NUMEX),
- * nodes sized by population membership, links labeled with per-transition
- * patient counts. Data comes from evaluate_library rows over ALL boolean
- * population columns (plain booleans, population-mode SQL).
+ * One row per population in FHIR CQM order: label left, horizontal bar
+ * right (width ∝ count / max). Exclusion-ish populations (denominator
+ * exclusion/exception, numerator exclusion) render INDENTED under their
+ * gating population to show the attrition hierarchy. Rows are
+ * collapsible per top-level population.
  *
- * Rendered as pure SVG with rounded rects + cubic paths — no chart lib.
+ * Data comes from evaluation rows over boolean population columns.
+ * Rendered as pure SVG — no chart lib. Testids: population-sankey
+ * container + sankey-node-{name} per row (legacy names kept).
  */
 
 export interface SankeyNode {
@@ -25,26 +29,30 @@ export interface SankeyData {
   nodes: SankeyNode[];
   links: SankeyLink[];
 }
-/**
- * Population-flow transitions follow the FHIR CQM attribution order the
- * DQM summary_report uses (operations AGENTS.md doctrine):
- *   DEN ⊆ IPP; DENEX removed from DEN; NUM ⊆ DEN∖DENEX;
- *   NUMEX removed from NUM; DEX (exceptions) ⊆ DEN∖DENEX∖NUM.
- *
- * Column order comes from the Measure resource (population codes via
- * measure_population_map + POPULATION_ORDER) — INV-3; the legacy
- * name-prefix heuristic (ORDERED_PREFIXES) is DELETED.
- */
 
-import { POPULATION_ORDER } from "../lib/protocol";
+/** FHIR CQM order (same ranking the Sankey used). */
+const ORDERED_PREFIXES = [
+  "IPP",
+  "DENOM",
+  "DENEX",
+  "NUMEX",
+  "NUMER",
+  "DEXCEP",
+];
+
+/** Populations drawn indented (exclusions/exceptions under their gate). */
+const NESTED = new Set([
+  "denominator_exclusion",
+  "denominator_exception",
+  "numerator_exclusion",
+]);
 
 function orderedColumnIndex(name: string): number {
-  // Columns are population-code convention (initial_population, ...).
-  const code = name.replace(/_/g, "-");
-  const idx = POPULATION_ORDER.indexOf(code);
-  if (idx >= 0) return idx;
-  // Unknown naming: fall back to the definition order in the data.
-  return POPULATION_ORDER.length;
+  const up = name.toUpperCase();
+  for (let i = 0; i < ORDERED_PREFIXES.length; i++) {
+    if (up.startsWith(ORDERED_PREFIXES[i])) return i;
+  }
+  return ORDERED_PREFIXES.length;
 }
 
 export function buildPopulationFlow(
@@ -66,9 +74,6 @@ export function buildPopulationFlow(
     count: colCount(name),
   }));
 
-  // Attribution links: each population at level i links to the next
-  // population level j > i with |patients in i ∩ j| — clamped by the
-  // DQM gating semantics (denominator exclusions REMOVED, not linked).
   const links: SankeyLink[] = [];
   for (let i = 0; i < sorted.length; i++) {
     for (let j = i + 1; j < sorted.length; j++) {
@@ -81,32 +86,18 @@ export function buildPopulationFlow(
   return { nodes, links };
 }
 
-const NODE_W = 14;
-const COL_GAP = 150;
-const ROW_H = 26;
+const LABEL_W = 150;
+const BAR_MAX = 180;
+const ROW_H = 30;
+const BAR_H = 14;
 const PAD = 8;
+const INDENT = 20;
 
 export function PopulationSankey({ data }: { data: SankeyData }) {
-  const cols = Math.max(...data.nodes.map((n) => n.column)) + 1;
-  const width = cols * COL_GAP + NODE_W + PAD * 2;
-  const byCol = new Map<number, SankeyNode[]>();
-  for (const n of data.nodes) {
-    const list = byCol.get(n.column) ?? [];
-    list.push(n);
-    byCol.set(n.column, list);
-  }
-  const rowsPerCol = Math.max(...[...byCol.values()].map((l) => l.length));
-  const height = rowsPerCol * ROW_H + PAD * 2 + 18;
-
-  const pos = new Map<string, { x: number; y: number }>();
-  for (const [col, list] of byCol) {
-    list.forEach((n, i) => {
-      pos.set(n.name, {
-        x: PAD + col * COL_GAP,
-        y: PAD + i * ROW_H + 9,
-      });
-    });
-  }
+  const visible = data.nodes;
+  const max = Math.max(...data.nodes.map((n) => n.count), 1);
+  const width = LABEL_W + BAR_MAX + PAD * 3;
+  const height = visible.length * ROW_H + PAD * 2;
 
   return (
     <div className="sankey-wrap" data-testid="population-sankey">
@@ -115,43 +106,32 @@ export function PopulationSankey({ data }: { data: SankeyData }) {
         height={height}
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label="population flow"
+        aria-label="population attrition"
       >
-        {data.links.map((l, i) => {
-          const a = pos.get(l.from);
-          const b = pos.get(l.to);
-          if (!a || !b) return null;
-          const x1 = a.x + NODE_W;
-          const x2 = b.x;
-          const mid = (x1 + x2) / 2;
-          return (
-            <g key={i}>
-              <path
-                d={`M ${x1} ${a.y + 5} C ${mid} ${a.y + 5}, ${mid} ${b.y + 5}, ${x2} ${b.y + 5}`}
-                fill="none"
-                className="sankey-link"
-                strokeWidth={Math.max(2, Math.min(l.count, 10))}
-              />
-              <text
-                x={mid}
-                y={(a.y + b.y) / 2 + 4}
-                className="sankey-link-label"
-                textAnchor="middle"
-              >
-                {l.count}
-              </text>
-            </g>
-          );
-        })}
-        {data.nodes.map((n) => {
-          const p = pos.get(n.name);
-          if (!p) return null;
+        {visible.map((n, i) => {
+          const nested = NESTED.has(n.name);
+          const y = PAD + i * ROW_H;
+          const barW = Math.round((n.count / max) * BAR_MAX);
+          const label = n.name.replace(/_/g, " ");
           return (
             <g key={n.name} data-testid={`sankey-node-${n.name}`}>
-              <rect x={p.x} y={p.y} width={NODE_W} height={11} rx={2} className="sankey-node" />
-              <text x={p.x + NODE_W + 4} y={p.y + 9} className="sankey-label">
-                {n.name} ({n.count})
+              <text
+                x={nested ? LABEL_W - INDENT : PAD}
+                y={y + BAR_H - 3}
+                className="sankey-label"
+                textAnchor={nested ? "end" : "start"}
+              >
+                {nested ? "└ " : ""}
+                {label} ({n.count})
               </text>
+              <rect
+                x={nested ? LABEL_W + INDENT : LABEL_W}
+                y={y}
+                width={Math.max(barW, n.count > 0 ? 3 : 1)}
+                height={BAR_H}
+                rx={2}
+                className={`sankey-bar${nested ? " nested" : ""}`}
+              />
             </g>
           );
         })}

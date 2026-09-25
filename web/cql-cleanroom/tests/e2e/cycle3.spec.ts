@@ -22,63 +22,33 @@ async function setMaleLibrary(page: import("@playwright/test").Page) {
 }
 
 test.describe("cleanroom cycle-3 capabilities", () => {
-  test("run-history compare shows a moved delta", async ({ page }) => {
+  test("run diff highlights changed cells in the output table", async ({ page }) => {
     await bootReady(page);
     await page.click('[data-testid=workspace-reset]');
     await page.waitForTimeout(600);
 
-    // 1. load dataset + ensure the Evidence drawer is open (starts
-    //    open; only click when the <details> is actually closed).
-    await page.click('[data-testid=load-dataset]');
-    await page.waitForSelector('[data-testid=dataset-loaded]', { timeout: 30_000 });
-    const evOpen = await page.evaluate(
-      () =>
-        (document.querySelector(
-          "[data-testid=drawer-evidence] details",
-        ) as HTMLDetailsElement | null)?.open ?? false,
-    );
-    if (!evOpen) {
-      await page.click('[data-testid=drawer-evidence-toggle]');
-    }
+    // 1. first evaluation (auto) — female logic; p1 IPP true
     await page.waitForSelector('[data-testid=results-table]', { timeout: 90_000 });
     await page.waitForFunction(
       () =>
-        document.querySelectorAll(
-          '[data-testid=compare-select] option[value]:not([value=""])',
-        ).length >= 1,
+        (document.querySelector(
+          "[data-testid=results-table] tbody tr td:nth-child(2)",
+        )?.textContent ?? "").includes("true"),
       undefined,
-      { timeout: 30_000 },
+      { timeout: 90_000 },
     );
 
     // 2. change the logic: female-only → male-only flips p1/p2 IPP
     await setMaleLibrary(page);
 
-    // 3. evaluate again — the new current differs from the saved run
-    await page.waitForFunction(
-      () =>
-        document.querySelectorAll(
-          '[data-testid=compare-select] option[value]:not([value=""])',
-        ).length >= 2,
-      undefined,
-      { timeout: 60_000 },
-    );
+    // 3. auto re-eval vs prior run: p1 IPP true→false must highlight
+    await page.waitForSelector("td.diff-down-cell", { timeout: 90_000 });
+    const changed = await page.locator("td.diff-up-cell, td.diff-down-cell").count();
+    if (changed < 2) throw new Error(`expected >=2 changed cells, got ${changed}`);
 
-    // 4. compare current vs the first saved run (list is
-    //    newest-first; the female baseline is the LAST option)
-    const runCount = await page
-      .locator('[data-testid=compare-select] option')
-      .count();
-    await page.selectOption('[data-testid=compare-select]', {
-      index: runCount - 1,
-    });
-    await page.click('[data-testid=compare-run]');
-    await page.waitForSelector('[data-testid=compare-delta]', { timeout: 30_000 });
-
-    const rows = await page.locator('[data-testid=compare-row]').allTextContents();
-    console.log("COMPARE_ROWS:", JSON.stringify(rows));
-    // p1/p2 initial_population must appear as moved deltas
-    const moved = rows.filter((r) => r.includes("initial_population") && r.includes("moved"));
-    if (moved.length === 0) throw new Error(`no moved rows: ${JSON.stringify(rows)}`);
+    // 4. footer chips carry the summary
+    const chip = await page.textContent("[data-testid=diff-chip-changed]");
+    if (!chip?.includes("changed")) throw new Error(`chip: ${chip}`);
 
     // reset so later tests start clean
     await page.click('[data-testid=workspace-reset]');

@@ -111,10 +111,10 @@ export function TerminologyPane({
   const effective = useMemo(() => {
     const map = new Map<string, { vs: TerminologyValueset; provenance: string }>();
     for (const v of datasetValuesets.filter(isVs)) {
-      map.set(v.url, { vs: v, provenance: "dataset" });
+      map.set(v.url, { vs: v, provenance: "imported" });
     }
     for (const v of workspaceValuesets.filter(isVs)) {
-      map.set(v.url, { vs: v, provenance: "workspace" }); // override wins
+      map.set(v.url, { vs: v, provenance: "edited" }); // override wins
     }
     return map;
   }, [datasetValuesets, workspaceValuesets]);
@@ -169,7 +169,15 @@ export function TerminologyPane({
         {urls.map((url) => {
           const entry = effective.get(url);
           const decl = declared.find((d) => d.url === url);
-          const label = decl ? decl.name : url.split("/").pop() ?? url;
+          // Prefer the CQL declaration name, then the ValueSet resource's
+          // own name/title, then the URL tail (id) as a last resort.
+          const vsName =
+            typeof entry?.vs.name === "string" && entry.vs.name
+              ? entry.vs.name
+              : typeof entry?.vs.title === "string" && entry.vs.title
+                ? entry.vs.title
+                : null;
+          const label = decl ? decl.name : (vsName ?? url.split("/").pop() ?? url);
           return (
             <button
               key={url}
@@ -183,9 +191,22 @@ export function TerminologyPane({
               title={url}
             >
               <span className="terminology-name">{label}</span>
-              <span className="terminology-prov">
-                {decl ? "CQL " : ""}
-                {entry ? entry.provenance : "unsourced"}
+              <span
+                className="terminology-prov"
+                title={
+                  entry
+                    ? entry.provenance === "edited"
+                      ? "edited in this workspace (overrides the packaged copy)"
+                      : "imported with the dataset/package"
+                    : "no ValueSet content loaded yet"
+                }
+              >
+                {decl ? "declared · " : ""}
+                {entry
+                  ? entry.provenance === "edited"
+                    ? "edited"
+                    : "imported"
+                  : "unsourced"}
               </span>
               {!entry && decl ? (
                 <span className="terminology-missing">no codes</span>
@@ -222,7 +243,16 @@ export function TerminologyPane({
         <div className="terminology-editor" data-testid="terminology-editor">
           <div className="terminology-editor-head">
             <code className="terminology-url">{selected.vs.url}</code>
-            <span className="terminology-prov-badge">{selected.provenance}</span>
+            <span
+              className="terminology-prov-badge"
+              title={
+                selected.provenance === "edited"
+                  ? "edited in this workspace"
+                  : "imported with the dataset/package"
+              }
+            >
+              {selected.provenance === "edited" ? "edited" : "imported"}
+            </span>
             <div className="pane-actions">
               <button
                 data-testid="terminology-raw-toggle"
@@ -242,6 +272,7 @@ export function TerminologyPane({
           )}
 
           {!rawMode && (
+            <div className="terminology-table-wrap">
             <table className="terminology-table" data-testid="terminology-table">
               <thead>
                 <tr>
@@ -303,6 +334,7 @@ export function TerminologyPane({
                 ))}
               </tbody>
             </table>
+            </div>
           )}
           {!rawMode && (
             <button

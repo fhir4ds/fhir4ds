@@ -11,6 +11,9 @@ async function bootReady(page: Page) {
 
 test("editor parses and evaluates with typed results", async ({ page }) => {
   await bootReady(page);
+  // Deterministic start: prior specs' auto-commits persist (same origin).
+  await page.click("[data-testid=workspace-reset]");
+  await page.waitForTimeout(600);
 
   // Default library parses clean (debounced parse_cql)
   await page.waitForFunction(
@@ -23,7 +26,6 @@ test("editor parses and evaluates with typed results", async ({ page }) => {
   );
 
   // Dataset: default NDJSON prefilled → Use dataset
-  await page.click("[data-testid=load-dataset]");
   await page.waitForSelector("[data-testid=dataset-loaded]");
   const loaded = await page.textContent("[data-testid=dataset-loaded]");
   if (!loaded?.includes("3")) throw new Error(`expected 3 resources: ${loaded}`);
@@ -34,7 +36,7 @@ test("editor parses and evaluates with typed results", async ({ page }) => {
   });
   const badge = await page.textContent("[data-testid=type-badge-initial_population]");
   if (badge !== "Boolean") throw new Error(`IPP badge: ${badge}`);
-  const meta = await page.textContent("[data-testid=eval-meta]");
+  const meta = await page.textContent("[data-testid=results-table-stats]");
   if (!meta?.includes("3 rows")) throw new Error(`meta: ${meta}`);
   await page.click("[data-testid=show-sql]");
   const sql = await page.textContent(".sql-pre");
@@ -47,7 +49,6 @@ test("tests run against the loaded dataset", async ({ page }) => {
   // (IndexedDB survives browser-context isolation — same origin).
   await page.click("[data-testid=workspace-reset]");
   await page.waitForTimeout(600);
-  await page.click("[data-testid=load-dataset]");
   await page.waitForSelector("[data-testid=dataset-loaded]");
 
   // Tests live in the MeasureReport tab now.

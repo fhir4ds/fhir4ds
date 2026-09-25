@@ -43,7 +43,6 @@ test.describe("nav rail", () => {
   test("evaluation uses the ENTRYPOINT library, not the edited tab", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.click("[data-testid=load-dataset]");
     await page.waitForSelector("[data-testid=dataset-loaded]");
 
     // Add a second library whose IPP differs (male instead of female).
@@ -73,16 +72,15 @@ define "Has Name":
     if (!cell?.includes("true")) throw new Error(`p1 IPP under entrypoint lib0: ${cell}`);
 
     // Move entrypoint to library 2 (male) WITHOUT editing: p1 flips false.
-    // (results-table never detaches — wait on run-history option growth.)
-    const runOptionsBefore = await page
-      .locator("[data-testid=compare-select] option")
-      .count();
+    // (results-table never detaches — wait on the cell VALUE flipping.)
     await page.dblclick("[data-testid=library-tab-1]");
     await page.waitForFunction(
-      (n) =>
-        document.querySelectorAll("[data-testid=compare-select] option").length > n,
-      runOptionsBefore,
-      { timeout: 60_000 },
+      () =>
+        (document.querySelector(
+          "[data-testid=results-table] tbody tr td:nth-child(2)",
+        )?.textContent ?? "").includes("false"),
+      undefined,
+      { timeout: 90_000 },
     );
     const cell2 = await page.textContent("[data-testid=results-table] tbody tr td:nth-child(2)");
     if (!cell2?.includes("false")) throw new Error(`p1 IPP under entrypoint lib1: ${cell2}`);
@@ -136,10 +134,18 @@ define "Has Name":
       JSON.stringify({ resourceType: "Patient", id: "p1", gender: "female", name: [{ given: ["Ann"] }] }) + "\n" +
       JSON.stringify({ resourceType: "Observation", id: "bp1", status: "final", code: { coding: [{ system: "http://loinc.org", code: "8480-6" }] }, subject: { reference: "Patient/p1" } }),
     );
-    await page.click("[data-testid=load-dataset]");
-    await page.waitForSelector("[data-testid=dataset-loaded]");
+    // Raw auto-commit: wait for the 2-resource dataset to land (~2s debounce).
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector("[data-testid=dataset-loaded]")
+          ?.textContent?.includes("2 resources"),
+      undefined,
+      { timeout: 30_000 },
+    );
 
     // Without codes: the declared VS is unsourced in the terminology list.
+    await page.click("[data-testid=drawer-terminology-toggle]").catch(() => {});
     await page.waitForSelector("[data-testid=terminology-pane]", { timeout: 30_000 });
     const unsourcedItem = page.locator("[data-testid^=terminology-item-]").first();
     await unsourcedItem.click();
@@ -159,9 +165,6 @@ define "Has Name":
     );
     const before = await page.textContent("[data-testid=results-table] tbody tr td:nth-child(2)");
     if (!before?.includes("false")) throw new Error(`p1 IPP before codes: ${before}`);
-    const runOptionsBefore = await page
-      .locator("[data-testid=compare-select] option")
-      .count();
 
     // Create the workspace override with the LOINC BP code.
     await page.click("[data-testid=terminology-create-override]");
@@ -171,20 +174,23 @@ define "Has Name":
     await page.fill("[data-testid=terminology-code-input-0]", "8480-6");
 
     // Evaluate again: the Observation code is now in the VS → true.
-    // (results-table never detaches — wait on run-history option growth.)
+    // (results-table never detaches — wait on the cell VALUE flipping.)
     await page.waitForFunction(
-      (n) =>
-        document.querySelectorAll("[data-testid=compare-select] option").length > n,
-      runOptionsBefore,
-      { timeout: 60_000 },
+      () =>
+        (document.querySelector(
+          "[data-testid=results-table] tbody tr td:nth-child(2)",
+        )?.textContent ?? "").includes("true"),
+      undefined,
+      { timeout: 90_000 },
     );
     const after = await page.textContent("[data-testid=results-table] tbody tr td:nth-child(2)");
     if (!after?.includes("true")) throw new Error(`p1 IPP after codes: ${after}`);
   });
 
-  test("terminology persists across reload (workspace v4)", async ({ page }) => {
+  test("terminology persists across reload (workspace v5)", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
+    await page.click("[data-testid=drawer-terminology-toggle]");
     await page.click("[data-testid=terminology-add]");
     await page.waitForSelector("[data-testid=terminology-table]", { timeout: 30_000 });
     await page.click("[data-testid=terminology-add-code]");
@@ -193,6 +199,7 @@ define "Has Name":
     await page.waitForTimeout(1200); // debounce autosave
     await page.reload();
     await page.waitForSelector(".version-badge", { timeout: 150_000 });
+    await page.click("[data-testid=drawer-terminology-toggle]").catch(() => {});
     await page.waitForSelector("[data-testid=terminology-pane]", { timeout: 30_000 });
     await page.waitForSelector("[data-testid=terminology-item-urn\\:cleanroom\\:vs\\:-]", { timeout: 10_000 }).catch(() => {
       // url contains a timestamp; just assert SOME item is listed

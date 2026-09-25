@@ -17,14 +17,14 @@ const BASE = {
   activeTabPref: "cql",
 };
 
-describe("workspace schemaVersion 4 (terminology)", () => {
-  it("version constant is 4", () => {
-    expect(WORKSPACE_SCHEMA_VERSION).toBe(4);
+describe("workspace schemaVersion (terminology + paramValues)", () => {
+  it("version constant is 5", () => {
+    expect(WORKSPACE_SCHEMA_VERSION).toBe(5);
   });
 
   it("v3 state migrates to terminology {valuesets:[]} (never null)", () => {
     const out = migrate({ ...BASE, schemaVersion: 3 });
-    expect(out.schemaVersion).toBe(4);
+    expect(out.schemaVersion).toBe(5);
     expect(out.terminology).toEqual({ valuesets: [] });
   });
 
@@ -33,7 +33,7 @@ describe("workspace schemaVersion 4 (terminology)", () => {
       schemaVersion: 1,
       libraries: BASE.libraries,
     });
-    expect(out.schemaVersion).toBe(4);
+    expect(out.schemaVersion).toBe(5);
     expect(out.viewConfig).toBeNull();
     expect(out.runHistory).toEqual([]);
     expect(out.activeTabPref).toBe("cql");

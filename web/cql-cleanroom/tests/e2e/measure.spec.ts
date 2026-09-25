@@ -13,7 +13,6 @@ async function bootReady(page: Page) {
 }
 
 async function loadDataset(page: Page) {
-  await page.click("[data-testid=load-dataset]");
   await page.waitForSelector("[data-testid=dataset-loaded]", {
     timeout: 30_000,
   });

@@ -19,8 +19,11 @@ export function PaginatedTable({
   header,
   renderRows,
   rowCount,
+  stats,
 }: {
   testId: string;
+  /** Optional right-aligned meta line (rows · columns · date · ms). */
+  stats?: React.ReactNode;
   /** <tr>…</tr> for the thead. */
   header: React.ReactNode;
   /** <tr>…</tr> rows for the visible page. */
@@ -49,25 +52,34 @@ export function PaginatedTable({
           </tbody>
         </table>
       </div>
-      {rowCount > PAGE_SIZE && (
+      {(rowCount > PAGE_SIZE || stats) && (
         <div className="table-pager" data-testid={`${testId}-pager`}>
-          <button
-            data-testid={`${testId}-prev`}
-            disabled={page === 0}
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-          >
-            ‹ prev
-          </button>
-          <span className="table-pager-info">
-            {start + 1}–{end} of {rowCount}
-          </span>
-          <button
-            data-testid={`${testId}-next`}
-            disabled={page >= pageCount - 1}
-            onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-          >
-            next ›
-          </button>
+          {rowCount > PAGE_SIZE && (
+            <>
+              <button
+                data-testid={`${testId}-prev`}
+                disabled={page === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                ‹ prev
+              </button>
+              <span className="table-pager-info">
+                {start + 1}–{end} of {rowCount}
+              </span>
+              <button
+                data-testid={`${testId}-next`}
+                disabled={page >= pageCount - 1}
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+              >
+                next ›
+              </button>
+            </>
+          )}
+          {stats && (
+            <span className="table-stats" data-testid={`${testId}-stats`}>
+              {stats}
+            </span>
+          )}
         </div>
       )}
     </div>

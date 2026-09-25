@@ -463,8 +463,9 @@ body { margin: 0; }
 .dataset-add-btn {
   background: #12321e; color: #6ee7a0; border: 1px solid #1e4a30;
   border-radius: 6px; padding: 0 8px; cursor: pointer; font-size: 12px;
-  line-height: 18px;
+  line-height: 18px; width: 26px; height: 20px; flex: none;
 }
+.dataset-add-btn:hover { background: #17452a; }
 .dataset-why {
   display: inline-block; margin-left: 5px; width: 14px; height: 14px;
   border-radius: 50%; background: #3a2c14; color: #f5c26b; font-size: 10px;
@@ -710,7 +711,6 @@ body { margin: 0; }
   flex: 1;
   min-width: 120px;
 }
-.dataset-type-group { margin: 2px 0 2px 10px; }
 .dataset-type-toggle {
   background: transparent;
   border: none;
@@ -916,7 +916,26 @@ body { margin: 0; }
   margin-left: 8px;
   border-left: 1px solid #2c4a6e;
   padding-left: 10px;
+  /* Guide must stay visible beside inputs: rows leave 4px clear. */
 }
+.builder-form .builder-tree-children > .builder-tree-row,
+.builder-form .builder-tree-children > .builder-choice,
+.builder-form .builder-tree-children > .builder-tree-group {
+  position: relative;
+}
+.builder-form .builder-tree-children::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #2c4a6e;
+  z-index: 0;
+  pointer-events: none;
+}
+.builder-form .builder-tree-children > * { position: relative; z-index: 1; }
+.builder-form .builder-tree-children { border-left: none; }
 .builder-form .builder-tree-head {
   margin-top: 6px;
   min-height: 28px;
@@ -1043,7 +1062,8 @@ body { margin: 0; }
   color: #8fb3d9;
   background: #101822;
 }
-.dataset-type-group { margin-left: 10px; border-left: 1px solid #2c4a6e; padding-left: 10px; }
+.dataset-type-group .dataset-rows { margin-left: 14px; border-left: 1px solid #26324a; padding-left: 8px; }
+.dataset-type-group > .dataset-row { margin-left: 14px; border-left: 1px solid #26324a; padding-left: 8px; }
 .dataset-rows { gap: 0; }
 .dataset-row {
   display: flex; align-items: center; justify-content: space-between; gap: 6px;
@@ -1113,3 +1133,86 @@ body { margin: 0; }
 }
 /* Tests pane: independent scroll (results tab, measure report) */
 .tests-scroll { max-height: 420px; overflow-y: auto; }
+
+/* Sankey: non-overlapping layout */
+.sankey-wrap { overflow-x: auto; }
+.sankey-label { font-size: 11px; fill: #c9d4e3; }
+.sankey-link { stroke: #3b82f6; opacity: 0.35; }
+.sankey-node { fill: #3b82f6; }
+.sankey-link-label { font-size: 10px; fill: #8aa0b8; }
+
+/* Vertical attrition chart */
+.sankey-bar { fill: #3b82f6; }
+.sankey-bar.nested { fill: #d97706; }
+.sankey-label { fill: #c9d4e3; font-size: 11px; }
+.sankey-wrap { overflow-x: auto; }
+
+/* Stats ride the pager row, right-aligned, pager typography */
+.table-stats { margin-left: auto; font-size: 11px; color: #8aa0b8; }
+
+/* Tests pane tables: horizontal scroll when populations overflow */
+.expected-grid-wrap, .failures-wrap { overflow-x: auto; border: 1px solid #1c2534; border-radius: 4px; }
+.expected-grid, .failures-table { min-width: max-content; }
+/* Builder + buttons: green accents (dataset palette) */
+.builder-form .builder-item-add,
+.builder-form .builder-choice .builder-tree-head select {
+  background: #12321e;
+  color: #6ee7a0;
+  border-color: #1e4a30;
+}
+.builder-form .builder-item-add:hover { background: #17452a; }
+
+/* Unify + buttons across Resources pane and Resource Builder */
+.builder-item-add,
+.dataset-add-btn {
+  border-radius: 6px;
+  border: 1px solid #1e4a30;
+  background: #12321e;
+  color: #6ee7a0;
+  width: 26px;
+  height: 20px;
+  line-height: 18px;
+  padding: 0;
+  font-size: 13px;
+  cursor: pointer;
+}
+.builder-item-add:hover,
+.dataset-add-btn:hover { background: #17452a; }
+
+/* Type groups indent under the patient group header (builder parity) */
+.dataset-type-group {
+  margin-left: 10px;
+  border-left: 1px solid #26324a;
+  padding-left: 10px;
+}
+
+/* Terminology codes table: scroll after 10 rows */
+.terminology-table-wrap {
+  max-height: 264px; /* ~10 rows + header */
+  overflow-y: auto;
+  border: 1px solid #1c2534;
+  border-radius: 4px;
+}
+.terminology-table-wrap .terminology-table { border: none; }
+.terminology-table-wrap .terminology-table thead th {
+  position: sticky;
+  top: 0;
+  background: #101822;
+  z-index: 1;
+}
+
+/* Run-diff cell highlights (vs prior run) */
+td.diff-up-cell { background: rgba(63, 191, 127, 0.16) !important; box-shadow: inset 2px 0 0 #3fbf7f; }
+td.diff-down-cell { background: rgba(217, 119, 6, 0.16) !important; box-shadow: inset 2px 0 0 #d97706; }
+td.diff-added-cell { background: rgba(96, 165, 250, 0.14) !important; box-shadow: inset 2px 0 0 #60a5fa; }
+td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow: inset 2px 0 0 #94a3b8; }
+.diff-chip {
+  margin-left: 6px; border-radius: 8px; padding: 0 7px; line-height: 16px;
+  font-size: 10px; border: 1px solid #2c4257;
+}
+.diff-chip.up { color: #7fbf7f; border-color: #2e5b2e; }
+.diff-chip.add { color: #8fb3d9; border-color: #2c4257; margin-left: 4px; }
+.diff-chip.rem { color: #d98a8a; border-color: #5b2e2e; margin-left: 4px; cursor: help; }
+
+/* Diff chips: header placement (upper right of Results) */
+.diff-chips { display: inline-flex; gap: 4px; margin-right: 8px; align-items: center; }

@@ -111,7 +111,6 @@ test.describe("results tabs", () => {
   test("evaluate populates all three tabs without re-execution", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.click("[data-testid=load-dataset]");
     await page.waitForSelector("[data-testid=dataset-loaded]");
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
@@ -143,95 +142,39 @@ test.describe("results tabs", () => {
 });
 
 test.describe("run history", () => {
-  test("runs accumulate; compare shows delta; rename + delete work", async ({ page }) => {
+  test("runs accumulate; diff highlights appear vs prior run", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.click("[data-testid=load-dataset]");
+    await page.reload();
+    await page.waitForSelector(".version-badge", { timeout: 150_000 });
+    await page.waitForFunction(() => Boolean((window as any).__cleanroom));
+
     await page.waitForSelector("[data-testid=dataset-loaded]");
 
-    // Two evaluations -> two saved runs.
+    // First evaluation (auto): female logic, p1 IPP true.
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
-    // The Evidence drawer (<details>) starts OPEN (attr renders as
-    // "" — falsy string but present). Check the DOM prop instead.
-    const evOpen = await page.evaluate(
+    await page.waitForFunction(
       () =>
         (document.querySelector(
-          "[data-testid=drawer-evidence] details",
-        ) as HTMLDetailsElement | null)?.open ?? false,
-    );
-    if (!evOpen) {
-      await page.click("[data-testid=drawer-evidence-toggle]");
-    }
-    await page.waitForFunction(
-      () =>
-        document.querySelectorAll(
-          '[data-testid=compare-select] option[value]:not([value=""])',
-        ).length >= 1,
+          "[data-testid=results-table] tbody tr td:nth-child(2)",
+        )?.textContent ?? "").includes("true"),
       undefined,
-      { timeout: 30_000 },
+      { timeout: 90_000 },
     );
 
-    // Change logic (female -> male) and evaluate again.
+    // Change logic (female -> male): auto re-run; diff cells appear.
     await setMaleLibrary(page);
-    // The results-table never detaches between runs — wait for the
-    // run HISTORY to grow instead (append is async post-evaluate).
-    await page.waitForFunction(
-      () =>
-        document.querySelectorAll(
-          '[data-testid=compare-select] option[value]:not([value=""])',
-        ).length >= 2,
-      undefined,
-      { timeout: 60_000 },
-    );
-
-    const optionCount = await page
-      .locator('[data-testid=compare-select] option[value]:not([value=""])')
+    await page.waitForSelector("td.diff-down-cell", { timeout: 90_000 });
+    const changed = await page
+      .locator("td.diff-up-cell, td.diff-down-cell")
       .count();
-    if (optionCount < 2) throw new Error(`runs saved: ${optionCount}`);
+    if (changed < 2) throw new Error(`changed cells: ${changed}`);
 
-    // Compare vs the first run: library changed -> drift warning + moved rows.
-    // Runs list is newest-first; the FEMALE baseline is the LAST option.
-    const runCount = await page
-      .locator('[data-testid=compare-select] option')
-      .count();
-    await page.selectOption("[data-testid=compare-select]", {
-      index: runCount - 1,
-    });
-    await page.waitForSelector("[data-testid=compare-drift]", {
-      timeout: 10_000,
-    });
-    await page.click("[data-testid=compare-run]");
-    await page.waitForSelector("[data-testid=compare-delta]", {
-      timeout: 30_000,
-    });
-    const rows = await page
-      .locator("[data-testid=compare-row]")
-      .allTextContents();
-    const moved = rows.filter(
-      (r) => r.includes("initial_population") && r.includes("moved"),
-    );
-    if (moved.length === 0) throw new Error(`no moved rows: ${JSON.stringify(rows)}`);
-
-    // Rename the currently selected (oldest) run via the prompt dialog.
-    page.once("dialog", (d) => void d.accept("baseline-female"));
-    await page.click("[data-testid=run-rename]");
-    await page.waitForTimeout(300);
-    const optionEls = await page
-      .locator('[data-testid=compare-select] option')
-      .allTextContents();
-    if (!optionEls.some((t) => t.includes("baseline-female")))
-      throw new Error(`rename failed: ${JSON.stringify(optionEls)}`);
-
-    // Delete the renamed run: option count drops by one.
-    page.once("dialog", (d) => void d.accept());
-    await page.click("[data-testid=run-delete]");
-    await page.waitForTimeout(300);
-    const after = await page
-      .locator("[data-testid=compare-select] option")
-      .count();
-    if (after !== optionCount + 1 - 1) throw new Error(`delete: ${after}`);
+    // Footer chips summarize the delta.
+    const chip = await page.textContent("[data-testid=diff-chip-changed]");
+    if (!chip?.includes("changed")) throw new Error(`chip: ${chip}`);
 
     await resetWorkspace(page);
   });
@@ -259,8 +202,15 @@ test.describe("dataset tree scale", () => {
     }
     await page.click("[data-testid=dataset-view-raw]");
     await page.fill("[data-testid=dataset-editor]", lines.join("\n"));
-    await page.click("[data-testid=load-dataset]");
-    await page.waitForSelector("[data-testid=dataset-loaded]");
+    // Raw auto-commit: wait for all 61 resources to land (~2s debounce).
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector("[data-testid=dataset-loaded]")
+          ?.textContent?.includes("61 resources"),
+      undefined,
+      { timeout: 30_000 },
+    );
     await page.click("[data-testid=dataset-view-tree]");
 
     // Type group for Observation exists with a count.

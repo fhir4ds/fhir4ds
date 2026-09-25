@@ -13,7 +13,7 @@ import { zipSync, unzipSync } from "fflate";
 
 const DB_NAME = "cql-cleanroom";
 const STORE = "workspace";
-export const WORKSPACE_SCHEMA_VERSION = 4;
+export const WORKSPACE_SCHEMA_VERSION = 5;
 
 /** WORKBENCH_REORG §3.3/§3.5 — a saved evaluation run. Local-only
  * (IndexedDB document; NEVER in zip or share links — INV-4). */
@@ -55,6 +55,9 @@ export interface WorkspaceState {
   /** Terminology (PASS2 G2): workspace ValueSet resources, url-deduped,
    *  overriding dataset valueset_resources on evaluate. Never null. */
   terminology: { valuesets: Array<Record<string, unknown>> };
+  /** Drawer parameter values (e.g. Measurement Period) — persisted so
+   *  example defaults and manual entries survive reloads. */
+  paramValues: Record<string, string>;
   savedAt: number;
 }
 
@@ -69,6 +72,8 @@ const MIGRATIONS: Record<number, (s: Record<string, unknown>) => Record<string, 
   // v3 -> v4 (PASS2): terminology override storage. Default is an EMPTY
   // list, never null — consumers iterate without guards.
   3: (s) => ({ ...s, terminology: { valuesets: [] } }),
+  // v4 -> v5: parameter drawer values (Measurement Period etc.).
+  4: (s) => ({ ...s, paramValues: {} }),
 };
 
 export function migrate(state: Record<string, unknown>): WorkspaceState {
@@ -93,6 +98,7 @@ export function migrate(state: Record<string, unknown>): WorkspaceState {
       (current.terminology as WorkspaceState["terminology"] | undefined) ?? {
         valuesets: [],
       },
+    paramValues: (current.paramValues as Record<string, string>) ?? {},
     savedAt: (current.savedAt as number) ?? Date.now(),
   };
 }
@@ -190,6 +196,7 @@ export function exportWorkspaceZip(state: Omit<WorkspaceState, "schemaVersion" |
     libraries: state.libraries,
     prefs: state.prefs,
     activeTabPref: state.activeTabPref,
+    paramValues: state.paramValues,
   };
   if (state.viewConfig) {
     metaOut.viewConfig = state.viewConfig;
@@ -264,6 +271,7 @@ export function importWorkspaceZip(bytes: Uint8Array): Omit<WorkspaceState, "sch
     activeTabPref: migrated.activeTabPref,
     prefs: migrated.prefs,
     terminology: migrated.terminology,
+    paramValues: migrated.paramValues,
   };
 }
 
