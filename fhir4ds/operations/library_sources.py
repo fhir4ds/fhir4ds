@@ -20,24 +20,72 @@ _BUNDLED_ANCHOR = "fhir4ds.cql.resources.cql"
 
 # Parse cache keyed by resource name (process lifetime).
 _BUNDLED_CACHE: dict[str, object] = {}
-# Names available in the wheel's resources/cql directory (verified via
-# importlib.resources iterdir; kept static so the bundled tier never
-# depends on filesystem listing at runtime).
-_BUNDLED_NAMES: list[str] = ["FHIRHelpers", "QICoreCommon", "Status"]
+# Standard libraries shipped in the wheel's resources/cql directory.
+# Files are named <Name>.cql or <Name>-<version>.cql; resolution is
+# name-first, version-suffixed fallback (dynamic listing at first use,
+# cached for process lifetime — no static drift).
+_BUNDLED_NAMES: list[str] | None = None
+_BUNDLED_FILE_INDEX: dict[str, str] = {}
+
+
+def _bundled_index() -> dict[str, str]:
+    global _BUNDLED_NAMES, _BUNDLED_FILE_INDEX
+    if _BUNDLED_NAMES is not None:
+        return _BUNDLED_FILE_INDEX
+    index: dict[str, str] = {}
+    names: list[str] = []
+    try:
+        for entry in importlib_resources.files(_BUNDLED_ANCHOR).iterdir():
+            fname = str(entry.name)
+            if not fname.endswith(".cql"):
+                continue
+            stem = fname[: -len(".cql")]
+            lib_name = stem.split("-")[0] if "-" in stem else stem
+            # Prefer the versionless/<Name>.cql form when present.
+            if lib_name not in index or "-" not in stem:
+                index[lib_name] = fname
+            if lib_name not in names:
+                names.append(lib_name)
+    except (ModuleNotFoundError, OSError, AttributeError):
+        pass
+    _BUNDLED_NAMES = names
+    _BUNDLED_FILE_INDEX = index
+    return _BUNDLED_FILE_INDEX
 
 
 def bundled_library_names() -> list[str]:
     """Standard libraries shipped in the wheel (FHIRHelpers et al.)."""
-    return list(_BUNDLED_NAMES)
+    _bundled_index()
+    return list(_BUNDLED_NAMES or [])
+
+
+def _bundled_text(name: str) -> str | None:
+    """Raw CQL text of a bundled library by name (or None)."""
+    index = _bundled_index()
+    fname = index.get(name)
+    if fname is None:
+        return None
+    try:
+        return (
+            importlib_resources.files(_BUNDLED_ANCHOR)
+            .joinpath(fname)
+            .read_text(encoding="utf-8")
+        )
+    except (FileNotFoundError, ModuleNotFoundError, OSError):
+        return None
 
 
 def _load_bundled(name: str) -> object | None:
     if name in _BUNDLED_CACHE:
         return _BUNDLED_CACHE[name]
+    index = _bundled_index()
+    fname = index.get(name)
+    if fname is None:
+        return None
     try:
         text = (
             importlib_resources.files(_BUNDLED_ANCHOR)
-            .joinpath(f"{name}.cql")
+            .joinpath(fname)
             .read_text(encoding="utf-8")
         )
     except (FileNotFoundError, ModuleNotFoundError, OSError):
@@ -74,8 +122,8 @@ class LibraryResolver:
             if alias not in self._inline_cache:
                 self._inline_cache[alias] = parse_cql(lib.text)
             return self._inline_cache[alias]
-        # Tier 2: bundled standards.
-        if alias in _BUNDLED_NAMES:
+        # Tier 2: bundled standards (dynamic index — see _bundled_index).
+        if alias in _bundled_index():
             library = _load_bundled(alias)
             if library is not None:
                 self.consulted.append(f"bundled:{alias}")
@@ -90,7 +138,7 @@ class LibraryResolver:
 
     def unresolved_diagnostic(self, alias: str, path: str | None = None):
         tiers = ["inline libraries[]", "bundled standards ("
-                 + ", ".join(_BUNDLED_NAMES) + ")", "adapter sources"]
+                 + ", ".join(bundled_library_names()) + ")", "adapter sources"]
         name = f"{path or alias}" + (f" (alias '{alias}')" if path and path != alias else "")
         return not_found(
             f"Could not resolve included library '{name}'.",

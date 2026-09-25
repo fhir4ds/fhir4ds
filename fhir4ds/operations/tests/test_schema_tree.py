@@ -188,3 +188,22 @@ class TestResourceSet:
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+class TestMetaNarrativeDatatypes:
+    """meta/text must resolve to Meta/Narrative datatype SDs (not empty
+    BackboneElement fallbacks) — the builder rendered them as empty groups."""
+
+    def test_observation_meta_is_meta_datatype(self):
+        r = resource_schema_tree("Observation")
+        meta = next(c for c in r.root["children"] if c["name"] == "meta")
+        assert meta["type"] == "Meta"
+        names = [x["name"] for x in meta["children"]]
+        assert "versionId" in names and "profile" in names
+
+    def test_observation_text_is_narrative_datatype(self):
+        r = resource_schema_tree("Observation")
+        text = next(c for c in r.root["children"] if c["name"] == "text")
+        assert text["type"] == "Narrative"
+        names = [x["name"] for x in text["children"]]
+        assert "status" in names and "div" in names

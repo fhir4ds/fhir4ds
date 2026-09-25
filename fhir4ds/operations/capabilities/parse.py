@@ -72,7 +72,21 @@ def _declarations(library: Any) -> tuple[dict[str, Any], ...]:
         for stmt in getattr(library, attr, []) or []:
             name = getattr(stmt, "name", None)
             if name:
-                out.append({"kind": kind, "name": name})
+                entry: dict[str, Any] = {"kind": kind, "name": name}
+                # Terminology declarations carry their canonical url on
+                # the `id` attribute (ValueSet/CodeSystem declarations:
+                # `valueset "VS": 'url'`). Surface id/codesystem/version
+                # so adapters can resolve terminology without re-parsing.
+                url = getattr(stmt, "id", None)
+                if url:
+                    entry["id"] = url
+                cs = getattr(stmt, "codesystem", None)
+                if cs is not None:
+                    entry["codesystem"] = cs
+                version = getattr(stmt, "version", None)
+                if version is not None:
+                    entry["version"] = version
+                out.append(entry)
     return tuple(out)
 
 

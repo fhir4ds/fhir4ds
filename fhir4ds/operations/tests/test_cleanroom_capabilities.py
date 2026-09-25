@@ -11,6 +11,7 @@ from fhir4ds.operations import (
     DatasetSpec,
     LibraryText,
     evaluate_library,
+    parse_cql,
     resource_schema,
     translate_cql,
     validate_resource,
@@ -152,6 +153,41 @@ class TestResourceSchema:
         value = next(f for f in r.fields if f["name"] == "value[x]")
         assert value["choice"] is True
         assert "Quantity" in value["types"] and "CodeableConcept" in value["types"]
+
+
+class TestDeclarationUrls:
+    LIB = """library T version '1.0.0'
+using FHIR version '4.0.1'
+include FHIRHelpers version '4.0.1' called FHIRHelpers
+codesystem "LOINC": 'http://loinc.org'
+valueset "Ethnicity": 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1011'
+define "D": 1 + 2
+"""
+
+    def test_valueset_declaration_carries_url(self):
+        r = parse_cql(self.LIB)
+        vs = next(d for d in r.declarations if d["kind"] == "valueset")
+        assert vs["name"] == "Ethnicity"
+        assert vs["id"] == (
+            "http://cts.nlm.nih.gov/fhir/ValueSet/"
+            "2.16.840.1.113883.3.464.1003.101.12.1011"
+        )
+
+    def test_codesystem_declaration_carries_url(self):
+        r = parse_cql(self.LIB)
+        cs = next(d for d in r.declarations if d["kind"] == "codesystem")
+        assert cs["name"] == "LOINC"
+        assert cs["id"] == "http://loinc.org"
+
+    def test_declaration_without_url_has_no_id_key(self):
+        r = parse_cql("library T version '1.0.0'\ndefine \"D\": 1")
+        for d in r.declarations:
+            assert "id" not in d
+
+    def test_to_dict_roundtrip_preserves_urls(self):
+        d = parse_cql(self.LIB).to_dict()
+        vs = next(x for x in d["declarations"] if x["kind"] == "valueset")
+        assert vs["id"].startswith("http://cts.nlm.nih.gov/fhir/ValueSet/")
 
 
 class TestTranslateMetadata:

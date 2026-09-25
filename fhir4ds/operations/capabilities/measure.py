@@ -186,6 +186,48 @@ def _validate_mapping(
     return pairs, None
 
 
+def dependency_closure(
+    libraries: list[LibraryText], main: LibraryText
+) -> tuple[list[LibraryText], list[str]]:
+    """Transitive include closure of ``main`` within ``libraries``.
+
+    Returns (ordered_libraries, missing_names): ordered MAIN-FIRST
+    (MADiE convention: Measure.library[0] is the primary), then each
+    included library depth-first in include order. ``missing_names``
+    lists include targets not present in the workspace (bundled
+    libraries like FHIRHelpers resolve elsewhere and are NOT missing).
+    """
+    from fhir4ds.cql import parse_cql as engine_parse
+
+    by_name = {lib.name: lib for lib in libraries}
+    ordered: list[LibraryText] = []
+    seen: set[str] = set()
+    missing: list[str] = []
+
+    def visit(lib: LibraryText) -> None:
+        if lib.name in seen:
+            return
+        seen.add(lib.name)
+        ordered.append(lib)
+        try:
+            ast = engine_parse(lib.text)
+        except Exception:
+            return
+        for inc in getattr(ast, "includes", []) or []:
+            target = getattr(inc, "path", None) or getattr(inc, "alias", None)
+            if not target or target in seen:
+                continue
+            dep = by_name.get(target)
+            if dep is None:
+                if target not in missing:
+                    missing.append(target)
+                continue
+            visit(dep)
+
+    visit(main)
+    return ordered, missing
+
+
 def measure_from_definitions(
     libraries: list[LibraryText],
     main: LibraryText,
@@ -193,6 +235,7 @@ def measure_from_definitions(
     mapping: list[dict[str, str]] | None = None,
     measure_name: str = "CleanroomMeasure",
     group_id: str = "group-1",
+    library_urls: list[str] | None = None,
 ) -> MeasureResult:
     """Build a FHIR Measure resource from the main library's defines.
 
@@ -237,10 +280,23 @@ def measure_from_definitions(
             }
             for define, code in pairs
         ]
+        # Measure.library[]: primary first (canonical), then dependency
+        # closure. Explicit library_urls wins; else mint stable urns from
+        # the closure so exported Measures are self-describing.
+        if library_urls is not None:
+            measure_libraries: list[str] = list(library_urls)
+        else:
+            closure, _missing = dependency_closure(
+                [main, *[l for l in libraries if l.name != main.name]], main
+            )
+            measure_libraries = [
+                f"urn:cleanroom:lib:{lib.name}" for lib in closure
+            ]
         measure: dict[str, Any] = {
             "resourceType": "Measure",
             "name": measure_name,
             "status": "draft",
+            "library": measure_libraries,
             "scoring": {
                 "coding": [
                     {

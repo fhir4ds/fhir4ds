@@ -334,3 +334,168 @@ class TestPandasFreeImports:
         src = inspect.getsource(m)
         assert "import pandas" not in src
         assert "import numpy" not in src
+
+
+class TestDependencyClosure:
+    MAIN = "library Main version '1.0.0'\ninclude Dep version '1.0.0'\ndefine \"IPP\": 1"
+    DEP = "library Dep version '1.0.0'\ninclude Shared version '1.0.0'\ndefine \"D\": 2"
+    SHARED = "library Shared version '1.0.0'\ndefine \"S\": 3"
+    OTHER = "library Other version '1.0.0'\ndefine \"O\": 4"
+
+    def _libs(self):
+        from fhir4ds.operations import LibraryText
+
+        return [
+            LibraryText(name="Shared", text=self.SHARED),
+            LibraryText(name="Other", text=self.OTHER),
+            LibraryText(name="Dep", text=self.DEP),
+            LibraryText(name="Main", text=self.MAIN),
+        ]
+
+    def test_closure_main_first_transitive(self):
+        from fhir4ds.operations import LibraryText, dependency_closure
+
+        main = LibraryText(name="Main", text=self.MAIN)
+        ordered, missing = dependency_closure(self._libs(), main)
+        assert [l.name for l in ordered] == ["Main", "Dep", "Shared"]
+        assert missing == []
+
+    def test_unrelated_libraries_excluded(self):
+        from fhir4ds.operations import LibraryText, dependency_closure
+
+        main = LibraryText(name="Main", text=self.MAIN)
+        ordered, _ = dependency_closure(self._libs(), main)
+        assert "Other" not in [l.name for l in ordered]
+
+    def test_missing_include_reported_not_fatal(self):
+        from fhir4ds.operations import LibraryText, dependency_closure
+
+        main = LibraryText(
+            name="Main",
+            text="library M version '1.0.0'\ninclude Ghost version '1.0.0'\ndefine \"X\": 1",
+        )
+        ordered, missing = dependency_closure([main], main)
+        assert [l.name for l in ordered] == ["Main"]
+        assert missing == ["Ghost"]
+
+    def test_cycle_terminates(self):
+        from fhir4ds.operations import LibraryText, dependency_closure
+
+        a = LibraryText(name="A", text="library A version '1.0.0'\ninclude B version '1'\ndefine \"X\": 1")
+        b = LibraryText(name="B", text="library B version '1.0.0'\ninclude A version '1'\ndefine \"Y\": 2")
+        ordered, _ = dependency_closure([a, b], a)
+        assert [l.name for l in ordered] == ["A", "B"]
+
+
+class TestMeasureLibraryUrls:
+    def test_measure_carries_closure_libraries_main_first(self):
+        from fhir4ds.operations import LibraryText, measure_from_definitions
+
+        main = LibraryText(
+            name="Main",
+            text="library Main version '1.0.0'\ninclude Dep version '1.0.0'\ndefine \"IPP\": 1",
+        )
+        dep = LibraryText(name="Dep", text="library Dep version '1.0.0'\ndefine \"D\": 2")
+        r = measure_from_definitions(
+            [main, dep], main, mapping=[{"define": "IPP", "code": "initial-population"}]
+        )
+        assert r.ok
+        assert r.measure["library"] == [
+            "urn:cleanroom:lib:Main",
+            "urn:cleanroom:lib:Dep",
+        ]
+
+    def test_explicit_library_urls_win(self):
+        from fhir4ds.operations import LibraryText, measure_from_definitions
+
+        main = LibraryText(name="M", text="library M version '1.0.0'\ndefine \"IPP\": 1")
+        r = measure_from_definitions(
+            [main],
+            main,
+            mapping=[{"define": "IPP", "code": "initial-population"}],
+            library_urls=["http://example.org/lib/m"],
+        )
+        assert r.ok
+        assert r.measure["library"] == ["http://example.org/lib/m"]
+
+    def test_bootstrap_mode_still_carries_library(self):
+        from fhir4ds.operations import LibraryText, measure_from_definitions
+
+        main = LibraryText(name="M", text="library M version '1.0.0'\ndefine \"IPP\": 1")
+        r = measure_from_definitions([main], main, mapping=None)
+        assert r.ok
+        assert r.measure["library"] == ["urn:cleanroom:lib:M"]
+
+
+class TestLambdaDistinctGuard:
+    """BF-002: Distinct macro must never render inside a lambda body."""
+
+    LIB = """library LambdaDistinct version '1.0.0'
+using FHIR version '4.0.1'
+include FHIRHelpers version '4.0.1' called FHIRHelpers
+
+define "Ethnicity Codes":
+  (Patient.name.first().given) X return Distinct({X})
+"""
+
+    def test_distinct_inside_lambda_rendered_subquery_free(self):
+        from fhir4ds.cql.translator.types import (
+            SQLFunctionCall,
+            SQLIdentifier,
+            SQLLambda,
+            _render_lambda_body,
+        )
+
+        lam = SQLLambda(
+            param="x",
+            body=SQLFunctionCall(
+                name='"Distinct"', args=[SQLIdentifier(name="lst")]
+            ),
+        )
+        sql = lam.to_sql()
+        assert '"Distinct"' not in sql
+        assert "list_distinct(" in sql
+
+    def test_distinct_subquery_arg_inside_lambda_raises(self):
+        from fhir4ds.cql.errors import TranslationError
+        from fhir4ds.cql.translator.types import (
+            SQLFunctionCall,
+            SQLLambda,
+            SQLSelect,
+            SQLSubquery,
+            SQLRaw,
+        )
+
+        lam = SQLLambda(
+            param="x",
+            body=SQLFunctionCall(
+                name='"Distinct"',
+                args=[SQLSubquery(query=SQLSelect(columns=[SQLRaw(raw_sql="(SELECT 1) AS v")]))],
+            ),
+        )
+        try:
+            lam.to_sql()
+            raise AssertionError("expected TranslationError")
+        except TranslationError:
+            pass
+
+    def test_plain_body_untouched(self):
+        from fhir4ds.cql.translator.types import SQLFunctionCall, SQLIdentifier, SQLLambda
+
+        lam = SQLLambda(
+            param="x",
+            body=SQLFunctionCall(name="upper", args=[SQLIdentifier(name="x")]),
+        )
+        assert lam.to_sql() == "x -> upper(x)"
+
+    def test_lambda2_body_also_guarded(self):
+        from fhir4ds.cql.translator.types import SQLFunctionCall, SQLIdentifier, SQLLambda2
+
+        lam = SQLLambda2(
+            params=["acc", "e"],
+            body=SQLFunctionCall(
+                name='"Distinct"', args=[SQLIdentifier(name="acc")]
+            ),
+        )
+        sql = lam.to_sql()
+        assert "list_distinct(" in sql and '"Distinct"' not in sql

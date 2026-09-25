@@ -136,40 +136,71 @@ class EvidenceResult(_EnvelopeFields):
 def _write_main_library(main: LibraryText, libraries: list[LibraryText], tmp_dir) -> tuple[str, list[str]]:
     """Materialize inline libraries to files for evaluate_measure (path-based).
 
-    Returns (main_path, include_dirs).
+    Returns (main_path, include_dirs). The include dir ALWAYS exists so
+    evaluate_measure wires a library_loader; every DIRECT include of the
+    main library is satisfied — inline copies first, then the bundled
+    tier (any bundled name, via the dynamic index) — and transitive
+    bundled includes are materialized too.
     """
-    include_names = {lib.name for lib in libraries} - {main.name}
-    include_dir = None
-    if include_names:
-        include_dir = tmp_dir / "includes"
-        include_dir.mkdir(parents=True, exist_ok=True)
-        for lib in libraries:
-            if lib.name == main.name:
-                continue
-            (include_dir / f"{lib.name}.cql").write_text(lib.text, encoding="utf-8")
-    bundled = {"FHIRHelpers", "QICoreCommon", "Status"}
-    missing = [
-        name
-        for name in include_names
-        if not ((include_dir / f"{name}.cql").exists() if include_dir else False)
-        and name not in bundled
-    ]
-    # bundled names are also materialized so include_paths sees one source
-    if include_dir is not None:
-        from importlib import resources as importlib_resources
+    import re as _re
 
-        for name in include_names & bundled:
-            target = include_dir / f"{name}.cql"
-            if not target.exists():
-                text = (
-                    importlib_resources.files("fhir4ds.cql.resources.cql")
-                    .joinpath(f"{name}.cql")
-                    .read_text(encoding="utf-8")
-                )
-                target.write_text(text, encoding="utf-8")
+    from ..library_sources import _bundled_index, _bundled_text
+
+    include_dir = tmp_dir / "includes"
+    include_dir.mkdir(parents=True, exist_ok=True)
+    inline_names: set[str] = set()
+    for lib in libraries:
+        if lib.name == main.name:
+            continue
+        (include_dir / f"{lib.name}.cql").write_text(lib.text, encoding="utf-8")
+        inline_names.add(lib.name)
+
+    # Direct includes of main (parse-light regex: include <Name> version '..')
+    direct = set(_re.findall(r"^\s*include\s+([A-Za-z][A-Za-z0-9_]*)", main.text, _re.MULTILINE))
+    missing = sorted(
+        name
+        for name in direct
+        if not (include_dir / f"{name}.cql").exists()
+        and _bundled_text(name) is None
+    )
+    # Materialize every direct include not already inline from the bundled tier
+    for name in direct:
+        target = include_dir / f"{name}.cql"
+        if target.exists():
+            continue
+        text = _bundled_text(name)
+        if text is not None:
+            target.write_text(text, encoding="utf-8")
+
+    # Transitive includes of materialized/bundled libraries, one hop at a
+    # time until closure (bounded by the bundled catalog size).
+    index = _bundled_index()
+    resolved = {p.stem for p in include_dir.glob("*.cql")}
+    frontier = list(resolved)
+    seen = set(frontier)
+    while frontier:
+        nxt: list[str] = []
+        for stem in frontier:
+            path = include_dir / f"{stem}.cql"
+            text = path.read_text(encoding="utf-8")
+            for dep in _re.findall(r"^\s*include\s+([A-Za-z][A-Za-z0-9_]*)", text, _re.MULTILINE):
+                if dep in seen:
+                    continue
+                seen.add(dep)
+                dep_target = include_dir / f"{dep}.cql"
+                if not dep_target.exists():
+                    dep_text = _bundled_text(dep)
+                    if dep_text is None:
+                        continue  # unresolved transitive — engine reports it
+                    dep_target.write_text(dep_text, encoding="utf-8")
+                nxt.append(dep_target.stem)
+        frontier = nxt
+        if len(seen) >= len(index) + len(libraries) + 1:
+            break
+
     if missing:
         raise FileNotFoundError(
-            f"Could not resolve included libraries: {', '.join(sorted(missing))}"
+            f"Could not resolve included libraries: {', '.join(missing)}"
         )
     main_path = tmp_dir / f"{main.name}.cql"
     main_path.write_text(main.text, encoding="utf-8")
@@ -308,45 +339,48 @@ def _evaluate(
     *,
     parameters: dict[str, Any] | None = None,
     output_columns: dict[str, str] | None = None,
-    audit_mode: str = "none",
+    audit_mode: str = "population",
     patient_ids: list[str] | None = None,
     want_sql: bool = False,
 ):
-    """Shared evaluation core. Returns (result_kwargs, diagnostics)."""
-    import tempfile
-    from pathlib import Path
+    """Shared evaluation core. Returns (result_kwargs, diagnostics).
 
-    from fhir4ds.cql import evaluate_measure
+    BF-003: evaluate now calls translate_cql (population/full shape,
+    same LibraryResolver include chain as the SQL viewer) and executes
+    the SQL directly on the connection — the temp-file materialization
+    + evaluate_measure include_paths dance is GONE. One translation
+    path, one include-resolution mechanism.
+    """
+    from .translate import translate_cql
 
     timing: dict[str, float] = {}
     diag: list[Any] = []
     t0 = time.perf_counter()
-    with tempfile.TemporaryDirectory(prefix="fhir4ds_ops_") as tmp:
-        tmp_dir = Path(tmp)
-        try:
-            main_path, include_dirs = _write_main_library(main, libraries, tmp_dir)
-        except FileNotFoundError as exc:
-            return None, [not_found(str(exc))]
-        if dataset is not None and not dataset.is_empty:
-            ds_result = _load_dataset(dataset, conn)
-            if not ds_result.ok:
-                return None, list(ds_result.diagnostics)
-        t_load = time.perf_counter()
-        timing["load"] = (t_load - t0) * 1000
-        try:
-            relation = evaluate_measure(
-                main_path,
-                conn,
-                output_columns=output_columns,
-                parameters=parameters,
-                patient_ids=patient_ids,
-                include_paths=include_dirs or None,
-                audit_mode=audit_mode,
-                verbose=False,
-            )
-        except Exception as exc:
-            return None, [diagnostic_from_exception(exc, library=main.name, context="evaluate")]
-        timing["evaluate"] = (time.perf_counter() - t_load) * 1000
+
+    tr = translate_cql(
+        libraries,
+        main,
+        audit_mode=audit_mode,
+        patient_ids=patient_ids,
+        output_columns=output_columns,
+        parameters=parameters,
+    )
+    if not tr.ok:
+        return None, list(tr.diagnostics)
+    t_load = time.perf_counter()
+    timing["load"] = (t_load - t0) * 1000
+
+    if dataset is not None and not dataset.is_empty:
+        ds_result = _load_dataset(dataset, conn)
+        if not ds_result.ok:
+            return None, list(ds_result.diagnostics)
+
+    try:
+        relation = conn.execute(tr.sql)
+    except Exception as exc:
+        return None, [diagnostic_from_exception(exc, library=main.name, context="evaluate")]
+    timing["evaluate"] = (time.perf_counter() - t_load) * 1000
+
     columns, rows = _rows_from_relation(relation)
     kwargs: dict[str, Any] = {
         "patient_count": len(rows),
@@ -355,11 +389,7 @@ def _evaluate(
         "timing_ms": timing,
     }
     if want_sql:
-        # Re-translate cheaply for the SQL viewer (same translator path).
-        from .translate import translate_cql
-
-        tr = translate_cql(libraries, main)
-        kwargs["sql"] = tr.sql if tr.ok else None
+        kwargs["sql"] = tr.sql
     return (kwargs, relation), diag
 
 
@@ -390,6 +420,7 @@ def evaluate_library(
     outcome = _evaluate(
         libraries, main, dataset, conn,
         parameters=parameters, output_columns=output_columns,
+        audit_mode="population",
         want_sql=emit_sql,
     )
     payload, diag = outcome
@@ -420,6 +451,7 @@ def run_tests(
     outcome = _evaluate(
         libraries, main, dataset, conn,
         parameters=parameters, output_columns=output_columns,
+        audit_mode="population",
     )
     payload, diag = outcome
     if payload is None:

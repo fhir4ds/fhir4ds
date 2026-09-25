@@ -182,12 +182,14 @@ def _children_of(
 
         choice = name.endswith("[x]")
         if choice:
-            # Synthesize one arm per concrete type (finding 2).
+            # Synthesize one arm per concrete type (finding 2); every arm
+            # carries choice_group so adapters can render pick-one groups.
             for t in types:
                 arm_suffix = t[0].upper() + t[1:]
                 arm_name = name[:-3] + arm_suffix
                 arm_node = _typed_node(
-                    arm_name, t, reference_targets, depth, depth_cap
+                    arm_name, t, reference_targets, depth, depth_cap,
+                    choice_group=name,
                 )
                 if arm_node is not None:
                     nodes.append(arm_node)
@@ -227,7 +229,10 @@ def _build_nodes(
         if name.endswith("[x]"):
             for t in types:
                 arm_name = name[:-3] + t[0].upper() + t[1:]
-                node = _typed_node(arm_name, t, reference_targets, depth, depth_cap)
+                node = _typed_node(
+                    arm_name, t, reference_targets, depth, depth_cap,
+                    choice_group=name,
+                )
                 if node is not None:
                     nodes.append(node)
             continue
@@ -248,9 +253,12 @@ def _typed_node(
     depth_cap: int,
     elem: dict[str, Any] | None = None,
     types: list[str] | None = None,
+    choice_group: str | None = None,
 ) -> dict[str, Any] | None:
     """Build one field node; None for unsupported/unknown types."""
     node: dict[str, Any] = {"name": name}
+    if choice_group:
+        node["choice_group"] = choice_group
     if elem is not None:
         node["cardinality"] = f"{elem.get('min', 0)}..{elem.get('max', '1')}"
     if types:

@@ -101,6 +101,7 @@ def translate_cql(
     audit_mode: str = "none",
     patient_ids: list[str] | None = None,
     output_columns: dict[str, str] | None = None,
+    parameters: dict[str, Any] | None = None,
 ) -> TranslateResult:
     """Translate the main library (includes via the §3.3.1 chain) to SQL.
 
@@ -148,6 +149,7 @@ def translate_cql(
                 main_ast,
                 output_columns=output_columns,
                 patient_ids=patient_ids,
+                parameters=parameters,
             )
         else:
             if patient_ids:
