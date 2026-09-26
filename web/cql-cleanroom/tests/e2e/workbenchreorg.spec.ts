@@ -45,7 +45,8 @@ test.describe("console sub-tabs + col2 panes", () => {
     });
 
     // REORG phase 6b: dock the console right — col2 becomes the console.
-    await page.click("[data-testid=console-place]");
+    await page.click("[data-testid=settings-menu]");
+    await page.selectOption("[data-testid=settings-console-placement]", "right");
     await page.waitForSelector(".app-main.dock-right");
     await page.waitForSelector("[data-testid=results-console]");
 
@@ -58,8 +59,8 @@ test.describe("console sub-tabs + col2 panes", () => {
       timeout: 90_000,
     });
 
-    // Measure editor active → the console shows the Measure Report
-    // output (pivot + attrition Sankey), no run-pipeline tabs.
+    // Measure editor active → the console shows Measure Report + Funnel
+    // tabs (REORG 6e), no run-pipeline tabs.
     await page.click("[data-testid=nav-toggle-measures]");
     await page.locator("[data-testid^=nav-item-measure-]").first().click();
     await page.waitForSelector("[data-testid=console-tab-mr]");
@@ -68,6 +69,8 @@ test.describe("console sub-tabs + col2 panes", () => {
       { timeout: 30_000 },
     );
     await page.waitForSelector("[data-testid=mr-table]", { timeout: 30_000 });
+    // REORG 6e: the Funnel (attrition Sankey) is its own console tab.
+    await page.click("[data-testid=console-tab-funnel]");
     await page.waitForSelector("[data-testid=population-sankey]", {
       timeout: 30_000,
     });
@@ -82,11 +85,75 @@ test.describe("console sub-tabs + col2 panes", () => {
 
     // Back to bottom-dock + library tab + Results so nothing bleeds
     // into later specs (autosave may outlive the reset below).
-    await page.click("[data-testid=console-place]");
+    await page.click("[data-testid=settings-menu]");
+    await page.selectOption("[data-testid=settings-console-placement]", "bottom");
     await page.locator("[data-testid^=editor-tab-library-]").first().click();
     await page.click("[data-testid=console-tab-results]");
     await page.waitForSelector(".app-main.dock-bottom");
     await page.waitForSelector("[data-testid=results-table]");
+    await resetWorkspace(page);
+  });
+
+  test("editor and console are pinned with independent scroll (6e)", async ({
+    page,
+  }) => {
+    await bootReady(page);
+    await resetWorkspace(page);
+    await page.waitForSelector("[data-testid=results-table]", {
+      timeout: 90_000,
+    });
+    // Pinned: the app shell itself never scrolls — panes do.
+    const mainOverflow = await page.evaluate(
+      () =>
+        getComputedStyle(
+          document.querySelector<HTMLElement>("[data-testid=app-main]")!,
+        ).overflow,
+    );
+    if (mainOverflow !== "hidden")
+      throw new Error(`app-main overflow: ${mainOverflow}`);
+    const consoleOverflow = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>(".results-console");
+      return el ? getComputedStyle(el).overflowY : null;
+    });
+    if (!consoleOverflow || consoleOverflow === "visible")
+      throw new Error(`console overflowY: ${consoleOverflow}`);
+    // Splitter drag: shrink the editor; the --editor-fr var changes and
+    // survives a reload (prefs.layout.editorFr).
+    const before = await page.evaluate(() =>
+      document
+        .querySelector<HTMLElement>("[data-testid=app-main]")!
+        .style.getPropertyValue("--editor-fr"),
+    );
+    const handle = await page
+      .locator("[data-testid=editor-splitter]")
+      .boundingBox();
+    if (!handle) throw new Error("no editor splitter");
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      handle.x + handle.width / 2,
+      handle.y + handle.height / 2 + 140,
+      { steps: 6 },
+    );
+    await page.mouse.up();
+    const after = await page.evaluate(() =>
+      document
+        .querySelector<HTMLElement>("[data-testid=app-main]")!
+        .style.getPropertyValue("--editor-fr"),
+    );
+    if (after === before)
+      throw new Error(`splitter drag was a no-op: ${before} -> ${after}`);
+    await page.waitForTimeout(1400); // autosave debounce
+    await page.reload();
+    await page.waitForSelector(".version-badge", { timeout: 150_000 });
+    await page.waitForSelector("[data-testid=app-main]");
+    const persisted = await page.evaluate(() =>
+      document
+        .querySelector<HTMLElement>("[data-testid=app-main]")!
+        .style.getPropertyValue("--editor-fr"),
+    );
+    if (persisted !== after)
+      throw new Error(`editorFr not persisted: ${persisted} != ${after}`);
     await resetWorkspace(page);
   });
 
@@ -108,7 +175,8 @@ test.describe("console sub-tabs + col2 panes", () => {
     const mrRows = await page.locator("[data-testid=mr-table] tbody tr").count();
     if (mrRows !== 3) throw new Error(`mr rows (want 3 patients): ${mrRows}`);
 
-    // Sankey renders after evaluation.
+    // REORG 6e: the Funnel tab hosts the Sankey.
+    await page.click("[data-testid=console-tab-funnel]");
     await page.waitForSelector("[data-testid=population-sankey]", {
       timeout: 30_000,
     });

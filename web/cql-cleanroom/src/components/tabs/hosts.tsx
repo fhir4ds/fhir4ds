@@ -1,6 +1,7 @@
 import type { EditorTab } from "../../lib/editorTabs";
 import { MeasurePane } from "../MeasurePane";
 import { ViewPane } from "../ViewPane";
+import { TerminologyPane } from "../TerminologyPane";
 import { ValuesetEditor } from "./ValuesetEditor";
 import type { ViewOverrides } from "../../lib/viewDerivation";
 import type { FlattenViewResult } from "../../lib/protocol";
@@ -37,6 +38,13 @@ export interface TabHostProps {
   onViewConfigChange: (v: ViewOverrides) => void;
   onSql?: (sql: string | null) => void;
   onResult: (r: FlattenViewResult | null) => void;
+  /* REORG 6e: settings recalc delay passed through to the view. */
+  recalcMs?: number;
+  /* terminology (REORG 6e — drawer became an editor tab) */
+  terminologyDeclarations: Array<Record<string, unknown>>;
+  terminologyDatasetValuesets: Array<Record<string, unknown>>;
+  terminologyValuesets: Array<Record<string, unknown>>;
+  onTerminologyChange: (valuesets: Array<Record<string, unknown>>) => void;
 }
 
 export function TabHost(p: TabHostProps) {
@@ -106,6 +114,16 @@ export function TabHost(p: TabHostProps) {
           onViewConfigChange={p.onViewConfigChange}
           onSql={p.onSql}
           onResult={p.onResult}
+          recalcMs={p.recalcMs}
+        />
+      );
+    case "terminology":
+      return (
+        <TerminologyPane
+          cqlDeclarations={p.terminologyDeclarations}
+          datasetValuesets={p.terminologyDatasetValuesets}
+          workspaceValuesets={p.terminologyValuesets}
+          onWorkspaceChange={p.onTerminologyChange}
         />
       );
     case "library":

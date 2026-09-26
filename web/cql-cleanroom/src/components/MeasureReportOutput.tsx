@@ -40,45 +40,45 @@ export function useRunDiff(
   );
 }
 
-export function MrOutput({
-  result,
+/** REORG 6e: the "Measure Report" console tab — the report pivot. */
+export function MrPivot({
   reports,
   measure,
   runDiff,
 }: {
-  result: EvaluateResult | null;
   reports: Array<Record<string, unknown>> | null;
   measure: Record<string, unknown> | null;
   runDiff: ReturnType<typeof diffRuns>;
 }) {
+  return reports && reports.length > 0 ? (
+    <div className="pane output-pane" data-testid="mr-reports">
+      <header className="pane-header">
+        <h3>Output</h3>
+      </header>
+      <MrPivotTable reports={reports} runDiff={runDiff} />
+    </div>
+  ) : (
+    <p className="pane-hint" data-testid="mr-empty">
+      {measure
+        ? "Run an evaluation to materialize MeasureReports."
+        : "Configure the Measure mapping, then re-evaluate."}
+    </p>
+  );
+}
+
+/** REORG 6e: the "Funnel" console tab — population attrition Sankey. */
+export function MrFunnel({ result }: { result: EvaluateResult | null }) {
   const populationColumns = (result?.columns ?? []).filter(
     (c) => c !== "patient_id",
   );
+  if (!(result && populationColumns.length > 0)) return null;
   return (
-    <>
-      {reports && reports.length > 0 ? (
-        <div className="pane output-pane" data-testid="mr-reports">
-          <header className="pane-header">
-            <h3>Output</h3>
-          </header>
-          <MrPivotTable reports={reports} runDiff={runDiff} />
-        </div>
-      ) : (
-        <p className="pane-hint" data-testid="mr-empty">
-          {measure
-            ? "Run an evaluation to materialize MeasureReports."
-            : "Configure the Measure mapping, then re-evaluate."}
-        </p>
-      )}
-      {result && populationColumns.length > 0 && (
-        <div className="pane output-pane" data-testid="attrition-pane">
-          <header className="pane-header">
-            <h3>Attrition</h3>
-          </header>
-          <SankeyFromRows columns={populationColumns} rows={result.rows} />
-        </div>
-      )}
-    </>
+    <div className="pane output-pane" data-testid="funnel-pane">
+      <header className="pane-header">
+        <h3>Funnel</h3>
+      </header>
+      <SankeyFromRows columns={populationColumns} rows={result.rows} />
+    </div>
   );
 }
 

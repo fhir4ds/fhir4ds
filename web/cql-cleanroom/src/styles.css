@@ -42,8 +42,9 @@ body { margin: 0; }
    shows the host INSTEAD of the library editor; the editor stays
    mounted-but-hidden so its Monaco model cache (undo/cursor) survives
    tab flips. */
-.editor-col.hosting-tab > .pane.editor-pane,
-.editor-col.hosting-tab > .results-drawer.editor-drawer { display: none; }
+/* REORG 6e: terminology is an editor tab — only the plain editor pane
+   is hidden while a hosted tab is active. */
+.editor-col.hosting-tab > .editor-area > .pane.editor-pane { display: none; }
 .pane table { max-width: 100%; }
 
 .pane {
@@ -77,7 +78,7 @@ body { margin: 0; }
   font-size: 13px; line-height: 1; padding: 0 4px; margin-left: 6px;
 }
 .expected-grid .row-remove:hover { color: #ff7b72; }
-.editor-host { height: 340px; border: 1px solid #232a35; border-radius: 6px; overflow: hidden; }
+.editor-host { min-height: 240px; border: 1px solid #232a35; border-radius: 6px; overflow: hidden; }
 .pane-meta { color: #8fa3bf; font-size: 11px; margin-right: 8px; }
 .pane-error { color: #ff7b72; font-size: 12px; margin: 6px 0; }
 .diag-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
@@ -157,11 +158,44 @@ body { margin: 0; }
 /* WORKBENCH_REORG phase 5: two-column shell — editor(+console) col,
    6px splitter, report col. --col1-fr is dragged/persisted by <Splitter>.
    REORG phase 6b: console docks BOTTOM (default: nav | editor+console)
-   or RIGHT (nav | editor | splitter | console). */
-.app-main.dock-bottom { display: grid; grid-template-columns: var(--nav-w, 264px) minmax(0, 1fr); gap: 10px; padding: 10px; overflow: auto; flex: 1; align-items: start; }
-.app-main.dock-right { display: grid; grid-template-columns: var(--nav-w, 264px) minmax(0, var(--col1-fr, 1.1fr)) 6px minmax(0, 1fr); gap: 10px; padding: 10px; overflow: auto; flex: 1; align-items: start; }
+   or RIGHT (nav | editor | splitter | console).
+   REORG 6e: the shell is PINNED — no page scroll; the editor area and
+   console each fill their grid row and scroll independently. */
+.app-main.dock-bottom { display: grid; grid-template-columns: var(--nav-w, 264px) minmax(0, 1fr); gap: 10px; padding: 10px; overflow: hidden; flex: 1; min-height: 0; align-items: stretch; }
+.app-main.dock-right { display: grid; grid-template-columns: var(--nav-w, 264px) minmax(0, var(--col1-fr, 1.1fr)) 6px minmax(0, 1fr); gap: 10px; padding: 10px; overflow: hidden; flex: 1; min-height: 0; align-items: stretch; }
 .splitter { align-self: stretch; min-height: 480px; border-radius: 3px; background: #232a35; cursor: col-resize; touch-action: none; }
 .splitter:hover, .splitter.dragging { background: #3b82c4; }
+
+/* REORG 6e: pinned editor/console rows. Dock-bottom editor col is a
+   4-row grid: tabs | editor-area | splitter | console (console only in
+   bottom mode; right mode keeps the flex column). --editor-fr is
+   dragged/persisted (default 2 → editor ≈ 2/3, console ≈ 1/3). */
+.editor-col { min-height: 0; }
+.app-main.dock-right .editor-col { display: flex; flex-direction: column; height: 100%; }
+.app-main.dock-bottom .editor-col {
+  display: grid;
+  grid-template-rows: auto minmax(0, var(--editor-fr, 2fr)) 6px minmax(0, 1fr);
+  height: 100%;
+}
+.app-main.dock-bottom .editor-col > .results-console {
+  margin-bottom: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.editor-area {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.editor-area > .pane { flex: 1 1 auto; min-height: 0; overflow: auto; margin-bottom: 0; }
+.editor-area > .pane.editor-pane { overflow: hidden; }
+.editor-area > .pane.editor-pane .editor-host {
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
 /* REORG 6d: maps-style nav — L1 icon strip + L2 slide-out panel. */
 .nav-rail {
@@ -779,8 +813,9 @@ body { margin: 0; }
 .tab-panel[hidden] { display: none !important; }
 
 /* REORG phase 6b: right-docked console fills the second column. */
-.run-col.console-dock { display: flex; flex-direction: column; min-height: 70vh; }
-.run-col.console-dock > .results-console { flex: 1 1 auto; min-height: 0; overflow: auto; }
+/* REORG 6e: right-docked console fills col2 (pinned, own scroll). */
+.run-col.console-dock { display: flex; flex-direction: column; min-height: 0; }
+.run-col.console-dock > .results-console { flex: 1 1 auto; min-height: 0; overflow: auto; margin-bottom: 0; }
 .splitter.horizontal { min-height: 0; height: 6px; width: auto; cursor: row-resize; align-self: auto; flex: 0 0 auto; }
 .console-subtabs { margin-bottom: 8px; display: flex; gap: 4px; }
 .console-subtabs .tab {
@@ -1408,3 +1443,38 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
   border: 1px solid #2a2f3a;
   border-radius: 6px;
 }
+
+/* REORG 6e: header settings menu rows. */
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 2px; font-size: 12px; color: #a8b8cf; white-space: nowrap; }
+.settings-row select { background: #101822; color: #dbe7ff; border: 1px solid #2c3644; border-radius: 6px; font-size: 12px; padding: 2px 4px; }
+
+/* REORG 6e: Tests L3 detail — a second maps-style nav panel sliding
+   out OVER the section panel (which stays mounted underneath). */
+.nav-panel-wrap { position: relative; flex: 1; min-width: 0; max-width: 198px; display: flex; flex-direction: column; min-height: 0; }
+.nav-panel-wrap > .nav-panel { flex: 1; min-height: 0; }
+.nav-panel-detail {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 284px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  background: #161b24;
+  border: 1px solid #232a35;
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  animation: nav-detail-in 160ms ease-out;
+}
+@keyframes nav-detail-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.nav-panel-detail .dataset-patient-detail { display: flex; flex-direction: column; gap: 6px; padding: 8px; min-width: 0; }
+.nav-panel-detail .dataset-detail-head { flex-wrap: wrap; }
+.nav-panel-detail .dataset-tree-controls { flex-wrap: wrap; }
+.nav-panel-detail .dataset-tree-controls input { flex: 1 1 110px; min-width: 0; }
+.nav-panel-detail .dataset-tree-controls button { flex: none; }
+.nav-panel-detail .dataset-detail-head > * { flex-shrink: 0; }
+.nav-panel-detail .dataset-detail-head .dataset-group-hint { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -19,7 +19,7 @@ import type { Artifact } from "../lib/runDiff";
  * REORG phase 6b — the console, now the single home for run OUTPUT.
  * Its sub-tab set is keyed on the ACTIVE editor tab's kind:
  *   library (or kinds without output) → Results / SQL / AST / Diags
- *   measure → the Measure Report output (pivot + attrition Sankey)
+ *   measure → Measure Report (pivot) + Funnel (attrition Sankey)
  *   view    → the ViewDefinition flatten output
  * Run / Run-Selection stay in the header in every context. The console
  * docks bottom (col1, under the editor) or right (col2).
@@ -28,7 +28,14 @@ import type { Artifact } from "../lib/runDiff";
  * back to Results once a run succeeds again) in library contexts.
  */
 
-export type ConsoleTab = "results" | "sql" | "ast" | "diags" | "mr" | "view";
+export type ConsoleTab =
+  | "results"
+  | "sql"
+  | "ast"
+  | "diags"
+  | "mr"
+  | "funnel"
+  | "view";
 export type ConsoleContext = "library" | "measure" | "view";
 export type ConsolePlacement = "bottom" | "right";
 
@@ -45,7 +52,10 @@ const CONTEXT_TABS: Record<ConsoleContext, Array<{ id: ConsoleTab; label: string
     { id: "ast", label: "AST" },
     { id: "diags", label: "Diagnostics" },
   ],
-  measure: [{ id: "mr", label: "Measure Report" }],
+  measure: [
+    { id: "mr", label: "Measure Report" },
+    { id: "funnel", label: "Funnel" },
+  ],
   view: [{ id: "view", label: "View Output" }],
 };
 
@@ -62,9 +72,9 @@ export function ResultsConsole({
   baselineArtifact,
   context,
   mrOutput,
+  funnelOutput,
   viewOutput,
-  placement,
-  onPlacementChange,
+  runRequest,
   activeTab,
   onTabChange,
 }: {
@@ -82,12 +92,14 @@ export function ResultsConsole({
   baselineArtifact: Artifact | null;
   /** Active editor kind — decides which sub-tabs exist. */
   context: ConsoleContext;
-  /** Measure Report output node (measure context). */
+  /** Measure Report pivot node (measure context). */
   mrOutput: React.ReactNode;
+  /** REORG 6e: attrition-funnel node (measure context). */
+  funnelOutput: React.ReactNode;
   /** View flatten output node (view context). */
   viewOutput: React.ReactNode;
-  placement: ConsolePlacement;
-  onPlacementChange: (p: ConsolePlacement) => void;
+  /** REORG 6e: Ctrl/Cmd+Enter from the editor lands here (nonce bumps). */
+  runRequest: { mode: "library" | "selection"; nonce: number } | null;
   activeTab: ConsoleTab;
   onTabChange: (t: ConsoleTab) => void;
 }) {
@@ -129,6 +141,12 @@ export function ResultsConsole({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [context, activeTab]);
 
+  // Ctrl/Cmd+Enter in the editor: (re)run via the request nonce.
+  const runRef = useRef<typeof run>(null!);
+  useEffect(() => {
+    if (runRequest) void runRef.current(runRequest.mode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runRequest?.nonce]);
   const run = async (mode: "library" | "selection") => {
     const seq = ++seqRef.current;
     setRunBusy(true);
@@ -180,6 +198,7 @@ export function ResultsConsole({
       if (seq === seqRef.current) setRunBusy(false);
     }
   };
+  runRef.current = run;
 
   // Cell-level evidence drill-in for the live results table.
   const [cellEvidence, setCellEvidence] = useState<{
@@ -259,19 +278,7 @@ export function ResultsConsole({
               )}
             </span>
           ) : null}
-          <button
-            data-testid="console-place"
-            title={
-              placement === "bottom"
-                ? "Dock the console to the right column"
-                : "Dock the console under the editor"
-            }
-            onClick={() =>
-              onPlacementChange(placement === "bottom" ? "right" : "bottom")
-            }
-          >
-            {placement === "bottom" ? "Dock right ⇥" : "Dock bottom ⇤"}
-          </button>
+          {/* REORG 6e: dock placement moved to the header Settings menu. */}
           <button
             data-testid="console-run-library"
             disabled={running}
@@ -502,6 +509,14 @@ export function ResultsConsole({
         data-testid="console-panel-mr"
       >
         {context === "measure" ? mrOutput : null}
+      </div>
+
+      <div
+        className="tab-panel"
+        hidden={activeTab !== "funnel"}
+        data-testid="console-panel-funnel"
+      >
+        {context === "measure" ? funnelOutput : null}
       </div>
 
       <div

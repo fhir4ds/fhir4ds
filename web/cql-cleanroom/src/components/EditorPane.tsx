@@ -29,6 +29,8 @@ interface Props {
   knownTabKeys?: string[];
   /** Selection text ("" when empty) for the console's Run-Selection. */
   onSelectionChange?: (text: string) => void;
+  /** REORG 6e: Ctrl/Cmd+Enter — run the selection (or library) in the console. */
+  onRunSelection?: () => void;
   /** REORG 6d: the visual-editor drawer lives under this pane; its
    *  toggle is a header button (was a standalone bottom bar). */
   graphOpen?: boolean;
@@ -78,6 +80,7 @@ export function EditorPane({
   tabKey = "library:solo",
   knownTabKeys,
   onSelectionChange,
+  onRunSelection,
   graphOpen,
   onGraphOpenChange,
 }: Props) {
@@ -122,6 +125,8 @@ export function EditorPane({
   onTextChangeRef.current = onTextChange;
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
+  const onRunSelectionRef = useRef(onRunSelection);
+  onRunSelectionRef.current = onRunSelection;
 
   useEffect(() => {
     let disposed = false;
@@ -157,6 +162,10 @@ export function EditorPane({
         );
       });
       editorRef.current = editor;
+      editor.addCommand(
+        monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+        () => onRunSelectionRef.current?.(),
+      );
     })();
     return () => {
       disposed = true;

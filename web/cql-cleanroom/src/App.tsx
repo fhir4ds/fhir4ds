@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { groupDataset } from "./lib/datasetGroup";
+import { PatientDetailPanel } from "./components/nav/PatientDetailPanel";
 import {
   BootOverlay,
   VersionBadge,
@@ -7,7 +9,6 @@ import {
 } from "./components/BootOverlay";
 import { EditorPane } from "./components/EditorPane";
 import { NavRail } from "./components/NavRail";
-import { TerminologyPane } from "./components/TerminologyPane";
 import { coerceParam, detectParams } from "./lib/params";
 import { importMadiePackage } from "./lib/madiePackage";
 import { exportMadiePackage } from "./lib/madieExport";
@@ -22,7 +23,7 @@ import {
   type ConsoleContext,
   type ConsolePlacement,
 } from "./components/ResultsConsole";
-import { MrOutput, useRunDiff } from "./components/MeasureReportOutput";
+import { MrPivot, MrFunnel, useRunDiff } from "./components/MeasureReportOutput";
 import { ViewOutputPanel } from "./components/ViewOutput";
 import { TestsPane } from "./components/TestsPane";
 import { DatasetPane } from "./components/DatasetPane";
@@ -348,7 +349,6 @@ export default function App() {
   >(null);
   // Editor-column visual-editor drawer (default collapsed).
   const [graphOpen, setGraphOpen] = useState(false);
-  const [terminologyOpen, setTerminologyOpen] = useState(false);
   // Editor-column FHIRPath scratchpad retired (phase 4): the CQL
   // console's Run-Selection replaces it.
   const [consoleSelection, setConsoleSelection] = useState<string>("");
@@ -414,6 +414,14 @@ export default function App() {
   const [col1Fr, setCol1Fr] = useState(1.1);
   const [consolePlacement, setConsolePlacement] =
     useState<ConsolePlacement>("bottom");
+  // REORG 6e: pinned editor/console rows (dock-bottom) — editor top
+  // ~2/3, console bottom ~1/3, adjustable; persisted in prefs.layout.
+  const [editorFr, setEditorFr] = useState(2);
+  // Seconds between auto-recalcs (0 = off → manual Run only).
+  const [recalcSeconds, setRecalcSeconds] = useState(2);
+  // REORG 6e: Tests L3 drill-in — which patient's detail panel is slid
+  // out over the Tests list (null = L2).
+  const [focusedPid, setFocusedPid] = useState<string | null>(null);
   // §3.2: per-patient `+` context — subject-class pickers default to
   // Patient/<id> (builder v2 consumes; v1 ignores gracefully).
   const [builderContext, setBuilderContext] = useState<{
@@ -582,6 +590,7 @@ export default function App() {
             ws.activeTabPref === "ast" ||
             ws.activeTabPref === "diags" ||
             ws.activeTabPref === "mr" ||
+            ws.activeTabPref === "funnel" ||
             ws.activeTabPref === "view")
         ) {
           setConsoleTab(ws.activeTabPref);
@@ -594,6 +603,8 @@ export default function App() {
             layout?: {
               col1Fr?: unknown;
               consolePlacement?: unknown;
+              editorFr?: unknown;
+              recalcSeconds?: unknown;
             };
           } | null
         )?.layout;
@@ -602,6 +613,16 @@ export default function App() {
         }
         if (layout?.consolePlacement === "right") {
           setConsolePlacement("right");
+        }
+        if (typeof layout?.editorFr === "number" && layout.editorFr >= 0.3) {
+          setEditorFr(Math.min(2.5, layout.editorFr));
+        }
+        if (typeof layout?.recalcSeconds === "number") {
+          setRecalcSeconds(
+            layout.recalcSeconds > 0
+              ? Math.min(10, Math.max(0.5, layout.recalcSeconds))
+              : 0,
+          );
         }
       })
       .catch(() => undefined)
@@ -627,7 +648,7 @@ export default function App() {
             ) as unknown[])
           : null,
         prefs: {
-          layout: { col1Fr, consolePlacement },
+          layout: { col1Fr, consolePlacement, editorFr, recalcSeconds },
         },
         measures,
         activeMeasureId,
@@ -656,6 +677,8 @@ export default function App() {
     restored,
     col1Fr,
     consolePlacement,
+    editorFr,
+    recalcSeconds,
   ]);
 
   const active = libraries[activeTab] ?? libraries[0];
@@ -776,18 +799,19 @@ export default function App() {
     }
   };
 
-  // AUTO-EVALUATE: recompute 2s after any input settles. U5: no manual
+  // AUTO-EVALUATE: recompute after any input settles (delay = the
+  // settings' recalc delay; 0 = off → manual Run only). U5: no manual
   // Evaluate — a first run that fails on a missing parameter still arms
   // (the effect re-fires when the parameter fills) so results auto-heal.
   useEffect(() => {
-    if (!canAutoEval) return;
+    if (!canAutoEval || recalcSeconds <= 0) return;
     const t = setTimeout(() => {
       if (evalBusyRef.current) return;
       void runEvaluation();
-    }, 2000);
+    }, recalcSeconds * 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mainLibs, main, evalDataset, outputColumns, measure, runtimeParameters, canAutoEval]);
+  }, [mainLibs, main, evalDataset, outputColumns, measure, runtimeParameters, canAutoEval, recalcSeconds]);
 
   // M1 write-through: Measure.library[] mirrors the entrypoint pin —
   // primary first, then the dependency closure of that library. Keeps
@@ -1209,6 +1233,81 @@ export default function App() {
     }
   };
 
+  // REORG 6e: the rail T button toggles Terminology as an editor tab;
+  // closing restores whatever the (possibly hidden) library editor was
+  // showing via the neighbor rule (library tabs sit on both sides in
+  // practice).
+  const toggleTerminologyTab = () => {
+    const id = tabId("terminology", "workspace");
+    if (activeEditorTabId === id) {
+      closeEditorTabById(id);
+    } else {
+      openEditorTab("terminology", "workspace");
+    }
+  };
+
+  // REORG 6e: Ctrl/Cmd+Enter — run the current selection (or the whole
+  // library when nothing is selected) through the console's runner.
+  const [runRequest, setRunRequest] = useState<{
+    mode: "library" | "selection";
+    nonce: number;
+  } | null>(null);
+  const runViaConsole = () => {
+    setRunRequest({
+      mode: consoleSelection.trim() ? "selection" : "library",
+      nonce: Date.now(),
+    });
+  };
+
+  // REORG 6e: Tests L2/L3 — patient groups live here so BOTH the list
+  // and the detail panel can consume them, and so a focused patient
+  // that vanishes (row delete / raw-edit wipe / workspace reset) can
+  // fall back to the L2 list automatically.
+  const patientGroups = useMemo(
+    () => groupDataset(dataset?.resources ?? []),
+    [dataset],
+  );
+  const focusedGroup = focusedPid
+    ? patientGroups.find((g) => g.key === focusedPid)
+    : undefined;
+  useEffect(() => {
+    if (focusedPid && !patientGroups.some((g) => g.key === focusedPid)) {
+      setFocusedPid(null);
+    }
+  }, [focusedPid, patientGroups]);
+
+  // Dataset callbacks shared by the L2 list and the L3 detail panel.
+  const editDatasetResource = (index: number) => {
+    const r = dataset?.resources?.[index];
+    if (r && typeof r === "object") {
+      setBuilderPrefill((prev) => ({
+        resource: r as Record<string, unknown>,
+        nonce: (prev?.nonce ?? 0) + 1,
+        sourceIndex: index,
+      }));
+      openEditorTab("test", `row-${index}`);
+    }
+  };
+  const addResourceForPatient = (patientId: string) => {
+    setBuilderPrefill(null);
+    const nonce = Date.now();
+    setBuilderContext({ patientId, nonce });
+    openEditorTab("test", `new-${nonce}`);
+  };
+  const addNewDatasetResource = () => {
+    setBuilderPrefill(null);
+    setBuilderContext(null);
+    openEditorTab("test", `new-${Date.now()}`);
+  };
+  // INV-C3-3: immutable replace — never mutate the dataset in place.
+  const deleteDatasetResource = (index: number) => {
+    if (!dataset) return;
+    setDataset({
+      ...dataset,
+      resources: (dataset.resources ?? []).filter((_, j) => j !== index),
+    });
+  };
+
   // Seed one library tab once the workspace is known (fresh sessions
   // open on the active measure's entrypoint library).
   useEffect(() => {
@@ -1366,6 +1465,9 @@ export default function App() {
           t.resourceId === "grid"
             ? "Expected Results"
             : t.resourceId.replace(/^Patient\//, "");
+        break;
+      case "terminology":
+        tabLabels[t.id] = "Terminology";
         break;
       case "view":
         tabLabels[t.id] =
@@ -1528,18 +1630,13 @@ export default function App() {
       baselineArtifact={baselineArtifact}
       context={consoleContext}
       mrOutput={
-        <MrOutput
-          result={evalResult}
-          reports={lastReports}
-          measure={measure}
-          runDiff={appRunDiff}
-        />
+        <MrPivot reports={lastReports} measure={measure} runDiff={appRunDiff} />
       }
+      funnelOutput={<MrFunnel result={evalResult} />}
+      runRequest={runRequest}
       viewOutput={
         <ViewOutputPanel viewResult={viewResult} runDiff={appRunDiff} />
       }
-      placement={consolePlacement}
-      onPlacementChange={setConsolePlacement}
       activeTab={consoleTab}
       onTabChange={setConsoleTab}
     />
@@ -1569,6 +1666,39 @@ export default function App() {
           <button data-testid="share-btn" onClick={shareLink}>
             Share
           </button>
+          {/* REORG 6e: workspace settings — console dock + recalc delay. */}
+          <DropdownMenu label="Settings" testId="settings-menu">
+            <label className="settings-row">
+              <span>Console</span>
+              <select
+                data-testid="settings-console-placement"
+                value={consolePlacement}
+                onChange={(e) =>
+                  setConsolePlacement(
+                    e.target.value === "right" ? "right" : "bottom",
+                  )
+                }
+              >
+                <option value="bottom">Dock bottom</option>
+                <option value="right">Dock right</option>
+              </select>
+            </label>
+            <label className="settings-row">
+              <span>Recalc every</span>
+              <select
+                data-testid="settings-recalc-seconds"
+                value={String(recalcSeconds)}
+                onChange={(e) => setRecalcSeconds(Number(e.target.value))}
+              >
+                <option value="0.5">0.5s</option>
+                <option value="1">1s</option>
+                <option value="2">2s</option>
+                <option value="5">5s</option>
+                <option value="10">10s</option>
+                <option value="0">Off</option>
+              </select>
+            </label>
+          </DropdownMenu>
           <DropdownMenu label="Import" testId="import-menu">
             <button
               className="dropdown-item"
@@ -1714,6 +1844,7 @@ export default function App() {
           {
             "--nav-w": navPanel ? "264px" : "52px",
             "--col1-fr": `${col1Fr}fr`,
+            "--editor-fr": `${editorFr}fr`,
           } as React.CSSProperties
         }
       >
@@ -1751,34 +1882,29 @@ export default function App() {
           onAddLibrary={addTab}
           onAddView={addStoredView}
           onAddExpected={openExpectedEditor}
-          onTerminologyOpen={() => setTerminologyOpen(true)}
-          terminologyOpen={terminologyOpen}
+          onTerminologyOpen={toggleTerminologyTab}
+          terminologyOpen={hostTab?.kind === "terminology"}
+          focusedPid={focusedPid}
+          detailSlot={
+            focusedGroup ? (
+              <PatientDetailPanel
+                group={focusedGroup}
+                onBack={() => setFocusedPid(null)}
+                onEditResource={editDatasetResource}
+                onAddForPatient={addResourceForPatient}
+                onAddNew={addNewDatasetResource}
+                onDelete={deleteDatasetResource}
+              />
+            ) : null
+          }
           testsSlot={
             <DatasetPane
               dataset={dataset}
               onDatasetChange={setDataset}
-              onEditResource={(index) => {
-                const r = dataset?.resources?.[index];
-                if (r && typeof r === "object") {
-                  setBuilderPrefill((prev) => ({
-                    resource: r as Record<string, unknown>,
-                    nonce: (prev?.nonce ?? 0) + 1,
-                    sourceIndex: index,
-                  }));
-                  openEditorTab("test", `row-${index}`);
-                }
-              }}
-              onAddForPatient={(patientId) => {
-                setBuilderPrefill(null);
-                const nonce = Date.now();
-                setBuilderContext({ patientId, nonce });
-                openEditorTab("test", `new-${nonce}`);
-              }}
-              onAddNew={() => {
-                setBuilderPrefill(null);
-                setBuilderContext(null);
-                openEditorTab("test", `new-${Date.now()}`);
-              }}
+              focusedPid={focusedPid}
+              onFocusedPidChange={setFocusedPid}
+              onAddForPatient={addResourceForPatient}
+              onAddNew={addNewDatasetResource}
             />
           }
         />
@@ -1792,6 +1918,7 @@ export default function App() {
             onSelect={(id) => setActiveEditorTabId(id as TabId)}
             onClose={(id) => closeEditorTabById(id as TabId)}
           />
+          <div className="editor-area">
           <EditorPane
             text={active.text}
             tabKey={activeLibTabKey}
@@ -1802,6 +1929,7 @@ export default function App() {
             onSelectionChange={setConsoleSelection}
             graphOpen={graphOpen}
             onGraphOpenChange={setGraphOpen}
+            onRunSelection={runViaConsole}
             onDiagnostics={(diags) => {
               const idx = activeTabRef.current;
               setLibErrors((prev) => {
@@ -1813,36 +1941,19 @@ export default function App() {
               });
             }}
           />
-          {consolePlacement === "bottom" && consoleNode}
-          {/* REORG 6d: the visual-editor drawer moved INTO EditorPane's
-              header; the terminology drawer is opened from the rail's T
-              button (drawer-terminology-toggle) and closed here. */}
-          {terminologyOpen && (
-            <div
-              className="results-drawer editor-drawer"
-              data-testid="drawer-terminology"
-            >
-              <button
-                className="drawer-toggle"
-                onClick={() => setTerminologyOpen(false)}
-              >
-                ▾ Terminology (ValueSets)
-              </button>
-              <div className="drawer-body">
-                <TerminologyPane
-                  cqlDeclarations={activeDeclarations}
-                  datasetValuesets={(dataset?.valueset_resources ?? []) as Array<Record<string, unknown>>}
-                  workspaceValuesets={terminology.valuesets}
-                  onWorkspaceChange={(valuesets) =>
-                    setTerminology({ valuesets })
-                  }
-                />
-              </div>
-            </div>
-          )}
           {hostTab && (
             <TabHost
               tab={hostTab}
+              terminologyDeclarations={activeDeclarations}
+              terminologyDatasetValuesets={
+                (dataset?.valueset_resources ?? []) as Array<
+                  Record<string, unknown>
+                >
+              }
+              terminologyValuesets={terminology.valuesets}
+              onTerminologyChange={(valuesets) =>
+                setTerminology({ valuesets })
+              }
               measure={measure}
               onMeasureChange={updateActiveMeasure}
               measureLibs={mainLibs}
@@ -1916,8 +2027,22 @@ export default function App() {
               viewConfig={viewConfig?.overrides ?? null}
               onViewConfigChange={(overrides) => setViewConfig({ overrides })}
               onResult={setViewResult}
+              recalcMs={recalcSeconds * 1000}
             />
           )}
+          </div>
+          {/* REORG 6e: the console is PINNED below the editor (default
+              2/3 : 1/3) — drag to adjust; each row scrolls itself. */}
+          {consolePlacement === "bottom" && (
+            <Splitter
+              orientation="horizontal"
+              testid="editor-splitter"
+              value={editorFr}
+              onChange={setEditorFr}
+              label="Resize editor and console"
+            />
+          )}
+          {consolePlacement === "bottom" && consoleNode}
         </div>
         {consolePlacement === "right" && (
           <Splitter value={col1Fr} onChange={setCol1Fr} />

@@ -54,6 +54,30 @@ test.describe("cql console", () => {
     expect(p2).toContain("false");
   });
 
+  test("Ctrl/Cmd+Enter runs the selection from the editor (6e)", async ({
+    page,
+  }) => {
+    await bootReady(page);
+    await page.click("[data-testid=cql-editor] .monaco-editor");
+    await page.keyboard.press("Control+Home");
+    for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Shift+End");
+    // No console button involved — the editor shortcut drives the run.
+    await page.keyboard.press("Control+Enter");
+    const table = page.locator("[data-testid=console-table]");
+    await expect(table).toBeVisible({ timeout: 60_000 });
+    const header = await page
+      .locator("[data-testid=console-table] th")
+      .allTextContents();
+    expect(header).toEqual(["patient_id", "snippet"]);
+    const rows = await page
+      .locator("[data-testid=console-table] tbody tr")
+      .allTextContents();
+    const p1 = rows.find((r) => r.includes("p1")) ?? "";
+    expect(p1).toContain("true");
+  });
+
   test("a broken selection surfaces a renumbered diagnostic", async ({
     page,
   }) => {

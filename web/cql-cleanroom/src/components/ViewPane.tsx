@@ -26,6 +26,7 @@ export function ViewPane({
   onViewConfigChange,
   onSql,
   onResult,
+  recalcMs = 2000,
 }: {
   measure: Record<string, unknown> | null;
   measureReports: Array<Record<string, unknown>> | null;
@@ -35,6 +36,8 @@ export function ViewPane({
   onSql?: (sql: string | null) => void;
   /** Reports the flatten RESULT upward — Results renders the Output pane. */
   onResult?: (r: FlattenViewResult | null) => void;
+  /** REORG 6e: auto-recalc delay (settings); 0 disables auto-run. */
+  recalcMs?: number;
 }) {
   const overrides = viewConfig ?? {};
   const columns = useMemo(
@@ -58,19 +61,20 @@ export function ViewPane({
     onViewConfigChange(next);
   };
 
-  // U6: NO manual Run — the view recomputes 2s after the reports or VD
-  // config change, whenever there are MeasureReports to flatten.
+  // U6: NO manual Run — the view recomputes after the reports or VD
+  // config change (settings recalc delay; 0 = off), whenever there are
+  // MeasureReports to flatten.
   const busyRef = useRef(false);
-  const canAutoRun = (measureReports?.length ?? 0) > 0;
+  const canAutoRun = (measureReports?.length ?? 0) > 0 && recalcMs > 0;
   useEffect(() => {
     if (!canAutoRun) return;
     const t = setTimeout(() => {
       if (busyRef.current) return;
       void run();
-    }, 2000);
+    }, recalcMs);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measureReports, mode, customVd, overrides, canAutoRun]);
+  }, [measureReports, mode, customVd, overrides, canAutoRun, recalcMs]);
 
   async function run() {
     busyRef.current = true;

@@ -14,7 +14,8 @@ export type TabKind =
   | "parameter"
   | "test"
   | "expected"
-  | "view";
+  | "view"
+  | "terminology";
 
 export type TabId = `${TabKind}:${string}`;
 

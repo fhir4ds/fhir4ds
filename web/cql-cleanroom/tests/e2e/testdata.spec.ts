@@ -38,6 +38,9 @@ test.describe("dataset patient tree", () => {
     // with that patient's type groups; dataset-back returns to L2.
     await page.click("[data-testid=dataset-group-p1]");
     await page.waitForSelector("[data-testid=dataset-back]");
+    // REORG 6e: the detail slides out as a SECOND nav panel — the L2
+    // list stays mounted underneath (p2 row still in the DOM).
+    await page.waitForSelector("[data-testid=dataset-group-p2]");
     await page.click("[data-testid=dataset-type-toggle-p1-Patient]");
 
     // Flat STORAGE-index row testids preserved (p1's Patient = row 0).
@@ -177,12 +180,13 @@ test.describe("console docking", () => {
     });
 
     // Toggle to the right dock — the console becomes col2.
-    await page.click("[data-testid=console-place]");
+    await page.click("[data-testid=settings-menu]");
+    await page.selectOption("[data-testid=settings-console-placement]", "right");
     await page.waitForSelector(".app-main.dock-right");
     await page.waitForSelector("[data-testid=results-console]");
 
     // And back.
-    await page.click("[data-testid=console-place]");
+    await page.selectOption("[data-testid=settings-console-placement]", "bottom");
     await page.waitForSelector(".app-main.dock-bottom");
     await resetWorkspace(page);
   });

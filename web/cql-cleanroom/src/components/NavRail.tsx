@@ -10,9 +10,9 @@ import type { NavItem, NavSectionId } from "../lib/navSections";
  * stays the visible boot signal). The drawer header caret closes the
  * panel (`nav-close-{id}`). Legacy e2e aliases survive: `library-tabs`
  * (hidden span), `library-tab-N`, `library-tab-add`, `rail-collapse`,
- * `nav-rail`, and the `.rail-badge.*` classes. The rail's T button opens
- * the terminology drawer in col1 (`drawer-terminology-toggle`), not a
- * section panel.
+ * `nav-rail`, and the `.rail-badge.*` classes. The rail's T button
+ * (`drawer-terminology-toggle`) toggles Terminology as an EDITOR tab
+ * (REORG 6e), not a section panel.
  */
 
 export interface NavRailSectionModel {
@@ -68,6 +68,7 @@ export function NavRail({
   onAddExpected,
   onTerminologyOpen,
   terminologyOpen = false,
+  detailSlot,
   testsSlot,
 }: {
   sections: Record<NavSectionId, NavRailSectionModel>;
@@ -89,6 +90,10 @@ export function NavRail({
   /** Opens the terminology drawer in col1 (below the editor). */
   onTerminologyOpen: () => void;
   terminologyOpen?: boolean;
+  /** REORG 6e: focused Tests patient (drives the slide-out overlay). */
+  focusedPid?: string | null;
+  /** REORG 6e: L3 detail panel, rendered over the section panel. */
+  detailSlot?: ReactNode;
   testsSlot?: ReactNode;
 }) {
   const panelId = navPanel;
@@ -166,8 +171,9 @@ export function NavRail({
         </button>
       </div>
       {panelId && sec && (
-        <div className="nav-panel">
-          <DrawerSection
+        <div className="nav-panel-wrap">
+          <div className="nav-panel">
+            <DrawerSection
             key={panelId}
             id={panelId}
             title={sec.title}
@@ -200,6 +206,12 @@ export function NavRail({
             ))}
             {panelId === "tests" && testsSlot}
           </DrawerSection>
+          </div>
+          {panelId === "tests" && detailSlot && (
+            <div className="nav-panel-detail" data-testid="nav-detail">
+              {detailSlot}
+            </div>
+          )}
         </div>
       )}
     </nav>
