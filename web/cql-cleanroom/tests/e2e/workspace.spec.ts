@@ -71,8 +71,11 @@ test("cell evidence drill-in and population flow", async ({ page }) => {
   const rows = await page.locator("[data-testid^=evidence-row-]").count();
   if (rows < 1) throw new Error("no evidence rows rendered");
 
-  // Population flow (Sankey): rendered in the MeasureReport tab after
-  // an evaluation — initial_population node with count 2.
+  // Population flow (Sankey): rendered in the console's Measure Report
+  // output while a measure editor tab is active (REORG 6b) —
+  // initial_population node with count 2.
+  await page.click("[data-testid=nav-toggle-measures]");
+  await page.locator("[data-testid^=nav-item-measure-]").first().click();
   await page.waitForSelector("[data-testid=population-sankey]", {
     timeout: 90_000,
   });

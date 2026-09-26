@@ -188,6 +188,16 @@ test.describe("expected values + MeasureReport round-trip", () => {
   });
 });
 
+async function openViewTab(page: Page) {
+  // REORG phase 6b: the ViewDefinition editor is a col1 tab; the "+"
+  // in the Views drawer creates a derived VD and opens it.
+  await page.click("[data-testid=nav-toggle-views]");
+  await page.click("[data-testid=nav-add-views]");
+  await page.waitForSelector("[data-testid=view-mode]", {
+    timeout: 30_000,
+  });
+}
+
 test.describe("view pane flatten", () => {
   test("derived VD flattens evaluation MeasureReports wide-format", async ({ page }) => {
     await bootReady(page);
@@ -197,6 +207,7 @@ test.describe("view pane flatten", () => {
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
+    await openViewTab(page);
 
     // Derived mode is the default: ONE ROW PER PATIENT (m1081 #9),
     // one integer count column per population (wide format, no forEach).
@@ -229,6 +240,7 @@ test.describe("view pane flatten", () => {
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
+    await openViewTab(page);
 
     // Override the numerator column name (ghost-text default forks on edit).
     await page.fill(
@@ -251,6 +263,7 @@ test.describe("view pane flatten", () => {
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
+    await openViewTab(page);
 
     // Custom mode: long-format projection of the engine's MeasureReports.
     await page.selectOption("[data-testid=view-mode]", "custom");

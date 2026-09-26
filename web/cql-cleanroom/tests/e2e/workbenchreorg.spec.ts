@@ -30,63 +30,67 @@ async function setMaleLibrary(page: import("@playwright/test").Page) {
 }
 
 test.describe("console sub-tabs + col2 panes", () => {
-  test("sub-tabs navigate; panes toggle; sub-tab pref persists", async ({ page }) => {
+  test("sub-tabs follow the active editor; placement + pref persist", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
 
-    // All four console sub-tabs render.
+    // Library context: the four run-pipeline sub-tabs; the default
+    // dataset AUTO-EVALUATES so Results populates with no clicks.
     await page.waitForSelector("[data-testid=console-tab-results]");
     await page.waitForSelector("[data-testid=console-tab-sql]");
     await page.waitForSelector("[data-testid=console-tab-ast]");
     await page.waitForSelector("[data-testid=console-tab-diags]");
-
-    // U5: default dataset AUTO-EVALUATES — Results populates with no
-    // clicks (default sub-tab).
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
 
-    // Col2 panes are ALWAYS visible (stacked, no tabs).
-    await page.waitForSelector("[data-testid=pane-measure-report]");
-    await page.waitForSelector("[data-testid=pane-view]");
-    await page.waitForSelector("[data-testid=mr-table]", { timeout: 30_000 });
-    // Sankey renders after evaluation.
-    await page.waitForSelector("[data-testid=population-sankey]", {
-      timeout: 30_000,
-    });
-    // View flatten over the saved reports.
-    await page.waitForSelector("[data-testid=view-table]", { timeout: 60_000 });
+    // REORG phase 6b: dock the console right — col2 becomes the console.
+    await page.click("[data-testid=console-place]");
+    await page.waitForSelector(".app-main.dock-right");
+    await page.waitForSelector("[data-testid=results-console]");
 
-    // Pane toggle hides the pane but keeps it MOUNTED (doctrine).
-    await page.click("[data-testid=pane-toggle-view]");
-    await page.waitForSelector("[data-testid=pane-view-body][hidden]", { state: "attached" });
-    await page.waitForSelector("[data-testid=view-table]", {
-      state: "attached",
-    });
-    await page.click("[data-testid=pane-toggle-view]");
-    await page.waitForSelector("[data-testid=view-table]");
-
-    // SQL sub-tab shows the last translation SQL.
-    await page.click("[data-testid=console-tab-sql]");
-    await page.waitForSelector("[data-testid=sql-viewer]", { timeout: 30_000 });
-
-    // Sub-tab pref persists across reload (rides workspace.json).
+    // Placement + sub-tab pref persist across reload (workspace.json).
     await page.waitForTimeout(1500);
     await page.reload();
     await page.waitForSelector(".version-badge", { timeout: 150_000 });
-    await page.waitForSelector(
-      "[data-testid=console-panel-sql]:not([hidden])",
-      { timeout: 90_000 },
-    );
+    await page.waitForSelector(".app-main.dock-right", { timeout: 90_000 });
+    await page.waitForSelector("[data-testid=results-table]", {
+      timeout: 90_000,
+    });
 
-    // Return to Results so the persisted pref does not bleed into
-    // later specs (autosave may outlive the reset below).
+    // Measure editor active → the console shows the Measure Report
+    // output (pivot + attrition Sankey), no run-pipeline tabs.
+    await page.click("[data-testid=nav-toggle-measures]");
+    await page.locator("[data-testid^=nav-item-measure-]").first().click();
+    await page.waitForSelector("[data-testid=console-tab-mr]");
+    await page.waitForSelector(
+      "[data-testid=console-panel-mr]:not([hidden])",
+      { timeout: 30_000 },
+    );
+    await page.waitForSelector("[data-testid=mr-table]", { timeout: 30_000 });
+    await page.waitForSelector("[data-testid=population-sankey]", {
+      timeout: 30_000,
+    });
+
+    // View editor active → the console shows the flatten output.
+    await page.click("[data-testid=nav-toggle-views]");
+    await page.click("[data-testid=nav-add-views]");
+    await page.waitForSelector("[data-testid=console-tab-view]");
+    await page.waitForSelector("[data-testid=view-table]", {
+      timeout: 60_000,
+    });
+
+    // Back to bottom-dock + library tab + Results so nothing bleeds
+    // into later specs (autosave may outlive the reset below).
+    await page.click("[data-testid=console-place]");
+    await page.locator("[data-testid^=editor-tab-library-]").first().click();
     await page.click("[data-testid=console-tab-results]");
+    await page.waitForSelector(".app-main.dock-bottom");
     await page.waitForSelector("[data-testid=results-table]");
     await resetWorkspace(page);
   });
 
-  test("evaluate populates console + both panes without re-execution", async ({ page }) => {
+  test("measure editor surfaces the report output in the console", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
     await page.waitForSelector("[data-testid=dataset-loaded]");
@@ -94,23 +98,19 @@ test.describe("console sub-tabs + col2 panes", () => {
       timeout: 60_000,
     });
 
-    // MR pane: report rows render (3 patients x 2 populations).
+    // MR pivot (m1081 #8): one row PER PATIENT, one column per
+    // population — 3 patients in the demo dataset.
+    await page.click("[data-testid=nav-toggle-measures]");
+    await page.locator("[data-testid^=nav-item-measure-]").first().click();
     await page.waitForSelector("[data-testid=mr-table]", {
       timeout: 30_000,
     });
-    // MR pivot (m1081 #8): one row PER PATIENT, one column per
-    // population — 3 patients in the demo dataset.
     const mrRows = await page.locator("[data-testid=mr-table] tbody tr").count();
     if (mrRows !== 3) throw new Error(`mr rows (want 3 patients): ${mrRows}`);
 
     // Sankey renders after evaluation.
     await page.waitForSelector("[data-testid=population-sankey]", {
       timeout: 30_000,
-    });
-
-    // View flatten over the saved reports.
-    await page.waitForSelector("[data-testid=view-table]", {
-      timeout: 60_000,
     });
 
     await resetWorkspace(page);

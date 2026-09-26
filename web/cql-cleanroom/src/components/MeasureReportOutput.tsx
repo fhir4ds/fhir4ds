@@ -5,17 +5,15 @@ import {
   cellDiffClass,
   diffPopKey,
   diffRuns,
-  diffSummary,
   type Artifact,
 } from "../lib/runDiff";
 import { PopulationSankey } from "./PopulationSankey";
 
 /**
- * WORKBENCH_REORG phase 5: the col2 Measure Report pane — pivot of the
- * materialized per-patient MeasureReports and the population attrition
- * Sankey. Always mounted; the pane toggle hides only the body.
- * REORG phase 6a: the expected grid (TestsPane) moved to its own
- * "expected" editor tab.
+ * REORG phase 6b: the Measure Report OUTPUT — pivot of the materialized
+ * per-patient MeasureReports plus the population attrition Sankey —
+ * rendered inside the CQL console's "mr" panel while a measure editor
+ * tab is active (the col2 stacked pane is gone).
  */
 
 export function useRunDiff(
@@ -42,62 +40,22 @@ export function useRunDiff(
   );
 }
 
-export function MeasureReportPane({
+export function MrOutput({
   result,
   reports,
   measure,
   runDiff,
-  open,
-  onToggle,
 }: {
   result: EvaluateResult | null;
   reports: Array<Record<string, unknown>> | null;
   measure: Record<string, unknown> | null;
   runDiff: ReturnType<typeof diffRuns>;
-  open: boolean;
-  onToggle: () => void;
 }) {
   const populationColumns = (result?.columns ?? []).filter(
     (c) => c !== "patient_id",
   );
-  const dsum = diffSummary(runDiff);
   return (
-    <section className="pane" data-testid="pane-measure-report">
-      <header className="pane-header">
-        <h2>Measure Report</h2>
-        <div className="pane-actions">
-          {runDiff && (dsum.changed || dsum.added || dsum.removed) ? (
-            <span className="diff-chips" data-testid="diff-chips">
-              <span className="diff-chip up" data-testid="diff-chip-changed">
-                {dsum.changed} changed
-              </span>
-              {dsum.added > 0 && (
-                <span className="diff-chip add" data-testid="diff-chip-added">
-                  {dsum.added} added
-                </span>
-              )}
-              {dsum.removed > 0 && (
-                <span
-                  className="diff-chip rem"
-                  data-testid="diff-chip-removed"
-                  title={runDiff.removedPatients.join(", ")}
-                >
-                  {dsum.removed} removed
-                </span>
-              )}
-            </span>
-          ) : null}
-          <button
-            className="pane-action"
-            data-testid="pane-toggle-measure-report"
-            onClick={onToggle}
-            title="Show or hide this pane"
-          >
-            {open ? "▾" : "▸"}
-          </button>
-        </div>
-      </header>
-      <div className="pane-body" data-testid="pane-mr-body" hidden={!open}>
+    <>
       {reports && reports.length > 0 ? (
         <div className="pane output-pane" data-testid="mr-reports">
           <header className="pane-header">
@@ -120,8 +78,7 @@ export function MeasureReportPane({
           <SankeyFromRows columns={populationColumns} rows={result.rows} />
         </div>
       )}
-      </div>
-    </section>
+    </>
   );
 }
 

@@ -159,22 +159,26 @@ test.describe("bundle export/import", () => {
   });
 });
 
-test.describe("results drawers", () => {
-  test("col2 panes render stacked and toggle in place", async ({ page }) => {
+test.describe("console docking", () => {
+  test("console docks bottom by default and toggles right and back", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
 
-    // WORKBENCH_REORG phase 5: no tabs — the Measure Report and View
-    // panes stack in the second column, always mounted.
-    await page.waitForSelector("[data-testid=pane-measure-report]");
-    await page.waitForSelector("[data-testid=view-pane]", {
-      timeout: 10_000,
+    // REORG phase 6b: the console lives under the editor by default.
+    await page.waitForSelector(".app-main.dock-bottom");
+    await page.waitForSelector("[data-testid=results-console]");
+    await page.waitForSelector("[data-testid=results-table]", {
+      timeout: 60_000,
     });
 
-    // Pane toggle hides but keeps the pane mounted.
-    await page.click("[data-testid=pane-toggle-view]");
-    await page.waitForSelector("[data-testid=pane-view-body][hidden]", { state: "attached", timeout: 10_000 });
-    await page.click("[data-testid=pane-toggle-view]");
-    await page.waitForSelector("[data-testid=view-pane]");
+    // Toggle to the right dock — the console becomes col2.
+    await page.click("[data-testid=console-place]");
+    await page.waitForSelector(".app-main.dock-right");
+    await page.waitForSelector("[data-testid=results-console]");
+
+    // And back.
+    await page.click("[data-testid=console-place]");
+    await page.waitForSelector(".app-main.dock-bottom");
+    await resetWorkspace(page);
   });
 });

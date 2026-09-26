@@ -16,16 +16,15 @@ import {
   decodeShareFragment,
   type SharePayload,
 } from "./lib/share";
-import { ResultsConsole, type ConsoleTab } from "./components/ResultsConsole";
-import { MeasureReportPane, useRunDiff } from "./components/MeasureReportOutput";
-import { ViewOutputPane } from "./components/ViewOutput";
 import {
-  DEFAULT_PANE_ORDER,
-  normalizePaneOrder,
-  type PaneId,
-} from "./lib/paneRegistry";
+  ResultsConsole,
+  type ConsoleTab,
+  type ConsoleContext,
+  type ConsolePlacement,
+} from "./components/ResultsConsole";
+import { MrOutput, useRunDiff } from "./components/MeasureReportOutput";
+import { ViewOutputPanel } from "./components/ViewOutput";
 import { TestsPane } from "./components/TestsPane";
-import { ViewPane } from "./components/ViewPane";
 import { DatasetPane } from "./components/DatasetPane";
 import { ResourceBuilderPane } from "./components/ResourceBuilderPane";
 import {
@@ -423,13 +422,10 @@ export default function App() {
   } | null>(null);
   // WORKBENCH_REORG phase 5: editor/report column split (fr units),
   // persisted in prefs.layout so reloads keep the user's proportions.
+  // REORG phase 6b: the console docks bottom (col1) or right (col2).
   const [col1Fr, setCol1Fr] = useState(1.1);
-  const [mrFr, setMrFr] = useState(1);
-  const [paneOrder, setPaneOrder] = useState<PaneId[]>(DEFAULT_PANE_ORDER);
-  const [paneOpen, setPaneOpen] = useState<Record<PaneId, boolean>>({
-    "measure-report": true,
-    view: true,
-  });
+  const [consolePlacement, setConsolePlacement] =
+    useState<ConsolePlacement>("bottom");
   // §3.2: per-patient `+` context — subject-class pickers default to
   // Patient/<id> (builder v2 consumes; v1 ignores gracefully).
   const [builderContext, setBuilderContext] = useState<{
@@ -596,7 +592,9 @@ export default function App() {
           (ws.activeTabPref === "results" ||
             ws.activeTabPref === "sql" ||
             ws.activeTabPref === "ast" ||
-            ws.activeTabPref === "diags")
+            ws.activeTabPref === "diags" ||
+            ws.activeTabPref === "mr" ||
+            ws.activeTabPref === "view")
         ) {
           setConsoleTab(ws.activeTabPref);
         }
@@ -607,27 +605,15 @@ export default function App() {
           ws?.prefs as {
             layout?: {
               col1Fr?: unknown;
-              mrFr?: unknown;
-              paneOrder?: unknown;
-              paneOpen?: unknown;
+              consolePlacement?: unknown;
             };
           } | null
         )?.layout;
         if (typeof layout?.col1Fr === "number" && layout.col1Fr >= 0.3) {
           setCol1Fr(Math.min(2.5, layout.col1Fr));
         }
-        if (typeof layout?.mrFr === "number" && layout.mrFr >= 0.2) {
-          setMrFr(Math.min(5, layout.mrFr));
-        }
-        setPaneOrder(normalizePaneOrder(layout?.paneOrder));
-        if (
-          layout?.paneOpen &&
-          typeof layout.paneOpen === "object" &&
-          typeof (layout.paneOpen as Record<string, unknown>)["measure-report"] === "boolean" &&
-          typeof (layout.paneOpen as Record<string, unknown>).view === "boolean"
-        ) {
-          const po = layout.paneOpen as Record<string, boolean>;
-          setPaneOpen({ "measure-report": po["measure-report"], view: po.view });
+        if (layout?.consolePlacement === "right") {
+          setConsolePlacement("right");
         }
       })
       .catch(() => undefined)
@@ -653,7 +639,7 @@ export default function App() {
             ) as unknown[])
           : null,
         prefs: {
-          layout: { col1Fr, mrFr, paneOrder, paneOpen },
+          layout: { col1Fr, consolePlacement },
         },
         measures,
         activeMeasureId,
@@ -681,9 +667,7 @@ export default function App() {
     terminology,
     restored,
     col1Fr,
-    mrFr,
-    paneOrder,
-    paneOpen,
+    consolePlacement,
   ]);
 
   const active = libraries[activeTab] ?? libraries[0];
@@ -1526,6 +1510,47 @@ export default function App() {
     openEditorTab("expected", "grid");
   };
 
+  // REORG phase 6b: the console's sub-tab set follows the ACTIVE editor
+  // tab's kind — measure editors surface the Measure Report output,
+  // view editors the ViewDefinition flatten, everything else the CQL
+  // run pipeline (Results/SQL/AST/Diagnostics).
+  const consoleContext: ConsoleContext =
+    hostTab?.kind === "measure"
+      ? "measure"
+      : hostTab?.kind === "view"
+        ? "view"
+        : "library";
+  const consoleNode = (
+    <ResultsConsole
+      libraries={mainLibs}
+      main={main}
+      dataset={evalDataset}
+      parameters={runtimeParameters}
+      outputColumns={outputColumns}
+      selection={consoleSelection}
+      result={evalResult}
+      evalDiags={evalDiags}
+      busy={evalBusy}
+      baselineArtifact={baselineArtifact}
+      context={consoleContext}
+      mrOutput={
+        <MrOutput
+          result={evalResult}
+          reports={lastReports}
+          measure={measure}
+          runDiff={appRunDiff}
+        />
+      }
+      viewOutput={
+        <ViewOutputPanel viewResult={viewResult} runDiff={appRunDiff} />
+      }
+      placement={consolePlacement}
+      onPlacementChange={setConsolePlacement}
+      activeTab={consoleTab}
+      onTabChange={setConsoleTab}
+    />
+  );
+
   return (
     <div className="app">
       <header className="app-header">
@@ -1689,7 +1714,7 @@ export default function App() {
         </div>
       </header>
       <main
-        className="app-main"
+        className={`app-main ${consolePlacement === "right" ? "dock-right" : "dock-bottom"}`}
         data-testid="app-main"
         style={
           {
@@ -1793,20 +1818,7 @@ export default function App() {
               });
             }}
           />
-          <ResultsConsole
-            libraries={mainLibs}
-            main={main}
-            dataset={evalDataset}
-            parameters={runtimeParameters}
-            outputColumns={outputColumns}
-            selection={consoleSelection}
-            result={evalResult}
-            evalDiags={evalDiags}
-            busy={evalBusy}
-            baselineArtifact={baselineArtifact}
-            activeTab={consoleTab}
-            onTabChange={setConsoleTab}
-          />
+          {consolePlacement === "bottom" && consoleNode}
           <div className="results-drawer editor-drawer" data-testid="drawer-graph">
             <button
               className="drawer-toggle"
@@ -1926,70 +1938,12 @@ export default function App() {
             />
           )}
         </div>
-        <Splitter value={col1Fr} onChange={setCol1Fr} />
-        <div
-          className="pane-col run-col"
-          style={{ "--mr-fr": `${mrFr}` } as React.CSSProperties}
-        >
-          {paneOrder.map((id, i) => {
-            const pane =
-              id === "measure-report" ? (
-                <MeasureReportPane
-                  key="measure-report"
-                  result={evalResult}
-                  reports={lastReports}
-                  measure={measure}
-                  runDiff={appRunDiff}
-                  open={paneOpen["measure-report"]}
-                  onToggle={() =>
-                    setPaneOpen((p) => ({
-                      ...p,
-                      "measure-report": !p["measure-report"],
-                    }))
-                  }
-                />
-              ) : (
-                <ViewOutputPane
-                  key="view"
-                  result={evalResult}
-                  viewResult={viewResult}
-                  baselineArtifact={baselineArtifact}
-                  viewSlot={
-                    <ViewPane
-                      measure={measure}
-                      measureReports={lastReports}
-                      viewConfig={viewConfig?.overrides ?? null}
-                      onViewConfigChange={(overrides) =>
-                        setViewConfig({ overrides })
-                      }
-                      onResult={setViewResult}
-                    />
-                  }
-                  open={paneOpen.view}
-                  onToggle={() =>
-                    setPaneOpen((p) => ({ ...p, view: !p.view }))
-                  }
-                />
-              );
-            const showSplitter =
-              i === 0 && paneOpen["measure-report"] && paneOpen.view;
-            return showSplitter
-              ? [
-                  pane,
-                  <Splitter
-                    key="mr-splitter"
-                    orientation="horizontal"
-                    value={mrFr}
-                    onChange={setMrFr}
-                    testid="mr-splitter"
-                    label="Resize report panes"
-                    min={0.2}
-                    max={5}
-                  />,
-                ]
-              : [pane];
-          })}
-        </div>
+        {consolePlacement === "right" && (
+          <Splitter value={col1Fr} onChange={setCol1Fr} />
+        )}
+        {consolePlacement === "right" && (
+          <div className="pane-col run-col console-dock">{consoleNode}</div>
+        )}
       </main>
       <ResourceContextMenu menu={ctxMenu} onClose={() => setCtxMenu(null)} />
       <BootOverlay state={boot} />

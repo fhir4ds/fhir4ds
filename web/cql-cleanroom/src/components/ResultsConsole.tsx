@@ -4,7 +4,7 @@ import { PaginatedTable } from "./PaginatedTable";
 import { DiagnosticsRow } from "./EditorPane";
 import { EvidencePopover } from "./EvidencePopover";
 import { AstTree } from "./AstPane";
-import { cellDiffClass } from "../lib/runDiff";
+import { cellDiffClass, diffSummary } from "../lib/runDiff";
 import { useRunDiff } from "./MeasureReportOutput";
 import type {
   Diagnostics,
@@ -16,24 +16,21 @@ import type {
 import type { Artifact } from "../lib/runDiff";
 
 /**
- * WORKBENCH_REORG phase 5 — the CQL console below the editor, four
- * sub-tabs on one run pipeline:
- *   Results    — scratch output of Run / Run-Selection plus the live
- *                auto-evaluation table (cell evidence + run diff)
- *   SQL        — translation SQL of the last evaluation
- *   AST        — the parse tree of the visible library
- *   Diagnostics— evaluation diagnostics of the last run
- *
- * Run evaluates the WHOLE visible library; Run-Selection evaluates the
- * highlighted expression in context (worker evaluate_snippet: hidden
- * __snippet__ define, narrowed output, diagnostics renumbered back).
+ * REORG phase 6b — the console, now the single home for run OUTPUT.
+ * Its sub-tab set is keyed on the ACTIVE editor tab's kind:
+ *   library (or kinds without output) → Results / SQL / AST / Diags
+ *   measure → the Measure Report output (pivot + attrition Sankey)
+ *   view    → the ViewDefinition flatten output
+ * Run / Run-Selection stay in the header in every context. The console
+ * docks bottom (col1, under the editor) or right (col2).
  *
  * A failing evaluation AUTO-SWITCHES the console to Diagnostics (and
- * back to Results once a run succeeds again) so errors announce
- * themselves without a click.
+ * back to Results once a run succeeds again) in library contexts.
  */
 
-export type ConsoleTab = "results" | "sql" | "ast" | "diags";
+export type ConsoleTab = "results" | "sql" | "ast" | "diags" | "mr" | "view";
+export type ConsoleContext = "library" | "measure" | "view";
+export type ConsolePlacement = "bottom" | "right";
 
 type ConsoleRows = {
   columns: string[];
@@ -41,12 +38,16 @@ type ConsoleRows = {
   ms: number | null;
 };
 
-const TABS: Array<{ id: ConsoleTab; label: string }> = [
-  { id: "results", label: "Results" },
-  { id: "sql", label: "SQL" },
-  { id: "ast", label: "AST" },
-  { id: "diags", label: "Diagnostics" },
-];
+const CONTEXT_TABS: Record<ConsoleContext, Array<{ id: ConsoleTab; label: string }>> = {
+  library: [
+    { id: "results", label: "Results" },
+    { id: "sql", label: "SQL" },
+    { id: "ast", label: "AST" },
+    { id: "diags", label: "Diagnostics" },
+  ],
+  measure: [{ id: "mr", label: "Measure Report" }],
+  view: [{ id: "view", label: "View Output" }],
+};
 
 export function ResultsConsole({
   libraries,
@@ -59,6 +60,11 @@ export function ResultsConsole({
   evalDiags,
   busy,
   baselineArtifact,
+  context,
+  mrOutput,
+  viewOutput,
+  placement,
+  onPlacementChange,
   activeTab,
   onTabChange,
 }: {
@@ -74,6 +80,14 @@ export function ResultsConsole({
   evalDiags: Diagnostics[] | null;
   busy: boolean;
   baselineArtifact: Artifact | null;
+  /** Active editor kind — decides which sub-tabs exist. */
+  context: ConsoleContext;
+  /** Measure Report output node (measure context). */
+  mrOutput: React.ReactNode;
+  /** View flatten output node (view context). */
+  viewOutput: React.ReactNode;
+  placement: ConsolePlacement;
+  onPlacementChange: (p: ConsolePlacement) => void;
   activeTab: ConsoleTab;
   onTabChange: (t: ConsoleTab) => void;
 }) {
@@ -85,9 +99,11 @@ export function ResultsConsole({
 
   // Error announce: on a NEW failing evaluation jump to Diagnostics;
   // when a run succeeds again, jump back (only if we auto-switched).
+  // Library contexts only — measure/view contexts have one output tab.
   const failSigRef = useRef("");
   const autoSwitchedRef = useRef(false);
   useEffect(() => {
+    if (context !== "library") return;
     if (evalDiags && evalDiags.length > 0 && !busy) {
       const sig = JSON.stringify(evalDiags.map((d) => [d.code, d.message]));
       if (sig !== failSigRef.current) {
@@ -101,7 +117,17 @@ export function ResultsConsole({
       onTabChange("results");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [evalDiags, result, busy]);
+  }, [evalDiags, result, busy, context]);
+
+  // A context switch can strand the persisted tab (e.g. "sql" while a
+  // view editor is active) — clamp to the context's first tab.
+  const tabs = CONTEXT_TABS[context];
+  useEffect(() => {
+    if (!tabs.some((t) => t.id === activeTab)) {
+      onTabChange(tabs[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context, activeTab]);
 
   const run = async (mode: "library" | "selection") => {
     const seq = ++seqRef.current;
@@ -205,12 +231,47 @@ export function ResultsConsole({
   const hasSelection = (selection ?? "").trim().length > 0;
   const running = runBusy || busy;
   const runDiff = useRunDiff(result, baselineArtifact);
+  const dsum = diffSummary(runDiff);
 
   return (
     <section className="pane results-console" data-testid="results-console">
       <header className="pane-header">
         <h2>CQL console</h2>
         <div className="pane-actions">
+          {runDiff && (dsum.changed || dsum.added || dsum.removed) ? (
+            <span className="diff-chips" data-testid="diff-chips">
+              <span className="diff-chip up" data-testid="diff-chip-changed">
+                {dsum.changed} changed
+              </span>
+              {dsum.added > 0 && (
+                <span className="diff-chip add" data-testid="diff-chip-added">
+                  {dsum.added} added
+                </span>
+              )}
+              {dsum.removed > 0 && (
+                <span
+                  className="diff-chip rem"
+                  data-testid="diff-chip-removed"
+                  title={runDiff.removedPatients.join(", ")}
+                >
+                  {dsum.removed} removed
+                </span>
+              )}
+            </span>
+          ) : null}
+          <button
+            data-testid="console-place"
+            title={
+              placement === "bottom"
+                ? "Dock the console to the right column"
+                : "Dock the console under the editor"
+            }
+            onClick={() =>
+              onPlacementChange(placement === "bottom" ? "right" : "bottom")
+            }
+          >
+            {placement === "bottom" ? "Dock right ⇥" : "Dock bottom ⇤"}
+          </button>
           <button
             data-testid="console-run-library"
             disabled={running}
@@ -229,7 +290,7 @@ export function ResultsConsole({
         </div>
       </header>
       <div className="tab-strip console-subtabs" data-testid="console-subtabs">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.id}
             className={`tab ${activeTab === t.id ? "active" : ""}`}
@@ -433,6 +494,22 @@ export function ResultsConsole({
             No evaluation diagnostics.
           </p>
         )}
+      </div>
+
+      <div
+        className="tab-panel"
+        hidden={activeTab !== "mr"}
+        data-testid="console-panel-mr"
+      >
+        {context === "measure" ? mrOutput : null}
+      </div>
+
+      <div
+        className="tab-panel"
+        hidden={activeTab !== "view"}
+        data-testid="console-panel-view"
+      >
+        {context === "view" ? viewOutput : null}
       </div>
     </section>
   );

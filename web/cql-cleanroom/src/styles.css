@@ -146,8 +146,11 @@ body { margin: 0; }
 .bottom-pane .pane { height: 100%; }
 .app { display: flex; flex-direction: column; height: 100vh; }
 /* WORKBENCH_REORG phase 5: two-column shell — editor(+console) col,
-   6px splitter, report col. --col1-fr is dragged/persisted by <Splitter>. */
-.app-main { display: grid; grid-template-columns: var(--nav-w, 264px) minmax(0, var(--col1-fr, 1.1fr)) 6px minmax(0, 1fr); gap: 10px; padding: 10px; overflow: auto; flex: 1; align-items: start; }
+   6px splitter, report col. --col1-fr is dragged/persisted by <Splitter>.
+   REORG phase 6b: console docks BOTTOM (default: nav | editor+console)
+   or RIGHT (nav | editor | splitter | console). */
+.app-main.dock-bottom { display: grid; grid-template-columns: var(--nav-w, 264px) minmax(0, 1fr); gap: 10px; padding: 10px; overflow: auto; flex: 1; align-items: start; }
+.app-main.dock-right { display: grid; grid-template-columns: var(--nav-w, 264px) minmax(0, var(--col1-fr, 1.1fr)) 6px minmax(0, 1fr); gap: 10px; padding: 10px; overflow: auto; flex: 1; align-items: start; }
 .splitter { align-self: stretch; min-height: 480px; border-radius: 3px; background: #232a35; cursor: col-resize; touch-action: none; }
 .splitter:hover, .splitter.dragging { background: #3b82c4; }
 
@@ -754,14 +757,9 @@ body { margin: 0; }
 /* Hidden tab panels: .pane display:flex defeats the UA hidden attr */
 .tab-panel[hidden] { display: none !important; }
 
-/* WORKBENCH_REORG phase 5: col2 stacks the registry panes; the pane
-   AFTER the horizontal splitter is the flex baseline (1), the Measure
-   Report pane grows by --mr-fr. Pane headers stay visible; toggling
-   hides only the pane BODY (mounted-when-hidden doctrine). */
-.run-col { display: flex; flex-direction: column; gap: 10px; }
-.run-col > .pane { flex: 1 1 0; min-height: 220px; overflow: auto; }
-.run-col > .pane[data-testid="pane-measure-report"] { flex-grow: var(--mr-fr, 1); }
-.run-col .pane-body[hidden] { display: none; }
+/* REORG phase 6b: right-docked console fills the second column. */
+.run-col.console-dock { display: flex; flex-direction: column; min-height: 70vh; }
+.run-col.console-dock > .results-console { flex: 1 1 auto; min-height: 0; overflow: auto; }
 .splitter.horizontal { min-height: 0; height: 6px; width: auto; cursor: row-resize; align-self: auto; flex: 0 0 auto; }
 .console-subtabs { margin-bottom: 8px; display: flex; gap: 4px; }
 .console-subtabs .tab {

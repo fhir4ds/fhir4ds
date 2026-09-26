@@ -88,7 +88,10 @@ test("MADiE package import → evaluate → export round-trip", async ({ page })
   await page.waitForSelector("[data-testid=dataset-loaded]");
   await page.waitForSelector("[data-testid=results-table]", { timeout: 90_000 });
 
-  // MR tab renders the package's mapping.
+  // MR output renders in the console while a measure editor tab is
+  // active (REORG 6b) — open the measure tab from the Measures drawer.
+  await page.click("[data-testid=nav-toggle-measures]");
+  await page.locator("[data-testid^=nav-item-measure-]").first().click();
   await page.waitForSelector("[data-testid=mr-table]", { timeout: 60_000 });
 
   // Export: capture the download.
