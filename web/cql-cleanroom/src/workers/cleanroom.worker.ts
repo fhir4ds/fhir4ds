@@ -163,12 +163,80 @@ async function route(msg: WorkerRequest): Promise<WorkerResponse> {
       );
       return { id: msg.id, type: msg.type, ok: true, envelope: resultJson } as WorkerResponse;
     }
+    case "evaluate_snippet":
+      // Console selection run: append the snippet as a hidden define,
+      // evaluate with the shared executor narrowed to that column.
+      return await executeSnippet(msg);
     case "evaluate_library":
     case "run_tests":
     case "explain_patient":
       // Execution capabilities: translate in Pyodide, execute on duckdb-wasm
       // behind the TS executor (same envelope shapes).
       return await executeCapability(msg);
+  }
+}
+
+/**
+ * evaluate_snippet (worker path): `define "__snippet__": (<snippet>)`
+ * is appended to a copy of the main library text and evaluated via the
+ * evaluate_library executor with output_columns={"snippet":
+ * "__snippet__"} (select + rename in one). Diagnostics pointing inside
+ * the appended block are renumbered relative to the snippet's first
+ * line so they refer to the selection the user sees. Mirrors the
+ * native evaluate_snippet capability (fhir4ds.operations).
+ */
+async function executeSnippet(
+  msg: Extract<WorkerRequest, { type: "evaluate_snippet" }>,
+): Promise<WorkerResponse> {
+  const body = msg.snippet.trim();
+  if (!body) {
+    return {
+      id: msg.id,
+      type: msg.type,
+      ok: true,
+      envelope: JSON.stringify({
+        schema: 1,
+        ok: false,
+        diagnostics: [{ code: "input_error", message: "snippet must be a non-empty string" }],
+      }),
+    } as WorkerResponse;
+  }
+  const count = (msg.main.text.match(/\n/g) ?? []).length;
+  const defineLine = count + (msg.main.text.endsWith("\n") ? 1 : 2);
+  const suffixedMain = {
+    ...msg.main,
+    text: `${msg.main.text}\ndefine "__snippet__":\n  (${body})\n`,
+  };
+  const resp = (await executeCapability({
+    ...msg,
+    type: "evaluate_library",
+    main: suffixedMain,
+    output_columns: { snippet: "__snippet__" },
+    emit_sql: false,
+  })) as unknown as { envelope: string };
+  try {
+    const env = JSON.parse(resp.envelope) as {
+      ok: boolean;
+      diagnostics?: Array<{
+        location?: {
+          start_line?: number | null;
+          end_line?: number | null;
+        } | null;
+      }>;
+    };
+    for (const d of env.diagnostics ?? []) {
+      const loc = d.location;
+      if (!loc) continue;
+      if (loc.start_line != null && loc.start_line >= defineLine) {
+        loc.start_line = loc.start_line - defineLine;
+      }
+      if (loc.end_line != null && loc.end_line >= defineLine) {
+        loc.end_line = loc.end_line - defineLine;
+      }
+    }
+    return { id: msg.id, type: msg.type, ok: true, envelope: JSON.stringify(env) } as WorkerResponse;
+  } catch {
+    return { id: msg.id, type: msg.type, ok: true, envelope: resp.envelope } as WorkerResponse;
   }
 }
 

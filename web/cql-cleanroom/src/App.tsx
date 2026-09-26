@@ -6,6 +6,7 @@ import {
   workerRequest,
 } from "./components/BootOverlay";
 import { EditorPane } from "./components/EditorPane";
+import { ResultsConsole } from "./components/ResultsConsole";
 import { NavRail } from "./components/NavRail";
 import { TerminologyPane } from "./components/TerminologyPane";
 import { ParametersDrawer, coerceParam, detectParams } from "./components/ParametersDrawer";
@@ -28,7 +29,6 @@ import {
   mergeDatasets,
 } from "./lib/bundleIo";
 import { DropdownMenu } from "./components/DropdownMenu";
-import { FhirpathPane } from "./components/FhirpathPane";
 import { ResourceContextMenu } from "./components/nav/ResourceContextMenu";
 import type { ContextMenuState } from "./components/nav/ResourceContextMenu";
 import {
@@ -353,8 +353,9 @@ export default function App() {
   // Editor-column visual-editor drawer (default collapsed).
   const [graphOpen, setGraphOpen] = useState(false);
   const [terminologyOpen, setTerminologyOpen] = useState(false);
-  // Editor-column FHIRPath scratchpad drawer (default collapsed).
-  const [fhirpathOpen, setFhirpathOpen] = useState(false);
+  // Editor-column FHIRPath scratchpad retired (phase 4): the CQL
+  // console's Run-Selection replaces it.
+  const [consoleSelection, setConsoleSelection] = useState<string>("");
   // WORKBENCH_REORG §3.1/§3.3 — Results tab pref + local run history.
   const [resultsTab, setResultsTab] = useState<ResultsTab>("cql");
   const [runHistory, setRunHistory] = useState<RunEntry[]>([]);
@@ -1554,6 +1555,7 @@ export default function App() {
               .filter((t) => t.kind === "library")
               .map((t) => t.id)}
             onTextChange={updateActiveText}
+            onSelectionChange={setConsoleSelection}
             onDiagnostics={(diags) => {
               const idx = activeTabRef.current;
               setLibErrors((prev) => {
@@ -1578,6 +1580,13 @@ export default function App() {
             open={paramsOpen}
             onToggle={() => setParamsOpen((o) => !o)}
           />
+          <ResultsConsole
+            libraries={mainLibs}
+            main={main}
+            dataset={evalDataset}
+            parameters={runtimeParameters}
+            selection={consoleSelection}
+          />
           <div className="results-drawer editor-drawer" data-testid="drawer-graph">
             <button
               className="drawer-toggle"
@@ -1594,20 +1603,6 @@ export default function App() {
                   future scope; the canvas starts from the default graph.
                 </p>
                 <GraphPane onApplyCql={(cql) => updateActiveText(cql)} />
-              </div>
-            )}
-          </div>
-          <div className="results-drawer editor-drawer" data-testid="drawer-fhirpath">
-            <button
-              className="drawer-toggle"
-              data-testid="drawer-fhirpath-toggle"
-              onClick={() => setFhirpathOpen(!fhirpathOpen)}
-            >
-              {fhirpathOpen ? "▾" : "▸"} FHIRPath scratchpad
-            </button>
-            {fhirpathOpen && (
-              <div className="drawer-body">
-                <FhirpathPane dataset={dataset} />
               </div>
             )}
           </div>

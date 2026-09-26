@@ -26,6 +26,8 @@ interface Props {
    *  switches; models for keys dropped from knownTabKeys are disposed. */
   tabKey?: string;
   knownTabKeys?: string[];
+  /** Selection text ("" when empty) for the console's Run-Selection. */
+  onSelectionChange?: (text: string) => void;
 }
 
 interface DiagnosticsRowProps {
@@ -70,6 +72,7 @@ export function EditorPane({
   onParamsDetected,
   tabKey = "library:solo",
   knownTabKeys,
+  onSelectionChange,
 }: Props) {
   const editorDiv = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<any>(null);
@@ -110,6 +113,8 @@ export function EditorPane({
   // Latest-callback ref for the mount-only Monaco listener.
   const onTextChangeRef = useRef(onTextChange);
   onTextChangeRef.current = onTextChange;
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
 
   useEffect(() => {
     let disposed = false;
@@ -136,6 +141,13 @@ export function EditorPane({
         // onTextChange closure is used (the captured one goes stale on
         // tab switches and would write into the wrong library).
         onTextChangeRef.current(editor.getValue());
+      });
+      editor.onDidChangeCursorSelection(() => {
+        const sel = editor.getSelection();
+        const model = editor.getModel();
+        onSelectionChangeRef.current?.(
+          sel && model ? model.getValueInRange(sel) : "",
+        );
       });
       editorRef.current = editor;
     })();

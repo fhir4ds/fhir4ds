@@ -406,6 +406,92 @@ def _summary_from_rows(rows: list[dict[str, Any]], columns: tuple[str, ...]) -> 
 # public operations
 
 
+def evaluate_snippet(
+    libraries: list[LibraryText],
+    main: LibraryText,
+    snippet: str,
+    dataset: DatasetSpec | None,
+    conn: Any,
+    *,
+    parameters: dict[str, Any] | None = None,
+) -> EvaluateResult:
+    """Evaluate a CQL expression selection in the main library's context.
+
+    The snippet is appended to a COPY of the main library text as
+    `define "__snippet__": (<snippet>)` and evaluated with the same
+    population pipeline as evaluate_library. The result is narrowed to
+    patient_id + the snippet column (renamed `snippet`). Diagnostics
+    that land inside the appended block are renumbered relative to the
+    snippet's first line (the injection offset is subtracted), so line
+    numbers refer to the selection the user sees.
+    """
+    import dataclasses
+
+    body = (snippet or "").strip()
+    if not body:
+        return EvaluateResult(
+            ok=False, diagnostics=(input_error("snippet must be a non-empty string"),)
+        )
+    count = main.text.count("\n")
+    define_line = count + (1 if main.text.endswith("\n") else 2)
+    suffixed = dataclasses.replace(
+        main,
+        text=f'{main.text}\ndefine "__snippet__":\n  ({body})\n',
+    )
+    outcome = _evaluate(
+        libraries, suffixed, dataset, conn,
+        parameters=parameters,
+        audit_mode="population",
+    )
+    payload, diag = outcome
+    if payload is None:
+        # Diagnostics inside the appended define: renumber relative to
+        # the snippet body (define_line + 1 == snippet line 1).
+        def shift(d: Any) -> Any:
+            loc = getattr(d, "location", None)
+            sl = getattr(loc, "start_line", None) if loc else None
+            if sl is not None and sl >= define_line:
+                shifted_lines = []
+                for line in (loc.start_line, loc.end_line):
+                    shifted_lines.append(
+                        line - define_line if line is not None and line >= define_line else line
+                    )
+                object.__setattr__(
+                    loc, "start_line", shifted_lines[0]
+                )
+                if getattr(loc, "end_line", None) is not None:
+                    object.__setattr__(loc, "end_line", shifted_lines[1])
+            return d
+
+        return EvaluateResult(ok=False, diagnostics=tuple(shift(d) for d in diag))
+    kwargs, _relation = payload
+    # Narrow to patient_id + snippet.
+    columns = tuple(
+        "snippet" if c == "__snippet__" else c
+        for c in kwargs["columns"]
+        if c == "patient_id" or c == "__snippet__"
+    )
+    rows = [
+        {
+            ("snippet" if k == "__snippet__" else k): v
+            for k, v in r.items()
+            if k == "patient_id" or k == "__snippet__"
+        }
+        for r in kwargs["rows"]
+    ]
+    return EvaluateResult(
+        patient_count=len(rows),
+        columns=columns,
+        rows=rows,
+        column_types=_column_types(
+            _definition_meta_map(libraries, suffixed),
+            columns,
+            None,
+        ),
+        timing_ms=kwargs["timing_ms"],
+    )
+
+
 def evaluate_library(
     libraries: list[LibraryText],
     main: LibraryText,

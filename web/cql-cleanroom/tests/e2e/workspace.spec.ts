@@ -83,28 +83,5 @@ test("cell evidence drill-in and population flow", async ({ page }) => {
   if (!ippNode?.includes("(2)")) throw new Error(`sankey IPP: ${ippNode}`);
 });
 
-test("fhirpath playground evaluates dataset resource via picker", async ({
-  page,
-}) => {
-  await bootReady(page);
-  // Dataset first so the picker has resources; then open the drawer.
-  await page.waitForSelector("[data-testid=dataset-loaded]", {
-    timeout: 30_000,
-  });
-  await page.click("[data-testid=drawer-fhirpath-toggle]");
-  await page.selectOption("[data-testid=fp-resource-select]", {
-    label: "p1",
-  });
-  await page.fill("[data-testid=fp-expr]", "name.given.first()");
-  await page.click("[data-testid=fp-run]");
-  await page.waitForFunction(
-    () =>
-      (document.querySelector("[data-testid=fp-result]") as HTMLElement)
-        ?.textContent &&
-      (document.querySelector("[data-testid=fp-result]") as HTMLElement)!
-        .textContent!
-        .includes("Ann"),
-    undefined,
-    { timeout: 30_000 },
-  );
-});
+// The FHIRPath scratchpad retired in WORKBENCH_REORG phase 4 — its
+// coverage lives in console.spec.ts (CQL console Run-Selection).

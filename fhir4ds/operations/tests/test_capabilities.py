@@ -9,6 +9,7 @@ from fhir4ds.operations import (
     TestCase,
     TestsInput,
     evaluate_library,
+    evaluate_snippet,
     explain_patient,
     fhirpath_eval,
     load_dataset,
@@ -119,6 +120,53 @@ class TestEvaluateCapability:
         r = evaluate_library([_main()], _main(), None, conn,
                               output_columns={"IPP": "Initial Population"})
         assert r.ok and r.patient_count == 3
+
+
+class TestEvaluateSnippetCapability:
+    def test_snippet_column_narrowing(self):
+        conn = create_connection()
+        r = evaluate_snippet(
+            [_main()], _main(), "exists [Patient]",
+            DatasetSpec(resources=PATIENTS), conn,
+        )
+        assert r.ok
+        assert r.columns == ("patient_id", "snippet")
+        by_id = {row["patient_id"]: row for row in r.rows}
+        assert by_id["p1"]["snippet"] is True
+        assert by_id["p2"]["snippet"] is True
+
+    def test_non_boolean_snippet_value(self):
+        conn = create_connection()
+        r = evaluate_snippet(
+            [_main()], _main(), "'hello'",
+            DatasetSpec(resources=PATIENTS[:1]), conn,
+        )
+        assert r.ok
+        assert r.rows[0]["snippet"] == "hello"
+
+    def test_empty_snippet_is_input_error(self):
+        conn = create_connection()
+        r = evaluate_snippet([_main()], _main(), "   ", None, conn)
+        assert not r.ok
+        assert r.diagnostics[0].code.value == "input_error"
+
+    def test_broken_snippet_diagnostics_shift_back(self):
+        # SIMPLE_LIB is 7 lines; the broken snippet lands on appended
+        # lines ~9-11 — after the offset shift the reported line must
+        # point inside the selection (single digits), not the appended
+        # region.
+        conn = create_connection()
+        r = evaluate_snippet(
+            [_main()], _main(), "exists [Patient] where",
+            DatasetSpec(resources=PATIENTS), conn,
+        )
+        assert not r.ok
+        assert r.diagnostics, "expected a diagnostic for the broken snippet"
+        loc = r.diagnostics[0].location
+        if loc is not None and loc.start_line is not None:
+            assert loc.start_line <= 3, (
+                f"snippet diagnostic not shifted back: L{loc.start_line}"
+            )
 
 
 class TestRunTestsCapability:

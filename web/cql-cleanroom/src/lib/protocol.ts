@@ -344,6 +344,15 @@ export type WorkerRequest =
     }
   | {
       id: number;
+      type: "evaluate_snippet";
+      libraries: LibraryText[];
+      main: LibraryText;
+      snippet: string;
+      dataset: DatasetSpec | null;
+      parameters?: Record<string, unknown> | null;
+    }
+  | {
+      id: number;
       type: "compare_evidence";
       baseline: Record<string, unknown>;
       current: Record<string, unknown>;

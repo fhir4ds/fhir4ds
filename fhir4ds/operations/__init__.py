@@ -11,6 +11,7 @@ from .capabilities.evaluate import (
     EvidenceResult,
     VerifyEnvelope,
     evaluate_library,
+    evaluate_snippet,
     explain_patient,
     run_tests,
 )
@@ -87,6 +88,7 @@ __all__ = [
     "dataset_spec_from_dict",
     "diagnostic_from_exception",
     "evaluate_library",
+    "evaluate_snippet",
     "evidence_payload_from_dict",
     "explain_patient",
     "fhirpath_eval",
