@@ -58,6 +58,19 @@ import {
 } from "./lib/runHistory";
 import type { ResultsTab } from "./components/ResultsPane";
 import { GraphPane } from "./components/GraphPane";
+import { EditorTabs } from "./components/tabs/EditorTabs";
+import { TabHost } from "./components/tabs/hosts";
+import {
+  closeTab as closeEditorTabIn,
+  neighborTabId,
+  openTab as openTabIn,
+  parseTabId,
+  tabId,
+  type EditorTab,
+  type TabId,
+  type TabKind,
+} from "./lib/editorTabs";
+import { renameLibrary } from "./lib/renameLibrary";
 import type { DatasetSpec, LibraryText, FlattenViewResult } from "./lib/protocol";
 import {
   clearWorkspace,
@@ -266,6 +279,13 @@ export default function App() {
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(
     null,
   );
+  // WORKBENCH_REORG phase 3 — editor tabs: one open resource per tab;
+  // the tab's host replaces the library editor while it is active.
+  const [editorTabs, setEditorTabs] = useState<EditorTab[]>([]);
+  const [activeEditorTabId, setActiveEditorTabId] = useState<TabId | null>(null);
+  // The library editor stays mounted while other tabs are active; this
+  // pins which library model it keeps showing when it is hidden.
+  const lastLibTabKeyRef = useRef<string>("library:solo");
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
   const [dataset, setDataset] = useState<DatasetSpec | null>({
@@ -1058,6 +1078,30 @@ export default function App() {
     updateExpectedValues(expectedMapFromReports(reports));
   };
 
+  const openEditorTab = (kind: TabKind, resourceId: string) => {
+    const id = tabId(kind, resourceId);
+    setEditorTabs((ts) => openTabIn(ts, { id, kind, resourceId }));
+    setActiveEditorTabId(id);
+  };
+
+  const closeEditorTabById = (id: TabId) => {
+    setEditorTabs((ts) => closeEditorTabIn(ts, id));
+    if (activeEditorTabId === id) {
+      setActiveEditorTabId(neighborTabId(editorTabs, id));
+    }
+  };
+
+  // Seed one library tab once the workspace is known (fresh sessions
+  // open on the active measure's entrypoint library).
+  useEffect(() => {
+    if (!restored || editorTabs.length > 0 || libraries.length === 0) return;
+    const libId = activeMeasureEntry?.mainLibraryId ?? libraries[0].id;
+    const id = tabId("library", libId);
+    setEditorTabs([{ id, kind: "library", resourceId: libId }]);
+    setActiveEditorTabId(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restored, editorTabs.length, libraries, activeMeasureEntry]);
+
   const commitRename = () => {
     if (!renaming) return;
     const { id, value } = renaming;
@@ -1079,32 +1123,31 @@ export default function App() {
       setViewDefs((vs) =>
         vs.map((v) => (v.id === resId ? { ...v, name } : v)),
       );
+    } else if (kind === "library") {
+      // Rewrites the CQL header + sibling includes; ids (and hence
+      // measure.mainLibraryId links and open tabs) are unaffected.
+      const next = renameLibrary(libraries, resId, name);
+      if (next) {
+        setLibraries(next);
+      } else {
+        setStatusNote(`invalid library name: ${name}`);
+      }
     }
   };
 
   const selectNavItem = (item: NavItem) => {
-    switch (item.kind) {
-      case "library":
-        setActiveTab(item.meta?.index as number);
-        break;
-      case "measure":
-        setActiveMeasureId(item.meta?.measureId as string);
-        break;
-      case "valueset":
-        setTerminologyOpen(true);
-        break;
-      case "parameter":
-        setParamsOpen(true);
-        break;
-      case "expected":
-        setResultsTab("measure");
-        break;
-      case "view":
-        setResultsTab("view");
-        break;
-      case "test":
-        break;
+    // Every nav item id is `${kind}:${resourceId}` — nav clicks open (or
+    // focus) the matching editor tab. Library tabs also select the
+    // underlying Monaco-adjacent library index.
+    const { kind, resourceId } = parseTabId(item.id);
+    if (kind === "library") {
+      const idx = libraries.findIndex((l) => l.id === resourceId);
+      if (idx >= 0) setActiveTab(idx);
     }
+    if (kind === "measure") {
+      setActiveMeasureId(item.meta?.measureId as string);
+    }
+    openEditorTab(kind as TabKind, resourceId);
   };
 
   const openNavContext = (item: NavItem, x: number, y: number) => {
@@ -1113,6 +1156,10 @@ export default function App() {
       items.push({
         label: "Set as entrypoint",
         onSelect: () => setEntrypoint(item.meta?.index as number),
+      });
+      items.push({
+        label: "Rename library",
+        onSelect: () => setRenaming({ id: item.id, value: item.label }),
       });
       if (libraries.length > 1) {
         items.push({
@@ -1170,6 +1217,103 @@ export default function App() {
       });
     }
     if (items.length) setCtxMenu({ x, y, title: item.label, items });
+  };
+
+  // Editor tab bookkeeping (labels + active kind) for the strip + host.
+  const tabLabels: Record<string, string> = {};
+  for (const t of editorTabs) {
+    switch (t.kind) {
+      case "library":
+        tabLabels[t.id] =
+          libraries.find((l) => l.id === t.resourceId)?.name ?? t.resourceId;
+        break;
+      case "measure": {
+        const m = measures.find((x) => x.id === t.resourceId);
+        const name = (m?.resource as { name?: unknown } | null)?.name;
+        tabLabels[t.id] =
+          typeof name === "string" && name ? name : t.resourceId;
+        break;
+      }
+      case "valueset":
+        tabLabels[t.id] = t.resourceId.replace(/^(ws|ds):/, "");
+        break;
+      case "expected":
+        tabLabels[t.id] = t.resourceId.replace(/^Patient\//, "");
+        break;
+      case "view":
+        tabLabels[t.id] =
+          viewDefs.find((v) => v.id === t.resourceId)?.name || t.resourceId;
+        break;
+      default:
+        tabLabels[t.id] = t.resourceId;
+    }
+  }
+  const activeTabIsLibrary =
+    !activeEditorTabId || parseTabId(activeEditorTabId).kind === "library";
+  // Latest-value mirror (same pattern as activeTabRef): which library
+  // model the (possibly hidden) editor keeps showing.
+  if (activeEditorTabId?.startsWith("library:")) {
+    lastLibTabKeyRef.current = activeEditorTabId;
+  }
+  const activeLibTabKey = activeTabIsLibrary
+    ? (activeEditorTabId ?? lastLibTabKeyRef.current)
+    : lastLibTabKeyRef.current;
+
+  // Resolve the non-library tab hosts' data from workspace state.
+  const hostTab: EditorTab | null =
+    activeEditorTabId && !activeTabIsLibrary
+      ? (() => {
+          const { kind, resourceId } = parseTabId(activeEditorTabId);
+          return { id: activeEditorTabId, kind, resourceId };
+        })()
+      : null;
+  const hostValueset = (() => {
+    if (hostTab?.kind !== "valueset") return null;
+    const m = /^([a-z]+):(.*)$/.exec(hostTab.resourceId);
+    const src = m?.[1] ?? "ws";
+    const url = m?.[2] ?? hostTab.resourceId;
+    if (src === "ds") {
+      return (
+        ((dataset?.valueset_resources ?? []) as Array<Record<string, unknown>>).find(
+          (v) => (v as { url?: string }).url === url,
+        ) ?? null
+      );
+    }
+    return (
+      terminology.valuesets.find(
+        (v) => (v as { url?: string }).url === url,
+      ) ?? null
+    );
+  })();
+  const hostExpectedReport = (() => {
+    if (hostTab?.kind !== "expected") return null;
+    const list = expectedReports[activeMeasureEntry?.id ?? ""] ?? [];
+    const byRef = list.find(
+      (r) =>
+        String((r.subject as { reference?: string } | undefined)?.reference) ===
+        hostTab.resourceId,
+    );
+    if (byRef) return byRef;
+    const idx = /^#(\d+)$/.exec(hostTab.resourceId);
+    return idx ? (list[Number(idx[1])] ?? null) : null;
+  })();
+  const setHostExpectedReport = (mr: Record<string, unknown>) => {
+    if (!hostTab || hostTab.kind !== "expected" || !activeMeasureEntry) return;
+    const mid = activeMeasureEntry.id;
+    const list = expectedReports[mid] ?? [];
+    const next = (() => {
+      const i = list.findIndex(
+        (r) =>
+          String((r.subject as { reference?: string } | undefined)?.reference) ===
+          hostTab.resourceId,
+      );
+      if (i >= 0) return list.map((r, j) => (j === i ? mr : r));
+      const m = /^#(\d+)$/.exec(hostTab.resourceId);
+      if (m) return list.map((r, j) => (j === Number(m[1]) ? mr : r));
+      return list;
+    })();
+    setExpectedReports({ ...expectedReports, [mid]: next });
+    updateExpectedValues(expectedMapFromReports(next));
   };
 
   return (
@@ -1393,9 +1537,22 @@ export default function App() {
             />
           }
         />
-        <div className="pane-col editor-col">
+        <div
+          className={`pane-col editor-col ${activeTabIsLibrary ? "" : "hosting-tab"}`}
+        >
+          <EditorTabs
+            tabs={editorTabs}
+            activeId={activeEditorTabId}
+            labels={tabLabels}
+            onSelect={(id) => setActiveEditorTabId(id as TabId)}
+            onClose={(id) => closeEditorTabById(id as TabId)}
+          />
           <EditorPane
             text={active.text}
+            tabKey={activeLibTabKey}
+            knownTabKeys={editorTabs
+              .filter((t) => t.kind === "library")
+              .map((t) => t.id)}
             onTextChange={updateActiveText}
             onDiagnostics={(diags) => {
               const idx = activeTabRef.current;
@@ -1475,6 +1632,73 @@ export default function App() {
               </div>
             )}
           </div>
+          {hostTab && (
+            <TabHost
+              tab={hostTab}
+              measure={measure}
+              onMeasureChange={updateActiveMeasure}
+              measureLibs={mainLibs}
+              measureMain={main}
+              valueset={hostValueset}
+              valuesetProvenance={
+                hostTab.kind === "valueset" && hostValueset
+                  ? hostTab.resourceId.startsWith("ds:")
+                    ? "imported"
+                    : "edited"
+                  : undefined
+              }
+              onValuesetChange={(vs) => {
+                const url = String(vs.url ?? "");
+                setTerminology({
+                  valuesets: [
+                    ...terminology.valuesets.filter(
+                      (v) => String((v as { url?: string }).url ?? "") !== url,
+                    ),
+                    vs,
+                  ],
+                });
+              }}
+              params={detectParams(mainLib.text).map((name) => ({
+                name,
+                value: paramValues[name] ?? "",
+              }))}
+              onParamsChange={(next) => {
+                const vals: Record<string, string> = {};
+                for (const p of next) vals[p.name] = p.value;
+                updateParamValues(vals);
+              }}
+              builder={
+                <ResourceBuilderPane
+                  onAddResource={(resource) => {
+                    const resources = [
+                      ...(dataset?.resources ?? []),
+                      resource,
+                    ];
+                    setDataset(
+                      dataset ? { ...dataset, resources } : { resources },
+                    );
+                  }}
+                  onReplaceResource={(index, resource) => {
+                    const resources = [...(dataset?.resources ?? [])];
+                    resources[index] = resource;
+                    setDataset(
+                      dataset ? { ...dataset, resources } : { resources },
+                    );
+                  }}
+                  prefill={builderPrefill}
+                  context={builderContext}
+                  dataset={dataset}
+                />
+              }
+              expectedReport={hostExpectedReport}
+              onExpectedReportChange={setHostExpectedReport}
+              measureReports={lastReports}
+              viewConfig={viewConfig?.overrides ?? null}
+              onViewConfigChange={(overrides) => setViewConfig({ overrides })}
+              onSql={setViewSql}
+              onResult={setViewResult}
+            />
+          )}
         </div>
         <div className="pane-col run-col">
           <ResultsPane

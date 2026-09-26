@@ -38,6 +38,12 @@ body { margin: 0; }
    (PASS2 G1: the earlier duplicate 3-column def is retired; the rail
    column is added there). */
 .pane-col > .pane { min-width: 0; max-width: 100%; }
+/* Tab hosts (phase 3): when a non-library tab is active the column
+   shows the host INSTEAD of the library editor; the editor stays
+   mounted-but-hidden so its Monaco model cache (undo/cursor) survives
+   tab flips. */
+.editor-col.hosting-tab > .pane.editor-pane,
+.editor-col.hosting-tab > .results-drawer.editor-drawer { display: none; }
 .pane table { max-width: 100%; }
 
 .pane {
@@ -1295,3 +1301,26 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 
 /* Diff chips: header placement (upper right of Results) */
 .diff-chips { display: inline-flex; gap: 4px; margin-right: 8px; align-items: center; }
+
+/* Editor tab strip (phase 3) */
+.editor-tabs { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 8px; border-bottom: 1px solid #232a35; }
+.editor-tab { display: inline-flex; align-items: center; border: 1px solid #232a35; border-bottom: none; border-radius: 6px 6px 0 0; background: #10151d; overflow: hidden; }
+.editor-tab.active { background: #151a22; }
+.editor-tab.active .editor-tab-label { color: #dbe7ff; font-weight: 600; }
+.editor-tab-btn { display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 8px; border: none; background: transparent; max-width: 220px; cursor: pointer; color: #a8b8cf; }
+.editor-tab-glyph { font-size: 0.72rem; }
+.editor-tab-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.78rem; }
+.editor-tab-close { border: none; background: transparent; padding: 4px 7px; cursor: pointer; color: #8fa3bf; opacity: 0.6; font-size: 0.85rem; }
+.editor-tab-close:hover { opacity: 1; background: rgba(255,255,255,0.08); color: #e6e9ef; }
+.vs-url-row { display: flex; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.vs-url-row label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #a8b8cf; flex: 1; min-width: 180px; }
+.vs-url-row input { flex: 1; }
+.vs-code-row { display: grid; grid-template-columns: 2fr 1fr 1.4fr auto; gap: 6px; margin-bottom: 4px; }
+.vs-warnings { font-size: 0.75rem; color: #e7c66b; margin-top: 6px; }
+.vs-code-del { border: none; background: transparent; color: #d98a8a; cursor: pointer; }
+.er-subject-row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 0.78rem; color: #a8b8cf; }
+.er-subject-row input { flex: 1; max-width: 320px; }
+.er-group { border: 1px solid #232a35; border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+.er-group-title { font-size: 0.75rem; font-weight: 600; color: #a8b8cf; margin-bottom: 4px; }
+.er-pop-row { display: grid; grid-template-columns: 1fr 90px auto; gap: 6px; margin-bottom: 4px; }
+.pane-action { border: 1px solid #2c3644; background: #101822; color: #dbe7ff; border-radius: 6px; padding: 2px 8px; font-size: 0.75rem; cursor: pointer; }

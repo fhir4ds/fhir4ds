@@ -21,6 +21,11 @@ interface Props {
   onTextChange: (text: string) => void;
   onDiagnostics?: (diags: Diagnostics[]) => void;
   onParamsDetected?: (names: string[]) => void;
+  /** Which workspace resource this editor shows ("library:lib_0").
+   *  One Monaco ITextModel per key: undo stacks + cursors survive tab
+   *  switches; models for keys dropped from knownTabKeys are disposed. */
+  tabKey?: string;
+  knownTabKeys?: string[];
 }
 
 interface DiagnosticsRowProps {
@@ -63,6 +68,8 @@ export function EditorPane({
   onTextChange,
   onDiagnostics,
   onParamsDetected,
+  tabKey = "library:solo",
+  knownTabKeys,
 }: Props) {
   const editorDiv = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<any>(null);
@@ -70,6 +77,25 @@ export function EditorPane({
   const [diags, setDiags] = useState<Diagnostics[]>([]);
   const [parseMs, setParseMs] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const modelsRef = useRef<Map<string, any>>(new Map());
+  const viewStatesRef = useRef<Map<string, any>>(new Map());
+  const prevKeyRef = useRef<string>(tabKey);
+  const textRef = useRef(text);
+  textRef.current = text;
+  const tabKeyRef = useRef(tabKey);
+  tabKeyRef.current = tabKey;
+
+  const getOrCreateModel = (key: string) => {
+    const monaco = monacoRef.current;
+    if (!monaco) return null;
+    const uri = monaco.Uri.parse(`inmemory://cql/${key}`);
+    let model = monaco.editor.getModel(uri);
+    if (!model) {
+      model = monaco.editor.createModel(textRef.current, "cql", uri);
+      modelsRef.current.set(key, model);
+    }
+    return model;
+  };
 
   // Extract parameter declarations from the declarations block (parse
   // envelope library_declarations when present; fall back to a light
@@ -92,8 +118,11 @@ export function EditorPane({
       const { registerCQLLanguage } = await import("../lib/monaco-cql-language");
       if (disposed || !editorDiv.current) return;
       registerCQLLanguage(monaco);
+      monacoRef.current = monaco;
+      const model = getOrCreateModel(tabKeyRef.current);
       const editor = monaco.editor.create(editorDiv.current, {
-        value: text,
+        model: model ?? undefined,
+        value: model ? undefined : textRef.current,
         language: "cql",
         minimap: { enabled: false },
         fontSize: 13,
@@ -109,7 +138,6 @@ export function EditorPane({
         onTextChangeRef.current(editor.getValue());
       });
       editorRef.current = editor;
-      monacoRef.current = monaco;
     })();
     return () => {
       disposed = true;
@@ -117,6 +145,42 @@ export function EditorPane({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Tab switch: checkpoint the outgoing view state, swap to the
+  // incoming model, restore its view state. Content stays in sync via
+  // the models themselves (each caches its library's latest text).
+  useEffect(() => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco) return;
+    const prevKey = prevKeyRef.current;
+    if (prevKey !== tabKey) {
+      viewStatesRef.current.set(prevKey, editor.saveViewState());
+      prevKeyRef.current = tabKey;
+      setDiags([]);
+    }
+    const model = getOrCreateModel(tabKey);
+    if (model && editor.getModel() !== model) {
+      const vs = viewStatesRef.current.get(tabKey);
+      editor.setModel(model);
+      if (vs) editor.restoreViewState(vs);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabKey]);
+
+  // Dispose models whose tab no longer exists (library deleted).
+  useEffect(() => {
+    if (!knownTabKeys || !monacoRef.current) return;
+    const live = new Set(knownTabKeys);
+    for (const [key, model] of modelsRef.current) {
+      if (!live.has(key) && key !== tabKeyRef.current) {
+        model.dispose();
+        modelsRef.current.delete(key);
+        viewStatesRef.current.delete(key);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [knownTabKeys?.join(",")]);
 
   // Sync external text changes (tab switch, Apply, share, import) into
   // the once-mounted Monaco instance — guarded so user typing (which
