@@ -68,6 +68,15 @@ body { margin: 0; }
   padding: 4px 10px; cursor: pointer; font-size: 12px;
 }
 .pane-header button:disabled { opacity: 0.5; cursor: default; }
+.pane-header select {
+  background: #24476e; color: #dbe7ff; border: none; border-radius: 6px;
+  padding: 4px 6px; cursor: pointer; font-size: 12px; max-width: 150px;
+}
+.expected-grid .row-remove {
+  background: none; border: none; color: #8fa3bf; cursor: pointer;
+  font-size: 13px; line-height: 1; padding: 0 4px; margin-left: 6px;
+}
+.expected-grid .row-remove:hover { color: #ff7b72; }
 .editor-host { height: 340px; border: 1px solid #232a35; border-radius: 6px; overflow: hidden; }
 .pane-meta { color: #8fa3bf; font-size: 11px; margin-right: 8px; }
 .pane-error { color: #ff7b72; font-size: 12px; margin: 6px 0; }
@@ -154,11 +163,12 @@ body { margin: 0; }
 .splitter { align-self: stretch; min-height: 480px; border-radius: 3px; background: #232a35; cursor: col-resize; touch-action: none; }
 .splitter:hover, .splitter.dragging { background: #3b82c4; }
 
-/* PASS2 G1: left navigation rail */
+/* REORG 6d: maps-style nav — L1 icon strip + L2 slide-out panel. */
 .nav-rail {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 6px;
   padding: 8px 6px;
   border: 1px solid #232a35;
   border-radius: 8px;
@@ -166,6 +176,18 @@ body { margin: 0; }
   min-height: 120px;
   position: sticky;
   top: 10px;
+}
+.nav-rail .rail-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 40px;
+  flex: none;
+}
+.nav-rail .nav-panel {
+  flex: 1;
+  min-width: 0;
+  max-width: 198px;
 }
 .nav-rail .rail-label {
   font-size: 10px;
@@ -223,8 +245,8 @@ body { margin: 0; }
 /* WORKBENCH_REORG phase 2: resource drawers */
 .nav-rail { max-height: calc(100vh - 40px); overflow-y: auto; }
 .nav-rail .rail-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 2px 4px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 0 4px;
 }
 .rail-collapse-btn {
   background: transparent; border: 1px solid #232a35; border-radius: 6px;
@@ -232,8 +254,7 @@ body { margin: 0; }
 }
 .rail-collapse-btn:hover { color: #e6ebf2; border-color: #3b82f6; }
 .nav-rail.collapsed { min-width: 0; }
-.nav-rail.collapsed .nav-drawer { display: none; }
-.nav-drawer { border-top: 1px solid #1d232e; padding-top: 3px; }
+.nav-drawer { padding-top: 3px; }
 .nav-drawer-head {
   display: flex; align-items: center; gap: 6px; width: 100%;
   background: transparent; border: 0; color: #aab4c3; cursor: pointer;

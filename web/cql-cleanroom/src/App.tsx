@@ -257,20 +257,10 @@ export default function App() {
   // so the callback always reads the CURRENT tab (the render-captured
   // activeTab goes stale across fast tab switches).
   const [libErrors, setLibErrors] = useState<Record<number, boolean>>({});
-  // WORKBENCH_REORG phase 2 — nav drawer UI state. Drawer bodies stay
-  // mounted when collapsed; Tests defaults open (dataset-loaded is the
-  // e2e boot signal and must be visible).
-  const [navExpanded, setNavExpanded] = useState<
-    Record<NavSectionId, boolean>
-  >({
-    measures: false,
-    libraries: true,
-    valuesets: false,
-    parameters: false,
-    tests: true,
-    expected: false,
-    views: false,
-  });
+  // REORG phase 6d — maps-style nav: one section panel open at a time
+  // (null = collapsed icon rail). Tests defaults open: dataset-loaded
+  // is the e2e boot signal and must be visible.
+  const [navPanel, setNavPanel] = useState<NavSectionId | null>("tests");
   const [navFilters, setNavFilters] = useState<
     Record<NavSectionId, string>
   >({
@@ -282,7 +272,6 @@ export default function App() {
     expected: "",
     views: "",
   });
-  const [railCollapsed, setRailCollapsed] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(
     null,
@@ -1116,18 +1105,6 @@ export default function App() {
     }
   };
 
-  // ---- Nav drawers (WORKBENCH_REORG phase 2) ---------------------------
-  const toggleNavSection = (id: NavSectionId) => {
-    setRailCollapsed(false);
-    setNavExpanded((e) => ({ ...e, [id]: !e[id] }));
-  };
-  // Quick rail buttons force the drawer OPEN (toggle would re-hide a
-  // body that is already expanded, which reads as a dead click).
-  const popNavSection = (id: NavSectionId) => {
-    setRailCollapsed(false);
-    setNavExpanded((e) => ({ ...e, [id]: true }));
-  };
-
   const libErrorById: Record<string, boolean> = {};
   libraries.forEach((l, i) => {
     if (libErrors[i]) libErrorById[l.id] = true;
@@ -1483,30 +1460,10 @@ export default function App() {
     setViewDefs((vs) => [...vs, entry]);
     openEditorTab("view", id);
   };
-  /** "+" on Expected Results — seed one authored (subject-less)
-   *  MeasureReport skeleton from the active measure's populations and
-   *  open the expected grid tab. Subject-less reports contribute nothing
-   *  to expectedMapFromReports, so the skeleton stays inert until a
-   *  patient is assigned. */
-  const addExpectedReport = () => {
-    if (!activeMeasureEntry) return;
-    const mid = activeMeasureEntry.id;
-    const skeleton = {
-      resourceType: "MeasureReport",
-      status: "complete",
-      type: "individual",
-      measure: `Measure/${mid}`,
-      group: [
-        {
-          population: populationCodes.map((code) => ({
-            code: { coding: [{ code }] },
-            count: 0,
-          })),
-        },
-      ],
-    };
-    const next = [...(expectedReports[mid] ?? []), skeleton];
-    setExpectedReports({ ...expectedReports, [mid]: next });
+  /** "+" on Expected Results — open the authoring editor. Patients are
+   *  added to the authored MeasureReports from inside the editor (6c):
+   *  one individual MR per added patient, so no skeleton is needed. */
+  const openExpectedEditor = () => {
     openEditorTab("expected", "grid");
   };
 
@@ -1718,28 +1675,27 @@ export default function App() {
         data-testid="app-main"
         style={
           {
-            "--nav-w": railCollapsed ? "52px" : "264px",
+            "--nav-w": navPanel ? "264px" : "52px",
             "--col1-fr": `${col1Fr}fr`,
           } as React.CSSProperties
         }
       >
         <NavRail
           sections={{
-            measures: { ...navSectionModels.measures, expanded: navExpanded.measures, filter: navFilters.measures },
-            libraries: { ...navSectionModels.libraries, expanded: navExpanded.libraries, filter: navFilters.libraries },
-            valuesets: { ...navSectionModels.valuesets, expanded: navExpanded.valuesets, filter: navFilters.valuesets },
-            parameters: { ...navSectionModels.parameters, expanded: navExpanded.parameters, filter: navFilters.parameters },
+            measures: { ...navSectionModels.measures, filter: navFilters.measures },
+            libraries: { ...navSectionModels.libraries, filter: navFilters.libraries },
+            valuesets: { ...navSectionModels.valuesets, filter: navFilters.valuesets },
+            parameters: { ...navSectionModels.parameters, filter: navFilters.parameters },
             tests: {
               ...navSectionModels.tests,
-              expanded: navExpanded.tests,
               filter: navFilters.tests,
               showFilter: false,
             },
-            expected: { ...navSectionModels.expected, expanded: navExpanded.expected, filter: navFilters.expected },
-            views: { ...navSectionModels.views, expanded: navExpanded.views, filter: navFilters.views },
+            expected: { ...navSectionModels.expected, filter: navFilters.expected },
+            views: { ...navSectionModels.views, filter: navFilters.views },
           }}
-          onToggleSection={toggleNavSection}
-          onPopSection={popNavSection}
+          navPanel={navPanel}
+          onNavPanelChange={setNavPanel}
           onFilterSection={(id, v) =>
             setNavFilters((f) => ({ ...f, [id]: v }))
           }
@@ -1757,9 +1713,7 @@ export default function App() {
           onRenameCancel={() => setRenaming(null)}
           onAddLibrary={addTab}
           onAddView={addStoredView}
-          onAddExpected={addExpectedReport}
-          railCollapsed={railCollapsed}
-          onRailCollapse={() => setRailCollapsed((c) => !c)}
+          onAddExpected={openExpectedEditor}
           testsSlot={
             <DatasetPane
               dataset={dataset}

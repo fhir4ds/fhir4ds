@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * WORKBENCH_REORG phase 2: the 7 nav drawers — expand/collapse, filters,
- * context-menu actions (rename/delete), and legacy alias preservation.
+ * REORG phase 6d: maps-style nav — L1 icon rail (nav-toggle-{id}) +
+ * L2 single slide-out panel (one section at a time), filters,
+ * context-menu actions, legacy alias preservation.
  */
 
 async function bootReady(page: import("@playwright/test").Page) {
@@ -11,8 +12,8 @@ async function bootReady(page: import("@playwright/test").Page) {
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
 }
 
-test.describe("nav drawers", () => {
-  test("seven sections render; libraries + tests default expanded", async ({
+test.describe("nav rail + panel", () => {
+  test("seven rail icons; Tests panel opens by default with the boot signal", async ({
     page,
   }) => {
     await bootReady(page);
@@ -25,33 +26,38 @@ test.describe("nav drawers", () => {
       "expected",
       "views",
     ]) {
-      await expect(page.locator(`[data-testid=nav-sec-${id}]`)).toBeAttached();
+      await expect(page.locator(`[data-testid=nav-toggle-${id}]`)).toBeVisible();
     }
-    // Boot signal stays VISIBLE inside the Tests drawer (default open).
+    // Boot signal is VISIBLE inside the default Tests panel.
     await expect(page.locator("[data-testid=dataset-loaded]")).toBeVisible();
-    // Libraries open with legacy alias testids; others collapsed.
-    await expect(page.locator("[data-testid=library-tab-0]")).toBeVisible();
-    await expect(page.locator("[data-testid=library-tab-add]")).toBeVisible();
-    await expect(page.locator("[data-testid=nav-list-measures]")).toBeHidden();
+    await expect(page.locator("[data-testid=nav-sec-tests]")).toBeVisible();
+    // Other sections' content mounts only when their icon opens it.
+    await expect(page.locator("[data-testid=nav-sec-measures]")).toHaveCount(0);
   });
 
-  test("drawer expand/collapse + filter", async ({ page }) => {
+  test("panel switches sections; collapse; filters", async ({ page }) => {
     await bootReady(page);
-    // Parameters drawer: default library declares none → empty list, but
-    // the filter input must exist and accept typing.
+    // Collapse the rail (close the panel).
+    await page.click("[data-testid=rail-collapse]");
+    await expect(page.locator("[data-testid=nav-sec-tests]")).toHaveCount(0);
+    // The Tests icon pops the panel back open.
+    await page.click("[data-testid=nav-toggle-tests]");
+    await expect(page.locator("[data-testid=dataset-loaded]")).toBeVisible();
+
+    // Parameters: opens; the filter accepts typing.
     await page.click("[data-testid=nav-toggle-parameters]");
     await expect(
       page.locator("[data-testid=nav-filter-parameters]"),
     ).toBeVisible();
     await page.fill("[data-testid=nav-filter-parameters]", "zzz-no-match");
 
-    // Valuesets drawer: the default dataset carries no valueset_resources,
-    // so the fresh workspace shows the empty state; the filter must exist
-    // and accept typing (workspace-authored valuesets populate it later).
+    // Valuesets: the fresh workspace shows the empty state; ONE panel at
+    // a time — opening it closed Parameters.
     await page.click("[data-testid=nav-toggle-valuesets]");
     await expect(
       page.locator("[data-testid=nav-sec-valuesets] .nav-empty"),
     ).toBeVisible();
+    await expect(page.locator("[data-testid=nav-sec-parameters]")).toHaveCount(0);
     await page.fill("[data-testid=nav-filter-valuesets]", "zzz-none");
     await expect(page.locator("[data-testid=nav-filter-valuesets]")).toHaveValue(
       "zzz-none",
@@ -59,20 +65,16 @@ test.describe("nav drawers", () => {
     await page.fill("[data-testid=nav-filter-valuesets]", "");
 
     // Libraries filter narrows by name.
+    await page.click("[data-testid=nav-toggle-libraries]");
     await page.fill("[data-testid=nav-filter-libraries]", "clean");
     await expect(page.locator("[data-testid=library-tab-0]")).toBeVisible();
     await page.fill("[data-testid=nav-filter-libraries]", "zzz-none");
     await expect(page.locator("[data-testid=library-tab-0]")).toBeHidden();
     await page.fill("[data-testid=nav-filter-libraries]", "");
 
-    // Collapse the rail: drawers hide, quick buttons remain.
-    await page.click("[data-testid=rail-collapse]");
-    await expect(page.locator("[data-testid=nav-sec-libraries]")).toBeHidden();
-    await expect(page.locator("[data-testid=rail-dataset]")).toBeVisible();
-    // Expanding a section pops the rail back open.
-    await page.click("[data-testid=rail-dataset]");
-    await expect(page.locator("[data-testid=nav-sec-tests]")).toBeVisible();
-    await expect(page.locator("[data-testid=dataset-loaded]")).toBeVisible();
+    // The panel header caret closes the panel.
+    await page.click("[data-testid=nav-close-libraries]");
+    await expect(page.locator("[data-testid=nav-sec-libraries]")).toHaveCount(0);
   });
 
   test("measure rename via context menu updates the label", async ({

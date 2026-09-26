@@ -28,21 +28,25 @@ test("workspace persists libraries and dataset across reload", async ({ page }) 
 
   // Load dataset + add a second library tab
   await page.waitForSelector("[data-testid=dataset-loaded]");
+  await page.click("[data-testid=nav-toggle-libraries]");
   await page.click("[data-testid=library-tab-add]");
   await page.waitForSelector("[data-testid=library-tab-1]");
 
   // Autosave debounce (800ms) + IndexedDB write
   await page.waitForTimeout(2000);
 
-  // Reload: tabs + dataset restored
+  // Reload: tabs + dataset restored (panel defaults back to Tests;
+  // read the boot signal, then reopen Libraries to see the restored
+  // tabs — REORG 6d).
   await page.reload();
   await page.waitForSelector(".version-badge", { timeout: 150_000 });
-  await page.waitForSelector("[data-testid=library-tab-1]", { timeout: 30_000 });
   await page.waitForSelector("[data-testid=dataset-loaded]", {
     timeout: 30_000,
   });
   const loaded = await page.textContent("[data-testid=dataset-loaded]");
   if (!loaded?.includes("3")) throw new Error(`dataset not restored: ${loaded}`);
+  await page.click("[data-testid=nav-toggle-libraries]");
+  await page.waitForSelector("[data-testid=library-tab-1]", { timeout: 30_000 });
 
   // Reset to defaults so other tests are unaffected
   await page.click("[data-testid=workspace-reset]");

@@ -2,11 +2,10 @@ import type { ReactNode } from "react";
 import type { NavSectionId } from "../../lib/navSections";
 
 /**
- * WORKBENCH_REORG phase 2 — one collapsible nav drawer: caret, title,
- * count, filter input, item list. Sections stay MOUNTED when collapsed
- * (display:none on the body) so e2e signals inside them (notably
- * dataset-loaded) survive; the Tests drawer defaults expanded so the
- * boot signal is VISIBLE for waitForSelector.
+ * REORG phase 6d — one nav panel section: header (caret closes the
+ * panel, testid `nav-close-{id}`), count, filter input, item list.
+ * Rendered inside NavRail's single slide-out panel; the Tests panel
+ * hosts the DatasetPane whose `dataset-loaded` is the e2e boot signal.
  */
 
 export function DrawerSection({
@@ -42,8 +41,9 @@ export function DrawerSection({
     >
       <button
         className="nav-drawer-head"
-        data-testid={`nav-toggle-${id}`}
+        data-testid={`nav-close-${id}`}
         aria-expanded={expanded}
+        title="collapse"
         onClick={onToggle}
       >
         <span className="nav-drawer-caret" aria-hidden>

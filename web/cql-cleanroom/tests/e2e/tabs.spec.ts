@@ -68,6 +68,7 @@ test.describe("editor tabs", () => {
     page,
   }) => {
     await bootReady(page);
+    await page.click("[data-testid=nav-toggle-libraries]");
     await page.click("[data-testid=library-tab-0]", { button: "right" });
     await page.click("[data-testid=nav-context-menu] >> text=Rename library");
     const input = page.locator("[data-testid=library-tab-0-rename] input");

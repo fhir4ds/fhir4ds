@@ -7,12 +7,14 @@ import type {
 import { workerRequest } from "./BootOverlay";
 
 /**
- * TestsPane v2 — Measure-backed expected-value grid.
+ * TestsPane v3 — the authored MeasureReport editor (REORG 6c).
  *
- * Expected values live in the workspace (`expectedValues` prop:
- * {patientId: {populationCode: boolean}}) — typed data, not free JSON.
- * Import/export as MeasureReport bundles (MADiE interop); the raw JSON
- * escape hatch remains.
+ * Expected results are AUTHORED, not a mirror of the dataset: the grid
+ * lists only the patients added to the active measure's expected
+ * MeasureReports (one individual MR per patient, count 1|0 per code).
+ * "Add patient" curates subjects from the dataset; All true/false bulk-
+ * authors every dataset patient. Import/export as MeasureReport bundles
+ * (MADiE interop).
  */
 
 interface ExpectedMap {
@@ -54,6 +56,31 @@ export function TestsPane({
   }, [dataset]);
 
   const expected: ExpectedMap = expectedValues ?? {};
+
+  // Authored subjects: the grid lists exactly these patients, sorted.
+  const addedPatients = useMemo(
+    () => Object.keys(expected).sort(),
+    [expectedValues],
+  );
+  const addablePatients = useMemo(
+    () => patients.filter((pid) => !(pid in expected)),
+    [patients, expectedValues],
+  );
+
+  function addPatient(pid: string) {
+    if (!pid || pid in expected) return;
+    const row: { [code: string]: boolean } = {};
+    for (const code of populationCodes) row[code] = false;
+    onExpectedValuesChange({ ...expected, [pid]: row });
+  }
+
+  function removePatient(pid: string) {
+    const next: ExpectedMap = {};
+    for (const [p, codes] of Object.entries(expected)) {
+      if (p !== pid) next[p] = codes;
+    }
+    onExpectedValuesChange(Object.keys(next).length ? next : null);
+  }
 
   useEffect(() => {
     // Keep the grid consistent with the current population codes.
@@ -217,6 +244,23 @@ export function TestsPane({
       <header className="pane-header">
         <h2>Tests</h2>
         <div className="pane-actions">
+          <select
+            data-testid="expected-add-patient"
+            value=""
+            disabled={!measureAvailable || addablePatients.length === 0}
+            onChange={(e) => {
+              addPatient(e.target.value);
+              e.target.value = "";
+            }}
+            title="Add a dataset patient to the expected MeasureReport"
+          >
+            <option value="">+ Add patient…</option>
+            {addablePatients.map((pid) => (
+              <option key={pid} value={pid}>
+                {pid}
+              </option>
+            ))}
+          </select>
           <button
             onClick={() => setAll(true)}
             disabled={!patients.length || !measureAvailable}
@@ -284,9 +328,20 @@ export function TestsPane({
             </tr>
           </thead>
           <tbody>
-            {patients.map((pid) => (
+            {addedPatients.map((pid) => (
               <tr key={pid} data-testid={`expected-row-${pid}`}>
-                <td>{pid}</td>
+                <td>
+                  {pid}
+                  <button
+                    className="row-remove"
+                    title="Remove this patient from the expected MeasureReport"
+                    aria-label={`Remove ${pid}`}
+                    onClick={() => removePatient(pid)}
+                    data-testid={`expected-remove-${pid}`}
+                  >
+                    ×
+                  </button>
+                </td>
                 {populationCodes.map((c) => {
                   const value = expected[pid]?.[c];
                   return (
@@ -302,6 +357,15 @@ export function TestsPane({
                 })}
               </tr>
             ))}
+            {addedPatients.length === 0 && (
+              <tr>
+                <td colSpan={populationCodes.length + 1}>
+                  <span className="pane-hint">
+                    No patients in the expected report — add them above.
+                  </span>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
         </div>

@@ -21,6 +21,8 @@ test("example loads include tabs, prefills MP, auto-recalcs", async ({ page }) =
   );
 
   // 2. Include tabs are present: main + Hospice/Palliative/QICoreCommon/SDE.
+  // REORG 6d: the Libraries panel opens via its rail icon.
+  await page.click("[data-testid=nav-toggle-libraries]");
   await page.waitForSelector("[data-testid=library-tab-1]", { timeout: 30_000 });
   const tabCount = await page.locator("[data-testid^=library-tab-]").count();
   if (tabCount < 5) throw new Error(`expected ≥5 tabs (main+4 includes), got ${tabCount - 1}`);

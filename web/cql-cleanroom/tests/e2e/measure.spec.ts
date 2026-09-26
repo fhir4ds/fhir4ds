@@ -43,11 +43,15 @@ test.describe("measure pane authoring", () => {
     const status = await page.textContent("[data-testid=measure-status]");
     if (!status?.includes("valid")) throw new Error(`measure status: ${status}`);
 
-    // Expected grid shows both population codes for every patient.
-    // REORG phase 6a: the grid is the "expected" editor tab now.
+    // Expected grid: authoring is CURATED (REORG 6c) — the "+" opens
+    // the editor, patients are added from the dataset, then every
+    // population code becomes a column.
     await page.click("[data-testid=nav-toggle-expected]");
     await page.click("[data-testid=nav-add-expected]");
     await page.waitForSelector("[data-testid=expected-grid]");
+    for (const pid of ["p1", "p2", "p3"]) {
+      await page.selectOption("[data-testid=expected-add-patient]", pid);
+    }
     await page.waitForSelector("[data-testid=expected-p1-initial-population]");
     await page.waitForSelector("[data-testid=expected-p3-numerator]");
   });
@@ -82,9 +86,11 @@ test.describe("measure pane authoring", () => {
     await page.waitForSelector("[data-testid=measure-status]", {
       timeout: 60_000,
     });
-    // REORG phase 6a: open the expected tab to see the new column.
+    // REORG 6c: open the expected tab and add p1 to see the new column.
     await page.click("[data-testid=nav-toggle-expected]");
     await page.click("[data-testid=nav-add-expected]");
+    await page.waitForSelector("[data-testid=expected-grid]");
+    await page.selectOption("[data-testid=expected-add-patient]", "p1");
     await page.waitForSelector(
       "[data-testid=expected-p1-denominator-exclusion]",
       { timeout: 10_000 },

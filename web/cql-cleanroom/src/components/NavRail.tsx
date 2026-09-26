@@ -3,18 +3,20 @@ import { DrawerSection, DrawerRow } from "./nav/DrawerSection";
 import type { NavItem, NavSectionId } from "../lib/navSections";
 
 /**
- * WORKBENCH_REORG phase 2: the left rail is now SEVEN resource drawers
- * (measures, libraries, valuesets, parameters, tests, expected, views).
- * Legacy e2e aliases survive: `library-tabs` (hidden span),
- * `library-tab-N` (library rows), `library-tab-add`, `rail-dataset`,
- * `rail-terminology`, `nav-rail`, and the `.rail-badge.*` classes.
+ * REORG phase 6d — maps-style nav. L1: an icon strip, one button per
+ * section (testid `nav-toggle-{id}`; clicking the active section
+ * collapses the rail). L2: a slide-out panel hosting exactly ONE
+ * DrawerSection at a time (App defaults it to Tests so `dataset-loaded`
+ * stays the visible boot signal). The drawer header caret closes the
+ * panel (`nav-close-{id}`). Legacy e2e aliases survive: `library-tabs`
+ * (hidden span), `library-tab-N`, `library-tab-add`, `rail-terminology`,
+ * `rail-collapse`, `nav-rail`, and the `.rail-badge.*` classes.
  */
 
 export interface NavRailSectionModel {
   title: string;
   items: NavItem[];
   count: number;
-  expanded: boolean;
   filter: string;
   showFilter?: boolean;
 }
@@ -29,6 +31,16 @@ const SECTION_ORDER: NavSectionId[] = [
   "views",
 ];
 
+const SECTION_GLYPHS: Record<NavSectionId, string> = {
+  measures: "M",
+  libraries: "L",
+  valuesets: "V",
+  parameters: "P",
+  tests: "▦",
+  expected: "E",
+  views: "◇",
+};
+
 function rowTestId(item: NavItem, index: number): string {
   if (item.kind === "library") {
     return `library-tab-${item.meta?.index ?? index}`;
@@ -38,8 +50,8 @@ function rowTestId(item: NavItem, index: number): string {
 
 export function NavRail({
   sections,
-  onToggleSection,
-  onPopSection,
+  navPanel,
+  onNavPanelChange,
   onFilterSection,
   onItemSelect,
   onItemDoubleClick,
@@ -52,13 +64,12 @@ export function NavRail({
   onAddLibrary,
   onAddView,
   onAddExpected,
-  railCollapsed,
-  onRailCollapse,
   testsSlot,
 }: {
   sections: Record<NavSectionId, NavRailSectionModel>;
-  onToggleSection: (id: NavSectionId) => void;
-  onPopSection: (id: NavSectionId) => void;
+  /** The single open section (null = collapsed rail). */
+  navPanel: NavSectionId | null;
+  onNavPanelChange: (id: NavSectionId | null) => void;
   onFilterSection: (id: NavSectionId, v: string) => void;
   onItemSelect: (item: NavItem) => void;
   onItemDoubleClick: (item: NavItem) => void;
@@ -71,76 +82,97 @@ export function NavRail({
   onAddLibrary: () => void;
   onAddView: () => void;
   onAddExpected: () => void;
-  railCollapsed: boolean;
-  onRailCollapse: () => void;
   testsSlot?: ReactNode;
 }) {
+  const panelId = navPanel;
+  const sec = panelId ? sections[panelId] : null;
+  const actions =
+    panelId === "libraries" ? (
+      <button
+        className="nav-add-btn"
+        data-testid="library-tab-add"
+        title="add library"
+        onClick={onAddLibrary}
+      >
+        +
+      </button>
+    ) : panelId === "views" ? (
+      <button
+        className="nav-add-btn"
+        data-testid="nav-add-views"
+        title="new ViewDefinition"
+        onClick={onAddView}
+      >
+        +
+      </button>
+    ) : panelId === "expected" ? (
+      <button
+        className="nav-add-btn"
+        data-testid="nav-add-expected"
+        title="author expected results"
+        onClick={onAddExpected}
+      >
+        +
+      </button>
+    ) : undefined;
   return (
     <nav
-      className={`nav-rail ${railCollapsed ? "collapsed" : ""}`}
+      className={`nav-rail ${panelId ? "" : "collapsed"}`}
       data-testid="nav-rail"
       aria-label="workspace navigation"
     >
-      <div className="rail-header">
-        <span className="rail-label">Workspace</span>
-        <button
-          className="rail-collapse-btn"
-          data-testid="rail-collapse"
-          title={railCollapsed ? "expand rail" : "collapse rail"}
-          onClick={onRailCollapse}
-        >
-          {railCollapsed ? "»" : "«"}
-        </button>
-      </div>
       {/* Legacy alias: e2e greps `^=library-tab-` — the wrapper keeps the
           per-item testid, this hidden span keeps the container testid. */}
       <span hidden data-testid="library-tabs" />
-      {SECTION_ORDER.map((id) => {
-        const sec = sections[id];
-        const showFilter = sec.showFilter !== false;
-        return (
-          <DrawerSection
+      <div className="rail-strip">
+        <div className="rail-header">
+          <button
+            className="rail-collapse-btn"
+            data-testid="rail-collapse"
+            title={panelId ? "collapse rail" : "expand rail"}
+            onClick={() => onNavPanelChange(panelId ? null : "tests")}
+          >
+            {panelId ? "«" : "»"}
+          </button>
+        </div>
+        {SECTION_ORDER.map((id) => (
+          <button
             key={id}
-            id={id}
+            className={`rail-item ${panelId === id ? "active" : ""}`}
+            data-testid={`nav-toggle-${id}`}
+            title={sections[id].title}
+            onClick={() => onNavPanelChange(panelId === id ? null : id)}
+          >
+            <span className="rail-glyph">{SECTION_GLYPHS[id]}</span>
+            <span className="rail-name">{sections[id].title}</span>
+          </button>
+        ))}
+        <div className="rail-sep" />
+        <button
+          className={`rail-item ${panelId === "valuesets" ? "active" : ""}`}
+          data-testid="rail-terminology"
+          title="Terminology (ValueSets)"
+          onClick={() => onNavPanelChange("valuesets")}
+        >
+          <span className="rail-glyph">Ⓣ</span>
+          <span className="rail-name">Terminology</span>
+        </button>
+      </div>
+      {panelId && sec && (
+        <div className="nav-panel">
+          <DrawerSection
+            key={panelId}
+            id={panelId}
             title={sec.title}
             count={sec.count}
-            expanded={sec.expanded && !railCollapsed}
-            onToggle={() => onToggleSection(id)}
+            expanded
+            onToggle={() => onNavPanelChange(null)}
             filter={sec.filter}
-            onFilter={(v) => onFilterSection(id, v)}
-            showFilter={showFilter}
-            actions={
-              id === "libraries" ? (
-                <button
-                  className="nav-add-btn"
-                  data-testid="library-tab-add"
-                  title="add library"
-                  onClick={onAddLibrary}
-                >
-                  +
-                </button>
-              ) : id === "views" ? (
-                <button
-                  className="nav-add-btn"
-                  data-testid="nav-add-views"
-                  title="new ViewDefinition"
-                  onClick={onAddView}
-                >
-                  +
-                </button>
-              ) : id === "expected" ? (
-                <button
-                  className="nav-add-btn"
-                  data-testid="nav-add-expected"
-                  title="new expected MeasureReport"
-                  onClick={onAddExpected}
-                >
-                  +
-                </button>
-              ) : undefined
-            }
+            onFilter={(v) => onFilterSection(panelId, v)}
+            showFilter={sec.showFilter !== false}
+            actions={actions}
           >
-            {sec.items.length === 0 && id !== "tests" && (
+            {sec.items.length === 0 && panelId !== "tests" && (
               <div className="nav-empty">none</div>
             )}
             {sec.items.map((item, i) => (
@@ -159,31 +191,10 @@ export function NavRail({
                 onRenameCancel={onRenameCancel}
               />
             ))}
-            {id === "tests" && testsSlot}
+            {panelId === "tests" && testsSlot}
           </DrawerSection>
-        );
-      })}
-      <div className="rail-sep" />
-      {/* Quick buttons POP their drawer open (never toggle): with the rail
-          collapsed a toggle would silently re-hide an already-open body. */}
-      <button
-        className={`rail-item ${sections.tests.expanded && !railCollapsed ? "active" : ""}`}
-        data-testid="rail-dataset"
-        title="Resources (Tests drawer)"
-        onClick={() => onPopSection("tests")}
-      >
-        <span className="rail-glyph">▦</span>
-        <span className="rail-name">Resources</span>
-      </button>
-      <button
-        className={`rail-item ${sections.valuesets.expanded && !railCollapsed ? "active" : ""}`}
-        data-testid="rail-terminology"
-        title="Terminology (ValueSets drawer)"
-        onClick={() => onPopSection("valuesets")}
-      >
-        <span className="rail-glyph">Ⓣ</span>
-        <span className="rail-name">Terminology</span>
-      </button>
+        </div>
+      )}
     </nav>
   );
 }

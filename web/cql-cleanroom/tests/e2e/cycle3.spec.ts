@@ -61,6 +61,7 @@ test.describe("cleanroom cycle-3 capabilities", () => {
     await bootReady(page);
 
     // open a new tab with a distinctive name via the editor
+    await page.click('[data-testid=nav-toggle-libraries]');
     await page.click('[data-testid=library-tab-add]');
     await page.waitForSelector('[data-testid=library-tab-1]', { timeout: 10_000 });
 
@@ -73,6 +74,7 @@ test.describe("cleanroom cycle-3 capabilities", () => {
     // hard reload: fragment must restore BOTH tabs
     await page.reload();
     await page.waitForSelector('.version-badge', { timeout: 150_000 });
+    await page.click('[data-testid=nav-toggle-libraries]');
     await page.waitForSelector('[data-testid=library-tab-1]', { timeout: 30_000 });
     const tabCount = await page.locator('[data-testid^=library-tab-]').count();
     console.log("SHARE_RESTORE_TABS:", tabCount);

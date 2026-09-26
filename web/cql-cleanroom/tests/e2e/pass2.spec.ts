@@ -20,6 +20,8 @@ test.describe("nav rail", () => {
   test("rail replaces the tab-strip; library testids live in the rail", async ({ page }) => {
     await bootReady(page);
     await expect(page.locator("[data-testid=nav-rail]")).toBeVisible();
+    // REORG 6d: one nav panel at a time — open Libraries.
+    await page.click("[data-testid=nav-toggle-libraries]");
     await expect(page.locator("[data-testid=nav-rail] [data-testid=library-tab-0]")).toBeVisible();
     await expect(page.locator("[data-testid=nav-rail] [data-testid=library-tab-add]")).toBeVisible();
     // The RESULTS tab strip stays; the LIBRARY tab-strip container
@@ -30,6 +32,7 @@ test.describe("nav rail", () => {
   test("entrypoint marker defaults to the first library; dbl-click moves it", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
+    await page.click("[data-testid=nav-toggle-libraries]");
     await page.click("[data-testid=library-tab-add]");
     await page.waitForSelector("[data-testid=library-tab-1]");
     // entrypoint badge is on library 0 by default
@@ -46,6 +49,7 @@ test.describe("nav rail", () => {
     await page.waitForSelector("[data-testid=dataset-loaded]");
 
     // Add a second library whose IPP differs (male instead of female).
+    await page.click("[data-testid=nav-toggle-libraries]");
     await page.click("[data-testid=library-tab-add]");
     await page.waitForSelector("[data-testid=library-tab-1]");
     await page.click("[data-testid=library-tab-1]");
@@ -89,6 +93,7 @@ define "Has Name":
   test("parse-error badge appears on a broken library", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
+    await page.click("[data-testid=nav-toggle-libraries]");
     await page.click("[data-testid=library-tab-add]");
     await page.waitForSelector("[data-testid=library-tab-1]");
     await page.click("[data-testid=library-tab-1]");
