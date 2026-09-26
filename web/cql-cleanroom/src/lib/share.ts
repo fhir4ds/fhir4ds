@@ -16,12 +16,18 @@ export interface SharePayloadLibrary {
 
 export interface SharePayload {
   format: "cql-cleanroom-share";
-  version: 1;
+  /**
+   * WORKBENCH_V6: v2 adds the ACTIVE measure resource (never datasets,
+   * expected reports, or view defs — the 100 KB cap stays lean).
+   * v1 payloads (no measure) decode unchanged.
+   */
+  version: 1 | 2;
   libraries: SharePayloadLibrary[];
   activeIndex?: number | null;
   outputColumns?: Record<string, string> | null;
   parameters?: Record<string, unknown> | null;
   cases?: unknown | null;
+  measure?: Record<string, unknown> | null;
 }
 
 const MAX_FRAGMENT_BYTES = 100 * 1024;
@@ -69,7 +75,10 @@ export function decodeShareFragment(hash: string): SharePayload | null {
   try {
     const json = strFromU8(inflateSync(fromBase64(b64)));
     const payload = JSON.parse(json) as SharePayload;
-    if (payload?.format !== "cql-cleanroom-share" || payload.version !== 1) {
+    if (
+      payload?.format !== "cql-cleanroom-share" ||
+      (payload.version !== 1 && payload.version !== 2)
+    ) {
       return null;
     }
     if (!Array.isArray(payload.libraries) || payload.libraries.length === 0) {

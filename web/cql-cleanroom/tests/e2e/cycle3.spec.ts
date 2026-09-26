@@ -24,8 +24,10 @@ async function setMaleLibrary(page: import("@playwright/test").Page) {
 test.describe("cleanroom cycle-3 capabilities", () => {
   test("run diff highlights changed cells in the output table", async ({ page }) => {
     await bootReady(page);
-    await page.click('[data-testid=workspace-reset]');
-    await page.waitForTimeout(600);
+    // NO reset here: each test gets a fresh IndexedDB context, and a
+    // reset landing between the boot auto-eval's history append and the
+    // edit wipes the diff baseline (photo-finish race — the male run
+    // would diff against nothing). Boot state == reset state.
 
     // 1. first evaluation (auto) — female logic; p1 IPP true
     await page.waitForSelector('[data-testid=results-table]', { timeout: 90_000 });

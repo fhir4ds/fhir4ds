@@ -32,6 +32,11 @@ import { FhirpathPane } from "./components/FhirpathPane";
 import type { RunEntry } from "./state/workspace";
 import { RUN_HISTORY_CAP } from "./state/workspace";
 import {
+  casesFromReports,
+  expectedMapFromReports,
+  reportsFromExpectedMap,
+} from "./lib/expectedReports";
+import {
   appendRun,
   artifactFromRows,
   datasetHash as computeDatasetHash,
@@ -47,8 +52,12 @@ import {
   exportWorkspaceZip,
   importWorkspaceZip,
   loadWorkspace,
+  newLibraryId,
+  newMeasureId,
   saveWorkspace,
+  withLibraryIds,
   type WorkspaceLibrary,
+  type WorkspaceMeasureEntry,
 } from "./state/workspace";
 
 // e2e bridge: the app's singleton worker, request/response correlated by id
@@ -85,6 +94,11 @@ const DEFAULT_DATASET_RESOURCES: Array<Record<string, unknown>> = [
   { resourceType: "Patient", id: "p2", gender: "male", name: [{ given: ["Bob"] }] },
   { resourceType: "Patient", id: "p3", gender: "female" },
 ];
+
+// Stable empty bindings — ResultsPane's auto-eval effect keys on the
+// parameters object; a fresh {} per render would re-arm the 2s debounce
+// forever (each auto-run then clobbers the run-diff baseline).
+const EMPTY_PARAM_VALUES: Record<string, string> = {};
 
 const DEFAULT_MEASURE: Record<string, unknown> = {
   resourceType: "Measure",
@@ -182,15 +196,28 @@ function populationCodesFromMeasure(
 
 export default function App() {
   const boot = useBootProgress();
+  // WORKBENCH_V6: collections + active-measure selectors. Panes keep
+  // their singleton-shaped props via the derived values below
+  // (measure / paramValues / expectedValues / entrypoint index).
   const [libraries, setLibraries] = useState<WorkspaceLibrary[]>([
-    { name: "CleanroomDemo", text: DEFAULT_CQL },
+    { id: "lib_0", name: "CleanroomDemo", text: DEFAULT_CQL },
   ]);
+  const [measures, setMeasures] = useState<WorkspaceMeasureEntry[]>([
+    { id: "msr_0", mainLibraryId: "lib_0", resource: DEFAULT_MEASURE },
+  ]);
+  const [activeMeasureId, setActiveMeasureId] = useState<string | null>("msr_0");
+  const [expectedReports, setExpectedReports] = useState<
+    Record<string, Array<Record<string, unknown>>>
+  >({});
+  const [viewDefs, setViewDefs] = useState<
+    Array<{ id: string; name: string; resource: Record<string, unknown> }>
+  >([]);
+  const [paramBindings, setParamBindings] = useState<
+    Record<string, Record<string, string>>
+  >({});
   const [activeTab, setActiveTab] = useState(0);
-  // PASS2 G1: entrypoint decouples evaluated root from edited tab.
-  const [entrypoint, setEntrypoint] = useState(0);
   // Parameters drawer: declared names derive from the ENTRYPOINT CQL;
   // values are user-bound and flow to every evaluate/tests/explain call.
-  const [paramValues, setParamValues] = useState<Record<string, string>>({});
   const [paramsOpen, setParamsOpen] = useState(false);
   // Per-library parse-error map (rail badges), fed by EditorPane
   // diagnostics for the active library. activeTabRef mirrors activeTab
@@ -202,15 +229,61 @@ export default function App() {
   const [dataset, setDataset] = useState<DatasetSpec | null>({
     resources: DEFAULT_DATASET_RESOURCES,
   });
-  // Measure resource: population-mapping authority (INV-3). NULL when
-  // the workspace has none — evaluation falls back to raw define names.
-  const [measure, setMeasure] = useState<Record<string, unknown> | null>(
-    DEFAULT_MEASURE,
-  );
 
-  const [expectedValues, setExpectedValues] = useState<{
-    [pid: string]: { [code: string]: boolean };
-  } | null>(null);
+  // --- v6 selectors: singleton-facing views over the collections ------
+  const activeMeasureEntry =
+    measures.find((m) => m.id === activeMeasureId) ?? measures[0] ?? null;
+  const measure = activeMeasureEntry?.resource ?? null;
+  // entrypoint index = position of the active measure's main library
+  // (drives eval + the rail dot; falls back to the first library).
+  const entrypoint = Math.max(
+    0,
+    libraries.findIndex((l) => l.id === activeMeasureEntry?.mainLibraryId),
+  );
+  const paramValues = useMemo(
+    () => paramBindings[activeMeasureEntry?.id ?? ""] ?? EMPTY_PARAM_VALUES,
+    [paramBindings, activeMeasureEntry?.id],
+  );
+  const expectedValues = useMemo(
+    () => expectedMapFromReports(expectedReports[activeMeasureEntry?.id ?? ""]),
+    [expectedReports, activeMeasureEntry?.id],
+  );
+  const updateParamValues = (next: Record<string, string>) => {
+    if (!activeMeasureEntry) return;
+    setParamBindings((pb) => ({ ...pb, [activeMeasureEntry.id]: next }));
+  };
+  const updateExpectedValues = (
+    next: { [pid: string]: { [code: string]: boolean } } | null,
+  ) => {
+    if (!activeMeasureEntry) return;
+    setExpectedReports((er) => ({
+      ...er,
+      [activeMeasureEntry.id]: reportsFromExpectedMap(next),
+    }));
+  };
+  /** Replace the active measure's FHIR resource (identity keys kept). */
+  const updateActiveMeasure = (
+    resource: Record<string, unknown> | null,
+  ) => {
+    if (!activeMeasureEntry) return;
+    // resource === null clears the populations (MeasurePane bootstrap
+    // mode) but keeps the entry — it still pins the entrypoint library.
+    setMeasures((ms) =>
+      ms.map((m) =>
+        m.id === activeMeasureEntry.id ? { ...m, resource } : m,
+      ),
+    );
+  };
+  /** Point the active measure's entry library at libraries[i]. */
+  const setEntrypoint = (i: number) => {
+    const lib = libraries[i];
+    if (!lib || !activeMeasureEntry) return;
+    setMeasures((ms) =>
+      ms.map((m) =>
+        m.id === activeMeasureEntry.id ? { ...m, mainLibraryId: lib.id } : m,
+      ),
+    );
+  };
   // MeasureReports from the last evaluation (View drawer default source).
   const [lastReports, setLastReports] = useState<
     Array<Record<string, unknown>> | null
@@ -325,10 +398,14 @@ export default function App() {
           // server-side without a tab
         }
       }
-      setLibraries([{ name, text: cql }, ...includeTabs]);
+      const nextLibs = withLibraryIds([{ name, text: cql }, ...includeTabs]);
+      setLibraries(nextLibs);
       setActiveTab(0);
-      setEntrypoint(0);
-      setMeasure(measure);
+      const msrId = newMeasureId([]);
+      setMeasures([
+        { id: msrId, mainLibraryId: nextLibs[0].id, resource: measure },
+      ]);
+      setActiveMeasureId(msrId);
       setTerminology({ valuesets: Array.isArray(valuesets) ? valuesets : [] });
       const resources = ndjson
         .split("\n")
@@ -349,7 +426,9 @@ export default function App() {
           defaults[pm[1]] = "2026-01-01T00:00:00.0..2026-12-31T23:59:59.999";
         }
       }
-      if (Object.keys(defaults).length) setParamValues(defaults);
+      if (Object.keys(defaults).length && msrId) {
+        setParamBindings((pb) => ({ ...pb, [msrId]: defaults }));
+      }
       setStatusNote(`loaded example ${example}: ${resources.length} resources`);
     } catch (e) {
       setStatusNote(`example load failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -371,10 +450,26 @@ export default function App() {
   useEffect(() => {
     const shared = decodeShareFragment(location.hash);
     if (shared) {
-      setLibraries(
+      const sharedLibs = withLibraryIds(
         shared.libraries.map((l) => ({ name: l.name, text: l.text })),
       );
-      setActiveTab(Math.min(shared.activeIndex ?? 0, shared.libraries.length - 1));
+      setLibraries(sharedLibs);
+      const activeIdx = Math.min(
+        shared.activeIndex ?? 0,
+        shared.libraries.length - 1,
+      );
+      setActiveTab(activeIdx);
+      if (shared.measure) {
+        const msrId = newMeasureId([]);
+        setMeasures([
+          {
+            id: msrId,
+            mainLibraryId: sharedLibs[activeIdx]?.id ?? sharedLibs[0].id,
+            resource: shared.measure,
+          },
+        ]);
+        setActiveMeasureId(msrId);
+      }
       setRestored(true);
       return;
     }
@@ -389,8 +484,18 @@ export default function App() {
             });
           }
         }
-        if (ws?.measure) {
-          setMeasure(ws.measure);
+        if (ws?.measures?.length) {
+          setMeasures(ws.measures);
+          setActiveMeasureId(ws.activeMeasureId ?? ws.measures[0].id);
+        }
+        if (ws?.expectedReports) {
+          setExpectedReports(ws.expectedReports);
+        }
+        if (ws?.viewDefs?.length) {
+          setViewDefs(ws.viewDefs);
+        }
+        if (ws?.paramBindings) {
+          setParamBindings(ws.paramBindings);
         }
         if (ws?.viewConfig) {
           setViewConfig(ws.viewConfig);
@@ -409,9 +514,6 @@ export default function App() {
         if (ws && ws.terminology?.valuesets?.length) {
           setTerminology(ws.terminology);
         }
-        if (ws && ws.paramValues && Object.keys(ws.paramValues).length) {
-          setParamValues(ws.paramValues);
-        }
       })
       .catch(() => undefined)
       .finally(() => {
@@ -428,35 +530,38 @@ export default function App() {
         dataset: dataset?.resources?.length
           ? { resources: dataset.resources as unknown[] }
           : null,
-        cases: expectedValues
-          ? (Object.entries(expectedValues).flatMap(([pid, codes]) =>
-              Object.entries(codes).map(([code, expect]) => ({
-                patient: pid,
-                population: code,
-                expect,
-              })),
+        // Legacy cases stay in sync with authored expectedReports
+        // (v5 zip interop); the reports themselves are first-class.
+        cases: expectedReports[activeMeasureEntry?.id ?? ""]?.length
+          ? (casesFromReports(
+              expectedReports[activeMeasureEntry?.id ?? ""],
             ) as unknown[])
           : null,
         prefs: {},
-        measure,
+        measures,
+        activeMeasureId,
+        expectedReports,
+        viewDefs,
+        paramBindings,
         viewConfig,
         runHistory,
         activeTabPref: resultsTab,
         terminology,
-        paramValues,
       }).catch(() => undefined);
     }, 800);
     return () => clearTimeout(t);
   }, [
     libraries,
     dataset,
-    measure,
-    expectedValues,
+    measures,
+    activeMeasureId,
+    expectedReports,
+    viewDefs,
+    paramBindings,
     viewConfig,
     runHistory,
     resultsTab,
     terminology,
-    paramValues,
     restored,
   ]);
 
@@ -488,43 +593,48 @@ export default function App() {
   // primary first, then the dependency closure of that library. Keeps
   // the exported Measure self-describing without touching the mapping.
   useEffect(() => {
-    if (!measure || !mainLib || !restored) return;
-    setMeasure((m) => {
-      if (!m) return m;
-      const closure = [mainLib.name];
-      // Cheap client-side closure via include declarations of each
-      // library below the entrypoint (worker round-trip is overkill
-      // for the common single-include case; the capability remains
-      // the authority at export time).
-      const byName = new Map(libraries.map((l) => [l.name, l]));
-      const seen = new Set([mainLib.name]);
-      const queue = [mainLib.name];
-      while (queue.length) {
-        const name = queue.shift()!;
-        const lib = byName.get(name);
-        if (!lib) continue;
-        const includes = [...lib.text.matchAll(/include\s+([A-Za-z][A-Za-z0-9_]*)/g)].map(
-          (mm) => mm[1],
-        );
-        for (const inc of includes) {
-          if (byName.has(inc) && !seen.has(inc)) {
-            seen.add(inc);
-            closure.push(inc);
-            queue.push(inc);
-          }
+    if (!measure || !mainLib || !restored || !activeMeasureEntry) return;
+    const closure = [mainLib.name];
+    // Cheap client-side closure via include declarations of each
+    // library below the entrypoint (worker round-trip is overkill
+    // for the common single-include case; the capability remains
+    // the authority at export time).
+    const byName = new Map(libraries.map((l) => [l.name, l]));
+    const seen = new Set([mainLib.name]);
+    const queue = [mainLib.name];
+    while (queue.length) {
+      const name = queue.shift()!;
+      const lib = byName.get(name);
+      if (!lib) continue;
+      const includes = [...lib.text.matchAll(/include\s+([A-Za-z][A-Za-z0-9_]*)/g)].map(
+        (mm) => mm[1],
+      );
+      for (const inc of includes) {
+        if (byName.has(inc) && !seen.has(inc)) {
+          seen.add(inc);
+          closure.push(inc);
+          queue.push(inc);
         }
       }
-      const libraryUrls = closure.map((n) => `urn:cleanroom:lib:${n}`);
-      const current = Array.isArray(m.library) ? (m.library as string[]) : [];
-      if (
-        current.length === libraryUrls.length &&
-        current.every((u, i) => u === libraryUrls[i])
-      ) {
-        return m; // unchanged
-      }
-      return { ...m, library: libraryUrls };
-    });
-  }, [entrypoint, libraries, mainLib, restored]);
+    }
+    const libraryUrls = closure.map((n) => `urn:cleanroom:lib:${n}`);
+    const current = Array.isArray(measure.library)
+      ? (measure.library as string[])
+      : [];
+    if (
+      current.length === libraryUrls.length &&
+      current.every((u, i) => u === libraryUrls[i])
+    ) {
+      return; // unchanged
+    }
+    setMeasures((ms) =>
+      ms.map((m) =>
+        m.id === activeMeasureEntry.id
+          ? { ...m, resource: { ...m.resource, library: libraryUrls } }
+          : m,
+      ),
+    );
+  }, [entrypoint, libraries, mainLib, restored, measure, activeMeasureEntry]);
 
 
   // G2: ValueSet declarations of the ACTIVE library (for the rail-linked
@@ -557,27 +667,43 @@ export default function App() {
   const addTab = () => {
     const name = `Library${libraries.length + 1}`;
     const text = `library ${name} version '1.0.0'\nusing FHIR version '4.0.1'\n`;
-    setLibraries((libs) => [...libs, { name, text }]);
+    const id = newLibraryId(libraries);
+    setLibraries((libs) => [...libs, { id, name, text }]);
     setActiveTab(libraries.length);
   };
 
   const closeTab = (i: number) => {
     if (libraries.length === 1) return;
+    const closed = libraries[i];
     setLibraries((libs) => libs.filter((_, idx) => idx !== i));
     setActiveTab((t) => (i < t ? t - 1 : Math.min(t, libraries.length - 2)));
-    setEntrypoint((e) => (i < e ? e - 1 : Math.min(e, libraries.length - 2)));
+    // Library ids are stable — only deleting the MAIN library re-pins
+    // the active measure (nearest neighbor keeps eval defined).
+    if (activeMeasureEntry && closed.id === activeMeasureEntry.mainLibraryId) {
+      const neighbor = libraries[i + 1] ?? libraries[i - 1];
+      if (neighbor) {
+        setMeasures((ms) =>
+          ms.map((m) =>
+            m.id === activeMeasureEntry.id
+              ? { ...m, mainLibraryId: neighbor.id }
+              : m,
+          ),
+        );
+      }
+    }
   };
 
 
   const shareLink = () => {
     const payload: SharePayload = {
       format: "cql-cleanroom-share",
-      version: 1,
+      version: 2,
       libraries: libraries.map((l) => ({ name: l.name, text: l.text })),
       activeIndex: activeTab,
       outputColumns: outputColumns,
       parameters: null,
       cases: null,
+      measure,
     };
     try {
       const url = buildShareUrl(payload);
@@ -630,10 +756,21 @@ export default function App() {
         setStatusNote("package contained no readable CQL libraries");
         return;
       }
-      setLibraries(pkg.libraries.map((l) => ({ name: l.name, text: l.text })));
+      const nextLibs = withLibraryIds(
+        pkg.libraries.map((l) => ({ name: l.name, text: l.text })),
+      );
+      setLibraries(nextLibs);
       setActiveTab(0);
-      setEntrypoint(0);
-      if (pkg.measure) setMeasure(pkg.measure);
+      const msrId = newMeasureId([]);
+      setMeasures([
+        {
+          id: msrId,
+          mainLibraryId: nextLibs[0].id,
+          resource: pkg.measure ?? DEFAULT_MEASURE,
+        },
+      ]);
+      setActiveMeasureId(msrId);
+      setExpectedReports((er) => ({ ...er, [msrId]: [] }));
       if (pkg.warnings.length) {
         setStatusNote(`imported with ${pkg.warnings.length} warning(s): ${pkg.warnings[0]}`);
       } else {
@@ -650,22 +787,21 @@ export default function App() {
       dataset: dataset?.resources?.length
         ? { resources: dataset.resources as unknown[] }
         : null,
-      cases: expectedValues
-        ? (Object.entries(expectedValues).flatMap(([pid, codes]) =>
-            Object.entries(codes).map(([code, expect]) => ({
-              patient: pid,
-              population: code,
-              expect,
-            })),
+      cases: expectedReports[activeMeasureEntry?.id ?? ""]?.length
+        ? (casesFromReports(
+            expectedReports[activeMeasureEntry?.id ?? ""],
           ) as unknown[])
         : null,
       prefs: {},
-      measure,
+      measures,
+      activeMeasureId,
+      expectedReports,
+      viewDefs,
+      paramBindings,
       viewConfig,
       runHistory,
       activeTabPref: resultsTab,
       terminology,
-      paramValues,
     });
     const blob = new Blob([bytes as unknown as BlobPart], {
       type: "application/zip",
@@ -746,21 +882,23 @@ export default function App() {
           resources: state.dataset.resources as Record<string, unknown>[],
         });
       }
-      setMeasure(state.measure ?? DEFAULT_MEASURE);
+      if (state.measures.length) {
+        setMeasures(state.measures);
+        setActiveMeasureId(state.activeMeasureId ?? state.measures[0].id);
+      } else {
+        // No measure in the zip — keep a default entry so the mapping
+        // pane stays functional (v5 zips always carried one).
+        const msrId = newMeasureId([]);
+        setMeasures([
+          { id: msrId, mainLibraryId: state.libraries[0]?.id ?? "lib_0", resource: DEFAULT_MEASURE },
+        ]);
+        setActiveMeasureId(msrId);
+      }
+      setExpectedReports(state.expectedReports ?? {});
+      setViewDefs(state.viewDefs ?? []);
+      setParamBindings(state.paramBindings ?? {});
       setViewConfig(state.viewConfig ?? null);
       setTerminology(state.terminology ?? { valuesets: [] });
-      setParamValues(state.paramValues ?? {});
-      if (Array.isArray(state.cases)) {
-        const ev: { [pid: string]: { [code: string]: boolean } } = {};
-        for (const c of state.cases as Array<{ patient?: string; population?: string; expect?: boolean }>) {
-          if (typeof c?.patient === "string" && typeof c?.population === "string") {
-            ev[c.patient] = { ...(ev[c.patient] ?? {}), [c.population]: c.expect === true };
-          }
-        }
-        setExpectedValues(Object.keys(ev).length ? ev : null);
-      } else {
-        setExpectedValues(null);
-      }
     } catch (e) {
       console.error("workspace import failed", e);
     }
@@ -859,8 +997,7 @@ export default function App() {
           </button>
           <button
             data-testid="workspace-reset"
-            onClick={() => {
-              // Await the clear BEFORE setting state — fire-and-forget
+            onClick={() => {              // Await the clear BEFORE setting state — fire-and-forget
               // raced the debounced autosave, resurrecting stale prefs
               // (notably resultsTab) on the next reload.
               {
@@ -869,17 +1006,21 @@ export default function App() {
                 // THEN set defaults — let a slow IndexedDB clear land
                 // its .then() seconds later, clobbering any state that
                 // changed in between, e.g. an import.)
-                setLibraries([{ name: "CleanroomDemo", text: DEFAULT_CQL }]);
+                setLibraries([{ id: "lib_0", name: "CleanroomDemo", text: DEFAULT_CQL }]);
                 setActiveTab(0);
                 setDataset({ resources: DEFAULT_DATASET_RESOURCES });
-                setMeasure(DEFAULT_MEASURE);
-                setExpectedValues(null);
+                setMeasures([
+                  { id: "msr_0", mainLibraryId: "lib_0", resource: DEFAULT_MEASURE },
+                ]);
+                setActiveMeasureId("msr_0");
+                setExpectedReports({});
+                setViewDefs([]);
                 setLastReports(null);
                 setViewConfig(null);
                 setRunHistory([]);
                 setResultsTab("cql");
                 setCurrentRun(null);
-                setParamValues({});
+                setParamBindings({});
                 void clearWorkspace().catch(() => undefined);
               }
             }}
@@ -971,7 +1112,7 @@ export default function App() {
             onChange={(next) => {
               const vals: Record<string, string> = {};
               for (const p of next) vals[p.name] = p.value;
-              setParamValues(vals);
+              updateParamValues(vals);
             }}
             open={paramsOpen}
             onToggle={() => setParamsOpen((o) => !o)}
@@ -1109,7 +1250,7 @@ export default function App() {
                 main={main}
                 measure={measure}
                 onChange={(m) => {
-                  setMeasure(m);
+                  updateActiveMeasure(m);
                   setLastReports(null);
                 }}
               />
@@ -1132,7 +1273,7 @@ export default function App() {
                 outputColumns={outputColumns}
                 populationCodes={populationCodes}
                 expectedValues={expectedValues}
-                onExpectedValuesChange={setExpectedValues}
+                onExpectedValuesChange={updateExpectedValues}
                 measure={measure}
               />
             }
