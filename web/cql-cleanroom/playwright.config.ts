@@ -16,9 +16,12 @@ export default defineConfig({
     timeout: 30_000,
   },
   webServer: {
-    command: "npm run dev -- --port 5176 --strictPort",
+    // AGENTS.md doctrine: serve the BUILT dist via vite preview — vite
+    // dev misses drvfs file-watch events on WSL and serves stale
+    // transforms; preview reads dist at boot. Build before testing.
+    command: "npm run build && npm run preview -- --port 5176 --strictPort",
     port: 5176,
-    reuseExistingServer: true,
-    timeout: 60_000,
+    reuseExistingServer: !process.env.CI,
+    timeout: 240_000,
   },
 });

@@ -33,40 +33,20 @@ test.describe("cleanroom cycle-3 dataset editing", () => {
     console.log("PREFILL_ID:", idValue);
 
     // AUTO-SAVE: edit a field (gender male) — the source row is
-    // REPLACED (no append). Wait on the OBSERVABLE change (dataset
-    // resource flips to male), not the count (already 3 — instant-pass).
+    // REPLACED (no append). Wait on the OBSERVABLE change: p1's tree
+    // group hint flips from "— female, Ann" to "— male, Ann". (The old
+    // dataset-row count>=3 wait required every type group expanded;
+    // the tree defaults collapsed since the phase-2 nav reorg.)
     await page.fill('[data-testid=builder-field-gender]', "male");
     await page.waitForFunction(
-      () => {
-        const id = document.querySelector('[data-testid=builder-field-id]') as HTMLInputElement | null;
-        return id?.value === "p1"; // prefill intact
-      },
-      undefined,
-      { timeout: 5_000 },
-    ).catch(() => undefined);
-    await page.waitForFunction(
       () =>
-        (window as any).__cleanroom !== undefined &&
-        document.querySelectorAll("[data-testid^=dataset-row-]").length >= 3,
+        document
+          .querySelector("[data-testid=dataset-group-p1]")
+          ?.textContent?.includes("male") ?? false,
       undefined,
       { timeout: 30_000 },
     );
-    // The committed resource now reads male in the workspace: verify via
-    // the app state snapshot (IndexedDB-backed dataset renders rows).
-    await page.waitForFunction(
-      () => {
-        const rows = [...document.querySelectorAll("[data-testid^=dataset-row-]")];
-        const p1 = rows.find((r) => r.textContent?.includes("Patient/p1"));
-        return Boolean(p1);
-      },
-      undefined,
-      { timeout: 30_000 },
-    );
-    const edited = await page.evaluate(() => {
-      const rows = [...document.querySelectorAll("[data-testid^=dataset-row-]")];
-      return rows.some((r) => r.textContent?.includes("Patient/p1"));
-    });
-    console.log("EDIT_REPLACED:", edited);
+    console.log("EDIT_REPLACED: p1 hint now male");
 
     // Delete p1's row → 2 remain.
     await page.click('[data-testid=dataset-delete-0]');
@@ -85,6 +65,11 @@ test.describe("cleanroom cycle-3 dataset editing", () => {
     await page.waitForSelector(".version-badge", { timeout: 150_000 });
 
     // Build a female patient via the form; AUTO-SAVE commits it.
+    // WORKBENCH_REORG phase 5: the builder is a test editor tab now.
+    await page.click("[data-testid=dataset-add-new]");
+    await page.waitForSelector("[data-testid=builder-field-id]", {
+      timeout: 15_000,
+    });
     await page.fill('[data-testid=builder-field-id]', "px");
     await page.fill('[data-testid=builder-field-gender]', "female");
     // App boots with the DEFAULT demo dataset (3 resources) since the

@@ -11,6 +11,7 @@ export function DatasetPane({
   onDatasetChange,
   onEditResource,
   onAddForPatient,
+  onAddNew,
 }: {
   dataset: DatasetSpec | null;
   onDatasetChange: (ds: DatasetSpec | null) => void;
@@ -18,6 +19,8 @@ export function DatasetPane({
   onEditResource?: (index: number) => void;
   /** §3.2: per-patient `+` — builder opens with a Patient/<id> default. */
   onAddForPatient?: (patientId: string) => void;
+  /** WORKBENCH_REORG phase 5: fresh builder tab (builder lives in a test tab now). */
+  onAddNew?: () => void;
 }) {
   const [text, setText] = useState(DEFAULT_NDJSON);
   const [view, setView] = useState<"tree" | "raw">("tree");
@@ -156,6 +159,16 @@ export function DatasetPane({
             >
               Collapse all
             </button>
+            {onAddNew && (
+              <button
+                type="button"
+                data-testid="dataset-add-new"
+                onClick={onAddNew}
+                title="Open a new-resource builder tab"
+              >
+                + New
+              </button>
+            )}
           </div>
           <div className="dataset-tree" data-testid="dataset-tree">
             {groups

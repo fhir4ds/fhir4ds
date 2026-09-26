@@ -4,6 +4,9 @@ import { test } from "@playwright/test";
  * Resource Builder auto-save e2e (replaces the manual validate→add flow):
  * a valid form commits to the dataset ~2s after it settles; edits to an
  * existing row REPLACE it; invalid drafts never commit.
+ *
+ * WORKBENCH_REORG phase 5: the builder lives in a TEST EDITOR TAB now —
+ * "New resource" opens a fresh one; dataset-edit-0 opens a prefilled one.
  */
 test("builder: valid form auto-commits a Patient", async ({ page }) => {
   await page.goto("/");
@@ -13,7 +16,13 @@ test("builder: valid form auto-commits a Patient", async ({ page }) => {
   await page.waitForTimeout(500);
   await page.waitForSelector("[data-testid=dataset-loaded]", { timeout: 60_000 });
 
-  // Builder defaults to Patient. Fill id + gender + birthDate.
+  // Fresh builder tab (defaults to Patient).
+  await page.click("[data-testid=dataset-add-new]");
+  await page.waitForSelector("[data-testid=builder-field-id]", {
+    timeout: 15_000,
+  });
+
+  // Fill id + gender + birthDate.
   await page.fill('[data-testid=builder-field-id]', 'built-1');
   await page.fill('[data-testid=builder-field-gender]', 'female');
   await page.fill('[data-testid=builder-field-birthDate]', '1990-05-04');
@@ -51,7 +60,11 @@ test("builder: invalid draft never commits", async ({ page }) => {
   await page.waitForTimeout(500);
   await page.waitForSelector("[data-testid=dataset-loaded]", { timeout: 60_000 });
 
-  // Raw JSON mode with a resource missing resourceType.
+  // Fresh builder tab, then Raw JSON mode with a resource missing resourceType.
+  await page.click("[data-testid=dataset-add-new]");
+  await page.waitForSelector("[data-testid=builder-raw-toggle]", {
+    timeout: 15_000,
+  });
   await page.check('[data-testid=builder-raw-toggle]');
   await page.fill('[data-testid=builder-raw-text]', '{"id": "no-type"}');
 

@@ -145,7 +145,11 @@ body { margin: 0; }
 .bottom-pane { flex: 1; min-height: 260px; background: #16191e; border-top: 1px solid #2d333b; overflow: auto; }
 .bottom-pane .pane { height: 100%; }
 .app { display: flex; flex-direction: column; height: 100vh; }
-.app-main { display: grid; grid-template-columns: var(--nav-w, 264px) minmax(380px, 1.1fr) minmax(440px, 1.1fr) minmax(300px, 0.9fr); gap: 10px; padding: 10px; overflow: auto; flex: 1; align-items: start; }
+/* WORKBENCH_REORG phase 5: two-column shell — editor(+console) col,
+   6px splitter, report col. --col1-fr is dragged/persisted by <Splitter>. */
+.app-main { display: grid; grid-template-columns: var(--nav-w, 264px) minmax(0, var(--col1-fr, 1.1fr)) 6px minmax(0, 1fr); gap: 10px; padding: 10px; overflow: auto; flex: 1; align-items: start; }
+.splitter { align-self: stretch; min-height: 480px; border-radius: 3px; background: #232a35; cursor: col-resize; touch-action: none; }
+.splitter:hover, .splitter.dragging { background: #3b82c4; }
 
 /* PASS2 G1: left navigation rail */
 .nav-rail {

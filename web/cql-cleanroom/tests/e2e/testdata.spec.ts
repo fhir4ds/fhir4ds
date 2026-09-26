@@ -69,6 +69,12 @@ test.describe("builder v2 recursion", () => {
     await bootReady(page);
     await resetWorkspace(page);
 
+    // WORKBENCH_REORG phase 5: the builder is a test editor tab now.
+    await page.click("[data-testid=dataset-add-new]");
+    await page.waitForSelector("[data-testid=builder-field-id]", {
+      timeout: 15_000,
+    });
+
     // Patient form: id + name (HumanName object) -> family + given[0..*].
     await page.fill("[data-testid=builder-field-id]", "p-tree-1");
     await page.click("[data-testid=builder-add-name]");

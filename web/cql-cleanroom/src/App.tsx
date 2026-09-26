@@ -58,6 +58,7 @@ import {
 } from "./lib/runHistory";
 import type { ResultsTab } from "./components/ResultsPane";
 import { GraphPane } from "./components/GraphPane";
+import { Splitter } from "./components/Splitter";
 import { EditorTabs } from "./components/tabs/EditorTabs";
 import { TabHost } from "./components/tabs/hosts";
 import {
@@ -404,7 +405,11 @@ export default function App() {
   const [builderPrefill, setBuilderPrefill] = useState<{
     resource: Record<string, unknown>;
     nonce: number;
+    sourceIndex?: number;
   } | null>(null);
+  // WORKBENCH_REORG phase 5: editor/report column split (fr units),
+  // persisted in prefs.layout so reloads keep the user's proportions.
+  const [col1Fr, setCol1Fr] = useState(1.1);
   // §3.2: per-patient `+` context — subject-class pickers default to
   // Patient/<id> (builder v2 consumes; v1 ignores gracefully).
   const [builderContext, setBuilderContext] = useState<{
@@ -577,6 +582,11 @@ export default function App() {
         if (ws && ws.terminology?.valuesets?.length) {
           setTerminology(ws.terminology);
         }
+        const layout = (ws?.prefs as { layout?: { col1Fr?: unknown } } | null)
+          ?.layout;
+        if (typeof layout?.col1Fr === "number" && layout.col1Fr >= 0.3) {
+          setCol1Fr(Math.min(2.5, layout.col1Fr));
+        }
       })
       .catch(() => undefined)
       .finally(() => {
@@ -600,7 +610,7 @@ export default function App() {
               expectedReports[activeMeasureEntry?.id ?? ""],
             ) as unknown[])
           : null,
-        prefs: {},
+        prefs: { layout: { col1Fr } },
         measures,
         activeMeasureId,
         expectedReports,
@@ -626,6 +636,7 @@ export default function App() {
     resultsTab,
     terminology,
     restored,
+    col1Fr,
   ]);
 
   const active = libraries[activeTab] ?? libraries[0];
@@ -1245,6 +1256,19 @@ export default function App() {
         tabLabels[t.id] =
           viewDefs.find((v) => v.id === t.resourceId)?.name || t.resourceId;
         break;
+      case "test": {
+        const m = /^row-(\d+)$/.exec(t.resourceId);
+        if (m) {
+          const idx = Number(m[1]);
+          const rt = (
+            dataset?.resources?.[idx] as { resourceType?: unknown } | undefined
+          )?.resourceType;
+          tabLabels[t.id] = `${typeof rt === "string" ? rt : "resource"} #${idx + 1}`;
+        } else {
+          tabLabels[t.id] = "New resource";
+        }
+        break;
+      }
       default:
         tabLabels[t.id] = t.resourceId;
     }
@@ -1480,7 +1504,12 @@ export default function App() {
       <main
         className="app-main"
         data-testid="app-main"
-        style={{ "--nav-w": railCollapsed ? "52px" : "264px" } as React.CSSProperties}
+        style={
+          {
+            "--nav-w": railCollapsed ? "52px" : "264px",
+            "--col1-fr": `${col1Fr}fr`,
+          } as React.CSSProperties
+        }
       >
         <NavRail
           sections={{
@@ -1529,11 +1558,19 @@ export default function App() {
                     nonce: (prev?.nonce ?? 0) + 1,
                     sourceIndex: index,
                   }));
+                  openEditorTab("test", `row-${index}`);
                 }
               }}
               onAddForPatient={(patientId) => {
                 setBuilderPrefill(null);
-                setBuilderContext({ patientId, nonce: Date.now() });
+                const nonce = Date.now();
+                setBuilderContext({ patientId, nonce });
+                openEditorTab("test", `new-${nonce}`);
+              }}
+              onAddNew={() => {
+                setBuilderPrefill(null);
+                setBuilderContext(null);
+                openEditorTab("test", `new-${Date.now()}`);
               }}
             />
           }
@@ -1672,6 +1709,8 @@ export default function App() {
                     setDataset(
                       dataset ? { ...dataset, resources } : { resources },
                     );
+                    setBuilderPrefill(null);
+                    setBuilderContext(null);
                   }}
                   onReplaceResource={(index, resource) => {
                     const resources = [...(dataset?.resources ?? [])];
@@ -1695,6 +1734,7 @@ export default function App() {
             />
           )}
         </div>
+        <Splitter col1Fr={col1Fr} onChange={setCol1Fr} />
         <div className="pane-col run-col">
           <ResultsPane
             libraries={mainLibs}
@@ -1800,24 +1840,6 @@ export default function App() {
                 measure={measure}
               />
             }
-          />
-        </div>
-        <div className="pane-col side-col">
-          <ResourceBuilderPane
-            onAddResource={(resource) => {
-              const resources = [...(dataset?.resources ?? []), resource];
-              setDataset(dataset ? { ...dataset, resources } : { resources });
-              setBuilderPrefill(null);
-              setBuilderContext(null);
-            }}
-            onReplaceResource={(index, resource) => {
-              const resources = [...(dataset?.resources ?? [])];
-              resources[index] = resource;
-              setDataset(dataset ? { ...dataset, resources } : { resources });
-            }}
-            prefill={builderPrefill}
-            context={builderContext}
-            dataset={dataset}
           />
         </div>
       </main>

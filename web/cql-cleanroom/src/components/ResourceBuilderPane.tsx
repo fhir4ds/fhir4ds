@@ -78,6 +78,11 @@ export function ResourceBuilderPane({
   const [staleOk, setStaleOk] = useState(true);
 
   const contextNonce = context?.nonce ?? 0;
+  // The builder can mount LATE (it lives in a test editor tab since
+  // WORKBENCH_REORG phase 5), so the mount-time schema fetch races the
+  // user's first keystrokes. Once anything is authored, the arriving
+  // schema must NOT clobber the form with an empty one.
+  const dirtyRef = useRef(false);
   useEffect(() => {
     // A prefill targeting this exact type owns the schema fetch + form
     // population; the type-change effect would otherwise re-fetch and
@@ -102,8 +107,12 @@ export function ResourceBuilderPane({
       if (!cancelled && env.resource_type === resourceType) {
         setTree(env);
         setForm((f) => {
-          void f;
-          const fresh = emptyForm(resourceType);
+          // Late schema arrival must not clobber keystrokes made while
+          // the fetch was in flight — keep authored values, but still
+          // seed empty context references below.
+          const fresh = dirtyRef.current
+            ? { ...f, resourceType } // keep authored values, adopt the new type
+            : emptyForm(resourceType);
           if (context && contextNonce !== 0 && resourceType !== "Patient") {
             const refNode = (env.root?.children ?? []).find(
               (c) =>
@@ -113,7 +122,7 @@ export function ResourceBuilderPane({
                 c.type === "Reference" &&
                 (c.reference_targets ?? []).includes("Patient"),
             );
-            if (refNode) {
+            if (refNode && !fresh.values[refNode.name]) {
               fresh.values[refNode.name] = {
                 kind: "ref",
                 reference: `Patient/${context.patientId}`,
@@ -283,7 +292,10 @@ export function ResourceBuilderPane({
             data-testid="builder-type"
             value={resourceType}
             disabled={useRaw}
-            onChange={(e) => setResourceType(e.target.value)}
+            onChange={(e) => {
+              dirtyRef.current = false; // deliberate type switch → fresh form
+              setResourceType(e.target.value);
+            }}
           >
             {BUILDER_RESOURCE_TYPES.map((t: string) => (
               <option key={t} value={t}>
@@ -303,6 +315,7 @@ export function ResourceBuilderPane({
           value={rawText}
           onChange={(e) => {
             setRawText(e.target.value);
+            dirtyRef.current = true;
             invalidate();
           }}
         />
@@ -318,6 +331,7 @@ export function ResourceBuilderPane({
             resources={resourceOptions}
             onChange={(v) => {
               invalidate();
+              dirtyRef.current = true;
               setForm((f) => {
                 const values = { ...f.values };
                 if (v === undefined) delete values.id;
@@ -332,6 +346,7 @@ export function ResourceBuilderPane({
             resources={resourceOptions}
             onChildChange={(name, v) => {
               invalidate();
+              dirtyRef.current = true;
               setForm((f) => {
                 const values = { ...f.values };
                 if (v === undefined) delete values[name];
