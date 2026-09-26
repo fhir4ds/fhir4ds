@@ -2,7 +2,6 @@ import type { EditorTab } from "../../lib/editorTabs";
 import { MeasurePane } from "../MeasurePane";
 import { ViewPane } from "../ViewPane";
 import { ValuesetEditor } from "./ValuesetEditor";
-import { ExpectedReportEditor } from "./ExpectedReportEditor";
 import type { ViewOverrides } from "../../lib/viewDerivation";
 import type { FlattenViewResult } from "../../lib/protocol";
 import type { ParamBinding } from "../EditorPane";
@@ -30,9 +29,8 @@ export interface TabHostProps {
   onParamsChange: (next: ParamBinding[]) => void;
   /* test (Resource Builder) */
   builder: React.ReactNode;
-  /* expected */
-  expectedReport: Record<string, unknown> | null;
-  onExpectedReportChange: (mr: Record<string, unknown>) => void;
+  /* expected (TestsPane expected grid) */
+  testsSlot: React.ReactNode;
   /* view */
   measureReports: Array<Record<string, unknown>> | null;
   viewConfig: ViewOverrides | null;
@@ -98,14 +96,7 @@ export function TabHost(p: TabHostProps) {
     case "test":
       return <>{p.builder}</>;
     case "expected":
-      return p.expectedReport ? (
-        <ExpectedReportEditor
-          report={p.expectedReport}
-          onChange={p.onExpectedReportChange}
-        />
-      ) : (
-        <p className="pane-hint">expectation not found: {p.tab.resourceId}</p>
-      );
+      return <>{p.testsSlot}</>;
     case "view":
       return (
         <ViewPane

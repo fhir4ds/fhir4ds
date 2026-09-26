@@ -8,7 +8,7 @@ import {
 import { EditorPane } from "./components/EditorPane";
 import { NavRail } from "./components/NavRail";
 import { TerminologyPane } from "./components/TerminologyPane";
-import { ParametersDrawer, coerceParam, detectParams } from "./components/ParametersDrawer";
+import { coerceParam, detectParams } from "./lib/params";
 import { importMadiePackage } from "./lib/madiePackage";
 import { exportMadiePackage } from "./lib/madieExport";
 import {
@@ -46,6 +46,7 @@ import {
   viewItems,
 } from "./lib/navSections";
 import type { NavItem, NavSectionId } from "./lib/navSections";
+import { buildDerivedView } from "./lib/viewDerivation";
 import type { RunEntry } from "./state/workspace";
 import { RUN_HISTORY_CAP } from "./state/workspace";
 import {
@@ -252,9 +253,6 @@ export default function App() {
     Record<string, Record<string, string>>
   >({});
   const [activeTab, setActiveTab] = useState(0);
-  // Parameters drawer: declared names derive from the ENTRYPOINT CQL;
-  // values are user-bound and flow to every evaluate/tests/explain call.
-  const [paramsOpen, setParamsOpen] = useState(false);
   // Per-library parse-error map (rail badges), fed by EditorPane
   // diagnostics for the active library. activeTabRef mirrors activeTab
   // so the callback always reads the CURRENT tab (the render-captured
@@ -1315,7 +1313,9 @@ export default function App() {
     if (kind === "measure") {
       setActiveMeasureId(item.meta?.measureId as string);
     }
-    openEditorTab(kind as TabKind, resourceId);
+    // REORG phase 6: all Expected Results items author the SAME grid
+    // (one authored MeasureReport set per measure) — converge on one tab.
+    openEditorTab(kind as TabKind, kind === "expected" ? "grid" : resourceId);
   };
 
   const openNavContext = (item: NavItem, x: number, y: number) => {
@@ -1380,8 +1380,8 @@ export default function App() {
       });
     } else if (item.kind === "parameter") {
       items.push({
-        label: "Open parameters",
-        onSelect: () => setParamsOpen(true),
+        label: "Open parameter tab",
+        onSelect: () => openEditorTab("parameter", item.meta?.name as string),
       });
     }
     if (items.length) setCtxMenu({ x, y, title: item.label, items });
@@ -1406,7 +1406,10 @@ export default function App() {
         tabLabels[t.id] = t.resourceId.replace(/^(ws|ds):/, "");
         break;
       case "expected":
-        tabLabels[t.id] = t.resourceId.replace(/^Patient\//, "");
+        tabLabels[t.id] =
+          t.resourceId === "grid"
+            ? "Expected Results"
+            : t.resourceId.replace(/^Patient\//, "");
         break;
       case "view":
         tabLabels[t.id] =
@@ -1483,35 +1486,44 @@ export default function App() {
       ) ?? null
     );
   })();
-  const hostExpectedReport = (() => {
-    if (hostTab?.kind !== "expected") return null;
-    const list = expectedReports[activeMeasureEntry?.id ?? ""] ?? [];
-    const byRef = list.find(
-      (r) =>
-        String((r.subject as { reference?: string } | undefined)?.reference) ===
-        hostTab.resourceId,
-    );
-    if (byRef) return byRef;
-    const idx = /^#(\d+)$/.exec(hostTab.resourceId);
-    return idx ? (list[Number(idx[1])] ?? null) : null;
-  })();
-  const setHostExpectedReport = (mr: Record<string, unknown>) => {
-    if (!hostTab || hostTab.kind !== "expected" || !activeMeasureEntry) return;
+  /** REORG phase 6: "+" on Views — create a default ViewDefinition
+   *  (derived from the active measure) and open it as an editor tab. */
+  const addStoredView = () => {
+    const n = viewDefs.length + 1;
+    const id = `vd_${Date.now().toString(36)}`;
+    const entry = {
+      id,
+      name: `View ${n}`,
+      resource: buildDerivedView(activeMeasureEntry?.resource ?? null, null),
+    };
+    setViewDefs((vs) => [...vs, entry]);
+    openEditorTab("view", id);
+  };
+  /** "+" on Expected Results — seed one authored (subject-less)
+   *  MeasureReport skeleton from the active measure's populations and
+   *  open the expected grid tab. Subject-less reports contribute nothing
+   *  to expectedMapFromReports, so the skeleton stays inert until a
+   *  patient is assigned. */
+  const addExpectedReport = () => {
+    if (!activeMeasureEntry) return;
     const mid = activeMeasureEntry.id;
-    const list = expectedReports[mid] ?? [];
-    const next = (() => {
-      const i = list.findIndex(
-        (r) =>
-          String((r.subject as { reference?: string } | undefined)?.reference) ===
-          hostTab.resourceId,
-      );
-      if (i >= 0) return list.map((r, j) => (j === i ? mr : r));
-      const m = /^#(\d+)$/.exec(hostTab.resourceId);
-      if (m) return list.map((r, j) => (j === Number(m[1]) ? mr : r));
-      return list;
-    })();
+    const skeleton = {
+      resourceType: "MeasureReport",
+      status: "complete",
+      type: "individual",
+      measure: `Measure/${mid}`,
+      group: [
+        {
+          population: populationCodes.map((code) => ({
+            code: { coding: [{ code }] },
+            count: 0,
+          })),
+        },
+      ],
+    };
+    const next = [...(expectedReports[mid] ?? []), skeleton];
     setExpectedReports({ ...expectedReports, [mid]: next });
-    updateExpectedValues(expectedMapFromReports(next));
+    openEditorTab("expected", "grid");
   };
 
   return (
@@ -1719,6 +1731,8 @@ export default function App() {
           onRenameCommit={commitRename}
           onRenameCancel={() => setRenaming(null)}
           onAddLibrary={addTab}
+          onAddView={addStoredView}
+          onAddExpected={addExpectedReport}
           railCollapsed={railCollapsed}
           onRailCollapse={() => setRailCollapsed((c) => !c)}
           testsSlot={
@@ -1778,19 +1792,6 @@ export default function App() {
                 return { ...prev, [idx]: hasErr };
               });
             }}
-          />
-          <ParametersDrawer
-            params={detectParams(mainLib.text).map((name) => ({
-              name,
-              value: paramValues[name] ?? "",
-            }))}
-            onChange={(next) => {
-              const vals: Record<string, string> = {};
-              for (const p of next) vals[p.name] = p.value;
-              updateParamValues(vals);
-            }}
-            open={paramsOpen}
-            onToggle={() => setParamsOpen((o) => !o)}
           />
           <ResultsConsole
             libraries={mainLibs}
@@ -1906,8 +1907,18 @@ export default function App() {
                   dataset={dataset}
                 />
               }
-              expectedReport={hostExpectedReport}
-              onExpectedReportChange={setHostExpectedReport}
+              testsSlot={
+                <TestsPane
+                  libraries={mainLibs}
+                  main={main}
+                  dataset={evalDataset}
+                  outputColumns={outputColumns}
+                  populationCodes={populationCodes}
+                  expectedValues={expectedValues}
+                  onExpectedValuesChange={updateExpectedValues}
+                  measure={measure}
+                />
+              }
               measureReports={lastReports}
               viewConfig={viewConfig?.overrides ?? null}
               onViewConfigChange={(overrides) => setViewConfig({ overrides })}
@@ -1929,18 +1940,6 @@ export default function App() {
                   reports={lastReports}
                   measure={measure}
                   runDiff={appRunDiff}
-                  testsSlot={
-                    <TestsPane
-                      libraries={mainLibs}
-                      main={main}
-                      dataset={evalDataset}
-                      outputColumns={outputColumns}
-                      populationCodes={populationCodes}
-                      expectedValues={expectedValues}
-                      onExpectedValuesChange={updateExpectedValues}
-                      measure={measure}
-                    />
-                  }
                   open={paneOpen["measure-report"]}
                   onToggle={() =>
                     setPaneOpen((p) => ({

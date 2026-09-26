@@ -50,6 +50,8 @@ export function NavRail({
   onRenameCommit,
   onRenameCancel,
   onAddLibrary,
+  onAddView,
+  onAddExpected,
   railCollapsed,
   onRailCollapse,
   testsSlot,
@@ -67,6 +69,8 @@ export function NavRail({
   onRenameCommit: () => void;
   onRenameCancel: () => void;
   onAddLibrary: () => void;
+  onAddView: () => void;
+  onAddExpected: () => void;
   railCollapsed: boolean;
   onRailCollapse: () => void;
   testsSlot?: ReactNode;
@@ -112,6 +116,24 @@ export function NavRail({
                   data-testid="library-tab-add"
                   title="add library"
                   onClick={onAddLibrary}
+                >
+                  +
+                </button>
+              ) : id === "views" ? (
+                <button
+                  className="nav-add-btn"
+                  data-testid="nav-add-views"
+                  title="new ViewDefinition"
+                  onClick={onAddView}
+                >
+                  +
+                </button>
+              ) : id === "expected" ? (
+                <button
+                  className="nav-add-btn"
+                  data-testid="nav-add-expected"
+                  title="new expected MeasureReport"
+                  onClick={onAddExpected}
                 >
                   +
                 </button>

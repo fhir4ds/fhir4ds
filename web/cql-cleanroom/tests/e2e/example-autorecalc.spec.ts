@@ -38,7 +38,13 @@ test("example loads include tabs, prefills MP, auto-recalcs", async ({ page }) =
   }
 
   // 3. Measurement Period prefilled → single Evaluate arms auto mode.
-  await page.click("[data-testid=drawer-parameters-toggle]");
+  // REORG phase 6a: parameters are an editor TAB now (the below-editor
+  // drawer expander is gone).
+  await page.click("[data-testid=nav-toggle-parameters]");
+  await page.locator("[data-testid^=nav-item-parameter-]").first().click();
+  await page.waitForSelector('[data-testid="param-input-Measurement Period"]', {
+    timeout: 10_000,
+  });
   const mp = await page.locator('[data-testid="param-input-Measurement Period"]').inputValue();
   if (!mp.includes("2026-01-01")) throw new Error(`MP prefill: ${mp}`);
   // Wait for the CMS69 result specifically (the default demo's 3-row

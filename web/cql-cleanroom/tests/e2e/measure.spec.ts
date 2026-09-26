@@ -44,6 +44,9 @@ test.describe("measure pane authoring", () => {
     if (!status?.includes("valid")) throw new Error(`measure status: ${status}`);
 
     // Expected grid shows both population codes for every patient.
+    // REORG phase 6a: the grid is the "expected" editor tab now.
+    await page.click("[data-testid=nav-toggle-expected]");
+    await page.click("[data-testid=nav-add-expected]");
     await page.waitForSelector("[data-testid=expected-grid]");
     await page.waitForSelector("[data-testid=expected-p1-initial-population]");
     await page.waitForSelector("[data-testid=expected-p3-numerator]");
@@ -79,12 +82,18 @@ test.describe("measure pane authoring", () => {
     await page.waitForSelector("[data-testid=measure-status]", {
       timeout: 60_000,
     });
+    // REORG phase 6a: open the expected tab to see the new column.
+    await page.click("[data-testid=nav-toggle-expected]");
+    await page.click("[data-testid=nav-add-expected]");
     await page.waitForSelector(
       "[data-testid=expected-p1-denominator-exclusion]",
       { timeout: 10_000 },
     );
 
-    // Remove the row again; the grid column disappears.
+    // Back to the measure tab (the grid click switched tabs)…
+    await page.locator("[data-testid^=editor-tab-measure-]").click();
+
+    // …then remove the row again; the grid column disappears.
     await page.click("[data-testid=measure-remove-2]");
     await page.waitForSelector("[data-testid=measure-row-2]", {
       state: "detached",
@@ -125,6 +134,13 @@ test.describe("expected values + MeasureReport round-trip", () => {
   test("export reports, wipe, import restores the grid", async ({ page }) => {
     await bootReady(page);
     await loadDataset(page);
+
+    // REORG phase 6a: authoring happens in the "expected" editor tab.
+    await page.click("[data-testid=nav-toggle-expected]");
+    await page.click("[data-testid=nav-add-expected]");
+    await page.waitForSelector("[data-testid=expected-grid]", {
+      timeout: 10_000,
+    });
 
     // Author expectations: p1 both, p2 numerator only, p3 initial only.
     // Seed all-true first so every cell gets an explicit entry

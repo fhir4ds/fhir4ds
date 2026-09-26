@@ -12,9 +12,10 @@ import { PopulationSankey } from "./PopulationSankey";
 
 /**
  * WORKBENCH_REORG phase 5: the col2 Measure Report pane — pivot of the
- * materialized per-patient MeasureReports, the population attrition
- * Sankey, and the expected-vs-actual grid (TestsPane). Always mounted;
- * the pane toggle hides it via the hidden attribute.
+ * materialized per-patient MeasureReports and the population attrition
+ * Sankey. Always mounted; the pane toggle hides only the body.
+ * REORG phase 6a: the expected grid (TestsPane) moved to its own
+ * "expected" editor tab.
  */
 
 export function useRunDiff(
@@ -46,7 +47,6 @@ export function MeasureReportPane({
   reports,
   measure,
   runDiff,
-  testsSlot,
   open,
   onToggle,
 }: {
@@ -54,7 +54,6 @@ export function MeasureReportPane({
   reports: Array<Record<string, unknown>> | null;
   measure: Record<string, unknown> | null;
   runDiff: ReturnType<typeof diffRuns>;
-  testsSlot: React.ReactNode;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -121,7 +120,6 @@ export function MeasureReportPane({
           <SankeyFromRows columns={populationColumns} rows={result.rows} />
         </div>
       )}
-      {testsSlot}
       </div>
     </section>
   );

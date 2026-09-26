@@ -56,11 +56,10 @@ test("tests run against the loaded dataset", async ({ page }) => {
   await page.waitForTimeout(600);
   await page.waitForSelector("[data-testid=dataset-loaded]");
 
-  // WORKBENCH_REORG phase 5: Tests live in the col2 Measure Report
-  // pane (no tabs, no drawer).
-  await page.waitForSelector("[data-testid=pane-measure-report]");
-
-  // Expected-value grid renders (Measure-backed, TestsPane v2)
+  // REORG phase 6a: the expected grid is the "expected" editor tab —
+  // "+" on the Expected Results drawer seeds a skeleton and opens it.
+  await page.click("[data-testid=nav-toggle-expected]");
+  await page.click("[data-testid=nav-add-expected]");
   await page.waitForSelector("[data-testid=expected-grid]", {
     timeout: 30_000,
   });
