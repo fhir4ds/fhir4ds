@@ -1,151 +1,163 @@
-import { useEffect, useRef } from "react";
+import type { ReactNode } from "react";
+import { DrawerSection, DrawerRow } from "./nav/DrawerSection";
+import type { NavItem, NavSectionId } from "../lib/navSections";
 
 /**
- * PASS2 G1: left navigation rail. Replaces the library tab-strip:
- * vertical library list + Dataset / Terminology navigation entries.
- *
- * - The ENTRYPOINT marker (●) decouples the evaluated root (main) from
- *   the edited tab — run-eval always evaluates the marked library.
- * - Parse-error badges (red dot) mark libraries whose text fails parse.
- * - role=tablist + arrow-key navigation (a11y guardrails).
- * - e2e compatibility: keeps the legacy library-tabs/library-tab-N/
- *   library-tab-N-close/library-tab-add testids as aliases.
+ * WORKBENCH_REORG phase 2: the left rail is now SEVEN resource drawers
+ * (measures, libraries, valuesets, parameters, tests, expected, views).
+ * Legacy e2e aliases survive: `library-tabs` (hidden span),
+ * `library-tab-N` (library rows), `library-tab-add`, `rail-dataset`,
+ * `rail-terminology`, `nav-rail`, and the `.rail-badge.*` classes.
  */
 
-export interface RailLibrary {
-  name: string;
-  hasError?: boolean;
+export interface NavRailSectionModel {
+  title: string;
+  items: NavItem[];
+  count: number;
+  expanded: boolean;
+  filter: string;
+  showFilter?: boolean;
+}
+
+const SECTION_ORDER: NavSectionId[] = [
+  "measures",
+  "libraries",
+  "valuesets",
+  "parameters",
+  "tests",
+  "expected",
+  "views",
+];
+
+function rowTestId(item: NavItem, index: number): string {
+  if (item.kind === "library") {
+    return `library-tab-${item.meta?.index ?? index}`;
+  }
+  return `nav-item-${item.kind}-${String(item.id).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
 export function NavRail({
-  libraries,
-  activeIndex,
-  entrypointIndex,
-  onSelect,
-  onClose,
-  onAdd,
-  onSetEntrypoint,
-  onNavigateDataset,
-  onNavigateTerminology,
-  datasetActive,
-  terminologyActive,
+  sections,
+  onToggleSection,
+  onPopSection,
+  onFilterSection,
+  onItemSelect,
+  onItemDoubleClick,
+  onItemContextMenu,
+  renaming,
+  renameValue,
+  onRenameChange,
+  onRenameCommit,
+  onRenameCancel,
+  onAddLibrary,
+  railCollapsed,
+  onRailCollapse,
+  testsSlot,
 }: {
-  libraries: RailLibrary[];
-  activeIndex: number;
-  entrypointIndex: number;
-  onSelect: (i: number) => void;
-  onClose: (i: number) => void;
-  onAdd: () => void;
-  onSetEntrypoint: (i: number) => void;
-  onNavigateDataset: () => void;
-  onNavigateTerminology: () => void;
-  datasetActive: boolean;
-  terminologyActive: boolean;
+  sections: Record<NavSectionId, NavRailSectionModel>;
+  onToggleSection: (id: NavSectionId) => void;
+  onPopSection: (id: NavSectionId) => void;
+  onFilterSection: (id: NavSectionId, v: string) => void;
+  onItemSelect: (item: NavItem) => void;
+  onItemDoubleClick: (item: NavItem) => void;
+  onItemContextMenu: (item: NavItem, x: number, y: number) => void;
+  renaming: string | null;
+  renameValue: string;
+  onRenameChange: (v: string) => void;
+  onRenameCommit: () => void;
+  onRenameCancel: () => void;
+  onAddLibrary: () => void;
+  railCollapsed: boolean;
+  onRailCollapse: () => void;
+  testsSlot?: ReactNode;
 }) {
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
-
-  useEffect(() => {
-    tabRefs.current = tabRefs.current.slice(0, libraries.length + 1);
-  }, [libraries.length]);
-
-  const focusAt = (i: number) => {
-    const max = libraries.length; // index libraries.length === the + add button
-    const clamped = ((i % (max + 1)) + (max + 1)) % (max + 1);
-    tabRefs.current[clamped]?.focus();
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent, i: number) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      focusAt(i + 1);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      focusAt(i - 1);
-    } else if (e.key === "Home") {
-      e.preventDefault();
-      focusAt(0);
-    } else if (e.key === "End") {
-      e.preventDefault();
-      focusAt(libraries.length);
-    }
-  };
-
   return (
-    <nav className="nav-rail" data-testid="nav-rail" aria-label="workspace navigation">
-      <div className="rail-label">Libs</div>
+    <nav
+      className={`nav-rail ${railCollapsed ? "collapsed" : ""}`}
+      data-testid="nav-rail"
+      aria-label="workspace navigation"
+    >
+      <div className="rail-header">
+        <span className="rail-label">Workspace</span>
+        <button
+          className="rail-collapse-btn"
+          data-testid="rail-collapse"
+          title={railCollapsed ? "expand rail" : "collapse rail"}
+          onClick={onRailCollapse}
+        >
+          {railCollapsed ? "»" : "«"}
+        </button>
+      </div>
       {/* Legacy alias: e2e greps `^=library-tab-` — the wrapper keeps the
           per-item testid, this hidden span keeps the container testid. */}
       <span hidden data-testid="library-tabs" />
-      <div role="tablist" aria-orientation="vertical" style={{ display: "contents" }}>
-        {libraries.map((lib, i) => (
-          <button
-            key={lib.name + i}
-            ref={(el) => {
-              tabRefs.current[i] = el;
-            }}
-            role="tab"
-            aria-selected={i === activeIndex}
-            tabIndex={i === activeIndex ? 0 : -1}
-            className={`rail-item ${i === activeIndex ? "active" : ""}`}
-            data-testid={`library-tab-${i}`}
-            title={
-              i === entrypointIndex
-                ? `${lib.name} (entrypoint — evaluated on Run)`
-                : lib.name
+      {SECTION_ORDER.map((id) => {
+        const sec = sections[id];
+        const showFilter = sec.showFilter !== false;
+        return (
+          <DrawerSection
+            key={id}
+            id={id}
+            title={sec.title}
+            count={sec.count}
+            expanded={sec.expanded && !railCollapsed}
+            onToggle={() => onToggleSection(id)}
+            filter={sec.filter}
+            onFilter={(v) => onFilterSection(id, v)}
+            showFilter={showFilter}
+            actions={
+              id === "libraries" ? (
+                <button
+                  className="nav-add-btn"
+                  data-testid="library-tab-add"
+                  title="add library"
+                  onClick={onAddLibrary}
+                >
+                  +
+                </button>
+              ) : undefined
             }
-            onClick={() => onSelect(i)}
-            onKeyDown={(e) => onKeyDown(e, i)}
-            onDoubleClick={() => onSetEntrypoint(i)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              onClose(i);
-            }}
           >
-            <span className="rail-glyph">{lib.name.slice(0, 2)}</span>
-            <span className="rail-name">
-              {lib.name}
-              {i === entrypointIndex ? " ● entrypoint" : ""}
-              {lib.hasError ? " — parse error" : ""}
-              {libraries.length > 1 ? " (dbl-click = entrypoint, right-click = close)" : ""}
-            </span>
-            {lib.hasError && <span className="rail-badge err" aria-label="parse error" />}
-            {i === entrypointIndex && (
-              <span className="rail-badge entry" aria-label="entrypoint" />
+            {sec.items.length === 0 && id !== "tests" && (
+              <div className="nav-empty">none</div>
             )}
-          </button>
-        ))}
-        <button
-          ref={(el) => {
-            tabRefs.current[libraries.length] = el;
-          }}
-          role="tab"
-          aria-selected={false}
-          tabIndex={-1}
-          className="rail-item"
-          data-testid="library-tab-add"
-          title="add library"
-          onClick={onAdd}
-          onKeyDown={(e) => onKeyDown(e, libraries.length)}
-        >
-          <span className="rail-glyph">+</span>
-          <span className="rail-name">Add library</span>
-        </button>
-      </div>
+            {sec.items.map((item, i) => (
+              <DrawerRow
+                key={item.id}
+                item={item}
+                active={item.entry}
+                testId={rowTestId(item, i)}
+                onClick={() => onItemSelect(item)}
+                onDoubleClick={() => onItemDoubleClick(item)}
+                onContextMenu={(e) => onItemContextMenu(item, e.clientX, e.clientY)}
+                renaming={renaming === item.id}
+                renameValue={renameValue}
+                onRenameChange={onRenameChange}
+                onRenameCommit={onRenameCommit}
+                onRenameCancel={onRenameCancel}
+              />
+            ))}
+            {id === "tests" && testsSlot}
+          </DrawerSection>
+        );
+      })}
       <div className="rail-sep" />
+      {/* Quick buttons POP their drawer open (never toggle): with the rail
+          collapsed a toggle would silently re-hide an already-open body. */}
       <button
-        className={`rail-item ${datasetActive ? "active" : ""}`}
+        className={`rail-item ${sections.tests.expanded && !railCollapsed ? "active" : ""}`}
         data-testid="rail-dataset"
-        title="Resources"
-        onClick={onNavigateDataset}
+        title="Resources (Tests drawer)"
+        onClick={() => onPopSection("tests")}
       >
         <span className="rail-glyph">▦</span>
         <span className="rail-name">Resources</span>
       </button>
       <button
-        className={`rail-item ${terminologyActive ? "active" : ""}`}
+        className={`rail-item ${sections.valuesets.expanded && !railCollapsed ? "active" : ""}`}
         data-testid="rail-terminology"
-        title="Terminology (ValueSets)"
-        onClick={onNavigateTerminology}
+        title="Terminology (ValueSets drawer)"
+        onClick={() => onPopSection("valuesets")}
       >
         <span className="rail-glyph">Ⓣ</span>
         <span className="rail-name">Terminology</span>

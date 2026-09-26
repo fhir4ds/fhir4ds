@@ -29,6 +29,18 @@ import {
 } from "./lib/bundleIo";
 import { DropdownMenu } from "./components/DropdownMenu";
 import { FhirpathPane } from "./components/FhirpathPane";
+import { ResourceContextMenu } from "./components/nav/ResourceContextMenu";
+import type { ContextMenuState } from "./components/nav/ResourceContextMenu";
+import {
+  expectedItems,
+  filterItems,
+  libraryItems,
+  measureItems,
+  parameterItems,
+  valuesetItems,
+  viewItems,
+} from "./lib/navSections";
+import type { NavItem, NavSectionId } from "./lib/navSections";
 import type { RunEntry } from "./state/workspace";
 import { RUN_HISTORY_CAP } from "./state/workspace";
 import {
@@ -224,6 +236,36 @@ export default function App() {
   // so the callback always reads the CURRENT tab (the render-captured
   // activeTab goes stale across fast tab switches).
   const [libErrors, setLibErrors] = useState<Record<number, boolean>>({});
+  // WORKBENCH_REORG phase 2 — nav drawer UI state. Drawer bodies stay
+  // mounted when collapsed; Tests defaults open (dataset-loaded is the
+  // e2e boot signal and must be visible).
+  const [navExpanded, setNavExpanded] = useState<
+    Record<NavSectionId, boolean>
+  >({
+    measures: false,
+    libraries: true,
+    valuesets: false,
+    parameters: false,
+    tests: true,
+    expected: false,
+    views: false,
+  });
+  const [navFilters, setNavFilters] = useState<
+    Record<NavSectionId, string>
+  >({
+    measures: "",
+    libraries: "",
+    valuesets: "",
+    parameters: "",
+    tests: "",
+    expected: "",
+    views: "",
+  });
+  const [railCollapsed, setRailCollapsed] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(
+    null,
+  );
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
   const [dataset, setDataset] = useState<DatasetSpec | null>({
@@ -904,6 +946,232 @@ export default function App() {
     }
   };
 
+  // ---- Nav drawers (WORKBENCH_REORG phase 2) ---------------------------
+  const toggleNavSection = (id: NavSectionId) => {
+    setRailCollapsed(false);
+    setNavExpanded((e) => ({ ...e, [id]: !e[id] }));
+  };
+  // Quick rail buttons force the drawer OPEN (toggle would re-hide a
+  // body that is already expanded, which reads as a dead click).
+  const popNavSection = (id: NavSectionId) => {
+    setRailCollapsed(false);
+    setNavExpanded((e) => ({ ...e, [id]: true }));
+  };
+
+  const libErrorById: Record<string, boolean> = {};
+  libraries.forEach((l, i) => {
+    if (libErrors[i]) libErrorById[l.id] = true;
+  });
+
+  const navLibItems = libraryItems(
+    libraries,
+    activeMeasureEntry?.mainLibraryId ?? null,
+    libErrorById,
+  );
+  const navMeasureItems = measureItems(measures, activeMeasureId);
+  const navValuesetItems = valuesetItems(
+    terminology.valuesets,
+    (dataset?.valueset_resources ?? []) as Array<Record<string, unknown>>,
+  );
+  const navParameterItems = parameterItems(
+    detectParams(mainLib.text).map((name) => ({
+      name,
+      value: paramValues[name] ?? "",
+    })),
+  );
+  const navExpectedItems = expectedItems(
+    expectedReports[activeMeasureEntry?.id ?? ""] ?? [],
+  );
+  const navViewItems = viewItems(viewDefs);
+
+  const navSectionModels: Record<
+    NavSectionId,
+    { title: string; items: NavItem[]; count: number }
+  > = {
+    measures: {
+      title: "Measures",
+      items: filterItems(navMeasureItems, navFilters.measures),
+      count: navMeasureItems.length,
+    },
+    libraries: {
+      title: "Libraries",
+      items: filterItems(navLibItems, navFilters.libraries),
+      count: navLibItems.length,
+    },
+    valuesets: {
+      title: "Valuesets",
+      items: filterItems(navValuesetItems, navFilters.valuesets),
+      count: navValuesetItems.length,
+    },
+    parameters: {
+      title: "Parameters",
+      items: filterItems(navParameterItems, navFilters.parameters),
+      count: navParameterItems.length,
+    },
+    tests: {
+      title: "Tests",
+      items: [],
+      count: dataset?.resources?.length ?? 0,
+    },
+    expected: {
+      title: "Expected Results",
+      items: filterItems(navExpectedItems, navFilters.expected),
+      count: navExpectedItems.length,
+    },
+    views: {
+      title: "Views",
+      items: filterItems(navViewItems, navFilters.views),
+      count: navViewItems.length,
+    },
+  };
+
+  const deleteMeasureEntry = (measureId: string) => {
+    if (!window.confirm("Delete this measure (and its expectations/bindings)?"))
+      return;
+    setMeasures((ms) => ms.filter((m) => m.id !== measureId));
+    setExpectedReports((er) => {
+      if (!(measureId in er)) return er;
+      const { [measureId]: _drop, ...rest } = er;
+      return rest;
+    });
+    setParamBindings((pb) => {
+      if (!(measureId in pb)) return pb;
+      const { [measureId]: _drop, ...rest } = pb;
+      return rest;
+    });
+    if (activeMeasureId === measureId) {
+      setActiveMeasureId(measures.find((m) => m.id !== measureId)?.id ?? null);
+    }
+  };
+
+  const deleteExpectedReport = (index: number) => {
+    const msrId = activeMeasureEntry?.id;
+    if (!msrId) return;
+    setExpectedReports((er) => ({
+      ...er,
+      [msrId]: (er[msrId] ?? []).filter((_, i) => i !== index),
+    }));
+    // Keep the legacy bool-map carrier in sync (evaluated diff view).
+    const reports = (expectedReports[msrId] ?? []).filter(
+      (_, i) => i !== index,
+    );
+    updateExpectedValues(expectedMapFromReports(reports));
+  };
+
+  const commitRename = () => {
+    if (!renaming) return;
+    const { id, value } = renaming;
+    const name = value.trim();
+    setRenaming(null);
+    if (!name) return;
+    const sep = id.indexOf(":");
+    const kind = id.slice(0, sep);
+    const resId = id.slice(sep + 1);
+    if (kind === "measure") {
+      setMeasures((ms) =>
+        ms.map((m) =>
+          m.id === resId && m.resource
+            ? { ...m, resource: { ...m.resource, name } }
+            : m,
+        ),
+      );
+    } else if (kind === "view") {
+      setViewDefs((vs) =>
+        vs.map((v) => (v.id === resId ? { ...v, name } : v)),
+      );
+    }
+  };
+
+  const selectNavItem = (item: NavItem) => {
+    switch (item.kind) {
+      case "library":
+        setActiveTab(item.meta?.index as number);
+        break;
+      case "measure":
+        setActiveMeasureId(item.meta?.measureId as string);
+        break;
+      case "valueset":
+        setTerminologyOpen(true);
+        break;
+      case "parameter":
+        setParamsOpen(true);
+        break;
+      case "expected":
+        setResultsTab("measure");
+        break;
+      case "view":
+        setResultsTab("view");
+        break;
+      case "test":
+        break;
+    }
+  };
+
+  const openNavContext = (item: NavItem, x: number, y: number) => {
+    const items: ContextMenuState["items"] = [];
+    if (item.kind === "library") {
+      items.push({
+        label: "Set as entrypoint",
+        onSelect: () => setEntrypoint(item.meta?.index as number),
+      });
+      if (libraries.length > 1) {
+        items.push({
+          label: "Delete library",
+          danger: true,
+          onSelect: () => closeTab(item.meta?.index as number),
+        });
+      }
+    } else if (item.kind === "measure") {
+      items.push({
+        label: "Rename",
+        onSelect: () =>
+          setRenaming({
+            id: item.id,
+            value: item.label === "(unauthored)" ? "" : item.label,
+          }),
+      });
+      items.push({
+        label: "Delete measure",
+        danger: true,
+        onSelect: () => deleteMeasureEntry(item.meta?.measureId as string),
+      });
+    } else if (item.kind === "valueset" && item.meta?.source === "workspace") {
+      items.push({
+        label: "Delete valueset",
+        danger: true,
+        onSelect: () =>
+          setTerminology({
+            valuesets: terminology.valuesets.filter(
+              (_, i) => i !== item.meta?.index,
+            ),
+          }),
+      });
+    } else if (item.kind === "expected") {
+      items.push({
+        label: "Delete expectation",
+        danger: true,
+        onSelect: () => deleteExpectedReport(item.meta?.index as number),
+      });
+    } else if (item.kind === "view") {
+      items.push({
+        label: "Rename",
+        onSelect: () => setRenaming({ id: item.id, value: item.label }),
+      });
+      items.push({
+        label: "Delete view",
+        danger: true,
+        onSelect: () =>
+          setViewDefs((vs) => vs.filter((_, i) => i !== item.meta?.index)),
+      });
+    } else if (item.kind === "parameter") {
+      items.push({
+        label: "Open parameters",
+        onSelect: () => setParamsOpen(true),
+      });
+    }
+    if (items.length) setCtxMenu({ x, y, title: item.label, items });
+  };
+
   return (
     <div className="app">
       <header className="app-header">
@@ -1064,30 +1332,66 @@ export default function App() {
           />
         </div>
       </header>
-      <main className="app-main" data-testid="app-main">
+      <main
+        className="app-main"
+        data-testid="app-main"
+        style={{ "--nav-w": railCollapsed ? "52px" : "264px" } as React.CSSProperties}
+      >
         <NavRail
-          libraries={libraries.map((l, i) => ({
-            name: l.name,
-            hasError: libErrors[i] === true,
-          }))}
-          activeIndex={activeTab}
-          entrypointIndex={entrypoint}
-          onSelect={setActiveTab}
-          onClose={closeTab}
-          onAdd={addTab}
-          onSetEntrypoint={setEntrypoint}
-          onNavigateDataset={() => {
-            document
-              .querySelector("[data-testid=dataset-pane]")
-              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          sections={{
+            measures: { ...navSectionModels.measures, expanded: navExpanded.measures, filter: navFilters.measures },
+            libraries: { ...navSectionModels.libraries, expanded: navExpanded.libraries, filter: navFilters.libraries },
+            valuesets: { ...navSectionModels.valuesets, expanded: navExpanded.valuesets, filter: navFilters.valuesets },
+            parameters: { ...navSectionModels.parameters, expanded: navExpanded.parameters, filter: navFilters.parameters },
+            tests: {
+              ...navSectionModels.tests,
+              expanded: navExpanded.tests,
+              filter: navFilters.tests,
+              showFilter: false,
+            },
+            expected: { ...navSectionModels.expected, expanded: navExpanded.expected, filter: navFilters.expected },
+            views: { ...navSectionModels.views, expanded: navExpanded.views, filter: navFilters.views },
           }}
-          onNavigateTerminology={() => {
-            document
-              .querySelector("[data-testid=terminology-pane]")
-              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          onToggleSection={toggleNavSection}
+          onPopSection={popNavSection}
+          onFilterSection={(id, v) =>
+            setNavFilters((f) => ({ ...f, [id]: v }))
+          }
+          onItemSelect={selectNavItem}
+          onItemDoubleClick={(item) => {
+            if (item.kind === "library") setEntrypoint(item.meta?.index as number);
           }}
-          datasetActive={false}
-          terminologyActive={false}
+          onItemContextMenu={openNavContext}
+          renaming={renaming?.id ?? null}
+          renameValue={renaming?.value ?? ""}
+          onRenameChange={(v) =>
+            setRenaming((r) => (r ? { ...r, value: v } : r))
+          }
+          onRenameCommit={commitRename}
+          onRenameCancel={() => setRenaming(null)}
+          onAddLibrary={addTab}
+          railCollapsed={railCollapsed}
+          onRailCollapse={() => setRailCollapsed((c) => !c)}
+          testsSlot={
+            <DatasetPane
+              dataset={dataset}
+              onDatasetChange={setDataset}
+              onEditResource={(index) => {
+                const r = dataset?.resources?.[index];
+                if (r && typeof r === "object") {
+                  setBuilderPrefill((prev) => ({
+                    resource: r as Record<string, unknown>,
+                    nonce: (prev?.nonce ?? 0) + 1,
+                    sourceIndex: index,
+                  }));
+                }
+              }}
+              onAddForPatient={(patientId) => {
+                setBuilderPrefill(null);
+                setBuilderContext({ patientId, nonce: Date.now() });
+              }}
+            />
+          }
         />
         <div className="pane-col editor-col">
           <EditorPane
@@ -1280,24 +1584,6 @@ export default function App() {
           />
         </div>
         <div className="pane-col side-col">
-          <DatasetPane
-            dataset={dataset}
-            onDatasetChange={setDataset}
-            onEditResource={(index) => {
-              const r = dataset?.resources?.[index];
-              if (r && typeof r === "object") {
-                setBuilderPrefill((prev) => ({
-                  resource: r as Record<string, unknown>,
-                  nonce: (prev?.nonce ?? 0) + 1,
-                  sourceIndex: index,
-                }));
-              }
-            }}
-            onAddForPatient={(patientId) => {
-              setBuilderPrefill(null);
-              setBuilderContext({ patientId, nonce: Date.now() });
-            }}
-          />
           <ResourceBuilderPane
             onAddResource={(resource) => {
               const resources = [...(dataset?.resources ?? []), resource];
@@ -1316,6 +1602,7 @@ export default function App() {
           />
         </div>
       </main>
+      <ResourceContextMenu menu={ctxMenu} onClose={() => setCtxMenu(null)} />
       <BootOverlay state={boot} />
     </div>
   );
