@@ -34,7 +34,8 @@ define "D1":
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
-    await page.click('[data-testid=show-ast]');
+    // WORKBENCH_REORG phase 5: AST is a console sub-tab now.
+    await page.click('[data-testid=console-tab-ast]');
     await page.click('[data-testid=ast-load]');
     await page.waitForSelector('[data-testid^=ast-def-]', { timeout: 30_000 });
     const defName = await page

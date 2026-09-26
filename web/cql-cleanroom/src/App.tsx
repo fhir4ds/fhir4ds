@@ -6,7 +6,6 @@ import {
   workerRequest,
 } from "./components/BootOverlay";
 import { EditorPane } from "./components/EditorPane";
-import { ResultsConsole } from "./components/ResultsConsole";
 import { NavRail } from "./components/NavRail";
 import { TerminologyPane } from "./components/TerminologyPane";
 import { ParametersDrawer, coerceParam, detectParams } from "./components/ParametersDrawer";
@@ -17,9 +16,15 @@ import {
   decodeShareFragment,
   type SharePayload,
 } from "./lib/share";
-import { ResultsPane } from "./components/ResultsPane";
+import { ResultsConsole, type ConsoleTab } from "./components/ResultsConsole";
+import { MeasureReportPane, useRunDiff } from "./components/MeasureReportOutput";
+import { ViewOutputPane } from "./components/ViewOutput";
+import {
+  DEFAULT_PANE_ORDER,
+  normalizePaneOrder,
+  type PaneId,
+} from "./lib/paneRegistry";
 import { TestsPane } from "./components/TestsPane";
-import { MeasurePane } from "./components/MeasurePane";
 import { ViewPane } from "./components/ViewPane";
 import { DatasetPane } from "./components/DatasetPane";
 import { ResourceBuilderPane } from "./components/ResourceBuilderPane";
@@ -56,7 +61,6 @@ import {
   libraryHash as computeLibraryHash,
   newRunId,
 } from "./lib/runHistory";
-import type { ResultsTab } from "./components/ResultsPane";
 import { GraphPane } from "./components/GraphPane";
 import { Splitter } from "./components/Splitter";
 import { EditorTabs } from "./components/tabs/EditorTabs";
@@ -72,7 +76,13 @@ import {
   type TabKind,
 } from "./lib/editorTabs";
 import { renameLibrary } from "./lib/renameLibrary";
-import type { DatasetSpec, LibraryText, FlattenViewResult } from "./lib/protocol";
+import type {
+  DatasetSpec,
+  LibraryText,
+  FlattenViewResult,
+  EvaluateResult,
+  Diagnostics,
+} from "./lib/protocol";
 import {
   clearWorkspace,
   exportWorkspaceZip,
@@ -357,11 +367,17 @@ export default function App() {
   // Editor-column FHIRPath scratchpad retired (phase 4): the CQL
   // console's Run-Selection replaces it.
   const [consoleSelection, setConsoleSelection] = useState<string>("");
-  // WORKBENCH_REORG §3.1/§3.3 — Results tab pref + local run history.
-  const [resultsTab, setResultsTab] = useState<ResultsTab>("cql");
+  // WORKBENCH_REORG phase 5 — console sub-tab pref + local run history.
+  const [consoleTab, setConsoleTab] = useState<ConsoleTab>("results");
   const [runHistory, setRunHistory] = useState<RunEntry[]>([]);
-  // Flatten SQL of the last View run (Show-SQL context for the View tab).
-  const [viewSql, setViewSql] = useState<string | null>(null);
+  // Live auto-evaluation of the entrypoint library (app heartbeat):
+  // the console Results/SQL/Diagnostics sub-tabs and the col2 panes
+  // all render from this single run.
+  const [evalResult, setEvalResult] = useState<EvaluateResult | null>(null);
+  const [evalDiags, setEvalDiags] = useState<Diagnostics[] | null>(null);
+  const [evalBusy, setEvalBusy] = useState(false);
+  const evalBusyRef = useRef(false);
+  const evalSeqRef = useRef(0);
   const [viewResult, setViewResult] = useState<FlattenViewResult | null>(null);
   // Row-shaped memberships + hashes of the LATEST evaluation (compare
   // target + drift reference). Cleared when inputs change. The read side
@@ -410,6 +426,12 @@ export default function App() {
   // WORKBENCH_REORG phase 5: editor/report column split (fr units),
   // persisted in prefs.layout so reloads keep the user's proportions.
   const [col1Fr, setCol1Fr] = useState(1.1);
+  const [mrFr, setMrFr] = useState(1);
+  const [paneOrder, setPaneOrder] = useState<PaneId[]>(DEFAULT_PANE_ORDER);
+  const [paneOpen, setPaneOpen] = useState<Record<PaneId, boolean>>({
+    "measure-report": true,
+    view: true,
+  });
   // §3.2: per-patient `+` context — subject-class pickers default to
   // Patient/<id> (builder v2 consumes; v1 ignores gracefully).
   const [builderContext, setBuilderContext] = useState<{
@@ -573,19 +595,41 @@ export default function App() {
         }
         if (
           ws &&
-          (ws.activeTabPref === "cql" ||
-            ws.activeTabPref === "measure" ||
-            ws.activeTabPref === "view")
+          (ws.activeTabPref === "results" ||
+            ws.activeTabPref === "sql" ||
+            ws.activeTabPref === "ast" ||
+            ws.activeTabPref === "diags")
         ) {
-          setResultsTab(ws.activeTabPref);
+          setConsoleTab(ws.activeTabPref);
         }
         if (ws && ws.terminology?.valuesets?.length) {
           setTerminology(ws.terminology);
         }
-        const layout = (ws?.prefs as { layout?: { col1Fr?: unknown } } | null)
-          ?.layout;
+        const layout = (
+          ws?.prefs as {
+            layout?: {
+              col1Fr?: unknown;
+              mrFr?: unknown;
+              paneOrder?: unknown;
+              paneOpen?: unknown;
+            };
+          } | null
+        )?.layout;
         if (typeof layout?.col1Fr === "number" && layout.col1Fr >= 0.3) {
           setCol1Fr(Math.min(2.5, layout.col1Fr));
+        }
+        if (typeof layout?.mrFr === "number" && layout.mrFr >= 0.2) {
+          setMrFr(Math.min(5, layout.mrFr));
+        }
+        setPaneOrder(normalizePaneOrder(layout?.paneOrder));
+        if (
+          layout?.paneOpen &&
+          typeof layout.paneOpen === "object" &&
+          typeof (layout.paneOpen as Record<string, unknown>)["measure-report"] === "boolean" &&
+          typeof (layout.paneOpen as Record<string, unknown>).view === "boolean"
+        ) {
+          const po = layout.paneOpen as Record<string, boolean>;
+          setPaneOpen({ "measure-report": po["measure-report"], view: po.view });
         }
       })
       .catch(() => undefined)
@@ -610,7 +654,9 @@ export default function App() {
               expectedReports[activeMeasureEntry?.id ?? ""],
             ) as unknown[])
           : null,
-        prefs: { layout: { col1Fr } },
+        prefs: {
+          layout: { col1Fr, mrFr, paneOrder, paneOpen },
+        },
         measures,
         activeMeasureId,
         expectedReports,
@@ -618,7 +664,7 @@ export default function App() {
         paramBindings,
         viewConfig,
         runHistory,
-        activeTabPref: resultsTab,
+        activeTabPref: consoleTab,
         terminology,
       }).catch(() => undefined);
     }, 800);
@@ -633,10 +679,13 @@ export default function App() {
     paramBindings,
     viewConfig,
     runHistory,
-    resultsTab,
+    consoleTab,
     terminology,
     restored,
     col1Fr,
+    mrFr,
+    paneOrder,
+    paneOpen,
   ]);
 
   const active = libraries[activeTab] ?? libraries[0];
@@ -644,8 +693,8 @@ export default function App() {
   // merely the edited tab (multi-library include flows).
   const mainLib = libraries[entrypoint] ?? active;
   // Stable identity across re-renders (same name+text → same object):
-  // ResultsPane's auto-eval effect keys on [main, [main]] — a fresh
-  // object per render would re-trigger the 2s debounce forever.
+  // the auto-eval effect keys on [main, [main]] — a fresh object per
+  // render would re-trigger the 2s debounce forever.
   const main = useMemo<LibraryText>(
     () => ({ name: mainLib.name, text: mainLib.text }),
     [mainLib.name, mainLib.text],
@@ -662,6 +711,113 @@ export default function App() {
     }
     return out;
   }, [paramValues]);
+
+  // WORKBENCH_REORG phase 5 — the evaluation heartbeat lives in App so
+  // the console sub-tabs AND the col2 panes render from one run.
+  const canAutoEval = !!evalDataset && !!main?.text;
+  const runEvaluation = async () => {
+    if (!canAutoEval) return;
+    const seq = ++evalSeqRef.current;
+    evalBusyRef.current = true;
+    setEvalBusy(true);
+    setEvalDiags(null);
+    try {
+      const resp = await workerRequest({
+        type: "evaluate_library",
+        libraries: mainLibs,
+        main,
+        dataset: evalDataset,
+        parameters: runtimeParameters,
+        output_columns: outputColumns,
+        emit_sql: true,
+      });
+      const env: EvaluateResult = JSON.parse(resp.envelope);
+      if (seq !== evalSeqRef.current) return; // superseded by a newer run
+      if (env.ok) {
+        env.evaluated_at = Date.now();
+        setEvalResult(env);
+        // §3.3: capture the run (row-shaped artifact + hashes). The
+        // artifact append is SYNCHRONOUS (the diff baseline must exist
+        // before any follow-up run evaluates); hashes are patched in
+        // afterwards (Web Crypto is async).
+        const entry: RunEntry = {
+          id: newRunId(),
+          name: defaultRunName(Date.now()),
+          createdAt: Date.now(),
+          libraryHash: "",
+          datasetHash: "",
+          artifact: artifactFromRows(env.rows, env.columns),
+        };
+        setRunHistory((h) => appendRun(h, entry, RUN_HISTORY_CAP));
+        setCurrentRun({
+          artifact: entry.artifact,
+          libraryHash: "",
+          datasetHash: "",
+        });
+        const libText = main.text;
+        const dsRes = dataset?.resources?.length
+          ? { resources: dataset.resources as unknown[] }
+          : null;
+        void Promise.all([
+          computeLibraryHash(libText),
+          computeDatasetHash(dsRes),
+        ]).then(([libHash, dsHash]) => {
+          setRunHistory((h) =>
+            h.map((r) =>
+              r.id === entry.id
+                ? { ...r, libraryHash: libHash, datasetHash: dsHash }
+                : r,
+            ),
+          );
+          setCurrentRun((c) =>
+            c ? { ...c, libraryHash: libHash, datasetHash: dsHash } : c,
+          );
+        });
+        // Materialize per-patient MeasureReports from the evaluation
+        // rows — the MR pane's render source and the view's default.
+        if (measure) {
+          try {
+            const repResp = await workerRequest({
+              type: "measure_report_from_rows",
+              measure,
+              rows: env.rows,
+              columns: env.columns,
+            });
+            const repEnv = JSON.parse(
+              (repResp as { envelope: string }).envelope,
+            ) as {
+              ok: boolean;
+              reports?: Array<Record<string, unknown>>;
+            };
+            setLastReports(repEnv.ok ? repEnv.reports ?? [] : null);
+          } catch {
+            setLastReports(null);
+          }
+        } else {
+          setLastReports(null);
+        }
+      } else {
+        setEvalDiags(env.diagnostics ?? []);
+        setLastReports(null);
+      }
+    } finally {
+      evalBusyRef.current = false;
+      setEvalBusy(false);
+    }
+  };
+
+  // AUTO-EVALUATE: recompute 2s after any input settles. U5: no manual
+  // Evaluate — a first run that fails on a missing parameter still arms
+  // (the effect re-fires when the parameter fills) so results auto-heal.
+  useEffect(() => {
+    if (!canAutoEval) return;
+    const t = setTimeout(() => {
+      if (evalBusyRef.current) return;
+      void runEvaluation();
+    }, 2000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainLibs, main, evalDataset, outputColumns, measure, runtimeParameters, canAutoEval]);
 
   // M1 write-through: Measure.library[] mirrors the entrypoint pin —
   // primary first, then the dependency closure of that library. Keeps
@@ -874,7 +1030,7 @@ export default function App() {
       paramBindings,
       viewConfig,
       runHistory,
-      activeTabPref: resultsTab,
+      activeTabPref: consoleTab,
       terminology,
     });
     const blob = new Blob([bytes as unknown as BlobPart], {
@@ -1275,6 +1431,23 @@ export default function App() {
   }
   const activeTabIsLibrary =
     !activeEditorTabId || parseTabId(activeEditorTabId).kind === "library";
+  // Prior run = second-to-last history entry; falls back to the
+  // in-flight currentRun artifact when history is pruned short.
+  const baselineArtifact: import("./lib/runDiff").Artifact | null =
+    runHistory.length >= 2
+      ? runHistory[runHistory.length - 2].artifact.patients != null
+        ? Object.fromEntries(
+            Object.entries(
+              runHistory[runHistory.length - 2].artifact.patients,
+            ).map(([pid, p]) => [
+              pid,
+              (p as { populations: Record<string, boolean | null> })
+                .populations,
+            ]),
+          )
+        : null
+      : null;
+  const appRunDiff = useRunDiff(evalResult, baselineArtifact);
   // Latest-value mirror (same pattern as activeTabRef): which library
   // model the (possibly hidden) editor keeps showing.
   if (activeEditorTabId?.startsWith("library:")) {
@@ -1455,7 +1628,9 @@ export default function App() {
                 setLastReports(null);
                 setViewConfig(null);
                 setRunHistory([]);
-                setResultsTab("cql");
+                setEvalResult(null);
+                setEvalDiags(null);
+                setConsoleTab("results");
                 setCurrentRun(null);
                 setParamBindings({});
                 void clearWorkspace().catch(() => undefined);
@@ -1622,7 +1797,14 @@ export default function App() {
             main={main}
             dataset={evalDataset}
             parameters={runtimeParameters}
+            outputColumns={outputColumns}
             selection={consoleSelection}
+            result={evalResult}
+            evalDiags={evalDiags}
+            busy={evalBusy}
+            baselineArtifact={baselineArtifact}
+            activeTab={consoleTab}
+            onTabChange={setConsoleTab}
           />
           <div className="results-drawer editor-drawer" data-testid="drawer-graph">
             <button
@@ -1729,118 +1911,85 @@ export default function App() {
               measureReports={lastReports}
               viewConfig={viewConfig?.overrides ?? null}
               onViewConfigChange={(overrides) => setViewConfig({ overrides })}
-              onSql={setViewSql}
               onResult={setViewResult}
             />
           )}
         </div>
-        <Splitter col1Fr={col1Fr} onChange={setCol1Fr} />
-        <div className="pane-col run-col">
-          <ResultsPane
-            libraries={mainLibs}
-            main={main}
-            dataset={evalDataset}
-            parameters={runtimeParameters}
-            viewResult={viewResult}
-            outputColumns={outputColumns}
-            measure={measure}
-            onReports={(reports) => {
-              setLastReports(reports);
-            }}
-            activeTab={resultsTab}
-            onTabChange={setResultsTab}
-            viewSql={viewSql}
-            reports={lastReports}
-            baselineArtifact={
-              // Prior run = second-to-last history entry; falls back to the
-              // in-flight currentRun artifact when history is pruned short.
-              runHistory.length >= 2
-                ? runHistory[runHistory.length - 2].artifact.patients != null
-                  ? Object.fromEntries(
-                      Object.entries(
-                        runHistory[runHistory.length - 2].artifact.patients,
-                      ).map(([pid, p]) => [
-                        pid,
-                        (p as { populations: Record<string, boolean | null> })
-                          .populations,
-                      ]),
-                    )
-                  : null
-                : null
-            }
-            onEvaluated={(env) => {
-              // §3.3: capture the run (row-shaped artifact + hashes).
-              // The artifact append is SYNCHRONOUS (the diff baseline must
-              // exist before any follow-up run evaluates); hashes are
-              // patched in afterwards (Web Crypto is async).
-              const entry: RunEntry = {
-                id: newRunId(),
-                name: defaultRunName(Date.now()),
-                createdAt: Date.now(),
-                libraryHash: "",
-                datasetHash: "",
-                artifact: artifactFromRows(env.rows, env.columns),
-              };
-              setRunHistory((h) => appendRun(h, entry, RUN_HISTORY_CAP));
-              setCurrentRun({
-                artifact: entry.artifact,
-                libraryHash: "",
-                datasetHash: "",
-              });
-              const libText = main.text;
-              const dsRes = dataset?.resources?.length
-                ? { resources: dataset.resources as unknown[] }
-                : null;
-              void Promise.all([
-                computeLibraryHash(libText),
-                computeDatasetHash(dsRes),
-              ]).then(([libHash, dsHash]) => {
-                setRunHistory((h) =>
-                  h.map((r) =>
-                    r.id === entry.id
-                      ? { ...r, libraryHash: libHash, datasetHash: dsHash }
-                      : r,
-                  ),
-                );
-                setCurrentRun((c) =>
-                  c ? { ...c, libraryHash: libHash, datasetHash: dsHash } : c,
-                );
-              });
-            }}
-            measureSlot={
-              <MeasurePane
-                libraries={mainLibs}
-                main={main}
-                measure={measure}
-                onChange={(m) => {
-                  updateActiveMeasure(m);
-                  setLastReports(null);
-                }}
-              />
-            }
-            viewSlot={
-              <ViewPane
-                measure={measure}
-                measureReports={lastReports}
-                viewConfig={viewConfig?.overrides ?? null}
-                onViewConfigChange={(overrides) => setViewConfig({ overrides })}
-                onSql={setViewSql}
-                onResult={setViewResult}
-              />
-            }
-            testsSlot={
-              <TestsPane
-                libraries={mainLibs}
-                main={main}
-                dataset={evalDataset}
-                outputColumns={outputColumns}
-                populationCodes={populationCodes}
-                expectedValues={expectedValues}
-                onExpectedValuesChange={updateExpectedValues}
-                measure={measure}
-              />
-            }
-          />
+        <Splitter value={col1Fr} onChange={setCol1Fr} />
+        <div
+          className="pane-col run-col"
+          style={{ "--mr-fr": `${mrFr}` } as React.CSSProperties}
+        >
+          {paneOrder.map((id, i) => {
+            const pane =
+              id === "measure-report" ? (
+                <MeasureReportPane
+                  key="measure-report"
+                  result={evalResult}
+                  reports={lastReports}
+                  measure={measure}
+                  runDiff={appRunDiff}
+                  testsSlot={
+                    <TestsPane
+                      libraries={mainLibs}
+                      main={main}
+                      dataset={evalDataset}
+                      outputColumns={outputColumns}
+                      populationCodes={populationCodes}
+                      expectedValues={expectedValues}
+                      onExpectedValuesChange={updateExpectedValues}
+                      measure={measure}
+                    />
+                  }
+                  open={paneOpen["measure-report"]}
+                  onToggle={() =>
+                    setPaneOpen((p) => ({
+                      ...p,
+                      "measure-report": !p["measure-report"],
+                    }))
+                  }
+                />
+              ) : (
+                <ViewOutputPane
+                  key="view"
+                  result={evalResult}
+                  viewResult={viewResult}
+                  baselineArtifact={baselineArtifact}
+                  viewSlot={
+                    <ViewPane
+                      measure={measure}
+                      measureReports={lastReports}
+                      viewConfig={viewConfig?.overrides ?? null}
+                      onViewConfigChange={(overrides) =>
+                        setViewConfig({ overrides })
+                      }
+                      onResult={setViewResult}
+                    />
+                  }
+                  open={paneOpen.view}
+                  onToggle={() =>
+                    setPaneOpen((p) => ({ ...p, view: !p.view }))
+                  }
+                />
+              );
+            const showSplitter =
+              i === 0 && paneOpen["measure-report"] && paneOpen.view;
+            return showSplitter
+              ? [
+                  pane,
+                  <Splitter
+                    key="mr-splitter"
+                    orientation="horizontal"
+                    value={mrFr}
+                    onChange={setMrFr}
+                    testid="mr-splitter"
+                    label="Resize report panes"
+                    min={0.2}
+                    max={5}
+                  />,
+                ]
+              : [pane];
+          })}
         </div>
       </main>
       <ResourceContextMenu menu={ctxMenu} onClose={() => setCtxMenu(null)} />

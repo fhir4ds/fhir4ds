@@ -73,7 +73,6 @@ test("cell evidence drill-in and population flow", async ({ page }) => {
 
   // Population flow (Sankey): rendered in the MeasureReport tab after
   // an evaluation — initial_population node with count 2.
-  await page.click("[data-testid=results-tab-measure]");
   await page.waitForSelector("[data-testid=population-sankey]", {
     timeout: 90_000,
   });

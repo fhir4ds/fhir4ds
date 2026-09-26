@@ -38,9 +38,14 @@ test("editor parses and evaluates with typed results", async ({ page }) => {
   if (badge !== "Boolean") throw new Error(`IPP badge: ${badge}`);
   const meta = await page.textContent("[data-testid=results-table-stats]");
   if (!meta?.includes("3 rows")) throw new Error(`meta: ${meta}`);
-  await page.click("[data-testid=show-sql]");
+  // WORKBENCH_REORG phase 5: SQL is a console sub-tab now.
+  await page.click("[data-testid=console-tab-sql]");
+  await page.waitForSelector("[data-testid=sql-viewer]", { timeout: 10_000 });
   const sql = await page.textContent(".sql-pre");
   if (!sql || !sql.includes("ORDER BY")) throw new Error("sql viewer empty");
+  // Leave the console on Results for later assertions/specs.
+  await page.click("[data-testid=console-tab-results]");
+  await page.waitForSelector("[data-testid=results-table]");
 });
 
 test("tests run against the loaded dataset", async ({ page }) => {
@@ -51,12 +56,9 @@ test("tests run against the loaded dataset", async ({ page }) => {
   await page.waitForTimeout(600);
   await page.waitForSelector("[data-testid=dataset-loaded]");
 
-  // Tests live in the MeasureReport tab now.
-  await page.click("[data-testid=results-tab-measure]");
-  const drawer = page.locator("[data-testid=drawer-populations]");
-  if ((await drawer.count()) > 0 && !(await drawer.isVisible())) {
-    await page.click("[data-testid=drawer-populations-toggle]");
-  }
+  // WORKBENCH_REORG phase 5: Tests live in the col2 Measure Report
+  // pane (no tabs, no drawer).
+  await page.waitForSelector("[data-testid=pane-measure-report]");
 
   // Expected-value grid renders (Measure-backed, TestsPane v2)
   await page.waitForSelector("[data-testid=expected-grid]", {

@@ -29,86 +29,64 @@ async function setMaleLibrary(page: import("@playwright/test").Page) {
   await page.waitForTimeout(1200);
 }
 
-test.describe("results tabs", () => {
-  test("three tabs navigate; empty states before first run", async ({ page }) => {
+test.describe("console sub-tabs + col2 panes", () => {
+  test("sub-tabs navigate; panes toggle; sub-tab pref persists", async ({ page }) => {
     await bootReady(page);
-    // Prior SPEC FILES may have left resultsTab=view persisted; go to
-    // the CQL tab BEFORE resetting so the first results wait targets a
-    // visible panel.
-    await page.click("[data-testid=results-tab-cql]");
     await resetWorkspace(page);
 
-    // All three tabs render.
-    await page.waitForSelector("[data-testid=results-tab-cql]");
-    await page.waitForSelector("[data-testid=results-tab-measure]");
-    await page.waitForSelector("[data-testid=results-tab-view]");
+    // All four console sub-tabs render.
+    await page.waitForSelector("[data-testid=console-tab-results]");
+    await page.waitForSelector("[data-testid=console-tab-sql]");
+    await page.waitForSelector("[data-testid=console-tab-ast]");
+    await page.waitForSelector("[data-testid=console-tab-diags]");
 
-    // U5: default dataset AUTO-EVALUATES — the CQL tab populates with
-    // no clicks. Reload post-reset so the workspace rehydrates
-    // deterministically (a prior test's tab pref can bleed), then go
-    // to the CQL tab explicitly.
-    await page.reload();
-    await page.waitForSelector(".version-badge", { timeout: 150_000 });
-    // Wait out the async workspace hydration (IndexedDB restore can
-    // land AFTER this point and re-apply a stale tab pref over the
-    // click below — the classic restore race).
-    await page.waitForFunction(
-      () =>
-        document.querySelectorAll("[data-testid=library-tab-0]").length > 0,
-      undefined,
-      { timeout: 30_000 },
-    );
-    await page.waitForTimeout(600);
-    // Self-healing tab click: hydration can land after the first click
-    // and re-apply a stale pref; poll-and-reclick until the CQL panel
-    // is actually visible (or give up with diagnostics).
-    let visible = false;
-    for (let attempt = 0; attempt < 12 && !visible; attempt++) {
-      await page.click("[data-testid=results-tab-cql]");
-      try {
-        await page.waitForSelector("[data-testid=results-table]", {
-          timeout: 10_000,
-        });
-        visible = true;
-      } catch {
-        const state = await page.evaluate(() => ({
-          tab: document
-            .querySelector('[data-testid=tab-panel-cql]')
-            ?.getAttribute("hidden"),
-          active: [
-            ...document.querySelectorAll(".results-tabs .tab"),
-          ].findIndex((b) => b.className.includes("active")),
-        }));
-        console.log(`TAB_RETRY ${attempt}:`, JSON.stringify(state));
-      }
-    }
-    if (!visible) throw new Error("CQL tab never became visible after 12 clicks");
+    // U5: default dataset AUTO-EVALUATES — Results populates with no
+    // clicks (default sub-tab).
+    await page.waitForSelector("[data-testid=results-table]", {
+      timeout: 60_000,
+    });
 
-    await page.click("[data-testid=results-tab-measure]");
-    await page.waitForSelector("[data-testid=measure-pane]");
-    // View tab still gates on MeasureReports (needs the measure
-    // materialization cycle) — may show the no-reports hint briefly.
-    await page.click("[data-testid=results-tab-view]");
+    // Col2 panes are ALWAYS visible (stacked, no tabs).
+    await page.waitForSelector("[data-testid=pane-measure-report]");
+    await page.waitForSelector("[data-testid=pane-view]");
+    await page.waitForSelector("[data-testid=mr-table]", { timeout: 30_000 });
+    // Sankey renders after evaluation.
+    await page.waitForSelector("[data-testid=population-sankey]", {
+      timeout: 30_000,
+    });
+    // View flatten over the saved reports.
+    await page.waitForSelector("[data-testid=view-table]", { timeout: 60_000 });
 
-    // Tab pref persists across reload (rides workspace.json): the VIEW
-    // tab we just selected restores — assert the VIEW output renders
-    // (not the CQL table, which is hidden on the view tab!).
+    // Pane toggle hides the pane but keeps it MOUNTED (doctrine).
+    await page.click("[data-testid=pane-toggle-view]");
+    await page.waitForSelector("[data-testid=pane-view-body][hidden]", { state: "attached" });
+    await page.waitForSelector("[data-testid=view-table]", {
+      state: "attached",
+    });
+    await page.click("[data-testid=pane-toggle-view]");
+    await page.waitForSelector("[data-testid=view-table]");
+
+    // SQL sub-tab shows the last translation SQL.
+    await page.click("[data-testid=console-tab-sql]");
+    await page.waitForSelector("[data-testid=sql-viewer]", { timeout: 30_000 });
+
+    // Sub-tab pref persists across reload (rides workspace.json).
     await page.waitForTimeout(1500);
     await page.reload();
     await page.waitForSelector(".version-badge", { timeout: 150_000 });
     await page.waitForSelector(
-      "[data-testid=tab-panel-view]:not([hidden])",
+      "[data-testid=console-panel-sql]:not([hidden])",
       { timeout: 90_000 },
     );
 
-    // Return to the CQL tab so the persisted tab pref does not bleed
-    // into later specs (autosave may outlive the reset below).
-    await page.click("[data-testid=results-tab-cql]");
-    await page.waitForTimeout(1000);
+    // Return to Results so the persisted pref does not bleed into
+    // later specs (autosave may outlive the reset below).
+    await page.click("[data-testid=console-tab-results]");
+    await page.waitForSelector("[data-testid=results-table]");
     await resetWorkspace(page);
   });
 
-  test("evaluate populates all three tabs without re-execution", async ({ page }) => {
+  test("evaluate populates console + both panes without re-execution", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
     await page.waitForSelector("[data-testid=dataset-loaded]");
@@ -116,8 +94,7 @@ test.describe("results tabs", () => {
       timeout: 60_000,
     });
 
-    // MR tab: report rows render (3 patients x 2 populations).
-    await page.click("[data-testid=results-tab-measure]");
+    // MR pane: report rows render (3 patients x 2 populations).
     await page.waitForSelector("[data-testid=mr-table]", {
       timeout: 30_000,
     });
@@ -126,13 +103,12 @@ test.describe("results tabs", () => {
     const mrRows = await page.locator("[data-testid=mr-table] tbody tr").count();
     if (mrRows !== 3) throw new Error(`mr rows (want 3 patients): ${mrRows}`);
 
-    // Sankey renders in the MR tab after evaluation.
+    // Sankey renders after evaluation.
     await page.waitForSelector("[data-testid=population-sankey]", {
       timeout: 30_000,
     });
 
-    // View tab: derived run over the saved reports.
-    await page.click("[data-testid=results-tab-view]");
+    // View flatten over the saved reports.
     await page.waitForSelector("[data-testid=view-table]", {
       timeout: 60_000,
     });
@@ -264,7 +240,8 @@ test.describe("ast filter", () => {
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
-    await page.click("[data-testid=show-ast]");
+    // WORKBENCH_REORG phase 5: AST is a console sub-tab now.
+    await page.click("[data-testid=console-tab-ast]");
     await page.click("[data-testid=ast-load]");
     await page.waitForSelector("[data-testid^=ast-def-]", {
       timeout: 30_000,

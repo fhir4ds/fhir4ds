@@ -89,7 +89,6 @@ test("MADiE package import → evaluate → export round-trip", async ({ page })
   await page.waitForSelector("[data-testid=results-table]", { timeout: 90_000 });
 
   // MR tab renders the package's mapping.
-  await page.click("[data-testid=results-tab-measure]");
   await page.waitForSelector("[data-testid=mr-table]", { timeout: 60_000 });
 
   // Export: capture the download.

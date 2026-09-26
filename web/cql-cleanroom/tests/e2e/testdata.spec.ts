@@ -160,28 +160,21 @@ test.describe("bundle export/import", () => {
 });
 
 test.describe("results drawers", () => {
-  test("populations + view tabs render their panes and toggle", async ({ page }) => {
+  test("col2 panes render stacked and toggle in place", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
 
-    // Measure pane lives in the MeasureReport tab.
-    await page.click("[data-testid=results-tab-measure]");
-    await page.waitForSelector("[data-testid=measure-pane]", {
+    // WORKBENCH_REORG phase 5: no tabs — the Measure Report and View
+    // panes stack in the second column, always mounted.
+    await page.waitForSelector("[data-testid=pane-measure-report]");
+    await page.waitForSelector("[data-testid=view-pane]", {
       timeout: 10_000,
     });
 
-    // View pane lives in the View tab; tab panels stay mounted, so
-    // leaving HIDES the pane (detached no longer applies).
-    await page.click("[data-testid=results-tab-view]");
-    await page.waitForSelector("[data-testid=view-pane]", {
-      timeout: 10_000,
-    });
-    await page.click("[data-testid=results-tab-cql]");
-    await page.waitForSelector("[data-testid=view-pane]", {
-      state: "hidden",
-      timeout: 10_000,
-    });
-    await page.click("[data-testid=results-tab-view]");
+    // Pane toggle hides but keeps the pane mounted.
+    await page.click("[data-testid=pane-toggle-view]");
+    await page.waitForSelector("[data-testid=pane-view-body][hidden]", { state: "attached", timeout: 10_000 });
+    await page.click("[data-testid=pane-toggle-view]");
     await page.waitForSelector("[data-testid=view-pane]");
   });
 });

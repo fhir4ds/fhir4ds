@@ -115,3 +115,11 @@ export function diffSummary(diff: RunDiff | null): {
     removed: diff.removedPatients.length,
   };
 }
+
+// Map a display column name to the diff's CQL column-key space:
+// hyphenated FHIR population codes (initial-population) -> snake_case,
+// multi-group prefixed names (g1_initial_population) -> bare name.
+export function diffPopKey(col: string): string {
+  const snake = col.replace(/-/g, "_");
+  return snake.replace(/^g[a-zA-Z0-9]*_/, "");
+}

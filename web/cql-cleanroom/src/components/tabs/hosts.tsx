@@ -37,7 +37,7 @@ export interface TabHostProps {
   measureReports: Array<Record<string, unknown>> | null;
   viewConfig: ViewOverrides | null;
   onViewConfigChange: (v: ViewOverrides) => void;
-  onSql: (sql: string | null) => void;
+  onSql?: (sql: string | null) => void;
   onResult: (r: FlattenViewResult | null) => void;
 }
 

@@ -18,13 +18,21 @@ async function loadDataset(page: Page) {
   });
 }
 
+/** WORKBENCH_REORG phase 5: measure authoring is an editor tab — expand
+ *  the Measures drawer (collapsed on fresh boot), then open the tab. */
+async function openMeasureTab(page: Page) {
+  await page.click("[data-testid=nav-toggle-measures]");
+  await page.locator("[data-testid^=nav-item-measure-]").first().click();
+  await page.waitForSelector("[data-testid=measure-validate]", {
+    timeout: 10_000,
+  });
+}
+
 test.describe("measure pane authoring", () => {
   test("default measure validates and drives the expected grid", async ({ page }) => {
     await bootReady(page);
     await loadDataset(page);
-
-    // Measure authoring lives in the MeasureReport tab.
-    await page.click("[data-testid=results-tab-measure]");
+    await openMeasureTab(page);
 
     // Default measure: initial-population -> Initial Population,
     // numerator -> Has Name. Validate through the capability.
@@ -44,7 +52,7 @@ test.describe("measure pane authoring", () => {
   test("add row, pick code + define, remove", async ({ page }) => {
     await bootReady(page);
     await loadDataset(page);
-    await page.click("[data-testid=results-tab-measure]");
+    await openMeasureTab(page);
 
     await page.click("[data-testid=measure-add-row]");
     await page.waitForSelector("[data-testid=measure-row-2]", {
@@ -91,7 +99,7 @@ test.describe("measure pane authoring", () => {
   test("unknown define surfaces a typed error", async ({ page }) => {
     await bootReady(page);
     await loadDataset(page);
-    await page.click("[data-testid=results-tab-measure]");
+    await openMeasureTab(page);
 
     // Remove row 1 (initial-population) and re-add it pointing at a
     // define that does not exist: select offers only parsed names, so
@@ -117,7 +125,6 @@ test.describe("expected values + MeasureReport round-trip", () => {
   test("export reports, wipe, import restores the grid", async ({ page }) => {
     await bootReady(page);
     await loadDataset(page);
-    await page.click("[data-testid=results-tab-measure]");
 
     // Author expectations: p1 both, p2 numerator only, p3 initial only.
     // Seed all-true first so every cell gets an explicit entry
@@ -174,7 +181,6 @@ test.describe("view pane flatten", () => {
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
-    await page.click("[data-testid=results-tab-view]");
 
     // Derived mode is the default: ONE ROW PER PATIENT (m1081 #9),
     // one integer count column per population (wide format, no forEach).
@@ -207,7 +213,6 @@ test.describe("view pane flatten", () => {
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
-    await page.click("[data-testid=results-tab-view]");
 
     // Override the numerator column name (ghost-text default forks on edit).
     await page.fill(
@@ -230,7 +235,6 @@ test.describe("view pane flatten", () => {
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
-    await page.click("[data-testid=results-tab-view]");
 
     // Custom mode: long-format projection of the engine's MeasureReports.
     await page.selectOption("[data-testid=view-mode]", "custom");

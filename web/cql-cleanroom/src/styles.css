@@ -754,6 +754,32 @@ body { margin: 0; }
 /* Hidden tab panels: .pane display:flex defeats the UA hidden attr */
 .tab-panel[hidden] { display: none !important; }
 
+/* WORKBENCH_REORG phase 5: col2 stacks the registry panes; the pane
+   AFTER the horizontal splitter is the flex baseline (1), the Measure
+   Report pane grows by --mr-fr. Pane headers stay visible; toggling
+   hides only the pane BODY (mounted-when-hidden doctrine). */
+.run-col { display: flex; flex-direction: column; gap: 10px; }
+.run-col > .pane { flex: 1 1 0; min-height: 220px; overflow: auto; }
+.run-col > .pane[data-testid="pane-measure-report"] { flex-grow: var(--mr-fr, 1); }
+.run-col .pane-body[hidden] { display: none; }
+.splitter.horizontal { min-height: 0; height: 6px; width: auto; cursor: row-resize; align-self: auto; flex: 0 0 auto; }
+.console-subtabs { margin-bottom: 8px; display: flex; gap: 4px; }
+.console-subtabs .tab {
+  background: transparent;
+  border: 1px solid var(--border, #444);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  padding: 4px 12px;
+  color: var(--fg-muted, #aaa);
+  cursor: pointer;
+  font-size: 12px;
+}
+.console-subtabs .tab.active {
+  color: var(--fg, #eee);
+  background: var(--bg-raised, #2a2a2a);
+  font-weight: 600;
+}
+
 .results-tabs { margin-bottom: 8px; }
 .results-tabs .tab {
   background: transparent;
