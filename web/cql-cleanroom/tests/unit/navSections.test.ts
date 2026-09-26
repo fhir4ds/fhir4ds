@@ -69,25 +69,38 @@ describe("navSections adapters", () => {
     expect(items[1].sublabel).toBe("2026");
   });
 
-  it("expectedItems summarize per-patient population counts", () => {
-    const items = expectedItems([
-      {
-        subject: { reference: "Patient/p1" },
-        group: [
-          {
-            population: [
-              { code: { coding: [{ code: "initial-population" }] }, count: 1 },
-              { code: { coding: [{ code: "numerator" }] }, count: 0 },
-            ],
-          },
-        ],
-      },
-      { subject: { reference: "Patient/p2" }, group: [] },
-    ]);
-    expect(items[0].label).toBe("p1");
-    expect(items[0].sublabel).toBe("1/2 populations");
-    expect(items[1].label).toBe("p2");
-    expect(items[1].sublabel).toBe("0/0 populations");
+  it("expectedItems list ONE item per measure with patient counts", () => {
+    const measures = [
+      { id: "msr_0", mainLibraryId: "lib_0", resource: { name: "CMS69" } },
+      { id: "msr_1", mainLibraryId: "lib_1", resource: null },
+    ];
+    const items = expectedItems(measures, {
+      msr_0: [
+        {
+          subject: { reference: "Patient/p1" },
+          group: [
+            {
+              population: [
+                { code: { coding: [{ code: "initial-population" }] }, count: 1 },
+                { code: { coding: [{ code: "numerator" }] }, count: 0 },
+              ],
+            },
+          ],
+        },
+        { subject: { reference: "Patient/p2" }, group: [] },
+        {},
+      ],
+    });
+    // One item per measure — even a measure with NO authored reports
+    // lists (empty-but-present), and subject-less reports don't count
+    // toward the patient total.
+    expect(items).toHaveLength(2);
+    expect(items[0].id).toBe("expected:msr_0");
+    expect(items[0].label).toBe("CMS69");
+    expect(items[0].sublabel).toBe("2 patients");
+    expect(items[0].meta?.measureId).toBe("msr_0");
+    expect(items[1].label).toBe("msr_1");
+    expect(items[1].sublabel).toBe("0 patients");
   });
 
   it("viewItems fall back to the id when name is empty", () => {

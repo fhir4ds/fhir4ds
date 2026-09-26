@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { workerRequest } from "./BootOverlay";
+import { GraphPane } from "./GraphPane";
 import type { Diagnostics, ParseResult } from "../lib/protocol";
 
 /**
@@ -28,6 +29,10 @@ interface Props {
   knownTabKeys?: string[];
   /** Selection text ("" when empty) for the console's Run-Selection. */
   onSelectionChange?: (text: string) => void;
+  /** REORG 6d: the visual-editor drawer lives under this pane; its
+   *  toggle is a header button (was a standalone bottom bar). */
+  graphOpen?: boolean;
+  onGraphOpenChange?: (open: boolean) => void;
 }
 
 interface DiagnosticsRowProps {
@@ -73,6 +78,8 @@ export function EditorPane({
   tabKey = "library:solo",
   knownTabKeys,
   onSelectionChange,
+  graphOpen,
+  onGraphOpenChange,
 }: Props) {
   const editorDiv = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<any>(null);
@@ -276,6 +283,15 @@ export function EditorPane({
               : "parsing…"
             : `${diags.length} diagnostic${diags.length === 1 ? "" : "s"}`}
         </span>
+        {onGraphOpenChange && (
+          <button
+            className="drawer-toggle"
+            data-testid="drawer-graph-toggle"
+            onClick={() => onGraphOpenChange(!graphOpen)}
+          >
+            {graphOpen ? "▾" : "▸"} Visual editor
+          </button>
+        )}
       </div>
       <div className="editor-host" data-testid="cql-editor" ref={editorDiv} />
       {diags.length > 0 && (
@@ -283,6 +299,16 @@ export function EditorPane({
           {diags.map((d, i) => (
             <DiagnosticsRow key={i} diag={d} onSelect={jumpTo} />
           ))}
+        </div>
+      )}
+      {onGraphOpenChange && graphOpen && (
+        <div className="drawer-body" data-testid="drawer-graph">
+          <p className="pane-hint">
+            The graph writes CQL only — Apply replaces the library text
+            after a parse round-trip. Full text→graph parsing is future
+            scope; the canvas starts from the default graph.
+          </p>
+          <GraphPane onApplyCql={(cql) => onTextChange(cql)} />
         </div>
       )}
     </section>

@@ -104,12 +104,29 @@ test.describe("nav rail + panel", () => {
     );
   });
 
-  test("expected drawer lists authored expectations; delete works", async ({
+  test("fresh boot lists the default view + the measure's expected item", async ({
     page,
   }) => {
     await bootReady(page);
+    // REORG 6d: every measure seeds one derived ViewDefinition, so
+    // Views is clickable out of the box.
+    await page.click("[data-testid=nav-toggle-views]");
+    const viewItem = page.locator("[data-testid^=nav-item-view-]").first();
+    await expect(viewItem).toBeVisible();
+    await expect(viewItem).toContainText("View 1");
+
+    // Expected Results: one item per measure — listed even with zero
+    // authored expectations (empty-but-present), showing the patient
+    // count.
     await page.click("[data-testid=nav-toggle-expected]");
-    // Fresh workspace: no authored expectations yet.
-    await expect(page.locator("[data-testid=nav-sec-expected] .nav-empty")).toBeVisible();
+    const expectedItem = page
+      .locator("[data-testid^=nav-item-expected-]")
+      .first();
+    await expect(expectedItem).toBeVisible();
+    await expect(expectedItem).toContainText(/patients/);
+
+    // Clicking it opens the expectations editor (the expected grid).
+    await expectedItem.click();
+    await expect(page.locator("[data-testid=expected-grid]")).toBeVisible();
   });
 });

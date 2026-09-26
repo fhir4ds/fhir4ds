@@ -19,7 +19,9 @@ test.describe("cleanroom cycle-3 dataset editing", () => {
     );
 
     // Edit row 0 (p1, female) → builder prefilled with gender=female.
-    // Type groups default COLLAPSED: expand p1's Patient group first.
+    // L3 drill-in (reorg 6e), then expand p1's Patient group (it
+    // defaults COLLAPSED).
+    await page.click('[data-testid=dataset-group-p1]');
     await page.click('[data-testid=dataset-type-toggle-p1-Patient]');
     await page.click('[data-testid=dataset-edit-0]');
     // Prefill is async (schema fetch) — wait for the id input to carry p1.

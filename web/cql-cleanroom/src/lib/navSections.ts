@@ -129,27 +129,30 @@ export function parameterItems(
   }));
 }
 
-/** One item per authored expected MeasureReport (per patient). */
+/** One EXPECTED item per measure — the expectations editor is
+ *  per-measure (its grid gains rows as patients are added), so the nav
+ *  lists the resource even before any expectations are authored. */
 export function expectedItems(
-  reports: Array<Record<string, unknown>>,
+  measures: WorkspaceMeasureEntry[],
+  expectedReports: Record<string, Array<Record<string, unknown>>>,
 ): NavItem[] {
-  type PopCoding = { code?: string };
-  type Population = { code?: { coding?: PopCoding[] }; count?: number };
-  type Group = { population?: Population[] };
-  return reports.map((r, i) => {
-    const ref = String(
-      (r.subject as { reference?: string } | undefined)?.reference ?? `#${i}`,
-    );
-    const populations: Population[] =
-      ((r.group as Group[] | undefined)?.flatMap((g) => g.population ?? []) ??
-        []);
-    const positive = populations.filter((p) => p.count === 1).length;
+  return measures.map((m) => {
+    const reports = expectedReports[m.id] ?? [];
+    const nPatients = reports.filter(
+      (r) =>
+        typeof (r.subject as { reference?: string } | undefined)
+          ?.reference === "string",
+    ).length;
+    const name =
+      typeof m.resource?.name === "string"
+        ? (m.resource.name as string)
+        : m.id;
     return {
-      id: `expected:${ref}`,
+      id: `expected:${m.id}`,
       kind: "expected" as const,
-      label: ref.replace(/^Patient\//, ""),
-      sublabel: `${positive}/${populations.length} populations`,
-      meta: { index: i, reference: ref },
+      label: name,
+      sublabel: `${nPatients} patients`,
+      meta: { measureId: m.id },
     };
   });
 }

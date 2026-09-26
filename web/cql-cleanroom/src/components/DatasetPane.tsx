@@ -3,8 +3,35 @@ import type { DatasetSpec } from "../lib/protocol";
 import {
   attributionWhy,
   groupDataset,
+  type DatasetRowRef,
   type PatientGroup,
 } from "../lib/datasetGroup";
+
+/**
+ * WORKBENCH_REORG 6e — maps-style L2/L3 drill-in for the Tests drawer.
+ *
+ * L2 "Patients": one row per patient group (`dataset-group-{pid}` on the
+ * row) with a resource-count pill; clicking a row DRILLS IN — the list
+ * is never expanded inline anymore.
+ *
+ * L3 "Patient detail": replaces the list inside the same panel — a back
+ * button (`dataset-back`, "‹ Patients"), the patient id + count pill +
+ * hint, the per-patient `+` (`dataset-add-{pid}`), and that patient's
+ * resources grouped by resource type with the SAME flat
+ * `dataset-row-{index}` rows (index = flat storage index; the
+ * dataset-type-toggle / dataset-edit / dataset-delete / dataset-more
+ * testids and callbacks are unchanged, so row clicks open the builder
+ * exactly as before).
+ *
+ * Preserved across BOTH levels: `dataset-view-tree`/`dataset-view-raw`
+ * + `dataset-editor` (raw NDJSON auto-commit), `dataset-filter`,
+ * `dataset-add-new`, and `dataset-loaded` (mounted + visible whenever
+ * the Tests panel is open — the e2e boot signal).
+ *
+ * Drill-in is purely local UI state (`focusedPid`): nothing is
+ * persisted. If the focused patient disappears from the dataset
+ * (deleted / workspace reset), the pane falls back to L2 automatically.
+ */
 
 export function DatasetPane({
   dataset,
@@ -24,11 +51,14 @@ export function DatasetPane({
 }) {
   const [text, setText] = useState(DEFAULT_NDJSON);
   const [view, setView] = useState<"tree" | "raw">("tree");
-  // WORKBENCH_REORG §3.4 — scale controls.
+  // WORKBENCH_REORG §3.4 — scale controls. The filter lives at BOTH
+  // levels: L2 narrows the patient list, L3 narrows the focused
+  // patient's rows (auto-expands type groups + bypasses the row cap).
   const [filter, setFilter] = useState("");
+  // L3 drill-in: the focused patient group key (null = patient list).
+  const [focusedPid, setFocusedPid] = useState<string | null>(null);
   const [collapsedTypes, setCollapsedTypes] = useState<Set<string>>(new Set());
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [uncappedTypes, setUncappedTypes] = useState<Set<string>>(new Set());
   const TYPE_ROW_CAP = 25;
 
@@ -59,6 +89,16 @@ export function DatasetPane({
     [dataset],
   );
 
+  const focused = focusedPid
+    ? groups.find((g) => g.key === focusedPid)
+    : undefined;
+
+  // If the focused patient disappears from the dataset (row delete,
+  // raw-edit wipe, workspace reset), fall back to the L2 list.
+  useEffect(() => {
+    if (focusedPid && !focused) setFocusedPid(null);
+  }, [focusedPid, focused]);
+
   // AUTO-COMMIT: Raw NDJSON edits apply to the active dataset ~2s after
   // the text settles, when every line parses. Invalid text is a no-op.
   // (The Use-dataset button is hidden — kept for spec compat.)
@@ -76,6 +116,30 @@ export function DatasetPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, view]);
 
+  // L2 list filtering: a patient row matches when its id/label matches
+  // OR it owns any matching resource (so "Observation" still surfaces
+  // the patients that have observations).
+  const groupMatches = (g: PatientGroup) =>
+    !filterActive ||
+    g.key.toLowerCase().includes(filter.trim().toLowerCase()) ||
+    g.label.toLowerCase().includes(filter.trim().toLowerCase()) ||
+    g.rows.some(matches);
+
+  // INV-C3-3: immutable replace — never mutate the dataset in place.
+  const deleteResource = (index: number) => {
+    if (!dataset) return;
+    const resources = (dataset.resources ?? []).filter(
+      (_, j) => j !== index,
+    );
+    onDatasetChange({ ...dataset, resources });
+  };
+
+  const collapseAllFocused = () => {
+    if (!focused) return;
+    const all = new Set<string>();
+    for (const t of groupTypes(focused)) all.add(typeKey(focused.key, t));
+    setCollapsedTypes(all);
+  };
 
   return (
     <section className="pane" data-testid="dataset-pane">
@@ -139,26 +203,24 @@ export function DatasetPane({
               placeholder="filter by type or id"
               aria-label="filter dataset"
             />
-            <button
-              type="button"
-              data-testid="dataset-expand-all"
-              onClick={() => setCollapsedTypes(new Set())}
-            >
-              Expand all
-            </button>
-            <button
-              type="button"
-              data-testid="dataset-collapse-all"
-              onClick={() => {
-                const all = new Set<string>();
-                for (const g of groups) {
-                  for (const t of groupTypes(g)) all.add(typeKey(g.key, t));
-                }
-                setCollapsedTypes(all);
-              }}
-            >
-              Collapse all
-            </button>
+            {focused && (
+              <>
+                <button
+                  type="button"
+                  data-testid="dataset-expand-all"
+                  onClick={() => setCollapsedTypes(new Set())}
+                >
+                  Expand all
+                </button>
+                <button
+                  type="button"
+                  data-testid="dataset-collapse-all"
+                  onClick={collapseAllFocused}
+                >
+                  Collapse all
+                </button>
+              </>
+            )}
             {onAddNew && (
               <button
                 type="button"
@@ -170,40 +232,37 @@ export function DatasetPane({
               </button>
             )}
           </div>
-          <div className="dataset-tree" data-testid="dataset-tree">
-            {groups
-              .map((g) => ({ g, rows: g.rows.filter(matches) }))
-              .filter(({ rows }) => rows.length > 0 || (!filterActive && true))
-              .filter(({ g, rows }) =>
-                filterActive ? rows.length > 0 : !g.unattributed || g.rows.length > 0,
-              )
-              .map(({ g }) => (
-                <PatientGroupNode
-                  key={g.key}
-                  group={g}
-                  filter={filter}
-                  matches={matches}
-                  collapsedTypes={collapsedTypes}
-                  setCollapsedTypes={setCollapsedTypes}
-                  collapsedGroups={collapsedGroups}
-                  setCollapsedGroups={setCollapsedGroups}
-                  expandedTypes={expandedTypes}
-                  uncappedTypes={uncappedTypes}
-                  setUncappedTypes={setUncappedTypes}
-                  setExpandedTypes={setExpandedTypes}
-                  typeRowCap={TYPE_ROW_CAP}
-                  onEditResource={onEditResource}
-                  onAddForPatient={onAddForPatient}
-                  onDelete={(i) => {
-                    // Immutable replace (INV-C3-3): never mutate in place.
-                    const resources = (dataset.resources ?? []).filter(
-                      (_, j) => j !== i,
-                    );
-                    onDatasetChange({ ...dataset, resources });
-                  }}
-                />
-              ))}
-          </div>
+          {focused ? (
+            <PatientDetail
+              group={focused}
+              filter={filter}
+              matches={matches}
+              collapsedTypes={collapsedTypes}
+              setCollapsedTypes={setCollapsedTypes}
+              expandedTypes={expandedTypes}
+              setExpandedTypes={setExpandedTypes}
+              uncappedTypes={uncappedTypes}
+              setUncappedTypes={setUncappedTypes}
+              typeRowCap={TYPE_ROW_CAP}
+              onBack={() => setFocusedPid(null)}
+              onEditResource={onEditResource}
+              onAddForPatient={onAddForPatient}
+              onDelete={deleteResource}
+            />
+          ) : (
+            <div className="dataset-tree" data-testid="dataset-tree">
+              {groups
+                .filter(groupMatches)
+                .map((g) => (
+                  <PatientRow
+                    key={g.key}
+                    group={g}
+                    onDrillIn={() => setFocusedPid(g.key)}
+                    onAddForPatient={onAddForPatient}
+                  />
+                ))}
+            </div>
+          )}
         </>
       )}
       {view === "tree" && dataset && !groups.some((g) => !g.unattributed) && (
@@ -220,43 +279,19 @@ function groupTypes(group: PatientGroup): string[] {
   return [...new Set(group.rows.map((r) => r.resourceType))].sort();
 }
 
-function PatientGroupNode({
+/**
+ * L2 — one maps-style row per patient group. Click = drill in (L3);
+ * the `+` button adds a resource for the patient WITHOUT drilling.
+ */
+function PatientRow({
   group,
-  filter,
-  matches,
-  collapsedTypes,
-  setCollapsedTypes,
-  collapsedGroups,
-  setCollapsedGroups,
-  expandedTypes,
-  setExpandedTypes,
-  uncappedTypes,
-  setUncappedTypes,
-  typeRowCap,
-  onEditResource,
+  onDrillIn,
   onAddForPatient,
-  onDelete,
 }: {
   group: PatientGroup;
-  filter: string;
-  matches: (r: { resourceType: string; id: string }) => boolean;
-  collapsedTypes: Set<string>;
-  setCollapsedTypes: (s: Set<string>) => void;
-  collapsedGroups: Set<string>;
-  setCollapsedGroups: (s: Set<string>) => void;
-  expandedTypes: Set<string>;
-  setExpandedTypes: (s: Set<string>) => void;
-  uncappedTypes: Set<string>;
-  setUncappedTypes: (s: Set<string>) => void;
-  typeRowCap: number;
-  onEditResource?: (index: number) => void;
+  onDrillIn: () => void;
   onAddForPatient?: (patientId: string) => void;
-  onDelete: (index: number) => void;
 }) {
-  const filterActive = filter.trim().length > 0;
-  const typeKey = (type: string) => `${group.key}::${type}`;
-  const groupCollapsed = !filterActive && collapsedGroups.has(group.key);
-  const totalRows = group.rows.length;
   const patientRow = group.rows.find((r) => r.resourceType === "Patient");
   const hint = patientRow
     ? patientHint(patientRow.resource)
@@ -267,49 +302,133 @@ function PatientGroupNode({
         : "no Patient resource with this id";
   return (
     <div
-      className="dataset-group"
+      className="dataset-patient-row"
+      data-testid={`dataset-group-${group.key}`}
+      data-phantom={group.phantom ? "true" : undefined}
+      data-unattributed={group.unattributed ? "true" : undefined}
+      onClick={onDrillIn}
+      title={`Show ${group.key}'s resources`}
+    >
+      <span className="dataset-caret" aria-hidden="true">
+        ▸
+      </span>
+      <span
+        className={`dataset-group-label${group.unattributed ? " muted" : ""}${group.phantom ? " phantom" : ""}`}
+      >
+        {group.unattributed ? "Unattributed" : group.label}
+        {hint && (
+          <span className="dataset-group-hint" title={hint}>
+            {" "}
+            — {hint}
+          </span>
+        )}
+      </span>
+      {group.phantom && (
+        <span
+          className="dataset-group-hint"
+          title="Add the Patient with this id first, then author resources for it"
+        >
+          add Patient/{group.key} first
+        </span>
+      )}
+      <span className="dataset-count-pill">{group.rows.length}</span>
+      {!group.unattributed && !group.phantom && onAddForPatient && (
+        <button
+          type="button"
+          className="dataset-add-btn"
+          data-testid={`dataset-add-${group.key}`}
+          onClick={(e) => {
+            e.stopPropagation(); // the row drills in — the + must ADD.
+            onAddForPatient(group.key);
+          }}
+          title={`New resource for ${group.label} (subject defaults to Patient/${group.key})`}
+        >
+          +
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * L3 — the focused patient's detail view, replacing the list inside the
+ * same panel. Resources are grouped by type with the same capped rows +
+ * show-more + filter-bypass semantics the old inline tree had.
+ */
+function PatientDetail({
+  group,
+  filter,
+  matches,
+  collapsedTypes,
+  setCollapsedTypes,
+  expandedTypes,
+  setExpandedTypes,
+  uncappedTypes,
+  setUncappedTypes,
+  typeRowCap,
+  onBack,
+  onEditResource,
+  onAddForPatient,
+  onDelete,
+}: {
+  group: PatientGroup;
+  filter: string;
+  matches: (r: { resourceType: string; id: string }) => boolean;
+  collapsedTypes: Set<string>;
+  setCollapsedTypes: (s: Set<string>) => void;
+  expandedTypes: Set<string>;
+  setExpandedTypes: (s: Set<string>) => void;
+  uncappedTypes: Set<string>;
+  setUncappedTypes: (s: Set<string>) => void;
+  typeRowCap: number;
+  onBack: () => void;
+  onEditResource?: (index: number) => void;
+  onAddForPatient?: (patientId: string) => void;
+  onDelete: (index: number) => void;
+}) {
+  const patientRow = group.rows.find((r) => r.resourceType === "Patient");
+  const hint = patientRow
+    ? patientHint(patientRow.resource)
+    : group.unattributed
+      ? null
+      : group.phantom
+        ? "resources reference this uuid, but no Patient with that id exists"
+        : "no Patient resource with this id";
+  return (
+    <div
+      className="dataset-patient-detail dataset-group"
       data-testid={`dataset-group-${group.key}`}
       data-phantom={group.phantom ? "true" : undefined}
       data-unattributed={group.unattributed ? "true" : undefined}
     >
-      <div
-        className="dataset-group-header"
-        data-testid={`dataset-group-toggle-${group.key}`}
-        onClick={() => {
-          if (filterActive) return;
-          const next = new Set(collapsedGroups);
-          if (next.has(group.key)) next.delete(group.key);
-          else next.add(group.key);
-          setCollapsedGroups(next);
-        }}
-        style={{ cursor: filterActive ? undefined : "pointer" }}
-      >
-        <span className="dataset-caret" aria-hidden="true">
-          {groupCollapsed ? "▸" : "▾"}
-        </span>
+      <div className="dataset-detail-head">
+        <button
+          type="button"
+          className="dataset-back"
+          data-testid="dataset-back"
+          onClick={onBack}
+          title="Back to the patient list"
+        >
+          ‹ Patients
+        </button>
         <span
           className={`dataset-group-label${group.unattributed ? " muted" : ""}${group.phantom ? " phantom" : ""}`}
         >
           {group.unattributed ? "Unattributed" : group.label}
           {" "}
-          <span className="dataset-count-pill">{totalRows}</span>
-          {hint && (
-            <span className="dataset-group-hint" title={hint}>
-              {" "}
-              — {hint}
-            </span>
-          )}
+          <span className="dataset-count-pill">{group.rows.length}</span>
         </span>
+        {hint && (
+          <span className="dataset-group-hint" title={hint}>
+            — {hint}
+          </span>
+        )}
         {!group.unattributed && !group.phantom && onAddForPatient && (
           <button
             type="button"
             className="dataset-add-btn"
             data-testid={`dataset-add-${group.key}`}
-            onClick={(e) => {
-              e.stopPropagation(); // the header toggles collapse — the +
-              // button must ADD, not toggle the group shut.
-              onAddForPatient(group.key);
-            }}
+            onClick={() => onAddForPatient(group.key)}
             title={`New resource for ${group.label} (subject defaults to Patient/${group.key})`}
           >
             +
@@ -324,125 +443,184 @@ function PatientGroupNode({
           </span>
         )}
       </div>
-      {groupCollapsed ? null : groupTypes(group).map((type) => {
-        const rows = group.rows.filter((r) => r.resourceType === type);
-        const matching = rows.filter(matches);
-        if (filterActive && matching.length === 0) return null;
-        // OQ-1 RESOLVED: type groups default OPEN when ≤ 3 resources,
-        // COLLAPSED with count otherwise. Filter active → auto-expand
-        // + bypass the row cap (gemini C: matches never hide).
-        const userCollapsed = collapsedTypes.has(typeKey(type));
-        const userExpanded = expandedTypes.has(typeKey(type));
-        const uncapped = uncappedTypes.has(typeKey(type));
-        // Default COLLAPSED: every type group starts closed (filter
-        // auto-expands; user toggles win). capBypassed = show-more
-        // lifted the 25-row cap for THIS group.
-        const isOpen = filterActive
-          ? true
-          : userCollapsed
-            ? false // explicit collapse wins (re-open clears the flag now)
-            : userExpanded;
-        const capBypassed = filterActive || uncapped;
-        const candidates = filterActive ? matching : rows;
-        const visible = isOpen
-          ? capBypassed
-            ? candidates
-            : candidates.slice(0, typeRowCap)
-          : [];
-        const hidden = candidates.length - visible.length;
-        return (
+      {groupTypes(group).map((type) => (
+        <TypeGroup
+          key={type}
+          groupKey={group.key}
+          unattributed={group.unattributed}
+          type={type}
+          rows={group.rows.filter((r) => r.resourceType === type)}
+          filter={filter}
+          matches={matches}
+          collapsedTypes={collapsedTypes}
+          setCollapsedTypes={setCollapsedTypes}
+          expandedTypes={expandedTypes}
+          setExpandedTypes={setExpandedTypes}
+          uncappedTypes={uncappedTypes}
+          setUncappedTypes={setUncappedTypes}
+          typeRowCap={typeRowCap}
+          onEditResource={onEditResource}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One resource-type group inside L3 — extracted verbatim from the old
+ * inline PatientGroupNode body. OQ-1 RESOLVED semantics kept: type
+ * groups default COLLAPSED with a count pill; filter active →
+ * auto-expand + bypass the row cap (gemini C: matches never hide).
+ */
+function TypeGroup({
+  groupKey,
+  unattributed,
+  type,
+  rows,
+  filter,
+  matches,
+  collapsedTypes,
+  setCollapsedTypes,
+  expandedTypes,
+  setExpandedTypes,
+  uncappedTypes,
+  setUncappedTypes,
+  typeRowCap,
+  onEditResource,
+  onDelete,
+}: {
+  groupKey: string;
+  unattributed: boolean;
+  type: string;
+  rows: DatasetRowRef[];
+  filter: string;
+  matches: (r: { resourceType: string; id: string }) => boolean;
+  collapsedTypes: Set<string>;
+  setCollapsedTypes: (s: Set<string>) => void;
+  expandedTypes: Set<string>;
+  setExpandedTypes: (s: Set<string>) => void;
+  uncappedTypes: Set<string>;
+  setUncappedTypes: (s: Set<string>) => void;
+  typeRowCap: number;
+  onEditResource?: (index: number) => void;
+  onDelete: (index: number) => void;
+}) {
+  const filterActive = filter.trim().length > 0;
+  const key = `${groupKey}::${type}`;
+  // Default COLLAPSED: every type group starts closed (filter
+  // auto-expands; user toggles win). capBypassed = show-more
+  // lifted the 25-row cap for THIS group.
+  const userCollapsed = collapsedTypes.has(key);
+  const userExpanded = expandedTypes.has(key);
+  const uncapped = uncappedTypes.has(key);
+  const isOpen = filterActive
+    ? true
+    : userCollapsed
+      ? false // explicit collapse wins (re-open clears the flag now)
+      : userExpanded;
+  const capBypassed = filterActive || uncapped;
+  const candidates = filterActive ? rows.filter(matches) : rows;
+  const visible = isOpen
+    ? capBypassed
+      ? candidates
+      : candidates.slice(0, typeRowCap)
+    : [];
+  const hidden = candidates.length - visible.length;
+  return (
+    <div className="dataset-type-group" data-testid={`dataset-type-${groupKey}-${type}`}>
+      <button
+        type="button"
+        className="dataset-type-toggle"
+        data-testid={`dataset-type-toggle-${groupKey}-${type}`}
+        onClick={() => {
+          // Symmetric toggle: OPEN clears the collapsed flag AND
+          // sets expand (big groups render capped + show-more);
+          // COLLAPSE clears expand AND sets collapsed. The old
+          // code only set flags — a re-opened group stayed
+          // collapsed because userCollapsed outranked userExpanded.
+          if (!isOpen) {
+            const ex = new Set(expandedTypes);
+            ex.add(key);
+            setExpandedTypes(ex);
+            const cx = new Set(collapsedTypes);
+            cx.delete(key);
+            if (cx.size !== collapsedTypes.size) setCollapsedTypes(cx);
+          } else {
+            const cx = new Set(collapsedTypes);
+            cx.add(key);
+            setCollapsedTypes(cx);
+            const ex = new Set(expandedTypes);
+            ex.delete(key);
+            if (ex.size !== expandedTypes.size) setExpandedTypes(ex);
+          }
+        }}
+      >
+        <span className="dataset-caret">{isOpen ? "▾" : "▸"}</span>
+        <span className="dataset-type-name">{type}</span>
+        <span className="dataset-count-pill">{rows.length}</span>
+      </button>
+      {isOpen &&
+        visible.map((r) => (
           <div
-            key={type}
-            className="dataset-type-group"
-            data-testid={`dataset-type-${group.key}-${type}`}
+            key={r.index}
+            className="dataset-row"
+            data-testid={`dataset-row-${r.index}`}
+            onClick={() => onEditResource?.(r.index)}
+            title="Edit in Resource Builder"
           >
-            <button
-              type="button"
-              className="dataset-type-toggle"
-              data-testid={`dataset-type-toggle-${group.key}-${type}`}
-              onClick={() => {
-                // Symmetric toggle: OPEN clears the collapsed flag AND
-                // sets expand (big groups render capped + show-more);
-                // COLLAPSE clears expand AND sets collapsed. The old
-                // code only set flags — a re-opened group stayed
-                // collapsed because userCollapsed outranked userExpanded.
-                if (!isOpen) {
-                  const ex = new Set(expandedTypes);
-                  ex.add(typeKey(type));
-                  setExpandedTypes(ex);
-                  const cx = new Set(collapsedTypes);
-                  cx.delete(typeKey(type));
-                  if (cx.size !== collapsedTypes.size) setCollapsedTypes(cx);
-                } else {
-                  const cx = new Set(collapsedTypes);
-                  cx.add(typeKey(type));
-                  setCollapsedTypes(cx);
-                  const ex = new Set(expandedTypes);
-                  ex.delete(typeKey(type));
-                  if (ex.size !== expandedTypes.size) setExpandedTypes(ex);
-                }
-              }}
-            >
-              <span className="dataset-caret">{isOpen ? "▾" : "▸"}</span>
-              <span className="dataset-type-name">{type}</span>
-              <span className="dataset-count-pill">{rows.length}</span>
-            </button>
-            {isOpen &&
-              visible.map((r) => (
-                <div
-                  key={r.index}
-                  className="dataset-row"
-                  data-testid={`dataset-row-${r.index}`}
+            <span className="dataset-row-id">
+              {r.resourceType}/{r.id}
+              {unattributed && (
+                <span
+                  className="dataset-why"
+                  data-testid={`dataset-why-${r.index}`}
+                  title={attributionWhy(r.resource)}
                 >
-                  <span className="dataset-row-id">
-                    {r.resourceType}/{r.id}
-                    {group.unattributed && (
-                      <span
-                        className="dataset-why"
-                        data-testid={`dataset-why-${r.index}`}
-                        title={attributionWhy(r.resource)}
-                      >
-                        ?
-                      </span>
-                    )}
-                  </span>
-                  <span className="dataset-row-actions">
-                    <button
-                      type="button"
-                      data-testid={`dataset-edit-${r.index}`}
-                      onClick={() => onEditResource?.(r.index)}
-                      title="Edit in Resource Builder"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      data-testid={`dataset-delete-${r.index}`}
-                      onClick={() => onDelete(r.index)}
-                      title="Remove from dataset"
-                    >
-                      ×
-                    </button>
-                  </span>
-                </div>
-              ))}
-            {!filterActive && isOpen && hidden > 0 && (
+                  ?
+                </span>
+              )}
+            </span>
+            <span className="dataset-row-actions">
               <button
                 type="button"
-                className="dataset-more"
-                data-testid={`dataset-more-${group.key}-${type}`}
-                onClick={() => {
-                  const ex = new Set(uncappedTypes);
-                  ex.add(typeKey(type));
-                  setUncappedTypes(ex);
+                data-testid={`dataset-edit-${r.index}`}
+                onClick={(e) => {
+                  e.stopPropagation(); // the row already opens the builder.
+                  onEditResource?.(r.index);
                 }}
+                title="Edit in Resource Builder"
               >
-                + show {hidden} more
+                Edit
               </button>
-            )}
+              <button
+                type="button"
+                data-testid={`dataset-delete-${r.index}`}
+                onClick={(e) => {
+                  e.stopPropagation(); // a row click must not pre-empt delete.
+                  onDelete(r.index);
+                }}
+                title="Remove from dataset"
+              >
+                ×
+              </button>
+            </span>
           </div>
-        );
-      })}
+        ))}
+      {!filterActive && isOpen && hidden > 0 && (
+        <button
+          type="button"
+          className="dataset-more"
+          data-testid={`dataset-more-${groupKey}-${type}`}
+          onClick={() => {
+            const ex = new Set(uncappedTypes);
+            ex.add(key);
+            setUncappedTypes(ex);
+          }}
+        >
+          + show {hidden} more
+        </button>
+      )}
     </div>
   );
 }

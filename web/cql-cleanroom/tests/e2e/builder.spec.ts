@@ -91,7 +91,9 @@ test("builder: edit auto-replaces the source row", async ({ page }) => {
   await page.waitForTimeout(500);
   await page.waitForSelector("[data-testid=dataset-loaded]", { timeout: 60_000 });
 
-  // Edit p1 (dataset row 0) via the Resources tree.
+  // Edit p1 (dataset row 0) via the Resources tree. L3 drill-in first
+  // (reorg 6e): rows live inside the patient's detail view.
+  await page.click("[data-testid=dataset-group-p1]");
   await page.locator("[data-testid=dataset-type-toggle-p1-Patient]").click();
   await page.waitForSelector("[data-testid=dataset-edit-0]");
   await page.click("[data-testid=dataset-edit-0]");

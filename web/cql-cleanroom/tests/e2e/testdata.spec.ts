@@ -25,14 +25,8 @@ test.describe("dataset patient tree", () => {
       timeout: 30_000,
     });
 
-    // Tree view is the default: patient groups appear. Type groups
-    // default COLLAPSED now — expand them (deterministic order).
-    for (const key of ["p1", "p2", "p3"]) {
-      const toggle = page.locator(
-        `[data-testid=dataset-type-toggle-${key}-Patient]`,
-      );
-      if (await toggle.count()) await toggle.click();
-    }
+    // Tree view is the default: the L2 patient list shows one row per
+    // patient with a count pill.
     await page.waitForSelector("[data-testid=dataset-tree]", {
       timeout: 10_000,
     });
@@ -40,12 +34,21 @@ test.describe("dataset patient tree", () => {
     await page.waitForSelector("[data-testid=dataset-group-p2]");
     await page.waitForSelector("[data-testid=dataset-group-p3]");
 
-    // Flat STORAGE-index row testids preserved (3 resources).
+    // L3 drill-in (reorg 6e): clicking a patient row replaces the list
+    // with that patient's type groups; dataset-back returns to L2.
+    await page.click("[data-testid=dataset-group-p1]");
+    await page.waitForSelector("[data-testid=dataset-back]");
+    await page.click("[data-testid=dataset-type-toggle-p1-Patient]");
+
+    // Flat STORAGE-index row testids preserved (p1's Patient = row 0).
     await page.waitForSelector("[data-testid=dataset-row-0]");
     const rows = await page
       .locator("[data-testid^=dataset-row-]")
       .count();
-    if (rows !== 3) throw new Error(`tree rows: ${rows}`);
+    if (rows !== 1) throw new Error(`tree rows: ${rows}`);
+
+    await page.click("[data-testid=dataset-back]");
+    await page.waitForSelector("[data-testid=dataset-group-p2]");
   });
 
   test("raw view toggle keeps the legacy NDJSON editor", async ({ page }) => {
@@ -108,6 +111,8 @@ test.describe("builder v2 recursion", () => {
     // no subject-class field at top level in the demo SD — Condition
     // does). Use Condition.
     await page.click("[data-testid=dataset-add-p1]");
+    // L3 drill-in: watch the auto-saved Condition land in p1's groups.
+    await page.click("[data-testid=dataset-group-p1]");
     await page.selectOption("[data-testid=builder-type]", "Condition");
     await page.fill("[data-testid=builder-field-id]", "cond-p1-1");
     // AUTO-SAVE: commits when valid; wait for the row to appear in p1.

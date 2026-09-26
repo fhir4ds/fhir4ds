@@ -189,6 +189,10 @@ test.describe("dataset tree scale", () => {
     );
     await page.click("[data-testid=dataset-view-tree]");
 
+    // L3 drill-in (reorg 6e): the L2 patient list replaced the inline
+    // tree — open "big" to reach its type groups.
+    await page.click("[data-testid=dataset-group-big]");
+
     // Type group for Observation exists with a count.
     await page.waitForSelector(
       "[data-testid=dataset-type-big-Observation]",

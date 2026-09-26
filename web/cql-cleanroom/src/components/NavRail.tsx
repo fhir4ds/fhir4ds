@@ -9,8 +9,10 @@ import type { NavItem, NavSectionId } from "../lib/navSections";
  * DrawerSection at a time (App defaults it to Tests so `dataset-loaded`
  * stays the visible boot signal). The drawer header caret closes the
  * panel (`nav-close-{id}`). Legacy e2e aliases survive: `library-tabs`
- * (hidden span), `library-tab-N`, `library-tab-add`, `rail-terminology`,
- * `rail-collapse`, `nav-rail`, and the `.rail-badge.*` classes.
+ * (hidden span), `library-tab-N`, `library-tab-add`, `rail-collapse`,
+ * `nav-rail`, and the `.rail-badge.*` classes. The rail's T button opens
+ * the terminology drawer in col1 (`drawer-terminology-toggle`), not a
+ * section panel.
  */
 
 export interface NavRailSectionModel {
@@ -64,6 +66,8 @@ export function NavRail({
   onAddLibrary,
   onAddView,
   onAddExpected,
+  onTerminologyOpen,
+  terminologyOpen = false,
   testsSlot,
 }: {
   sections: Record<NavSectionId, NavRailSectionModel>;
@@ -82,6 +86,9 @@ export function NavRail({
   onAddLibrary: () => void;
   onAddView: () => void;
   onAddExpected: () => void;
+  /** Opens the terminology drawer in col1 (below the editor). */
+  onTerminologyOpen: () => void;
+  terminologyOpen?: boolean;
   testsSlot?: ReactNode;
 }) {
   const panelId = navPanel;
@@ -149,12 +156,12 @@ export function NavRail({
         ))}
         <div className="rail-sep" />
         <button
-          className={`rail-item ${panelId === "valuesets" ? "active" : ""}`}
-          data-testid="rail-terminology"
+          className={`rail-item ${terminologyOpen ? "active" : ""}`}
+          data-testid="drawer-terminology-toggle"
           title="Terminology (ValueSets)"
-          onClick={() => onNavPanelChange("valuesets")}
+          onClick={onTerminologyOpen}
         >
-          <span className="rail-glyph">Ⓣ</span>
+          <span className="rail-glyph">T</span>
           <span className="rail-name">Terminology</span>
         </button>
       </div>

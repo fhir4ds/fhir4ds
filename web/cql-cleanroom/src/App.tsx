@@ -61,7 +61,6 @@ import {
   libraryHash as computeLibraryHash,
   newRunId,
 } from "./lib/runHistory";
-import { GraphPane } from "./components/GraphPane";
 import { Splitter } from "./components/Splitter";
 import { EditorTabs } from "./components/tabs/EditorTabs";
 import { TabHost } from "./components/tabs/hosts";
@@ -1126,9 +1125,7 @@ export default function App() {
       value: paramValues[name] ?? "",
     })),
   );
-  const navExpectedItems = expectedItems(
-    expectedReports[activeMeasureEntry?.id ?? ""] ?? [],
-  );
+  const navExpectedItems = expectedItems(measures, expectedReports);
   const navViewItems = viewItems(viewDefs);
 
   const navSectionModels: Record<
@@ -1191,18 +1188,12 @@ export default function App() {
     }
   };
 
-  const deleteExpectedReport = (index: number) => {
-    const msrId = activeMeasureEntry?.id;
-    if (!msrId) return;
-    setExpectedReports((er) => ({
-      ...er,
-      [msrId]: (er[msrId] ?? []).filter((_, i) => i !== index),
-    }));
+  // REORG 6d: expectations are per-measure now (the nav lists one item
+  // per measure), so the context menu clears the measure's whole set.
+  const clearExpectedReports = (measureId: string) => {
+    setExpectedReports((er) => ({ ...er, [measureId]: [] }));
     // Keep the legacy bool-map carrier in sync (evaluated diff view).
-    const reports = (expectedReports[msrId] ?? []).filter(
-      (_, i) => i !== index,
-    );
-    updateExpectedValues(expectedMapFromReports(reports));
+    updateExpectedValues(expectedMapFromReports([]));
   };
 
   const openEditorTab = (kind: TabKind, resourceId: string) => {
@@ -1323,11 +1314,15 @@ export default function App() {
           }),
       });
     } else if (item.kind === "expected") {
-      items.push({
-        label: "Delete expectation",
-        danger: true,
-        onSelect: () => deleteExpectedReport(item.meta?.index as number),
-      });
+      const msrId = item.meta?.measureId as string;
+      const hasExpectations = (expectedReports[msrId] ?? []).length > 0;
+      if (hasExpectations) {
+        items.push({
+          label: "Clear expectations",
+          danger: true,
+          onSelect: () => clearExpectedReports(msrId),
+        });
+      }
     } else if (item.kind === "view") {
       items.push({
         label: "Rename",
@@ -1466,6 +1461,48 @@ export default function App() {
   const openExpectedEditor = () => {
     openEditorTab("expected", "grid");
   };
+
+  // REORG 6d: every measure gets ONE default derived ViewDefinition
+  // ("View 1", vd_default) so the nav's Views section lists a clickable
+  // resource out of the box. One-shot per measure id: reset does not
+  // re-seed while the measure is unchanged, and user deletions of other
+  // views are not resurrected (the seed only fills an EMPTY collection).
+  const ensuredViewForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!restored || !activeMeasureEntry) return;
+    if (ensuredViewForRef.current === activeMeasureEntry.id) return;
+    ensuredViewForRef.current = activeMeasureEntry.id;
+    setViewDefs((vs) =>
+      vs.length > 0
+        ? vs
+        : [
+            {
+              id: "vd_default",
+              name: "View 1",
+              resource: buildDerivedView(activeMeasureEntry.resource, null),
+            },
+          ],
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restored, activeMeasureEntry]);
+
+  // REORG 6d: every measure gets an (empty) expected-reports slot so
+  // its Expected item renders before anything is authored. Never
+  // clobbers authored expectations.
+  useEffect(() => {
+    if (!restored) return;
+    setExpectedReports((er) => {
+      let changed = false;
+      const next = { ...er };
+      for (const m of measures) {
+        if (!(m.id in next)) {
+          next[m.id] = [];
+          changed = true;
+        }
+      }
+      return changed ? next : er;
+    });
+  }, [restored, measures]);
 
   // REORG phase 6b: the console's sub-tab set follows the ACTIVE editor
   // tab's kind — measure editors surface the Measure Report output,
@@ -1714,6 +1751,8 @@ export default function App() {
           onAddLibrary={addTab}
           onAddView={addStoredView}
           onAddExpected={openExpectedEditor}
+          onTerminologyOpen={() => setTerminologyOpen(true)}
+          terminologyOpen={terminologyOpen}
           testsSlot={
             <DatasetPane
               dataset={dataset}
@@ -1761,6 +1800,8 @@ export default function App() {
               .map((t) => t.id)}
             onTextChange={updateActiveText}
             onSelectionChange={setConsoleSelection}
+            graphOpen={graphOpen}
+            onGraphOpenChange={setGraphOpen}
             onDiagnostics={(diags) => {
               const idx = activeTabRef.current;
               setLibErrors((prev) => {
@@ -1773,34 +1814,20 @@ export default function App() {
             }}
           />
           {consolePlacement === "bottom" && consoleNode}
-          <div className="results-drawer editor-drawer" data-testid="drawer-graph">
-            <button
-              className="drawer-toggle"
-              data-testid="drawer-graph-toggle"
-              onClick={() => setGraphOpen(!graphOpen)}
+          {/* REORG 6d: the visual-editor drawer moved INTO EditorPane's
+              header; the terminology drawer is opened from the rail's T
+              button (drawer-terminology-toggle) and closed here. */}
+          {terminologyOpen && (
+            <div
+              className="results-drawer editor-drawer"
+              data-testid="drawer-terminology"
             >
-              {graphOpen ? "▾" : "▸"} Visual editor
-            </button>
-            {graphOpen && (
-              <div className="drawer-body">
-                <p className="pane-hint">
-                  The graph writes CQL only — Apply replaces the library
-                  text after a parse round-trip. Full text→graph parsing is
-                  future scope; the canvas starts from the default graph.
-                </p>
-                <GraphPane onApplyCql={(cql) => updateActiveText(cql)} />
-              </div>
-            )}
-          </div>
-          <div className="results-drawer editor-drawer" data-testid="drawer-terminology">
-            <button
-              className="drawer-toggle"
-              data-testid="drawer-terminology-toggle"
-              onClick={() => setTerminologyOpen((o) => !o)}
-            >
-              {terminologyOpen ? "▾" : "▸"} Terminology (ValueSets)
-            </button>
-            {terminologyOpen && (
+              <button
+                className="drawer-toggle"
+                onClick={() => setTerminologyOpen(false)}
+              >
+                ▾ Terminology (ValueSets)
+              </button>
               <div className="drawer-body">
                 <TerminologyPane
                   cqlDeclarations={activeDeclarations}
@@ -1811,8 +1838,8 @@ export default function App() {
                   }
                 />
               </div>
-            )}
-          </div>
+            </div>
+          )}
           {hostTab && (
             <TabHost
               tab={hostTab}

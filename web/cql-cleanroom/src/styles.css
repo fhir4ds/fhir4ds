@@ -1207,6 +1207,30 @@ body { margin: 0; }
 .dataset-row:hover { background: #1a212c; }
 .dataset-group-label { font-weight: 600; color: #c9d4e3; font-size: 12px; }
 
+/* L2 patient list + L3 detail (maps-style drill-in, reorg 6e) */
+.dataset-patient-row {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; padding: 2px 2px; min-height: 26px;
+  border-bottom: 1px solid #1c2534; border-radius: 2px;
+  cursor: pointer; background: transparent;
+}
+.dataset-patient-row:hover { background: #1a212c; }
+.dataset-patient-row .dataset-group-label {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dataset-patient-row .dataset-count-pill { flex: none; }
+.dataset-patient-detail .dataset-type-group { margin-top: 2px; }
+.dataset-detail-head {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 2px 0 6px; border-bottom: 1px solid #1c2534; margin-bottom: 4px;
+}
+.dataset-back {
+  background: transparent; border: 1px solid #2c4257; border-radius: 3px;
+  color: #8fb3d9; cursor: pointer; font-size: 11px;
+  padding: 1px 8px; line-height: 18px; font-family: inherit;
+}
+.dataset-back:hover { background: #16202e; color: #c9d4e3; }
+
 /* Cell-level evidence drill-in */
 .results-table td.cell-evidence {
   cursor: pointer;
@@ -1373,3 +1397,14 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 .er-group-title { font-size: 0.75rem; font-weight: 600; color: #a8b8cf; margin-bottom: 4px; }
 .er-pop-row { display: grid; grid-template-columns: 1fr 90px auto; gap: 6px; margin-bottom: 4px; }
 .pane-action { border: 1px solid #2c3644; background: #101822; color: #dbe7ff; border-radius: 6px; padding: 2px 8px; font-size: 0.75rem; cursor: pointer; }
+
+/* REORG 6d: the visual-editor toggle is a pane-header button now. */
+.pane-header .drawer-toggle {
+  width: auto;
+  margin-left: auto;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid #2a2f3a;
+  border-radius: 6px;
+}
