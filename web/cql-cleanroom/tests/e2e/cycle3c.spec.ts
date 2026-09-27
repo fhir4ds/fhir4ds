@@ -1,4 +1,5 @@
 import { test } from "@playwright/test";
+import { waitDatasetResources } from "./dataset";
 
 /**
  * C3-U3 e2e: dataset edit/delete + builder prefill round-trip + the F8
@@ -12,11 +13,7 @@ test.describe("cleanroom cycle-3 dataset editing", () => {
     await page.waitForSelector(".version-badge", { timeout: 150_000 });
 
     // Load the default 3-patient dataset.
-    await page.waitForFunction(
-      () =>
-        document.querySelector('[data-testid=dataset-loaded]')?.textContent ===
-        "Active: 3 resources",
-    );
+    await waitDatasetResources(page, 3);
 
     // Edit row 0 (p1, female) → builder prefilled with gender=female.
     // L3 drill-in (reorg 6e), then expand p1's Patient group (it
@@ -52,13 +49,7 @@ test.describe("cleanroom cycle-3 dataset editing", () => {
 
     // Delete p1's row → 2 remain.
     await page.click('[data-testid=dataset-delete-0]');
-    await page.waitForFunction(
-      () =>
-        document.querySelector('[data-testid=dataset-loaded]')?.textContent ===
-        "Active: 2 resources",
-      undefined,
-      { timeout: 30_000 },
-    );
+    await waitDatasetResources(page, 2);
     console.log("DELETE_REMOVED: true");
   });
 
@@ -76,13 +67,7 @@ test.describe("cleanroom cycle-3 dataset editing", () => {
     await page.fill('[data-testid=builder-field-gender]', "female");
     // App boots with the DEFAULT demo dataset (3 resources) since the
     // evaluate-button removal; adding px makes 4.
-    await page.waitForFunction(
-      () =>
-        document.querySelector('[data-testid=dataset-loaded]')?.textContent ===
-        "Active: 4 resources",
-      undefined,
-      { timeout: 30_000 },
-    );
+    await waitDatasetResources(page, 4);
     console.log("BUILT_ADDED: true");
 
     // Load the default dataset on top (append flow covered elsewhere);

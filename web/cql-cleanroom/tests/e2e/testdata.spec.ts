@@ -1,4 +1,5 @@
 import { test, type Page } from "@playwright/test";
+import { waitDatasetResources } from "./dataset";
 
 /**
  * Test-data-authoring campaign e2e (FEATURE_CLEANROOM_TEST_DATA_AUTHORING.md):
@@ -21,7 +22,7 @@ test.describe("dataset patient tree", () => {
   test("groups demo resources by patient with flat-index rows", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.waitForSelector("[data-testid=dataset-loaded]", {
+    await page.waitForSelector("[data-testid=dataset-tree]", {
       timeout: 30_000,
     });
 
@@ -59,20 +60,6 @@ test.describe("dataset patient tree", () => {
     await page.waitForSelector("[data-testid=dataset-group-p2]");
   });
 
-  test("raw view toggle keeps the legacy NDJSON editor", async ({ page }) => {
-    await bootReady(page);
-    await resetWorkspace(page);
-    await page.waitForSelector("[data-testid=dataset-loaded]", {
-      timeout: 30_000,
-    });
-    await page.waitForSelector("[data-testid=dataset-tree]");
-    await page.click("[data-testid=dataset-view-raw]");
-    await page.waitForSelector("[data-testid=dataset-editor]", {
-      timeout: 10_000,
-    });
-    await page.click("[data-testid=dataset-view-tree]");
-    await page.waitForSelector("[data-testid=dataset-tree]");
-  });
 });
 
 test.describe("builder v2 recursion", () => {
@@ -112,7 +99,7 @@ test.describe("builder v2 recursion", () => {
   test("reference picker emits Reference objects with context default", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.waitForSelector("[data-testid=dataset-loaded]");
+    await page.waitForSelector("[data-testid=dataset-tree]");
 
     // Per-patient + on p1: opens the builder for a new resource with
     // a subject-class field preseeded to Patient/p1 (Observation has
@@ -147,7 +134,7 @@ test.describe("bundle export/import", () => {
   test("export then replace-import round-trips the dataset", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.waitForSelector("[data-testid=dataset-loaded]");
+    await page.waitForSelector("[data-testid=dataset-tree]");
 
     const [download] = await Promise.all([
       page.waitForEvent("download", { timeout: 60_000 }),
@@ -164,11 +151,7 @@ test.describe("bundle export/import", () => {
     await page.waitForTimeout(1200);
     await page.click("[data-testid=bundle-mode]"); // merge -> replace
     await page.setInputFiles("[data-testid=bundle-import-input]", path);
-    await page.waitForSelector("[data-testid=dataset-loaded]", {
-      timeout: 30_000,
-    });
-    const loaded = await page.textContent("[data-testid=dataset-loaded]");
-    if (!loaded?.includes("3")) throw new Error(`dataset not restored: ${loaded}`);
+    await waitDatasetResources(page, 3, 30_000);
   });
 });
 

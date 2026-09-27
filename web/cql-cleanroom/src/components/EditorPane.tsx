@@ -285,13 +285,6 @@ export function EditorPane({
     <section className="pane editor-pane" data-testid="editor-pane">
       <div className="pane-header">
         <h2>Library</h2>
-        <span className="pane-meta" data-testid="parse-status">
-          {diags.length === 0
-            ? parseMs != null
-              ? `parsed ✓ ${parseMs}ms`
-              : "parsing…"
-            : `${diags.length} diagnostic${diags.length === 1 ? "" : "s"}`}
-        </span>
         {onGraphOpenChange && (
           <button
             className="drawer-toggle"
@@ -320,6 +313,15 @@ export function EditorPane({
           <GraphPane onApplyCql={(cql) => onTextChange(cql)} />
         </div>
       )}
+      {/* REORG 6f.1: execution stats live bottom-right (same convention
+          as the console's rows·columns footer). */}
+      <span className="pane-meta editor-stat" data-testid="parse-status">
+        {diags.length === 0
+          ? parseMs != null
+            ? `parsed ✓ ${parseMs}ms`
+            : "parsing…"
+          : `${diags.length} diagnostic${diags.length === 1 ? "" : "s"}`}
+      </span>
     </section>
   );
 }

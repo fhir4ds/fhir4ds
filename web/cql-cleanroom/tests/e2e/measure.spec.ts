@@ -13,7 +13,7 @@ async function bootReady(page: Page) {
 }
 
 async function loadDataset(page: Page) {
-  await page.waitForSelector("[data-testid=dataset-loaded]", {
+  await page.waitForSelector("[data-testid=dataset-tree]", {
     timeout: 30_000,
   });
 }
@@ -70,7 +70,16 @@ test.describe("measure pane authoring", () => {
     await page.selectOption("[data-testid=measure-code-2]", {
       label: "denominator-exclusion",
     });
-    // Define picker lists the parsed definitions of the main library.
+    // Define picker lists the parsed definitions of the main library
+    // (cold-boot parse takes seconds — poll for the option to land).
+    await page.waitForFunction(
+      () =>
+        [...document.querySelectorAll("[data-testid=measure-define-2] option")].some(
+          (o) => o.textContent?.includes("Initial Population"),
+        ),
+      undefined,
+      { timeout: 30_000 },
+    );
     const options = await page
       .locator("[data-testid=measure-define-2] option")
       .allTextContents();

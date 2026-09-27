@@ -85,7 +85,7 @@ test("MADiE package import → evaluate → export round-trip", async ({ page })
   );
 
   // Load dataset + evaluate — Measure came from the package.
-  await page.waitForSelector("[data-testid=dataset-loaded]");
+  await page.waitForSelector("[data-testid=dataset-tree]");
   await page.waitForSelector("[data-testid=results-table]", { timeout: 90_000 });
 
   // MR output renders in the console while a measure editor tab is

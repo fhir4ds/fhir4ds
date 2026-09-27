@@ -6,8 +6,8 @@ import type { NavItem, NavSectionId } from "../lib/navSections";
  * REORG phase 6d — maps-style nav. L1: an icon strip, one button per
  * section (testid `nav-toggle-{id}`; clicking the active section
  * collapses the rail). L2: a slide-out panel hosting exactly ONE
- * DrawerSection at a time (App defaults it to Tests so `dataset-loaded`
- * stays the visible boot signal). The drawer header caret closes the
+ * DrawerSection at a time (App defaults it to Tests so the dataset
+ * tree stays the visible boot signal). The drawer header caret closes the
  * panel (`nav-close-{id}`). Legacy e2e aliases survive: `library-tabs`
  * (hidden span), `library-tab-N`, `library-tab-add`, `rail-collapse`,
  * `nav-rail`, and the `.rail-badge.*` classes. The rail's T button

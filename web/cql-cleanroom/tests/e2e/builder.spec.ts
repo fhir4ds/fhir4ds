@@ -1,4 +1,5 @@
 import { test } from "@playwright/test";
+import { waitDatasetResources, datasetResourceCount } from "./dataset";
 
 /**
  * Resource Builder auto-save e2e (replaces the manual validate→add flow):
@@ -14,7 +15,7 @@ test("builder: valid form auto-commits a Patient", async ({ page }) => {
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
   await page.click("[data-testid=workspace-reset]");
   await page.waitForTimeout(500);
-  await page.waitForSelector("[data-testid=dataset-loaded]", { timeout: 60_000 });
+  await page.waitForSelector("[data-testid=dataset-tree]", { timeout: 60_000 });
 
   // Fresh builder tab (defaults to Patient).
   await page.click("[data-testid=dataset-add-new]");
@@ -35,14 +36,7 @@ test("builder: valid form auto-commits a Patient", async ({ page }) => {
   }
 
   // Auto-commit: dataset grows to 4 resources (~2s debounce + validate).
-  await page.waitForFunction(
-    () =>
-      document
-        .querySelector("[data-testid=dataset-loaded]")
-        ?.textContent?.includes("4 resources"),
-    undefined,
-    { timeout: 30_000 },
-  );
+  await waitDatasetResources(page, 4);
   console.log("AUTO_COMMIT: 4 resources OK");
 
   // The new patient appears in the Resources tree under its own group.
@@ -58,7 +52,7 @@ test("builder: invalid draft never commits", async ({ page }) => {
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
   await page.click("[data-testid=workspace-reset]");
   await page.waitForTimeout(500);
-  await page.waitForSelector("[data-testid=dataset-loaded]", { timeout: 60_000 });
+  await page.waitForSelector("[data-testid=dataset-tree]", { timeout: 60_000 });
 
   // Fresh builder tab, then Raw JSON mode with a resource missing resourceType.
   await page.click("[data-testid=dataset-add-new]");
@@ -70,9 +64,9 @@ test("builder: invalid draft never commits", async ({ page }) => {
 
   // Give the auto-commit debounce ample time to (wrongly) fire.
   await page.waitForTimeout(3500);
-  const loaded = await page.textContent("[data-testid=dataset-loaded]");
-  if (!loaded?.includes("3 resources")) {
-    throw new Error(`invalid draft committed: ${loaded}`);
+  const count = await datasetResourceCount(page);
+  if (count !== 3) {
+    throw new Error(`invalid draft committed: ${count} resources`);
   }
 
   // Diagnostics surface (auto-validate result).
@@ -89,7 +83,7 @@ test("builder: edit auto-replaces the source row", async ({ page }) => {
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
   await page.click("[data-testid=workspace-reset]");
   await page.waitForTimeout(500);
-  await page.waitForSelector("[data-testid=dataset-loaded]", { timeout: 60_000 });
+  await page.waitForSelector("[data-testid=dataset-tree]", { timeout: 60_000 });
 
   // Edit p1 (dataset row 0) via the Resources tree. L3 drill-in first
   // (reorg 6e): rows live inside the patient's detail view.
@@ -107,13 +101,6 @@ test("builder: edit auto-replaces the source row", async ({ page }) => {
 
   // Change gender; auto-commit must REPLACE row 0 (still 3 resources).
   await page.fill('[data-testid=builder-field-gender]', 'male');
-  await page.waitForFunction(
-    () =>
-      document
-        .querySelector("[data-testid=dataset-loaded]")
-        ?.textContent?.includes("3 resources"),
-    undefined,
-    { timeout: 30_000 },
-  );
+  await waitDatasetResources(page, 3);
   console.log("EDIT_REPLACED: dataset still 3 resources");
 });

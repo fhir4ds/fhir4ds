@@ -1,36 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { DatasetSpec } from "../lib/protocol";
 import { groupDataset, type PatientGroup } from "../lib/datasetGroup";
 import { patientHint } from "./nav/PatientDetailPanel";
 
 /**
- * WORKBENCH_REORG 6e — Tests drawer, L2 only.
+ * REORG 6f.1 — Tests drawer, L2 only, no chrome: the patient list fills
+ * the nav panel (one row per patient group with a count pill); the L3
+ * detail (nav/PatientDetailPanel) slides out BESIDE it while a patient
+ * is focused. The focused row drops its `dataset-group-{pid}` testid
+ * while the detail panel owns it, so `dataset-group-{other}` rows stay
+ * addressable while drilled in.
  *
- * L2 "Patients": one row per patient group (`dataset-group-{pid}` on the
- * row) with a resource-count pill; clicking a row asks App to focus that
- * patient, which renders the L3 detail as a SECOND maps-style nav panel
- * (nav/PatientDetailPanel) over this one — this pane stays mounted
- * underneath, so `dataset-group-{other}` rows and the `dataset-loaded`
- * boot signal remain in the DOM while drilled in. The focused row drops
- * its `dataset-group-{pid}` testid while the detail panel owns it.
- *
- * Preserved here: `dataset-view-tree`/`dataset-view-raw` +
- * `dataset-editor` (raw NDJSON auto-commit), the L2 `dataset-filter`,
- * `dataset-add-new`, and `dataset-loaded` (mounted + visible whenever
- * the Tests panel is open — the e2e boot signal).
+ * Kept content signals: the L2 `dataset-filter`, `dataset-add-new`, and
+ * `dataset-tree` (+ `dataset-group-*` rows) — what the e2e suite waits on.
  */
 
 export function DatasetPane({
   dataset,
-  onDatasetChange,
   focusedPid,
   onFocusedPidChange,
   onAddForPatient,
   onAddNew,
 }: {
   dataset: DatasetSpec | null;
-  onDatasetChange: (ds: DatasetSpec | null) => void;
-  /** Focused patient group key (null = L2 list); detail renders above. */
+  /** Focused patient group key (null = L2 list); detail renders beside. */
   focusedPid: string | null;
   onFocusedPidChange: (pid: string | null) => void;
   /** §3.2: per-patient `+` — builder opens with a Patient/<id> default. */
@@ -38,8 +31,6 @@ export function DatasetPane({
   /** WORKBENCH_REORG phase 5: fresh builder tab (builder lives in a test tab now). */
   onAddNew?: () => void;
 }) {
-  const [text, setText] = useState(DEFAULT_NDJSON);
-  const [view, setView] = useState<"tree" | "raw">("tree");
   // L2 filter: narrows the patient list (a patient row matches when its
   // id/label matches OR it owns any matching resource — so "Observation"
   // still surfaces the patients that have observations). The L3 row
@@ -52,41 +43,10 @@ export function DatasetPane({
     r.resourceType.toLowerCase().includes(filter.trim().toLowerCase()) ||
     r.id.toLowerCase().includes(filter.trim().toLowerCase());
 
-  const parsed = useMemo<{ resources: any[]; error: string | null }>(() => {
-    if (!text.trim()) return { resources: [], error: null };
-    const resources: any[] = [];
-    for (const [i, line] of text.split("\n").entries()) {
-      if (!line.trim()) continue;
-      try {
-        resources.push(JSON.parse(line));
-      } catch (e) {
-        return { resources: [], error: `line ${i + 1}: ${e}` };
-      }
-    }
-    return { resources, error: null };
-  }, [text]);
-
   const groups = useMemo(
     () => groupDataset(dataset?.resources ?? []),
     [dataset],
   );
-
-  // AUTO-COMMIT: Raw NDJSON edits apply to the active dataset ~2s after
-  // the text settles, when every line parses. Invalid text is a no-op.
-  // (The Use-dataset button is hidden — kept for spec compat.)
-  const lastRawCommitRef = useRef("");
-  useEffect(() => {
-    if (view !== "raw") return;
-    if (parsed.error || parsed.resources.length === 0) return;
-    const key = JSON.stringify(parsed.resources);
-    const timer = setTimeout(() => {
-      if (key === lastRawCommitRef.current) return;
-      lastRawCommitRef.current = key;
-      onDatasetChange({ resources: parsed.resources });
-    }, 2000);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, view]);
 
   // INV-C3-3: immutable replace — never mutate the dataset in place.
   const groupMatches = (g: PatientGroup) =>
@@ -96,58 +56,8 @@ export function DatasetPane({
     g.rows.some(matches);
 
   return (
-    <section className="pane" data-testid="dataset-pane">
-      <header className="pane-header">
-        <h2>Resources</h2>
-        <span className="dataset-view-toggle">
-          <button
-            type="button"
-            data-testid="dataset-view-tree"
-            className={view === "tree" ? "active" : ""}
-            onClick={() => setView("tree")}
-          >
-            Tree
-          </button>
-          <button
-            type="button"
-            data-testid="dataset-view-raw"
-            className={view === "raw" ? "active" : ""}
-            onClick={() => setView("raw")}
-          >
-            Raw
-          </button>
-        </span>
-        <button
-          data-testid="load-dataset"
-          hidden
-          disabled={!!parsed.error || !parsed.resources.length}
-          onClick={() => onDatasetChange({ resources: parsed.resources })}
-        >
-          Use dataset ({parsed.resources.length})
-        </button>
-      </header>
-      {view === "raw" && (
-        <>
-          {parsed.error && (
-            <div className="pane-error" data-testid="dataset-error">
-              {parsed.error}
-            </div>
-          )}
-          <textarea
-            className="dataset-editor"
-            data-testid="dataset-editor"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            spellCheck={false}
-          />
-        </>
-      )}
-      {dataset && (
-        <div className="dataset-loaded" data-testid="dataset-loaded">
-          Active: {dataset.resources?.length ?? 0} resources
-        </div>
-      )}
-      {view === "tree" && dataset && (dataset.resources?.length ?? 0) > 0 && (
+    <section className="dataset-pane" data-testid="dataset-pane">
+      {dataset && (dataset.resources?.length ?? 0) > 0 && (
         <>
           {!focusedPid && (
             <div className="dataset-tree-controls">
@@ -185,7 +95,7 @@ export function DatasetPane({
           </div>
         </>
       )}
-      {view === "tree" && dataset && !groups.some((g) => !g.unattributed) && (
+      {dataset && !groups.some((g) => !g.unattributed) && (
         <div className="pane-empty" data-testid="dataset-no-patients">
           No patient-attributed resources — patient-context evaluation will
           see none of these.
@@ -267,9 +177,3 @@ function PatientRow({
     </div>
   );
 }
-
-const DEFAULT_NDJSON = [
-  JSON.stringify({ resourceType: "Patient", id: "p1", gender: "female", name: [{ given: ["Ann"] }] }),
-  JSON.stringify({ resourceType: "Patient", id: "p2", gender: "male", name: [{ given: ["Bob"] }] }),
-  JSON.stringify({ resourceType: "Patient", id: "p3", gender: "female" }),
-].join("\n");

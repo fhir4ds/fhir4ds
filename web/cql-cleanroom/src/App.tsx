@@ -259,7 +259,7 @@ export default function App() {
   // activeTab goes stale across fast tab switches).
   const [libErrors, setLibErrors] = useState<Record<number, boolean>>({});
   // REORG phase 6d — maps-style nav: one section panel open at a time
-  // (null = collapsed icon rail). Tests defaults open: dataset-loaded
+  // (null = collapsed icon rail). Tests defaults open: the dataset tree
   // is the e2e boot signal and must be visible.
   const [navPanel, setNavPanel] = useState<NavSectionId | null>("tests");
   const [navFilters, setNavFilters] = useState<
@@ -1938,7 +1938,6 @@ export default function App() {
           testsSlot={
             <DatasetPane
               dataset={dataset}
-              onDatasetChange={setDataset}
               focusedPid={focusedPid}
               onFocusedPidChange={setFocusedPid}
               onAddForPatient={addResourceForPatient}

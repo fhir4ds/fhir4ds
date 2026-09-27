@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { importBundleResources, waitDatasetResources } from "./dataset";
 
 /**
  * PASS2 e2e: nav rail (G1) + terminology pane (G2).
@@ -46,7 +47,7 @@ test.describe("nav rail", () => {
   test("evaluation uses the ENTRYPOINT library, not the edited tab", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.waitForSelector("[data-testid=dataset-loaded]");
+    await page.waitForSelector("[data-testid=dataset-tree]");
 
     // Add a second library whose IPP differs (male instead of female).
     await page.click("[data-testid=nav-toggle-libraries]");
@@ -133,21 +134,12 @@ define "Has Name":
     );
 
     // Dataset: one BP observation (LOINC 8480-6) + patients for attribution.
-    await page.click("[data-testid=dataset-view-raw]");
-    await page.fill(
-      "[data-testid=dataset-editor]",
-      JSON.stringify({ resourceType: "Patient", id: "p1", gender: "female", name: [{ given: ["Ann"] }] }) + "\n" +
-      JSON.stringify({ resourceType: "Observation", id: "bp1", status: "final", code: { coding: [{ system: "http://loinc.org", code: "8480-6" }] }, subject: { reference: "Patient/p1" } }),
-    );
-    // Raw auto-commit: wait for the 2-resource dataset to land (~2s debounce).
-    await page.waitForFunction(
-      () =>
-        document
-          .querySelector("[data-testid=dataset-loaded]")
-          ?.textContent?.includes("2 resources"),
-      undefined,
-      { timeout: 30_000 },
-    );
+    // REORG 6f.1: import via the menu (the raw NDJSON view is gone).
+    await importBundleResources(page, [
+      { resourceType: "Patient", id: "p1", gender: "female", name: [{ given: ["Ann"] }] },
+      { resourceType: "Observation", id: "bp1", status: "final", code: { coding: [{ system: "http://loinc.org", code: "8480-6" }] }, subject: { reference: "Patient/p1" } },
+    ]);
+    await waitDatasetResources(page, 2, 30_000);
 
     // Without codes: the declared VS is unsourced in the terminology list.
     await page.click("[data-testid=drawer-terminology-toggle]").catch(() => {});

@@ -1,4 +1,5 @@
 import { test, type Page } from "@playwright/test";
+import { importBundleResources, waitDatasetResources } from "./dataset";
 
 /**
  * Workbench-reorg e2e (FEATURE_CLEANROOM_WORKBENCH_REORG.md):
@@ -160,7 +161,7 @@ test.describe("console sub-tabs + col2 panes", () => {
   test("measure editor surfaces the report output in the console", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.waitForSelector("[data-testid=dataset-loaded]");
+    await page.waitForSelector("[data-testid=dataset-tree]");
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
@@ -193,7 +194,7 @@ test.describe("run history", () => {
     await page.waitForSelector(".version-badge", { timeout: 150_000 });
     await page.waitForFunction(() => Boolean((window as any).__cleanroom));
 
-    await page.waitForSelector("[data-testid=dataset-loaded]");
+    await page.waitForSelector("[data-testid=dataset-tree]");
 
     // First evaluation (auto): female logic, p1 IPP true.
     await page.waitForSelector("[data-testid=results-table]", {
@@ -229,33 +230,21 @@ test.describe("dataset tree scale", () => {
     await bootReady(page);
     await resetWorkspace(page);
 
-    // Build a big dataset through the raw NDJSON view.
-    const lines: string[] = [
-      JSON.stringify({ resourceType: "Patient", id: "big", gender: "female", name: [{ given: ["Bee"] }] }),
+    // REORG 6f.1: build the big dataset via a replace-mode import.
+    const big: Array<Record<string, unknown>> = [
+      { resourceType: "Patient", id: "big", gender: "female", name: [{ given: ["Bee"] }] },
     ];
     for (let i = 0; i < 60; i++) {
-      lines.push(
-        JSON.stringify({
-          resourceType: "Observation",
-          id: `obs-${i}`,
-          status: "final",
-          code: { text: "o" },
-          subject: { reference: "Patient/big" },
-        }),
-      );
+      big.push({
+        resourceType: "Observation",
+        id: `obs-${i}`,
+        status: "final",
+        code: { text: "o" },
+        subject: { reference: "Patient/big" },
+      });
     }
-    await page.click("[data-testid=dataset-view-raw]");
-    await page.fill("[data-testid=dataset-editor]", lines.join("\n"));
-    // Raw auto-commit: wait for all 61 resources to land (~2s debounce).
-    await page.waitForFunction(
-      () =>
-        document
-          .querySelector("[data-testid=dataset-loaded]")
-          ?.textContent?.includes("61 resources"),
-      undefined,
-      { timeout: 30_000 },
-    );
-    await page.click("[data-testid=dataset-view-tree]");
+    await importBundleResources(page, big);
+    await waitDatasetResources(page, 61, 60_000);
 
     // L3 drill-in (reorg 6e): the L2 patient list replaced the inline
     // tree — open "big" to reach its type groups.

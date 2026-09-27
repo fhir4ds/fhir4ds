@@ -29,7 +29,7 @@ test.describe("nav rail + panel", () => {
       await expect(page.locator(`[data-testid=nav-toggle-${id}]`)).toBeVisible();
     }
     // Boot signal is VISIBLE inside the default Tests panel.
-    await expect(page.locator("[data-testid=dataset-loaded]")).toBeVisible();
+    await expect(page.locator("[data-testid=dataset-tree]")).toBeVisible();
     await expect(page.locator("[data-testid=nav-sec-tests]")).toBeVisible();
     // Other sections' content mounts only when their icon opens it.
     await expect(page.locator("[data-testid=nav-sec-measures]")).toHaveCount(0);
@@ -42,7 +42,7 @@ test.describe("nav rail + panel", () => {
     await expect(page.locator("[data-testid=nav-sec-tests]")).toHaveCount(0);
     // The Tests icon pops the panel back open.
     await page.click("[data-testid=nav-toggle-tests]");
-    await expect(page.locator("[data-testid=dataset-loaded]")).toBeVisible();
+    await expect(page.locator("[data-testid=dataset-tree]")).toBeVisible();
 
     // Parameters: opens; the filter accepts typing.
     await page.click("[data-testid=nav-toggle-parameters]");

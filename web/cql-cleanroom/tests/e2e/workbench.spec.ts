@@ -1,4 +1,5 @@
 import { test, type Page } from "@playwright/test";
+import { waitDatasetResources } from "./dataset";
 
 async function bootReady(page: Page) {
   await page.goto("/");
@@ -25,10 +26,9 @@ test("editor parses and evaluates with typed results", async ({ page }) => {
     { timeout: 30_000 },
   );
 
-  // Dataset: default NDJSON prefilled → Use dataset
-  await page.waitForSelector("[data-testid=dataset-loaded]");
-  const loaded = await page.textContent("[data-testid=dataset-loaded]");
-  if (!loaded?.includes("3")) throw new Error(`expected 3 resources: ${loaded}`);
+  // Dataset: the demo 3-resource workspace.
+  await page.waitForSelector("[data-testid=dataset-tree]");
+  await waitDatasetResources(page, 3);
 
   // Evaluate → typed results table + SQL viewer
   await page.waitForSelector("[data-testid=results-table]", {
@@ -54,7 +54,7 @@ test("tests run against the loaded dataset", async ({ page }) => {
   // (IndexedDB survives browser-context isolation — same origin).
   await page.click("[data-testid=workspace-reset]");
   await page.waitForTimeout(600);
-  await page.waitForSelector("[data-testid=dataset-loaded]");
+  await page.waitForSelector("[data-testid=dataset-tree]");
 
   // REORG phase 6a: the expected grid is the "expected" editor tab —
   // "+" on the Expected Results drawer seeds a skeleton and opens it.

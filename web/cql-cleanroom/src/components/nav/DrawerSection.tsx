@@ -5,7 +5,7 @@ import type { NavSectionId } from "../../lib/navSections";
  * REORG phase 6d — one nav panel section: header (caret closes the
  * panel, testid `nav-close-{id}`), count, filter input, item list.
  * Rendered inside NavRail's single slide-out panel; the Tests panel
- * hosts the DatasetPane whose `dataset-loaded` is the e2e boot signal.
+ * hosts the DatasetPane whose `dataset-tree` is the e2e boot signal.
  */
 
 export function DrawerSection({

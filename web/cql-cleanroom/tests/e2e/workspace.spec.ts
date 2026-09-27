@@ -1,4 +1,5 @@
 import { test, type Page } from "@playwright/test";
+import { waitDatasetResources } from "./dataset";
 
 /**
  * C1-U7 e2e: workspace persistence (IndexedDB), multi-library tabs,
@@ -17,17 +18,11 @@ test("workspace persists libraries and dataset across reload", async ({ page }) 
   // origin). Reset restores the 3-resource demo synchronously; wait
   // for the count AND the autosave flush before reloading.
   await page.click("[data-testid=workspace-reset]");
-  await page.waitForFunction(
-    () =>
-      document.querySelector("[data-testid=dataset-loaded]")?.textContent ===
-      "Active: 3 resources",
-    undefined,
-    { timeout: 10_000 },
-  );
+  await waitDatasetResources(page, 3, 10_000);
   await page.waitForTimeout(1500);
 
   // Load dataset + add a second library tab
-  await page.waitForSelector("[data-testid=dataset-loaded]");
+  await page.waitForSelector("[data-testid=dataset-tree]");
   await page.click("[data-testid=nav-toggle-libraries]");
   await page.click("[data-testid=library-tab-add]");
   await page.waitForSelector("[data-testid=library-tab-1]");
@@ -40,11 +35,7 @@ test("workspace persists libraries and dataset across reload", async ({ page }) 
   // tabs — REORG 6d).
   await page.reload();
   await page.waitForSelector(".version-badge", { timeout: 150_000 });
-  await page.waitForSelector("[data-testid=dataset-loaded]", {
-    timeout: 30_000,
-  });
-  const loaded = await page.textContent("[data-testid=dataset-loaded]");
-  if (!loaded?.includes("3")) throw new Error(`dataset not restored: ${loaded}`);
+  await waitDatasetResources(page, 3, 30_000);
   await page.click("[data-testid=nav-toggle-libraries]");
   await page.waitForSelector("[data-testid=library-tab-1]", { timeout: 30_000 });
 
@@ -55,7 +46,7 @@ test("workspace persists libraries and dataset across reload", async ({ page }) 
 
 test("cell evidence drill-in and population flow", async ({ page }) => {
   await bootReady(page);
-  await page.waitForSelector("[data-testid=dataset-loaded]");
+  await page.waitForSelector("[data-testid=dataset-tree]");
 
   // Auto-evaluation runs (no Evaluate button) — wait for results.
   await page.waitForSelector("[data-testid=results-table]", {
