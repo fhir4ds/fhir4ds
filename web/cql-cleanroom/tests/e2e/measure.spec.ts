@@ -300,3 +300,105 @@ test.describe("view pane flatten", () => {
     if (!first?.includes("Patient/")) throw new Error(`view row: ${first}`);
   });
 });
+
+test.describe("measure association (reorg 6f)", () => {
+  test("primary-library picker repoints the measure + closure chips", async ({
+    page,
+  }) => {
+    await bootReady(page);
+    await loadDataset(page);
+    await openMeasureTab(page);
+
+    // The entrypoint's closure surfaces as read-only chips.
+    await page.waitForSelector("[data-testid=measure-assoc]");
+    const chip0 = await page.textContent(".measure-assoc .assoc-chip");
+    if (!chip0?.includes("CleanroomDemo"))
+      throw new Error(`initial chip: ${chip0}`);
+
+    // A second library becomes selectable; picking it re-points the
+    // measure through the SAME write path as the nav double-click.
+    await page.click("[data-testid=nav-toggle-libraries]");
+    await page.click("[data-testid=library-tab-add]");
+    await page.waitForSelector("[data-testid=library-tab-1]");
+    await page.locator("[data-testid^=editor-tab-measure-]").click();
+    await page.waitForSelector("[data-testid=measure-main-library]");
+    const secondName = await page.evaluate(() => {
+      const sel = document.querySelector<HTMLSelectElement>(
+        "[data-testid=measure-main-library]",
+      );
+      return sel!.options[1]?.textContent ?? "";
+    });
+    if (!secondName) throw new Error("second library option missing");
+    await page.selectOption("[data-testid=measure-main-library]", {
+      index: 1,
+    });
+    await page.waitForFunction(
+      (name) =>
+        document
+          .querySelector(".measure-assoc .assoc-chip")
+          ?.textContent?.includes(name ?? ""),
+      secondName,
+      { timeout: 10_000 },
+    );
+
+    // Switch back so the heartbeat evaluates a real library again.
+    await page.selectOption("[data-testid=measure-main-library]", {
+      index: 0,
+    });
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector(".measure-assoc .assoc-chip")
+          ?.textContent?.includes("CleanroomDemo"),
+      undefined,
+      { timeout: 10_000 },
+    );
+  });
+
+  test("capture-current-run writes the expected grid + authored status", async ({
+    page,
+  }) => {
+    await bootReady(page);
+    await loadDataset(page);
+    await page.waitForSelector("[data-testid=results-table]", {
+      timeout: 90_000,
+    });
+    await openMeasureTab(page);
+
+    // Not authored yet; the Measure Report tab carries the capture.
+    await page.waitForSelector("[data-testid=expected-status]");
+    const before = await page.textContent("[data-testid=expected-status]");
+    if (!before?.includes("not authored"))
+      throw new Error(`status before capture: ${before}`);
+
+    await page.waitForSelector("[data-testid=mr-table]", { timeout: 30_000 });
+    await page.click("[data-testid=capture-expected]");
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector("[data-testid=expected-status]")
+          ?.textContent?.includes("3 patients"),
+      undefined,
+      { timeout: 10_000 },
+    );
+
+    // The grid mirrors the run (female demo logic: p1/p3 in the
+    // initial population, p2 out).
+    await page.click("[data-testid=measure-open-expected]");
+    await page.waitForSelector("[data-testid=expected-grid]");
+    const checked = await page.evaluate(() => {
+      const get = (tid: string) =>
+        document.querySelector<HTMLInputElement>(
+          `[data-testid=expected-${tid}]`,
+        )?.checked ?? null;
+      return {
+        p1: get("p1-initial-population"),
+        p2: get("p2-initial-population"),
+        p3: get("p3-initial-population"),
+      };
+    });
+    if (checked.p1 !== true || checked.p3 !== true || checked.p2 !== false) {
+      throw new Error(`captured grid mismatch: ${JSON.stringify(checked)}`);
+    }
+  });
+});

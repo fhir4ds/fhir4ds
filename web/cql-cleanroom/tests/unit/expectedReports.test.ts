@@ -41,6 +41,21 @@ describe("expectedReports conversions (cases ⇄ MeasureReport ⇄ map)", () => 
     expect(back).toEqual(map);
   });
 
+  it("measureUrn threads onto authored reports and survives the round-trip (6f)", () => {
+    const urn = "http://cleanroom.example/Measure/Demo|1.0.0";
+    const map = { p1: { "initial-population": true } };
+    const reports = reportsFromExpectedMap(map, urn);
+    expect(reports[0].measure).toBe(urn);
+    // The map converter ignores `measure` — the grid still round-trips.
+    expect(expectedMapFromReports(reports)).toEqual(map);
+    // Cases path threads the same urn; absent → placeholder keeps
+    // legacy zips valid.
+    expect(expectedReportsFromCases(CASES, urn)[0].measure).toBe(urn);
+    expect(expectedReportsFromCases(CASES)[0].measure).toBe(
+      "urn:cleanroom:measure",
+    );
+  });
+
   it("reports → legacy cases keeps row form (v5 zip interop)", () => {
     const reports = expectedReportsFromCases(CASES);
     expect(casesFromReports(reports)).toEqual(CASES);

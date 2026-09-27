@@ -4,6 +4,7 @@ import { ViewPane } from "../ViewPane";
 import { TerminologyPane } from "../TerminologyPane";
 import { ValuesetEditor } from "./ValuesetEditor";
 import type { ViewOverrides } from "../../lib/viewDerivation";
+import type { LibraryClosure } from "../../lib/libraryGraph";
 import type { FlattenViewResult } from "../../lib/protocol";
 import type { ParamBinding } from "../EditorPane";
 
@@ -21,6 +22,14 @@ export interface TabHostProps {
   onMeasureChange: (m: Record<string, unknown> | null) => void;
   measureLibs: Array<{ name: string; text: string }>;
   measureMain: { name: string; text: string };
+  /* 6f: primary-library + expected-results association */
+  measureMainLibraryId?: string;
+  measureLibraryChoices?: Array<{ id: string; name: string }>;
+  onMeasureMainLibraryChange?: (id: string) => void;
+  measureClosure?: LibraryClosure;
+  measureValuesetSources?: Record<string, "workspace" | "dataset">;
+  measureExpectedStatus?: { patients: number } | null;
+  onOpenExpected?: () => void;
   /* valueset */
   valueset: Record<string, unknown> | null;
   valuesetProvenance?: string;
@@ -56,6 +65,13 @@ export function TabHost(p: TabHostProps) {
           main={p.measureMain}
           measure={p.measure}
           onChange={p.onMeasureChange}
+          mainLibraryId={p.measureMainLibraryId}
+          libraryChoices={p.measureLibraryChoices}
+          onMainLibraryChange={p.onMeasureMainLibraryChange}
+          closure={p.measureClosure}
+          valuesetSources={p.measureValuesetSources}
+          expectedStatus={p.measureExpectedStatus}
+          onOpenExpected={p.onOpenExpected}
         />
       );
     case "valueset":
@@ -75,7 +91,7 @@ export function TabHost(p: TabHostProps) {
             <h2>Parameters</h2>
             <span className="pane-meta">entrypoint bindings</span>
           </div>
-          <div className="drawer-body">
+          <div className="drawer-body pane-body">
             {p.params.length === 0 && (
               <p className="pane-hint">
                 No parameters declared in the entrypoint library.

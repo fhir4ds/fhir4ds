@@ -95,7 +95,7 @@ export function ValuesetEditor({
         </button>
       </div>
       {rawMode ? (
-        <div className="drawer-body">
+        <div className="pane-body">
           <textarea
             className="raw-json"
             data-testid="valueset-raw"
@@ -122,7 +122,7 @@ export function ValuesetEditor({
           </div>
         </div>
       ) : (
-        <div className="drawer-body" data-testid="valueset-codes">
+        <div className="pane-body" data-testid="valueset-codes">
           <div className="vs-url-row">
             <label>
               url{" "}

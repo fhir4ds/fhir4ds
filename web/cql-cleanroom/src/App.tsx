@@ -54,6 +54,7 @@ import {
   expectedMapFromReports,
   reportsFromExpectedMap,
 } from "./lib/expectedReports";
+import { libraryClosure } from "./lib/libraryGraph";
 import {
   appendRun,
   artifactFromRows,
@@ -293,6 +294,16 @@ export default function App() {
   const activeMeasureEntry =
     measures.find((m) => m.id === activeMeasureId) ?? measures[0] ?? null;
   const measure = activeMeasureEntry?.resource ?? null;
+  // 6f: canonical URN authored onto expected MeasureReports (explicit
+  // url wins; otherwise the cleanroom urn convention).
+  const measureUrn = useMemo(
+    () =>
+      String(
+        (measure?.url as string | undefined) ??
+          `urn:cleanroom:measure:${String(measure?.name ?? "CleanroomMeasure")}`,
+      ),
+    [measure],
+  );
   // entrypoint index = position of the active measure's main library
   // (drives eval + the rail dot; falls back to the first library).
   const entrypoint = Math.max(
@@ -317,7 +328,19 @@ export default function App() {
     if (!activeMeasureEntry) return;
     setExpectedReports((er) => ({
       ...er,
-      [activeMeasureEntry.id]: reportsFromExpectedMap(next),
+      [activeMeasureEntry.id]: reportsFromExpectedMap(next, measureUrn),
+    }));
+  };
+  /** 6f: one-click "capture current run as expected" — the console's
+   *  Measure Report tab writes the last run's populations into the
+   *  authored expected reports for the active measure. */
+  const captureExpectedFromRun = () => {
+    if (!activeMeasureEntry || !lastReports?.length) return;
+    const map = expectedMapFromReports(lastReports);
+    if (!map) return;
+    setExpectedReports((er) => ({
+      ...er,
+      [activeMeasureEntry.id]: reportsFromExpectedMap(map, measureUrn),
     }));
   };
   /** Replace the active measure's FHIR resource (identity keys kept). */
@@ -333,15 +356,20 @@ export default function App() {
       ),
     );
   };
-  /** Point the active measure's entry library at libraries[i]. */
-  const setEntrypoint = (i: number) => {
-    const lib = libraries[i];
-    if (!lib || !activeMeasureEntry) return;
+  /** Point the active measure's primary library at a library id (6f).
+   *  The single write path — the nav double-click, context menu and the
+   *  MeasurePane picker all land here. */
+  const setMainLibrary = (libId: string) => {
+    if (!activeMeasureEntry) return;
     setMeasures((ms) =>
       ms.map((m) =>
-        m.id === activeMeasureEntry.id ? { ...m, mainLibraryId: lib.id } : m,
+        m.id === activeMeasureEntry.id ? { ...m, mainLibraryId: libId } : m,
       ),
     );
+  };
+  const setEntrypoint = (i: number) => {
+    const lib = libraries[i];
+    if (lib) setMainLibrary(lib.id);
   };
   // MeasureReports from the last evaluation (View drawer default source).
   const [lastReports, setLastReports] = useState<
@@ -693,6 +721,29 @@ export default function App() {
     [mainLib.name, mainLib.text],
   );
   const mainLibs = useMemo<LibraryText[]>(() => [main], [main]);
+  // 6f: the primary library's include closure + valueset declarations,
+  // surfaced as read-only chips in the Measure editor.
+  const measureClosure = useMemo(
+    () =>
+      mainLib
+        ? libraryClosure(libraries, mainLib.name)
+        : { libraryNames: [], valuesetDecls: [] },
+    [libraries, mainLib],
+  );
+  // Workspace terminology OVERRIDES dataset valueset_resources
+  // (url-deduped — same precedence as evalDataset).
+  const measureValuesetSources = useMemo(() => {
+    const map: Record<string, "workspace" | "dataset"> = {};
+    for (const v of dataset?.valueset_resources ?? []) {
+      const url = (v as Record<string, unknown>)?.url;
+      if (typeof url === "string") map[url] = "dataset";
+    }
+    for (const v of terminology.valuesets) {
+      const url = (v as Record<string, unknown>)?.url;
+      if (typeof url === "string") map[url] = "workspace";
+    }
+    return map;
+  }, [dataset, terminology]);
 
   // Runtime parameter bindings (drawer values, coerced): empty strings
   // are absent — a half-filled binding never reaches the engine.
@@ -814,34 +865,14 @@ export default function App() {
   }, [mainLibs, main, evalDataset, outputColumns, measure, runtimeParameters, canAutoEval, recalcSeconds]);
 
   // M1 write-through: Measure.library[] mirrors the entrypoint pin —
-  // primary first, then the dependency closure of that library. Keeps
-  // the exported Measure self-describing without touching the mapping.
+  // primary first, then the dependency closure of that library (6f: the
+  // BFS lives in lib/libraryGraph). Keeps the exported Measure
+  // self-describing without touching the mapping.
   useEffect(() => {
     if (!measure || !mainLib || !restored || !activeMeasureEntry) return;
-    const closure = [mainLib.name];
-    // Cheap client-side closure via include declarations of each
-    // library below the entrypoint (worker round-trip is overkill
-    // for the common single-include case; the capability remains
-    // the authority at export time).
-    const byName = new Map(libraries.map((l) => [l.name, l]));
-    const seen = new Set([mainLib.name]);
-    const queue = [mainLib.name];
-    while (queue.length) {
-      const name = queue.shift()!;
-      const lib = byName.get(name);
-      if (!lib) continue;
-      const includes = [...lib.text.matchAll(/include\s+([A-Za-z][A-Za-z0-9_]*)/g)].map(
-        (mm) => mm[1],
-      );
-      for (const inc of includes) {
-        if (byName.has(inc) && !seen.has(inc)) {
-          seen.add(inc);
-          closure.push(inc);
-          queue.push(inc);
-        }
-      }
-    }
-    const libraryUrls = closure.map((n) => `urn:cleanroom:lib:${n}`);
+    const libraryUrls = libraryClosure(libraries, mainLib.name).libraryNames.map(
+      (n) => `urn:cleanroom:lib:${n}`,
+    );
     const current = Array.isArray(measure.library)
       ? (measure.library as string[])
       : [];
@@ -1634,6 +1665,8 @@ export default function App() {
       }
       funnelOutput={<MrFunnel result={evalResult} />}
       runRequest={runRequest}
+      onCaptureExpected={captureExpectedFromRun}
+      canCaptureExpected={!!lastReports?.length}
       viewOutput={
         <ViewOutputPanel viewResult={viewResult} runDiff={appRunDiff} />
       }
@@ -1842,7 +1875,12 @@ export default function App() {
         data-testid="app-main"
         style={
           {
-            "--nav-w": navPanel ? "264px" : "52px",
+            "--nav-w":
+              navPanel
+                ? focusedPid && navPanel === "tests"
+                  ? "556px"
+                  : "264px"
+                : "52px",
             "--col1-fr": `${col1Fr}fr`,
             "--editor-fr": `${editorFr}fr`,
           } as React.CSSProperties
@@ -1958,6 +1996,19 @@ export default function App() {
               onMeasureChange={updateActiveMeasure}
               measureLibs={mainLibs}
               measureMain={main}
+              measureMainLibraryId={activeMeasureEntry?.mainLibraryId}
+              measureLibraryChoices={libraries.map((l) => ({
+                id: l.id,
+                name: l.name,
+              }))}
+              onMeasureMainLibraryChange={setMainLibrary}
+              measureClosure={measureClosure}
+              measureValuesetSources={measureValuesetSources}
+              measureExpectedStatus={{
+                patients: (expectedReports[activeMeasureEntry?.id ?? ""] ?? [])
+                  .length,
+              }}
+              onOpenExpected={openExpectedEditor}
               valueset={hostValueset}
               valuesetProvenance={
                 hostTab.kind === "valueset" && hostValueset

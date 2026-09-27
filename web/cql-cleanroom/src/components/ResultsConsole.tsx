@@ -75,6 +75,8 @@ export function ResultsConsole({
   funnelOutput,
   viewOutput,
   runRequest,
+  onCaptureExpected,
+  canCaptureExpected,
   activeTab,
   onTabChange,
 }: {
@@ -100,6 +102,10 @@ export function ResultsConsole({
   viewOutput: React.ReactNode;
   /** REORG 6e: Ctrl/Cmd+Enter from the editor lands here (nonce bumps). */
   runRequest: { mode: "library" | "selection"; nonce: number } | null;
+  /** 6f: capture the current run's populations as the active measure's
+   *  expected reports (Measure Report tab header). */
+  onCaptureExpected?: () => void;
+  canCaptureExpected?: boolean;
   activeTab: ConsoleTab;
   onTabChange: (t: ConsoleTab) => void;
 }) {
@@ -508,6 +514,19 @@ export function ResultsConsole({
         hidden={activeTab !== "mr"}
         data-testid="console-panel-mr"
       >
+        {context === "measure" && onCaptureExpected && (
+          <div className="console-mr-actions">
+            <button
+              className="pane-action"
+              data-testid="capture-expected"
+              disabled={!canCaptureExpected}
+              title="Save the current run's populations as this measure's expected results"
+              onClick={onCaptureExpected}
+            >
+              Capture as expected
+            </button>
+          </div>
+        )}
         {context === "measure" ? mrOutput : null}
       </div>
 

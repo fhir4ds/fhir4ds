@@ -6,6 +6,7 @@ import type {
   ParseResult,
 } from "../lib/protocol";
 import { POPULATION_ORDER } from "../lib/protocol";
+import type { LibraryClosure } from "../lib/libraryGraph";
 import { workerRequest } from "./BootOverlay";
 
 /**
@@ -27,9 +28,30 @@ interface Props {
   main: LibraryText;
   measure: Record<string, unknown> | null;
   onChange: (measure: Record<string, unknown> | null) => void;
+  /* 6f: primary-library association + surfaced dependency closure. */
+  mainLibraryId?: string;
+  libraryChoices?: Array<{ id: string; name: string }>;
+  onMainLibraryChange?: (id: string) => void;
+  closure?: LibraryClosure;
+  valuesetSources?: Record<string, "workspace" | "dataset">;
+  /* 6f: expected-results association. */
+  expectedStatus?: { patients: number } | null;
+  onOpenExpected?: () => void;
 }
 
-export function MeasurePane({ libraries, main, measure, onChange }: Props) {
+export function MeasurePane({
+  libraries,
+  main,
+  measure,
+  onChange,
+  mainLibraryId,
+  libraryChoices,
+  onMainLibraryChange,
+  closure,
+  valuesetSources,
+  expectedStatus,
+  onOpenExpected,
+}: Props) {
   const [parse, setParse] = useState<ParseResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -249,6 +271,20 @@ export function MeasurePane({ libraries, main, measure, onChange }: Props) {
     <section className="pane" data-testid="measure-pane">
       <header className="pane-header">
         <h2>Measure</h2>
+        {libraryChoices && onMainLibraryChange && (
+          <select
+            data-testid="measure-main-library"
+            value={mainLibraryId ?? ""}
+            onChange={(e) => onMainLibraryChange(e.target.value)}
+            title="Primary library — brings in its dependent libraries and valuesets"
+          >
+            {libraryChoices.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        )}
         <div className="pane-actions">
           <button onClick={add} data-testid="measure-add-row">
             + population
@@ -273,6 +309,51 @@ export function MeasurePane({ libraries, main, measure, onChange }: Props) {
       {statusNote && (
         <div className="status-note" data-testid="measure-status">
           {statusNote}
+        </div>
+      )}
+      {closure && closure.libraryNames.length > 0 && (
+        <div className="measure-assoc" data-testid="measure-assoc">
+          <div className="assoc-chips">
+            <span className="assoc-label">Libraries</span>
+            {closure.libraryNames.map((n) => (
+              <span key={n} className="assoc-chip">
+                {n}
+              </span>
+            ))}
+          </div>
+          {closure.valuesetDecls.length > 0 && (
+            <div className="assoc-chips">
+              <span className="assoc-label">ValueSets</span>
+              {closure.valuesetDecls.map((v) => {
+                const src = valuesetSources?.[v.url];
+                return (
+                  <span key={v.url} className="assoc-chip" title={v.url}>
+                    {v.name}
+                    <em className={`assoc-src${src ? "" : " unsourced"}`}>
+                      {src ?? "unsourced"}
+                    </em>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+      {onOpenExpected && (
+        <div className="measure-expected" data-testid="measure-expected">
+          <span className="assoc-label">Expected results</span>
+          <span className="pane-meta" data-testid="expected-status">
+            {expectedStatus && expectedStatus.patients > 0
+              ? `${expectedStatus.patients} patient${expectedStatus.patients === 1 ? "" : "s"} authored`
+              : "not authored"}
+          </span>
+          <button
+            className="pane-action"
+            onClick={onOpenExpected}
+            data-testid="measure-open-expected"
+          >
+            Open grid
+          </button>
         </div>
       )}
       {rows.length === 0 ? (

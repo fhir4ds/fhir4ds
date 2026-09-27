@@ -22,6 +22,7 @@ export type ExpectedMap = { [pid: string]: { [code: string]: boolean } };
 /** Legacy case rows → one authored MeasureReport per patient. */
 export function expectedReportsFromCases(
   cases: unknown[] | null | undefined,
+  measureUrn?: string,
 ): Array<Record<string, unknown>> {
   const byPatient = new Map<string, Array<{ code: string; expect: boolean }>>();
   for (const raw of cases ?? []) {
@@ -36,21 +37,28 @@ export function expectedReportsFromCases(
   }
   const reports: Array<Record<string, unknown>> = [];
   for (const [pid, pops] of byPatient) {
-    reports.push(expectedReportFor(pid, pops));
+    reports.push(expectedReportFor(pid, pops, measureUrn));
   }
   return reports;
 }
 
-/** Authored single-patient expected MeasureReport (count 0|1 per code). */
+/**
+ * Authored single-patient expected MeasureReport (count 0|1 per code).
+ * 6f: measureUrn threads the owning Measure's canonical url so authored
+ * reports are self-describing; the placeholder keeps legacy zips valid.
+ */
+export const PLACEHOLDER_MEASURE_URN = "urn:cleanroom:measure";
+
 export function expectedReportFor(
   pid: string,
   pops: Array<{ code: string; expect: boolean }>,
+  measureUrn?: string,
 ): Record<string, unknown> {
   return {
     resourceType: "MeasureReport",
     status: "complete",
     type: "individual",
-    measure: "urn:cleanroom:measure",
+    measure: measureUrn ?? PLACEHOLDER_MEASURE_URN,
     subject: { reference: `Patient/${pid}` },
     group: [
       {
@@ -97,12 +105,14 @@ export function expectedMapFromReports(
 /** TestsPane expected map → authored MeasureReports (grid is the UI form). */
 export function reportsFromExpectedMap(
   map: ExpectedMap | null | undefined,
+  measureUrn?: string,
 ): Array<Record<string, unknown>> {
   if (!map) return [];
   return Object.entries(map).map(([pid, codes]) =>
     expectedReportFor(
       pid,
       Object.entries(codes).map(([code, expect]) => ({ code, expect })),
+      measureUrn,
     ),
   );
 }

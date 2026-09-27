@@ -230,9 +230,6 @@ function PatientRow({
       onClick={onDrillIn}
       title={`Show ${group.key}'s resources`}
     >
-      <span className="dataset-caret" aria-hidden="true">
-        ▸
-      </span>
       <span
         className={`dataset-group-label${group.unattributed ? " muted" : ""}${group.phantom ? " phantom" : ""}`}
       >

@@ -34,13 +34,18 @@ test.describe("dataset patient tree", () => {
     await page.waitForSelector("[data-testid=dataset-group-p2]");
     await page.waitForSelector("[data-testid=dataset-group-p3]");
 
-    // L3 drill-in (reorg 6e): clicking a patient row replaces the list
-    // with that patient's type groups; dataset-back returns to L2.
+    // L3 drill-in (reorg 6e): clicking a patient row opens that
+    // patient's type groups; dataset-back returns to L2.
     await page.click("[data-testid=dataset-group-p1]");
     await page.waitForSelector("[data-testid=dataset-back]");
-    // REORG 6e: the detail slides out as a SECOND nav panel — the L2
-    // list stays mounted underneath (p2 row still in the DOM).
+    // REORG 6f: the detail slides out BESIDE the list (Maps push) —
+    // the p2 row is still mounted AND visible, and patient rows no
+    // longer carry a chevron (the list itself is the affordance).
     await page.waitForSelector("[data-testid=dataset-group-p2]");
+    const carets = await page
+      .locator(".dataset-patient-row .dataset-caret")
+      .count();
+    if (carets !== 0) throw new Error(`patient-row carets: ${carets}`);
     await page.click("[data-testid=dataset-type-toggle-p1-Patient]");
 
     // Flat STORAGE-index row testids preserved (p1's Patient = row 0).
