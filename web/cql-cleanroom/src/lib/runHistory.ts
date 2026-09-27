@@ -8,7 +8,7 @@
  * produce false drift warnings.
  */
 
-import type { RunEntry } from "../state/workspace";
+import type { RunArtifact, RunEntry } from "../state/workspace";
 
 export async function sha256Hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
@@ -55,9 +55,9 @@ export async function datasetHash(
 export function artifactFromRows(
   rows: Array<Record<string, unknown>>,
   columns: string[],
-): RunEntry["artifact"] {
+): RunArtifact {
   const populationColumns = columns.filter((c) => c !== "patient_id");
-  const patients: RunEntry["artifact"]["patients"] = {};
+  const patients: RunArtifact["patients"] = {};
   for (const row of rows) {
     const pid = String(row["patient_id"] ?? "");
     const populations: Record<string, boolean | null> = {};

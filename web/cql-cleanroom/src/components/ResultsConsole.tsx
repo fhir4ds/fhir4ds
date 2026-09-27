@@ -14,15 +14,20 @@ import type {
   EvidenceResult,
 } from "../lib/protocol";
 import type { Artifact } from "../lib/runDiff";
+import type { RunEntry } from "../state/workspace";
+import { formatRunTimestamp } from "../lib/runHistory";
 
 /**
  * REORG phase 6b — the console, now the single home for run OUTPUT.
  * Its sub-tab set is keyed on the ACTIVE editor tab's kind:
- *   library (or kinds without output) → Results / SQL / AST / Diags
+ *   library (or kinds without output) → Results / SQL / AST / CQL / Diags
  *   measure → Measure Report (pivot) + Funnel (attrition Sankey)
  *   view    → the ViewDefinition flatten output
- * Run / Run-Selection stay in the header in every context. The console
- * docks bottom (col1, under the editor) or right (col2).
+ * REORG 6g — the console is RUN-CENTRIC: every tab renders from the
+ * selected run's replay payload (the run switcher sits right of the
+ * tabs). Runs are triggered from the LIBRARY EDITOR (Run button /
+ * Ctrl+Enter); the console only displays. The console docks bottom
+ * (col1, under the editor) or right (col2).
  *
  * A failing evaluation AUTO-SWITCHES the console to Diagnostics (and
  * back to Results once a run succeeds again) in library contexts.
@@ -32,6 +37,7 @@ export type ConsoleTab =
   | "results"
   | "sql"
   | "ast"
+  | "cql"
   | "diags"
   | "mr"
   | "funnel"
@@ -39,17 +45,12 @@ export type ConsoleTab =
 export type ConsoleContext = "library" | "measure" | "view";
 export type ConsolePlacement = "bottom" | "right";
 
-type ConsoleRows = {
-  columns: string[];
-  rows: Array<Record<string, unknown>>;
-  ms: number | null;
-};
-
 const CONTEXT_TABS: Record<ConsoleContext, Array<{ id: ConsoleTab; label: string }>> = {
   library: [
     { id: "results", label: "Results" },
     { id: "sql", label: "SQL" },
     { id: "ast", label: "AST" },
+    { id: "cql", label: "CQL" },
     { id: "diags", label: "Diagnostics" },
   ],
   measure: [
@@ -75,6 +76,10 @@ export function ResultsConsole({
   funnelOutput,
   viewOutput,
   runRequest,
+  runs,
+  displayRun,
+  onSelectRun,
+  onManualRun,
   onCaptureExpected,
   canCaptureExpected,
   activeTab,
@@ -102,6 +107,22 @@ export function ResultsConsole({
   viewOutput: React.ReactNode;
   /** REORG 6e: Ctrl/Cmd+Enter from the editor lands here (nonce bumps). */
   runRequest: { mode: "library" | "selection"; nonce: number } | null;
+  /** REORG 6g: the run ring (last 20) + which entry the tabs render. */
+  runs: RunEntry[];
+  displayRun: RunEntry | null;
+  onSelectRun: (id: string | null) => void;
+  /** Manual runs (Run button / Ctrl+Enter) land in App's ring. */
+  onManualRun: (p: {
+    mode: "library" | "selection";
+    cql: string;
+    ok: boolean;
+    sql?: string;
+    rows?: Array<Record<string, unknown>>;
+    columns?: string[];
+    column_types?: Record<string, string>;
+    ms?: number | null;
+    diags?: Diagnostics[];
+  }) => void;
   /** 6f: capture the current run's populations as the active measure's
    *  expected reports (Measure Report tab header). */
   onCaptureExpected?: () => void;
@@ -109,10 +130,7 @@ export function ResultsConsole({
   activeTab: ConsoleTab;
   onTabChange: (t: ConsoleTab) => void;
 }) {
-  const [runBusy, setRunBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [diags, setDiags] = useState<Diagnostics[]>([]);
-  const [scratch, setScratch] = useState<ConsoleRows | null>(null);
   const seqRef = useRef(0);
 
   // Error announce: on a NEW failing evaluation jump to Diagnostics;
@@ -155,9 +173,7 @@ export function ResultsConsole({
   }, [runRequest?.nonce]);
   const run = async (mode: "library" | "selection") => {
     const seq = ++seqRef.current;
-    setRunBusy(true);
     setError(null);
-    setDiags([]);
     try {
       const resp = await workerRequest(
         mode === "selection"
@@ -175,33 +191,38 @@ export function ResultsConsole({
               main,
               dataset,
               parameters,
-              emit_sql: false,
+              emit_sql: true,
             },
       );
       if (seq !== seqRef.current) return;
       const env = JSON.parse((resp as { envelope: string }).envelope) as {
         ok: boolean;
+        cql?: string;
+        sql?: string;
         diagnostics?: Diagnostics[];
         columns?: string[];
+        column_types?: Record<string, string>;
         rows?: Array<Record<string, unknown>>;
         timing_ms?: Record<string, number>;
       };
-      if (!env.ok) {
-        setDiags(env.diagnostics ?? []);
-        setScratch(null);
-      } else {
-        setScratch({
-          columns: env.columns ?? [],
-          rows: env.rows ?? [],
-          ms: env.timing_ms?.evaluate ?? null,
-        });
-      }
+      // REORG 6g: the response becomes a RING ENTRY — the switcher can
+      // replay its table, SQL, AST and executed CQL later. App owns the
+      // history write; the new entry overrides the displayed result.
+      onManualRun({
+        mode,
+        cql: env.cql ?? main.text,
+        ok: !!env.ok,
+        sql: env.ok ? env.sql : undefined,
+        rows: env.rows,
+        columns: env.columns,
+        column_types: env.column_types,
+        ms: env.timing_ms?.evaluate ?? null,
+        diags: env.ok ? undefined : env.diagnostics ?? [],
+      });
     } catch (e) {
       if (seq === seqRef.current) {
         setError(e instanceof Error ? e.message : String(e));
       }
-    } finally {
-      if (seq === seqRef.current) setRunBusy(false);
     }
   };
   runRef.current = run;
@@ -253,17 +274,34 @@ export function ResultsConsole({
     }
   }
 
-  const hasSelection = (selection ?? "").trim().length > 0;
-  const running = runBusy || busy;
+  // Diff chips + per-cell diff classes describe the LATEST run; a
+  // pinned historical run renders plain (its diff window has moved on).
+  const latestRun = runs[runs.length - 1] ?? null;
+  const isLatest = displayRun != null && displayRun.id === latestRun?.id;
+  const payload = displayRun?.payload ?? null;
+  const payloadRows = payload?.rows;
+  const payloadColumns = payload?.columns;
   const runDiff = useRunDiff(result, baselineArtifact);
   const dsum = diffSummary(runDiff);
 
   return (
     <section className="pane results-console" data-testid="results-console">
-      <header className="pane-header">
-        <h2>CQL console</h2>
-        <div className="pane-actions">
-          {runDiff && (dsum.changed || dsum.added || dsum.removed) ? (
+      <div className="tab-strip console-subtabs" data-testid="console-subtabs">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            className={`tab ${activeTab === t.id ? "active" : ""}`}
+            data-testid={`console-tab-${t.id}`}
+            onClick={() => onTabChange(t.id)}
+          >
+            {t.label}
+            {t.id === "diags" && evalDiags && evalDiags.length > 0
+              ? ` (${evalDiags.length})`
+              : ""}
+          </button>
+        ))}
+        <div className="console-toolbar-right">
+          {isLatest && runDiff && (dsum.changed || dsum.added || dsum.removed) ? (
             <span className="diff-chips" data-testid="diff-chips">
               <span className="diff-chip up" data-testid="diff-chip-changed">
                 {dsum.changed} changed
@@ -284,38 +322,24 @@ export function ResultsConsole({
               )}
             </span>
           ) : null}
-          {/* REORG 6e: dock placement moved to the header Settings menu. */}
-          <button
-            data-testid="console-run-library"
-            disabled={running}
-            onClick={() => void run("library")}
+          <select
+            className="console-run-select"
+            data-testid="console-run-select"
+            title="replay one of the last 20 runs"
+            value={isLatest ? "" : (displayRun?.id ?? "")}
+            onChange={(e) =>
+              onSelectRun(e.target.value === "" ? null : e.target.value)
+            }
           >
-            {running ? "running…" : "Run"}
-          </button>
-          <button
-            data-testid="console-run-selection"
-            disabled={running || !hasSelection}
-            title={hasSelection ? "evaluate the selected expression" : "select code in the editor first"}
-            onClick={() => void run("selection")}
-          >
-            Run selection
-          </button>
+            <option value="">latest</option>
+            {[...runs].reverse().map((r) => (
+              <option key={r.id} value={r.id}>
+                {formatRunTimestamp(r.createdAt)} · {r.payload?.mode ?? "library"}
+                {r.payload?.diags?.length ? " · error" : ""}
+              </option>
+            ))}
+          </select>
         </div>
-      </header>
-      <div className="tab-strip console-subtabs" data-testid="console-subtabs">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            className={`tab ${activeTab === t.id ? "active" : ""}`}
-            data-testid={`console-tab-${t.id}`}
-            onClick={() => onTabChange(t.id)}
-          >
-            {t.label}
-            {t.id === "diags" && evalDiags && evalDiags.length > 0
-              ? ` (${evalDiags.length})`
-              : ""}
-          </button>
-        ))}
       </div>
 
       <div
@@ -324,139 +348,104 @@ export function ResultsConsole({
         data-testid="console-panel-results"
       >
         {error && <p className="pane-error" data-testid="console-error">{error}</p>}
-        {diags.length > 0 && (
+        {payload?.diags && payload.diags.length > 0 && (
           <div className="diag-list" data-testid="console-diags">
-            {diags.map((d, i) => (
+            {payload.diags.map((d, i) => (
               <DiagnosticsRow key={i} diag={d} />
             ))}
           </div>
         )}
-        {scratch && scratch.columns.length > 0 && (
+        {payloadRows && payloadColumns && payloadColumns.length > 0 && (
           <PaginatedTable
-            testId="console-table"
-            rowCount={scratch.rows.length}
+            testId="results-table"
+            rowCount={payloadRows.length}
             stats={
               <>
-                {scratch.rows.length} rows ·{" "}
-                {scratch.ms != null ? `${Math.round(scratch.ms)}ms` : ""}
+                {payloadRows.length} rows · {payloadColumns.length} columns
+                {displayRun
+                  ? ` · ${formatRunTimestamp(displayRun.createdAt)}`
+                  : ""}
+                {payload?.ms != null ? ` · ${Math.round(payload.ms)}ms` : ""}
               </>
             }
             header={
               <tr>
-                <th>patient_id</th>
-                {scratch.columns.filter((c) => c !== "patient_id").map((c) => (
-                  <th key={c}>{c}</th>
+                {payloadColumns.map((c) => (
+                  <th key={c}>
+                    {c}
+                    {payload?.column_types?.[c] && (
+                      <span
+                        className="type-badge"
+                        data-testid={`type-badge-${c}`}
+                        title="CQL type"
+                      >
+                        {payload.column_types[c]}
+                      </span>
+                    )}
+                  </th>
                 ))}
               </tr>
             }
-            renderRows={(range) => (
-              <>
-                {scratch.rows.slice(range.start, range.end).map((r, i) => (
-                  <tr key={range.start + i}>
-                    <td>{String(r.patient_id ?? "")}</td>
-                    {scratch.columns.filter((c) => c !== "patient_id").map((c) => (
-                      <td key={c}>{String(r[c] ?? "")}</td>
-                    ))}
-                  </tr>
-                ))}
-              </>
-            )}
-          />
-        )}
-        {result && (
-          <div className="pane output-pane" data-testid="output-cql">
-            <header className="pane-header">
-              <h3>Output</h3>
-            </header>
-            <PaginatedTable
-              testId="results-table"
-              rowCount={result.rows.length}
-              stats={
-                <>
-                  {result.rows.length} rows · {result.columns.length} columns
-                  {result.evaluated_at
-                    ? ` · ${new Date(result.evaluated_at).toLocaleString()}`
-                    : ""}
-                  {` · ${result.timing_ms.evaluate}ms`}
-                </>
-              }
-              header={
-                <tr>
-                  {result.columns.map((c) => (
-                    <th key={c}>
-                      {c}
-                      {result.column_types[c] && (
-                        <span
-                          className="type-badge"
-                          data-testid={`type-badge-${c}`}
-                          title="CQL type"
-                        >
-                          {result.column_types[c]}
-                        </span>
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              }
-              renderRows={({ slice }) =>
-                slice(result.rows).map((row) => {
-                  const pid = String(row.patient_id ?? "");
-                  return (
-                    <tr key={pid}>
-                      {result.columns.map((c) => {
-                        const isPopulation =
-                          c !== "patient_id" && row[c] !== undefined;
-                        const dcls = isPopulation
+            renderRows={({ slice }) =>
+              slice(payloadRows).map((row) => {
+                const pid = String(row.patient_id ?? "");
+                return (
+                  <tr key={pid}>
+                    {payloadColumns.map((c) => {
+                      const isPopulation =
+                        c !== "patient_id" && row[c] !== undefined;
+                      const dcls =
+                        isLatest && isPopulation
                           ? cellDiffClass(runDiff, pid, c)
                           : null;
-                        return (
-                          <td
-                            key={c}
-                            className={
-                              isPopulation
-                                ? `cell-evidence${dcls ? " " + dcls : ""}`
-                                : dcls
-                                  ? dcls
-                                  : undefined
-                            }
-                            data-testid={
-                              isPopulation ? `cell-${pid}-${c}` : undefined
-                            }
-                            title={
-                              isPopulation
-                                ? `why: ${pid} · ${c}${dcls ? " · changed" : ""}`
+                      return (
+                        <td
+                          key={c}
+                          className={
+                            isPopulation
+                              ? `cell-evidence${dcls ? " " + dcls : ""}`
+                              : dcls
+                                ? dcls
                                 : undefined
-                            }
-                            onClick={
-                              isPopulation
-                                ? () => void explainCell(pid, c)
-                                : undefined
-                            }
-                          >
-                            {renderValue(row[c])}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })
-              }
-            />
-            {cellEvidence && (
-              <EvidencePopover
-                evidence={cellEvidence.evidence}
-                patientId={cellEvidence.patientId}
-                population={cellEvidence.population}
-                onClose={() => setCellEvidence(null)}
-              />
-            )}
-          </div>
+                          }
+                          data-testid={
+                            isPopulation ? `cell-${pid}-${c}` : undefined
+                          }
+                          title={
+                            isPopulation
+                              ? `why: ${pid} · ${c}${dcls ? " · changed" : ""}`
+                              : undefined
+                          }
+                          onClick={
+                            isPopulation
+                              ? () => void explainCell(pid, c)
+                              : undefined
+                          }
+                        >
+                          {renderValue(row[c])}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })
+            }
+          />
         )}
-        {!scratch && !result && diags.length === 0 && !error && (
+        {!payload && (
           <p className="pane-hint" data-testid="console-empty">
-            Run evaluates the whole library; select an expression and Run
-            selection evaluates just that, in context.
+            Run from the editor toolbar (or Ctrl/Cmd+Enter): the whole
+            library runs, a selection runs just that expression. The last
+            20 runs stay switchable above.
           </p>
+        )}
+        {cellEvidence && (
+          <EvidencePopover
+            evidence={cellEvidence.evidence}
+            patientId={cellEvidence.patientId}
+            population={cellEvidence.population}
+            onClose={() => setCellEvidence(null)}
+          />
         )}
       </div>
 
@@ -465,9 +454,9 @@ export function ResultsConsole({
         hidden={activeTab !== "sql"}
         data-testid="console-panel-sql"
       >
-        {result?.sql ? (
+        {payload?.sql ? (
           <div className="sql-viewer" data-testid="sql-viewer">
-            <pre className="sql-pre">{result.sql}</pre>
+            <pre className="sql-pre">{payload.sql}</pre>
           </div>
         ) : (
           <p className="pane-hint" data-testid="sql-empty">
@@ -481,12 +470,29 @@ export function ResultsConsole({
         hidden={activeTab !== "ast"}
         data-testid="console-panel-ast"
       >
-        <div className="pane output-pane" data-testid="ast-pane">
-          <header className="pane-header">
-            <h3>AST</h3>
-          </header>
-          <AstTree cqlText={main.text} />
-        </div>
+        {payload?.cql ? (
+          <AstTree cqlText={payload.cql} />
+        ) : (
+          <p className="pane-hint" data-testid="ast-empty">
+            Run an evaluation to see its AST.
+          </p>
+        )}
+      </div>
+
+      <div
+        className="tab-panel"
+        hidden={activeTab !== "cql"}
+        data-testid="console-panel-cql"
+      >
+        {payload?.cql ? (
+          <div className="sql-viewer" data-testid="cql-viewer">
+            <pre className="sql-pre">{payload.cql}</pre>
+          </div>
+        ) : (
+          <p className="pane-hint" data-testid="cql-empty">
+            Run an evaluation to see the exact CQL that executed.
+          </p>
+        )}
       </div>
 
       <div

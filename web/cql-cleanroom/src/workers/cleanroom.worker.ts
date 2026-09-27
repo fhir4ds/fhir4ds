@@ -212,11 +212,12 @@ async function executeSnippet(
     type: "evaluate_library",
     main: suffixedMain,
     output_columns: { snippet: "__snippet__" },
-    emit_sql: false,
+    emit_sql: true,
   })) as unknown as { envelope: string };
   try {
     const env = JSON.parse(resp.envelope) as {
       ok: boolean;
+      cql?: string;
       diagnostics?: Array<{
         location?: {
           start_line?: number | null;
@@ -224,6 +225,9 @@ async function executeSnippet(
         } | null;
       }>;
     };
+    // REORG 6g: the executed CQL is the synthesized wrapper, so the
+    // console's SQL/AST/CQL tabs replay the selection run faithfully.
+    env.cql = suffixedMain.text;
     for (const d of env.diagnostics ?? []) {
       const loc = d.location;
       if (!loc) continue;

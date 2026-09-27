@@ -383,6 +383,9 @@ export default function App() {
   // WORKBENCH_REORG phase 5 — console sub-tab pref + local run history.
   const [consoleTab, setConsoleTab] = useState<ConsoleTab>("results");
   const [runHistory, setRunHistory] = useState<RunEntry[]>([]);
+  // REORG 6g: which run the console displays. null = follow latest;
+  // picking an older run pins it until a new MANUAL run overrides.
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   // Live auto-evaluation of the entrypoint library (app heartbeat):
   // the console Results/SQL/Diagnostics sub-tabs and the col2 panes
   // all render from this single run.
@@ -791,6 +794,17 @@ export default function App() {
           libraryHash: "",
           datasetHash: "",
           artifact: artifactFromRows(env.rows, env.columns),
+          // REORG 6g: replay payload — Results/SQL/AST/CQL tabs all
+          // render from the run's own snapshot, not live state.
+          payload: {
+            mode: "library",
+            cql: main.text,
+            sql: env.sql,
+            rows: env.rows,
+            columns: env.columns,
+            column_types: env.column_types,
+            ms: env.timing_ms?.evaluate ?? null,
+          },
         };
         setRunHistory((h) => appendRun(h, entry, RUN_HISTORY_CAP));
         setCurrentRun({
@@ -843,6 +857,28 @@ export default function App() {
       } else {
         setEvalDiags(env.diagnostics ?? []);
         setLastReports(null);
+        // REORG 6g: failures are results too — replayable from the ring
+        // (CQL + diagnostics). No artifact, so the diff baseline's
+        // patients!=null guard skips them.
+        setRunHistory((h) =>
+          appendRun(
+            h,
+            {
+              id: newRunId(),
+              name: defaultRunName(Date.now()),
+              createdAt: Date.now(),
+              libraryHash: "",
+              datasetHash: "",
+              artifact: null,
+              payload: {
+                mode: "library",
+                cql: main.text,
+                diags: env.diagnostics ?? [],
+              },
+            },
+            RUN_HISTORY_CAP,
+          ),
+        );
       }
     } finally {
       evalBusyRef.current = false;
@@ -1290,6 +1326,73 @@ export default function App() {
     });
   };
 
+  // REORG 6g: manual runs (editor Run button / Ctrl+Enter) append to the
+  // ring and OVERRIDE the displayed result. Same sync-artifact +
+  // async-hash-patch flow as the heartbeat.
+  const appendManualRun = (p: {
+    mode: "library" | "selection";
+    cql: string;
+    ok: boolean;
+    sql?: string;
+    rows?: Array<Record<string, unknown>>;
+    columns?: string[];
+    column_types?: Record<string, string>;
+    ms?: number | null;
+    diags?: Diagnostics[];
+  }) => {
+    const entry: RunEntry = {
+      id: newRunId(),
+      name: defaultRunName(Date.now()),
+      createdAt: Date.now(),
+      libraryHash: "",
+      datasetHash: "",
+      artifact: p.ok
+        ? artifactFromRows(p.rows ?? [], p.columns ?? [])
+        : null,
+      payload: {
+        mode: p.mode,
+        cql: p.cql,
+        sql: p.sql,
+        rows: p.rows,
+        columns: p.columns,
+        column_types: p.column_types,
+        ms: p.ms ?? null,
+        diags: p.diags,
+      },
+    };
+    setRunHistory((h) => appendRun(h, entry, RUN_HISTORY_CAP));
+    setSelectedRunId(entry.id);
+    const dsRes = dataset?.resources?.length
+      ? { resources: dataset.resources as unknown[] }
+      : null;
+    void Promise.all([
+      computeLibraryHash(main?.text ?? p.cql),
+      computeDatasetHash(dsRes),
+    ]).then(([libHash, dsHash]) => {
+      setRunHistory((h) =>
+        h.map((r) =>
+          r.id === entry.id
+            ? { ...r, libraryHash: libHash, datasetHash: dsHash }
+            : r,
+        ),
+      );
+    });
+  };
+
+  // The run the console renders: pinned selection, else the latest.
+  const displayRun =
+    (selectedRunId
+      ? runHistory.find((r) => r.id === selectedRunId)
+      : undefined) ??
+    runHistory[runHistory.length - 1] ??
+    null;
+  // A pinned run that fell off the 20-ring reverts to following latest.
+  useEffect(() => {
+    if (selectedRunId && !runHistory.some((r) => r.id === selectedRunId)) {
+      setSelectedRunId(null);
+    }
+  }, [runHistory, selectedRunId]);
+
   // REORG 6e: Tests L2/L3 — patient groups live here so BOTH the list
   // and the detail panel can consume them, and so a focused patient
   // that vanishes (row delete / raw-edit wipe / workspace reset) can
@@ -1525,20 +1628,17 @@ export default function App() {
     !activeEditorTabId || parseTabId(activeEditorTabId).kind === "library";
   // Prior run = second-to-last history entry; falls back to the
   // in-flight currentRun artifact when history is pruned short.
-  const baselineArtifact: import("./lib/runDiff").Artifact | null =
-    runHistory.length >= 2
-      ? runHistory[runHistory.length - 2].artifact.patients != null
-        ? Object.fromEntries(
-            Object.entries(
-              runHistory[runHistory.length - 2].artifact.patients,
-            ).map(([pid, p]) => [
-              pid,
-              (p as { populations: Record<string, boolean | null> })
-                .populations,
-            ]),
-          )
-        : null
-      : null;
+  // FAILED ring entries carry patients:null — the baseline skips them.
+  const baselineArtifact: import("./lib/runDiff").Artifact | null = (() => {
+    const prev = runHistory[runHistory.length - 2];
+    if (!prev?.artifact?.patients) return null;
+    return Object.fromEntries(
+      Object.entries(prev.artifact.patients).map(([pid, p]) => [
+        pid,
+        (p as { populations: Record<string, boolean | null> }).populations,
+      ]),
+    );
+  })();
   const appRunDiff = useRunDiff(evalResult, baselineArtifact);
   // Latest-value mirror (same pattern as activeTabRef): which library
   // model the (possibly hidden) editor keeps showing.
@@ -1665,6 +1765,10 @@ export default function App() {
       }
       funnelOutput={<MrFunnel result={evalResult} />}
       runRequest={runRequest}
+      runs={runHistory}
+      displayRun={displayRun}
+      onSelectRun={setSelectedRunId}
+      onManualRun={appendManualRun}
       onCaptureExpected={captureExpectedFromRun}
       canCaptureExpected={!!lastReports?.length}
       viewOutput={
@@ -1966,7 +2070,7 @@ export default function App() {
             onSelectionChange={setConsoleSelection}
             graphOpen={graphOpen}
             onGraphOpenChange={setGraphOpen}
-            onRunSelection={runViaConsole}
+            onRun={runViaConsole}
             onDiagnostics={(diags) => {
               const idx = activeTabRef.current;
               setLibErrors((prev) => {

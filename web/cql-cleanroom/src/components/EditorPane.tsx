@@ -29,8 +29,9 @@ interface Props {
   knownTabKeys?: string[];
   /** Selection text ("" when empty) for the console's Run-Selection. */
   onSelectionChange?: (text: string) => void;
-  /** REORG 6e: Ctrl/Cmd+Enter — run the selection (or library) in the console. */
-  onRunSelection?: () => void;
+  /** REORG 6g: the header Run button (and Ctrl/Cmd+Enter) — runs the
+   *  selection when one exists, else the whole library. */
+  onRun?: () => void;
   /** REORG 6d: the visual-editor drawer lives under this pane; its
    *  toggle is a header button (was a standalone bottom bar). */
   graphOpen?: boolean;
@@ -80,7 +81,7 @@ export function EditorPane({
   tabKey = "library:solo",
   knownTabKeys,
   onSelectionChange,
-  onRunSelection,
+  onRun,
   graphOpen,
   onGraphOpenChange,
 }: Props) {
@@ -125,8 +126,10 @@ export function EditorPane({
   onTextChangeRef.current = onTextChange;
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
-  const onRunSelectionRef = useRef(onRunSelection);
-  onRunSelectionRef.current = onRunSelection;
+  const onRunRef = useRef(onRun);
+  onRunRef.current = onRun;
+  // Selection presence drives the header button label (Run / Run selection).
+  const [selText, setSelText] = useState("");
 
   useEffect(() => {
     let disposed = false;
@@ -157,14 +160,14 @@ export function EditorPane({
       editor.onDidChangeCursorSelection(() => {
         const sel = editor.getSelection();
         const model = editor.getModel();
-        onSelectionChangeRef.current?.(
-          sel && model ? model.getValueInRange(sel) : "",
-        );
+        const selContent = sel && model ? model.getValueInRange(sel) : "";
+        onSelectionChangeRef.current?.(selContent);
+        setSelText(selContent);
       });
       editorRef.current = editor;
       editor.addCommand(
         monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
-        () => onRunSelectionRef.current?.(),
+        () => onRunRef.current?.(),
       );
     })();
     return () => {
@@ -285,6 +288,20 @@ export function EditorPane({
     <section className="pane editor-pane" data-testid="editor-pane">
       <div className="pane-header">
         <h2>Library</h2>
+        {onRun && (
+          <button
+            className="editor-run-btn"
+            data-testid="editor-run"
+            title={
+              selText.trim()
+                ? "evaluate the selected expression (Ctrl/Cmd+Enter)"
+                : "evaluate the whole library (Ctrl/Cmd+Enter)"
+            }
+            onClick={() => onRun()}
+          >
+            {selText.trim() ? "Run selection" : "Run"}
+          </button>
+        )}
         {onGraphOpenChange && (
           <button
             className="drawer-toggle"

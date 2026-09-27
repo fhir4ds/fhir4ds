@@ -34,14 +34,34 @@ export const WORKSPACE_SCHEMA_VERSION = 6;
 
 /** WORKBENCH_REORG §3.3/§3.5 — a saved evaluation run. Local-only
  * (IndexedDB document; NEVER in zip or share links — INV-4). */
+/** REORG 6g — everything needed to REPLAY a run's output (results
+ *  table, SQL, AST, executed CQL) without re-evaluating. Selection runs
+ *  carry the synthesized `__snippet__` wrapper text as `cql`. */
+export interface RunEntryPayload {
+  mode: "library" | "selection";
+  cql: string;
+  sql?: string;
+  rows?: Array<Record<string, unknown>>;
+  columns?: string[];
+  column_types?: Record<string, string>;
+  ms?: number | null;
+  diags?: import("../lib/protocol").Diagnostics[];
+}
+
+/** Row-shaped memberships of a successful run. */
+export interface RunArtifact {
+  patients: Record<string, { populations: Record<string, boolean | null> }>;
+}
+
 export interface RunEntry {
   id: string;
   name: string;
   createdAt: number;
   libraryHash: string;
   datasetHash: string;
-  /** Row-shaped memberships {patients: {pid: {populations: ...}}}. */
-  artifact: { patients: Record<string, { populations: Record<string, boolean | null> }> };
+  /** null for FAILED runs (no artifact — the diff baseline skips them). */
+  artifact: RunArtifact | null;
+  payload?: RunEntryPayload;
 }
 
 export const RUN_HISTORY_CAP = 20;

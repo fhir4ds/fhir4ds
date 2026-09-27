@@ -1518,3 +1518,24 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 .nav-panel-detail .dataset-tree-controls button { flex: none; }
 .nav-panel-detail .dataset-detail-head > * { flex-shrink: 0; }
 .nav-panel-detail .dataset-detail-head .dataset-group-hint { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===== REORG 6g — run-centric console + editor run button ===== */
+/* Console chrome: no pane header; the subtab strip carries the diff
+   chips + run switcher on the right. */
+.console-subtabs { align-items: center; }
+.console-toolbar-right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.console-run-select {
+  background: #0f131a; border: 1px solid #2a2f3a; border-radius: 4px;
+  color: #dce7f5; font-size: 11px; padding: 2px 4px; max-width: 240px;
+}
+/* Run lives in the LIBRARY EDITOR header now. */
+.editor-run-btn {
+  margin-left: auto;
+  background: #1c2634; color: #cfe0f4; border: 1px solid #2c3a4e;
+  border-radius: 6px; padding: 3px 14px; cursor: pointer; font-size: 12px;
+}
+.editor-run-btn:hover { background: #243146; }
+/* Editor form columns stop stretching edge to edge on wide monitors. */
+.pane .param-row, .pane .vs-code-row, .pane .er-pop-row, .pane .vd-config,
+.pane table.mapping-table { max-width: 760px; }
+.pane .builder-form { max-width: 880px; }
