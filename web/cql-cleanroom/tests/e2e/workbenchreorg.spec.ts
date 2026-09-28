@@ -15,6 +15,7 @@ async function bootReady(page: Page) {
 }
 
 async function resetWorkspace(page: Page) {
+  await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
   await page.waitForTimeout(800);
 }
@@ -88,6 +89,9 @@ test.describe("console sub-tabs + col2 panes", () => {
     // into later specs (autosave may outlive the reset below).
     await page.click("[data-testid=settings-menu]");
     await page.selectOption("[data-testid=settings-console-placement]", "bottom");
+    // The open settings list now anchors at the header's left edge and
+    // overlaps the first library tab — close it before clicking through.
+    await page.keyboard.press("Escape");
     await page.locator("[data-testid^=editor-tab-library-]").first().click();
     await page.click("[data-testid=console-tab-results]");
     await page.waitForSelector(".app-main.dock-bottom");

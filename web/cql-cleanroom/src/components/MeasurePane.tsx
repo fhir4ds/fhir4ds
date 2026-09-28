@@ -285,10 +285,19 @@ export function MeasurePane({
 
   return (
     <section className="pane" data-testid="measure-pane">
-      <div className="measure-identity">
-        {libraryChoices && onMainLibraryChange && (
-          <>
-            <span className="assoc-label">Primary library</span>
+      {/* #64: shared editor grammar — identity left, actions right (the
+          mapping buttons live here, matching valueset/expected). */}
+      <header className="pane-header">
+        <div className="editor-identity">
+          <span className="editor-name" data-testid="measure-name">
+            {String(
+              (measure?.name as string | undefined) ?? "unnamed measure",
+            )}
+          </span>
+          <span className="type-badge">Measure</span>
+        </div>
+        <div className="pane-actions">
+          {libraryChoices && onMainLibraryChange && (
             <select
               data-testid="measure-main-library"
               value={mainLibraryId ?? ""}
@@ -301,9 +310,22 @@ export function MeasurePane({
                 </option>
               ))}
             </select>
-          </>
-        )}
-      </div>
+          )}
+          <button onClick={add} data-testid="measure-add-row">
+            + population
+          </button>
+          <button onClick={suggest} disabled={busy} data-testid="measure-suggest">
+            Suggest
+          </button>
+          <button
+            onClick={applyViaCapability}
+            disabled={busy}
+            data-testid="measure-validate"
+          >
+            Validate
+          </button>
+        </div>
+      </header>
       {error && (
         <div className="pane-error" data-testid="measure-error">
           {error}
@@ -372,21 +394,6 @@ export function MeasurePane({
       )}
       <div className="mapping-head">
         <span className="assoc-label">Population mapping</span>
-        <div className="pane-actions">
-          <button onClick={add} data-testid="measure-add-row">
-            + population
-          </button>
-          <button onClick={suggest} disabled={busy} data-testid="measure-suggest">
-            Suggest
-          </button>
-          <button
-            onClick={applyViaCapability}
-            disabled={busy}
-            data-testid="measure-validate"
-          >
-            Validate
-          </button>
-        </div>
       </div>
       {rows.length === 0 ? (
         <p className="pane-hint" data-testid="measure-empty">

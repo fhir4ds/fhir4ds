@@ -64,6 +64,8 @@ test.describe("cleanroom cycle-3 dataset editing", () => {
       timeout: 15_000,
     });
     await page.fill('[data-testid=builder-field-id]', "px");
+    // Populated-only form (reorg 6i): add the element, then fill it.
+    await page.selectOption('[data-testid=builder-add-element]', 'gender');
     await page.fill('[data-testid=builder-field-gender]', "female");
     // App boots with the DEFAULT demo dataset (3 resources) since the
     // evaluate-button removal; adding px makes 4.

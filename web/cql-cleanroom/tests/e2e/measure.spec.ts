@@ -146,7 +146,7 @@ test.describe("measure pane authoring", () => {
 });
 
 test.describe("expected values + MeasureReport round-trip", () => {
-  test("export reports, wipe, import restores the grid", async ({ page }) => {
+  test("import a MeasureReport bundle via the Expected ▾ menu restores the grid", async ({ page }) => {
     await bootReady(page);
     await loadDataset(page);
 
@@ -160,20 +160,27 @@ test.describe("expected values + MeasureReport round-trip", () => {
     // Author expectations: p1 both, p2 numerator only, p3 initial only.
     // Seed all-true first so every cell gets an explicit entry
     // (unchecking an unchecked controlled box is a no-op).
-    await page.click("[data-testid=tests-set-all-true]");
+    await page.click("[data-testid=expected-default]");
+    await page.click("[data-testid=expected-default-all-true]");
     await page.uncheck("[data-testid=expected-p2-initial-population]");
     await page.uncheck("[data-testid=expected-p3-numerator]");
 
-    // Export downloads the expected-MeasureReport bundle.
-    const [download] = await Promise.all([
-      page.waitForEvent("download", { timeout: 60_000 }),
-      page.click("[data-testid=tests-export]"),
-    ]);
-    const path = await download.path();
-    if (!path) throw new Error("no download path");
+    // #64: the editor lost its export/import buttons — the authored set
+    // round-trips as a MeasureReport bundle through the nav section's ▾
+    // menu (single individual MR per patient, count 1|0 per code).
+    const bundle = {
+      resourceType: "Bundle",
+      type: "collection",
+      entry: [
+        mrEntry("p1", { "initial-population": 1, numerator: 1 }),
+        mrEntry("p2", { "initial-population": 0, numerator: 1 }),
+        mrEntry("p3", { "initial-population": 1, numerator: 0 }),
+      ],
+    };
 
-    // Wipe via All false, verify, then re-import the downloaded file.
-    await page.click("[data-testid=tests-set-all-false]");
+    // Wipe via All false, verify, then re-import the bundle.
+    await page.click("[data-testid=expected-default]");
+    await page.click("[data-testid=expected-default-all-false]");
     await page.waitForFunction(() => {
       const cb = document.querySelector(
         "[data-testid=expected-p1-initial-population]",
@@ -181,7 +188,16 @@ test.describe("expected values + MeasureReport round-trip", () => {
       return cb && cb.checked === false;
     });
 
-    await page.setInputFiles("[data-testid=tests-import-input]", path);
+    const [chooser] = await Promise.all([
+      page.waitForEvent("filechooser", { timeout: 15_000 }),
+      page.click("[data-testid=nav-import-expected]"),
+      page.click("[data-testid=nav-import-expected-expected-json]"),
+    ]);
+    await chooser.setFiles({
+      name: "expected-measure-reports.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(bundle)),
+    });
     await page.waitForFunction(() => {
       const cb = document.querySelector(
         "[data-testid=expected-p1-initial-population]",
@@ -193,15 +209,42 @@ test.describe("expected values + MeasureReport round-trip", () => {
     );
     if (!p3) throw new Error("import did not restore p3 initial_population");
 
-    // Run tests: authored expectations match the demo data truths.
-    await page.click("[data-testid=run-tests]");
-    await page.waitForSelector("[data-testid=tests-summary]", {
-      timeout: 90_000,
-    });
-    const counts = await page.textContent("[data-testid=tests-summary]");
-    if (!counts?.includes("6/6")) throw new Error(`counts: ${counts}`);
+    // 6h #62: the compare derives from the latest auto-run — imported
+    // expectations match the demo data truths (no button).
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector("[data-testid=tests-summary]")
+          ?.textContent?.includes("6/6") ?? false,
+      undefined,
+      { timeout: 90_000 },
+    );
   });
 });
+
+/** One authored individual MeasureReport entry (count 0|1 per code). */
+function mrEntry(
+  pid: string,
+  counts: Record<string, number>,
+): { resource: Record<string, unknown> } {
+  return {
+    resource: {
+      resourceType: "MeasureReport",
+      status: "complete",
+      type: "individual",
+      measure: "urn:cleanroom:measure:CleanroomDemoMeasure",
+      subject: { reference: `Patient/${pid}` },
+      group: [
+        {
+          population: Object.entries(counts).map(([code, count]) => ({
+            code: { coding: [{ code }] },
+            count,
+          })),
+        },
+      ],
+    },
+  };
+}
 
 async function openViewTab(page: Page) {
   // REORG phase 6b: the ViewDefinition editor is a col1 tab; the "+"
@@ -368,7 +411,7 @@ test.describe("measure association (reorg 6f)", () => {
     );
   });
 
-  test("capture-current-run writes the expected grid + authored status", async ({
+  test("Default > Current result writes the expected grid + authored status", async ({
     page,
   }) => {
     await bootReady(page);
@@ -378,27 +421,28 @@ test.describe("measure association (reorg 6f)", () => {
     });
     await openMeasureTab(page);
 
-    // Not authored yet; the Measure Report tab carries the capture.
+    // Not authored yet; the expected editor carries the capture.
     await page.waitForSelector("[data-testid=expected-status]");
     const before = await page.textContent("[data-testid=expected-status]");
     if (!before?.includes("not authored"))
       throw new Error(`status before capture: ${before}`);
 
-    await page.waitForSelector("[data-testid=mr-table]", { timeout: 30_000 });
-    await page.click("[data-testid=capture-expected]");
-    await page.waitForFunction(
-      () =>
-        document
-          .querySelector("[data-testid=expected-status]")
-          ?.textContent?.includes("3 patients"),
-      undefined,
-      { timeout: 10_000 },
-    );
+    // #64: capture moved out of the console into the expected editor's
+    // Default ▾ ("Current result" = the old Capture-as-expected).
+    await page.click("[data-testid=nav-toggle-expected]");
+    await page.click("[data-testid=nav-add-expected]");
+    await page.waitForSelector("[data-testid=tests-pane]", { timeout: 30_000 });
+    await page.click("[data-testid=expected-default]");
+    await page.click("[data-testid=expected-default-current-result]");
 
     // The grid mirrors the run (female demo logic: p1/p3 in the
     // initial population, p2 out).
-    await page.click("[data-testid=measure-open-expected]");
     await page.waitForSelector("[data-testid=expected-grid]");
+    await page.waitForFunction(
+      () => document.querySelectorAll("[data-testid^=expected-row-]").length === 3,
+      undefined,
+      { timeout: 10_000 },
+    );
     const checked = await page.evaluate(() => {
       const get = (tid: string) =>
         document.querySelector<HTMLInputElement>(
@@ -413,36 +457,67 @@ test.describe("measure association (reorg 6f)", () => {
     if (checked.p1 !== true || checked.p3 !== true || checked.p2 !== false) {
       throw new Error(`captured grid mismatch: ${JSON.stringify(checked)}`);
     }
+
+    // Back on the measure tab, the association strip counts the authored
+    // reports (the editor column swaps panes, so the measure remounts).
+    await page
+      .locator("[data-testid^=editor-tab-measure-]")
+      .first()
+      .click();
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector("[data-testid=expected-status]")
+          ?.textContent?.includes("3 patients"),
+      undefined,
+      { timeout: 10_000 },
+    );
   });
 
-  test("run tests shows a pass/fail summary and survives a broken library", async ({
+  test("compare derives automatically and survives a broken library", async ({
     page,
   }) => {
     await bootReady(page);
+    // Deterministic start: this test asserts the EMPTY-grid compare
+    // state, so leaky prior-spec expectations would mask it.
+    await page.click("[data-testid=file-menu]");
+    await page.click("[data-testid=workspace-reset]");
+    await page.waitForTimeout(1200);
+    await page.waitForSelector("[data-testid=dataset-tree]", {
+      timeout: 30_000,
+    });
 
-    // Expected editor tab hosts TestsPane (empty grid → 0/0).
+    // Fresh expected report + its editor tab: the empty grid renders the
+    // compare hint (no 0/0 chip).
     await page.click("[data-testid=nav-toggle-expected]");
-    await page.locator("[data-testid^=nav-item-expected-]").first().click();
+    await page.click("[data-testid=nav-add-expected]");
     await page.waitForSelector("[data-testid=tests-pane]", { timeout: 30_000 });
-    await page.click("[data-testid=run-tests]");
+    await page.waitForSelector("[data-testid=compare-empty]", {
+      timeout: 30_000,
+    });
+
+    // Author expectations: the compare derives from the latest auto-run
+    // immediately (chip in the console's Compare tab).
+    await page.click("[data-testid=expected-default]");
+    await page.click("[data-testid=expected-default-all-true]");
     await page.waitForSelector("[data-testid=tests-summary]", {
       timeout: 60_000,
     });
     await expect(page.locator("[data-testid=tests-summary]")).toContainText(
-      "0/0 passed",
+      "passed",
     );
 
-    // Break the library: the run_tests envelope comes back ok:false with
-    // diagnostics — render it as an error, never crash the tree.
+    // Break the library: the heartbeat run fails (no rows) → the compare
+    // explains and the chip disappears. Never crash the tree.
     await page.locator("[data-testid^=editor-tab-library-]").first().click();
     await page.click("[data-testid=cql-editor]");
     await page.keyboard.press("Control+Home");
     await page.keyboard.insertText("this is not cql {{{\n");
-    await page.waitForTimeout(2500);
     await page.locator("[data-testid^=nav-item-expected-]").first().click();
     await page.waitForSelector("[data-testid=tests-pane]", { timeout: 30_000 });
-    await page.click("[data-testid=run-tests]");
-    await page.waitForSelector("[data-testid=tests-error]", { timeout: 60_000 });
+    await page.waitForSelector("[data-testid=compare-empty]", {
+      timeout: 60_000,
+    });
     await expect(page.locator("[data-testid=tests-pane]")).toBeVisible();
     await expect(page.locator(".version-badge")).toBeVisible();
   });

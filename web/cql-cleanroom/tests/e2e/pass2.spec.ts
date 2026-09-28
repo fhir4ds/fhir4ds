@@ -12,6 +12,7 @@ async function bootReady(page: import("@playwright/test").Page) {
 }
 
 async function resetWorkspace(page: import("@playwright/test").Page) {
+  await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
   await page.reload();
   await page.waitForSelector(".version-badge", { timeout: 150_000 });

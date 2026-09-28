@@ -72,6 +72,7 @@ export function ResourceBuilderPane({
   const [tree, setTree] = useState<SchemaTreeResult | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm("Patient"));
   const [rawText, setRawText] = useState("");
+  const [rawError, setRawError] = useState<string | null>(null);
   const [validation, setValidation] = useState<ValidateResourceResult | null>(
     null,
   );
@@ -83,29 +84,35 @@ export function ResourceBuilderPane({
   // user's first keystrokes. Once anything is authored, the arriving
   // schema must NOT clobber the form with an empty one.
   const dirtyRef = useRef(false);
+  // Type/context identity of the last schema fetch. Raw-mode toggling has
+  // the same identity — skipping the reset there keeps the tree alive so
+  // the raw→form round-trip can map JSON through the real schema.
+  const schemaDepsRef = useRef<string>("");
   useEffect(() => {
-    // A prefill targeting this exact type owns the schema fetch + form
-    // population; the type-change effect would otherwise re-fetch and
-    // overwrite the prefilled form with an empty one.
     if (prefill && prefillNonce !== 0 && prefill.resource.resourceType === resourceType) {
       return;
     }
-    let cancelled = false;
+    if (schemaDepsRef.current === `${resourceType}|${contextNonce}`) return;
+    schemaDepsRef.current = `${resourceType}|${contextNonce}`;
     const token = ++schemaReqRef.current;
     setTree(null);
     setValidation(null);
     setStaleOk(true);
-    if (useRaw) return;
     (async () => {
       const resp = await workerRequest({
         type: "resource_schema_tree",
         resource_type: resourceType,
       });
-      if (cancelled || token !== schemaReqRef.current) return;
+      // Token only — raw toggles re-run this effect without bumping it,
+      // so an in-flight fetch must survive them (its cleanup would
+      // otherwise cancel the only fetch and strand the tree on null).
+      if (token !== schemaReqRef.current) return;
       if (!resp?.ok || !resp.envelope) return;
       const env: SchemaTreeResult = JSON.parse(resp.envelope);
-      if (!cancelled && env.resource_type === resourceType) {
+      if (env.resource_type === resourceType) {
         setTree(env);
+        // Raw mode shows no form; leave it untouched until raw exits.
+        if (useRaw) return;
         setForm((f) => {
           // Late schema arrival must not clobber keystrokes made while
           // the fetch was in flight — keep authored values, but still
@@ -133,9 +140,6 @@ export function ResourceBuilderPane({
         });
       }
     })();
-    return () => {
-      cancelled = true;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resourceType, useRaw, contextNonce]);
 
@@ -266,155 +270,186 @@ export function ResourceBuilderPane({
     <section className="pane builder-pane" data-testid="builder-pane">
       <div className="pane-header">
         <h2>Resource Builder</h2>
-        <label className="builder-mode">
-          <input
-            type="checkbox"
-            checked={useRaw}
-            data-testid="builder-raw-toggle"
-            onChange={(e) => {
-              setUseRaw(e.target.checked);
-              setValidation(null);
-              setStaleOk(true);
-              if (e.target.checked) {
-                setRawText(JSON.stringify({ resourceType }, null, 2));
-                rawSeedRef.current = JSON.stringify({ resourceType });
-              }
-            }}
-          />{" "}
-          Raw JSON
-        </label>
+        <div className="pane-actions">
+          <label className="builder-mode">
+            Type{" "}
+            <select
+              data-testid="builder-type"
+              value={resourceType}
+              disabled={useRaw}
+              onChange={(e) => {
+                dirtyRef.current = false; // deliberate type switch → fresh form
+                setResourceType(e.target.value);
+              }}
+            >
+              {BUILDER_RESOURCE_TYPES.map((t: string) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="builder-mode">
+            <input
+              type="checkbox"
+              checked={useRaw}
+              data-testid="builder-raw-toggle"
+              onChange={(e) => {
+                if (e.target.checked) {
+                  // Round-trip hatch: seed the raw editor from the CURRENT
+                  // draft (form → JSON), never a bare skeleton.
+                  const seed = draft ?? { resourceType };
+                  setRawText(JSON.stringify(seed, null, 2));
+                  rawSeedRef.current = JSON.stringify(seed);
+                  setUseRaw(true);
+                } else {
+                  // Back to the form only when the raw text parses —
+                  // raw edits flow INTO the form (JSON → form).
+                  try {
+                    const parsed = JSON.parse(rawText);
+                    if (
+                      typeof parsed !== "object" ||
+                      parsed === null ||
+                      Array.isArray(parsed)
+                    ) {
+                      throw new Error("resource must be a JSON object");
+                    }
+                    if (!root) {
+                      throw new Error("schema still loading — try again");
+                    }
+                    setForm(
+                      jsonToForm(parsed as Record<string, unknown>, root),
+                    );
+                    // Authored from JSON: a late schema fetch must keep
+                    // these values, not reset to an empty form.
+                    dirtyRef.current = true;
+                    setUseRaw(false);
+                    setRawError(null);
+                  } catch (err) {
+                    setRawError(
+                      err instanceof Error ? err.message : String(err),
+                    );
+                  }
+                }
+                setValidation(null);
+                setStaleOk(true);
+              }}
+            />{" "}
+            Raw JSON
+          </label>
+        </div>
       </div>
 
-      <div className="builder-type">
-        <label>
-          Type{" "}
-          <select
-            data-testid="builder-type"
-            value={resourceType}
-            disabled={useRaw}
+      <div className="pane-body">
+        {useRaw ? (
+          <textarea
+            className="builder-raw"
+            data-testid="builder-raw-text"
+            rows={10}
+            spellCheck={false}
+            value={rawText}
             onChange={(e) => {
-              dirtyRef.current = false; // deliberate type switch → fresh form
-              setResourceType(e.target.value);
+              setRawText(e.target.value);
+              setRawError(null);
+              dirtyRef.current = true;
+              invalidate();
             }}
+          />
+        ) : (
+          <div className="builder-form" data-testid="builder-form">
+            <FieldRow
+              node={{
+                name: "id",
+                type: "string",
+                cardinality: "0..1",
+              }}
+              value={form.values.id}
+              resources={resourceOptions}
+              onChange={(v) => {
+                invalidate();
+                dirtyRef.current = true;
+                setForm((f) => {
+                  const values = { ...f.values };
+                  if (v === undefined) delete values.id;
+                  else values.id = v;
+                  return { ...f, values };
+                });
+              }}
+            />
+            <ElementRows
+              nodes={(root?.children ?? []).filter((c) => c.name !== "id")}
+              values={form.values as Record<string, FieldValue>}
+              resources={resourceOptions}
+              onChildChange={(name, v) => {
+                invalidate();
+                dirtyRef.current = true;
+                setForm((f) => {
+                  const values = { ...f.values };
+                  if (v === undefined) delete values[name];
+                  else values[name] = v;
+                  return { ...f, values };
+                });
+              }}
+              depth={0}
+            />
+            <PassthroughDrawer
+              passthrough={form.passthrough}
+              onApply={(p) => {
+                invalidate();
+                setForm((f) => ({ ...f, passthrough: p }));
+              }}
+            />
+          </div>
+        )}
+        {useRaw && rawError && (
+          <div className="diag-row diag-error" data-testid="builder-raw-error">
+            {rawError}
+          </div>
+        )}
+
+        <div className="builder-actions" hidden>
+          <button
+            type="button"
+            data-testid="builder-validate"
+            onClick={validate}
+            disabled={!draft}
           >
-            {BUILDER_RESOURCE_TYPES.map((t: string) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
+            Validate
+          </button>
+          <button
+            type="button"
+            data-testid="builder-add"
+            onClick={addToDataset}
+            disabled={!canAdd}
+            title={
+              canAdd
+                ? "Append to the dataset"
+                : "Validate (fresh) before adding — INV-C3-2"
+            }
+          >
+            Add to dataset
+          </button>
+        </div>
+
+        {validation && (validation.valid === false || !validation.ok) && (
+          <div className="diag-list" data-testid="builder-diagnostics">
+            {(validation.diagnostics ?? []).length === 0 && (
+              <div className="diag-row diag-error">validation failed</div>
+            )}
+            {(validation.diagnostics ?? []).map((d: Diagnostics, i) => (
+              <div key={i} className={`diag-row diag-${d.severity}`}>
+                {d.message}
+              </div>
             ))}
-          </select>
-        </label>
+          </div>
+        )}
+        {validation?.ok && validation.valid === true && (
+          <div className="diag-row diag-info" data-testid="builder-valid">
+            Valid {validation.resource_type}
+            {validation.resource_id ? ` ${validation.resource_id}` : ""}
+          </div>
+        )}
       </div>
-
-      {useRaw ? (
-        <textarea
-          className="builder-raw"
-          data-testid="builder-raw-text"
-          rows={10}
-          spellCheck={false}
-          value={rawText}
-          onChange={(e) => {
-            setRawText(e.target.value);
-            dirtyRef.current = true;
-            invalidate();
-          }}
-        />
-      ) : (
-        <div className="builder-form" data-testid="builder-form">
-          <FieldRow
-            node={{
-              name: "id",
-              type: "string",
-              cardinality: "0..1",
-            }}
-            value={form.values.id}
-            resources={resourceOptions}
-            onChange={(v) => {
-              invalidate();
-              dirtyRef.current = true;
-              setForm((f) => {
-                const values = { ...f.values };
-                if (v === undefined) delete values.id;
-                else values.id = v;
-                return { ...f, values };
-              });
-            }}
-          />
-          <TreeFields
-            nodes={(root?.children ?? []).filter((c) => c.name !== "id")}
-            values={form.values as Record<string, FieldValue>}
-            resources={resourceOptions}
-            onChildChange={(name, v) => {
-              invalidate();
-              dirtyRef.current = true;
-              setForm((f) => {
-                const values = { ...f.values };
-                if (v === undefined) delete values[name];
-                else values[name] = v;
-                return { ...f, values };
-              });
-            }}
-            depth={0}
-          />
-          <PassthroughDrawer
-            passthrough={form.passthrough}
-            onApply={(p) => {
-              invalidate();
-              setForm((f) => ({ ...f, passthrough: p }));
-            }}
-          />
-        </div>
-      )}
-
-      <div className="builder-preview">
-        <h3>Preview (exact validate/add payload)</h3>
-        <pre data-testid="builder-preview" className="builder-pre">
-          {draft ? JSON.stringify(draft, null, 2) : "—"}
-        </pre>
-      </div>
-
-      <div className="builder-actions" hidden>
-        <button
-          type="button"
-          data-testid="builder-validate"
-          onClick={validate}
-          disabled={!draft}
-        >
-          Validate
-        </button>
-        <button
-          type="button"
-          data-testid="builder-add"
-          onClick={addToDataset}
-          disabled={!canAdd}
-          title={
-            canAdd
-              ? "Append to the dataset"
-              : "Validate (fresh) before adding — INV-C3-2"
-          }
-        >
-          Add to dataset
-        </button>
-      </div>
-
-      {validation && (validation.valid === false || !validation.ok) && (
-        <div className="diag-list" data-testid="builder-diagnostics">
-          {(validation.diagnostics ?? []).length === 0 && (
-            <div className="diag-row diag-error">validation failed</div>
-          )}
-          {(validation.diagnostics ?? []).map((d: Diagnostics, i) => (
-            <div key={i} className={`diag-row diag-${d.severity}`}>
-              {d.message}
-            </div>
-          ))}
-        </div>
-      )}
-      {validation?.ok && validation.valid === true && (
-        <div className="diag-row diag-info" data-testid="builder-valid">
-          Valid {validation.resource_type}
-          {validation.resource_id ? ` ${validation.resource_id}` : ""}
-        </div>
-      )}
     </section>
   );
 }
@@ -432,6 +467,7 @@ function FieldRow({
   depth = 0,
   hideHeader = false,
   startOpen,
+  onRemove,
 }: {
   node: SchemaTreeNode;
   value: FieldValue | undefined;
@@ -440,6 +476,8 @@ function FieldRow({
   depth?: number;
   hideHeader?: boolean;
   startOpen?: boolean;
+  /** Populated-only model: drop the whole element (absent = required). */
+  onRemove?: () => void;
 }) {
   const repeatable = isRepeatable(node.cardinality);
 
@@ -455,20 +493,33 @@ function FieldRow({
         <div className="builder-tree-row builder-tree-head">
           <span className="builder-caret placeholder">▾</span>
           <span className="builder-label">{node.name}</span>
-          <button
-            type="button"
-            className="builder-item-add"
-            aria-label={`add ${node.name} item`}
-            data-testid={`builder-add-${node.name}`}
-            onClick={() =>
-              onChange({
-                kind: "items",
-                items: [...items, { key: newKey(), value: defaultValue(node) }],
-              })
-            }
-          >
-            +
-          </button>
+          <span className="builder-row-actions">
+            <button
+              type="button"
+              className="builder-item-add"
+              aria-label={`add ${node.name} item`}
+              data-testid={`builder-add-${node.name}`}
+              onClick={() =>
+                onChange({
+                  kind: "items",
+                  items: [...items, { key: newKey(), value: defaultValue(node) }],
+                })
+              }
+            >
+              +
+            </button>
+            {onRemove && (
+              <button
+                type="button"
+                className="row-remove"
+                aria-label={`remove ${node.name}`}
+                data-testid={`builder-remove-${node.name}`}
+                onClick={onRemove}
+              >
+                ×
+              </button>
+            )}
+          </span>
         </div>
         {items.map((it, i) => (
           <div
@@ -529,8 +580,19 @@ function FieldRow({
       depth={depth}
       hideHeader={hideHeader}
       startOpen={startOpen}
+      onRemove={onRemove}
     />
   );
+}
+
+/** min cardinality ≥ 1: the element cannot be dropped from the form. */
+function isRequired(node: SchemaTreeNode): boolean {
+  return !!node.cardinality && node.cardinality.startsWith("1..");
+}
+
+/** Array item shape: an item itself is never repeatable. */
+function singular(node: SchemaTreeNode): SchemaTreeNode {
+  return isRepeatable(node.cardinality) ? { ...node, cardinality: "0..1" } : node;
 }
 
 function defaultValue(node: SchemaTreeNode): FieldValue {
@@ -549,6 +611,7 @@ function SingleField({
   itemIndex,
   hideHeader = false,
   startOpen,
+  onRemove,
 }: {
   node: SchemaTreeNode;
   value: FieldValue | undefined;
@@ -561,6 +624,8 @@ function SingleField({
   hideHeader?: boolean;
   /** Forwarded to NestedObject: items open on add. */
   startOpen?: boolean;
+  /** Drop the element (ElementRows wires it; never inside items). */
+  onRemove?: () => void;
 }) {
   const tid = (base: string) =>
     itemIndex === undefined ? base : `${base}-${itemIndex}`;
@@ -582,6 +647,7 @@ function SingleField({
             onChange({ kind: "hatch", json: e.target.value })
           }
         />
+        {onRemove && <RemoveBtn node={node} onRemove={onRemove} tid={tid} />}
       </label>
     );
   }
@@ -639,6 +705,7 @@ function SingleField({
             not in dataset (allowed)
           </span>
         )}
+        {onRemove && <RemoveBtn node={node} onRemove={onRemove} tid={tid} />}
       </div>
     );
   }
@@ -662,6 +729,7 @@ function SingleField({
           onChange={(e) => onChange({ kind: "scalar", value: e.target.value })}
           placeholder={node.type}
         />
+        {onRemove && <RemoveBtn node={node} onRemove={onRemove} tid={tid} />}
       </label>
     );
   }
@@ -686,6 +754,7 @@ function SingleField({
           value={json}
           onChange={(e) => onChange({ kind: "hatch", json: e.target.value })}
         />
+        {onRemove && <RemoveBtn node={node} onRemove={onRemove} tid={tid} />}
       </label>
     );
   }
@@ -712,6 +781,7 @@ function SingleField({
           value={json}
           onChange={(e) => onChange({ kind: "hatch", json: e.target.value })}
         />
+        {onRemove && <RemoveBtn node={node} onRemove={onRemove} tid={tid} />}
       </label>
     );
   }
@@ -725,7 +795,37 @@ function SingleField({
       depth={depth}
       hideHeader={hideHeader}
       startOpen={startOpen}
+      onRemove={onRemove}
     />
+  );
+}
+
+/** Element-remove × (populated-only model; absent = required element). */
+function RemoveBtn({
+  node,
+  onRemove,
+  tid,
+}: {
+  node: SchemaTreeNode;
+  onRemove: () => void;
+  tid: (base: string) => string;
+}) {
+  return (
+    <span className="builder-row-actions">
+      <button
+        type="button"
+        className="row-remove"
+        aria-label={`remove ${node.name}`}
+        title="Remove this element from the resource"
+        data-testid={tid(`builder-remove-${node.name}`)}
+        onClick={(e) => {
+          e.preventDefault(); // rows can be <label> — keep focus off inputs
+          onRemove();
+        }}
+      >
+        ×
+      </button>
+    </span>
   );
 }
 
@@ -741,6 +841,7 @@ function NestedObject({
   depth,
   hideHeader = false,
   startOpen,
+  onRemove,
 }: {
   node: SchemaTreeNode;
   value: ObjectValue;
@@ -751,6 +852,8 @@ function NestedObject({
   hideHeader?: boolean;
   /** Explicit open state (repeatable items open on add). */
   startOpen?: boolean;
+  /** Drop the whole element (wired by ElementRows; absent = required). */
+  onRemove?: () => void;
 }) {
   // Populated objects stay open; EMPTY ones start collapsed (a brand-new
   // resource shows just the field names; anything with data is laid out).
@@ -783,11 +886,29 @@ function NestedObject({
             {open ? "▾" : "▸"}
           </button>
           <span className="builder-label">{node.name}</span>
+          {onRemove && (
+            <span className="builder-row-actions">
+              <button
+                type="button"
+                className="row-remove"
+                aria-label={`remove ${node.name}`}
+                title="Remove this element from the resource"
+                data-testid={`builder-remove-${node.name}`}
+                onClick={(e) => {
+                  e.stopPropagation(); // the head row toggles collapse
+                  onRemove();
+                }}
+              >
+                ×
+              </button>
+            </span>
+          )}
         </div>
       )}
       {open && (
         <div className="builder-tree-children">
-          <TreeFields
+          <ElementRows
+            scope={node.name}
             nodes={(node.children ?? []).filter((c) => c.name !== "__hatch__")}
             values={value.children}
             resources={resources}
@@ -816,26 +937,19 @@ function NestedObject({
 }
 
 /**
- * Renders sibling field nodes as tree rows, GROUPING choice arms
- * (nodes sharing choice_group, e.g. value[x] → valueQuantity…) into a
- * single pick-one control: only the selected (populated) arm renders.
+ * Populated-only element list (Joel's model): rows render ONLY for
+ * elements with data, in schema order; an "+ add element…" select
+ * (native, type-ahead) offers every ABSENT element — a 0..1 element
+ * leaves the list once present and returns when its × drops it;
+ * choice arms group under their base; min-1 elements have no ×.
  */
-function TreeFields({
-  nodes,
-  values,
-  resources,
-  onChildChange,
-  depth,
-}: {
-  nodes: SchemaTreeNode[];
-  values: Record<string, FieldValue>;
-  resources: Array<Record<string, unknown>>;
-  onChildChange: (name: string, v: FieldValue | undefined) => void;
-  depth: number;
-}) {
-  // Group consecutive choice arms by their choice_group.
-  const groups: Array<{ kind: "single"; node: SchemaTreeNode } | { kind: "choice"; base: string; arms: SchemaTreeNode[] }> = [];
-  const byGroup = new Map<string, { kind: "choice"; base: string; arms: SchemaTreeNode[] }>();
+type ArmGroup =
+  | { kind: "single"; node: SchemaTreeNode }
+  | { kind: "choice"; base: string; arms: SchemaTreeNode[] };
+
+function groupArms(nodes: SchemaTreeNode[]): ArmGroup[] {
+  const groups: ArmGroup[] = [];
+  const byGroup = new Map<string, ArmGroup & { kind: "choice" }>();
   for (const n of nodes) {
     const g = n.choice_group;
     if (!g) {
@@ -850,10 +964,59 @@ function TreeFields({
     }
     entry.arms.push(n);
   }
+  return groups;
+}
+
+function ElementRows({
+  nodes,
+  values,
+  resources,
+  onChildChange,
+  depth,
+  scope,
+}: {
+  nodes: SchemaTreeNode[];
+  values: Record<string, FieldValue>;
+  resources: Array<Record<string, unknown>>;
+  onChildChange: (name: string, v: FieldValue | undefined) => void;
+  depth: number;
+  /** Parent node name when nested (suffixes the add-element testid). */
+  scope?: string;
+}) {
+  const groups = groupArms(nodes);
+  const isPopulated = (g: ArmGroup) =>
+    g.kind === "single"
+      ? values[g.node.name] !== undefined
+      : g.arms.some((a) => values[a.name] !== undefined);
+  const populated = groups.filter(isPopulated);
+  const addable = groups.filter((g) => !isPopulated(g));
+
+  const add = (key: string) => {
+    const g = addable.find((x) =>
+      x.kind === "single" ? x.node.name === key : x.base === key,
+    );
+    if (!g) return;
+    if (g.kind === "single") {
+      const n = g.node;
+      onChildChange(
+        n.name,
+        isRepeatable(n.cardinality)
+          ? {
+              kind: "items",
+              items: [{ key: newKey(), value: defaultValue(singular(n)) }],
+            }
+          : defaultValue(n),
+      );
+    } else {
+      // Choice group: seed the first arm; the arm select can switch.
+      const arm = g.arms[0];
+      if (arm) onChildChange(arm.name, defaultValue(singular(arm)));
+    }
+  };
 
   return (
     <>
-      {groups.map((g, gi) =>
+      {populated.map((g) =>
         g.kind === "single" ? (
           <FieldRow
             key={g.node.name}
@@ -862,18 +1025,62 @@ function TreeFields({
             resources={resources}
             onChange={(v) => onChildChange(g.node.name, v)}
             depth={depth}
+            onRemove={
+              isRequired(g.node)
+                ? undefined
+                : () => onChildChange(g.node.name, undefined)
+            }
           />
         ) : (
           <ChoiceGroup
-            key={`cg-${gi}`}
+            key={`cg-${g.base}`}
             base={g.base}
             arms={g.arms}
             values={values}
             resources={resources}
             onChildChange={onChildChange}
             depth={depth}
+            onRemove={
+              g.arms.every(isRequired)
+                ? undefined
+                : () => {
+                    for (const a of g.arms) {
+                      if (values[a.name] !== undefined) {
+                        onChildChange(a.name, undefined);
+                      }
+                    }
+                  }
+            }
           />
         ),
+      )}
+      {addable.length > 0 && (
+        <div className="builder-add-row">
+          <select
+            data-testid={scope ? `builder-add-element-${scope}` : "builder-add-element"}
+            value=""
+            aria-label="add element"
+            title="Add a data element to the resource"
+            onChange={(e) => {
+              if (e.target.value) add(e.target.value);
+            }}
+          >
+            <option value="">+ add element…</option>
+            {addable.map((g) => {
+              const node =
+                g.kind === "single" ? g.node : { name: g.base, cardinality: "0..1" };
+              return (
+                <option
+                  key={g.kind === "single" ? g.node.name : `cg-${g.base}`}
+                  value={g.kind === "single" ? g.node.name : g.base}
+                >
+                  {node.name}
+                  {node.cardinality ? ` (${node.cardinality})` : ""}
+                </option>
+              );
+            })}
+          </select>
+        </div>
       )}
     </>
   );
@@ -891,6 +1098,7 @@ function ChoiceGroup({
   resources,
   onChildChange,
   depth,
+  onRemove,
 }: {
   base: string;
   arms: SchemaTreeNode[];
@@ -898,6 +1106,8 @@ function ChoiceGroup({
   resources: Array<Record<string, unknown>>;
   onChildChange: (name: string, v: FieldValue | undefined) => void;
   depth: number;
+  /** Drop the populated arm (ElementRows wires it; absent = required). */
+  onRemove?: () => void;
 }) {
   const populated = arms.find((a) => values[a.name] !== undefined);
   const selected = populated ?? null;
@@ -929,6 +1139,20 @@ function ChoiceGroup({
             </option>
           ))}
         </select>
+        {onRemove && (
+          <span className="builder-row-actions">
+            <button
+              type="button"
+              className="row-remove"
+              aria-label={`remove ${base}`}
+              title="Remove this element from the resource"
+              data-testid={`builder-remove-${base}`}
+              onClick={onRemove}
+            >
+              ×
+            </button>
+          </span>
+        )}
       </div>
       {selected && (
         <div className="builder-tree-children">

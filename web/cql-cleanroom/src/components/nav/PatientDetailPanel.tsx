@@ -4,6 +4,7 @@ import {
   type DatasetRowRef,
   type PatientGroup,
 } from "../../lib/datasetGroup";
+import { DropdownMenu } from "../DropdownMenu";
 
 /**
  * REORG 6e — the Tests L3 patient detail, now a SECOND maps-style nav
@@ -13,9 +14,10 @@ import {
  *
  * It keeps the old L3 surface verbatim: `dataset-back`, per-patient `+`
  * (`dataset-add-{pid}`), the `dataset-filter` input (this panel owns it
- * while drilled in), Expand/Collapse all, and per-type groups with
- * `dataset-type-toggle-{pid}-{Type}`, capped `dataset-row-{index}` rows
- * and `dataset-more-{pid}-{Type}`.
+ * while drilled in; 6h #63 dropped Expand/Collapse all and the duplicate
+ * "+ New" — the L2 header grammar is filter + one add), and per-type
+ * groups with `dataset-type-toggle-{pid}-{Type}`, capped
+ * `dataset-row-{index}` rows and `dataset-more-{pid}-{Type}`.
  *
  * The wrapper keeps `data-testid=dataset-group-{pid}` (specs assert its
  * textContent at L3); the L2 PatientRow drops its duplicate while this
@@ -52,7 +54,7 @@ export function PatientDetailPanel({
   onBack,
   onEditResource,
   onAddForPatient,
-  onAddNew,
+  onImportItem,
   onDelete,
 }: {
   group: PatientGroup;
@@ -61,7 +63,9 @@ export function PatientDetailPanel({
   onEditResource?: (index: number) => void;
   /** §3.2: per-patient `+` — builder opens with a Patient/<id> default. */
   onAddForPatient?: (patientId: string) => void;
-  onAddNew?: () => void;
+  /** #64: L3 ▾ — same file imports as the Tests L2 section (resource
+   *  .json or Bundle .json), routed to App's shared handlers. */
+  onImportItem?: (item: string) => void;
   onDelete: (index: number) => void;
 }) {
   const [filter, setFilter] = useState("");
@@ -74,13 +78,6 @@ export function PatientDetailPanel({
     !filterActive ||
     r.resourceType.toLowerCase().includes(filter.trim().toLowerCase()) ||
     r.id.toLowerCase().includes(filter.trim().toLowerCase());
-  const typeKey = (groupKey: string, type: string) => `${groupKey}::${type}`;
-
-  const collapseAll = () => {
-    const all = new Set<string>();
-    for (const t of groupTypes(group)) all.add(typeKey(group.key, t));
-    setCollapsedTypes(all);
-  };
 
   const patientRow = group.rows.find((r) => r.resourceType === "Patient");
   const hint = patientRow
@@ -101,12 +98,12 @@ export function PatientDetailPanel({
       <div className="dataset-detail-head">
         <button
           type="button"
-          className="dataset-back"
+          className="dataset-back rail-collapse-btn"
           data-testid="dataset-back"
           onClick={onBack}
           title="Back to the patient list"
         >
-          ‹ Patients
+          «
         </button>
         <span
           className={`dataset-group-label${group.unattributed ? " muted" : ""}${group.phantom ? " phantom" : ""}`}
@@ -119,17 +116,6 @@ export function PatientDetailPanel({
           <span className="dataset-group-hint" title={hint}>
             — {hint}
           </span>
-        )}
-        {!group.unattributed && !group.phantom && onAddForPatient && (
-          <button
-            type="button"
-            className="dataset-add-btn"
-            data-testid={`dataset-add-${group.key}`}
-            onClick={() => onAddForPatient(group.key)}
-            title={`New resource for ${group.label} (subject defaults to Patient/${group.key})`}
-          >
-            +
-          </button>
         )}
         {group.phantom && (
           <span
@@ -148,29 +134,38 @@ export function PatientDetailPanel({
           placeholder="filter by type or id"
           aria-label="filter dataset"
         />
-        <button
-          type="button"
-          data-testid="dataset-expand-all"
-          onClick={() => setCollapsedTypes(new Set())}
-        >
-          Expand all
-        </button>
-        <button
-          type="button"
-          data-testid="dataset-collapse-all"
-          onClick={collapseAll}
-        >
-          Collapse all
-        </button>
-        {onAddNew && (
-          <button
-            type="button"
-            data-testid="dataset-add-new"
-            onClick={onAddNew}
-            title="Open a new-resource builder tab"
-          >
-            + New
-          </button>
+        {!group.unattributed && !group.phantom && (onAddForPatient || onImportItem) && (
+          <div className="nav-actions">
+            {onAddForPatient && (
+              <button
+                type="button"
+                className="nav-add-btn"
+                data-testid={`dataset-add-${group.key}`}
+                onClick={() => onAddForPatient(group.key)}
+                title={`New resource for ${group.label} (subject defaults to Patient/${group.key})`}
+              >
+                +
+              </button>
+            )}
+            {onImportItem && (
+              <DropdownMenu label="" testId={`dataset-import-${group.key}`}>
+                <button
+                  className="dropdown-item"
+                  data-testid={`dataset-import-${group.key}-resource-json`}
+                  onClick={() => onImportItem("resource-json")}
+                >
+                  Import resource .json…
+                </button>
+                <button
+                  className="dropdown-item"
+                  data-testid={`dataset-import-${group.key}-bundle-json`}
+                  onClick={() => onImportItem("bundle-json")}
+                >
+                  Import Bundle .json…
+                </button>
+              </DropdownMenu>
+            )}
+          </div>
         )}
       </div>
       {groupTypes(group).map((type) => (

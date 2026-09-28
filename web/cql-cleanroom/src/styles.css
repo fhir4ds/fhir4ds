@@ -16,6 +16,12 @@ body { margin: 0; }
   font-size: 11px; color: #8fa3bf; border: 1px solid #2c3644;
   border-radius: 10px; padding: 2px 8px;
 }
+/* #64: menus sit beside the title; the version pill owns the far right.
+   Header lists anchor LEFT (the File button is near the viewport's left
+   edge — right:0 would push the list off-screen). */
+.app-header .workspace-actions { margin-left: 2px; }
+.app-header .version-badge { margin-left: auto; }
+.app-header .dropdown-list { left: 0; right: auto; }
 .app-main { padding: 18px; flex: 1; }
 .boot-overlay {
   position: fixed; inset: 0; z-index: 100;
@@ -96,11 +102,13 @@ body { margin: 0; }
   width: auto; max-width: 220px;
 }
 .pane-header input { width: auto; }
-.expected-grid .row-remove {
+.pane-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+/* Shared row-remove × (mapping rows, valueset codes, expected patients). */
+.row-remove {
   background: none; border: none; color: #8fa3bf; cursor: pointer;
   font-size: 13px; line-height: 1; padding: 0 4px; margin-left: 6px;
 }
-.expected-grid .row-remove:hover { color: #ff7b72; }
+.row-remove:hover { color: #ff7b72; }
 .editor-host { min-height: 240px; border: 1px solid #232a35; border-radius: 6px; overflow: hidden; }
 .pane-meta { color: #8fa3bf; font-size: 11px; margin-right: 8px; }
 .pane-error { color: #ff7b72; font-size: 12px; margin: 6px 0; }
@@ -149,7 +157,16 @@ body { margin: 0; }
   padding: 10px; font-size: 11px; overflow: auto; max-height: 260px;
   white-space: pre-wrap; word-break: break-all; margin: 8px 0 0;
 }
-.tests-summary { margin-top: 8px; font-size: 12px; display: flex; flex-direction: column; gap: 6px; }
+/* Compare chip (6h #62): N/M passed — pager row's right end, clickable
+   (filters the compare matrix to failing rows). */
+.tests-summary {
+  border: 1px solid #232a35; border-radius: 10px; padding: 1px 10px;
+  font-size: 11px; cursor: pointer; white-space: nowrap; color: #c9d4e3;
+}
+.tests-summary.pass { background: #12321e; color: #6ee7a0; }
+.tests-summary.fail { background: #3a1418; color: #ff9d9b; }
+.compare-cell-match { background: rgba(18, 50, 30, 0.25); }
+.compare-cell-miss { color: #ff9d9b; background: rgba(58, 20, 24, 0.4); }
 .badge { border-radius: 10px; padding: 1px 10px; font-size: 11px; width: fit-content; }
 .badge.pass { background: #12321e; color: #6ee7a0; }
 .badge.fail { background: #3a1418; color: #ff9d9b; }
@@ -342,6 +359,17 @@ body { margin: 0; }
   cursor: pointer; font-size: 13px; line-height: 1;
 }
 .nav-add-btn:hover { color: #e6ebf2; border-color: #3b82f6; }
+/* Split + | ▾ in the section toolbar (#64): the ▾ opens the section's
+   file-import menu. Sized to hug the panel — the shared .dropdown-list
+   min-width would overflow the rail's scroll clip. */
+.nav-actions { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.nav-actions .dropdown-menu > button {
+  width: 24px; height: 24px; padding: 0; background: #1d232e;
+  border: 1px solid #232a35; border-radius: 6px; color: #aab4c3;
+  cursor: pointer; font-size: 11px; line-height: 1;
+}
+.nav-actions .dropdown-menu > button:hover { color: #e6ebf2; border-color: #3b82f6; }
+.nav-actions .dropdown-list { min-width: 0; width: max-content; max-width: 280px; }
 .nav-drawer-list { display: flex; flex-direction: column; gap: 2px; flex: 1; min-height: 0; overflow-y: auto; }
 .nav-empty { color: #5d6f8a; font-size: 11px; padding: 2px 4px; }
 .nav-item {
@@ -569,8 +597,7 @@ body { margin: 0; }
   margin-left: 4px;
   min-width: 24px;
 }
-.builder-type { margin: 6px 0; }
-.builder-mode { font-size: 12px; margin-left: auto; }
+.builder-mode { font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
 .builder-raw {
   width: 100%;
   min-height: 200px;
@@ -582,20 +609,13 @@ body { margin: 0; }
   border-radius: 4px;
   padding: 6px;
 }
-.builder-preview { margin-top: 8px; }
-.builder-pre {
-  max-height: 180px;
-  overflow: auto;
-  font-size: 11px;
-  background: var(--bg-inset, #141821);
-  padding: 6px;
-  border-radius: 4px;
-}
 .builder-actions {
   display: flex;
   gap: 8px;
   margin: 8px 0;
 }
+/* flex display defeats the hidden attr (same trap as tab panels) */
+.builder-actions[hidden] { display: none; }
 .builder-actions button:disabled { opacity: 0.45; }
 .builder-passthrough textarea {
   width: 100%;
@@ -636,12 +656,6 @@ body { margin: 0; }
 .dataset-group-label.phantom { color: #e0a0a0; font-weight: 500; }
 .dataset-group-hint { color: #5d6f8a; font-weight: 400; font-size: 11px; }
 .dataset-group .dataset-row { margin-top: 2px; }
-.dataset-add-btn {
-  background: #12321e; color: #6ee7a0; border: 1px solid #1e4a30;
-  border-radius: 6px; padding: 0 8px; cursor: pointer; font-size: 12px;
-  line-height: 18px; width: 26px; height: 20px; flex: none;
-}
-.dataset-add-btn:hover { background: #17452a; }
 .dataset-why {
   display: inline-block; margin-left: 5px; width: 14px; height: 14px;
   border-radius: 50%; background: #3a2c14; color: #f5c26b; font-size: 10px;
@@ -806,14 +820,6 @@ body { margin: 0; }
 .assoc-label { color: #7b8698; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; }
 /* REORG 6h: measure editor as four sections — identity, inputs,
  * population mapping, expected cross-link. */
-.measure-identity {
-  display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
-}
-.measure-identity select {
-  background: #24476e; color: #dbe7ff; border: none; border-radius: 6px;
-  padding: 4px 6px; cursor: pointer; font-size: 12px;
-  width: auto; max-width: 220px;
-}
 .measure-inputs { margin-bottom: 10px; }
 .inputs-toggle {
   display: flex; align-items: center; gap: 6px;
@@ -836,12 +842,6 @@ body { margin: 0; }
 .mapping-head {
   display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
 }
-.mapping-head .pane-actions { margin-left: auto; display: flex; gap: 6px; }
-.mapping-head .pane-actions button {
-  background: #24476e; color: #dbe7ff; border: none; border-radius: 6px;
-  padding: 4px 10px; cursor: pointer; font-size: 12px;
-}
-.mapping-head .pane-actions button:disabled { opacity: 0.5; cursor: default; }
 .measure-expected {
   display: flex; align-items: center; gap: 8px; margin-top: 14px;
   font-size: 12px;
@@ -1084,7 +1084,8 @@ body { margin: 0; }
    column, and labels never compress or wrap. */
 .builder-form .builder-tree-row {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
+  /* caret | label | input | element actions (populated-only model) */
+  grid-template-columns: 16px minmax(0, 1fr) minmax(0, 2fr) auto;
   column-gap: 6px;
   row-gap: 3px;
   align-items: center;
@@ -1101,19 +1102,27 @@ body { margin: 0; }
   white-space: nowrap;
   overflow: visible;
 }
+/* Input sits RIGHT of the label on the same line. */
 .builder-form .builder-tree-row > input,
 .builder-form .builder-tree-row > select,
 .builder-form .builder-tree-row > textarea {
-  grid-column: 2 / -1;
-  grid-row: 2;
+  grid-column: 3;
+  grid-row: 1;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
 }
-/* Repeatable + buttons sit right of the label on line 1. */
-.builder-form .builder-tree-row > .builder-item-add,
+/* Element actions (item + / element ×) hug the right edge. */
+.builder-form .builder-row-actions {
+  grid-column: 4;
+  grid-row: 1;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-self: end;
+}
 .builder-form .builder-tree-row > .builder-item-remove {
-  grid-column: 3;
+  grid-column: 4;
   grid-row: 1;
   justify-self: end;
 }
@@ -1129,7 +1138,7 @@ body { margin: 0; }
 /* Choice select: sits RIGHT of the label, never overlapping — the
    label column becomes flexible and the select flows after it. */
 .builder-form .builder-choice .builder-tree-row.builder-tree-head {
-  grid-template-columns: 20px minmax(0, max-content) minmax(0, 1fr);
+  grid-template-columns: 20px minmax(0, max-content) minmax(0, 1fr) auto;
 }
 .builder-form .builder-tree-row.builder-tree-head select {
   grid-row: 1;
@@ -1202,9 +1211,12 @@ body { margin: 0; }
 
 /* Tree-row internals: consistent grid inside every row */
 .builder-form .builder-tree-row {
-  align-items: start;
+  align-items: center;
   max-width: 100%;
   box-sizing: border-box;
+}
+.builder-form .builder-tree-row.builder-hatch-row {
+  align-items: start;
 }
 
 .builder-form .builder-tree-row input,
@@ -1214,31 +1226,33 @@ body { margin: 0; }
   min-width: 0;
   box-sizing: border-box;
 }
-/* Hatch textareas: full width on line 2 like other inputs. */
+/* Hatch textareas: full width on line 2 under the label (multi-line). */
 .builder-form .builder-tree-row.builder-hatch-row .builder-hatch {
   grid-column: 2 / -1;
+  grid-row: 2;
   width: 100%;
   min-width: 0;
 }
-/* Ref rows: target pills ride line 1 right after the label; the
-   dangling hint (if any) goes under the input. */
-/* Ref line 1: label and pills flow together; input full-width line 2. */
+/* Ref rows: input shares line 1 with the label; target pills ride line 2
+   under the input; the dangling hint (if any) goes under them. */
 .builder-form .builder-tree-row.builder-ref .ref-target-pills {
-  grid-column: 2 / -1;
-  grid-row: 1;
-  justify-self: end;
+  grid-column: 3;
+  grid-row: 2;
+  justify-self: start;
   margin-top: 0;
   align-self: center;
 }
 .builder-form .builder-tree-row.builder-ref .builder-hint {
-  grid-column: 2 / -1;
+  grid-column: 3 / -1;
   grid-row: 3;
   justify-self: start;
 }
-/* Array + buttons hug the label, not the far edge. */
-.builder-form .builder-tree-head .builder-item-add {
-  justify-self: start;
-  margin-left: 2px;
+/* The "+ add element" picker (populated-only model). */
+.builder-add-row { margin-top: 6px; }
+.builder-add-row select {
+  background: #101822; color: #8fa3bf; border: 1px dashed #2c3644;
+  border-radius: 6px; font-size: 12px; padding: 2px 6px; cursor: pointer;
+  width: auto; max-width: 260px;
 }
 
 /* Reference target pills (row 2 of ref rows, under the input) */
@@ -1308,8 +1322,6 @@ body { margin: 0; }
   color: #8fb3d9;
   background: #101822;
 }
-.dataset-type-group .dataset-rows { margin-left: 14px; border-left: 1px solid #26324a; padding-left: 8px; }
-.dataset-type-group > .dataset-row { margin-left: 14px; border-left: 1px solid #26324a; padding-left: 8px; }
 .dataset-rows { gap: 0; }
 .dataset-row {
   display: flex; align-items: center; justify-content: space-between; gap: 6px;
@@ -1336,12 +1348,6 @@ body { margin: 0; }
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   padding: 2px 0 6px; border-bottom: 1px solid #1c2534; margin-bottom: 4px;
 }
-.dataset-back {
-  background: transparent; border: 1px solid #2c4257; border-radius: 3px;
-  color: #8fb3d9; cursor: pointer; font-size: 11px;
-  padding: 1px 8px; line-height: 18px; font-family: inherit;
-}
-.dataset-back:hover { background: #16202e; color: #c9d4e3; }
 
 /* Cell-level evidence drill-in */
 .results-table td.cell-evidence {
@@ -1391,6 +1397,22 @@ body { margin: 0; }
   font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
   color: #7b8698; padding: 4px 10px 2px;
 }
+/* One-level flyout (File > Open / Save / Examples): the File button
+   sits at the header's LEFT now, so the flyout slides RIGHT of the
+   parent list, vertically aligned with its trigger. */
+.dropdown-sub { position: relative; }
+.dropdown-sub-trigger {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%;
+}
+.dropdown-sub-caret { color: #7b8698; margin-left: 18px; }
+.dropdown-sub:hover .dropdown-sub-caret { color: #c9d4e3; }
+.dropdown-sublist {
+  position: absolute; left: 100%; top: -4px; z-index: 61;
+  display: flex; flex-direction: column; min-width: 210px;
+  background: #10151d; border: 1px solid #2c3848; border-radius: 8px;
+  padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
 
 /* Pager pinned BELOW the scroll region (never scrolls away) */
 .results-table-block { display: flex; flex-direction: column; }
@@ -1401,9 +1423,6 @@ body { margin: 0; }
 .results-table-block .table-pager {
   border: 1px solid #1c2534; border-radius: 0 0 4px 4px; background: #10151d;
 }
-/* Tests pane: independent scroll (results tab, measure report) */
-.tests-scroll { max-height: 420px; overflow-y: auto; }
-
 /* Sankey: non-overlapping layout */
 .sankey-wrap { overflow-x: auto; }
 .sankey-label { font-size: 11px; fill: #c9d4e3; }
@@ -1420,9 +1439,15 @@ body { margin: 0; }
 /* Stats ride the pager row, right-aligned, pager typography */
 .table-stats { margin-left: auto; font-size: 11px; color: #8aa0b8; }
 
-/* Tests pane tables: horizontal scroll when populations overflow */
-.expected-grid-wrap, .failures-wrap { overflow-x: auto; border: 1px solid #1c2534; border-radius: 4px; }
-.expected-grid, .failures-table { width: 100%; min-width: max-content; }
+/* Expected Results editor: full-pane table with the results-table
+   grammar (borders, sticky header); wraps scroll horizontally when
+   populations overflow. */
+.expected-grid-wrap { overflow-x: auto; border: 1px solid #1c2534; border-radius: 4px; }
+.expected-grid { border-collapse: collapse; width: 100%; min-width: max-content; font-size: 12px; }
+.expected-grid th, .expected-grid td {
+  border: 1px solid #232a35; padding: 4px 8px; text-align: left; white-space: nowrap;
+}
+.expected-grid th { background: #101822; color: #a8b8cf; position: sticky; top: 0; }
 /* Builder + buttons: green accents (dataset palette) */
 .builder-form .builder-item-add,
 .builder-form .builder-choice .builder-tree-head select {
@@ -1433,8 +1458,7 @@ body { margin: 0; }
 .builder-form .builder-item-add:hover { background: #17452a; }
 
 /* Unify + buttons across Resources pane and Resource Builder */
-.builder-item-add,
-.dataset-add-btn {
+.builder-item-add {
   border-radius: 6px;
   border: 1px solid #1e4a30;
   background: #12321e;
@@ -1446,15 +1470,7 @@ body { margin: 0; }
   font-size: 13px;
   cursor: pointer;
 }
-.builder-item-add:hover,
-.dataset-add-btn:hover { background: #17452a; }
-
-/* Type groups indent under the patient group header (builder parity) */
-.dataset-type-group {
-  margin-left: 10px;
-  border-left: 1px solid #26324a;
-  padding-left: 10px;
-}
+.builder-item-add:hover { background: #17452a; }
 
 /* Terminology codes table: scroll after 10 rows */
 .terminology-table-wrap {
@@ -1497,7 +1513,7 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 .editor-tab-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.78rem; }
 .editor-tab-close { border: none; background: transparent; padding: 4px 7px; cursor: pointer; color: #8fa3bf; opacity: 0.6; font-size: 0.85rem; }
 .editor-tab-close:hover { opacity: 1; background: rgba(255,255,255,0.08); color: #e6e9ef; }
-.vs-url-row { display: flex; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; max-width: 760px; }
+.vs-url-row { display: flex; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; max-width: 600px; }
 .vs-url-row label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #a8b8cf; flex: 1; min-width: 180px; }
 .vs-url-row input { flex: 1; }
 /* 6h — editor identity rows (valueset, parameters): name + pill, header
@@ -1508,7 +1524,6 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 .vs-url-row + .assoc-label { margin-top: 10px; }
 .vs-code-row { display: grid; grid-template-columns: 2fr 1fr 1.4fr auto; gap: 6px; margin-bottom: 4px; }
 .vs-warnings { font-size: 0.75rem; color: #e7c66b; margin-top: 6px; }
-.vs-code-del { border: none; background: transparent; color: #d98a8a; cursor: pointer; }
 .er-subject-row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 0.78rem; color: #a8b8cf; }
 .er-subject-row input { flex: 1; max-width: 320px; }
 .er-group { border: 1px solid #232a35; border-radius: 6px; padding: 8px; margin-bottom: 8px; }
@@ -1566,7 +1581,7 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 .nav-panel-detail .dataset-detail-head { flex-wrap: wrap; }
 .nav-panel-detail .dataset-tree-controls { flex-wrap: wrap; }
 .nav-panel-detail .dataset-tree-controls input { flex: 1 1 110px; min-width: 0; }
-.nav-panel-detail .dataset-tree-controls button { flex: none; }
+.nav-panel-detail .dataset-tree-controls .nav-actions { flex: none; }
 .nav-panel-detail .dataset-detail-head > * { flex-shrink: 0; }
 .nav-panel-detail .dataset-detail-head .dataset-group-hint { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -1589,8 +1604,7 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 .editor-run-btn:hover { background: #243146; }
 /* Editor form columns stop stretching edge to edge on wide monitors. */
 .pane .param-row, .pane .vs-code-row, .pane .er-pop-row, .pane .vd-config,
-.pane table.mapping-table { max-width: 760px; }
-.pane .builder-form { max-width: 880px; }
+.pane table.mapping-table, .pane .builder-form { max-width: 600px; }
 /* 6h: mapping grid sits left with content-sized selects. The pane is a
  * flex column, so tables need fit-content or they stretch full-width. */
 .pane table.mapping-table { width: fit-content; }

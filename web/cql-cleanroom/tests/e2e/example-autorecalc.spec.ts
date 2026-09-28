@@ -9,10 +9,12 @@ test("example loads include tabs, prefills MP, auto-recalcs", async ({ page }) =
   await page.goto("/");
   await page.waitForSelector(".version-badge", { timeout: 150_000 });
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
+  await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
 
   // 1. Load the example.
-  await page.click("[data-testid=import-menu]");
+  await page.click("[data-testid=file-menu]");
+  await page.hover("[data-testid=file-examples]");
   await page.click("[data-testid=load-example-cms69]");
   await page.waitForFunction(
     () => document.querySelector(".status-note")?.textContent?.includes("loaded example"),

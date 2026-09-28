@@ -40,7 +40,7 @@ export async function importBundleResources(
   page: Page,
   resources: Array<Record<string, unknown>>,
 ) {
-  await page.click("[data-testid=export-menu]");
+  await page.click("[data-testid=file-menu]");
   // 6h: the mode control lives in the Settings menu now.
   await page.click("[data-testid=settings-menu]");
   await page.selectOption("[data-testid=bundle-mode]", "replace");

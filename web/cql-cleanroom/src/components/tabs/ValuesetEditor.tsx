@@ -92,9 +92,18 @@ export function ValuesetEditor({
             {codes.length} code{codes.length === 1 ? "" : "s"}
           </span>
         </div>
-        <button className="pane-action" onClick={() => setRawMode((r) => !r)}>
-          {rawMode ? "table" : "raw JSON"}
-        </button>
+        <div className="pane-actions">
+          <button
+            data-testid="valueset-add-code"
+            disabled={rawMode}
+            onClick={() => setCodes([...codes, { system: "", code: "" }])}
+          >
+            + code
+          </button>
+          <button className="pane-action" onClick={() => setRawMode((r) => !r)}>
+            {rawMode ? "table" : "raw JSON"}
+          </button>
+        </div>
       </div>
       {rawMode ? (
         <div className="pane-body">
@@ -163,22 +172,15 @@ export function ValuesetEditor({
                 onChange={(e) => patchCode(i, "display", e.target.value)}
               />
               <button
-                className="vs-code-del"
+                className="row-remove"
                 title="remove code"
+                aria-label={`remove code ${c.code || i}`}
                 onClick={() => setCodes(codes.filter((_, j) => j !== i))}
               >
                 ×
               </button>
             </div>
           ))}
-          <div className="drawer-actions">
-            <button
-              data-testid="valueset-add-code"
-              onClick={() => setCodes([...codes, { system: "", code: "" }])}
-            >
-              + code
-            </button>
-          </div>
           {warnings.length > 0 && (
             <ul className="vs-warnings">
               {warnings.map((w, i) => (

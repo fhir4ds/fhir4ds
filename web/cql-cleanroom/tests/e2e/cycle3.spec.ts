@@ -53,6 +53,7 @@ test.describe("cleanroom cycle-3 capabilities", () => {
     if (!chip?.includes("changed")) throw new Error(`chip: ${chip}`);
 
     // reset so later tests start clean
+    await page.click("[data-testid=file-menu]");
     await page.click('[data-testid=workspace-reset]');
     await page.waitForTimeout(400);
   });
@@ -66,6 +67,7 @@ test.describe("cleanroom cycle-3 capabilities", () => {
     await page.waitForSelector('[data-testid=library-tab-1]', { timeout: 10_000 });
 
     // click Share — writes the fragment
+    await page.click("[data-testid=file-menu]");
     await page.click('[data-testid=share-btn]');
     await page.waitForTimeout(300);
     const hash = await page.evaluate(() => location.hash);
@@ -80,6 +82,7 @@ test.describe("cleanroom cycle-3 capabilities", () => {
     console.log("SHARE_RESTORE_TABS:", tabCount);
 
     // reset so later tests start clean
+    await page.click("[data-testid=file-menu]");
     await page.click('[data-testid=workspace-reset]');
     await page.waitForTimeout(400);
   });

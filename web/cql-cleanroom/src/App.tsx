@@ -9,7 +9,7 @@ import {
 } from "./components/BootOverlay";
 import { EditorPane } from "./components/EditorPane";
 import { NavRail } from "./components/NavRail";
-import { coerceParam, detectParams } from "./lib/params";
+import { coerceParam, detectParams, joinInterval } from "./lib/params";
 import { importMadiePackage } from "./lib/madiePackage";
 import { exportMadiePackage } from "./lib/madieExport";
 import {
@@ -33,7 +33,7 @@ import {
   importBundle,
   mergeDatasets,
 } from "./lib/bundleIo";
-import { DropdownMenu } from "./components/DropdownMenu";
+import { DropdownMenu, DropdownSubmenu } from "./components/DropdownMenu";
 import { ResourceContextMenu } from "./components/nav/ResourceContextMenu";
 import type { ContextMenuState } from "./components/nav/ResourceContextMenu";
 import {
@@ -84,8 +84,9 @@ import type {
   FlattenViewResult,
   EvaluateResult,
   Diagnostics,
-  VerifyEnvelope,
+  MeasureRowsResult,
 } from "./lib/protocol";
+import { deriveCompare } from "./lib/verifyCompare";
 import {
   clearWorkspace,
   exportWorkspaceZip,
@@ -382,11 +383,6 @@ export default function App() {
   const evalBusyRef = useRef(false);
   const evalSeqRef = useRef(0);
   const [viewResult, setViewResult] = useState<FlattenViewResult | null>(null);
-  // 6h: expected-vs-actual verify result — rendered in the CONSOLE's
-  // Compare tab (tests context), not inside the TestsPane.
-  const [verifyResult, setVerifyResult] = useState<VerifyEnvelope | null>(
-    null,
-  );
   // Row-shaped memberships + hashes of the LATEST evaluation (compare
   // target + drift reference). Cleared when inputs change. The read side
   // rides baselineArtifact via runHistory; currentRun itself is the
@@ -1189,6 +1185,345 @@ export default function App() {
     }
   };
 
+  // #64: per-section ▾ imports — one hidden input re-armed per pick.
+  const sectionImportInputRef = useRef<HTMLInputElement | null>(null);
+  const sectionImportPickRef = useRef<{
+    accept: string;
+    cb: (f: File) => void;
+  } | null>(null);
+  const pickSectionImport = (accept: string, cb: (f: File) => void) => {
+    sectionImportPickRef.current = { accept, cb };
+    const input = sectionImportInputRef.current;
+    if (input) {
+      input.accept = accept;
+      input.click();
+    }
+  };
+
+  /** Single JSON object off disk, validated by the caller. */
+  const readJsonObject = async (
+    file: File,
+  ): Promise<Record<string, unknown>> => {
+    const parsed: unknown = JSON.parse(await file.text());
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new Error("expected a JSON object");
+    }
+    return parsed as Record<string, unknown>;
+  };
+
+  const upsertLibraryText = (name: string, text: string) => {
+    const i = libraries.findIndex((l) => l.name === name);
+    if (i >= 0) {
+      const next = [...libraries];
+      next[i] = { ...next[i], text };
+      setLibraries(next);
+      setActiveTab(i);
+    } else {
+      setLibraries((libs) => [
+        ...libs,
+        { id: newLibraryId(libs), name, text },
+      ]);
+      setActiveTab(libraries.length);
+    }
+    setStatusNote(`imported library ${name}`);
+  };
+
+  const decodeBase64Text = (b64: string) =>
+    new TextDecoder().decode(
+      Uint8Array.from(atob(b64.replace(/\s+/g, "")), (c) => c.charCodeAt(0)),
+    );
+
+  // Expected ▾: authored MeasureReports (.json — single resource,
+  // bare array, or Bundle) → the active measure's expected grid (same
+  // rows_from_measure_reports path the editor used).
+  const importExpectedBundle = async (file: File) => {
+    if (!measure || populationCodes.length === 0) {
+      setStatusNote(
+        "expected import needs a Measure mapping with populations",
+      );
+      return;
+    }
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      let reports: Array<Record<string, unknown>> = [];
+      if (Array.isArray(parsed)) {
+        reports = parsed.filter(
+          (r) => (r as { resourceType?: string })?.resourceType === "MeasureReport",
+        );
+      } else if (
+        parsed &&
+        typeof parsed === "object" &&
+        (parsed as { resourceType?: string }).resourceType === "Bundle"
+      ) {
+        const entries =
+          ((parsed as { entry?: Array<{ resource?: Record<string, unknown> }> })
+            .entry ?? []);
+        reports = entries
+          .map((e) => e.resource)
+          .filter(
+            (r): r is Record<string, unknown> =>
+              !!r && r.resourceType === "MeasureReport",
+          );
+      } else if (
+        parsed &&
+        typeof parsed === "object" &&
+        (parsed as { resourceType?: string }).resourceType === "MeasureReport"
+      ) {
+        reports = [parsed as Record<string, unknown>];
+      }
+      if (!reports.length) {
+        setStatusNote("no MeasureReport resources found in file");
+        return;
+      }
+      const resp = await workerRequest({
+        type: "rows_from_measure_reports",
+        reports,
+        population_codes: populationCodes,
+      });
+      const env: MeasureRowsResult = JSON.parse(
+        (resp as { envelope: string }).envelope,
+      );
+      if (!env.ok && !env.rows.length) {
+        setStatusNote(
+          env.diagnostics?.map((d) => d.message).join("; ") ??
+            "expected import failed",
+        );
+        return;
+      }
+      const colToCode = new Map(
+        populationCodes.map((c) => [c.replace(/-/g, "_"), c]),
+      );
+      const next: { [pid: string]: { [code: string]: boolean } } = {};
+      for (const row of env.rows) {
+        const pid = String(row.patient_id ?? "");
+        if (!pid) continue;
+        const codes: { [code: string]: boolean } = {};
+        for (const [col, value] of Object.entries(row)) {
+          const code = colToCode.get(col);
+          if (code) codes[code] = value === true;
+        }
+        next[pid] = codes;
+      }
+      updateExpectedValues(Object.keys(next).length ? next : null);
+      setStatusNote(`imported expected results for ${Object.keys(next).length} patient(s)`);
+    } catch (e) {
+      setStatusNote(
+        `expected import failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  };
+
+  const importParametersResource = async (file: File) => {
+    try {
+      const res = await readJsonObject(file);
+      if (res.resourceType !== "Parameters") {
+        setStatusNote("not a Parameters resource");
+        return;
+      }
+      const declTypes = new Map(
+        detectParams(mainLib.text).map((d) => [d.name, d.type]),
+      );
+      const values: Record<string, string> = {};
+      let firstName: string | null = null;
+      for (const p of (res.parameter as Array<Record<string, unknown>>) ?? []) {
+        const name = typeof p?.name === "string" ? p.name : "";
+        if (!name) continue;
+        firstName ??= name;
+        const period = p.valuePeriod as
+          | { start?: unknown; end?: unknown }
+          | undefined;
+        if (period && typeof period.start === "string" && typeof period.end === "string") {
+          // Restore the engine's interval text — DateTime params get the
+          // inclusive end-day boundaries joinInterval writes on export.
+          values[name] = joinInterval(
+            declTypes.get(name),
+            period.start,
+            period.end,
+          );
+          continue;
+        }
+        for (const key of ["valueString", "valueCode"] as const) {
+          const v = p[key];
+          if (typeof v === "string") values[name] = v;
+        }
+        for (const key of ["valueInteger", "valueDecimal"] as const) {
+          const v = p[key];
+          if (typeof v === "number") values[name] = String(v);
+        }
+        if (typeof p.valueBoolean === "boolean") {
+          values[name] = p.valueBoolean ? "true" : "false";
+        }
+      }
+      if (!firstName) {
+        setStatusNote("Parameters resource has no parameter entries");
+        return;
+      }
+      setParamValues((pv) => ({ ...pv, ...values }));
+      setStatusNote(`imported ${Object.keys(values).length} parameter value(s)`);
+      if (detectParams(mainLib.text).some((d) => d.name === firstName)) {
+        openEditorTab("parameter", firstName);
+      }
+    } catch (e) {
+      setStatusNote(
+        `Parameters import failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  };
+
+  const handleNavImport = (section: NavSectionId, item: string) => {
+    const json = ".json,application/json";
+    switch (`${section}:${item}`) {
+      case "libraries:library-cql":
+        pickSectionImport(".cql,.txt,text/plain,text/cql", async (f) => {
+          const base = f.name.replace(/\.[^.]*$/, "").replace(/[^A-Za-z0-9_ -]/g, "").trim();
+          upsertLibraryText(base || "Imported", await f.text());
+        });
+        break;
+      case "libraries:library-json":
+        pickSectionImport(json, async (f) => {
+          try {
+            const lib = await readJsonObject(f);
+            if (lib.resourceType !== "Library") {
+              setStatusNote("not a FHIR Library resource");
+              return;
+            }
+            const data = (
+              (lib.content as Array<{ data?: unknown }> | undefined) ?? []
+            ).find((a) => typeof a?.data === "string" && a.data.length > 0)
+              ?.data as string | undefined;
+            if (!data) {
+              setStatusNote("Library has no base64 CQL content attachment");
+              return;
+            }
+            const name =
+              (typeof lib.name === "string" && lib.name) ||
+              (typeof lib.title === "string" && lib.title) ||
+              (typeof lib.id === "string" && lib.id) ||
+              "Imported";
+            upsertLibraryText(name, decodeBase64Text(data));
+          } catch (e) {
+            setStatusNote(
+              `Library import failed: ${e instanceof Error ? e.message : String(e)}`,
+            );
+          }
+        });
+        break;
+      case "measures:measure-json":
+        pickSectionImport(json, async (f) => {
+          try {
+            const resource = await readJsonObject(f);
+            if (resource.resourceType !== "Measure") {
+              setStatusNote("not a Measure resource");
+              return;
+            }
+            const id = newMeasureId(measures);
+            setMeasures((ms) => [...ms, { id, mainLibraryId: active?.id ?? "lib_0", resource }]);
+            setActiveMeasureId(id);
+            openEditorTab("measure", id);
+            setStatusNote(`imported Measure ${String(resource.name ?? resource.id ?? id)}`);
+          } catch (e) {
+            setStatusNote(
+              `Measure import failed: ${e instanceof Error ? e.message : String(e)}`,
+            );
+          }
+        });
+        break;
+      case "valuesets:valueset-json":
+        pickSectionImport(json, async (f) => {
+          try {
+            const vs = await readJsonObject(f);
+            if (vs.resourceType !== "ValueSet") {
+              setStatusNote("not a ValueSet resource");
+              return;
+            }
+            const url = typeof vs.url === "string" ? vs.url : "";
+            if (!url) {
+              setStatusNote("ValueSet needs a url");
+              return;
+            }
+            setTerminology((t) => ({
+              valuesets: [
+                ...t.valuesets.filter(
+                  (v) => String((v as { url?: string }).url ?? "") !== url,
+                ),
+                vs,
+              ],
+            }));
+            openEditorTab("valueset", `ws:${url}`);
+            setStatusNote(`imported ValueSet ${url}`);
+          } catch (e) {
+            setStatusNote(
+              `ValueSet import failed: ${e instanceof Error ? e.message : String(e)}`,
+            );
+          }
+        });
+        break;
+      case "parameters:parameters-json":
+        pickSectionImport(json, (f) => void importParametersResource(f));
+        break;
+      case "views:view-json":
+        pickSectionImport(json, async (f) => {
+          try {
+            const resource = await readJsonObject(f);
+            if (resource.resourceType !== "ViewDefinition") {
+              setStatusNote("not a ViewDefinition resource");
+              return;
+            }
+            const id =
+              typeof resource.id === "string" && resource.id
+                ? resource.id
+                : `vd_${Date.now().toString(36)}`;
+            const name =
+              (typeof resource.name === "string" && resource.name) ||
+              (typeof resource.title === "string" && resource.title) ||
+              `View ${viewDefs.length + 1}`;
+            setViewDefs((vs) => [
+              ...vs.filter((v) => v.id !== id),
+              { id, name, resource },
+            ]);
+            openEditorTab("view", id);
+            setStatusNote(`imported ViewDefinition ${name}`);
+          } catch (e) {
+            setStatusNote(
+              `View import failed: ${e instanceof Error ? e.message : String(e)}`,
+            );
+          }
+        });
+        break;
+      case "tests:resource-json":
+        pickSectionImport(json, async (f) => {
+          try {
+            const resource = await readJsonObject(f);
+            if (
+              typeof resource.resourceType !== "string" ||
+              typeof resource.id !== "string" ||
+              !resource.id
+            ) {
+              setStatusNote("resource needs resourceType and id");
+              return;
+            }
+            const current = (dataset?.resources ?? []) as Array<
+              Record<string, unknown>
+            >;
+            const next = mergeDatasets(current, [resource]);
+            setDataset(next.length ? { resources: next } : null);
+            setStatusNote(`imported ${resource.resourceType}/${resource.id}`);
+          } catch (e) {
+            setStatusNote(
+              `resource import failed: ${e instanceof Error ? e.message : String(e)}`,
+            );
+          }
+        });
+        break;
+      case "tests:bundle-json":
+        pickSectionImport(json, (f) => void importBundleFile(f));
+        break;
+      case "expected:expected-json":
+        pickSectionImport(json, (f) => void importExpectedBundle(f));
+        break;
+    }
+  };
+
   const libErrorById: Record<string, boolean> = {};
   libraries.forEach((l, i) => {
     if (libErrors[i]) libErrorById[l.id] = true;
@@ -1377,6 +1712,30 @@ export default function App() {
       : undefined) ??
     runHistory[runHistory.length - 1] ??
     null;
+
+  // 6h #62: the expected-vs-actual compare is DERIVED from the latest
+  // library run (heartbeat rows) + authored expectations — no second
+  // evaluation, recalc is automatic. Snippet runs don't carry population
+  // columns, so only the newest run with mode "library" counts; a failed
+  // run has no rows and the console explains instead of comparing.
+  const latestLibraryRun = useMemo(() => {
+    for (let i = runHistory.length - 1; i >= 0; i--) {
+      if (runHistory[i].payload?.mode === "library") return runHistory[i];
+    }
+    return null;
+  }, [runHistory]);
+  const verifyCompare = useMemo(
+    () =>
+      deriveCompare(
+        latestLibraryRun?.payload?.rows,
+        expectedValues ?? {},
+        populationCodes,
+      ),
+    [latestLibraryRun, expectedValues, populationCodes],
+  );
+  const compareStale =
+    !!latestLibraryRun && !latestLibraryRun.payload?.rows;
+
   // A pinned run that fell off the 20-ring reverts to following latest.
   useEffect(() => {
     if (selectedRunId && !runHistory.some((r) => r.id === selectedRunId)) {
@@ -1815,12 +2174,11 @@ export default function App() {
       displayRun={displayRun}
       onSelectRun={setSelectedRunId}
       onManualRun={appendManualRun}
-      onCaptureExpected={captureExpectedFromRun}
-      canCaptureExpected={!!lastReports?.length}
       viewOutput={
         <ViewOutputPanel viewResult={viewResult} runDiff={appRunDiff} />
       }
-      verifyResult={verifyResult}
+      verifyCompare={verifyCompare}
+      compareStale={compareStale}
       activeTab={consoleTab}
       onTabChange={setConsoleTab}
     />
@@ -1830,26 +2188,108 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <h1>CQL Cleanroom</h1>
-        <VersionBadge
-          wheelVersion={boot.phase === "ready" ? boot.wheelVersion : null}
-        />
-        {statusNote && (
-          <span
-            className="status-note"
-            data-testid="status-note"
-            ref={(el) => {
-              if (el) {
-                setTimeout(() => setStatusNote(null), 6000);
-              }
-            }}
-          >
-            {statusNote}
-          </span>
-        )}
         <div className="workspace-actions" data-testid="workspace-actions">
-          <button data-testid="share-btn" onClick={shareLink}>
-            Share
-          </button>
+          {/* #64: desktop-app menu — Open (imports), Save (exports),
+              Examples, share + reset under File; Settings stays
+              separate. Open/Save/Examples are hover flyouts. */}
+          <DropdownMenu label="File" testId="file-menu">
+            <DropdownSubmenu label="Open" testId="file-open">
+              <button
+                className="dropdown-item"
+                data-testid="workspace-import"
+                onClick={() => {
+                  fileRef.current?.click();
+                }}
+              >
+                Workspace zip…
+              </button>
+              <button
+                className="dropdown-item"
+                data-testid="bundle-import"
+                onClick={() => bundleFileRef.current?.click()}
+                title={`bundle import mode: ${bundleMode}`}
+              >
+                FHIR Bundle… ({bundleMode})
+              </button>
+              <button
+                className="dropdown-item"
+                data-testid="madie-import"
+                onClick={() => madieFileRef.current?.click()}
+              >
+                Measure package (MADiE)…
+              </button>
+            </DropdownSubmenu>
+            <DropdownSubmenu label="Save" testId="file-save">
+              <button
+                className="dropdown-item"
+                data-testid="workspace-export"
+                onClick={exportZip}
+              >
+                Workspace zip
+              </button>
+              <button
+                className="dropdown-item"
+                data-testid="bundle-export"
+                onClick={exportBundleFile}
+              >
+                FHIR Bundle
+              </button>
+              <button
+                className="dropdown-item"
+                data-testid="madie-export"
+                onClick={exportMadieZip}
+              >
+                Measure package (MADiE)
+              </button>
+            </DropdownSubmenu>
+            <DropdownSubmenu label="Examples" testId="file-examples">
+              <button
+                className="dropdown-item"
+                data-testid="load-example-cms69"
+                onClick={() => void loadExample("cms69")}
+              >
+                CMS69 BMI Screening
+              </button>
+            </DropdownSubmenu>
+            <div className="dropdown-sep" />
+            <button className="dropdown-item" data-testid="share-btn" onClick={shareLink}>
+              Copy share link
+            </button>
+            <button
+              className="dropdown-item"
+              data-testid="workspace-reset"
+              onClick={() => {              // Await the clear BEFORE setting state — fire-and-forget
+                // raced the debounced autosave, resurrecting stale prefs
+                // (notably resultsTab) on the next reload.
+                {
+                  // Reset state SYNCHRONOUSLY; clear IndexedDB in the
+                  // background. (The old order — await clearWorkspace()
+                  // THEN set defaults — let a slow IndexedDB clear land
+                  // its .then() seconds later, clobbering any state that
+                  // changed in between, e.g. an import.)
+                  setLibraries([{ id: "lib_0", name: "CleanroomDemo", text: DEFAULT_CQL }]);
+                  setActiveTab(0);
+                  setDataset({ resources: DEFAULT_DATASET_RESOURCES });
+                  setMeasures([
+                    { id: "msr_0", mainLibraryId: "lib_0", resource: DEFAULT_MEASURE },
+                  ]);
+                  setActiveMeasureId("msr_0");
+                  setExpectedReports({});
+                  setViewDefs([]);
+                  setLastReports(null);
+                  setViewConfig(null);
+                  setRunHistory([]);
+                  setEvalResult(null);
+                  setConsoleTab("results");
+                  setCurrentRun(null);
+                  setParamValues({});
+                  void clearWorkspace().catch(() => undefined);
+                }
+              }}
+            >
+              Reset workspace
+            </button>
+          </DropdownMenu>
           {/* REORG 6e: workspace settings — console dock + recalc delay. */}
           <DropdownMenu label="Settings" testId="settings-menu">
             <label className="settings-row">
@@ -1897,97 +2337,6 @@ export default function App() {
               </select>
             </label>
           </DropdownMenu>
-          <DropdownMenu label="Import" testId="import-menu">
-            <button
-              className="dropdown-item"
-              data-testid="workspace-import"
-              onClick={() => {
-                fileRef.current?.click();
-              }}
-            >
-              Workspace zip
-            </button>
-            <button
-              className="dropdown-item"
-              data-testid="bundle-import"
-              onClick={() => bundleFileRef.current?.click()}
-              title={`bundle import mode: ${bundleMode}`}
-            >
-              FHIR Bundle ({bundleMode})
-            </button>
-            <button
-              className="dropdown-item"
-              data-testid="madie-import"
-              onClick={() => madieFileRef.current?.click()}
-            >
-              Measure package (MADiE)
-            </button>
-            <div className="dropdown-sep" />
-            <div className="dropdown-header">Examples</div>
-            <button
-              className="dropdown-item"
-              data-testid="load-example-cms69"
-              onClick={() => void loadExample("cms69")}
-            >
-              CMS69 BMI Screening
-            </button>
-          </DropdownMenu>
-          <DropdownMenu label="Export" testId="export-menu">
-            <button
-              className="dropdown-item"
-              data-testid="workspace-export"
-              onClick={exportZip}
-            >
-              Workspace zip
-            </button>
-            <button
-              className="dropdown-item"
-              data-testid="bundle-export"
-              onClick={exportBundleFile}
-            >
-              FHIR Bundle
-            </button>
-            <button
-              className="dropdown-item"
-              data-testid="madie-export"
-              onClick={exportMadieZip}
-            >
-              Measure package (MADiE)
-            </button>
-          </DropdownMenu>
-          <button
-            data-testid="workspace-reset"
-            onClick={() => {              // Await the clear BEFORE setting state — fire-and-forget
-              // raced the debounced autosave, resurrecting stale prefs
-              // (notably resultsTab) on the next reload.
-              {
-                // Reset state SYNCHRONOUSLY; clear IndexedDB in the
-                // background. (The old order — await clearWorkspace()
-                // THEN set defaults — let a slow IndexedDB clear land
-                // its .then() seconds later, clobbering any state that
-                // changed in between, e.g. an import.)
-                setLibraries([{ id: "lib_0", name: "CleanroomDemo", text: DEFAULT_CQL }]);
-                setActiveTab(0);
-                setDataset({ resources: DEFAULT_DATASET_RESOURCES });
-                setMeasures([
-                  { id: "msr_0", mainLibraryId: "lib_0", resource: DEFAULT_MEASURE },
-                ]);
-                setActiveMeasureId("msr_0");
-                setExpectedReports({});
-                setViewDefs([]);
-                setLastReports(null);
-                setViewConfig(null);
-                setRunHistory([]);
-                setEvalResult(null);
-                setConsoleTab("results");
-                setCurrentRun(null);
-                setParamValues({});
-                void clearWorkspace().catch(() => undefined);
-              }
-            }}
-          >
-            Reset
-          </button>
            <input
             ref={fileRef}
             type="file"
@@ -2023,7 +2372,35 @@ export default function App() {
               e.target.value = "";
             }}
           />
+          <input
+            ref={sectionImportInputRef}
+            type="file"
+            hidden
+            data-testid="section-import-input"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              const pick = sectionImportPickRef.current;
+              e.target.value = "";
+              if (f && pick) pick.cb(f);
+            }}
+          />
         </div>
+        {statusNote && (
+          <span
+            className="status-note"
+            data-testid="status-note"
+            ref={(el) => {
+              if (el) {
+                setTimeout(() => setStatusNote(null), 6000);
+              }
+            }}
+          >
+            {statusNote}
+          </span>
+        )}
+        <VersionBadge
+          wheelVersion={boot.phase === "ready" ? boot.wheelVersion : null}
+        />
       </header>
       <main
         className={`app-main ${consolePlacement === "right" ? "dock-right" : "dock-bottom"}`}
@@ -2078,6 +2455,7 @@ export default function App() {
           onAddView={addStoredView}
           onAddExpected={openExpectedEditor}
           onAddValuesets={addWorkspaceValueset}
+          onImportItem={handleNavImport}
           panelWidth={navWidths.panel}
           detailWidth={navWidths.detail}
           onPanelWidth={(w) => updateNavWidths({ ...navWidths, panel: w })}
@@ -2090,7 +2468,7 @@ export default function App() {
                 onBack={() => setFocusedPid(null)}
                 onEditResource={editDatasetResource}
                 onAddForPatient={addResourceForPatient}
-                onAddNew={addNewDatasetResource}
+                onImportItem={(item) => handleNavImport("tests", item)}
                 onDelete={deleteDatasetResource}
               />
             ) : null
@@ -2238,16 +2616,13 @@ export default function App() {
               }
               testsSlot={
                 <TestsPane
-                  libraries={mainLibs}
-                  main={main}
                   dataset={evalDataset}
-                  outputColumns={outputColumns}
                   populationCodes={populationCodes}
                   expectedValues={expectedValues}
                   onExpectedValuesChange={updateExpectedValues}
                   measure={measure}
-                  parameters={runtimeParameters}
-                  onVerifyResult={setVerifyResult}
+                  onUseCurrentResult={captureExpectedFromRun}
+                  hasCurrentResult={!!lastReports?.length}
                 />
               }
               measureReports={lastReports}

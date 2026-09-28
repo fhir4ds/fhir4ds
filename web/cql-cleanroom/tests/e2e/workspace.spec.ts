@@ -17,6 +17,7 @@ test("workspace persists libraries and dataset across reload", async ({ page }) 
   // Deterministic start: prior specs' auto-commits persist (same
   // origin). Reset restores the 3-resource demo synchronously; wait
   // for the count AND the autosave flush before reloading.
+  await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
   await waitDatasetResources(page, 3, 10_000);
   await page.waitForTimeout(1500);
@@ -40,6 +41,7 @@ test("workspace persists libraries and dataset across reload", async ({ page }) 
   await page.waitForSelector("[data-testid=library-tab-1]", { timeout: 30_000 });
 
   // Reset to defaults so other tests are unaffected
+  await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
   await page.waitForTimeout(1200);
 });

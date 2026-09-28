@@ -13,6 +13,7 @@ async function bootReady(page: Page) {
 test("editor parses and evaluates with typed results", async ({ page }) => {
   await bootReady(page);
   // Deterministic start: prior specs' auto-commits persist (same origin).
+  await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
   await page.waitForTimeout(600);
 
@@ -52,6 +53,7 @@ test("tests run against the loaded dataset", async ({ page }) => {
   await bootReady(page);
   // Deterministic start: clear any workspace persisted by prior specs
   // (IndexedDB survives browser-context isolation — same origin).
+  await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
   await page.waitForTimeout(600);
   await page.waitForSelector("[data-testid=dataset-tree]");
@@ -67,19 +69,23 @@ test("tests run against the loaded dataset", async ({ page }) => {
   // Author explicit expectations for every cell: seed all-true, then
   // uncheck the false cells (unchecking an unchecked controlled box is
   // a no-op, so seed first to guarantee every cell has an entry).
-  await page.click("[data-testid=tests-set-all-true]");
+  await page.click("[data-testid=expected-default]");
+  await page.click("[data-testid=expected-default-all-true]");
   // p1 female+name (both), p2 male+name (numerator only),
   // p3 female+no-name (initial_population only).
   await page.uncheck("[data-testid=expected-p2-initial-population]");
   await page.uncheck("[data-testid=expected-p3-numerator]");
 
-  await page.click("[data-testid=run-tests]");
-  await page.waitForSelector("[data-testid=tests-summary]", {
-    timeout: 90_000,
-  });
+  // 6h #62: the compare derives from the latest auto-run — no button.
   // 6 cases (3 patients × 2 populations), all matching.
-  const counts = await page.textContent("[data-testid=tests-summary]");
-  if (!counts?.includes("6/6")) throw new Error(`counts: ${counts}`);
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector("[data-testid=tests-summary]")
+        ?.textContent?.includes("6/6") ?? false,
+    undefined,
+    { timeout: 90_000 },
+  );
 });
 
 test("broken library surfaces diagnostics", async ({ page }) => {

@@ -13,6 +13,7 @@ test("builder: valid form auto-commits a Patient", async ({ page }) => {
   await page.goto("/");
   await page.waitForSelector(".version-badge", { timeout: 150_000 });
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
+  await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
   await page.waitForTimeout(500);
   await page.waitForSelector("[data-testid=dataset-tree]", { timeout: 60_000 });
@@ -23,33 +24,38 @@ test("builder: valid form auto-commits a Patient", async ({ page }) => {
     timeout: 15_000,
   });
 
-  // Fill id + gender + birthDate.
+  // Fill id + gender + birthDate. Populated-only form (reorg 6i): the
+  // "+ add element" select offers ABSENT elements; picking one seeds
+  // its row (a 0..1 element leaves the list until removed again).
   await page.fill('[data-testid=builder-field-id]', 'built-1');
+  await page.selectOption('[data-testid=builder-add-element]', 'gender');
   await page.fill('[data-testid=builder-field-gender]', 'female');
+  await page.selectOption('[data-testid=builder-add-element]', 'birthDate');
   await page.fill('[data-testid=builder-field-birthDate]', '1990-05-04');
 
-  // Preview must be the exact payload.
-  const preview = await page.textContent('[data-testid=builder-preview]');
-  const parsed = JSON.parse(preview!);
-  if (parsed.resourceType !== "Patient" || parsed.id !== "built-1") {
-    console.log("PREVIEW:", preview!.slice(0, 300));
-  }
-
-  // Auto-commit: dataset grows to 4 resources (~2s debounce + validate).
+  // Auto-commit: dataset grows to 4 resources (~2s debounce + validate);
+  // the valid chip names the committed resource.
   await waitDatasetResources(page, 4);
+  await page.waitForSelector('[data-testid=builder-valid]', {
+    timeout: 30_000,
+  });
+  const valid = await page.textContent('[data-testid=builder-valid]');
+  if (!valid?.includes("Patient built-1")) {
+    throw new Error(`unexpected valid chip: ${valid}`);
+  }
   console.log("AUTO_COMMIT: 4 resources OK");
 
   // The new patient appears in the Resources tree under its own group.
   await page.waitForSelector("[data-testid=dataset-group-built-1]", {
     timeout: 10_000,
   });
-  console.log("PREVIEW_OK:", parsed.resourceType === "Patient");
 });
 
 test("builder: invalid draft never commits", async ({ page }) => {
   await page.goto("/");
   await page.waitForSelector(".version-badge", { timeout: 150_000 });
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
+  await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
   await page.waitForTimeout(500);
   await page.waitForSelector("[data-testid=dataset-tree]", { timeout: 60_000 });
@@ -81,6 +87,7 @@ test("builder: edit auto-replaces the source row", async ({ page }) => {
   await page.goto("/");
   await page.waitForSelector(".version-badge", { timeout: 150_000 });
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
+  await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
   await page.waitForTimeout(500);
   await page.waitForSelector("[data-testid=dataset-tree]", { timeout: 60_000 });

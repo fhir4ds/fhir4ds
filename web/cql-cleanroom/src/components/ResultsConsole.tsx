@@ -6,13 +6,13 @@ import { EvidencePopover } from "./EvidencePopover";
 import { AstTree } from "./AstPane";
 import { cellDiffClass, diffSummary } from "../lib/runDiff";
 import { useRunDiff } from "./MeasureReportOutput";
+import type { CompareResult } from "../lib/verifyCompare";
 import type {
   Diagnostics,
   LibraryText,
   DatasetSpec,
   EvaluateResult,
   EvidenceResult,
-  VerifyEnvelope,
 } from "../lib/protocol";
 import type { Artifact } from "../lib/runDiff";
 import type { RunEntry } from "../state/workspace";
@@ -58,8 +58,8 @@ const CONTEXT_TABS: Record<ConsoleContext, Array<{ id: ConsoleTab; label: string
     { id: "funnel", label: "Funnel" },
   ],
   view: [{ id: "view", label: "View Output" }],
-  // 6h: the Expected Results editor's console context — the authored
-  // expected values vs the actual run, compared by the Run tests action.
+  // 6h: the Expected Results editor's console context — authored
+  // expectations derived against the latest library run (#62).
   tests: [{ id: "compare", label: "Compare" }],
 };
 
@@ -76,14 +76,13 @@ export function ResultsConsole({
   mrOutput,
   funnelOutput,
   viewOutput,
-  verifyResult,
+  verifyCompare,
+  compareStale,
   runRequest,
   runs,
   displayRun,
   onSelectRun,
   onManualRun,
-  onCaptureExpected,
-  canCaptureExpected,
   activeTab,
   onTabChange,
 }: {
@@ -105,8 +104,10 @@ export function ResultsConsole({
   funnelOutput: React.ReactNode;
   /** View flatten output node (view context). */
   viewOutput: React.ReactNode;
-  /** 6h: expected-vs-actual verify envelope (tests context). */
-  verifyResult: VerifyEnvelope | null;
+  /** 6h #62: derived expected-vs-actual compare (tests context). */
+  verifyCompare: CompareResult | null;
+  /** True when the latest library run failed — nothing to compare. */
+  compareStale: boolean;
   /** REORG 6e: Ctrl/Cmd+Enter from the editor lands here (nonce bumps). */
   runRequest: { mode: "library" | "selection"; nonce: number } | null;
   /** REORG 6g: the run ring (last 20) + which entry the tabs render. */
@@ -125,10 +126,6 @@ export function ResultsConsole({
     ms?: number | null;
     diags?: Diagnostics[];
   }) => void;
-  /** 6f: capture the current run's populations as the active measure's
-   *  expected reports (Measure Report tab header). */
-  onCaptureExpected?: () => void;
-  canCaptureExpected?: boolean;
   activeTab: ConsoleTab;
   onTabChange: (t: ConsoleTab) => void;
 }) {
@@ -303,17 +300,6 @@ export function ResultsConsole({
               )}
             </span>
           ) : null}
-          {activeTab === "mr" && context === "measure" && onCaptureExpected && (
-            <button
-              className="pane-action"
-              data-testid="capture-expected"
-              disabled={!canCaptureExpected}
-              title="Save the current run's populations as this measure's expected results"
-              onClick={onCaptureExpected}
-            >
-              Capture as expected
-            </button>
-          )}
           <select
             className="console-run-select"
             data-testid="console-run-select"
@@ -512,59 +498,103 @@ export function ResultsConsole({
       </div>
 
       <div
-        className="tab-panel"
+        className="tab-panel compare-panel"
         hidden={activeTab !== "compare"}
         data-testid="console-panel-compare"
       >
-        {context === "tests" ? <CompareOutput result={verifyResult} /> : null}
+        {context === "tests" ? (
+          <CompareOutput result={verifyCompare} stale={compareStale} />
+        ) : null}
       </div>
     </section>
   );
 }
 
-/** 6h: expected-vs-actual summary — moved out of the TestsPane so the
- *  comparison lands in the console like every other run output. */
-function CompareOutput({ result }: { result: VerifyEnvelope | null }) {
-  if (!result) {
+/**
+ * 6h #62: expected-vs-actual matrix, derived client-side (see
+ * lib/verifyCompare.ts) — one row per expected patient, one column per
+ * population; mismatches sort first and render red. The N/M passed chip
+ * rides the pager row's right end (the `.editor-stat` bottom-right
+ * convention) and click-filters to failing rows. Recalcs automatically
+ * with every heartbeat run — no button.
+ */
+function CompareOutput({
+  result,
+  stale,
+}: {
+  result: CompareResult | null;
+  stale: boolean;
+}) {
+  const [onlyFailed, setOnlyFailed] = useState(false);
+  if (stale) {
     return (
       <p className="pane-hint" data-testid="compare-empty">
-        Press Run tests in the Expected Results editor to compare the
-        authored expectations against the actual evaluation.
+        The latest library run failed — fix the diagnostics and the
+        compare refreshes automatically.
       </p>
     );
   }
+  if (!result || result.rows.length === 0) {
+    return (
+      <p className="pane-hint" data-testid="compare-empty">
+        Author expected values in the Expected Results editor — the
+        compare recalculates automatically on every run.
+      </p>
+    );
+  }
+  const shown = onlyFailed
+    ? result.rows.filter((r) => r.mismatch)
+    : result.rows;
+  const allPass = result.passed === result.total;
   return (
-    <div className="tests-summary" data-testid="tests-summary">
-      <span className={result.passed ? "pass" : "fail"}>
-        {result.tests.passed}/{result.tests.total} passed
-      </span>
-      {result.tests.failures.length > 0 && (
-        <div className="failures-wrap">
-          <table className="failures-table" data-testid="failures-table">
-            <thead>
-              <tr>
-                <th>Patient</th>
-                <th>Target</th>
-                <th>Expected</th>
-                <th>Actual</th>
-                <th>Reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.tests.failures.map((f, i) => (
-                <tr key={i}>
-                  <td>{f.patient}</td>
-                  <td>{f.target}</td>
-                  <td>{String(f.expected)}</td>
-                  <td>{f.actual === null ? "—" : String(f.actual)}</td>
-                  <td>{f.reason ?? ""}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+    <PaginatedTable
+      testId="compare-table"
+      rowCount={shown.length}
+      stats={
+        <button
+          className={`tests-summary ${allPass ? "pass" : "fail"}`}
+          data-testid="tests-summary"
+          title="show only failing rows"
+          onClick={() => setOnlyFailed((v) => !v)}
+        >
+          {result.passed}/{result.total} passed
+          {onlyFailed ? " · failing only" : ""}
+        </button>
+      }
+      header={
+        <tr>
+          <th>patient_id</th>
+          {result.rows[0]?.cells.map((c) => (
+            <th key={c.code}>{c.code}</th>
+          ))}
+        </tr>
+      }
+      renderRows={({ slice }) =>
+        slice(shown).map((r) => (
+          <tr key={r.pid} data-testid={`compare-row-${r.pid}`}>
+            <td>
+              {r.pid}
+              {r.missing && (
+                <span className="type-badge" title="no row in the actual run">
+                  no data
+                </span>
+              )}
+            </td>
+            {r.cells.map((c) => (
+              <td
+                key={c.code}
+                className={c.match ? "compare-cell-match" : "compare-cell-miss"}
+                data-testid={`compare-${r.pid}-${c.code}`}
+              >
+                {c.match
+                  ? renderValue(c.expected)
+                  : `exp ${renderValue(c.expected)} · got ${c.actual === null ? "—" : renderValue(c.actual)}`}
+              </td>
+            ))}
+          </tr>
+        ))
+      }
+    />
   );
 }
 

@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { DrawerSection, DrawerRow } from "./nav/DrawerSection";
+import { DropdownMenu } from "./DropdownMenu";
 import type { NavItem, NavSectionId } from "../lib/navSections";
 
 /**
@@ -60,6 +61,29 @@ function rowTestId(item: NavItem, index: number): string {
   return `nav-item-${item.kind}-${String(item.id).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
+/** REORG 6h #64: the section header's ▾ imports items from files (the
+ *  + button still creates from scratch). File-interop only — tests may
+ *  import a single resource OR a Bundle; everything else is typed. */
+const IMPORT_ITEMS: Partial<
+  Record<NavSectionId, Array<{ item: string; label: string }>>
+> = {
+  measures: [{ item: "measure-json", label: "Import Measure .json…" }],
+  libraries: [
+    { item: "library-cql", label: "Import .cql…" },
+    { item: "library-json", label: "Import FHIR Library .json…" },
+  ],
+  valuesets: [{ item: "valueset-json", label: "Import ValueSet .json…" }],
+  parameters: [{ item: "parameters-json", label: "Import Parameters .json…" }],
+  views: [{ item: "view-json", label: "Import ViewDefinition .json…" }],
+  tests: [
+    { item: "resource-json", label: "Import resource .json…" },
+    { item: "bundle-json", label: "Import Bundle .json…" },
+  ],
+  expected: [
+    { item: "expected-json", label: "Import MeasureReport .json…" },
+  ],
+};
+
 export function NavRail({
   sections,
   navPanel,
@@ -79,6 +103,7 @@ export function NavRail({
   onAddView,
   onAddExpected,
   onAddValuesets,
+  onImportItem,
   panelWidth,
   detailWidth,
   onPanelWidth,
@@ -108,6 +133,9 @@ export function NavRail({
   onAddExpected: () => void;
   /** Creates a fresh workspace ValueSet and opens its editor tab. */
   onAddValuesets: () => void;
+  /** #64: the ▾ split-button — import one item from a file into the
+   *  section (`IMPORT_ITEMS[section]` keys the chosen item). */
+  onImportItem: (section: NavSectionId, item: string) => void;
   /** REORG 6h: resizable slide-outs — px widths + drag callbacks. */
   panelWidth: number;
   detailWidth: number;
@@ -159,7 +187,7 @@ export function NavRail({
       onPointerUp={resizeUp}
     />
   );
-  const actions =
+  const plusButton =
     panelId === "measures" ? (
       <button
         className="nav-add-btn"
@@ -215,6 +243,27 @@ export function NavRail({
         +
       </button>
     ) : undefined;
+  // Split button: + | ▾ — the ▾ opens the section's file-import items.
+  const importItems = panelId ? (IMPORT_ITEMS[panelId] ?? []) : [];
+  const actions = (
+    <>
+      {plusButton}
+      {importItems.length > 0 && panelId && (
+        <DropdownMenu label="" testId={`nav-import-${panelId}`}>
+          {importItems.map((it) => (
+            <button
+              key={it.item}
+              className="dropdown-item"
+              data-testid={`nav-import-${panelId}-${it.item}`}
+              onClick={() => onImportItem(panelId, it.item)}
+            >
+              {it.label}
+            </button>
+          ))}
+        </DropdownMenu>
+      )}
+    </>
+  );
   return (
     <nav
       className={`nav-rail ${panelId ? "" : "collapsed"}`}

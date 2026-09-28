@@ -47,6 +47,7 @@ test("MADiE package import → evaluate → export round-trip", async ({ page })
   // prior test's workspace can't restore over this import. Wait for the
   // reset's async defaults to LAND before reloading — an immediate
   // reload can race the click onto the new page (double reset).
+  await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
   await page.waitForFunction(
     () =>
@@ -58,6 +59,7 @@ test("MADiE package import → evaluate → export round-trip", async ({ page })
   await page.reload();
   await page.waitForSelector(".version-badge", { timeout: 150_000 });
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
+  await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
 
   // Write the package zip to disk, then drive the file input.
@@ -98,7 +100,8 @@ test("MADiE package import → evaluate → export round-trip", async ({ page })
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: 30_000 }),
     (async () => {
-      await page.click("[data-testid=export-menu]");
+      await page.click("[data-testid=file-menu]");
+      await page.hover("[data-testid=file-save]");
       await page.click("[data-testid=madie-export]");
     })(),
   ]);

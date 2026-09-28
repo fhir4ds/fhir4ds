@@ -14,6 +14,7 @@ async function bootReady(page: Page) {
 }
 
 async function resetWorkspace(page: Page) {
+  await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
   await page.waitForTimeout(1200);
 }
@@ -74,17 +75,18 @@ test.describe("builder v2 recursion", () => {
     });
 
     // Patient form: id + name (HumanName object) -> family + given[0..*].
+    // Populated-only form (reorg 6i): "+ add element" seeds the element —
+    // a repeatable seeds its FIRST item (open, ready to fill).
     await page.fill("[data-testid=builder-field-id]", "p-tree-1");
-    await page.click("[data-testid=builder-add-name]");
+    await page.selectOption("[data-testid=builder-add-element]", "name");
     await page.waitForSelector("[data-testid=builder-item-name-0]", {
       timeout: 10_000,
     });
-    // Empty objects start COLLAPSED: expand the new name item first.
-    await page.locator("[data-testid=builder-nested-name] .builder-tree-head")
-      .first().click();
-    await page.waitForTimeout(300);
+    // Inside the HumanName item the same rule applies: add family + given
+    // through the nested picker, then fill them.
+    await page.selectOption("[data-testid=builder-add-element-name]", "family");
     await page.fill("[data-testid=builder-field-family]", "Roe");
-    await page.click("[data-testid=builder-add-given]");
+    await page.selectOption("[data-testid=builder-add-element-name]", "given");
     await page.fill("[data-testid=builder-field-given-0]", "Mary");
     await page.click("[data-testid=builder-add-given]");
     await page.fill("[data-testid=builder-field-given-1]", "Jane");
@@ -143,7 +145,8 @@ test.describe("bundle export/import", () => {
     const [download] = await Promise.all([
       page.waitForEvent("download", { timeout: 60_000 }),
       (async () => {
-        await page.click("[data-testid=export-menu]");
+        await page.click("[data-testid=file-menu]");
+        await page.hover("[data-testid=file-save]");
         await page.click("[data-testid=bundle-export]");
       })(),
     ]);
@@ -151,12 +154,87 @@ test.describe("bundle export/import", () => {
     if (!path) throw new Error("no download path");
 
     // Wipe + re-import in replace mode (6h: mode select lives in Settings).
+    await page.click("[data-testid=file-menu]");
     await page.click("[data-testid=workspace-reset]");
     await page.waitForTimeout(1200);
     await page.click("[data-testid=settings-menu]");
     await page.selectOption("[data-testid=bundle-mode]", "replace");
     await page.setInputFiles("[data-testid=bundle-import-input]", path);
     await waitDatasetResources(page, 3, 30_000);
+  });
+});
+
+test.describe("section import menus (#64)", () => {
+  test("Tests ▾ imports a single resource json into the dataset", async ({ page }) => {
+    await bootReady(page);
+    await resetWorkspace(page);
+    await page.waitForSelector("[data-testid=dataset-tree]");
+
+    const resource = {
+      resourceType: "Patient",
+      id: "p-imported",
+      gender: "other",
+    };
+    const [chooser] = await Promise.all([
+      page.waitForEvent("filechooser", { timeout: 15_000 }),
+      (async () => {
+        await page.click("[data-testid=nav-import-tests]");
+        await page.click("[data-testid=nav-import-tests-resource-json]");
+      })(),
+    ]);
+    await chooser.setFiles({
+      name: "patient.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(resource)),
+    });
+
+    await page.waitForSelector("[data-testid=dataset-group-p-imported]", {
+      timeout: 15_000,
+    });
+  });
+
+  test("Valuesets ▾ imports a ValueSet json and opens its editor", async ({ page }) => {
+    await bootReady(page);
+    await resetWorkspace(page);
+
+    const vs = {
+      resourceType: "ValueSet",
+      url: "urn:cleanroom:vs:imported-vs",
+      name: "ImportedVS",
+      compose: { include: [{ system: "http://loinc.org", concept: [{ code: "1234-5" }] }] },
+    };
+    const [chooser] = await Promise.all([
+      page.waitForEvent("filechooser", { timeout: 15_000 }),
+      (async () => {
+        await page.click("[data-testid=nav-toggle-valuesets]");
+        await page.click("[data-testid=nav-import-valuesets]");
+        await page.click("[data-testid=nav-import-valuesets-valueset-json]");
+      })(),
+    ]);
+    await chooser.setFiles({
+      name: "valueset.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(vs)),
+    });
+
+    // The workspace valueset editor tab opens keyed on ws:<url>.
+    await page.waitForSelector('[data-testid^="editor-tab-valueset-"]', {
+      timeout: 15_000,
+    });
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector("[data-testid=valueset-url]")
+          ?.getAttribute("value")
+          ?.includes("imported-vs") ?? false,
+      undefined,
+      { timeout: 15_000 },
+    );
+    // The nav lists the imported valueset.
+    await page.waitForSelector(
+      '[data-testid^=nav-item-valueset-]:has-text("ImportedVS")',
+      { timeout: 15_000 },
+    );
   });
 });
 
