@@ -129,4 +129,46 @@ test.describe("nav rail + panel", () => {
     await expectedItem.click();
     await expect(page.locator("[data-testid=expected-grid]")).toBeVisible();
   });
+
+  test("L2 panel and L3 detail slide-outs resize by drag and persist", async ({
+    page,
+  }) => {
+    await bootReady(page);
+    await page.click("[data-testid=nav-toggle-valuesets]");
+    const panel = page.locator(".nav-panel-wrap > .nav-panel");
+    const w0 = (await panel.boundingBox())?.width ?? 0;
+    if (Math.round(w0) !== 198) throw new Error(`initial panel width: ${w0}`);
+
+    // Drag the L2 handle +120px (clamps at 480).
+    const handle = page.locator("[data-testid=nav-resize-panel]");
+    const hb = (await handle.boundingBox())!;
+    await page.mouse.move(hb.x + hb.width / 2, hb.y + 200);
+    await page.mouse.down();
+    await page.mouse.move(hb.x + hb.width / 2 + 120, hb.y + 200, { steps: 5 });
+    await page.mouse.up();
+    const w1 = (await panel.boundingBox())?.width ?? 0;
+    if (Math.abs(w1 - (w0 + 120)) > 2) throw new Error(`post-drag width: ${w1}`);
+
+    // Width persists across reload (localStorage).
+    await page.reload();
+    await page.waitForSelector(".version-badge", { timeout: 150_000 });
+    await page.click("[data-testid=nav-toggle-valuesets]");
+    const w2 = (await page.locator(".nav-panel-wrap > .nav-panel").boundingBox())
+      ?.width ?? 0;
+    if (Math.abs(w2 - w1) > 2) throw new Error(`persisted width: ${w2}`);
+
+    // L3 detail: open a patient drill-in and drag its handle wider.
+    await page.click("[data-testid=nav-toggle-tests]");
+    await page.locator("[data-testid^=dataset-group-]").first().click();
+    await page.waitForSelector("[data-testid=nav-detail]", { timeout: 15_000 });
+    const detail = page.locator("[data-testid=nav-detail]");
+    const d0 = (await detail.boundingBox())?.width ?? 0;
+    const dh = (await page.locator("[data-testid=nav-resize-detail]").boundingBox())!;
+    await page.mouse.move(dh.x + dh.width / 2, dh.y + 200);
+    await page.mouse.down();
+    await page.mouse.move(dh.x + dh.width / 2 + 80, dh.y + 200, { steps: 5 });
+    await page.mouse.up();
+    const d1 = (await detail.boundingBox())?.width ?? 0;
+    if (Math.abs(d1 - (d0 + 80)) > 2) throw new Error(`post-drag detail: ${d1}`);
+  });
 });

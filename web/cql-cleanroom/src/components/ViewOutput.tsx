@@ -23,10 +23,7 @@ export function ViewOutputPanel({
     );
   }
   return (
-    <div className="pane output-pane" data-testid="output-view">
-      <header className="pane-header">
-        <h3>Output</h3>
-      </header>
+    <div data-testid="output-view">
       <PaginatedTable
         testId="view-table"
         rowCount={viewResult.rows.length}

@@ -41,14 +41,23 @@ test("example loads include tabs, prefills MP, auto-recalcs", async ({ page }) =
 
   // 3. Measurement Period prefilled → single Evaluate arms auto mode.
   // REORG phase 6a: parameters are an editor TAB now (the below-editor
-  // drawer expander is gone).
+  // drawer expander is gone). 6h: interval params use start/end date
+  // pickers on ONE shared form.
   await page.click("[data-testid=nav-toggle-parameters]");
   await page.locator("[data-testid^=nav-item-parameter-]").first().click();
   await page.waitForSelector('[data-testid="param-input-Measurement Period"]', {
     timeout: 10_000,
   });
-  const mp = await page.locator('[data-testid="param-input-Measurement Period"]').inputValue();
-  if (!mp.includes("2026-01-01")) throw new Error(`MP prefill: ${mp}`);
+  const mpStart = await page
+    .locator('[data-testid="param-input-Measurement Period"]')
+    .inputValue();
+  if (!mpStart.includes("2026-01-01")) throw new Error(`MP prefill: ${mpStart}`);
+  const mpEndPrefill = await page
+    .locator('[data-testid="param-end-Measurement Period"]')
+    .inputValue();
+  if (!mpEndPrefill.includes("2026-12-31")) {
+    throw new Error(`MP end prefill: ${mpEndPrefill}`);
+  }
   // Wait for the CMS69 result specifically (the default demo's 3-row
   // table may still be showing; the pager must read "of 62").
   await page.waitForFunction(
@@ -65,15 +74,17 @@ test("example loads include tabs, prefills MP, auto-recalcs", async ({ page }) =
   const pager = await page.textContent("[data-testid=results-table-pager]");
   if (!pager?.includes("of 62")) throw new Error(`pager: ${pager}`);
 
-  // 4. AUTO-RECALC: clear the MP → diagnostics appear; refill it →
-  //    results return WITHOUT clicking Evaluate.
+  // 4. AUTO-RECALC: clear the MP → run errors appear inline on Results
+  //    (6h: Results owns errors); refill it → results return WITHOUT
+  //    clicking Evaluate.
   await page.fill('[data-testid="param-input-Measurement Period"]', "");
-  await page.waitForSelector("[data-testid=eval-diags]", { timeout: 120_000 });
+  await page.fill('[data-testid="param-end-Measurement Period"]', "");
+  await page.waitForSelector("[data-testid=console-diags]", {
+    timeout: 120_000,
+  });
 
-  await page.fill(
-    '[data-testid="param-input-Measurement Period"]',
-    "2026-01-01T00:00:00.0..2026-12-31T23:59:59.999",
-  );
+  await page.fill('[data-testid="param-input-Measurement Period"]', "2026-01-01");
+  await page.fill('[data-testid="param-end-Measurement Period"]', "2026-12-31");
   await page.waitForSelector("[data-testid=results-table]", { timeout: 120_000 });
   await page.waitForFunction(
     () => document.querySelectorAll("[data-testid=results-table] tbody tr").length === 10,

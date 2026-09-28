@@ -59,7 +59,7 @@ test.describe("cleanroom cycle-3 dataset editing", () => {
 
     // Build a female patient via the form; AUTO-SAVE commits it.
     // WORKBENCH_REORG phase 5: the builder is a test editor tab now.
-    await page.click("[data-testid=dataset-add-new]");
+    await page.click("[data-testid=nav-add-tests]");
     await page.waitForSelector("[data-testid=builder-field-id]", {
       timeout: 15_000,
     });

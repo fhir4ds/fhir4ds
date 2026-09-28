@@ -1,4 +1,14 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+import {
+  BookOpen,
+  Database,
+  Ruler,
+  SlidersHorizontal,
+  Table,
+  Tags,
+  Target,
+  type LucideIcon,
+} from "lucide-react";
 import { DrawerSection, DrawerRow } from "./nav/DrawerSection";
 import type { NavItem, NavSectionId } from "../lib/navSections";
 
@@ -33,14 +43,14 @@ const SECTION_ORDER: NavSectionId[] = [
   "views",
 ];
 
-const SECTION_GLYPHS: Record<NavSectionId, string> = {
-  measures: "M",
-  libraries: "L",
-  valuesets: "V",
-  parameters: "P",
-  tests: "▦",
-  expected: "E",
-  views: "◇",
+const SECTION_ICONS: Record<NavSectionId, LucideIcon> = {
+  measures: Ruler,
+  libraries: BookOpen,
+  valuesets: Tags,
+  parameters: SlidersHorizontal,
+  tests: Database,
+  expected: Target,
+  views: Table,
 };
 
 function rowTestId(item: NavItem, index: number): string {
@@ -64,10 +74,15 @@ export function NavRail({
   onRenameCommit,
   onRenameCancel,
   onAddLibrary,
+  onAddMeasures,
+  onAddTests,
   onAddView,
   onAddExpected,
-  onTerminologyOpen,
-  terminologyOpen = false,
+  onAddValuesets,
+  panelWidth,
+  detailWidth,
+  onPanelWidth,
+  onDetailWidth,
   detailSlot,
   testsSlot,
 }: {
@@ -85,11 +100,19 @@ export function NavRail({
   onRenameCommit: () => void;
   onRenameCancel: () => void;
   onAddLibrary: () => void;
+  /** Creates a blank Measure bound to the entrypoint library. */
+  onAddMeasures: () => void;
+  /** Opens a fresh resource-builder tab (dataset authoring). */
+  onAddTests: () => void;
   onAddView: () => void;
   onAddExpected: () => void;
-  /** Opens the terminology drawer in col1 (below the editor). */
-  onTerminologyOpen: () => void;
-  terminologyOpen?: boolean;
+  /** Creates a fresh workspace ValueSet and opens its editor tab. */
+  onAddValuesets: () => void;
+  /** REORG 6h: resizable slide-outs — px widths + drag callbacks. */
+  panelWidth: number;
+  detailWidth: number;
+  onPanelWidth: (w: number) => void;
+  onDetailWidth: (w: number) => void;
   /** REORG 6e: focused Tests patient (drives the slide-out overlay). */
   focusedPid?: string | null;
   /** REORG 6e: L3 detail panel, rendered over the section panel. */
@@ -98,8 +121,64 @@ export function NavRail({
 }) {
   const panelId = navPanel;
   const sec = panelId ? sections[panelId] : null;
+  // REORG 6h: slide-out resize — pointer drag on the edge handles; px
+  // deltas map 1:1 onto the width while the grid column (--nav-w) tracks.
+  const dragRef = useRef<{
+    key: "panel" | "detail";
+    startX: number;
+    startW: number;
+  } | null>(null);
+  const resizeDown = (key: "panel" | "detail") => (e: React.PointerEvent) => {
+    dragRef.current = {
+      key,
+      startX: e.clientX,
+      startW: key === "panel" ? panelWidth : detailWidth,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const resizeMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const [min, max] = d.key === "panel" ? [168, 480] : [208, 640];
+    const w = Math.min(max, Math.max(min, d.startW + (e.clientX - d.startX)));
+    (d.key === "panel" ? onPanelWidth : onDetailWidth)(w);
+  };
+  const resizeUp = (e: React.PointerEvent) => {
+    dragRef.current = null;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+  const resizeHandle = (key: "panel" | "detail") => (
+    <div
+      className="nav-resize"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={`Resize ${key} panel`}
+      data-testid={`nav-resize-${key}`}
+      onPointerDown={resizeDown(key)}
+      onPointerMove={resizeMove}
+      onPointerUp={resizeUp}
+    />
+  );
   const actions =
-    panelId === "libraries" ? (
+    panelId === "measures" ? (
+      <button
+        className="nav-add-btn"
+        data-testid="nav-add-measures"
+        title="new Measure"
+        onClick={onAddMeasures}
+      >
+        +
+      </button>
+    ) : panelId === "tests" ? (
+      <button
+        className="nav-add-btn"
+        data-testid="nav-add-tests"
+        title="new resource"
+        onClick={onAddTests}
+      >
+        +
+      </button>
+    ) : panelId === "libraries" ? (
       <button
         className="nav-add-btn"
         data-testid="library-tab-add"
@@ -126,6 +205,15 @@ export function NavRail({
       >
         +
       </button>
+    ) : panelId === "valuesets" ? (
+      <button
+        className="nav-add-btn"
+        data-testid="nav-add-valuesets"
+        title="new ValueSet"
+        onClick={onAddValuesets}
+      >
+        +
+      </button>
     ) : undefined;
   return (
     <nav
@@ -147,28 +235,23 @@ export function NavRail({
             {panelId ? "«" : "»"}
           </button>
         </div>
-        {SECTION_ORDER.map((id) => (
-          <button
-            key={id}
-            className={`rail-item ${panelId === id ? "active" : ""}`}
-            data-testid={`nav-toggle-${id}`}
-            title={sections[id].title}
-            onClick={() => onNavPanelChange(panelId === id ? null : id)}
-          >
-            <span className="rail-glyph">{SECTION_GLYPHS[id]}</span>
-            <span className="rail-name">{sections[id].title}</span>
-          </button>
-        ))}
-        <div className="rail-sep" />
-        <button
-          className={`rail-item ${terminologyOpen ? "active" : ""}`}
-          data-testid="drawer-terminology-toggle"
-          title="Terminology (ValueSets)"
-          onClick={onTerminologyOpen}
-        >
-          <span className="rail-glyph">T</span>
-          <span className="rail-name">Terminology</span>
-        </button>
+        {SECTION_ORDER.map((id) => {
+          const Icon = SECTION_ICONS[id];
+          return (
+            <button
+              key={id}
+              className={`rail-item ${panelId === id ? "active" : ""}`}
+              data-testid={`nav-toggle-${id}`}
+              title={sections[id].title}
+              onClick={() => onNavPanelChange(panelId === id ? null : id)}
+            >
+              <span className="rail-glyph">
+                <Icon size={15} strokeWidth={1.8} aria-hidden />
+              </span>
+              <span className="rail-name">{sections[id].title}</span>
+            </button>
+          );
+        })}
       </div>
       {panelId && sec && (
         <div className="nav-panel-wrap">
@@ -207,9 +290,11 @@ export function NavRail({
             {panelId === "tests" && testsSlot}
           </DrawerSection>
           </div>
+          {resizeHandle("panel")}
           {panelId === "tests" && detailSlot && (
             <div className="nav-panel-detail" data-testid="nav-detail">
               {detailSlot}
+              {resizeHandle("detail")}
             </div>
           )}
         </div>

@@ -21,7 +21,7 @@ export interface ValuesetRow {
 
 export interface ValuesetFlattenResult {
   rows: ValuesetRow[];
-  /** Non-fatal flatten diagnostics surfaced in the TerminologyPane. */
+  /** Non-fatal flatten diagnostics surfaced in the valueset editor. */
   warnings: string[];
 }
 

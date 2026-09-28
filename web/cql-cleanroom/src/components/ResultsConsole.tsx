@@ -12,6 +12,7 @@ import type {
   DatasetSpec,
   EvaluateResult,
   EvidenceResult,
+  VerifyEnvelope,
 } from "../lib/protocol";
 import type { Artifact } from "../lib/runDiff";
 import type { RunEntry } from "../state/workspace";
@@ -38,26 +39,28 @@ export type ConsoleTab =
   | "sql"
   | "ast"
   | "cql"
-  | "diags"
   | "mr"
   | "funnel"
-  | "view";
-export type ConsoleContext = "library" | "measure" | "view";
+  | "view"
+  | "compare";
+export type ConsoleContext = "library" | "measure" | "view" | "tests";
 export type ConsolePlacement = "bottom" | "right";
 
 const CONTEXT_TABS: Record<ConsoleContext, Array<{ id: ConsoleTab; label: string }>> = {
   library: [
     { id: "results", label: "Results" },
+    { id: "cql", label: "CQL" },
     { id: "sql", label: "SQL" },
     { id: "ast", label: "AST" },
-    { id: "cql", label: "CQL" },
-    { id: "diags", label: "Diagnostics" },
   ],
   measure: [
     { id: "mr", label: "Measure Report" },
     { id: "funnel", label: "Funnel" },
   ],
   view: [{ id: "view", label: "View Output" }],
+  // 6h: the Expected Results editor's console context — the authored
+  // expected values vs the actual run, compared by the Run tests action.
+  tests: [{ id: "compare", label: "Compare" }],
 };
 
 export function ResultsConsole({
@@ -68,13 +71,12 @@ export function ResultsConsole({
   outputColumns,
   selection,
   result,
-  evalDiags,
-  busy,
   baselineArtifact,
   context,
   mrOutput,
   funnelOutput,
   viewOutput,
+  verifyResult,
   runRequest,
   runs,
   displayRun,
@@ -94,8 +96,6 @@ export function ResultsConsole({
   selection: string | null;
   /** Live auto-evaluation of the entrypoint library (app heartbeat). */
   result: EvaluateResult | null;
-  evalDiags: Diagnostics[] | null;
-  busy: boolean;
   baselineArtifact: Artifact | null;
   /** Active editor kind — decides which sub-tabs exist. */
   context: ConsoleContext;
@@ -105,6 +105,8 @@ export function ResultsConsole({
   funnelOutput: React.ReactNode;
   /** View flatten output node (view context). */
   viewOutput: React.ReactNode;
+  /** 6h: expected-vs-actual verify envelope (tests context). */
+  verifyResult: VerifyEnvelope | null;
   /** REORG 6e: Ctrl/Cmd+Enter from the editor lands here (nonce bumps). */
   runRequest: { mode: "library" | "selection"; nonce: number } | null;
   /** REORG 6g: the run ring (last 20) + which entry the tabs render. */
@@ -133,27 +135,9 @@ export function ResultsConsole({
   const [error, setError] = useState<string | null>(null);
   const seqRef = useRef(0);
 
-  // Error announce: on a NEW failing evaluation jump to Diagnostics;
-  // when a run succeeds again, jump back (only if we auto-switched).
-  // Library contexts only — measure/view contexts have one output tab.
-  const failSigRef = useRef("");
-  const autoSwitchedRef = useRef(false);
-  useEffect(() => {
-    if (context !== "library") return;
-    if (evalDiags && evalDiags.length > 0 && !busy) {
-      const sig = JSON.stringify(evalDiags.map((d) => [d.code, d.message]));
-      if (sig !== failSigRef.current) {
-        failSigRef.current = sig;
-        autoSwitchedRef.current = true;
-        onTabChange("diags");
-      }
-    } else if (!evalDiags && result && autoSwitchedRef.current) {
-      failSigRef.current = "";
-      autoSwitchedRef.current = false;
-      onTabChange("results");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [evalDiags, result, busy, context]);
+  // Errors are not a tab: every failed run carries its diagnostics in
+  // the run payload, and the Results panel renders them inline — the
+  // failure stays next to the output it replaced (no tab switching).
 
   // A context switch can strand the persisted tab (e.g. "sql" while a
   // view editor is active) — clamp to the context's first tab.
@@ -295,9 +279,6 @@ export function ResultsConsole({
             onClick={() => onTabChange(t.id)}
           >
             {t.label}
-            {t.id === "diags" && evalDiags && evalDiags.length > 0
-              ? ` (${evalDiags.length})`
-              : ""}
           </button>
         ))}
         <div className="console-toolbar-right">
@@ -322,6 +303,17 @@ export function ResultsConsole({
               )}
             </span>
           ) : null}
+          {activeTab === "mr" && context === "measure" && onCaptureExpected && (
+            <button
+              className="pane-action"
+              data-testid="capture-expected"
+              disabled={!canCaptureExpected}
+              title="Save the current run's populations as this measure's expected results"
+              onClick={onCaptureExpected}
+            >
+              Capture as expected
+            </button>
+          )}
           <select
             className="console-run-select"
             data-testid="console-run-select"
@@ -497,42 +489,9 @@ export function ResultsConsole({
 
       <div
         className="tab-panel"
-        hidden={activeTab !== "diags"}
-        data-testid="console-panel-diags"
-      >
-        {evalDiags && evalDiags.length > 0 ? (
-          <ul className="diag-list" data-testid="eval-diags">
-            {evalDiags.map((d, i) => (
-              <li key={i} className="diag-row">
-                <span className="diag-code">{d.code}</span> {d.message}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="pane-hint" data-testid="eval-diags-empty">
-            No evaluation diagnostics.
-          </p>
-        )}
-      </div>
-
-      <div
-        className="tab-panel"
         hidden={activeTab !== "mr"}
         data-testid="console-panel-mr"
       >
-        {context === "measure" && onCaptureExpected && (
-          <div className="console-mr-actions">
-            <button
-              className="pane-action"
-              data-testid="capture-expected"
-              disabled={!canCaptureExpected}
-              title="Save the current run's populations as this measure's expected results"
-              onClick={onCaptureExpected}
-            >
-              Capture as expected
-            </button>
-          </div>
-        )}
         {context === "measure" ? mrOutput : null}
       </div>
 
@@ -551,7 +510,61 @@ export function ResultsConsole({
       >
         {context === "view" ? viewOutput : null}
       </div>
+
+      <div
+        className="tab-panel"
+        hidden={activeTab !== "compare"}
+        data-testid="console-panel-compare"
+      >
+        {context === "tests" ? <CompareOutput result={verifyResult} /> : null}
+      </div>
     </section>
+  );
+}
+
+/** 6h: expected-vs-actual summary — moved out of the TestsPane so the
+ *  comparison lands in the console like every other run output. */
+function CompareOutput({ result }: { result: VerifyEnvelope | null }) {
+  if (!result) {
+    return (
+      <p className="pane-hint" data-testid="compare-empty">
+        Press Run tests in the Expected Results editor to compare the
+        authored expectations against the actual evaluation.
+      </p>
+    );
+  }
+  return (
+    <div className="tests-summary" data-testid="tests-summary">
+      <span className={result.passed ? "pass" : "fail"}>
+        {result.tests.passed}/{result.tests.total} passed
+      </span>
+      {result.tests.failures.length > 0 && (
+        <div className="failures-wrap">
+          <table className="failures-table" data-testid="failures-table">
+            <thead>
+              <tr>
+                <th>Patient</th>
+                <th>Target</th>
+                <th>Expected</th>
+                <th>Actual</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.tests.failures.map((f, i) => (
+                <tr key={i}>
+                  <td>{f.patient}</td>
+                  <td>{f.target}</td>
+                  <td>{String(f.expected)}</td>
+                  <td>{f.actual === null ? "—" : String(f.actual)}</td>
+                  <td>{f.reason ?? ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 

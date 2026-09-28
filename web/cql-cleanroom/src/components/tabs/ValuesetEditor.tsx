@@ -3,7 +3,7 @@ import { valuesetToRows } from "../../lib/valuesetBridge";
 
 /**
  * WORKBENCH_REORG phase 3 — single-valueset editor tab. The one-vs
- * subset of TerminologyPane: codes table (system/code/display) writes
+ * codes table (system/code/display) writes
  * back through compose.include grouping; a raw-JSON hatch preserves
  * advanced shapes. Edits commit to the workspace terminology copy.
  */
@@ -51,11 +51,9 @@ function withCodes(vs: Vs, codes: Code[]): Vs {
 
 export function ValuesetEditor({
   valueset,
-  provenance,
   onChange,
 }: {
   valueset: Vs;
-  provenance?: string;
   onChange: (next: Vs) => void;
 }) {
   const [rawMode, setRawMode] = useState(false);
@@ -67,6 +65,7 @@ export function ValuesetEditor({
     () => valuesetToRows([valueset]).warnings,
     [valueset],
   );
+  const name = asTerminology(valueset).name;
 
   // Keep the raw hatch in sync while hidden (external edits flow in).
   useEffect(() => {
@@ -85,11 +84,14 @@ export function ValuesetEditor({
   return (
     <section className="pane" data-testid="valueset-editor">
       <div className="pane-header">
-        <h2>{String(asTerminology(valueset).name ?? asTerminology(valueset).url)}</h2>
-        <span className="pane-meta">
-          {provenance ? `${provenance} · ` : ""}
-          {codes.length} code{codes.length === 1 ? "" : "s"}
-        </span>
+        <div className="editor-identity">
+          <span className="editor-name" data-testid="valueset-name">
+            {name || "unnamed valueset"}
+          </span>
+          <span className="type-badge" data-testid="valueset-code-count">
+            {codes.length} code{codes.length === 1 ? "" : "s"}
+          </span>
+        </div>
         <button className="pane-action" onClick={() => setRawMode((r) => !r)}>
           {rawMode ? "table" : "raw JSON"}
         </button>
@@ -132,15 +134,8 @@ export function ValuesetEditor({
                 onChange={(e) => onChange({ ...valueset, url: e.target.value })}
               />
             </label>
-            <label>
-              name{" "}
-              <input
-                data-testid="valueset-name"
-                value={String(asTerminology(valueset).name ?? "")}
-                onChange={(e) => onChange({ ...valueset, name: e.target.value })}
-              />
-            </label>
           </div>
+          <div className="assoc-label">Codes</div>
           {codes.length === 0 && (
             <p className="pane-hint">
               No enumerated codes (compose or expansion). Use raw JSON for

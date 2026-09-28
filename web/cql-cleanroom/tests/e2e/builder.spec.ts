@@ -18,7 +18,7 @@ test("builder: valid form auto-commits a Patient", async ({ page }) => {
   await page.waitForSelector("[data-testid=dataset-tree]", { timeout: 60_000 });
 
   // Fresh builder tab (defaults to Patient).
-  await page.click("[data-testid=dataset-add-new]");
+  await page.click("[data-testid=nav-add-tests]");
   await page.waitForSelector("[data-testid=builder-field-id]", {
     timeout: 15_000,
   });
@@ -55,7 +55,7 @@ test("builder: invalid draft never commits", async ({ page }) => {
   await page.waitForSelector("[data-testid=dataset-tree]", { timeout: 60_000 });
 
   // Fresh builder tab, then Raw JSON mode with a resource missing resourceType.
-  await page.click("[data-testid=dataset-add-new]");
+  await page.click("[data-testid=nav-add-tests]");
   await page.waitForSelector("[data-testid=builder-raw-toggle]", {
     timeout: 15_000,
   });

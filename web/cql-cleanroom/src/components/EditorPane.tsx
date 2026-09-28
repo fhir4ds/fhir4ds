@@ -12,11 +12,6 @@ import type { Diagnostics, ParseResult } from "../lib/protocol";
  * - data-testids for the e2e suite (editor, marker, params)
  */
 
-export interface ParamBinding {
-  name: string;
-  value: string;
-}
-
 interface Props {
   text: string;
   onTextChange: (text: string) => void;
@@ -286,8 +281,16 @@ export function EditorPane({
 
   return (
     <section className="pane editor-pane" data-testid="editor-pane">
-      <div className="pane-header">
-        <h2>Library</h2>
+      <div className="pane-header editor-header">
+        {onGraphOpenChange && (
+          <button
+            className="drawer-toggle"
+            data-testid="drawer-graph-toggle"
+            onClick={() => onGraphOpenChange(!graphOpen)}
+          >
+            {graphOpen ? "▾" : "▸"} Visual editor
+          </button>
+        )}
         {onRun && (
           <button
             className="editor-run-btn"
@@ -300,15 +303,6 @@ export function EditorPane({
             onClick={() => onRun()}
           >
             {selText.trim() ? "Run selection" : "Run"}
-          </button>
-        )}
-        {onGraphOpenChange && (
-          <button
-            className="drawer-toggle"
-            data-testid="drawer-graph-toggle"
-            onClick={() => onGraphOpenChange(!graphOpen)}
-          >
-            {graphOpen ? "▾" : "▸"} Visual editor
           </button>
         )}
       </div>

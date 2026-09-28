@@ -51,10 +51,7 @@ export function MrPivot({
   runDiff: ReturnType<typeof diffRuns>;
 }) {
   return reports && reports.length > 0 ? (
-    <div className="pane output-pane" data-testid="mr-reports">
-      <header className="pane-header">
-        <h3>Output</h3>
-      </header>
+    <div data-testid="mr-reports">
       <MrPivotTable reports={reports} runDiff={runDiff} />
     </div>
   ) : (
@@ -73,10 +70,7 @@ export function MrFunnel({ result }: { result: EvaluateResult | null }) {
   );
   if (!(result && populationColumns.length > 0)) return null;
   return (
-    <div className="pane output-pane" data-testid="funnel-pane">
-      <header className="pane-header">
-        <h3>Funnel</h3>
-      </header>
+    <div data-testid="funnel-pane">
       <SankeyFromRows columns={populationColumns} rows={result.rows} />
     </div>
   );

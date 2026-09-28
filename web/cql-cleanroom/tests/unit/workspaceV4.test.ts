@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { zipSync } from "fflate";
+import { unzipSync, zipSync } from "fflate";
 import {
   WORKSPACE_SCHEMA_VERSION,
   exportWorkspaceZip,
@@ -37,25 +37,25 @@ const MEASURE = {
   ],
 };
 
-describe("workspace schemaVersion (WORKBENCH_V6 collections)", () => {
-  it("version constant is 6", () => {
-    expect(WORKSPACE_SCHEMA_VERSION).toBe(6);
+describe("workspace schemaVersion (WORKBENCH_V6/V7 collections)", () => {
+  it("version constant is 7", () => {
+    expect(WORKSPACE_SCHEMA_VERSION).toBe(7);
   });
 
-  it("v3 state chains all migrations and lands on v6 defaults", () => {
+  it("v3 state chains all migrations and lands on v7 defaults", () => {
     const out = migrate({ ...BASE_V5, schemaVersion: 3 });
-    expect(out.schemaVersion).toBe(6);
+    expect(out.schemaVersion).toBe(7);
     expect(out.terminology).toEqual({ valuesets: [] });
     expect(out.measures).toEqual([]);
     expect(out.activeMeasureId).toBeNull();
     expect(out.expectedReports).toEqual({});
     expect(out.viewDefs).toEqual([]);
-    expect(out.paramBindings).toEqual({});
+    expect(out.paramValues).toEqual({});
     expect(out.runHistory).toEqual([]);
     expect(out.activeTabPref).toBe("cql");
   });
 
-  it("v5 single measure becomes measures[0] pinned to the first library", () => {
+  it("v5 single measure becomes measures[0] pinned to the first library; params go global", () => {
     const out = migrate({
       ...BASE_V5,
       schemaVersion: 5,
@@ -68,7 +68,22 @@ describe("workspace schemaVersion (WORKBENCH_V6 collections)", () => {
     expect(out.measures[0].mainLibraryId).toBe("lib_0");
     expect(out.measures[0].resource).toEqual(MEASURE);
     expect(out.activeMeasureId).toBe("msr_0");
-    expect(out.paramBindings).toEqual({ msr_0: { "Measurement Period": "2026" } });
+    expect(out.paramValues).toEqual({ "Measurement Period": "2026" });
+  });
+
+  it("v6 per-measure paramBindings collapse into global paramValues", () => {
+    const out = migrate({
+      ...BASE_V5,
+      schemaVersion: 6,
+      measures: [{ id: "msr_0", mainLibraryId: "lib_0", resource: MEASURE }],
+      paramBindings: {
+        msr_0: { A: "1", "Measurement Period": "2026" },
+        msr_1: { A: "2", B: "3" },
+      },
+    });
+    expect(out.schemaVersion).toBe(7);
+    // Later measures win conflicts; the union survives.
+    expect(out.paramValues).toEqual({ A: "2", B: "3", "Measurement Period": "2026" });
   });
 
   it("v5 viewConfig overrides seed a stored ViewDefinition AND ride along (legacy)", () => {
@@ -175,7 +190,7 @@ describe("workspace zip v6 round-trip", () => {
       ],
     },
     viewDefs: [],
-    paramBindings: { msr_0: { P: "1" } },
+    paramValues: { P: "1", MP: "2026-01-01T00:00:00.0..2026-12-31T23:59:59.999" },
     runHistory: [],
     activeTabPref: "cql",
     terminology: { valuesets: VS },
@@ -200,8 +215,27 @@ describe("workspace zip v6 round-trip", () => {
     expect(out.activeMeasureId).toBe("msr_0");
     expect(out.expectedReports.msr_0).toEqual(V6_STATE.expectedReports.msr_0);
     expect(out.viewDefs).toHaveLength(1);
-    expect(out.paramBindings).toEqual({ msr_0: { P: "1" } });
+    expect(out.paramValues).toEqual(V6_STATE.paramValues);
     expect(out.terminology.valuesets).toEqual(VS);
+  });
+
+  it("bound values ride as a FHIR Parameters resource (parameters.json)", () => {
+    const bytes = exportWorkspaceZip({ ...V6_STATE } as never);
+    const files = unzipSync(bytes);
+    const params = JSON.parse(new TextDecoder().decode(files["parameters.json"]));
+    expect(params.resourceType).toBe("Parameters");
+    const str = params.parameter.find((p: { name: string }) => p.name === "P");
+    expect(str.valueString).toBe("1");
+    const period = params.parameter.find((p: { name: string }) => p.name === "MP");
+    expect(period.valuePeriod).toEqual({
+      start: "2026-01-01T00:00:00.0",
+      end: "2026-12-31T23:59:59.999",
+    });
+    // nothing bound → no parameters.json entry
+    const bare = unzipSync(
+      exportWorkspaceZip({ ...V6_STATE, paramValues: {} } as never),
+    );
+    expect(bare["parameters.json"]).toBeUndefined();
   });
 
   it("a null-resource measure entry (bootstrap mode) round-trips", () => {
@@ -242,9 +276,29 @@ describe("workspace zip v6 round-trip", () => {
     expect(out.measures[0].resource).toEqual(MEASURE);
     expect(out.measures[0].mainLibraryId).toBe("lib_0");
     expect(out.activeMeasureId).toBe("msr_0");
-    expect(out.paramBindings.msr_0).toEqual({ P: "9" });
+    expect(out.paramValues).toEqual({ P: "9" });
     expect(out.expectedReports.msr_0).toHaveLength(1);
     expect(out.cases).toHaveLength(1);
+  });
+
+  it("a v6 zip (paramBindings in workspace.json) imports onto global paramValues", () => {
+    const j = (o: unknown) => new TextEncoder().encode(JSON.stringify(o));
+    const bytes = zipSync({
+      "workspace.json": j({
+        schemaVersion: 6,
+        format: "cql-cleanroom-workspace",
+        libraries: [{ id: "lib_0", name: "L1", text: "library L1" }],
+        prefs: {},
+        activeTabPref: "cql",
+        activeMeasureId: "msr_0",
+        paramBindings: { msr_0: { P: "1" } },
+      }),
+      "measures.json": j([
+        { id: "msr_0", mainLibraryId: "lib_0", resource: MEASURE, expectedReports: [] },
+      ]),
+    });
+    const out = importWorkspaceZip(bytes);
+    expect(out.paramValues).toEqual({ P: "1" });
   });
 
   it("empty terminology omits valuesets.json; import still yields the default", () => {

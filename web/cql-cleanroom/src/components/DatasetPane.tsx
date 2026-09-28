@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { DatasetSpec } from "../lib/protocol";
 import { groupDataset, type PatientGroup } from "../lib/datasetGroup";
 import { patientHint } from "./nav/PatientDetailPanel";
@@ -11,32 +11,26 @@ import { patientHint } from "./nav/PatientDetailPanel";
  * while the detail panel owns it, so `dataset-group-{other}` rows stay
  * addressable while drilled in.
  *
- * Kept content signals: the L2 `dataset-filter`, `dataset-add-new`, and
- * `dataset-tree` (+ `dataset-group-*` rows) — what the e2e suite waits on.
+ * REORG 6h — the filter and the add (`+`) live in the section HEADER
+ * (DrawerSection, like every other nav section); this pane renders the
+ * list only.
  */
 
 export function DatasetPane({
   dataset,
   focusedPid,
   onFocusedPidChange,
-  onAddForPatient,
-  onAddNew,
+  filter,
 }: {
   dataset: DatasetSpec | null;
   /** Focused patient group key (null = L2 list); detail renders beside. */
   focusedPid: string | null;
   onFocusedPidChange: (pid: string | null) => void;
-  /** §3.2: per-patient `+` — builder opens with a Patient/<id> default. */
-  onAddForPatient?: (patientId: string) => void;
-  /** WORKBENCH_REORG phase 5: fresh builder tab (builder lives in a test tab now). */
-  onAddNew?: () => void;
+  /** Section-header filter (a row matches when its id/label matches OR
+   *  it owns any matching resource — "Observation" still surfaces the
+   *  patients that have observations). */
+  filter: string;
 }) {
-  // L2 filter: narrows the patient list (a patient row matches when its
-  // id/label matches OR it owns any matching resource — so "Observation"
-  // still surfaces the patients that have observations). The L3 row
-  // filter lives in PatientDetailPanel.
-  const [filter, setFilter] = useState("");
-
   const filterActive = filter.trim().length > 0;
   const matches = (r: { resourceType: string; id: string }) =>
     !filterActive ||
@@ -58,42 +52,18 @@ export function DatasetPane({
   return (
     <section className="dataset-pane" data-testid="dataset-pane">
       {dataset && (dataset.resources?.length ?? 0) > 0 && (
-        <>
-          {!focusedPid && (
-            <div className="dataset-tree-controls">
-              <input
-                data-testid="dataset-filter"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                placeholder="filter by type or id"
-                aria-label="filter dataset"
+        <div className="dataset-tree" data-testid="dataset-tree">
+          {groups
+            .filter(groupMatches)
+            .map((g) => (
+              <PatientRow
+                key={g.key}
+                group={g}
+                focused={focusedPid === g.key}
+                onDrillIn={() => onFocusedPidChange(g.key)}
               />
-              {onAddNew && (
-                <button
-                  type="button"
-                  data-testid="dataset-add-new"
-                  onClick={onAddNew}
-                  title="Open a new-resource builder tab"
-                >
-                  + New
-                </button>
-              )}
-            </div>
-          )}
-          <div className="dataset-tree" data-testid="dataset-tree">
-            {groups
-              .filter(groupMatches)
-              .map((g) => (
-                <PatientRow
-                  key={g.key}
-                  group={g}
-                  focused={focusedPid === g.key}
-                  onDrillIn={() => onFocusedPidChange(g.key)}
-                  onAddForPatient={onAddForPatient}
-                />
-              ))}
-          </div>
-        </>
+            ))}
+        </div>
       )}
       {dataset && !groups.some((g) => !g.unattributed) && (
         <div className="pane-empty" data-testid="dataset-no-patients">
@@ -107,21 +77,18 @@ export function DatasetPane({
 
 /**
  * L2 — one maps-style row per patient group. Click = drill in (the L3
- * detail slides out as a second nav panel); the `+` button adds a
- * resource for the patient WITHOUT drilling. While THIS patient's
- * detail panel is up, the row drops its `dataset-group-{pid}` testid
- * (the detail owns it) and its `+` (unreachable under the overlay).
+ * detail slides out as a second nav panel; per-patient add lives in the
+ * detail's per-type groups). While THIS patient's detail panel is up,
+ * the row drops its `dataset-group-{pid}` testid (the detail owns it).
  */
 function PatientRow({
   group,
   focused,
   onDrillIn,
-  onAddForPatient,
 }: {
   group: PatientGroup;
   focused: boolean;
   onDrillIn: () => void;
-  onAddForPatient?: (patientId: string) => void;
 }) {
   const patientRow = group.rows.find((r) => r.resourceType === "Patient");
   const hint = patientRow
@@ -160,20 +127,6 @@ function PatientRow({
         </span>
       )}
       <span className="dataset-count-pill">{group.rows.length}</span>
-      {!focused && !group.unattributed && !group.phantom && onAddForPatient && (
-        <button
-          type="button"
-          className="dataset-add-btn"
-          data-testid={`dataset-add-${group.key}`}
-          onClick={(e) => {
-            e.stopPropagation(); // the row drills in — the + must ADD.
-            onAddForPatient(group.key);
-          }}
-          title={`New resource for ${group.label} (subject defaults to Patient/${group.key})`}
-        >
-          +
-        </button>
-      )}
     </div>
   );
 }

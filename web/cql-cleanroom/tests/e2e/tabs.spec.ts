@@ -43,13 +43,10 @@ test.describe("editor tabs", () => {
 
   test("valueset tab opens the single-valueset editor", async ({ page }) => {
     await bootReady(page);
-    // Create a workspace valueset via the terminology drawer.
-    await page.click("[data-testid=drawer-terminology-toggle]");
-    await page.click("[data-testid=terminology-add]");
-    await page.click("[data-testid=drawer-terminology-toggle]");
-    // Open it from the Valuesets drawer.
+    // Create a workspace valueset via the Valuesets drawer "+" (6h:
+    // terminology pane is gone; the rail section owns creation).
     await page.click("[data-testid=nav-toggle-valuesets]");
-    await page.locator("[data-testid^=nav-item-valueset-]").first().click();
+    await page.click("[data-testid=nav-add-valuesets]");
     await expect(page.locator("[data-testid=valueset-editor]")).toBeVisible();
     await expect(page.locator("[data-testid=cql-editor]")).toBeHidden();
     // Codes table accepts a code.

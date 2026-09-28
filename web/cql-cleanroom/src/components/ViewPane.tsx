@@ -111,7 +111,6 @@ export function ViewPane({
   return (
     <section className="pane" data-testid="view-pane">
       <header className="pane-header">
-        <h2>View</h2>
         <div className="pane-actions">
           {busy && (
             <span className="pane-meta" data-testid="view-busy">

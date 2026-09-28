@@ -1,4 +1,4 @@
-import { test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 /**
  * Measure-reports campaign e2e (FEATURE_CLEANROOM_MEASURE_REPORTS.md):
@@ -311,18 +311,22 @@ test.describe("view pane flatten", () => {
 });
 
 test.describe("measure association (reorg 6f)", () => {
-  test("primary-library picker repoints the measure + closure chips", async ({
+  test("primary-library picker repoints the measure + inputs table", async ({
     page,
   }) => {
     await bootReady(page);
     await loadDataset(page);
     await openMeasureTab(page);
 
-    // The entrypoint's closure surfaces as read-only chips.
-    await page.waitForSelector("[data-testid=measure-assoc]");
-    const chip0 = await page.textContent(".measure-assoc .assoc-chip");
-    if (!chip0?.includes("CleanroomDemo"))
-      throw new Error(`initial chip: ${chip0}`);
+    // The entrypoint's closure surfaces as a collapsible inputs table
+    // (reorg 6h — replaced the 6f chip row).
+    await page.waitForSelector("[data-testid=measure-inputs]");
+    await page.click("[data-testid=measure-inputs-toggle]");
+    const row0 = await page.textContent(
+      "[data-testid=measure-inputs] tbody tr:first-child",
+    );
+    if (!row0?.includes("CleanroomDemo"))
+      throw new Error(`initial inputs row: ${row0}`);
 
     // A second library becomes selectable; picking it re-points the
     // measure through the SAME write path as the nav double-click.
@@ -344,7 +348,7 @@ test.describe("measure association (reorg 6f)", () => {
     await page.waitForFunction(
       (name) =>
         document
-          .querySelector(".measure-assoc .assoc-chip")
+          .querySelector("[data-testid=measure-inputs] tbody tr")
           ?.textContent?.includes(name ?? ""),
       secondName,
       { timeout: 10_000 },
@@ -357,7 +361,7 @@ test.describe("measure association (reorg 6f)", () => {
     await page.waitForFunction(
       () =>
         document
-          .querySelector(".measure-assoc .assoc-chip")
+          .querySelector("[data-testid=measure-inputs] tbody tr")
           ?.textContent?.includes("CleanroomDemo"),
       undefined,
       { timeout: 10_000 },
@@ -409,5 +413,37 @@ test.describe("measure association (reorg 6f)", () => {
     if (checked.p1 !== true || checked.p3 !== true || checked.p2 !== false) {
       throw new Error(`captured grid mismatch: ${JSON.stringify(checked)}`);
     }
+  });
+
+  test("run tests shows a pass/fail summary and survives a broken library", async ({
+    page,
+  }) => {
+    await bootReady(page);
+
+    // Expected editor tab hosts TestsPane (empty grid → 0/0).
+    await page.click("[data-testid=nav-toggle-expected]");
+    await page.locator("[data-testid^=nav-item-expected-]").first().click();
+    await page.waitForSelector("[data-testid=tests-pane]", { timeout: 30_000 });
+    await page.click("[data-testid=run-tests]");
+    await page.waitForSelector("[data-testid=tests-summary]", {
+      timeout: 60_000,
+    });
+    await expect(page.locator("[data-testid=tests-summary]")).toContainText(
+      "0/0 passed",
+    );
+
+    // Break the library: the run_tests envelope comes back ok:false with
+    // diagnostics — render it as an error, never crash the tree.
+    await page.locator("[data-testid^=editor-tab-library-]").first().click();
+    await page.click("[data-testid=cql-editor]");
+    await page.keyboard.press("Control+Home");
+    await page.keyboard.insertText("this is not cql {{{\n");
+    await page.waitForTimeout(2500);
+    await page.locator("[data-testid^=nav-item-expected-]").first().click();
+    await page.waitForSelector("[data-testid=tests-pane]", { timeout: 30_000 });
+    await page.click("[data-testid=run-tests]");
+    await page.waitForSelector("[data-testid=tests-error]", { timeout: 60_000 });
+    await expect(page.locator("[data-testid=tests-pane]")).toBeVisible();
+    await expect(page.locator(".version-badge")).toBeVisible();
   });
 });

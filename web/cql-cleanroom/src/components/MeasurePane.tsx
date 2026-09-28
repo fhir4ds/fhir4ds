@@ -34,8 +34,9 @@ interface Props {
   onMainLibraryChange?: (id: string) => void;
   closure?: LibraryClosure;
   valuesetSources?: Record<string, "workspace" | "dataset">;
-  /* 6f: expected-results association. */
-  expectedStatus?: { patients: number } | null;
+  /* 6f: expected-results association. 6h: the full authored reports so
+   * the pane can render the per-patient ✓/✗ tally strip. */
+  expectedReports?: Array<Record<string, unknown>>;
   onOpenExpected?: () => void;
 }
 
@@ -49,7 +50,7 @@ export function MeasurePane({
   onMainLibraryChange,
   closure,
   valuesetSources,
-  expectedStatus,
+  expectedReports,
   onOpenExpected,
 }: Props) {
   const [parse, setParse] = useState<ParseResult | null>(null);
@@ -267,24 +268,110 @@ export function MeasurePane({
 
   const usedCodes = new Set(rows.map((r) => r.code).filter(Boolean));
 
+  /* Expected-results association (option A): presence + a jump to the
+   * dedicated editor — the data itself is authored/viewed there, not
+   * duplicated here. */
+  const nExpected = (expectedReports ?? []).filter(
+    (r) =>
+      typeof (r.subject as { reference?: string } | undefined)?.reference ===
+      "string",
+  ).length;
+
+  const [inputsOpen, setInputsOpen] = useState(false);
+
+  const unsourced = (closure?.valuesetDecls ?? []).filter(
+    (v) => !valuesetSources?.[v.url],
+  ).length;
+
   return (
     <section className="pane" data-testid="measure-pane">
-      <header className="pane-header">
-        <h2>Measure</h2>
+      <div className="measure-identity">
         {libraryChoices && onMainLibraryChange && (
-          <select
-            data-testid="measure-main-library"
-            value={mainLibraryId ?? ""}
-            onChange={(e) => onMainLibraryChange(e.target.value)}
-            title="Primary library — brings in its dependent libraries and valuesets"
-          >
-            {libraryChoices.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
+          <>
+            <span className="assoc-label">Primary library</span>
+            <select
+              data-testid="measure-main-library"
+              value={mainLibraryId ?? ""}
+              onChange={(e) => onMainLibraryChange(e.target.value)}
+              title="Primary library — brings in its dependent libraries and valuesets"
+            >
+              {libraryChoices.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </>
         )}
+      </div>
+      {error && (
+        <div className="pane-error" data-testid="measure-error">
+          {error}
+        </div>
+      )}
+      {statusNote && (
+        <div className="status-note" data-testid="measure-status">
+          {statusNote}
+        </div>
+      )}
+      {closure &&
+       (closure.libraryNames.length > 0 || closure.valuesetDecls.length > 0) && (
+        <section className="measure-inputs" data-testid="measure-inputs">
+          <button
+            className="inputs-toggle"
+            data-testid="measure-inputs-toggle"
+            aria-expanded={inputsOpen}
+            onClick={() => setInputsOpen(!inputsOpen)}
+          >
+            <span className="inputs-caret" aria-hidden>
+              {inputsOpen ? "▾" : "▸"}
+            </span>
+            <span className="assoc-label">Inputs</span>
+            <span className="pane-meta">
+              {closure.libraryNames.length}{" "}
+              {closure.libraryNames.length === 1 ? "library" : "libraries"} ·{" "}
+              {closure.valuesetDecls.length}{" "}
+              {closure.valuesetDecls.length === 1 ? "valueset" : "valuesets"}
+              {unsourced > 0 ? ` · ${unsourced} unsourced` : ""}
+            </span>
+          </button>
+          {inputsOpen && (
+            <table className="inputs-table">
+              <thead>
+                <tr>
+                  <th>Kind</th>
+                  <th>Name</th>
+                  <th>Source</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {closure.libraryNames.map((n, i) => (
+                  <tr key={`lib-${n}`} data-testid={`inputs-library-${i}`}>
+                    <td>library</td>
+                    <td>{n}</td>
+                    <td>workspace</td>
+                    <td>{n === main.name ? "primary" : ""}</td>
+                  </tr>
+                ))}
+                {closure.valuesetDecls.map((v) => {
+                  const src = valuesetSources?.[v.url];
+                  return (
+                    <tr key={v.url} title={v.url}>
+                      <td>valueset</td>
+                      <td>{v.name}</td>
+                      <td>{src ?? "—"}</td>
+                      <td>{src ? "" : <span className="warn">⚠ unsourced</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
+      <div className="mapping-head">
+        <span className="assoc-label">Population mapping</span>
         <div className="pane-actions">
           <button onClick={add} data-testid="measure-add-row">
             + population
@@ -300,62 +387,7 @@ export function MeasurePane({
             Validate
           </button>
         </div>
-      </header>
-      {error && (
-        <div className="pane-error" data-testid="measure-error">
-          {error}
-        </div>
-      )}
-      {statusNote && (
-        <div className="status-note" data-testid="measure-status">
-          {statusNote}
-        </div>
-      )}
-      {closure && closure.libraryNames.length > 0 && (
-        <div className="measure-assoc" data-testid="measure-assoc">
-          <div className="assoc-chips">
-            <span className="assoc-label">Libraries</span>
-            {closure.libraryNames.map((n) => (
-              <span key={n} className="assoc-chip">
-                {n}
-              </span>
-            ))}
-          </div>
-          {closure.valuesetDecls.length > 0 && (
-            <div className="assoc-chips">
-              <span className="assoc-label">ValueSets</span>
-              {closure.valuesetDecls.map((v) => {
-                const src = valuesetSources?.[v.url];
-                return (
-                  <span key={v.url} className="assoc-chip" title={v.url}>
-                    {v.name}
-                    <em className={`assoc-src${src ? "" : " unsourced"}`}>
-                      {src ?? "unsourced"}
-                    </em>
-                  </span>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-      {onOpenExpected && (
-        <div className="measure-expected" data-testid="measure-expected">
-          <span className="assoc-label">Expected results</span>
-          <span className="pane-meta" data-testid="expected-status">
-            {expectedStatus && expectedStatus.patients > 0
-              ? `${expectedStatus.patients} patient${expectedStatus.patients === 1 ? "" : "s"} authored`
-              : "not authored"}
-          </span>
-          <button
-            className="pane-action"
-            onClick={onOpenExpected}
-            data-testid="measure-open-expected"
-          >
-            Open grid
-          </button>
-        </div>
-      )}
+      </div>
       {rows.length === 0 ? (
         <p className="pane-hint" data-testid="measure-empty">
           No Measure mapping — evaluation uses raw define columns. Add a
@@ -419,6 +451,24 @@ export function MeasurePane({
             ))}
           </tbody>
         </table>
+      )}
+      {onOpenExpected && (
+        <div className="measure-expected" data-testid="measure-expected">
+          <span className="assoc-label">Expected</span>
+          <span className="pane-meta" data-testid="expected-status">
+            {nExpected > 0
+              ? `${nExpected} patient${nExpected === 1 ? "" : "s"}`
+              : "not authored"}
+          </span>
+          <button
+            className="pane-action"
+            onClick={onOpenExpected}
+            data-testid="measure-open-expected"
+            title="Open the expected-results editor"
+          >
+            open editor ↗
+          </button>
+        </div>
       )}
     </section>
   );

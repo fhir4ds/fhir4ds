@@ -35,8 +35,8 @@ define "D1":
       timeout: 60_000,
     });
     // WORKBENCH_REORG phase 5: AST is a console sub-tab now.
+    // REORG 6h: no Refresh button — the tree auto-parses on tab open.
     await page.click('[data-testid=console-tab-ast]');
-    await page.click('[data-testid=ast-load]');
     await page.waitForSelector('[data-testid^=ast-def-]', { timeout: 30_000 });
     const defName = await page
       .locator('[data-testid^=ast-def-]')

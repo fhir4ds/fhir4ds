@@ -41,7 +41,9 @@ export async function importBundleResources(
   resources: Array<Record<string, unknown>>,
 ) {
   await page.click("[data-testid=export-menu]");
-  await page.click("[data-testid=bundle-mode]"); // merge -> replace
+  // 6h: the mode control lives in the Settings menu now.
+  await page.click("[data-testid=settings-menu]");
+  await page.selectOption("[data-testid=bundle-mode]", "replace");
   await page.setInputFiles("[data-testid=bundle-import-input]", {
     name: "dataset.json",
     mimeType: "application/json",

@@ -248,9 +248,9 @@ body { margin: 0; }
   flex: none;
 }
 .nav-rail .nav-panel {
-  flex: 1;
+  flex: none;
   min-width: 0;
-  max-width: 198px;
+  width: var(--navpanel-w, 198px);
 }
 .nav-rail .rail-label {
   font-size: 10px;
@@ -275,7 +275,7 @@ body { margin: 0; }
 }
 .rail-item:hover { background: #1f2733; color: #e6ebf2; }
 .rail-item.active { background: #1f2733; border-color: #3b82f6; color: #e6ebf2; }
-.rail-item .rail-glyph { font-weight: 600; }
+.rail-item .rail-glyph { display: flex; align-items: center; justify-content: center; }
 .rail-item .rail-name {
   display: none;
   position: absolute;
@@ -359,6 +359,12 @@ body { margin: 0; }
   color: #5d6f8a; font-size: 10px;
 }
 .nav-item.active .nav-item-sub { color: #8fa3bf; }
+.nav-item .nav-item-pill {
+  margin-left: auto; flex: none; max-width: 40%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: #1c2634; border: 1px solid #2c3a4e; border-radius: 999px;
+  color: #8fa3bf; font-size: 10px; line-height: 1; padding: 2px 7px;
+}
 .nav-item .rail-badge { position: static; flex: none; width: 8px; height: 8px; }
 .nav-item .rail-badge.entry { width: 7px; height: 7px; }
 .nav-item.renaming input {
@@ -796,19 +802,51 @@ body { margin: 0; }
   color: #5b6a7d;
 }
 .vd-config { display: flex; flex-direction: column; gap: 8px; font-size: 13px; min-width: 0; }
-/* REORG 6f: measure association — primary library + dependency chips */
-.measure-assoc { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
-.assoc-chips { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 12px; }
+/* REORG 6f: shared section-label style (survived the 6h chip→table swap) */
 .assoc-label { color: #7b8698; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; }
-.assoc-chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  background: #101822; border: 1px solid #232a35; border-radius: 8px;
-  padding: 0 8px; font-size: 11px; color: #a8b8cf;
+/* REORG 6h: measure editor as four sections — identity, inputs,
+ * population mapping, expected cross-link. */
+.measure-identity {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
 }
-.assoc-chip .assoc-src { font-style: normal; font-size: 10px; color: #63a1ff; }
-.assoc-chip .assoc-src.unsourced { color: #d97706; }
-.measure-expected { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
-.console-mr-actions { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+.measure-identity select {
+  background: #24476e; color: #dbe7ff; border: none; border-radius: 6px;
+  padding: 4px 6px; cursor: pointer; font-size: 12px;
+  width: auto; max-width: 220px;
+}
+.measure-inputs { margin-bottom: 10px; }
+.inputs-toggle {
+  display: flex; align-items: center; gap: 6px;
+  background: none; border: none; cursor: pointer; padding: 0;
+  color: #a8b8cf; font-size: 12px;
+}
+.inputs-toggle:hover .assoc-label { color: #a8b8cf; }
+.inputs-toggle .pane-meta { margin-right: 0; }
+.inputs-caret { color: #7b8698; width: 10px; }
+.inputs-table {
+  width: fit-content; border-collapse: collapse; font-size: 12px;
+  margin: 6px 0 0 16px;
+}
+.inputs-table th {
+  text-align: left; color: #7b8698; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.05em; font-weight: 600; padding: 2px 14px 2px 0;
+}
+.inputs-table td { text-align: left; padding: 2px 14px 2px 0; }
+.inputs-table .warn { color: #d97706; }
+.mapping-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.mapping-head .pane-actions { margin-left: auto; display: flex; gap: 6px; }
+.mapping-head .pane-actions button {
+  background: #24476e; color: #dbe7ff; border: none; border-radius: 6px;
+  padding: 4px 10px; cursor: pointer; font-size: 12px;
+}
+.mapping-head .pane-actions button:disabled { opacity: 0.5; cursor: default; }
+.measure-expected {
+  display: flex; align-items: center; gap: 8px; margin-top: 14px;
+  font-size: 12px;
+}
+.measure-expected .pane-meta { margin-right: 0; }
 .vd-path-input {
   font-family: ui-monospace, monospace;
 }
@@ -1224,9 +1262,12 @@ body { margin: 0; }
 }
 
 /* Parameters drawer rows reuse the builder tree look */
-.param-row { display: grid; grid-template-columns: 20px minmax(96px, max-content) minmax(0, 1fr); column-gap: 8px; align-items: center; padding: 2px 0; min-height: 28px; }
+.param-row { display: grid; grid-template-columns: 20px minmax(96px, max-content) auto minmax(0, 1fr); column-gap: 8px; align-items: center; padding: 2px 0; min-height: 28px; }
 .param-row .builder-label { font-size: 12px; color: #c9d4e3; }
 .param-row input { width: 100%; min-width: 0; box-sizing: border-box; font-size: 12px; }
+.param-row .type-badge { flex: none; justify-self: start; }
+.param-interval { display: flex; gap: 6px; min-width: 0; }
+.param-interval input { flex: 1; min-width: 0; }
 
 /* Dataset tree — builder-tree look (caret gutter, guides, hover rows) */
 .dataset-group { border-left: none; padding-left: 0; }
@@ -1456,9 +1497,15 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 .editor-tab-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.78rem; }
 .editor-tab-close { border: none; background: transparent; padding: 4px 7px; cursor: pointer; color: #8fa3bf; opacity: 0.6; font-size: 0.85rem; }
 .editor-tab-close:hover { opacity: 1; background: rgba(255,255,255,0.08); color: #e6e9ef; }
-.vs-url-row { display: flex; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.vs-url-row { display: flex; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; max-width: 760px; }
 .vs-url-row label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #a8b8cf; flex: 1; min-width: 180px; }
 .vs-url-row input { flex: 1; }
+/* 6h — editor identity rows (valueset, parameters): name + pill, header
+   slot holds the right-side action (raw JSON / export) */
+.editor-identity { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.editor-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.editor-identity .type-badge { flex: none; }
+.vs-url-row + .assoc-label { margin-top: 10px; }
 .vs-code-row { display: grid; grid-template-columns: 2fr 1fr 1.4fr auto; gap: 6px; margin-bottom: 4px; }
 .vs-warnings { font-size: 0.75rem; color: #e7c66b; margin-top: 6px; }
 .vs-code-del { border: none; background: transparent; color: #d98a8a; cursor: pointer; }
@@ -1472,7 +1519,6 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 /* REORG 6d: the visual-editor toggle is a pane-header button now. */
 .pane-header .drawer-toggle {
   width: auto;
-  margin-left: auto;
   padding: 2px 8px;
   font-size: 0.75rem;
   font-weight: 500;
@@ -1487,16 +1533,15 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 /* REORG 6f: Tests L3 detail — a second maps-style nav panel sliding
    out BESIDE the section panel (list stays visible; the grid column
    grows via --nav-w so nothing clips). REORG 6f.1: flat — no card
-   wrap, it reads as part of the rail; both panels fill the rail height. */
-.nav-panel-wrap { position: relative; flex: 1; min-width: 0; max-width: 198px; display: flex; flex-direction: row; align-items: stretch; gap: 6px; min-height: 0; }
-/* The detail is a static sibling (never overlays the list): the wrap
-   only drops its 198px clamp while the detail is mounted, which is
-   exactly when App grows the --nav-w column. */
-.nav-panel-wrap:has(> .nav-panel-detail) { max-width: none; }
-.nav-panel-wrap > .nav-panel { flex: 1; min-width: 0; max-width: 198px; min-height: 0; display: flex; flex-direction: column; }
+   wrap, it reads as part of the rail; both panels fill the rail height.
+   REORG 6h: both widths are user-resizable (px vars driven from App,
+   persisted in localStorage) with edge drag handles. */
+.nav-panel-wrap { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: row; align-items: stretch; gap: 6px; min-height: 0; }
+.nav-panel-wrap > .nav-panel { flex: none; width: var(--navpanel-w, 198px); min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .nav-panel-detail {
   flex: none;
-  width: 284px;
+  width: var(--navdetail-w, 284px);
+  position: relative;
   z-index: 20;
   display: flex;
   flex-direction: column;
@@ -1505,6 +1550,12 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
   border-left: 1px solid #232a35;
   animation: nav-detail-in 160ms ease-out;
 }
+.nav-resize { position: absolute; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 45; touch-action: none; }
+.nav-panel-wrap > .nav-resize { left: var(--navpanel-w, 198px); transform: translateX(-4px); }
+/* The detail scrolls (overflow-y) — the handle must stay inside its box
+   or the overhang turns into a horizontal scrollbar. */
+.nav-panel-detail > .nav-resize { right: 0; }
+.nav-resize:hover { background: rgba(59, 130, 246, 0.3); border-radius: 3px; }
 /* Tests L2 list: no pane chrome — the patient list fills the panel. */
 .dataset-pane { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; min-width: 0; }
 @keyframes nav-detail-in {
@@ -1524,6 +1575,7 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
    chips + run switcher on the right. */
 .console-subtabs { align-items: center; }
 .console-toolbar-right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.console-toolbar-right .pane-action { white-space: nowrap; flex: none; }
 .console-run-select {
   background: #0f131a; border: 1px solid #2a2f3a; border-radius: 4px;
   color: #dce7f5; font-size: 11px; padding: 2px 4px; max-width: 240px;
@@ -1539,3 +1591,9 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 .pane .param-row, .pane .vs-code-row, .pane .er-pop-row, .pane .vd-config,
 .pane table.mapping-table { max-width: 760px; }
 .pane .builder-form { max-width: 880px; }
+/* 6h: mapping grid sits left with content-sized selects. The pane is a
+ * flex column, so tables need fit-content or they stretch full-width. */
+.pane table.mapping-table { width: fit-content; }
+.mapping-table th { text-align: left; color: #7b8698; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.mapping-table td { padding-right: 10px; }
+.mapping-table select { width: auto; min-width: 170px; max-width: 320px; }

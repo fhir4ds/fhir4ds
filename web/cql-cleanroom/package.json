@@ -18,6 +18,7 @@
     "@xyflow/react": "^12.11.6",
     "apache-arrow": "^21.1.0",
     "fflate": "^0.8.2",
+    "lucide-react": "^1.48.0",
     "monaco-editor": "^0.52.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"

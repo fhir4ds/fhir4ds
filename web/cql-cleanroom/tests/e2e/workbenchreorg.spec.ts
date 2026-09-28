@@ -35,12 +35,12 @@ test.describe("console sub-tabs + col2 panes", () => {
     await bootReady(page);
     await resetWorkspace(page);
 
-    // Library context: the four run-pipeline sub-tabs; the default
-    // dataset AUTO-EVALUATES so Results populates with no clicks.
+    // Library context: the run-pipeline sub-tabs (Results/CQL/SQL/AST —
+    // 6h retired the Errors tab); the default dataset AUTO-EVALUATES so
+    // Results populates with no clicks.
     await page.waitForSelector("[data-testid=console-tab-results]");
     await page.waitForSelector("[data-testid=console-tab-sql]");
     await page.waitForSelector("[data-testid=console-tab-ast]");
-    await page.waitForSelector("[data-testid=console-tab-diags]");
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
@@ -283,7 +283,7 @@ test.describe("dataset tree scale", () => {
     if (expanded < 60) throw new Error(`show-more: ${expanded}`);
 
     // Filter bypasses cap + auto-expands.
-    await page.fill("[data-testid=dataset-filter]", "obs-58");
+    await page.fill("[data-testid=nav-filter-tests]", "obs-58");
     await page.waitForTimeout(300);
     const filtered = await page
       .locator("[data-testid^=dataset-row-]")
@@ -301,9 +301,9 @@ test.describe("ast filter", () => {
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
-    // WORKBENCH_REORG phase 5: AST is a console sub-tab now.
+    // WORKBENCH_REORG phase 5: AST is a console sub-tab now (6g: it
+    // auto-parses — no manual load button).
     await page.click("[data-testid=console-tab-ast]");
-    await page.click("[data-testid=ast-load]");
     await page.waitForSelector("[data-testid^=ast-def-]", {
       timeout: 30_000,
     });

@@ -30,6 +30,8 @@ export function TestsPane({
   expectedValues,
   onExpectedValuesChange,
   measure,
+  parameters,
+  onVerifyResult,
 }: {
   libraries: LibraryText[];
   main: LibraryText;
@@ -39,8 +41,11 @@ export function TestsPane({
   expectedValues: ExpectedMap | null;
   onExpectedValuesChange: (v: ExpectedMap | null) => void;
   measure: Record<string, unknown> | null;
+  /** Runtime CQL parameters (e.g. Measurement Period) for the engine. */
+  parameters: Record<string, unknown>;
+  /** 6h: the compare result renders in the CONSOLE, not in this pane. */
+  onVerifyResult: (r: VerifyEnvelope | null) => void;
 }) {
-  const [result, setResult] = useState<VerifyEnvelope | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -125,6 +130,7 @@ export function TestsPane({
   async function run() {
     setBusy(true);
     setError(null);
+    onVerifyResult(null);
     try {
       const cases = Object.entries(expected).flatMap(([pid, codes]) =>
         Object.entries(codes).map(([code, expect]) => ({
@@ -142,10 +148,22 @@ export function TestsPane({
         main,
         dataset,
         tests,
+        // Required CQL parameters (e.g. Measurement Period) must reach
+        // the engine or run_tests fails on a declared-no-default param.
+        parameters,
         output_columns: outputColumns,
       });
-      const env: VerifyEnvelope = JSON.parse((resp as { envelope: string }).envelope);
-      setResult(env);
+      const env = JSON.parse((resp as { envelope: string }).envelope) as VerifyEnvelope;
+      // A failed run (e.g. CQL translate error) has no `tests` payload —
+      // surface it as an error instead of crashing on result.tests.
+      if (!env.ok) {
+        setError(
+          env.diagnostics?.map((d) => d.message).join("; ") ??
+            "test run failed",
+        );
+        return;
+      }
+      onVerifyResult(env);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -368,39 +386,6 @@ export function TestsPane({
             )}
           </tbody>
         </table>
-        </div>
-      )}
-      {result && (
-        <div className="tests-summary" data-testid="tests-summary">
-          <span className={result.passed ? "pass" : "fail"}>
-            {result.tests.passed}/{result.tests.total} passed
-          </span>
-          {result.tests.failures.length > 0 && (
-            <div className="failures-wrap">
-            <table className="failures-table" data-testid="failures-table">
-              <thead>
-                <tr>
-                  <th>Patient</th>
-                  <th>Target</th>
-                  <th>Expected</th>
-                  <th>Actual</th>
-                  <th>Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.tests.failures.map((f, i) => (
-                  <tr key={i}>
-                    <td>{f.patient}</td>
-                    <td>{f.target}</td>
-                    <td>{String(f.expected)}</td>
-                    <td>{f.actual === null ? "—" : String(f.actual)}</td>
-                    <td>{f.reason ?? ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          )}
         </div>
       )}
     </section>

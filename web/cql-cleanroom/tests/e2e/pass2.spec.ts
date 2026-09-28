@@ -108,14 +108,15 @@ define "Has Name":
   });
 });
 
-test.describe("terminology", () => {
-  test("ValueSet created in the pane seeds the engine cache and affects evaluation", async ({ page }) => {
+test.describe("valuesets", () => {
+  test("workspace ValueSet seeds the engine cache and affects evaluation", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
 
     // Library declares a valueset used over a Coding path (in_valueset
     // extracts systems from Coding objects; bare primitives like gender
-    // carry no system and never match — engine semantics).
+    // carry no system and never match — engine semantics). Edit the
+    // library FIRST: opening the valueset editor tab hides it.
     await page.click("[data-testid=cql-editor]");
     await page.keyboard.press("Control+Home");
     await page.keyboard.press("Control+Shift+End");
@@ -133,6 +134,17 @@ define "Has Name":
 `,
     );
 
+    // Create a workspace valueset via the rail section "+" (6h: the
+    // terminology pane is gone) and give it the url the library declares.
+    await page.click("[data-testid=nav-toggle-valuesets]");
+    await page.click("[data-testid=nav-add-valuesets]");
+    await page.waitForSelector("[data-testid=valueset-editor]", { timeout: 30_000 });
+    await page.fill("[data-testid=valueset-url]", "urn:cleanroom:test:vitals");
+
+    // The dataset count pills live in the Tests panel — switch the nav
+    // panel back (the valueset stays open as an EDITOR tab).
+    await page.click("[data-testid=nav-toggle-tests]");
+
     // Dataset: one BP observation (LOINC 8480-6) + patients for attribution.
     // REORG 6f.1: import via the menu (the raw NDJSON view is gone).
     await importBundleResources(page, [
@@ -140,13 +152,6 @@ define "Has Name":
       { resourceType: "Observation", id: "bp1", status: "final", code: { coding: [{ system: "http://loinc.org", code: "8480-6" }] }, subject: { reference: "Patient/p1" } },
     ]);
     await waitDatasetResources(page, 2, 30_000);
-
-    // Without codes: the declared VS is unsourced in the terminology list.
-    await page.click("[data-testid=drawer-terminology-toggle]").catch(() => {});
-    await page.waitForSelector("[data-testid=terminology-pane]", { timeout: 30_000 });
-    const unsourcedItem = page.locator("[data-testid^=terminology-item-]").first();
-    await unsourcedItem.click();
-    await page.waitForSelector("[data-testid=terminology-unsourced]", { timeout: 30_000 });
 
     // Evaluate BEFORE adding codes: p1 not in the empty VS → false.
     // The auto-eval may still show the pre-edit demo result (p1=true)
@@ -163,12 +168,11 @@ define "Has Name":
     const before = await page.textContent("[data-testid=results-table] tbody tr td:nth-child(2)");
     if (!before?.includes("false")) throw new Error(`p1 IPP before codes: ${before}`);
 
-    // Create the workspace override with the LOINC BP code.
-    await page.click("[data-testid=terminology-create-override]");
-    await page.waitForSelector("[data-testid=terminology-table]", { timeout: 30_000 });
-    await page.click("[data-testid=terminology-add-code]");
-    await page.fill("[data-testid=terminology-system-0]", "http://loinc.org");
-    await page.fill("[data-testid=terminology-code-input-0]", "8480-6");
+    // Add the LOINC BP code to the workspace valueset.
+    await page.locator("[data-testid^=editor-tab-valueset-]").first().click();
+    await page.click("[data-testid=valueset-add-code]");
+    await page.fill("[data-testid=valueset-codes] input[aria-label=system]", "http://loinc.org");
+    await page.fill("[data-testid=valueset-codes] input[aria-label=code]", "8480-6");
 
     // Evaluate again: the Observation code is now in the VS → true.
     // (results-table never detaches — wait on the cell VALUE flipping.)
@@ -184,24 +188,22 @@ define "Has Name":
     if (!after?.includes("true")) throw new Error(`p1 IPP after codes: ${after}`);
   });
 
-  test("terminology persists across reload (workspace v5)", async ({ page }) => {
+  test("workspace valuesets persist across reload", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.click("[data-testid=drawer-terminology-toggle]");
-    await page.click("[data-testid=terminology-add]");
-    await page.waitForSelector("[data-testid=terminology-table]", { timeout: 30_000 });
-    await page.click("[data-testid=terminology-add-code]");
-    await page.fill("[data-testid=terminology-system-0]", "urn:s");
-    await page.fill("[data-testid=terminology-code-input-0]", "c1");
+    await page.click("[data-testid=nav-toggle-valuesets]");
+    await page.click("[data-testid=nav-add-valuesets]");
+    await page.waitForSelector("[data-testid=valueset-editor]", { timeout: 30_000 });
+    await page.fill("[data-testid=valueset-url]", "urn:cleanroom:test:vitals");
+    await page.click("[data-testid=valueset-add-code]");
+    await page.fill("[data-testid=valueset-codes] input[aria-label=system]", "urn:s");
+    await page.fill("[data-testid=valueset-codes] input[aria-label=code]", "c1");
     await page.waitForTimeout(1200); // debounce autosave
     await page.reload();
     await page.waitForSelector(".version-badge", { timeout: 150_000 });
-    await page.click("[data-testid=drawer-terminology-toggle]").catch(() => {});
-    await page.waitForSelector("[data-testid=terminology-pane]", { timeout: 30_000 });
-    await page.waitForSelector("[data-testid=terminology-item-urn\\:cleanroom\\:vs\\:-]", { timeout: 10_000 }).catch(() => {
-      // url contains a timestamp; just assert SOME item is listed
-    });
-    const items = await page.locator("[data-testid^=terminology-item-]").count();
-    if (items < 1) throw new Error("terminology did not persist");
+    await page.click("[data-testid=nav-toggle-valuesets]");
+    // rowTestId prepends the kind to the TabId (valueset:ws:<url>) —
+    // the ws marker lands twice.
+    await page.waitForSelector("[data-testid^=nav-item-valueset-valueset-ws-]", { timeout: 30_000 });
   });
 });

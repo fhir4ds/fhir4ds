@@ -1,12 +1,12 @@
 import type { EditorTab } from "../../lib/editorTabs";
 import { MeasurePane } from "../MeasurePane";
 import { ViewPane } from "../ViewPane";
-import { TerminologyPane } from "../TerminologyPane";
 import { ValuesetEditor } from "./ValuesetEditor";
 import type { ViewOverrides } from "../../lib/viewDerivation";
 import type { LibraryClosure } from "../../lib/libraryGraph";
 import type { FlattenViewResult } from "../../lib/protocol";
-import type { ParamBinding } from "../EditorPane";
+import type { ParamBinding } from "../../lib/params";
+import { ParameterEditor } from "./ParameterEditor";
 
 /**
  * WORKBENCH_REORG phase 3 — per-kind tab hosts (non-library kinds).
@@ -28,11 +28,10 @@ export interface TabHostProps {
   onMeasureMainLibraryChange?: (id: string) => void;
   measureClosure?: LibraryClosure;
   measureValuesetSources?: Record<string, "workspace" | "dataset">;
-  measureExpectedStatus?: { patients: number } | null;
+  measureExpectedReports?: Array<Record<string, unknown>>;
   onOpenExpected?: () => void;
   /* valueset */
   valueset: Record<string, unknown> | null;
-  valuesetProvenance?: string;
   onValuesetChange: (vs: Record<string, unknown>) => void;
   /* parameter */
   params: ParamBinding[];
@@ -49,11 +48,6 @@ export interface TabHostProps {
   onResult: (r: FlattenViewResult | null) => void;
   /* REORG 6e: settings recalc delay passed through to the view. */
   recalcMs?: number;
-  /* terminology (REORG 6e — drawer became an editor tab) */
-  terminologyDeclarations: Array<Record<string, unknown>>;
-  terminologyDatasetValuesets: Array<Record<string, unknown>>;
-  terminologyValuesets: Array<Record<string, unknown>>;
-  onTerminologyChange: (valuesets: Array<Record<string, unknown>>) => void;
 }
 
 export function TabHost(p: TabHostProps) {
@@ -70,7 +64,7 @@ export function TabHost(p: TabHostProps) {
           onMainLibraryChange={p.onMeasureMainLibraryChange}
           closure={p.measureClosure}
           valuesetSources={p.measureValuesetSources}
-          expectedStatus={p.measureExpectedStatus}
+          expectedReports={p.measureExpectedReports}
           onOpenExpected={p.onOpenExpected}
         />
       );
@@ -78,45 +72,13 @@ export function TabHost(p: TabHostProps) {
       return p.valueset ? (
         <ValuesetEditor
           valueset={p.valueset}
-          provenance={p.valuesetProvenance}
           onChange={p.onValuesetChange}
         />
       ) : (
         <p className="pane-hint">valueset not found: {p.tab.resourceId}</p>
       );
     case "parameter":
-      return (
-        <section className="pane" data-testid="parameter-editor">
-          <div className="pane-header">
-            <h2>Parameters</h2>
-            <span className="pane-meta">entrypoint bindings</span>
-          </div>
-          <div className="drawer-body pane-body">
-            {p.params.length === 0 && (
-              <p className="pane-hint">
-                No parameters declared in the entrypoint library.
-              </p>
-            )}
-            {p.params.map((param, i) => (
-              <label key={param.name} className="param-row builder-tree-row">
-                <span className="builder-caret placeholder" aria-hidden="true" />
-                <span className="builder-label">{param.name}</span>
-                <input
-                  data-testid={`param-input-${param.name}`}
-                  value={param.value}
-                  placeholder="value or start..end"
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    p.onParamsChange(
-                      p.params.map((x, j) => (j === i ? { ...x, value: v } : x)),
-                    );
-                  }}
-                />
-              </label>
-            ))}
-          </div>
-        </section>
-      );
+      return <ParameterEditor params={p.params} onChange={p.onParamsChange} />;
     case "test":
       return <>{p.builder}</>;
     case "expected":
@@ -131,15 +93,6 @@ export function TabHost(p: TabHostProps) {
           onSql={p.onSql}
           onResult={p.onResult}
           recalcMs={p.recalcMs}
-        />
-      );
-    case "terminology":
-      return (
-        <TerminologyPane
-          cqlDeclarations={p.terminologyDeclarations}
-          datasetValuesets={p.terminologyDatasetValuesets}
-          workspaceValuesets={p.terminologyValuesets}
-          onWorkspaceChange={p.onTerminologyChange}
         />
       );
     case "library":

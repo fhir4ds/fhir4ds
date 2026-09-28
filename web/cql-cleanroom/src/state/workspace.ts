@@ -14,7 +14,8 @@
  *  - viewDefs: [{ id, name, resource }] (stored ViewDefinition resources)
  *  - viewConfig: LEGACY override map kept until the View pane goes
  *    stored-mode (WORKBENCH_V6 phase 3); seeded alongside viewDefs.
- *  - paramBindings: { measureId: { param: value } }
+ *  - paramValues: { param: value } (global, v7; v6 per-measure
+ *    paramBindings collapse on migrate)
  *  - dataset: { resources: [...] } | null  (Tests drawer data)
  *  - cases: legacy row-form expectations, kept in sync with
  *    expectedReports for v5 zip interop
@@ -27,10 +28,11 @@ import {
   casesFromReports,
   expectedReportsFromCases,
 } from "../lib/expectedReports";
+import { toParametersResource } from "../lib/params";
 
 const DB_NAME = "cql-cleanroom";
 const STORE = "workspace";
-export const WORKSPACE_SCHEMA_VERSION = 6;
+export const WORKSPACE_SCHEMA_VERSION = 7;
 
 /** WORKBENCH_REORG §3.3/§3.5 — a saved evaluation run. Local-only
  * (IndexedDB document; NEVER in zip or share links — INV-4). */
@@ -110,8 +112,10 @@ export interface WorkspaceState {
   /** Authored expected MeasureReports, keyed by measure id. */
   expectedReports: Record<string, Array<Record<string, unknown>>>;
   viewDefs: WorkspaceViewDefEntry[];
-  /** Per-measure parameter bindings (v5 `paramValues` successor). */
-  paramBindings: Record<string, Record<string, string>>;
+  /** Parameter values by CQL parameter name — GLOBAL, not per-measure:
+   *  parameters belong to the primary library's declarations, and a
+   *  shared set holds the union as measures multiply (v7). */
+  paramValues: Record<string, string>;
   /** Local run history (§3.3); capped, pruned oldest-first. */
   runHistory: RunEntry[];
   /** Preferred results lens (§3.1): cql | measure | view. */
@@ -220,6 +224,17 @@ const MIGRATIONS: Record<number, (s: Record<string, unknown>) => Record<string, 
       paramBindings: measures[0] ? { [measures[0].id]: paramValues } : {},
     };
   },
+  // v6 -> v7: parameters go GLOBAL — the per-measure maps collapse into
+  // one name→value record (later measures win on conflicts; in practice
+  // there is exactly one).
+  6: (s) => {
+    const perMeasure =
+      (s.paramBindings as Record<string, Record<string, string>> | undefined) ??
+      {};
+    const merged: Record<string, string> = {};
+    for (const values of Object.values(perMeasure)) Object.assign(merged, values);
+    return { ...s, paramValues: merged };
+  },
 };
 
 export function migrate(state: Record<string, unknown>): WorkspaceState {
@@ -242,8 +257,7 @@ export function migrate(state: Record<string, unknown>): WorkspaceState {
     expectedReports:
       (current.expectedReports as WorkspaceState["expectedReports"]) ?? {},
     viewDefs: (current.viewDefs as WorkspaceViewDefEntry[]) ?? [],
-    paramBindings:
-      (current.paramBindings as WorkspaceState["paramBindings"]) ?? {},
+    paramValues: (current.paramValues as Record<string, string>) ?? {},
     runHistory: (current.runHistory as RunEntry[]) ?? [],
     activeTabPref: (current.activeTabPref as string) ?? "cql",
     terminology:
@@ -312,11 +326,13 @@ export async function clearWorkspace(): Promise<void> {
 // ---------------------------------------------------------------------------
 // Zip export/import (fflate; single source of truth = WorkspaceState)
 //
-// v6 layout: NN-name.cql, dataset.ndjson, cases.json, valuesets.json,
-// measures.json (entries + embedded expectedReports), viewdefs.json,
+// v7 layout: NN-name.cql, dataset.ndjson, cases.json, valuesets.json,
+// parameters.json (FHIR Parameters view of the bound values), measures.json
+// (entries + embedded expectedReports), viewdefs.json,
 // workspace.json (meta: libraries with ids, activeMeasureId,
-// paramBindings, prefs, activeTabPref, legacy viewConfig).
-// v5 zips (measure.json + paramValues) still import via MIGRATIONS[5].
+// paramValues, prefs, activeTabPref, legacy viewConfig).
+// v6 zips (paramBindings) and v5 zips (measure.json + paramValues) still
+// import via MIGRATIONS.
 // ---------------------------------------------------------------------------
 
 export function exportWorkspaceZip(state: Omit<WorkspaceState, "schemaVersion" | "savedAt">): Uint8Array {
@@ -362,6 +378,16 @@ export function exportWorkspaceZip(state: Omit<WorkspaceState, "schemaVersion" |
       JSON.stringify(state.terminology.valuesets, null, 1),
     );
   }
+  // v7: the FHIR Parameters view of the bound values — interop artifact
+  // for real engines; workspace.json keeps carrying the raw state.
+  const bound = Object.entries(state.paramValues ?? {}).filter(
+    ([, v]) => typeof v === "string" && v.trim() !== "",
+  );
+  if (bound.length) {
+    files["parameters.json"] = utf8Encode(
+      JSON.stringify(toParametersResource(Object.fromEntries(bound)), null, 1),
+    );
+  }
   // INV-4: runHistory is local-only — deliberately absent from the zip.
   const metaOut: Record<string, unknown> = {
     schemaVersion: WORKSPACE_SCHEMA_VERSION,
@@ -370,7 +396,7 @@ export function exportWorkspaceZip(state: Omit<WorkspaceState, "schemaVersion" |
     prefs: state.prefs,
     activeTabPref: state.activeTabPref,
     activeMeasureId: state.activeMeasureId,
-    paramBindings: state.paramBindings,
+    paramValues: state.paramValues,
   };
   if (state.viewConfig) {
     metaOut.viewConfig = state.viewConfig;
@@ -421,7 +447,7 @@ export function importWorkspaceZip(bytes: Uint8Array): Omit<WorkspaceState, "sch
   let measures: WorkspaceMeasureEntry[] = [];
   let expectedReports: WorkspaceState["expectedReports"] = {};
   let viewDefs: WorkspaceViewDefEntry[] = [];
-  let paramBindings: WorkspaceState["paramBindings"] = {};
+  let paramBindings: Record<string, Record<string, string>> = {};
   let measureV5: Record<string, unknown> | null = null;
   let viewConfigV5: WorkspaceViewConfig | null =
     (meta.viewConfig as WorkspaceViewConfig | null | undefined) ?? null;
@@ -473,7 +499,8 @@ export function importWorkspaceZip(bytes: Uint8Array): Omit<WorkspaceState, "sch
       }
     }
     paramBindings =
-      (meta.paramBindings as WorkspaceState["paramBindings"] | undefined) ?? {};
+      (meta.paramBindings as Record<string, Record<string, string>> | undefined) ??
+      {};
     schemaVersion = Math.max(schemaVersion, 5 + 1);
   } else if (files["measure.json"]) {
     const parsed = JSON.parse(decode(files["measure.json"]));
@@ -517,7 +544,7 @@ export function importWorkspaceZip(bytes: Uint8Array): Omit<WorkspaceState, "sch
     activeMeasureId: migrated.activeMeasureId,
     expectedReports: migrated.expectedReports,
     viewDefs: migrated.viewDefs,
-    paramBindings: migrated.paramBindings,
+    paramValues: migrated.paramValues,
     runHistory: [], // local-only: imports never restore runs (INV-4)
     activeTabPref: migrated.activeTabPref,
     prefs: migrated.prefs,

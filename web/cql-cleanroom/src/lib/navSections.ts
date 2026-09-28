@@ -34,6 +34,8 @@ export interface NavItem {
   kind: NavKind;
   label: string;
   sublabel?: string;
+  /** Small chip on the row's right edge (e.g. resource version). */
+  pill?: string;
   entry?: boolean;
   error?: boolean;
   /** Row payload for handlers (index, resource, source, …). */
@@ -51,20 +53,35 @@ export function filterItems(items: NavItem[], q: string): NavItem[] {
   );
 }
 
+/** Pull `library <name> version '<ver>'` out of the CQL header — the
+ *  text is authoritative, so the nav labels default from it. */
+export function parseLibraryHeader(
+  text: string,
+): { name?: string; version?: string } {
+  const m = /\blibrary\s+([A-Za-z][A-Za-z0-9_]*)\s*(?:version\s+'([^']*)')?/.exec(
+    text,
+  );
+  if (!m) return {};
+  return { name: m[1], version: m[2] };
+}
+
 export function libraryItems(
   libraries: WorkspaceLibrary[],
   entrypointId: string | null,
   errorsById?: Record<string, boolean>,
 ): NavItem[] {
-  return libraries.map((lib, i) => ({
-    id: `library:${lib.id}`,
-    kind: "library" as const,
-    label: lib.name,
-    sublabel: lib.text.split("\n")[0]?.trim() || undefined,
-    entry: lib.id === entrypointId,
-    error: errorsById?.[lib.id] === true,
-    meta: { index: i, libraryId: lib.id },
-  }));
+  return libraries.map((lib, i) => {
+    const header = parseLibraryHeader(lib.text);
+    return {
+      id: `library:${lib.id}`,
+      kind: "library" as const,
+      label: header.name ?? lib.name,
+      pill: header.version,
+      entry: lib.id === entrypointId,
+      error: errorsById?.[lib.id] === true,
+      meta: { index: i, libraryId: lib.id },
+    };
+  });
 }
 
 export function measureItems(
@@ -75,16 +92,42 @@ export function measureItems(
     const name =
       typeof m.resource?.name === "string"
         ? (m.resource.name as string)
-        : "(unauthored)";
+        : undefined;
+    const version =
+      typeof m.resource?.version === "string"
+        ? (m.resource.version as string)
+        : undefined;
     return {
       id: `measure:${m.id}`,
       kind: "measure" as const,
-      label: name,
-      sublabel: m.resource ? `entry: ${m.mainLibraryId}` : "no populations yet",
+      label: name ?? m.id,
+      pill: version,
       entry: m.id === activeMeasureId,
-      meta: { measureId: m.id, mainLibraryId: m.mainLibraryId },
+      meta: {
+        measureId: m.id,
+        mainLibraryId: m.mainLibraryId,
+        name,
+      },
     };
   });
+}
+
+/** Human label for a ValueSet resource: `name`, then `title`, then `id`,
+ *  then the url's last path segment (fresh workspace valuesets are born
+ *  with only a generated url). Undefined when the resource is unusable. */
+export function valuesetLabel(
+  v: Record<string, unknown> | null | undefined,
+): string | undefined {
+  if (!v) return undefined;
+  const str = (k: string) =>
+    typeof v[k] === "string" && (v[k] as string).trim() !== ""
+      ? (v[k] as string)
+      : undefined;
+  const url = str("url");
+  const seg = url?.includes("/")
+    ? url.slice(url.lastIndexOf("/") + 1)
+    : undefined;
+  return str("name") ?? str("title") ?? str("id") ?? seg ?? url;
 }
 
 /** Workspace ValueSets override dataset ones by url (same merge rule as
@@ -101,17 +144,28 @@ export function valuesetItems(
   const ws = workspaceValuesets.map((v, i) => ({
     id: `valueset:ws:${String(v.url ?? i)}`,
     kind: "valueset" as const,
-    label: String(v.name ?? v.id ?? v.url ?? `valueset ${i + 1}`),
-    sublabel: String(v.url ?? ""),
-    meta: { source: "workspace" as const, index: i, url: v.url },
+    label: valuesetLabel(v) ?? `valueset ${i + 1}`,
+    pill:
+      typeof v.version === "string" && v.version.trim() !== ""
+        ? v.version
+        : undefined,
+    meta: {
+      source: "workspace" as const,
+      index: i,
+      url: v.url,
+      name: typeof v.name === "string" ? v.name : undefined,
+    },
   }));
   const ds = datasetValuesets
     .filter((v) => !(typeof v?.url === "string" && wsUrls.has(v.url)))
     .map((v, i) => ({
       id: `valueset:ds:${String(v.url ?? i)}`,
       kind: "valueset" as const,
-      label: String(v.name ?? v.id ?? v.url ?? `dataset valueset ${i + 1}`),
-      sublabel: String(v.url ?? ""),
+      label: valuesetLabel(v) ?? `dataset valueset ${i + 1}`,
+      pill:
+        typeof v.version === "string" && v.version.trim() !== ""
+          ? v.version
+          : undefined,
       meta: { source: "dataset" as const, url: v.url },
     }));
   return [...ws, ...ds];

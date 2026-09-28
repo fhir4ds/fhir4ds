@@ -43,6 +43,7 @@ import {
   measureItems,
   parameterItems,
   valuesetItems,
+  valuesetLabel,
   viewItems,
 } from "./lib/navSections";
 import type { NavItem, NavSectionId } from "./lib/navSections";
@@ -83,6 +84,7 @@ import type {
   FlattenViewResult,
   EvaluateResult,
   Diagnostics,
+  VerifyEnvelope,
 } from "./lib/protocol";
 import {
   clearWorkspace,
@@ -131,11 +133,6 @@ const DEFAULT_DATASET_RESOURCES: Array<Record<string, unknown>> = [
   { resourceType: "Patient", id: "p2", gender: "male", name: [{ given: ["Bob"] }] },
   { resourceType: "Patient", id: "p3", gender: "female" },
 ];
-
-// Stable empty bindings — ResultsPane's auto-eval effect keys on the
-// parameters object; a fresh {} per render would re-arm the 2s debounce
-// forever (each auto-run then clobbers the run-diff baseline).
-const EMPTY_PARAM_VALUES: Record<string, string> = {};
 
 const DEFAULT_MEASURE: Record<string, unknown> = {
   resourceType: "Measure",
@@ -249,9 +246,9 @@ export default function App() {
   const [viewDefs, setViewDefs] = useState<
     Array<{ id: string; name: string; resource: Record<string, unknown> }>
   >([]);
-  const [paramBindings, setParamBindings] = useState<
-    Record<string, Record<string, string>>
-  >({});
+  // Parameter values are GLOBAL (v7): keyed by CQL parameter name, not
+  // by measure — the declarations belong to the primary library.
+  const [paramValues, setParamValues] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState(0);
   // Per-library parse-error map (rail badges), fed by EditorPane
   // diagnostics for the active library. activeTabRef mirrors activeTab
@@ -310,18 +307,10 @@ export default function App() {
     0,
     libraries.findIndex((l) => l.id === activeMeasureEntry?.mainLibraryId),
   );
-  const paramValues = useMemo(
-    () => paramBindings[activeMeasureEntry?.id ?? ""] ?? EMPTY_PARAM_VALUES,
-    [paramBindings, activeMeasureEntry?.id],
-  );
   const expectedValues = useMemo(
     () => expectedMapFromReports(expectedReports[activeMeasureEntry?.id ?? ""]),
     [expectedReports, activeMeasureEntry?.id],
   );
-  const updateParamValues = (next: Record<string, string>) => {
-    if (!activeMeasureEntry) return;
-    setParamBindings((pb) => ({ ...pb, [activeMeasureEntry.id]: next }));
-  };
   const updateExpectedValues = (
     next: { [pid: string]: { [code: string]: boolean } } | null,
   ) => {
@@ -390,11 +379,14 @@ export default function App() {
   // the console Results/SQL/Diagnostics sub-tabs and the col2 panes
   // all render from this single run.
   const [evalResult, setEvalResult] = useState<EvaluateResult | null>(null);
-  const [evalDiags, setEvalDiags] = useState<Diagnostics[] | null>(null);
-  const [evalBusy, setEvalBusy] = useState(false);
   const evalBusyRef = useRef(false);
   const evalSeqRef = useRef(0);
   const [viewResult, setViewResult] = useState<FlattenViewResult | null>(null);
+  // 6h: expected-vs-actual verify result — rendered in the CONSOLE's
+  // Compare tab (tests context), not inside the TestsPane.
+  const [verifyResult, setVerifyResult] = useState<VerifyEnvelope | null>(
+    null,
+  );
   // Row-shaped memberships + hashes of the LATEST evaluation (compare
   // target + drift reference). Cleared when inputs change. The read side
   // rides baselineArtifact via runHistory; currentRun itself is the
@@ -453,6 +445,33 @@ export default function App() {
   // REORG 6e: Tests L3 drill-in — which patient's detail panel is slid
   // out over the Tests list (null = L2).
   const [focusedPid, setFocusedPid] = useState<string | null>(null);
+  // REORG 6h: resizable L2 panel / L3 detail widths (px), persisted in
+  // localStorage — chrome, not workspace data.
+  const [navWidths, setNavWidths] = useState<{ panel: number; detail: number }>(
+    () => {
+      try {
+        const raw = localStorage.getItem("cleanroom:nav-widths");
+        if (raw) {
+          const p = JSON.parse(raw) as { panel?: number; detail?: number };
+          return {
+            panel: typeof p.panel === "number" ? p.panel : 198,
+            detail: typeof p.detail === "number" ? p.detail : 284,
+          };
+        }
+      } catch {
+        /* fresh start */
+      }
+      return { panel: 198, detail: 284 };
+    },
+  );
+  const updateNavWidths = (w: { panel: number; detail: number }) => {
+    setNavWidths(w);
+    try {
+      localStorage.setItem("cleanroom:nav-widths", JSON.stringify(w));
+    } catch {
+      /* private mode */
+    }
+  };
   // §3.2: per-patient `+` context — subject-class pickers default to
   // Patient/<id> (builder v2 consumes; v1 ignores gracefully).
   const [builderContext, setBuilderContext] = useState<{
@@ -537,8 +556,8 @@ export default function App() {
           defaults[pm[1]] = "2026-01-01T00:00:00.0..2026-12-31T23:59:59.999";
         }
       }
-      if (Object.keys(defaults).length && msrId) {
-        setParamBindings((pb) => ({ ...pb, [msrId]: defaults }));
+      if (Object.keys(defaults).length) {
+        setParamValues(defaults);
       }
       setStatusNote(`loaded example ${example}: ${resources.length} resources`);
     } catch (e) {
@@ -605,8 +624,8 @@ export default function App() {
         if (ws?.viewDefs?.length) {
           setViewDefs(ws.viewDefs);
         }
-        if (ws?.paramBindings) {
-          setParamBindings(ws.paramBindings);
+        if (ws?.paramValues) {
+          setParamValues(ws.paramValues);
         }
         if (ws?.viewConfig) {
           setViewConfig(ws.viewConfig);
@@ -619,11 +638,11 @@ export default function App() {
           (ws.activeTabPref === "results" ||
             ws.activeTabPref === "sql" ||
             ws.activeTabPref === "ast" ||
-            ws.activeTabPref === "diags" ||
             ws.activeTabPref === "mr" ||
             ws.activeTabPref === "funnel" ||
             ws.activeTabPref === "view")
         ) {
+          // legacy "diags" prefs aren't restored — Results owns errors
           setConsoleTab(ws.activeTabPref);
         }
         if (ws && ws.terminology?.valuesets?.length) {
@@ -685,7 +704,7 @@ export default function App() {
         activeMeasureId,
         expectedReports,
         viewDefs,
-        paramBindings,
+        paramValues,
         viewConfig,
         runHistory,
         activeTabPref: consoleTab,
@@ -700,7 +719,7 @@ export default function App() {
     activeMeasureId,
     expectedReports,
     viewDefs,
-    paramBindings,
+    paramValues,
     viewConfig,
     runHistory,
     consoleTab,
@@ -766,8 +785,6 @@ export default function App() {
     if (!canAutoEval) return;
     const seq = ++evalSeqRef.current;
     evalBusyRef.current = true;
-    setEvalBusy(true);
-    setEvalDiags(null);
     try {
       const resp = await workerRequest({
         type: "evaluate_library",
@@ -855,7 +872,6 @@ export default function App() {
           setLastReports(null);
         }
       } else {
-        setEvalDiags(env.diagnostics ?? []);
         setLastReports(null);
         // REORG 6g: failures are results too — replayable from the ring
         // (CQL + diagnostics). No artifact, so the diff baseline's
@@ -882,7 +898,6 @@ export default function App() {
       }
     } finally {
       evalBusyRef.current = false;
-      setEvalBusy(false);
     }
   };
 
@@ -926,27 +941,6 @@ export default function App() {
       ),
     );
   }, [entrypoint, libraries, mainLib, restored, measure, activeMeasureEntry]);
-
-
-  // G2: ValueSet declarations of the ACTIVE library (for the rail-linked
-  // Terminology pane); parsed debounced through the worker.
-  const [activeDeclarations, setActiveDeclarations] = useState<
-    Array<Record<string, unknown>>
-  >([]);
-  useEffect(() => {
-    const t = setTimeout(() => {
-      void workerRequest({ type: "parse_cql", text: active.text })
-        .then((resp) => {
-          const env = JSON.parse(resp.envelope) as {
-            ok: boolean;
-            declarations?: Array<Record<string, unknown>>;
-          };
-          setActiveDeclarations(env.ok ? env.declarations ?? [] : []);
-        })
-        .catch(() => undefined);
-    }, 600);
-    return () => clearTimeout(t);
-  }, [active.text]);
 
 
   const updateActiveText = (text: string) => {
@@ -1088,7 +1082,7 @@ export default function App() {
       activeMeasureId,
       expectedReports,
       viewDefs,
-      paramBindings,
+      paramValues,
       viewConfig,
       runHistory,
       activeTabPref: consoleTab,
@@ -1187,7 +1181,7 @@ export default function App() {
       }
       setExpectedReports(state.expectedReports ?? {});
       setViewDefs(state.viewDefs ?? []);
-      setParamBindings(state.paramBindings ?? {});
+      setParamValues(state.paramValues ?? {});
       setViewConfig(state.viewConfig ?? null);
       setTerminology(state.terminology ?? { valuesets: [] });
     } catch (e) {
@@ -1211,9 +1205,9 @@ export default function App() {
     (dataset?.valueset_resources ?? []) as Array<Record<string, unknown>>,
   );
   const navParameterItems = parameterItems(
-    detectParams(mainLib.text).map((name) => ({
-      name,
-      value: paramValues[name] ?? "",
+    detectParams(mainLib.text).map((d) => ({
+      name: d.name,
+      value: paramValues[d.name] ?? "",
     })),
   );
   const navExpectedItems = expectedItems(measures, expectedReports);
@@ -1269,11 +1263,6 @@ export default function App() {
       const { [measureId]: _drop, ...rest } = er;
       return rest;
     });
-    setParamBindings((pb) => {
-      if (!(measureId in pb)) return pb;
-      const { [measureId]: _drop, ...rest } = pb;
-      return rest;
-    });
     if (activeMeasureId === measureId) {
       setActiveMeasureId(measures.find((m) => m.id !== measureId)?.id ?? null);
     }
@@ -1300,17 +1289,19 @@ export default function App() {
     }
   };
 
-  // REORG 6e: the rail T button toggles Terminology as an editor tab;
-  // closing restores whatever the (possibly hidden) library editor was
-  // showing via the neighbor rule (library tabs sit on both sides in
-  // practice).
-  const toggleTerminologyTab = () => {
-    const id = tabId("terminology", "workspace");
-    if (activeEditorTabId === id) {
-      closeEditorTabById(id);
-    } else {
-      openEditorTab("terminology", "workspace");
-    }
+  // 6h: the terminology chrome is gone — the Valuesets nav section's "+"
+  // creates a fresh workspace ValueSet and opens its editor tab.
+  const addWorkspaceValueset = () => {
+    const url = `urn:cleanroom:vs:${Date.now().toString(36)}`;
+    setTerminology({
+      valuesets: [
+        ...terminology.valuesets.filter(
+          (v) => String((v as { url?: string }).url ?? "") !== url,
+        ),
+        { resourceType: "ValueSet", url, compose: { include: [] } },
+      ],
+    });
+    openEditorTab("valueset", `ws:${url}`);
   };
 
   // REORG 6e: Ctrl/Cmd+Enter — run the current selection (or the whole
@@ -1483,6 +1474,18 @@ export default function App() {
       } else {
         setStatusNote(`invalid library name: ${name}`);
       }
+    } else if (kind === "valueset") {
+      // Nav ids are url-keyed (`valueset:ws:<url>`) — the rename writes
+      // `name` onto the workspace copy; dataset valuesets aren't renamable.
+      if (!resId.startsWith("ws:")) return;
+      const url = resId.slice(3);
+      setTerminology({
+        valuesets: terminology.valuesets.map((v) =>
+          String((v as { url?: string }).url ?? "") === url
+            ? { ...v, name }
+            : v,
+        ),
+      });
     }
   };
 
@@ -1527,7 +1530,8 @@ export default function App() {
         onSelect: () =>
           setRenaming({
             id: item.id,
-            value: item.label === "(unauthored)" ? "" : item.label,
+            value:
+              typeof item.meta?.name === "string" ? item.meta.name : "",
           }),
       });
       items.push({
@@ -1536,6 +1540,15 @@ export default function App() {
         onSelect: () => deleteMeasureEntry(item.meta?.measureId as string),
       });
     } else if (item.kind === "valueset" && item.meta?.source === "workspace") {
+      items.push({
+        label: "Rename valueset",
+        onSelect: () =>
+          setRenaming({
+            id: item.id,
+            value:
+              typeof item.meta?.name === "string" ? item.meta.name : "",
+          }),
+      });
       items.push({
         label: "Delete valueset",
         danger: true,
@@ -1591,17 +1604,28 @@ export default function App() {
           typeof name === "string" && name ? name : t.resourceId;
         break;
       }
-      case "valueset":
-        tabLabels[t.id] = t.resourceId.replace(/^(ws|ds):/, "");
+      case "valueset": {
+        // Tab identity follows the nav label (name → title → id → url
+        // segment) so a nav rename retitles the tab too.
+        const m = /^([a-z]+):(.*)$/.exec(t.resourceId);
+        const src = m?.[1] ?? "ws";
+        const url = m?.[2] ?? "";
+        const pool: Array<Record<string, unknown>> =
+          src === "ds"
+            ? ((dataset?.valueset_resources ??
+                []) as Array<Record<string, unknown>>)
+            : terminology.valuesets;
+        tabLabels[t.id] =
+          valuesetLabel(
+            pool.find((v) => (v as { url?: string }).url === url),
+          ) ?? url;
         break;
+      }
       case "expected":
         tabLabels[t.id] =
           t.resourceId === "grid"
             ? "Expected Results"
             : t.resourceId.replace(/^Patient\//, "");
-        break;
-      case "terminology":
-        tabLabels[t.id] = "Terminology";
         break;
       case "view":
         tabLabels[t.id] =
@@ -1620,6 +1644,10 @@ export default function App() {
         }
         break;
       }
+      case "parameter":
+        // One shared form for the whole binding set (values are global).
+        tabLabels[t.id] = "Parameters";
+        break;
       default:
         tabLabels[t.id] = t.resourceId;
     }
@@ -1695,6 +1723,24 @@ export default function App() {
     openEditorTab("expected", "grid");
   };
 
+  /** 6h: "+" on Measures — a blank measure (population skeleton pointing
+   *  at the demo define names) bound to the entrypoint library; it
+   *  becomes the active measure and opens its editor tab. */
+  const addMeasure = () => {
+    const id = newMeasureId(measures);
+    const entry = {
+      id,
+      mainLibraryId: active?.id ?? "lib_0",
+      resource: {
+        ...DEFAULT_MEASURE,
+        name: `Measure${measures.length + 1}`,
+      },
+    };
+    setMeasures((ms) => [...ms, entry]);
+    setActiveMeasureId(id);
+    openEditorTab("measure", id);
+  };
+
   // REORG 6d: every measure gets ONE default derived ViewDefinition
   // ("View 1", vd_default) so the nav's Views section lists a clickable
   // resource out of the box. One-shot per measure id: reset does not
@@ -1746,7 +1792,9 @@ export default function App() {
       ? "measure"
       : hostTab?.kind === "view"
         ? "view"
-        : "library";
+        : hostTab?.kind === "expected"
+          ? "tests"
+          : "library";
   const consoleNode = (
     <ResultsConsole
       libraries={mainLibs}
@@ -1756,8 +1804,6 @@ export default function App() {
       outputColumns={outputColumns}
       selection={consoleSelection}
       result={evalResult}
-      evalDiags={evalDiags}
-      busy={evalBusy}
       baselineArtifact={baselineArtifact}
       context={consoleContext}
       mrOutput={
@@ -1774,6 +1820,7 @@ export default function App() {
       viewOutput={
         <ViewOutputPanel viewResult={viewResult} runDiff={appRunDiff} />
       }
+      verifyResult={verifyResult}
       activeTab={consoleTab}
       onTabChange={setConsoleTab}
     />
@@ -1833,6 +1880,20 @@ export default function App() {
                 <option value="5">5s</option>
                 <option value="10">10s</option>
                 <option value="0">Off</option>
+              </select>
+            </label>
+            <label className="settings-row">
+              <span>Bundle import</span>
+              <select
+                data-testid="bundle-mode"
+                title="bundle import mode"
+                value={bundleMode}
+                onChange={(e) =>
+                  setBundleMode(e.target.value as "merge" | "replace")
+                }
+              >
+                <option value="merge">Merge</option>
+                <option value="replace">Replace</option>
               </select>
             </label>
           </DropdownMenu>
@@ -1895,15 +1956,6 @@ export default function App() {
             </button>
           </DropdownMenu>
           <button
-            data-testid="bundle-mode"
-            onClick={() =>
-              setBundleMode((m) => (m === "merge" ? "replace" : "merge"))
-            }
-            title="bundle import mode"
-          >
-            mode: {bundleMode}
-          </button>
-          <button
             data-testid="workspace-reset"
             onClick={() => {              // Await the clear BEFORE setting state — fire-and-forget
               // raced the debounced autosave, resurrecting stale prefs
@@ -1927,10 +1979,9 @@ export default function App() {
                 setViewConfig(null);
                 setRunHistory([]);
                 setEvalResult(null);
-                setEvalDiags(null);
                 setConsoleTab("results");
                 setCurrentRun(null);
-                setParamBindings({});
+                setParamValues({});
                 void clearWorkspace().catch(() => undefined);
               }
             }}
@@ -1979,12 +2030,13 @@ export default function App() {
         data-testid="app-main"
         style={
           {
-            "--nav-w":
-              navPanel
-                ? focusedPid && navPanel === "tests"
-                  ? "556px"
-                  : "264px"
-                : "52px",
+            "--nav-w": navPanel
+              ? focusedPid && navPanel === "tests"
+                ? `calc(74px + ${navWidths.panel}px + ${navWidths.detail}px)`
+                : `calc(66px + ${navWidths.panel}px)`
+              : "52px",
+            "--navpanel-w": `${navWidths.panel}px`,
+            "--navdetail-w": `${navWidths.detail}px`,
             "--col1-fr": `${col1Fr}fr`,
             "--editor-fr": `${editorFr}fr`,
           } as React.CSSProperties
@@ -1999,7 +2051,6 @@ export default function App() {
             tests: {
               ...navSectionModels.tests,
               filter: navFilters.tests,
-              showFilter: false,
             },
             expected: { ...navSectionModels.expected, filter: navFilters.expected },
             views: { ...navSectionModels.views, filter: navFilters.views },
@@ -2022,10 +2073,15 @@ export default function App() {
           onRenameCommit={commitRename}
           onRenameCancel={() => setRenaming(null)}
           onAddLibrary={addTab}
+          onAddMeasures={addMeasure}
+          onAddTests={addNewDatasetResource}
           onAddView={addStoredView}
           onAddExpected={openExpectedEditor}
-          onTerminologyOpen={toggleTerminologyTab}
-          terminologyOpen={hostTab?.kind === "terminology"}
+          onAddValuesets={addWorkspaceValueset}
+          panelWidth={navWidths.panel}
+          detailWidth={navWidths.detail}
+          onPanelWidth={(w) => updateNavWidths({ ...navWidths, panel: w })}
+          onDetailWidth={(w) => updateNavWidths({ ...navWidths, detail: w })}
           focusedPid={focusedPid}
           detailSlot={
             focusedGroup ? (
@@ -2044,8 +2100,7 @@ export default function App() {
               dataset={dataset}
               focusedPid={focusedPid}
               onFocusedPidChange={setFocusedPid}
-              onAddForPatient={addResourceForPatient}
-              onAddNew={addNewDatasetResource}
+              filter={navFilters.tests}
             />
           }
         />
@@ -2085,16 +2140,6 @@ export default function App() {
           {hostTab && (
             <TabHost
               tab={hostTab}
-              terminologyDeclarations={activeDeclarations}
-              terminologyDatasetValuesets={
-                (dataset?.valueset_resources ?? []) as Array<
-                  Record<string, unknown>
-                >
-              }
-              terminologyValuesets={terminology.valuesets}
-              onTerminologyChange={(valuesets) =>
-                setTerminology({ valuesets })
-              }
               measure={measure}
               onMeasureChange={updateActiveMeasure}
               measureLibs={mainLibs}
@@ -2107,38 +2152,64 @@ export default function App() {
               onMeasureMainLibraryChange={setMainLibrary}
               measureClosure={measureClosure}
               measureValuesetSources={measureValuesetSources}
-              measureExpectedStatus={{
-                patients: (expectedReports[activeMeasureEntry?.id ?? ""] ?? [])
-                  .length,
-              }}
+              measureExpectedReports={
+                expectedReports[activeMeasureEntry?.id ?? ""] ?? []
+              }
               onOpenExpected={openExpectedEditor}
               valueset={hostValueset}
-              valuesetProvenance={
-                hostTab.kind === "valueset" && hostValueset
-                  ? hostTab.resourceId.startsWith("ds:")
-                    ? "imported"
-                    : "edited"
-                  : undefined
-              }
               onValuesetChange={(vs) => {
-                const url = String(vs.url ?? "");
+                const nextUrl = String(vs.url ?? "");
+                // The tab's resourceId (`ws:<url>`) is the identity of the
+                // entry being edited. Editing the URL FIELD changes that
+                // identity: swap out the OLD entry (not just same-url
+                // ones) and re-key the tab, or the codes would land on a
+                // stale duplicate while the renamed valueset stays empty.
+                const tabUrl =
+                  hostTab?.kind === "valueset" &&
+                  hostTab.resourceId.startsWith("ws:")
+                    ? hostTab.resourceId.slice(3)
+                    : null;
+                const oldTabId = hostTab?.id ?? null;
                 setTerminology({
                   valuesets: [
-                    ...terminology.valuesets.filter(
-                      (v) => String((v as { url?: string }).url ?? "") !== url,
-                    ),
+                    ...terminology.valuesets.filter((v) => {
+                      const u = String((v as { url?: string }).url ?? "");
+                      if (u === nextUrl) return false;
+                      if (tabUrl !== null && u === tabUrl && nextUrl !== tabUrl) {
+                        return false;
+                      }
+                      return true;
+                    }),
                     vs,
                   ],
                 });
+                if (
+                  oldTabId &&
+                  tabUrl !== null &&
+                  nextUrl &&
+                  nextUrl !== tabUrl
+                ) {
+                  const newTabId: TabId = `valueset:ws:${nextUrl}`;
+                  setEditorTabs((ts) =>
+                    ts.map((t) =>
+                      t.id === oldTabId
+                        ? { ...t, id: newTabId, resourceId: `ws:${nextUrl}` }
+                        : t,
+                    ),
+                  );
+                  setActiveEditorTabId((cur) =>
+                    cur === oldTabId ? newTabId : cur,
+                  );
+                }
               }}
-              params={detectParams(mainLib.text).map((name) => ({
-                name,
-                value: paramValues[name] ?? "",
+              params={detectParams(mainLib.text).map((d) => ({
+                ...d,
+                value: paramValues[d.name] ?? "",
               }))}
               onParamsChange={(next) => {
                 const vals: Record<string, string> = {};
                 for (const p of next) vals[p.name] = p.value;
-                updateParamValues(vals);
+                setParamValues(vals);
               }}
               builder={
                 <ResourceBuilderPane
@@ -2175,6 +2246,8 @@ export default function App() {
                   expectedValues={expectedValues}
                   onExpectedValuesChange={updateExpectedValues}
                   measure={measure}
+                  parameters={runtimeParameters}
+                  onVerifyResult={setVerifyResult}
                 />
               }
               measureReports={lastReports}

@@ -68,7 +68,7 @@ test.describe("builder v2 recursion", () => {
     await resetWorkspace(page);
 
     // WORKBENCH_REORG phase 5: the builder is a test editor tab now.
-    await page.click("[data-testid=dataset-add-new]");
+    await page.click("[data-testid=nav-add-tests]");
     await page.waitForSelector("[data-testid=builder-field-id]", {
       timeout: 15_000,
     });
@@ -101,10 +101,14 @@ test.describe("builder v2 recursion", () => {
     await resetWorkspace(page);
     await page.waitForSelector("[data-testid=dataset-tree]");
 
-    // Per-patient + on p1: opens the builder for a new resource with
-    // a subject-class field preseeded to Patient/p1 (Observation has
-    // no subject-class field at top level in the demo SD — Condition
-    // does). Use Condition.
+    // Per-patient add lives in the L3 detail now (6h: L2 rows have no
+    // per-row +): drill into p1, then add with the subject preseeded to
+    // Patient/p1 (Observation has no subject-class field at top level
+    // in the demo SD — Condition does). Use Condition.
+    await page.click("[data-testid=dataset-group-p1]");
+    await page.waitForSelector("[data-testid=dataset-add-p1]", {
+      timeout: 10_000,
+    });
     await page.click("[data-testid=dataset-add-p1]");
     // L3 drill-in: watch the auto-saved Condition land in p1's groups.
     await page.click("[data-testid=dataset-group-p1]");
@@ -146,10 +150,11 @@ test.describe("bundle export/import", () => {
     const path = await download.path();
     if (!path) throw new Error("no download path");
 
-    // Wipe + re-import in replace mode (click-toggle button).
+    // Wipe + re-import in replace mode (6h: mode select lives in Settings).
     await page.click("[data-testid=workspace-reset]");
     await page.waitForTimeout(1200);
-    await page.click("[data-testid=bundle-mode]"); // merge -> replace
+    await page.click("[data-testid=settings-menu]");
+    await page.selectOption("[data-testid=bundle-mode]", "replace");
     await page.setInputFiles("[data-testid=bundle-import-input]", path);
     await waitDatasetResources(page, 3, 30_000);
   });

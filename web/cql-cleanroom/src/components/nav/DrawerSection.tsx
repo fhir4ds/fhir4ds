@@ -90,7 +90,7 @@ export function DrawerRow({
   onRenameCommit,
   onRenameCancel,
 }: {
-  item: { id: string; label: string; sublabel?: string; entry?: boolean; error?: boolean };
+  item: { id: string; label: string; sublabel?: string; pill?: string; entry?: boolean; error?: boolean };
   active?: boolean;
   testId: string;
   onClick?: () => void;
@@ -138,6 +138,11 @@ export function DrawerRow({
     >
       <span className="nav-item-label">{item.label}</span>
       {item.sublabel && <span className="nav-item-sub">{item.sublabel}</span>}
+      {item.pill && (
+        <span className="nav-item-pill" title="version">
+          {item.pill}
+        </span>
+      )}
       {item.entry && <span className="rail-badge entry" aria-label="active" />}
       {item.error && <span className="rail-badge err" aria-label="error" />}
     </button>

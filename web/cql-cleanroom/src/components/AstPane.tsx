@@ -90,29 +90,23 @@ function AstTreeNode({
 
 export function AstTree({ cqlText }: Props) {
   const [parse, setParse] = useState<ParseResult | null>(null);
-  const [loading, setLoading] = useState(false);
   const [filterText, setFilterText] = useState("");
 
-  // Auto-parse on mount AND on text change — the tree opens ready;
-  // the Refresh button re-runs the same parse.
-  const runParse = async () => {
-    setLoading(true);
-    try {
-      const resp = await workerRequest({
-        type: "parse_cql",
-        text: cqlText,
-        include_ast: true,
-      });
-      if (resp?.ok && resp.envelope) {
-        setParse(JSON.parse(resp.envelope));
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Auto-parse on mount AND on text change — the tree tracks edits, so
+  // there is no refresh control (a manual button re-ran the same parse).
   useEffect(() => {
-    void runParse();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    workerRequest({
+      type: "parse_cql",
+      text: cqlText,
+      include_ast: true,
+    }).then((resp) => {
+      if (cancelled || !resp?.ok || !resp.envelope) return;
+      setParse(JSON.parse(resp.envelope));
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [cqlText]);
 
   const statements = useMemo(() => {
@@ -124,17 +118,6 @@ export function AstTree({ cqlText }: Props) {
   return (
     <div className="ast-inline" data-testid="ast-inline">
       <div className="inspection-row ast-filter-row">
-        <span className="pane-meta">
-          {loading ? "parsing…" : parse ? "parsed" : ""}
-        </span>
-        <button
-          type="button"
-          data-testid="ast-load"
-          onClick={() => void runParse()}
-          disabled={loading}
-        >
-          Refresh
-        </button>
         <input
           data-testid="ast-filter"
           value={filterText}
