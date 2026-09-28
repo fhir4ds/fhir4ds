@@ -728,15 +728,23 @@ export default function App() {
   ]);
 
   const active = libraries[activeTab] ?? libraries[0];
-  // G1 invariant: evaluation always uses the ENTRYPOINT library, never
-  // merely the edited tab (multi-library include flows).
+  // G1 invariant: measure surfaces (MR/funnel/expected) always pin to
+  // the ENTRYPOINT library, never merely the edited tab.
   const mainLib = libraries[entrypoint] ?? active;
+  // REORG 6j — runs follow the ACTIVE library tab: opening/executing a
+  // specific library evaluates and displays THAT library's output.
+  // Host tabs (measure/params/valuesets/…) and the hidden editor fall
+  // back to the entrypoint so the measure heartbeat stays truthful.
+  const activeTabIsLibrary =
+    !activeEditorTabId || parseTabId(activeEditorTabId).kind === "library";
+  const runLib = activeTabIsLibrary ? active : mainLib;
+  const runIsEntrypoint = runLib === mainLib;
   // Stable identity across re-renders (same name+text → same object):
   // the auto-eval effect keys on [main, [main]] — a fresh object per
   // render would re-trigger the 2s debounce forever.
   const main = useMemo<LibraryText>(
-    () => ({ name: mainLib.name, text: mainLib.text }),
-    [mainLib.name, mainLib.text],
+    () => ({ name: runLib.name, text: runLib.text }),
+    [runLib.name, runLib.text],
   );
   const mainLibs = useMemo<LibraryText[]>(() => [main], [main]);
   // 6f: the primary library's include closure + valueset declarations,
@@ -788,7 +796,9 @@ export default function App() {
         main,
         dataset: evalDataset,
         parameters: runtimeParameters,
-        output_columns: outputColumns,
+        // 6j: non-entrypoint targets have no population defines — the
+        // engine returns ALL of that library's defines instead.
+        output_columns: runIsEntrypoint ? outputColumns : undefined,
         emit_sql: true,
       });
       const env: EvaluateResult = JSON.parse(resp.envelope);
@@ -811,6 +821,7 @@ export default function App() {
           // render from the run's own snapshot, not live state.
           payload: {
             mode: "library",
+            library: runLib.name,
             cql: main.text,
             sql: env.sql,
             rows: env.rows,
@@ -846,7 +857,8 @@ export default function App() {
         });
         // Materialize per-patient MeasureReports from the evaluation
         // rows — the MR pane's render source and the view's default.
-        if (measure) {
+        // 6j: only entrypoint runs carry population shape.
+        if (measure && runIsEntrypoint) {
           try {
             const repResp = await workerRequest({
               type: "measure_report_from_rows",
@@ -884,6 +896,7 @@ export default function App() {
               artifact: null,
               payload: {
                 mode: "library",
+                library: runLib.name,
                 cql: main.text,
                 diags: env.diagnostics ?? [],
               },
@@ -903,10 +916,20 @@ export default function App() {
   // (the effect re-fires when the parameter fills) so results auto-heal.
   useEffect(() => {
     if (!canAutoEval || recalcSeconds <= 0) return;
-    const t = setTimeout(() => {
-      if (evalBusyRef.current) return;
-      void runEvaluation();
-    }, recalcSeconds * 1000);
+    let t: ReturnType<typeof setTimeout>;
+    const fire = () => {
+      t = setTimeout(() => {
+        // 6j: tab switches fire this effect while the PREVIOUS target's
+        // run may still be in flight — reschedule instead of dropping,
+        // or the display goes stale until the next input change.
+        if (evalBusyRef.current) {
+          fire();
+          return;
+        }
+        void runEvaluation();
+      }, recalcSeconds * 1000);
+    };
+    fire();
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainLibs, main, evalDataset, outputColumns, measure, runtimeParameters, canAutoEval, recalcSeconds]);
@@ -1662,6 +1685,7 @@ export default function App() {
   // async-hash-patch flow as the heartbeat.
   const appendManualRun = (p: {
     mode: "library" | "selection";
+    library: string;
     cql: string;
     ok: boolean;
     sql?: string;
@@ -1682,6 +1706,7 @@ export default function App() {
         : null,
       payload: {
         mode: p.mode,
+        library: p.library,
         cql: p.cql,
         sql: p.sql,
         rows: p.rows,
@@ -1729,17 +1754,25 @@ export default function App() {
     }
     return null;
   }, [runHistory]);
+  // 6j: expected values belong to the MEASURE (entrypoint library) — a
+  // non-entrypoint run (active-tab targeting) can't feed the compare.
+  const latestRunIsEntrypoint =
+    !latestLibraryRun?.payload?.library ||
+    latestLibraryRun.payload.library === mainLib.name;
   const verifyCompare = useMemo(
     () =>
-      deriveCompare(
-        latestLibraryRun?.payload?.rows,
-        expectedValues ?? {},
-        populationCodes,
-      ),
-    [latestLibraryRun, expectedValues, populationCodes],
+      latestRunIsEntrypoint
+        ? deriveCompare(
+            latestLibraryRun?.payload?.rows,
+            expectedValues ?? {},
+            populationCodes,
+          )
+        : null,
+    [latestRunIsEntrypoint, latestLibraryRun, expectedValues, populationCodes],
   );
   const compareStale =
-    !!latestLibraryRun && !latestLibraryRun.payload?.rows;
+    (!!latestLibraryRun && !latestLibraryRun.payload?.rows) ||
+    !latestRunIsEntrypoint;
 
   // A pinned run that fell off the 20-ring reverts to following latest.
   useEffect(() => {
@@ -2016,20 +2049,24 @@ export default function App() {
         tabLabels[t.id] = t.resourceId;
     }
   }
-  const activeTabIsLibrary =
-    !activeEditorTabId || parseTabId(activeEditorTabId).kind === "library";
-  // Prior run = second-to-last history entry; falls back to the
-  // in-flight currentRun artifact when history is pruned short.
-  // FAILED ring entries carry patients:null — the baseline skips them.
+  // Prior run = nearest earlier entry OF THE SAME LIBRARY — active-tab
+  // runs interleave entrypoint runs in the ring, and a cross-library
+  // diff is noise. Falls back to null; FAILED entries (patients:null)
+  // are skipped.
   const baselineArtifact: import("./lib/runDiff").Artifact | null = (() => {
-    const prev = runHistory[runHistory.length - 2];
-    if (!prev?.artifact?.patients) return null;
-    return Object.fromEntries(
-      Object.entries(prev.artifact.patients).map(([pid, p]) => [
-        pid,
-        (p as { populations: Record<string, boolean | null> }).populations,
-      ]),
-    );
+    for (let i = runHistory.length - 2; i >= 0; i--) {
+      const prev = runHistory[i];
+      if (!prev?.artifact?.patients) continue;
+      if (prev.payload?.library && runLib && prev.payload.library !== runLib.name)
+        continue;
+      return Object.fromEntries(
+        Object.entries(prev.artifact.patients).map(([pid, p]) => [
+          pid,
+          (p as { populations: Record<string, boolean | null> }).populations,
+        ]),
+      );
+    }
+    return null;
   })();
   const appRunDiff = useRunDiff(evalResult, baselineArtifact);
   // Latest-value mirror (same pattern as activeTabRef): which library

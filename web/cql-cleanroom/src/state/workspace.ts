@@ -41,6 +41,8 @@ export const WORKSPACE_SCHEMA_VERSION = 7;
  *  carry the synthesized `__snippet__` wrapper text as `cql`. */
 export interface RunEntryPayload {
   mode: "library" | "selection";
+  /** 6j: which library this run executed (active-tab targeting). */
+  library?: string;
   cql: string;
   sql?: string;
   rows?: Array<Record<string, unknown>>;

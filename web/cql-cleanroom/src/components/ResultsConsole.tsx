@@ -117,6 +117,7 @@ export function ResultsConsole({
   /** Manual runs (Run button / Ctrl+Enter) land in App's ring. */
   onManualRun: (p: {
     mode: "library" | "selection";
+    library: string;
     cql: string;
     ok: boolean;
     sql?: string;
@@ -191,6 +192,7 @@ export function ResultsConsole({
       // history write; the new entry overrides the displayed result.
       onManualRun({
         mode,
+        library: main.name,
         cql: env.cql ?? main.text,
         ok: !!env.ok,
         sql: env.ok ? env.sql : undefined,
@@ -313,6 +315,7 @@ export function ResultsConsole({
             {[...runs].reverse().map((r) => (
               <option key={r.id} value={r.id}>
                 {formatRunTimestamp(r.createdAt)} · {r.payload?.mode ?? "library"}
+                {r.payload?.library ? ` · ${r.payload.library}` : ""}
                 {r.payload?.diags?.length ? " · error" : ""}
               </option>
             ))}

@@ -209,3 +209,95 @@ test.describe("run ring + switcher (6g)", () => {
     );
   });
 });
+
+test.describe("shape-aware runs + active-tab targeting (6j)", () => {
+  test("selecting the whole library runs it AS the library", async ({
+    page,
+  }) => {
+    await bootReady(page);
+    const prior = await page
+      .locator("[data-testid=console-run-select] option")
+      .count();
+    await page.click("[data-testid=cql-editor] .monaco-editor");
+    await page.keyboard.press("Control+A");
+    await page.click("[data-testid=editor-run]");
+    await waitForRunCount(page, prior + 1);
+    // No __snippet__ wrapper: output = all defines, and the CQL tab is
+    // exactly the library text (no appended define).
+    const header = (await tableHeader(page)).join(",");
+    expect(header).toContain("patient_id");
+    expect(header).toContain("Initial Population");
+    expect(header).not.toContain("snippet");
+    await page.click("[data-testid=console-tab-cql]");
+    await expect(page.locator("[data-testid=cql-viewer]")).not.toContainText(
+      "__snippet__",
+    );
+  });
+
+  test("selecting a define statement runs it unwrapped (no snippet column)", async ({
+    page,
+  }) => {
+    await bootReady(page);
+    const prior = await page
+      .locator("[data-testid=console-run-select] option")
+      .count();
+    // Select the `define "Initial Population":` line + its body.
+    await page.click("[data-testid=cql-editor] .monaco-editor");
+    await page.keyboard.press("Control+Home");
+    for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Shift+ArrowDown");
+    await page.keyboard.press("Shift+End");
+    await page.click("[data-testid=editor-run]");
+    await waitForRunCount(page, prior + 1);
+    const header = (await tableHeader(page)).join(",");
+    expect(header).toContain("patient_id");
+    expect(header).toContain("Initial Population");
+    expect(header).not.toContain("snippet");
+  });
+
+  test("runs follow the active library tab (Library2 output + ring label)", async ({
+    page,
+  }) => {
+    await bootReady(page);
+    await page.click("[data-testid=nav-toggle-libraries]");
+    await page.click("[data-testid=library-tab-add]");
+    await page.waitForSelector("[data-testid=library-tab-1]");
+    await page.waitForSelector("[data-testid=cql-editor]");
+    // Author a distinctive define in Library2.
+    await page.click("[data-testid=cql-editor] .monaco-editor");
+    await page.keyboard.press("Control+A");
+    await page.keyboard.press("Delete");
+    await page.keyboard.type(
+      "library Library2 version '1.0.0'\nusing FHIR version '4.0.1'\n\ndefine \"FromLib2\":\n  true\n",
+    );
+    // The heartbeat follows the active tab: the auto run lands with
+    // Library2's define as the output column (no manual click needed).
+    await page.waitForFunction(
+      () =>
+        [...document.querySelectorAll("[data-testid=results-table] th")]
+          .some((th) => th.textContent?.includes("FromLib2")),
+      undefined,
+      { timeout: 60_000 },
+    );
+    // The ring entry names its library.
+    const latest = await page.evaluate(() => {
+      const sel = document.querySelector<HTMLSelectElement>(
+        "[data-testid=console-run-select]",
+      );
+      return sel?.options[1]?.textContent ?? "";
+    });
+    expect(latest).toContain("Library2");
+    // Switching back to the entrypoint tab restores the heartbeat's
+    // population columns (auto runs use the measure's population codes;
+    // manual runs show define names — a pre-existing asymmetry).
+    await page.click("[data-testid=library-tab-0]");
+    await page.waitForFunction(
+      () =>
+        [...document.querySelectorAll("[data-testid=results-table] th")]
+          .some((th) => th.textContent?.includes("initial_population")),
+      undefined,
+      { timeout: 60_000 },
+    );
+  });
+});

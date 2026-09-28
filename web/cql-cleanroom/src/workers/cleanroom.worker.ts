@@ -177,13 +177,21 @@ async function route(msg: WorkerRequest): Promise<WorkerResponse> {
 }
 
 /**
- * evaluate_snippet (worker path): `define "__snippet__": (<snippet>)`
- * is appended to a copy of the main library text and evaluated via the
- * evaluate_library executor with output_columns={"snippet":
- * "__snippet__"} (select + rename in one). Diagnostics pointing inside
- * the appended block are renumbered relative to the snippet's first
- * line so they refer to the selection the user sees. Mirrors the
- * native evaluate_snippet capability (fhir4ds.operations).
+ * evaluate_snippet (worker path). 6j — a selection is not always an
+ * expression, so the synthesis is shape-aware:
+ *   whole library   (starts with `library`) → run AS the library;
+ *                   output = every define (output_columns omitted)
+ *   statement block (define/valueset/parameter/context/…) → reuse the
+ *                   original header (minus decls the selection
+ *                   repeats), run the statements bare; output = every
+ *                   define in the selection
+ *   expression      → `define "__snippet__": (<snippet>)` appended to
+ *                     the library, output_columns={"snippet":
+ *                     "__snippet__"} (select + rename in one)
+ * All three delegate to the evaluate_library executor. Diagnostics
+ * pointing after the synthesized prefix are renumbered relative to the
+ * selection's first line so they refer to what the user sees.
+ * env.cql is always the exact executed text.
  */
 async function executeSnippet(
   msg: Extract<WorkerRequest, { type: "evaluate_snippet" }>,
@@ -201,17 +209,59 @@ async function executeSnippet(
       }),
     } as WorkerResponse;
   }
-  const count = (msg.main.text.match(/\n/g) ?? []).length;
-  const defineLine = count + (msg.main.text.endsWith("\n") ? 1 : 2);
-  const suffixedMain = {
-    ...msg.main,
-    text: `${msg.main.text}\ndefine "__snippet__":\n  (${body})\n`,
-  };
+  const firstWord = (body.match(/^[A-Za-z]+/)?.[0] ?? "").toLowerCase();
+  const statementKinds = new Set([
+    "define",
+    "valueset",
+    "codesystem",
+    "code",
+    "parameter",
+    "context",
+    "using",
+    "include",
+  ]);
+  const isWholeLibrary = firstWord === "library";
+  const isStatementBlock = statementKinds.has(firstWord);
+
+  let executedText: string;
+  let outputColumns: Record<string, string> | undefined;
+  // Lines to subtract from executed-file diagnostics so they point at
+  // the selection; 0 = executed text IS the selection (no shift).
+  let diagShift = 0;
+  if (isWholeLibrary) {
+    executedText = body;
+    outputColumns = undefined;
+  } else if (isStatementBlock) {
+    const firstDefine = /^\s*define\b/m.exec(msg.main.text);
+    const header = firstDefine
+      ? msg.main.text.slice(0, firstDefine.index)
+      : msg.main.text;
+    const kept = header.split("\n").filter((line) => {
+      const w = (line.match(/^\s*([A-Za-z]+)/)?.[1] ?? "").toLowerCase();
+      if (!statementKinds.has(w)) return true;
+      // `using` is unnamed — drop it when the selection has its own.
+      if (w === "using") return !/^\s*using\b/m.test(body);
+      const named = line.match(/"([^"]+)"|^\s*[A-Za-z]+\s+([A-Za-z][\w-]*)/);
+      const name = named?.[1] ?? named?.[2];
+      if (!name) return true;
+      return !new RegExp(`\\b${w}\\s+"${name}"|\\b${w}\\s+${name}\\b`).test(body);
+    });
+    const headerText = kept.join("\n");
+    diagShift = (headerText.match(/\n/g) ?? []).length;
+    executedText = `${headerText}${body}\n`;
+    outputColumns = undefined;
+  } else {
+    const count = (msg.main.text.match(/\n/g) ?? []).length;
+    diagShift = count + (msg.main.text.endsWith("\n") ? 1 : 2);
+    executedText = `${msg.main.text}\ndefine "__snippet__":\n  (${body})\n`;
+    outputColumns = { snippet: "__snippet__" };
+  }
+  const runMain = { ...msg.main, text: executedText };
   const resp = (await executeCapability({
     ...msg,
     type: "evaluate_library",
-    main: suffixedMain,
-    output_columns: { snippet: "__snippet__" },
+    main: runMain,
+    output_columns: outputColumns,
     emit_sql: true,
   })) as unknown as { envelope: string };
   try {
@@ -225,17 +275,19 @@ async function executeSnippet(
         } | null;
       }>;
     };
-    // REORG 6g: the executed CQL is the synthesized wrapper, so the
+    // REORG 6g: the executed CQL is the synthesized text, so the
     // console's SQL/AST/CQL tabs replay the selection run faithfully.
-    env.cql = suffixedMain.text;
-    for (const d of env.diagnostics ?? []) {
-      const loc = d.location;
-      if (!loc) continue;
-      if (loc.start_line != null && loc.start_line >= defineLine) {
-        loc.start_line = loc.start_line - defineLine;
-      }
-      if (loc.end_line != null && loc.end_line >= defineLine) {
-        loc.end_line = loc.end_line - defineLine;
+    env.cql = executedText;
+    if (diagShift > 0) {
+      for (const d of env.diagnostics ?? []) {
+        const loc = d.location;
+        if (!loc) continue;
+        if (loc.start_line != null && loc.start_line >= diagShift) {
+          loc.start_line = loc.start_line - diagShift;
+        }
+        if (loc.end_line != null && loc.end_line >= diagShift) {
+          loc.end_line = loc.end_line - diagShift;
+        }
       }
     }
     return { id: msg.id, type: msg.type, ok: true, envelope: JSON.stringify(env) } as WorkerResponse;
