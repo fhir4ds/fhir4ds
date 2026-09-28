@@ -12,8 +12,9 @@ test("example loads include tabs, prefills MP, auto-recalcs", async ({ page }) =
   await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
 
-  // 1. Load the example.
+  // 1. Load the example. 6i.1: Examples nests under File > Open.
   await page.click("[data-testid=file-menu]");
+  await page.hover("[data-testid=file-open]");
   await page.hover("[data-testid=file-examples]");
   await page.click("[data-testid=load-example-cms69]");
   await page.waitForFunction(

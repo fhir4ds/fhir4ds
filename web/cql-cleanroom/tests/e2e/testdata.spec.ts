@@ -153,13 +153,20 @@ test.describe("bundle export/import", () => {
     const path = await download.path();
     if (!path) throw new Error("no download path");
 
-    // Wipe + re-import in replace mode (6h: mode select lives in Settings).
+    // Wipe + re-import in replace mode (6i.1: File > Open > FHIR Bundle
+    // is the replace path; Add > FHIR Bundle merges).
     await page.click("[data-testid=file-menu]");
     await page.click("[data-testid=workspace-reset]");
     await page.waitForTimeout(1200);
-    await page.click("[data-testid=settings-menu]");
-    await page.selectOption("[data-testid=bundle-mode]", "replace");
-    await page.setInputFiles("[data-testid=bundle-import-input]", path);
+    const [chooser] = await Promise.all([
+      page.waitForEvent("filechooser", { timeout: 15_000 }),
+      (async () => {
+        await page.click("[data-testid=file-menu]");
+        await page.hover("[data-testid=file-open]");
+        await page.click("[data-testid=bundle-import]");
+      })(),
+    ]);
+    await chooser.setFiles(path);
     await waitDatasetResources(page, 3, 30_000);
   });
 });

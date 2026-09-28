@@ -1097,8 +1097,6 @@ export default function App() {
 
   // §3.4 Bundle export/import for the dataset.
   const bundleFileRef = useRef<HTMLInputElement | null>(null);
-  const [bundleMode, setBundleMode] = useState<"merge" | "replace">("merge");
-
   const exportBundleFile = () => {
     const resources = (dataset?.resources ?? []) as Array<
       Record<string, unknown>
@@ -1120,7 +1118,14 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  const importBundleFile = async (file: File) => {
+  // 6i.1: bundle import mode is a property of the ACTION (File > Open =
+  // replace, File > Add / nav imports = merge), not a Settings toggle —
+  // the menu item records its mode here before the file chooser opens.
+  const bundleModeRef = useRef<"merge" | "replace">("merge");
+  const importBundleFile = async (
+    file: File,
+    mode: "merge" | "replace",
+  ) => {
     try {
       const parsed = JSON.parse(await file.text());
       const result = importBundle(parsed);
@@ -1140,7 +1145,7 @@ export default function App() {
         Record<string, unknown>
       >;
       const next =
-        bundleMode === "replace"
+        mode === "replace"
           ? result.resources
           : mergeDatasets(current, result.resources);
       setDataset(next.length ? { resources: next } : null);
@@ -1516,7 +1521,7 @@ export default function App() {
         });
         break;
       case "tests:bundle-json":
-        pickSectionImport(json, (f) => void importBundleFile(f));
+        pickSectionImport(json, (f) => void importBundleFile(f, "merge"));
         break;
       case "expected:expected-json":
         pickSectionImport(json, (f) => void importExpectedBundle(f));
@@ -2206,10 +2211,13 @@ export default function App() {
               <button
                 className="dropdown-item"
                 data-testid="bundle-import"
-                onClick={() => bundleFileRef.current?.click()}
-                title={`bundle import mode: ${bundleMode}`}
+                onClick={() => {
+                  bundleModeRef.current = "replace";
+                  bundleFileRef.current?.click();
+                }}
+                title="replaces the dataset with the bundle's resources"
               >
-                FHIR Bundle… ({bundleMode})
+                FHIR Bundle… (replaces dataset)
               </button>
               <button
                 className="dropdown-item"
@@ -2217,6 +2225,28 @@ export default function App() {
                 onClick={() => madieFileRef.current?.click()}
               >
                 Measure package (MADiE)…
+              </button>
+              <DropdownSubmenu label="Examples" testId="file-examples">
+                <button
+                  className="dropdown-item"
+                  data-testid="load-example-cms69"
+                  onClick={() => void loadExample("cms69")}
+                >
+                  CMS69 BMI Screening
+                </button>
+              </DropdownSubmenu>
+            </DropdownSubmenu>
+            <DropdownSubmenu label="Add" testId="file-add">
+              <button
+                className="dropdown-item"
+                data-testid="bundle-add"
+                onClick={() => {
+                  bundleModeRef.current = "merge";
+                  bundleFileRef.current?.click();
+                }}
+                title="merges the bundle's resources into the current dataset"
+              >
+                FHIR Bundle… (merge)
               </button>
             </DropdownSubmenu>
             <DropdownSubmenu label="Save" testId="file-save">
@@ -2240,15 +2270,6 @@ export default function App() {
                 onClick={exportMadieZip}
               >
                 Measure package (MADiE)
-              </button>
-            </DropdownSubmenu>
-            <DropdownSubmenu label="Examples" testId="file-examples">
-              <button
-                className="dropdown-item"
-                data-testid="load-example-cms69"
-                onClick={() => void loadExample("cms69")}
-              >
-                CMS69 BMI Screening
               </button>
             </DropdownSubmenu>
             <div className="dropdown-sep" />
@@ -2322,20 +2343,6 @@ export default function App() {
                 <option value="0">Off</option>
               </select>
             </label>
-            <label className="settings-row">
-              <span>Bundle import</span>
-              <select
-                data-testid="bundle-mode"
-                title="bundle import mode"
-                value={bundleMode}
-                onChange={(e) =>
-                  setBundleMode(e.target.value as "merge" | "replace")
-                }
-              >
-                <option value="merge">Merge</option>
-                <option value="replace">Replace</option>
-              </select>
-            </label>
           </DropdownMenu>
            <input
             ref={fileRef}
@@ -2368,7 +2375,7 @@ export default function App() {
             data-testid="bundle-import-input"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) void importBundleFile(f);
+              if (f) void importBundleFile(f, bundleModeRef.current);
               e.target.value = "";
             }}
           />

@@ -33,18 +33,23 @@ export async function waitDatasetResources(
 }
 
 /**
- * Replace the dataset with an in-memory collection Bundle via the
- * Import menu (the raw NDJSON view was retired in 6f.1).
+ * Replace the dataset with an in-memory collection Bundle via
+ * File > Open > FHIR Bundle (6i.1: Open = replace, Add = merge — the
+ * Settings mode select is gone).
  */
 export async function importBundleResources(
   page: Page,
   resources: Array<Record<string, unknown>>,
 ) {
-  await page.click("[data-testid=file-menu]");
-  // 6h: the mode control lives in the Settings menu now.
-  await page.click("[data-testid=settings-menu]");
-  await page.selectOption("[data-testid=bundle-mode]", "replace");
-  await page.setInputFiles("[data-testid=bundle-import-input]", {
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser", { timeout: 15_000 }),
+    (async () => {
+      await page.click("[data-testid=file-menu]");
+      await page.hover("[data-testid=file-open]");
+      await page.click("[data-testid=bundle-import]");
+    })(),
+  ]);
+  await chooser.setFiles({
     name: "dataset.json",
     mimeType: "application/json",
     buffer: Buffer.from(

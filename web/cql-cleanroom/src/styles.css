@@ -609,6 +609,18 @@ body { margin: 0; }
   border-radius: 4px;
   padding: 6px;
 }
+/* Raw JSON mode: the text IS the pane — fill the editor height, keep
+   the raw diagnostics (its validation output) pinned below it. */
+.pane-body.builder-raw-active {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.pane-body.builder-raw-active .builder-raw {
+  flex: 1 1 auto;
+  min-height: 0;
+  resize: none;
+}
 .builder-actions {
   display: flex;
   gap: 8px;
@@ -1126,13 +1138,14 @@ body { margin: 0; }
   grid-row: 1;
   justify-self: end;
 }
-/* Item heads: subtle row so list members read as numbered entries. */
+/* Item heads: plain tree rows numbered 1, 2, 3 (no element prefix). */
 .builder-form .builder-item-head {
-  border-bottom: none;
   margin-top: 2px;
-  background: #18202b;
-  border-radius: 4px;
-  padding: 0 4px;
+}
+.builder-form .builder-item-num {
+  color: #8fa3bf;
+  font-variant-numeric: tabular-nums;
+  min-width: 16px;
 }
 /* Choice select: LEFT-aligned right after the label on line 1. */
 /* Choice select: sits RIGHT of the label, never overlapping — the
@@ -1167,7 +1180,6 @@ body { margin: 0; }
 .builder-form .builder-tree-group.collapsed > .builder-tree-children { display: none; }
 .builder-form .builder-tree-children {
   margin-left: 8px;
-  border-left: 1px solid #2c4a6e;
   padding-left: 10px;
   /* Guide must stay visible beside inputs: rows leave 4px clear. */
 }
@@ -1176,6 +1188,8 @@ body { margin: 0; }
 .builder-form .builder-tree-children > .builder-tree-group {
   position: relative;
 }
+/* ONE vertical guide style for every nesting level (no elbows — rows
+   vary in height, so corner connectors would break). */
 .builder-form .builder-tree-children::before {
   content: "";
   position: absolute;
@@ -1183,17 +1197,14 @@ body { margin: 0; }
   top: 0;
   bottom: 0;
   width: 1px;
-  background: #2c4a6e;
+  background: #26303f;
   z-index: 0;
   pointer-events: none;
 }
 .builder-form .builder-tree-children > * { position: relative; z-index: 1; }
-.builder-form .builder-tree-children { border-left: none; }
 .builder-form .builder-tree-head {
   margin-top: 6px;
   min-height: 28px;
-  border-bottom: 1px solid #24402f;
-  border-radius: 2px;
   cursor: pointer;
   user-select: none;
 }
@@ -1207,7 +1218,6 @@ body { margin: 0; }
   max-width: 170px;
   font-size: 13px;
 }
-.builder-form .builder-choice .builder-tree-children { border-left-style: dashed; }
 
 /* Tree-row internals: consistent grid inside every row */
 .builder-form .builder-tree-row {

@@ -340,7 +340,7 @@ export function ResourceBuilderPane({
         </div>
       </div>
 
-      <div className="pane-body">
+      <div className={`pane-body${useRaw ? " builder-raw-active" : ""}`}>
         {useRaw ? (
           <textarea
             className="builder-raw"
@@ -431,7 +431,7 @@ export function ResourceBuilderPane({
           </button>
         </div>
 
-        {validation && (validation.valid === false || !validation.ok) && (
+        {useRaw && validation && (validation.valid === false || !validation.ok) && (
           <div className="diag-list" data-testid="builder-diagnostics">
             {(validation.diagnostics ?? []).length === 0 && (
               <div className="diag-row diag-error">validation failed</div>
@@ -443,7 +443,7 @@ export function ResourceBuilderPane({
             ))}
           </div>
         )}
-        {validation?.ok && validation.valid === true && (
+        {useRaw && validation?.ok && validation.valid === true && (
           <div className="diag-row diag-info" data-testid="builder-valid">
             Valid {validation.resource_type}
             {validation.resource_id ? ` ${validation.resource_id}` : ""}
@@ -521,52 +521,96 @@ function FieldRow({
             )}
           </span>
         </div>
-        {items.map((it, i) => (
-          <div
-            className="builder-tree-children builder-item"
-            key={it.key}
-            data-testid={`builder-item-${node.name}-${i}`}
-          >
+        {items.map((it, i) => {
+          const primitiveItem =
+            !node.hatch &&
+            node.type !== "Reference" &&
+            isPrimitiveType(node.type);
+          return (
             <div
-              className="builder-tree-row builder-tree-head builder-item-head"
-              data-testid={`builder-item-head-${node.name}-${i}`}
+              className="builder-tree-children builder-item"
+              key={it.key}
+              data-testid={`builder-item-${node.name}-${i}`}
             >
-              <span className="builder-caret placeholder" aria-hidden="true" />
-              <span className="builder-label">
-                {node.name} - {i + 1}
-              </span>
-              <button
-                type="button"
-                className="builder-item-remove"
-                aria-label={`remove ${node.name} item ${i + 1}`}
-                data-testid={`builder-remove-${node.name}-${i}`}
-                onClick={() =>
-                  onChange({
-                    kind: "items",
-                    items: items.filter((x) => x.key !== it.key),
-                  })
-                }
-              >
-                −
-              </button>
+              {primitiveItem ? (
+                <div
+                  className="builder-tree-row builder-item-head"
+                  data-testid={`builder-item-head-${node.name}-${i}`}
+                >
+                  <span className="builder-caret placeholder" aria-hidden="true" />
+                  <span className="builder-label builder-item-num">{i + 1}</span>
+                  <input
+                    type={primitiveInputType(node.type)}
+                    data-testid={`builder-field-${node.name}-${i}`}
+                    value={scalarValue(it.value)}
+                    placeholder={node.type}
+                    onChange={(e) => {
+                      const next = items.map((x) =>
+                        x.key === it.key
+                          ? { key: it.key, value: { kind: "scalar", value: e.target.value } as FieldValue }
+                          : x,
+                      );
+                      onChange({ kind: "items", items: next });
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="builder-item-remove"
+                    aria-label={`remove ${node.name} item ${i + 1}`}
+                    data-testid={`builder-remove-${node.name}-${i}`}
+                    onClick={() =>
+                      onChange({
+                        kind: "items",
+                        items: items.filter((x) => x.key !== it.key),
+                      })
+                    }
+                  >
+                    −
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div
+                    className="builder-tree-row builder-tree-head builder-item-head"
+                    data-testid={`builder-item-head-${node.name}-${i}`}
+                  >
+                    <span className="builder-caret placeholder" aria-hidden="true" />
+                    <span className="builder-label builder-item-num">{i + 1}</span>
+                    <button
+                      type="button"
+                      className="builder-item-remove"
+                      aria-label={`remove ${node.name} item ${i + 1}`}
+                      data-testid={`builder-remove-${node.name}-${i}`}
+                      onClick={() =>
+                        onChange({
+                          kind: "items",
+                          items: items.filter((x) => x.key !== it.key),
+                        })
+                      }
+                    >
+                      −
+                    </button>
+                  </div>
+                  <SingleField
+                    node={node}
+                    value={it.value}
+                    resources={resources}
+                    onChange={(v) => {
+                      if (v === undefined) return;
+                      const next = items
+                        .map((x) => (x.key === it.key ? { key: it.key, value: v } : x));
+                      onChange({ kind: "items", items: next });
+                    }}
+                    depth={depth}
+                    itemIndex={i}
+                    hideHeader
+                    startOpen
+                  />
+                </>
+              )}
             </div>
-            <SingleField
-              node={node}
-              value={it.value}
-              resources={resources}
-              onChange={(v) => {
-                if (v === undefined) return;
-                const next = items
-                  .map((x) => (x.key === it.key ? { key: it.key, value: v } : x));
-                onChange({ kind: "items", items: next });
-              }}
-              depth={depth}
-              itemIndex={i}
-              hideHeader
-              startOpen
-            />
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   }
@@ -588,6 +632,12 @@ function FieldRow({
 /** min cardinality ≥ 1: the element cannot be dropped from the form. */
 function isRequired(node: SchemaTreeNode): boolean {
   return !!node.cardinality && node.cardinality.startsWith("1..");
+}
+
+function primitiveInputType(type?: string): string {
+  if (type === "boolean") return "text";
+  if (type === "date") return "date";
+  return "text";
 }
 
 /** Array item shape: an item itself is never repeatable. */
@@ -712,18 +762,12 @@ function SingleField({
 
   if (isPrimitiveType(node.type)) {
     const current = scalarValue(value);
-    const inputType =
-      node.type === "boolean"
-        ? "text"
-        : node.type === "date"
-          ? "date"
-          : "text";
     return (
       <label className="builder-tree-row">
         <span className="builder-caret placeholder" aria-hidden="true" />
         <span className="builder-label">{node.name}</span>
         <input
-          type={inputType}
+          type={primitiveInputType(node.type)}
           data-testid={tid(`builder-field-${node.name}`)}
           value={current}
           onChange={(e) => onChange({ kind: "scalar", value: e.target.value })}

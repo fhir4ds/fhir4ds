@@ -33,16 +33,10 @@ test("builder: valid form auto-commits a Patient", async ({ page }) => {
   await page.selectOption('[data-testid=builder-add-element]', 'birthDate');
   await page.fill('[data-testid=builder-field-birthDate]', '1990-05-04');
 
-  // Auto-commit: dataset grows to 4 resources (~2s debounce + validate);
-  // the valid chip names the committed resource.
+  // Auto-commit: dataset grows to 4 resources (~2s debounce + validate).
+  // 6i.1: validation UI (chip + diagnostics) is RAW-ONLY — the form's
+  // commit signal is the dataset itself.
   await waitDatasetResources(page, 4);
-  await page.waitForSelector('[data-testid=builder-valid]', {
-    timeout: 30_000,
-  });
-  const valid = await page.textContent('[data-testid=builder-valid]');
-  if (!valid?.includes("Patient built-1")) {
-    throw new Error(`unexpected valid chip: ${valid}`);
-  }
   console.log("AUTO_COMMIT: 4 resources OK");
 
   // The new patient appears in the Resources tree under its own group.
