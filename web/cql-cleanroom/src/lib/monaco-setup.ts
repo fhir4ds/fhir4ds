@@ -12,6 +12,10 @@
 
 import { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
+// editor.api is the bare core (no suggest/hover/find widgets at all) —
+// editor.all registers the contributions on the same API singleton.
+// The visual editor needs suggest + hover; pull everything.
+import "monaco-editor/esm/vs/editor/editor.all.js";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 
 (self as any).MonacoEnvironment = {

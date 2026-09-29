@@ -301,3 +301,145 @@ test.describe("shape-aware runs + active-tab targeting (6j)", () => {
     );
   });
 });
+
+test.describe("defines matrix (visual editor 1)", () => {
+  test("Defines tab evaluates every define live as you type", async ({
+    page,
+  }) => {
+    await bootReady(page);
+    await page.click("[data-testid=console-tab-defines]");
+    // All defines — including non-population ones the Results table
+    // never shows ("Has Name" is not in the Measure).
+    await page.waitForSelector("[data-testid=defines-table]", {
+      timeout: 120_000,
+    });
+    const header = (
+      await page.locator("[data-testid=defines-table] th").allTextContents()
+    ).join(",");
+    expect(header).toContain("patient_id");
+    expect(header).toContain("Initial Population");
+    expect(header).toContain("Has Name");
+    // p1/p3 female → Initial Population true; p2 male → false.
+    const rows = await page
+      .locator("[data-testid=defines-table] tbody tr")
+      .allTextContents();
+    expect(rows.find((r) => r.includes("p1")) ?? "").toContain("true");
+    expect(rows.find((r) => r.includes("p2")) ?? "").toContain("false");
+    // LIVE: author a new define — it joins the matrix with no manual run.
+    await page.click("[data-testid=cql-editor] .monaco-editor");
+    await page.keyboard.press("Control+End");
+    await page.keyboard.type('\ndefine "MatrixCheck":\n  true\n');
+    await page.waitForFunction(
+      () =>
+        [...document.querySelectorAll("[data-testid=defines-table] th")].some(
+          (th) => th.textContent?.includes("MatrixCheck"),
+        ),
+      undefined,
+      { timeout: 60_000 },
+    );
+  });
+});
+
+test.describe("workspace completions (visual editor 2)", () => {
+  test("suggests defines and dataset retrieves from the workspace", async ({
+    page,
+  }) => {
+    await bootReady(page);
+    await page.click("[data-testid=cql-editor] .monaco-editor");
+    await page.keyboard.press("Control+End");
+    // Workspace define suggestion.
+    await page.keyboard.type('\ndefine "TryMe":\n  H');
+    await page.waitForSelector(".suggest-widget .monaco-list-row", {
+      timeout: 15_000,
+    });
+    await page.waitForFunction(
+      () =>
+        [...document.querySelectorAll(".suggest-widget .monaco-list-row")].some(
+          (r) => r.textContent?.includes("Has Name"),
+        ),
+      undefined,
+      { timeout: 10_000 },
+    );
+    // Retrieve: `[` suggests dataset resource types (the default
+    // dataset only carries Patients).
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Control+End");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type("exists([");
+    await page.waitForFunction(
+      () =>
+        [...document.querySelectorAll(".suggest-widget .monaco-list-row")].some(
+          (r) => r.textContent?.includes("Patient"),
+        ),
+      undefined,
+      { timeout: 10_000 },
+    );
+  });
+});
+
+test.describe("hover evaluation (visual editor 3)", () => {
+  test("hovering a define shows its live per-patient values", async ({
+    page,
+  }) => {
+    await bootReady(page);
+    await page.waitForSelector("[data-testid=results-table]", {
+      timeout: 120_000,
+    });
+    const line = page
+      .locator(".view-lines .view-line", { hasText: "Has Name" })
+      .first();
+    await line.hover({ position: { x: 100, y: 8 } });
+    await page.waitForFunction(
+      () =>
+        [...document.querySelectorAll(".monaco-hover")].some(
+          (h) =>
+            !h.classList.contains("hidden") &&
+            (h.textContent || "").includes("p1") &&
+            (h.textContent || "").includes("Has Name"),
+        ),
+      undefined,
+      { timeout: 60_000 },
+    );
+  });
+});
+
+test.describe("outline + jump-to-define (visual editor 4)", () => {
+  test("outline lists symbols; clicking jumps to the declaration", async ({
+    page,
+  }) => {
+    await bootReady(page);
+    // The outline needs the mounted Monaco instance (jump target) —
+    // wait for it, or the click races the dynamic import and no-ops.
+    await page.waitForSelector("[data-testid=cql-editor] .monaco-editor");
+    await page.click("[data-testid=editor-outline]");
+    const panel = page.locator("[data-testid=outline-panel]");
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText("Defines");
+    await expect(panel).toContainText("Initial Population");
+    await expect(panel).toContainText("Has Name");
+    await expect(panel).toContainText("L8");
+    // Jump: the current-line highlight must land on the "Has Name"
+    // declaration (line 8) — same viewport row as that view-line.
+    await panel
+      .locator("[data-testid=outline-item]", { hasText: "Has Name" })
+      .first()
+      .click();
+    await expect(panel).toHaveCount(0);
+    const target = page
+      .locator(".view-lines .view-line", { hasText: "Has Name" })
+      .first();
+    await expect(target).toBeVisible({ timeout: 10_000 });
+    const box = await target.boundingBox();
+    await page.waitForFunction(
+      (ty) => {
+        const cur = document.querySelector(".view-overlays .current-line");
+        return cur
+          ? Math.abs(cur.getBoundingClientRect().top - (ty as number)) < 20
+          : false;
+      },
+      box!.y,
+      { timeout: 10_000 },
+    );
+  });
+});

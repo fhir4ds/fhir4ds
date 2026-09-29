@@ -8,6 +8,10 @@ import {
   workerRequest,
 } from "./components/BootOverlay";
 import { EditorPane } from "./components/EditorPane";
+import {
+  setCqlCompletionContext,
+  setCqlHoverContext,
+} from "./lib/monaco-cql-language";
 import { NavRail } from "./components/NavRail";
 import { coerceParam, detectParams, joinInterval } from "./lib/params";
 import { importMadiePackage } from "./lib/madiePackage";
@@ -756,6 +760,30 @@ export default function App() {
         : { libraryNames: [], valuesetDecls: [] },
     [libraries, mainLib],
   );
+  // Visual editor step 2 — feed the ACTIVE library's world to the CQL
+  // completion provider (defines/params/valuesets of the edited
+  // library, include aliases → their texts, dataset resource types for
+  // retrieves). Pushed on every edit; the provider extracts symbols
+  // per keystroke locally.
+  useEffect(() => {
+    const name = active?.name ?? "";
+    const closure = name ? libraryClosure(libraries, name).libraryNames : [];
+    setCqlCompletionContext({
+      text: active?.text ?? "",
+      resourceTypes: [
+        ...new Set(
+          (dataset?.resources ?? [])
+            .map((r) => String((r as Record<string, unknown>)?.resourceType ?? ""))
+            .filter(Boolean),
+        ),
+      ],
+      includedLibraries: Object.fromEntries(
+        closure
+          .map((n) => [n, libraries.find((l) => l.name === n)?.text ?? ""])
+          .filter(([, t]) => t !== ""),
+      ),
+    });
+  }, [active, dataset, libraries]);
   // Workspace terminology OVERRIDES dataset valueset_resources
   // (url-deduped — same precedence as evalDataset).
   const measureValuesetSources = useMemo(() => {
@@ -781,6 +809,43 @@ export default function App() {
     }
     return out;
   }, [paramValues]);
+
+  // Visual editor step 3 — hover evaluation: one cached all-defines
+  // eval per (library, text, dataset, params); hovers after the first
+  // are instant until an input changes.
+  const hoverEvalRef = useRef<Promise<{
+    columns: string[];
+    rows: Array<Record<string, unknown>>;
+  } | null> | null>(null);
+  const hoverEvalKey = `${main.name}|${main.text}|${evalDataset?.resources?.length ?? 0}|${JSON.stringify(runtimeParameters)}`;
+  useEffect(() => {
+    hoverEvalRef.current = null;
+  }, [hoverEvalKey]);
+  useEffect(() => {
+    const evaluateAll = () => {
+      if (!evalDataset || !main.text) return Promise.resolve(null);
+      if (hoverEvalRef.current) return hoverEvalRef.current;
+      const p = workerRequest({
+        type: "evaluate_library",
+        libraries: mainLibs,
+        main,
+        dataset: evalDataset,
+        parameters: runtimeParameters,
+        emit_sql: false,
+      })
+        .then((resp) => JSON.parse((resp as { envelope: string }).envelope))
+        .then((env) =>
+          env.ok
+            ? { columns: env.columns as string[], rows: env.rows }
+            : null,
+        )
+        .catch(() => null);
+      hoverEvalRef.current = p;
+      return p;
+    };
+    setCqlHoverContext({ evaluateAll });
+    return () => setCqlHoverContext(null);
+  }, [main, mainLibs, evalDataset, runtimeParameters, hoverEvalKey]);
 
   // WORKBENCH_REORG phase 5 — the evaluation heartbeat lives in App so
   // the console sub-tabs AND the col2 panes render from one run.
@@ -2223,6 +2288,7 @@ export default function App() {
       compareStale={compareStale}
       activeTab={consoleTab}
       onTabChange={setConsoleTab}
+      recalcSeconds={recalcSeconds}
     />
   );
 

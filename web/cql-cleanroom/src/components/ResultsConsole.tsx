@@ -5,6 +5,8 @@ import { DiagnosticsRow } from "./EditorPane";
 import { EvidencePopover } from "./EvidencePopover";
 import { AstTree } from "./AstPane";
 import { cellDiffClass, diffSummary } from "../lib/runDiff";
+import { DefinesMatrix } from "./DefinesMatrix";
+import { renderValue } from "../lib/formatValue";
 import { useRunDiff } from "./MeasureReportOutput";
 import type { CompareResult } from "../lib/verifyCompare";
 import type {
@@ -36,6 +38,7 @@ import { formatRunTimestamp } from "../lib/runHistory";
 
 export type ConsoleTab =
   | "results"
+  | "defines"
   | "sql"
   | "ast"
   | "cql"
@@ -49,6 +52,7 @@ export type ConsolePlacement = "bottom" | "right";
 const CONTEXT_TABS: Record<ConsoleContext, Array<{ id: ConsoleTab; label: string }>> = {
   library: [
     { id: "results", label: "Results" },
+    { id: "defines", label: "Defines" },
     { id: "cql", label: "CQL" },
     { id: "sql", label: "SQL" },
     { id: "ast", label: "AST" },
@@ -56,6 +60,7 @@ const CONTEXT_TABS: Record<ConsoleContext, Array<{ id: ConsoleTab; label: string
   measure: [
     { id: "mr", label: "Measure Report" },
     { id: "funnel", label: "Funnel" },
+    { id: "defines", label: "Defines" },
   ],
   view: [{ id: "view", label: "View Output" }],
   // 6h: the Expected Results editor's console context — authored
@@ -85,12 +90,15 @@ export function ResultsConsole({
   onManualRun,
   activeTab,
   onTabChange,
+  recalcSeconds,
 }: {
   libraries: LibraryText[];
   main: LibraryText;
   dataset: DatasetSpec | null;
   parameters: Record<string, unknown>;
   outputColumns: Record<string, string> | null;
+  /** 6g: settings recalc delay — also debounces the Defines matrix. */
+  recalcSeconds: number;
   /** Current editor selection text (null/empty disables Run-Selection). */
   selection: string | null;
   /** Live auto-evaluation of the entrypoint library (app heartbeat). */
@@ -432,6 +440,21 @@ export function ResultsConsole({
 
       <div
         className="tab-panel"
+        hidden={activeTab !== "defines"}
+        data-testid="console-panel-defines"
+      >
+        <DefinesMatrix
+          libraries={libraries}
+          main={main}
+          dataset={dataset}
+          parameters={parameters}
+          visible={activeTab === "defines"}
+          debounceMs={recalcSeconds > 0 ? recalcSeconds * 1000 : 1000}
+        />
+      </div>
+
+      <div
+        className="tab-panel"
         hidden={activeTab !== "sql"}
         data-testid="console-panel-sql"
       >
@@ -599,11 +622,4 @@ function CompareOutput({
       }
     />
   );
-}
-
-function renderValue(v: unknown): string {
-  if (v === null || v === undefined) return "—";
-  if (typeof v === "boolean") return v ? "true" : "false";
-  if (typeof v === "object") return JSON.stringify(v);
-  return String(v);
 }

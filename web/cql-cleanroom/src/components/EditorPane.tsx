@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { workerRequest } from "./BootOverlay";
-import { GraphPane } from "./GraphPane";
+import { BuilderPane } from "./BuilderPane";
+import { countReferences, extractCqlSymbols } from "../lib/cqlSymbols";
 import type { Diagnostics, ParseResult } from "../lib/protocol";
 
 /**
@@ -125,6 +126,8 @@ export function EditorPane({
   onRunRef.current = onRun;
   // Selection presence drives the header button label (Run / Run selection).
   const [selText, setSelText] = useState("");
+  // Visual editor step 4 — outline dropdown (symbols + jump-to-define).
+  const [outlineOpen, setOutlineOpen] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -279,6 +282,59 @@ export function EditorPane({
     editor.focus();
   };
 
+  const jumpToLine = (line: number, name: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const lineText: string = editor.getModel()?.getLineContent(line) ?? "";
+    editor.revealLineInCenter(line);
+    editor.setPosition({ lineNumber: line, column: Math.max(1, lineText.indexOf(name) + 1) });
+    editor.focus();
+  };
+
+  interface OutlineRow {
+    group: string;
+    name: string;
+    line: number;
+    uses?: number;
+    note?: string;
+  }
+  const outlineGroups = useMemo<Array<{ label: string; rows: OutlineRow[] }>>(() => {
+    if (!outlineOpen) return [];
+    const syms = extractCqlSymbols(text);
+    const withUses = (e: { name: string; line: number }): OutlineRow => ({
+      group: "",
+      name: e.name,
+      line: e.line,
+      uses: countReferences(text, e.name, e.line),
+    });
+    const groups: Array<{ label: string; rows: OutlineRow[] }> = [];
+    const add = (label: string, rows: OutlineRow[]) => {
+      if (rows.length) groups.push({ label, rows });
+    };
+    add("Defines", syms.defines.map(withUses));
+    add(
+      "Functions",
+      syms.functions.map(withUses),
+    );
+    add(
+      "Parameters",
+      syms.parameters.map(withUses),
+    );
+    add("Valuesets", syms.valuesets.map((e) => ({ group: "", name: e.name, line: e.line })));
+    add("Codesystems", syms.codesystems.map((e) => ({ group: "", name: e.name, line: e.line })));
+    add("Codes", syms.codeDecls.map((e) => ({ group: "", name: e.name, line: e.line })));
+    add(
+      "Includes",
+      syms.includes.map((i) => ({
+        group: "",
+        name: i.name,
+        line: i.line,
+        note: i.alias !== i.name ? `called ${i.alias}` : undefined,
+      })),
+    );
+    return groups;
+  }, [outlineOpen, text]);
+
   return (
     <section className="pane editor-pane" data-testid="editor-pane">
       <div className="pane-header editor-header">
@@ -291,6 +347,14 @@ export function EditorPane({
             {graphOpen ? "▾" : "▸"} Visual editor
           </button>
         )}
+        <button
+          className="drawer-toggle"
+          data-testid="editor-outline"
+          title="symbols in this library — click to jump"
+          onClick={() => setOutlineOpen((o) => !o)}
+        >
+          {outlineOpen ? "▾" : "▸"} Outline
+        </button>
         {onRun && (
           <button
             className="editor-run-btn"
@@ -307,6 +371,46 @@ export function EditorPane({
         )}
       </div>
       <div className="editor-host" data-testid="cql-editor" ref={editorDiv} />
+      {outlineOpen && (
+        <div
+          className="outline-panel"
+          data-testid="outline-panel"
+          role="listbox"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setOutlineOpen(false);
+          }}
+        >
+          {outlineGroups.length === 0 && (
+            <p className="pane-hint">No declarations in this library yet.</p>
+          )}
+          {outlineGroups.map((g) => (
+            <div key={g.label} className="outline-group">
+              <div className="outline-group-label">{g.label}</div>
+              {g.rows.map((r) => (
+                <button
+                  key={`${g.label}:${r.name}`}
+                  className="outline-row"
+                  data-testid="outline-item"
+                  title={`go to line ${r.line}`}
+                  onClick={() => {
+                    setOutlineOpen(false);
+                    jumpToLine(r.line, r.name);
+                  }}
+                >
+                  <span className="outline-name">{r.name}</span>
+                  {r.note && <span className="outline-note">{r.note}</span>}
+                  {r.uses != null && (
+                    <span className="outline-uses">
+                      {r.uses} use{r.uses === 1 ? "" : "s"}
+                    </span>
+                  )}
+                  <span className="outline-line">L{r.line}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
       {diags.length > 0 && (
         <div className="diag-list" data-testid="diag-list">
           {diags.map((d, i) => (
@@ -317,11 +421,12 @@ export function EditorPane({
       {onGraphOpenChange && graphOpen && (
         <div className="drawer-body" data-testid="drawer-graph">
           <p className="pane-hint">
-            The graph writes CQL only — Apply replaces the library text
-            after a parse round-trip. Full text→graph parsing is future
-            scope; the canvas starts from the default graph.
+            The builder parses ONE define at a time into an editable
+            shape (retrieve + predicates) and splices it back on Apply
+            after a parse round-trip. Logic outside the builder grammar
+            stays editable as text.
           </p>
-          <GraphPane onApplyCql={(cql) => onTextChange(cql)} />
+          <BuilderPane text={text} onTextChange={onTextChange} />
         </div>
       )}
       {/* REORG 6f.1: execution stats live bottom-right (same convention

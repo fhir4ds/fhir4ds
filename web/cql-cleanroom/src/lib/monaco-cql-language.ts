@@ -9,6 +9,8 @@
  */
 
 import type * as MonacoEditor from "monaco-editor";
+import { extractCqlSymbols } from "./cqlSymbols";
+import { renderValue } from "./formatValue";
 
 type Monaco = typeof MonacoEditor;
 
@@ -285,7 +287,31 @@ export const CQL_DARK_THEME = {
 };
 
 // CQL Completion Item Provider
+
+/**
+ * Visual editor step 2 — workspace-aware completion context. The
+ * provider is a Monaco singleton (registered once per language), so
+ * the app pushes the ACTIVE library's world in here on every change
+ * instead of registering per-editor providers.
+ */
+export interface CqlCompletionContext {
+  /** Active library text (the one being edited). */
+  text: string;
+  /** Distinct dataset resource types (retrieve completions). */
+  resourceTypes: string[];
+  /** Included library name → its text (qualified define completions). */
+  includedLibraries: Record<string, string>;
+}
+let completionContext: CqlCompletionContext | null = null;
+export function setCqlCompletionContext(
+  c: CqlCompletionContext | null,
+): void {
+  completionContext = c;
+}
+
 export const createCQLCompletionProvider = (monaco: Monaco) => ({
+  // `[` retrieves, `.` qualified references, `"` quoted identifiers.
+  triggerCharacters: ["[", ".", '"'],
   provideCompletionItems: (model: any, position: any) => {
     const word = model.getWordUntilPosition(position);
     const range = {
@@ -294,6 +320,55 @@ export const createCQLCompletionProvider = (monaco: Monaco) => ({
       startColumn: word.startColumn,
       endColumn: word.endColumn,
     };
+    const lineText = model.getValueInRange({
+      startLineNumber: position.lineNumber,
+      startColumn: 1,
+      endLineNumber: position.lineNumber,
+      endColumn: position.column,
+    });
+    const ctx = completionContext;
+
+    // Retrieve: typing right after `[` — dataset resource types first.
+    if (/\[\s*$/.test(lineText) && ctx?.resourceTypes.length) {
+      return {
+        suggestions: ctx.resourceTypes.map((rt) => ({
+          label: rt,
+          kind: monaco.languages.CompletionItemKind.Class,
+          insertText: rt,
+          range,
+          detail: "dataset resource type",
+        })),
+      };
+    }
+
+    // Qualified reference: `Alias.` or `Alias."…` — the included
+    // library's defines/functions (inserted bare; CQL accepts quoted
+    // identifiers either way, so we complete inside the quotes too).
+    const qual = /(?:^|[\s(=])([A-Za-z][\w]*)\.\s*(?:"([^"]*)|([\w]*))$/.exec(
+      lineText,
+    );
+    if (qual && ctx) {
+      const alias = qual[1];
+      const libText = ctx.includedLibraries[alias];
+      if (libText) {
+        const syms = extractCqlSymbols(libText);
+        const at = {
+          startLineNumber: position.lineNumber,
+          endLineNumber: position.lineNumber,
+          startColumn: position.column - (qual[2] ?? qual[3] ?? "").length,
+          endColumn: position.column,
+        };
+        return {
+          suggestions: [...syms.defines, ...syms.functions].map((n) => ({
+            label: `"${n.name}"`,
+            insertText: n.name,
+            kind: monaco.languages.CompletionItemKind.Value,
+            range: at,
+            detail: `${alias} define`,
+          })),
+        };
+      }
+    }
 
     const suggestions = [
       ...CQL_KEYWORDS.map((keyword) => ({
@@ -340,28 +415,143 @@ export const createCQLCompletionProvider = (monaco: Monaco) => ({
       },
     ];
 
+    // Workspace symbols from the active library + its includes.
+    if (ctx) {
+      const syms = extractCqlSymbols(ctx.text);
+      const push = (
+        label: string,
+        kind: any,
+        detail: string,
+        insert?: string,
+      ) =>
+        suggestions.push({
+          label,
+          kind,
+          insertText: insert ?? label,
+          range,
+          detail,
+        });
+      for (const d of syms.defines)
+        push(d.name, monaco.languages.CompletionItemKind.Value, "define");
+      for (const f of syms.functions)
+        push(
+          f.name,
+          monaco.languages.CompletionItemKind.Function,
+          "function define",
+          `${f.name}($0)`,
+        );
+      for (const p of syms.parameters)
+        push(p.name, monaco.languages.CompletionItemKind.Variable, "parameter");
+      for (const v of syms.valuesets)
+        push(v.name, monaco.languages.CompletionItemKind.EnumMember, "valueset");
+      for (const i of syms.includes)
+        push(
+          i.alias,
+          monaco.languages.CompletionItemKind.Module,
+          `library include (${i.name})`,
+        );
+    }
+
     return { suggestions };
   },
 });
 
 // CQL Hover Provider
+
+/**
+ * Visual editor step 3 — live hover evaluation. The app pushes an
+ * all-defines evaluation accessor (cached per library text); hovering
+ * a define/parameter name renders its per-patient values inline.
+ */
+export interface CqlHoverContext {
+  evaluateAll: () => Promise<{
+    columns: string[];
+    rows: Array<Record<string, unknown>>;
+  } | null>;
+}
+let hoverContext: CqlHoverContext | null = null;
+export function setCqlHoverContext(c: CqlHoverContext | null): void {
+  hoverContext = c;
+}
+
+/** Expand a quoted CQL identifier ("Initial Population") around the
+ *  cursor — the word API only yields the fragment between spaces. */
+function quotedNameAt(model: any, position: any): string | null {
+  const line = model.getValueInRange({
+    startLineNumber: position.lineNumber,
+    startColumn: 1,
+    endLineNumber: position.lineNumber,
+    endColumn: position.column,
+  });
+  const rest = model.getValueInRange({
+    startLineNumber: position.lineNumber,
+    startColumn: position.column,
+    endLineNumber: position.lineNumber,
+    endColumn: model.getLineMaxColumn(position.lineNumber),
+  });
+  const li = line.lastIndexOf('"');
+  const ri = rest.indexOf('"');
+  if (li === -1 || ri === -1) return null;
+  const name = line.slice(li + 1) + rest.slice(0, ri);
+  return name.trim() || null;
+}
+
 export const createCQLHoverProvider = (monaco: Monaco) => ({
-  provideHover: (model: any, position: any) => {
+  provideHover: async (model: any, position: any) => {
     const word = model.getWordAtPosition(position);
-    if (!word) return;
+    const quoted = word ? quotedNameAt(model, position) : null;
+    const name = quoted ?? word?.word;
+    if (!name) return;
 
-    const { word: hoveredWord } = word;
+    // Workspace symbol first: define/function/parameter → live values.
+    const syms = completionContext
+      ? extractCqlSymbols(completionContext.text)
+      : null;
+    const isDefine =
+      !!syms &&
+      ([...syms.defines, ...syms.functions, ...syms.parameters] as Array<{
+        name: string;
+      }>).some((s) => s.name === name);
+    if (isDefine && hoverContext) {
+      const res = await hoverContext.evaluateAll();
+      const ci = res?.columns.indexOf(name) ?? -1;
+      if (res && ci >= 0) {
+        const kind = syms!.parameters.some((p) => p.name === name)
+          ? "parameter"
+          : "define";
+        const MAX = 8;
+        const lines = ["| patient | value |", "| --- | --- |"];
+        for (const r of res.rows.slice(0, MAX)) {
+          lines.push(`| ${r.patient_id} | ${renderValue(r[name])} |`);
+        }
+        if (res.rows.length > MAX) {
+          lines.push(`| … | +${res.rows.length - MAX} more patients |`);
+        }
+        return {
+          range: new monaco.Range(
+            position.lineNumber,
+            word?.startColumn ?? position.column - 1,
+            position.lineNumber,
+            word?.endColumn ?? position.column + 1,
+          ),
+          contents: [
+            { value: `**${name}** — ${kind} · all patients` },
+            { value: lines.join("\n") },
+          ],
+        };
+      }
+    }
 
-    const documentation = getCQLDocumentation(hoveredWord);
+    const documentation = getCQLDocumentation(name);
     if (documentation) {
       return {
         range: new monaco.Range(
           position.lineNumber,
-          word.startColumn,
+          word!.startColumn,
           position.lineNumber,
-          word.endColumn,
+          word!.endColumn,
         ),
-        contents: [{ value: `**${hoveredWord}**` }, { value: documentation }],
+        contents: [{ value: `**${name}**` }, { value: documentation }],
       };
     }
 

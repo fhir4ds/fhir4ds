@@ -15,7 +15,6 @@
   "dependencies": {
     "@duckdb/duckdb-wasm": "1.33.1-dev64.0",
     "@monaco-editor/react": "^4.7.0",
-    "@xyflow/react": "^12.11.6",
     "apache-arrow": "^21.1.0",
     "fflate": "^0.8.2",
     "lucide-react": "^1.48.0",
