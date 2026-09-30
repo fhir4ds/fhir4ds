@@ -238,6 +238,115 @@ def test_phase3_closure_table_built_and_subsumption_works_in_process(
         _ = df  # silence linter
 
 
+def test_phase3_resource_vs_code_equivalence_closure_qa023(
+    in_process_endpoint,
+) -> None:
+    """QA-023 (iter 12): `C.code ~ "Asthma"` with closure_loaded=True must
+    route the RESOURCE-side operand through terminology_closure subsumption.
+
+    build_closure_table inserts reflexive rows (exact-match coverage) plus
+    ancestor rows (descendant coverage). A Condition coded with a DESCENDANT
+    asthma code must satisfy `C.code ~ "Asthma"`; an exact-coded control
+    must satisfy it too.
+    """
+    import duckdb
+    import pathlib
+    import tempfile
+
+    from fhir4ds.cql import evaluate_measure
+    from fhir4ds.cql.parser import parse_cql
+    from fhir4ds.cql.terminology.closure import build_closure_table
+    from fhir4ds.cql.loader import FHIRDataLoader
+    from fhir4ds.fhirpath.duckdb import register_fhirpath
+    from fhir4ds.cql.duckdb import register
+
+    conn = duckdb.connect(":memory:")
+    # The resource-side closure arm extracts codings via the fhirpath UDF —
+    # the documented evaluate_measure precondition.
+    register_fhirpath(conn)
+    register(conn, include_fhirpath=False)
+
+    cql_source = """
+    library TestPhase3Qa023 version '1.0'
+    using FHIR version '4.0.1'
+    codesystem snomed: 'http://snomed.info/sct'
+    code Asthma: '195967001' from snomed
+    context Patient
+    define AsthmaMatch:
+        exists ([Condition] C where C.code ~ Asthma)
+    """
+
+    library = parse_cql(cql_source)
+    report = build_closure_table(
+        library, in_process_endpoint, conn, on_expand_error="warn"
+    )
+    closure_count = conn.execute(
+        "SELECT COUNT(*) FROM terminology_closure"
+    ).fetchone()[0]
+    if closure_count == 0:
+        pytest.skip(
+            "build_closure_table inserted 0 rows - SNOMED hierarchy index "
+            f"may not be loaded (errors={len(report.errors)})"
+        )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        lib_path = pathlib.Path(tmpdir) / "TestPhase3Qa023.cql"
+        lib_path.write_text(cql_source)
+
+        loader = FHIRDataLoader(conn)
+        loader.load_resource({"resourceType": "Patient", "id": "p1", "active": True})
+        loader.load_resource({"resourceType": "Patient", "id": "p2", "active": True})
+        # Descendant-of-asthma code (from the expansion hierarchy).
+        loader.load_resource(
+            {
+                "resourceType": "Condition",
+                "id": "cond-qa023-descendant",
+                "subject": {"reference": "Patient/p1"},
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "10692761000119107",
+                        }
+                    ]
+                },
+            }
+        )
+        # Exact-code control.
+        loader.load_resource(
+            {
+                "resourceType": "Condition",
+                "id": "cond-qa023-exact",
+                "subject": {"reference": "Patient/p2"},
+                "code": {
+                    "coding": [
+                        {"system": "http://snomed.info/sct", "code": "195967001"}
+                    ]
+                },
+            }
+        )
+
+        result = evaluate_measure(
+            library_path=str(lib_path),
+            conn=conn,
+            output_columns={"asthma_match": "AsthmaMatch"},
+            terminology_endpoint=in_process_endpoint,
+            closure_loaded=True,
+        )
+        matches = {
+            rec["patient_id"]: bool(rec["asthma_match"])
+            for rec in result.to_dict("records")
+        }
+        assert matches.get("p1") is True, (
+            f"descendant-coded Condition must satisfy ~ Asthma via closure; "
+            f"matches={matches}"
+        )
+        assert matches.get("p2") is True, (
+            f"exact-coded Condition must satisfy ~ Asthma via reflexive "
+            f"closure rows; matches={matches}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Phase 4: notes pipeline extraction (no endpoint needed).
 # ---------------------------------------------------------------------------

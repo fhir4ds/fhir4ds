@@ -834,7 +834,7 @@ _LAMBDA_UNSAFE_MACROS = frozenset({'"Distinct"'})
 def _rewrite_distinct_calls(text: str) -> str:
     """Recursively rewrite `"Distinct"(...)` → `list_distinct(...)` in a
     rendered argument string (nested calls inside lambda bodies)."""
-    m = re.search('"Distinct"\s*\(', text)
+    m = re.search(r'"Distinct"\s*\(', text)
     if not m:
         return text
     start = m.start()
@@ -889,7 +889,7 @@ def _render_lambda_body(body: SQLExpression) -> str:
             out: list[str] = []
             i = 0
             while True:
-                m = re.search('"Distinct"\s*\(', rendered[i:])
+                m = re.search(r'"Distinct"\s*\(', rendered[i:])
                 if not m:
                     out.append(rendered[i:])
                     break

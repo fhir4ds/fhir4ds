@@ -2890,6 +2890,39 @@ class ListsMixin:
                 right=SQLLiteral(value=0),
             )
 
+        # QA-024 (iter 15, EXPLORER): a bare Retrieve source translates to a
+        # RetrievePlaceholder. Nested-position exists(...) (e.g. inside
+        # Coalesce args or `exists([Obs]) and true`) previously fell through
+        # to the `source IS NOT NULL` default, and the late placeholder
+        # resolution swapped the placeholder for a bare CTE identifier —
+        # producing `CTE IS NOT NULL` with no FROM/patient correlation
+        # (BinderException). Emit the correlated-EXISTS shape directly with
+        # the placeholder INSIDE the subquery FROM: resolve_placeholders
+        # recurses SQLSelect.from_clause/SQLAlias/SQLExists, so the final
+        # SQL becomes EXISTS (SELECT 1 FROM "<CTE>" sub WHERE
+        # sub.patient_id = <outer>.patient_id).
+        from ...translator.placeholder import RetrievePlaceholder as _RetPl
+        if isinstance(source, _RetPl):
+            outer_alias = self.context.patient_alias or "_pt"
+            if self.context.current_patient_id:
+                correlation_where = SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
+                    right=SQLLiteral(value=self.context.current_patient_id),
+                )
+            else:
+                correlation_where = SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
+                    right=SQLQualifiedIdentifier(parts=[outer_alias, "patient_id"]),
+                )
+            exists_select = SQLSelect(
+                columns=[SQLLiteral(value=1)],
+                from_clause=SQLAlias(expr=source, alias="sub"),
+                where=correlation_where,
+            )
+            return SQLExists(subquery=SQLSubquery(query=exists_select))
+
         # If source is already an EXISTS (from boolean_context handling), return it directly
         if isinstance(source, SQLExists):
             return source

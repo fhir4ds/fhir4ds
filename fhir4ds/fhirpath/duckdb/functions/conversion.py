@@ -696,15 +696,15 @@ def _quantity_from_string(value: str) -> nodes.FP_Quantity | None:
         return nodes.FP_Quantity(num_value, quoted_unit)
     if not time_unit:
         return nodes.FP_Quantity(num_value, "'1'")
+    # FP-08 EXPLORER doctrine (QA-017, iter 1 2026-09-28): mirror the engine
+    # toQuantity string grammar (engine/invocations/misc.py). The bare-alpha
+    # regex group is for calendar duration keywords ONLY — case-sensitive
+    # (§8.7, §8.5: keywords are lowercase `year`/`years`/... with len > 2;
+    # 2-char tokens like `wk`/`mg` are UCUM codes and must be quoted).
+    # Bare UCUM codes, unknown tokens, and hex-looking strings (`0xFF`) are
+    # rejected, matching native C++ isBareDurationKeyword.
     if nodes.FP_Quantity.timeUnitsToUCUM.get(time_unit) and len(time_unit) > 2:
         return nodes.FP_Quantity(num_value, time_unit)
-    if nodes.FP_Quantity.timeUnitsToUCUM.get(time_unit.lower()) and len(time_unit) > 2:
-        return nodes.FP_Quantity(num_value, time_unit.lower())
-    if time_unit.lower() not in {u.strip("'") for u in nodes.FP_Quantity.mapUCUMCodeToTimeUnits} and not (
-        nodes.FP_Quantity.timeUnitsToUCUM.get(time_unit)
-        or nodes.FP_Quantity.timeUnitsToUCUM.get(time_unit.lower())
-    ):
-        return nodes.FP_Quantity(num_value, f"'{time_unit}'")
     return None
 
 

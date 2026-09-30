@@ -351,7 +351,6 @@ def measure_population_map(measure: dict[str, Any]) -> tuple[list[tuple[str, str
 
         pop_map = MeasureParser().parse(measure)
     except Exception as exc:
-        diag = diagnostic_from_exception(exc, context="measure_population_map")
         return [], Diagnostics(
             code=DiagnosticCode.INPUT_ERROR,
             severity="error",

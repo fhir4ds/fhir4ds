@@ -6688,6 +6688,24 @@ class OperatorsMixin:
             return [code_info]
         return []
 
+    @staticmethod
+    def _sql_ref_for_closure(ref: SQLExpression) -> str:
+        """QA-023: render a resource reference for the raw closure-SQL arms.
+
+        Handles the shapes the resource-vs-code equivalence path can
+        produce: SQLQualifiedIdentifier (C.resource → C.resource as a plain
+        dotted reference — quoted table aliases from retrieve CTEs are
+        created unquoted (AS C), so re-quoting would emit "C"."resource"
+        which DuckDB parses as a quoted identifier pair that does not
+        resolve against the unquoted alias) and SQLFunctionCall
+        (fhirpath_*(X, ...) → X). Falls back to to_sql().
+        """
+        if isinstance(ref, SQLQualifiedIdentifier):
+            return ".".join(str(part) for part in ref.parts)
+        if isinstance(ref, SQLFunctionCall) and ref.args:
+            return OperatorsMixin._sql_ref_for_closure(ref.args[0])
+        return ref.to_sql()
+
     def _translate_equivalence_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
         is_negated = operator == "!~"
@@ -7110,6 +7128,60 @@ class OperatorsMixin:
                     resource_ref = resource_expr
             else:
                 resource_ref = resource_expr
+            # QA-023 (iter 12, medterm4ds Phase 3): when the closure table is
+            # loaded, resource-vs-code ~ must route through terminology_closure
+            # (translator closure_loaded docstring promises ~ consults the
+            # closure table; the static-static and is-op paths already do).
+            # Emit a SQL-side predicate: unnest the runtime codings extracted
+            # by the fhirpath UDF, then a correlated closure EXISTS per static
+            # code entry (symmetric: either side may be the ancestor, matching
+            # _emit_closure_aware_codes_equivalent). build_closure_table
+            # inserts reflexive rows, so exact literal matches resolve through
+            # the ancestor=self descendant=self row.
+            if getattr(self.context, "closure_table_loaded", False):
+                from ...duckdb.udf.system_resolver import SystemResolver
+
+                coding_path = (
+                    f"{base_path}.coding" if not _is_coding_type else base_path
+                )
+                entry_arms: list[str] = []
+                for entry in code_entries:
+                    system_raw = entry.get("codesystem", entry.get("system", ""))
+                    system_url = self.context.codesystems.get(system_raw, system_raw)
+                    system_norm = SystemResolver.normalize(system_url) or system_url
+                    code_value = entry.get("code", "")
+                    s_lit = SQLLiteral(value=system_norm).to_sql()
+                    c_lit = SQLLiteral(value=code_value).to_sql()
+                    res_sql = OperatorsMixin._sql_ref_for_closure(resource_ref)
+                    entry_arms.append(
+                        "EXISTS (SELECT 1 FROM unnest(fhirpath("
+                        f"{res_sql}, '{coding_path}')) AS _u(_c) "
+                        "WHERE EXISTS (SELECT 1 FROM terminology_closure _tc "
+                        f"WHERE ((_tc.ancestor_system = {s_lit} "
+                        f"AND _tc.ancestor_code = {c_lit} "
+                        "AND _tc.descendant_system = "
+                        "coalesce(json_extract_string(_u._c, '$.system'), "
+                        f"{s_lit}) "
+                        "AND _tc.descendant_code = "
+                        "coalesce(json_extract_string(_u._c, '$.code'), "
+                        f"{c_lit})) "
+                        f"OR (_tc.descendant_system = {s_lit} "
+                        f"AND _tc.descendant_code = {c_lit} "
+                        "AND _tc.ancestor_system = "
+                        "coalesce(json_extract_string(_u._c, '$.system'), "
+                        f"{s_lit}) "
+                        "AND _tc.ancestor_code = "
+                        "coalesce(json_extract_string(_u._c, '$.code'), "
+                        f"{c_lit})))))"
+                    )
+                if entry_arms:
+                    # Balance check: each arm opens unnest-EXISTS + closure-EXISTS
+                    # + the ((A...) OR (B...)) grouping and must close all of them.
+                    result_expr = SQLRaw(raw_sql=" OR ".join(entry_arms))
+                    if is_negated:
+                        return SQLUnaryOp(operator="NOT", operand=result_expr)
+                    return result_expr
+
             result_expr = SQLFunctionCall(
                 name="fhirpath_bool",
                 args=[resource_ref, SQLLiteral(value=fhirpath_expr)],

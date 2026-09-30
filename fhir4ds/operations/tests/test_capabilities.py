@@ -93,6 +93,49 @@ class TestDatasetCapability:
         r = load_dataset(DatasetSpec(resources=[{"nada": 1}]), conn)
         assert not r.ok
 
+    def test_valueset_paths_loads_codes_qa026(self):
+        """QA-026 (iter 18): valueset_paths must read the JSON file and load
+        its ValueSet codes — the branch used to pass the path string straight
+        to load_valuesets (TypeError: valuesets must be a list, got str)."""
+        import json
+        import tempfile
+        from pathlib import Path
+
+        vs = {
+            "resourceType": "ValueSet",
+            "id": "qa026",
+            "url": "http://example.org/ValueSet/qa026",
+            "expansion": {
+                "contains": [
+                    {"system": "http://loinc.org", "code": "8480-6"},
+                    {"system": "http://loinc.org", "code": "8462-4"},
+                ]
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "vs.json"
+            path.write_text(json.dumps(vs))
+            conn = create_connection()
+            r = load_dataset(DatasetSpec(valueset_paths=[str(path)]), conn)
+        assert r.ok
+        n = conn.execute(
+            "SELECT count(*) FROM valueset_codes WHERE valueset_url = ?",
+            ["http://example.org/ValueSet/qa026"],
+        ).fetchone()[0]
+        assert n == 2
+
+    def test_valueset_paths_bad_json_is_typed_diag_qa026(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "vs.json"
+            path.write_text("{not json")
+            conn = create_connection()
+            r = load_dataset(DatasetSpec(valueset_paths=[str(path)]), conn)
+        assert not r.ok
+        assert r.diagnostics
+
 
 class TestEvaluateCapability:
     def test_rows_and_types(self):

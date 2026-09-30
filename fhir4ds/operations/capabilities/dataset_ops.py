@@ -61,8 +61,12 @@ def load_dataset(dataset: DatasetSpec, conn: Any) -> DatasetResult:
                     bundle = json.load(fh)
                 loader.load_bundle(bundle)
         if dataset.valueset_paths:
+            # QA-026 (iter 18): read the ValueSet JSON file and wrap it in a
+            # list for load_valuesets (the branch used to pass the raw path
+            # string, which load_valuesets rejects with a TypeError).
             for path in dataset.valueset_paths:
-                loader.load_valuesets(path)
+                with open(path, encoding="utf-8-sig") as fh:
+                    loader.load_valuesets([json.load(fh)])
         if dataset.valueset_resources:
             for vs in dataset.valueset_resources:
                 loader.load_valuesets([vs])

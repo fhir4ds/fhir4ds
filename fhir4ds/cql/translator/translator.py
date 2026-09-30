@@ -657,6 +657,17 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     start, end = param_value
                     self._context.set_parameter_binding(param_name, (str(start), str(end)))
                     # set_parameter_binding handles all interval parameters uniformly
+                elif isinstance(param_value, list) and len(param_value) == 2:
+                    # QA-025 (iter 16): Interval parameter supplied as a JSON
+                    # array [start, end] — the natural spelling arriving from
+                    # browser/env callers through the operations
+                    # evaluate_library envelope (JSON arrays decode to Python
+                    # lists). Coerce to the (start, end) tuple shape the
+                    # interval parameter lowering expects; without this the
+                    # raw list flows into scalar positions such as
+                    # intervalStart([...]) and binder-errors at execution.
+                    start, end = param_value
+                    self._context.set_parameter_binding(param_name, (str(start), str(end)))
                 else:
                     self._context.set_parameter_binding(param_name, param_value)
 
@@ -2175,7 +2186,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
     def _retrieve_promotion_source(self, node: Retrieve) -> Optional[Tuple[str, str]]:
         """Resolve a Retrieve AST node to its retrieve CTE name and resource type."""
-        from ..parser.ast_nodes import BinaryExpression, CodeSelector
+        from ..parser.ast_nodes import BinaryExpression, CodeSelector, Literal as _RetLiteral
         from ..translator.cte_builder import build_retrieve_cte
 
         resource_type = getattr(node, "type", None)
@@ -2216,6 +2227,32 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                         valueset_name = right.name
                     else:
                         valueset_name = str(right)
+                    # QA-019 (iter 3, 2026-09-28): `[Obs: "8480-6" in "LOINC"]`
+                    # with a declared CODESYSTEM must resolve to direct-code
+                    # membership (`urn:cql:code:<cs_url>|<code>`), not the
+                    # in_valueset path (which fabricates an NLM ValueSet URL
+                    # for a codesystem name and never matches). The quoted
+                    # code string parses as an Identifier inside the retrieve
+                    # terminology expression; when the right operand names a
+                    # declared codesystem, the LEFT operand is the code VALUE
+                    # and must not be treated as a code_property.
+                    if valueset_name is not None and valueset_name not in (
+                        self._context.valuesets,
+                        self._context.codes,
+                    ):
+                        cs_url = self._context.codesystems.get(valueset_name)
+                        if cs_url is not None:
+                            left_value = (
+                                left.value
+                                if isinstance(left, _RetLiteral)
+                                else getattr(left, "name", None)
+                            )
+                            if isinstance(left_value, str):
+                                valueset = (
+                                    f"urn:cql:code:{cs_url}|{left_value}"
+                                )
+                                code_property = None
+                                valueset_name = None
                 else:
                     valueset_name = str(terminology)
 
