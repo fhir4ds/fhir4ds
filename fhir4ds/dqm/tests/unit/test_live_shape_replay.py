@@ -149,8 +149,8 @@ define "Numerator": Patient.active
             ],
         }
         from fhir4ds.cql import FHIRDataLoader
-        from fhir4ds.fhirpath.duckdb import register_fhirpath
         from fhir4ds.cql.duckdb import register
+        from fhir4ds.fhirpath.duckdb import register_fhirpath
 
         con = duckdb.connect()
         register_fhirpath(con)

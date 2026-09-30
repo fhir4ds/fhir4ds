@@ -211,7 +211,7 @@ def _evidence_artifact(
     operations capability). Returns the payload dict or a process exit
     code on failure.
     """
-    from fhir4ds.operations import evaluate_library, explain_patient
+    from fhir4ds.operations import evaluate_library
 
     output_columns = _parse_json_arg(args.output_columns, "output-columns")
     ev = evaluate_library(
