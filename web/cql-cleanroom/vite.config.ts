@@ -159,10 +159,33 @@ export default defineConfig({
   plugins: [react(), assetMiddleware(), copyAssetsToDist()],
   build: {
     rollupOptions: {
+      // Web-component entry (mirrors cql-clinic): stable filename so the
+      // Docusaurus <script src> tag never needs updating. The shared App
+      // chunk's CSS also gets a stable name — module-script consumers
+      // (the WC) never link CSS chunks, so it is fetched into the shadow
+      // root at runtime by name.
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        "cql-cleanroom": path.resolve(__dirname, "src/web-component.tsx"),
+      },
       output: {
-        entryFileNames: "assets/[name]-[hash].js",
+        entryFileNames: (chunk: { name: string }) =>
+          chunk.name === "cql-cleanroom"
+            ? "cql-cleanroom.js"
+            : "assets/[name]-[hash].js",
         chunkFileNames: "assets/[name]-[hash].js",
-        assetFileNames: "assets/[name]-[hash][extname]",
+        assetFileNames: (assetInfo: any) => {
+          // names include the extension ("styles.css")
+          const name = (assetInfo.names?.[0] ?? assetInfo.name ?? "").replace(/\.[^.]*$/, "");
+          // Stable names for the two stylesheets the web-component build
+          // fetches into its shadow root at runtime: the app styles (the
+          // shared main chunk's CSS) and Monaco's stylesheet (emitted from
+          // the monaco-setup shared chunk). Module-script consumers never
+          // link CSS chunks, so both are looked up by fixed name.
+          if (name === "main" || name === "index" || name === "styles") return "assets/app.css";
+          if (name === "monaco-setup") return "assets/monaco.css";
+          return "assets/[name]-[hash][extname]";
+        },
       },
     },
   },

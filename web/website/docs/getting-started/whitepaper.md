@@ -1,6 +1,7 @@
 ---
 id: whitepaper
 title: Technical Whitepaper
+description: "The FHIR4DS design whitepaper: clinical analytics on columnar storage via CQL-to-SQL translation."
 ---
 
 # FHIR4DS Technical Whitepaper

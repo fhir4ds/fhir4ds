@@ -38,6 +38,7 @@ import {
   mergeDatasets,
 } from "./lib/bundleIo";
 import { DropdownMenu, DropdownSubmenu } from "./components/DropdownMenu";
+import { NativeClickButton } from "./components/NativeClickButton";
 import { ResourceContextMenu } from "./components/nav/ResourceContextMenu";
 import type { ContextMenuState } from "./components/nav/ResourceContextMenu";
 import {
@@ -82,6 +83,11 @@ import {
   type TabKind,
 } from "./lib/editorTabs";
 import { renameLibrary } from "./lib/renameLibrary";
+import {
+  exampleAssetUrl,
+  takePendingDefaultExample,
+  urlDefaultExample,
+} from "./lib/defaultExample";
 import type {
   DatasetSpec,
   LibraryText,
@@ -138,6 +144,91 @@ const DEFAULT_DATASET_RESOURCES: Array<Record<string, unknown>> = [
   { resourceType: "Patient", id: "p2", gender: "male", name: [{ given: ["Bob"] }] },
   { resourceType: "Patient", id: "p3", gender: "female" },
 ];
+
+/**
+ * A workspace is PRISTINE when it still holds the untouched
+ * CleanroomDemo scratch state a fresh install auto-saves (single
+ * default library text, default measure, default 3-patient dataset,
+ * no user-authored extras). Pristine workspaces may be replaced by a
+ * host-declared default example; edited ones are never touched.
+ */
+function isPristineWorkspace(ws: {
+  libraries?: Array<{ name?: string; text?: string }>;
+  measures?: unknown[];
+  viewDefs?: Array<{ id?: string; resource?: Record<string, unknown> }>;
+  expectedReports?: Record<string, unknown>;
+  dataset?: { resources?: unknown[] } | null;
+  cases?: unknown[] | null;
+}): boolean {
+  const checks: Array<[string, boolean]> = [
+    [
+      "exactly one library",
+      !!ws.libraries && ws.libraries.length === 1,
+    ],
+    [
+      "library is untouched CleanroomDemo",
+      ws.libraries?.length === 1 &&
+        ws.libraries[0].name === "CleanroomDemo" &&
+        ws.libraries[0].text === DEFAULT_CQL,
+    ],
+    ["at most one measure", !ws.measures || ws.measures.length <= 1],
+    // The app AUTO-SEEDS two artifacts for the demo measure on every
+    // restore (REORG 6d): one derived default ViewDefinition
+    // ("vd_default", built by buildDerivedView from the untouched demo
+    // measure) and an empty expected-reports slot keyed by "msr_0".
+    // Auto-save persists them, so on the NEXT visit these checks would
+    // fail even though the user never authored anything — permanently
+    // blocking the host default example (CMS69). Tolerate exactly the
+    // seeded shapes; any authored view/report content still fails.
+    [
+      "no user view definitions",
+      !ws.viewDefs ||
+        ws.viewDefs.length === 0 ||
+        (ws.viewDefs.length === 1 &&
+          ws.viewDefs[0]?.id === "vd_default" &&
+          JSON.stringify(ws.viewDefs[0]?.resource) ===
+            JSON.stringify(buildDerivedView(DEFAULT_MEASURE, null))),
+    ],
+    [
+      "no user expected reports",
+      !ws.expectedReports ||
+        Object.keys(ws.expectedReports).length === 0 ||
+        (Object.keys(ws.expectedReports).length === 1 &&
+          ws.expectedReports["msr_0"] != null &&
+          Array.isArray(ws.expectedReports["msr_0"]) &&
+          (ws.expectedReports["msr_0"] as unknown[]).length === 0),
+    ],
+    ["no test cases", !ws.cases || ws.cases.length === 0],
+    [
+      "dataset is the default 3-patient set",
+      (() => {
+        const res = ws.dataset?.resources;
+        if (
+          !Array.isArray(res) ||
+          res.length !== DEFAULT_DATASET_RESOURCES.length
+        ) {
+          return false;
+        }
+        return res.every(
+          (r, i) =>
+            JSON.stringify(r) === JSON.stringify(DEFAULT_DATASET_RESOURCES[i]),
+        );
+      })(),
+    ],
+  ];
+  const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
+  if (failed.length > 0) {
+    // Diagnose why a host-declared default example (e.g. CMS69) did not
+    // auto-load: an edited saved workspace is intentionally preserved.
+    console.info(
+      "[cql-cleanroom] saved workspace is not pristine; keeping it " +
+        "(failed: " + failed.join(", ") + "). Use File > Open > Examples " +
+        "to load an example manually.",
+    );
+    return false;
+  }
+  return true;
+}
 
 const DEFAULT_MEASURE: Record<string, unknown> = {
   resourceType: "Measure",
@@ -499,7 +590,11 @@ export default function App() {
   // 22 ValueSets, real CQL). Loaded from public/examples/.
   const loadExample = async (example: string) => {
     try {
-      const base = `examples/${example}`;
+      // Resolve against the BUNDLE's asset base, not the document: inside
+      // the website embed the document is a docs page and relative
+      // fetches 404 into the SPA HTML fallback (r.json() then dies on
+      // the DOCTYPE). See exampleAssetUrl in lib/defaultExample.ts.
+      const base = exampleAssetUrl(`examples/${example}`);
       const [cql, measure, valuesets, ndjson] = await Promise.all([
         fetch(`${base}/main.cql`).then((r) => r.text()),
         fetch(`${base}/measure.json`).then((r) => r.json()),
@@ -612,6 +707,20 @@ export default function App() {
             setDataset({
               resources: ws.dataset.resources as Record<string, unknown>[],
             });
+          }
+        }
+        // Host-declared default example (web component sets "cms69";
+        // standalone app honors ?example=). Fires when the workspace is
+        // absent OR still pristine (the untouched CleanroomDemo scratch
+        // state a fresh install auto-saves) — so returning embed
+        // visitors who never edited anything still get the featured
+        // example, while real work is never clobbered. Share fragments
+        // returned early above.
+        if (!ws || !ws.libraries?.length || isPristineWorkspace(ws)) {
+          const defaultExample =
+            takePendingDefaultExample() ?? urlDefaultExample();
+          if (defaultExample) {
+            void loadExample(defaultExample);
           }
         }
         if (ws?.measures?.length) {
@@ -866,7 +975,23 @@ export default function App() {
         output_columns: runIsEntrypoint ? outputColumns : undefined,
         emit_sql: true,
       });
-      const env: EvaluateResult = JSON.parse(resp.envelope);
+      const env: EvaluateResult = resp.envelope
+        ? (JSON.parse(resp.envelope) as EvaluateResult)
+        : // Worker hard-failure (no envelope): surface as an engine
+          // diagnostic row instead of crashing auto-eval with
+          // JSON.parse(undefined).
+          ({
+            ok: false,
+            diagnostics: [
+              {
+                code: "worker_error",
+                severity: "error",
+                message:
+                  (resp as { error?: string }).error ??
+                  "engine worker failed without an envelope",
+              },
+            ],
+          } as unknown as EvaluateResult);
       if (seq !== evalSeqRef.current) return; // superseded by a newer run
       if (env.ok) {
         env.evaluated_at = Date.now();
@@ -2330,13 +2455,12 @@ export default function App() {
                 Measure package (MADiE)…
               </button>
               <DropdownSubmenu label="Examples" testId="file-examples">
-                <button
-                  className="dropdown-item"
-                  data-testid="load-example-cms69"
+                <NativeClickButton
+                  testId="load-example-cms69"
                   onClick={() => void loadExample("cms69")}
                 >
                   CMS69 BMI Screening
-                </button>
+                </NativeClickButton>
               </DropdownSubmenu>
             </DropdownSubmenu>
             <DropdownSubmenu label="Add" testId="file-add">

@@ -191,6 +191,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'examples/cql-cleanroom',
+          label: 'CQL Cleanroom',
+        },
+        {
+          type: 'doc',
           id: 'examples/cms-measures',
           label: 'Quality Measures',
         },

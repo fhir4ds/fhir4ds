@@ -31,7 +31,9 @@ export function ResourceContextMenu({
   useEffect(() => {
     if (!menu) return;
     const away = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      // composedPath() pierces shadow DOM (embed retargeting — see
+      // DropdownMenu.tsx onDown note).
+      if (ref.current && !e.composedPath().includes(ref.current)) onClose();
     };
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();

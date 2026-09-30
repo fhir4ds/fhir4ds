@@ -21,6 +21,45 @@ boots are cached. The workbench needs no server and no data leaves the
 browser.
 :::
 
+import CleanroomWC from '@site/src/components/CleanroomWC';
+
+<CleanroomWC height="85vh" popout />
+
+## Walkthrough
+
+### 1. Load a featured example
+
+Open **File → Open → Examples** and pick **CMS69 — BMI Screen and Follow
+Up**. The workbench loads the full measure: `main.cql` plus five include
+tabs (FHIRHelpers, Hospice, PalliativeCare, QICoreCommon, Status), 22
+ValueSets, and a 62-patient synthetic dataset. The Measurement Period
+parameter is prefilled for 2026.
+
+### 2. Watch the auto-recalculation
+
+With **auto-recalc** on, editing any define re-evaluates the measure in
+the background — results appear in the Run pane pager (62 patients, 10 per
+page). Clear the Measurement Period to see inline run errors and error
+recovery when you refill it.
+
+### 3. Inspect population evidence
+
+Switch to the **Evidence** pane: per-patient population membership with
+the reasoning tree, a Sankey flow from Initial Population through
+denominator exclusions to the numerator, and evidence compare (baseline vs
+current with moved/added/removed/flipped classifications).
+
+### 4. Run test cases
+
+The **Tests** pane executes your library's test cases with pass/fail
+diffs and failure reasons — the same `run_tests` envelope the CLI and MCP
+adapters emit.
+
+### 5. Explore the SQL
+
+**Run → SQL** shows the generated DuckDB SQL for every population define,
+so you can trace exactly how the translator lowered your CQL.
+
 ## Workbench capabilities
 
 - **Editor** — Monaco with CQL syntax, live diagnostics (markers from

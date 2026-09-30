@@ -1,6 +1,7 @@
 ---
 id: quickstart
 title: Quick Start
+description: "Get running in five minutes: load FHIR resources, translate CQL to SQL, and evaluate quality measures in DuckDB."
 ---
 
 # Quick Start

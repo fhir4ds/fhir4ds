@@ -19,7 +19,14 @@ export function DropdownMenu({
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      // composedPath() pierces shadow DOM: when this component runs inside
+      // the <cql-cleanroom> web component, native document-level events
+      // retarget e.target to the HOST element, making contains(e.target)
+      // false even for clicks inside the menu — the menu would close on
+      // mousedown and swallow the item's onClick (File > Open > Examples
+      // was unclickable in the embed). composedPath() includes the real
+      // shadow-internal nodes in both light-DOM and shadow-DOM contexts.
+      if (ref.current && !e.composedPath().includes(ref.current)) {
         setOpen(false);
       }
     };

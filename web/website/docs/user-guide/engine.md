@@ -1,6 +1,7 @@
 ---
 id: engine
 title: The Unified Engine
+description: "User guide to the FHIR4DS engine — connections, FHIRPath evaluation, and the operations API surface."
 sidebar_label: The Unified Engine
 slug: /user-guide/index
 ---
