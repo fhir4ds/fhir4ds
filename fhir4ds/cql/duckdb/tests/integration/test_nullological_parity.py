@@ -704,3 +704,56 @@ define "IsNotTrueLow": exists([Observation] O where (O.valueQuantity.value < 100
         con.close()
         vals = [v.get("result") if isinstance(v, dict) else v for v in row]
         assert vals == [True, True], (cpp, vals)
+
+
+def test_coalesce_over_exists_retrieves_executes_qa024() -> None:
+    """QA-024 (iter 15): `Coalesce(exists([Obs]), exists([Cond]))` is valid
+    CQL (variadic Coalesce over Boolean exists-retrieves). Nested-position
+    exists(Retrieve) must lower to a correlated EXISTS subquery — NOT the
+    placeholder-fallthrough `CTE IS NOT NULL` bare-identifier shape that
+    BinderExceptions at execution."""
+    import duckdb as _duckdb
+
+    from fhir4ds.cql.duckdb import register as _register_cql
+    from fhir4ds.cql.loader.fhir_loader import FHIRDataLoader as _Loader
+    from fhir4ds.cql.parser.parser import parse_cql as _parse_cql
+    from fhir4ds.cql.translator.translator import CQLToSQLTranslator as _T
+
+    lib = """
+library MCoalesceRetr version '1.0'
+using FHIR version '4.0.1'
+context Patient
+define "Co": Coalesce(exists([Observation]), exists([Condition]))
+define "NestedAnd": exists([Observation]) and true
+"""
+    for cpp in (True, False):
+        con = _duckdb.connect(
+            ":memory:", config={"allow_unsigned_extensions": True} if cpp else {}
+        )
+        _register_cql(con)
+        _Loader(con).load_resources([
+            {"resourceType": "Patient", "id": "p1"},
+            {"resourceType": "Patient", "id": "p2"},
+            # p1 has both an Observation and a Condition; p2 has only a Condition.
+            {"resourceType": "Observation", "id": "o1",
+             "subject": {"reference": "Patient/p1"}, "status": "final",
+             "code": {"coding": [{"system": "http://loinc.org", "code": "8480-6"}]}},
+            {"resourceType": "Condition", "id": "c1",
+             "subject": {"reference": "Patient/p1"},
+             "code": {"coding": [{"system": "http://snomed.info/sct", "code": "195967001"}]}},
+            {"resourceType": "Condition", "id": "c2",
+             "subject": {"reference": "Patient/p2"},
+             "code": {"coding": [{"system": "http://snomed.info/sct", "code": "195967001"}]}},
+        ])
+        sql = _T().translate_library_to_population_sql(_parse_cql(lib))
+        con.execute("CREATE OR REPLACE TEMP TABLE r AS " + sql)
+        rows = con.execute(
+            "SELECT patient_id, Co, NestedAnd FROM r ORDER BY patient_id"
+        ).fetchall()
+        con.close()
+        # CQL §22.6 Coalesce returns the first NON-NULL argument: for p2,
+        # exists([Observation]) is false — non-null — so Co is false (the
+        # second arm is never reached). The arms still execute correctly
+        # for p1 (first arm true) and the correlated-EXISTS lowering is
+        # exercised end-to-end on both engine modes.
+        assert rows == [("p1", True, True), ("p2", False, False)], (cpp, rows)

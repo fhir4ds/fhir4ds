@@ -1,6 +1,7 @@
 ---
 id: benchmarking
 title: Benchmarking & Accuracy
+description: "FHIR4DS query and translation benchmarks against reference FHIRPath implementations, with reproducible methodology."
 ---
 
 # Benchmarking & Accuracy

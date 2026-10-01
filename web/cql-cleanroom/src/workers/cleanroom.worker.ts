@@ -1,0 +1,754 @@
+/**
+ * Cleanroom worker: single worker owning BOTH runtimes.
+ *
+ *  - Pyodide + fhir4ds-v2 wheel (deps=False doctrine): stateless
+ *    operations (parse_cql, translate_cql, fhirpath_eval,
+ *    validate_resource, resource_schema) → schema:1 envelopes serialized
+ *    as JSON strings inside Python (S12: no toJs() deep marshaling).
+ *  - duckdb-wasm (same worker): executes translated SQL behind the
+ *    TS-side executor (evaluate_library / run_tests / explain_patient).
+ *
+ * EXACT-SQL DOCTRINE (plan §3.1): the SQL emitted by translate_cql is
+ * executed VERBATIM — no regex/string rewriting anywhere (the cql-clinic
+ * removeListExtractFhirpathWrappers workaround is NOT ported).
+ * Dialect gaps are bugs filed against the translator or cql-macros.
+ */
+
+/// <reference lib="webworker" />
+declare const self: any;
+declare const __FHIR4DS_WHEEL_NAME__: string;
+declare const __FHIR4DS_WHEEL_HASH__: string;
+
+import type {
+  DatasetSpec,
+  WorkerRequest,
+  WorkerResponse,
+} from "../lib/protocol";
+import { runSqlOnDuckDB, initDuckDB } from "../lib/executor";
+
+const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
+
+let pyodide: any = null;
+let booted = false;
+let bootFailed: string | null = null; // REV-C1-001: last boot error; cleared on retry
+// Early capability calls WAIT for boot instead of racing it: pyodide
+// sync runPython during an in-flight runPythonAsync crashes natively.
+const bootWaiters: Array<() => void> = [];
+
+function markBootDone(): void {
+  booted = true;
+  for (const w of bootWaiters) w();
+  bootWaiters.length = 0;
+}
+
+async function waitForBoot(): Promise<void> {
+  if (booted) return;
+  await new Promise<void>((resolve) => bootWaiters.push(resolve));
+}
+
+self.onmessage = async (e: MessageEvent) => {
+  const msg = e.data as WorkerRequest;
+  try {
+    const resp = await route(msg);
+    self.postMessage(resp);
+  } catch (err) {
+    self.postMessage({
+      id: msg.id,
+      type: msg.type,
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    } satisfies WorkerResponse);
+  }
+};
+
+async function route(msg: WorkerRequest): Promise<WorkerResponse> {
+  switch (msg.type) {
+    case "boot":
+      return boot();
+    default:
+      await waitForBoot();
+  }
+
+  switch (msg.type) {
+    case "parse_cql":
+      return envelope(msg, "parse_cql", {
+        text: msg.text,
+        include_ast: msg.include_ast === true,
+      });
+    case "compare_evidence":
+      // Stateless dict-diff; runs entirely in Pyodide (no dataset, no SQL).
+      return envelope(msg, "compare_evidence", {
+        baseline: msg.baseline,
+        current: msg.current,
+        output_columns: msg.output_columns ?? null,
+      });
+    case "translate_cql":
+      return envelope(msg, "translate_cql", {
+        libraries: msg.libraries,
+        main: msg.main,
+        audit_mode: msg.audit_mode ?? "none",
+        patient_ids: msg.patient_ids ?? null,
+      });
+    case "fhirpath_eval":
+      return envelope(msg, "fhirpath_eval", {
+        path: msg.path,
+        resource: msg.resource,
+      });
+    case "validate_resource":
+      return envelope(msg, "validate_resource", {
+        resource: msg.resource,
+      });
+    case "resource_schema":
+      return envelope(msg, "resource_schema", {
+        resource_type: msg.resource_type,
+      });
+    case "resource_schema_tree":
+      return envelope(msg, "resource_schema_tree", {
+        resource_type: msg.resource_type,
+        depth: msg.depth ?? null,
+      });
+    case "load_dataset":
+      return envelope(msg, "load_dataset", {
+        dataset: msg.dataset,
+      });
+    case "measure_from_definitions":
+      return envelope(msg, "measure_from_definitions", {
+        libraries: msg.libraries,
+        main: msg.main,
+        mapping: msg.mapping ?? null,
+        library_urls: msg.library_urls ?? null,
+      });
+    case "dependency_closure":
+      return envelope(msg, "dependency_closure", {
+        libraries: msg.libraries,
+        main: msg.main,
+      });
+    case "measure_population_map":
+      return envelope(msg, "measure_population_map", {
+        measure: msg.measure,
+      });
+    case "measure_report_from_rows":
+      return envelope(msg, "measure_report_from_rows", {
+        measure: msg.measure,
+        rows: msg.rows,
+        columns: msg.columns,
+        period_start: msg.period_start ?? null,
+        period_end: msg.period_end ?? null,
+      });
+    case "rows_from_measure_reports":
+      return envelope(msg, "rows_from_measure_reports", {
+        reports: msg.reports,
+        population_codes: msg.population_codes ?? null,
+      });
+    case "flatten_view": {
+      // Parse+generate the VD SQL in Pyodide (pure-Python viewdef
+      // engine), stage resources + execute VERBATIM on duckdb-wasm —
+      // same exact-SQL doctrine as evaluate (SO-3 temp-table staging).
+      const gen = await generateViewSql(msg.view_definition);
+      if (!gen.ok) {
+        return {
+          id: msg.id,
+          type: msg.type,
+          ok: true,
+          envelope: JSON.stringify({
+            schema: 1,
+            ok: false,
+            diagnostics: gen.diagnostics,
+          }),
+        } as WorkerResponse;
+      }
+      const resultJson = await stageAndRunFlat(
+        gen.sql!,
+        msg.resources,
+      );
+      return { id: msg.id, type: msg.type, ok: true, envelope: resultJson } as WorkerResponse;
+    }
+    case "evaluate_snippet":
+      // Console selection run: append the snippet as a hidden define,
+      // evaluate with the shared executor narrowed to that column.
+      return await executeSnippet(msg);
+    case "evaluate_library":
+    case "run_tests":
+    case "explain_patient":
+      // Execution capabilities: translate in Pyodide, execute on duckdb-wasm
+      // behind the TS executor (same envelope shapes).
+      return await executeCapability(msg);
+  }
+}
+
+/**
+ * evaluate_snippet (worker path). 6j — a selection is not always an
+ * expression, so the synthesis is shape-aware:
+ *   whole library   (starts with `library`) → run AS the library;
+ *                   output = every define (output_columns omitted)
+ *   statement block (define/valueset/parameter/context/…) → reuse the
+ *                   original header (minus decls the selection
+ *                   repeats), run the statements bare; output = every
+ *                   define in the selection
+ *   expression      → `define "__snippet__": (<snippet>)` appended to
+ *                     the library, output_columns={"snippet":
+ *                     "__snippet__"} (select + rename in one)
+ * All three delegate to the evaluate_library executor. Diagnostics
+ * pointing after the synthesized prefix are renumbered relative to the
+ * selection's first line so they refer to what the user sees.
+ * env.cql is always the exact executed text.
+ */
+async function executeSnippet(
+  msg: Extract<WorkerRequest, { type: "evaluate_snippet" }>,
+): Promise<WorkerResponse> {
+  const body = msg.snippet.trim();
+  if (!body) {
+    return {
+      id: msg.id,
+      type: msg.type,
+      ok: true,
+      envelope: JSON.stringify({
+        schema: 1,
+        ok: false,
+        diagnostics: [{ code: "input_error", message: "snippet must be a non-empty string" }],
+      }),
+    } as WorkerResponse;
+  }
+  const firstWord = (body.match(/^[A-Za-z]+/)?.[0] ?? "").toLowerCase();
+  const statementKinds = new Set([
+    "define",
+    "valueset",
+    "codesystem",
+    "code",
+    "parameter",
+    "context",
+    "using",
+    "include",
+  ]);
+  const isWholeLibrary = firstWord === "library";
+  const isStatementBlock = statementKinds.has(firstWord);
+
+  let executedText: string;
+  let outputColumns: Record<string, string> | undefined;
+  // Lines to subtract from executed-file diagnostics so they point at
+  // the selection; 0 = executed text IS the selection (no shift).
+  let diagShift = 0;
+  if (isWholeLibrary) {
+    executedText = body;
+    outputColumns = undefined;
+  } else if (isStatementBlock) {
+    const firstDefine = /^\s*define\b/m.exec(msg.main.text);
+    const header = firstDefine
+      ? msg.main.text.slice(0, firstDefine.index)
+      : msg.main.text;
+    const kept = header.split("\n").filter((line) => {
+      const w = (line.match(/^\s*([A-Za-z]+)/)?.[1] ?? "").toLowerCase();
+      if (!statementKinds.has(w)) return true;
+      // `using` is unnamed — drop it when the selection has its own.
+      if (w === "using") return !/^\s*using\b/m.test(body);
+      const named = line.match(/"([^"]+)"|^\s*[A-Za-z]+\s+([A-Za-z][\w-]*)/);
+      const name = named?.[1] ?? named?.[2];
+      if (!name) return true;
+      return !new RegExp(`\\b${w}\\s+"${name}"|\\b${w}\\s+${name}\\b`).test(body);
+    });
+    const headerText = kept.join("\n");
+    diagShift = (headerText.match(/\n/g) ?? []).length;
+    executedText = `${headerText}${body}\n`;
+    outputColumns = undefined;
+  } else {
+    const count = (msg.main.text.match(/\n/g) ?? []).length;
+    diagShift = count + (msg.main.text.endsWith("\n") ? 1 : 2);
+    executedText = `${msg.main.text}\ndefine "__snippet__":\n  (${body})\n`;
+    outputColumns = { snippet: "__snippet__" };
+  }
+  const runMain = { ...msg.main, text: executedText };
+  const resp = (await executeCapability({
+    ...msg,
+    type: "evaluate_library",
+    main: runMain,
+    output_columns: outputColumns,
+    emit_sql: true,
+  })) as unknown as { envelope: string };
+  try {
+    const env = JSON.parse(resp.envelope) as {
+      ok: boolean;
+      cql?: string;
+      diagnostics?: Array<{
+        location?: {
+          start_line?: number | null;
+          end_line?: number | null;
+        } | null;
+      }>;
+    };
+    // REORG 6g: the executed CQL is the synthesized text, so the
+    // console's SQL/AST/CQL tabs replay the selection run faithfully.
+    env.cql = executedText;
+    if (diagShift > 0) {
+      for (const d of env.diagnostics ?? []) {
+        const loc = d.location;
+        if (!loc) continue;
+        if (loc.start_line != null && loc.start_line >= diagShift) {
+          loc.start_line = loc.start_line - diagShift;
+        }
+        if (loc.end_line != null && loc.end_line >= diagShift) {
+          loc.end_line = loc.end_line - diagShift;
+        }
+      }
+    }
+    return { id: msg.id, type: msg.type, ok: true, envelope: JSON.stringify(env) } as WorkerResponse;
+  } catch {
+    return { id: msg.id, type: msg.type, ok: true, envelope: resp.envelope } as WorkerResponse;
+  }
+}
+
+/** Run a stateless Python operation and pass its JSON envelope through. */
+async function envelope(
+  msg: WorkerRequest,
+  op: string,
+  args: Record<string, unknown>,
+): Promise<WorkerResponse> {
+  if (op === "load_dataset") {
+    // Dataset ops run on duckdb-wasm, not Pyodide (plan §3.1: datasets
+    // bypass Pyodide entirely).
+    const ds = args.dataset as DatasetSpec;
+    await loadIntoDuckDB(ds);
+    const total = ds.resources?.length ?? 0;
+    const counts: Record<string, number> = {};
+    for (const r of ds.resources ?? []) {
+      const rt = (r as { resourceType?: string }).resourceType ?? "Unknown";
+      counts[rt] = (counts[rt] ?? 0) + 1;
+    }
+    const env = JSON.stringify({
+      schema: 1,
+      ok: true,
+      resource_counts: counts,
+      total,
+    });
+    return { id: msg.id, type: op, ok: true, envelope: env } as WorkerResponse;
+  }
+  pyodide.globals.set("_op_name", op);
+  pyodide.globals.set("__cleanroom_args", JSON.stringify(args));
+    const json: string = pyodide.runPython(`
+import json
+from fhir4ds import operations as _ops
+from fhir4ds.operations import LibraryText
+
+class _Envelope:
+    """Minimal schema:1 carrier for adapter-composed results."""
+    @staticmethod
+    def ok(payload):
+        class _R:
+            def to_dict(self_inner):
+                return {"schema": 1, "ok": True, **payload}
+        return _R()
+
+    @staticmethod
+    def from_error(diag):
+        class _R:
+            def to_dict(self_inner):
+                return {"schema": 1, "ok": False, "diagnostics": [diag.to_dict()]}
+        return _R()
+
+_args = json.loads(__cleanroom_args)
+
+
+
+
+def _run(op, a):
+    # Per-op signature adapters: operations signatures are NOT uniform
+    # (parse_cql is positional text; translate takes LibraryText objects).
+    if op == "parse_cql":
+        if a.get("include_ast"):
+            return _ops.parse_cql(a["text"], include_ast=True)
+        return _ops.parse_cql(a["text"])
+    if op == "compare_evidence":
+        return _ops.compare_evidence(
+            a["baseline"], a["current"], output_columns=a.get("output_columns")
+        )
+    if op == "translate_cql":
+        libs = [LibraryText(name=l["name"], text=l["text"]) for l in a["libraries"]]
+        main = LibraryText(name=a["main"]["name"], text=a["main"]["text"])
+        pids = a.get("patient_ids")
+        mode = a.get("audit_mode") or "none"
+        if mode in ("population", "full"):
+            return _ops.translate_cql(libs, main, audit_mode=mode, patient_ids=pids)
+        return _ops.translate_cql(libs, main)
+    if op == "fhirpath_eval":
+        return _ops.fhirpath_eval(a["path"], a["resource"])
+    if op == "validate_resource":
+        return _ops.validate_resource(a["resource"])
+    if op == "resource_schema":
+        return _ops.resource_schema(a["resource_type"])
+    if op == "resource_schema_tree":
+        return _ops.resource_schema_tree(
+            a["resource_type"], depth=a.get("depth")
+        )
+    if op == "measure_from_definitions":
+        libs = [LibraryText(name=l["name"], text=l["text"]) for l in a["libraries"]]
+        main = LibraryText(name=a["main"]["name"], text=a["main"]["text"])
+        return _ops.measure_from_definitions(
+            libs, main, mapping=a.get("mapping"), library_urls=a.get("library_urls")
+        )
+    if op == "dependency_closure":
+        libs = [LibraryText(name=l["name"], text=l["text"]) for l in a["libraries"]]
+        main = LibraryText(name=a["main"]["name"], text=a["main"]["text"])
+        ordered, missing = _ops.dependency_closure(libs, main)
+        return _Envelope.ok({
+            "libraries": [{"name": l.name, "text": l.text} for l in ordered],
+            "missing": missing,
+        })
+    if op == "measure_population_map":
+        pairs, diag = _ops.measure_population_map(a["measure"])
+        if diag is not None:
+            return _Envelope.from_error(diag)
+        return _Envelope.ok({"pairs": [{"code": c, "define": d} for c, d in pairs]})
+    if op == "measure_report_from_rows":
+        return _ops.measure_report_from_rows(
+            a["measure"], a["rows"], a["columns"],
+            period_start=a.get("period_start"),
+            period_end=a.get("period_end"),
+        )
+    if op == "rows_from_measure_reports":
+        return _ops.rows_from_measure_reports(
+            a["reports"], population_codes=a.get("population_codes")
+        )
+    raise ValueError(f"unknown op: {op}")
+
+result = _run(_op_name, _args)
+json.dumps(result.to_dict())
+`);
+  return { id: msg.id, type: op, ok: true, envelope: json } as WorkerResponse;
+}
+
+type ExecCapabilityMsg = Extract<
+  WorkerRequest,
+  { type: "evaluate_library" | "run_tests" | "explain_patient" }
+>;
+
+async function executeCapability(msg: ExecCapabilityMsg): Promise<WorkerResponse> {
+  // 1. Translate (population SQL shape; audit structs for explain)
+  const isExplain = msg.type === "explain_patient";
+  const trArgs: Record<string, unknown> = {
+    libraries: msg.libraries,
+    main: msg.main,
+    // population: plain boolean columns (evaluate_library / run_tests);
+    // full: audit structs (explain_patient unwraps {result, evidence}).
+    audit_mode: isExplain ? "full" : "population",
+    patient_ids: isExplain ? [msg.patient_id] : null,
+    output_columns: (msg as { output_columns?: Record<string, string> | null }).output_columns ?? null,
+    parameters: (msg as { parameters?: Record<string, unknown> | null }).parameters ?? null,
+  };
+  pyodide.globals.set("__cleanroom_args", JSON.stringify(trArgs));
+  pyodide.globals.set("_op_name", "translate_cql");
+  const trJson: string = pyodide.runPython(`
+import json
+from fhir4ds import operations as _ops
+from fhir4ds.operations import LibraryText
+
+_args = json.loads(__cleanroom_args)
+_libs = [LibraryText(name=l["name"], text=l["text"]) for l in _args["libraries"]]
+_main = LibraryText(name=_args["main"]["name"], text=_args["main"]["text"])
+_pids = _args.get("patient_ids")
+_mode = _args.get("audit_mode") or "population"
+_oc = _args.get("output_columns")
+_params = _args.get("parameters")
+_r = _ops.translate_cql(_libs, _main, audit_mode=_mode, patient_ids=_pids, output_columns=_oc, parameters=_params)
+json.dumps(_r.to_dict())
+`);
+  const tr = JSON.parse(trJson);
+  if (!tr.ok) {
+    return { id: msg.id, type: msg.type, ok: true, envelope: trJson } as WorkerResponse;
+  }
+
+  // 2. Dataset load (inline resources → duckdb-wasm resources table)
+  const ds = (msg as { dataset?: DatasetSpec | null }).dataset;
+  if (ds && (ds.resources?.length || ds.valueset_resources?.length)) {
+    await loadIntoDuckDB(ds);
+  }
+
+  // 3. Execute the SQL VERBATIM on duckdb-wasm + shape the envelope in TS
+  const execArgs: import("../lib/executor").ExecArgs = {
+    capability: msg.type,
+    library: msg.main.name,
+    sql: tr.sql as string,
+    column_types: tr.column_types as Record<string, string>,
+    tests: msg.type === "run_tests" ? msg.tests : null,
+    patient_id: msg.type === "explain_patient" ? msg.patient_id : null,
+    output_columns: msg.output_columns ?? null,
+    emit_sql: msg.type === "evaluate_library" && msg.emit_sql === true,
+  };
+  const envelopeJson = await runSqlOnDuckDB(execArgs);
+  return { id: msg.id, type: msg.type, ok: true, envelope: envelopeJson } as WorkerResponse;
+}
+
+async function loadIntoDuckDB(ds: DatasetSpec): Promise<void> {
+  const rows: Array<{ patient_ref: string | null; resourceType: string; id: string | null; resource: unknown }> = [];
+  for (const r of ds.resources ?? []) {
+    const rt = typeof (r as any).resourceType === "string" ? (r as any).resourceType : null;
+    const id = typeof (r as any).id === "string" ? (r as any).id : null;
+    rows.push({
+      patient_ref: rt === "Patient" ? id : patientRefOf(r as Record<string, unknown>),
+      resourceType: rt ?? "",
+      id,
+      resource: JSON.stringify(r),
+    });
+  }
+  await initDuckDB();
+  if (rows.length) {
+    // Fresh dataset per load: clear prior rows so runs are deterministic.
+    const stmts = [
+      "DELETE FROM resources",
+      `
+      INSERT INTO resources (patient_ref, resourceType, id, resource)
+      SELECT patient_ref, resourceType, id, resource FROM (
+        SELECT * FROM (VALUES ${rows
+          .map(
+            (r) =>
+              `(${sqlNullable(r.patient_ref)}, ${sqlStr(r.resourceType)}, ${sqlNullable(r.id)}, ${sqlStr(String(r.resource))})`,
+          )
+          .join(", ")})
+      ) AS t(patient_ref, resourceType, id, resource)
+      `,
+    ];
+    for (const stmt of stmts) {
+      try {
+        await runSqlOnDuckDBRaw(stmt);
+      } catch (err) {
+        console.error(
+          "[loadIntoDuckDB] statement failed:",
+          String(err),
+          "| sql:",
+          JSON.stringify(stmt.slice(0, 300)),
+        );
+        throw err;
+      }
+    }
+  }
+  // PASS2 G2: bridge ValueSet resources into the WASM engine's
+  // g_valueset_cache (in_valueset reads the C++ cache, not a table).
+  // Workspace terminology arrives via DatasetSpec.valueset_resources.
+  if (ds.valueset_resources?.length) {
+    const { valuesetToRows, seedValuesetCache } = await import(
+      "../lib/valuesetBridge"
+    );
+    const { rows: vsRows, warnings } = valuesetToRows(
+      ds.valueset_resources as Array<Record<string, unknown>>,
+    );
+    for (const w of warnings) {
+      console.warn("[valuesetBridge]", w);
+    }
+    await seedValuesetCache(vsRows, runSqlOnDuckDBRaw);
+  }
+  // NOTE: an absent valueset_resources does NOT clear the cache — an
+  // in-flight un-terminologied evaluation racing a seeded one would
+  // wipe it between load and execute. seedValuesetCache() clears
+  // before seeding (fresh state per load); an empty run simply reuses
+  // the session cache.
+}
+
+function patientRefOf(r: Record<string, unknown>): string | null {
+  // Patient-typed reference doctrine (loader QA-001): only Patient refs
+  const subj = r.subject ?? r.patient;
+  if (!subj || typeof subj !== "object") return null;
+  const ref = (subj as Record<string, unknown>).reference;
+  if (typeof ref !== "string") return null;
+  const parts = ref.split("/").filter(Boolean);
+  if (parts.length >= 2 && parts[parts.length - 2] === "Patient") {
+    return parts[parts.length - 1];
+  }
+  return null;
+}
+
+function sqlStr(v: string | null): string {
+  return v === null ? "NULL" : `'${v.replace(/'/g, "''")}'`;
+}
+
+function sqlNullable(v: string | null): string {
+  return sqlStr(v);
+}
+
+async function runSqlOnDuckDBRaw(sql: string): Promise<unknown> {
+  return (await import("../lib/executor")).runRaw(sql);
+}
+
+// ---------------------------------------------------------------------------
+// flatten_view helpers (Pyodide generates VD SQL; duckdb-wasm executes)
+// ---------------------------------------------------------------------------
+
+interface ViewSqlResult {
+  ok: boolean;
+  sql: string | null;
+  diagnostics: Array<Record<string, unknown>> | null;
+}
+
+async function generateViewSql(
+  viewDefinition: Record<string, unknown>,
+): Promise<ViewSqlResult> {
+  await waitForBoot();
+  pyodide.globals.set("__vd_json", JSON.stringify(viewDefinition));
+  const out: string = pyodide.runPython(`
+import json
+from fhir4ds.viewdef.parser import parse_view_definition
+from fhir4ds.viewdef.generator import SQLGenerator
+
+try:
+    vd = parse_view_definition(json.loads(__vd_json))
+    gen = SQLGenerator(source_table="__cleanroom_flatten_src")
+    sql = gen.generate(vd)
+    result = {"ok": True, "sql": sql}
+except Exception as exc:
+    from fhir4ds.operations.errors import diagnostic_from_exception
+    diag = diagnostic_from_exception(exc, context="flatten_view")
+    result = {"ok": False, "diagnostics": [diag.to_dict()]}
+json.dumps(result)
+`);
+  return JSON.parse(out) as ViewSqlResult;
+}
+
+/** Stage resources into the isolated SO-3 temp table, run VD SQL verbatim. */
+async function stageAndRunFlat(
+  sql: string,
+  resources: Array<Record<string, unknown>>,
+): Promise<string> {
+  await initDuckDB();
+  const values = resources
+    .map((r) => `('${JSON.stringify(r).replace(/'/g, "''")}')`)
+    .join(", ");
+  const staged = [
+    "CREATE OR REPLACE TEMP TABLE __cleanroom_flatten_src (resource JSON)",
+    values
+      ? `INSERT INTO __cleanroom_flatten_src VALUES ${values}`
+      : "INSERT INTO __cleanroom_flatten_src SELECT NULL WHERE false",
+  ];
+  const envelope: Record<string, unknown> = { schema: 1, ok: true };
+  try {
+    for (const stmt of staged) await runSqlOnDuckDBRaw(stmt);
+    const result = (await runSqlOnDuckDBRaw(sql)) as {
+      schema: { fields: Array<{ name: string }> };
+      toArray: () => Promise<Array<Record<string, unknown>>>;
+    };
+    const columns = result.schema.fields.map((f) => f.name);
+    const rowsRaw = await result.toArray();
+    const rows = rowsRaw.map((row) => {
+      const out: Record<string, unknown> = {};
+      for (const c of columns) {
+        out[c] = row[c] === undefined ? null : row[c];
+      }
+      return out;
+    });
+    envelope.sql = sql;
+    envelope.columns = columns;
+    envelope.rows = JSON.parse(JSON.stringify(rows));
+  } catch (err) {
+    envelope.ok = false;
+    envelope.diagnostics = [
+      {
+        code: "evaluation_error",
+        severity: "error",
+        message: String(err instanceof Error ? err.message : err),
+      },
+    ];
+  } finally {
+    try {
+      await runSqlOnDuckDBRaw("DROP TABLE IF EXISTS __cleanroom_flatten_src");
+    } catch {
+      /* cleanup best-effort */
+    }
+  }
+  return JSON.stringify(envelope);
+}
+
+// ---------------------------------------------------------------------------
+// boot
+// ---------------------------------------------------------------------------
+
+async function boot(): Promise<WorkerResponse> {
+  if (booted) {
+    return { id: 0, type: "boot", ok: true };
+  }
+  // A previous failed boot may retry: clear the error and re-run.
+  bootFailed = null;
+  const t0 = Date.now();
+  try {
+    const { loadPyodide } = await import(
+      /* @vite-ignore */ `${PYODIDE_CDN}pyodide.mjs`
+    );
+    pyodide = await loadPyodide({ indexURL: PYODIDE_CDN });
+
+    // Pyodide-hosted binary packages imported by fhir4ds at module load.
+    // The wheel is installed deps=False; pure-Python deps come separately.
+    await pyodide.loadPackage(["micropip", "duckdb", "orjson", "pyarrow"]);
+
+    const wheelUrl = new URL(
+      /* @vite-ignore */ `./${__FHIR4DS_WHEEL_NAME__}?v=${__FHIR4DS_WHEEL_HASH__}`,
+      import.meta.url,
+    ).href;
+    pyodide.globals.set("__wheel_url__", wheelUrl);
+    // runPythonAsync: the block awaits micropip.install (top-level await)
+    await pyodide.runPythonAsync(`
+import micropip, json
+
+await micropip.install([
+    "antlr4-python3-runtime>=4.10",
+    "python-dateutil>=2.8",
+])
+await micropip.install(__wheel_url__, deps=False)
+`);
+
+    pyodide.runPython(`
+# Boot resource assertions (S16): bundled .cql includes AND on-demand SD
+# JSONs must resolve in MEMFS or later capabilities crash at first use.
+from importlib import resources as _res
+for _name in ("FHIRHelpers", "QICoreCommon", "Status"):
+    _p = _res.files("fhir4ds.cql.resources.cql").joinpath(_name + ".cql")
+    assert _p is not None and _p.is_file(), f"bundled CQL missing: {_name}"
+
+from fhir4ds.cql.paths import get_resource_path as _grp
+_sd_dir = _grp("fhir", "r4")
+for _rt in ("Patient", "Observation", "Condition", "Encounter", "Procedure",
+            "MedicationRequest", "ServiceRequest", "DeviceRequest",
+            "CommunicationRequest", "Coverage"):
+    _f = _sd_dir / (_rt + ".json")
+    assert _f.is_file(), f"StructureDefinition missing in wheel: {_rt}"
+
+import fhir4ds
+__wheel_version__ = fhir4ds.__version__
+`);
+
+    const wheelVersion: string = pyodide.runPython("__wheel_version__");
+
+    // Smoke: every stateless capability imports + the new ones execute.
+    pyodide.runPython(`
+from fhir4ds import operations as _ops
+_v = _ops.validate_resource({"resourceType": "Patient", "id": "boot-check"})
+assert _v.valid is True, "validate_resource boot smoke failed"
+_s = _ops.resource_schema("Patient")
+assert _s.ok and any(f["name"] == "gender" for f in _s.fields), \\
+    "resource_schema boot smoke failed"
+_t = _ops.resource_schema_tree("Observation")
+assert _t.ok and any(c["name"] == "valueQuantity" for c in _t.root["children"]), \\
+    "resource_schema_tree boot smoke failed"
+`);
+
+    // duckdb-wasm on the same worker (execution runtime)
+    await initDuckDB();
+
+    markBootDone();
+    return {
+      id: 0,
+      type: "boot",
+      ok: true,
+      wheelVersion,
+      bootMs: Date.now() - t0,
+    };
+  } catch (err) {
+    // REV-C1-001: do NOT mark booted on failure — a retry `boot` message
+    // must re-attempt, not short-circuit ok:true. Release current waiters
+    // (their capability calls fail loudly against the un-booted worker);
+    // `booted` stays false so a later boot request runs the real path.
+    bootFailed = err instanceof Error ? err.message : String(err);
+    for (const w of bootWaiters) w();
+    bootWaiters.length = 0;
+    return {
+      id: 0,
+      type: "boot",
+      ok: false,
+      error: bootFailed,
+    };
+  }
+}

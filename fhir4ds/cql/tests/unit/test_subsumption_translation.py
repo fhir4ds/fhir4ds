@@ -185,6 +185,42 @@ class TestClosureAwareTranslation:
         # Negated equivalence wraps in NOT (...).
         assert "NOT" in sql.upper()
 
+    def test_resource_vs_code_equivalence_with_closure_qa023(self):
+        """QA-023 (iter 12): `C.code ~ "A"` inside a query where-clause must
+        consult the terminology_closure table when closure_table_loaded=True
+        (translator docstring promises ~ routes through closure for the
+        resource side too, not only static code pairs)."""
+        cql = """
+        library T version '1.0'
+        using FHIR version '4.0.1'
+        codesystem "SNOMED-CT": 'http://snomed.info/sct'
+        code "A": '73211009' from "SNOMED-CT"
+        context Patient
+        define Match: exists ([Condition] C where C.code ~ "A")
+        """
+        expr = _translate_define(cql, closure_loaded=True)
+        assert expr is not None
+        sql = expr.to_sql()
+        assert "terminology_closure" in sql
+        assert "73211009" in sql
+
+    def test_resource_vs_code_equivalence_without_closure_unchanged_qa023(self):
+        """QA-023 regression guard: without closure data the resource-vs-code
+        ~ keeps its exact-match form (no terminology_closure reference)."""
+        cql = """
+        library T version '1.0'
+        using FHIR version '4.0.1'
+        codesystem "SNOMED-CT": 'http://snomed.info/sct'
+        code "A": '73211009' from "SNOMED-CT"
+        context Patient
+        define Match: exists ([Condition] C where C.code ~ "A")
+        """
+        expr = _translate_define(cql, closure_loaded=False)
+        assert expr is not None
+        sql = expr.to_sql()
+        assert "terminology_closure" not in sql
+        assert "73211009" in sql
+
 
 # ---------------------------------------------------------------------------
 # System normalization

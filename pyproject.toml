@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fhir4ds-v2"
-version = "0.0.16"
+version = "0.0.17"
 description = "FHIR for Data Science — unified package for FHIRPath, CQL, and SQL-on-FHIR analytics"
 readme = "README.md"
 license = {text = "AGPL-3.0-only"}
@@ -70,6 +70,11 @@ terminology = [
 ner = [
     "medterm4ds[extraction]>=0.0.4,<0.0.5",
 ]
+# Agentic interfaces: MCP stdio server (fhir4ds-mcp). Optional per the
+# operations-layer FDD — core install stays dependency-lean.
+mcp = [
+    "mcp>=1.2",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -86,6 +91,7 @@ Issues = "https://github.com/fhir4ds/fhir4ds/issues"
 
 [project.scripts]
 fhir4ds = "fhir4ds.cli.main:main"
+fhir4ds-mcp = "fhir4ds.mcp.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["fhir4ds"]

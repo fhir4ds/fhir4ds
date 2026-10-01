@@ -1,6 +1,7 @@
 ---
 id: quickstart
 title: Quick Start
+description: "Get running in five minutes: load FHIR resources, translate CQL to SQL, and evaluate quality measures in DuckDB."
 ---
 
 # Quick Start
@@ -69,7 +70,7 @@ FHIR `MeasureReport` output, use the CLI:
 fhir4ds dqm run --config dqm-run.json
 ```
 
-See the [Command Line Interface](/docs/user-guide/cli) and
+See the [Command Line Interface](/docs/user-guide/interfaces/cli) and
 [DQM production recipes](/docs/examples/dqm-recipes) for end-to-end
 batch examples.
 

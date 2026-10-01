@@ -720,9 +720,37 @@ class TestToQuantity:
         assert result == {"value": 100.0, "unit": "1"}
 
     def test_to_quantity_from_string_with_bare_unit(self) -> None:
-        """Test toQuantity from string with bare unit (no quotes)."""
-        result = to_quantity("100 mg")
-        assert result == {"value": 100.0, "unit": "mg"}
+        """Bare alpha tokens are calendar duration keywords only (FP-08 doctrine)."""
+        assert to_quantity("5 years") == {"value": 5.0, "unit": "years"}
+        assert to_quantity("5 year") == {"value": 5.0, "unit": "year"}
+        assert to_quantity("100 mg") is None
+        assert to_quantity("1 wk") is None
+        assert to_quantity("5 YEARS") is None
+        assert to_quantity("5 Days") is None
+        assert to_quantity("4 abc") is None
+        assert to_quantity("0xFF") is None
+
+    def test_to_quantity_string_grammar_matches_engine_qa017(self) -> None:
+        """QA-017: helper string grammar must mirror engine toQuantity exactly.
+
+        Engine doctrine (FP-08 EXPLORER, engine/invocations/misc.py):
+        bare UCUM codes must appear as quoted string literals; calendar
+        duration keywords are case-sensitive per FHIRPath §8.7 and §8.5.
+        """
+        # Quoted UCUM accepted
+        assert to_quantity("5 'mg'") == {"value": 5.0, "unit": "mg"}
+        # Bare calendar keywords accepted (case-sensitive, len > 2)
+        assert to_quantity("180 days") == {"value": 180.0, "unit": "days"}
+        # 2-char and UCUM codes rejected bare (must quote; engine rejects '1 min' bare too)
+        assert to_quantity("1 s") is None
+        assert to_quantity("1 min") is None
+        # Unknown / malformed tokens rejected
+        assert to_quantity("5 mg") is None
+        assert to_quantity("0xFF") is None
+        assert to_quantity("4 abc") is None
+        # Unit conversion path still engine-consistent
+        assert to_quantity("5 'mg'", "g") == {"value": 0.005, "unit": "g"}
+        assert to_quantity("5 years", "day") == {"value": 1825.0, "unit": "day"}
 
     def test_to_quantity_from_boolean(self) -> None:
         """Test toQuantity from boolean."""

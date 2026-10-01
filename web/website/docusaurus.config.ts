@@ -16,10 +16,38 @@ const config: Config = {
   url: 'https://fhir4ds.com',
   baseUrl: baseUrl,
 
+  // GH Pages serves directories with trailing slashes and 301s the
+  // non-slash form; emitting slash URLs in sitemap/canonicals/links
+  // avoids every page registering as "Page with redirect" in Search
+  // Console. Dev BASE_URL=/ builds are unaffected.
+  trailingSlash: true,
+
   organizationName: 'fhir4ds',
   projectName: 'fhir4ds',
 
   onBrokenLinks: 'warn',
+
+  // Search Console 404 remediation: meta-refresh client redirects for
+  // docs routes that were renamed or deleted (GH Pages artifact
+  // deploys cannot serve server-side redirect files).
+  plugins: [
+    // Dev-only COOP/COEP headers so DuckDB-WASM demos are cross-origin
+    // isolated on localhost (production uses the coi-serviceworker).
+    './coi-dev-headers-plugin.js',
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          { from: '/docs/user-guide/ci', to: '/docs/user-guide/interfaces/cli'},
+          { from: '/docs/user-guide/data-ingestion', to: '/docs/user-guide/data-sources' },
+          { from: '/docs/user-guide/quality/hapi-materialization', to: '/docs/integrations/hapi-fhir' },
+          { from: '/docs/user-guide/extraction/duckdb', to: '/docs/user-guide/duckdb' },
+          { from: '/docs/user-guide/quality/dqm-recipes', to: '/docs/examples/dqm-recipes' },
+          { from: '/docs/user-guide/cli', to: '/docs/user-guide/interfaces/cli' },
+        ],
+      },
+    ],
+  ],
   markdown: {
     mermaid: true,
   },
@@ -59,6 +87,18 @@ const config: Config = {
       innerHTML: `
         (function () {
           if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+            return;
+          }
+
+          // Dev guard: the COI service worker exists to add COOP/COEP headers
+          // on GitHub Pages. In dev the server config already serves headers
+          // where needed, and a cached SW poisons every chunk fetch after a
+          // rebuild (chunk hashes change per build). Register in prod only.
+          var isDev =
+            window.location.hostname === 'localhost' ||
+            window.location.hostname === '127.0.0.1' ||
+            window.location.port === '3000';
+          if (isDev) {
             return;
           }
 

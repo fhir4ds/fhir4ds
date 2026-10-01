@@ -4636,7 +4636,7 @@ zero parity diffs:
 ## medterm4ds Phase 1 — Terminology Abstraction (Foundation)
 
 **Implemented:** 2026-07-03, target version 0.0.11.
-**FDD:** `docs/architecture/plans/FEATURE_MEDTERM4DS_PHASE1_TERMINOLOGY.md`.
+**FDD:** `fhir4ds-private/docs/architecture/plans/FEATURE_MEDTERM4DS_PHASE1_TERMINOLOGY.md`.
 
 ### Architecture
 
@@ -4706,7 +4706,7 @@ zero parity diffs:
 ## medterm4ds Phase 2 — Auto-Coding Loader
 
 **Implemented:** 2026-07-03, target version 0.0.11.
-**FDD:** `docs/architecture/plans/FEATURE_MEDTERM4DS_PHASE2_AUTOCODING.md`.
+**FDD:** `fhir4ds-private/docs/architecture/plans/FEATURE_MEDTERM4DS_PHASE2_AUTOCODING.md`.
 
 ### Architecture
 

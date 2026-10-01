@@ -4169,12 +4169,30 @@ class FunctionsMixin:
         gets a VARCHAR[] instead of VARCHAR[][]. CQL 1.5 §10.7 requires the
         full List<List<T>>. Promote fhirpath_text operands (and array elements)
         to their list-valued projections before flattening.
+
+        QA-020 (iter 3, 2026-09-28): Query/retrieve-shaped operands
+        (`flatten((from [Observation] O return O.component.code.coding))`)
+        lower rows-shaped (scalar per-row projections), giving flatten() a
+        flat T[] instead of T[][]. Materialize them through the CQL-19
+        EXPLORER `_list_operator_full_list_source` machinery first (LIST-
+        aggregated per-patient subquery over the list-valued per-row
+        projections), then flatten.
         """
         from ...translator.expressions._utils import _promote_fhirpath_text_list
         from ...translator.types import SQLArray, SQLFunctionCall
         if not func.arguments:
             return None
-        arg_sql = translator.translate(func.arguments[0])
+        arg_node = func.arguments[0]
+        # QA-020: retrieve/query-shaped sources need the per-patient LIST
+        # materialization so flatten() receives the nested T[][] shape.
+        try:
+            full_list = self._list_operator_full_list_source(arg_node)
+        except Exception:
+            full_list = None
+        if full_list is not None:
+            full_list = self._promote_fhirpath_text_deep(full_list)
+            return SQLFunctionCall(name="flatten", args=[full_list])
+        arg_sql = translator.translate(arg_node)
         if isinstance(arg_sql, SQLArray):
             promoted_elements = [
                 _promote_fhirpath_text_list(element) for element in arg_sql.elements
@@ -4183,6 +4201,82 @@ class FunctionsMixin:
         else:
             arg_sql = _promote_fhirpath_text_list(arg_sql)
         return SQLFunctionCall(name="flatten", args=[arg_sql])
+
+    @staticmethod
+    def _promote_fhirpath_text_deep(node):
+        """QA-020 helper: recursively rewrite 2-arg ``fhirpath_text`` calls
+        inside a materialized SQL tree to their list-valued
+        ``from_json(fhirpath(...), '["VARCHAR"]')`` projections.
+
+        The CQL-19 `_list_operator_full_list_source` machinery aggregates
+        per-ROW projections with ``list()``; when the query return clause
+        lowers to scalar ``fhirpath_text`` the aggregate yields a flat T[]
+        instead of T[][]. Promoting each per-row projection to the
+        list-valued form restores the nesting DuckDB's ``flatten()`` needs.
+        """
+        from ...translator.expressions._utils import _promote_fhirpath_text_list
+        from ...translator.types import (
+            SQLAlias,
+            SQLBinaryOp,
+            SQLCase,
+            SQLCast,
+            SQLFunctionCall,
+            SQLSelect,
+            SQLSubquery,
+            SQLUnaryOp,
+            SQLUnion,
+        )
+
+        node = _promote_fhirpath_text_list(node)
+        if isinstance(node, SQLFunctionCall):
+            node.args = [
+                FunctionsMixin._promote_fhirpath_text_deep(a) for a in node.args
+            ]
+        elif isinstance(node, SQLSubquery):
+            node.query = FunctionsMixin._promote_fhirpath_text_deep(node.query)
+        elif isinstance(node, SQLSelect):
+            node.columns = [
+                (
+                    SQLAlias(
+                        expr=FunctionsMixin._promote_fhirpath_text_deep(c.expr),
+                        alias=c.alias,
+                    )
+                    if isinstance(c, SQLAlias)
+                    else FunctionsMixin._promote_fhirpath_text_deep(c)
+                )
+                for c in node.columns
+            ]
+            if node.where is not None:
+                node.where = FunctionsMixin._promote_fhirpath_text_deep(node.where)
+            if node.from_clause is not None:
+                fc = node.from_clause
+                if isinstance(fc, SQLAlias):
+                    fc.expr = FunctionsMixin._promote_fhirpath_text_deep(fc.expr)
+                else:
+                    node.from_clause = FunctionsMixin._promote_fhirpath_text_deep(fc)
+        elif isinstance(node, SQLBinaryOp):
+            node.left = FunctionsMixin._promote_fhirpath_text_deep(node.left)
+            node.right = FunctionsMixin._promote_fhirpath_text_deep(node.right)
+        elif isinstance(node, SQLUnaryOp):
+            node.operand = FunctionsMixin._promote_fhirpath_text_deep(node.operand)
+        elif isinstance(node, SQLCast):
+            node.operand = FunctionsMixin._promote_fhirpath_text_deep(node.operand)
+        elif isinstance(node, SQLCase):
+            node.when_clauses = [
+                (
+                    FunctionsMixin._promote_fhirpath_text_deep(cond),
+                    FunctionsMixin._promote_fhirpath_text_deep(res),
+                )
+                for cond, res in node.when_clauses
+            ]
+            if node.else_clause is not None:
+                node.else_clause = FunctionsMixin._promote_fhirpath_text_deep(
+                    node.else_clause
+                )
+        elif isinstance(node, SQLUnion):
+            node.left = FunctionsMixin._promote_fhirpath_text_deep(node.left)
+            node.right = FunctionsMixin._promote_fhirpath_text_deep(node.right)
+        return node
 
     def _translate_precision_pre(self, func, translator) -> "Optional[SQLExpression]":
         """Pre-translate CQL Precision() — preserve raw Decimal trailing zeros.

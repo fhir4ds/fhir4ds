@@ -726,6 +726,77 @@ define "Payer Line":
         )
         assert report["group"][0]["stratifier"][0]["id"] == "payer-line"
 
+    def test_evaluate_property_path_stratified_measure_qa022(self, conn, tmp_path):
+        """QA-022 (iter 9): stratifier expressions that are property paths
+        (define "Strat": Patient.gender) arrive as DuckDB LIST()-projected
+        ndarray cells; summary_report must not crash on them."""
+        from fhir4ds.cql import FHIRDataLoader
+        loader = FHIRDataLoader(conn)
+        loader.load_resource({
+            "resourceType": "Patient",
+            "id": "p1",
+            "gender": "male",
+            "birthDate": "1990-01-01",
+        })
+        loader.load_resource({
+            "resourceType": "Patient",
+            "id": "p2",
+            "gender": "female",
+            "birthDate": "1990-01-01",
+        })
+
+        measure_json = {
+            "resourceType": "Measure",
+            "id": "test-stratified-qa022",
+            "library": ["http://example.com/Library/TestStratifiedQa022"],
+            "group": [{
+                "population": [
+                    {
+                        "code": {"coding": [{"code": "initial-population"}]},
+                        "criteria": {"expression": "Initial Population"},
+                    },
+                ],
+                "stratifier": [{
+                    "id": "gender",
+                    "code": {"text": "Gender"},
+                    "criteria": {"expression": "Gender Strata"},
+                }],
+            }],
+        }
+        cql_text = '''library TestStratifiedQa022
+using FHIR version '4.0.1'
+context Patient
+define "Initial Population":
+    true
+define "Gender Strata":
+    Patient.gender
+'''
+        cql_path = tmp_path / "test_stratified_qa022.cql"
+        cql_path.write_text(cql_text)
+
+        evaluator = MeasureEvaluator(conn)
+        result = evaluator.evaluate(
+            measure_bundle=measure_json,
+            cql_library_path=str(cql_path),
+        )
+        assert "stratifier_1" in result.dataframe.columns
+
+        summary = evaluator.summary_report(result)
+        strata = {
+            stratum["text"]: stratum["population"]
+            for stratum in summary["stratifiers"][0]["strata"]
+        }
+        assert strata["male"]["initial-population"] == 1
+        assert strata["female"]["initial-population"] == 1
+        assert sum(
+            counts["initial-population"] for counts in strata.values()
+        ) == summary["initial_population"]
+
+        report = evaluator.to_measure_report(
+            result, period_start="2026-01-01", period_end="2026-12-31"
+        )
+        assert report["group"][0]["stratifier"][0]["id"] == "gender"
+
     def test_generate_narratives_true_requires_audit(self, conn):
         evaluator = MeasureEvaluator(conn)
         with pytest.raises(ValueError, match="Narratives require audit=True"):

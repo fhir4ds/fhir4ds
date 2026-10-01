@@ -1432,6 +1432,27 @@ class QueryMixin:
                         valueset_name = right.name
                     else:
                         valueset_name = str(right)
+                    # QA-019 (iter 3, 2026-09-28): right operand naming a
+                    # declared CODESYSTEM means the LEFT operand is the code
+                    # VALUE — resolve to direct-code membership instead of
+                    # the in_valueset path (which fabricates an NLM ValueSet
+                    # URL for a codesystem name). Mirrors translator.py
+                    # `_translate_retrieve_terminology`.
+                    if valueset_name is not None and valueset_name not in (
+                        self.context.valuesets,
+                        self.context.codes,
+                    ):
+                        cs_url = self.context.codesystems.get(valueset_name)
+                        if cs_url is not None:
+                            left_value = (
+                                left.value
+                                if isinstance(left, Literal)
+                                else getattr(left, "name", None)
+                            )
+                            if isinstance(left_value, str):
+                                valueset = f"urn:cql:code:{cs_url}|{left_value}"
+                                code_property = None
+                                valueset_name = None
                 else:
                     valueset_name = str(terminology)
 

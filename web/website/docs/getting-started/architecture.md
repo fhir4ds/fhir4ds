@@ -1,6 +1,7 @@
 ---
 id: architecture
 title: Architecture
+description: "How FHIR4DS layers FHIRPath, CQL, ViewDefinitions, and DQM on DuckDB — translation, UDF, and core engine tiers."
 ---
 
 # Architecture

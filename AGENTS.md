@@ -206,7 +206,7 @@ bug): `import fhir4ds.dqm` requires `pandas`, which is in the optional
 
 ## Known Architecture Issues (2026-Q2 Refresh Audit)
 
-See `docs/architecture/AUDIT_REPORT_2026Q2_REFRESH.md` for the full audit report.
+See `fhir4ds-private/docs/architecture/AUDIT_REPORT_2026Q2_REFRESH.md` for the full audit report.
 
 ### Error Hierarchy
 FHIRPath error classes are canonically defined in `fhir4ds/fhirpath/engine/errors.py`.
@@ -226,7 +226,7 @@ Thread-safety mitigations applied in 2026-Q2 remediation:
 - `cql/duckdb/udf/string.py` — same ReDoS guards applied to deprecated CQL UDFs
 
 ### CQL Translator Invariants
-The 8 architecture invariants documented in `docs/architecture/translator/AGENTS.md`
+The 8 architecture invariants documented in `fhir4ds-private/docs/architecture/translator/AGENTS.md`
 remain in effect. Post-remediation status (2026-Q2):
 - `SQLRaw` mid-pipeline: **20+ sites eliminated** (CQL-001/002/012-016/018-020/025)
 - `to_sql()` mid-pipeline: **8 sites fixed** (replaced with proper AST nodes)
@@ -1076,7 +1076,7 @@ Built-in FHIRPath variables (`%context`, `%resource`, `%rootResource`, `%ucum`, 
 are canonically defined in `fhir4ds/viewdef/constants.py:FHIRPATH_BUILTIN_VARIABLES`.
 The generator imports from this canonical source. Do not duplicate this set.
 
-See `docs/architecture/CQL_TRANSLATOR_AUDIT_2026Q2.md` for the detailed issue log.
+See `fhir4ds-private/docs/architecture/CQL_TRANSLATOR_AUDIT_2026Q2.md` for the detailed issue log.
 
 ### C++ Extension Security
 All JSON injection sites have been remediated with `escapeJsonString()`.
@@ -5696,3 +5696,34 @@ cliff. Conformance after fix: 2832/2832 (ViewDef 144). Probes:
 
 ## 0.0.13 docs_audit (2026-08-26) — READY
 - 4/4 notebooks executed clean against the 0.0.13 wheel (install pins updated). Website: PRODUCT_VERSION/demo.spec/notebooks.md/wasm-engine.md/vite fallback all 0.0.13; STALE 0.0.10 wheel found + replaced in static/bulk-publisher-app (was shipping 0.0.10 into browsers!); wasm-demo rebuilt with the 0.0.13 wheel (0.0.12 removed) and copied to static/wasm-app; micropip deps=False rule verified intact; releases.md v0.0.13 section added (reliability + medterm4ds 0.0.3 + campaign pillars, 2832 baseline, known-limitation note). One pre-existing stale e2e assertion fixed (feature-card heading). Typecheck + build clean; Playwright e2e 17/17 on the final build. Report: docs_audit_report.md.
+
+## v0.0.16 CQL Type System Campaign (2026-09-20, feature_implementation)
+
+Option A landed (FDD: fhir4ds-private/docs/architecture/plans/FEATURE_CQL_TYPE_SYSTEM.md —
+read §7 Implementation Record for as-built details and the REV-002 sunset
+ledger). Durable doctrines:
+
+- **Type-map dual-authority**: `TypeMapBuilder` (translator/type_map.py) is
+  the FACADE authority; `infer_cql_type_compat` in the same module is the
+  VERBATIM legacy port that `_infer_cql_type` (inference.py) delegates to —
+  they INTENTIONALLY diverge (uncertainty family→Any, power int rules,
+  Sum(List<Quantity>)→Quantity, dotted cast names→bare, identifier order;
+  full allowlist documented in the tripwire test). Never "unify" them
+  without deleting the frozen lowering classifiers in the same change —
+  `test_type_map_differential_drift_tripwire` pins the boundary.
+- **Byte-identical SQL invariant**: the builder attaches AFTER lowering
+  (`translate_library()` end) via ONE additive `DefinitionMeta.cql_type_ref`
+  field; `cql_type` is NEVER back-filled (~40 lowering sites read it). Any
+  type_map.py change must re-run the DQM-47 baseline compare
+  (.temp/typemap/compare_baseline.py; CTE-order-normalized digests — raw
+  sha256 drifts across processes because CTE emission order is
+  nondeterministic).
+- **Facade metadata-first contract**: known cql_type_ref metadata is
+  trusted; runtime inference only on Any (silent) or would-crash rescue
+  (failure-driven — typed CQLFacadeErrors, NOT mismatch-driven; recursive
+  per serialize_value level; WARNING log names both types = gap backlog).
+  String runtime never rescues (VARCHAR-transport doctrine). Rollback flag:
+  `CQLServerConfig.metadata_first_serialization=False` restores legacy
+  reconcile verbatim.
+- **97-define Any backlog** (Property 48, Query 44, Binary 4, Identifier 1
+  on DQM-47) is the known gap frontier for future type-map work.

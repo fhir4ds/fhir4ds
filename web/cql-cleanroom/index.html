@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CQL Cleanroom</title>
+    <!-- COI shim: registers a service worker that re-applies COOP/COEP
+         when header-based isolation fails (e.g. Chrome private-network
+         rules on WSL-IP origins). Required for duckdb-wasm SAB. -->
+    <script src="./coi-serviceworker.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

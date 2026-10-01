@@ -1,6 +1,7 @@
 ---
 id: installation
 title: Installation
+description: "Install FHIR4DS with pip — core engine, optional extras for measures, terminology, and MCP — plus native DuckDB extension setup."
 ---
 
 # Installation

@@ -405,6 +405,116 @@ class TestMeasureEvaluatorValidation:
         assert summary["numerator"] == 1
         assert summary["total_patients"] == 2
 
+    def test_summary_report_false_boolean_list_cell_not_counted_qa021(self):
+        """QA-021 (iter 4): a population cell holding Boolean false ([false])
+        must NOT count as population-positive.
+
+        Raw-Boolean CQL defines (e.g. ``define "IP": Patient.active``) lower
+        to LIST()-encoded cells: [true] / [false] / []. Presence-encoding
+        (non-empty list -> member) is only valid for resource-referencing
+        populations; a list-wrapped Boolean false is a definitive negative
+        per FHIR CQM membership semantics.
+        """
+        df = pd.DataFrame(
+            {
+                "patient_id": ["P1", "P2", "P3"],
+                "initial_population": [[True], [False], []],
+                "denominator": [[True], [False], []],
+                "denominator_exclusion": [[], [False], []],
+                "denominator_exception": [[], [False], []],
+                "numerator": [[True], [False], []],
+                "numerator_exclusion": [[], [False], []],
+            }
+        )
+        evaluator = MeasureEvaluator(conn=None)
+
+        summary = evaluator.summary_report(df)
+
+        assert summary["initial_population"] == 1
+        assert summary["denominator"] == 1
+        assert summary["numerator"] == 1
+        assert summary["total_patients"] == 3
+
+    def test_summary_report_string_boolean_list_cell_not_counted_qa027(self):
+        """QA-027 (iter 28): LIVE-path boolean cells are STRING lists.
+
+        Raw-Boolean CQL defines lower to
+        ``from_json(fhirpath(...), '["VARCHAR"]')`` which yields the strings
+        'true'/'false', not python bools. The QA-021 isinstance-bool guard
+        misses them, so ['false'] counted as population-positive via
+        presence. String boolean elements must use element truthiness.
+        The LIVE pandas cell shape is an object-dtype column of numpy
+        arrays (SQL LIST() projection) — pin BOTH shapes.
+        """
+        df = pd.DataFrame(
+            {
+                "patient_id": ["P1", "P2", "P3"],
+                "initial_population": [["true"], ["false"], []],
+                "denominator": [["true"], ["false"], []],
+                "denominator_exclusion": [[], ["false"], []],
+                "denominator_exception": [[], ["false"], []],
+                "numerator": [["true"], ["false"], []],
+                "numerator_exclusion": [[], ["false"], []],
+            }
+        )
+        # The actual live shape: pandas wraps the SQL list cells into
+        # object-dtype numpy arrays (what _is_true receives at runtime).
+        df["denominator"] = df["denominator"].apply(
+            lambda cell: np.array(cell, dtype=object)
+        )
+        df["numerator"] = df["numerator"].apply(
+            lambda cell: np.array(cell, dtype=object)
+        )
+        evaluator = MeasureEvaluator(conn=None)
+
+        summary = evaluator.summary_report(df)
+
+        assert summary["initial_population"] == 1
+        assert summary["denominator"] == 1
+        assert summary["numerator"] == 1
+        assert summary["total_patients"] == 3
+
+    def test_summary_report_audit_path_string_boolean_list_cell_not_counted_qa027(self):
+        """QA-027 mirror for the audit/stratifier path's _truthy helper."""
+        df = pd.DataFrame(
+            {
+                "patient_id": ["P1", "P2"],
+                "initial_population": [["true"], ["false"]],
+                "denominator": [["true"], ["false"]],
+                "denominator_exclusion": [[], ["false"]],
+                "denominator_exception": [[], ["false"]],
+                "numerator": [["true"], ["false"]],
+                "numerator_exclusion": [[], ["false"]],
+            }
+        )
+        evaluator = MeasureEvaluator(conn=None)
+
+        summary = evaluator.summary_report(df)
+
+        assert summary["initial_population"] == 1
+        assert summary["denominator"] == 1
+        assert summary["numerator"] == 1
+
+    def test_summary_report_audit_path_false_boolean_list_cell_not_counted_qa021(self):
+        """QA-021 mirror for the audit/stratifier path's _truthy helper."""
+        df = pd.DataFrame(
+            {
+                "patient_id": ["P1", "P2"],
+                "initial_population": [[True], [False]],
+                "denominator": [[True], [False]],
+                "denominator_exclusion": [[], [False]],
+                "denominator_exception": [[], [False]],
+                "numerator": [[True], [False]],
+                "numerator_exclusion": [[], [False]],
+            }
+        )
+        evaluator = MeasureEvaluator(conn=None)
+
+        summary = evaluator.summary_report(df)
+
+        assert summary["initial_population"] == 1
+        assert summary["denominator"] == 1
+
     def test_summary_report_applies_denominator_exclusion_before_numerator(self):
         """Excluded denominator patients must not contribute to numerator rate."""
         df = pd.DataFrame(
@@ -472,6 +582,53 @@ class TestMeasureEvaluatorValidation:
         assert component_strata[0]["components"][0]["text"] == "SNP"
         assert component_strata[0]["components"][1]["text"] == "Medicare"
         assert component_strata[0]["population"]["initial-population"] == 2
+
+    def test_summary_report_stratifier_ndarray_cell_qa022(self):
+        """QA-022 (iter 9): property-path stratifier cells arrive from DuckDB
+        LIST() projection as numpy object arrays; summary_report must not
+        crash on the ndarray-vs-Series comparison and must unwrap singleton
+        arrays to their scalar stratum value."""
+        df = pd.DataFrame(
+            {
+                "patient_id": ["P1", "P2", "P3"],
+                "initial_population": [True, True, True],
+                "denominator": [True, True, True],
+                "numerator": [True, False, True],
+                "stratifier_1": [
+                    np.array(["female"], dtype=object),
+                    np.array(["male"], dtype=object),
+                    np.array(["female"], dtype=object),
+                ],
+            }
+        )
+        evaluator = MeasureEvaluator(conn=None)
+
+        summary = evaluator.summary_report(
+            MeasureResult(
+                dataframe=df,
+                populations={
+                    "initial_population": "Initial Population",
+                    "denominator": "Denominator",
+                    "numerator": "Numerator",
+                },
+                parameters={},
+                measure_url="http://example.com/Library/S",
+                pop_map=_make_stratified_measure_result().pop_map,
+            )
+        )
+
+        strata = {
+            stratum["text"]: stratum["population"]
+            for stratum in summary["stratifiers"][0]["strata"]
+        }
+        assert strata["female"]["initial-population"] == 2
+        assert strata["male"]["initial-population"] == 1
+        assert strata["female"]["numerator"] == 2
+        assert strata["male"]["numerator"] == 0
+        assert (
+            sum(c["initial-population"] for c in strata.values())
+            == summary["initial_population"]
+        )
 
     def test_prune_population_evidence_preserves_inclusion_evidence(self):
         """Evaluator pruning must pass the population column context to AuditEngine."""

@@ -1,6 +1,7 @@
 ---
 id: engine
 title: The Unified Engine
+description: "User guide to the FHIR4DS engine — connections, FHIRPath evaluation, and the operations API surface."
 sidebar_label: The Unified Engine
 slug: /user-guide/index
 ---
@@ -104,7 +105,7 @@ The `dqm` (Digital Quality Measures) module manages the full lifecycle of evalua
 
 For repeatable batch runs and project automation, use the operations guides:
 
-- **CLI**: [Command Line Interface](./cli)
+- **CLI**: [Command Line Interface](./interfaces/cli)
 
 ---
 

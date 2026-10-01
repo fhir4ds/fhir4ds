@@ -493,8 +493,53 @@ class MeasureEvaluator:
                     if value is None:
                         return False
                     if isinstance(value, np.ndarray):
+                        # QA-027 (iter 28): LIVE cells from LIST()-projected
+                        # raw-Boolean defines arrive as object-dtype ndarrays
+                        # of 'true'/'false' strings (pandas wraps the SQL
+                        # list). A singleton boolean-string element carries
+                        # the Boolean RESULT — element truthiness, not
+                        # presence. Other ndarray content (audit struct
+                        # arrays = resource evidence) keeps size>0 presence.
+                        if value.size == 1:
+                            el = value.reshape(-1)[0]
+                            if isinstance(el, str) and el.strip().lower() in (
+                                "true",
+                                "false",
+                            ):
+                                return el.strip().lower() == "true"
+                            if isinstance(el, (bool, np.bool_)):
+                                return bool(el)
                         return value.size > 0
                     if isinstance(value, (list, tuple, set)):
+                        # QA-021 (iter 4): LIST()-encoded cells from raw
+                        # Boolean CQL defines carry the Boolean RESULT
+                        # ([true]/[false]); presence-encoding is only valid
+                        # for resource-referencing populations. A list whose
+                        # elements are Booleans must use element truthiness
+                        # so [false] is a definitive negative per FHIR CQM
+                        # membership semantics.
+                        if value and all(
+                            isinstance(el, (bool, np.bool_)) for el in value
+                        ):
+                            return any(bool(el) for el in value)
+                        # QA-027 (iter 28): the LIVE lowering for raw-Boolean
+                        # property defines is from_json(fhirpath(...),
+                        # '["VARCHAR"]') which yields the STRINGS
+                        # 'true'/'false' — the isinstance-bool guard above
+                        # misses them, so ['false'] counted as
+                        # population-positive via presence. Treat
+                        # boolean-string elements with element truthiness
+                        # (case-insensitive, matching the SQL/VARCHAR
+                        # rendering); resource-reference strings and other
+                        # content keep presence semantics.
+                        if value and all(
+                            isinstance(el, str)
+                            and el.strip().lower() in ("true", "false")
+                            for el in value
+                        ):
+                            return any(
+                                el.strip().lower() == "true" for el in value
+                            )
                         return len(value) > 0
                     try:
                         missing = pd.isna(value)
@@ -711,6 +756,18 @@ class MeasureEvaluator:
             pass
         if isinstance(value, np.generic):
             return value.item()
+        # QA-022 (iter 9): DuckDB LIST()-projected stratifier cells arrive as
+        # numpy object arrays, not Python lists. Singleton arrays unwrap to
+        # their scalar stratum value (the canonical property-path stratifier
+        # case, e.g. `define "Strat": Patient.gender`); multi-element arrays
+        # serialize to canonical JSON so stratum keys stay hashable/stable.
+        if isinstance(value, np.ndarray):
+            if value.size == 1:
+                item = value.item()
+                if isinstance(item, (dict, list)):
+                    return json.dumps(item, sort_keys=True, default=str)
+                return item
+            return json.dumps(value.tolist(), sort_keys=True, default=str)
         if isinstance(value, (dict, list)):
             return json.dumps(value, sort_keys=True, default=str)
         return value
@@ -1501,7 +1558,28 @@ class MeasureEvaluator:
                     if hasattr(value, "__len__") and not isinstance(
                         value, (str, bytes, dict)
                     ):
-                        return len(value) > 0
+                        # QA-021 (iter 4): LIST()-encoded cells from raw
+                        # Boolean CQL defines carry the Boolean result
+                        # ([true]/[false]); presence is only a valid
+                        # membership signal for resource-referencing
+                        # populations. Element truthiness keeps
+                        # ['Encounter/e1'] truthy while [false] is a
+                        # definitive negative per FHIR CQM semantics.
+                        # QA-027 (iter 28): the live shape is STRING
+                        # booleans ('true'/'false' via from_json VARCHAR
+                        # projection) — boolean-string elements use element
+                        # truthiness; other strings keep presence semantics.
+                        def _bool_str(v: Any) -> bool:
+                            return isinstance(v, str) and v.strip().lower() in (
+                                "true",
+                                "false",
+                            )
+
+                        if all(_bool_str(v) for v in value):
+                            return any(
+                                v.strip().lower() == "true" for v in value
+                            )
+                        return any(bool(v) for v in value)
                     return bool(value)
 
                 return df[col_name].apply(_truthy)

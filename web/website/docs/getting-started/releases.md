@@ -7,6 +7,60 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.17
+*September 2026*
+
+Version 0.0.17 ships the **CQL Cleanroom** — a fully browser-native CQL
+workbench built on the operations layer. Every capability runs client-side:
+Pyodide hosts the fhir4ds wheel for stateless operations (parse, translate,
+validate), DuckDB-WASM executes the translated SQL, and the TS executor
+emits schema:1 envelopes that are **field-for-field identical** to the CLI
+and MCP adapters. The conformance baseline holds at **2832/2832**
+(ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47).
+
+**Operations layer (shared core)**
+
+- New capabilities: `validate_resource` (loader-identity validation —
+  a resource that passes validation always loads cleanly) and
+  `resource_schema` (FHIR R4 StructureDefinition-driven field metadata).
+- `translate_cql` gains an audit-mode enum (`none` / `population` / `full`),
+  `output_columns` aliasing, and `patient_ids` pushdown; results carry
+  `column_types` CQL metadata.
+- `parse_cql(include_ast=True)` exposes statement-level AST trees.
+- New `compare_evidence` capability: strict evidence-payload diff with
+  moved/added/removed/flipped classifications per patient and population.
+- CLI `verify --evidence` / `--baseline` writes and compares evidence
+  artifacts; MCP gains `compare_evidence_tool`.
+
+**CQL Cleanroom (web/cql-cleanroom)**
+
+- Monaco CQL editor with live diagnostics (markers from structured
+  `Diagnostics.location`), parameter panel, and multi-library tabs with
+  IndexedDB workspace persistence + zip export/import.
+- Evaluation, test, and evidence panes over DuckDB-WASM: typed result
+  tables, SQL viewer, test harness with failure reasons, patient
+  drill-in with audit evidence, and population Sankey flows.
+- Evidence compare mode (baseline paste vs. current explain) and share
+  links (LZ-compressed URL fragments, ≤100 KB, never contain datasets).
+- Resource Builder: schema-driven FHIR resource forms (8 types + raw JSON
+  fallback) with validate-before-add gating and no-silent-data-loss edit
+  round-trips.
+- Visual algorithm editor v1: graph → CQL emitter with a parse round-trip
+  guard before applying to the library.
+
+**Parity & verification**
+
+- Three-way capability matrix: CLI == MCP == browser envelopes on the
+  shared fixture, for both `run_tests` and `compare_evidence`.
+- Macro-sync contract test keeps the browser SQL macro surface in lockstep
+  with the Python translator (`test_macro_sync.py`).
+
+**Known limitations**
+
+- 21 deep-comparator SQL macros remain browser-gap allowlisted
+  (`BROWSER_MACRO_GAP_ALLOWLIST`); the visual editor canvas is a beta seam
+  over the JSON graph editor.
+
 ## Version 0.0.16
 *September 2026*
 

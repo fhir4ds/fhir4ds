@@ -241,6 +241,25 @@ def _descendant_repeat_key(item):
         return ("boolean", data)
     if isinstance(data, (int, float, Decimal)) and not isinstance(data, bool):
         return ("number", str(Decimal(str(data)).normalize()))
+    if isinstance(data, dict):
+        # QA-018 (evolution iter 2): quantity-shaped child objects must
+        # dedup under FHIRPath ``=`` quantity semantics, mirroring native
+        # fpValueRepeatKey (fpValueAsQuantity first, then
+        # quantity:<base_unit>:<base_value> via convertQuantityToBase).
+        # Without this, descendants() over {"value": 10, "unit": "mm"}
+        # alongside {"value": 1, "unit": "cm"} emitted both subtrees even
+        # though repeat(children()) collapses them (10 'mm' = 1 'cm').
+        # parse_value recognizes both Quantity-typed ResourceNodes and
+        # plain value+code/unit dicts, with the FP-12 SKEPTIC QA-001
+        # fall-through to the original value for invalid shapes.
+        parsed = util.parse_value(data)
+        if isinstance(parsed, nodes.FP_Quantity):
+            base = nodes.FP_Quantity.conv_unit_to_base(parsed.unit, parsed.value)
+            if base.unit != parsed.unit and base.unit.strip("'") != "1":
+                return ("quantity", str(base.unit), str(Decimal(str(base.value)).normalize()))
+            # Unconvertible unit: key on the raw unit/value like native's
+            # quantity:<unit>:<value> fallback branch.
+            return ("quantity", str(parsed.unit), str(Decimal(str(parsed.value)).normalize()))
     if isinstance(data, (dict, list)):
         # FP-12 EXPLORER (2026-06-29): The standard `json.dumps` and
         # `orjson.dumps` both serialize nested structures recursively

@@ -1,6 +1,7 @@
 ---
 id: licensing
 title: Licensing & Support
+description: "FHIR4DS license and third-party attribution terms."
 ---
 
 # Licensing & Support

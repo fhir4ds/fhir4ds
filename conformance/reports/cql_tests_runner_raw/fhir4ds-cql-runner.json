@@ -1,6 +1,6 @@
 {
   "FhirServer": {
-    "BaseUrl": "http://127.0.0.1:34289/fhir",
+    "BaseUrl": "http://127.0.0.1:35359/fhir",
     "CqlOperation": "$cql"
   },
   "Build": {

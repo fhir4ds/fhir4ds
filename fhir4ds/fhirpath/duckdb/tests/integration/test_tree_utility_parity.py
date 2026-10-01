@@ -1204,3 +1204,62 @@ def test_extension_elements_typed_as_fhir_extension_fp12_explorer3(monkeypatch: 
     finally:
         native.close()
         fallback.close()
+
+
+def test_descendants_dedups_quantity_shaped_children_qa018(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """QA-018 (evolution iter 2): descendants() must dedup quantity-shaped
+    child objects under FHIRPath ``=`` quantity semantics, mirroring native
+    ``fpValueRepeatKey`` (fpValueAsQuantity -> quantity:<base_unit>:<value>).
+
+    Fixture: Observation with valueQuantity 1 cm, component.valueQuantity
+    10 mm, referenceRange.high 2 cm. ``1 'cm' = 10 'mm'`` and
+    ``1 'cm' = 2 'cm'`` are true under ``=``, so the three Quantity objects
+    collapse to one descendant and their numeric/string children are never
+    queued (object-level dedup suppresses whole duplicate subtrees), per
+    the pinned doctrine that descendants() == repeat(children()).
+    """
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "status": "final",
+            "code": {"coding": [{"code": "8480-6"}]},
+            "valueQuantity": {"value": 1, "unit": "cm"},
+            "component": [
+                {"valueQuantity": {"value": 10, "unit": "mm"}},
+            ],
+            "referenceRange": [{"high": {"value": 2, "unit": "cm"}}],
+        }
+    )
+    expressions = [
+        "descendants().count()",
+        "descendants().ofType(Quantity).count()",
+        "repeat(children()).count()",
+        "descendants().count() = repeat(children()).count()",
+    ]
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in expressions:
+            native_row = native.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()
+            fallback_row = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()
+            assert native_row == fallback_row, (
+                f"expression={expression!r}: native={native_row!r}, "
+                f"fallback={fallback_row!r}"
+            )
+        # Pin the deduped count from BOTH engines (native value observed
+        # live: {value:10,unit:mm} collapses into the {value:1,unit:cm}
+        # subtree because 10 'mm' = 1 'cm' under ``, so its children ("10",
+        # "mm") are never queued; {value:2,unit:cm} stays distinct (2 != 1)
+        # and contributes "2" (its "cm" child was already seen).
+        assert native.execute(
+            "SELECT fhirpath(?::JSON, ?)", [resource, "descendants().count()"]
+        ).fetchone()[0] == ["11"]
+    finally:
+        native.close()
+        fallback.close()
