@@ -247,3 +247,73 @@ one patient's membership in a population column or the value of any define:
 Unknown patients or defines become case failures with a reason — never a
 crash. See the [Operations Layer](./operations) page for the shared envelope
 and diagnostics contract behind this command.
+
+
+## CQL Commands
+
+`fhir4ds cql` is the translate/evaluate surface aligned with the browser
+demo's CQL editor. `verify` remains the battery command (tests, evidence
+artifacts, baselines); these commands are the single-purpose equivalents.
+
+### `fhir4ds cql translate`
+
+CQL → SQL without execution (the SQLOutput capability).
+
+```bash
+fhir4ds cql translate MEASURE.cql [--include-dir DIR ...]
+               [--audit]              # population SQL shape (one row per patient)
+               [--parameters '{"...": ...}']
+               [--output-columns '{"IPP": "Initial Population"}']
+               [--sql-out out.sql]    # write SQL to a file, envelope to stdout
+```
+
+Exit codes match `verify` (`0` ok / `1` diagnostics / `2` bad CLI input).
+
+### `fhir4ds cql evaluate`
+
+Evaluate a library against a dataset and print the population envelope.
+
+```bash
+fhir4ds cql evaluate MEASURE.cql
+               [--include-dir DIR ...]
+               [--data DATA.ndjson | FILE.json | DIR ...]   [--valueset FILE.json ...]
+               [--parameters '{"...": ...}']
+               [--output-columns '{"IPP": "Initial Population"}']
+               [--emit-sql]
+```
+
+## FHIRPath Command
+
+`fhir4ds fhirpath` evaluates a FHIRPath expression against one resource —
+the patient-viewer capability:
+
+```bash
+fhir4ds fhirpath 'name.given.first()' --resource patient.json
+cat patient.json | fhir4ds fhirpath 'Patient.gender'
+```
+
+Prints the `fhirpath_eval` envelope (`schema: 1`, `ok`, `results`).
+
+## Validate Resource Command
+
+`fhir4ds validate-resource` validates FHIR resource JSON files against the
+loader invariants (resourceType present, id pattern, JSON shape) — the
+workbench validator capability:
+
+```bash
+fhir4ds validate-resource patient.json observation.json
+```
+
+For multiple inputs, an array of envelopes (each annotated with `source`)
+is printed. Invalid resources exit `1` with `input_error` diagnostics;
+unreadable/malformed input exits `2`.
+
+## Human-Only WASM Capabilities
+
+The browser demo also ships capabilities that are intentionally NOT aligned
+to CLI/MCP: the FHIR resource builder and SDC form renderer are
+human-oriented editing surfaces; the SMART on FHIR launch is an OAuth
+browser flow. Automation consumers should load data via
+`cql evaluate --data` / `load_dataset_tool` and authenticate with their own
+SMART credentials. See the
+[operations](./operations) alignment matrix for details.

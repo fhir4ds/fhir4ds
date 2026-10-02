@@ -31,6 +31,15 @@ fhir4ds-mcp   # stdio server; the MCP client manages the process
 | `fhirpath_eval_tool` | `fhirpath_eval` | Evaluate a FHIRPath expression on one resource |
 | `load_dataset_tool` | `load_dataset` | Load a dataset; returns a handle + counts |
 | `explain_patient_tool` | `explain_patient` | Per-patient audit evidence drill-in |
+| `compare_evidence_tool` | `compare_evidence` | Baseline vs current evidence delta |
+| `measure_from_definitions_tool` | `measure_from_definitions` | Build a Measure from CQL definitions |
+| `measure_population_map_tool` | `measure_population_map` | Measure population criteria map |
+| `measure_report_from_rows_tool` | `measure_report_from_rows` | Rows → per-patient MeasureReports |
+| `rows_from_measure_reports_tool` | `rows_from_measure_reports` | MeasureReports → rows (inverse) |
+| `measure_roundtrip_tool` | (composed) | Build→evaluate→report→invert roundtrip |
+| `validate_resource_tool` | `validate_resource` | Validate one FHIR resource (loader invariants) |
+| `resource_schema_tool` | `resource_schema` | Column/schema info for a resource type |
+| `resource_schema_tree_tool` | `resource_schema_tree` | Recursive schema tree for a resource type |
 
 Every tool returns the shared envelope (`schema: 1`, `ok`, `passed`,
 `diagnostics`) — identical shapes to the [CLI](./cli) on the same inputs.
