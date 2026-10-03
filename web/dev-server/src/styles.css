@@ -36,3 +36,12 @@ button:disabled { opacity: 0.5; }
 .dev-cellerr { color: #f48771; cursor: help; }
 .dev-cellcount { color: #888; }
 select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size: 12px; }
+
+/* Fill-height chain for the reused CQLEditor (its .editor-pane/.pane-body
+   classes come from wasm-demo's stylesheet, which we do not import) */
+.dev-editor { flex: 1 1 auto; min-height: 0; }
+.dev-editor .editor-pane,
+.dev-editor .pane-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.dev-editor .pane-body > * { flex: 1 1 auto; min-height: 0; }
+.dev-output .dev-pane { min-height: 0; }
+.dev-cellrail { flex: 0 0 auto; }
