@@ -97,7 +97,7 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
         if path == "/api/events":
-            self._sse()
+            self._websocket_events()
             return
         if path == "/api/workspace":
             snap = self.server.watcher.snapshot
@@ -290,30 +290,57 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
         return True
 
-    # -- SSE ----------------------------------------------------------------
+    # -- WebSocket events channel (RFC 6455, stdlib-only) -------------------
+    #
+    # Server->client events over a minimal stdlib WebSocket (conductor
+    # ruling 2026-10-03: WebSockets instead of SSE; no dual transport).
+    # v1 pushes events only; client text frames are read and ignored
+    # (the socket is future-proofed for v2 bidirectional commands).
 
-    def _sse(self) -> None:
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream")
-        self.send_header("Cache-Control", "no-cache")
+    def _websocket_events(self) -> None:
+        from . import ws as ws_protocol
+
+        key = self.headers.get("Sec-WebSocket-Key")
+        upgrade = (self.headers.get("Upgrade") or "").lower()
+        if key is None or "websocket" not in upgrade:
+            self._write_json(
+                400, _envelope(ok=False, diagnostics=[_diag("websocket upgrade required")])
+            )
+            return
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", ws_protocol.accept_key(key))
         self.end_headers()
+
         q = self.server.watcher.bus.subscribe()
         try:
-            self.wfile.write(b": connected\n\n")
+            # Connected frame doubles as the subscription barrier: clients
+            # that publish after consuming it are guaranteed delivery.
+            self.wfile.write(ws_protocol.encode_text_frame('{"kind":"connected"}'))
             self.wfile.flush()
             while True:
                 try:
                     event = q.get(timeout=15)
                 except queue.Empty:
-                    self.wfile.write(b": keepalive\n\n")
+                    # keepalive ping; a dead client surfaces as WsEOF on
+                    # the read side or a broken-pipe write below.
+                    self.wfile.write(ws_protocol.encode_text_frame('{"kind":"ping"}'))
                     self.wfile.flush()
                     continue
-                self.wfile.write(event.sse().encode("utf-8"))
+                self.wfile.write(
+                    ws_protocol.encode_text_frame(ws_protocol.event_json(event))
+                )
                 self.wfile.flush()
-        except Exception:  # client disconnected
+        except Exception:  # client disconnected (WsEOF / broken pipe)
             pass
         finally:
             self.server.watcher.bus.unsubscribe(q)
+            try:
+                self.wfile.write(ws_protocol.encode_close_frame())
+                self.wfile.flush()
+            except Exception:
+                pass
 
 
 def _version() -> str:

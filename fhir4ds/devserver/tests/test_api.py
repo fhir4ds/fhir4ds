@@ -175,3 +175,121 @@ class TestKernelRestart:
         assert call("/health")["kernel_id"] == r["kernel_id"]
         # and evaluation still works after restart
         assert call("/api/evaluate", {"library": "Demographics"})["ok"]
+
+
+class TestWebSocketEvents:
+    """RFC 6455 events channel (stdlib server; raw-socket client)."""
+
+    def _handshake(self, sock):
+        import base64
+        import os
+
+        key = base64.b64encode(os.urandom(16)).decode()
+        req = (
+            f"GET /api/events HTTP/1.1\r\n"
+            f"Host: 127.0.0.1:{PORT}\r\n"
+            f"Upgrade: websocket\r\n"
+            f"Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {key}\r\n"
+            f"Sec-WebSocket-Version: 13\r\n\r\n"
+        )
+        sock.sendall(req.encode())
+        resp = b""
+        while b"\r\n\r\n" not in resp:
+            chunk = sock.recv(4096)
+            if not chunk:
+                raise AssertionError("connection closed during handshake")
+            resp += chunk
+        head, _, rest = resp.partition(b"\r\n\r\n")
+        return key, head.decode(), rest
+
+    def _read_frame(self, sock, buffered):
+        """Read one server frame (servers never mask). Uses a simple
+        accumulating buffer shared with handshake leftovers."""
+        import struct
+
+        def need(n):
+            while len(buffered) < n:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    raise AssertionError("eof")
+                buffered.extend(chunk)
+            out = bytes(buffered[:n])
+            del buffered[:n]
+            return out
+
+        b1, b2 = need(2)
+        opcode = b1 & 0x0F
+        length = b2 & 0x7F
+        if length == 126:
+            (length,) = struct.unpack("!H", need(2))
+        elif length == 127:
+            (length,) = struct.unpack("!Q", need(8))
+        payload = need(length)
+        return opcode, payload
+
+    def test_handshake_and_connected_frame(self, server, tmp_path):
+        from fhir4ds.devserver import ws as ws_protocol
+        import socket
+
+        s = socket.create_connection(("127.0.0.1", PORT), timeout=10)
+        try:
+            key, head, rest = self._handshake(s)
+            assert " 101 " in head
+            accept = ws_protocol.accept_key(key)
+            assert f"Sec-WebSocket-Accept: {accept}" in head
+            buffered = bytearray(rest)
+            opcode, payload = self._read_frame(s, buffered)
+            assert opcode == 0x1
+            assert json.loads(payload) == {"kind": "connected"}
+        finally:
+            s.close()
+
+    def test_publish_reaches_subscriber(self, server):
+        import socket
+
+        s = socket.create_connection(("127.0.0.1", PORT), timeout=10)
+        try:
+            _, _, rest = self._handshake(s)
+            buffered = bytearray(rest)
+            # The server subscribes BEFORE sending the connected frame,
+            # so consuming it guarantees our subscription exists — publish
+            # only after that point (publishing straight after the 101
+            # races the handler thread and can drop the event).
+            deadline = time.time() + 10
+            while True:
+                _, payload = self._read_frame(s, buffered)
+                if json.loads(payload).get("kind") == "connected":
+                    break
+                if time.time() > deadline:
+                    raise AssertionError("connected frame not received")
+            from fhir4ds.devserver.watcher import WorkspaceEvent as WE
+
+            server.watcher.bus.publish(
+                WE(kind="changed", paths=["cql/Demographics.cql"])
+            )
+            seen = None
+            while time.time() < deadline:
+                _, payload = self._read_frame(s, buffered)
+                data = json.loads(payload)
+                if data.get("kind") in ("changed",):
+                    seen = data
+                    break
+                # else: keepalive — keep reading
+            assert seen is not None
+            assert seen["paths"] == ["cql/Demographics.cql"]
+        finally:
+            s.close()
+
+    def test_non_upgrade_get_rejected(self, server):
+        import urllib.error
+        import urllib.request
+
+        try:
+            urllib.request.urlopen(
+                f"http://127.0.0.1:{PORT}/api/events", timeout=10
+            )
+            raised = False
+        except urllib.error.HTTPError as e:
+            raised = e.code == 400
+        assert raised

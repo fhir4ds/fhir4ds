@@ -1,8 +1,8 @@
-"""Polling watcher + SSE event bus for workspace changes."""
+"""Polling watcher + event bus for workspace changes."""
 
 from __future__ import annotations
 
-import json
+
 import queue
 import threading
 import time
@@ -19,7 +19,7 @@ DEBOUNCE = 0.25  # seconds per file
 
 @dataclass
 class WorkspaceEvent:
-    """One watcher event pushed to SSE subscribers."""
+    """One watcher event pushed to event-channel subscribers."""
 
     kind: str  # "changed" | "removed" | "data-hint"
     paths: list[str] = field(default_factory=list)
@@ -28,12 +28,9 @@ class WorkspaceEvent:
     def to_dict(self) -> dict[str, Any]:
         return {"kind": self.kind, "paths": self.paths, "workspace": self.snapshot}
 
-    def sse(self) -> str:
-        return f"data: {json.dumps(self.to_dict())}\n\n"
-
 
 class EventBus:
-    """Fan-out event queue registry for SSE subscribers."""
+    """Fan-out event queue registry for events-channel subscribers."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -85,7 +82,7 @@ class Watcher:
     ) -> None:
         self._cfg = cfg
         self._bus = bus
-        self.bus = bus  # public alias for API/SSE subscribers
+        self.bus = bus  # public alias for API events subscribers
         self._on_rescan = on_rescan
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None

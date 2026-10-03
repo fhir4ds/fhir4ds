@@ -13,7 +13,7 @@ import type {
 /** Server-side transport: thin fetch wrappers over the dev-server API. */
 export class HttpTransport implements Transport {
   private base: string;
-  private es: EventSource | null = null;
+  private ws: WebSocket | null = null;
 
   constructor(base = "") {
     this.base = base;
@@ -85,17 +85,25 @@ export class HttpTransport implements Transport {
   }
 
   onWorkspaceEvent(cb: (e: WorkspaceEvent) => void): () => void {
-    this.es = new EventSource(`${this.base}/api/events`);
-    this.es.onmessage = (msg) => {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const url = `${proto}//${location.host}${this.base}/api/events`;
+    const socket = new WebSocket(url);
+    this.ws = socket;
+    socket.onmessage = (msg) => {
       try {
-        cb(JSON.parse(msg.data) as WorkspaceEvent);
+        const parsed = JSON.parse(msg.data) as
+          | { kind: "ping" | "connected" }
+          | WorkspaceEvent;
+        if (parsed.kind === "changed" || parsed.kind === "data-hint") {
+          cb(parsed);
+        }
       } catch {
-        /* ignore malformed events */
+        /* ignore malformed frames */
       }
     };
     return () => {
-      this.es?.close();
-      this.es = null;
+      socket.close();
+      if (this.ws === socket) this.ws = null;
     };
   }
 }
