@@ -950,8 +950,18 @@ def quantityCompare(q1_json: str | None, q2_json: str | None, op: str) -> bool |
     code1 = q1_dict.get("code") or "1"
     code2 = q2_dict.get("code") or "1"
     if code1 == code2 and _same_code_unit_valid_for_compare(code1):
-        v1 = float(q1_dict.get("value"))
-        v2 = float(q2_dict.get("value"))
+        # A null value on either side makes the comparison NULL (CQL §Equal
+        # null propagation). This also guards non-Quantity JSON (e.g.
+        # Concept JSON {"codes": [...]} re-serialized by parse_quantity with
+        # value=None, code='1' on BOTH sides) against a float(None)
+        # TypeError crash (CQL-21-F01); the surrounding COALESCE then falls
+        # through to the Concept-equality arm, matching the native engine.
+        raw_v1 = q1_dict.get("value")
+        raw_v2 = q2_dict.get("value")
+        if raw_v1 is None or raw_v2 is None:
+            return None
+        v1 = float(raw_v1)
+        v2 = float(raw_v2)
         if op == ">":
             return v1 > v2
         if op == "<":
