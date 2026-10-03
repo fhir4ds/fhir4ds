@@ -1378,3 +1378,45 @@ def test_quantity_arithmetic_spec_examples_both_backends_fp02_historian(
     finally:
         native.close()
         fallback.close()
+
+
+_FP18_F01_BOOLEAN_QUANTITY_CASES = [
+    # FP-18-F01: Boolean operands must be rejected by Quantity arithmetic
+    # arms on BOTH backends (§6.6 operand types; §5.5 Boolean->number is
+    # Explicit-only). The fallback's `mul`/`div` quantity arms previously
+    # coerced True->1 ("5 'mg'", "0.2 '1/mg'"); native rejected.
+    ("true * 5 'mg'", []),
+    ("false * 2 'cm'", []),
+    ("5 'mg' * true", []),
+    ("true / 5 'mg'", []),
+    ("true + 5 'mg'", []),
+    ("true - 5 'mg'", []),
+    ("true mod 5 'mg'", []),
+    ("true div 5 'mg'", []),
+]
+
+
+@pytest.mark.parametrize(
+    ("expression", "expected"),
+    _FP18_F01_BOOLEAN_QUANTITY_CASES,
+)
+def test_boolean_quantity_arithmetic_rejected_both_backends_fp18_f01(
+    expression: str,
+    expected,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FP-18-F01: Boolean x Quantity arithmetic errors to empty on both engines."""
+    resource = json.dumps({"resourceType": "Observation"})
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        for con in (native, fallback):
+            row = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert row == expected, (
+                f"{expression!r}: result={row!r} expected={expected!r}"
+            )
+    finally:
+        native.close()
+        fallback.close()
