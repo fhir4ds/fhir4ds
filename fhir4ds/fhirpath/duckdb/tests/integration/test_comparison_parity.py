@@ -1000,3 +1000,53 @@ def test_subsecond_and_cross_type_comparison_parity_fp14_explorer(
     finally:
         native.close()
         fallback.close()
+
+
+class TestTemporalFieldVsStringOrderingFp14F01:
+    """FP-14-F01 (spec-comp 2026-10-02): a model-typed temporal field
+    (fhir_type date/dateTime/instant/time, e.g. Patient.birthDate) is a
+    Date-family VALUE per §4.1.5-§4.1.7 even though transported as a
+    physical String. Ordering it against an arbitrary, non-date-shaped
+    String is a §6.2 type mismatch -> evaluation error -> empty ({ }) —
+    the native engine previously fell through to lexicographic String
+    ordering (birthDate < 'a' -> true). Date-SHAPED string literals keep
+    the §6.1/§6.2 implicit JSON-convenience comparison behavior, plain
+    String fields keep lexicographic ordering, and temporal-literal
+    comparisons are unaffected.
+    """
+
+    def test_temporal_field_vs_arbitrary_string_ordering_parity_fp14_f01(
+        self, monkeypatch
+    ) -> None:
+        con = _connection()
+        fb = _python_fallback_connection(monkeypatch)
+        resource = json.dumps(
+            {
+                "resourceType": "Patient",
+                "id": "p1",
+                "birthDate": "1974-12-25",
+                "gender": "male",
+            }
+        )
+        cases = [
+            # temporal field vs NON-date-shaped string -> empty on BOTH engines
+            ("birthDate < 'a'", []),
+            ("birthDate > 'zzz'", []),
+            ("birthDate <= 'n'", []),
+            ("birthDate >= 'a'", []),
+            # controls: date-shaped literal comparisons keep working
+            ("birthDate <= '2000-01-01'", ["true"]),
+            ("birthDate < @2000-01-01", ["true"]),
+            ("birthDate = '1974-12-25'", ["true"]),
+            # control: plain String field keeps lexicographic ordering
+            ("gender < 'n'", ["true"]),
+        ]
+        for expression, expected in cases:
+            native = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            fallback = fb.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert native == expected, (expression, "native", native, expected)
+            assert fallback == expected, (expression, "fallback", fallback, expected)
