@@ -41,6 +41,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     verify.configure_parser(verify_parser)
 
+    from . import dev as dev_cmd
+
+    dev_parser = subparsers.add_parser(
+        "dev", help="Start the CQL cleanroom dev server (single-user, 127.0.0.1)"
+    )
+    dev_cmd.configure_parser(dev_parser)
+
     args = parser.parse_args(argv)
     if args.command == "dqm":
         return dqm.run(args)
@@ -54,6 +61,8 @@ def main(argv: list[str] | None = None) -> int:
         return validate_resource.run(args)
     if args.command == "verify":
         return verify.run(args)
+    if args.command == "dev":
+        return dev_cmd.run(args)
 
     parser.print_help()
     return 2

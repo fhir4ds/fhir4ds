@@ -1,0 +1,107 @@
+/**
+ * Transport interface: the engine-agnostic seam shared by the dev server
+ * (HttpTransport) and the in-browser WASM engine (WasmTransport fixture).
+ *
+ * The reused wasm-demo components stay engine-agnostic because everything
+ * they render flows through this interface.
+ */
+
+export interface WorkspaceLibrary {
+  name: string;
+  path: string;
+  parse_ok: boolean;
+  error: string | null;
+  definitions: string[];
+}
+
+export interface WorkspaceInfo {
+  libraries: WorkspaceLibrary[];
+  valuesets: string[];
+  measures: string[];
+  datasets: string[];
+  data_changed_hint: boolean;
+}
+
+export interface Diagnostic {
+  code: string;
+  message: string;
+  detail?: string | null;
+}
+
+export interface TranslateResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  sql: string;
+  column_types: Record<string, string>;
+  definitions: string[];
+}
+
+export interface EvaluateResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  patient_count: number;
+  columns: string[];
+  rows: Record<string, unknown>[];
+  column_types: Record<string, string>;
+  sql: string | null;
+  timing_ms: Record<string, number>;
+}
+
+export interface EvidenceResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  patient_id: string;
+  rows?: Record<string, unknown>[];
+  evidence?: Record<string, unknown>;
+}
+
+export interface VerifyResult {
+  schema: number;
+  ok: boolean;
+  passed: boolean | null;
+  diagnostics: Diagnostic[];
+  summary: Record<string, number>;
+  tests: Record<string, unknown>;
+}
+
+export interface HealthInfo {
+  schema: number;
+  ok: boolean;
+  status: string;
+  version: string;
+  kernel_id: string;
+  watching: number;
+}
+
+export interface WorkspaceEvent {
+  kind: "changed" | "data-hint";
+  paths: string[];
+  workspace?: WorkspaceInfo;
+}
+
+export interface Transport {
+  health(): Promise<HealthInfo>;
+  workspace(): Promise<WorkspaceInfo>;
+  library(name: string): Promise<WorkspaceLibrary>;
+  translate(libraries: { name: string; text: string }[], library: string): Promise<TranslateResult>;
+  evaluate(
+    libraries: { name: string; text: string }[],
+    library: string,
+    define?: string,
+  ): Promise<EvaluateResult>;
+  verify(
+    libraries: { name: string; text: string }[],
+    library: string,
+    cases: unknown[],
+  ): Promise<VerifyResult>;
+  explain(
+    libraries: { name: string; text: string }[],
+    library: string,
+    patientId: string,
+  ): Promise<EvidenceResult>;
+  restartKernel(): Promise<HealthInfo>;
+  onWorkspaceEvent(cb: (e: WorkspaceEvent) => void): () => void;
+}

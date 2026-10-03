@@ -1,0 +1,23 @@
+.dev-app { display: flex; flex-direction: column; height: 100vh; color: #d4d4d4; background: #1e1e1e; }
+.dev-header { display: flex; align-items: center; gap: 16px; padding: 8px 16px; background: #252526; border-bottom: 1px solid #333; }
+.dev-header h1 { font-size: 15px; margin: 0; }
+.dev-status { opacity: 0.7; font-size: 12px; }
+.dev-hint { color: #e2c08d; font-size: 12px; }
+.dev-main { display: grid; grid-template-columns: 200px 1fr 1fr; flex: 1; min-height: 0; }
+.dev-libraries { background: #252526; border-right: 1px solid #333; padding: 8px; overflow: auto; }
+.dev-libraries h2 { font-size: 11px; text-transform: uppercase; opacity: 0.6; margin: 8px 4px 4px; }
+.dev-lib { padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.dev-lib.selected { background: #094771; }
+.dev-lib.broken { color: #f48771; }
+.dev-lib.small { opacity: 0.7; font-size: 11px; }
+.dev-editor { display: flex; flex-direction: column; border-right: 1px solid #333; min-width: 0; }
+.dev-toolbar { display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: #252526; border-bottom: 1px solid #333; font-size: 12px; }
+.dev-output { display: flex; flex-direction: column; min-width: 0; }
+.dev-tabs { display: flex; gap: 4px; padding: 6px 10px; background: #252526; border-bottom: 1px solid #333; }
+.dev-tabs button { background: transparent; border: none; color: #d4d4d4; cursor: pointer; padding: 4px 10px; border-radius: 4px; text-transform: capitalize; }
+.dev-tabs button.active { background: #094771; }
+.dev-pane { flex: 1; overflow: auto; padding: 8px; }
+.dev-errors { list-style: none; padding: 0; margin: 0; font-family: var(--font-mono, monospace); font-size: 12px; }
+.dev-errors li { padding: 4px 8px; border-bottom: 1px solid #333; }
+button { background: #0e639c; color: #fff; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+button:disabled { opacity: 0.5; }

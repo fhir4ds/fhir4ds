@@ -1,0 +1,52 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": [
+      "ES2021",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noImplicitAny": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@wasm-demo/*": [
+        "../wasm-demo/src/*"
+      ],
+      "react": [
+        "node_modules/@types/react"
+      ],
+      "react/jsx-runtime": [
+        "node_modules/@types/react/jsx-runtime"
+      ],
+      "@monaco-editor/react": [
+        "node_modules/@monaco-editor/react"
+      ],
+      "monaco-editor": [
+        "node_modules/monaco-editor/esm/vs/editor/editor.api"
+      ]
+    },
+    "types": [
+      "vite/client"
+    ]
+  },
+  "include": [
+    "src",
+    "../wasm-demo/src/components/CQLEditor.tsx",
+    "../wasm-demo/src/components/SQLOutput.tsx",
+    "../wasm-demo/src/components/ResultsTable.tsx",
+    "../wasm-demo/src/components/EvidenceModal.tsx",
+    "../wasm-demo/src/components/PatientDataViewer.tsx"
+  ]
+}
