@@ -153,3 +153,65 @@ def test_session_kernel_restart_marks_stale():
     s.set_result("Male", CellRecord(status=OK, result={}))
     s.mark_stale_all()
     assert s.get_result("Male").status == "stale"
+
+
+def test_refs_see_collection_literals_in_function_args():
+    """v2 verification blocker pin: identifiers inside collection-literal
+    arguments of function calls ARE dependencies (Count({IsMale}) must see
+    IsMale; the first walker only covered bare Identifier refs)."""
+    text = (
+        "library Demo version '1.0.0'\n"
+        "using FHIR version '4.0.1'\n"
+        "context Patient\n"
+        "define IsMale: Patient.gender = 'male'\n"
+        "define A: 1\n"
+        "define B: 2\n"
+        "define FnRef: Count({IsMale})\n"
+    )
+    refs = refs_of(text)
+    assert "IsMale" in refs["FnRef"]
+    closure = dependency_closure(
+        "FnRef", refs, {"IsMale", "FnRef", "A", "B"}
+    )
+    assert set(closure) == {"IsMale", "FnRef"}
+
+
+def test_refs_nested_fn_args_and_multi_element_lists():
+    """Max({A, B}) + C and nested fn-in-fn args (Max({A, Min({B, C})}) + D)."""
+    text = (
+        "library Demo version '1.0.0'\n"
+        "using FHIR version '4.0.1'\n"
+        "context Patient\n"
+        "define A: 1\n"
+        "define B: 2\n"
+        "define C: 3\n"
+        "define D: 4\n"
+        "define Multi: Max({A, B}) + C\n"
+        "define Nested: Max({A, Min({B, C})}) + D\n"
+    )
+    refs = refs_of(text)
+    assert set(refs["Multi"]) == {"Max", "A", "B", "C"}
+    assert set(refs["Nested"]) == {"Max", "Min", "A", "B", "C", "D"}
+    assert set(dependency_closure("Nested", refs, {"A", "B", "C", "D", "Nested"})) == {
+        "A", "B", "C", "D", "Nested",
+    }
+
+
+def test_refs_tuple_elements_and_retrieve_exclusion():
+    """Tuple element values are deps; retrieves ([Patient]) and the context
+    identifier are NOT cell deps."""
+    text = (
+        "library Demo version '1.0.0'\n"
+        "using FHIR version '4.0.1'\n"
+        "context Patient\n"
+        "define A: 1\n"
+        "define B: 2\n"
+        "define TupleRef: Tuple { x: A, y: B }\n"
+        "define Retrieve: exists([Patient])\n"
+        "define Baseline: Patient.birthDate\n"
+    )
+    refs = refs_of(text)
+    assert set(refs["TupleRef"]) == {"A", "B"}
+    # Retrieve carries no define-name refs; Patient is filtered as context.
+    assert refs["Retrieve"] == []
+    assert refs["Baseline"] == []

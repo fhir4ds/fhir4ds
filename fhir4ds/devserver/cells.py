@@ -175,14 +175,27 @@ def _param_names(stmt: Any) -> set[str]:
 
 
 def _walk_refs(node: Any, out: list[str]) -> None:
-    """Recursive AST walk collecting Identifier names."""
+    """Recursive AST walk collecting Identifier names.
+
+    Covers every composite shape the dev-server cells can author:
+    binary (left/right), unary/n-ary (operand/operands), function calls
+    (arguments), lists (ListExpression.elements), tuples
+    (TupleExpression.elements w/ values under .type), and query bodies
+    (source/where/return/let/sort clauses). Identifier names inside
+    collection-literal function arguments are deps (v2 verification
+    blocker: Count({IsMale}) must see IsMale).
+    """
     if node is None:
         return
     name = getattr(node, "name", None)
     node_type = type(node).__name__
     if isinstance(name, str) and node_type in ("Identifier", "FunctionRef"):
         out.append(name)
-    for attr in ("operand", "operands", "arguments", "left", "right", "expression", "source", "element"):
+    for attr in (
+        "operand", "operands", "arguments", "left", "right", "expression",
+        "source", "element", "elements", "type", "where", "return_clause",
+        "sort", "let_clauses", "with_clauses", "relationships", "aggregate",
+    ):
         child = getattr(node, attr, None)
         if child is None:
             continue

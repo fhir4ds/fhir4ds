@@ -232,3 +232,32 @@ def test_run_with_inline_text_overrides(ws):
     rows = msg["per_cell"]["Male"]["rows"]
     # 'MALE' never matches -> all False (engine lowercases nothing).
     assert all(r["Male"] is False for r in rows)
+
+
+class TestCollectionLiteralClosureApi:
+    """v2 verification blocker: run cell_deps over WS on a cell whose dep is
+    referenced inside a collection-literal function argument (Count({IsMale}))
+    — the closure must compose IsMale and evaluate, not Binder-error."""
+
+    _LIB = (
+        "library Demo version '1.0.0'\n"
+        "using FHIR version '4.0.1'\n"
+        "context Patient\n"
+        "\n"
+        "// # %% [name: IsMale]\n"
+        "define IsMale: Patient.gender = 'male'\n"
+        "\n"
+        "// # %% [name: MaleCount]\n"
+        "define MaleCount: Count({IsMale})\n"
+    )
+
+    def test_cell_deps_composes_collection_literal_closure(self, server, ws):
+        ws.send({"kind": "run", "library": "Demo", "cell": "MaleCount",
+                 "mode": "cell_deps", "text": self._LIB})
+        msg = ws.until({"result", "cellerror", "runerror"})
+        assert msg is not None and msg["kind"] == "result"
+        assert set(msg["cells"]) == {"IsMale", "MaleCount"}
+        rows = msg["per_cell"]["MaleCount"]["rows"]
+        assert all(r["MaleCount"] == 1 for r in rows)
+        ismale = msg["per_cell"]["IsMale"]["rows"]
+        assert sorted(bool(r["IsMale"]) for r in ismale) == [False, True]
