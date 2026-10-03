@@ -600,3 +600,38 @@ def test_escaped_backslash_argument_literals_lex_correctly_fp10_explorer(
     finally:
         native.close()
         fallback.close()
+
+
+class TestMatchesFlagArgSpecFp10F01:
+    """FP-10-F01 (spec-comp 2026-10-02): spec §5.6.9 defines only m/i flag
+    arguments for matches(); the native engine previously accepted the
+    illegal 's' flag as a no-op while the Python fallback rejected it. Both
+    engines must now reject 's'/'ms' (runtime error -> empty) while valid
+    flags and inline leading flag groups keep working. Inline (?s) still
+    PARSES (absorbed then dropped; dot-all is unconditional on both engines).
+    """
+
+    CASES = [
+        ("'abc'.matches('b','s')", []),          # illegal flag -> empty both
+        ("'abc'.matches('b','ms')", []),         # illegal composite -> empty both
+        ("'abc'.matches('b','x')", []),          # illegal flag -> empty both
+        ("'ABC'.matches('b','i')", ["true"]),
+        ("'A\\nB'.matches('^b$','im')", ["true"]),
+        ("'ABC'.matches('(?i)b')", ["true"]),     # inline leading (?i) unaffected
+        ("'a\\ncd'.matches('(?s)a.c')", ["true"]),  # inline (?s) still parses
+        ("'a\\ncd'.matches('a.c')", ["true"]),     # unconditional dot-all unchanged
+    ]
+
+    def test_matches_flag_arg_matrix_parity_fp10_f01(self, monkeypatch: pytest.MonkeyPatch):
+        con = _connection()
+        fb = _python_fallback_connection(monkeypatch)
+        resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+        for expression, expected in self.CASES:
+            native = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            fallback = fb.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert native == expected, (expression, native, expected)
+            assert fallback == expected, (expression, fallback, expected)

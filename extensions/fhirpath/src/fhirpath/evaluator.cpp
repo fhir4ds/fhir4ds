@@ -294,13 +294,13 @@ static std::regex_constants::syntax_option_type fhirpathRegexCompileOptions(cons
 			options = options | std::regex_constants::icase;
 		} else if (flag == 'm') {
 			// Handled by normalizeFHIRPathRegex()/line-wise replacement below.
-		} else if (flag == 's') {
-			// ECMAScript std::regex has no dotall option; '.' is translated
-			// per-codepoint by normalizeFHIRPathRegex and does not cross
-			// line terminators. Accepted so leading (?s) groups parse; the
-			// dotall-over-newline case rides the deferred inline-flag
-			// dialect note (FP-10 QA-003).
 		} else {
+			// FP-10-F01: spec 5.6.9 defines only 'm' and 'i' as legal
+			// matches()/replaceMatches() flag arguments; 's' (and anything
+			// else) is rejected, matching the Python fallback
+			// (_regex_flags). Inline leading (?s) groups are still PARSED
+			// as a no-op via absorbLeadingInlineRegexFlags, which now
+			// drops 's' instead of forwarding it here.
 			throw FHIRPathSpecError("FHIRPath: invalid regex flags");
 		}
 	}
@@ -684,6 +684,11 @@ static std::string absorbLeadingInlineRegexFlags(const std::string &pattern, std
 	std::string letters = pattern.substr(2, close - 2);
 	if (letters.empty() || letters.find_first_not_of("ims") != std::string::npos) return pattern;
 	for (char ch : letters) {
+		// FP-10-F01: forward only 'i'/'m' to fhirpathRegexCompileOptions
+		// (spec 5.6.9 flag set). 's' is silently dropped: the group is
+		// still consumed so inline (?s) parses, and '.' already matches
+		// across newlines on both engines, making it a semantic no-op.
+		if (ch == 's') continue;
 		if (flags_text.find(ch) == std::string::npos) flags_text += ch;
 	}
 	return pattern.substr(close + 1);
@@ -9846,8 +9851,30 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			throwIncompatibleComparison(lv, rv);
 		}
 
-		// String comparison - lexicographic, only between same types
+		// String comparison - lexicographic, only between same types.
+		// FP-14-F01 (spec-comp 2026-10-02): a metadata-typed temporal field
+		// (fhir_type date/dateTime/instant/time — e.g. birthDate) is a
+		// Date/DateTime/Time VALUE per §4.1.5-§4.1.7 even though it arrives
+		// as a physical String; comparing it against an arbitrary String
+		// must NOT fall through to lexicographic ordering (`birthDate <
+		// 'a'` returned true). §6.2 comparisons require operands of the
+		// same type (String is not implicitly comparable to Date family —
+		// §5.5 conversions are explicit-only), so this is the
+		// incompatible-types evaluation error -> empty, matching the
+		// Python fallback and the arithmetic `+` guard below (Domain 1
+		// EXPLORER doctrine: gate on fhir_type metadata, not lexical shape).
 		if (lt == FPValue::Type::String && rt == FPValue::Type::String) {
+			auto metadataTemporal = [](const FPValue &v) -> bool {
+				if (v.fhir_type.empty()) return false;
+				std::string ft = v.fhir_type;
+				std::transform(ft.begin(), ft.end(), ft.begin(), [](unsigned char c) {
+					return static_cast<char>(std::tolower(c));
+				});
+				return ft == "date" || ft == "datetime" || ft == "instant" || ft == "time";
+			};
+			if (metadataTemporal(lv) || metadataTemporal(rv)) {
+				throwIncompatibleComparison(lv, rv);
+			}
 			std::string l_str = toString(lv);
 			std::string r_str = toString(rv);
 			if (op == "<") return {FPValue::FromBoolean(l_str < r_str)};
