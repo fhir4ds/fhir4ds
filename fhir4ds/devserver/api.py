@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import queue
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
@@ -303,7 +304,7 @@ class _Handler(BaseHTTPRequestHandler):
             while True:
                 try:
                     event = q.get(timeout=15)
-                except Exception:
+                except queue.Empty:
                     self.wfile.write(b": keepalive\n\n")
                     self.wfile.flush()
                     continue
