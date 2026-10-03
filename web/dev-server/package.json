@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -19,6 +20,7 @@
     "@vitejs/plugin-react": "^4.3.0",
     "monaco-editor": "^0.57.0",
     "typescript": "~5.8.0",
-    "vite": "^6.3.0"
+    "vite": "^6.3.0",
+    "@playwright/test": "^1.59.1"
   }
 }

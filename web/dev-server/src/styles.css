@@ -45,3 +45,52 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
 .dev-editor .pane-body > * { flex: 1 1 auto; min-height: 0; }
 .dev-output .dev-pane { min-height: 0; }
 .dev-cellrail { flex: 0 0 auto; }
+
+/* UX polish: pane labels, hint bar, inline cell results, marker decorations */
+.dev-pane-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.55;
+  margin-right: 6px;
+}
+.dev-hintbar {
+  padding: 4px 16px;
+  background: #1b1b1b;
+  border-bottom: 1px solid #333;
+  font-size: 11px;
+  opacity: 0.75;
+}
+.dev-hintbar code { font-family: var(--font-mono, monospace); color: #9cdcfe; }
+.dev-cellblock {
+  border-bottom: 1px solid #2a2a2a;
+  padding: 2px 0;
+}
+.dev-cellresult {
+  padding: 2px 10px 6px 34px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+}
+.dev-cellresult-row { display: flex; gap: 14px; padding: 1px 0; }
+.dev-cellresult-cell { display: flex; gap: 4px; min-width: 0; }
+.dev-cellresult-key { color: #9cdcfe; opacity: 0.8; }
+.dev-cellresult-val { color: #ce9178; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.dev-cellresult-more { opacity: 0.6; padding-top: 2px; }
+.dev-cellerror {
+  padding: 2px 10px 6px 34px;
+  color: #f48771;
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* Monaco line decorations for // # %% markers (applied by DevEditor) */
+.dev-cell-marker {
+  background: rgba(14, 99, 156, 0.10);
+  border-left: 3px solid #0e639c;
+}
+.dev-cell-marker-glyph {
+  background: #0e639c;
+  width: 3px !important;
+  margin-left: 2px;
+}

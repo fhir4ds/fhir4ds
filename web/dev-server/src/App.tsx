@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { CQLEditor } from "@wasm-demo/components/CQLEditor";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SQLOutput } from "@wasm-demo/components/SQLOutput";
 import { ResultsTable } from "@wasm-demo/components/ResultsTable";
 import type { QueryResult } from "@wasm-demo/components/ResultsTable";
 import { HttpTransport } from "./http-transport";
 import { chunkEditor } from "./cells";
+import { DevEditor } from "./DevEditor";
+import type { DevEditorHandle } from "./DevEditor";
 import type {
   CellEvent,
   Diagnostic,
@@ -162,6 +163,11 @@ export function App() {
     [buffer, runMode, selected, transport],
   );
 
+  const editorHandle = useRef<DevEditorHandle | null>(null);
+  const registerEditor = useCallback((h: DevEditorHandle) => {
+    editorHandle.current = h;
+  }, []);
+
 
   return (
     <div className="dev-app">
@@ -180,6 +186,10 @@ export function App() {
           Restart kernel
         </button>
       </header>
+      <div className="dev-hintbar">
+        Unmarked defines = shared header · <code>// # %%</code> marked defines
+        = cells · Apply/Run syncs the buffer (files stay untouched)
+      </div>
       <main className="dev-main">
         <aside className="dev-libraries">
           <h2>Libraries</h2>
@@ -207,6 +217,7 @@ export function App() {
         </aside>
         <section className="dev-editor">
           <div className="dev-toolbar">
+            <span className="dev-pane-label">Editor</span>
             <span>{selected}{dirty ? " *" : ""}</span>
             <select
               value={runMode}
@@ -218,6 +229,12 @@ export function App() {
               <option value="all">all</option>
               <option value="to_here">to here</option>
             </select>
+            <button
+              onClick={() => editorHandle.current?.insertCell()}
+              title="Insert a new cell at the end of the file"
+            >
+              + cell
+            </button>
             <button disabled={busy} onClick={() => apply("translate")}>
               Translate
             </button>
@@ -225,18 +242,20 @@ export function App() {
               Run ▶
             </button>
           </div>
-          <CQLEditor
+          <DevEditor
             value={buffer}
             onChange={(v) => {
               setBuffer(v);
               setDirty(true);
             }}
+            registerHandle={registerEditor}
           />
           <div className="dev-cellrail">
             {chunkEditor(buffer)
               .filter((c) => c.type === "cell")
               .map((c) => (
-                <div key={c.name ?? c.order} className="dev-cellrow">
+                <div key={c.name ?? c.order} className="dev-cellblock">
+                <div className="dev-cellrow">
                   <button
                     className="dev-cellrun"
                     onClick={() => runCell(c.name ?? "")}
@@ -259,11 +278,35 @@ export function App() {
                     </span>
                   )}
                 </div>
+                {cellRows[c.name ?? ""]?.length > 0 && (
+                  <div className="dev-cellresult">
+                    {cellRows[c.name ?? ""].slice(0, 3).map((row, i) => (
+                      <div key={i} className="dev-cellresult-row">
+                        {Object.entries(row).map(([k, v]) => (
+                          <span key={k} className="dev-cellresult-cell">
+                            <span className="dev-cellresult-key">{k}</span>
+                            <span className="dev-cellresult-val">{String(v)}</span>
+                          </span>
+                        ))}
+                      </div>
+                    ))}
+                    {cellRows[c.name ?? ""].length > 3 && (
+                      <div className="dev-cellresult-more">
+                        +{cellRows[c.name ?? ""].length - 3} more rows — see Results tab
+                      </div>
+                    )}
+                  </div>
+                )}
+                {cellErrors[c.name ?? ""] && (
+                  <div className="dev-cellerror">{cellErrors[c.name ?? ""]}</div>
+                )}
+                </div>
               ))}
           </div>
         </section>
         <section className="dev-output">
           <div className="dev-tabs">
+            <span className="dev-pane-label">Results</span>
             {(["results", "sql", "errors"] as Tab[]).map((t) => (
               <button
                 key={t}
