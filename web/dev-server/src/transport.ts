@@ -82,6 +82,31 @@ export interface WorkspaceEvent {
   workspace?: WorkspaceInfo;
 }
 
+export type RunMode = "cell" | "cell_deps" | "all" | "to_here";
+
+export interface CellState {
+  library: string;
+  cell: string;
+  status: "idle" | "running" | "ok" | "error" | "stale";
+  run_seq: number;
+  rows?: Record<string, unknown>[];
+  sql?: string | null;
+  error?: string | null;
+}
+
+export interface CellEvent {
+  kind: "cellstate" | "result" | "cellerror" | "runerror";
+  library?: string;
+  cell?: string;
+  cells?: string[];
+  run_seq?: number;
+  states?: Record<string, string>;
+  per_cell?: Record<string, { rows?: Record<string, unknown>[]; sql?: string | null }>;
+  sql?: string | null;
+  diagnostics?: Diagnostic[];
+  message?: string;
+}
+
 export interface Transport {
   health(): Promise<HealthInfo>;
   workspace(): Promise<WorkspaceInfo>;
@@ -104,4 +129,7 @@ export interface Transport {
   ): Promise<EvidenceResult>;
   restartKernel(): Promise<HealthInfo>;
   onWorkspaceEvent(cb: (e: WorkspaceEvent) => void): () => void;
+  runCell(library: string, cell: string, mode: RunMode, text?: string): void;
+  syncCells(library: string, text: string): void;
+  onCellEvent(cb: (e: CellEvent) => void): () => void;
 }

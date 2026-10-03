@@ -4,10 +4,13 @@ import { SQLOutput } from "@wasm-demo/components/SQLOutput";
 import { ResultsTable } from "@wasm-demo/components/ResultsTable";
 import type { QueryResult } from "@wasm-demo/components/ResultsTable";
 import { HttpTransport } from "./http-transport";
+import { chunkEditor } from "./cells";
 import type {
+  CellEvent,
   Diagnostic,
   EvaluateResult,
   HealthInfo,
+  RunMode,
   WorkspaceEvent,
   WorkspaceInfo,
 } from "./transport";
@@ -28,6 +31,10 @@ export function App() {
   const [tab, setTab] = useState<Tab>("results");
   const [busy, setBusy] = useState(false);
   const [dataHint, setDataHint] = useState<string[]>([]);
+  const [runMode, setRunMode] = useState<RunMode>("cell");
+  const [cellStates, setCellStates] = useState<Record<string, string>>({});
+  const [cellRows, setCellRows] = useState<Record<string, Record<string, unknown>[]>>({});
+  const [cellErrors, setCellErrors] = useState<Record<string, string>>({});
 
   const loadLibrary = useCallback(
     async (name: string) => {
@@ -54,7 +61,46 @@ export function App() {
       if (e.kind === "changed" && e.workspace) setWorkspace(e.workspace);
       if (e.kind === "data-hint") setDataHint(e.paths);
     });
-    return off;
+    const offCells = transport.onCellEvent((e: CellEvent) => {
+      if (e.kind === "cellstate" && e.states) {
+        setCellStates((prev) => ({ ...prev, ...e.states! }));
+      } else if (e.kind === "result" && e.per_cell) {
+        const rows: Record<string, Record<string, unknown>[]> = {};
+        for (const [name, slice] of Object.entries(e.per_cell)) {
+          rows[name] = slice.rows ?? [];
+        }
+        setCellRows((prev) => ({ ...prev, ...rows }));
+        setCellStates((prev) => {
+          const next = { ...prev };
+          for (const n of e.cells ?? []) next[n] = "ok";
+          return next;
+        });
+        setCellErrors((prev) => {
+          const next = { ...prev };
+          for (const n of e.cells ?? []) delete next[n];
+          return next;
+        });
+      } else if (e.kind === "cellerror") {
+        const message =
+          e.diagnostics?.[0]?.message ?? "evaluation failed";
+        setCellErrors((prev) => {
+          const next = { ...prev };
+          for (const n of e.cells ?? []) next[n] = message;
+          return next;
+        });
+        setCellStates((prev) => {
+          const next = { ...prev };
+          for (const n of e.cells ?? []) next[n] = "error";
+          return next;
+        });
+      } else if (e.kind === "runerror") {
+        setCellErrors((prev) => ({ ...prev, [e.cell ?? "?"]: e.message ?? "run failed" }));
+      }
+    });
+    return () => {
+      off();
+      offCells();
+    };
   }, [transport, refreshWorkspace]);
 
   const apply = useCallback(
@@ -98,7 +144,23 @@ export function App() {
     const h = await transport.restartKernel();
     setHealth(h);
     setDataHint([]);
+    setCellStates((prev) => {
+      const next: Record<string, string> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        next[k] = v === "ok" || v === "error" ? "stale" : v;
+      }
+      return next;
+    });
   }, [transport]);
+
+  const runCell = useCallback(
+    (name: string) => {
+      if (!selected) return;
+      transport.syncCells(selected, buffer);
+      transport.runCell(selected, name, runMode, buffer);
+    },
+    [buffer, runMode, selected, transport],
+  );
 
 
   return (
@@ -146,6 +208,16 @@ export function App() {
         <section className="dev-editor">
           <div className="dev-toolbar">
             <span>{selected}{dirty ? " *" : ""}</span>
+            <select
+              value={runMode}
+              onChange={(e) => setRunMode(e.target.value as RunMode)}
+              title="Cell run mode"
+            >
+              <option value="cell">cell</option>
+              <option value="cell_deps">cell + deps</option>
+              <option value="all">all</option>
+              <option value="to_here">to here</option>
+            </select>
             <button disabled={busy} onClick={() => apply("translate")}>
               Translate
             </button>
@@ -160,6 +232,35 @@ export function App() {
               setDirty(true);
             }}
           />
+          <div className="dev-cellrail">
+            {chunkEditor(buffer)
+              .filter((c) => c.type === "cell")
+              .map((c) => (
+                <div key={c.name ?? c.order} className="dev-cellrow">
+                  <button
+                    className="dev-cellrun"
+                    onClick={() => runCell(c.name ?? "")}
+                    title={`Run ${c.name} (${runMode})`}
+                  >
+                    ▶
+                  </button>
+                  <span className="dev-cellname">{c.name}</span>
+                  <span className={"dev-chip " + (cellStates[c.name ?? ""] ?? "idle")}>
+                    {cellStates[c.name ?? ""] ?? "idle"}
+                  </span>
+                  {cellErrors[c.name ?? ""] && (
+                    <span className="dev-cellerr" title={cellErrors[c.name ?? ""]}>
+                      ⚠
+                    </span>
+                  )}
+                  {cellRows[c.name ?? ""] && (
+                    <span className="dev-cellcount">
+                      {cellRows[c.name ?? ""].length} rows
+                    </span>
+                  )}
+                </div>
+              ))}
+          </div>
         </section>
         <section className="dev-output">
           <div className="dev-tabs">

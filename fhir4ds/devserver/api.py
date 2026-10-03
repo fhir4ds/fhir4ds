@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import json
 import queue
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from fhir4ds.operations.envelopes import LibraryText, tests_input_from_dict
 
+from .cells import (
+    CellRecord,
+    CellSessionRegistry,
+    ERROR,
+    OK,
+    RUNNING,
+)
 from .kernel import KernelManager
 from .watcher import Watcher
 
@@ -23,12 +31,20 @@ def _diag(message: str, code: str = "INPUT_ERROR") -> dict[str, Any]:
     return {"code": code, "message": message}
 
 
+def _first_message(envelope: dict[str, Any]) -> str:
+    diags = envelope.get("diagnostics") or []
+    if diags and isinstance(diags[0], dict):
+        return str(diags[0].get("message") or diags[0].get("code") or "evaluation failed")
+    return "evaluation failed"
+
+
 class DevHTTPServer(ThreadingHTTPServer):
     """HTTP server carrying the dev-server state."""
 
     kernel_manager: KernelManager
     watcher: Watcher
     static_root: str = ""
+    cell_registry: "CellSessionRegistry" = None  # type: ignore[assignment]
 
 
 def create_server(
@@ -41,6 +57,7 @@ def create_server(
     server = DevHTTPServer((host, port), _Handler)
     server.kernel_manager = kernel_manager
     server.watcher = watcher
+    server.cell_registry = CellSessionRegistry()
     return server
 
 
@@ -174,6 +191,8 @@ class _Handler(BaseHTTPRequestHandler):
             elif path == "/api/kernel/restart":
                 snap = self.server.watcher.snapshot
                 kernel = self.server.kernel_manager.restart(snap)
+                # Cell results evaluated against the OLD kernel are stale.
+                self.server.cell_registry.mark_stale_all()
                 self._write_json(
                     200,
                     _envelope(
@@ -314,20 +333,79 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
         q = self.server.watcher.bus.subscribe()
+        conn_id = id(self.connection)
+        run_queue: "queue.Queue[dict[str, Any]]" = queue.Queue(maxsize=1)
+
+        def on_client_message(payload: str) -> None:
+            """Dispatch client->server commands (v2 cells protocol)."""
+            try:
+                msg = json.loads(payload)
+            except ValueError:
+                return
+            if not isinstance(msg, dict):
+                return
+            if msg.get("kind") == "run":
+                # Conductor ruling 2: cap-1 latest-wins queue.
+                try:
+                    run_queue.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    run_queue.put_nowait(msg)
+                except queue.Full:
+                    pass
+            elif msg.get("kind") == "sync":
+                session = self.server.cell_registry.get(conn_id, str(msg.get("library") or ""))
+                session.sync(str(msg.get("text") or ""))
+
+        def reader() -> None:
+            """Reader thread: consumes client frames until EOF/close."""
+            try:
+                while True:
+                    opcode, payload = ws_protocol.read_client_frame(self.rfile)
+                    if opcode == ws_protocol.OP_CLOSE:
+                        return
+                    if opcode == ws_protocol.OP_PING:
+                        try:
+                            self.wfile.write(ws_protocol.encode_pong_frame(payload))
+                            self.wfile.flush()
+                        except Exception:
+                            return
+                    elif opcode == ws_protocol.OP_TEXT:
+                        on_client_message(payload.decode("utf-8", "replace"))
+            except Exception:
+                return
+
+        reader_thread = threading.Thread(target=reader, daemon=True)
+        reader_thread.start()
         try:
             # Connected frame doubles as the subscription barrier: clients
             # that publish after consuming it are guaranteed delivery.
             self.wfile.write(ws_protocol.encode_text_frame('{"kind":"connected"}'))
             self.wfile.flush()
             while True:
+                # Drain at most one pending run between event polls; runs
+                # execute inline on this socket thread (single-user).
                 try:
-                    event = q.get(timeout=15)
+                    run_msg = run_queue.get_nowait()
                 except queue.Empty:
-                    # keepalive ping; a dead client surfaces as WsEOF on
-                    # the read side or a broken-pipe write below.
-                    self.wfile.write(ws_protocol.encode_text_frame('{"kind":"ping"}'))
-                    self.wfile.flush()
+                    run_msg = None
+                if run_msg is not None:
+                    self._execute_cell_run(conn_id, run_msg)
                     continue
+                try:
+                    event = q.get(timeout=0.5)
+                except queue.Empty:
+                    # Keepalive ping; a dead client surfaces as WsEOF on
+                    # the read side or a broken-pipe write below.
+                    idle_ticks = getattr(self, "_idle_ticks", 0) + 1
+                    self._idle_ticks = idle_ticks
+                    if idle_ticks >= 30:  # ~15s of idleness -> keepalive
+                        self._idle_ticks = 0
+                        self.wfile.write(ws_protocol.encode_text_frame('{"kind":"ping"}'))
+                        self.wfile.flush()
+                    continue
+                self._idle_ticks = 0
                 self.wfile.write(
                     ws_protocol.encode_text_frame(ws_protocol.event_json(event))
                 )
@@ -336,11 +414,133 @@ class _Handler(BaseHTTPRequestHandler):
             pass
         finally:
             self.server.watcher.bus.unsubscribe(q)
+            self.server.cell_registry.drop(conn_id)
+            reader_thread.join(timeout=2)
             try:
                 self.wfile.write(ws_protocol.encode_close_frame())
                 self.wfile.flush()
             except Exception:
                 pass
+
+    def _ws_send(self, obj: dict[str, Any]) -> None:
+        from . import ws as ws_protocol
+
+        self.wfile.write(ws_protocol.encode_text_frame(json.dumps(obj)))
+        self.wfile.flush()
+
+    def _execute_cell_run(self, conn_id: int, msg: dict[str, Any]) -> None:
+        """Execute one v2 cell run request and push per-cell results."""
+        library = str(msg.get("library") or "")
+        cell = str(msg.get("cell") or "")
+        mode = str(msg.get("mode") or "cell")
+        text = msg.get("text")
+        if not library or not cell:
+            self._ws_send({"kind": "runerror", "message": "library and cell are required"})
+            return
+        session = self.server.cell_registry.get(conn_id, library)
+        if isinstance(text, str) and text:
+            session.sync(text)
+
+        run_seq = session.next_run_seq()
+        try:
+            names = session.plan(cell, mode)
+        except KeyError:
+            self._ws_send({"kind": "runerror", "message": f"unknown cell {cell!r}"})
+            return
+        except ValueError as exc:
+            self._ws_send({"kind": "runerror", "message": str(exc)})
+            return
+
+        # Recompute the refs-based selection for split attribution (the
+        # plan may be file-order based for all/to_here modes; the split
+        # narrows per-cell columns regardless of composition order).
+        for name in names:
+            session.set_result(name, CellRecord(status=RUNNING, run_seq=run_seq))
+        self._ws_send(
+            {
+                "kind": "cellstate",
+                "library": library,
+                "run_seq": run_seq,
+                "states": {n: RUNNING for n in names},
+            }
+        )
+
+        composed = session.compose(names)
+        includes, main = self._cell_libraries(library, composed)
+        kernel = self.server.kernel_manager.current()
+        envelope = kernel.evaluate(
+            includes,
+            main,
+            output_columns={n: n for n in names},
+        )
+
+        if not envelope.get("ok"):
+            # Whole-composition failure: attribute to the REQUESTING cell
+            # only (review-note test pins this for mid-split errors).
+            for name in names:
+                rec = session.get_result(name) or CellRecord()
+                rec.status = ERROR
+                rec.error = _first_message(envelope)
+                rec.run_seq = run_seq
+                session.set_result(name, rec)
+            self._ws_send(
+                {
+                    "kind": "cellerror",
+                    "library": library,
+                    "cell": cell,
+                    "run_seq": run_seq,
+                    "cells": names,
+                    "diagnostics": envelope.get("diagnostics", []),
+                }
+            )
+            return
+
+        columns = envelope.get("columns", [])
+        rows = envelope.get("rows", [])
+        for name in names:
+            if name not in columns:
+                # Cell contributed no column (e.g. function cell): keep
+                # idle-with-note rather than fabricated results.
+                rec = session.get_result(name) or CellRecord()
+                rec.status = OK
+                rec.run_seq = run_seq
+                session.set_result(name, rec)
+                continue
+            rec = session.get_result(name) or CellRecord()
+            rec.status = OK
+            rec.run_seq = run_seq
+            rec.result = {
+                "column_types": {name: envelope.get("column_types", {}).get(name)},
+                "rows": [{name: row.get(name)} for row in rows],
+                "patient_count": envelope.get("patient_count", 0),
+                "sql": envelope.get("sql"),
+            }
+            session.set_result(name, rec)
+        self._ws_send(
+            {
+                "kind": "result",
+                "library": library,
+                "cell": cell,
+                "run_seq": run_seq,
+                "cells": names,
+                "sql": envelope.get("sql"),
+                "per_cell": {
+                    n: session.get_result(n).result for n in names if session.get_result(n)
+                },
+                "states": {n: OK for n in names},
+            }
+        )
+
+    def _cell_libraries(
+        self, library_name: str, composed_text: str
+    ) -> tuple[list[LibraryText], LibraryText]:
+        """Includes from the workspace snapshot + composed main inline."""
+        snap = self.server.watcher.snapshot
+        includes: list[LibraryText] = []
+        for lib in snap.libraries:
+            if lib.name != library_name:
+                includes.append(lib.library_text())
+        return includes, LibraryText(name=library_name, text=composed_text)
 
 
 def _version() -> str:

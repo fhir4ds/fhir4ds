@@ -21,3 +21,18 @@
 .dev-errors li { padding: 4px 8px; border-bottom: 1px solid #333; }
 button { background: #0e639c; color: #fff; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 button:disabled { opacity: 0.5; }
+
+/* v2 cell rail */
+.dev-cellrail { border-top: 1px solid #333; max-height: 200px; overflow-y: auto; }
+.dev-cellrow { display: flex; align-items: center; gap: 8px; padding: 4px 10px; font-size: 12px; }
+.dev-cellname { font-family: var(--font-mono); color: #9cdcfe; }
+.dev-cellrun { padding: 1px 7px; font-size: 11px; }
+.dev-chip { padding: 0 6px; border-radius: 8px; font-size: 10px; text-transform: uppercase; }
+.dev-chip.idle { background: #444; }
+.dev-chip.running { background: #264f78; }
+.dev-chip.ok { background: #2d5a2d; }
+.dev-chip.error { background: #6b2d2d; }
+.dev-chip.stale { background: #6b5a2d; }
+.dev-cellerr { color: #f48771; cursor: help; }
+.dev-cellcount { color: #888; }
+select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size: 12px; }
