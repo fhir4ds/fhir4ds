@@ -1,12 +1,14 @@
 /**
- * DevEditor — local editor wrapper for the dev-server UI.
+ * DevEditor — local editor wrapper for the dev-server UI (v3, ux2 polish).
  *
  * Same Monaco setup as the reused CQLEditor (language, theme, options,
- * shadow-DOM fix) plus v2 cell affordances:
- *  - `on # %% [name: X]` marker lines get a colored left border + subtle
- *    background via Monaco deltaDecorations so cells are visible IN the code.
- *  - exposes an imperative `insertCell()` used by the toolbar "+ cell"
- *    button to append a marker + define skeleton.
+ * shadow-DOM fix) plus cell affordances:
+ *  - `// # %%` marker lines get a stronger blue wash + left border via
+ *    decorations, and a 24px glyph-margin gutter area; the cell NAME is
+ *    rendered as a margin widget aligned to the marker line (fix 4).
+ *  - custom theme `dev-cql`: string tokens render straw/orange (red is
+ *    reserved for errors only — the stock sql theme renders strings red).
+ *  - imperative `insertCell()` used by the toolbar "+ cell" button.
  */
 
 import { useCallback, useEffect, useRef } from "react";
@@ -15,6 +17,7 @@ import { fixMonacoInputArea } from "@wasm-demo/lib/monaco-shadow-fix";
 import type * as MonacoEditor from "monaco-editor";
 
 const MARKER = /^\s*\/\/\s*#\s*%%/;
+const DEFINE_ANYWHERE = /^\s*define\s+(function\s+)?([A-Za-z0-9_]+)\s*[(:]/m;
 
 interface DevEditorHandle {
   insertCell: () => void;
@@ -26,6 +29,27 @@ interface DevEditorProps {
   registerHandle?: (h: DevEditorHandle) => void;
 }
 
+let themeDefined = false;
+
+function defineDevTheme(monaco: typeof MonacoEditor) {
+  if (themeDefined) return;
+  themeDefined = true;
+  monaco.editor.defineTheme("dev-cql", {
+    base: "vs-dark",
+    inherit: true,
+    rules: [
+      // Fix 4: strings = neutral straw/orange; red stays error-only.
+      { token: "string", foreground: "ce9178" },
+      { token: "string.sql", foreground: "ce9178" },
+      { token: "string.quote", foreground: "ce9178" },
+      { token: "string.value", foreground: "d7ba7d" },
+      { token: "keyword", foreground: "569cd6" },
+      { token: "comment", foreground: "6a9955", fontStyle: "italic" },
+    ],
+    colors: {},
+  });
+}
+
 export function DevEditor({ value, onChange, registerHandle }: DevEditorProps) {
   const editorRef = useRef<MonacoEditor.editor.IStandaloneCodeEditor | null>(
     null,
@@ -34,6 +58,9 @@ export function DevEditor({ value, onChange, registerHandle }: DevEditorProps) {
   const decorationsRef = useRef<MonacoEditor.editor.IEditorDecorationsCollection | null>(
     null,
   );
+  const nameWidgetRefs = useRef<
+    { id: string; widget: MonacoEditor.editor.IContentWidget }[]
+  >([]);
 
   const recompute = useCallback(() => {
     const editor = editorRef.current;
@@ -42,6 +69,7 @@ export function DevEditor({ value, onChange, registerHandle }: DevEditorProps) {
     const model = editor.getModel();
     if (!model) return;
     const markers: MonacoEditor.editor.IModelDeltaDecoration[] = [];
+    const names: { line: number; name: string }[] = [];
     const lineCount = model.getLineCount();
     for (let line = 1; line <= lineCount; line++) {
       if (MARKER.test(model.getLineContent(line))) {
@@ -50,9 +78,18 @@ export function DevEditor({ value, onChange, registerHandle }: DevEditorProps) {
           options: {
             isWholeLine: true,
             className: "dev-cell-marker",
-            linesDecorationsClassName: "dev-cell-marker-glyph",
           },
         });
+        // Cell name: derive from the first define after the marker.
+        let name = "";
+        for (let l = line + 1; l <= Math.min(lineCount, line + 5); l++) {
+          const m = DEFINE_ANYWHERE.exec(model.getLineContent(l));
+          if (m?.[2]) {
+            name = m[2];
+            break;
+          }
+        }
+        names.push({ line, name });
       }
     }
     if (decorationsRef.current) {
@@ -60,6 +97,28 @@ export function DevEditor({ value, onChange, registerHandle }: DevEditorProps) {
     } else {
       decorationsRef.current = editor.createDecorationsCollection(markers);
     }
+    // Refresh name widgets (content widgets aligned to marker lines).
+    for (const { widget } of nameWidgetRefs.current) {
+      editor.removeContentWidget(widget);
+    }
+    nameWidgetRefs.current = names.map(({ line, name }) => {
+      const id = `dev-cell-name-${line}`;
+      const domNode = document.createElement("div");
+      domNode.className = "dev-cell-name-gutter";
+      domNode.textContent = name;
+      const widget: MonacoEditor.editor.IContentWidget = {
+        getId: () => id,
+        getDomNode: () => domNode,
+        getPosition: () => ({
+          position: { lineNumber: line, column: 1 },
+          preference: [
+            monacoRef.current!.editor.ContentWidgetPositionPreference.EXACT,
+          ],
+        }),
+      };
+      editor.addContentWidget(widget);
+      return { id, widget };
+    });
   }, []);
 
   // Recompute decorations whenever the buffer changes.
@@ -102,11 +161,13 @@ export function DevEditor({ value, onChange, registerHandle }: DevEditorProps) {
       <div className="pane-body">
         <Editor
           language="sql"
-          theme="vs-dark"
+          theme="dev-cql"
           value={value}
           onChange={(v) => onChange(v ?? "")}
           onMount={(editor, monaco) => {
             fixMonacoInputArea(editor);
+            defineDevTheme(monaco);
+            monaco.editor.setTheme("dev-cql");
             editorRef.current = editor;
             monacoRef.current = monaco;
             recompute();
@@ -121,6 +182,7 @@ export function DevEditor({ value, onChange, registerHandle }: DevEditorProps) {
             padding: { top: 8 },
             renderLineHighlight: "gutter",
             automaticLayout: true,
+            glyphMargin: true,
           }}
         />
       </div>

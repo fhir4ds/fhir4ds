@@ -102,6 +102,8 @@ export interface CellEvent {
   run_seq?: number;
   states?: Record<string, string>;
   per_cell?: Record<string, { rows?: Record<string, unknown>[]; sql?: string | null }>;
+  rows?: Record<string, unknown>[];
+  timing_ms?: Record<string, number>;
   sql?: string | null;
   diagnostics?: Diagnostic[];
   message?: string;

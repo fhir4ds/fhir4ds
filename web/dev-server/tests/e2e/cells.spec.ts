@@ -31,19 +31,24 @@ test.beforeAll(async () => {
       "// # %%",
       "define IsMale: Patient.gender = 'male'",
       "",
+      "// # %%",
+      "define BirthYear: Patient.birthDate.substring(0, 4)",
+      "",
     ].join("\n"),
   );
-  fs.writeFileSync(
-    path.join(workdir, "data", "patients.ndjson"),
-    [
-      JSON.stringify({ resourceType: "Patient", id: "p1", gender: "male", birthDate: "1974-12-25" }),
-      JSON.stringify({ resourceType: "Patient", id: "p2", gender: "female", birthDate: "1990-01-01" }),
-    ].join("\n"),
+  const patients = ["p1", "p2", "p3", "p4", "p5", "p6"].map((id, i) =>
+    JSON.stringify({
+      resourceType: "Patient",
+      id,
+      gender: i % 2 === 0 ? "male" : "female",
+      birthDate: i % 2 === 0 ? "1974-12-25" : "1990-01-01",
+    }),
   );
+  fs.writeFileSync(path.join(workdir, "data", "patients.ndjson"), patients.join("\n"));
   server = spawn(
     "/usr/bin/python3",
     ["-m", "fhir4ds.cli", "dev", workdir, "--port", String(PORT), "--no-open"],
-    { env: { PATH: process.env.PATH, PYTHONPATH: "/mnt/d/fhir4ds-devserver-ux-20261003" }, stdio: "ignore" },
+    { env: { PATH: process.env.PATH, PYTHONPATH: "/mnt/d/fhir4ds-devserver-ux2-20261003" }, stdio: "ignore" },
   );
   // Wait for /health.
   const deadline = Date.now() + 60_000;
@@ -78,16 +83,16 @@ test("editor shows library text with visible cells", async ({ page }) => {
       return t?.includes("define") && t?.includes("IsMale");
     }, { timeout: 30_000 })
     .toBe(true);
-  // Hint bar explains the model.
-  await expect(page.getByText(/shared header/)).toBeVisible();
+  // ux2: the hint bar was replaced by the empty-Results guide.
+  await expect(page.locator(".dev-guide h3")).toHaveText("Getting started");
 });
 
 test("cell chip exists and run produces visible output", async ({ page }) => {
   await page.goto(BASE);
-  await expect(page.locator(".dev-cellname")).toHaveText("IsMale", {
+  await expect(page.locator(".dev-cellname").first()).toHaveText("IsMale", {
     timeout: 30_000,
   });
-  await expect(page.locator(".dev-cellrow")).toHaveCount(1);
+  await expect(page.locator(".dev-cellrow")).toHaveCount(2);
   const chip = page.locator(".dev-chip").first();
   await expect(chip).toBeVisible();
   // Run the cell via the rail button (mode defaults to strict cell).
@@ -98,4 +103,55 @@ test("cell chip exists and run produces visible output", async ({ page }) => {
   });
   // The chip flips to ok after the run completes.
   await expect(page.locator(".dev-chip.ok").first()).toBeVisible({ timeout: 60_000 });
+});
+
+test("ux2: right Results pane populates on cell run", async ({ page }) => {
+  await page.goto(BASE);
+  await expect(page.locator(".dev-cellname").first()).toHaveText("IsMale", {
+    timeout: 30_000,
+  });
+  await page.locator(".dev-cellrun").first().click();
+  await expect(page.locator(".dev-resultheader")).toContainText(/IsMale - 6 rows/, {
+    timeout: 60_000,
+  });
+  // Results tab auto-switched and the table is visible.
+  await expect(page.locator(".dev-pane table").first()).toBeVisible();
+});
+
+test("ux2: toolbar says Run all and empty-state guide shows pre-run", async ({ page }) => {
+  await page.goto(BASE);
+  await expect(page.getByRole("button", { name: /Run all/ })).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.locator(".dev-guide h3")).toHaveText("Getting started");
+  // The jargon hint bar is gone.
+  await expect(page.locator(".dev-hintbar")).toHaveCount(0);
+});
+
+test("ux2: string tokens are not red", async ({ page }) => {
+  await page.goto(BASE);
+  await expect(page.locator(".dev-cellname").first()).toHaveText("IsMale", {
+    timeout: 30_000,
+  });
+  const color = await page.evaluate(() => {
+    const spans = [...document.querySelectorAll(".view-lines span")];
+    const hit = spans.find((s) => s.textContent?.includes("male"));
+    return hit ? getComputedStyle(hit).color : "span-not-found";
+  });
+  expect(color).not.toBe("rgb(255, 0, 0)");
+});
+
+test("ux2: inline cell table has patient column", async ({ page }) => {
+  await page.goto(BASE);
+  await expect(page.locator(".dev-cellname").first()).toHaveText("IsMale", {
+    timeout: 30_000,
+  });
+  await page.locator(".dev-cellrun").first().click();
+  await expect(page.locator(".dev-celltable-row").first()).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(page.locator(".dev-celltable-head")).toContainText("patient");
+  await expect(
+    page.locator(".dev-celltable-body .dev-cellresult-row").first(),
+  ).toContainText("p1");
 });

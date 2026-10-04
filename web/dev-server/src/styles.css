@@ -94,3 +94,71 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   width: 3px !important;
   margin-left: 2px;
 }
+
+/* Muse Spark 1.3 design fixes */
+.dev-lastrun { opacity: 0.7; font-size: 12px; }
+/* hollow "Not run" pill */
+.dev-chip.idle {
+  background: transparent;
+  border: 1px solid #666;
+  color: #999;
+}
+/* inline 3-col result table (# / patient / value) */
+.dev-celltable { padding: 2px 10px 6px 34px; }
+.dev-celltable-row {
+  display: grid;
+  grid-template-columns: 28px 90px 1fr;
+  gap: 8px;
+  align-items: baseline;
+}
+.dev-celltable-head {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+  padding-bottom: 2px;
+  border-bottom: 1px solid #333;
+  position: sticky;
+  top: 0;
+  background: #1e1e1e;
+}
+.dev-celltable-body {
+  max-height: calc(5 * 18px);
+  overflow-y: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+}
+.dev-celltable-body .dev-cellresult-row { color: #ce9178; }
+.dev-celltable-body .dev-cellresult-row span:first-child { color: #888; }
+.dev-celltable-body .dev-cellresult-row span:nth-child(2) { color: #9cdcfe; }
+.dev-cellview {
+  margin-top: 4px;
+  padding: 1px 8px;
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid #0e639c;
+  color: #9cdcfe;
+}
+.dev-resultheader {
+  font-size: 12px;
+  opacity: 0.85;
+  padding: 2px 8px 8px;
+  color: #9cdcfe;
+}
+.dev-guide { padding: 24px 16px; max-width: 420px; }
+.dev-guide h3 { margin: 0 0 10px; font-size: 14px; }
+.dev-guide ol { padding-left: 20px; display: grid; gap: 8px; font-size: 13px; }
+.dev-guide code { font-family: var(--font-mono, monospace); color: #9cdcfe; }
+/* stronger cell band + name gutter (Muse fix 4) */
+.dev-cell-marker {
+  background: rgba(14, 99, 156, 0.18);
+  border-left: 3px solid #0e639c;
+}
+.dev-cell-name-gutter {
+  color: #9cdcfe;
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  opacity: 0.85;
+  padding: 0 4px;
+  user-select: none;
+}

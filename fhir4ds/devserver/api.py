@@ -524,6 +524,10 @@ class _Handler(BaseHTTPRequestHandler):
                 "run_seq": run_seq,
                 "cells": names,
                 "sql": envelope.get("sql"),
+                # Full envelope rows (patient_id + all cell columns) so the
+                # UI can build patient-aware tables (Muse fix 1/5).
+                "rows": rows,
+                "timing_ms": envelope.get("timing_ms", {}),
                 "per_cell": {
                     n: session.get_result(n).result for n in names if session.get_result(n)
                 },

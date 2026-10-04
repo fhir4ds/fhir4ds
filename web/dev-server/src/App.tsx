@@ -36,6 +36,15 @@ export function App() {
   const [cellStates, setCellStates] = useState<Record<string, string>>({});
   const [cellRows, setCellRows] = useState<Record<string, Record<string, unknown>[]>>({});
   const [cellErrors, setCellErrors] = useState<Record<string, string>>({});
+  // Muse fix 1: unified results — the requesting cell's run populates the
+  // right Results pane (QueryResult + header) and switches to it.
+  const [resultHeader, setResultHeader] = useState("");
+  // Muse fix 2: last-run indicator near the kernel status.
+  const [lastRun, setLastRun] = useState<{ cell: string; time: string } | null>(null);
+  // Muse fix 5: full envelope rows (patient_id per row) for inline tables.
+  const [cellFullRows, setCellFullRows] = useState<Record<string, Record<string, unknown>[]>>({});
+  // Muse fix 2: last-focused cell for the Cmd/Ctrl+Enter shortcut.
+  const lastFocusedCell = useRef<string | null>(null);
 
   const loadLibrary = useCallback(
     async (name: string) => {
@@ -71,6 +80,10 @@ export function App() {
           rows[name] = slice.rows ?? [];
         }
         setCellRows((prev) => ({ ...prev, ...rows }));
+        // Muse fix 5: keep the full envelope rows (patient_id per row).
+        if (e.rows && e.cell) {
+          setCellFullRows((prev) => ({ ...prev, [e.cell!]: e.rows! }));
+        }
         setCellStates((prev) => {
           const next = { ...prev };
           for (const n of e.cells ?? []) next[n] = "ok";
@@ -81,6 +94,27 @@ export function App() {
           for (const n of e.cells ?? []) delete next[n];
           return next;
         });
+        // Muse fix 1: populate the right Results pane with the REQUESTING
+        // cell's table + header, and auto-switch to the results tab.
+        const req = e.cell;
+        if (req && rows[req]) {
+          const cellRowsNow = rows[req];
+          const timing = e.timing_ms ?? {};
+          const ms = Object.values(timing).reduce((a, b) => a + b, 0);
+          setResult({
+            columns: [req],
+            rows: cellRowsNow.map((r) => [String(r[req])]),
+            rowCount: cellRowsNow.length,
+            executionTimeMs: ms,
+          });
+          setResultHeader(`${req} - ${cellRowsNow.length} rows${ms ? ` - ${Math.round(ms)}ms` : ""}`);
+          setSql(e.sql ?? "");
+          setTab("results");
+        }
+        // Muse fix 2: last-run indicator.
+        if (e.cell) {
+          setLastRun({ cell: e.cell, time: new Date().toLocaleTimeString() });
+        }
       } else if (e.kind === "cellerror") {
         const message =
           e.diagnostics?.[0]?.message ?? "evaluation failed";
@@ -168,6 +202,26 @@ export function App() {
     editorHandle.current = h;
   }, []);
 
+  // Muse fix 2: Cmd/Ctrl+Enter runs the last-focused cell.
+  const runCellRef = useRef(runCell);
+  runCellRef.current = runCell;
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") {
+        ev.preventDefault();
+        const target = lastFocusedCell.current;
+        if (target) runCellRef.current(target);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const anyCellOk = useMemo(
+    () => Object.values(cellStates).some((s) => s === "ok"),
+    [cellStates],
+  );
+
 
   return (
     <div className="dev-app">
@@ -176,6 +230,11 @@ export function App() {
         <span className="dev-status">
           {health ? `${health.kernel_id} · ${health.watching} files` : "…"}
         </span>
+        {lastRun && (
+          <span className="dev-lastrun">
+            Last run: {lastRun.cell} · {lastRun.time}
+          </span>
+        )}
         {dataHint.length > 0 && (
           <span className="dev-hint">
             data changed ({dataHint.length}) —{" "}
@@ -186,10 +245,6 @@ export function App() {
           Restart kernel
         </button>
       </header>
-      <div className="dev-hintbar">
-        Unmarked defines = shared header · <code>// # %%</code> marked defines
-        = cells · Apply/Run syncs the buffer (files stay untouched)
-      </div>
       <main className="dev-main">
         <aside className="dev-libraries">
           <h2>Libraries</h2>
@@ -231,15 +286,23 @@ export function App() {
             </select>
             <button
               onClick={() => editorHandle.current?.insertCell()}
-              title="Insert a new cell at the end of the file"
+              title={"Inserts a new cell at the end of the file:\n\n// # %%\ndefine NewCell: 'TODO'"}
             >
               + cell
             </button>
-            <button disabled={busy} onClick={() => apply("translate")}>
-              Translate
+            <button
+              disabled={busy || !anyCellOk}
+              onClick={() => apply("translate")}
+              title={anyCellOk ? "Show the generated SQL" : "Run a cell first"}
+            >
+              Show SQL
             </button>
-            <button disabled={busy} onClick={() => apply("evaluate")}>
-              Run ▶
+            <button
+              disabled={busy}
+              onClick={() => apply("evaluate")}
+              title="Evaluate every define in the buffer as one batch library"
+            >
+              Run all ▶
             </button>
           </div>
           <DevEditor
@@ -253,55 +316,77 @@ export function App() {
           <div className="dev-cellrail">
             {chunkEditor(buffer)
               .filter((c) => c.type === "cell")
-              .map((c) => (
+              .map((c) => {
+                const name = c.name ?? "";
+                const state = cellStates[name] ?? "idle";
+                const fullRows = cellFullRows[name] ?? [];
+                const sliceRows = cellRows[name] ?? [];
+                return (
                 <div key={c.name ?? c.order} className="dev-cellblock">
-                <div className="dev-cellrow">
+                <div
+                  className="dev-cellrow"
+                  onMouseDown={() => {
+                    lastFocusedCell.current = name;
+                  }}
+                >
                   <button
                     className="dev-cellrun"
-                    onClick={() => runCell(c.name ?? "")}
-                    title={`Run ${c.name} (${runMode})`}
+                    onClick={() => runCell(name)}
+                    title={`Run ${name} (${runMode}) — Cmd/Ctrl+Enter runs the last-clicked cell`}
                   >
-                    ▶
+                    ▶ Run
                   </button>
-                  <span className="dev-cellname">{c.name}</span>
-                  <span className={"dev-chip " + (cellStates[c.name ?? ""] ?? "idle")}>
-                    {cellStates[c.name ?? ""] ?? "idle"}
+                  <span className="dev-cellname">{name}</span>
+                  <span className={"dev-chip " + state}>
+                    {state === "idle" ? "Not run" : state}
                   </span>
-                  {cellErrors[c.name ?? ""] && (
-                    <span className="dev-cellerr" title={cellErrors[c.name ?? ""]}>
+                  {cellErrors[name] && (
+                    <span className="dev-cellerr" title={cellErrors[name]}>
                       ⚠
                     </span>
                   )}
-                  {cellRows[c.name ?? ""] && (
+                  {sliceRows.length > 0 && (
                     <span className="dev-cellcount">
-                      {cellRows[c.name ?? ""].length} rows
+                      {sliceRows.length} rows
                     </span>
                   )}
                 </div>
-                {cellRows[c.name ?? ""]?.length > 0 && (
-                  <div className="dev-cellresult">
-                    {cellRows[c.name ?? ""].slice(0, 3).map((row, i) => (
-                      <div key={i} className="dev-cellresult-row">
-                        {Object.entries(row).map(([k, v]) => (
-                          <span key={k} className="dev-cellresult-cell">
-                            <span className="dev-cellresult-key">{k}</span>
-                            <span className="dev-cellresult-val">{String(v)}</span>
-                          </span>
-                        ))}
-                      </div>
-                    ))}
-                    {cellRows[c.name ?? ""].length > 3 && (
+                {fullRows.length > 0 && (
+                  <div className="dev-celltable">
+                    <div className="dev-celltable-head dev-celltable-row">
+                      <span>#</span>
+                      <span>patient</span>
+                      <span>{name}</span>
+                    </div>
+                    <div className="dev-celltable-body">
+                      {fullRows.slice(0, 5).map((row, i) => (
+                        <div key={i} className="dev-cellresult-row dev-celltable-row">
+                          <span>{i + 1}</span>
+                          <span>{String(row.patient_id ?? "")}</span>
+                          <span>{String(row[name] ?? "")}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {fullRows.length > 5 && (
                       <div className="dev-cellresult-more">
-                        +{cellRows[c.name ?? ""].length - 3} more rows — see Results tab
+                        +{fullRows.length - 5} more rows
                       </div>
                     )}
+                    <button
+                      className="dev-cellview"
+                      onClick={() => setTab("results")}
+                      title="Show the full table in the Results pane"
+                    >
+                      View in Results →
+                    </button>
                   </div>
                 )}
-                {cellErrors[c.name ?? ""] && (
-                  <div className="dev-cellerror">{cellErrors[c.name ?? ""]}</div>
+                {cellErrors[name] && (
+                  <div className="dev-cellerror">{cellErrors[name]}</div>
                 )}
                 </div>
-              ))}
+                );
+              })}
           </div>
         </section>
         <section className="dev-output">
@@ -319,6 +404,19 @@ export function App() {
             ))}
           </div>
           <div className="dev-pane">
+            {resultHeader && (
+              <div className="dev-resultheader">{resultHeader}</div>
+            )}
+            {tab === "results" && !result && !resultHeader && (
+              <div className="dev-guide">
+                <h3>Getting started</h3>
+                <ol>
+                  <li>Pick a dataset — files under <code>data/</code> load automatically.</li>
+                  <li>Pick a cell — each <code>// # %%</code> block runs on its own.</li>
+                  <li>Press the cell's <strong>Run</strong> button (or Cmd/Ctrl+Enter).</li>
+                </ol>
+              </div>
+            )}
             {tab === "results" && (
               <ResultsTable
                 result={result}
