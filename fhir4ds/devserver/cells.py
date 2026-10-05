@@ -131,12 +131,15 @@ def _define_info(body: str) -> tuple[str, bool] | None:
     return m.group(2), bool(m.group(1))
 
 
-def refs_of(text: str) -> dict[str, list[str]]:
+def refs_of(text: str, identifiers_only: bool = False) -> dict[str, list[str]]:
     """Map define name -> referenced identifiers for one library text.
 
     Uses the engine parser AST (operations ParseResult carries no AST on
     success). Function parameters are excluded from their own function's
     refs. Includes (other libraries) are NOT refs.
+
+    identifiers_only=True skips FunctionRef names (function CALLS are not
+    cell dependencies for missing-dep detection).
     """
     library = parse_cql(text)
     context_name = getattr(getattr(library, "context", None), "name", None)
@@ -148,7 +151,7 @@ def refs_of(text: str) -> dict[str, list[str]]:
             continue
         params = _param_names(stmt)
         found: list[str] = []
-        _walk_refs(expr, found)
+        _walk_refs(expr, found, include_functions=not identifiers_only)
         seen: set[str] = set()
         refs = []
         for ref in found:
@@ -174,8 +177,8 @@ def _param_names(stmt: Any) -> set[str]:
     return names
 
 
-def _walk_refs(node: Any, out: list[str]) -> None:
-    """Recursive AST walk collecting Identifier names.
+def _walk_refs(node: Any, out: list[str], include_functions: bool = True) -> None:
+    """Recursive AST walk collecting Identifier (and FunctionRef) names.
 
     Covers every composite shape the dev-server cells can author:
     binary (left/right), unary/n-ary (operand/operands), function calls
@@ -184,13 +187,18 @@ def _walk_refs(node: Any, out: list[str]) -> None:
     (source/where/return/let/sort clauses). Identifier names inside
     collection-literal function arguments are deps (v2 verification
     blocker: Count({IsMale}) must see IsMale).
+
+    include_functions=False collects Identifier names ONLY — used for
+    missing-dep detection, where a dangling FunctionRef is an
+    unknown-function error class, not a missing cell.
     """
     if node is None:
         return
     name = getattr(node, "name", None)
     node_type = type(node).__name__
     if isinstance(name, str) and node_type in ("Identifier", "FunctionRef"):
-        out.append(name)
+        if include_functions or node_type == "Identifier":
+            out.append(name)
     for attr in (
         "operand", "operands", "arguments", "left", "right", "expression",
         "source", "element", "elements", "type", "where", "return_clause",
@@ -201,9 +209,9 @@ def _walk_refs(node: Any, out: list[str]) -> None:
             continue
         if isinstance(child, (list, tuple)):
             for item in child:
-                _walk_refs(item, out)
+                _walk_refs(item, out, include_functions)
         else:
-            _walk_refs(child, out)
+            _walk_refs(child, out, include_functions)
 
 
 def dependency_closure(target: str, refs: dict[str, list[str]], available: set[str]) -> list[str]:
@@ -313,24 +321,55 @@ class CellSession:
                 "states": {n: r.status for n, r in self.results.items()},
             }
 
-    def _refs_unlocked(self) -> dict[str, list[str]]:
+    def _refs_unlocked(self, identifiers_only: bool = False) -> dict[str, list[str]]:
         try:
             composed = self.header_text + "\n" + "\n".join(self.cells.values())
-            return refs_of(composed)
+            return refs_of(composed, identifiers_only=identifiers_only)
         except Exception:
             return {}
+
+    def _header_define_names_unlocked(self) -> set[str]:
+        """Define/function names declared in the shared header block.
+
+        Header content composes into EVERY run, so header defines are
+        always resolvable — never missing deps.
+        """
+        if not self.header_text.strip():
+            return set()
+        try:
+            return set(refs_of(self.header_text).keys())
+        except Exception:
+            return set()
 
     # -- run planning -------------------------------------------------------
 
     def plan(self, cell: str, mode: str) -> list[str]:
-        """Names to evaluate for a run request (in composition order)."""
+        """Names to evaluate for a run request (in composition order).
+
+        Modes:
+          cell       - auto-closure: the cell plus its transitive dep
+                       closure (deps present in the session), ONE
+                       evaluation, deps refresh with the target. Missing
+                       deps raise a clean ValueError naming them.
+          cell_only  - strict legacy behaviour: header + target alone
+                       (dangling deps surface engine diagnostics).
+          cell_deps  - same closure as 'cell' (kept for explicit UI
+                       visibility; identical composition).
+          all        - every cell in file order.
+          to_here    - file-order prefix ending at the cell.
+        """
         with self.lock:
             if cell not in self.cells:
                 raise KeyError(cell)
-            if mode == "cell":
+            if mode == "cell_only":
                 return [cell]
-            refs = self._refs_unlocked()
+            if mode == "cell":
+                refs = self._refs_unlocked()
+                self._check_dangling_unlocked(cell, refs)
+                return dependency_closure(cell, refs, set(self.cells))
             if mode == "cell_deps":
+                refs = self._refs_unlocked()
+                self._check_dangling_unlocked(cell, refs)
                 return dependency_closure(cell, refs, set(self.cells))
             if mode == "all":
                 return list(self.order)
@@ -338,6 +377,35 @@ class CellSession:
                 idx = self.order.index(cell)
                 return self.order[: idx + 1]
             raise ValueError(f"unknown run mode {mode!r}")
+
+    def _check_dangling_unlocked(self, cell: str, refs: dict[str, list[str]]) -> None:
+        """Raise ValueError naming identifier refs missing everywhere.
+
+        A dep counts as present when it is a session cell OR a header
+        define (the header composes into every run). FunctionRef names
+        are excluded (identifiers_only walk); a dangling FunctionRef is
+        an unknown-function error, not a missing cell. The error names
+        the dangling identifiers so the user knows what to run or
+        define first.
+        """
+        header_names = self._header_define_names_unlocked()
+        ident_map = self._refs_unlocked(identifiers_only=True)
+        closure = dependency_closure(cell, refs, set(self.cells)) or [cell]
+        dangling: list[str] = []
+        seen: set[str] = set()
+        for name in closure:
+            for ref in ident_map.get(name, []):
+                if ref in seen:
+                    continue
+                if ref in self.cells or ref in header_names:
+                    continue
+                seen.add(ref)
+                dangling.append(ref)
+        if dangling:
+            raise ValueError(
+                f"{cell} references {', '.join(dangling)} - run or define "
+                f"{'it' if len(dangling) == 1 else 'them'} first"
+            )
 
     def compose(self, names: list[str]) -> str:
         """Header + selected cell texts as one synthetic library."""

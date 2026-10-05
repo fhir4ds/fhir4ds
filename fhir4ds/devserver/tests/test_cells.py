@@ -81,12 +81,22 @@ def test_refs_and_closure():
 def test_session_plan_modes():
     s = CellSession("Demo")
     s.sync(TEXT)
-    assert s.plan("MaleSeniors", "cell") == ["MaleSeniors"]
+    # Bare 'cell' AUTO-INCLUDES the dependency closure (hotfix: bare Run
+    # previously composed header+target only, so any dep dangled and the
+    # engine surfaced a raw Binder error).
+    assert set(s.plan("MaleSeniors", "cell")) == {
+        "AgeYears",
+        "Male",
+        "MaleSeniors",
+    }
+    assert s.plan("MaleSeniors", "cell")[-1] == "MaleSeniors"
     assert set(s.plan("MaleSeniors", "cell_deps")) == {
         "AgeYears",
         "Male",
         "MaleSeniors",
     }
+    # 'cell_only' is the legacy strict single-define mode (advanced).
+    assert s.plan("MaleSeniors", "cell_only") == ["MaleSeniors"]
     assert s.plan("MaleSeniors", "all") == ["AgeYears", "Male", "MaleSeniors"]
     assert s.plan("MaleSeniors", "to_here") == ["AgeYears", "Male", "MaleSeniors"]
     assert s.plan("Male", "to_here") == ["AgeYears", "Male"]
@@ -94,6 +104,74 @@ def test_session_plan_modes():
         s.plan("Male", "bogus-mode")
     with pytest.raises(KeyError):
         s.plan("Nope", "cell")
+
+
+def test_plan_missing_dep_clean_error():
+    """Bare Run with a dependency missing everywhere raises a clean
+    ValueError naming the missing cell (not a raw engine Binder error).
+    """
+    s = CellSession("Demo2")
+    s.sync(
+        """
+library Demo2 version '1.0.0'
+using FHIR version '4.0.1'
+
+context Patient
+
+// # %% [name: IsMale]
+define IsMale:
+  Patient.gender = 'male'
+
+// # %% [name: Boom]
+define Boom: Missing
+
+// # %% [name: Top]
+define Top: Boom + 1
+""".strip()
+        + "\n"
+    )
+    with pytest.raises(ValueError, match="references Missing"):
+        s.plan("Boom", "cell")
+    # Transitive: the closure's dangling refs are named too.
+    with pytest.raises(ValueError, match="references Missing"):
+        s.plan("Top", "cell")
+    # cell_only stays strict-silent (engine diagnostics at evaluation).
+    assert s.plan("Boom", "cell_only") == ["Boom"]
+    # Function calls (Count/Max) are not treated as missing cells.
+    s2 = CellSession("Demo3")
+    s2.sync(
+        """
+library Demo3 version '1.0.0'
+using FHIR version '4.0.1'
+
+context Patient
+
+// # %% [name: A]
+define A: Count({1, 2})
+
+// # %% [name: B]
+define B: Max({A, 3})
+""".strip()
+        + "\n"
+    )
+    assert set(s2.plan("B", "cell")) == {"A", "B"}
+
+
+def test_plan_header_define_is_resolvable():
+    """Header defines compose into every run, so they are never missing."""
+    s = CellSession("Demo4")
+    s.sync(
+        """
+library Demo4 version '1.0.0'
+using FHIR version '4.0.1'
+define Unmarked: 1
+
+// # %% [name: UsesH]
+define UsesH: Unmarked + 1
+""".strip()
+        + "\n"
+    )
+    assert s.plan("UsesH", "cell") == ["UsesH"]
 
 
 def test_session_compose_includes_header():

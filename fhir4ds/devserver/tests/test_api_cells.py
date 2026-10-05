@@ -141,15 +141,75 @@ def ws(server):
     client.close()
 
 
-def test_run_cell_strict_and_result(ws):
+def test_run_cell_auto_closure_and_result(ws):
+    """Bare Run ('cell' mode) auto-includes the dependency closure in ONE
+    evaluation (hotfix: previously strict single-define, so deps dangled
+    with raw Binder errors)."""
     ws.send({"kind": "sync", "library": "Demo", "text": CQL})
     time.sleep(0.2)
     ws.send({"kind": "run", "library": "Demo", "cell": "Male", "mode": "cell"})
     msg = ws.until({"result", "cellerror", "runerror"})
     assert msg is not None and msg["kind"] == "result"
-    assert msg["cells"] == ["Male"]  # ruling 1: STRICT single define
+    # Male has no cell deps (Patient is context-filtered) -> closure is itself.
+    assert msg["cells"] == ["Male"]
     rows = msg["per_cell"]["Male"]["rows"]
     assert {"Male": True} in rows and {"Male": False} in rows
+
+
+def test_run_bare_cell_includes_prior_dep_results(ws):
+    """The user repro: run IsMale (ok), then bare-Run MaleCount -> the
+    closure composes and BOTH cells report results (deps refresh too)."""
+    text = (
+        "library Demo version '1.0.0'\nusing FHIR version '4.0.1'\n\ncontext Patient\n\n"
+        "// # %%\ndefine IsMale: Patient.gender = 'male'\n\n"
+        "// # %%\ndefine MaleCount: IsMale\n"
+    )
+    ws.send({"kind": "sync", "library": "Demo", "text": text})
+    time.sleep(0.2)
+    ws.send({"kind": "run", "library": "Demo", "cell": "IsMale", "mode": "cell"})
+    first = ws.until({"result"})
+    assert first is not None and first["kind"] == "result"
+    ws.send({"kind": "run", "library": "Demo", "cell": "MaleCount", "mode": "cell"})
+    msg = ws.until({"result", "cellerror", "runerror"})
+    assert msg is not None and msg["kind"] == "result"
+    assert set(msg["cells"]) == {"IsMale", "MaleCount"}
+    # The target AND the refreshed dep both carry per-cell slices.
+    assert "MaleCount" in msg["per_cell"] and "IsMale" in msg["per_cell"]
+
+
+def test_run_cell_only_strict_mode(ws):
+    """'cell_only' preserves the legacy strict single-define mode."""
+    text = (
+        "library Demo version '1.0.0'\nusing FHIR version '4.0.1'\n\ncontext Patient\n\n"
+        "// # %%\ndefine IsMale: Patient.gender = 'male'\n\n"
+        "// # %%\ndefine MaleCount: IsMale\n"
+    )
+    ws.send({"kind": "sync", "library": "Demo", "text": text})
+    time.sleep(0.2)
+    ws.send({"kind": "run", "library": "Demo", "cell": "MaleCount", "mode": "cell_only"})
+    msg = ws.until({"result", "cellerror", "runerror"})
+    # Strict compose of MaleCount alone dangles IsMale -> engine failure,
+    # cleanly attributed (cellerror naming the requesting cell).
+    assert msg is not None and msg["kind"] == "cellerror"
+    assert msg["cell"] == "MaleCount"
+    assert msg["cells"] == ["MaleCount"]
+
+
+def test_run_bare_cell_missing_dep_clean_runerror(ws):
+    """Missing dep on a bare Run surfaces a CLEAN runerror naming the
+    missing cell — never a raw Binder error."""
+    text = (
+        "library Demo version '1.0.0'\nusing FHIR version '4.0.1'\n\ncontext Patient\n\n"
+        "// # %%\ndefine IsMale: Patient.gender = 'male'\n\n"
+        "// # %%\ndefine Boom: Missing\n"
+    )
+    ws.send({"kind": "sync", "library": "Demo", "text": text})
+    time.sleep(0.2)
+    ws.send({"kind": "run", "library": "Demo", "cell": "Boom", "mode": "cell"})
+    msg = ws.until({"result", "cellerror", "runerror"})
+    assert msg is not None and msg["kind"] == "runerror"
+    assert "references Missing" in msg["message"]
+    assert "run or define" in msg["message"]
 
 
 def test_run_cell_deps_composes_closure(ws):
@@ -175,12 +235,14 @@ def test_run_unknown_cell_runerror(ws):
 
 
 def test_closure_error_attributes_to_requesting_cell(ws):
-    """Review-note pin: a closure cell ERRORING mid-split attributes to the
-    REQUESTING cell (and the split set), never silently to the wrong cell."""
+    """Review-note pin: a closure cell FAILING at evaluation attributes to
+    the REQUESTING cell (and the split set), never silently to the wrong
+    cell. Uses a runtime failure (invalid date comparison), NOT a dangling
+    identifier — dangling refs now short-circuit to a clean runerror."""
     text = (
         "library Demo version '1.0.0'\nusing FHIR version '4.0.1'\n\ncontext Patient\n\n"
         "// # %%\ndefine Good: Patient.gender = 'male'\n\n"
-        "// # %%\ndefine Boom: Missing\n\n"
+        "// # %%\ndefine Boom: 1\n\n"
         "// # %%\ndefine Top: Good and Boom\n"
     )
     ws.send({"kind": "sync", "library": "Demo", "text": text})
@@ -191,8 +253,23 @@ def test_closure_error_attributes_to_requesting_cell(ws):
     # The error names the REQUESTING cell; the whole split set is listed.
     assert msg["cell"] == "Top"
     assert set(msg["cells"]) == {"Good", "Boom", "Top"}
-    diags = json.dumps(msg.get("diagnostics", []))
-    assert "Missing" in diags
+
+
+def test_closure_dangling_ref_is_clean_runerror(ws):
+    """Dangling refs in the closure short-circuit to a CLEAN runerror
+    naming the missing cell (previously raw Binder via cellerror)."""
+    text = (
+        "library Demo version '1.0.0'\nusing FHIR version '4.0.1'\n\ncontext Patient\n\n"
+        "// # %%\ndefine Good: Patient.gender = 'male'\n\n"
+        "// # %%\ndefine Boom: Missing\n\n"
+        "// # %%\ndefine Top: Good and Boom\n"
+    )
+    ws.send({"kind": "sync", "library": "Demo", "text": text})
+    time.sleep(0.2)
+    ws.send({"kind": "run", "library": "Demo", "cell": "Top", "mode": "cell_deps"})
+    msg = ws.until({"result", "cellerror", "runerror"})
+    assert msg is not None and msg["kind"] == "runerror"
+    assert "references Missing" in msg["message"]
 
 
 def test_deleted_cell_drop_condition(ws):
@@ -214,13 +291,12 @@ def test_deleted_cell_drop_condition(ws):
     )
     ws.send({"kind": "sync", "library": "Demo", "text": text2})
     time.sleep(0.2)
+    # Hotfix: bare Run auto-includes closure; with Base deleted the dep is
+    # missing everywhere -> CLEAN runerror naming Base (not raw Binder).
     ws.send({"kind": "run", "library": "Demo", "cell": "UsesBase", "mode": "cell"})
     err = ws.until({"result", "cellerror", "runerror"})
-    assert err is not None and err["kind"] == "cellerror"
-    # The failing rerun's split set contains ONLY surviving cells; the
-    # deleted Base is absent (dropped by the failing rerun condition).
-    assert "Base" not in err["cells"]
-    assert err["cells"] == ["UsesBase"]
+    assert err is not None and err["kind"] == "runerror"
+    assert "references Base" in err["message"]
 
 
 def test_run_with_inline_text_overrides(ws):

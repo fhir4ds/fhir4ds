@@ -31,6 +31,9 @@ test.beforeAll(async () => {
       "// # %% [name: IsMale]",
       "define IsMale: Patient.gender = 'male'",
       "",
+      "// # %% [name: MaleCount]",
+      "define MaleCount: IsMale",
+      "",
       "// # %%",
       "define BirthYear: Patient.birthDate.substring(0, 4)",
       "",
@@ -93,7 +96,7 @@ test("cell chip exists and run produces visible output", async ({ page }) => {
   await expect(page.locator(".dev-box-title").nth(1)).toHaveText("IsMale", {
     timeout: 30_000,
   });
-  await expect(page.locator(".dev-boxbar .dev-cellrun")).toHaveCount(2);
+  await expect(page.locator(".dev-boxbar .dev-cellrun")).toHaveCount(3);
   const chip = page.locator(".dev-chip").first();
   await expect(chip).toBeVisible();
   // Run the cell via the rail button (mode defaults to strict cell).
@@ -172,4 +175,65 @@ test("marker comments are hidden inside box editors", async ({ page }) => {
       throw new Error(`marker leaked into box editor ${i}: ${t.slice(0, 80)}`);
     }
   }
+});
+
+
+test("bare Run auto-includes dependency closure", async ({ page }) => {
+  await page.goto(BASE);
+  await expect(page.locator(".dev-box-title").nth(1)).toHaveText("IsMale", {
+    timeout: 30_000,
+  });
+  // Run the dependency first...
+  await page.locator(".dev-cellrun").nth(0).click();
+  await expect(page.locator(".dev-chip.ok").first()).toBeVisible({
+    timeout: 30_000,
+  });
+  // ...then bare-Run the dependent: must succeed (result visible in the
+  // right pane with a MaleCount column), not a raw Binder error.
+  await page.locator(".dev-cellrun").nth(1).click();
+  await expect(page.locator(".dev-resultheader")).toContainText(
+    "MaleCount - 6 rows",
+    { timeout: 30_000 },
+  );
+  await expect(page.locator(".dev-pane table")).toBeVisible();
+});
+
+test("missing dependency surfaces a clean error, not a raw Binder error", async ({ page }) => {
+  // Second fixture library whose only cell dangles; no editor typing
+  // needed — run it directly and assert the clean runerror text.
+  fs.writeFileSync(
+    path.join(workdir!, "cql", "Broken.cql"),
+    [
+      "library Broken version '1.0.0'",
+      "using FHIR version '4.0.1'",
+      "context Patient",
+      "",
+      "// # %% [name: Dangles]",
+      "define Dangles: Nope",
+      "",
+    ].join("\n"),
+  );
+  // Wait for the watcher to pick the new file up, then load the page fresh
+  // (workspace list is fetched on load, so Broken will be present).
+  await new Promise((r) => setTimeout(r, 1_500));
+  await page.goto(BASE);
+  await expect
+    .poll(
+      async () => page.locator(".dev-lib", { hasText: "Broken" }).count(),
+      { timeout: 30_000 },
+    )
+    .toBeGreaterThan(0);
+  await page.locator(".dev-lib", { hasText: "Broken" }).click();
+  await expect(page.locator(".dev-box-title").nth(1)).toHaveText("Dangles", {
+    timeout: 30_000,
+  });
+  await page.locator(".dev-cellrun").nth(0).click();
+  // runerror has no cell attribution; the message lands in the errors
+  // surface (cellErrors under the box keyed "?") — assert page-wide text.
+  await expect
+    .poll(
+      async () => page.locator("body").innerText(),
+      { timeout: 30_000 },
+    )
+    .toContain("references Nope");
 });

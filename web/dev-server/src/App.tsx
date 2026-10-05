@@ -352,8 +352,9 @@ export function App() {
               onChange={(e) => setRunMode(e.target.value as RunMode)}
               title="Cell run mode"
             >
-              <option value="cell">cell</option>
+              <option value="cell">cell (+ deps)</option>
               <option value="cell_deps">cell + deps</option>
+              <option value="cell_only">cell only</option>
               <option value="all">all</option>
               <option value="to_here">to here</option>
             </select>
@@ -421,17 +422,17 @@ export function App() {
                       className="dev-cellrun"
                       onMouseDown={() => (lastFocusedCell.current = box.name ?? "")}
                       onClick={() => runCell(box.name ?? "", "cell")}
-                      title={`Run ${box.name} only (Cmd/Ctrl+Enter re-runs last-run cell)`}
+                      title={`Run ${box.name} (auto-includes its dependencies; Cmd/Ctrl+Enter re-runs last-run cell)`}
                     >
                       ▶ Run
                     </button>
                     <button
                       className="dev-cellrundeps"
                       onMouseDown={() => (lastFocusedCell.current = box.name ?? "")}
-                      onClick={() => runCell(box.name ?? "", "cell_deps")}
-                      title={`Run ${box.name} with its dependencies`}
+                      onClick={() => runCell(box.name ?? "", "cell_only")}
+                      title={`Strict: run ${box.name} alone (advanced; dangling deps surface engine diagnostics)`}
                     >
-                      ▶ Run + deps
+                      ▶ Run cell only
                     </button>
                     <span
                       className={

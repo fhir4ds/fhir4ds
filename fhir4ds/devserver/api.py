@@ -552,7 +552,7 @@ class _Handler(BaseHTTPRequestHandler):
         mode = str(msg.get("mode") or "cell")
         text = msg.get("text")
         if not library or not cell:
-            self._ws_send({"kind": "runerror", "message": "library and cell are required"})
+            self._ws_send({"kind": "runerror", "library": library, "cell": cell, "message": "library and cell are required"})
             return
         session = self.server.cell_registry.get(conn_id, library)
         if isinstance(text, str) and text:
@@ -562,10 +562,10 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             names = session.plan(cell, mode)
         except KeyError:
-            self._ws_send({"kind": "runerror", "message": f"unknown cell {cell!r}"})
+            self._ws_send({"kind": "runerror", "library": library, "cell": cell, "message": f"unknown cell {cell!r}"})
             return
         except ValueError as exc:
-            self._ws_send({"kind": "runerror", "message": str(exc)})
+            self._ws_send({"kind": "runerror", "library": library, "cell": cell, "message": str(exc)})
             return
 
         # Recompute the refs-based selection for split attribution (the

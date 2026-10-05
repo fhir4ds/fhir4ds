@@ -82,7 +82,7 @@ export interface WorkspaceEvent {
   workspace?: WorkspaceInfo;
 }
 
-export type RunMode = "cell" | "cell_deps" | "all" | "to_here";
+export type RunMode = "cell" | "cell_only" | "cell_deps" | "all" | "to_here";
 
 export interface CellState {
   library: string;
