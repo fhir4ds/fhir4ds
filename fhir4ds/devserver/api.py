@@ -45,6 +45,7 @@ class DevHTTPServer(ThreadingHTTPServer):
     watcher: Watcher
     static_root: str = ""
     cell_registry: "CellSessionRegistry" = None  # type: ignore[assignment]
+    valuesets_stale: bool = False
 
 
 def create_server(
@@ -58,6 +59,9 @@ def create_server(
     server.kernel_manager = kernel_manager
     server.watcher = watcher
     server.cell_registry = CellSessionRegistry()
+    # v3 Slice 1: set True when a valueset edit was written to disk but the
+    # kernel still holds the terminology loaded at startup (restart reloads).
+    server.valuesets_stale = False
     return server
 
 
@@ -110,6 +114,7 @@ class _Handler(BaseHTTPRequestHandler):
                     kernel_id=kernel.kernel_id,
                     watching=len(self.server.watcher.files),
                     load_diagnostics=kernel.load_diagnostics,
+                    valuesets_stale=self.server.valuesets_stale,
                 ),
             )
             return
@@ -156,6 +161,73 @@ class _Handler(BaseHTTPRequestHandler):
                 self._write_json(200, _envelope(ok=True, total=sum(s["count"] for s in stats), by_type=stats))
             except Exception as exc:
                 self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        if path == "/api/library-header":
+            # v3 Slice 1: header info (library/includes/parameters) for the
+            # Parameters pane.
+            from urllib.parse import parse_qs, urlparse
+
+            qs = parse_qs(urlparse(self.path).query)
+            name = (qs.get("library") or [""])[0]
+            snap = self.server.watcher.snapshot
+            lib = next((l for l in snap.libraries if l.name == name), None)
+            if lib is None:
+                self._write_json(
+                    200, _envelope(ok=False, diagnostics=[_diag(f"unknown library {name!r}")])
+                )
+                return
+            from .resources import header_info
+
+            info = header_info(lib.text or "")
+            self._write_json(200, _envelope(library=info["library"], includes=info["includes"], parameters=info["parameters"]))
+            return
+        if path == "/api/patients":
+            # v3 Slice 1: distinct patient ids for the test-cases dropdown
+            # (never free text).
+            kernel = self.server.kernel_manager.current()
+            try:
+                rows = kernel.conn.execute(
+                    "SELECT DISTINCT patient_ref FROM resources"
+                    " WHERE patient_ref IS NOT NULL ORDER BY 1"
+                ).fetchall()
+                self._write_json(200, _envelope(patients=[r[0] for r in rows]))
+            except Exception as exc:
+                self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        if path == "/api/valueset":
+            # v3 Slice 1: valueset grid read (concepts + used-by + url).
+            from urllib.parse import parse_qs, urlparse
+
+            qs = parse_qs(urlparse(self.path).query)
+            vs_path = (qs.get("path") or [""])[0]
+            snap = self.server.watcher.snapshot
+            if vs_path not in [str(p) for p in snap.valuesets]:
+                self._write_json(
+                    200,
+                    _envelope(ok=False, diagnostics=[_diag(f"unknown valueset path {vs_path!r}")]),
+                )
+                return
+            try:
+                with open(vs_path, "r", encoding="utf-8") as fh:
+                    resource = json.load(fh)
+            except (OSError, json.JSONDecodeError) as exc:
+                self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+                return
+            from fhir4ds.cql.loader.fhir_loader import _extract_codes_from_valueset_resource
+            from .resources import valueset_used_by
+
+            concepts = _extract_codes_from_valueset_resource(resource) or []
+            lib_pairs = [(l.name, l.text or "") for l in snap.libraries]
+            self._write_json(
+                200,
+                _envelope(
+                    path=vs_path,
+                    url=resource.get("url"),
+                    concepts=concepts,
+                    used_by=valueset_used_by(resource, lib_pairs),
+                    stale=self.server.valuesets_stale,
+                ),
+            )
             return
         if path == "/api/workspace":
             snap = self.server.watcher.snapshot
@@ -271,6 +343,134 @@ class _Handler(BaseHTTPRequestHandler):
                     200, _envelope(ok=True, library=lib_name, text=new_text, boxes=new_boxes)
                 )
                 return
+            if path == "/api/parameters":
+                # v3 Slice 1: parameter upsert/delete. Returns the NEW text
+                # (in-memory buffer doctrine — client splices; like rename-box,
+                # the session is synced so subsequent runs see the change).
+                from .resources import delete_parameter, upsert_parameter
+
+                lib_name = str(body.get("library") or "")
+                action = str(body.get("action") or "upsert")
+                snap = self.server.watcher.snapshot
+                lib = next((l for l in snap.libraries if l.name == lib_name), None)
+                if lib is None:
+                    self._write_json(
+                        200, _envelope(ok=False, diagnostics=[_diag(f"unknown library {lib_name!r}")])
+                    )
+                    return
+                name = body.get("name")
+                if not isinstance(name, str) or not name.strip():
+                    raise ValueError("name must be a non-empty string")
+                # The edit loop is in-memory + Apply: when the client carries
+                # an edited buffer it is authoritative; otherwise fall back to
+                # the workspace file text. Edits are stateless transforms so
+                # they compose client-side across sequential calls.
+                text = body.get("text")
+                if not isinstance(text, str):
+                    text = lib.text or ""
+                try:
+                    if action == "delete":
+                        new_text = delete_parameter(text, name)
+                    elif action == "upsert":
+                        ptype = body.get("type")
+                        if not isinstance(ptype, str) or not ptype.strip():
+                            raise ValueError("type must be a non-empty string")
+                        default = body.get("default")  # optional raw CQL expr text
+                        if default is not None and not isinstance(default, str):
+                            raise ValueError("default must be raw CQL expression text")
+                        new_text = upsert_parameter(text, name, ptype, default)
+                    else:
+                        raise ValueError(f"unknown action {action!r}")
+                except ValueError as exc:
+                    self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+                    return
+                session = self.server.cell_registry.get(id(self.connection), lib_name)
+                session.sync(new_text)
+                from .resources import parse_parameters
+
+                self._write_json(
+                    200,
+                    _envelope(
+                        ok=True,
+                        library=lib_name,
+                        text=new_text,
+                        parameters=[
+                            {"name": p.name, "type": p.type, "default": p.default}
+                            for p in parse_parameters(new_text)
+                        ],
+                    ),
+                )
+                return
+            if path == "/api/valueset/edit":
+                # v3 Slice 1: valueset concept edit. Validate -> apply ->
+                # validate_resource -> WRITE the workspace file (the valuesets/
+                # dir is author-owned workspace, not a dependency dir) and set
+                # the staleness flag (kernel restart reloads terminology).
+                from .resources import ValueSetEdit, apply_valueset_edit, validate_valueset_edit
+
+                vs_path = str(body.get("path") or "")
+                snap = self.server.watcher.snapshot
+                if vs_path not in [str(p) for p in snap.valuesets]:
+                    self._write_json(
+                        200,
+                        _envelope(ok=False, diagnostics=[_diag(f"unknown valueset path {vs_path!r}")]),
+                    )
+                    return
+                edit_raw = body.get("edit")
+                if not isinstance(edit_raw, dict):
+                    raise ValueError("edit must be an object")
+                try:
+                    edit = ValueSetEdit(
+                        action=str(edit_raw.get("action") or ""),
+                        system=edit_raw.get("system"),
+                        code=edit_raw.get("code"),
+                        display=edit_raw.get("display"),
+                        old_code=edit_raw.get("old_code"),
+                    )
+                except TypeError as exc:
+                    self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+                    return
+                problems = validate_valueset_edit(edit)
+                if problems:
+                    self._write_json(200, _envelope(ok=False, diagnostics=[_diag(p) for p in problems]))
+                    return
+                try:
+                    with open(vs_path, "r", encoding="utf-8") as fh:
+                        resource = json.load(fh)
+                except (OSError, json.JSONDecodeError) as exc:
+                    self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+                    return
+                new_resource = apply_valueset_edit(resource, edit)
+                from fhir4ds.operations import validate_resource as ops_validate_resource
+
+                vr = ops_validate_resource(new_resource)
+                if not vr.valid:
+                    self._write_json(
+                        200,
+                        _envelope(ok=False, diagnostics=[_diag(d) for d in vr.diagnostics]),
+                    )
+                    return
+                with open(vs_path, "w", encoding="utf-8") as fh:
+                    json.dump(new_resource, fh, indent=2)
+                    fh.write("\n")
+                self.server.valuesets_stale = True
+                from fhir4ds.cql.loader.fhir_loader import _extract_codes_from_valueset_resource
+
+                concepts = _extract_codes_from_valueset_resource(new_resource) or []
+                from .resources import valueset_used_by
+
+                lib_pairs = [(l.name, l.text or "") for l in snap.libraries]
+                self._write_json(
+                    200,
+                    _envelope(
+                        ok=True,
+                        path=vs_path,
+                        concepts=concepts,
+                        used_by=valueset_used_by(new_resource, lib_pairs),
+                        stale=True,
+                    ),
+                )
+                return
             if path == "/api/translate":
                 self._route_translate(body)
             elif path == "/api/evaluate":
@@ -284,6 +484,8 @@ class _Handler(BaseHTTPRequestHandler):
                 kernel = self.server.kernel_manager.restart(snap)
                 # Cell results evaluated against the OLD kernel are stale.
                 self.server.cell_registry.mark_stale_all()
+                # Restart reloads valuesets from disk — staleness clears.
+                self.server.valuesets_stale = False
                 self._write_json(
                     200,
                     _envelope(

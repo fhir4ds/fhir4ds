@@ -23,6 +23,9 @@ import type {
   WorkspaceEvent,
   WorkspaceInfo,
 } from "./transport";
+import { ValueSetPane } from "./ValueSetPane";
+import { ParamsPane } from "./ParamsPane";
+import { TestsPane } from "./TestsPane";
 
 type Tab = "results" | "sql" | "errors";
 
@@ -56,6 +59,10 @@ export function App() {
   const [kernelBusy, setKernelBusy] = useState<"idle" | "busy" | "restarting">("idle");
   const [datasetStats, setDatasetStats] = useState<{ total: number; by_type: Record<string, number> } | null>(null);
   const [datasetStatsOpen, setDatasetStatsOpen] = useState(false);
+  // v3: resource panes + dataset context.
+  const [selectedValueset, setSelectedValueset] = useState<string | null>(null);
+  const [vsStale, setVsStale] = useState(false);
+  const [headerOpen, setHeaderOpen] = useState(false);
 
   const boxes = useMemo(() => splitBoxes(buffer), [buffer]);
   const defineBoxes = useMemo(() => boxes.filter((b) => b.kind === "define"), [boxes]);
@@ -63,12 +70,22 @@ export function App() {
   const loadLibrary = useCallback(
     async (name: string) => {
       setSelected(name);
+      setSelectedValueset(null);
       const r = await transport.library(name);
       setBuffer((r as unknown as { text?: string }).text ?? "");
       setDirty(false);
     },
     [transport],
   );
+
+  const selectValueset = useCallback((path: string) => {
+    // Keep `selected` intact — clearing it would re-trigger the workspace
+    // load effect and immediately re-select the first library, discarding
+    // the valueset selection. The editor column branches on
+    // selectedValueset first, and loadLibrary resets it when a library
+    // is clicked.
+    setSelectedValueset(path);
+  }, []);
 
   const refreshWorkspace = useCallback(async () => {
     const w = await transport.workspace();
@@ -190,6 +207,7 @@ export function App() {
     } finally {
       setKernelBusy("idle");
     }
+    setVsStale(false);
     setDataHint([]);
     setCellStates((prev) => {
       const next: Record<string, string> = {};
@@ -259,6 +277,17 @@ export function App() {
       }
     }
   }, [datasetStats]);
+
+  // v3: dataset context — load stats once so the results header can echo
+  // dataset + patient count alongside the kernel id.
+  useEffect(() => {
+    fetch("/api/dataset-stats")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d) setDatasetStats(d);
+      })
+      .catch(() => {});
+  }, [health?.kernel_id]);
 
   const jumpToBox = useCallback((title: string) => {
     document
@@ -332,6 +361,19 @@ export function App() {
               {d.split("/").pop()}
             </div>
           ))}
+          {(workspace?.valuesets ?? []).length > 0 && <h2>ValueSets</h2>}
+          {(workspace?.valuesets ?? []).map((v) => (
+            <div
+              key={v}
+              className={
+                "dev-lib small" + (v === selectedValueset ? " selected" : "")
+              }
+              title={v}
+              onClick={() => selectValueset(v)}
+            >
+              {v.split("/").pop()?.replace(/\.json$/, "")}
+            </div>
+          ))}
           {datasetStatsOpen && datasetStats && (
             <div className="dev-datasetstats">
               <div>total: {datasetStats.total}</div>
@@ -344,6 +386,14 @@ export function App() {
           )}
         </aside>
         <section className="dev-editor">
+          {selectedValueset ? (
+            <ValueSetPane
+              transport={transport}
+              path={selectedValueset}
+              onStaleChange={setVsStale}
+            />
+          ) : (
+            <>
           <div className="dev-toolbar">
             <span className="dev-pane-label">Editor</span>
             <span>{selected}{dirty ? " *" : ""}</span>
@@ -358,6 +408,12 @@ export function App() {
               <option value="all">all</option>
               <option value="to_here">to here</option>
             </select>
+            <button
+              onClick={() => setHeaderOpen((o) => !o)}
+              title="Edit library header parameters (name, type, default)"
+            >
+              {headerOpen ? "▾" : "▸"} header
+            </button>
             <button
               onClick={() => {
                 setBuffer((b) => appendBox(b));
@@ -383,6 +439,16 @@ export function App() {
             </button>
           </div>
           <div className="dev-boxes">
+            {headerOpen && selected && (
+              <ParamsPane
+                transport={transport}
+                library={selected}
+                onText={(text) => {
+                  setBuffer(text);
+                  setDirty(true);
+                }}
+              />
+            )}
             {boxes.map((box) => (
               <div key={`${box.title}-${box.start}`} className="dev-box" data-box={box.title}>
                 {editingTitle?.box.start === box.start ? (
@@ -564,6 +630,19 @@ export function App() {
               </div>
             )}
           </div>
+          {selected && (
+            <TestsPane
+              transport={transport}
+              library={selected}
+              buffer={buffer}
+              definitions={
+                workspace?.libraries.find((l) => l.name === selected)
+                  ?.definitions ?? []
+              }
+            />
+          )}
+            </>
+          )}
         </section>
         <section className="dev-output">
           <div className="dev-tabs">
@@ -581,7 +660,21 @@ export function App() {
           <div className="dev-pane">
             {tab === "results" && (
               <>
-                {resultHeader && <div className="dev-resultheader">{resultHeader}</div>}
+                {resultHeader && (
+                  <div className="dev-resultheader">
+                    {resultHeader}
+                    {datasetStats && (
+                      <span className="dev-resultctx" title="dataset context">
+                        {" "}· {datasetStats.total} patients · kernel {health?.kernel_id ?? "?"}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {vsStale && (
+                  <div className="dev-stale" title="Terminology changed — restart the kernel to reload">
+                    ⚠ stale terminology — Run may use outdated valuesets
+                  </div>
+                )}
                 {!result && !resultHeader && (
                   <div className="dev-guide">
                     <h3>Getting started</h3>

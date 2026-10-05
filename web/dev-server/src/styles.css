@@ -270,3 +270,40 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   font-size: 11px;
   color: #9cdcfe;
 }
+
+/* v3 resource panes */
+.dev-vspane { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+.dev-vsgrid { display: flex; flex-direction: column; border: 1px solid #333; border-radius: 6px; overflow: hidden; }
+.dev-vsrow { display: grid; grid-template-columns: 2fr 1fr 1.2fr auto; gap: 6px; padding: 4px 8px; align-items: center; border-bottom: 1px solid #2a2a2a; }
+.dev-vsrow:last-child { border-bottom: none; }
+.dev-vshead { text-transform: uppercase; font-size: 10px; letter-spacing: 0.08em; color: #888; background: #232323; position: sticky; top: 0; }
+.dev-vsrow input { background: #1b1b1b; color: #d4d4d4; border: 1px solid #3a3a3a; border-radius: 3px; padding: 2px 6px; font-size: 12px; }
+.dev-vsdisplay { opacity: 0.45; }
+.dev-vsactions { display: flex; gap: 4px; }
+.dev-vsempty { padding: 10px; color: #888; font-style: italic; }
+.dev-vsmeta { display: flex; gap: 8px; }
+.dev-vsurl { color: #9cdcfe; font-size: 11px; font-family: var(--font-mono); }
+.dev-vsusedby { color: #888; font-size: 11px; padding: 4px 2px; }
+.dev-vsusedchip { background: #094771; color: #d4d4d4; border-radius: 8px; padding: 1px 8px; margin-left: 4px; font-family: var(--font-mono); font-size: 10px; }
+.dev-vserror { color: #f87171; background: rgba(248, 113, 113, 0.08); border: 1px solid rgba(248, 113, 113, 0.35); border-radius: 4px; padding: 4px 8px; font-size: 12px; }
+.dev-stale { color: #fbbf24; background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.4); border-radius: 4px; padding: 2px 8px; font-size: 11px; align-self: flex-start; }
+
+.dev-paramspane { border: 1px solid #333; border-radius: 6px; background: #1d1d1d; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.dev-paramstable { border-collapse: collapse; font-size: 12px; }
+.dev-paramstable th { text-align: left; color: #888; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; padding: 2px 8px; }
+.dev-paramstable td { padding: 3px 8px; border-top: 1px solid #2a2a2a; font-family: var(--font-mono); }
+.dev-paramslib { color: #9cdcfe; font-size: 11px; }
+.dev-paramsadd { display: flex; gap: 6px; }
+.dev-paramsadd input, .dev-paramsadd select { background: #1b1b1b; color: #d4d4d4; border: 1px solid #3a3a3a; border-radius: 3px; padding: 2px 6px; font-size: 12px; }
+
+.dev-testspane { border-top: 1px solid #333; padding-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.dev-testgrid { display: flex; flex-direction: column; border: 1px solid #333; border-radius: 6px; overflow: hidden; max-height: 260px; overflow-y: auto; }
+.dev-testtarget { display: flex; gap: 4px; }
+.dev-testtarget select { max-width: 130px; }
+.dev-testgrid select, .dev-testgrid input { background: #1b1b1b; color: #d4d4d4; border: 1px solid #3a3a3a; border-radius: 3px; padding: 2px 4px; font-size: 12px; }
+.dev-testresults { display: flex; flex-direction: column; gap: 4px; }
+.dev-testsummary { font-size: 12px; font-weight: 600; border-radius: 4px; padding: 3px 8px; align-self: flex-start; }
+.dev-testsummary.pass { color: #4ade80; background: rgba(74, 222, 128, 0.08); border: 1px solid rgba(74, 222, 128, 0.35); }
+.dev-testsummary.fail { color: #fbbf24; background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.4); }
+.dev-testfail { color: #fbbf24; font-size: 11px; font-family: var(--font-mono); }
+.dev-resultctx { color: #888; font-weight: 400; font-size: 11px; }

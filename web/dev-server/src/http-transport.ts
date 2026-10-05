@@ -3,9 +3,12 @@ import type {
   EvaluateResult,
   EvidenceResult,
   HealthInfo,
+  LibraryHeaderInfo,
+  ParametersResult,
   RunMode,
   TranslateResult,
   Transport,
+  ValueSetInfo,
   VerifyResult,
   WorkspaceEvent,
   WorkspaceInfo,
@@ -92,6 +95,65 @@ export class HttpTransport implements Transport {
 
   library(name: string): Promise<WorkspaceLibrary> {
     return this.get(`/api/libraries/${encodeURIComponent(name)}`);
+  }
+
+  /** Unwrap a devserver envelope (HTTP 200, ok flag) into its payload. */
+  private async unwrap<T>(path: string): Promise<T> {
+    const d = await this.get<Record<string, unknown>>(path);
+    if (d.ok === false) {
+      const diags = (d.diagnostics as { message?: string }[] | undefined) ?? [];
+      throw new Error(diags[0]?.message ?? "request failed");
+    }
+    return d as unknown as T;
+  }
+
+  libraryHeader(library: string): Promise<LibraryHeaderInfo> {
+    return this.unwrap(`/api/library-header?library=${encodeURIComponent(library)}`);
+  }
+
+  patients(): Promise<string[]> {
+    return this.unwrap<{ patients: string[] }>("/api/patients").then(
+      (d) => d.patients,
+    );
+  }
+
+  valueset(path: string): Promise<ValueSetInfo> {
+    return this.unwrap(`/api/valueset?path=${encodeURIComponent(path)}`);
+  }
+
+  async valuesetEdit(
+    path: string,
+    edit: { action: string; system?: string | null; code?: string | null; display?: string | null; old_code?: string | null },
+  ): Promise<ValueSetInfo> {
+    const d = await this.post<Record<string, unknown>>("/api/valueset/edit", {
+      path,
+      edit,
+    });
+    if (d.ok === false) {
+      const diags = (d.diagnostics as { message?: string }[] | undefined) ?? [];
+      throw new Error(diags[0]?.message ?? "edit failed");
+    }
+    return d as unknown as ValueSetInfo;
+  }
+
+  async parameters(
+    library: string,
+    action: "upsert" | "delete",
+    name: string,
+    type?: string,
+    default_?: string | null,
+    text?: string,
+  ): Promise<ParametersResult> {
+    const body: Record<string, unknown> = { library, action, name };
+    if (type !== undefined) body.type = type;
+    if (default_ !== undefined && default_ !== null) body.default = default_;
+    if (text !== undefined) body.text = text;
+    const d = await this.post<Record<string, unknown>>("/api/parameters", body);
+    if (d.ok === false) {
+      const diags = (d.diagnostics as { message?: string }[] | undefined) ?? [];
+      throw new Error(diags[0]?.message ?? "parameter edit failed");
+    }
+    return d as unknown as ParametersResult;
   }
 
   translate(

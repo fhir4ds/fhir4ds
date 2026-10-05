@@ -109,9 +109,43 @@ export interface CellEvent {
   message?: string;
 }
 
+export interface LibraryHeaderInfo {
+  library: string;
+  includes: { path: string; version: string | null; local: boolean }[];
+  parameters: { name: string; type: string; default: string | null }[];
+}
+
+export interface ValueSetInfo {
+  path: string;
+  url: string | null;
+  concepts: { system: string; code: string; display: string | null }[];
+  used_by: string[];
+  stale: boolean;
+}
+
+export interface ParametersResult {
+  text: string;
+  parameters: { name: string; type: string; default: string | null }[];
+}
+
 export interface Transport {
   health(): Promise<HealthInfo>;
   workspace(): Promise<WorkspaceInfo>;
+  libraryHeader(library: string): Promise<LibraryHeaderInfo>;
+  patients(): Promise<string[]>;
+  valueset(path: string): Promise<ValueSetInfo>;
+  valuesetEdit(
+    path: string,
+    edit: { action: string; system?: string | null; code?: string | null; display?: string | null; old_code?: string | null },
+  ): Promise<ValueSetInfo>;
+  parameters(
+    library: string,
+    action: "upsert" | "delete",
+    name: string,
+    type?: string,
+    default_?: string | null,
+    text?: string,
+  ): Promise<ParametersResult>;
   library(name: string): Promise<WorkspaceLibrary>;
   translate(libraries: { name: string; text: string }[], library: string): Promise<TranslateResult>;
   evaluate(
