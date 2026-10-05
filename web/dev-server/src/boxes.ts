@@ -19,13 +19,25 @@ const BLOCK_KIND =
   /^\s*(valueset|codesystem|code|concept|parameter|include|context|using|library)\b/;
 
 export function splitBoxes(text: string): Box[] {
-  const lines = text.split(/(?=\n)/); // keep line endings attached
+  const lines = text.split(/\r?\n/);
+  // Walk lines with offsets where each line's terminator (\n, or \r\n)
+  // belongs to the PRECEDING line — mirrors python splitlines(keepends=True)
+  // semantics used by the server, so box.start points AT the marker text
+  // (never at the leading newline) and spans match server spans exactly.
   let offset = 0;
   let headerEnd = text.length;
   const markers: { start: number; end: number; label: string | null }[] = [];
   for (const line of lines) {
+    // Advance past the line content plus its terminator (if any).
+    let consumed = line.length;
+    let term = 0;
+    if (text[offset + consumed] === "\r" && text[offset + consumed + 1] === "\n") {
+      term = 2;
+    } else if (text[offset + consumed] === "\n") {
+      term = 1;
+    }
     const start = offset;
-    const end = offset + line.length;
+    const end = offset + consumed + term;
     const m = MARKER.exec(line);
     if (m) {
       if (headerEnd === text.length) headerEnd = start;
@@ -85,13 +97,15 @@ export function spliceBox(
   newBody: string,
   includeMarker: boolean,
 ): string {
-  const body = includeMarker ? newBody : buffer.slice(box.start, box.end - (box.end - box.start)) + newBody;
   if (includeMarker) {
-    return buffer.slice(0, box.start) + body + buffer.slice(box.end);
+    // Replace the whole span (header box: its full text; or a full-box edit).
+    return buffer.slice(0, box.start) + newBody + buffer.slice(box.end);
   }
-  // Replace only the body region after the marker line.
-  const markerEnd = buffer.indexOf("\n", box.start) + 1 || box.end;
-  return buffer.slice(0, markerEnd) + body + buffer.slice(box.end);
+  // Replace only the body region after the marker line. box.start points AT
+  // the marker line's first char (see splitBoxes), so the terminator search
+  // lands on the marker line's own \n.
+  const markerEnd = markerLineEnd(buffer, box);
+  return buffer.slice(0, markerEnd) + newBody + buffer.slice(box.end);
 }
 
 /** Insert a new cell box at the end of the buffer; returns [newBuffer]. */

@@ -48,7 +48,7 @@ test.beforeAll(async () => {
   server = spawn(
     "/usr/bin/python3",
     ["-m", "fhir4ds.cli", "dev", workdir, "--port", String(PORT), "--no-open"],
-    { env: { PATH: process.env.PATH, PYTHONPATH: "/mnt/d/fhir4ds-devserver-ux3-20261005" }, stdio: "ignore" },
+    { env: { PATH: process.env.PATH, PYTHONPATH: "/mnt/d/fhir4ds" }, stdio: "ignore" },
   );
   // Wait for /health.
   const deadline = Date.now() + 60_000;
@@ -155,4 +155,21 @@ test("ux2: inline cell table has patient column", async ({ page }) => {
   await expect(
     page.locator(".dev-celltable-body .dev-cellresult-row").first(),
   ).toContainText("p1");
+});
+
+test("marker comments are hidden inside box editors", async ({ page }) => {
+  await page.goto(BASE);
+  await expect(page.locator(".dev-box-title").nth(1)).toHaveText("IsMale", {
+    timeout: 30_000,
+  });
+  // The marker line must NEVER render inside a box editor body —
+  // regression pin for the span-offset fix (leading-newline convention).
+  const editors = page.locator(".dev-box-editor .view-lines");
+  const n = await editors.count();
+  for (let i = 0; i < n; i++) {
+    const t = (await editors.nth(i).textContent()) ?? "";
+    if (t.includes("#")) {
+      throw new Error(`marker leaked into box editor ${i}: ${t.slice(0, 80)}`);
+    }
+  }
 });
