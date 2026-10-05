@@ -162,3 +162,111 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   padding: 0 4px;
   user-select: none;
 }
+
+/* ux3: cell boxes projection + cell index + kernel status + dataset detail */
+.dev-boxes {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+.dev-box {
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.dev-box-title {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: #9cdcfe;
+  padding: 6px 10px;
+  border-bottom: 1px solid #2a2a2a;
+  background: #252526;
+  border-radius: 6px 6px 0 0;
+}
+.dev-box-title.renameable { cursor: text; }
+.dev-box-title-input {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: #9cdcfe;
+  background: #1e1e1e;
+  border: none;
+  border-bottom: 1px solid #0e639c;
+  padding: 6px 10px;
+  width: 100%;
+  outline: none;
+}
+.dev-boxbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  font-size: 11px;
+  border-bottom: 1px solid #2a2a2a;
+}
+.dev-cellrundeps { padding: 1px 7px; font-size: 11px; }
+.dev-box-kind {
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: #888;
+}
+.dev-box-editor { min-height: 60px; }
+.dev-box-editor .editor-pane,
+.dev-box-editor .pane-body { flex: 1 1 auto; min-height: 0; }
+.dev-cellindex {
+  border-top: 1px solid #333;
+  background: #252526;
+  font-size: 12px;
+}
+.dev-cellindex-toggle {
+  background: transparent;
+  color: #d4d4d4;
+  padding: 4px 10px;
+  text-align: left;
+  width: 100%;
+}
+.dev-cellindex-rows {
+  max-height: 140px;
+  overflow-y: auto;
+  padding-bottom: 4px;
+}
+.dev-cellindex-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+.dev-cellindex-row:hover { background: #094771; }
+.dev-cellindex-rename { opacity: 0.6; }
+.dev-cellindex-rename:hover { opacity: 1; }
+.dev-kerneldot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+.dev-kerneldot.idle { background: #4caf50; }
+.dev-kerneldot.busy { background: #ffb300; }
+.dev-kerneldot.restarting { background: #f44336; }
+.dev-data-toggle { cursor: pointer; }
+.dev-dataset { cursor: pointer; }
+.dev-dataset:hover { background: #094771; }
+.dev-datasetstats {
+  margin: 4px;
+  padding: 6px 8px;
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: #9cdcfe;
+}

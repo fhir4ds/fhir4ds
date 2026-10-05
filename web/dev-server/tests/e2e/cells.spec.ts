@@ -28,7 +28,7 @@ test.beforeAll(async () => {
       "using FHIR version '4.0.1'",
       "context Patient",
       "",
-      "// # %%",
+      "// # %% [name: IsMale]",
       "define IsMale: Patient.gender = 'male'",
       "",
       "// # %%",
@@ -48,7 +48,7 @@ test.beforeAll(async () => {
   server = spawn(
     "/usr/bin/python3",
     ["-m", "fhir4ds.cli", "dev", workdir, "--port", String(PORT), "--no-open"],
-    { env: { PATH: process.env.PATH, PYTHONPATH: "/mnt/d/fhir4ds-devserver-ux2-20261003" }, stdio: "ignore" },
+    { env: { PATH: process.env.PATH, PYTHONPATH: "/mnt/d/fhir4ds-devserver-ux3-20261005" }, stdio: "ignore" },
   );
   // Wait for /health.
   const deadline = Date.now() + 60_000;
@@ -79,8 +79,9 @@ test("editor shows library text with visible cells", async ({ page }) => {
   // assert on the container's full text rather than a phrase locator).
   await expect
     .poll(async () => {
-      const t = await page.locator(".view-lines").textContent();
-      return t?.includes("define") && t?.includes("IsMale");
+      const t = await page.locator(".view-lines").allTextContents();
+      const joined = t.join(" ");
+      return joined.includes("define") && joined.includes("IsMale");
     }, { timeout: 30_000 })
     .toBe(true);
   // ux2: the hint bar was replaced by the empty-Results guide.
@@ -89,10 +90,10 @@ test("editor shows library text with visible cells", async ({ page }) => {
 
 test("cell chip exists and run produces visible output", async ({ page }) => {
   await page.goto(BASE);
-  await expect(page.locator(".dev-cellname").first()).toHaveText("IsMale", {
+  await expect(page.locator(".dev-box-title").nth(1)).toHaveText("IsMale", {
     timeout: 30_000,
   });
-  await expect(page.locator(".dev-cellrow")).toHaveCount(2);
+  await expect(page.locator(".dev-boxbar .dev-cellrun")).toHaveCount(2);
   const chip = page.locator(".dev-chip").first();
   await expect(chip).toBeVisible();
   // Run the cell via the rail button (mode defaults to strict cell).
@@ -107,7 +108,7 @@ test("cell chip exists and run produces visible output", async ({ page }) => {
 
 test("ux2: right Results pane populates on cell run", async ({ page }) => {
   await page.goto(BASE);
-  await expect(page.locator(".dev-cellname").first()).toHaveText("IsMale", {
+  await expect(page.locator(".dev-box-title").nth(1)).toHaveText("IsMale", {
     timeout: 30_000,
   });
   await page.locator(".dev-cellrun").first().click();
@@ -130,7 +131,7 @@ test("ux2: toolbar says Run all and empty-state guide shows pre-run", async ({ p
 
 test("ux2: string tokens are not red", async ({ page }) => {
   await page.goto(BASE);
-  await expect(page.locator(".dev-cellname").first()).toHaveText("IsMale", {
+  await expect(page.locator(".dev-box-title").nth(1)).toHaveText("IsMale", {
     timeout: 30_000,
   });
   const color = await page.evaluate(() => {
@@ -143,7 +144,7 @@ test("ux2: string tokens are not red", async ({ page }) => {
 
 test("ux2: inline cell table has patient column", async ({ page }) => {
   await page.goto(BASE);
-  await expect(page.locator(".dev-cellname").first()).toHaveText("IsMale", {
+  await expect(page.locator(".dev-box-title").nth(1)).toHaveText("IsMale", {
     timeout: 30_000,
   });
   await page.locator(".dev-cellrun").first().click();

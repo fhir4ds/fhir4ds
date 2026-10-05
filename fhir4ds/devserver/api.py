@@ -116,6 +116,47 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/events":
             self._websocket_events()
             return
+        if path == "/api/boxes":
+            # ux3: boxes projection for a library (spans + titles).
+            from urllib.parse import parse_qs, urlparse
+
+            qs = parse_qs(urlparse(self.path).query)
+            name = (qs.get("name") or [""])[0]
+            snap = self.server.watcher.snapshot
+            lib = next((l for l in snap.libraries if l.name == name), None)
+            if lib is None:
+                self._write_json(
+                    200, _envelope(ok=False, diagnostics=[_diag(f"unknown library {name!r}")])
+                )
+                return
+            from .cells import split_boxes
+
+            boxes = [
+                {
+                    "title": b.title,
+                    "title_source": b.title_source,
+                    "kind": b.kind,
+                    "name": b.name,
+                    "start": b.start,
+                    "end": b.end,
+                }
+                for b in split_boxes(lib.text or "")
+            ]
+            self._write_json(200, _envelope(library=name, boxes=boxes))
+            return
+        if path == "/api/dataset-stats":
+            # ux3 Part B: real dataset detail — row count + resourceType mix.
+            kernel = self.server.kernel_manager.current()
+            try:
+                rows = kernel.conn.execute(
+                    "SELECT resource->>'resourceType' AS rt, COUNT(*) AS n"
+                    " FROM resources GROUP BY 1 ORDER BY 2 DESC"
+                ).fetchall()
+                stats = [{"resourceType": r[0], "count": r[1]} for r in rows]
+                self._write_json(200, _envelope(ok=True, total=sum(s["count"] for s in stats), by_type=stats))
+            except Exception as exc:
+                self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
         if path == "/api/workspace":
             snap = self.server.watcher.snapshot
             self._write_json(200, _envelope(workspace=snap.to_dict()))
@@ -180,6 +221,56 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         try:
+            if path == "/api/rename-box":
+                # ux3: rename a box title (label edit or define refactor).
+                # Body: {library, title, new_title}. The server re-derives
+                # the box from the CURRENT workspace file text; clients that
+                # hold an edited buffer should sync first.
+                from .cells import split_boxes
+
+                lib_name = str(body.get("library") or "")
+                snap = self.server.watcher.snapshot
+                lib = next((l for l in snap.libraries if l.name == lib_name), None)
+                if lib is None:
+                    self._write_json(
+                        200, _envelope(ok=False, diagnostics=[_diag(f"unknown library {lib_name!r}")])
+                    )
+                    return
+                title = str(body.get("title") or "")
+                new_title = str(body.get("new_title") or "")
+                boxes = split_boxes(lib.text or "")
+                box = next((b for b in boxes if b.title == title), None)
+                if box is None:
+                    self._write_json(
+                        200, _envelope(ok=False, diagnostics=[_diag(f"unknown box {title!r}")])
+                    )
+                    return
+                from .cells import rename_box
+
+                try:
+                    new_text = rename_box(lib.text or "", box, new_title)
+                except ValueError as exc:
+                    self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+                    return
+                # In-memory session update (zero-write doctrine); the file
+                # itself is only touched by the author's editor.
+                session = self.server.cell_registry.get(id(self.connection), lib_name)
+                session.sync(new_text)
+                new_boxes = [
+                    {
+                        "title": b.title,
+                        "title_source": b.title_source,
+                        "kind": b.kind,
+                        "name": b.name,
+                        "start": b.start,
+                        "end": b.end,
+                    }
+                    for b in split_boxes(new_text)
+                ]
+                self._write_json(
+                    200, _envelope(ok=True, library=lib_name, text=new_text, boxes=new_boxes)
+                )
+                return
             if path == "/api/translate":
                 self._route_translate(body)
             elif path == "/api/evaluate":
@@ -335,6 +426,7 @@ class _Handler(BaseHTTPRequestHandler):
         q = self.server.watcher.bus.subscribe()
         conn_id = id(self.connection)
         run_queue: "queue.Queue[dict[str, Any]]" = queue.Queue(maxsize=1)
+        sync_reply: list[dict[str, Any] | None] = [None]
 
         def on_client_message(payload: str) -> None:
             """Dispatch client->server commands (v2 cells protocol)."""
@@ -356,7 +448,26 @@ class _Handler(BaseHTTPRequestHandler):
                     pass
             elif msg.get("kind") == "sync":
                 session = self.server.cell_registry.get(conn_id, str(msg.get("library") or ""))
-                session.sync(str(msg.get("text") or ""))
+                result = session.sync(str(msg.get("text") or ""))
+                # ux3: include the boxes projection (spans + titles) so the
+                # client can render card boxes over the single file.
+                try:
+                    from .cells import split_boxes
+
+                    result["boxes"] = [
+                        {
+                            "title": b.title,
+                            "title_source": b.title_source,
+                            "kind": b.kind,
+                            "name": b.name,
+                            "start": b.start,
+                            "end": b.end,
+                        }
+                        for b in split_boxes(str(msg.get("text") or ""))
+                    ]
+                except Exception:
+                    pass
+                sync_reply[0] = result
 
         def reader() -> None:
             """Reader thread: consumes client frames until EOF/close."""
@@ -392,6 +503,12 @@ class _Handler(BaseHTTPRequestHandler):
                     run_msg = None
                 if run_msg is not None:
                     self._execute_cell_run(conn_id, run_msg)
+                    continue
+                if sync_reply[0] is not None:
+                    frame = json.dumps({"kind": "synced", **sync_reply[0]})
+                    sync_reply[0] = None
+                    self.wfile.write(ws_protocol.encode_text_frame(frame))
+                    self.wfile.flush()
                     continue
                 try:
                     event = q.get(timeout=0.5)

@@ -405,3 +405,135 @@ class CellSessionRegistry:
             for per_conn in self._sessions.values():
                 for session in per_conn.values():
                     session.mark_stale_all()
+
+
+# ---------------------------------------------------------------------------
+# Cell boxes projection (ux3, Muse round-2 Part A)
+# ---------------------------------------------------------------------------
+
+# Block keywords a box may contain (besides define). Detected from the
+# first meaningful statement in the box body.
+_BLOCK_KIND_RE = re.compile(
+    r"^\s*(valueset|codesystem|code|concept|parameter|include|context|using|library)\b",
+    re.IGNORECASE,
+)
+
+
+@dataclass
+class ParsedBox:
+    """One marked region of the file, for the boxes projection UI.
+
+    A box is a *view* over a contiguous span of the single library text;
+    ``split_boxes`` reports titles + spans; the run protocol continues to
+    use ``split_cells`` (define-keyed) unchanged.
+    """
+
+    title: str  # explicit label, first define name, or "header"
+    title_source: str  # "label" | "define" | "header"
+    kind: str  # "define" | "valueset" | "codesystem" | "parameter" | "include" | "header" | "block"
+    name: str | None  # define name when the box holds a define (run addressable)
+    start: int  # span start offset in the original text (chars)
+    end: int  # span end offset (exclusive; marker line INCLUDED for boxes)
+    text: str  # the span slice (marker line included for non-header boxes)
+
+
+def split_boxes(text: str) -> list[ParsedBox]:
+    """Split ``text`` into header + marked boxes with char spans.
+
+    Title rule (conductor-locked): explicit ``[name: X]`` wins; otherwise
+    the first define name in the box; a box with neither is titled by its
+    leading block keyword; the leading un-marked region is the header box.
+    Spans tile the file: header [0, first_marker) then each marker line
+    through the line before the next marker (or EOF).
+    """
+    lines = text.splitlines(keepends=True)
+    boxes: list[ParsedBox] = []
+    offset = 0
+    header_end = len(text)
+    marker_lines: list[tuple[int, int, str | None]] = []  # (start, end, label)
+    for line in lines:
+        m = MARKER_RE.match(line.rstrip("\r\n"))
+        start = offset
+        end = offset + len(line)
+        if m:
+            if header_end == len(text):
+                header_end = start
+            marker_lines.append((start, end, (m.group("name") or None)))
+        offset = end
+    # Header box
+    if header_end > 0:
+        header_text = text[:header_end]
+        boxes.append(
+            ParsedBox(
+                title="header",
+                title_source="header",
+                kind="header",
+                name=None,
+                start=0,
+                end=header_end,
+                text=header_text,
+            )
+        )
+    elif marker_lines and marker_lines[0][0] == 0:
+        pass  # file starts with a marker: no header box
+    for i, (m_start, m_end, label) in enumerate(marker_lines):
+        b_end = marker_lines[i + 1][0] if i + 1 < len(marker_lines) else len(text)
+        body = text[m_end:b_end]
+        stripped = body.strip()
+        kind = "block"
+        name: str | None = None
+        d = _DEFINE_RE.match(stripped)
+        if d:
+            kind = "define"
+            name = d.group(2)
+        else:
+            kb = _BLOCK_KIND_RE.match(stripped)
+            if kb:
+                kind = kb.group(1).lower()
+        if label is not None:
+            title, source = label, "label"
+        elif name is not None:
+            title, source = name, "define"
+        elif stripped:
+            title, source = kind, "block"
+        else:
+            title, source = "empty", "block"
+        boxes.append(
+            ParsedBox(
+                title=title,
+                title_source=source,
+                kind=kind,
+                name=name,
+                start=m_start,
+                end=b_end,
+                text=text[m_start:b_end],
+            )
+        )
+    return boxes
+
+
+def rename_box(
+    text: str, box: ParsedBox, new_title: str, all_texts_refs: dict[str, list[str]] | None = None
+) -> str:
+    """Return the library text after renaming a box title.
+
+    title_source == "label": rewrite the marker label (marker line lives
+    at box.start..first newline).
+    title_source == "define": rename the define AND every reference to it
+    in the rest of the file (callers pass refs via ``all_texts_refs``
+    mapping OTHER box define-names -> their refs; simpler and safer: the
+    caller refetches refs after the rename, so here we do a whole-file
+    identifier-boundary replace of the old define name).
+    """
+    if not new_title or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", new_title):
+        raise ValueError(f"invalid title {new_title!r}")
+    if box.title_source == "label":
+        line_end = text.index("\n", box.start) if "\n" in text[box.start:] else len(text)
+        new_marker = f"// # %% [name: {new_title}]"
+        return text[: box.start] + new_marker + text[line_end:]
+    if box.title_source == "define" and box.name:
+        old = box.name
+        pattern = re.compile(rf"\b{re.escape(old)}\b")
+        # Rename the define declaration itself plus all references.
+        return pattern.sub(new_title, text)
+    raise ValueError("cannot rename a header/block box without a label or define")

@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Editor from "@monaco-editor/react";
 import { SQLOutput } from "@wasm-demo/components/SQLOutput";
 import { ResultsTable } from "@wasm-demo/components/ResultsTable";
 import type { QueryResult } from "@wasm-demo/components/ResultsTable";
 import { HttpTransport } from "./http-transport";
-import { chunkEditor } from "./cells";
-import { DevEditor } from "./DevEditor";
-import type { DevEditorHandle } from "./DevEditor";
+import {
+  appendBox,
+  defineDevTheme,
+  markerLineEnd,
+  renameDefine,
+  renameLabel,
+  spliceBox,
+  splitBoxes,
+} from "./boxes";
+import type { Box } from "./boxes";
 import type {
   CellEvent,
   Diagnostic,
@@ -36,15 +44,21 @@ export function App() {
   const [cellStates, setCellStates] = useState<Record<string, string>>({});
   const [cellRows, setCellRows] = useState<Record<string, Record<string, unknown>[]>>({});
   const [cellErrors, setCellErrors] = useState<Record<string, string>>({});
-  // Muse fix 1: unified results — the requesting cell's run populates the
-  // right Results pane (QueryResult + header) and switches to it.
   const [resultHeader, setResultHeader] = useState("");
-  // Muse fix 2: last-run indicator near the kernel status.
   const [lastRun, setLastRun] = useState<{ cell: string; time: string } | null>(null);
-  // Muse fix 5: full envelope rows (patient_id per row) for inline tables.
-  const [cellFullRows, setCellFullRows] = useState<Record<string, Record<string, unknown>[]>>({});
-  // Muse fix 2: last-focused cell for the Cmd/Ctrl+Enter shortcut.
-  const lastFocusedCell = useRef<string | null>(null);
+  const [cellFullRows, setCellFullRows] = useState<
+    Record<string, Record<string, unknown>[]>
+  >({});
+  const lastFocusedCell = useRef<string>("");
+  // ux3: boxes projection + index + kernel status + dataset detail.
+  const [editingTitle, setEditingTitle] = useState<{ box: Box; value: string } | null>(null);
+  const [indexOpen, setIndexOpen] = useState(false);
+  const [kernelBusy, setKernelBusy] = useState<"idle" | "busy" | "restarting">("idle");
+  const [datasetStats, setDatasetStats] = useState<{ total: number; by_type: Record<string, number> } | null>(null);
+  const [datasetStatsOpen, setDatasetStatsOpen] = useState(false);
+
+  const boxes = useMemo(() => splitBoxes(buffer), [buffer]);
+  const defineBoxes = useMemo(() => boxes.filter((b) => b.kind === "define"), [boxes]);
 
   const loadLibrary = useCallback(
     async (name: string) => {
@@ -80,8 +94,7 @@ export function App() {
           rows[name] = slice.rows ?? [];
         }
         setCellRows((prev) => ({ ...prev, ...rows }));
-        // Muse fix 5: keep the full envelope rows (patient_id per row).
-        if (e.rows && e.cell) {
+        if (e.cell && e.rows) {
           setCellFullRows((prev) => ({ ...prev, [e.cell!]: e.rows! }));
         }
         setCellStates((prev) => {
@@ -94,27 +107,21 @@ export function App() {
           for (const n of e.cells ?? []) delete next[n];
           return next;
         });
-        // Muse fix 1: populate the right Results pane with the REQUESTING
-        // cell's table + header, and auto-switch to the results tab.
-        const req = e.cell;
-        if (req && rows[req]) {
-          const cellRowsNow = rows[req];
-          const timing = e.timing_ms ?? {};
-          const ms = Object.values(timing).reduce((a, b) => a + b, 0);
+        const cell = e.cell ?? "";
+        const slice = e.per_cell[cell];
+        if (slice) {
+          const timing = Object.values(e.timing_ms ?? {}).reduce((a, b) => a + b, 0);
           setResult({
-            columns: [req],
-            rows: cellRowsNow.map((r) => [String(r[req])]),
-            rowCount: cellRowsNow.length,
-            executionTimeMs: ms,
+            columns: [cell],
+            rows: (slice.rows ?? []).map((row) => [String(row[cell])]),
+            rowCount: slice.rows?.length ?? 0,
+            executionTimeMs: timing,
           });
-          setResultHeader(`${req} - ${cellRowsNow.length} rows${ms ? ` - ${Math.round(ms)}ms` : ""}`);
+          setResultHeader(`${cell} - ${slice.rows?.length ?? 0} rows - ${timing}ms`);
           setSql(e.sql ?? "");
           setTab("results");
         }
-        // Muse fix 2: last-run indicator.
-        if (e.cell) {
-          setLastRun({ cell: e.cell, time: new Date().toLocaleTimeString() });
-        }
+        setLastRun({ cell, time: new Date().toLocaleTimeString() });
       } else if (e.kind === "cellerror") {
         const message =
           e.diagnostics?.[0]?.message ?? "evaluation failed";
@@ -176,8 +183,13 @@ export function App() {
   );
 
   const restartKernel = useCallback(async () => {
-    const h = await transport.restartKernel();
-    setHealth(h);
+    setKernelBusy("restarting");
+    try {
+      const h = await transport.restartKernel();
+      setHealth(h);
+    } finally {
+      setKernelBusy("idle");
+    }
     setDataHint([]);
     setCellStates((prev) => {
       const next: Record<string, string> = {};
@@ -189,28 +201,21 @@ export function App() {
   }, [transport]);
 
   const runCell = useCallback(
-    (name: string) => {
+    (name: string, mode: RunMode = runMode) => {
       if (!selected) return;
       transport.syncCells(selected, buffer);
-      transport.runCell(selected, name, runMode, buffer);
+      transport.runCell(selected, name, mode, buffer);
     },
     [buffer, runMode, selected, transport],
   );
-
-  const editorHandle = useRef<DevEditorHandle | null>(null);
-  const registerEditor = useCallback((h: DevEditorHandle) => {
-    editorHandle.current = h;
-  }, []);
-
-  // Muse fix 2: Cmd/Ctrl+Enter runs the last-focused cell.
   const runCellRef = useRef(runCell);
   runCellRef.current = runCell;
+
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
       if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") {
         ev.preventDefault();
-        const target = lastFocusedCell.current;
-        if (target) runCellRef.current(target);
+        if (lastFocusedCell.current) runCellRef.current(lastFocusedCell.current);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -221,12 +226,59 @@ export function App() {
     () => Object.values(cellStates).some((s) => s === "ok"),
     [cellStates],
   );
+  useEffect(() => {
+    setKernelBusy(
+      Object.values(cellStates).some((s) => s === "running") ? "busy" : "idle",
+    );
+  }, [cellStates]);
 
+  const commitTitle = useCallback(() => {
+    if (!editingTitle) return;
+    const { box, value } = editingTitle;
+    const t = value.trim();
+    if (t && /^[A-Za-z][A-Za-z0-9_]*$/.test(t)) {
+      if (box.title_source === "label") {
+        setBuffer((b) => renameLabel(b, box, t));
+        setDirty(true);
+      } else if (box.title_source === "define" && box.name) {
+        setBuffer((b) => renameDefine(b, box.name!, t));
+        setDirty(true);
+      }
+    }
+    setEditingTitle(null);
+  }, [editingTitle]);
+
+  const openDatasetStats = useCallback(async () => {
+    setDatasetStatsOpen((o) => !o);
+    if (!datasetStats) {
+      try {
+        const r = await fetch("/api/dataset-stats");
+        if (r.ok) setDatasetStats(await r.json());
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [datasetStats]);
+
+  const jumpToBox = useCallback((title: string) => {
+    document
+      .querySelector(`[data-box="${title}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
+  const boxBody = (box: Box): string =>
+    box.kind === "header"
+      ? buffer.slice(box.start, box.end)
+      : buffer.slice(markerLineEnd(buffer, box), box.end);
+
+  const renameable = (box: Box) =>
+    box.title_source === "label" || box.title_source === "define";
 
   return (
     <div className="dev-app">
       <header className="dev-header">
         <h1>FHIR4DS CQL Cleanroom</h1>
+        <span className={"dev-kerneldot " + kernelBusy} title={`kernel ${kernelBusy}`} />
         <span className="dev-status">
           {health ? `${health.kernel_id} · ${health.watching} files` : "…"}
         </span>
@@ -262,13 +314,34 @@ export function App() {
             </div>
           ))}
           {workspace?.datasets.length ? (
-            <h2>Data</h2>
+            <h2
+              className="dev-data-toggle"
+              onClick={openDatasetStats}
+              title="Show loaded dataset details"
+            >
+              Data
+            </h2>
           ) : null}
           {(workspace?.datasets ?? []).map((d) => (
-            <div key={d} className="dev-lib small" title={d}>
+            <div
+              key={d}
+              className="dev-lib small dev-dataset"
+              title={d}
+              onClick={openDatasetStats}
+            >
               {d.split("/").pop()}
             </div>
           ))}
+          {datasetStatsOpen && datasetStats && (
+            <div className="dev-datasetstats">
+              <div>total: {datasetStats.total}</div>
+              {Object.entries(datasetStats.by_type).map(([t, n]) => (
+                <div key={t}>
+                  {t}: {n}
+                </div>
+              ))}
+            </div>
+          )}
         </aside>
         <section className="dev-editor">
           <div className="dev-toolbar">
@@ -285,113 +358,214 @@ export function App() {
               <option value="to_here">to here</option>
             </select>
             <button
-              onClick={() => editorHandle.current?.insertCell()}
-              title={"Inserts a new cell at the end of the file:\n\n// # %%\ndefine NewCell: 'TODO'"}
+              onClick={() => {
+                setBuffer((b) => appendBox(b));
+                setDirty(true);
+              }}
+              title={"Inserts:\n// # %%\ndefine NewCell: 'TODO'"}
             >
               + cell
             </button>
             <button
               disabled={busy || !anyCellOk}
               onClick={() => apply("translate")}
-              title={anyCellOk ? "Show the generated SQL" : "Run a cell first"}
+              title="Show generated SQL (enabled after a cell run succeeds)"
             >
               Show SQL
             </button>
             <button
               disabled={busy}
               onClick={() => apply("evaluate")}
-              title="Evaluate every define in the buffer as one batch library"
+              title="Run the whole library as one batch evaluation"
             >
-              Run all ▶
+              Run all cells
             </button>
           </div>
-          <DevEditor
-            value={buffer}
-            onChange={(v) => {
-              setBuffer(v);
-              setDirty(true);
-            }}
-            registerHandle={registerEditor}
-          />
-          <div className="dev-cellrail">
-            {chunkEditor(buffer)
-              .filter((c) => c.type === "cell")
-              .map((c) => {
-                const name = c.name ?? "";
-                const state = cellStates[name] ?? "idle";
-                const fullRows = cellFullRows[name] ?? [];
-                const sliceRows = cellRows[name] ?? [];
-                return (
-                <div key={c.name ?? c.order} className="dev-cellblock">
-                <div
-                  className="dev-cellrow"
-                  onMouseDown={() => {
-                    lastFocusedCell.current = name;
-                  }}
-                >
-                  <button
-                    className="dev-cellrun"
-                    onClick={() => runCell(name)}
-                    title={`Run ${name} (${runMode}) — Cmd/Ctrl+Enter runs the last-clicked cell`}
+          <div className="dev-boxes">
+            {boxes.map((box) => (
+              <div key={`${box.title}-${box.start}`} className="dev-box" data-box={box.title}>
+                {editingTitle?.box.start === box.start ? (
+                  <input
+                    className="dev-box-title-input"
+                    value={editingTitle.value}
+                    autoFocus
+                    onChange={(e) =>
+                      setEditingTitle({ box, value: e.target.value })
+                    }
+                    onBlur={commitTitle}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitTitle();
+                      if (e.key === "Escape") setEditingTitle(null);
+                    }}
+                  />
+                ) : (
+                  <div
+                    className={
+                      "dev-box-title" + (renameable(box) ? " renameable" : "")
+                    }
+                    title={
+                      renameable(box)
+                        ? "Click to rename (updates marker label or define + refs)"
+                        : "This section's title is derived from its content"
+                    }
+                    onClick={() => {
+                      if (renameable(box)) setEditingTitle({ box, value: box.title });
+                    }}
                   >
-                    ▶ Run
-                  </button>
-                  <span className="dev-cellname">{name}</span>
-                  <span className={"dev-chip " + state}>
-                    {state === "idle" ? "Not run" : state}
-                  </span>
-                  {cellErrors[name] && (
-                    <span className="dev-cellerr" title={cellErrors[name]}>
-                      ⚠
+                    {box.title}
+                  </div>
+                )}
+                {box.kind === "define" ? (
+                  <div className="dev-boxbar">
+                    <button
+                      className="dev-cellrun"
+                      onMouseDown={() => (lastFocusedCell.current = box.name ?? "")}
+                      onClick={() => runCell(box.name ?? "", "cell")}
+                      title={`Run ${box.name} only (Cmd/Ctrl+Enter re-runs last-run cell)`}
+                    >
+                      ▶ Run
+                    </button>
+                    <button
+                      className="dev-cellrundeps"
+                      onMouseDown={() => (lastFocusedCell.current = box.name ?? "")}
+                      onClick={() => runCell(box.name ?? "", "cell_deps")}
+                      title={`Run ${box.name} with its dependencies`}
+                    >
+                      ▶ Run + deps
+                    </button>
+                    <span
+                      className={
+                        "dev-chip " + (cellStates[box.name ?? ""] ?? "idle")
+                      }
+                    >
+                      {(cellStates[box.name ?? ""] ?? "idle") === "idle"
+                        ? "Not run"
+                        : cellStates[box.name ?? ""] ?? "idle"}
                     </span>
-                  )}
-                  {sliceRows.length > 0 && (
-                    <span className="dev-cellcount">
-                      {sliceRows.length} rows
-                    </span>
-                  )}
+                    {cellErrors[box.name ?? ""] && (
+                      <span
+                        className="dev-cellerr"
+                        title={cellErrors[box.name ?? ""]}
+                      >
+                        ⚠
+                      </span>
+                    )}
+                    {cellRows[box.name ?? ""] && (
+                      <span className="dev-cellcount">
+                        {cellRows[box.name ?? ""].length} rows
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="dev-boxbar">
+                    <span className="dev-box-kind">{box.kind}</span>
+                  </div>
+                )}
+                <div className="dev-box-editor">
+                  <Editor
+                    language="sql"
+                    theme="dev-cql"
+                    value={boxBody(box)}
+                    onMount={(_e, monaco) => defineDevTheme(monaco)}
+                    onChange={(v) => {
+                      setBuffer((b) => spliceBox(b, box, v ?? "", box.kind === "header"));
+                      setDirty(true);
+                    }}
+                    options={{
+                      minimap: { enabled: false },
+                      fontSize: 13,
+                      fontFamily: "var(--font-mono)",
+                      lineNumbers: "off",
+                      scrollBeyondLastLine: false,
+                      wordWrap: "on",
+                      padding: { top: 4, bottom: 4 },
+                      renderLineHighlight: "none",
+                      automaticLayout: true,
+                    }}
+                  />
                 </div>
-                {fullRows.length > 0 && (
+                {cellFullRows[box.name ?? ""]?.length > 0 && (
                   <div className="dev-celltable">
-                    <div className="dev-celltable-head dev-celltable-row">
+                    <div className="dev-celltable-row dev-celltable-head">
                       <span>#</span>
                       <span>patient</span>
-                      <span>{name}</span>
+                      <span>{box.name}</span>
                     </div>
                     <div className="dev-celltable-body">
-                      {fullRows.slice(0, 5).map((row, i) => (
-                        <div key={i} className="dev-cellresult-row dev-celltable-row">
+                      {cellFullRows[box.name ?? ""].slice(0, 5).map((row, i) => (
+                        <div key={i} className="dev-celltable-row dev-cellresult-row">
                           <span>{i + 1}</span>
                           <span>{String(row.patient_id ?? "")}</span>
-                          <span>{String(row[name] ?? "")}</span>
+                          <span>{String(row[box.name ?? ""] ?? "")}</span>
                         </div>
                       ))}
+                      {cellFullRows[box.name ?? ""].length > 5 && (
+                        <div className="dev-cellresult-more">
+                          +{cellFullRows[box.name ?? ""].length - 5} more rows — see
+                          Results
+                        </div>
+                      )}
                     </div>
-                    {fullRows.length > 5 && (
-                      <div className="dev-cellresult-more">
-                        +{fullRows.length - 5} more rows
-                      </div>
-                    )}
                     <button
                       className="dev-cellview"
                       onClick={() => setTab("results")}
-                      title="Show the full table in the Results pane"
                     >
                       View in Results →
                     </button>
                   </div>
                 )}
-                {cellErrors[name] && (
-                  <div className="dev-cellerror">{cellErrors[name]}</div>
+                {cellErrors[box.name ?? ""] && (
+                  <div className="dev-cellerror">{cellErrors[box.name ?? ""]}</div>
                 )}
-                </div>
-                );
-              })}
+              </div>
+            ))}
+          </div>
+          <div className="dev-cellindex">
+            <button
+              className="dev-cellindex-toggle"
+              onClick={() => setIndexOpen((o) => !o)}
+            >
+              {indexOpen ? "▾" : "▸"} Cell index ({defineBoxes.length})
+            </button>
+            {indexOpen && (
+              <div className="dev-cellindex-rows">
+                {defineBoxes.map((box) => (
+                  <div
+                    key={box.title}
+                    className="dev-cellindex-row"
+                    onClick={() => jumpToBox(box.title)}
+                    title="Jump to this cell"
+                  >
+                    <span
+                      className={
+                        "dev-chip " + (cellStates[box.name ?? ""] ?? "idle")
+                      }
+                    >
+                      {(cellStates[box.name ?? ""] ?? "idle") === "idle"
+                        ? "Not run"
+                        : cellStates[box.name ?? ""] ?? "idle"}
+                    </span>
+                    <span className="dev-cellname">{box.title}</span>
+                    <span
+                      className="dev-cellindex-rename"
+                      title="Rename this cell"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        jumpToBox(box.title);
+                        if (renameable(box))
+                          setEditingTitle({ box, value: box.title });
+                      }}
+                    >
+                      ✎
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
         <section className="dev-output">
           <div className="dev-tabs">
-            <span className="dev-pane-label">Results</span>
             {(["results", "sql", "errors"] as Tab[]).map((t) => (
               <button
                 key={t}
@@ -404,29 +578,29 @@ export function App() {
             ))}
           </div>
           <div className="dev-pane">
-            {resultHeader && (
-              <div className="dev-resultheader">{resultHeader}</div>
-            )}
-            {tab === "results" && !result && !resultHeader && (
-              <div className="dev-guide">
-                <h3>Getting started</h3>
-                <ol>
-                  <li>Pick a dataset — files under <code>data/</code> load automatically.</li>
-                  <li>Pick a cell — each <code>// # %%</code> block runs on its own.</li>
-                  <li>Press the cell's <strong>Run</strong> button (or Cmd/Ctrl+Enter).</li>
-                </ol>
-              </div>
-            )}
             {tab === "results" && (
-              <ResultsTable
-                result={result}
-                error={
-                  evaluate && !evaluate.ok && evaluate.diagnostics.length
-                    ? evaluate.diagnostics[0].message
-                    : null
-                }
-                isLoading={busy}
-              />
+              <>
+                {resultHeader && <div className="dev-resultheader">{resultHeader}</div>}
+                {!result && !resultHeader && (
+                  <div className="dev-guide">
+                    <h3>Getting started</h3>
+                    <ol>
+                      <li>Pick a dataset (click it in the Data list to inspect it)</li>
+                      <li>Click ▶ Run on a cell box</li>
+                      <li>Cmd/Ctrl+Enter re-runs the last-run cell</li>
+                    </ol>
+                  </div>
+                )}
+                <ResultsTable
+                  result={result}
+                  error={
+                    evaluate && !evaluate.ok && evaluate.diagnostics.length
+                      ? evaluate.diagnostics[0].message
+                      : null
+                  }
+                  isLoading={busy}
+                />
+              </>
             )}
             {tab === "sql" && <SQLOutput value={sql} />}
             {tab === "errors" && (
