@@ -1,5 +1,6 @@
 import type {
   CellEvent,
+  DefineTypeInfo,
   EvaluateResult,
   EvidenceResult,
   HealthInfo,
@@ -112,6 +113,12 @@ export class HttpTransport implements Transport {
 
   libraryHeader(library: string): Promise<LibraryHeaderInfo> {
     return this.unwrap(`/api/library-header?library=${encodeURIComponent(library)}`);
+  }
+
+  defineTypes(library: string, text?: string): Promise<DefineTypeInfo[]> {
+    let q = `/api/define-types?library=${encodeURIComponent(library)}`;
+    if (text !== undefined) q += `&text=${encodeURIComponent(text)}`;
+    return this.unwrap<{ defines: DefineTypeInfo[] }>(q).then((d) => d.defines);
   }
 
   patients(): Promise<string[]> {

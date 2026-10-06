@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { HttpTransport } from "./http-transport";
-import type { MeasureMappingEntry, MeasureScaffoldResult } from "./transport";
+import type { DefineTypeInfo, MeasureMappingEntry, MeasureScaffoldResult } from "./transport";
 
 /** Canonical FHIR measure-population codes (must match the server's POPULATION_ORDER). */
 const POPULATIONS = [
@@ -45,6 +45,32 @@ export function MeasurePane({
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [types, setTypes] = useState<DefineTypeInfo[]>([]);
+  const rowRefs = useRef<Record<string, HTMLSelectElement | null>>({});
+
+  const booleanDefines = useMemo(() => types.filter((t) => t.boolean).map((t) => t.name), [types]);
+  const hiddenDefines = useMemo(
+    () => definitions.filter((d) => !booleanDefines.includes(d)),
+    [definitions, booleanDefines],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    transport
+      .defineTypes(library, buffer)
+      .then((t) => {
+        if (!cancelled) setTypes(t);
+      })
+      .catch(() => {
+        // untyped fallback: show all defines as non-boolean-hidden
+        if (!cancelled) setTypes(definitions.map((d) => ({ name: d, cql_type: null, boolean: true })));
+      });
+    return () => {
+      cancelled = true;
+    };
+    // refetch when the library or buffer identity changes (buffer = client-authoritative)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [library, transport]);
 
   const mappedCodes = useMemo(
     () => new Set(Object.entries(rows).filter(([, d]) => d).map(([c]) => c)),
@@ -57,6 +83,17 @@ export function MeasurePane({
   const ipMapped = Boolean(rows["initial-population"]);
   const canRun = scoring !== "" && ipMapped && definitions.length > 0;
   const unmappedDefines = definitions.filter((d) => !mappedDefines.has(d));
+  const firstUnmappedCode = POPULATIONS.find(
+    (c) => c === "initial-population" && !rows[c],
+  ) ?? null;
+
+  function focusRow(code: string) {
+    const sel = rowRefs.current[code];
+    if (sel) {
+      sel.focus();
+      sel.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
 
   function mappingPayload(): MeasureMappingEntry[] {
     return Object.entries(rows)
@@ -152,6 +189,7 @@ export function MeasurePane({
           Scaffold preview
         </button>
         <button
+          className="dev-msrun"
           disabled={busy || !canRun}
           onClick={run}
           title={
@@ -162,6 +200,11 @@ export function MeasurePane({
         >
           ▶ Run measure
         </button>
+        {!canRun && (
+          <span className="dev-msrunreason">
+            Select scoring + map initial-population to run
+          </span>
+        )}
       </div>
       {error && <div className="dev-vserror">{error}</div>}
       <table className="dev-msgrid">
@@ -177,20 +220,27 @@ export function MeasurePane({
               <td>
                 {code}
                 {code === "initial-population" && !rows[code] && (
-                  <span className="dev-mswarn" title="Run is disabled until initial-population is mapped">
+                  <button
+                    className="dev-mswarn"
+                    title="Run is disabled until initial-population is mapped — click to focus its dropdown"
+                    onClick={() => focusRow(code)}
+                  >
                     {" "}UNMAPPED
-                  </span>
+                  </button>
                 )}
               </td>
               <td>
                 <select
+                  ref={(el) => {
+                    rowRefs.current[code] = el;
+                  }}
                   value={rows[code] ?? ""}
                   onChange={(e) =>
                     setRows((prev) => ({ ...prev, [code]: e.target.value }))
                   }
                 >
                   <option value="">—</option>
-                  {definitions.map((d) => (
+                  {booleanDefines.map((d) => (
                     <option key={d} value={d}>
                       {d}
                     </option>
@@ -201,12 +251,23 @@ export function MeasurePane({
           ))}
         </tbody>
       </table>
+        {hiddenDefines.length > 0 && (
+          <div className="dev-msnote">
+            {hiddenDefines.length} non-Boolean define{hiddenDefines.length === 1 ? "" : "s"} hidden
+            — only Boolean defines can be population members. {hiddenDefines.join(", ")}
+          </div>
+        )}
       {unmappedDefines.length > 0 && (
         <div className="dev-mschips">
           {unmappedDefines.map((d) => (
-            <span key={d} className="dev-mschip" title="This define exists in the library but is not mapped to a population">
+            <button
+              key={d}
+              className="dev-mschip"
+              title="This define exists in the library but is not mapped — click to focus the first unmapped population row"
+              onClick={() => focusRow(firstUnmappedCode ?? POPULATIONS[0])}
+            >
               {d} exists but unmapped — intentional?
-            </span>
+            </button>
           ))}
         </div>
       )}

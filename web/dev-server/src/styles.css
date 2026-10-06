@@ -410,6 +410,25 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   font-weight: 600;
   letter-spacing: 0.05em;
 }
+.dev-mswarn,
+.dev-mschip {
+  cursor: pointer;
+  background: transparent;
+}
+.dev-mschip:active,
+.dev-mswarn:active {
+  filter: brightness(1.3);
+}
+.dev-msrun {
+  transition: opacity 0.1s ease;
+}
+.dev-msrun:disabled {
+  opacity: 0.45;
+}
+.dev-msrunreason {
+  font-size: 11px;
+  color: #ffb300;
+}
 .dev-mschips {
   display: flex;
   flex-wrap: wrap;

@@ -231,6 +231,78 @@ class _Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
             return
+        if path == "/api/define-types":
+            # v3 Slice-2 gate: translator-backed define classification for
+            # the measure mapping dropdowns (boolean Patient-context defines
+            # are the only valid population members). text= is the
+            # client-authoritative buffer (run-with-text doctrine); absent
+            # falls back to the workspace file.
+            from urllib.parse import parse_qs, urlparse
+
+            qs = parse_qs(urlparse(self.path).query)
+            name = (qs.get("library") or [""])[0]
+            text = (qs.get("text") or [None])[0]
+            snap = self.server.watcher.snapshot
+            lib = next((l for l in snap.libraries if l.name == name), None)
+            if lib is None:
+                self._write_json(
+                    200, _envelope(ok=False, diagnostics=[_diag(f"unknown library {name!r}")])
+                )
+                return
+            if text is None:
+                text = lib.text or ""
+            try:
+                from fhir4ds.cql.parser import parse_cql
+                from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+                lib_ast = parse_cql(text)
+                translator = CQLToSQLTranslator()
+                translator.translate_library_to_population_sql(lib_ast)
+                defines = []
+                for stmt in getattr(lib_ast, "statements", []):
+                    if type(stmt).__name__ != "Definition":
+                        continue  # function defines carry no population result
+                    stmt_name = getattr(stmt, "name", None)
+                    if stmt_name is None:
+                        continue
+                    cql_type = None
+                    try:
+                        meta = translator.get_definition_meta(stmt_name)
+                        if meta is not None:
+                            cql_type = getattr(meta, "cql_type_ref", None) or getattr(
+                                meta, "cql_type", None
+                            )
+                    except Exception:
+                        cql_type = None
+                    defines.append(
+                        {
+                            "name": stmt_name,
+                            "cql_type": cql_type,
+                            "boolean": cql_type == "Boolean",
+                        }
+                    )
+                self._write_json(200, _envelope(library=name, defines=defines))
+            except Exception as exc:
+                # Incomplete/dangling libs fail translation: report all
+                # defines as untyped so the UI can show them greyed out.
+                try:
+                    from fhir4ds.cql.parser import parse_cql as _parse
+
+                    defines = []
+                    lib_ast = _parse(text)
+                    for stmt in getattr(lib_ast, "statements", []):
+                        if type(stmt).__name__ != "Definition":
+                            continue
+                        stmt_name = getattr(stmt, "name", None)
+                        if stmt_name is None:
+                            continue
+                        defines.append(
+                            {"name": stmt_name, "cql_type": None, "boolean": False}
+                        )
+                    self._write_json(200, _envelope(library=name, defines=defines))
+                except Exception:
+                    self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
         if path == "/api/valueset":
             # v3 Slice 1: valueset grid read (concepts + used-by + url).
             from urllib.parse import parse_qs, urlparse

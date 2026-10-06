@@ -152,9 +152,16 @@ export interface MeasureRunResult {
   reports: Record<string, unknown>[];
 }
 
+export interface DefineTypeInfo {
+  name: string;
+  cql_type: string | null;
+  boolean: boolean;
+}
+
 export interface Transport {
   health(): Promise<HealthInfo>;
   workspace(): Promise<WorkspaceInfo>;
+  defineTypes(library: string, text?: string): Promise<DefineTypeInfo[]>;
   libraryHeader(library: string): Promise<LibraryHeaderInfo>;
   patients(): Promise<string[]>;
   valueset(path: string): Promise<ValueSetInfo>;

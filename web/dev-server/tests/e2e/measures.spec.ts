@@ -26,6 +26,9 @@ test.beforeAll(async () => {
       "// # %% [name: HasBp]",
       'define HasBp: exists([Observation] O where O.code in "BPVS")',
       "",
+      "// # %% [name: BirthYear]",
+      "define BirthYear: year from Patient.birthDate",
+      "",
     ].join("\n"),
   );
   writeFileSync(
@@ -121,9 +124,38 @@ test("measure pane: Run disabled until scoring + initial-population mapped", asy
   await expect(pane).toBeVisible();
   const run = pane.getByRole("button", { name: "▶ Run measure" });
   await expect(run).toBeDisabled();
+  // Ungated reason text is visible beside the disabled Run button.
+  await expect(pane.locator(".dev-msrunreason")).toContainText(
+    "Select scoring + map initial-population to run",
+  );
   // Set scoring but leave initial-population unmapped — still disabled.
   await pane.locator("select").first().selectOption("proportion");
   await expect(run).toBeDisabled();
+  await expect(pane.locator(".dev-msrunreason")).toBeVisible();
+});
+
+test("measure pane: dropdowns filter to Boolean defines; UNMAPPED + chips are clickable", async ({ page }) => {
+  await expect(page.locator(".dev-lib.selected", { hasText: "Demographics" })).toBeVisible({ timeout: 15000 });
+  await page.getByRole("button", { name: /^▸ measure$/ }).click();
+  const pane = page.locator(".dev-mspane");
+  await expect(pane).toBeVisible();
+
+  // define-types fetched from the server: Boolean defines selectable, non-Boolean hidden w/ note.
+  // (Playwright treats <option> elements as hidden — assert via count, not visibility.)
+  const ipRow = pane.locator(".dev-msgrid tbody tr").nth(0).locator("select");
+  await expect(ipRow.locator("option", { hasText: "InIp" })).toHaveCount(1, { timeout: 20000 });
+  await expect(ipRow.locator("option", { hasText: "HasBp" })).toHaveCount(1);
+  await expect(ipRow.locator("option", { hasText: "BirthYear" })).toHaveCount(0);
+  await expect(pane.locator(".dev-msnote")).toContainText("1 non-Boolean define hidden");
+  await expect(pane.locator(".dev-msnote")).toContainText("BirthYear");
+
+  // UNMAPPED badge is a button focusing the initial-population select.
+  await pane.locator(".dev-mswarn", { hasText: "UNMAPPED" }).click();
+  await expect(ipRow).toBeFocused();
+
+  // Unmapped-define chip (InIp unmapped so far) is a button focusing the IP row.
+  await pane.locator(".dev-mschip", { hasText: "InIp exists but unmapped" }).click();
+  await expect(ipRow).toBeFocused();
 });
 
 test("measure pane: scaffold → map → run shows counts", async ({ page }) => {
@@ -143,6 +175,7 @@ test("measure pane: scaffold → map → run shows counts", async ({ page }) => 
 
   const run = pane.getByRole("button", { name: "▶ Run measure" });
   await expect(run).toBeEnabled();
+  await expect(pane.locator(".dev-msrunreason")).toHaveCount(0);
   await run.click();
   await expect(pane.locator(".dev-mssummary.pass")).toBeVisible({ timeout: 30000 });
   await expect(pane.locator(".dev-mssummary.pass")).toContainText("initial_population: 6");
