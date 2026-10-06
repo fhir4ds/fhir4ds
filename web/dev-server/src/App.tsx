@@ -74,6 +74,9 @@ export function App() {
   >(null);
   const [vsStale, setVsStale] = useState(false);
   const [patients, setPatients] = useState<string[]>([]);
+  // v4.3: last measure run's MeasureReports for the VD pane's
+  // run-against-measure-output toggle.
+  const [lastMeasureReports, setLastMeasureReports] = useState<Record<string, unknown>[] | null>(null);
 
   const boxes = useMemo(() => splitBoxes(buffer), [buffer]);
   const defineBoxes = useMemo(() => boxes.filter((b) => b.kind === "define"), [boxes]);
@@ -536,6 +539,7 @@ export function App() {
                   workspace?.libraries.find((l) => l.name === selected)
                     ?.definitions ?? []
                 }
+                onMeasureReports={setLastMeasureReports}
               />
             </div>
           ) : railView?.kind === "view" ? (
@@ -546,6 +550,7 @@ export function App() {
                 (workspace?.datasets ?? [])[0]?.split("/").pop()?.replace(/\.ndjson$/, "") ?? ""
               }
               patientCount={datasetStats?.total ?? null}
+              lastMeasureReports={lastMeasureReports}
             />
           ) : railView?.kind === "builder" ? (
             <ResourceBuilderPane

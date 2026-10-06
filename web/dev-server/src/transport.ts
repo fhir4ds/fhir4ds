@@ -261,7 +261,7 @@ export interface Transport {
   workspace(): Promise<WorkspaceInfo>;
   defineTypes(library: string, text?: string): Promise<DefineTypeInfo[]>;
   view(path: string): Promise<ViewInfo>;
-  viewRun(text?: string, path?: string): Promise<ViewRunResult>;
+  viewRun(text?: string, path?: string, resources?: Record<string, unknown>[]): Promise<ViewRunResult>;
   schemaTree(resource: string, depth?: number): Promise<SchemaTreeResult>;
   resourceValidate(resource: Record<string, unknown>): Promise<ResourceValidateResult>;
   resourceSave(resource: Record<string, unknown>, datasetPath: string): Promise<ResourceSaveResult>;

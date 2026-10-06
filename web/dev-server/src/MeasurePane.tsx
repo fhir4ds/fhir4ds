@@ -32,11 +32,14 @@ export function MeasurePane({
   library,
   buffer,
   definitions,
+  onMeasureReports,
 }: {
   transport: HttpTransport;
   library: string;
   buffer: string;
   definitions: string[];
+  /** v4.3: called with the run's per-patient MeasureReports (VD-over-measure-output). */
+  onMeasureReports?: (reports: Record<string, unknown>[]) => void;
 }) {
   const [rows, setRows] = useState<Record<string, string>>({});
   const [scoring, setScoring] = useState("");
@@ -174,6 +177,7 @@ export function MeasurePane({
         });
       } else {
         setRunResult({ ok: true, counts: r.counts, reports: r.reports });
+        onMeasureReports?.(r.reports);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

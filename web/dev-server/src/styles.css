@@ -685,3 +685,101 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   border-color: #f14c4c;
   color: #f48771;
 }
+
+/* v4.3 — VdPane affordances */
+.dev-vdagainst {
+  background: #333;
+  color: #d4d4d4;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+.dev-vdpathbtn {
+  background: transparent;
+  color: #9cdcfe;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.dev-vdpathbtn:hover { background: #094771; }
+.dev-vdpaths {
+  border: 1px solid #334;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin: 4px 0;
+  background: #1b1b1b;
+}
+.dev-vdpathfilter {
+  width: 100%;
+  background: #252526;
+  color: #d4d4d4;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.dev-vdpathlist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 110px;
+  overflow-y: auto;
+}
+.dev-vdpathitem {
+  background: #094771;
+  color: #d4d4d4;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.dev-vdpathitem:hover { filter: brightness(1.3); }
+.dev-vdpathnote { color: #888; font-size: 11px; display: block; margin-top: 4px; }
+.dev-vdconsts {
+  border: 1px solid #334;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin: 6px 0;
+  background: #1b1b1b;
+}
+.dev-vdconsts-head { color: #9cdcfe; font-size: 12px; margin-bottom: 4px; }
+.dev-vdconsts-head span { color: #888; font-weight: normal; }
+.dev-vdconst-rows { display: flex; flex-direction: column; gap: 4px; }
+.dev-vdconst-row { display: grid; grid-template-columns: 140px 100px 1fr auto; gap: 6px; align-items: center; }
+.dev-vdconst-name, .dev-vdconst-value {
+  background: #252526;
+  color: #d4d4d4;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+}
+.dev-vdconst-kind {
+  background: #333;
+  color: #d4d4d4;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.dev-vdconst-del {
+  background: transparent;
+  color: #888;
+  border: none;
+  cursor: pointer;
+}
+.dev-vdconst-del:hover { color: #f44336; }
+.dev-vdconst-add {
+  background: transparent;
+  color: #9cdcfe;
+  border: 1px dashed #445;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  margin-top: 4px;
+  cursor: pointer;
+}
+.dev-vdconst-add:hover { background: #094771; }

@@ -134,8 +134,8 @@ export class HttpTransport implements Transport {
     return this.unwrap(`/api/view?path=${encodeURIComponent(path)}`);
   }
 
-  viewRun(text?: string, path?: string): Promise<ViewRunResult> {
-    return this.post<ViewRunResult>("/api/view/run", { text, path });
+  viewRun(text?: string, path?: string, resources?: Record<string, unknown>[]): Promise<ViewRunResult> {
+    return this.post<ViewRunResult>("/api/view/run", { text, path, resources });
   }
 
   schemaTree(resource: string, depth?: number): Promise<SchemaTreeResult> {

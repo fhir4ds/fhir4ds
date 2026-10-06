@@ -1265,20 +1265,38 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
         kernel = self.server.kernel_manager.current()
-        try:
-            rows = kernel.conn.execute(
-                "SELECT resource FROM resources WHERE resourceType = ?",
-                [resource_type],
-            ).fetchall()
-        except Exception as exc:
-            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
-            return
-        resources = []
-        for (raw,) in rows:
+        explicit = body.get("resources")
+        if explicit is not None:
+            # v4.3: caller-supplied resources (e.g. the last measure run's
+            # MeasureReports) are staged verbatim — the kernel table is not
+            # consulted. Every entry must be a JSON object.
+            if not isinstance(explicit, list) or not all(
+                isinstance(r, dict) for r in explicit
+            ):
+                self._write_json(
+                    200,
+                    _envelope(
+                        ok=False,
+                        diagnostics=[_diag("resources must be a list of JSON objects")],
+                    ),
+                )
+                return
+            resources = explicit
+        else:
             try:
-                resources.append(json.loads(raw) if isinstance(raw, str) else raw)
-            except json.JSONDecodeError:
-                continue
+                rows = kernel.conn.execute(
+                    "SELECT resource FROM resources WHERE resourceType = ?",
+                    [resource_type],
+                ).fetchall()
+            except Exception as exc:
+                self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+                return
+            resources = []
+            for (raw,) in rows:
+                try:
+                    resources.append(json.loads(raw) if isinstance(raw, str) else raw)
+                except json.JSONDecodeError:
+                    continue
         result = flatten_view(vd, resources, kernel.conn)
         self._write_json(
             200,
