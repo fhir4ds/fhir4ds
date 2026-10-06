@@ -60,11 +60,15 @@ export function App() {
   const [kernelBusy, setKernelBusy] = useState<"idle" | "busy" | "restarting">("idle");
   const [datasetStats, setDatasetStats] = useState<{ total: number; by_type: Record<string, number> } | null>(null);
   const [datasetStatsOpen, setDatasetStatsOpen] = useState(false);
-  // v3: resource panes + dataset context.
-  const [selectedValueset, setSelectedValueset] = useState<string | null>(null);
+  // v3: resource panes + dataset context. The left rail lists ALL resource
+  // types; railView picks what the center column shows (null = cell boxes).
+  const [railView, setRailView] = useState<
+    | { kind: "valueset"; id: string }
+    | { kind: "params"; id: string }
+    | { kind: "measure"; id: string }
+    | null
+  >(null);
   const [vsStale, setVsStale] = useState(false);
-  const [headerOpen, setHeaderOpen] = useState(false);
-  const [measureOpen, setMeasureOpen] = useState(false);
   const [patients, setPatients] = useState<string[]>([]);
 
   const boxes = useMemo(() => splitBoxes(buffer), [buffer]);
@@ -73,7 +77,7 @@ export function App() {
   const loadLibrary = useCallback(
     async (name: string) => {
       setSelected(name);
-      setSelectedValueset(null);
+      setRailView(null);
       const r = await transport.library(name);
       setBuffer((r as unknown as { text?: string }).text ?? "");
       setDirty(false);
@@ -82,12 +86,10 @@ export function App() {
   );
 
   const selectValueset = useCallback((path: string) => {
-    // Keep `selected` intact — clearing it would re-trigger the workspace
-    // load effect and immediately re-select the first library, discarding
-    // the valueset selection. The editor column branches on
-    // selectedValueset first, and loadLibrary resets it when a library
-    // is clicked.
-    setSelectedValueset(path);
+    // Keep `selected` intact — the workspace-load effect re-selects the
+    // first library otherwise and discards the valueset view. The center
+    // column branches on railView first, and loadLibrary resets it.
+    setRailView({ kind: "valueset", id: path });
   }, []);
 
   const refreshWorkspace = useCallback(async () => {
@@ -394,12 +396,57 @@ export function App() {
             <div
               key={v}
               className={
-                "dev-lib small" + (v === selectedValueset ? " selected" : "")
+                "dev-lib small" + (railView?.kind === "valueset" && railView.id === v ? " selected" : "")
               }
               title={v}
               onClick={() => selectValueset(v)}
             >
               {v.split("/").pop()?.replace(/\.json$/, "")}
+            </div>
+          ))}
+          {(workspace?.libraries ?? []).length > 0 && <h2>Parameters</h2>}
+          {(workspace?.libraries ?? []).map((lib) => (
+            <div
+              key={lib.name}
+              className={
+                "dev-lib small" + (railView?.kind === "params" && railView.id === lib.name ? " selected" : "")
+              }
+              title={`Parameters for ${lib.name}`}
+              onClick={async () => {
+                if (selected !== lib.name) await loadLibrary(lib.name);
+                setRailView({ kind: "params", id: lib.name });
+              }}
+            >
+              {lib.name} · parameters
+            </div>
+          ))}
+          <h2>Measures</h2>
+          {(workspace?.measures ?? []).map((m) => (
+            <div
+              key={m}
+              className={
+                "dev-lib small" + (railView?.kind === "measure" && railView.id === m ? " selected" : "")
+              }
+              title={m}
+              onClick={() => setRailView({ kind: "measure", id: m })}
+            >
+              {m.split("/").pop()?.replace(/\.json$/, "")}
+            </div>
+          ))}
+          {(workspace?.libraries ?? []).map((lib) => (
+            <div
+              key={lib.name + "-scaffold"}
+              className={
+                "dev-lib small" +
+                (railView?.kind === "measure" && railView.id === lib.name + "-scaffold" ? " selected" : "")
+              }
+              title={`Scaffold a Measure from ${lib.name} defines (preview + run)`}
+              onClick={async () => {
+                if (selected !== lib.name) await loadLibrary(lib.name);
+                setRailView({ kind: "measure", id: lib.name + "-scaffold" });
+              }}
+            >
+              + {lib.name} scaffold
             </div>
           ))}
           {datasetStatsOpen && datasetStats && (
@@ -414,10 +461,10 @@ export function App() {
           )}
         </aside>
         <section className="dev-editor">
-          {selectedValueset ? (
+          {railView?.kind === "valueset" ? (
             <ValueSetPane
               transport={transport}
-              path={selectedValueset}
+              path={railView.id}
               onStaleChange={setVsStale}
               onInsertDeclaration={(decl) => {
                 // Splice the valueset declaration into the open library's
@@ -432,6 +479,38 @@ export function App() {
                 setDirty(true);
               }}
             />
+          ) : railView?.kind === "params" ? (
+            <div className="dev-panewrap">
+              <div className="dev-toolbar">
+                <span className="dev-pane-label">Parameters</span>
+                <span>{railView.id}</span>
+                <span className="dev-pane-hint">edits apply to the library header box</span>
+              </div>
+              <ParamsPane
+                transport={transport}
+                library={railView.id}
+                onText={(text) => {
+                  setBuffer(text);
+                  setDirty(true);
+                }}
+              />
+            </div>
+          ) : railView?.kind === "measure" ? (
+            <div className="dev-panewrap">
+              <div className="dev-toolbar">
+                <span className="dev-pane-label">Measure</span>
+                <span>{railView.id}</span>
+              </div>
+              <MeasurePane
+                transport={transport}
+                library={selected}
+                buffer={buffer}
+                definitions={
+                  workspace?.libraries.find((l) => l.name === selected)
+                    ?.definitions ?? []
+                }
+              />
+            </div>
           ) : (
             <>
           <div className="dev-toolbar">
@@ -448,18 +527,6 @@ export function App() {
               <option value="all">all</option>
               <option value="to_here">to here</option>
             </select>
-            <button
-              onClick={() => setHeaderOpen((o) => !o)}
-              title="Edit library header parameters (name, type, default)"
-            >
-              {headerOpen ? "▾" : "▸"} header
-            </button>
-            <button
-              onClick={() => setMeasureOpen((o) => !o)}
-              title="Measure scaffold preview + run (map populations to defines)"
-            >
-              {measureOpen ? "▾" : "▸"} measure
-            </button>
             <button
               onClick={() => {
                 setBuffer((b) => appendBox(b));
@@ -488,28 +555,7 @@ export function App() {
               Run all cells
             </button>
           </div>
-          <div className="dev-boxes">
-            {headerOpen && selected && (
-              <ParamsPane
-                transport={transport}
-                library={selected}
-                onText={(text) => {
-                  setBuffer(text);
-                  setDirty(true);
-                }}
-              />
-            )}
-            {measureOpen && selected && (
-              <MeasurePane
-                transport={transport}
-                library={selected}
-                buffer={buffer}
-                definitions={
-                  workspace?.libraries.find((l) => l.name === selected)
-                    ?.definitions ?? []
-                }
-              />
-            )}
+           <div className="dev-boxes">
             {boxes.map((box) => (
               <div key={`${box.title}-${box.start}`} className="dev-box" data-box={box.title}>
                 {editingTitle?.box.start === box.start ? (
@@ -631,15 +677,8 @@ export function App() {
                       padding: { top: 4, bottom: 4 },
                       renderLineHighlight: "none",
                       automaticLayout: true,
-                      readOnly:
-                        box.kind === "header" && headerOpen,
                     }}
                   />
-                  {box.kind === "header" && headerOpen && (
-                    <div className="dev-box-readonly-hint">
-                      read-only while the Parameters table is open — edit via the table
-                    </div>
-                  )}
                 </div>
                 {cellFullRows[box.name ?? ""]?.length > 0 && (
                   <div className="dev-celltable">

@@ -506,3 +506,17 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   padding: 2px 6px;
   border-bottom: 1px solid #2a2a2a;
 }
+
+/* v3 rail resource sections */
+.dev-panewrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.dev-pane-hint {
+  color: #888;
+  font-size: 11px;
+}

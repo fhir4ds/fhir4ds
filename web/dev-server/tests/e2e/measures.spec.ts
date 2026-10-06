@@ -119,7 +119,7 @@ test.beforeEach(async ({ page }) => {
 
 test("measure pane: Run disabled until scoring + initial-population mapped", async ({ page }) => {
   await expect(page.locator(".dev-lib.selected", { hasText: "Demographics" })).toBeVisible({ timeout: 15000 });
-  await page.getByRole("button", { name: /^▸ measure$/ }).click();
+  await page.locator(".dev-lib.small", { hasText: "Demographics scaffold" }).click();
   const pane = page.locator(".dev-mspane");
   await expect(pane).toBeVisible();
   const run = pane.getByRole("button", { name: "▶ Run measure" });
@@ -136,7 +136,7 @@ test("measure pane: Run disabled until scoring + initial-population mapped", asy
 
 test("measure pane: dropdowns filter to Boolean defines; UNMAPPED + chips are clickable", async ({ page }) => {
   await expect(page.locator(".dev-lib.selected", { hasText: "Demographics" })).toBeVisible({ timeout: 15000 });
-  await page.getByRole("button", { name: /^▸ measure$/ }).click();
+  await page.locator(".dev-lib.small", { hasText: "Demographics scaffold" }).click();
   const pane = page.locator(".dev-mspane");
   await expect(pane).toBeVisible();
 
@@ -160,7 +160,7 @@ test("measure pane: dropdowns filter to Boolean defines; UNMAPPED + chips are cl
 
 test("measure pane: scaffold → map → run shows counts", async ({ page }) => {
   await expect(page.locator(".dev-lib.selected", { hasText: "Demographics" })).toBeVisible({ timeout: 15000 });
-  await page.getByRole("button", { name: /^▸ measure$/ }).click();
+  await page.locator(".dev-lib.small", { hasText: "Demographics scaffold" }).click();
   const pane = page.locator(".dev-mspane");
   await expect(pane).toBeVisible();
 

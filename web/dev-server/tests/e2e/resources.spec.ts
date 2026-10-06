@@ -139,7 +139,8 @@ test("valueset pane renders, edits, and shows the stale banner", async ({ page }
 
 test("params table shows the declared parameter and can delete it", async ({ page }) => {
   await expect(page.locator(".dev-lib.selected")).toHaveText("Demographics", { timeout: 15000 });
-  await page.locator("button", { hasText: "header" }).click();
+  // Rail: Parameters section opens the per-library params pane
+  await page.locator(".dev-lib.small", { hasText: "Demographics · parameters" }).click();
   await expect(page.locator(".dev-paramspane")).toBeVisible();
   await expect(page.locator(".dev-paramstable tbody tr")).toHaveCount(1);
   await expect(page.locator(".dev-paramstable")).toContainText("MinAge");
@@ -194,15 +195,15 @@ test("red-green chain: valueset edit flips IsBp after restart, reverts green", a
   await expect(page.locator(".dev-stale").first()).toContainText("Restart kernel", { timeout: 10000 });
 
   // FIX 2: Run buttons are disabled while terminology is stale.
-  await page.locator(".dev-lib", { hasText: "Demographics" }).click();
+  await page.locator(".dev-lib.selected", { hasText: "Demographics" }).click();
   await expect(page.locator(".dev-box-title").filter({ hasText: "IsBp" })).toBeVisible({ timeout: 15000 });
   await expect(page.locator(".dev-boxbar .dev-cellrun").first()).toBeDisabled();
 
   // Restart the kernel (reloads terminology), run the test again -> RED.
   await page.locator("button", { hasText: "Restart kernel" }).click();
   await expect(page.locator(".dev-kerneldot.idle")).toBeVisible({ timeout: 30000 });
-  await expect(page.locator(".dev-lib", { hasText: "Demographics" })).toBeVisible();
-  await page.locator(".dev-lib", { hasText: "Demographics" }).click();
+  await expect(page.locator(".dev-lib.selected", { hasText: "Demographics" })).toBeVisible();
+  await page.locator(".dev-lib.selected", { hasText: "Demographics" }).click();
   await expect(page.locator(".dev-box-title").filter({ hasText: "IsBp" })).toBeVisible({ timeout: 15000 });
   await page.locator("button", { hasText: "Run tests" }).click();
   await expect(page.locator(".dev-testsummary.fail")).toBeVisible({ timeout: 30000 });
@@ -216,7 +217,7 @@ test("red-green chain: valueset edit flips IsBp after restart, reverts green", a
   await expect(page.locator(".dev-stale").first()).toContainText("Restart kernel", { timeout: 10000 });
   await page.locator("button", { hasText: "Restart kernel" }).click();
   await expect(page.locator(".dev-kerneldot.idle")).toBeVisible({ timeout: 30000 });
-  await page.locator(".dev-lib", { hasText: "Demographics" }).click();
+  await page.locator(".dev-lib.selected", { hasText: "Demographics" }).click();
   await expect(page.locator(".dev-box-title").filter({ hasText: "IsBp" })).toBeVisible({ timeout: 15000 });
   await page.locator("button", { hasText: "Run tests" }).click();
   await expect(page.locator(".dev-testsummary.pass")).toBeVisible({ timeout: 30000 });

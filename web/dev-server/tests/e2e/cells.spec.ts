@@ -226,11 +226,11 @@ test("missing dependency surfaces a clean error, not a raw Binder error", async 
   await page.goto(BASE);
   await expect
     .poll(
-      async () => page.locator(".dev-lib", { hasText: "Broken" }).count(),
+      async () => page.locator(".dev-lib").filter({ hasText: "Broken" }).count(),
       { timeout: 30_000 },
     )
     .toBeGreaterThan(0);
-  await page.locator(".dev-lib", { hasText: "Broken" }).click();
+  await page.locator(".dev-lib").filter({ hasText: "Broken" }).first().click();
   await expect(page.locator(".dev-box-title").nth(1)).toHaveText("Dangles", {
     timeout: 30_000,
   });
