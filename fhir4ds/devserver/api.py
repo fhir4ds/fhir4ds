@@ -367,6 +367,61 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             self._write_json(200, payload)
             return
+        if path == "/api/measure/baselines":
+            from pathlib import Path
+            from urllib.parse import parse_qs, urlparse
+
+            qs = parse_qs(urlparse(self.path).query)
+            measure_name = (qs.get("measure") or [""])[0].strip()
+            snap = self.server.watcher.snapshot
+            roots = [Path(str(d)).parent for d in (getattr(snap, "measures", None) or [])]
+            if roots:
+                expected_dir = roots[0] / "expected"
+            else:
+                cfg = getattr(self.server.watcher, "_cfg", None)
+                data_dirs = list(getattr(cfg, "data_dirs", None) or [])
+                expected_dir = (
+                    Path(data_dirs[0]).parent / "measures" / "expected"
+                    if data_dirs
+                    else Path("measures") / "expected"
+                )
+            baselines: list[dict[str, Any]] = []
+            if expected_dir.is_dir():
+                for f in sorted(expected_dir.glob("*.baseline.v*.json")):
+                    stem = f.name.split(".baseline.v")[0]
+                    if measure_name and stem != measure_name:
+                        continue
+                    entry: dict[str, Any] = {"path": str(f), "name": f.name}
+                    try:
+                        with open(f, "r", encoding="utf-8") as fh:
+                            wrapper = json.load(fh)
+                        prov = wrapper.get("provenance") or {}
+                        entry["provenance"] = prov
+                        entry["reports"] = len(wrapper.get("reports") or [])
+                    except (OSError, json.JSONDecodeError) as exc:
+                        entry["error"] = str(exc)
+                    baselines.append(entry)
+            self._write_json(200, _envelope(baselines=baselines))
+            return
+        if path == "/api/measure/baseline/raw":
+            from pathlib import Path
+            from urllib.parse import parse_qs, urlparse
+
+            qs = parse_qs(urlparse(self.path).query)
+            raw_path = (qs.get("path") or [""])[0]
+            target = Path(raw_path).resolve()
+            if target.parent.name != "expected" or not target.is_file():
+                self._write_json(
+                    200, _envelope(False, diagnostics=[_diag("unknown baseline path")])
+                )
+                return
+            try:
+                wrapper = json.loads(target.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                self._write_json(200, _envelope(False, diagnostics=[_diag(str(exc))]))
+                return
+            self._write_json(200, _envelope(wrapper=wrapper))
+            return
         if path == "/api/view":
             # v3 Slice 4: ViewDefinition file read (text + parsed header info).
             from urllib.parse import parse_qs, urlparse
@@ -656,6 +711,10 @@ class _Handler(BaseHTTPRequestHandler):
                 self._route_measure_run(body)
             elif path == "/api/measure/compare":
                 self._route_measure_compare(body)
+            elif path == "/api/measure/baseline/save":
+                self._route_baseline_save(body)
+            elif path == "/api/measure/baseline/delete":
+                self._route_baseline_delete(body)
             elif path == "/api/view/run":
                 self._route_view_run(body)
             elif path == "/api/resource/validate":
@@ -995,6 +1054,168 @@ class _Handler(BaseHTTPRequestHandler):
             return {"matches": True, "canonical": None}
         ref = (measure.get("url") or (measure.get("library") or [None])[0]) or ""
         return {"matches": ref in canonicals, "canonical": sorted(canonicals)[0]}
+
+    def _route_baseline_save(self, body: dict[str, Any]) -> None:
+        """v4.2: capture the CURRENT run output as an expected baseline.
+
+        Body: {library, text?, libraries?, measure: {...}, parameters?,
+        dataset?: str}. Reuses the scaffold+run path internally (the run
+        evaluates against the dataset AS LOADED in the kernel — builder
+        NDJSON appends only touch files, never the live kernel table), then
+        writes measures/expected/<name>.baseline.vN.json (vN auto-increment,
+        never overwrites) with a provenance wrapper. Publishes a 'changed'
+        workspace event so other UIs refresh.
+        """
+        from datetime import datetime, timezone
+        from pathlib import Path
+
+        measure = body.get("measure")
+        if not isinstance(measure, dict):
+            self._write_json(
+                200,
+                _envelope(False, diagnostics=[_diag("measure must be a Measure resource object")]),
+            )
+            return
+        name = (body.get("name") or "").strip()
+        if not name or not isinstance(name, str):
+            name = measure.get("name") or "CleanroomMeasure"
+        if not all(ch.isalnum() or ch in "-_" for ch in name):
+            self._write_json(
+                200,
+                _envelope(
+                    False,
+                    diagnostics=[_diag("baseline name must be alphanumeric/-/_")],
+                ),
+            )
+            return
+
+        includes, main = self._resolve_main(body)
+        if main is None:
+            return
+        try:
+            columns = output_columns_from_measure(measure)
+        except OperationError as exc:
+            self._write_json(200, _envelope(False, diagnostics=[_diag(str(exc))]))
+            return
+
+        kernel = self.server.kernel_manager.current()
+        evd = evaluate_library(
+            includes,
+            main,
+            None,
+            kernel.conn,
+            parameters=body.get("parameters") or {},
+            output_columns=columns,
+        ).to_dict()
+        if not evd.get("ok"):
+            self._write_json(
+                200,
+                _envelope(
+                    False,
+                    diagnostics=(evd.get("diagnostics") or [_diag("evaluation failed")]),
+                ),
+            )
+            return
+        mr = measure_report_from_rows(
+            measure,
+            evd.get("rows", []),
+            columns,
+            library_url=(measure.get("library") or [None])[0],
+        )
+        if not mr.ok:
+            self._write_json(200, mr.to_dict())
+            return
+        reports = [_regroup_report_populations(dict(r)) for r in mr.reports]
+        counts: dict[str, int] = {}
+        for row in evd.get("rows", []):
+            for col in columns:
+                if row.get(col) is True:
+                    counts[col] = counts.get(col, 0) + 1
+
+        snap = self.server.watcher.snapshot
+        dataset = body.get("dataset") or (
+            str(snap.datasets[0]) if getattr(snap, "datasets", None) else None
+        )
+        prov = {
+            "captured_at": datetime.now(timezone.utc).isoformat(),
+            "library": main.name,
+            "dataset": dataset,
+            "kernel_id": kernel.kernel_id,
+            "patient_count": len(evd.get("rows", [])),
+            "counts": {c: counts.get(c, 0) for c in columns},
+        }
+
+        # measures/expected under the workspace root: resolve from the FIRST
+        # measure dir's parent when measure dirs exist, else the config data
+        # dirs' parent — fall back to the server cwd.
+        roots = [Path(str(d)).parent for d in (getattr(snap, "measures", None) or [])]
+        if roots:
+            expected_dir = roots[0] / "expected"
+        else:
+            cfg = getattr(self.server.watcher, "_cfg", None)
+            data_dirs = list(getattr(cfg, "data_dirs", None) or [])
+            expected_dir = (
+                Path(data_dirs[0]).parent / "measures" / "expected"
+                if data_dirs
+                else Path("measures") / "expected"
+            )
+        expected_dir.mkdir(parents=True, exist_ok=True)
+        n = 1
+        target = expected_dir / f"{name}.baseline.v{n}.json"
+        while target.exists():
+            n += 1
+            target = expected_dir / f"{name}.baseline.v{n}.json"
+        wrapper = {
+            "resourceType": "Bundle",
+            "type": "collection",
+            "provenance": prov,
+            "reports": reports,
+        }
+        with open(target, "w", encoding="utf-8") as fh:
+            json.dump(wrapper, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        self.server.watcher.bus.publish(
+            WorkspaceEvent(kind="changed", paths=[str(target)])
+        )
+        self._write_json(
+            200,
+            _envelope(
+                path=str(target),
+                name=target.name,
+                provenance=prov,
+                reports=len(reports),
+            ),
+        )
+
+    def _route_baseline_delete(self, body: dict[str, Any]) -> None:
+        """v4.2: delete a baseline file (guarded to an expected/ dir)."""
+        from pathlib import Path
+
+        p = body.get("path")
+        if not isinstance(p, str) or not p:
+            self._write_json(
+                200, _envelope(False, diagnostics=[_diag("path is required")])
+            )
+            return
+        target = Path(p).resolve()
+        if target.parent.name != "expected":
+            self._write_json(
+                200,
+                _envelope(
+                    False,
+                    diagnostics=[_diag("refusing to delete outside measures/expected/")],
+                ),
+            )
+            return
+        try:
+            target.unlink()
+        except OSError as exc:
+            self._write_json(200, _envelope(False, diagnostics=[_diag(str(exc))]))
+            return
+        self.server.watcher.bus.publish(
+            WorkspaceEvent(kind="changed", paths=[str(target)])
+        )
+        self._write_json(200, _envelope(deleted=str(target)))
 
     def _route_view_run(self, body: dict[str, Any]) -> None:
         """v3 Slice 4: run a ViewDefinition over the loaded dataset.

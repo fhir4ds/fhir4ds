@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { HttpTransport } from "./http-transport";
 import type {
+  BaselineInfo,
   DefineTypeInfo,
   MeasureCompareResult,
   MeasureMappingEntry,
@@ -56,8 +57,17 @@ export function MeasurePane({
   const [strict, setStrict] = useState(false);
   const [showExpectedRaw, setShowExpectedRaw] = useState(false);
   const [compareResult, setCompareResult] = useState<MeasureCompareResult | null>(null);
+  const [baselines, setBaselines] = useState<BaselineInfo[]>([]);
+  const [baselineSel, setBaselineSel] = useState("");
+  const [baselineMsg, setBaselineMsg] = useState<string | null>(null);
+  const [lastMeasure, setLastMeasure] = useState<Record<string, unknown> | null>(null);
 
   const booleanDefines = useMemo(() => types.filter((t) => t.boolean).map((t) => t.name), [types]);
+
+  useEffect(() => {
+    refreshBaselines();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const hiddenDefines = useMemo(
     () => definitions.filter((d) => !booleanDefines.includes(d)),
     [definitions, booleanDefines],
@@ -153,6 +163,7 @@ export function MeasurePane({
         return;
       }
       setPreview(s);
+      setLastMeasure(s.measure);
       const r = await transport.measureRun(libs, library, s.measure);
       if (!r.ok) {
         setRunResult({
@@ -181,6 +192,92 @@ export function MeasurePane({
       return arr as Record<string, unknown>[];
     } catch {
       return null;
+    }
+  }
+
+  async function refreshBaselines(measure?: string) {
+    try {
+      const d = await transport.measureBaselines(measure);
+      if (d.ok) setBaselines(d.baselines);
+    } catch {
+      /* listing is best-effort */
+    }
+  }
+
+  async function saveBaseline() {
+    setBusy(true);
+    setBaselineMsg(null);
+    try {
+      const libs = [{ name: library, text: buffer }];
+      const s = await transport.measureScaffold(
+        libs,
+        library,
+        mappingPayload(),
+        scoring === "" ? undefined : scoring,
+        measureName || undefined,
+      );
+      if (!s.ok || !s.measure) {
+        setBaselineMsg(s.diagnostics[0]?.message ?? "scaffold failed");
+        return;
+      }
+      setPreview(s);
+      setLastMeasure(s.measure);
+      const r = await transport.measureBaselineSave(libs, library, s.measure, measureName || undefined);
+      if (!r.ok || !r.path) {
+        setBaselineMsg(r.diagnostics[0]?.message ?? "baseline save failed");
+        return;
+      }
+      setBaselineMsg(`Saved ${r.name} (${r.reports ?? 0} reports) — restart note: baselines are read-only artifacts.`);
+      await refreshBaselines();
+    } catch (e) {
+      setBaselineMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadBaseline() {
+    const entry = baselines.find((b) => b.path === baselineSel);
+    if (!entry) return;
+    setBaselineMsg(null);
+    try {
+      const env = await (transport as unknown as {
+        get: (p: string) => Promise<Record<string, unknown>>;
+      }).get(`/api/measure/baseline/raw?path=${encodeURIComponent(entry.path)}`);
+      const wrapper = (env["wrapper"] ?? {}) as Record<string, unknown>;
+      const reports = Array.isArray(wrapper["reports"])
+        ? (wrapper["reports"] as Record<string, unknown>[])
+        : [];
+      setExpectedText(JSON.stringify(reports, null, 2));
+      const prov = entry.provenance ?? {};
+      const provBits = [
+        prov.captured_at ? `captured ${prov.captured_at}` : null,
+        prov.library ? `library ${prov.library}` : null,
+        prov.patient_count !== undefined ? `${prov.patient_count} patients` : null,
+        prov.kernel_id ? `kernel ${String(prov.kernel_id).slice(0, 8)}` : null,
+      ].filter(Boolean);
+      setBaselineMsg(`Loaded ${entry.name}${provBits.length ? " · " + provBits.join(" · ") : ""}`);
+    } catch (e) {
+      setBaselineMsg(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function deleteBaseline() {
+    const entry = baselines.find((b) => b.path === baselineSel);
+    if (!entry) return;
+    if (!confirm(`Delete ${entry.name}?`)) return;
+    setBaselineMsg(null);
+    try {
+      const d = await transport.measureBaselineDelete(entry.path);
+      if (!d.ok) {
+        setBaselineMsg(d.diagnostics[0]?.message ?? "delete failed");
+        return;
+      }
+      setBaselineSel("");
+      await refreshBaselines();
+      setBaselineMsg(`Deleted ${entry.name}`);
+    } catch (e) {
+      setBaselineMsg(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -377,6 +474,17 @@ export function MeasurePane({
                   ))}
                 </tbody>
               </table>
+              <div className="dev-msbaseline">
+                <button
+                  className="dev-msbasesave"
+                  disabled={busy || !canRun}
+                  onClick={saveBaseline}
+                  title="Run the measure now and freeze the output as a versioned expected baseline (measures/expected/&lt;name&gt;.baseline.vN.json)"
+                >
+                  ⬒ Save as expected baseline
+                </button>
+                {baselineMsg && <span className="dev-msbasemsg">{baselineMsg}</span>}
+              </div>
             </>
           ) : (
             <div className="dev-vserror">{runResult.error}</div>
@@ -405,6 +513,47 @@ export function MeasurePane({
             }
           >
             ▶ Compare
+          </button>
+        </div>
+        <div className="dev-msbaselinerow">
+          <span className="dev-rbsub">baselines:</span>
+          <select
+            className="dev-msbaselinesel"
+            value={baselineSel}
+            onChange={(e) => setBaselineSel(e.target.value)}
+            title="Saved expected baselines (measures/expected) — captured from prior runs with provenance"
+          >
+            <option value="">— saved baselines —</option>
+            {baselines.map((b) => (
+              <option key={b.path} value={b.path}>
+                {b.name}
+                {b.reports !== undefined ? ` (${b.reports} reports)` : ""}
+                {b.error ? " (unreadable)" : ""}
+              </option>
+            ))}
+          </select>
+          <button
+            className="dev-msbaseload"
+            disabled={!baselineSel}
+            onClick={loadBaseline}
+            title="Load the selected baseline's reports into the paste area (hand-edit from there)"
+          >
+            Load
+          </button>
+          <button
+            className="dev-msbasedel"
+            disabled={!baselineSel}
+            onClick={deleteBaseline}
+            title="Delete the selected baseline file (guarded to measures/expected/)"
+          >
+            Delete
+          </button>
+          <button
+            className="dev-msbaserefresh"
+            onClick={() => refreshBaselines()}
+            title="Refresh the baseline list"
+          >
+            ↻
           </button>
         </div>
         <textarea

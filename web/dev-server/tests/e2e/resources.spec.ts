@@ -125,14 +125,15 @@ test.beforeEach(async ({ page }) => {
 test("valueset pane renders, edits, and shows the stale banner", async ({ page }) => {
   await expect(page.locator(".dev-lib", { hasText: "vs1" })).toBeVisible({ timeout: 15000 });
   await page.locator(".dev-lib", { hasText: "vs1" }).click();
-  await expect(page.locator(".dev-vspane")).toBeVisible();
-  await expect(page.locator(".dev-vsrow")).toHaveCount(2); // head + 1 concept
+  const pane = page.locator(".dev-vspane");
+  await expect(pane).toBeVisible();
+  await expect(pane.locator(".dev-vsrow")).toHaveCount(2); // head + 1 concept
   await expect(page.locator(".dev-vsurl")).toHaveText("http://example.com/bp");
   // used-by footer names the declaring library (FIX 1 binding)
   await expect(page.locator(".dev-vsusedby")).toContainText("Demographics.BPVS", { timeout: 10000 });
   // add a concept server-side
-  await page.locator("button", { hasText: "+ concept" }).click();
-  await expect(page.locator(".dev-vsrow")).toHaveCount(3, { timeout: 10000 });
+  await pane.locator("button", { hasText: "+ concept" }).click();
+  await expect(pane.locator(".dev-vsrow")).toHaveCount(3, { timeout: 10000 });
   // FIX 2: visible stale state — banner names the remedy
   await expect(page.locator(".dev-stale").first()).toContainText("Restart kernel", { timeout: 10000 });
 });
@@ -188,10 +189,11 @@ test("red-green chain: valueset edit flips IsBp after restart, reverts green", a
 
   // Edit the valueset: change the concept code so nothing matches anymore.
   await page.locator(".dev-lib", { hasText: "vs1" }).click();
-  await expect(page.locator(".dev-vspane")).toBeVisible();
-  const codeInput = page.locator(".dev-vsrow").nth(1).locator("input").nth(1);
+  const rgPane = page.locator(".dev-vspane");
+  await expect(rgPane).toBeVisible();
+  const codeInput = rgPane.locator(".dev-vsrow").nth(1).locator("input").nth(1);
   await codeInput.fill("9999-9");
-  await page.locator(".dev-vsrow").nth(1).locator("button", { hasText: "Save" }).click();
+  await rgPane.locator(".dev-vsrow").nth(1).locator("button", { hasText: "Save" }).click();
   await expect(page.locator(".dev-stale").first()).toContainText("Restart kernel", { timeout: 10000 });
 
   // FIX 2: Run buttons are disabled while terminology is stale.
@@ -210,10 +212,11 @@ test("red-green chain: valueset edit flips IsBp after restart, reverts green", a
 
   // Revert the code edit, restart again -> GREEN.
   await page.locator(".dev-lib", { hasText: "vs1" }).click();
-  await expect(page.locator(".dev-vspane")).toBeVisible();
-  const reverted = page.locator(".dev-vsrow").nth(1).locator("input").nth(1);
+  const rvPane = page.locator(".dev-vspane");
+  await expect(rvPane).toBeVisible();
+  const reverted = rvPane.locator(".dev-vsrow").nth(1).locator("input").nth(1);
   await reverted.fill("8480-6");
-  await page.locator(".dev-vsrow").nth(1).locator("button", { hasText: "Save" }).click();
+  await rvPane.locator(".dev-vsrow").nth(1).locator("button", { hasText: "Save" }).click();
   await expect(page.locator(".dev-stale").first()).toContainText("Restart kernel", { timeout: 10000 });
   await page.locator("button", { hasText: "Restart kernel" }).click();
   await expect(page.locator(".dev-kerneldot.idle")).toBeVisible({ timeout: 30000 });

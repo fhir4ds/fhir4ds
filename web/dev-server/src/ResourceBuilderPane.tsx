@@ -285,7 +285,7 @@ export function ResourceBuilderPane({ transport, datasets, dataHint }: Props) {
         <div className="dev-rbmain">
           <div className="dev-rbform">
             <div className="dev-rbformhead">
-              form <span className="dev-rbsub">({resourceType})</span>
+              form <span className="dev-rbsub">({resourceType}) — template helpers, JSON is authoritative</span>
             </div>
             {templateRows.rows.length === 0 && (
               <div className="dev-rbempty">no template fields — edit the JSON</div>

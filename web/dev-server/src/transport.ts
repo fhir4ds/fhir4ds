@@ -170,6 +170,31 @@ export interface MeasureCompareResult {
   expected_measure: { matches: boolean; canonical: string | null };
 }
 
+export interface BaselineInfo {
+  path: string;
+  name: string;
+  provenance?: {
+    captured_at?: string;
+    library?: string;
+    dataset?: string | null;
+    kernel_id?: string;
+    patient_count?: number;
+    counts?: Record<string, number>;
+  };
+  reports?: number;
+  error?: string;
+}
+
+export interface BaselineSaveResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  path?: string;
+  name?: string;
+  provenance?: BaselineInfo["provenance"];
+  reports?: number;
+}
+
 export interface DefineTypeInfo {
   name: string;
   cql_type: string | null;
@@ -276,6 +301,14 @@ export interface Transport {
     strict?: boolean,
     parameters?: Record<string, unknown>,
   ): Promise<MeasureCompareResult>;
+  measureBaselineSave(
+    libraries: { name: string; text: string }[],
+    library: string,
+    measure: Record<string, unknown>,
+    name?: string,
+  ): Promise<BaselineSaveResult>;
+  measureBaselines(measure?: string): Promise<{ schema: number; ok: boolean; diagnostics: Diagnostic[]; baselines: BaselineInfo[] }>;
+  measureBaselineDelete(path: string): Promise<{ schema: number; ok: boolean; diagnostics: Diagnostic[] }>;
   library(name: string): Promise<WorkspaceLibrary>;
   translate(libraries: { name: string; text: string }[], library: string): Promise<TranslateResult>;
   evaluate(

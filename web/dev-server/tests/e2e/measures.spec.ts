@@ -252,3 +252,45 @@ test("measure pane: expected-MR compare shows normalized diff + canonical warnin
   await expect(pane.locator(".dev-mscanonical")).toBeVisible({ timeout: 30000 });
   await expect(pane.locator(".dev-mscanonical")).toContainText("other-measure");
 });
+
+test("measure pane: save → load → compare baseline roundtrip + delete", async ({ page }) => {
+  await expect(page.locator(".dev-lib.selected", { hasText: "Demographics" })).toBeVisible({ timeout: 15000 });
+  await page.locator(".dev-lib.small", { hasText: "Demographics scaffold" }).click();
+  const pane = page.locator(".dev-mspane");
+  await expect(pane).toBeVisible();
+
+  await pane.locator("select").first().selectOption("proportion");
+  await pane.locator(".dev-msgrid tbody tr").nth(0).locator("select").selectOption("InIp");
+  await pane.locator(".dev-msgrid tbody tr").nth(4).locator("select").selectOption("HasBp");
+
+  // Run first so the run-results (and Save-as-baseline) appear.
+  await pane.getByRole("button", { name: "▶ Run measure" }).click();
+  await expect(pane.locator(".dev-mssummary.pass")).toBeVisible({ timeout: 30000 });
+
+  // Save as expected baseline → versioned file + message.
+  const save = pane.getByRole("button", { name: "⬒ Save as expected baseline" });
+  await save.click();
+  await expect(pane.locator(".dev-msbasemsg")).toContainText("Saved", { timeout: 30000 });
+  await expect(pane.locator(".dev-msbasemsg")).toContainText("6 reports");
+
+  // Baseline dropdown lists it; Load unwraps into the paste area w/ provenance.
+  const sel = pane.locator(".dev-msbaselinesel");
+  await expect(sel.locator("option").filter({ hasText: ".baseline.v1.json" })).toHaveCount(1, { timeout: 10000 });
+  const optValue = await sel.locator("option").filter({ hasText: ".baseline.v1.json" }).getAttribute("value");
+  await sel.selectOption(optValue!);
+  await pane.getByRole("button", { name: "Load" }).click();
+  await expect(pane.locator(".dev-msexpinput")).not.toHaveValue("", { timeout: 10000 });
+  await expect(pane.locator(".dev-msbasemsg")).toContainText("Loaded");
+  await expect(pane.locator(".dev-msbasemsg")).toContainText("6 patients");
+
+  // Compare against the loaded baseline → PASS.
+  await pane.getByRole("button", { name: "▶ Compare" }).click();
+  await expect(pane.locator(".dev-msdiff")).toBeVisible({ timeout: 30000 });
+  await expect(pane.locator(".dev-msdiff .dev-mssummary.pass")).toContainText("PASS");
+
+  // Delete: accept the confirm, dropdown resets, message confirms.
+  page.once("dialog", (d) => d.accept());
+  await pane.getByRole("button", { name: "Delete" }).click();
+  await expect(pane.locator(".dev-msbasemsg")).toContainText("Deleted", { timeout: 10000 });
+  await expect(sel).toHaveValue("");
+});

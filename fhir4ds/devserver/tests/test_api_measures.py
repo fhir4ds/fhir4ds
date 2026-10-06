@@ -305,3 +305,103 @@ class TestCompare:
         exp = self._expected(liburl, "odd")
         d = call(srv, "/api/measure/compare", {"library": "Demo", "text": CQL, "measure": m, "expected": exp})
         assert d["ok"] is True and d["passed"] is True
+
+
+class TestBaselines:
+    """v4.2 expected-MeasureReport baselines: capture-from-run, list, delete."""
+
+    def _scaffold(self, srv):
+        d = call(
+            srv,
+            "/api/measure/scaffold",
+            {
+                "library": "Demo",
+                "mapping": [
+                    {"define": "InIp", "code": "initial-population"},
+                    {"define": "HasBp", "code": "numerator"},
+                ],
+                "scoring": "proportion",
+                "measure_name": "BaselineMeasure",
+            },
+        )
+        assert d["ok"] is True
+        return d["measure"]
+
+    def test_save_creates_versioned_baseline_with_provenance(self, server):
+        srv, ws = server
+        m = self._scaffold(srv)
+        d = call(srv, "/api/measure/baseline/save", {"library": "Demo", "measure": m, "name": "BaselineMeasure"})
+        assert d["ok"] is True
+        assert d["name"] == "BaselineMeasure.baseline.v1.json"
+        assert d["reports"] == 6
+        prov = d["provenance"]
+        assert prov["library"] == "Demo"
+        assert prov["patient_count"] == 6
+        assert prov["counts"]["initial_population"] == 6
+        assert prov["counts"]["numerator"] == 3
+        assert prov["kernel_id"]
+        assert prov["captured_at"]
+        target = Path(d["path"])
+        assert target.exists()
+        assert target.name == "BaselineMeasure.baseline.v1.json"
+        assert target.parent.name == "expected"
+        wrapper = json.loads(target.read_text())
+        assert wrapper["resourceType"] == "Bundle"
+        assert len(wrapper["reports"]) == 6
+        assert wrapper["provenance"]["counts"]["numerator"] == 3
+
+    def test_save_never_overwrites(self, server):
+        srv, ws = server
+        m = self._scaffold(srv)
+        d1 = call(srv, "/api/measure/baseline/save", {"library": "Demo", "measure": m, "name": "MultiV"})
+        d2 = call(srv, "/api/measure/baseline/save", {"library": "Demo", "measure": m, "name": "MultiV"})
+        assert d1["ok"] and d2["ok"]
+        assert Path(d1["path"]).name == "MultiV.baseline.v1.json"
+        assert Path(d2["path"]).name == "MultiV.baseline.v2.json"
+        assert Path(d1["path"]).exists() and Path(d2["path"]).exists()
+
+    def test_list_and_filter(self, server):
+        srv, ws = server
+        m = self._scaffold(srv)
+        call(srv, "/api/measure/baseline/save", {"library": "Demo", "measure": m, "name": "ListA"})
+        call(srv, "/api/measure/baseline/save", {"library": "Demo", "measure": m, "name": "ListB"})
+        d = call(srv, "/api/measure/baselines?measure=ListA")
+        assert d["ok"] is True
+        names = [e["name"] for e in d["baselines"]]
+        assert names == ["ListA.baseline.v1.json"]
+        d_all = call(srv, "/api/measure/baselines")
+        all_names = [e["name"] for e in d_all["baselines"]]
+        assert "ListA.baseline.v1.json" in all_names and "ListB.baseline.v1.json" in all_names
+        entry = d["baselines"][0]
+        assert entry["provenance"]["counts"]["numerator"] == 3
+        assert entry["reports"] == 6
+
+    def test_baseline_roundtrip_compare_passes(self, server):
+        srv, ws = server
+        m = self._scaffold(srv)
+        call(srv, "/api/measure/baseline/save", {"library": "Demo", "measure": m, "name": "RoundTrip"})
+        d = call(srv, "/api/measure/baselines?measure=RoundTrip")
+        wrapper = json.loads(Path(d["baselines"][0]["path"]).read_text())
+        d2 = call(srv, "/api/measure/compare", {"library": "Demo", "measure": m, "expected": wrapper["reports"]})
+        assert d2["ok"] is True and d2["passed"] is True
+
+    def test_delete_guarded_to_expected_dir(self, server):
+        srv, ws = server
+        m = self._scaffold(srv)
+        d = call(srv, "/api/measure/baseline/save", {"library": "Demo", "measure": m, "name": "DelMe"})
+        assert d["ok"] is True
+        dd = call(srv, "/api/measure/baseline/delete", {"path": d["path"]})
+        assert dd["ok"] is True
+        assert not Path(d["path"]).exists()
+        bad = call(srv, "/api/measure/baseline/delete", {"path": "/etc/passwd"})
+        assert bad["ok"] is False
+
+    def test_save_bad_shapes(self, server):
+        srv, _ = server
+        d1 = call(srv, "/api/measure/baseline/save", {"library": "Demo", "measure": "nope"})
+        assert d1["ok"] is False
+        assert "Measure" in d1["diagnostics"][0]["message"]
+        m = self._scaffold(srv)
+        d2 = call(srv, "/api/measure/baseline/save", {"library": "Demo", "measure": m, "name": "../escape"})
+        assert d2["ok"] is False
+        assert "alphanumeric" in d2["diagnostics"][0]["message"]

@@ -12,12 +12,15 @@ import type {
   LibraryHeaderInfo,
   MeasureMappingEntry,
   MeasureCompareResult,
+  BaselineInfo,
+  BaselineSaveResult,
   MeasureRunResult,
   MeasureScaffoldResult,
   ParametersResult,
   RunMode,
   TranslateResult,
   Transport,
+  Diagnostic,
   ValueSetInfo,
   VerifyResult,
   WorkspaceEvent,
@@ -259,6 +262,28 @@ export class HttpTransport implements Transport {
     if (strict !== undefined) body.strict = strict;
     if (parameters !== undefined) body.parameters = parameters;
     return this.post("/api/measure/compare", body);
+  }
+
+  measureBaselineSave(
+    libraries: { name: string; text: string }[],
+    library: string,
+    measure: Record<string, unknown>,
+    name?: string,
+  ): Promise<BaselineSaveResult> {
+    const body: Record<string, unknown> = { library, libraries, measure };
+    if (name !== undefined) body.name = name;
+    return this.post("/api/measure/baseline/save", body);
+  }
+
+  measureBaselines(
+    measure?: string,
+  ): Promise<{ schema: number; ok: boolean; diagnostics: Diagnostic[]; baselines: BaselineInfo[] }> {
+    const q = measure ? `?measure=${encodeURIComponent(measure)}` : "";
+    return this.get(`/api/measure/baselines${q}`);
+  }
+
+  measureBaselineDelete(path: string): Promise<{ schema: number; ok: boolean; diagnostics: Diagnostic[] }> {
+    return this.post("/api/measure/baseline/delete", { path });
   }
 
   evaluate(

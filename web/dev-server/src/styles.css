@@ -623,3 +623,65 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
 .dev-rbvalidate, .dev-rbsavebtn { background: #0e639c; color: #fff; border: none; border-radius: 4px; padding: 5px 12px; cursor: pointer; }
 .dev-rbsavebtn:disabled, .dev-rbvalidate:disabled { opacity: 0.45; cursor: not-allowed; }
 .dev-rbsavemsg { color: #9cdcfe; font-size: 12px; }
+
+/* v4.2 expected-MR baselines */
+.dev-msbaseline {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dev-msbasesave {
+  background: #0e639c;
+  color: #fff;
+  border: 1px solid #1177bb;
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-size: 11px;
+}
+.dev-msbasesave:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.dev-msbasemsg {
+  color: #9cdcfe;
+  font-size: 11px;
+}
+.dev-msbaselinerow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  flex-wrap: wrap;
+}
+.dev-msbaselinesel {
+  background: #333;
+  color: #d4d4d4;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  max-width: 260px;
+}
+.dev-msbaseload,
+.dev-msbasedel,
+.dev-msbaserefresh {
+  background: #333;
+  color: #d4d4d4;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 11px;
+}
+.dev-msbaseload:disabled,
+.dev-msbasedel:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.dev-msbasedel:hover:not(:disabled) {
+  border-color: #f14c4c;
+  color: #f48771;
+}
