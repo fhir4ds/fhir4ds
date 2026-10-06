@@ -28,6 +28,7 @@ import { ParamsPane } from "./ParamsPane";
 import { TestsPane } from "./TestsPane";
 import { MeasurePane } from "./MeasurePane";
 import { VdPane } from "./VdPane";
+import { ResourceBuilderPane } from "./ResourceBuilderPane";
 
 type Tab = "results" | "sql" | "errors";
 
@@ -68,6 +69,7 @@ export function App() {
     | { kind: "params"; id: string }
     | { kind: "measure"; id: string }
     | { kind: "view"; id: string }
+    | { kind: "builder" }
     | null
   >(null);
   const [vsStale, setVsStale] = useState(false);
@@ -464,6 +466,16 @@ export function App() {
               {v.split("/").pop()?.replace(/\.json$/, "")}
             </div>
           ))}
+          <h2>Build</h2>
+          <div
+            className={
+              "dev-lib small" + (railView?.kind === "builder" ? " selected" : "")
+            }
+            title="Form/JSON hybrid resource builder with schema-tree guidance and validate_resource gating"
+            onClick={() => setRailView({ kind: "builder" })}
+          >
+            + Resource
+          </div>
           {datasetStatsOpen && datasetStats && (
             <div className="dev-datasetstats">
               <div>total: {datasetStats.total}</div>
@@ -534,6 +546,12 @@ export function App() {
                 (workspace?.datasets ?? [])[0]?.split("/").pop()?.replace(/\.ndjson$/, "") ?? ""
               }
               patientCount={datasetStats?.total ?? null}
+            />
+          ) : railView?.kind === "builder" ? (
+            <ResourceBuilderPane
+              transport={transport}
+              datasets={workspace?.datasets ?? []}
+              dataHint={dataHint.length > 0 ? `data changed (${dataHint.length}) — restart kernel to load` : null}
             />
           ) : (
             <>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import queue
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -339,6 +340,33 @@ class _Handler(BaseHTTPRequestHandler):
                 ),
             )
             return
+        if path == "/api/schema-tree":
+            # v4.1 Resource Builder: schema-tree driven field assistance.
+            from urllib.parse import parse_qs, urlparse
+
+            from fhir4ds.operations.capabilities.schema_tree import resource_schema_tree
+
+            qs = parse_qs(urlparse(self.path).query)
+            resource_type = (qs.get("resource") or [""])[0]
+            if not resource_type:
+                self._write_json(
+                    200,
+                    _envelope(ok=False, diagnostics=[_diag("resource parameter is required")]),
+                )
+                return
+            depth_raw = (qs.get("depth") or ["2"])[0]
+            try:
+                depth = max(1, min(int(depth_raw), 4))
+            except ValueError:
+                depth = 2
+            try:
+                result = resource_schema_tree(resource_type, depth=depth)
+                payload = result.to_dict()
+            except Exception as exc:
+                self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+                return
+            self._write_json(200, payload)
+            return
         if path == "/api/view":
             # v3 Slice 4: ViewDefinition file read (text + parsed header info).
             from urllib.parse import parse_qs, urlparse
@@ -630,6 +658,10 @@ class _Handler(BaseHTTPRequestHandler):
                 self._route_measure_compare(body)
             elif path == "/api/view/run":
                 self._route_view_run(body)
+            elif path == "/api/resource/validate":
+                self._route_resource_validate(body)
+            elif path == "/api/resource/save":
+                self._route_resource_save(body)
             elif path == "/api/kernel/restart":
                 snap = self.server.watcher.snapshot
                 kernel = self.server.kernel_manager.restart(snap)
@@ -1039,6 +1071,102 @@ class _Handler(BaseHTTPRequestHandler):
                 "resource_count": len(resources),
             },
         )
+
+    def _route_resource_validate(self, body: dict[str, Any]) -> None:
+        """v4.1 Resource Builder: validate a draft resource (save gate)."""
+        from fhir4ds.operations.capabilities.validate import validate_resource
+
+        resource = body.get("resource")
+        if not isinstance(resource, dict):
+            self._write_json(
+                200,
+                _envelope(ok=False, diagnostics=[_diag("resource must be a JSON object")]),
+            )
+            return
+        result = validate_resource(resource)
+        self._write_json(
+            200,
+            {
+                "schema": 1,
+                "ok": True,
+                "valid": bool(result.valid),
+                "resource_type": result.resource_type,
+                "resource_id": result.resource_id,
+                "diagnostics": [d.to_dict() if hasattr(d, "to_dict") else d for d in (result.diagnostics or [])],
+            },
+        )
+
+    def _route_resource_save(self, body: dict[str, Any]) -> None:
+        """v4.1 Resource Builder: validate then append one NDJSON line.
+
+        The dataset path must live inside the workspace data dirs (author
+        owned); the save publishes a data-hint event so the UI offers a
+        kernel restart (data never auto-reloads).
+        """
+        from pathlib import Path as _Path
+
+        from fhir4ds.operations.capabilities.validate import validate_resource
+
+        resource = body.get("resource")
+        if not isinstance(resource, dict):
+            self._write_json(
+                200,
+                _envelope(ok=False, diagnostics=[_diag("resource must be a JSON object")]),
+            )
+            return
+        raw_path = str(body.get("dataset_path") or "")
+        if not raw_path:
+            self._write_json(
+                200,
+                _envelope(ok=False, diagnostics=[_diag("dataset_path is required")]),
+            )
+            return
+        snap = self.server.watcher.snapshot
+        data_roots = [str(_Path(str(p)).parent.resolve()) for p in snap.datasets]
+        default_root = next((r for r in data_roots if _Path(r).exists()), None)
+        target = _Path(raw_path).resolve()
+        allowed = any(str(target).startswith(root + os.sep) or str(target) == root for root in data_roots)
+        if default_root is None:
+            cfg_dirs = getattr(self.server.watcher.cfg, "data_dirs", None) or []
+            cfg_roots = [str(_Path(str(p)).resolve()) for p in cfg_dirs]
+            allowed = allowed or any(
+                str(target).startswith(root + os.sep) or str(target) == root
+                for root in cfg_roots
+                if _Path(root).exists()
+            )
+            default_root = next((r for r in cfg_roots if _Path(r).exists()), None)
+        if not allowed:
+            self._write_json(
+                200,
+                _envelope(
+                    ok=False,
+                    diagnostics=[_diag(f"dataset path must be inside a workspace data dir: {raw_path!r}")],
+                ),
+            )
+            return
+        result = validate_resource(resource)
+        if not result.valid:
+            self._write_json(
+                200,
+                {
+                    "schema": 1,
+                    "ok": False,
+                    "diagnostics": [
+                        d.to_dict() if hasattr(d, "to_dict") else d
+                        for d in (result.diagnostics or [])
+                    ],
+                },
+            )
+            return
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with open(target, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(resource, ensure_ascii=False) + "\n")
+        except OSError as exc:
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        self.server.watcher.bus.publish(WorkspaceEvent(kind="data-hint", paths=[str(target)]))
+        self._write_json(200, _envelope(path=str(target), appended=True))
 
     # -- static UI ----------------------------------------------------------
 

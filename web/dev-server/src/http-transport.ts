@@ -3,6 +3,9 @@ import type {
   DefineTypeInfo,
   ViewInfo,
   ViewRunResult,
+  ResourceSaveResult,
+  ResourceValidateResult,
+  SchemaTreeResult,
   EvaluateResult,
   EvidenceResult,
   HealthInfo,
@@ -130,6 +133,41 @@ export class HttpTransport implements Transport {
 
   viewRun(text?: string, path?: string): Promise<ViewRunResult> {
     return this.post<ViewRunResult>("/api/view/run", { text, path });
+  }
+
+  schemaTree(resource: string, depth?: number): Promise<SchemaTreeResult> {
+    let q = `/api/schema-tree?resource=${encodeURIComponent(resource)}`;
+    if (depth !== undefined) q += `&depth=${depth}`;
+    return this.unwrap(q);
+  }
+
+  async resourceValidate(
+    resource: Record<string, unknown>,
+  ): Promise<ResourceValidateResult> {
+    const d = await this.post<Record<string, unknown>>(
+      "/api/resource/validate",
+      { resource },
+    );
+    if (d.ok === false) {
+      const diags = (d.diagnostics as { message?: string }[] | undefined) ?? [];
+      throw new Error(diags[0]?.message ?? "validate failed");
+    }
+    return d as unknown as ResourceValidateResult;
+  }
+
+  async resourceSave(
+    resource: Record<string, unknown>,
+    datasetPath: string,
+  ): Promise<ResourceSaveResult> {
+    const d = await this.post<Record<string, unknown>>("/api/resource/save", {
+      resource,
+      dataset_path: datasetPath,
+    });
+    if (d.ok === false) {
+      const diags = (d.diagnostics as { message?: string }[] | undefined) ?? [];
+      throw new Error(diags[0]?.message ?? "save failed");
+    }
+    return d as unknown as ResourceSaveResult;
   }
 
   patients(): Promise<string[]> {

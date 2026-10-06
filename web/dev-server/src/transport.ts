@@ -196,12 +196,50 @@ export interface ViewRunResult {
   resource_count: number;
 }
 
+export interface SchemaTreeResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  resource_type: string;
+  root: SchemaTreeNode | null;
+}
+
+export interface SchemaTreeNode {
+  name: string;
+  type: string;
+  cardinality: string;
+  types?: string[];
+  children?: SchemaTreeNode[];
+  reference_targets?: string[];
+  hatch?: boolean;
+}
+
+export interface ResourceValidateResult {
+  schema: number;
+  ok: boolean;
+  valid: boolean;
+  resource_type: string | null;
+  resource_id: string | null;
+  diagnostics: Diagnostic[];
+}
+
+export interface ResourceSaveResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  path: string;
+  appended: boolean;
+}
+
 export interface Transport {
   health(): Promise<HealthInfo>;
   workspace(): Promise<WorkspaceInfo>;
   defineTypes(library: string, text?: string): Promise<DefineTypeInfo[]>;
   view(path: string): Promise<ViewInfo>;
   viewRun(text?: string, path?: string): Promise<ViewRunResult>;
+  schemaTree(resource: string, depth?: number): Promise<SchemaTreeResult>;
+  resourceValidate(resource: Record<string, unknown>): Promise<ResourceValidateResult>;
+  resourceSave(resource: Record<string, unknown>, datasetPath: string): Promise<ResourceSaveResult>;
   libraryHeader(library: string): Promise<LibraryHeaderInfo>;
   patients(): Promise<string[]>;
   valueset(path: string): Promise<ValueSetInfo>;
