@@ -195,3 +195,113 @@ class TestRun:
         d = call(srv, "/api/measure/run", {"library": "Demo", "text": CQL, "measure": m})
         assert d["ok"] is True
         assert d["counts"]["initial_population"] == 6
+
+
+class TestCompare:
+    def _scaffold(self, srv):
+        return call(
+            srv,
+            "/api/measure/scaffold",
+            {
+                "library": "Demo",
+                "mapping": [
+                    {"define": "InIp", "code": "initial-population"},
+                    {"define": "HasBp", "code": "numerator"},
+                ],
+                "scoring": "proportion",
+                "measure_name": "MyMeasure",
+            },
+        )["measure"]
+
+    def _expected(self, measure_url, num_counts):
+        def mr(pid, ip, num):
+            return {
+                "resourceType": "MeasureReport",
+                "status": "complete",
+                "type": "individual",
+                "measure": measure_url,
+                "subject": {"reference": f"Patient/{pid}"},
+                "group": [
+                    {
+                        "id": "group-1",
+                        "population": [
+                            {
+                                "code": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/measure-population", "code": "initial-population"}]},
+                                "count": ip,
+                            },
+                            {
+                                "code": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/measure-population", "code": "numerator"}]},
+                                "count": num,
+                            },
+                        ],
+                    }
+                ],
+            }
+
+        return [mr(f"p{i}", 1, 1 if (i % 2 and num_counts == "odd") else (1 if num_counts == "all" else 0)) for i in range(1, 7)]
+
+    def test_compare_pass(self, server):
+        srv, _ = server
+        m = self._scaffold(srv)
+        liburl = m["library"][0]
+        exp = self._expected(liburl, "odd")
+        d = call(srv, "/api/measure/compare", {"library": "Demo", "measure": m, "expected": exp})
+        assert d["ok"] is True
+        assert d["passed"] is True
+        assert d["strict"] is False
+        rows = {r["code"]: r for r in d["rows"]}
+        assert rows["initial-population"] == {"code": "initial-population", "expected": 6, "actual": 6, "delta": 0}
+        assert rows["numerator"]["delta"] == 0
+        assert d["expected_measure"]["matches"] is True
+
+    def test_compare_fail_delta(self, server):
+        srv, _ = server
+        m = self._scaffold(srv)
+        liburl = m["library"][0]
+        exp = self._expected(liburl, "all")
+        d = call(srv, "/api/measure/compare", {"library": "Demo", "measure": m, "expected": exp})
+        assert d["ok"] is True
+        assert d["passed"] is False
+        rows = {r["code"]: r for r in d["rows"]}
+        assert rows["numerator"]["expected"] == 6
+        assert rows["numerator"]["actual"] == 3
+        assert rows["numerator"]["delta"] == -3
+
+    def test_compare_canonical_mismatch(self, server):
+        srv, _ = server
+        m = self._scaffold(srv)
+        exp = self._expected("http://example.com/other-measure", "odd")
+        d = call(srv, "/api/measure/compare", {"library": "Demo", "measure": m, "expected": exp})
+        assert d["ok"] is True
+        assert d["expected_measure"]["matches"] is False
+        assert d["expected_measure"]["canonical"] == "http://example.com/other-measure"
+
+    def test_compare_strict_vs_loose(self, server):
+        srv, _ = server
+        m = self._scaffold(srv)
+        liburl = m["library"][0]
+        # one merged report w/ aggregate counts: loose passes, strict fails
+        merged = self._expected(liburl, "odd")[:1]
+        merged[0]["group"][0]["population"][0]["count"] = 6
+        merged[0]["group"][0]["population"][1]["count"] = 3
+        loose = call(srv, "/api/measure/compare", {"library": "Demo", "measure": m, "expected": merged, "strict": False})
+        strict = call(srv, "/api/measure/compare", {"library": "Demo", "measure": m, "expected": merged, "strict": True})
+        assert loose["ok"] is True and loose["passed"] is True
+        assert strict["ok"] is True and strict["passed"] is False
+
+    def test_compare_invalid_shapes(self, server):
+        srv, _ = server
+        m = self._scaffold(srv)
+        d1 = call(srv, "/api/measure/compare", {"library": "Demo", "measure": m, "expected": "not-a-list"})
+        assert d1["ok"] is False
+        d2 = call(srv, "/api/measure/compare", {"library": "Demo", "measure": {"resourceType": "Patient"}, "expected": []})
+        assert d2["ok"] is False
+        assert "Measure" in d2["diagnostics"][0]["message"]
+
+    def test_compare_with_text(self, server):
+        srv, _ = server
+        m = self._scaffold(srv)
+        liburl = m["library"][0]
+        exp = self._expected(liburl, "odd")
+        d = call(srv, "/api/measure/compare", {"library": "Demo", "text": CQL, "measure": m, "expected": exp})
+        assert d["ok"] is True and d["passed"] is True

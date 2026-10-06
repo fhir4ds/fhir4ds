@@ -427,7 +427,7 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
 }
 .dev-msrunreason {
   font-size: 11px;
-  color: #ffb300;
+  color: #e2a336;
 }
 .dev-mschips {
   display: flex;
@@ -435,9 +435,9 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   gap: 6px;
 }
 .dev-mschip {
-  background: rgba(255, 179, 0, 0.12);
-  border: 1px solid rgba(255, 179, 0, 0.4);
-  color: #ffb300;
+  background: rgba(226, 163, 54, 0.12);
+  border: 1px solid rgba(226, 163, 54, 0.45);
+  color: #e2a336;
   border-radius: 10px;
   padding: 2px 8px;
   font-size: 11px;
@@ -519,4 +519,63 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
 .dev-pane-hint {
   color: #888;
   font-size: 11px;
+}
+
+/* v3 slice 3: expected-MeasureReport compare */
+.dev-msexpected {
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dev-msexpected-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dev-msstrict {
+  font-size: 11px;
+  color: #9cdcfe;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dev-mscompare {
+  margin-left: auto;
+}
+.dev-mscompare:disabled {
+  opacity: 0.45;
+}
+.dev-msexpinput {
+  min-height: 70px;
+  resize: vertical;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  background: #181818;
+  color: #d4d4d4;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 6px;
+}
+.dev-msrawtoggle {
+  align-self: flex-start;
+  font-size: 11px;
+}
+.dev-msdiff {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dev-msdiffrow td {
+  color: #e2a336;
+}
+.dev-mscanonical {
+  font-size: 11px;
+  color: #e2a336;
+  background: rgba(226, 163, 54, 0.08);
+  border: 1px solid rgba(226, 163, 54, 0.4);
+  border-radius: 4px;
+  padding: 4px 8px;
 }

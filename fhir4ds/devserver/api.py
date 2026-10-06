@@ -598,6 +598,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._route_measure_scaffold(body)
             elif path == "/api/measure/run":
                 self._route_measure_run(body)
+            elif path == "/api/measure/compare":
+                self._route_measure_compare(body)
             elif path == "/api/kernel/restart":
                 snap = self.server.watcher.snapshot
                 kernel = self.server.kernel_manager.restart(snap)
@@ -793,6 +795,143 @@ class _Handler(BaseHTTPRequestHandler):
                 "reports": reports,
             },
         )
+
+    def _route_measure_compare(self, body: dict[str, Any]) -> None:
+        """POST /api/measure/compare — normalized diff of expected MeasureReports.
+
+        Body: {library, text?, libraries?, measure: {...}, expected: [MR dict, ...],
+        strict?: bool, parameters?}.
+        Runs the measure over the loaded dataset (same path as /api/measure/run),
+        aggregates expected and actual per population code (sum of count values
+        across reports/groups), and returns rows [{code, expected, actual, delta}]
+        where PASS = all deltas zero. Strict mode (default False) additionally
+        requires the report structure to match exactly (group/population sets).
+        """
+        measure = body.get("measure")
+        if not isinstance(measure, dict):
+            self._write_json(
+                200,
+                _envelope(False, diagnostics=[_diag("measure must be a Measure resource object")]),
+            )
+            return
+        expected = body.get("expected")
+        if not isinstance(expected, list) or not all(isinstance(r, dict) for r in expected):
+            self._write_json(
+                200,
+                _envelope(
+                    False,
+                    diagnostics=[_diag("expected must be a list of MeasureReport objects")],
+                ),
+            )
+            return
+        strict = bool(body.get("strict", False))
+
+        includes, main = self._resolve_main(body)
+        if main is None:
+            return
+
+        try:
+            columns = output_columns_from_measure(measure)
+        except OperationError as exc:
+            self._write_json(
+                200,
+                _envelope(False, diagnostics=[_diag(str(exc))]),
+            )
+            return
+
+        kernel = self.server.kernel_manager.current()
+        evd = evaluate_library(
+            includes,
+            main,
+            None,
+            kernel.conn,
+            parameters=body.get("parameters") or {},
+            output_columns=columns,
+        ).to_dict()
+        if not evd.get("ok"):
+            self._write_json(
+                200,
+                _envelope(
+                    False,
+                    diagnostics=(evd.get("diagnostics") or [_diag("evaluation failed")]),
+                ),
+            )
+            return
+
+        mr = measure_report_from_rows(
+            measure,
+            evd.get("rows", []),
+            columns,
+            library_url=(measure.get("library") or [None])[0],
+        )
+        actual_reports = [_regroup_report_populations(dict(r)) for r in mr.reports]
+
+        def _pop_counts(reports: list[dict[str, Any]]) -> dict[str, int]:
+            counts: dict[str, int] = {}
+            for rep in reports:
+                for group in rep.get("group") or []:
+                    for pop in group.get("population") or []:
+                        code = None
+                        for coding in (pop.get("code") or {}).get("coding") or []:
+                            code = coding.get("code")
+                            if code:
+                                break
+                        if not code:
+                            continue
+                        value = pop.get("count", 0)
+                        counts[code] = counts.get(code, 0) + (value or 0)
+            return counts
+
+        exp_counts = _pop_counts(expected)
+        act_counts = _pop_counts(actual_reports)
+        codes: list[str] = []
+        for code in list(exp_counts) + [c for c in act_counts if c not in exp_counts]:
+            if code not in codes:
+                codes.append(code)
+        rows = [
+            {
+                "code": code,
+                "expected": exp_counts.get(code, 0),
+                "actual": act_counts.get(code, 0),
+                "delta": act_counts.get(code, 0) - exp_counts.get(code, 0),
+            }
+            for code in codes
+        ]
+        pass_ = all(r["delta"] == 0 for r in rows)
+        if strict:
+            pass_ = pass_ and exp_counts == act_counts and len(expected) == len(actual_reports)
+
+        self._write_json(
+            200,
+            {
+                "schema": 1,
+                "ok": True,
+                "passed": pass_,
+                "strict": strict,
+                "rows": rows,
+                "expected_measure": self._expected_measure_canonical(expected, measure),
+            },
+        )
+
+    @staticmethod
+    def _expected_measure_canonical(
+        expected: list[dict[str, Any]], measure: dict[str, Any]
+    ) -> dict[str, Any]:
+        """On-load check: does expected[].measure canonical match the open Measure?
+
+        Returns {matches: bool, canonical: str | None}. When any expected report
+        carries a measure canonical and none matches the Measure's library url
+        or url, matches=False (the UI surfaces a warning).
+        """
+        canonicals = set()
+        for rep in expected:
+            m = rep.get("measure")
+            if isinstance(m, str) and m:
+                canonicals.add(m)
+        if not canonicals:
+            return {"matches": True, "canonical": None}
+        ref = (measure.get("url") or (measure.get("library") or [None])[0]) or ""
+        return {"matches": ref in canonicals, "canonical": sorted(canonicals)[0]}
 
     # -- static UI ----------------------------------------------------------
 

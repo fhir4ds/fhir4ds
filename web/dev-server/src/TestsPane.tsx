@@ -98,7 +98,7 @@ export function TestsPane({
   return (
     <div className="dev-testspane">
       <div className="dev-toolbar">
-        <span className="dev-pane-label">Test cases</span>
+        <span className="dev-pane-label" title="Library-scoped: each case targets a define (or population) in the open library">Test cases — library defines</span>
         <span>{library}</span>
         <button
           disabled={busy || cases.length === 0}

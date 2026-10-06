@@ -152,6 +152,23 @@ export interface MeasureRunResult {
   reports: Record<string, unknown>[];
 }
 
+export interface MeasureCompareRow {
+  code: string;
+  expected: number;
+  actual: number;
+  delta: number;
+}
+
+export interface MeasureCompareResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  passed: boolean;
+  strict: boolean;
+  rows: MeasureCompareRow[];
+  expected_measure: { matches: boolean; canonical: string | null };
+}
+
 export interface DefineTypeInfo {
   name: string;
   cql_type: string | null;
@@ -190,6 +207,14 @@ export interface Transport {
     measure: Record<string, unknown>,
     parameters?: Record<string, unknown>,
   ): Promise<MeasureRunResult>;
+  measureCompare(
+    libraries: { name: string; text: string }[],
+    library: string,
+    measure: Record<string, unknown>,
+    expected: Record<string, unknown>[],
+    strict?: boolean,
+    parameters?: Record<string, unknown>,
+  ): Promise<MeasureCompareResult>;
   library(name: string): Promise<WorkspaceLibrary>;
   translate(libraries: { name: string; text: string }[], library: string): Promise<TranslateResult>;
   evaluate(

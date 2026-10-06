@@ -6,6 +6,7 @@ import type {
   HealthInfo,
   LibraryHeaderInfo,
   MeasureMappingEntry,
+  MeasureCompareResult,
   MeasureRunResult,
   MeasureScaffoldResult,
   ParametersResult,
@@ -196,6 +197,20 @@ export class HttpTransport implements Transport {
     const body: Record<string, unknown> = { library, libraries, measure };
     if (parameters !== undefined) body.parameters = parameters;
     return this.post("/api/measure/run", body);
+  }
+
+  measureCompare(
+    libraries: { name: string; text: string }[],
+    library: string,
+    measure: Record<string, unknown>,
+    expected: Record<string, unknown>[],
+    strict?: boolean,
+    parameters?: Record<string, unknown>,
+  ): Promise<MeasureCompareResult> {
+    const body: Record<string, unknown> = { library, libraries, measure, expected };
+    if (strict !== undefined) body.strict = strict;
+    if (parameters !== undefined) body.parameters = parameters;
+    return this.post("/api/measure/compare", body);
   }
 
   evaluate(

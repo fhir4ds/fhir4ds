@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { HttpTransport } from "./http-transport";
-import type { DefineTypeInfo, MeasureMappingEntry, MeasureScaffoldResult } from "./transport";
+import type {
+  DefineTypeInfo,
+  MeasureCompareResult,
+  MeasureMappingEntry,
+  MeasureScaffoldResult,
+} from "./transport";
 
 /** Canonical FHIR measure-population codes (must match the server's POPULATION_ORDER). */
 const POPULATIONS = [
@@ -47,6 +52,10 @@ export function MeasurePane({
   const [error, setError] = useState<string | null>(null);
   const [types, setTypes] = useState<DefineTypeInfo[]>([]);
   const rowRefs = useRef<Record<string, HTMLSelectElement | null>>({});
+  const [expectedText, setExpectedText] = useState("");
+  const [strict, setStrict] = useState(false);
+  const [showExpectedRaw, setShowExpectedRaw] = useState(false);
+  const [compareResult, setCompareResult] = useState<MeasureCompareResult | null>(null);
 
   const booleanDefines = useMemo(() => types.filter((t) => t.boolean).map((t) => t.name), [types]);
   const hiddenDefines = useMemo(
@@ -155,6 +164,55 @@ export function MeasurePane({
       } else {
         setRunResult({ ok: true, counts: r.counts, reports: r.reports });
       }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function parseExpected(): Record<string, unknown>[] | null {
+    const text = expectedText.trim();
+    if (!text) return null;
+    try {
+      const parsed: unknown = JSON.parse(text);
+      const arr = Array.isArray(parsed) ? parsed : [parsed];
+      if (!arr.every((r) => r && typeof r === "object" && !Array.isArray(r))) return null;
+      return arr as Record<string, unknown>[];
+    } catch {
+      return null;
+    }
+  }
+
+  async function compare() {
+    setBusy(true);
+    setError(null);
+    setCompareResult(null);
+    try {
+      const expected = parseExpected();
+      if (!expected) {
+        setError("Paste expected MeasureReport JSON (a single object or an array) first.");
+        return;
+      }
+      const libs = [{ name: library, text: buffer }];
+      const s = await transport.measureScaffold(
+        libs,
+        library,
+        mappingPayload(),
+        scoring === "" ? undefined : scoring,
+        measureName || undefined,
+      );
+      if (!s.ok || !s.measure) {
+        setError(s.diagnostics[0]?.message ?? "scaffold failed");
+        return;
+      }
+      setPreview(s);
+      const r = await transport.measureCompare(libs, library, s.measure, expected, strict);
+      if (!r.ok) {
+        setError(r.diagnostics[0]?.message ?? "compare failed");
+        return;
+      }
+      setCompareResult(r);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -325,6 +383,79 @@ export function MeasurePane({
           )}
         </div>
       )}
+      <div className="dev-msexpected">
+        <div className="dev-msexpected-head">
+          <span className="dev-pane-label">Expected MeasureReports</span>
+          <label className="dev-msstrict" title="Strict FHIR equality also requires an identical report count (one per patient), not just equal population counts">
+            <input
+              type="checkbox"
+              checked={strict}
+              onChange={(e) => setStrict(e.target.checked)}
+            />{" "}
+            strict FHIR equality
+          </label>
+          <button
+            className="dev-mscompare"
+            disabled={busy || !canRun || !parseExpected()}
+            onClick={compare}
+            title={
+              canRun
+                ? "Run the library + measure, then diff normalized population counts against the expected MeasureReports"
+                : "Compare needs a scoring code and an initial-population mapping"
+            }
+          >
+            ▶ Compare
+          </button>
+        </div>
+        <textarea
+          className="dev-msexpinput"
+          placeholder='Paste expected MeasureReport JSON here (single object or array)…'
+          value={expectedText}
+          onChange={(e) => setExpectedText(e.target.value)}
+          spellCheck={false}
+        />
+        <button className="dev-msrawtoggle" onClick={() => setShowExpectedRaw((s) => !s)}>
+          {showExpectedRaw ? "Hide raw" : "Show raw"}
+        </button>
+        {showExpectedRaw && (
+          <pre className="dev-msraw">{expectedText}</pre>
+        )}
+        {compareResult && (
+          <div className="dev-msdiff">
+            <div className={compareResult.passed ? "dev-mssummary pass" : "dev-mssummary fail"}>
+              {compareResult.passed ? "✓ PASS" : "✗ FAIL"} ·{" "}
+              {compareResult.strict ? "strict" : "loose"} comparison
+            </div>
+            {compareResult.expected_measure.canonical !== null &&
+              !compareResult.expected_measure.matches && (
+                <div className="dev-mscanonical">
+                  ⚠ expected MeasureReports reference measure{" "}
+                  {compareResult.expected_measure.canonical} — does not match the open Measure
+                </div>
+              )}
+            <table className="dev-mscounts">
+              <thead>
+                <tr>
+                  <th>population</th>
+                  <th>expected</th>
+                  <th>actual</th>
+                  <th>delta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {compareResult.rows.map((row) => (
+                  <tr key={row.code} className={row.delta !== 0 ? "dev-msdiffrow" : undefined}>
+                    <td>{row.code}</td>
+                    <td>{row.expected}</td>
+                    <td>{row.actual}</td>
+                    <td>{row.delta}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

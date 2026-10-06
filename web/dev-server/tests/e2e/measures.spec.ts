@@ -182,3 +182,73 @@ test("measure pane: scaffold → map → run shows counts", async ({ page }) => 
   await expect(pane.locator(".dev-mssummary.pass")).toContainText("numerator: 3");
   await expect(pane.locator(".dev-mssummary.pass")).toContainText("6 MeasureReports");
 });
+
+test("measure pane: expected-MR compare shows normalized diff + canonical warning", async ({ page }) => {
+  await expect(page.locator(".dev-lib.selected", { hasText: "Demographics" })).toBeVisible({ timeout: 15000 });
+  await page.locator(".dev-lib.small", { hasText: "Demographics scaffold" }).click();
+  const pane = page.locator(".dev-mspane");
+  await expect(pane).toBeVisible();
+
+  await pane.locator("select").first().selectOption("proportion");
+  await pane.locator(".dev-msgrid tbody tr").nth(0).locator("select").selectOption("InIp");
+  await pane.locator(".dev-msgrid tbody tr").nth(4).locator("select").selectOption("HasBp");
+
+  // PASS: expected = 6 per-patient MRs w/ IP=1 + numerator=1 on odd patients.
+  const mr = (pid: string, num: number, measure: string) => ({
+    resourceType: "MeasureReport",
+    status: "complete",
+    type: "individual",
+    measure,
+    subject: { reference: "Patient/" + pid },
+    group: [
+      {
+        id: "group-1",
+        population: [
+          {
+            code: { coding: [{ system: "http://terminology.hl7.org/CodeSystem/measure-population", code: "initial-population" }] },
+            count: 1,
+          },
+          {
+            code: { coding: [{ system: "http://terminology.hl7.org/CodeSystem/measure-population", code: "numerator" }] },
+            count: num,
+          },
+        ],
+      },
+    ],
+  });
+  const liburl = "urn:cleanroom:lib:Demographics";
+  const expected = [];
+  for (let i = 1; i <= 6; i++) expected.push(mr("p" + i, i % 2 === 1 ? 1 : 0, liburl));
+
+  const exp = pane.locator(".dev-msexpinput");
+  await exp.fill(JSON.stringify(expected));
+  await pane.getByRole("button", { name: "▶ Compare" }).click();
+  await expect(pane.locator(".dev-msdiff")).toBeVisible({ timeout: 30000 });
+  await expect(pane.locator(".dev-msdiff .dev-mssummary.pass")).toContainText("PASS");
+  await expect(pane.locator(".dev-mscanonical")).toHaveCount(0);
+
+  // FAIL: mismatching numerator counts (all 1) → FAIL + delta row.
+  const wrong = expected.map((r) => ({
+    ...r,
+    group: [
+      {
+        id: "group-1",
+        population: [
+          r.group[0].population[0],
+          { ...r.group[0].population[1], count: 1 },
+        ],
+      },
+    ],
+  }));
+  await exp.fill(JSON.stringify(wrong));
+  await pane.getByRole("button", { name: "▶ Compare" }).click();
+  await expect(pane.locator(".dev-msdiff .dev-mssummary.fail")).toContainText("FAIL", { timeout: 30000 });
+  await expect(pane.locator(".dev-msdiffrow").first()).toContainText("numerator");
+
+  // Canonical warning: expected referencing a different measure canonical.
+  const alien = expected.map((r) => ({ ...r, measure: "http://example.com/other-measure" }));
+  await exp.fill(JSON.stringify(alien));
+  await pane.getByRole("button", { name: "▶ Compare" }).click();
+  await expect(pane.locator(".dev-mscanonical")).toBeVisible({ timeout: 30000 });
+  await expect(pane.locator(".dev-mscanonical")).toContainText("other-measure");
+});
