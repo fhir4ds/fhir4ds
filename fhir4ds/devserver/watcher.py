@@ -21,12 +21,16 @@ DEBOUNCE = 0.25  # seconds per file
 class WorkspaceEvent:
     """One watcher event pushed to event-channel subscribers."""
 
-    kind: str  # "changed" | "removed" | "data-hint"
+    kind: str  # "changed" | "removed" | "data-hint" | "stale"
     paths: list[str] = field(default_factory=list)
     snapshot: dict[str, Any] | None = None
+    valuesets_stale: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {"kind": self.kind, "paths": self.paths, "workspace": self.snapshot}
+        out: dict[str, Any] = {"kind": self.kind, "paths": self.paths, "workspace": self.snapshot}
+        if self.valuesets_stale is not None:
+            out["valuesets_stale"] = self.valuesets_stale
+        return out
 
 
 class EventBus:

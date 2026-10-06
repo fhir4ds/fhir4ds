@@ -221,3 +221,35 @@ test("red-green chain: valueset edit flips IsBp after restart, reverts green", a
   await page.locator("button", { hasText: "Run tests" }).click();
   await expect(page.locator(".dev-testsummary.pass")).toBeVisible({ timeout: 30000 });
 });
+
+test("stale state propagates from API-originated edits (no pane interaction)", async ({ page }) => {
+  await expect(page.locator(".dev-lib.selected")).toHaveText("Demographics", { timeout: 15000 });
+  await expect(page.locator(".dev-box-title").filter({ hasText: "IsBp" })).toBeVisible({ timeout: 15000 });
+  // No stale banner before the edit.
+  await expect(page.locator(".dev-stale")).toHaveCount(0);
+
+  // Edit the valueset via the API (not the pane) — the page must still learn.
+  const response = await page.request.post("http://127.0.0.1:18961/api/valueset/edit", {
+    data: {
+      path: join(dir, "valuesets", "vs1.json"),
+      edit: { action: "update", system: "http://loinc.org", code: "9999-9", old_code: "8480-6" },
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+
+  // The banner + Run-disable arrive through the 'stale' WS event.
+  await expect(page.locator(".dev-stale").first()).toContainText("Restart kernel", { timeout: 10000 });
+  await expect(page.locator(".dev-boxbar .dev-cellrun").first()).toBeDisabled();
+
+  // Revert via the API, restart, banner clears everywhere.
+  const revert = await page.request.post("http://127.0.0.1:18961/api/valueset/edit", {
+    data: {
+      path: join(dir, "valuesets", "vs1.json"),
+      edit: { action: "update", system: "http://loinc.org", code: "8480-6", old_code: "9999-9" },
+    },
+  });
+  expect(revert.ok()).toBeTruthy();
+  await page.locator("button", { hasText: "Restart kernel" }).click();
+  await expect(page.locator(".dev-kerneldot.idle")).toBeVisible({ timeout: 30000 });
+  await expect(page.locator(".dev-stale")).toHaveCount(0, { timeout: 10000 });
+});

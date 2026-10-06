@@ -58,7 +58,7 @@ export class HttpTransport implements Transport {
       ) {
         const cellListeners = [...this.cellListeners];
         for (const cb of cellListeners) cb(parsed as CellEvent);
-      } else if (kind === "changed" || kind === "data-hint") {
+      } else if (kind === "changed" || kind === "data-hint" || kind === "stale") {
         const wsListeners = [...this.wsListeners];
         for (const cb of wsListeners) cb(parsed as WorkspaceEvent);
       }

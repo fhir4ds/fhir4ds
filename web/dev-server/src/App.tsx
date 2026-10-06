@@ -102,6 +102,9 @@ export function App() {
     const off = transport.onWorkspaceEvent((e: WorkspaceEvent) => {
       if (e.kind === "changed" && e.workspace) setWorkspace(e.workspace);
       if (e.kind === "data-hint") setDataHint(e.paths);
+      // Staleness can originate from ANY edit source (API, another tab),
+      // not just this page's ValueSet pane.
+      if (e.kind === "stale") setVsStale(Boolean(e.valuesets_stale));
     });
     const offCells = transport.onCellEvent((e: CellEvent) => {
       if (e.kind === "cellstate" && e.states) {
@@ -582,7 +585,14 @@ export function App() {
                     <span className="dev-box-kind">{box.kind}</span>
                   </div>
                 )}
-                <div className="dev-box-editor">
+                <div
+                  className="dev-box-editor"
+                  style={
+                    box.kind === "header"
+                      ? { height: `${Math.min(18 + 18 * boxBody(box).split("\n").length, 360)}px` }
+                      : undefined
+                  }
+                >
                   <Editor
                     language="sql"
                     theme="dev-cql"

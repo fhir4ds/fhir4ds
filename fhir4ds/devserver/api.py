@@ -18,7 +18,7 @@ from .cells import (
     RUNNING,
 )
 from .kernel import KernelManager
-from .watcher import Watcher
+from .watcher import Watcher, WorkspaceEvent
 
 
 def _envelope(ok: bool = True, **payload: Any) -> dict[str, Any]:
@@ -458,6 +458,12 @@ class _Handler(BaseHTTPRequestHandler):
                     json.dump(new_resource, fh, indent=2)
                     fh.write("\n")
                 self.server.valuesets_stale = True
+                # Propagate staleness to every connected UI — the edit may
+                # have originated from outside this page (API/another tab),
+                # so the local onStaleChange path is not enough.
+                self.server.watcher.bus.publish(
+                    WorkspaceEvent(kind="stale", paths=[vs_path], valuesets_stale=True)
+                )
                 from fhir4ds.cql.loader.fhir_loader import _extract_codes_from_valueset_resource
 
                 concepts = _extract_codes_from_valueset_resource(new_resource) or []
@@ -490,6 +496,10 @@ class _Handler(BaseHTTPRequestHandler):
                 self.server.cell_registry.mark_stale_all()
                 # Restart reloads valuesets from disk — staleness clears.
                 self.server.valuesets_stale = False
+                # Let every connected UI clear its stale banner too.
+                self.server.watcher.bus.publish(
+                    WorkspaceEvent(kind="stale", paths=[], valuesets_stale=False)
+                )
                 self._write_json(
                     200,
                     _envelope(

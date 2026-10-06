@@ -77,9 +77,10 @@ export interface HealthInfo {
 }
 
 export interface WorkspaceEvent {
-  kind: "changed" | "data-hint";
+  kind: "changed" | "data-hint" | "stale";
   paths: string[];
   workspace?: WorkspaceInfo;
+  valuesets_stale?: boolean;
 }
 
 export type RunMode = "cell" | "cell_only" | "cell_deps" | "all" | "to_here";
