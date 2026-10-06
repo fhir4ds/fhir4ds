@@ -63,6 +63,7 @@ export function App() {
   const [selectedValueset, setSelectedValueset] = useState<string | null>(null);
   const [vsStale, setVsStale] = useState(false);
   const [headerOpen, setHeaderOpen] = useState(false);
+  const [patients, setPatients] = useState<string[]>([]);
 
   const boxes = useMemo(() => splitBoxes(buffer), [buffer]);
   const defineBoxes = useMemo(() => boxes.filter((b) => b.kind === "define"), [boxes]);
@@ -289,6 +290,28 @@ export function App() {
       .catch(() => {});
   }, [health?.kernel_id]);
 
+  // Patients list lives at App level: it survives TestsPane remounts
+  // (workspace refreshes can flip the selected library and unmount panes).
+  useEffect(() => {
+    if (!health?.kernel_id) return;
+    let cancelled = false;
+    const attempt = async (tries: number) => {
+      try {
+        const ps = await transport.patients();
+        if (!cancelled && ps.length > 0) setPatients(ps);
+        else if (!cancelled && tries > 0)
+          setTimeout(() => attempt(tries - 1).catch(() => {}), 1500);
+      } catch {
+        if (!cancelled && tries > 0)
+          setTimeout(() => attempt(tries - 1).catch(() => {}), 1500);
+      }
+    };
+    attempt(5).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [health?.kernel_id, transport]);
+
   const jumpToBox = useCallback((title: string) => {
     document
       .querySelector(`[data-box="${title}"]`)
@@ -391,6 +414,18 @@ export function App() {
               transport={transport}
               path={selectedValueset}
               onStaleChange={setVsStale}
+              onInsertDeclaration={(decl) => {
+                // Splice the valueset declaration into the open library's
+                // header box (in-memory buffer + dirty; Apply persists).
+                if (!selected) return;
+                const header = boxes.find((b) => b.kind === "header");
+                if (!header) return;
+                const body = boxBody(header);
+                setBuffer((b) =>
+                  spliceBox(b, header, (body.endsWith("\n") ? body : body + "\n") + decl + "\n", true),
+                );
+                setDirty(true);
+              }}
             />
           ) : (
             <>
@@ -431,9 +466,13 @@ export function App() {
               Show SQL
             </button>
             <button
-              disabled={busy}
+              disabled={busy || vsStale}
               onClick={() => apply("evaluate")}
-              title="Run the whole library as one batch evaluation"
+              title={
+                vsStale
+                  ? "Terminology changed — Restart kernel to reload before running"
+                  : "Run the whole library as one batch evaluation"
+              }
             >
               Run all cells
             </button>
@@ -486,28 +525,43 @@ export function App() {
                   <div className="dev-boxbar">
                     <button
                       className="dev-cellrun"
+                      disabled={vsStale}
                       onMouseDown={() => (lastFocusedCell.current = box.name ?? "")}
                       onClick={() => runCell(box.name ?? "", "cell")}
-                      title={`Run ${box.name} (auto-includes its dependencies; Cmd/Ctrl+Enter re-runs last-run cell)`}
+                      title={
+                        vsStale
+                          ? "Terminology changed — Restart kernel to reload before running"
+                          : `Run ${box.name} (auto-includes its dependencies; Cmd/Ctrl+Enter re-runs last-run cell)`
+                      }
                     >
                       ▶ Run
                     </button>
                     <button
                       className="dev-cellrundeps"
+                      disabled={vsStale}
                       onMouseDown={() => (lastFocusedCell.current = box.name ?? "")}
                       onClick={() => runCell(box.name ?? "", "cell_only")}
-                      title={`Strict: run ${box.name} alone (advanced; dangling deps surface engine diagnostics)`}
+                      title={
+                        vsStale
+                          ? "Terminology changed — Restart kernel to reload before running"
+                          : `Strict: run ${box.name} alone (advanced; dangling deps surface engine diagnostics)`
+                      }
                     >
                       ▶ Run cell only
                     </button>
                     <span
                       className={
-                        "dev-chip " + (cellStates[box.name ?? ""] ?? "idle")
+                        "dev-chip " +
+                        (vsStale && (cellStates[box.name ?? ""] ?? "idle") !== "running"
+                          ? "stale"
+                          : cellStates[box.name ?? ""] ?? "idle")
                       }
                     >
-                      {(cellStates[box.name ?? ""] ?? "idle") === "idle"
-                        ? "Not run"
-                        : cellStates[box.name ?? ""] ?? "idle"}
+                      {vsStale && (cellStates[box.name ?? ""] ?? "idle") !== "running"
+                        ? "stale"
+                        : (cellStates[box.name ?? ""] ?? "idle") === "idle"
+                          ? "Not run"
+                          : cellStates[box.name ?? ""] ?? "idle"}
                     </span>
                     {cellErrors[box.name ?? ""] && (
                       <span
@@ -548,8 +602,15 @@ export function App() {
                       padding: { top: 4, bottom: 4 },
                       renderLineHighlight: "none",
                       automaticLayout: true,
+                      readOnly:
+                        box.kind === "header" && headerOpen,
                     }}
                   />
+                  {box.kind === "header" && headerOpen && (
+                    <div className="dev-box-readonly-hint">
+                      read-only while the Parameters table is open — edit via the table
+                    </div>
+                  )}
                 </div>
                 {cellFullRows[box.name ?? ""]?.length > 0 && (
                   <div className="dev-celltable">
@@ -630,18 +691,20 @@ export function App() {
               </div>
             )}
           </div>
+            </>
+          )}
           {selected && (
             <TestsPane
               transport={transport}
               library={selected}
               buffer={buffer}
+              kernelId={health?.kernel_id ?? "unknown"}
+              patients={patients}
               definitions={
                 workspace?.libraries.find((l) => l.name === selected)
                   ?.definitions ?? []
               }
             />
-          )}
-            </>
           )}
         </section>
         <section className="dev-output">
@@ -671,8 +734,11 @@ export function App() {
                   </div>
                 )}
                 {vsStale && (
-                  <div className="dev-stale" title="Terminology changed — restart the kernel to reload">
-                    ⚠ stale terminology — Run may use outdated valuesets
+                  <div
+                    className="dev-stale"
+                    title="Terminology changed on disk — restart the kernel to reload it, then re-run tests"
+                  >
+                    ⚠ Valueset changed — Restart kernel to reload
                   </div>
                 )}
                 {!result && !resultHeader && (

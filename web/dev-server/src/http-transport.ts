@@ -175,8 +175,9 @@ export class HttpTransport implements Transport {
     libraries: { name: string; text: string }[],
     library: string,
     cases: unknown[],
+    parameters?: Record<string, unknown>,
   ): Promise<VerifyResult> {
-    return this.post("/api/verify", { libraries, library, cases });
+    return this.post("/api/verify", { libraries, library, cases, parameters });
   }
 
   explain(

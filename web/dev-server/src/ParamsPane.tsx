@@ -66,7 +66,69 @@ export function ParamsPane({
     [transport, library, onText],
   );
 
-  const types = ["Integer", "Decimal", "String", "Boolean", "Date", "DateTime", "Time", "Quantity", "Concept", "Code", "Ratio", "Interval<Integer>"];
+  const types = [
+    "Any",
+    "Boolean",
+    "Code",
+    "Concept",
+    "Date",
+    "DateTime",
+    "Decimal",
+    "Integer",
+    "Interval<Date>",
+    "Interval<DateTime>",
+    "Interval<Decimal>",
+    "Interval<Integer>",
+    "Interval<Quantity>",
+    "List<Code>",
+    "List<Concept>",
+    "List<Decimal>",
+    "List<Integer>",
+    "List<Quantity>",
+    "List<String>",
+    "Long",
+    "Quantity",
+    "Ratio",
+    "String",
+    "Time",
+  ];
+
+  /**
+   * Lenient default-field validation against the declared type. Returns an
+   * advisory problem string (red hint) — the author may still save; the
+   * engine surfaces hard errors at translate time.
+   */
+  function defaultProblem(type: string, dflt: string): string | null {
+    if (dflt === "") return null;
+    switch (type) {
+      case "Integer":
+      case "Long":
+        return /^[+-]?\d+$/.test(dflt) ? null : `${type} default must be an integer literal`;
+      case "Decimal":
+        return /^[+-]?(\d+(\.\d+)?|\.\d+)$/.test(dflt) ? null : "Decimal default must be numeric";
+      case "Boolean":
+        return /^(true|false)$/.test(dflt) ? null : "Boolean default must be true or false";
+      case "Date":
+        return dflt.startsWith("@") ? null : "Date default is usually an @-literal (e.g. @2024-01-01)";
+      case "DateTime":
+        return dflt.startsWith("@") ? null : "DateTime default is usually an @-literal (e.g. @2024-01-01T10:00:00)";
+      case "Time":
+        return dflt.startsWith("@T") ? null : "Time default is usually an @T-literal (e.g. @T10:30:00)";
+      case "Quantity":
+        return /^\d+(\.\d+)?\s+('([^']+)'\s*\S+|\S+)/.test(dflt) ? null : "Quantity default looks like: 5 'mg' or 5 mg";
+      case "String":
+        return dflt.startsWith("'") ? null : "String default is usually single-quoted (e.g. 'male')";
+      case "Interval<Integer>":
+      case "Interval<Decimal>":
+      case "Interval<Date>":
+      case "Interval<DateTime>":
+        return dflt.startsWith("Interval[") ? null : "Interval default looks like: Interval[1, 10]";
+      default:
+        return null;
+    }
+  }
+
+  const newDefaultProblem = defaultProblem(newType, newDefault);
 
   return (
     <div className="dev-paramspane">
@@ -83,6 +145,7 @@ export function ParamsPane({
             <th>name</th>
             <th>type</th>
             <th>default</th>
+            <th title="How the parameter is referenced in CQL expressions">%ref</th>
             <th />
           </tr>
         </thead>
@@ -92,6 +155,9 @@ export function ParamsPane({
               <td>{p.name}</td>
               <td>{p.type}</td>
               <td>{p.default ?? "—"}</td>
+              <td>
+                <code>%{p.name}</code>
+              </td>
               <td>
                 <button
                   disabled={busy}
@@ -105,13 +171,18 @@ export function ParamsPane({
           ))}
           {(info?.parameters ?? []).length === 0 && (
             <tr>
-              <td colSpan={4} className="dev-vsempty">
+              <td colSpan={5} className="dev-vsempty">
                 No parameters declared.
               </td>
             </tr>
           )}
         </tbody>
       </table>
+      <div className="dev-paramsnote">
+        The header box above is read-only while this table is open — every edit
+        here rewrites it. Reference parameters in expressions as{" "}
+        <code>%Name</code>.
+      </div>
       <div className="dev-paramsadd">
         <input
           placeholder="Name"
@@ -127,9 +198,16 @@ export function ParamsPane({
         </select>
         <input
           placeholder="default (optional, raw CQL)"
+          className={newDefaultProblem ? "invalid" : undefined}
+          title={newDefaultProblem ?? "Default value expression (raw CQL)"}
           value={newDefault}
           onChange={(e) => setNewDefault(e.target.value)}
         />
+        {newDefaultProblem && (
+          <span className="dev-paramsadd-problem" title={newDefaultProblem}>
+            ⚠ {newDefaultProblem}
+          </span>
+        )}
         <button
           disabled={busy || !/^[A-Za-z][A-Za-z0-9_]*$/.test(newName)}
           title="Add or update the parameter declaration in the header"

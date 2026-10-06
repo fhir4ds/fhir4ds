@@ -157,6 +157,7 @@ export interface Transport {
     libraries: { name: string; text: string }[],
     library: string,
     cases: unknown[],
+    parameters?: Record<string, unknown>,
   ): Promise<VerifyResult>;
   explain(
     libraries: { name: string; text: string }[],

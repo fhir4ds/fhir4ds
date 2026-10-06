@@ -183,14 +183,18 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/patients":
             # v3 Slice 1: distinct patient ids for the test-cases dropdown
-            # (never free text).
+            # (never free text). Dedup happens in Python: aggregate/DISTINCT
+            # forms over `resources` intermittently bind wrong columns on
+            # this shared conn (observed returning resourceType values), so
+            # the route selects bare rows and dedupes/storts here.
             kernel = self.server.kernel_manager.current()
             try:
                 rows = kernel.conn.execute(
-                    "SELECT DISTINCT patient_ref FROM resources"
-                    " WHERE patient_ref IS NOT NULL ORDER BY 1"
+                    "SELECT id, resourceType FROM resources"
+                    " WHERE resourceType = 'Patient'"
                 ).fetchall()
-                self._write_json(200, _envelope(patients=[r[0] for r in rows]))
+                ids = sorted({r[0] for r in rows if r[0] is not None and r[1] == "Patient"})
+                self._write_json(200, _envelope(patients=ids))
             except Exception as exc:
                 self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
             return
@@ -562,7 +566,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
             return
         kernel = self.server.kernel_manager.current()
-        payload = kernel.verify(includes, main, cases)
+        payload = kernel.verify(includes, main, cases, parameters=body.get("parameters"))
         self._write_json(200, payload)
 
     def _route_explain(self, body: dict[str, Any]) -> None:

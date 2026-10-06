@@ -51,7 +51,7 @@ test.beforeAll(async () => {
   server = spawn(
     "/usr/bin/python3",
     ["-m", "fhir4ds.cli", "dev", workdir, "--port", String(PORT), "--no-open"],
-    { env: { PATH: process.env.PATH, PYTHONPATH: "/mnt/d/fhir4ds" }, stdio: "ignore" },
+    { env: { PATH: process.env.PATH, PYTHONPATH: "/mnt/d/fhir4ds-devserver-v3-20261005" }, stdio: "ignore", cwd: workdir },
   );
   // Wait for /health.
   const deadline = Date.now() + 60_000;
@@ -67,8 +67,15 @@ test.beforeAll(async () => {
   throw new Error("dev server did not become healthy");
 });
 
-test.afterAll(() => {
-  server?.kill();
+test.afterAll(async () => {
+  if (server) {
+    server.kill("SIGKILL");
+    await new Promise<void>((resolve) => {
+      if (server.exitCode !== null) return resolve();
+      server.once("exit", () => resolve());
+      setTimeout(resolve, 5000);
+    });
+  }
   if (workdir) fs.rmSync(workdir, { recursive: true, force: true });
 });
 

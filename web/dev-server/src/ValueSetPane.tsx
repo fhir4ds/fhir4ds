@@ -12,10 +12,12 @@ export function ValueSetPane({
   transport,
   path,
   onStaleChange,
+  onInsertDeclaration,
 }: {
   transport: HttpTransport;
   path: string;
   onStaleChange: (stale: boolean) => void;
+  onInsertDeclaration?: (decl: string) => void;
 }) {
   const [info, setInfo] = useState<ValueSetInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export function ValueSetPane({
         <span>{name}</span>
         {info?.stale && (
           <span className="dev-stale" title="Terminology changed on disk — restart the kernel to reload it, then re-run tests">
-            ⚠ stale terminology — restart kernel
+            ⚠ Valueset changed — Restart kernel to reload
           </span>
         )}
         <button disabled={busy} onClick={() => runEdit({ action: "add", system: "http://loinc.org", code: "NEW-CODE" })}>
@@ -90,15 +92,32 @@ export function ValueSetPane({
           <span className="dev-vsurl" title={info.url ?? ""}>
             {info.url ?? "(no url)"}
           </span>
+          {onInsertDeclaration && info.url && (
+            <button
+              className="dev-vsdecl"
+              title={`Insert  valueset "<name>": '${info.url}'  into the open library header`}
+              onClick={() => {
+                // Declared name: prefer the name used by referencing libraries
+                // (used_by chips look like "Demographics.BPVS"), else the file stem.
+                const used = info.used_by[0] ?? "";
+                const declared = used.includes(".") ? used.split(".").slice(1).join(".") : "";
+                const name = declared || (path.split("/").pop() ?? "VS").replace(/\.json$/, "");
+                onInsertDeclaration(`valueset "${name}": '${info.url}'`);
+              }}
+            >
+              Insert declaration into header
+            </button>
+          )}
         </div>
       )}
       <div className="dev-vsgrid">
         <div className="dev-vsrow dev-vshead">
-          <span>system</span>
+          <span title="Code system URI (http/https)">system</span>
           <span>code</span>
           <span title="Display is documentation only — ignored for evaluation logic">display</span>
           <span />
         </div>
+        <div className="dev-vshint">display is ignored for membership — only system + code matter</div>
         {concepts.length === 0 && (
           <div className="dev-vsempty">No concepts in compose.include.</div>
         )}
@@ -109,6 +128,8 @@ export function ValueSetPane({
           return (
             <div key={i} className="dev-vsrow">
               <input
+                className="dev-vssystem"
+                title={draft.system}
                 value={draft.system}
                 onChange={(e) =>
                   setDrafts((d) => ({ ...d, [i]: { ...draft, system: e.target.value } }))

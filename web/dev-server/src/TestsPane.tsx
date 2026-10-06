@@ -21,27 +21,45 @@ export function TestsPane({
   library,
   buffer,
   definitions,
+  kernelId,
+  patients,
 }: {
   transport: HttpTransport;
   library: string;
   buffer: string;
   definitions: string[];
+  kernelId: string;
+  patients: string[];
 }) {
   const [cases, setCases] = useState<Case[]>([]);
-  const [patients, setPatients] = useState<string[]>([]);
+  const [paramsText, setParamsText] = useState("");
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    transport
-      .patients()
-      .then(setPatients)
-      .catch(() => setPatients([]));
-  }, [transport]);
-
   const setCase = useCallback((i: number, patch: Partial<Case>) => {
     setCases((cs) => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  }, []);
+
+  /** Parse 'Name = value' lines into a parameters map for /api/verify. */
+  const parseParams = useCallback((text: string): Record<string, unknown> | undefined => {
+    const out: Record<string, unknown> = {};
+    for (const line of text.split("\n")) {
+      const t = line.trim();
+      if (!t) continue;
+      const m = t.match(/^([A-Za-z][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+      if (!m) continue;
+      const raw = m[2].trim();
+      // typed literal: quoted string, number, boolean; else pass raw text
+      let v: unknown = raw;
+      if (/^'.*'$/.test(raw)) v = raw.slice(1, -1);
+      else if (/^[+-]?\d+$/.test(raw)) v = parseInt(raw, 10);
+      else if (/^[+-]?(\d+\.\d+|\.\d+)$/.test(raw)) v = parseFloat(raw);
+      else if (raw === "true") v = true;
+      else if (raw === "false") v = false;
+      out[m[1]] = v;
+    }
+    return Object.keys(out).length ? out : undefined;
   }, []);
 
   const runTests = useCallback(async () => {
@@ -56,14 +74,19 @@ export function TestsPane({
         if (c.comment.trim()) body.comment = c.comment.trim();
         return body;
       });
-      const r = await transport.verify([{ name: library, text: buffer }], library, payload);
+      const r = await transport.verify(
+        [{ name: library, text: buffer }],
+        library,
+        payload,
+        parseParams(paramsText),
+      );
       setResult(r);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
-  }, [transport, library, buffer, cases]);
+  }, [transport, library, buffer, cases, paramsText, parseParams]);
 
   const tests = (result?.tests ?? {}) as {
     total?: number;
@@ -104,11 +127,22 @@ export function TestsPane({
         </button>
       </div>
       {error && <div className="dev-vserror">{error}</div>}
+      <div className="dev-testparams">
+        <span className="dev-testparams-label" title="Overrides declared parameter defaults while running these cases (applies to ALL cases)">
+          parameters
+        </span>
+        <textarea
+          rows={2}
+          placeholder={"Optional — one per line:\nMinAge = 21\nGender = 'male'"}
+          value={paramsText}
+          onChange={(e) => setParamsText(e.target.value)}
+        />
+      </div>
       <div className="dev-testgrid">
         <div className="dev-vsrow dev-vshead">
           <span>patient</span>
-          <span>target</span>
-          <span>expect</span>
+          <span>TARGET — what to check</span>
+          <span>EXPECTED</span>
           <span>comment</span>
           <span />
         </div>
@@ -155,7 +189,7 @@ export function TestsPane({
             <select
               value={String(c.expect)}
               onChange={(e) => setCase(i, { expect: e.target.value === "true" })}
-              title="Expected membership result (Boolean — the runner checks the patient's row)"
+              title="Expected result for this patient's TARGET (Boolean membership — the runner checks the patient's row)"
             >
               <option value="true">true</option>
               <option value="false">false</option>
