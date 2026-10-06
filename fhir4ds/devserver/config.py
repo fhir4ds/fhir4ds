@@ -20,14 +20,16 @@ CONVENTION_DIRS = {
     "valueset": "valuesets",
     "measure": "measures",
     "data": "data",
+    "view": "views",
 }
 
-_CONFIG_KEYS = {"cql_dirs", "valueset_dirs", "measure_dirs", "data_dirs"}
+_CONFIG_KEYS = {"cql_dirs", "valueset_dirs", "measure_dirs", "data_dirs", "view_dirs"}
 _LIST_FIELDS = {
     "cql_dirs": "cql",
     "valueset_dirs": "valueset",
     "measure_dirs": "measure",
     "data_dirs": "data",
+    "view_dirs": "view",
 }
 
 
@@ -46,6 +48,7 @@ class DevServerConfig:
     valueset_dirs: list[Path] = field(default_factory=list)
     measure_dirs: list[Path] = field(default_factory=list)
     data_dirs: list[Path] = field(default_factory=list)
+    view_dirs: list[Path] = field(default_factory=list)
 
     def all_dirs(self) -> list[Path]:
         out: list[Path] = []
@@ -54,6 +57,7 @@ class DevServerConfig:
             self.valueset_dirs,
             self.measure_dirs,
             self.data_dirs,
+            self.view_dirs,
         ):
             out.extend(dirs)
         return out
@@ -106,6 +110,7 @@ def load_config(
     valueset_dirs: list[str] | None = None,
     measure_dirs: list[str] | None = None,
     data_dirs: list[str] | None = None,
+    view_dirs: list[str] | None = None,
 ) -> DevServerConfig:
     """Merge convention dirs + ``[dev]`` manifest + CLI flags.
 
@@ -141,6 +146,7 @@ def load_config(
         valueset_dirs=merged("valueset", valueset_dirs),
         measure_dirs=merged("measure", measure_dirs),
         data_dirs=merged("data", data_dirs),
+        view_dirs=merged("view", view_dirs),
     )
     if not (1 <= cfg.port <= 65535):
         raise DevConfigError(f"Invalid port {cfg.port}")

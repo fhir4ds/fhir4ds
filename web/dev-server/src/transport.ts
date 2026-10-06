@@ -19,6 +19,7 @@ export interface WorkspaceInfo {
   valuesets: string[];
   measures: string[];
   datasets: string[];
+  views?: string[];
   data_changed_hint: boolean;
 }
 
@@ -175,10 +176,32 @@ export interface DefineTypeInfo {
   boolean: boolean;
 }
 
+export interface ViewInfo {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  path: string;
+  text: string;
+  resource: string | null;
+  name: string | null;
+}
+
+export interface ViewRunResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  sql: string;
+  columns: string[];
+  rows: Record<string, unknown>[];
+  resource_count: number;
+}
+
 export interface Transport {
   health(): Promise<HealthInfo>;
   workspace(): Promise<WorkspaceInfo>;
   defineTypes(library: string, text?: string): Promise<DefineTypeInfo[]>;
+  view(path: string): Promise<ViewInfo>;
+  viewRun(text?: string, path?: string): Promise<ViewRunResult>;
   libraryHeader(library: string): Promise<LibraryHeaderInfo>;
   patients(): Promise<string[]>;
   valueset(path: string): Promise<ValueSetInfo>;

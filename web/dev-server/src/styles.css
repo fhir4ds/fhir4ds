@@ -579,3 +579,20 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   border-radius: 4px;
   padding: 4px 8px;
 }
+
+/* v3 slice 4 — ViewDefinition pane */
+.dev-vdpane { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; overflow-y: auto; }
+.dev-vdhead { font-size: 12px; color: #9cdcfe; }
+.dev-vdctx { font-size: 11px; color: #888; }
+.dev-vdbar { display: flex; align-items: center; gap: 8px; }
+.dev-vdrun { background: #0e639c; color: #fff; border: none; border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+.dev-vdrun:disabled { opacity: 0.45; cursor: not-allowed; }
+.dev-vddirty { font-size: 11px; color: #e2a336; }
+.dev-vdeditor { border: 1px solid #333; border-radius: 6px; overflow: hidden; }
+.dev-vderror { color: #f48771; background: rgba(244, 135, 113, 0.08); border: 1px solid rgba(244, 135, 113, 0.4); border-radius: 4px; padding: 6px 8px; font-size: 12px; white-space: pre-wrap; }
+.dev-vdhint { font-size: 11px; color: #888; border-left: 2px solid #0e639c; padding-left: 8px; }
+.dev-vdresults { display: flex; flex-direction: column; gap: 6px; }
+.dev-vdtabs { display: flex; gap: 4px; }
+.dev-vdtabs button { background: transparent; color: #888; border: 1px solid #333; border-radius: 4px 4px 0 0; padding: 3px 10px; cursor: pointer; font-size: 12px; }
+.dev-vdtabs button.on { color: #d4d4d4; border-color: #0e639c; background: rgba(14, 99, 156, 0.15); }
+.dev-vdcount { font-size: 11px; color: #888; }

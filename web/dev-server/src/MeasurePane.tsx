@@ -337,7 +337,7 @@ export function MeasurePane({
               {mappedCodes.size} population{mappedCodes.size === 1 ? "" : "s"} mapped
             </span>
             <button onClick={() => setShowRaw((s) => !s)}>
-              {showRaw ? "Hide raw" : "Show raw"}
+              {showRaw ? "Hide pasted" : "Show pasted"}
             </button>
           </div>
           {showRaw && (
@@ -392,7 +392,7 @@ export function MeasurePane({
               checked={strict}
               onChange={(e) => setStrict(e.target.checked)}
             />{" "}
-            strict FHIR equality
+            strict: also require equal report counts
           </label>
           <button
             className="dev-mscompare"
@@ -415,7 +415,7 @@ export function MeasurePane({
           spellCheck={false}
         />
         <button className="dev-msrawtoggle" onClick={() => setShowExpectedRaw((s) => !s)}>
-          {showExpectedRaw ? "Hide raw" : "Show raw"}
+          {showExpectedRaw ? "Hide pasted" : "Show pasted"}
         </button>
         {showExpectedRaw && (
           <pre className="dev-msraw">{expectedText}</pre>
@@ -439,7 +439,7 @@ export function MeasurePane({
                   <th>population</th>
                   <th>expected</th>
                   <th>actual</th>
-                  <th>delta</th>
+                  <th title="delta = actual − expected">delta</th>
                 </tr>
               </thead>
               <tbody>

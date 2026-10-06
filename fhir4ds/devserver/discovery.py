@@ -38,6 +38,7 @@ class WorkspaceSnapshot:
     valuesets: list[Path] = field(default_factory=list)
     measures: list[Path] = field(default_factory=list)
     datasets: list[Path] = field(default_factory=list)
+    views: list[Path] = field(default_factory=list)
     data_changed_hint: bool = False  # new/removed data file since last snapshot
 
     def library(self, name: str) -> LibraryFile | None:
@@ -61,6 +62,7 @@ class WorkspaceSnapshot:
             "valuesets": [str(p) for p in self.valuesets],
             "measures": [str(p) for p in self.measures],
             "datasets": [str(p) for p in self.datasets],
+            "views": [str(p) for p in self.views],
             "data_changed_hint": self.data_changed_hint,
         }
 
@@ -148,4 +150,5 @@ def scan_workspace(cfg: DevServerConfig) -> WorkspaceSnapshot:
         valuesets=files(cfg.valueset_dirs, (".json",)),
         measures=files(cfg.measure_dirs, (".json",)),
         datasets=files(cfg.data_dirs, NDJSON_SUFFIXES),
+        views=files(cfg.view_dirs, (".json",)),
     )

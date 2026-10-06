@@ -1,6 +1,8 @@
 import type {
   CellEvent,
   DefineTypeInfo,
+  ViewInfo,
+  ViewRunResult,
   EvaluateResult,
   EvidenceResult,
   HealthInfo,
@@ -120,6 +122,14 @@ export class HttpTransport implements Transport {
     let q = `/api/define-types?library=${encodeURIComponent(library)}`;
     if (text !== undefined) q += `&text=${encodeURIComponent(text)}`;
     return this.unwrap<{ defines: DefineTypeInfo[] }>(q).then((d) => d.defines);
+  }
+
+  view(path: string): Promise<ViewInfo> {
+    return this.unwrap(`/api/view?path=${encodeURIComponent(path)}`);
+  }
+
+  viewRun(text?: string, path?: string): Promise<ViewRunResult> {
+    return this.post<ViewRunResult>("/api/view/run", { text, path });
   }
 
   patients(): Promise<string[]> {

@@ -27,6 +27,7 @@ import { ValueSetPane } from "./ValueSetPane";
 import { ParamsPane } from "./ParamsPane";
 import { TestsPane } from "./TestsPane";
 import { MeasurePane } from "./MeasurePane";
+import { VdPane } from "./VdPane";
 
 type Tab = "results" | "sql" | "errors";
 
@@ -66,6 +67,7 @@ export function App() {
     | { kind: "valueset"; id: string }
     | { kind: "params"; id: string }
     | { kind: "measure"; id: string }
+    | { kind: "view"; id: string }
     | null
   >(null);
   const [vsStale, setVsStale] = useState(false);
@@ -449,6 +451,19 @@ export function App() {
               + {lib.name} scaffold
             </div>
           ))}
+          <h2>ViewDefinitions</h2>
+          {(workspace?.views ?? []).map((v) => (
+            <div
+              key={v}
+              className={
+                "dev-lib small" + (railView?.kind === "view" && railView.id === v ? " selected" : "")
+              }
+              title={v}
+              onClick={() => setRailView({ kind: "view", id: v })}
+            >
+              {v.split("/").pop()?.replace(/\.json$/, "")}
+            </div>
+          ))}
           {datasetStatsOpen && datasetStats && (
             <div className="dev-datasetstats">
               <div>total: {datasetStats.total}</div>
@@ -511,6 +526,15 @@ export function App() {
                 }
               />
             </div>
+          ) : railView?.kind === "view" ? (
+            <VdPane
+              transport={transport}
+              path={railView.id}
+              datasetName={
+                (workspace?.datasets ?? [])[0]?.split("/").pop()?.replace(/\.ndjson$/, "") ?? ""
+              }
+              patientCount={datasetStats?.total ?? null}
+            />
           ) : (
             <>
           <div className="dev-toolbar">

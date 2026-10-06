@@ -66,6 +66,7 @@ def _snapshot_files(snap: WorkspaceSnapshot) -> set[str]:
     out.update(str(p) for p in snap.valuesets)
     out.update(str(p) for p in snap.measures)
     out.update(str(p) for p in snap.datasets)
+    out.update(str(p) for p in snap.views)
     return out
 
 

@@ -12,6 +12,7 @@ from fhir4ds.operations.envelopes import LibraryText, tests_input_from_dict
 from fhir4ds.operations.errors import OperationError
 from fhir4ds.operations.capabilities.evaluate import evaluate_library
 from fhir4ds.operations.capabilities.measure import (
+    flatten_view,
     measure_from_definitions,
     measure_report_from_rows,
     output_columns_from_measure,
@@ -338,6 +339,33 @@ class _Handler(BaseHTTPRequestHandler):
                 ),
             )
             return
+        if path == "/api/view":
+            # v3 Slice 4: ViewDefinition file read (text + parsed header info).
+            from urllib.parse import parse_qs, urlparse
+
+            qs = parse_qs(urlparse(self.path).query)
+            v_path = (qs.get("path") or [""])[0]
+            snap = self.server.watcher.snapshot
+            if v_path not in [str(p) for p in snap.views]:
+                self._write_json(
+                    200,
+                    _envelope(ok=False, diagnostics=[_diag(f"unknown view path {v_path!r}")]),
+                )
+                return
+            try:
+                with open(v_path, "r", encoding="utf-8") as fh:
+                    text = fh.read()
+                resource = json.loads(text)
+                resource_type = resource.get("resource") if isinstance(resource, dict) else None
+                name = resource.get("name") if isinstance(resource, dict) else None
+            except (OSError, json.JSONDecodeError) as exc:
+                self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+                return
+            self._write_json(
+                200,
+                _envelope(path=v_path, text=text, resource=resource_type, name=name),
+            )
+            return
         if path == "/api/workspace":
             snap = self.server.watcher.snapshot
             self._write_json(200, _envelope(workspace=snap.to_dict()))
@@ -600,6 +628,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._route_measure_run(body)
             elif path == "/api/measure/compare":
                 self._route_measure_compare(body)
+            elif path == "/api/view/run":
+                self._route_view_run(body)
             elif path == "/api/kernel/restart":
                 snap = self.server.watcher.snapshot
                 kernel = self.server.kernel_manager.restart(snap)
@@ -805,7 +835,8 @@ class _Handler(BaseHTTPRequestHandler):
         aggregates expected and actual per population code (sum of count values
         across reports/groups), and returns rows [{code, expected, actual, delta}]
         where PASS = all deltas zero. Strict mode (default False) additionally
-        requires the report structure to match exactly (group/population sets).
+        requires the number of expected MeasureReports to equal the number of
+        generated per-patient reports (loose mode compares counts only).
         """
         measure = body.get("measure")
         if not isinstance(measure, dict):
@@ -932,6 +963,82 @@ class _Handler(BaseHTTPRequestHandler):
             return {"matches": True, "canonical": None}
         ref = (measure.get("url") or (measure.get("library") or [None])[0]) or ""
         return {"matches": ref in canonicals, "canonical": sorted(canonicals)[0]}
+
+    def _route_view_run(self, body: dict[str, Any]) -> None:
+        """v3 Slice 4: run a ViewDefinition over the loaded dataset.
+
+        Body: {text?: str (inline JSON — client buffer wins), path?: str}.
+        Reads resources of the VD's `resource` type from the live kernel
+        table, then flattens via operations flatten_view (isolated staging
+        per SO-3 — the live resources table is never touched). Typed
+        SOF-VD invariant diagnostics (ParseError/ValidationError messages)
+        flow back inline for the pane to render.
+        """
+        text = body.get("text")
+        v_path = body.get("path")
+        if text is None and v_path is not None:
+            snap = self.server.watcher.snapshot
+            if str(v_path) not in [str(p) for p in snap.views]:
+                self._write_json(
+                    200,
+                    _envelope(ok=False, diagnostics=[_diag(f"unknown view path {str(v_path)!r}")]),
+                )
+                return
+            try:
+                with open(str(v_path), "r", encoding="utf-8") as fh:
+                    text = fh.read()
+            except OSError as exc:
+                self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+                return
+        if not isinstance(text, str) or not text.strip():
+            self._write_json(
+                200,
+                _envelope(ok=False, diagnostics=[_diag("view text required (inline JSON or a known path)")]),
+            )
+            return
+        try:
+            vd = json.loads(text)
+        except json.JSONDecodeError as exc:
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(f"invalid JSON: {exc}")]))
+            return
+        if not isinstance(vd, dict):
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag("view definition must be a JSON object")]))
+            return
+        resource_type = vd.get("resource")
+        if not isinstance(resource_type, str) or not resource_type:
+            self._write_json(
+                200,
+                _envelope(ok=False, diagnostics=[_diag("view definition requires a 'resource' binding")]),
+            )
+            return
+        kernel = self.server.kernel_manager.current()
+        try:
+            rows = kernel.conn.execute(
+                "SELECT resource FROM resources WHERE resourceType = ?",
+                [resource_type],
+            ).fetchall()
+        except Exception as exc:
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        resources = []
+        for (raw,) in rows:
+            try:
+                resources.append(json.loads(raw) if isinstance(raw, str) else raw)
+            except json.JSONDecodeError:
+                continue
+        result = flatten_view(vd, resources, kernel.conn)
+        self._write_json(
+            200,
+            {
+                "schema": 1,
+                "ok": bool(result.ok),
+                "sql": result.sql,
+                "columns": list(result.columns or []),
+                "rows": list(result.rows or []),
+                "diagnostics": [d.to_dict() if hasattr(d, "to_dict") else d for d in (result.diagnostics or [])],
+                "resource_count": len(resources),
+            },
+        )
 
     # -- static UI ----------------------------------------------------------
 
