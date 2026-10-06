@@ -26,6 +26,7 @@ import type {
 import { ValueSetPane } from "./ValueSetPane";
 import { ParamsPane } from "./ParamsPane";
 import { TestsPane } from "./TestsPane";
+import { MeasurePane } from "./MeasurePane";
 
 type Tab = "results" | "sql" | "errors";
 
@@ -63,6 +64,7 @@ export function App() {
   const [selectedValueset, setSelectedValueset] = useState<string | null>(null);
   const [vsStale, setVsStale] = useState(false);
   const [headerOpen, setHeaderOpen] = useState(false);
+  const [measureOpen, setMeasureOpen] = useState(false);
   const [patients, setPatients] = useState<string[]>([]);
 
   const boxes = useMemo(() => splitBoxes(buffer), [buffer]);
@@ -453,6 +455,12 @@ export function App() {
               {headerOpen ? "▾" : "▸"} header
             </button>
             <button
+              onClick={() => setMeasureOpen((o) => !o)}
+              title="Measure scaffold preview + run (map populations to defines)"
+            >
+              {measureOpen ? "▾" : "▸"} measure
+            </button>
+            <button
               onClick={() => {
                 setBuffer((b) => appendBox(b));
                 setDirty(true);
@@ -489,6 +497,17 @@ export function App() {
                   setBuffer(text);
                   setDirty(true);
                 }}
+              />
+            )}
+            {measureOpen && selected && (
+              <MeasurePane
+                transport={transport}
+                library={selected}
+                buffer={buffer}
+                definitions={
+                  workspace?.libraries.find((l) => l.name === selected)
+                    ?.definitions ?? []
+                }
               />
             )}
             {boxes.map((box) => (

@@ -9,6 +9,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from fhir4ds.operations.envelopes import LibraryText, tests_input_from_dict
+from fhir4ds.operations.errors import OperationError
+from fhir4ds.operations.capabilities.evaluate import evaluate_library
+from fhir4ds.operations.capabilities.measure import (
+    measure_from_definitions,
+    measure_report_from_rows,
+    output_columns_from_measure,
+)
 
 from .cells import (
     CellRecord,
@@ -36,6 +43,32 @@ def _first_message(envelope: dict[str, Any]) -> str:
     if diags and isinstance(diags[0], dict):
         return str(diags[0].get("message") or diags[0].get("code") or "evaluation failed")
     return "evaluation failed"
+
+
+def _regroup_report_populations(report: dict[str, Any]) -> dict[str, Any]:
+    """Merge per-code group entries into one entry per group id.
+
+    The operations layer emits one MeasureReport.group entry per
+    population code (S-1 dual representation). The dev-server UI
+    normalizes to the Measure's own grouping: one group entry per
+    group id containing all its populations, order preserved.
+    """
+    merged: list[dict[str, Any]] = []
+    by_id: dict[str, dict[str, Any]] = {}
+    for entry in report.get("group") or []:
+        gid = entry.get("id") if isinstance(entry, dict) else None
+        if gid is None:
+            merged.append(entry)
+            continue
+        bucket = by_id.get(gid)
+        if bucket is None:
+            bucket = {"id": gid, "population": []}
+            by_id[gid] = bucket
+            merged.append(bucket)
+        for pop in entry.get("population") or []:
+            bucket["population"].append(pop)
+    report["group"] = merged
+    return report
 
 
 class DevHTTPServer(ThreadingHTTPServer):
@@ -489,6 +522,10 @@ class _Handler(BaseHTTPRequestHandler):
                 self._route_verify(body)
             elif path == "/api/explain":
                 self._route_explain(body)
+            elif path == "/api/measure/scaffold":
+                self._route_measure_scaffold(body)
+            elif path == "/api/measure/run":
+                self._route_measure_run(body)
             elif path == "/api/kernel/restart":
                 snap = self.server.watcher.snapshot
                 kernel = self.server.kernel_manager.restart(snap)
@@ -587,6 +624,103 @@ class _Handler(BaseHTTPRequestHandler):
         kernel = self.server.kernel_manager.current()
         payload = kernel.explain(includes, main, patient)
         self._write_json(200, payload)
+
+    # -- measure scaffold/run (v3 slice 2) ----------------------------------
+
+    def _route_measure_scaffold(self, body: dict[str, Any]) -> None:
+        """Build a Measure PREVIEW from the library + explicit mapping.
+
+        Never auto-saves: the caller receives the Measure resource and
+        decides. ``mapping`` absent => bootstrap (define list only).
+        """
+        includes, main = self._resolve_main(body)
+        mapping = body.get("mapping")
+        if mapping is not None and not isinstance(mapping, list):
+            self._write_json(
+                200,
+                _envelope(
+                    ok=False,
+                    diagnostics=[
+                        _diag("mapping must be a list of {define, code} objects")
+                    ],
+                ),
+            )
+            return
+        scoring = body.get("scoring") or "proportion"
+        measure_name = body.get("measure_name") or "CleanroomMeasure"
+        result = measure_from_definitions(
+            includes,
+            main,
+            mapping=mapping,
+            measure_name=measure_name,
+            scoring=scoring,
+        )
+        self._write_json(200, result.to_dict())
+
+    def _route_measure_run(self, body: dict[str, Any]) -> None:
+        """Run a Measure against the loaded dataset.
+
+        Body: {library, text?, measure: {...}, parameters?}. Evaluates
+        the mapped defines via output_columns narrowing (one evaluation)
+        and returns population counts + per-patient MeasureReports.
+        """
+        measure = body.get("measure")
+        if not isinstance(measure, dict):
+            self._write_json(
+                200,
+                _envelope(ok=False, diagnostics=[_diag("measure (JSON object) is required")]),
+            )
+            return
+        try:
+            cols = output_columns_from_measure(measure)
+        except OperationError as exc:
+            self._write_json(
+                200, _envelope(ok=False, diagnostics=[_diag(str(exc))])
+            )
+            return
+        includes, main = self._resolve_main(body)
+        kernel = self.server.kernel_manager.current()
+        ev = evaluate_library(
+            includes, main, None, kernel.conn,
+            parameters=body.get("parameters"), output_columns=cols,
+        )
+        evd = ev.to_dict()
+        if not evd.get("ok"):
+            self._write_json(200, evd)
+            return
+        columns = list(cols.keys())
+        mr = measure_report_from_rows(
+            measure, evd.get("rows", []), columns,
+            library_url=(measure.get("library") or [None])[0],
+        )
+        if not mr.ok:
+            self._write_json(200, mr.to_dict())
+            return
+        # Population counts over per-patient membership
+        counts: dict[str, int] = {}
+        for row in evd.get("rows", []):
+            for col in columns:
+                if row.get(col) is True:
+                    counts[col] = counts.get(col, 0) + 1
+        # Regroup per-patient populations into one MeasureReport group
+        # entry per Measure.group (the operations layer intentionally
+        # emits one group entry per population code — S-1 dual
+        # representation — which the UI normalizes here so each report
+        # mirrors the Measure's single-group shape).
+        reports = [
+            _regroup_report_populations(dict(r)) for r in mr.reports
+        ]
+        self._write_json(
+            200,
+            {
+                "schema": 1,
+                "ok": True,
+                "counts": {c: counts.get(c, 0) for c in columns},
+                "columns": evd.get("column_types", {}),
+                "rows": evd.get("rows", []),
+                "reports": reports,
+            },
+        )
 
     # -- static UI ----------------------------------------------------------
 

@@ -129,6 +129,29 @@ export interface ParametersResult {
   parameters: { name: string; type: string; default: string | null }[];
 }
 
+export interface MeasureMappingEntry {
+  define: string;
+  code: string;
+}
+
+export interface MeasureScaffoldResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  measure: Record<string, unknown> | null;
+  mapping: MeasureMappingEntry[];
+}
+
+export interface MeasureRunResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  counts: Record<string, number>;
+  columns: Record<string, string>;
+  rows: Record<string, unknown>[];
+  reports: Record<string, unknown>[];
+}
+
 export interface Transport {
   health(): Promise<HealthInfo>;
   workspace(): Promise<WorkspaceInfo>;
@@ -147,6 +170,19 @@ export interface Transport {
     default_?: string | null,
     text?: string,
   ): Promise<ParametersResult>;
+  measureScaffold(
+    libraries: { name: string; text: string }[],
+    library: string,
+    mapping?: MeasureMappingEntry[],
+    scoring?: string,
+    measureName?: string,
+  ): Promise<MeasureScaffoldResult>;
+  measureRun(
+    libraries: { name: string; text: string }[],
+    library: string,
+    measure: Record<string, unknown>,
+    parameters?: Record<string, unknown>,
+  ): Promise<MeasureRunResult>;
   library(name: string): Promise<WorkspaceLibrary>;
   translate(libraries: { name: string; text: string }[], library: string): Promise<TranslateResult>;
   evaluate(

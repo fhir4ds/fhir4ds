@@ -4,6 +4,9 @@ import type {
   EvidenceResult,
   HealthInfo,
   LibraryHeaderInfo,
+  MeasureMappingEntry,
+  MeasureRunResult,
+  MeasureScaffoldResult,
   ParametersResult,
   RunMode,
   TranslateResult,
@@ -161,6 +164,31 @@ export class HttpTransport implements Transport {
     library: string,
   ): Promise<TranslateResult> {
     return this.post("/api/translate", { libraries, library, emit_sql: true });
+  }
+
+  measureScaffold(
+    libraries: { name: string; text: string }[],
+    library: string,
+    mapping?: MeasureMappingEntry[],
+    scoring?: string,
+    measureName?: string,
+  ): Promise<MeasureScaffoldResult> {
+    const body: Record<string, unknown> = { library, libraries };
+    if (mapping !== undefined) body.mapping = mapping;
+    if (scoring !== undefined) body.scoring = scoring;
+    if (measureName !== undefined) body.measure_name = measureName;
+    return this.post("/api/measure/scaffold", body);
+  }
+
+  measureRun(
+    libraries: { name: string; text: string }[],
+    library: string,
+    measure: Record<string, unknown>,
+    parameters?: Record<string, unknown>,
+  ): Promise<MeasureRunResult> {
+    const body: Record<string, unknown> = { library, libraries, measure };
+    if (parameters !== undefined) body.parameters = parameters;
+    return this.post("/api/measure/run", body);
   }
 
   evaluate(

@@ -228,6 +228,15 @@ def dependency_closure(
     return ordered, missing
 
 
+_SCORING_SYSTEM = "http://terminology.hl7.org/CodeSystem/measure-scoring"
+_SCORING_CODES: tuple[str, ...] = (
+    "proportion",
+    "ratio",
+    "continuous-variable",
+    "cohort",
+)
+
+
 def measure_from_definitions(
     libraries: list[LibraryText],
     main: LibraryText,
@@ -236,6 +245,7 @@ def measure_from_definitions(
     measure_name: str = "CleanroomMeasure",
     group_id: str = "group-1",
     library_urls: list[str] | None = None,
+    scoring: str = "proportion",
 ) -> MeasureResult:
     """Build a FHIR Measure resource from the main library's defines.
 
@@ -243,7 +253,8 @@ def measure_from_definitions(
     the capability never guesses define roles from names (the UI may
     OFFER a default suggestion, but the mapping itself is explicit).
     When ``mapping`` is None the result carries only the candidate
-    define list (bootstrap mode).
+    define list (bootstrap mode). ``scoring`` selects the
+    measure-scoring code (proportion/ratio/continuous-variable/cohort).
     """
     from fhir4ds.cql import parse_cql as engine_parse
 
@@ -267,6 +278,19 @@ def measure_from_definitions(
         pairs, diag = _validate_mapping(mapping, definition_names)
         if diag is not None:
             return MeasureResult(ok=False, diagnostics=(diag,))
+
+        if scoring not in _SCORING_CODES:
+            return MeasureResult(
+                ok=False,
+                diagnostics=(
+                    Diagnostics(
+                        code=DiagnosticCode.INPUT_ERROR,
+                        severity="error",
+                        message=f"unknown scoring code {scoring!r}",
+                        data={"expected": list(_SCORING_CODES), "found": scoring},
+                    ),
+                ),
+            )
 
         populations: list[dict[str, Any]] = [
             {
@@ -300,8 +324,8 @@ def measure_from_definitions(
             "scoring": {
                 "coding": [
                     {
-                        "system": "http://terminology.hl7.org/CodeSystem/measure-scoring",
-                        "code": "proportion",
+                        "system": _SCORING_SYSTEM,
+                        "code": scoring,
                     }
                 ]
             },
