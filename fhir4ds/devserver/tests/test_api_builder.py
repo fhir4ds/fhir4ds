@@ -211,3 +211,21 @@ class TestResourceSave:
             {"resource": 42, "dataset_path": "whatever"},
         )
         assert d["ok"] is False
+
+
+class TestDatasetStatsShape:
+    """Pin the /api/dataset-stats wire shape (by_type is an ARRAY).
+
+    The UI normalizes this array into a Record for rendering; this pin
+    guards the contract so a future API change fails loudly here instead
+    of crashing the client (React error #31 - objects as children).
+    """
+
+    def test_dataset_stats_by_type_is_array(self, server):
+        with urllib.request.urlopen(f"{BASE}/api/dataset-stats") as r:
+            d = json.loads(r.read().decode())
+        assert d["ok"] is True
+        assert d["total"] == 2
+        assert isinstance(d["by_type"], list)
+        entries = {e["resourceType"]: e["count"] for e in d["by_type"]}
+        assert entries == {"Patient": 2}

@@ -124,3 +124,13 @@ test("invalid resource blocks save with inline red", async ({ page }) => {
   await expect(page.locator(".dev-rberror").first()).toBeVisible({ timeout: 15000 });
   await expect(page.locator(".dev-rbsavebtn")).toBeDisabled();
 });
+
+test("dataset click renders stats without crashing", async ({ page }) => {
+  await page.goto(BASE);
+  await expect(page.locator(".dev-dataset").first()).toBeVisible();
+  await page.locator(".dev-dataset").first().click();
+  const stats = page.locator(".dev-datasetstats");
+  await expect(stats).toBeVisible();
+  await expect(stats).toContainText("total: 2");
+  await expect(stats).toContainText("Patient: 2");
+});

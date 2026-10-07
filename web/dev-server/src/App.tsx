@@ -281,12 +281,24 @@ export function App() {
     setEditingTitle(null);
   }, [editingTitle]);
 
+  // Normalize /api/dataset-stats payloads: the API emits by_type as an
+  // ARRAY of {resourceType, count}; map it to a Record for rendering.
+  const normalizeStats = (d: {
+    total: number;
+    by_type: Array<{ resourceType: string; count: number }> | Record<string, number>;
+  }): { total: number; by_type: Record<string, number> } => ({
+    total: d.total,
+    by_type: Array.isArray(d.by_type)
+      ? Object.fromEntries(d.by_type.map((s) => [s.resourceType, s.count]))
+      : d.by_type,
+  });
+
   const openDatasetStats = useCallback(async () => {
     setDatasetStatsOpen((o) => !o);
     if (!datasetStats) {
       try {
         const r = await fetch("/api/dataset-stats");
-        if (r.ok) setDatasetStats(await r.json());
+        if (r.ok) setDatasetStats(normalizeStats(await r.json()));
       } catch {
         /* ignore */
       }
@@ -299,7 +311,7 @@ export function App() {
     fetch("/api/dataset-stats")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d) setDatasetStats(d);
+        if (d) setDatasetStats(normalizeStats(d));
       })
       .catch(() => {});
   }, [health?.kernel_id]);
