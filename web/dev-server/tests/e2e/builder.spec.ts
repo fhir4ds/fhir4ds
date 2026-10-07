@@ -194,3 +194,34 @@ test("rbux2: typed widgets — date picker, choice dropdown, repeatable rows", a
   const codeGroup = pane.locator(".dev-rbgroupitem", { hasText: "code" }).first();
   await expect(codeGroup.locator(".dev-rbgroup").first()).toBeVisible({ timeout: 10000 });
 });
+
+test("rbux2 gate: form mirrors JSON coding values; arm-switch hides inactive arms", async ({ page }) => {
+  await page.goto(BASE);
+  await page.locator(".dev-lib.small", { hasText: "+ Resource" }).click();
+  const pane = page.locator(".dev-rbpane");
+  await page.locator(".dev-rbtpl", { hasText: "Observation" }).click();
+
+  // P0: the JSON carries code.coding[0] {system, code, display}; the form's
+  // coding rows must MIRROR those values (JSON-is-authoritative).
+  await expect(pane.locator(".dev-rbjsonarea")).toHaveValue(/8480-6/, { timeout: 10000 });
+  const codingInputs = pane.locator(".dev-rbgroup .dev-rbrow input.dev-rbinput");
+  await expect(codingInputs.first()).toBeVisible({ timeout: 10000 });
+  const values: string[] = [];
+  const count = await codingInputs.count();
+  for (let i = 0; i < count; i++) values.push(await codingInputs.nth(i).inputValue());
+  const joined = values.join("|");
+  if (!joined.includes("http://loinc.org") || !joined.includes("8480-6") || !joined.includes("BP")) {
+    throw new Error(`coding rows do not mirror JSON values: ${joined}`);
+  }
+
+  // P1: switch the value[x] arm — the JSON must carry ONLY the new arm and
+  // the old arm's rows must not linger (choice arms render only via the
+  // choice dropdown, never duplicated in the structured tree).
+  const valueSel = page
+    .locator(".dev-rbchoicesel")
+    .filter({ has: page.locator("option[value=valueBoolean]") });
+  await expect(valueSel).toHaveCount(1, { timeout: 10000 });
+  await valueSel.selectOption("valueBoolean");
+  await expect(pane.locator(".dev-rbjsonarea")).toHaveValue(/valueBoolean/, { timeout: 5000 });
+  await expect(pane.locator(".dev-rbjsonarea")).not.toHaveValue(/valueQuantity/);
+});

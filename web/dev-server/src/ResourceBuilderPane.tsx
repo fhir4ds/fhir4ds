@@ -99,8 +99,11 @@ function scanChoiceArms(node: SchemaNode | null, group: string): SchemaNode[] {
   const walk = (n: SchemaNode) => {
     for (const c of n.children ?? []) {
       if (c.hatch) continue;
-      if (c.choice_group === group) out.push(c);
-      else if ((c.children?.length ?? 0) > 0) walk(c);
+      if (c.choice_group === group) {
+        // Dedupe by arm name — the recursive scan can reach the same arm
+        // through nested subtrees (extension value[x] mirrors root value[x]).
+        if (!out.some((x) => x.name === c.name)) out.push(c);
+      } else if ((c.children?.length ?? 0) > 0) walk(c);
     }
   };
   walk(node);
@@ -278,9 +281,21 @@ function StructuredGroup({
                     type="button"
                     className="dev-rbdelbtn"
                     title={`remove this ${leaf} element`}
+                    aria-label={`remove this ${leaf} element`}
                     onClick={() => ctx.removeAt(f.path)}
                   >
                     ✕
+                  </button>
+                )}
+                {(f.node.cardinality === "0..*" || f.index !== null) && (
+                  <button
+                    type="button"
+                    className="dev-rbaddbtn"
+                    title={`add another ${leaf} element`}
+                    aria-label={`add another ${leaf} element`}
+                    onClick={() => ctx.appendAt(f.path.replace(/#\d+$/, ""), typeof f.value === "object" && f.value !== null && !Array.isArray(f.value) ? {} : Array.isArray(f.value) ? "" : typeof f.value)}
+                  >
+                    +
                   </button>
                 )}
               </div>
@@ -306,6 +321,7 @@ function StructuredGroup({
               <button
                 className="dev-rbrefbtn"
                 title={`Browse ${refTargets.join(" | ")} resources from the loaded dataset files`}
+                aria-label={`browse ${refTargets.join(" or ")} references`}
                 onClick={() => ctx.browseReferences(f.path, refTargets)}
                 type="button"
               >
@@ -461,7 +477,8 @@ function fieldsFor(
   if (!schema) return [];
   const out: FieldNode[] = [];
   for (const child of schema.children ?? []) {
-    if (child.hatch || child.name === "resourceType") continue;
+    // Choice arms are owned by the choice dropdown rows — never duplicated here.
+    if (child.hatch || child.name === "resourceType" || child.choice_group) continue;
     const path = joinPath(prefix, child.name);
     const v = obj[child.name];
     if (Array.isArray(v)) {
@@ -943,13 +960,18 @@ export function ResourceBuilderPane({ transport, datasets, dataHint, initialReso
             {choiceGroups.map((group) => {
               const arms = scanChoiceArms(tree, group);
               const sel = selectedChoiceArm(group);
+              // Hide groups with no active arm AND no meaningful choice
+              // remaining (only render the picker when the user can act).
+              if (!sel && arms.length < 2) return null;
               return (
                 <div key={group} className="dev-rbrow dev-rbchoicerow">
-                  <label className="dev-rblabel" title={`choice group ${group} — pick one arm`}>
+                  <label className="dev-rblabel" title={`choice group ${group} — pick one arm (SDC-style: only the active arm shows)`}>
                     {group}
                   </label>
                   <select
                     className="dev-rbinput dev-rbsel dev-rbchoicesel"
+                    title={`choose the ${group} arm`}
+                    aria-label={`choice arm for ${group}`}
                     value={sel ? sel.arm.name : ""}
                     onChange={(e) => {
                       const armName = e.target.value;
