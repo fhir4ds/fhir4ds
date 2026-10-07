@@ -197,6 +197,49 @@ class _Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
             return
+        if path == "/api/dataset":
+            # v4.4: dataset file read — resource list + per-line parse errors.
+            from urllib.parse import parse_qs, urlparse
+
+            query = parse_qs(urlparse(self.path).query)
+            dpath = (query.get("path") or [""])[0]
+            snap = self.server.watcher.snapshot
+            if dpath not in {str(p) for p in snap.datasets}:
+                self._write_json(
+                    200,
+                    _envelope(
+                        False,
+                        diagnostics=[_diag(f"unknown dataset path: {dpath}")],
+                    ),
+                )
+                return
+            resources: list[dict[str, Any]] = []
+            parse_errors: list[dict[str, Any]] = []
+            try:
+                with open(dpath, "r", encoding="utf-8-sig") as fh:
+                    for lineno, line in enumerate(fh, start=1):
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            obj = json.loads(line)
+                        except json.JSONDecodeError as exc:
+                            parse_errors.append({"line": lineno, "error": str(exc)})
+                            continue
+                        if isinstance(obj, dict):
+                            resources.append(obj)
+                        else:
+                            parse_errors.append(
+                                {"line": lineno, "error": "line is not a JSON object"}
+                            )
+            except OSError as exc:
+                self._write_json(200, _envelope(False, diagnostics=[_diag(str(exc))]))
+                return
+            self._write_json(
+                200,
+                _envelope(path=dpath, resources=resources, parse_errors=parse_errors),
+            )
+            return
         if path == "/api/library-header":
             # v3 Slice 1: header info (library/includes/parameters) for the
             # Parameters pane.

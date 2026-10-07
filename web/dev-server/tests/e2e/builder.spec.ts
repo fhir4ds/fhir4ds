@@ -51,7 +51,7 @@ test.beforeAll(async () => {
   server = spawn(
     "/usr/bin/python3",
     ["-m", "fhir4ds.cli", "dev", dir, "--port", String(PORT), "--no-open"],
-    { cwd: dir, env: { PYTHONPATH: "/mnt/d/fhir4ds-cleanroom-v4-20261006", PATH: process.env.PATH ?? "" }, stdio: "ignore" },
+    { cwd: dir, env: { PYTHONPATH: "/mnt/d/fhir4ds-devserver-v44-20261007", PATH: process.env.PATH ?? "" }, stdio: "ignore" },
   );
   for (let i = 0; i < 120; i++) {
     try {
@@ -125,12 +125,12 @@ test("invalid resource blocks save with inline red", async ({ page }) => {
   await expect(page.locator(".dev-rbsavebtn")).toBeDisabled();
 });
 
-test("dataset click renders stats without crashing", async ({ page }) => {
+test("dataset click opens the dataset pane with stats (no crash)", async ({ page }) => {
   await page.goto(BASE);
   await expect(page.locator(".dev-dataset").first()).toBeVisible();
   await page.locator(".dev-dataset").first().click();
-  const stats = page.locator(".dev-datasetstats");
-  await expect(stats).toBeVisible();
-  await expect(stats).toContainText("total: 2");
-  await expect(stats).toContainText("Patient: 2");
+  const pane = page.locator(".dev-dspane");
+  await expect(pane).toBeVisible();
+  await expect(pane.locator(".dev-dstotal")).toContainText("total: 2", { timeout: 20000 });
+  await expect(pane.locator(".dev-dschipstat").first()).toContainText("Patient");
 });

@@ -8,6 +8,10 @@ interface Props {
   transport: Transport;
   datasets: string[];
   dataHint: string | null;
+  /** Prefill the builder from the DatasetPane 'Edit in builder' action. */
+  initialResource?: Record<string, unknown> | null;
+  /** Preselect the target dataset file (e.g. the file the resource came from). */
+  initialDatasetPath?: string | null;
 }
 
 /** Starter templates: common authoring cases (conductor addition to v4.1). */
@@ -118,17 +122,21 @@ function lookup(obj: Record<string, unknown>, path: string): unknown {
   return cur;
 }
 
-export function ResourceBuilderPane({ transport, datasets, dataHint }: Props) {
-  const [resourceType, setResourceType] = useState("");
-  const [tree, setTree] = useState<SchemaNode | null>(null);
-  const [resource, setResource] = useState<Record<string, unknown>>({});
-  const [jsonText, setJsonText] = useState("");
+export function ResourceBuilderPane({ transport, datasets, dataHint, initialResource = null, initialDatasetPath = null }: Props) {
+  const [resourceType, setResourceType] = useState(
+    initialResource && typeof initialResource.resourceType === "string" ? initialResource.resourceType : "",
+  );
+
+  const [resource, setResource] = useState<Record<string, unknown>>(initialResource ?? {});
+  const [jsonText, setJsonText] = useState(initialResource ? JSON.stringify(initialResource, null, 2) : "");
+
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [validation, setValidation] = useState<{ valid: boolean; messages: Diagnostic[] } | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
-  const [datasetPath, setDatasetPath] = useState("");
+  const [datasetPath, setDatasetPath] = useState(initialDatasetPath ?? "");
   const [busy, setBusy] = useState(false);
   const [pickerText, setPickerText] = useState("");
+  const [tree, setTree] = useState<SchemaNode | null>(null);
   const jsonAreaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {

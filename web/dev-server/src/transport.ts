@@ -211,6 +211,15 @@ export interface ViewInfo {
   name: string | null;
 }
 
+export interface DatasetInfo {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  path: string;
+  resources: Record<string, unknown>[];
+  parse_errors: { line: number; error: string }[];
+}
+
 export interface ViewRunResult {
   schema: number;
   ok: boolean;
@@ -261,6 +270,8 @@ export interface Transport {
   workspace(): Promise<WorkspaceInfo>;
   defineTypes(library: string, text?: string): Promise<DefineTypeInfo[]>;
   view(path: string): Promise<ViewInfo>;
+
+  dataset(path: string): Promise<DatasetInfo>;
   viewRun(text?: string, path?: string, resources?: Record<string, unknown>[]): Promise<ViewRunResult>;
   schemaTree(resource: string, depth?: number): Promise<SchemaTreeResult>;
   resourceValidate(resource: Record<string, unknown>): Promise<ResourceValidateResult>;

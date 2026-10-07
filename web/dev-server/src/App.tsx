@@ -28,6 +28,7 @@ import { ParamsPane } from "./ParamsPane";
 import { TestsPane } from "./TestsPane";
 import { MeasurePane } from "./MeasurePane";
 import { VdPane } from "./VdPane";
+import { DatasetPane } from "./DatasetPane";
 import { ResourceBuilderPane } from "./ResourceBuilderPane";
 
 type Tab = "results" | "sql" | "errors";
@@ -61,7 +62,6 @@ export function App() {
   const [indexOpen, setIndexOpen] = useState(false);
   const [kernelBusy, setKernelBusy] = useState<"idle" | "busy" | "restarting">("idle");
   const [datasetStats, setDatasetStats] = useState<{ total: number; by_type: Record<string, number> } | null>(null);
-  const [datasetStatsOpen, setDatasetStatsOpen] = useState(false);
   // v3: resource panes + dataset context. The left rail lists ALL resource
   // types; railView picks what the center column shows (null = cell boxes).
   const [railView, setRailView] = useState<
@@ -69,9 +69,14 @@ export function App() {
     | { kind: "params"; id: string }
     | { kind: "measure"; id: string }
     | { kind: "view"; id: string }
+    | { kind: "dataset"; id: string }
     | { kind: "builder" }
     | null
   >(null);
+  const [builderPrefill, setBuilderPrefill] = useState<{
+    resource: Record<string, unknown>;
+    datasetPath: string;
+  } | null>(null);
   const [vsStale, setVsStale] = useState(false);
   const [patients, setPatients] = useState<string[]>([]);
   // v4.3: last measure run's MeasureReports for the VD pane's
@@ -293,18 +298,6 @@ export function App() {
       : d.by_type,
   });
 
-  const openDatasetStats = useCallback(async () => {
-    setDatasetStatsOpen((o) => !o);
-    if (!datasetStats) {
-      try {
-        const r = await fetch("/api/dataset-stats");
-        if (r.ok) setDatasetStats(normalizeStats(await r.json()));
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [datasetStats]);
-
   // v3: dataset context — load stats once so the results header can echo
   // dataset + patient count alongside the kernel id.
   useEffect(() => {
@@ -391,21 +384,16 @@ export function App() {
               {!lib.parse_ok && <em title={lib.error ?? ""}> ⚠</em>}
             </div>
           ))}
-          {workspace?.datasets.length ? (
-            <h2
-              className="dev-data-toggle"
-              onClick={openDatasetStats}
-              title="Show loaded dataset details"
-            >
-              Data
-            </h2>
-          ) : null}
+          {workspace?.datasets.length ? <h2>Data</h2> : null}
           {(workspace?.datasets ?? []).map((d) => (
             <div
               key={d}
-              className="dev-lib small dev-dataset"
+              className={
+                "dev-lib small dev-dataset" +
+                (railView?.kind === "dataset" && railView.id === d ? " selected" : "")
+              }
               title={d}
-              onClick={openDatasetStats}
+              onClick={() => setRailView({ kind: "dataset", id: d })}
             >
               {d.split("/").pop()}
             </div>
@@ -487,20 +475,13 @@ export function App() {
               "dev-lib small" + (railView?.kind === "builder" ? " selected" : "")
             }
             title="Form/JSON hybrid resource builder with schema-tree guidance and validate_resource gating"
-            onClick={() => setRailView({ kind: "builder" })}
+            onClick={() => {
+              setBuilderPrefill(null);
+              setRailView({ kind: "builder" });
+            }}
           >
             + Resource
           </div>
-          {datasetStatsOpen && datasetStats && (
-            <div className="dev-datasetstats">
-              <div>total: {datasetStats.total}</div>
-              {Object.entries(datasetStats.by_type).map(([t, n]) => (
-                <div key={t}>
-                  {t}: {n}
-                </div>
-              ))}
-            </div>
-          )}
         </aside>
         <section className="dev-editor">
           {railView?.kind === "valueset" ? (
@@ -554,6 +535,16 @@ export function App() {
                 onMeasureReports={setLastMeasureReports}
               />
             </div>
+          ) : railView?.kind === "dataset" ? (
+            <DatasetPane
+              transport={transport}
+              path={railView.id}
+              datasetName={railView.id.split("/").pop() ?? railView.id}
+              onEditInBuilder={(resource, datasetPath) => {
+                setBuilderPrefill({ resource, datasetPath });
+                setRailView({ kind: "builder" });
+              }}
+            />
           ) : railView?.kind === "view" ? (
             <VdPane
               transport={transport}
@@ -569,6 +560,8 @@ export function App() {
               transport={transport}
               datasets={workspace?.datasets ?? []}
               dataHint={dataHint.length > 0 ? `data changed (${dataHint.length}) — restart kernel to load` : null}
+              initialResource={builderPrefill?.resource ?? null}
+              initialDatasetPath={builderPrefill?.datasetPath ?? null}
             />
           ) : (
             <>

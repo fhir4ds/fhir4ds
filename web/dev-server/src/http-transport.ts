@@ -3,6 +3,7 @@ import type {
   DefineTypeInfo,
   ViewInfo,
   ViewRunResult,
+  DatasetInfo,
   ResourceSaveResult,
   ResourceValidateResult,
   SchemaTreeResult,
@@ -132,6 +133,10 @@ export class HttpTransport implements Transport {
 
   view(path: string): Promise<ViewInfo> {
     return this.unwrap(`/api/view?path=${encodeURIComponent(path)}`);
+  }
+
+  dataset(path: string): Promise<DatasetInfo> {
+    return this.unwrap(`/api/dataset?path=${encodeURIComponent(path)}`);
   }
 
   viewRun(text?: string, path?: string, resources?: Record<string, unknown>[]): Promise<ViewRunResult> {
