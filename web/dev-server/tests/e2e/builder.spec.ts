@@ -51,7 +51,7 @@ test.beforeAll(async () => {
   server = spawn(
     "/usr/bin/python3",
     ["-m", "fhir4ds.cli", "dev", dir, "--port", String(PORT), "--no-open"],
-    { cwd: dir, env: { PYTHONPATH: "/mnt/d/fhir4ds-devserver-rbux-20261007", PATH: process.env.PATH ?? "" }, stdio: "ignore" },
+    { cwd: dir, env: { PYTHONPATH: "/mnt/d/fhir4ds-rbux2-typed-20261007", PATH: process.env.PATH ?? "" }, stdio: "ignore" },
   );
   for (let i = 0; i < 120; i++) {
     try {
@@ -159,4 +159,33 @@ test("Build section gone; '+ Resource' lives under Data; add-element adds second
   if (!Array.isArray(parsed.telecom) || parsed.telecom.length < 1) {
     throw new Error(`expected a telecom array from the add-element picker, got ${JSON.stringify(parsed.telecom)}`);
   }
+});
+
+test("rbux2: typed widgets — date picker, choice dropdown, repeatable rows", async ({ page }) => {
+  await page.goto(BASE);
+  await page.locator(".dev-lib.small", { hasText: "+ Resource" }).click();
+  await expect(page.locator(".dev-rbpane")).toBeVisible();
+  await page.locator(".dev-rbtpl", { hasText: "Patient" }).click();
+  const pane = page.locator(".dev-rbpane");
+
+  // 1. Date widget: Patient.birthDate renders a native date input seeded from the template.
+  const dateInput = pane.locator(".dev-rbdate");
+  await expect(dateInput).toHaveCount(1, { timeout: 10000 });
+  await expect(dateInput).toHaveValue("1974-12-25");
+
+  // 2. Choice dropdown: deceased[x] choice group offers the boolean arm; selecting writes JSON.
+  //    Scope by page-level :has filter (nested pane-scope locators inside `has:` don't match);
+  //    multiple choice groups render sibling selects.
+  const deceasedSel = page
+    .locator(".dev-rbchoicesel")
+    .filter({ has: page.locator("option[value=deceasedBoolean]") });
+  await expect(deceasedSel).toHaveCount(1, { timeout: 10000 });
+  await expect(deceasedSel.locator("option", { hasText: "deceased (boolean)" })).toHaveCount(1);
+  await deceasedSel.selectOption("deceasedBoolean");
+  await expect(pane.locator(".dev-rbjsonarea")).toHaveValue(/deceasedBoolean/, { timeout: 5000 });
+
+  // 3. Repeatable-element rows: name.given renders one typed row per array element.
+  await expect(pane.locator(".dev-rbarrayrows").first()).toBeVisible({ timeout: 10000 });
+  const givenRows = pane.locator(".dev-rbarrayrows .dev-rbrow");
+  await expect(givenRows.first()).toBeVisible();
 });

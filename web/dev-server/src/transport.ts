@@ -247,6 +247,8 @@ export interface SchemaTreeNode {
   children?: SchemaTreeNode[];
   reference_targets?: string[];
   hatch?: boolean;
+  /** Choice-arm marker: e.g. deceasedBoolean carries choice_group 'deceased[x]'. */
+  choice_group?: string;
 }
 
 export interface ResourceValidateResult {

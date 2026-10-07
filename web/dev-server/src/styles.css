@@ -998,3 +998,17 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
 .dev-paramsaddbtn:hover {
   border-color: #9cdcfe;
 }
+
+/* v3.1-rbux2: typed widgets in the resource builder */
+.dev-rbcheck { margin-left: 8px; }
+.dev-rbdate { color-scheme: dark; }
+.dev-rbnum { min-width: 120px; }
+.dev-rbsel { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; border-radius: 3px; padding: 2px 4px; }
+.dev-rbqty { display: inline-flex; gap: 4px; flex: 1; }
+.dev-rbqtyval { max-width: 120px; }
+.dev-rbqtyunit { max-width: 140px; }
+.dev-rbchoicerow { background: rgba(14, 99, 156, 0.10); border-left: 3px solid #0e639c; padding-left: 6px; margin: 2px 0; }
+.dev-rbchoicesel { max-width: 220px; }
+.dev-rbchoicewidget { display: inline-flex; flex: 1; align-items: center; }
+.dev-rbarrayrows { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #444; }
+.dev-rbarrayadd { margin: 4px 0 6px 0; }
