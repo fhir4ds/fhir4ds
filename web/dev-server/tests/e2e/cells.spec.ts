@@ -114,6 +114,16 @@ test("cell chip exists and run produces visible output", async ({ page }) => {
   });
   // The chip flips to ok after the run completes.
   await expect(page.locator(".dev-chip.ok").first()).toBeVisible({ timeout: 60_000 });
+  // P0 pin (Muse final gate): the queued synced frame must not clobber the
+  // run's OK state back to NOT RUN — the pill stays ok for at least 2s.
+  // (Scope to the run button's bar: the header box also renders a bar.)
+  await page.waitForTimeout(2000);
+  const runBar = page
+    .locator(".dev-boxbar")
+    .filter({ has: page.locator(".dev-cellrun") })
+    .first();
+  await expect(runBar.locator(".dev-chip.ok")).toBeVisible();
+  await expect(runBar.locator(".dev-chip.idle")).toHaveCount(0);
 });
 
 test("ux2: right Results pane populates on cell run", async ({ page }) => {

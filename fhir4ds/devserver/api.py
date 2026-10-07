@@ -1581,6 +1581,11 @@ class _Handler(BaseHTTPRequestHandler):
                     run_msg = None
                 if run_msg is not None:
                     self._execute_cell_run(conn_id, run_msg)
+                    # A queued sync reply predates the run's inline
+                    # session.sync (same buffer text); sending it after
+                    # the result frame would clobber the run's OK states
+                    # (client merges synced.states unconditionally).
+                    sync_reply[0] = None
                     continue
                 if sync_reply[0] is not None:
                     frame = json.dumps({"kind": "synced", **sync_reply[0]})
