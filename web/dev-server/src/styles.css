@@ -1012,3 +1012,14 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
 .dev-rbchoicewidget { display: inline-flex; flex: 1; align-items: center; }
 .dev-rbarrayrows { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #444; }
 .dev-rbarrayadd { margin: 4px 0 6px 0; }
+
+/* v3.1-rbux2 nested structured groups (Coding under Code, value/unit under Quantity) */
+.dev-rbgroup-root { display: flex; flex-direction: column; gap: 4px; }
+.dev-rbgroup { display: flex; flex-direction: column; gap: 3px; border-left: 2px solid #094771; padding-left: 10px; margin: 4px 0 6px 130px; }
+.dev-rbgroup-root > .dev-rbgroupitem > .dev-rbgroup { margin-left: 0; }
+.dev-rbgroupitem { margin: 2px 0; }
+.dev-rbgrouplabel { color: #9cdcfe; font-size: 11px; margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
+.dev-rbgrouplabel .dev-rbdelbtn { padding: 0 4px; }
+.dev-rbgroup-empty { color: #888; font-size: 11px; font-style: italic; padding: 2px 0; }
+.dev-rbqtyrow .dev-rbqty { display: inline-flex; gap: 4px; flex: 1; }
+.dev-rbqtysystem { max-width: 220px; }

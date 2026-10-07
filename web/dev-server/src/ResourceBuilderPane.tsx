@@ -217,8 +217,280 @@ function QuantityInput({
   );
 }
 
+/**
+ * Context the recursive form renderer needs from the pane: writers +
+ * reference browse + curated-binding context. Kept as a plain object so the
+ * recursion passes one prop.
+ */
+export interface FormCtx {
+  resourceType: string;
+  setAtPath: (path: string, value: unknown, del: boolean) => void;
+  setQuantityObj: (path: string, patch: Record<string, unknown>, delKeys: string[]) => void;
+  appendAt: (path: string, def: unknown) => void;
+  removeAt: (path: string) => void;
+  browseReferences: (path: string, targets: string[]) => void;
+  refBrowsePath: string | null;
+  refCandidates: RefCandidate[];
+  refTargets: string[];
+}
+
+/**
+ * Recursive structured group: renders the schema children of one object
+ * value as nested typed widgets (Coding under Code, value/unit under
+ * Quantity, …). Raw JSON only for hatch/unknown shapes.
+ */
+function StructuredGroup({
+  obj,
+  schema,
+  prefix,
+  depth,
+  ctx,
+}: {
+  obj: Record<string, unknown>;
+  schema: SchemaNode;
+  prefix: string;
+  depth: number;
+  ctx: FormCtx;
+}) {
+  const fields = fieldsFor(obj, schema, prefix);
+  if (fields.length === 0 && depth > 0) {
+    return <div className="dev-rbgroup-empty">(empty group — add fields below or via JSON)</div>;
+  }
+  return (
+    <div className={depth === 0 ? "dev-rbgroup-root" : "dev-rbgroup"}>
+      {fields.map((f) => {
+        const leaf = f.node.name;
+        const segs = f.path.replace(/#\d+$/, "").split(".");
+        const required = f.node.cardinality === "1..1";
+        if (isStructuredType(f.node)) {
+          const childObj =
+            f.value && typeof f.value === "object" && !Array.isArray(f.value)
+              ? (f.value as Record<string, unknown>)
+              : {};
+          return (
+            <div key={f.path} className="dev-rbgroupitem">
+              <div className="dev-rbgrouplabel">
+                {leaf}
+                {required && <span className="dev-rbreq"> *</span>}
+                <span className="dev-rbsub"> {f.node.type} {f.node.cardinality ?? ""}</span>
+                {f.index !== null && (
+                  <button
+                    type="button"
+                    className="dev-rbdelbtn"
+                    title={`remove this ${leaf} element`}
+                    onClick={() => ctx.removeAt(f.path)}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <StructuredGroup obj={childObj} schema={f.node} prefix={f.path} depth={depth + 1} ctx={ctx} />
+            </div>
+          );
+        }
+        // Reference: text input + browse popover (reference_targets).
+        const refTargets = f.node.reference_targets;
+        if (refTargets?.length) {
+          return (
+            <div key={f.path} className="dev-rbrow">
+              <label className="dev-rblabel" title={`type ${f.node.type} · cardinality ${f.node.cardinality ?? ""}`}>
+                {segs.map((s, i) => (i === 0 ? s : <span key={i} className="dev-rbsub">.{s}</span>))}
+                {required && <span className="dev-rbreq"> *</span>}
+              </label>
+              <input
+                className="dev-rbinput"
+                value={typeof f.value === "string" ? f.value : f.value && typeof f.value === "object" ? String((f.value as Record<string, unknown>).reference ?? "") : ""}
+                placeholder={`Reference (${refTargets.join(" | ")})`}
+                onChange={(e) => ctx.setAtPath(f.path, e.target.value === "" ? undefined : { reference: e.target.value }, false)}
+              />
+              <button
+                className="dev-rbrefbtn"
+                title={`Browse ${refTargets.join(" | ")} resources from the loaded dataset files`}
+                onClick={() => ctx.browseReferences(f.path, refTargets)}
+                type="button"
+              >
+                ⌖
+              </button>
+              {ctx.refBrowsePath === f.path && (
+                <RefPopover
+                  targets={ctx.refTargets}
+                  candidates={ctx.refCandidates}
+                  onPick={(t, id) => {
+                    ctx.setAtPath(f.path, { reference: `${t}/${id}` }, false);
+                  }}
+                  onClose={() => ctx.browseReferences("", [])}
+                />
+              )}
+            </div>
+          );
+        }
+        // Quantity: value + unit + system/code via the object writer.
+        if (f.node.type === "Quantity") {
+          const q = f.value && typeof f.value === "object" && !Array.isArray(f.value)
+            ? (f.value as Record<string, unknown>)
+            : {};
+          return (
+            <div key={f.path} className="dev-rbrow dev-rbqtyrow">
+              <label className="dev-rblabel" title={`Quantity · ${f.node.cardinality ?? ""}`}>
+                {leaf}{required && <span className="dev-rbreq"> *</span>}
+              </label>
+              <span className="dev-rbqty">
+                <input
+                  type="number" step="any" className="dev-rbinput dev-rbqtyval" placeholder="value"
+                  value={q.value === undefined || q.value === null ? "" : String(q.value)}
+                  onChange={(e) =>
+                    ctx.setQuantityObj(f.path, e.target.value === "" ? {} : { value: Number(e.target.value) }, e.target.value === "" ? ["value"] : [])
+                  }
+                />
+                <input
+                  className="dev-rbinput dev-rbqtyunit" placeholder="unit"
+                  value={typeof q.unit === "string" ? q.unit : ""}
+                  onChange={(e) =>
+                    ctx.setQuantityObj(f.path, e.target.value === "" ? {} : { unit: e.target.value }, e.target.value === "" ? ["unit"] : [])
+                  }
+                />
+                <input
+                  className="dev-rbinput dev-rbqtysystem" placeholder="system"
+                  value={typeof q.system === "string" ? q.system : ""}
+                  onChange={(e) =>
+                    ctx.setQuantityObj(f.path, e.target.value === "" ? {} : { system: e.target.value }, e.target.value === "" ? ["system"] : [])
+                  }
+                />
+              </span>
+            </div>
+          );
+        }
+        // Primitive (incl. choice arms already filtered): typed widget.
+        return (
+          <div key={f.path} className="dev-rbrow">
+            <label className="dev-rblabel" title={`type ${f.node.type} · cardinality ${f.node.cardinality ?? ""}`}>
+              {segs.map((s, i) => (i === 0 ? s : <span key={i} className="dev-rbsub">.{s}</span>))}
+              {f.index !== null && <span className="dev-rbsub"> [{f.index}]</span>}
+              {required && <span className="dev-rbreq"> *</span>}
+            </label>
+            <PrimitiveInput
+              path={f.path}
+              value={asString(f.value)}
+              node={f.node}
+              resourceType={ctx.resourceType}
+              onChange={(raw) => {
+                let value: unknown = raw;
+                if (raw === "true") value = true;
+                else if (raw === "false") value = false;
+                else if (raw !== "" && !Number.isNaN(Number(raw))) value = Number(raw);
+                ctx.setAtPath(f.path, value, raw === "");
+              }}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Reference browse popover (shared by flat + structured renderers). */
+function RefPopover({
+  targets,
+  candidates,
+  onPick,
+  onClose,
+}: {
+  targets: string[];
+  candidates: RefCandidate[];
+  onPick: (type: string, id: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="dev-rbrefpop" role="listbox">
+      <div className="dev-rbrefpop-head">
+        {targets.join(" | ")} from loaded data
+        <button type="button" className="dev-rbrefclose" onClick={onClose}>✕</button>
+      </div>
+      {candidates.length === 0 ? (
+        <div className="dev-rbrefempty">
+          No {targets.join("/")} resources in the loaded dataset files —
+          type a reference manually (e.g. {targets[0]}/id).
+        </div>
+      ) : (
+        <div className="dev-rbreflist">
+          {candidates.slice(0, 50).map((c) => (
+            <button
+              key={`${c.type}/${c.id}`}
+              type="button"
+              className="dev-rbrefitem"
+              onClick={() => onPick(c.type, c.id)}
+            >
+              <span className="dev-rbctype">{c.type}</span>
+              <span className="dev-rbcid">{c.id}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function joinPath(base: string, name: string): string {
   return base ? `${base}.${name}` : name;
+}
+
+/** Deep-clone a value through JSON (form edits never mutate shared state). */
+function clone(v: unknown): unknown {
+  return v === undefined ? undefined : JSON.parse(JSON.stringify(v));
+}
+
+/**
+ * Structured form tree: ONE node per schema child, carrying the CURRENT
+ * resource value. Complex schema types (CodeableConcept, Coding, Quantity,
+ * Reference, BackboneElement, …) render as NESTED GROUPS of their schema
+ * children — raw JSON only as the deep fallback for hatch/unknown shapes.
+ */
+type FieldNode = {
+  node: SchemaNode;
+  path: string;
+  value: unknown;
+  /** Array index this element represents (repeatable containers). */
+  index: number | null;
+};
+
+function fieldsFor(
+  obj: Record<string, unknown>,
+  schema: SchemaNode | null,
+  prefix: string
+): FieldNode[] {
+  if (!schema) return [];
+  const out: FieldNode[] = [];
+  for (const child of schema.children ?? []) {
+    if (child.hatch || child.name === "resourceType") continue;
+    const path = joinPath(prefix, child.name);
+    const v = obj[child.name];
+    if (Array.isArray(v)) {
+      v.forEach((el, i) => out.push({ node: child, path: `${path}#${i}`, value: el, index: i }));
+    } else if (v !== undefined && v !== null) {
+      out.push({ node: child, path, value: v, index: null });
+    } else if (child.cardinality === "1..1") {
+      // Required-but-missing: still surface the field so users can fill it.
+      out.push({ node: child, path, value: undefined, index: null });
+    }
+  }
+  return out;
+}
+
+/**
+ * Whether a schema node should render as a STRUCTURED nested group (its
+ * schema children become widgets) rather than a raw value/JSON blob.
+ * Choice-group arms are handled separately (the choice dropdown owns them).
+ */
+function isStructuredType(n: SchemaNode): boolean {
+  if ((n.children?.length ?? 0) === 0) return false;
+  if (n.choice_group) return false; // choice arms render via the group dropdown
+  return true;
+}
+
+/** Value helpers for primitive widget rendering. */
+function asString(v: unknown): string {
+  if (v === undefined || v === null) return "";
+  return typeof v === "string" ? v : JSON.stringify(v);
 }
 
 /** Derive a flat editable row set from a resource dict, guided by the schema tree. */
@@ -258,6 +530,9 @@ function rowsForResource(
   if (tree) collect(tree, "");
   return { rows, primitives };
 }
+
+// NOTE: rowsForResource/repeatRows above are retained for the JSON fallback
+// path only; the structured form now renders via FieldNode recursion.
 
 /** Collect one leaf row per array element for repeatable primitive arrays. */
 function repeatRows(
@@ -366,7 +641,7 @@ export function ResourceBuilderPane({ transport, datasets, dataHint, initialReso
     if (!resourceType) return;
     let alive = true;
     transport
-      .schemaTree(resourceType, 2)
+      .schemaTree(resourceType, 4)
       .then((r) => {
         if (alive) setTree(r.root ?? null);
       })
@@ -474,6 +749,45 @@ export function ResourceBuilderPane({ transport, datasets, dataHint, initialReso
   };
 
   /** Append one element to a (possibly absent) array field in the resource. */
+  /** Remove the element addressed by a #N (or plain dotted) path. */
+  const removeAt = (path: string) => setAtPath(path, "", true);
+
+  /**
+   * Object writer for structured leaf groups (Quantity, Reference, …):
+   * merges `patch` into the object at `path` and deletes `delKeys`.
+   */
+  const setQuantityObj = (path: string, patch: Record<string, unknown>, delKeys: string[]) => {
+    const next = { ...resource } as Record<string, unknown>;
+    const segs = path.split(".");
+    let cur: Record<string, unknown> = next;
+    for (let i = 0; i < segs.length - 1; i++) {
+      const seg = segs[i];
+      if (!cur[seg] || typeof cur[seg] !== "object") cur[seg] = {};
+      let v: unknown = cur[seg];
+      if (Array.isArray(v)) v = v[0];
+      cur = (v ?? {}) as Record<string, unknown>;
+    }
+    const leafSeg = segs[segs.length - 1];
+    const hashIdx = leafSeg.indexOf("#");
+    let leaf = leafSeg;
+    let target: Record<string, unknown> = cur;
+    if (hashIdx >= 0) {
+      leaf = leafSeg.slice(0, hashIdx);
+      const idx = Number(leafSeg.slice(hashIdx + 1));
+      const arr = cur[leaf];
+      if (!Array.isArray(arr) || idx < 0 || idx >= arr.length) return;
+      const el = arr[idx];
+      target = el && typeof el === "object" ? (el as Record<string, unknown>) : (arr[idx] = {});
+    }
+    let obj = target[leaf];
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) obj = target[leaf] = {};
+    const merged = { ...(obj as Record<string, unknown>), ...patch };
+    for (const k of delKeys) delete merged[k];
+    if (Object.keys(merged).length === 0) delete target[leaf];
+    else target[leaf] = merged;
+    setResource(next);
+  };
+
   const appendAt = (path: string, def: unknown) => {
     const next = { ...resource } as Record<string, unknown>;
     const segs = path.split(".");
@@ -490,16 +804,6 @@ export function ResourceBuilderPane({ transport, datasets, dataHint, initialReso
     else cur[leaf] = [existing, def];
     setResource(next);
   };
-
-  const templateRows = useMemo(
-    () => rowsForResource(resource, tree),
-    [resource, tree]
-  );
-
-  const arrayRows = useMemo(
-    () => repeatRows(resource, tree),
-    [resource, tree]
-  );
 
   /** Choice groups present in the schema (from the tree, deduped). */
   const choiceGroups = useMemo(() => {
@@ -636,9 +940,6 @@ export function ResourceBuilderPane({ transport, datasets, dataHint, initialReso
             <div className="dev-rbformhead">
               form <span className="dev-rbsub">({resourceType}) — template helpers, JSON is authoritative</span>
             </div>
-            {templateRows.rows.length === 0 && (
-              <div className="dev-rbempty">no template fields — edit the JSON</div>
-            )}
             {choiceGroups.map((group) => {
               const arms = scanChoiceArms(tree, group);
               const sel = selectedChoiceArm(group);
@@ -680,169 +981,24 @@ export function ResourceBuilderPane({ transport, datasets, dataHint, initialReso
                 </div>
               );
             })}
-            {templateRows.rows.map((row) => {
-              const prim = templateRows.primitives.find((p) => p.path === row.path);
-              const refTargets = prim?.node.reference_targets;
-              const isQuantity = prim?.node.type === "Quantity";
-              const parentPath = row.path.split(".").slice(0, -1).join(".");
-              const leafName = row.path.split(".").slice(-1)[0];
-              const parentPrim = templateRows.primitives.find((p) => p.path === parentPath);
-              const parentRepeatable = parentPrim ? parentPrim.node.cardinality === "0..*" : false;
-              const siblings = templateRows.rows.filter((r) => r.path !== row.path && r.path.startsWith(parentPath ? parentPath + "." : ""));
-              return (
-                <div key={row.path} className="dev-rbrow">
-                  <label className="dev-rblabel" title={prim ? `cardinality ${prim.node.cardinality} · type ${prim.node.type}` : row.path}>
-                    {row.path}
-                    {prim?.node.cardinality === "1..1" && <span className="dev-rbreq"> *</span>}
-                  </label>
-                  {refTargets?.length ? (
-                    <>
-                      <input
-                        className="dev-rbinput"
-                        value={row.value}
-                        placeholder={`Reference (${refTargets.join(" | ")})`}
-                        onChange={(e) => setField(row.path, e.target.value)}
-                      />
-                      <button
-                        className="dev-rbrefbtn"
-                        title={`Browse ${refTargets.join(" | ")} resources from the loaded dataset files`}
-                        onClick={() => browseReferences(row.path, refTargets)}
-                        type="button"
-                      >
-                        ⌖
-                      </button>
-                    </>
-                  ) : isQuantity ? (
-                    <QuantityInput raw={row.value} onSet={(v, u) => setQuantity(row.path, v, u)} />
-                  ) : prim ? (
-                    <PrimitiveInput
-                      path={row.path}
-                      value={row.value}
-                      node={prim.node}
-                      resourceType={resourceType}
-                      onChange={(raw) => setField(row.path, raw)}
-                    />
-                  ) : (
-                    <input
-                      className="dev-rbinput"
-                      value={row.value}
-                      onChange={(e) => setField(row.path, e.target.value)}
-                    />
-                  )}
-                  {parentRepeatable && (
-                    <button
-                      type="button"
-                      className="dev-rbaddbtn"
-                      title={`add another ${leafName} element`}
-                      onClick={() => appendAt(parentPath, "")}
-                    >
-                      +
-                    </button>
-                  )}
-                  {parentRepeatable && siblings.length > 0 && (
-                    <button
-                      type="button"
-                      className="dev-rbdelbtn"
-                      title={`remove this ${leafName} element`}
-                      onClick={() => {
-                        const next = { ...resource } as Record<string, unknown>;
-                        const segs = row.path.split(".");
-                        let cur: unknown = next;
-                        for (let i = 0; i < segs.length - 1; i++) {
-                          cur = (cur as Record<string, unknown>)[segs[i]];
-                        }
-                        const parent = cur as Record<string, unknown>;
-                        const arr = parent[leafName];
-                        const idx = templateRows.rows.filter((r) => r.path === row.path || r.path === `${parentPath}.${leafName}`).findIndex((r) => r.path === row.path);
-                        if (Array.isArray(arr)) parent[leafName] = arr.filter((_, i) => i !== idx);
-                        setResource(next);
-                      }}
-                    >
-                      ✕
-                    </button>
-                  )}
-                  {refBrowse?.path === row.path && (
-                    <div className="dev-rbrefpop" role="listbox">
-                      <div className="dev-rbrefpop-head">
-                        {refBrowse.targets.join(" | ")} from loaded data
-                        <button type="button" className="dev-rbrefclose" onClick={() => setRefBrowse(null)}>✕</button>
-                      </div>
-                      {refBrowse.candidates.length === 0 ? (
-                        <div className="dev-rbrefempty">
-                          No {refBrowse.targets.join("/")} resources in the loaded dataset files —
-                          type a reference manually (e.g. {refBrowse.targets[0]}/id).
-                        </div>
-                      ) : (
-                        <div className="dev-rbreflist">
-                          {refBrowse.candidates.slice(0, 50).map((c) => (
-                            <button
-                              key={`${c.type}/${c.id}`}
-                              type="button"
-                              className="dev-rbrefitem"
-                              onClick={() => {
-                                setField(row.path, `${c.type}/${c.id}`);
-                                setRefBrowse(null);
-                              }}
-                            >
-                              <span className="dev-rbctype">{c.type}</span>
-                              <span className="dev-rbcid">{c.id}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {arrayRows.length > 0 && (
-              <div className="dev-rbarrayrows">
-                <div className="dev-rbformhead">
-                  repeatable elements <span className="dev-rbsub">one row per array element</span>
-                </div>
-                {arrayRows.map((row) => {
-                  const node = row.node!;
-                  const base = row.path.split("#")[0];
-                  return (
-                    <div key={row.path} className="dev-rbrow">
-                      <label className="dev-rblabel" title={`cardinality ${node.cardinality} · type ${node.type}`}>
-                        {base}
-                      </label>
-                      <PrimitiveInput
-                        path={row.path}
-                        value={row.value}
-                        node={node}
-                        resourceType={resourceType}
-                        onChange={(raw) => {
-                          let value: unknown = raw;
-                          if (raw === "true") value = true;
-                          else if (raw === "false") value = false;
-                          else if (raw !== "" && !Number.isNaN(Number(raw))) value = Number(raw);
-                          setAtPath(row.path, value, raw === "");
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="dev-rbdelbtn"
-                        title={`remove this ${base} element`}
-                        onClick={() => setAtPath(row.path, "", true)}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  );
-                })}
-                <button
-                  type="button"
-                  className="dev-rbaddbtn dev-rbarrayadd"
-                  title={`append another ${arrayRows[0]?.path.split("#")[0].split(".").slice(-1)[0] ?? "element"}`}
-                  onClick={() => appendAt(arrayRows[0].path.split("#")[0], "")}
-                >
-                  + add {arrayRows[0]?.path.split("#")[0].split(".").slice(-1)[0] ?? "element"}
-                </button>
-              </div>
-            )}
-            <div className="dev-rbaddrbar">
+            <StructuredGroup
+              obj={resource}
+              schema={tree!}
+              prefix=""
+              depth={0}
+              ctx={{
+                resourceType,
+                setAtPath,
+                setQuantityObj,
+                appendAt,
+                removeAt,
+                browseReferences,
+                refBrowsePath: refBrowse?.path ?? null,
+                refCandidates: refBrowse?.candidates ?? [],
+                refTargets: refBrowse?.targets ?? [],
+              }}
+            />
+                        <div className="dev-rbaddrbar">
               <select className="dev-rbaddsel" value={addSel} onChange={(e) => setAddSel(e.target.value)}>
                 <option value="">+ add data element…</option>
                 {rootFields

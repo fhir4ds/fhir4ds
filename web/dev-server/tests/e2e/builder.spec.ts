@@ -184,8 +184,13 @@ test("rbux2: typed widgets — date picker, choice dropdown, repeatable rows", a
   await deceasedSel.selectOption("deceasedBoolean");
   await expect(pane.locator(".dev-rbjsonarea")).toHaveValue(/deceasedBoolean/, { timeout: 5000 });
 
-  // 3. Repeatable-element rows: name.given renders one typed row per array element.
-  await expect(pane.locator(".dev-rbarrayrows").first()).toBeVisible({ timeout: 10000 });
-  const givenRows = pane.locator(".dev-rbarrayrows .dev-rbrow");
-  await expect(givenRows.first()).toBeVisible();
+  // 3. Nested structured groups: name renders as a HumanName group with
+  // family + given typed rows (Coding-style children, not raw JSON).
+  const nameGroup = pane.locator(".dev-rbgroupitem", { hasText: "name" }).first();
+  await expect(nameGroup).toBeVisible({ timeout: 10000 });
+  await expect(nameGroup.locator(".dev-rbrow").first()).toBeVisible();
+  // Observation-style check via template: code renders Coding children.
+  await page.locator(".dev-rbtpl", { hasText: "Observation" }).click();
+  const codeGroup = pane.locator(".dev-rbgroupitem", { hasText: "code" }).first();
+  await expect(codeGroup.locator(".dev-rbgroup").first()).toBeVisible({ timeout: 10000 });
 });
