@@ -1727,6 +1727,7 @@ class _Handler(BaseHTTPRequestHandler):
                     n: session.get_result(n).result for n in names if session.get_result(n)
                 },
                 "states": {n: OK for n in names},
+                "stale_reasons": {},
             }
         )
 

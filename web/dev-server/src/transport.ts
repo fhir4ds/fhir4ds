@@ -97,12 +97,13 @@ export interface CellState {
 }
 
 export interface CellEvent {
-  kind: "cellstate" | "result" | "cellerror" | "runerror";
+  kind: "cellstate" | "result" | "cellerror" | "runerror" | "synced";
   library?: string;
   cell?: string;
   cells?: string[];
   run_seq?: number;
   states?: Record<string, string>;
+  stale_reasons?: Record<string, string>;
   per_cell?: Record<string, { rows?: Record<string, unknown>[]; sql?: string | null }>;
   rows?: Record<string, unknown>[];
   timing_ms?: Record<string, number>;

@@ -248,6 +248,7 @@ class CellRecord:
     result: dict[str, Any] | None = None  # evaluate envelope slice
     error: str | None = None
     run_seq: int = 0
+    stale_reason: str | None = None  # one-line why (e.g. "BPVS changed")
 
 
 class CellSession:
@@ -279,6 +280,7 @@ class CellSession:
         """
         parsed = split_cells(text)
         with self.lock:
+            header_changed = parsed.header != self.header_text
             self.header_text = parsed.header
             new_cells = {c.name: c.text for c in parsed.cells}
             self.order = [c.name for c in parsed.cells]
@@ -291,6 +293,7 @@ class CellSession:
                 rec = self.results.get(name)
                 if rec is not None:
                     rec.status = STALE
+                    rec.stale_reason = "cell deleted"
 
             self.cells = new_cells
             for name in self.cells:
@@ -307,7 +310,14 @@ class CellSession:
                 for ref in refs.get(name, []):
                     if ref not in self.cells or new_cells.get(ref) != self._dep_texts.get(ref):
                         rec.status = STALE
+                        rec.stale_reason = f"{ref} changed"
                         break
+                # Header-edit cascade: valueset/codesystem declarations in
+                # the header feed every cell (in-valueset membership), so a
+                # header change dirties all computed cells in one pass.
+                if rec.status is not STALE and header_changed:
+                    rec.status = STALE
+                    rec.stale_reason = "header changed"
             self._dep_texts = dict(new_cells)
 
             return {
@@ -319,6 +329,9 @@ class CellSession:
                 ],
                 "deleted": deleted,
                 "states": {n: r.status for n, r in self.results.items()},
+                "stale_reasons": {
+                    n: r.stale_reason for n, r in self.results.items() if r.stale_reason
+                },
             }
 
     def _refs_unlocked(self, identifiers_only: bool = False) -> dict[str, list[str]]:
@@ -424,6 +437,7 @@ class CellSession:
             return self.run_counter
 
     def set_result(self, name: str, record: CellRecord) -> None:
+        record.stale_reason = None
         with self.lock:
             self.results[name] = record
 
@@ -437,6 +451,7 @@ class CellSession:
             for rec in self.results.values():
                 if rec.status in (OK, ERROR):
                     rec.status = STALE
+                    rec.stale_reason = "kernel restarted"
 
     def state_summary(self) -> dict[str, Any]:
         with self.lock:
@@ -447,6 +462,9 @@ class CellSession:
                     for i, n in enumerate(self.order)
                 ],
                 "states": {n: r.status for n, r in self.results.items()},
+                "stale_reasons": {
+                    n: r.stale_reason for n, r in self.results.items() if r.stale_reason
+                },
             }
 
 

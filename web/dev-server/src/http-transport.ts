@@ -68,7 +68,8 @@ export class HttpTransport implements Transport {
         kind === "cellstate" ||
         kind === "result" ||
         kind === "cellerror" ||
-        kind === "runerror"
+        kind === "runerror" ||
+        kind === "synced"
       ) {
         const cellListeners = [...this.cellListeners];
         for (const cb of cellListeners) cb(parsed as CellEvent);

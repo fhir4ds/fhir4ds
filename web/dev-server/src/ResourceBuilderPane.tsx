@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Diagnostic, Transport, SchemaTreeNode } from "./transport";
+import type { DatasetInfo, Diagnostic, Transport, SchemaTreeNode } from "./transport";
 
 /** A node from GET /api/schema-tree (subset of fields the form needs). */
 export type SchemaNode = SchemaTreeNode;
@@ -66,6 +66,9 @@ const COMMON_TYPES = [
 ];
 
 type Row = { path: string; value: string };
+
+/** Candidate target for a Reference picker: type + id from the loaded dataset files. */
+type RefCandidate = { type: string; id: string };
 
 function joinPath(base: string, name: string): string {
   return base ? `${base}.${name}` : name;
@@ -137,6 +140,35 @@ export function ResourceBuilderPane({ transport, datasets, dataHint, initialReso
   const [busy, setBusy] = useState(false);
   const [pickerText, setPickerText] = useState("");
   const [tree, setTree] = useState<SchemaNode | null>(null);
+  // Reference browse popover state: path of the Reference row it is attached to + candidates.
+  const [refBrowse, setRefBrowse] = useState<{ path: string; targets: string[]; candidates: RefCandidate[] } | null>(null);
+
+  /** Load candidates for a Reference field from the loaded dataset files. */
+  const browseReferences = async (path: string, targets: string[]) => {
+    try {
+      const pools = await Promise.all(
+        datasets.slice(0, 4).map((d) => transport.dataset(d).catch(() => null))
+      );
+      const seen = new Set<string>();
+      const candidates: RefCandidate[] = [];
+      for (const pool of pools) {
+        if (!pool?.ok) continue;
+        for (const r of pool.resources ?? []) {
+          const t = String((r as Record<string, unknown>).resourceType ?? "");
+          const id = String((r as Record<string, unknown>).id ?? "");
+          if (!t || !id || !targets.includes(t)) continue;
+          const key = `${t}/${id}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          candidates.push({ type: t, id });
+        }
+      }
+      candidates.sort((a, b) => a.type.localeCompare(b.type) || a.id.localeCompare(b.id));
+      setRefBrowse({ path, targets, candidates });
+    } catch {
+      setRefBrowse({ path, targets, candidates: [] });
+    }
+  };
   const jsonAreaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -308,18 +340,59 @@ export function ResourceBuilderPane({ transport, datasets, dataHint, initialReso
                     {prim?.node.cardinality === "1..1" && <span className="dev-rbreq"> *</span>}
                   </label>
                   {refTargets?.length ? (
-                    <input
-                      className="dev-rbinput"
-                      value={row.value}
-                      placeholder={`Reference (${refTargets.join(" | ")})`}
-                      onChange={(e) => setField(row.path, e.target.value)}
-                    />
+                    <>
+                      <input
+                        className="dev-rbinput"
+                        value={row.value}
+                        placeholder={`Reference (${refTargets.join(" | ")})`}
+                        onChange={(e) => setField(row.path, e.target.value)}
+                      />
+                      <button
+                        className="dev-rbrefbtn"
+                        title={`Browse ${refTargets.join(" | ")} resources from the loaded dataset files`}
+                        onClick={() => browseReferences(row.path, refTargets)}
+                        type="button"
+                      >
+                        ⌖
+                      </button>
+                    </>
                   ) : (
                     <input
                       className="dev-rbinput"
                       value={row.value}
                       onChange={(e) => setField(row.path, e.target.value)}
                     />
+                  )}
+                  {refBrowse?.path === row.path && (
+                    <div className="dev-rbrefpop" role="listbox">
+                      <div className="dev-rbrefpop-head">
+                        {refBrowse.targets.join(" | ")} from loaded data
+                        <button type="button" className="dev-rbrefclose" onClick={() => setRefBrowse(null)}>✕</button>
+                      </div>
+                      {refBrowse.candidates.length === 0 ? (
+                        <div className="dev-rbrefempty">
+                          No {refBrowse.targets.join("/")} resources in the loaded dataset files —
+                          type a reference manually (e.g. {refBrowse.targets[0]}/id).
+                        </div>
+                      ) : (
+                        <div className="dev-rbreflist">
+                          {refBrowse.candidates.slice(0, 50).map((c) => (
+                            <button
+                              key={`${c.type}/${c.id}`}
+                              type="button"
+                              className="dev-rbrefitem"
+                              onClick={() => {
+                                setField(row.path, `${c.type}/${c.id}`);
+                                setRefBrowse(null);
+                              }}
+                            >
+                              <span className="dev-rbctype">{c.type}</span>
+                              <span className="dev-rbcid">{c.id}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               );

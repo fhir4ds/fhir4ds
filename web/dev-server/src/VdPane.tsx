@@ -98,6 +98,8 @@ export function VdPane({ transport, path, datasetName, patientCount, lastMeasure
   const [pathAssist, setPathAssist] = useState(false);
   const [pathOptions, setPathOptions] = useState<string[] | null>(null);
   const [pathFilter, setPathFilter] = useState("");
+  const [wordWrap, setWordWrap] = useState(false);
+  const [jsonCheck, setJsonCheck] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -252,6 +254,51 @@ export function VdPane({ transport, path, datasetName, patientCount, lastMeasure
         </div>
       ) : null}
       {error ? <div className="dev-vderror">{error}</div> : null}
+      {jsonCheck ? <div className="dev-vderror" role="note">{jsonCheck}</div> : null}
+      <div className="dev-vdbar2">
+        <button className="dev-vdtool" onClick={() => setWordWrap(!wordWrap)} title="Toggle soft wrap for long lines">
+          {wordWrap ? "▾ wrap" : "▸ wrap"}
+        </button>
+        <button
+          className="dev-vdtool"
+          onClick={() => {
+            try {
+              const parsed: unknown = JSON.parse(text);
+              if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+                setJsonCheck("Format: the buffer is valid JSON but not an object");
+                return;
+              }
+              setText(JSON.stringify(parsed, null, 2));
+              setDirty(true);
+              setJsonCheck(null);
+            } catch (err) {
+              setJsonCheck(`invalid JSON: ${(err as Error).message}`);
+            }
+          }}
+          title="Pretty-print the buffer as 2-space JSON"
+        >
+          {"{ } Format"}
+        </button>
+        <button
+          className="dev-vdtool"
+          onClick={() => {
+            try {
+              const parsed: unknown = JSON.parse(text);
+              if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+                setJsonCheck("Validate: the buffer is valid JSON but not an object");
+                return;
+              }
+              setJsonCheck(null);
+              setError(null);
+            } catch (err) {
+              setJsonCheck(`invalid JSON: ${(err as Error).message}`);
+            }
+          }}
+          title="Check the buffer parses as a JSON object (SOF-VD invariant checks run server-side on Run)"
+        >
+          ✓ Validate
+        </button>
+      </div>
       <div className="dev-vdeditor">
         <Editor
           height="220px"
@@ -263,7 +310,7 @@ export function VdPane({ transport, path, datasetName, patientCount, lastMeasure
             setText(v ?? "");
             setDirty(true);
           }}
-          options={{ minimap: { enabled: false }, lineNumbers: "on", scrollBeyondLastLine: false, tabSize: 2 }}
+          options={{ minimap: { enabled: false }, lineNumbers: "on", scrollBeyondLastLine: false, tabSize: 2, wordWrap: wordWrap ? "on" : "off" }}
         />
       </div>
       <div className="dev-vdconsts">
@@ -336,8 +383,8 @@ export function VdPane({ transport, path, datasetName, patientCount, lastMeasure
             <button className={tab === "results" ? "on" : ""} onClick={() => setTab("results")}>
               Results ({result.rows.length} rows)
             </button>
-            <button className={tab === "sql" ? "on" : ""} onClick={() => setTab("sql")}>
-              SQL
+            <button className={tab === "sql" ? "on" : ""} onClick={() => setTab("sql")} title="SQL generated from this ViewDefinition (VD → SQL)">
+              VD → SQL
             </button>
             <span className="dev-vdcount">{result.resource_count} {result.resource_count === 1 ? "resource" : "resources"} staged</span>
           </div>

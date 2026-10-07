@@ -33,6 +33,51 @@ import { ResourceBuilderPane } from "./ResourceBuilderPane";
 
 type Tab = "results" | "sql" | "errors";
 
+function guideSteps(rail: { kind: string; id?: string } | null): { title: string; steps: string[] } {
+  if (!rail) return { title: "Getting started", steps: [
+    "Pick a dataset (click it in the Data list to inspect it)",
+    "Click ▶ Run on a cell box",
+    "Cmd/Ctrl+Enter re-runs the last-run cell",
+  ] };
+  switch (rail.kind) {
+    case "valueset": return { title: "Getting started — valuesets", steps: [
+      "Edit system/code cells; display is ignored for membership",
+      "Insert the valueset declaration into the library header",
+      "Restart the kernel after saving, then re-run tests",
+    ] };
+    case "params": return { title: "Getting started — parameters", steps: [
+      "Add a parameter row (name, type, optional default)",
+      "Reference it in CQL as %Name",
+      "Edits apply to the library header box on Apply",
+    ] };
+    case "measure": return { title: "Getting started — measures", steps: [
+      "Select scoring, then map populations to Boolean defines",
+      "Scaffold preview shows the Measure JSON (never auto-saves)",
+      "Run computes counts + per-patient MeasureReports; save a baseline or paste expected JSON to compare",
+    ] };
+    case "view": return { title: "Getting started — ViewDefinitions", steps: [
+      "Edit the VD JSON (constants table and path assist can help)",
+      "Click ▶ Run view to execute over the loaded dataset",
+      "Inspect Results and VD → SQL tabs; invariant errors show inline",
+    ] };
+    case "builder": return { title: "Getting started — resource builder", steps: [
+      "Pick a starter template (form rows are helpers; JSON is authoritative)",
+      "Validate, choose a dataset file, and Save to append",
+      "Restart the kernel to load the new data",
+    ] };
+    case "dataset": return { title: "Getting started — datasets", steps: [
+      "Review kernel-loaded stats and the file's resource list",
+      "Click a resource to inspect its JSON",
+      "\u274e Edit in builder opens the resource pre-filled for a new appended line",
+    ] };
+    default: return { title: "Getting started", steps: [
+      "Pick a dataset (click it in the Data list to inspect it)",
+      "Click \u25b6 Run on a cell box",
+      "Cmd/Ctrl+Enter re-runs the last-run cell",
+    ] };
+  }
+}
+
 export function App() {
   const transport = useMemo(() => new HttpTransport(""), []);
   const [health, setHealth] = useState<HealthInfo | null>(null);
@@ -49,6 +94,7 @@ export function App() {
   const [dataHint, setDataHint] = useState<string[]>([]);
   const [runMode, setRunMode] = useState<RunMode>("cell");
   const [cellStates, setCellStates] = useState<Record<string, string>>({});
+  const [cellStaleReasons, setCellStaleReasons] = useState<Record<string, string>>({});
   const [cellRows, setCellRows] = useState<Record<string, Record<string, unknown>[]>>({});
   const [cellErrors, setCellErrors] = useState<Record<string, string>>({});
   const [resultHeader, setResultHeader] = useState("");
@@ -82,9 +128,55 @@ export function App() {
   // v4.3: last measure run's MeasureReports for the VD pane's
   // run-against-measure-output toggle.
   const [lastMeasureReports, setLastMeasureReports] = useState<Record<string, unknown>[] | null>(null);
+  // v3.1: rail count badges — patients (kernel stats), valueset concept
+  // counts (lazy fetch), VD column counts (client-side text parse).
+  const [vsCounts, setVsCounts] = useState<Record<string, number> | null>(null);
+  const [vsPeek, setVsPeek] = useState<{ path: string; codes: string[] } | null>(null);
 
   const boxes = useMemo(() => splitBoxes(buffer), [buffer]);
   const defineBoxes = useMemo(() => boxes.filter((b) => b.kind === "define"), [boxes]);
+
+  // v3.1: lazily fetch valueset concept counts once per workspace snapshot;
+  // VD column badges are parsed client-side from the file text we already
+  // have via the view route when opened — here we parse the rail names only
+  // for the patient badge source (datasetStats is fetched on mount below).
+  useEffect(() => {
+    let alive = true;
+    const targets = (workspace?.valuesets ?? []).slice(0, 12);
+    if (targets.length === 0) {
+      setVsCounts(null);
+      return;
+    }
+    (async () => {
+      const next: Record<string, number> = {};
+      await Promise.all(
+        targets.map(async (v) => {
+          try {
+            const env = (await (
+              await fetch(`/api/valueset?path=${encodeURIComponent(v)}`)
+            ).json()) as { ok?: boolean; concepts?: unknown[] };
+            if (env?.ok && Array.isArray(env.concepts)) next[v] = env.concepts.length;
+          } catch {
+            /* best-effort badge */
+          }
+        }),
+      );
+      if (alive) setVsCounts(next);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [workspace?.valuesets]);
+
+  const vdColumnCount = useCallback((text: string): number | null => {
+    try {
+      const vd = JSON.parse(text) as { select?: unknown };
+      const first = Array.isArray(vd?.select) ? (vd.select[0] as { column?: unknown }) : null;
+      return Array.isArray(first?.column) ? first.column.length : null;
+    } catch {
+      return null;
+    }
+  }, []);
 
   const loadLibrary = useCallback(
     async (name: string) => {
@@ -123,8 +215,9 @@ export function App() {
       if (e.kind === "stale") setVsStale(Boolean(e.valuesets_stale));
     });
     const offCells = transport.onCellEvent((e: CellEvent) => {
-      if (e.kind === "cellstate" && e.states) {
+      if ((e.kind === "cellstate" || e.kind === "synced") && e.states) {
         setCellStates((prev) => ({ ...prev, ...e.states! }));
+        if (e.stale_reasons) setCellStaleReasons((prev) => ({ ...prev, ...e.stale_reasons! }));
       } else if (e.kind === "result" && e.per_cell) {
         const rows: Record<string, Record<string, unknown>[]> = {};
         for (const [name, slice] of Object.entries(e.per_cell)) {
@@ -137,6 +230,11 @@ export function App() {
         setCellStates((prev) => {
           const next = { ...prev };
           for (const n of e.cells ?? []) next[n] = "ok";
+          return next;
+        });
+        setCellStaleReasons((prev) => {
+          const next = { ...prev };
+          for (const n of e.cells ?? []) delete next[n];
           return next;
         });
         setCellErrors((prev) => {
@@ -396,6 +494,11 @@ export function App() {
               onClick={() => setRailView({ kind: "dataset", id: d })}
             >
               {d.split("/").pop()}
+              {datasetStats && workspace?.datasets.length === 1 ? (
+                <span className="dev-railbadge" title={`${datasetStats.total} resources loaded in the kernel`}>
+                  {datasetStats.total}
+                </span>
+              ) : null}
             </div>
           ))}
           {(workspace?.valuesets ?? []).length > 0 && <h2>ValueSets</h2>}
@@ -409,8 +512,52 @@ export function App() {
               onClick={() => selectValueset(v)}
             >
               {v.split("/").pop()?.replace(/\.json$/, "")}
+              {vsCounts?.[v] != null ? (
+                <span
+                  className="dev-railbadge dev-railbadge-vs"
+                  title={`${vsCounts[v]} concepts — click badge to peek codes`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (vsPeek?.path === v) {
+                      setVsPeek(null);
+                    } else {
+                      fetch(`/api/valueset?path=${encodeURIComponent(v)}`)
+                        .then((r) => r.json())
+                        .then((env: { ok?: boolean; concepts?: { system?: string; code?: string }[] }) => {
+                          if (env?.ok && Array.isArray(env.concepts)) {
+                            setVsPeek({
+                              path: v,
+                              codes: env.concepts.slice(0, 25).map((c) => `${c.code ?? "?"}`),
+                            });
+                          }
+                        })
+                        .catch(() => setVsPeek(null));
+                    }
+                  }}
+                >
+                  {vsCounts[v]}
+                </span>
+              ) : null}
             </div>
           ))}
+          {vsPeek ? (
+            <div className="dev-vspeek" role="note">
+              <div className="dev-vspeek-head">
+                <span>{vsPeek.path.split("/").pop()?.replace(/\.json$/, "")} — codes (first {vsPeek.codes.length})</span>
+                <button className="dev-vspeek-close" onClick={() => setVsPeek(null)}>
+                  ✕
+                </button>
+              </div>
+              <div className="dev-vspeek-list">
+                {vsPeek.codes.map((c, i) => (
+                  <code key={i} className="dev-vspeek-code">
+                    {c}
+                  </code>
+                ))}
+              </div>
+              <div className="dev-vspeek-note">expansion preview — membership uses system + code</div>
+            </div>
+          ) : null}
           {(workspace?.libraries ?? []).length > 0 && <h2>Parameters</h2>}
           {(workspace?.libraries ?? []).map((lib) => (
             <div
@@ -676,6 +823,13 @@ export function App() {
                           ? "stale"
                           : cellStates[box.name ?? ""] ?? "idle")
                       }
+                      title={
+                        vsStale && (cellStates[box.name ?? ""] ?? "idle") !== "running"
+                          ? "STALE — terminology changed; restart kernel to reload"
+                          : cellStaleReasons[box.name ?? ""]
+                            ? `STALE — ${cellStaleReasons[box.name ?? ""]}`
+                            : undefined
+                      }
                     >
                       {vsStale && (cellStates[box.name ?? ""] ?? "idle") !== "running"
                         ? "stale"
@@ -683,6 +837,13 @@ export function App() {
                           ? "Not run"
                           : cellStates[box.name ?? ""] ?? "idle"}
                     </span>
+                    {!vsStale &&
+                      cellStates[box.name ?? ""] === "stale" &&
+                      cellStaleReasons[box.name ?? ""] && (
+                        <span className="dev-stalereason">
+                          — {cellStaleReasons[box.name ?? ""]}
+                        </span>
+                      )}
                     {cellErrors[box.name ?? ""] && (
                       <span
                         className="dev-cellerr"
@@ -851,6 +1012,12 @@ export function App() {
                         {" "}· {datasetStats.total} patients · kernel {health?.kernel_id ?? "?"}
                       </span>
                     )}
+                    <span
+                      className="dev-resultctx dev-resultterm"
+                      title="terminology state at run time — stale means a valueset changed on disk after the kernel loaded it"
+                    >
+                      {" "}· terminology: {vsStale ? "stale" : "clean"}
+                    </span>
                   </div>
                 )}
                 {vsStale && (
@@ -861,16 +1028,19 @@ export function App() {
                     ⚠ Valueset changed — Restart kernel to reload
                   </div>
                 )}
-                {!result && !resultHeader && (
-                  <div className="dev-guide">
-                    <h3>Getting started</h3>
-                    <ol>
-                      <li>Pick a dataset (click it in the Data list to inspect it)</li>
-                      <li>Click ▶ Run on a cell box</li>
-                      <li>Cmd/Ctrl+Enter re-runs the last-run cell</li>
-                    </ol>
-                  </div>
-                )}
+                {!result && !resultHeader && (() => {
+                  const g = guideSteps(railView);
+                  return (
+                    <div className="dev-guide">
+                      <h3>{g.title}</h3>
+                      <ol>
+                        {g.steps.map((step, i) => (
+                          <li key={i}>{step}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  );
+                })()}
                 <ResultsTable
                   result={result}
                   error={

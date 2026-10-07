@@ -806,3 +806,162 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
 .dev-dsedit { background: transparent; color: #9cdcfe; border: 1px solid #333; border-radius: 4px; cursor: pointer; padding: 2px 8px; font-size: 12px; }
 .dev-dsedit:hover { background: #252526; }
 .dev-dsjson { background: #1e1e1e; border: 1px solid #333; border-radius: 6px; padding: 8px; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; color: #d4d4d4; max-height: 420px; white-space: pre; }
+
+/* ===== v3.1 item C: builder reference popover ===== */
+.dev-rbrow { position: relative; }
+.dev-rbrefbtn {
+  margin-left: 6px;
+  padding: 2px 8px;
+  background: #094771;
+  color: #d4d4d4;
+  border: 1px solid #45638b;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.dev-rbrefbtn:hover { background: #0e639c; }
+.dev-rbrefpop {
+  position: absolute;
+  right: 0;
+  top: 34px;
+  z-index: 30;
+  width: 320px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: #252526;
+  border: 1px solid #45638b;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+}
+.dev-rbrefpop-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: #9cdcfe;
+  border-bottom: 1px solid #333;
+  position: sticky;
+  top: 0;
+  background: #252526;
+}
+.dev-rbrefclose {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.dev-rbrefclose:hover { color: #f48771; }
+.dev-rbrefempty {
+  padding: 10px;
+  font-size: 11px;
+  color: #e2a336;
+}
+.dev-rbreflist { display: flex; flex-direction: column; }
+.dev-rbrefitem {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #2d2d2d;
+  color: #d4d4d4;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+}
+.dev-rbrefitem:hover { background: #094771; }
+.dev-rbctype { color: #9cdcfe; min-width: 110px; }
+.dev-rbcid { color: #ce9178; }
+
+/* ===== v3.1 item B: error boundary ===== */
+.dev-errorboundary-reload {
+  margin-top: 12px;
+  padding: 6px 14px;
+  background: #094771;
+  color: #fff;
+  border: 1px solid #45638b;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.dev-errorboundary-reload:hover { background: #0e639c; }
+
+/* v3.1 polish: staleness reason line + contrast nits */
+.dev-stalereason {
+  color: #e2a336;
+  font-size: 11px;
+}
+.dev-chip.idle {
+  background: #3a3a3a;
+  color: #bbb;
+  border: 1px solid #555;
+}
+.dev-chip.stale {
+  background: #6b5a2d;
+  color: #ffd27d;
+  border: 1px solid #8a7440;
+}
+
+/* v3.1: rail count badges + valueset peephole */
+.dev-railbadge {
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: #094771;
+  color: #9cdcfe;
+  font-size: 10px;
+  line-height: 16px;
+  flex: none;
+}
+.dev-railbadge-vs {
+  cursor: pointer;
+}
+.dev-railbadge-vs:hover {
+  background: #0e639c;
+}
+.dev-vspeek {
+  margin: 4px 6px;
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: #1e1e1e;
+  padding: 6px 8px;
+}
+.dev-vspeek-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #9cdcfe;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.dev-vspeek-close {
+  background: none;
+  border: none;
+  color: #bbb;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.dev-vspeek-close:hover {
+  color: #f48771;
+}
+.dev-vspeek-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.dev-vspeek-code {
+  background: #252526;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: #ce9178;
+  font-size: 11px;
+}
+.dev-vspeek-note {
+  color: #888;
+  font-size: 10px;
+  margin-top: 4px;
+}
