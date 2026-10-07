@@ -51,7 +51,7 @@ test.beforeAll(async () => {
   server = spawn(
     "/usr/bin/python3",
     ["-m", "fhir4ds.cli", "dev", dir, "--port", String(PORT), "--no-open"],
-    { cwd: dir, env: { PYTHONPATH: "/mnt/d/fhir4ds-cleanroom-v31-20261007", PATH: process.env.PATH ?? "" }, stdio: "ignore" },
+    { cwd: dir, env: { PYTHONPATH: "/mnt/d/fhir4ds-devserver-rbux-20261007", PATH: process.env.PATH ?? "" }, stdio: "ignore" },
   );
   for (let i = 0; i < 120; i++) {
     try {
@@ -133,4 +133,30 @@ test("dataset click opens the dataset pane with stats (no crash)", async ({ page
   await expect(pane).toBeVisible();
   await expect(pane.locator(".dev-dstotal")).toContainText("total: 2", { timeout: 20000 });
   await expect(pane.locator(".dev-dschipstat").first()).toContainText("Patient");
+});
+
+test("Build section gone; '+ Resource' lives under Data; add-element adds second telecom", async ({ page }) => {
+  await page.goto(BASE);
+  // The standalone Build rail section is GONE (exact-text h2).
+  await expect(page.locator("h2", { hasText: /^Build$/ })).toHaveCount(0);
+  // '+ Resource' opens the builder from the Data section.
+  await page.locator(".dev-lib.small", { hasText: "+ Resource" }).click();
+  await expect(page.locator(".dev-rbpane")).toBeVisible();
+  // Load the Patient template (no telecom seeded).
+  await page.locator(".dev-rbtpl", { hasText: "Patient" }).click();
+  // Add-element picker: add a telecom (repeatable) via the root picker.
+  // (Wait for the schema-tree fetch to populate the picker options first.)
+  const pane = page.locator(".dev-rbpane");
+  await expect(pane.locator(".dev-rbaddsel option", { hasText: "telecom" })).toHaveCount(1, { timeout: 20000 });
+  await pane.locator(".dev-rbaddsel").selectOption("telecom");
+  // Scope to the addrbar add button — .dev-rbaddbtn is shared with per-row '+' affordances.
+  await pane.locator(".dev-rbaddrbar .dev-rbaddbtn").click();
+  // The JSON writer now holds a telecom array (was absent; the picker added it).
+  // Poll the textarea value — the click → setResource → setJsonText re-render is async.
+  await expect(pane.locator(".dev-rbjsonarea")).toHaveValue(/telecom/, { timeout: 5000 });
+  const jsonVal = await pane.locator(".dev-rbjsonarea").inputValue();
+  const parsed = JSON.parse(jsonVal);
+  if (!Array.isArray(parsed.telecom) || parsed.telecom.length < 1) {
+    throw new Error(`expected a telecom array from the add-element picker, got ${JSON.stringify(parsed.telecom)}`);
+  }
 });

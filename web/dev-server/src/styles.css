@@ -965,3 +965,36 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   font-size: 10px;
   margin-top: 4px;
 }
+
+/* v3.1-rbux: add-element affordances */
+.dev-rbaddrbar { display: flex; gap: 6px; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px solid #333; }
+.dev-rbaddsel { flex: 1; background: #252526; color: #d4d4d4; border: 1px solid #3c3c3c; border-radius: 4px; padding: 3px 6px; font-size: 12px; }
+.dev-rbaddbtn { background: #094771; color: #9cdcfe; border: none; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 12px; }
+.dev-rbaddbtn:hover:not(:disabled) { background: #0e639c; }
+.dev-rbaddbtn:disabled { opacity: 0.45; cursor: default; }
+.dev-rbrow .dev-rbaddbtn { padding: 2px 6px; }
+.dev-rbdelbtn { background: transparent; color: #888; border: none; cursor: pointer; font-size: 12px; }
+.dev-rbdelbtn:hover { color: #f14c4c; }
+
+/* v3.1 rbux: params pane aligned to the ValueSet inline-editing idiom */
+.dev-paramstable select,
+.dev-paramstable input {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border: 1px solid #333;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 12px;
+  min-width: 90px;
+}
+.dev-paramsrow input {
+  width: 100%;
+}
+.dev-paramsaddbtn {
+  background: transparent;
+  color: #9cdcfe;
+  border: 1px dashed #45627e;
+}
+.dev-paramsaddbtn:hover {
+  border-color: #9cdcfe;
+}

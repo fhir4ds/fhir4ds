@@ -237,10 +237,52 @@ export function ResourceBuilderPane({ transport, datasets, dataHint, initialReso
     setResource(next);
   };
 
+  /** Append one element to a (possibly absent) array field in the resource. */
+  const appendAt = (path: string, def: unknown) => {
+    const next = { ...resource } as Record<string, unknown>;
+    const segs = path.split(".");
+    let cur: Record<string, unknown> = next;
+    for (let i = 0; i < segs.length - 1; i++) {
+      const seg = segs[i];
+      if (!cur[seg] || typeof cur[seg] !== "object") cur[seg] = {};
+      cur = cur[seg] as Record<string, unknown>;
+    }
+    const leaf = segs[segs.length - 1];
+    const existing = cur[leaf];
+    if (Array.isArray(existing)) cur[leaf] = [...existing, def];
+    else if (existing === undefined || existing === null) cur[leaf] = [def];
+    else cur[leaf] = [existing, def];
+    setResource(next);
+  };
+
   const templateRows = useMemo(
     () => rowsForResource(resource, tree),
     [resource, tree]
   );
+
+  // Schema-valid root fields for the add-element picker: repeatables can
+  // always take another element; 0..1 fields only until present.
+  const rootFields = useMemo(() => {
+    if (!tree) return [];
+    return (tree.children ?? [])
+      .filter((c) => !c.hatch && c.name !== "id")
+      .map((c) => ({
+        name: c.name,
+        cardinality: c.cardinality,
+        repeat: c.cardinality === "0..*",
+        complex: (c.children?.length ?? 0) > 0,
+        present: lookup(resource, c.name) !== undefined,
+      }));
+  }, [tree, resource]);
+
+  const [addSel, setAddSel] = useState("");
+
+  const addField = () => {
+    const f = rootFields.find((x) => x.name === addSel);
+    if (!f) return;
+    appendAt(f.name, f.complex ? {} : "");
+    setAddSel("");
+  };
 
   const validate = async () => {
     setBusy(true);
@@ -333,6 +375,11 @@ export function ResourceBuilderPane({ transport, datasets, dataHint, initialReso
             {templateRows.rows.map((row) => {
               const prim = templateRows.primitives.find((p) => p.path === row.path);
               const refTargets = prim?.node.reference_targets;
+              const parentPath = row.path.split(".").slice(0, -1).join(".");
+              const leafName = row.path.split(".").slice(-1)[0];
+              const parentPrim = templateRows.primitives.find((p) => p.path === parentPath);
+              const parentRepeatable = parentPrim ? parentPrim.node.cardinality === "0..*" : false;
+              const siblings = templateRows.rows.filter((r) => r.path !== row.path && r.path.startsWith(parentPath ? parentPath + "." : ""));
               return (
                 <div key={row.path} className="dev-rbrow">
                   <label className="dev-rblabel" title={prim ? `cardinality ${prim.node.cardinality} · type ${prim.node.type}` : row.path}>
@@ -362,6 +409,38 @@ export function ResourceBuilderPane({ transport, datasets, dataHint, initialReso
                       value={row.value}
                       onChange={(e) => setField(row.path, e.target.value)}
                     />
+                  )}
+                  {parentRepeatable && (
+                    <button
+                      type="button"
+                      className="dev-rbaddbtn"
+                      title={`add another ${leafName} element`}
+                      onClick={() => appendAt(parentPath, "")}
+                    >
+                      +
+                    </button>
+                  )}
+                  {parentRepeatable && siblings.length > 0 && (
+                    <button
+                      type="button"
+                      className="dev-rbdelbtn"
+                      title={`remove this ${leafName} element`}
+                      onClick={() => {
+                        const next = { ...resource } as Record<string, unknown>;
+                        const segs = row.path.split(".");
+                        let cur: unknown = next;
+                        for (let i = 0; i < segs.length - 1; i++) {
+                          cur = (cur as Record<string, unknown>)[segs[i]];
+                        }
+                        const parent = cur as Record<string, unknown>;
+                        const arr = parent[leafName];
+                        const idx = templateRows.rows.filter((r) => r.path === row.path || r.path === `${parentPath}.${leafName}`).findIndex((r) => r.path === row.path);
+                        if (Array.isArray(arr)) parent[leafName] = arr.filter((_, i) => i !== idx);
+                        setResource(next);
+                      }}
+                    >
+                      ✕
+                    </button>
                   )}
                   {refBrowse?.path === row.path && (
                     <div className="dev-rbrefpop" role="listbox">
@@ -397,6 +476,27 @@ export function ResourceBuilderPane({ transport, datasets, dataHint, initialReso
                 </div>
               );
             })}
+            <div className="dev-rbaddrbar">
+              <select className="dev-rbaddsel" value={addSel} onChange={(e) => setAddSel(e.target.value)}>
+                <option value="">+ add data element…</option>
+                {rootFields
+                  .filter((f) => f.repeat || !f.present)
+                  .map((f) => (
+                    <option key={f.name} value={f.name}>
+                      {f.name} ({f.cardinality}{f.complex ? " · complex" : ""})
+                    </option>
+                  ))}
+              </select>
+              <button
+                type="button"
+                className="dev-rbaddbtn"
+                disabled={!addSel}
+                title="append the element to the resource (JSON stays authoritative — edit deeper structure there)"
+                onClick={addField}
+              >
+                add
+              </button>
+            </div>
           </div>
           <div className="dev-rbjson">
             <div className="dev-rbformhead">JSON (writer)</div>

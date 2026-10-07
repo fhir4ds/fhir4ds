@@ -482,7 +482,7 @@ export function App() {
               {!lib.parse_ok && <em title={lib.error ?? ""}> ⚠</em>}
             </div>
           ))}
-          {workspace?.datasets.length ? <h2>Data</h2> : null}
+          <h2>Data</h2>
           {(workspace?.datasets ?? []).map((d) => (
             <div
               key={d}
@@ -501,6 +501,18 @@ export function App() {
               ) : null}
             </div>
           ))}
+          <div
+            className={
+              "dev-lib small" + (railView?.kind === "builder" ? " selected" : "")
+            }
+            title="Form/JSON hybrid resource builder with schema-tree guidance and validate_resource gating"
+            onClick={() => {
+              setBuilderPrefill(null);
+              setRailView({ kind: "builder" });
+            }}
+          >
+            + Resource
+          </div>
           {(workspace?.valuesets ?? []).length > 0 && <h2>ValueSets</h2>}
           {(workspace?.valuesets ?? []).map((v) => (
             <div
@@ -616,19 +628,6 @@ export function App() {
               {v.split("/").pop()?.replace(/\.json$/, "")}
             </div>
           ))}
-          <h2>Build</h2>
-          <div
-            className={
-              "dev-lib small" + (railView?.kind === "builder" ? " selected" : "")
-            }
-            title="Form/JSON hybrid resource builder with schema-tree guidance and validate_resource gating"
-            onClick={() => {
-              setBuilderPrefill(null);
-              setRailView({ kind: "builder" });
-            }}
-          >
-            + Resource
-          </div>
         </aside>
         <section className="dev-editor">
           {railView?.kind === "valueset" ? (

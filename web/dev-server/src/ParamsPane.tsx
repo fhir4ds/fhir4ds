@@ -24,6 +24,8 @@ export function ParamsPane({
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState("Integer");
   const [newDefault, setNewDefault] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [drafts, setDrafts] = useState<Record<string, { type: string; dflt: string }>>({});
 
   const reload = useCallback(async () => {
     setError(null);
@@ -150,25 +152,85 @@ export function ParamsPane({
           </tr>
         </thead>
         <tbody>
-          {(info?.parameters ?? []).map((p) => (
-            <tr key={p.name}>
-              <td>{p.name}</td>
-              <td>{p.type}</td>
-              <td>{p.default ?? "—"}</td>
-              <td>
-                <code>%{p.name}</code>
-              </td>
-              <td>
-                <button
-                  disabled={busy}
-                  title="Delete this parameter declaration"
-                  onClick={() => edit("delete", p.name)}
-                >
-                  ✕
-                </button>
-              </td>
-            </tr>
-          ))}
+          {(info?.parameters ?? []).map((p) => {
+            const draft = drafts[p.name] ?? { type: p.type, dflt: p.default ?? "" };
+            const setDraft = (d: { type: string; dflt: string }) =>
+              setDrafts((prev) => ({ ...prev, [p.name]: d }));
+            const dirty = draft.type !== p.type || draft.dflt !== (p.default ?? "");
+            const problem = defaultProblem(draft.type, draft.dflt);
+            return (
+              <tr key={p.name} className="dev-paramsrow">
+                <td title="Renaming is delete + re-add in CQL semantics">
+                  {p.name}
+                </td>
+                <td>
+                  <select
+                    value={draft.type}
+                    title="Change the declared type"
+                    onChange={(e) => setDraft({ ...draft, type: e.target.value })}
+                  >
+                    {types.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <input
+                    className={problem ? "invalid" : undefined}
+                    title={problem ?? "Default value expression (raw CQL)"}
+                    value={draft.dflt}
+                    placeholder="—"
+                    onChange={(e) => setDraft({ ...draft, dflt: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && dirty && !problem) {
+                        edit("upsert", p.name, draft.type, draft.dflt);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (dirty && !problem) {
+                        edit("upsert", p.name, draft.type, draft.dflt);
+                      }
+                    }}
+                  />
+                  {problem && (
+                    <span className="dev-paramsadd-problem" title={problem}>
+                      ⚠ {problem}
+                    </span>
+                  )}
+                </td>
+                <td>
+                  <code>%{p.name}</code>
+                </td>
+                <td>
+                  {dirty && !problem && (
+                    <button
+                      disabled={busy}
+                      title="Apply the edited declaration"
+                      onClick={() => edit("upsert", p.name, draft.type, draft.dflt)}
+                    >
+                      save
+                    </button>
+                  )}{" "}
+                  <button
+                    disabled={busy}
+                    title="Delete this parameter declaration"
+                    onClick={() => {
+                      setDrafts((prev) => {
+                        const next = { ...prev };
+                        delete next[p.name];
+                        return next;
+                      });
+                      edit("delete", p.name);
+                    }}
+                  >
+                    ✕
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
           {(info?.parameters ?? []).length === 0 && (
             <tr>
               <td colSpan={5} className="dev-vsempty">
@@ -183,43 +245,61 @@ export function ParamsPane({
         here rewrites it. Reference parameters in expressions as{" "}
         <code>%Name</code>.
       </div>
-      <div className="dev-paramsadd">
-        <input
-          placeholder="Name"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-        />
-        <select value={newType} onChange={(e) => setNewType(e.target.value)}>
-          {types.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-        <input
-          placeholder="default (optional, raw CQL)"
-          className={newDefaultProblem ? "invalid" : undefined}
-          title={newDefaultProblem ?? "Default value expression (raw CQL)"}
-          value={newDefault}
-          onChange={(e) => setNewDefault(e.target.value)}
-        />
-        {newDefaultProblem && (
-          <span className="dev-paramsadd-problem" title={newDefaultProblem}>
-            ⚠ {newDefaultProblem}
-          </span>
-        )}
+      <div className="dev-paramsaddrow">
         <button
-          disabled={busy || !/^[A-Za-z][A-Za-z0-9_]*$/.test(newName)}
-          title="Add or update the parameter declaration in the header"
+          className="dev-paramsaddbtn"
+          disabled={busy}
+          title="Add a parameter declaration row"
           onClick={() => {
-            edit("upsert", newName, newType, newDefault);
+            setShowAdd((v) => !v);
             setNewName("");
+            setNewType("Integer");
             setNewDefault("");
           }}
         >
-          + parameter
+          {showAdd ? "▾" : "▸"} + parameter
         </button>
       </div>
+      {showAdd && (
+        <div className="dev-paramsadd">
+          <input
+            placeholder="Name"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+          />
+          <select value={newType} onChange={(e) => setNewType(e.target.value)}>
+            {types.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+          <input
+            placeholder="default (optional, raw CQL)"
+            className={newDefaultProblem ? "invalid" : undefined}
+            title={newDefaultProblem ?? "Default value expression (raw CQL)"}
+            value={newDefault}
+            onChange={(e) => setNewDefault(e.target.value)}
+          />
+          {newDefaultProblem && (
+            <span className="dev-paramsadd-problem" title={newDefaultProblem}>
+              ⚠ {newDefaultProblem}
+            </span>
+          )}
+          <button
+            disabled={busy || !/^[A-Za-z][A-Za-z0-9_]*$/.test(newName)}
+            title="Add or update the parameter declaration in the header"
+            onClick={() => {
+              edit("upsert", newName, newType, newDefault);
+              setNewName("");
+              setNewDefault("");
+              setShowAdd(false);
+            }}
+          >
+            add
+          </button>
+        </div>
+      )}
     </div>
   );
 }
