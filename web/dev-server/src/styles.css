@@ -1023,3 +1023,60 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
 .dev-rbgroup-empty { color: #888; font-size: 11px; font-style: italic; padding: 2px 0; }
 .dev-rbqtyrow .dev-rbqty { display: inline-flex; gap: 4px; flex: 1; }
 .dev-rbqtysystem { max-width: 220px; }
+
+/* c-vsac-cleanroom: terminology import + resolution chips + status pill */
+.dev-vsimport {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+}
+.dev-vsurlinput {
+  flex: 1;
+  font-family: var(--dev-mono, monospace);
+}
+.dev-vsimportmsg {
+  color: #9cdcfe;
+}
+.dev-vspreview {
+  border: 1px solid #333;
+  border-radius: 4px;
+  margin: 0 10px 6px;
+  padding: 6px 8px;
+}
+.dev-vspreview-head {
+  color: #9cdcfe;
+  margin-bottom: 4px;
+}
+.dev-vspreview-row {
+  font-family: var(--dev-mono, monospace);
+  font-size: 11px;
+  color: #bbb;
+}
+.dev-vspreview-more {
+  color: #666;
+  font-size: 11px;
+}
+.dev-reschip {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  border: 1px solid #555;
+  color: #ddd;
+}
+.dev-reschip-local { border-color: #4caf50; color: #4caf50; }
+.dev-reschip-vsac { border-color: #569cd6; color: #569cd6; }
+.dev-reschip-server { border-color: #17a2b8; color: #17a2b8; }
+.dev-reschip-unresolved { border-color: #777; color: #999; }
+.dev-termpill {
+  margin-left: 8px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-size: 10px;
+  border: 1px solid #555;
+}
+.dev-termpill-vsac { border-color: #569cd6; color: #569cd6; }
+.dev-termpill-http { border-color: #17a2b8; color: #17a2b8; }
+.dev-termpill-disabled { border-color: #666; color: #888; }

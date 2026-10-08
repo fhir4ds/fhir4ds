@@ -75,6 +75,12 @@ export interface HealthInfo {
   version: string;
   kernel_id: string;
   watching: number;
+  /** Terminology provider status (c-vsac-cleanroom); presence-only — never key material. */
+  terminology?: {
+    provider: string;
+    configured: boolean;
+    api_key_set: boolean;
+  };
 }
 
 export interface WorkspaceEvent {
@@ -221,6 +227,42 @@ export interface DatasetInfo {
   parse_errors: { line: number; error: string }[];
 }
 
+/** Terminology preview: expanded codes for a URL/OID (no disk writes). */
+export interface TerminologyPreviewResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  url: string;
+  concepts: { system: string; code: string; display?: string | null }[];
+  count: number;
+}
+
+/** Terminology import: writes a local valueset file w/ provenance. */
+export interface TerminologyImportResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  path: string;
+  url: string;
+  code_count: number;
+  stale: boolean;
+}
+
+/** Per-valueset-declaration resolution status. */
+export interface ResolutionRow {
+  library: string;
+  id: string;
+  url: string;
+  resolved: "local" | "VSAC" | "server" | "unresolved";
+}
+
+export interface TerminologyResolutionResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  resolutions: ResolutionRow[];
+}
+
 export interface ViewRunResult {
   schema: number;
   ok: boolean;
@@ -276,6 +318,11 @@ export interface Transport {
 
   dataset(path: string): Promise<DatasetInfo>;
   viewRun(text?: string, path?: string, resources?: Record<string, unknown>[]): Promise<ViewRunResult>;
+
+  /** Terminology (VSAC / FHIR R4 server) integration — preview, import, resolution. */
+  terminologyPreview(url: string): Promise<TerminologyPreviewResult>;
+  terminologyImport(url: string, name?: string): Promise<TerminologyImportResult>;
+  terminologyResolution(): Promise<TerminologyResolutionResult>;
   schemaTree(resource: string, depth?: number): Promise<SchemaTreeResult>;
   resourceValidate(resource: Record<string, unknown>): Promise<ResourceValidateResult>;
   resourceSave(resource: Record<string, unknown>, datasetPath: string): Promise<ResourceSaveResult>;

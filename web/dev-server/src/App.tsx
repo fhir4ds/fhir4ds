@@ -450,6 +450,14 @@ export function App() {
         <span className={"dev-kerneldot " + kernelBusy} title={`kernel ${kernelBusy}`} />
         <span className="dev-status">
           {health ? `${health.kernel_id} · ${health.watching} files` : "…"}
+          {health?.terminology && (
+            <span
+              className={`dev-termpill dev-termpill-${health.terminology.provider}`}
+              title={`terminology: ${health.terminology.provider} (api key set: ${health.terminology.api_key_set})`}
+            >
+              {health.terminology.provider}
+            </span>
+          )}
         </span>
         {lastRun && (
           <span className="dev-lastrun">
@@ -646,6 +654,9 @@ export function App() {
                   spliceBox(b, header, (body.endsWith("\n") ? body : body + "\n") + decl + "\n", true),
                 );
                 setDirty(true);
+              }}
+              onImported={() => {
+                refreshWorkspace();
               }}
             />
           ) : railView?.kind === "params" ? (

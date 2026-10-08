@@ -1,29 +1,41 @@
 import { useCallback, useEffect, useState } from "react";
 import type { HttpTransport } from "./http-transport";
-import type { ValueSetInfo } from "./transport";
+import type { ResolutionRow, TerminologyImportResult, TerminologyPreviewResult, ValueSetInfo } from "./transport";
 
 /**
  * ValueSet table editor (v3 Slice 1): concepts grid over compose.include.
  * The display column is greyed out — it is ignored for evaluation logic.
  * Saving edits WRITES the workspace valueset file and sets the kernel
  * staleness flag (amber badge + restart hint until restart).
+ *
+ * VSAC/terminology integration (c-vsac-cleanroom): an Import row lets the
+ * author expand a remote ValueSet by URL/OID (Preview shows codes+count),
+ * then save it as a LOCAL workspace file with provenance. Imported sets are
+ * ordinary local files afterwards (normal stale/restart contract).
  */
 export function ValueSetPane({
   transport,
   path,
   onStaleChange,
   onInsertDeclaration,
+  onImported,
 }: {
   transport: HttpTransport;
   path: string;
   onStaleChange: (stale: boolean) => void;
   onInsertDeclaration?: (decl: string) => void;
+  onImported?: () => void;
 }) {
   const [info, setInfo] = useState<ValueSetInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Row-level draft edits (system/code) keyed by index.
   const [drafts, setDrafts] = useState<Record<number, { system: string; code: string }>>({});
+  // Terminology import state.
+  const [importUrl, setImportUrl] = useState("");
+  const [preview, setPreview] = useState<TerminologyPreviewResult | null>(null);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [resolutions, setResolutions] = useState<ResolutionRow[]>([]);
 
   const reload = useCallback(async () => {
     setError(null);
@@ -41,6 +53,53 @@ export function ValueSetPane({
   useEffect(() => {
     reload().catch(() => {});
   }, [reload]);
+
+  useEffect(() => {
+    let alive = true;
+    transport
+      .terminologyResolution()
+      .then((r) => {
+        if (alive) setResolutions(r.resolutions ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [transport]);
+
+  const doPreview = useCallback(async () => {
+    setError(null);
+    setImportMsg(null);
+    setBusy(true);
+    try {
+      const r = await transport.terminologyPreview(importUrl);
+      setPreview(r);
+    } catch (e) {
+      setPreview(null);
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [transport, importUrl]);
+
+  const doImport = useCallback(async () => {
+    setError(null);
+    setImportMsg(null);
+    setBusy(true);
+    try {
+      const r = await transport.terminologyImport(importUrl);
+      setImportMsg(
+        `Imported ${r.path} (${r.code_count} codes) — restart kernel to load`,
+      );
+      onStaleChange(true);
+      setPreview(null);
+      onImported?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [transport, importUrl, onStaleChange, onImported]);
 
   const runEdit = useCallback(
     async (edit: {
@@ -86,6 +145,42 @@ export function ValueSetPane({
           Reload
         </button>
       </div>
+      <div className="dev-vsimport">
+        <input
+          className="dev-vsurlinput"
+          placeholder="ValueSet URL or OID…"
+          value={importUrl}
+          onChange={(e) => setImportUrl(e.target.value)}
+        />
+        <button disabled={busy || !importUrl} onClick={doPreview} title="Expand the remote ValueSet (no disk writes)">
+          Preview
+        </button>
+        <button
+          disabled={busy || !importUrl}
+          onClick={doImport}
+          title="Import as a local workspace valueset file (with provenance); sets the stale-terminology flag"
+        >
+          Import
+        </button>
+        {importMsg && <span className="dev-vsimportmsg">{importMsg}</span>}
+      </div>
+      {preview && (
+        <div className="dev-vspreview">
+          <div className="dev-vspreview-head">
+            {preview.url ?? importUrl} — {preview.count} codes
+          </div>
+          {(preview.concepts ?? []).slice(0, 5).map((c, i) => (
+            <div key={i} className="dev-vspreview-row">
+              {c.system} | {c.code}
+            </div>
+          ))}
+          {(preview.concepts?.length ?? 0) > 5 && (
+            <div className="dev-vspreview-more">
+              +{(preview.concepts?.length ?? 0) - 5} more
+            </div>
+          )}
+        </div>
+      )}
       {error && <div className="dev-vserror">{error}</div>}
       {info && (
         <div className="dev-vsmeta">
@@ -175,13 +270,37 @@ export function ValueSetPane({
       </div>
       {info && info.used_by.length > 0 && (
         <div className="dev-vsusedby">
-          Used by: {info.used_by.map((u) => (
-            <span key={u} className="dev-vsusedchip">{u}</span>
-          ))}
+          Used by: {info.used_by.map((u) => {
+            const r = resolutions.find((row) => `${row.library}.${row.id}` === u);
+            return (
+              <span key={u}>
+                <span className="dev-vsusedchip">{u}</span>
+                {r && (
+                  <span
+                    className={`dev-reschip dev-reschip-${r.resolved.toLowerCase()}`}
+                    title={r.url}
+                  >
+                    {r.resolved}
+                  </span>
+                )}
+              </span>
+            );
+          })}
         </div>
       )}
       {info && info.used_by.length === 0 && (
-        <div className="dev-vsusedby">Used by: (no library declarations reference this url)</div>
+        <div className="dev-vsusedby">
+          Used by: (no library declarations reference this url)
+          {resolutions.map((r) => (
+            <span
+              key={`${r.library}.${r.id}`}
+              className={`dev-reschip dev-reschip-${r.resolved.toLowerCase()}`}
+              title={r.url}
+            >
+              {r.library}.{r.id}: {r.resolved}
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );

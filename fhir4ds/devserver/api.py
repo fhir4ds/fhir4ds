@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import queue
+import re
 import threading
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
@@ -83,6 +86,18 @@ class DevHTTPServer(ThreadingHTTPServer):
     valuesets_stale: bool = False
 
 
+def _utc_now_iso() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _valueset_stem_from_url(url: str) -> str:
+    """File-stem for an imported canonical: OID tail or last URL segment."""
+    tail = url.rstrip("|").rstrip("/").rsplit("/", 1)[-1]
+    tail = tail.split("|")[0] or "valueset"
+    safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in tail)
+    return safe or "valueset"
+
+
 def create_server(
     kernel_manager: KernelManager,
     watcher: Watcher,
@@ -97,6 +112,12 @@ def create_server(
     # v3 Slice 1: set True when a valueset edit was written to disk but the
     # kernel still holds the terminology loaded at startup (restart reloads).
     server.valuesets_stale = False
+    # c-vsac-cleanroom: terminology connectivity (lazy — endpoint built on
+    # first use; API key resolved at call time, never stored/logged).
+    from .config import terminology_settings
+
+    server.terminology_settings = terminology_settings(watcher._cfg)
+    server._terminology_endpoint_holder = None
     return server
 
 
@@ -115,6 +136,236 @@ class _Handler(BaseHTTPRequestHandler):
     server: DevHTTPServer
 
     # -- plumbing ----------------------------------------------------------
+
+    # -- terminology connectivity (c-vsac-cleanroom) -----------------------
+
+    def _publish_changed(self, paths: list[str]) -> None:
+        """Publish a workspace 'changed' event on the watcher bus."""
+        self.server.watcher.bus.publish(
+            WorkspaceEvent(kind="changed", paths=paths)
+        )
+
+    def _terminology_status(self) -> dict[str, Any]:
+        """Status payload for /health: provider + configured flag.
+
+        NEVER includes key material — only whether the API key env var is
+        SET (presence check, not the value).
+        """
+        settings = getattr(self.server, "terminology_settings", None)
+        if settings is None:
+            return {"provider": "disabled", "configured": False}
+        return {
+            "provider": settings.provider,
+            "configured": settings.provider != "disabled",
+            "api_key_set": bool(settings.api_key()),
+        }
+
+    def _terminology_endpoint(self):
+        """Lazily build the VCACTerminologyEndpoint (vsac or generic http
+        base URL). Returns None when the provider is disabled."""
+        if self.server._terminology_endpoint_holder is None:
+            settings = self.server.terminology_settings
+            if settings.provider == "disabled":
+                return None
+            from fhir4ds.cql.terminology.vsac_adapter import (
+                VCACTerminologyEndpoint,
+            )
+
+            self.server._terminology_endpoint_holder = VCACTerminologyEndpoint(
+                base_url=settings.base_url or "https://cts.nlm.nih.gov/fhir",
+                timeout_seconds=settings.timeout_seconds,
+                api_key=settings.api_key(),
+            )
+        return self.server._terminology_endpoint_holder
+
+    def _route_terminology_preview(self, body: dict[str, Any]) -> None:
+        """POST /api/terminology/preview — expand a canonical URL/OID via
+        the configured endpoint; concept preview only, no disk writes."""
+        url = body.get("url")
+        if not isinstance(url, str) or not url.strip():
+            self._write_json(
+                200, _envelope(ok=False, diagnostics=[_diag("url is required")])
+            )
+            return
+        endpoint = self._terminology_endpoint()
+        if endpoint is None:
+            self._write_json(
+                200,
+                _envelope(
+                    ok=False,
+                    diagnostics=[
+                        _diag(
+                            "terminology provider is disabled — set "
+                            "[terminology] in fhir4ds.toml or "
+                            "FHIR4DS_TERMINOLOGY_PROVIDER"
+                        )
+                    ],
+                ),
+            )
+            return
+        try:
+            codes = endpoint.expand(url.strip())
+        except Exception as exc:  # adapter errors carry no key material
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        concepts = [
+            {"system": c.system, "code": c.code, "display": c.display}
+            for c in codes
+        ]
+        self._write_json(
+            200, _envelope(url=url.strip(), concepts=concepts, count=len(concepts))
+        )
+
+    def _route_terminology_import(self, body: dict[str, Any]) -> None:
+        """POST /api/terminology/import — expand + WRITE a local valueset
+        file (origin+version provenance). Imported sets are ordinary local
+        files from then on (normal stale/restart contract)."""
+        url = body.get("url")
+        name = body.get("name")
+        if not isinstance(url, str) or not url.strip():
+            self._write_json(
+                200, _envelope(ok=False, diagnostics=[_diag("url is required")])
+            )
+            return
+        if name is not None and (
+            not isinstance(name, str)
+            or not name
+            or not all(ch.isalnum() or ch in "-_" for ch in name)
+        ):
+            self._write_json(
+                200,
+                _envelope(
+                    ok=False,
+                    diagnostics=[
+                        _diag(
+                            "name must be a non-empty identifier (alphanumerics, -, _)"
+                        )
+                    ],
+                ),
+            )
+            return
+        endpoint = self._terminology_endpoint()
+        if endpoint is None:
+            self._write_json(
+                200,
+                _envelope(
+                    ok=False,
+                    diagnostics=[
+                        _diag(
+                            "terminology provider is disabled — set "
+                            "[terminology] in fhir4ds.toml or "
+                            "FHIR4DS_TERMINOLOGY_PROVIDER"
+                        )
+                    ],
+                ),
+            )
+            return
+        try:
+            codes = endpoint.expand(url.strip())
+        except Exception as exc:
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        if not codes:
+            self._write_json(
+                200,
+                _envelope(
+                    ok=False,
+                    diagnostics=[_diag(f"expansion of {url!r} returned no codes")],
+                ),
+            )
+            return
+        stem = name or _valueset_stem_from_url(url)
+        snap = self.server.watcher.snapshot
+        if snap.valuesets:
+            vs_dir = Path(str(snap.valuesets[0])).parent
+        else:
+            cfg = getattr(self.server.watcher, "_cfg", None)
+            vs_dir = (
+                cfg.valueset_dirs[0]
+                if cfg.valueset_dirs
+                else cfg.root / "valuesets"
+            )
+        vs_dir.mkdir(parents=True, exist_ok=True)
+        target = vs_dir / f"{stem}.json"
+        n = 1
+        while target.exists():
+            target = vs_dir / f"{stem}-{n}.json"
+            n += 1
+        systems = sorted({c.system for c in codes})
+        resource = {
+            "resourceType": "ValueSet",
+            "id": stem,
+            "url": url.strip(),
+            "name": stem,
+            "status": "active",
+            "compose": {
+                "include": [
+                    {
+                        "system": system,
+                        "concept": [
+                            {"code": c.code, "display": c.display or ""}
+                            for c in codes
+                            if c.system == system
+                        ],
+                    }
+                    for system in systems
+                ]
+            },
+            "_origin": {
+                "imported_from": url.strip(),
+                "imported_at": _utc_now_iso(),
+                "code_count": len(codes),
+            },
+        }
+        with open(target, "w", encoding="utf-8") as fh:
+            json.dump(resource, fh, indent=2)
+            fh.write("\n")
+        self.server.valuesets_stale = True
+        self._publish_changed([str(target)])
+        self._write_json(
+            200,
+            _envelope(
+                path=str(target), url=url.strip(), count=len(codes), stale=True
+            ),
+        )
+
+    def _route_terminology_resolution(self) -> None:
+        """GET /api/terminology/resolution — for each valueset declaration
+        in every library, report where it resolves: local / VSAC / server /
+        unresolved."""
+        snap = self.server.watcher.snapshot
+        local_urls: set[str] = set()
+        for vp in snap.valuesets:
+            try:
+                with open(str(vp), "r", encoding="utf-8") as fh:
+                    resource = json.load(fh)
+                url = resource.get("url")
+                if isinstance(url, str):
+                    local_urls.add(url)
+            except (OSError, json.JSONDecodeError):
+                continue
+        settings = getattr(self.server, "terminology_settings", None)
+        provider = settings.provider if settings else "disabled"
+        resolutions: list[dict[str, Any]] = []
+        for lib in snap.libraries:
+            for m in re.finditer(
+                r"^[ \t]*valueset[ \t]+\"([^\"]+)\"[ \t]*:[ \t]*'([^']+)'",
+                lib.text or "",
+                re.MULTILINE,
+            ):
+                vs_id, url = m.group(1), m.group(2)
+                if url in local_urls:
+                    where = "local"
+                elif provider == "vsac":
+                    where = "VSAC"
+                elif provider == "http":
+                    where = "server"
+                else:
+                    where = "unresolved"
+                resolutions.append(
+                    {"library": lib.name, "id": vs_id, "url": url, "resolved": where}
+                )
+        self._write_json(200, _envelope(resolutions=resolutions, provider=provider))
 
     def _write_json(self, status: int, payload: dict[str, Any]) -> None:
         body = json.dumps(payload, default=str).encode("utf-8")
@@ -150,6 +401,7 @@ class _Handler(BaseHTTPRequestHandler):
                     watching=len(self.server.watcher.files),
                     load_diagnostics=kernel.load_diagnostics,
                     valuesets_stale=self.server.valuesets_stale,
+                    terminology=self._terminology_status(),
                 ),
             )
             return
@@ -465,6 +717,9 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             self._write_json(200, _envelope(wrapper=wrapper))
             return
+        if path == "/api/terminology/resolution":
+            self._route_terminology_resolution()
+            return
         if path == "/api/view":
             # v3 Slice 4: ViewDefinition file read (text + parsed header info).
             from urllib.parse import parse_qs, urlparse
@@ -664,7 +919,13 @@ class _Handler(BaseHTTPRequestHandler):
                     ),
                 )
                 return
-            if path == "/api/valueset/edit":
+            elif path == "/api/terminology/preview":
+                self._route_terminology_preview(body)
+                return
+            elif path == "/api/terminology/import":
+                self._route_terminology_import(body)
+                return
+            elif path == "/api/valueset/edit":
                 # v3 Slice 1: valueset concept edit. Validate -> apply ->
                 # validate_resource -> WRITE the workspace file (the valuesets/
                 # dir is author-owned workspace, not a dependency dir) and set

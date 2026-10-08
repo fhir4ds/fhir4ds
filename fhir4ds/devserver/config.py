@@ -78,7 +78,7 @@ def _parse_manifest(path: Path) -> dict[str, list[str]]:
         raise DevConfigError(f"Invalid TOML in {path}: {exc}") from exc
     section = doc.get("dev")
     if section is None:
-        return {}
+        section = {}
     if not isinstance(section, dict):
         raise DevConfigError("fhir4ds.toml [dev] must be a table")
     unknown = set(section) - _CONFIG_KEYS
@@ -151,3 +151,121 @@ def load_config(
     if not (1 <= cfg.port <= 65535):
         raise DevConfigError(f"Invalid port {cfg.port}")
     return cfg
+
+
+# ---------------------------------------------------------------------------
+# Terminology connectivity ([terminology] table of fhir4ds.toml)
+# ---------------------------------------------------------------------------
+
+_TERMINOLOGY_KEYS = {"provider", "base_url", "timeout_seconds", "api_key_env"}
+
+_TERMINOLOGY_PROVIDERS = {"vsac", "http", "disabled"}
+
+
+@dataclass
+class TerminologySettings:
+    """Terminology-server connectivity for the dev server.
+
+    The API key is NEVER stored here — only the NAME of the environment
+    variable holding it (``api_key_env``, default ``UMLS_API_KEY``), per
+    the never-render/never-log doctrine. Resolution happens lazily at
+    endpoint-construction time.
+    """
+
+    provider: str = "disabled"
+    base_url: str | None = None
+    timeout_seconds: float = 5.0
+    api_key_env: str = "UMLS_API_KEY"
+
+    def api_key(self) -> str | None:
+        """Lazily read the API key from the named env var (never logged)."""
+        import os
+
+        return os.environ.get(self.api_key_env) or None
+
+
+def _parse_terminology_manifest(path: Path) -> dict[str, object]:
+    """Parse the ``[terminology]`` table of ``fhir4ds.toml`` (when present).
+
+    Returns {} when absent. Env vars (``FHIR4DS_TERMINOLOGY_PROVIDER``,
+    ``FHIR4DS_VSAC_API_KEY``/``UMLS_API_KEY``) remain the zero-config path;
+    the toml section is the workspace-persistent form.
+    """
+    if not path.exists():
+        return {}
+    if tomllib is None:  # pragma: no cover
+        raise DevConfigError(
+            "fhir4ds.toml parsing requires Python 3.11+ (tomllib) or tomli"
+        )
+    try:
+        with open(path, "rb") as fh:
+            doc = tomllib.load(fh)
+    except Exception as exc:
+        raise DevConfigError(f"Invalid TOML in {path}: {exc}") from exc
+    section = doc.get("terminology")
+    if section is None:
+        return {}
+    if not isinstance(section, dict):
+        raise DevConfigError("fhir4ds.toml [terminology] must be a table")
+    unknown = set(section) - _TERMINOLOGY_KEYS
+    if unknown:
+        raise DevConfigError(
+            f"fhir4ds.toml [terminology] has unknown keys {sorted(unknown)}; "
+            f"allowed: {sorted(_TERMINOLOGY_KEYS)}"
+        )
+    out: dict[str, object] = {}
+    if "provider" in section:
+        provider = section["provider"]
+        if not isinstance(provider, str) or provider not in _TERMINOLOGY_PROVIDERS:
+            raise DevConfigError(
+                f"fhir4ds.toml [terminology].provider must be one of "
+                f"{sorted(_TERMINOLOGY_PROVIDERS)}; got {provider!r}"
+            )
+        out["provider"] = provider
+    if "base_url" in section:
+        base_url = section["base_url"]
+        if not isinstance(base_url, str) or not base_url.strip():
+            raise DevConfigError(
+                "fhir4ds.toml [terminology].base_url must be a non-empty string"
+            )
+        out["base_url"] = base_url.strip()
+    if "timeout_seconds" in section:
+        timeout = section["timeout_seconds"]
+        if not isinstance(timeout, (int, float)) or not timeout > 0:
+            raise DevConfigError(
+                "fhir4ds.toml [terminology].timeout_seconds must be a positive number"
+            )
+        out["timeout_seconds"] = float(timeout)
+    if "api_key_env" in section:
+        api_key_env = section["api_key_env"]
+        if not isinstance(api_key_env, str) or not api_key_env.strip():
+            raise DevConfigError(
+                "fhir4ds.toml [terminology].api_key_env must be a non-empty string"
+            )
+        out["api_key_env"] = api_key_env.strip()
+    return out
+
+
+def terminology_settings(cfg: DevServerConfig) -> TerminologySettings:
+    """Resolve effective terminology settings: toml [terminology] first,
+    then env-var overrides (``FHIR4DS_TERMINOLOGY_PROVIDER`` /
+    ``FHIR4DS_TERMINOLOGY_URL``), matching the merge doctrine.
+
+    The API key itself never transits this function.
+    """
+    import os
+
+    manifest = _parse_terminology_manifest(cfg.root / "fhir4ds.toml")
+    settings = TerminologySettings(**manifest)  # type: ignore[arg-type]
+    env_provider = os.environ.get("FHIR4DS_TERMINOLOGY_PROVIDER")
+    if env_provider:
+        if env_provider not in _TERMINOLOGY_PROVIDERS:
+            raise DevConfigError(
+                f"FHIR4DS_TERMINOLOGY_PROVIDER must be one of "
+                f"{sorted(_TERMINOLOGY_PROVIDERS)}; got {env_provider!r}"
+            )
+        settings.provider = env_provider
+    env_url = os.environ.get("FHIR4DS_TERMINOLOGY_URL")
+    if env_url:
+        settings.base_url = env_url
+    return settings

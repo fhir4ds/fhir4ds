@@ -4,6 +4,9 @@ import type {
   ViewInfo,
   ViewRunResult,
   DatasetInfo,
+  TerminologyPreviewResult,
+  TerminologyImportResult,
+  TerminologyResolutionResult,
   ResourceSaveResult,
   ResourceValidateResult,
   SchemaTreeResult,
@@ -138,6 +141,18 @@ export class HttpTransport implements Transport {
 
   dataset(path: string): Promise<DatasetInfo> {
     return this.unwrap(`/api/dataset?path=${encodeURIComponent(path)}`);
+  }
+
+  terminologyPreview(url: string): Promise<TerminologyPreviewResult> {
+    return this.post<TerminologyPreviewResult>("/api/terminology/preview", { url });
+  }
+
+  terminologyImport(url: string, name?: string): Promise<TerminologyImportResult> {
+    return this.post<TerminologyImportResult>("/api/terminology/import", { url, name });
+  }
+
+  terminologyResolution(): Promise<TerminologyResolutionResult> {
+    return this.unwrap("/api/terminology/resolution");
   }
 
   viewRun(text?: string, path?: string, resources?: Record<string, unknown>[]): Promise<ViewRunResult> {
