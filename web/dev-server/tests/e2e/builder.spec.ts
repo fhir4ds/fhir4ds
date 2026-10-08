@@ -51,7 +51,7 @@ test.beforeAll(async () => {
   server = spawn(
     "/usr/bin/python3",
     ["-m", "fhir4ds.cli", "dev", dir, "--port", String(PORT), "--no-open"],
-    { cwd: dir, env: { PYTHONPATH: "/mnt/d/fhir4ds-rbux2-typed-20261007", PATH: process.env.PATH ?? "" }, stdio: "ignore" },
+    { cwd: dir, env: { PYTHONPATH: "/mnt/d/fhir4ds-rbux3-parity-20261008", PATH: process.env.PATH ?? "" }, stdio: "ignore" },
   );
   for (let i = 0; i < 120; i++) {
     try {
@@ -224,4 +224,47 @@ test("rbux2 gate: form mirrors JSON coding values; arm-switch hides inactive arm
   await valueSel.selectOption("valueBoolean");
   await expect(pane.locator(".dev-rbjsonarea")).toHaveValue(/valueBoolean/, { timeout: 5000 });
   await expect(pane.locator(".dev-rbjsonarea")).not.toHaveValue(/valueQuantity/);
+});
+
+test("rbux3 parity: Quantity choice arm renders typed inputs; + coding shows inputs", async ({ page }) => {
+  await page.goto(BASE);
+  await page.locator(".dev-lib.small", { hasText: "+ Resource" }).click();
+  await expect(page.locator(".dev-rbpane")).toBeVisible();
+  await page.locator(".dev-rbtpl", { hasText: "Observation" }).click();
+  const pane = page.locator(".dev-rbpane");
+
+  // DEFECT 1 pin: valueQuantity renders the triple-input widget, seeded from JSON.
+  const qtyVal = pane.locator(".dev-rbqtyval");
+  await expect(qtyVal).toHaveCount(1, { timeout: 10000 });
+  await expect(qtyVal).toHaveValue("120");
+  const qtyUnit = pane.locator(".dev-rbqtyunit").first();
+  await expect(qtyUnit).toHaveValue("mmHg");
+
+  // DEFECT 2 pin: '+' on the code group adds a second coding WITH inputs.
+  // (PAGE-scope has: filter — nested pane-scope never matches.)
+  const codeGroup = page.locator(".dev-rbgroupitem").filter({
+    has: page.locator(".dev-rbgrouplabel", { hasText: /^code\s/ }),
+  }).first();
+  await codeGroup.locator(".dev-rbgrouplabel .dev-rbaddbtn").click();
+  // The JSON textarea is pretty-printed — parse and assert array growth instead of a compact regex.
+  await expect
+    .poll(async () => {
+      const v = await pane.locator(".dev-rbjsonarea").inputValue();
+      try {
+        return JSON.parse(v).code.coding.length;
+      } catch {
+        return -1;
+      }
+    }, { timeout: 5000 })
+    .toBe(2);
+  const newSys = codeGroup.locator(".dev-rbrow", { hasText: "coding#1.system" }).locator("input.dev-rbinput");
+  await expect(newSys).toHaveCount(1, { timeout: 5000 });
+  const newCode = codeGroup.locator(".dev-rbrow", { hasText: "coding#1.code" }).locator("input.dev-rbinput");
+  await expect(newCode).toHaveCount(1);
+
+  // Type into the new coding element — the widget must write JSON.
+  await newSys.fill("http://snomed.info/sct");
+  await newCode.fill("123456");
+  await expect(pane.locator(".dev-rbjsonarea")).toHaveValue(/123456/, { timeout: 5000 });
+  await expect(pane.locator(".dev-rbjsonarea")).toHaveValue(/snomed/, { timeout: 5000 });
 });

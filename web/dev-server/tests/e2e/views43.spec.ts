@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const PORT = 19041;
-const WORKTREE = "/mnt/d/fhir4ds-rbux2-typed-20261007";
+const WORKTREE = "/mnt/d/fhir4ds-rbux3-parity-20261008";
 
 let server: ChildProcess | null = null;
 let dir: string | null = null;

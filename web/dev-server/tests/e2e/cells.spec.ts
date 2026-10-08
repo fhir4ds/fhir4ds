@@ -51,7 +51,7 @@ test.beforeAll(async () => {
   server = spawn(
     "/usr/bin/python3",
     ["-m", "fhir4ds.cli", "dev", workdir, "--port", String(PORT), "--no-open"],
-    { env: { PATH: process.env.PATH, PYTHONPATH: "/mnt/d/fhir4ds-rbux2-typed-20261007" }, stdio: "ignore", cwd: workdir },
+    { env: { PATH: process.env.PATH, PYTHONPATH: "/mnt/d/fhir4ds-rbux3-parity-20261008" }, stdio: "ignore", cwd: workdir },
   );
   // Wait for /health.
   const deadline = Date.now() + 60_000;

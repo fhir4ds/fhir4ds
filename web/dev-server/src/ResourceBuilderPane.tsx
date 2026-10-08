@@ -255,7 +255,7 @@ function StructuredGroup({
   depth: number;
   ctx: FormCtx;
 }) {
-  const fields = fieldsFor(obj, schema, prefix);
+  const fields = fieldsFor(obj, schema, prefix, depth > 0);
   if (fields.length === 0 && depth > 0) {
     return <div className="dev-rbgroup-empty">(empty group — add fields below or via JSON)</div>;
   }
@@ -472,7 +472,10 @@ type FieldNode = {
 function fieldsFor(
   obj: Record<string, unknown>,
   schema: SchemaNode | null,
-  prefix: string
+  prefix: string,
+  /** Nested-group mode: surface absent 0..1 PRIMITIVE children so freshly
+   *  added elements (e.g. a new coding) immediately show their inputs. */
+  all = false
 ): FieldNode[] {
   if (!schema) return [];
   const out: FieldNode[] = [];
@@ -481,12 +484,15 @@ function fieldsFor(
     if (child.hatch || child.name === "resourceType" || child.choice_group) continue;
     const path = joinPath(prefix, child.name);
     const v = obj[child.name];
+    const primitive = (child.children?.length ?? 0) === 0;
     if (Array.isArray(v)) {
       v.forEach((el, i) => out.push({ node: child, path: `${path}#${i}`, value: el, index: i }));
     } else if (v !== undefined && v !== null) {
       out.push({ node: child, path, value: v, index: null });
     } else if (child.cardinality === "1..1") {
       // Required-but-missing: still surface the field so users can fill it.
+      out.push({ node: child, path, value: undefined, index: null });
+    } else if (all && primitive && child.cardinality !== "0..*") {
       out.push({ node: child, path, value: undefined, index: null });
     }
   }
@@ -989,7 +995,52 @@ export function ResourceBuilderPane({ transport, datasets, dataHint, initialReso
                       </option>
                     ))}
                   </select>
-                  {sel && (
+                  {sel && sel.arm.type === "Quantity" ? (
+                    <span className="dev-rbchoicewidget dev-rbqty">
+                      <input
+                        type="number" step="any" className="dev-rbinput dev-rbqtyval" placeholder="value"
+                        value={typeof (resource[sel.arm.name] as Record<string, unknown> | undefined)?.value === "number"
+                          ? String((resource[sel.arm.name] as Record<string, unknown>).value) : ""}
+                        onChange={(e) => setQuantityObj(sel.arm.name, e.target.value === "" ? {} : { value: Number(e.target.value) }, e.target.value === "" ? ["value"] : [])}
+                      />
+                      <input
+                        className="dev-rbinput dev-rbqtyunit" placeholder="unit (e.g. mg)"
+                        value={typeof (resource[sel.arm.name] as Record<string, unknown> | undefined)?.unit === "string"
+                          ? (resource[sel.arm.name] as Record<string, unknown>).unit as string : ""}
+                        onChange={(e) => setQuantityObj(sel.arm.name, e.target.value === "" ? {} : { unit: e.target.value }, e.target.value === "" ? ["unit"] : [])}
+                      />
+                      <input
+                        className="dev-rbinput dev-rbqtysystem" placeholder="system (UCUM)"
+                        value={typeof (resource[sel.arm.name] as Record<string, unknown> | undefined)?.system === "string"
+                          ? (resource[sel.arm.name] as Record<string, unknown>).system as string : ""}
+                        onChange={(e) => setQuantityObj(sel.arm.name, e.target.value === "" ? {} : { system: e.target.value }, e.target.value === "" ? ["system"] : [])}
+                      />
+                    </span>
+                  ) : sel && (sel.arm.children?.length ?? 0) > 0 && !sel.arm.children!.every((c) => c.hatch) ? (
+                    <span className="dev-rbchoicewidget dev-rbchoicewidget-struct">
+                      <StructuredGroup
+                        obj={
+                          resource[sel.arm.name] && typeof resource[sel.arm.name] === "object" && !Array.isArray(resource[sel.arm.name])
+                            ? (resource[sel.arm.name] as Record<string, unknown>)
+                            : {}
+                        }
+                        schema={sel.arm}
+                        prefix={sel.arm.name}
+                        depth={1}
+                        ctx={{
+                          resourceType,
+                          setAtPath,
+                          setQuantityObj,
+                          appendAt,
+                          removeAt,
+                          browseReferences,
+                          refBrowsePath: refBrowse?.path ?? null,
+                          refCandidates: refBrowse?.candidates ?? [],
+                          refTargets: refBrowse?.targets ?? [],
+                        }}
+                      />
+                    </span>
+                  ) : sel && (
                     <span className="dev-rbchoicewidget">
                       <PrimitiveInput
                         path={sel.arm.name}
