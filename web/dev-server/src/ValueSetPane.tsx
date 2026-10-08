@@ -36,6 +36,10 @@ export function ValueSetPane({
   const [preview, setPreview] = useState<TerminologyPreviewResult | null>(null);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [resolutions, setResolutions] = useState<ResolutionRow[]>([]);
+  // Provenance for the last successful preview/import (persists after import).
+  const [provAt, setProvAt] = useState<Date | null>(null);
+  const [provCount, setProvCount] = useState<number | null>(null);
+  const [insertAttn, setInsertAttn] = useState(false);
 
   const reload = useCallback(async () => {
     setError(null);
@@ -70,10 +74,13 @@ export function ValueSetPane({
   const doPreview = useCallback(async () => {
     setError(null);
     setImportMsg(null);
+    setInsertAttn(false);
     setBusy(true);
     try {
       const r = await transport.terminologyPreview(importUrl);
       setPreview(r);
+      setProvAt(new Date());
+      setProvCount(r.count ?? r.concepts?.length ?? 0);
     } catch (e) {
       setPreview(null);
       setError(e instanceof Error ? e.message : String(e));
@@ -88,18 +95,21 @@ export function ValueSetPane({
     setBusy(true);
     try {
       const r = await transport.terminologyImport(importUrl);
+      const stem = (r.path ?? "").split("/").pop()?.replace(/\.json$/, "") ?? "";
       setImportMsg(
-        `Imported ${r.path} (${r.code_count} codes) — restart kernel to load`,
+        `Saved ${stem || r.path}.json — click Insert to add to header`,
       );
+      setProvCount(r.code_count ?? provCount ?? 0);
+      setProvAt((d) => d ?? new Date());
       onStaleChange(true);
-      setPreview(null);
       onImported?.();
+      setInsertAttn(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
-  }, [transport, importUrl, onStaleChange, onImported]);
+  }, [transport, importUrl, onStaleChange, onImported, provCount]);
 
   const runEdit = useCallback(
     async (edit: {
@@ -164,6 +174,13 @@ export function ValueSetPane({
         </button>
         {importMsg && <span className="dev-vsimportmsg">{importMsg}</span>}
       </div>
+      {(provCount !== null || preview) && provAt && provCount !== null && (
+        <div className="dev-vsprov">
+          {provCount} concepts from VSAC — OID{" "}
+          {importUrl.split("/").filter(Boolean).pop() ?? importUrl} — retrieved{" "}
+          {provAt.toLocaleString()}
+        </div>
+      )}
       {preview && (
         <div className="dev-vspreview">
           <div className="dev-vspreview-head">
@@ -189,7 +206,7 @@ export function ValueSetPane({
           </span>
           {onInsertDeclaration && info.url && (
             <button
-              className="dev-vsdecl"
+              className={"dev-vsdecl" + (insertAttn ? " dev-vsdecl-attn" : "")}
               title={`Insert  valueset "<name>": '${info.url}'  into the open library header`}
               onClick={() => {
                 // Declared name: prefer the name used by referencing libraries

@@ -455,7 +455,21 @@ export function App() {
               className={`dev-termpill dev-termpill-${health.terminology.provider}`}
               title={`terminology: ${health.terminology.provider} (api key set: ${health.terminology.api_key_set})`}
             >
-              {health.terminology.provider}
+              <span
+                className={
+                  "dev-termdot " +
+                  (health.terminology.provider !== "disabled" &&
+                  health.terminology.configured &&
+                  health.terminology.api_key_set
+                    ? "dev-termdot-connected"
+                    : "dev-termdot-offline")
+                }
+              />
+              {health.terminology.provider !== "disabled" &&
+              health.terminology.configured &&
+              health.terminology.api_key_set
+                ? "VSAC connected"
+                : "VSAC offline — local only"}
             </span>
           )}
         </span>

@@ -1080,3 +1080,29 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
 .dev-termpill-vsac { border-color: #569cd6; color: #569cd6; }
 .dev-termpill-http { border-color: #17a2b8; color: #17a2b8; }
 .dev-termpill-disabled { border-color: #666; color: #888; }
+
+/* VSAC cleanroom Muse-gate: status dot, provenance line, insert attention */
+.dev-termdot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.dev-termdot-connected { background: #4caf50; box-shadow: 0 0 4px #4caf50; }
+.dev-termdot-offline { background: #888; }
+.dev-vsprov {
+  margin: 2px 10px 4px;
+  font-size: 11px;
+  color: #9cdcfe;
+  font-family: var(--dev-mono, monospace);
+}
+.dev-vsdecl-attn {
+  outline: 2px solid #4caf50;
+  animation: dev-pulse 1.2s ease-in-out 4;
+}
+@keyframes dev-pulse {
+  0%, 100% { outline-color: #4caf50; }
+  50% { outline-color: transparent; }
+}

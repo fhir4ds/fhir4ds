@@ -60,7 +60,11 @@ test.beforeAll(async () => {
 
   server = spawn("/usr/bin/python3", ["-m", "fhir4ds.cli", "dev", dir, "--port", String(PORT), "--no-open"], {
     cwd: dir,
-    env: { PYTHONPATH: WORKTREE, PATH: process.env.PATH ?? "" },
+    env: {
+      PYTHONPATH: WORKTREE,
+      PATH: process.env.PATH ?? "",
+      UMLS_API_KEY_TEST: "e2e-dummy-key",
+    },
     stdio: "ignore",
   });
 
@@ -86,7 +90,8 @@ test.afterAll(async () => {
 test("terminology status pill shows provider", async ({ page }) => {
   await page.goto(BASE);
   await expect(page.locator(".dev-termpill")).toBeVisible({ timeout: 20_000 });
-  await expect(page.locator(".dev-termpill")).toContainText("vsac");
+  await expect(page.locator(".dev-termpill")).toContainText("VSAC connected");
+  await expect(page.locator(".dev-termdot-connected")).toHaveCount(1);
 });
 
 test("import flow: preview then import with stale banner", async ({ page }) => {
@@ -140,12 +145,17 @@ test("import flow: preview then import with stale banner", async ({ page }) => {
   await page.locator(".dev-vsurlinput").fill("http://example.com/remote");
   await page.getByRole("button", { name: "Preview" }).click();
   await expect(page.locator(".dev-vspreview-head")).toContainText("3 codes", { timeout: 10_000 });
+  await expect(page.locator(".dev-vsprov")).toContainText("3 concepts from VSAC", { timeout: 10_000 });
+  await expect(page.locator(".dev-vsprov")).toContainText("OID remote");
 
   await page.getByRole("button", { name: "Import", exact: true }).click();
-  await expect(page.locator(".dev-vsimportmsg")).toContainText("Imported valuesets/imported.json", {
+  await expect(page.locator(".dev-vsimportmsg")).toContainText("Saved imported.json", {
     timeout: 10_000,
   });
+  await expect(page.locator(".dev-vsimportmsg")).toContainText("click Insert");
   await expect(page.locator(".dev-stale").first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".dev-vsdecl-attn")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".dev-vsprov")).toContainText("3 concepts from VSAC");
 });
 
 test("resolution chips render in used-by footer", async ({ page }) => {
