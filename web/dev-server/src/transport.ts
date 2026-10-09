@@ -288,6 +288,50 @@ export interface AddPathResult {
   snapshot?: { datasets: number; libraries: number };
 }
 
+export interface TestsSaveResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  measure?: string;
+  count?: number;
+}
+
+export interface TestsExpectedPatient {
+  patient: string;
+  report: Record<string, unknown>;
+  groups: { id?: string; population: { code: string; count: number; display_id?: string }[] }[];
+}
+
+export interface TestsExpectedGetResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  measure?: string;
+  patients?: TestsExpectedPatient[];
+  count?: number;
+}
+
+export interface TestsCaptureResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  measure?: string;
+  reports?: Record<string, unknown>[];
+  counts?: Record<string, number>;
+  columns?: string[];
+}
+
+export interface TestsRunResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  measure?: string;
+  rows?: { patient: string; code: string; expected: number | null; actual: number | null; pass: boolean; reason?: string }[];
+  total?: number;
+  passed?: number;
+  failed?: number;
+}
+
 /** Per-valueset-declaration resolution status. */
 export interface ResolutionRow {
   library: string;
@@ -380,6 +424,13 @@ export interface Transport {
     kind: "cql" | "valueset" | "measure" | "data" | "view",
     path: string,
   ): Promise<AddPathResult>;
+
+  /** S3b (c-cleanroom-ux5 item 3): expected-results editor surface. */
+  testsExpectedGet(measure: string): Promise<TestsExpectedGetResult>;
+  testsExpectedSave(measure: string, reports: Record<string, unknown>[]): Promise<TestsSaveResult>;
+  testsExpectedDelete(measure: string, patient: string): Promise<{ schema: number; ok: boolean; removed?: boolean; diagnostics: Diagnostic[] }>;
+  testsCapture(libraries: { name: string; text: string }[], library: string, measure: Record<string, unknown>, measureName: string): Promise<TestsCaptureResult>;
+  testsRun(libraries: { name: string; text: string }[], library: string, measure: Record<string, unknown>, measureName: string): Promise<TestsRunResult>;
 
   schemaTree(resource: string, depth?: number): Promise<SchemaTreeResult>;
   resourceValidate(resource: Record<string, unknown>): Promise<ResourceValidateResult>;

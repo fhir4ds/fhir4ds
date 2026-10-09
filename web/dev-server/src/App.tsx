@@ -25,7 +25,7 @@ import type {
 } from "./transport";
 import { ValueSetPane } from "./ValueSetPane";
 import { ParamsPane } from "./ParamsPane";
-import { TestsPane } from "./TestsPane";
+import { ExpectedResultsPane } from "./ExpectedResultsPane";
 import { TerminologyDialog } from "./TerminologyDialog";
 import { PathPickerDialog } from "./PathPickerDialog";
 import { MeasurePane } from "./MeasurePane";
@@ -132,6 +132,8 @@ export function App() {
   // v4.3: last measure run's MeasureReports for the VD pane's
   // run-against-measure-output toggle.
   const [lastMeasureReports, setLastMeasureReports] = useState<Record<string, unknown>[] | null>(null);
+  const [lastMeasure, setLastMeasure] = useState<Record<string, unknown> | null>(null);
+  const [lastMeasureName, setLastMeasureName] = useState("CleanroomMeasure");
   // v3.1: rail count badges — patients (kernel stats), valueset concept
   // counts (lazy fetch), VD column counts (client-side text parse).
   const [vsCounts, setVsCounts] = useState<Record<string, number> | null>(null);
@@ -709,6 +711,10 @@ export function App() {
                     ?.definitions ?? []
                 }
                 onMeasureReports={setLastMeasureReports}
+                onMeasureInfo={(m, name) => {
+                  setLastMeasure(m);
+                  setLastMeasureName(name);
+                }}
               />
             </div>
           ) : railView?.kind === "dataset" ? (
@@ -1004,16 +1010,12 @@ export function App() {
             </>
           )}
           {selected && (
-            <TestsPane
+            <ExpectedResultsPane
               transport={transport}
               library={selected}
               buffer={buffer}
-              kernelId={health?.kernel_id ?? "unknown"}
-              patients={patients}
-              definitions={
-                workspace?.libraries.find((l) => l.name === selected)
-                  ?.definitions ?? []
-              }
+              measure={lastMeasure}
+              measureName={lastMeasureName}
             />
           )}
         </section>

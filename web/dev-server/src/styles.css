@@ -1207,3 +1207,60 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   cursor: pointer; font-size: 11px; padding: 0 4px; margin-left: 4px; vertical-align: middle;
 }
 .dev-addrail:hover { color: #fff; border-color: #666; }
+
+/* S3b: Expected results editor pane */
+.dev-expectedpane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.dev-expectedpane .dev-expectedgrid {
+  display: grid;
+  gap: 2px;
+  overflow: auto;
+  max-height: 260px;
+  border: 1px solid var(--dev-border, #ddd);
+  border-radius: 6px;
+  padding: 6px;
+}
+.dev-expectedhead,
+.dev-expectedrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.dev-expectedhead {
+  font-weight: 600;
+  opacity: 0.7;
+}
+.dev-expectedpatient {
+  font-weight: 600;
+  min-width: 90px;
+}
+.dev-expectedcount {
+  width: 64px;
+}
+.dev-expecteddel {
+  margin-left: auto;
+}
+.dev-expectedempty {
+  font-size: 12px;
+  opacity: 0.6;
+  padding: 6px;
+}
+.dev-expectedrun {
+  border-top: 1px solid var(--dev-border, #ddd);
+  padding-top: 6px;
+}
+.dev-expectedrun.pass .dev-expectedrunhead {
+  color: #1a7f37;
+}
+.dev-expectedrun.fail .dev-expectedrunhead {
+  color: #b42318;
+}
+.dev-expectedfail {
+  color: #b42318;
+  font-size: 12px;
+}

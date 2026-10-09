@@ -82,7 +82,7 @@ test.beforeAll(async () => {
 
   server = spawn("/usr/bin/python3", ["-m", "fhir4ds.cli", "dev", dir, "--port", "18961", "--no-open"], {
     env: {
-      PYTHONPATH: "/mnt/d/fhir4ds-umls-20261008",
+      PYTHONPATH: "/mnt/d/fhir4ds-ux5-20261008",
       PATH: process.env.PATH ?? "",
     },
     stdio: "ignore",
@@ -150,81 +150,6 @@ test("params table shows the declared parameter and can delete it", async ({ pag
   await expect(page.locator(".dev-paramstable")).toContainText("No parameters", { timeout: 10000 });
 });
 
-test("tests grid: patient dropdown populated, case runs green", async ({ page }) => {
-  await expect(page.locator(".dev-lib.selected")).toHaveText("Demographics", { timeout: 15000 });
-  await expect(page.locator(".dev-testspane")).toBeVisible();
-  // wait until the patients dropdown is fed by the loaded dataset
-  await expect(page.locator("button", { hasText: "+ case" })).toBeEnabled({ timeout: 15000 });
-  await page.locator("button", { hasText: "+ case" }).click();
-  await expect(page.locator(".dev-testgrid .dev-vsrow")).toHaveCount(2); // head + 1 case
-  const patientSelect = page.locator(".dev-testgrid .dev-vsrow").nth(1).locator("select").first();
-  await expect(patientSelect.locator("option", { hasText: "p1" })).toBeAttached({ timeout: 30000 });
-  const opts = await patientSelect.locator("option").allTextContents();
-  expect(opts.filter((o) => /^p\d$/.test(o)).length).toBe(6);
-  // IsMale for p1 (male) should pass
-  await page.locator("button", { hasText: "Run tests" }).click();
-  await expect(page.locator(".dev-testsummary.pass")).toBeVisible({ timeout: 30000 });
-});
-
-// Muse FIX 1/2 blocker chain: valueset edit -> stale banner + Run disabled ->
-// restart kernel -> IsBp test goes RED -> revert -> restart -> GREEN.
-test("red-green chain: valueset edit flips IsBp after restart, reverts green", async ({ page }) => {
-  await expect(page.locator(".dev-lib.selected")).toHaveText("Demographics", { timeout: 15000 });
-  // Wait for the boxes to render (IsBp box present).
-  await expect(page.locator(".dev-box-title").filter({ hasText: "IsBp" })).toBeVisible({ timeout: 15000 });
-
-  // Seed a green test first: IsBp for p1 (p1 has a coded Observation) = true.
-  await expect(page.locator("button", { hasText: "+ case" })).toBeEnabled({ timeout: 15000 });
-  await page.locator("button", { hasText: "+ case" }).click();
-  const row = page.locator(".dev-testgrid .dev-vsrow").nth(1);
-  await expect(row.locator("select").first().locator("option", { hasText: "p1" })).toBeAttached({ timeout: 30000 });
-  await row.locator("select").first().selectOption("p1");
-  // target_kind default is define; pick IsBp in the target select.
-  // Row selects: [0]=patient, [1]=target_kind, [2]=target name, [3]=expect.
-  const targetSelect = row.locator("select").nth(2);
-  await targetSelect.selectOption({ label: "IsBp" });
-  // expect select: default true — p1 should pass.
-  await page.locator("button", { hasText: "Run tests" }).click();
-  await expect(page.locator(".dev-testsummary.pass")).toBeVisible({ timeout: 30000 });
-
-  // Edit the valueset: change the concept code so nothing matches anymore.
-  await page.locator(".dev-lib", { hasText: "vs1" }).click();
-  const rgPane = page.locator(".dev-vspane");
-  await expect(rgPane).toBeVisible();
-  const codeInput = rgPane.locator(".dev-vsrow").nth(1).locator("input").nth(1);
-  await codeInput.fill("9999-9");
-  await rgPane.locator(".dev-vsrow").nth(1).locator("button", { hasText: "Save" }).click();
-  await expect(page.locator(".dev-stale").first()).toContainText("Restart kernel", { timeout: 10000 });
-
-  // FIX 2: Run buttons are disabled while terminology is stale.
-  await page.locator(".dev-lib.selected", { hasText: "Demographics" }).click();
-  await expect(page.locator(".dev-box-title").filter({ hasText: "IsBp" })).toBeVisible({ timeout: 15000 });
-  await expect(page.locator(".dev-boxbar .dev-cellrun").first()).toBeDisabled();
-
-  // Restart the kernel (reloads terminology), run the test again -> RED.
-  await page.locator("button", { hasText: "Restart kernel" }).click();
-  await expect(page.locator(".dev-kerneldot.idle")).toBeVisible({ timeout: 30000 });
-  await expect(page.locator(".dev-lib.selected", { hasText: "Demographics" })).toBeVisible();
-  await page.locator(".dev-lib.selected", { hasText: "Demographics" }).click();
-  await expect(page.locator(".dev-box-title").filter({ hasText: "IsBp" })).toBeVisible({ timeout: 15000 });
-  await page.locator("button", { hasText: "Run tests" }).click();
-  await expect(page.locator(".dev-testsummary.fail")).toBeVisible({ timeout: 30000 });
-
-  // Revert the code edit, restart again -> GREEN.
-  await page.locator(".dev-lib", { hasText: "vs1" }).click();
-  const rvPane = page.locator(".dev-vspane");
-  await expect(rvPane).toBeVisible();
-  const reverted = rvPane.locator(".dev-vsrow").nth(1).locator("input").nth(1);
-  await reverted.fill("8480-6");
-  await rvPane.locator(".dev-vsrow").nth(1).locator("button", { hasText: "Save" }).click();
-  await expect(page.locator(".dev-stale").first()).toContainText("Restart kernel", { timeout: 10000 });
-  await page.locator("button", { hasText: "Restart kernel" }).click();
-  await expect(page.locator(".dev-kerneldot.idle")).toBeVisible({ timeout: 30000 });
-  await page.locator(".dev-lib.selected", { hasText: "Demographics" }).click();
-  await expect(page.locator(".dev-box-title").filter({ hasText: "IsBp" })).toBeVisible({ timeout: 15000 });
-  await page.locator("button", { hasText: "Run tests" }).click();
-  await expect(page.locator(".dev-testsummary.pass")).toBeVisible({ timeout: 30000 });
-});
 
 test("stale state propagates from API-originated edits (no pane interaction)", async ({ page }) => {
   await expect(page.locator(".dev-lib.selected")).toHaveText("Demographics", { timeout: 15000 });

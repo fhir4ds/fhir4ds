@@ -33,6 +33,7 @@ export function MeasurePane({
   buffer,
   definitions,
   onMeasureReports,
+  onMeasureInfo,
 }: {
   transport: HttpTransport;
   library: string;
@@ -40,6 +41,8 @@ export function MeasurePane({
   definitions: string[];
   /** v4.3: called with the run's per-patient MeasureReports (VD-over-measure-output). */
   onMeasureReports?: (reports: Record<string, unknown>[]) => void;
+  /** S3b: lifts the scaffolded measure + its name to App (ExpectedResultsPane). */
+  onMeasureInfo?: (measure: Record<string, unknown> | null, name: string) => void;
 }) {
   const [rows, setRows] = useState<Record<string, string>>({});
   const [scoring, setScoring] = useState("");
@@ -167,6 +170,7 @@ export function MeasurePane({
       }
       setPreview(s);
       setLastMeasure(s.measure);
+      onMeasureInfo?.(s.measure, measureName || "CleanroomMeasure");
       const r = await transport.measureRun(libs, library, s.measure);
       if (!r.ok) {
         setRunResult({
@@ -226,6 +230,7 @@ export function MeasurePane({
       }
       setPreview(s);
       setLastMeasure(s.measure);
+      onMeasureInfo?.(s.measure, measureName || "CleanroomMeasure");
       const r = await transport.measureBaselineSave(libs, library, s.measure, measureName || undefined);
       if (!r.ok || !r.path) {
         setBaselineMsg(r.diagnostics[0]?.message ?? "baseline save failed");

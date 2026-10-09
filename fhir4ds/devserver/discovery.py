@@ -141,7 +141,15 @@ def scan_workspace(cfg: DevServerConfig) -> WorkspaceSnapshot:
             if not d.is_dir():
                 continue
             for path in sorted(d.rglob("*")):
-                if path.is_file() and path.suffix.lower() in suffixes:
+                if (
+                    path.is_file()
+                    and path.suffix.lower() in suffixes
+                    # S3b: expected-results store lives under measures/
+                    # but is not a Measure resource — exclude it from
+                    # measure discovery (it previously captured the saved
+                    # cqfm-test-cases MeasureReports as "measures").
+                    and "expected" not in path.relative_to(d).parts
+                ):
                     out.append(path)
         return out
 

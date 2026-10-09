@@ -11,6 +11,10 @@ import type {
   TerminologyConfigResult,
   FsListResult,
   AddPathResult,
+  TestsExpectedGetResult,
+  TestsCaptureResult,
+  TestsSaveResult,
+  TestsRunResult,
   ResourceSaveResult,
   ResourceValidateResult,
   SchemaTreeResult,
@@ -185,6 +189,26 @@ export class HttpTransport implements Transport {
 
   workspaceAddPath(kind: "cql" | "valueset" | "measure" | "data" | "view", path: string): Promise<AddPathResult> {
     return this.post<AddPathResult>("/api/workspace/add-path", { kind, path });
+  }
+
+  testsExpectedGet(measure: string): Promise<TestsExpectedGetResult> {
+    return this.unwrap(`/api/tests/expected?measure=${encodeURIComponent(measure)}`);
+  }
+
+  testsExpectedSave(measure: string, reports: Record<string, unknown>[]): Promise<TestsSaveResult> {
+    return this.post<AddPathResult>("/api/tests/expected/save", { measure, reports });
+  }
+
+  testsExpectedDelete(measure: string, patient: string): Promise<{ schema: number; ok: boolean; removed?: boolean; diagnostics: Diagnostic[] }> {
+    return this.post("/api/tests/expected/delete", { measure, patient });
+  }
+
+  testsCapture(libraries: { name: string; text: string }[], library: string, measure: Record<string, unknown>, measureName: string): Promise<TestsCaptureResult> {
+    return this.post<TestsCaptureResult>("/api/tests/capture", { libraries, library, measure, measure_name: measureName });
+  }
+
+  testsRun(libraries: { name: string; text: string }[], library: string, measure: Record<string, unknown>, measureName: string): Promise<TestsRunResult> {
+    return this.post<TestsRunResult>("/api/tests/run", { libraries, library, measure, measure_name: measureName });
   }
 
   viewRun(text?: string, path?: string, resources?: Record<string, unknown>[]): Promise<ViewRunResult> {

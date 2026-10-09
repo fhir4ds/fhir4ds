@@ -1496,12 +1496,17 @@ class _Handler(BaseHTTPRequestHandler):
         self._write_json(200, result.to_dict())
 
     def _expected_root(self) -> Path:
-        """measures/expected dir (same resolution as baseline routes)."""
-        snap = self.server.watcher.snapshot
-        roots = [Path(str(d)).parent for d in (getattr(snap, "measures", None) or [])]
-        if roots:
-            return roots[0] / "expected"
+        """measures/expected dir (same resolution as baseline routes).
+
+        S3b fix: resolve from the CONFIGURED measures dir — deriving from
+        snapshot.measures (files) made the root drift once save populated
+        measures/expected/patients/... (the saved files themselves became
+        the "measures", moving the root under patients/<M>/expected).
+        """
         cfg = getattr(self.server.watcher, "_cfg", None)
+        measure_dirs = list(getattr(cfg, "measure_dirs", None) or [])
+        if measure_dirs:
+            return Path(measure_dirs[0]) / "expected"
         data_dirs = list(getattr(cfg, "data_dirs", None) or [])
         if data_dirs:
             return Path(data_dirs[0]).parent / "measures" / "expected"
