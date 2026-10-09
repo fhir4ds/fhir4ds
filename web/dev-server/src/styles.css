@@ -1264,3 +1264,14 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   color: #b42318;
   font-size: 12px;
 }
+
+/* S4: MADiE import message (rail) */
+.dev-importmsg {
+  margin: 4px 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  background: #1f2937;
+  color: #93c5fd;
+  word-break: break-word;
+}

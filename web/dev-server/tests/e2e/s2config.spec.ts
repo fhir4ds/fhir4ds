@@ -63,7 +63,14 @@ test.beforeEach(async ({ browser }) => {
 test.afterEach(async () => {
   if (server?.pid) {
     server.kill();
-    await new Promise((r) => setTimeout(r, 300));
+    // Wait for the process to actually exit so the port is released
+    // before the next test spawns a fresh server on the same port.
+    const exited = new Promise<void>((resolve) => {
+      server!.once("exit", () => resolve());
+      setTimeout(resolve, 5000);
+    });
+    await exited;
+    await new Promise((r) => setTimeout(r, 200));
   }
 });
 

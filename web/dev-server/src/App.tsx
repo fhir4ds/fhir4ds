@@ -92,6 +92,7 @@ export function App() {
   const [sql, setSql] = useState("");
   const [termDialog, setTermDialog] = useState(false);
   const [pickerKind, setPickerKind] = useState<"cql" | "valueset" | "measure" | "data" | "view" | null>(null);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const [tab, setTab] = useState<Tab>("results");
   const [busy, setBusy] = useState(false);
@@ -183,6 +184,42 @@ export function App() {
       return null;
     }
   }, []);
+
+  const importMadie = useCallback(
+    async (kind: "package" | "tests") => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".zip";
+      input.onchange = async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        const b64 = await new Promise<string>((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => {
+            const s = String(fr.result);
+            resolve(s.slice(s.indexOf(",") + 1)); // strip data-url prefix
+          };
+          fr.onerror = () => reject(fr.error);
+          fr.readAsDataURL(file);
+        });
+        try {
+          const r =
+            kind === "package"
+              ? await transport.madieImportPackage(b64)
+              : await transport.madieImportTests(b64);
+          setImportMsg(
+            r.ok
+              ? `MADiE ${kind} imported: ${JSON.stringify(r.counts ?? {})}`
+              : `MADiE import failed: ${r.diagnostics?.[0]?.message ?? "unknown error"}`,
+          );
+        } catch (e) {
+          setImportMsg(`MADiE import failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      };
+      input.click();
+    },
+    [transport],
+  );
 
   const loadLibrary = useCallback(
     async (name: string) => {
@@ -497,7 +534,7 @@ export function App() {
       </header>
       <main className="dev-main">
         <aside className="dev-libraries">
-          <h2>Libraries <button className="dev-addrail" title="Add a cql path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("cql")}>+</button></h2>
+          <h2>Libraries <button className="dev-addrail" title="Add a cql path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("cql")}>+</button><button className="dev-addrail" title="Import a MADiE measure package ZIP (CQL -> cql/, valuesets -> valuesets/, Measure -> measures/)" onClick={() => importMadie("package")}>MADiE</button></h2>
           {(workspace?.libraries ?? []).map((lib) => (
             <div
               key={lib.name}
@@ -511,6 +548,7 @@ export function App() {
               {!lib.parse_ok && <em title={lib.error ?? ""}> ⚠</em>}
             </div>
           ))}
+          {importMsg && <div className="dev-importmsg" role="status">{importMsg}</div>}
           <h2>Data <button className="dev-addrail" title="Add a data path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("data")}>+</button></h2>
           {(workspace?.datasets ?? []).map((d) => (
             <div
@@ -615,7 +653,7 @@ export function App() {
               {lib.name} · parameters
             </div>
           ))}
-          <h2>Measures <button className="dev-addrail" title="Add a measure path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("measure")}>+</button></h2>
+          <h2>Measures <button className="dev-addrail" title="Add a measure path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("measure")}>+</button><button className="dev-addrail" title="Import a MADiE test-case ZIP (patient bundles -> data/, expected MeasureReports -> expected store)" onClick={() => importMadie("tests")}>MADiE</button></h2>
           {(workspace?.measures ?? []).map((m) => (
             <div
               key={m}

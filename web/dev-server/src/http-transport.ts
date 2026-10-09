@@ -38,6 +38,7 @@ import type {
   WorkspaceEvent,
   WorkspaceInfo,
   WorkspaceLibrary,
+MadieImportResult,
 } from "./transport";
 
 /** Server-side transport: thin fetch wrappers over the dev-server API. */
@@ -189,6 +190,17 @@ export class HttpTransport implements Transport {
 
   workspaceAddPath(kind: "cql" | "valueset" | "measure" | "data" | "view", path: string): Promise<AddPathResult> {
     return this.post<AddPathResult>("/api/workspace/add-path", { kind, path });
+  }
+
+  madieImportPackage(zipBase64: string): Promise<MadieImportResult> {
+    return this.post<MadieImportResult>("/api/madie/import-package", { zip_base64: zipBase64 });
+  }
+
+  madieImportTests(zipBase64: string, measureName?: string): Promise<MadieImportResult> {
+    return this.post<MadieImportResult>("/api/madie/import-tests", {
+      zip_base64: zipBase64,
+      measure_name: measureName,
+    });
   }
 
   testsExpectedGet(measure: string): Promise<TestsExpectedGetResult> {

@@ -296,6 +296,16 @@ export interface TestsSaveResult {
   count?: number;
 }
 
+export interface MadieImportResult {
+  schema: number;
+  ok: boolean;
+  diagnostics?: { message: string }[];
+  written?: Record<string, string[]>;
+  counts?: Record<string, number>;
+  cases?: string[];
+  expected?: string[];
+}
+
 export interface TestsExpectedPatient {
   patient: string;
   report: Record<string, unknown>;
@@ -424,6 +434,10 @@ export interface Transport {
     kind: "cql" | "valueset" | "measure" | "data" | "view",
     path: string,
   ): Promise<AddPathResult>;
+
+  /** S4 (c-cleanroom-ux5 item 4): MADiE importers. */
+  madieImportPackage(zipBase64: string): Promise<MadieImportResult>;
+  madieImportTests(zipBase64: string, measureName?: string): Promise<MadieImportResult>;
 
   /** S3b (c-cleanroom-ux5 item 3): expected-results editor surface. */
   testsExpectedGet(measure: string): Promise<TestsExpectedGetResult>;

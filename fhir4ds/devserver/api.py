@@ -1258,6 +1258,12 @@ class _Handler(BaseHTTPRequestHandler):
             elif path == "/api/tests/expected/delete":
                 self._route_tests_expected_delete(body)
                 return
+            elif path == "/api/madie/import-package":
+                self._route_madie_import_package(body)
+                return
+            elif path == "/api/madie/import-tests":
+                self._route_madie_import_tests(body)
+                return
             elif path == "/api/tests/capture":
                 self._route_tests_capture(body)
                 return
@@ -1627,6 +1633,73 @@ class _Handler(BaseHTTPRequestHandler):
             return
         removed = delete_expected_report(self._expected_root(), measure, patient)
         self._write_json(200, _envelope(measure=measure, patient=patient, removed=removed))
+
+    def _route_madie_import_package(self, body: dict[str, Any]) -> None:
+        """POST /api/madie/import-package — import a MADiE package ZIP.
+
+        Body: ``{zip_base64}`` (the exported measure package). Writes
+        cql/, valuesets/, measures/ files and publishes a changed event.
+        """
+        import base64
+        import binascii
+
+        from .madie_import import import_package_zip
+
+        raw = body.get("zip_base64")
+        if not isinstance(raw, str) or not raw:
+            self._write_json(
+                200,
+                _envelope(
+                    False,
+                    diagnostics=[_diag("zip_base64 is required (base64 of the MADiE package zip)")],
+                ),
+            )
+            return
+        try:
+            zip_bytes = base64.b64decode(raw, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            self._write_json(200, _envelope(False, diagnostics=[_diag(f"invalid base64: {exc}")]))
+            return
+        result = import_package_zip(self.server, zip_bytes)
+        self._write_json(200, _envelope(**result))
+
+    def _route_madie_import_tests(self, body: dict[str, Any]) -> None:
+        """POST /api/madie/import-tests — import a MADiE test-case ZIP.
+
+        Body: ``{zip_base64, measure_name?}``. Strips trailing
+        isTestCases MeasureReports into the expected store; patient
+        bundles land under ``data/<patientId>/``.
+        """
+        import base64
+        import binascii
+
+        from .madie_import import import_tests_zip
+
+        raw = body.get("zip_base64")
+        if not isinstance(raw, str) or not raw:
+            self._write_json(
+                200,
+                _envelope(
+                    False,
+                    diagnostics=[_diag("zip_base64 is required (base64 of the MADiE test-case zip)")],
+                ),
+            )
+            return
+        try:
+            zip_bytes = base64.b64decode(raw, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            self._write_json(200, _envelope(False, diagnostics=[_diag(f"invalid base64: {exc}")]))
+            return
+        measure_name = body.get("measure_name")
+        if measure_name is not None and not isinstance(measure_name, str):
+            self._write_json(
+                200, _envelope(False, diagnostics=[_diag("measure_name must be a string")])
+            )
+            return
+        result = import_tests_zip(
+            self.server, zip_bytes, measure_name=(measure_name or "").strip()
+        )
+        self._write_json(200, _envelope(**result))
 
     def _route_tests_capture(self, body: dict[str, Any]) -> None:
         """POST /api/tests/capture — run the measure, seed per-patient
