@@ -254,6 +254,229 @@ class _Handler(BaseHTTPRequestHandler):
             200, _envelope(ok=True, query=query.strip(), results=payload, count=len(payload))
         )
 
+    def _route_terminology_config_get(self) -> None:
+        """GET /api/terminology/config — current settings + key-presence flag.
+
+        The key VALUE never appears; ``key_env_resolves`` reports only
+        whether the named env var is set in the server process.
+        """
+        import os
+
+        s = self.server.terminology_settings
+        self._write_json(
+            200,
+            _envelope(
+                ok=True,
+                config={
+                    "provider": s.provider,
+                    "base_url": s.base_url,
+                    "timeout_seconds": s.timeout_seconds,
+                    "api_key_env": s.api_key_env,
+                    "key_env_resolves": bool(os.environ.get(s.api_key_env)),
+                },
+            ),
+        )
+
+    def _route_terminology_config_post(self, body: dict[str, Any]) -> None:
+        """POST /api/terminology/config — persist [terminology] to fhir4ds.toml.
+
+        Item-1 hard rule: only the env var NAME is accepted; a raw key
+        value in any field is rejected outright (never written, never
+        echoed beyond the rejection message).
+        """
+        from .config import DevConfigError, TerminologySettings, terminology_settings
+        from .toml_writer import write_section
+
+        if not isinstance(body, dict):
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag("body must be an object")]))
+            return
+        updates: dict[str, object] = {}
+        allowed = {"provider", "base_url", "timeout_seconds", "api_key_env"}
+        for key in allowed:
+            if key in body:
+                updates[key] = body[key]
+        # Validate via the parse-side shapes BEFORE writing anything.
+        try:
+            candidate = TerminologySettings(
+                provider=updates.get("provider", "vsac") if "provider" in updates else "vsac",
+                **{k: v for k, v in updates.items() if k != "provider"},
+            )
+            if "provider" in updates and candidate.provider not in ("vsac", "http", "disabled"):
+                raise DevConfigError(
+                    f"provider must be one of ['disabled', 'http', 'vsac']; got {updates['provider']!r}"
+                )
+            if "base_url" in updates and (
+                not isinstance(updates["base_url"], str) or not updates["base_url"].strip()
+            ):
+                raise DevConfigError("base_url must be a non-empty string")
+            if "timeout_seconds" in updates and (
+                not isinstance(updates["timeout_seconds"], (int, float))
+                or not updates["timeout_seconds"] > 0
+            ):
+                raise DevConfigError("timeout_seconds must be a positive number")
+            if "api_key_env" in updates and (
+                not isinstance(updates["api_key_env"], str) or not updates["api_key_env"].strip()
+            ):
+                raise DevConfigError("api_key_env must be a non-empty string")
+        except TypeError as exc:
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        except DevConfigError as exc:
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        cfg = getattr(self.server.watcher, "_cfg", None)
+        if cfg is None:
+            self._write_json(
+                200, _envelope(ok=False, diagnostics=[_diag("workspace config unavailable")])
+            )
+            return
+        toml_path = cfg.root / "fhir4ds.toml"
+        try:
+            write_section(toml_path, "terminology", updates)
+            # Re-resolve settings + reset the lazy endpoint holders so the
+            # next call uses the new config without a server restart.
+            self.server.terminology_settings = terminology_settings(cfg)
+            self.server._terminology_endpoint_holder = None
+            self.server._umls_endpoint_holder = None
+        except (OSError, ValueError) as exc:
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        s = self.server.terminology_settings
+        self._write_json(
+            200,
+            _envelope(ok=True, config={"provider": s.provider, "base_url": s.base_url,
+                                       "timeout_seconds": s.timeout_seconds,
+                                       "api_key_env": s.api_key_env}),
+        )
+
+    def _route_fs_list(self) -> None:
+        """GET /api/fs/list?path=... — server-side directory listing for pickers.
+
+        Sandboxed to the workspace root and below; ``..`` and absolute
+        paths outside root are rejected. Hidden entries are skipped.
+        """
+        from urllib.parse import parse_qs, urlparse
+
+        cfg = getattr(self.server.watcher, "_cfg", None)
+        if cfg is None:
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag("workspace config unavailable")]))
+            return
+        query = parse_qs(urlparse(self.path).query)
+        raw = (query.get("path") or [""])[0]
+        root = cfg.root.resolve()
+        target = root if not raw else (root / raw).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError:
+            self._write_json(
+                200,
+                _envelope(
+                    ok=False,
+                    diagnostics=[_diag(f"path escapes the workspace root: {raw}")],
+                ),
+            )
+            return
+        if not target.is_dir():
+            self._write_json(
+                200, _envelope(ok=False, diagnostics=[_diag(f"not a directory: {raw or '.'}")])
+            )
+            return
+        entries = []
+        try:
+            for child in sorted(target.iterdir()):
+                name = child.name
+                if name.startswith("."):
+                    continue
+                entries.append(
+                    {
+                        "name": name,
+                        "kind": "dir" if child.is_dir() else "file",
+                        "suffix": child.suffix.lower() if child.is_file() else "",
+                    }
+                )
+        except OSError as exc:
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        rel = str(target.relative_to(root)) or "."
+        self._write_json(200, _envelope(ok=True, path=rel, entries=entries))
+
+    def _route_workspace_add_path(self, body: dict[str, Any]) -> None:
+        """POST /api/workspace/add-path — persist a source path to [dev].
+
+        Body: {kind: cql|valueset|measure|data|view, path}. Appends the
+        entry to the matching [dev] array in fhir4ds.toml (manifest ADDS
+        to convention; duplicates deduped at load), then rescans and
+        restarts the watcher poll cycle so the new files surface.
+        """
+        from .config import _LIST_FIELDS  # key -> kind map
+
+        kind = body.get("kind")
+        path = body.get("path")
+        kinds = {"cql", "valueset", "measure", "data", "view"}
+        if kind not in kinds:
+            self._write_json(
+                200,
+                _envelope(
+                    ok=False,
+                    diagnostics=[_diag(f"kind must be one of {sorted(kinds)}; got {kind!r}")],
+                ),
+            )
+            return
+        if not isinstance(path, str) or not path.strip():
+            self._write_json(
+                200, _envelope(ok=False, diagnostics=[_diag("path is required")])
+            )
+            return
+        cfg = getattr(self.server.watcher, "_cfg", None)
+        if cfg is None:
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag("workspace config unavailable")]))
+            return
+        raw = path.strip()
+        candidate = Path(raw).expanduser()
+        if not candidate.is_absolute():
+            candidate = cfg.root / candidate
+        candidate = candidate.resolve()
+        if not candidate.exists():
+            self._write_json(
+                200,
+                _envelope(ok=False, diagnostics=[_diag(f"path does not exist: {raw}")]),
+            )
+            return
+        # _LIST_FIELDS maps the TOML key (cql_dirs/data_dirs/...) -> kind;
+        # the manifest arrays use the SAME _dirs-suffixed keys.
+        key = next(k for k, v in _LIST_FIELDS.items() if v == kind)
+        toml_path = cfg.root / "fhir4ds.toml"
+        try:
+            # Re-read manifest and append, preserving the other entries.
+            from .config import _parse_manifest
+
+            current = _parse_manifest(toml_path).get(key, [])
+            rel = str(candidate)
+            try:
+                rel = str(candidate.relative_to(cfg.root.resolve()))
+            except ValueError:
+                pass
+            if rel not in current:
+                current.append(rel)
+            from .toml_writer import write_section
+
+            write_section(toml_path, "dev", {key: current})
+            # Reload config so the watcher/kernel see the new path list
+            # (the Watcher captured DevServerConfig at construction).
+            from .config import load_config as _load_config
+
+            new_cfg = _load_config(cfg.root)
+            self.server.watcher._cfg = new_cfg
+        except (OSError, ValueError) as exc:
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        snap = self.server.watcher.rescan()
+        self._write_json(
+            200,
+            _envelope(ok=True, kind=kind, added=rel, snapshot={"datasets": len(snap.datasets),
+                                                               "libraries": len(snap.libraries)}),
+        )
+
     def _route_terminology_preview(self, body: dict[str, Any]) -> None:
         """POST /api/terminology/preview — expand a canonical URL/OID via
         the configured endpoint; concept preview only, no disk writes."""
@@ -796,6 +1019,12 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/terminology/resolution":
             self._route_terminology_resolution()
             return
+        if path == "/api/terminology/config":
+            self._route_terminology_config_get()
+            return
+        if path == "/api/fs/list":
+            self._route_fs_list()
+            return
         if path == "/api/view":
             # v3 Slice 4: ViewDefinition file read (text + parsed header info).
             from urllib.parse import parse_qs, urlparse
@@ -1003,6 +1232,12 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             elif path == "/api/terminology/import":
                 self._route_terminology_import(body)
+                return
+            elif path == "/api/terminology/config":
+                self._route_terminology_config_post(body)
+                return
+            elif path == "/api/workspace/add-path":
+                self._route_workspace_add_path(body)
                 return
             elif path == "/api/valueset/edit":
                 # v3 Slice 1: valueset concept edit. Validate -> apply ->
