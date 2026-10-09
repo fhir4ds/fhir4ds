@@ -94,6 +94,9 @@ class DevHTTPServer(ThreadingHTTPServer):
     static_root: str = ""
     cell_registry: "CellSessionRegistry" = None  # type: ignore[assignment]
     valuesets_stale: bool = False
+    # parity item 2: CURRENT sql store (sha -> text) for copy-sql-ref;
+    # stale shas honestly report 'sql superseded'.
+    sql_store: dict[str, str] = {}
 
 
 def _utc_now_iso() -> str:
@@ -1120,7 +1123,37 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/fs/list":
             self._route_fs_list()
             return
-        if path == "/api/tests/expected":
+        if path == "/api/runs/sql":
+            from urllib.parse import parse_qs, urlparse
+
+            from .runlog import _sha
+
+            q = parse_qs(urlparse(self.path).query)
+            sha = (q.get("sha") or [""])[0]
+            text = self.server.sql_store.get(sha)
+            if text is not None:
+                self._write_json(200, _envelope(ok=True, sql=text))
+            else:
+                self._write_json(
+                    200,
+                    _envelope(
+                        ok=False,
+                        diagnostics=[_diag("sql superseded — rerun the target to regenerate it")],
+                    ),
+                )
+        elif path == "/api/runs":
+            # parity item 2: run history (newest-first; ?kind=&limit=)
+            from urllib.parse import parse_qs, urlparse
+
+            q = parse_qs(urlparse(self.path).query)
+            kind = (q.get("kind") or [""])[0] or None
+            try:
+                limit = int((q.get("limit") or ["200"])[0])
+            except ValueError:
+                limit = 200
+            events = self._runlog().load(kind=kind, limit=limit)
+            self._write_json(200, _envelope(ok=True, runs=events, count=len(events)))
+        elif path == "/api/tests/expected":
             self._route_tests_expected_get()
             return
         if path == "/api/view":
@@ -1340,6 +1373,9 @@ class _Handler(BaseHTTPRequestHandler):
             elif path == "/api/tests/expected/save":
                 self._route_tests_expected_post(body)
                 return
+            elif path == "/api/runs/clear":
+                self._runlog().clear()
+                self._write_json(200, _envelope(ok=True))
             elif path == "/api/tests/expected/delete":
                 self._route_tests_expected_delete(body)
                 return
@@ -1586,6 +1622,70 @@ class _Handler(BaseHTTPRequestHandler):
         )
         self._write_json(200, result.to_dict())
 
+    def _runlog(self):
+        """RunLogStore for the workspace root (parity item 2)."""
+        from .runlog import RunLogStore
+
+        return RunLogStore(Path(self.server.watcher._cfg.root))
+
+    def _dataset_ctx(self) -> tuple[list[str], int | None]:
+        """Dataset names + patient count for run-history capture."""
+        snap = self.server.watcher.snapshot
+        names = [str(d) for d in (getattr(snap, "datasets", None) or [])]
+        try:
+            kernel = self.server.kernel_manager.current()
+            rows = kernel.conn.execute(
+                "SELECT id FROM resources WHERE resourceType = 'Patient'"
+            ).fetchall()
+            count = len({r[0] for r in rows if r[0] is not None})
+        except Exception:
+            count = None
+        return names, count
+
+    def _runlog_record(
+        self,
+        *,
+        kind: str,
+        target: str,
+        status: str,
+        duration_ms: int,
+        row_count: int,
+        summary=None,
+        params=None,
+        library_text: str | None = None,
+        sql_text: str | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Record one run-history event (never raises into the request)."""
+        try:
+            if sql_text is not None:
+                from .runlog import _sha
+
+                store = getattr(self.server, "sql_store", None)
+                if store is not None:
+                    store[_sha(sql_text)] = sql_text
+                    # bound the in-memory current-SQL store
+                    if len(store) > 50:
+                        for k in list(store.keys())[: len(store) - 50]:
+                            del store[k]
+            datasets, patient_count = self._dataset_ctx()
+            self._runlog().record(
+                kind=kind,
+                target=target,
+                status=status,
+                duration_ms=duration_ms,
+                row_count=row_count,
+                summary=summary,
+                params=params,
+                library_text=library_text,
+                sql_text=sql_text,
+                error=error,
+                datasets=datasets,
+                patient_count=patient_count,
+            )
+        except Exception:
+            pass
+
     def _expected_root(self) -> Path:
         """measures/expected dir (same resolution as baseline routes).
 
@@ -1623,6 +1723,7 @@ class _Handler(BaseHTTPRequestHandler):
         evd = evaluate_library(
             includes, main, None, kernel.conn,
             parameters=body.get("parameters"), output_columns=cols,
+            emit_sql=True,
         ).to_dict()
         if not evd.get("ok"):
             return None, None, None, (evd.get("diagnostics") or [_diag("evaluation failed")]), None
@@ -1828,10 +1929,23 @@ class _Handler(BaseHTTPRequestHandler):
         and a summary. Patients present only on one side surface as
         missing/extra rows.
         """
+        import time as _time
+
         from .expected_store import parse_expected_groups
 
+        _t0 = _time.monotonic()
         columns, counts, reports, diag, run_sql = self._evaluate_measure_reports(body)
         if diag is not None:
+            m0 = body.get("measure") or {}
+            self._runlog_record(
+                kind="test",
+                target=(m0.get("name") if isinstance(m0, dict) else None) or "Measure",
+                status="error",
+                duration_ms=int((_time.monotonic() - _t0) * 1000),
+                row_count=0,
+                params=body.get("parameters"),
+                error=(diag or [{}])[0].get("message"),
+            )
             self._write_json(200, _envelope(False, diagnostics=diag))
             return
         measure_name = (body.get("measure_name") or "").strip()
@@ -1885,6 +1999,16 @@ class _Handler(BaseHTTPRequestHandler):
                 ok = e == a
                 rows.append({"patient": pid, "code": code, "expected": e, "actual": a, "pass": ok})
                 passed, failed = (passed + 1, failed) if ok else (passed, failed + 1)
+        self._runlog_record(
+            kind="test",
+            target=measure_name,
+            status="pass" if failed == 0 else "fail",
+            duration_ms=int((_time.monotonic() - _t0) * 1000),
+            row_count=len(rows),
+            summary={"passed": passed, "failed": failed},
+            params=body.get("parameters"),
+            sql_text=run_sql,
+        )
         self._write_json(
             200,
             _envelope(
@@ -1921,12 +2045,29 @@ class _Handler(BaseHTTPRequestHandler):
             return
         includes, main = self._resolve_main(body)
         kernel = self.server.kernel_manager.current()
+        import time as _time
+
+        _t0 = _time.monotonic()
         ev = evaluate_library(
             includes, main, None, kernel.conn,
             parameters=body.get("parameters"), output_columns=cols,
+            emit_sql=True,
         )
         evd = ev.to_dict()
+        measure_name = (
+            measure.get("name") if isinstance(measure.get("name"), str) else "Measure"
+        )
         if not evd.get("ok"):
+            self._runlog_record(
+                kind="measure",
+                target=measure_name,
+                status="error",
+                duration_ms=int((_time.monotonic() - _t0) * 1000),
+                row_count=0,
+                params=body.get("parameters"),
+                library_text=main.text if main is not None else None,
+                error=(evd.get("diagnostics") or [{}])[0].get("message"),
+            )
             self._write_json(200, evd)
             return
         columns = list(cols.keys())
@@ -1951,6 +2092,17 @@ class _Handler(BaseHTTPRequestHandler):
         reports = [
             _regroup_report_populations(dict(r)) for r in mr.reports
         ]
+        self._runlog_record(
+            kind="measure",
+            target=measure_name,
+            status="pass",
+            duration_ms=int((_time.monotonic() - _t0) * 1000),
+            row_count=len(reports),
+            summary={c: counts.get(c, 0) for c in columns},
+            params=body.get("parameters"),
+            library_text=main.text if main is not None else None,
+            sql_text=evd.get("sql"),
+        )
         self._write_json(
             200,
             {
@@ -2346,7 +2498,23 @@ class _Handler(BaseHTTPRequestHandler):
                     resources.append(json.loads(raw) if isinstance(raw, str) else raw)
                 except json.JSONDecodeError:
                     continue
+        import time as _time
+
+        _t0 = _time.monotonic()
         result = flatten_view(vd, resources, kernel.conn)
+        vd_name = vd.get("name") if isinstance(vd.get("name"), str) else (v_path or "inline view")
+        self._runlog_record(
+            kind="view",
+            target=str(vd_name),
+            status="pass" if result.ok else "fail",
+            duration_ms=int((_time.monotonic() - _t0) * 1000),
+            row_count=len(list(result.rows or [])),
+            library_text=text,
+            sql_text=result.sql,
+            error=None if result.ok else (
+                (result.diagnostics or [None] and [getattr(d, "message", str(d)) for d in result.diagnostics] or [None])[0]
+            ),
+        )
         self._write_json(
             200,
             {
@@ -2674,10 +2842,24 @@ class _Handler(BaseHTTPRequestHandler):
         composed = session.compose(names)
         includes, main = self._cell_libraries(library, composed)
         kernel = self.server.kernel_manager.current()
+        import time as _time
+
+        _t0 = _time.monotonic()
         envelope = kernel.evaluate(
             includes,
             main,
             output_columns={n: n for n in names},
+        )
+        self._runlog_record(
+            kind="cell",
+            target=f"{library}/{cell}",
+            status="pass" if envelope.get("ok") else "error",
+            duration_ms=int((_time.monotonic() - _t0) * 1000),
+            row_count=len(envelope.get("rows", [])),
+            params=None,
+            library_text=composed,
+            sql_text=envelope.get("sql"),
+            error=None if envelope.get("ok") else _first_message(envelope),
         )
 
         if not envelope.get("ok"):

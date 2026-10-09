@@ -27,6 +27,7 @@ import { ValueSetPane } from "./ValueSetPane";
 import { ParamsPane } from "./ParamsPane";
 import { ExpectedResultsPane } from "./ExpectedResultsPane";
 import { EvidenceModal } from "./EvidenceModal";
+import { RunHistoryPane } from "./RunHistoryPane";
 import { PatientSlideOut } from "./PatientSlideOut";
 import { TerminologyDialog } from "./TerminologyDialog";
 import { PathPickerDialog } from "./PathPickerDialog";
@@ -105,7 +106,7 @@ export function App() {
   const [railW, setRailW] = useState(() => Number(localStorage.getItem("dev.railW")) || 200);
   const [outFrac, setOutFrac] = useState(() => Number(localStorage.getItem("dev.outFrac")) || 1);
   // S7 (item 6): slide-out nav — level-1 icon rail + level-2 section panel.
-  type NavSection = "datasets" | "terminology" | "libraries" | "builder" | "views" | "tests" | "settings";
+  type NavSection = "datasets" | "terminology" | "libraries" | "builder" | "views" | "tests" | "history" | "settings";
   const NAV_SECTIONS: { id: NavSection; label: string; glyph: string; title: string }[] = [
     { id: "datasets", label: "Data", glyph: "▤", title: "Datasets (alt+1)" },
     { id: "terminology", label: "Term", glyph: "◈", title: "Terminology / ValueSets (alt+2)" },
@@ -113,7 +114,8 @@ export function App() {
     { id: "builder", label: "Build", glyph: "✚", title: "Resource builder (alt+4)" },
     { id: "views", label: "Views", glyph: "▦", title: "ViewDefinitions (alt+5)" },
     { id: "tests", label: "Tests", glyph: "✓", title: "Measures & expected results (alt+6)" },
-    { id: "settings", label: "Set", glyph: "⚙", title: "Settings / terminology config (alt+7)" },
+    { id: "history", label: "Hist", glyph: "🕘", title: "Run history (alt+7)" },
+    { id: "settings", label: "Set", glyph: "⚙", title: "Settings / terminology config (alt+8)" },
   ];
   const [railSection, setRailSection] = useState<NavSection | null>(null);
   // Slide-out starts OPEN showing every section (legacy full-rail default);
@@ -134,7 +136,7 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeNav();
-      if (e.altKey && e.key >= "1" && e.key <= "7") {
+      if (e.altKey && e.key >= "1" && e.key <= "8") {
         e.preventDefault();
         const s = NAV_SECTIONS[Number(e.key) - 1].id;
         if (s === "builder") {
@@ -852,6 +854,28 @@ export function App() {
             </div>
           ))}
           </>
+          )}
+          {sectionOn("history") && (
+            <RunHistoryPane
+              transport={transport}
+              refreshKey={railSection ?? "all"}
+              onReopen={(kind, target) => {
+                if (kind === "cell") {
+                  const lib = target.split("/")[0];
+                  loadLibrary(lib);
+                } else if (kind === "measure" || kind === "test") {
+                  const m = (workspace?.measures ?? []).find(
+                    (p) => (p.split("/").pop() ?? "").replace(/\.json$/, "") === target,
+                  );
+                  setRailView(m ? { kind: "measure", id: m } : null);
+                } else if (kind === "view") {
+                  const v = (workspace?.views ?? []).find(
+                    (p) => (p.split("/").pop() ?? "").replace(/\.json$/, "") === target,
+                  );
+                  if (v) setRailView({ kind: "view", id: v });
+                }
+              }}
+            />
           )}
         </aside>
         </div>

@@ -533,6 +533,10 @@ export interface Transport {
     library: string,
     patientId: string,
   ): Promise<EvidenceResult>;
+  runsList(): Promise<{ ok: boolean; runs?: import("./RunHistoryPane").RunEvent[]; count?: number }>;
+  runsClear(): Promise<{ ok: boolean }>;
+  runSqlGet(sha: string): Promise<{ ok: boolean; sql?: string; diagnostics?: { message: string }[] }>;
+
   restartKernel(): Promise<HealthInfo>;
   onWorkspaceEvent(cb: (e: WorkspaceEvent) => void): () => void;
   runCell(library: string, cell: string, mode: RunMode, text?: string): void;

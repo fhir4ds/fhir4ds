@@ -1558,3 +1558,27 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
 .dev-evtable { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
 .dev-evtable th { text-align: left; color: var(--dev-muted, #9ca3af); font-weight: 500; padding: 3px 8px 3px 0; }
 .dev-evtable td { padding: 3px 8px 3px 0; border-top: 1px solid #1f2937; }
+
+/* parity item 2: run history */
+.dev-runhistory { font-size: 12px; }
+.dev-rhfilter { border: 1px solid var(--dev-border, #374151); background: transparent; color: var(--dev-muted, #9ca3af); border-radius: 6px; padding: 1px 6px; cursor: pointer; font-size: 11px; }
+.dev-rhfilter.active { background: #1f2937; color: #fff; }
+.dev-rhclear { margin-left: auto; border: none; background: transparent; color: var(--dev-muted, #9ca3af); cursor: pointer; font-size: 11px; }
+.dev-rhclear:hover { color: #b42318; }
+.dev-rhempty { color: var(--dev-muted, #9ca3af); padding: 10px 0; }
+.dev-rhrow { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-bottom: 1px solid #1f2937; cursor: pointer; flex-wrap: wrap; }
+.dev-rhrow:hover { background: rgba(255, 255, 255, 0.04); }
+.dev-rhdot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dev-rhdot.pass { background: #1a7f37; }
+.dev-rhdot.fail { background: #b54708; }
+.dev-rhdot.error { background: #b42318; }
+.dev-rhkind { color: #38bdf8; font-size: 10px; text-transform: uppercase; flex: none; }
+.dev-rhtarget { flex: 1 1 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dev-rhmeta { color: var(--dev-muted, #9ca3af); font-size: 10px; flex: none; }
+.dev-rhts { color: var(--dev-muted, #9ca3af); font-size: 10px; flex: none; }
+.dev-rhdetail { width: 100%; background: #0b1220; border: 1px solid #1f2937; border-radius: 6px; padding: 6px 8px; margin: 2px 0 4px; display: flex; flex-direction: column; gap: 3px; }
+.dev-rhsummary { display: flex; gap: 8px; flex-wrap: wrap; }
+.dev-rherror { color: #b42318; }
+.dev-rhactions { display: flex; gap: 6px; }
+.dev-rhactions button { border: 1px solid var(--dev-border, #374151); background: transparent; color: #cbd5e1; border-radius: 6px; padding: 1px 8px; cursor: pointer; font-size: 11px; }
+.dev-rhactions button:hover { background: #1f2937; color: #fff; }

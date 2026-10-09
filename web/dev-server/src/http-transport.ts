@@ -411,6 +411,18 @@ export class HttpTransport implements Transport {
     });
   }
 
+  runsList(): Promise<{ ok: boolean; runs?: import("./RunHistoryPane").RunEvent[]; count?: number }> {
+    return this.unwrap("/api/runs");
+  }
+
+  runsClear(): Promise<{ ok: boolean }> {
+    return this.post("/api/runs/clear", {});
+  }
+
+  runSqlGet(sha: string): Promise<{ ok: boolean; sql?: string; diagnostics?: { message: string }[] }> {
+    return this.unwrap(`/api/runs/sql?sha=${encodeURIComponent(sha)}`);
+  }
+
   restartKernel(): Promise<HealthInfo> {
     return this.post("/api/kernel/restart", {});
   }
