@@ -88,7 +88,7 @@ test("terminology config dialog saves to toml (env-name only)", async () => {
     const r = await fetch("/api/terminology/config");
     return r.json();
   });
-  expect(cfg.config.provider).toBe("vsac");
+expect(cfg.config.provider).toBe("vsac");
   expect(cfg.config.api_key_env).toBe("MY_TEST_KEY_VAR");
 });
 

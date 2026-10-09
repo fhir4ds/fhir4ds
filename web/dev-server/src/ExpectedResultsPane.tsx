@@ -13,6 +13,7 @@ type CaptureResult = {
   measure?: string;
   reports?: Record<string, unknown>[];
   counts?: Record<string, number>;
+  sql?: string | null;
 };
 
 type TestRunRow = {
@@ -31,6 +32,7 @@ type TestRunResult = {
   total?: number;
   passed?: number;
   failed?: number;
+  sql?: string | null;
 };
 
 /**
@@ -48,6 +50,7 @@ export function ExpectedResultsPane({
   measure,
   measureName,
   onPatient,
+  onSql,
 }: {
   transport: HttpTransport;
   library: string;
@@ -55,12 +58,15 @@ export function ExpectedResultsPane({
   measure: Record<string, unknown> | null;
   measureName: string;
   onPatient?: (patient: string) => void;
+  onSql?: (sql: string) => void;
 }) {
   const [expectations, setExpectations] = useState<PatientExpectation[]>([]);
   const [runResult, setRunResult] = useState<TestRunResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [runSql, setRunSql] = useState<string | null>(null);
+  const [showSql, setShowSql] = useState(false);
 
   const reload = useCallback(() => {
     if (!measureName) return;
@@ -142,6 +148,7 @@ export function ExpectedResultsPane({
       const libs = [{ name: library, text: buffer }];
       const r: TestRunResult = await transport.testsRun(libs, library, measure, measureName);
       setRunResult(r);
+      if (r.sql) setRunSql(r.sql);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -256,6 +263,14 @@ export function ExpectedResultsPane({
               </button>
             </div>
           ))}
+        </div>
+      )}
+      {runSql && (
+        <div className="dev-mssql">
+          <button className="dev-mssqltoggle" onClick={() => setShowSql(!showSql)}>
+            {showSql ? "▾" : "▸"} SQL
+          </button>
+          {showSql && <pre className="dev-mssqlpre">{runSql}</pre>}
         </div>
       )}
       {runResult && (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Transport } from "./transport";
 
 /** S2 (c-cleanroom-ux5 item 1): in-app VSAC/terminology config dialog.
@@ -25,10 +25,20 @@ export function TerminologyDialog({
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  // S6 fix: a late-resolving GET must never clobber user edits (selecting
+  // vsac then saving could silently revert to the loaded provider under
+  // slow loads; e2e flake + real UX bug). Guarded by an interacted ref set
+  // on the FIRST user change to any field.
+  const interactedRef = useRef(false);
+  const markInteracted = useCallback(() => {
+    interactedRef.current = true;
+  }, []);
   useEffect(() => {
+    let cancelled = false;
     transport
       .terminologyConfigGet()
       .then((r) => {
+        if (cancelled || interactedRef.current) return;
         if (r.ok && r.config) {
           setProvider(r.config.provider);
           setBaseUrl(r.config.base_url ?? "");
@@ -39,7 +49,12 @@ export function TerminologyDialog({
           setErr(r.diagnostics?.[0]?.message ?? "failed to load config");
         }
       })
-      .catch((e) => setErr(String(e)));
+      .catch((e) => {
+        if (!cancelled) setErr(String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [transport]);
 
   const save = useCallback(async () => {
@@ -83,7 +98,7 @@ export function TerminologyDialog({
           <label className="dev-rblabel" title="Terminology provider (writes [terminology] in fhir4ds.toml)">
             provider
           </label>
-          <select className="dev-rbinput dev-rbsel" value={provider} onChange={(e) => setProvider(e.target.value)}>
+          <select className="dev-rbinput dev-rbsel" value={provider} onChange={(e) => { markInteracted(); setProvider(e.target.value); }}>
             <option value="disabled">disabled (local only)</option>
             <option value="vsac">vsac (NLM VSAC)</option>
             <option value="http">http (FHIR R4 server)</option>

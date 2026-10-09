@@ -1363,3 +1363,89 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   cursor: pointer;
 }
 .dev-mspatientchip:hover { border-color: #1d4ed8; }
+
+/* S6: diagnostics banner (errors-in-context, replaces the errors tab) */
+.dev-diagbanner {
+  margin: 4px 0 8px;
+  border: 1px solid #7f1d1d;
+  border-radius: 6px;
+  background: #2a1215;
+}
+.dev-diagbanner-head {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: none;
+  border: none;
+  color: #fca5a5;
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.dev-diagbanner.open .dev-diagbanner-head { border-bottom: 1px solid #7f1d1d; }
+.dev-diagcount {
+  background: #b42318;
+  color: #fff;
+  border-radius: 9px;
+  font-size: 10px;
+  padding: 1px 7px;
+}
+.dev-diagbanner .dev-errors { margin: 0; padding: 6px 12px 10px 28px; font-size: 12px; }
+.dev-diag-banner-note { color: #9ca3af; }
+
+/* S6: SQL expander (measure + expected-results panes) */
+.dev-mssql { margin: 4px 0; }
+.dev-mssqltoggle {
+  font-size: 11px;
+  background: #1f2937;
+  border: 1px solid #374151;
+  color: #93c5fd;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.dev-mssqlpre {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #0b1220;
+  border: 1px solid #1f2937;
+  border-radius: 4px;
+  padding: 6px;
+  max-height: 220px;
+  overflow: auto;
+  margin-top: 4px;
+}
+
+/* S6 (item 5): choice-arm child fields as stacked labeled rows */
+.dev-rbchoicerow { flex-wrap: wrap; }
+.dev-rbqtystacked { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.dev-rbfieldrow { display: flex; align-items: center; gap: 8px; width: 100%; }
+.dev-rbfieldlabel {
+  min-width: 64px;
+  font-size: 11px;
+  color: #9ca3af;
+  text-align: right;
+}
+.dev-rbfieldrow .dev-rbinput { flex: 1; }
+
+/* S6 (item 8): pane dividers */
+.dev-divider {
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 5;
+}
+.dev-divider::after {
+  content: "";
+  position: absolute;
+  inset: 0 1px;
+  background: #333;
+}
+.dev-divider:hover::after,
+.dev-divider:active::after {
+  background: #1d4ed8;
+}
+.dev-libraries, .dev-editor, .dev-output { min-width: 0; }

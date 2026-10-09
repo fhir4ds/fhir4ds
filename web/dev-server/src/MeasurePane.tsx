@@ -35,6 +35,7 @@ export function MeasurePane({
   onMeasureReports,
   onMeasureInfo,
   onPatient,
+  onSql,
 }: {
   transport: HttpTransport;
   library: string;
@@ -46,11 +47,15 @@ export function MeasurePane({
   onMeasureInfo?: (measure: Record<string, unknown> | null, name: string) => void;
   /** S5: open the patient-resources slide-out for a subject in the run reports. */
   onPatient?: (patient: string) => void;
+  /** S6: surface the run's generated SQL in the central Show-SQL view. */
+  onSql?: (sql: string) => void;
 }) {
   const [rows, setRows] = useState<Record<string, string>>({});
   const [scoring, setScoring] = useState("");
   const [measureName, setMeasureName] = useState("CleanroomMeasure");
   const [preview, setPreview] = useState<MeasureScaffoldResult | null>(null);
+  const [runSql, setRunSql] = useState<string | null>(null);
+  const [showSql, setShowSql] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
   const [runResult, setRunResult] = useState<{
     ok: boolean;
@@ -185,6 +190,10 @@ export function MeasurePane({
       } else {
         setRunResult({ ok: true, counts: r.counts, reports: r.reports });
         onMeasureReports?.(r.reports);
+        if (r.sql) {
+          setRunSql(r.sql);
+          onSql?.(r.sql);
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -503,6 +512,14 @@ export function MeasurePane({
                   ))}
                 </tbody>
               </table>
+              {runSql && (
+                <div className="dev-mssql">
+                  <button className="dev-mssqltoggle" onClick={() => setShowSql(!showSql)}>
+                    {showSql ? "▾" : "▸"} SQL
+                  </button>
+                  {showSql && <pre className="dev-mssqlpre">{runSql}</pre>}
+                </div>
+              )}
               <div className="dev-msbaseline">
                 <button
                   className="dev-msbasesave"

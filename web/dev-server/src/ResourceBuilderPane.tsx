@@ -996,25 +996,34 @@ export function ResourceBuilderPane({ transport, datasets, dataHint, initialReso
                     ))}
                   </select>
                   {sel && sel.arm.type === "Quantity" ? (
-                    <span className="dev-rbchoicewidget dev-rbqty">
-                      <input
-                        type="number" step="any" className="dev-rbinput dev-rbqtyval" placeholder="value"
-                        value={typeof (resource[sel.arm.name] as Record<string, unknown> | undefined)?.value === "number"
-                          ? String((resource[sel.arm.name] as Record<string, unknown>).value) : ""}
-                        onChange={(e) => setQuantityObj(sel.arm.name, e.target.value === "" ? {} : { value: Number(e.target.value) }, e.target.value === "" ? ["value"] : [])}
-                      />
-                      <input
-                        className="dev-rbinput dev-rbqtyunit" placeholder="unit (e.g. mg)"
-                        value={typeof (resource[sel.arm.name] as Record<string, unknown> | undefined)?.unit === "string"
-                          ? (resource[sel.arm.name] as Record<string, unknown>).unit as string : ""}
-                        onChange={(e) => setQuantityObj(sel.arm.name, e.target.value === "" ? {} : { unit: e.target.value }, e.target.value === "" ? ["unit"] : [])}
-                      />
-                      <input
-                        className="dev-rbinput dev-rbqtysystem" placeholder="system (UCUM)"
-                        value={typeof (resource[sel.arm.name] as Record<string, unknown> | undefined)?.system === "string"
-                          ? (resource[sel.arm.name] as Record<string, unknown>).system as string : ""}
-                        onChange={(e) => setQuantityObj(sel.arm.name, e.target.value === "" ? {} : { system: e.target.value }, e.target.value === "" ? ["system"] : [])}
-                      />
+                    <span className="dev-rbchoicewidget dev-rbqty dev-rbqtystacked">
+                      <span className="dev-rbfieldrow">
+                        <label className="dev-rbfieldlabel">value</label>
+                        <input
+                          type="number" step="any" className="dev-rbinput dev-rbqtyval" placeholder="value"
+                          value={typeof (resource[sel.arm.name] as Record<string, unknown> | undefined)?.value === "number"
+                            ? String((resource[sel.arm.name] as Record<string, unknown>).value) : ""}
+                          onChange={(e) => setQuantityObj(sel.arm.name, e.target.value === "" ? {} : { value: Number(e.target.value) }, e.target.value === "" ? ["value"] : [])}
+                        />
+                      </span>
+                      <span className="dev-rbfieldrow">
+                        <label className="dev-rbfieldlabel">unit</label>
+                        <input
+                          className="dev-rbinput dev-rbqtyunit" placeholder="unit (e.g. mg)"
+                          value={typeof (resource[sel.arm.name] as Record<string, unknown> | undefined)?.unit === "string"
+                            ? (resource[sel.arm.name] as Record<string, unknown>).unit as string : ""}
+                          onChange={(e) => setQuantityObj(sel.arm.name, e.target.value === "" ? {} : { unit: e.target.value }, e.target.value === "" ? ["unit"] : [])}
+                        />
+                      </span>
+                      <span className="dev-rbfieldrow">
+                        <label className="dev-rbfieldlabel">system</label>
+                        <input
+                          className="dev-rbinput dev-rbqtysystem" placeholder="system (UCUM)"
+                          value={typeof (resource[sel.arm.name] as Record<string, unknown> | undefined)?.system === "string"
+                            ? (resource[sel.arm.name] as Record<string, unknown>).system as string : ""}
+                          onChange={(e) => setQuantityObj(sel.arm.name, e.target.value === "" ? {} : { system: e.target.value }, e.target.value === "" ? ["system"] : [])}
+                        />
+                      </span>
                     </span>
                   ) : sel && (sel.arm.children?.length ?? 0) > 0 && !sel.arm.children!.every((c) => c.hatch) ? (
                     <span className="dev-rbchoicewidget dev-rbchoicewidget-struct">

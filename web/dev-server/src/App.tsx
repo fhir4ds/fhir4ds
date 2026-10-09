@@ -34,7 +34,7 @@ import { VdPane } from "./VdPane";
 import { DatasetPane } from "./DatasetPane";
 import { ResourceBuilderPane } from "./ResourceBuilderPane";
 
-type Tab = "results" | "sql" | "errors";
+type Tab = "results" | "sql";
 
 function guideSteps(rail: { kind: string; id?: string } | null): { title: string; steps: string[] } {
   if (!rail) return { title: "Getting started", steps: [
@@ -97,6 +97,39 @@ export function App() {
   const [patientSlide, setPatientSlide] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const [tab, setTab] = useState<Tab>("results");
+  const [errorsOpen, setErrorsOpen] = useState(false);
+  // S6 (item 8): resizable panes — grid fractions persisted to localStorage.
+  const [railW, setRailW] = useState(() => Number(localStorage.getItem("dev.railW")) || 200);
+  const [outFrac, setOutFrac] = useState(() => Number(localStorage.getItem("dev.outFrac")) || 1);
+  const dragRef = useRef<{ kind: "rail" | "out"; startX: number; startVal: number } | null>(null);
+
+  const onDividerDown = useCallback((kind: "rail" | "out") => (e: React.PointerEvent) => {
+    e.preventDefault();
+    dragRef.current = {
+      kind,
+      startX: e.clientX,
+      startVal: kind === "rail" ? railW : outFrac,
+    };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [railW, outFrac]);
+
+  const onDividerMove = useCallback((e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    if (d.kind === "rail") {
+      const w = Math.min(420, Math.max(140, d.startVal + (e.clientX - d.startX)));
+      setRailW(w);
+      localStorage.setItem("dev.railW", String(w));
+    } else {
+      const frac = Math.min(2.5, Math.max(0.4, d.startVal - (e.clientX - d.startX) / 400));
+      setOutFrac(frac);
+      localStorage.setItem("dev.outFrac", String(frac));
+    }
+  }, []);
+
+  const onDividerUp = useCallback(() => {
+    dragRef.current = null;
+  }, []);
   const [busy, setBusy] = useState(false);
   const [dataHint, setDataHint] = useState<string[]>([]);
   const [runMode, setRunMode] = useState<RunMode>("cell");
@@ -335,7 +368,8 @@ export function App() {
           const r = await transport.translate(libraries, selected);
           setSql(r.sql ?? "");
           setDiagnostics(r.diagnostics ?? []);
-          setTab(r.ok ? "sql" : "errors");
+          setTab(r.ok ? "sql" : "results");
+          if (!r.ok) setErrorsOpen(true);
         } else {
           const r = await transport.evaluate(libraries, selected);
           setEvaluate(r);
@@ -351,7 +385,7 @@ export function App() {
             });
             setTab("results");
           } else {
-            setTab("errors");
+            setErrorsOpen(true);
           }
         }
         setDirty(false);
@@ -534,7 +568,10 @@ export function App() {
           Restart kernel
         </button>
       </header>
-      <main className="dev-main">
+      <main
+        className="dev-main"
+        style={{ gridTemplateColumns: `${railW}px 4px 1fr 4px ${outFrac}fr` }}
+      >
         <aside className="dev-libraries">
           <h2>Libraries <button className="dev-addrail" title="Add a cql path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("cql")}>+</button><button className="dev-addrail" title="Import a MADiE measure package ZIP (CQL -> cql/, valuesets -> valuesets/, Measure -> measures/)" onClick={() => importMadie("package")}>MADiE</button></h2>
           {(workspace?.libraries ?? []).map((lib) => (
@@ -698,6 +735,15 @@ export function App() {
             </div>
           ))}
         </aside>
+        <div
+          className="dev-divider dev-divider-rail"
+          role="separator"
+          aria-orientation="vertical"
+          title="drag to resize the workspace rail"
+          onPointerDown={onDividerDown("rail")}
+          onPointerMove={onDividerMove}
+          onPointerUp={onDividerUp}
+        />
         <section className="dev-editor">
           {railView?.kind === "valueset" ? (
             <ValueSetPane
@@ -756,6 +802,7 @@ export function App() {
                   setLastMeasureName(name);
                 }}
                 onPatient={setPatientSlide}
+                onSql={setSql}
               />
             </div>
           ) : railView?.kind === "dataset" ? (
@@ -1061,16 +1108,24 @@ export function App() {
             />
           )}
         </section>
+        <div
+          className="dev-divider dev-divider-out"
+          role="separator"
+          aria-orientation="vertical"
+          title="drag to resize the results pane"
+          onPointerDown={onDividerDown("out")}
+          onPointerMove={onDividerMove}
+          onPointerUp={onDividerUp}
+        />
         <section className="dev-output">
           <div className="dev-tabs">
-            {(["results", "sql", "errors"] as Tab[]).map((t) => (
+            {(["results", "sql"] as Tab[]).map((t) => (
               <button
                 key={t}
                 className={tab === t ? "active" : ""}
                 onClick={() => setTab(t)}
               >
-                {t}
-                {t === "errors" && diagnostics.length ? ` (${diagnostics.length})` : ""}
+                {t === "sql" ? "Show SQL" : t}
               </button>
             ))}
           </div>
@@ -1114,6 +1169,28 @@ export function App() {
                     </div>
                   );
                 })()}
+                {diagnostics.length > 0 && (
+                  <div className={"dev-diagbanner " + (errorsOpen ? "open" : "")}>
+                    <button
+                      className="dev-diagbanner-head"
+                      onClick={() => setErrorsOpen(!errorsOpen)}
+                      title="Diagnostics from the last run (severity color kept)"
+                    >
+                      <span className="dev-diagcount">{diagnostics.length}</span>
+                      diagnostic{diagnostics.length === 1 ? "" : "s"} from the last
+                      run {errorsOpen ? "▾" : "▸"}
+                    </button>
+                    {errorsOpen && (
+                      <ul className="dev-errors">
+                        {diagnostics.map((d, i) => (
+                          <li key={i} className={"dev-diag-" + (d.code || "INFO").toLowerCase()}>
+                            <strong>{d.code}</strong> {d.message}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
                 <ResultsTable
                   result={result}
                   error={
@@ -1126,16 +1203,6 @@ export function App() {
               </>
             )}
             {tab === "sql" && <SQLOutput value={sql} />}
-            {tab === "errors" && (
-              <ul className="dev-errors">
-                {diagnostics.length === 0 && <li>No diagnostics.</li>}
-                {diagnostics.map((d, i) => (
-                  <li key={i}>
-                    <strong>{d.code}</strong> {d.message}
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
         </section>
       </main>

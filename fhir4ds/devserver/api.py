@@ -1572,42 +1572,42 @@ class _Handler(BaseHTTPRequestHandler):
         return Path("measures") / "expected"
 
     def _evaluate_measure_reports(self, body: dict[str, Any]):
-        """Shared S3 helper: run the measure → (ok, per-patient reports|diag).
+        """Shared S3/S6 helper: run the measure.
 
-        Returns (columns, counts, reports, None) on success or
-        (None, None, None, diagnostics) on failure.
+        Returns (columns, counts, reports, None, sql) on success or
+        (None, None, None, diagnostics, None) on failure.
         """
         measure = body.get("measure")
         if not isinstance(measure, dict):
-            return None, None, None, [_diag("measure (JSON object) is required")]
+            return None, None, None, [_diag("measure (JSON object) is required")], None
         try:
             cols = output_columns_from_measure(measure)
         except OperationError as exc:
-            return None, None, None, [_diag(str(exc))]
+            return None, None, None, [_diag(str(exc))], None
         includes, main = self._resolve_main(body)
         if main is None:
-            return None, None, None, [_diag("could not resolve main library")]
+            return None, None, None, [_diag("could not resolve main library")], None
         kernel = self.server.kernel_manager.current()
         evd = evaluate_library(
             includes, main, None, kernel.conn,
             parameters=body.get("parameters"), output_columns=cols,
         ).to_dict()
         if not evd.get("ok"):
-            return None, None, None, (evd.get("diagnostics") or [_diag("evaluation failed")])
+            return None, None, None, (evd.get("diagnostics") or [_diag("evaluation failed")]), None
         columns = list(cols.keys())
         mr = measure_report_from_rows(
             measure, evd.get("rows", []), columns,
             library_url=(measure.get("library") or [None])[0],
         )
         if not mr.ok:
-            return None, None, None, (mr.to_dict().get("diagnostics") or [_diag("report build failed")])
+            return None, None, None, (mr.to_dict().get("diagnostics") or [_diag("report build failed")]), None
         counts: dict[str, int] = {}
         for row in evd.get("rows", []):
             for col in columns:
                 if row.get(col) is True:
                     counts[col] = counts.get(col, 0) + 1
         reports = [_regroup_report_populations(dict(r)) for r in mr.reports]
-        return columns, counts, reports, None
+        return columns, counts, reports, None, evd.get("sql")
 
     def _route_tests_expected_get(self) -> None:
         """GET /api/tests/expected?measure=<name> — per-patient expected MRs."""
@@ -1757,7 +1757,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _route_tests_capture(self, body: dict[str, Any]) -> None:
         """POST /api/tests/capture — run the measure, seed per-patient
         expected reports from ACTUAL results (editable grid start point)."""
-        columns, counts, reports, diag = self._evaluate_measure_reports(body)
+        columns, counts, reports, diag, run_sql = self._evaluate_measure_reports(body)
         if diag is not None:
             self._write_json(200, _envelope(False, diagnostics=diag))
             return
@@ -1784,6 +1784,7 @@ class _Handler(BaseHTTPRequestHandler):
                 reports=seed,
                 counts=counts,
                 columns=columns,
+                sql=run_sql,
             ),
         )
 
@@ -1797,7 +1798,7 @@ class _Handler(BaseHTTPRequestHandler):
         """
         from .expected_store import parse_expected_groups
 
-        columns, counts, reports, diag = self._evaluate_measure_reports(body)
+        columns, counts, reports, diag, run_sql = self._evaluate_measure_reports(body)
         if diag is not None:
             self._write_json(200, _envelope(False, diagnostics=diag))
             return
@@ -1861,6 +1862,7 @@ class _Handler(BaseHTTPRequestHandler):
                 passed=passed,
                 failed=failed,
                 ok=failed == 0,
+                sql=run_sql,
             ),
         )
 
@@ -1926,6 +1928,9 @@ class _Handler(BaseHTTPRequestHandler):
                 "columns": evd.get("column_types", {}),
                 "rows": evd.get("rows", []),
                 "reports": reports,
+                # S6: surface the evaluation SQL (Show-SQL parity with
+                # translate/evaluate; the UI previously discarded it).
+                "sql": evd.get("sql"),
             },
         )
 

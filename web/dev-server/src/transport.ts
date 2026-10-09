@@ -158,6 +158,7 @@ export interface MeasureRunResult {
   columns: Record<string, string>;
   rows: Record<string, unknown>[];
   reports: Record<string, unknown>[];
+  sql?: string | null;
 }
 
 export interface MeasureCompareRow {
@@ -346,6 +347,7 @@ export interface TestsCaptureResult {
   reports?: Record<string, unknown>[];
   counts?: Record<string, number>;
   columns?: string[];
+  sql?: string | null;
 }
 
 export interface TestsRunResult {
@@ -357,6 +359,7 @@ export interface TestsRunResult {
   total?: number;
   passed?: number;
   failed?: number;
+  sql?: string | null;
 }
 
 /** Per-valueset-declaration resolution status. */
