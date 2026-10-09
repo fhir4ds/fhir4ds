@@ -51,7 +51,7 @@ test.beforeAll(async () => {
   server = spawn(
     "/usr/bin/python3",
     ["-m", "fhir4ds.cli", "dev", dir, "--port", String(PORT), "--no-open"],
-    { cwd: dir, env: { PYTHONPATH: "/mnt/d/fhir4ds-vsac-cleanroom-20261008", PATH: process.env.PATH ?? "" }, stdio: "ignore" },
+    { cwd: dir, env: { PYTHONPATH: "/mnt/d/fhir4ds-umls-20261008", PATH: process.env.PATH ?? "" }, stdio: "ignore" },
   );
   for (let i = 0; i < 120; i++) {
     try {

@@ -1106,3 +1106,58 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   0%, 100% { outline-color: #4caf50; }
   50% { outline-color: transparent; }
 }
+
+/* c-umls-lookup: UMLS code search row + results */
+.dev-vssearch {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+}
+.dev-vssearchinput {
+  flex: 1;
+  font-family: var(--dev-mono, monospace);
+}
+.dev-vssearchsys {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border: 1px solid #333;
+  border-radius: 3px;
+  padding: 2px 4px;
+}
+.dev-vsresults {
+  border: 1px solid #333;
+  border-radius: 4px;
+  margin: 0 10px 6px;
+  padding: 6px 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.dev-vsresults-head {
+  color: #9cdcfe;
+  margin-bottom: 4px;
+}
+.dev-vsresults-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 2px 0;
+}
+.dev-vsresults-code {
+  font-family: var(--dev-mono, monospace);
+  font-size: 11px;
+  color: #bbb;
+  white-space: nowrap;
+}
+.dev-vsresults-display {
+  flex: 1;
+  font-size: 11px;
+  color: #888;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dev-vsresults-empty {
+  color: #666;
+  font-size: 11px;
+}

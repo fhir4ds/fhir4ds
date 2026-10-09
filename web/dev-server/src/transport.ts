@@ -248,6 +248,16 @@ export interface TerminologyImportResult {
   stale: boolean;
 }
 
+/** Terminology search (UMLS): candidate codes for a free-text query. */
+export interface TerminologySearchResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  query: string;
+  results: { system: string; code: string; display: string | null; rootSource?: string | null }[];
+  count: number;
+}
+
 /** Per-valueset-declaration resolution status. */
 export interface ResolutionRow {
   library: string;
@@ -323,6 +333,7 @@ export interface Transport {
   terminologyPreview(url: string): Promise<TerminologyPreviewResult>;
   terminologyImport(url: string, name?: string): Promise<TerminologyImportResult>;
   terminologyResolution(): Promise<TerminologyResolutionResult>;
+  terminologySearch(query: string, system?: string): Promise<TerminologySearchResult>;
   schemaTree(resource: string, depth?: number): Promise<SchemaTreeResult>;
   resourceValidate(resource: Record<string, unknown>): Promise<ResourceValidateResult>;
   resourceSave(resource: Record<string, unknown>, datasetPath: string): Promise<ResourceSaveResult>;

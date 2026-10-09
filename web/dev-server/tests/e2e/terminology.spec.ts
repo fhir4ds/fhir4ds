@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 const PORT = 19021;
 const BASE = `http://127.0.0.1:${PORT}`;
-const WORKTREE = "/mnt/d/fhir4ds-vsac-cleanroom-20261008";
+const WORKTREE = "/mnt/d/fhir4ds-umls-20261008";
 
 let server: ChildProcess | null = null;
 let dir = "";
@@ -182,4 +182,83 @@ test("resolution chips render in used-by footer", async ({ page }) => {
   // mock response feeds at least the matching local chip and that no
   // unresolvable chip leaks in.
   await expect(page.locator(".dev-reschip-unresolved")).toHaveCount(0);
+});
+
+test("umls search: results render and add writes a concept row", async ({ page }) => {
+  await page.route("**/api/terminology/resolution", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ schema: 1, ok: true, resolutions: [] }),
+    }),
+  );
+  let searchCalls = 0;
+  let editPayload = "";
+  await page.route("**/api/terminology/search", (route) => {
+    searchCalls += 1;
+    const body = route.request().postDataJSON() as { query?: string; system?: string };
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        schema: 1,
+        ok: true,
+        query: body.query ?? "",
+        results: [
+          {
+            system: "http://snomed.info/sct",
+            code: "22298006",
+            display: "Myocardial infarction",
+            rootSource: "words",
+          },
+          {
+            system: "http://hl7.org/fhir/sid/icd-10-cm",
+            code: "I21.9",
+            display: "Acute myocardial infarction, unspecified",
+            rootSource: "words",
+          },
+        ],
+        count: 2,
+      }),
+    });
+  });
+  await page.route("**/api/valueset/edit", (route) => {
+    editPayload = route.request().postData() ?? "";
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        schema: 1,
+        ok: true,
+        path: "valuesets/vs1.json",
+        url: "http://example.com/bp",
+        stale: true,
+        concepts: [
+          { system: "http://loinc.org", code: "8480-6", display: "BP" },
+          { system: "http://snomed.info/sct", code: "22298006", display: "Myocardial infarction" },
+        ],
+        used_by: [],
+      }),
+    });
+  });
+
+  await page.goto(BASE);
+  await page.locator(".dev-lib.small", { hasText: "vs1" }).click();
+  await expect(page.locator(".dev-vspane")).toBeVisible({ timeout: 20_000 });
+
+  await page.locator(".dev-vssearchinput").fill("myocardial infarction");
+  await page.locator(".dev-vssearchsys").selectOption("http://snomed.info/sct");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+
+  await expect(page.locator(".dev-vsresults-head")).toContainText("2 matches", { timeout: 10_000 });
+  await expect(page.locator(".dev-vsresults-row")).toHaveCount(2);
+  await expect(page.locator(".dev-vsresults-code").first()).toContainText("SNOMED | 22298006");
+  await expect(page.locator(".dev-vsresults-display").first()).toContainText("Myocardial infarction");
+  expect(searchCalls).toBe(1);
+
+  await page.locator(".dev-vsresults-row").first().getByRole("button", { name: "+ Add" }).click();
+  // Grid rows render inputs — assert the added code via its input value.
+  await expect
+    .poll(async () => page.evaluate(() => Array.from(document.querySelectorAll(".dev-vsgrid input")).map((el) => (el as HTMLInputElement).value).join(",")), { timeout: 10_000 })
+    .toContain("22298006");
+  await expect(page.locator(".dev-stale").first()).toBeVisible({ timeout: 10_000 });
+  expect(editPayload).toContain('"action":"add"');
+  expect(editPayload).toContain("22298006");
 });

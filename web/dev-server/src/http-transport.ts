@@ -7,6 +7,7 @@ import type {
   TerminologyPreviewResult,
   TerminologyImportResult,
   TerminologyResolutionResult,
+  TerminologySearchResult,
   ResourceSaveResult,
   ResourceValidateResult,
   SchemaTreeResult,
@@ -153,6 +154,13 @@ export class HttpTransport implements Transport {
 
   terminologyResolution(): Promise<TerminologyResolutionResult> {
     return this.unwrap("/api/terminology/resolution");
+  }
+
+  terminologySearch(query: string, system?: string): Promise<TerminologySearchResult> {
+    return this.post<TerminologySearchResult>("/api/terminology/search", {
+      query,
+      system: system && system !== "" ? system : undefined,
+    });
   }
 
   viewRun(text?: string, path?: string, resources?: Record<string, unknown>[]): Promise<ViewRunResult> {

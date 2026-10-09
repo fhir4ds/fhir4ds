@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import type { HttpTransport } from "./http-transport";
-import type { ResolutionRow, TerminologyImportResult, TerminologyPreviewResult, ValueSetInfo } from "./transport";
+import type {
+  ResolutionRow,
+  TerminologyImportResult,
+  TerminologyPreviewResult,
+  TerminologySearchResult,
+  ValueSetInfo,
+} from "./transport";
 
 /**
  * ValueSet table editor (v3 Slice 1): concepts grid over compose.include.
@@ -40,6 +46,11 @@ export function ValueSetPane({
   const [provAt, setProvAt] = useState<Date | null>(null);
   const [provCount, setProvCount] = useState<number | null>(null);
   const [insertAttn, setInsertAttn] = useState(false);
+  // UMLS code-lookup search state (c-umls-lookup).
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchSystem, setSearchSystem] = useState("");
+  const [searchResults, setSearchResults] = useState<TerminologySearchResult | null>(null);
+  const [searching, setSearching] = useState(false);
 
   const reload = useCallback(async () => {
     setError(null);
@@ -135,8 +146,37 @@ export function ValueSetPane({
     [transport, path, onStaleChange],
   );
 
+  const doSearch = useCallback(async () => {
+    setError(null);
+    setSearching(true);
+    try {
+      const r = await transport.terminologySearch(
+        searchQuery.trim(),
+        searchSystem || undefined,
+      );
+      setSearchResults(r);
+    } catch (e) {
+      setSearchResults(null);
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSearching(false);
+    }
+  }, [transport, searchQuery, searchSystem]);
+
   const concepts = info?.concepts ?? [];
   const name = path.split("/").pop() ?? path;
+
+  const shortSystem = (system: string): string => {
+    const known: Record<string, string> = {
+      "http://snomed.info/sct": "SNOMED",
+      "http://loinc.org": "LOINC",
+      "http://hl7.org/fhir/sid/icd-10-cm": "ICD-10-CM",
+      "http://hl7.org/fhir/sid/icd-9-cm": "ICD-9-CM",
+      "http://www.nlm.nih.gov/research/umls/rxnorm": "RxNorm",
+      "http://www.ama-assn.org/go/cpt": "CPT",
+    };
+    return known[system] ?? system;
+  };
 
   return (
     <div className="dev-vspane">
@@ -195,6 +235,68 @@ export function ValueSetPane({
             <div className="dev-vspreview-more">
               +{(preview.concepts?.length ?? 0) - 5} more
             </div>
+          )}
+        </div>
+      )}
+      <div className="dev-vssearch">
+        <input
+          className="dev-vssearchinput"
+          placeholder="Search UMLS codes by text…"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !searching && searchQuery.trim()) doSearch();
+          }}
+        />
+        <select
+          className="dev-vssearchsys"
+          value={searchSystem}
+          onChange={(e) => setSearchSystem(e.target.value)}
+          title="Restrict results to one code system"
+        >
+          <option value="">all systems</option>
+          <option value="http://snomed.info/sct">SNOMED CT</option>
+          <option value="http://loinc.org">LOINC</option>
+          <option value="http://hl7.org/fhir/sid/icd-10-cm">ICD-10-CM</option>
+          <option value="http://www.nlm.nih.gov/research/umls/rxnorm">RxNorm</option>
+          <option value="http://www.ama-assn.org/go/cpt">CPT</option>
+        </select>
+        <button
+          disabled={searching || busy || !searchQuery.trim()}
+          onClick={doSearch}
+          title="Search UMLS (UTS) for codes matching the text; add results to this valueset"
+        >
+          Search
+        </button>
+      </div>
+      {searchResults && (
+        <div className="dev-vsresults">
+          <div className="dev-vsresults-head">
+            {searchResults.ok
+              ? `${searchResults.count} match${searchResults.count === 1 ? "" : "es"} for “${searchResults.query}”`
+              : `search failed for “${searchResults.query}”`}
+          </div>
+          {searchResults.results.map((r, i) => (
+            <div key={`${r.system}|${r.code}|${i}`} className="dev-vsresults-row">
+              <span className="dev-vsresults-code" title={r.system}>
+                {shortSystem(r.system)} | {r.code}
+              </span>
+              <span className="dev-vsresults-display" title={r.display ?? ""}>
+                {r.display ?? ""}
+              </span>
+              <button
+                disabled={busy}
+                title="Add this code to the valueset (writes the file; sets the stale-terminology flag)"
+                onClick={() =>
+                  runEdit({ action: "add", system: r.system, code: r.code, display: r.display ?? undefined })
+                }
+              >
+                + Add
+              </button>
+            </div>
+          ))}
+          {searchResults.ok && searchResults.results.length === 0 && (
+            <div className="dev-vsresults-empty">No matching codes found.</div>
           )}
         </div>
       )}

@@ -118,6 +118,7 @@ def create_server(
 
     server.terminology_settings = terminology_settings(watcher._cfg)
     server._terminology_endpoint_holder = None
+    server._umls_endpoint_holder = None
     return server
 
 
@@ -177,6 +178,82 @@ class _Handler(BaseHTTPRequestHandler):
                 api_key=settings.api_key(),
             )
         return self.server._terminology_endpoint_holder
+
+    def _umls_endpoint(self):
+        """Lazily build the UMLSTerminologyEndpoint for code search.
+
+        Independent of the [terminology] provider (available whenever a
+        UMLS key resolves) — UTS REST auth differs from the VSAC FHIR
+        endpoint, so it gets its own lazy holder. Returns None when no
+        key is configured."""
+        if self.server._umls_endpoint_holder is None:
+            settings = self.server.terminology_settings
+            key = settings.api_key() if settings else None
+            if not key:
+                import os
+
+                key = os.environ.get("FHIR4DS_UMLS_API_KEY")
+            if not key:
+                return None
+            from fhir4ds.cql.terminology.umls_adapter import (
+                UMLSTerminologyEndpoint,
+            )
+
+            self.server._umls_endpoint_holder = UMLSTerminologyEndpoint(
+                timeout_seconds=settings.timeout_seconds if settings else 15.0,
+                api_key=key,
+            )
+        return self.server._umls_endpoint_holder
+
+    def _route_terminology_search(self, body: dict[str, Any]) -> None:
+        """POST /api/terminology/search — UMLS code lookup by concept
+        name (c-umls-lookup). Results are display-only; adding a code to
+        a valueset goes through the existing /api/valueset/edit."""
+        query = body.get("query")
+        if not isinstance(query, str) or not query.strip():
+            self._write_json(
+                200, _envelope(ok=False, diagnostics=[_diag("query is required")])
+            )
+            return
+        system = body.get("system")
+        if system is not None and not isinstance(system, str):
+            self._write_json(
+                200,
+                _envelope(ok=False, diagnostics=[_diag("system must be a string")]),
+            )
+            return
+        endpoint = self._umls_endpoint()
+        if endpoint is None:
+            self._write_json(
+                200,
+                _envelope(
+                    ok=False,
+                    diagnostics=[
+                        _diag(
+                            "UMLS API key not configured — set UMLS_API_KEY "
+                            "or [terminology] api_key_env in fhir4ds.toml"
+                        )
+                    ],
+                ),
+            )
+            return
+        try:
+            results = endpoint.search_text(query.strip(), system or None)
+        except Exception as exc:  # adapter errors carry no key material
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        payload = [
+            {
+                "system": r.system,
+                "code": r.code,
+                "display": r.display,
+                "rootSource": r.search_mode,
+            }
+            for r in results
+        ]
+        self._write_json(
+            200, _envelope(ok=True, query=query.strip(), results=payload, count=len(payload))
+        )
 
     def _route_terminology_preview(self, body: dict[str, Any]) -> None:
         """POST /api/terminology/preview — expand a canonical URL/OID via
@@ -921,6 +998,9 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             elif path == "/api/terminology/preview":
                 self._route_terminology_preview(body)
+                return
+            elif path == "/api/terminology/search":
+                self._route_terminology_search(body)
                 return
             elif path == "/api/terminology/import":
                 self._route_terminology_import(body)

@@ -200,3 +200,126 @@ class TestDisabled:
             assert "disabled" in body["diagnostics"][0]["message"]
         finally:
             srv.shutdown()
+
+
+class FakeUmlsEndpoint:
+    """Deterministic UMLS search endpoint for /api/terminology/search."""
+
+    def __init__(self):
+        self.queries: list[tuple] = []
+
+    class _R:
+        def __init__(self, system, code, display):
+            self.system, self.code, self.display = system, code, display
+            self.score, self.match_grade = 1.0, "probable"
+            self.search_mode = "words"
+
+    def search_text(self, query, category=None, mode="words"):
+        self.queries.append((query, category, mode))
+        if query == "myocardial infarction":
+            return [
+                self._R("http://snomed.info/sct", "22298006", "Myocardial infarction"),
+                self._R("http://hl7.org/fhir/sid/icd-10-cm", "I21", "Acute MI"),
+            ]
+        return []
+
+    def search_batch(self, queries, mode="words"):
+        return [self.search_text(q, None, mode=mode) for q in queries]
+
+    def expand(self, url):
+        return []
+
+    def expand_intensional(self, value_set):
+        return []
+
+
+class TestUmlsSearch:
+    def test_search_ok(self, server):
+        srv, tmp = server
+        fake = FakeUmlsEndpoint()
+        srv._umls_endpoint_holder = fake
+        try:
+            r = call("/api/terminology/search", {"query": "myocardial infarction"})
+            assert r["ok"] is True
+            assert r["count"] == 2
+            assert r["results"][0]["code"] == "22298006"
+            assert fake.queries[-1] == ("myocardial infarction", None, "words")
+        finally:
+            srv._umls_endpoint_holder = None
+
+    def test_search_with_system_filter_forwarded(self, server):
+        srv, tmp = server
+        fake = FakeUmlsEndpoint()
+        srv._umls_endpoint_holder = fake
+        try:
+            r = call(
+                "/api/terminology/search",
+                {"query": "myocardial infarction", "system": "http://snomed.info/sct"},
+            )
+            assert r["ok"] is True
+            assert fake.queries[-1][1] == "http://snomed.info/sct"
+        finally:
+            srv._umls_endpoint_holder = None
+
+    def test_search_requires_query(self, server):
+        r = call("/api/terminology/search", {"query": ""})
+        assert r["ok"] is False
+        assert "query" in r["diagnostics"][0]["message"]
+
+    def test_search_rejects_non_string_system(self, server):
+        r = call("/api/terminology/search", {"query": "x", "system": 42})
+        assert r["ok"] is False
+
+    def test_search_error_surfaced_without_crash(self, server):
+        srv, tmp = server
+
+        class _Boom:
+            def search_text(self, query, category=None, mode="words"):
+                raise RuntimeError("UTS request failed: HTTP 500 for /search/current: x")
+
+        srv._umls_endpoint_holder = _Boom()
+        try:
+            r = call("/api/terminology/search", {"query": "x"})
+            assert r["ok"] is False
+            assert "HTTP 500" in r["diagnostics"][0]["message"]
+        finally:
+            srv._umls_endpoint_holder = None
+
+    def test_search_no_key_configured(self, tmp_path):
+        (tmp_path / "cql").mkdir()
+        (tmp_path / "cql" / "L.cql").write_text(
+            "library L version '1.0.0'\nusing FHIR version '4.0.1'\n\ndefine X: true\n"
+        )
+        (tmp_path / "data").mkdir()
+        cfg = load_config(tmp_path)
+        snap = scan_workspace(cfg)
+        mgr = KernelManager(snap)
+        w = Watcher(cfg, EventBus())
+        srv = create_server(mgr, w, port=PORT + 2)
+        # no [terminology] section, no env key → holder never built
+        srv._umls_endpoint_holder = None
+        thread = threading.Thread(target=srv.serve_forever, daemon=True)
+        thread.start()
+        time.sleep(0.2)
+        try:
+            import os
+
+            old = os.environ.pop("UMLS_API_KEY", None)
+            old2 = os.environ.pop("FHIR4DS_UMLS_API_KEY", None)
+            old3 = os.environ.pop("UMLS_API_KEY_TEST", None)
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{PORT + 2}/api/terminology/search",
+                data=json.dumps({"query": "x"}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            body = json.loads(urllib.request.urlopen(req, timeout=30).read())
+            assert body["ok"] is False
+            assert "UMLS API key not configured" in body["diagnostics"][0]["message"]
+            if old is not None:
+                os.environ["UMLS_API_KEY"] = old
+            if old2 is not None:
+                os.environ["FHIR4DS_UMLS_API_KEY"] = old2
+            if old3 is not None:
+                os.environ["UMLS_API_KEY_TEST"] = old3
+        finally:
+            srv.shutdown()

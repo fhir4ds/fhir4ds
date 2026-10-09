@@ -69,7 +69,7 @@ test.beforeAll(async () => {
     ["-m", "fhir4ds.cli", "dev", dir, "--port", String(PORT), "--no-open"],
     {
       env: {
-        PYTHONPATH: "/mnt/d/fhir4ds-vsac-cleanroom-20261008",
+        PYTHONPATH: "/mnt/d/fhir4ds-umls-20261008",
         PATH: process.env.PATH ?? "",
       },
       cwd: dir,
