@@ -50,6 +50,7 @@ export function ExpectedResultsPane({
   measure,
   measureName,
   onPatient,
+  onExplain,
   onSql,
 }: {
   transport: HttpTransport;
@@ -58,6 +59,8 @@ export function ExpectedResultsPane({
   measure: Record<string, unknown> | null;
   measureName: string;
   onPatient?: (patient: string) => void;
+  /** parity item 1: open the evidence modal for a patient. */
+  onExplain?: (patient: string) => void;
   onSql?: (sql: string) => void;
 }) {
   const [expectations, setExpectations] = useState<PatientExpectation[]>([]);
@@ -238,6 +241,15 @@ export function ExpectedResultsPane({
               >
                 {x.patient}
               </span>
+              {onExplain && (
+                <button
+                  className="dev-msexplainchip dev-expectedexplain"
+                  title={`why did the defines evaluate for ${x.patient}? (/api/explain)`}
+                  onClick={() => onExplain(x.patient)}
+                >
+                  ⚖
+                </button>
+              )}
               {codes.map((c) => {
                 const pop = x.groups.flatMap((g) => g.population).find((p) => p.code === c);
                 return (

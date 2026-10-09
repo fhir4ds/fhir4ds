@@ -1507,3 +1507,54 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   font-size: 12px;
 }
 .dev-navwrap { display: contents; }
+
+/* parity item 1: evidence modal + explain chips */
+.dev-mspatientcell { display: inline-flex; align-items: center; gap: 2px; margin: 0 4px 2px 0; }
+.dev-msexplainchip {
+  border: 1px solid var(--dev-border, #374151);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--dev-muted, #9ca3af);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 1px 4px;
+}
+.dev-msexplainchip:hover { color: #fff; background: #1f2937; }
+.dev-expectedexplain { margin-right: 4px; }
+
+.dev-evbackdrop {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center;
+}
+.dev-evmodal {
+  background: #0b1220; color: #e5e7eb;
+  border: 1px solid var(--dev-border, #374151); border-radius: 10px;
+  width: min(760px, 92vw); max-height: 84vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+.dev-evheader {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-bottom: 1px solid var(--dev-border, #374151);
+}
+.dev-evheader h3 { margin: 0; font-size: 14px; flex: 1; }
+.dev-evpatient { color: #38bdf8; }
+.dev-evlib { color: var(--dev-muted, #9ca3af); font-weight: 400; font-size: 12px; }
+.dev-evclose { border: none; background: transparent; color: var(--dev-muted, #9ca3af); cursor: pointer; font-size: 14px; }
+.dev-evclose:hover { color: #fff; }
+.dev-evbody { overflow-y: auto; padding: 10px 14px; }
+.dev-evempty { padding: 24px; color: var(--dev-muted, #9ca3af); }
+.dev-evsection { margin-bottom: 14px; border: 1px solid #1f2937; border-radius: 8px; padding: 8px 10px; }
+.dev-evsechead { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.dev-evcol { font-weight: 600; font-size: 13px; flex: 1; }
+.dev-evbool { font-size: 12px; }
+.dev-evbool.true { color: #1a7f37; }
+.dev-evbool.false { color: #b42318; }
+.dev-evnarrative p { margin: 2px 0; font-size: 12px; color: #cbd5e1; }
+.dev-evtrace { margin: 6px 0; }
+.dev-evbreadcrumbs { font-size: 11px; color: var(--dev-muted, #9ca3af); }
+.dev-evarrow { color: #38bdf8; }
+.dev-evtable { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+.dev-evtable th { text-align: left; color: var(--dev-muted, #9ca3af); font-weight: 500; padding: 3px 8px 3px 0; }
+.dev-evtable td { padding: 3px 8px 3px 0; border-top: 1px solid #1f2937; }

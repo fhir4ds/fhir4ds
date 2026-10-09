@@ -35,6 +35,7 @@ export function MeasurePane({
   onMeasureReports,
   onMeasureInfo,
   onPatient,
+  onExplain,
   onSql,
 }: {
   transport: HttpTransport;
@@ -47,6 +48,8 @@ export function MeasurePane({
   onMeasureInfo?: (measure: Record<string, unknown> | null, name: string) => void;
   /** S5: open the patient-resources slide-out for a subject in the run reports. */
   onPatient?: (patient: string) => void;
+  /** parity item 1: open the evidence modal (why did defines evaluate) for a patient. */
+  onExplain?: (patient: string) => void;
   /** S6: surface the run's generated SQL in the central Show-SQL view. */
   onSql?: (sql: string) => void;
 }) {
@@ -485,14 +488,24 @@ export function MeasurePane({
                     .map((r) => r.subject?.reference?.split("/").pop() ?? "")
                     .filter(Boolean)
                     .map((pid) => (
-                      <button
-                        key={pid}
-                        className="dev-mspatientchip"
-                        title={`resources for ${pid}`}
-                        onClick={() => onPatient(pid)}
-                      >
-                        {pid}
-                      </button>
+                      <span key={pid} className="dev-mspatientcell">
+                        <button
+                          className="dev-mspatientchip"
+                          title={`resources for ${pid}`}
+                          onClick={() => onPatient?.(pid)}
+                        >
+                          {pid}
+                        </button>
+                        {onExplain && (
+                          <button
+                            className="dev-msexplainchip"
+                            title={`why did the defines evaluate for ${pid}? (/api/explain)`}
+                            onClick={() => onExplain(pid)}
+                          >
+                            ⚖
+                          </button>
+                        )}
+                      </span>
                     ))}
                 </div>
               )}

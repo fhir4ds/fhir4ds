@@ -26,6 +26,7 @@ import type {
 import { ValueSetPane } from "./ValueSetPane";
 import { ParamsPane } from "./ParamsPane";
 import { ExpectedResultsPane } from "./ExpectedResultsPane";
+import { EvidenceModal } from "./EvidenceModal";
 import { PatientSlideOut } from "./PatientSlideOut";
 import { TerminologyDialog } from "./TerminologyDialog";
 import { PathPickerDialog } from "./PathPickerDialog";
@@ -95,6 +96,8 @@ export function App() {
   const [pickerKind, setPickerKind] = useState<"cql" | "valueset" | "measure" | "data" | "view" | null>(null);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [patientSlide, setPatientSlide] = useState<string | null>(null);
+  // parity item 1: evidence modal — explain WHY defines evaluated for a patient.
+  const [evidencePatient, setEvidencePatient] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const [tab, setTab] = useState<Tab>("results");
   const [errorsOpen, setErrorsOpen] = useState(false);
@@ -919,6 +922,7 @@ export function App() {
                   setLastMeasureName(name);
                 }}
                 onPatient={setPatientSlide}
+                onExplain={setEvidencePatient}
                 onSql={setSql}
               />
             </div>
@@ -1222,6 +1226,7 @@ export function App() {
               measure={lastMeasure}
               measureName={lastMeasureName}
               onPatient={setPatientSlide}
+                onExplain={setEvidencePatient}
             />
           )}
         </section>
@@ -1333,6 +1338,15 @@ export function App() {
           setPatientSlide(null);
         }}
       />
+      {evidencePatient && (
+        <EvidenceModal
+          transport={transport}
+          libraries={[{ name: selected, text: buffer }]}
+          library={selected}
+          patient={evidencePatient}
+          onClose={() => setEvidencePatient(null)}
+        />
+      )}
       {termDialog && (
         <TerminologyDialog
           transport={transport}
