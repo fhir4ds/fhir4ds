@@ -8,6 +8,9 @@ import type {
   TerminologyImportResult,
   TerminologyResolutionResult,
   TerminologySearchResult,
+  TerminologyConfigResult,
+  FsListResult,
+  AddPathResult,
   ResourceSaveResult,
   ResourceValidateResult,
   SchemaTreeResult,
@@ -161,6 +164,27 @@ export class HttpTransport implements Transport {
       query,
       system: system && system !== "" ? system : undefined,
     });
+  }
+
+  terminologyConfigGet(): Promise<TerminologyConfigResult> {
+    return this.unwrap("/api/terminology/config");
+  }
+
+  terminologyConfigPost(updates: Partial<{ provider: string; base_url: string | null; timeout_seconds: number; api_key_env: string }>): Promise<TerminologyConfigResult> {
+    const body: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(updates)) {
+      if (v !== undefined) body[k] = v === "" ? undefined : v;
+    }
+    return this.post<TerminologyConfigResult>("/api/terminology/config", body);
+  }
+
+  fsList(path?: string): Promise<FsListResult> {
+    const q = path && path !== "" && path !== "." ? `?path=${encodeURIComponent(path)}` : "";
+    return this.unwrap(`/api/fs/list${q}`);
+  }
+
+  workspaceAddPath(kind: "cql" | "valueset" | "measure" | "data" | "view", path: string): Promise<AddPathResult> {
+    return this.post<AddPathResult>("/api/workspace/add-path", { kind, path });
   }
 
   viewRun(text?: string, path?: string, resources?: Record<string, unknown>[]): Promise<ViewRunResult> {

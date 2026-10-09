@@ -258,6 +258,36 @@ export interface TerminologySearchResult {
   count: number;
 }
 
+export interface TerminologyConfigResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  config?: {
+    provider: string;
+    base_url: string | null;
+    timeout_seconds: number;
+    api_key_env: string;
+    key_env_resolves?: boolean;
+  };
+}
+
+export interface FsListResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  path: string;
+  entries: { name: string; kind: "dir" | "file"; suffix: string }[];
+}
+
+export interface AddPathResult {
+  schema: number;
+  ok: boolean;
+  diagnostics: Diagnostic[];
+  kind?: string;
+  added?: string;
+  snapshot?: { datasets: number; libraries: number };
+}
+
 /** Per-valueset-declaration resolution status. */
 export interface ResolutionRow {
   library: string;
@@ -334,6 +364,23 @@ export interface Transport {
   terminologyImport(url: string, name?: string): Promise<TerminologyImportResult>;
   terminologyResolution(): Promise<TerminologyResolutionResult>;
   terminologySearch(query: string, system?: string): Promise<TerminologySearchResult>;
+
+  /** S1/S2 (c-cleanroom-ux5): in-app VSAC config + fs pickers. */
+  terminologyConfigGet(): Promise<TerminologyConfigResult>;
+  terminologyConfigPost(
+    updates: Partial<{
+      provider: string;
+      base_url: string | null;
+      timeout_seconds: number;
+      api_key_env: string;
+    }>,
+  ): Promise<TerminologyConfigResult>;
+  fsList(path?: string): Promise<FsListResult>;
+  workspaceAddPath(
+    kind: "cql" | "valueset" | "measure" | "data" | "view",
+    path: string,
+  ): Promise<AddPathResult>;
+
   schemaTree(resource: string, depth?: number): Promise<SchemaTreeResult>;
   resourceValidate(resource: Record<string, unknown>): Promise<ResourceValidateResult>;
   resourceSave(resource: Record<string, unknown>, datasetPath: string): Promise<ResourceSaveResult>;

@@ -26,6 +26,8 @@ import type {
 import { ValueSetPane } from "./ValueSetPane";
 import { ParamsPane } from "./ParamsPane";
 import { TestsPane } from "./TestsPane";
+import { TerminologyDialog } from "./TerminologyDialog";
+import { PathPickerDialog } from "./PathPickerDialog";
 import { MeasurePane } from "./MeasurePane";
 import { VdPane } from "./VdPane";
 import { DatasetPane } from "./DatasetPane";
@@ -88,6 +90,8 @@ export function App() {
   const [result, setResult] = useState<QueryResult | null>(null);
   const [evaluate, setEvaluate] = useState<EvaluateResult | null>(null);
   const [sql, setSql] = useState("");
+  const [termDialog, setTermDialog] = useState(false);
+  const [pickerKind, setPickerKind] = useState<"cql" | "valueset" | "measure" | "data" | "view" | null>(null);
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const [tab, setTab] = useState<Tab>("results");
   const [busy, setBusy] = useState(false);
@@ -453,7 +457,8 @@ export function App() {
           {health?.terminology && (
             <span
               className={`dev-termpill dev-termpill-${health.terminology.provider}`}
-              title={`terminology: ${health.terminology.provider} (api key set: ${health.terminology.api_key_set})`}
+              title={`terminology: ${health.terminology.provider} (api key set: ${health.terminology.api_key_set}) — click to configure`}
+              onClick={() => setTermDialog(true)}
             >
               <span
                 className={
@@ -490,7 +495,7 @@ export function App() {
       </header>
       <main className="dev-main">
         <aside className="dev-libraries">
-          <h2>Libraries</h2>
+          <h2>Libraries <button className="dev-addrail" title="Add a cql path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("cql")}>+</button></h2>
           {(workspace?.libraries ?? []).map((lib) => (
             <div
               key={lib.name}
@@ -504,7 +509,7 @@ export function App() {
               {!lib.parse_ok && <em title={lib.error ?? ""}> ⚠</em>}
             </div>
           ))}
-          <h2>Data</h2>
+          <h2>Data <button className="dev-addrail" title="Add a data path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("data")}>+</button></h2>
           {(workspace?.datasets ?? []).map((d) => (
             <div
               key={d}
@@ -535,7 +540,7 @@ export function App() {
           >
             + Resource
           </div>
-          {(workspace?.valuesets ?? []).length > 0 && <h2>ValueSets</h2>}
+          {(workspace?.valuesets ?? []).length > 0 && <h2>ValueSets <button className="dev-addrail" title="Add a valueset path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("valueset")}>+</button></h2>}
           {(workspace?.valuesets ?? []).map((v) => (
             <div
               key={v}
@@ -608,7 +613,7 @@ export function App() {
               {lib.name} · parameters
             </div>
           ))}
-          <h2>Measures</h2>
+          <h2>Measures <button className="dev-addrail" title="Add a measure path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("measure")}>+</button></h2>
           {(workspace?.measures ?? []).map((m) => (
             <div
               key={m}
@@ -637,7 +642,7 @@ export function App() {
               + {lib.name} scaffold
             </div>
           ))}
-          <h2>ViewDefinitions</h2>
+          <h2>ViewDefinitions <button className="dev-addrail" title="Add a view path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("view")}>+</button></h2>
           {(workspace?.views ?? []).map((v) => (
             <div
               key={v}
@@ -1090,6 +1095,21 @@ export function App() {
           </div>
         </section>
       </main>
+      {termDialog && (
+        <TerminologyDialog
+          transport={transport}
+          onClose={() => setTermDialog(false)}
+          onSaved={() => refreshWorkspace()}
+        />
+      )}
+      {pickerKind && (
+        <PathPickerDialog
+          transport={transport}
+          kind={pickerKind}
+          onClose={() => setPickerKind(null)}
+          onAdded={() => refreshWorkspace()}
+        />
+      )}
     </div>
   );
 }

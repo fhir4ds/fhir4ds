@@ -1161,3 +1161,49 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
   color: #666;
   font-size: 11px;
 }
+
+/* ============ S2 (c-cleanroom-ux5): dialogs — terminology config + path picker ============ */
+.dev-dialog-backdrop {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45);
+  display: flex; align-items: center; justify-content: center; z-index: 60;
+}
+.dev-dialog {
+  background: #1b1b1b; color: #d4d4d4; border: 1px solid #3c3c3c; border-radius: 6px;
+  min-width: 460px; max-width: 640px; max-height: 80vh; display: flex; flex-direction: column;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+.dev-dialog-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border-bottom: 1px solid #3c3c3c; font-weight: 600;
+}
+.dev-dialog-x { background: none; border: none; color: #9a9a9a; cursor: pointer; font-size: 14px; }
+.dev-dialog-x:hover { color: #fff; }
+.dev-dialog-body { padding: 10px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.dev-dialog-body .dev-rblabel { margin-top: 8px; color: #9a9a9a; font-size: 12px; }
+.dev-dialog-foot {
+  display: flex; gap: 8px; justify-content: flex-end;
+  padding: 8px 12px; border-top: 1px solid #3c3c3c;
+}
+.dev-dialog-hint { font-size: 12px; color: #9a9a9a; min-height: 16px; }
+.dev-pickerbar { display: flex; align-items: center; gap: 6px; }
+.dev-pickerpath { font-family: var(--dev-mono, monospace); font-size: 12px; color: #9a9a9a; flex: 1; }
+.dev-pickerfilter { max-width: 140px; }
+.dev-pickerlist {
+  border: 1px solid #333; border-radius: 4px; max-height: 260px; overflow-y: auto;
+  margin: 6px 0; background: #141414;
+}
+.dev-pickerrow {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 3px 8px; border-bottom: 1px solid #262626; font-size: 13px;
+}
+.dev-pickerrow:hover { background: #202020; }
+.dev-pickerdir { color: #cfc; }
+.dev-pickerfile { color: #ccc; }
+.dev-pickeractions button { margin-left: 6px; }
+.dev-pickerempty { padding: 8px; color: #777; font-size: 12px; }
+.dev-termpill { cursor: pointer; }
+.dev-addrail {
+  background: none; border: 1px solid #3c3c3c; color: #9a9a9a; border-radius: 3px;
+  cursor: pointer; font-size: 11px; padding: 0 4px; margin-left: 4px; vertical-align: middle;
+}
+.dev-addrail:hover { color: #fff; border-color: #666; }
