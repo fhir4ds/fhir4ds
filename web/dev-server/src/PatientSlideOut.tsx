@@ -21,6 +21,7 @@ export function PatientSlideOut({
 }) {
   const [result, setResult] = useState<PatientResourcesResult | null>(null);
   const [detail, setDetail] = useState<PatientResourceEntry | null>(null);
+  const [detailBusy, setDetailBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -91,15 +92,29 @@ export function PatientSlideOut({
               {onEditInBuilder && (
                 <button
                   title="Open this resource in the builder"
-                  onClick={() => {
+                  disabled={detailBusy}
+                  onClick={async () => {
+                    setDetailBusy(true);
                     try {
-                      onEditInBuilder(JSON.parse(detail.preview + "…") as Record<string, unknown>);
-                    } catch {
-                      /* preview truncated — best effort */
+                      const r = await fetch(
+                        `/api/patient/resources?id=${encodeURIComponent(patient)}` +
+                          `&resourceType=${encodeURIComponent(detail.resourceType)}` +
+                          `&rid=${encodeURIComponent(detail.id)}`,
+                      );
+                      const env = (await r.json()) as { ok?: boolean; resource?: Record<string, unknown> };
+                      if (env.ok && env.resource) {
+                        onEditInBuilder(env.resource);
+                      } else {
+                        setError("could not load the full resource for the builder");
+                      }
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : String(e));
+                    } finally {
+                      setDetailBusy(false);
                     }
                   }}
                 >
-                  open in builder
+                  {detailBusy ? "loading…" : "open in builder"}
                 </button>
               )}
               <button className="dev-patientslide-close" onClick={() => setDetail(null)}>

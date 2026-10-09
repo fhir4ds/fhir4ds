@@ -852,6 +852,38 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             kernel = self.server.kernel_manager.current()
             try:
+                full_type = (qs.get("resourceType") or [""])[0].strip()
+                full_rid = (qs.get("rid") or [""])[0].strip()
+                if full_type and full_rid:
+                    # Muse fix: full-resource fetch for the builder handoff
+                    # (previews are 200 chars and unparseable).
+                    row = kernel.conn.execute(
+                        "SELECT resource FROM resources"
+                        " WHERE resourceType = ? AND id = ?",
+                        [full_type, full_rid],
+                    ).fetchone()
+                    payload = None
+                    if row and row[0] is not None:
+                        try:
+                            payload = (
+                                row[0]
+                                if isinstance(row[0], dict)
+                                else json.loads(row[0])
+                            )
+                        except (ValueError, TypeError):
+                            payload = None
+                    self._write_json(
+                        200,
+                        _envelope(
+                            patient=pid,
+                            resource=payload,
+                            ok=payload is not None,
+                            diagnostics=None
+                            if payload is not None
+                            else [_diag(f"resource {full_type}/{full_rid} not found")],
+                        ),
+                    )
+                    return
                 rows = kernel.conn.execute(
                     "SELECT id, resourceType, resource, patient_ref FROM resources"
                     " WHERE id = ? OR patient_ref = ? ORDER BY resourceType, id",

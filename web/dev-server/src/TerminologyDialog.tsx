@@ -34,6 +34,13 @@ export function TerminologyDialog({
     interactedRef.current = true;
   }, []);
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  useEffect(() => {
     let cancelled = false;
     transport
       .terminologyConfigGet()
@@ -111,7 +118,7 @@ export function TerminologyDialog({
             className="dev-rbinput"
             placeholder="https://cts.nlm.nih.gov/fhir (default)"
             value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
+            onChange={(e) => { markInteracted(); setBaseUrl(e.target.value); }}
           />
 
           <label className="dev-rblabel" title="Request timeout in seconds">timeout_seconds</label>
@@ -121,7 +128,7 @@ export function TerminologyDialog({
             min="0.5"
             step="0.5"
             value={timeoutSeconds}
-            onChange={(e) => setTimeoutSeconds(e.target.value)}
+            onChange={(e) => { markInteracted(); setTimeoutSeconds(e.target.value); }}
           />
 
           <label
@@ -134,7 +141,7 @@ export function TerminologyDialog({
             className="dev-rbinput"
             placeholder="UMLS_API_KEY"
             value={apiKeyEnv}
-            onChange={(e) => setApiKeyEnv(e.target.value)}
+            onChange={(e) => { markInteracted(); setApiKeyEnv(e.target.value); }}
           />
           <div className="dev-dialog-hint">
             {keyResolves === true

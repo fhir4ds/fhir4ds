@@ -573,7 +573,7 @@ export function App() {
         style={{ gridTemplateColumns: `${railW}px 4px 1fr 4px ${outFrac}fr` }}
       >
         <aside className="dev-libraries">
-          <h2>Libraries <button className="dev-addrail" title="Add a cql path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("cql")}>+</button><button className="dev-addrail" title="Import a MADiE measure package ZIP (CQL -> cql/, valuesets -> valuesets/, Measure -> measures/)" onClick={() => importMadie("package")}>MADiE</button></h2>
+          <h2>Libraries <button className="dev-addrail" title="Add a cql path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("cql")}>+</button><button className="dev-addrail" title="Import a MADiE measure package ZIP (CQL -> cql/, valuesets -> valuesets/, Measure -> measures/)" onClick={() => importMadie("package")}>MADiE pkg</button></h2>
           {(workspace?.libraries ?? []).map((lib) => (
             <div
               key={lib.name}
@@ -692,7 +692,7 @@ export function App() {
               {lib.name} · parameters
             </div>
           ))}
-          <h2>Measures <button className="dev-addrail" title="Add a measure path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("measure")}>+</button><button className="dev-addrail" title="Import a MADiE test-case ZIP (patient bundles -> data/, expected MeasureReports -> expected store)" onClick={() => importMadie("tests")}>MADiE</button></h2>
+          <h2>Measures <button className="dev-addrail" title="Add a measure path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("measure")}>+</button><button className="dev-addrail" title="Import a MADiE test-case ZIP (patient bundles -> data/, expected MeasureReports -> expected store)" onClick={() => importMadie("tests")}>MADiE tests</button></h2>
           {(workspace?.measures ?? []).map((m) => (
             <div
               key={m}
