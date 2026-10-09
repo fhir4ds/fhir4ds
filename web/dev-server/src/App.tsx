@@ -101,6 +101,71 @@ export function App() {
   // S6 (item 8): resizable panes — grid fractions persisted to localStorage.
   const [railW, setRailW] = useState(() => Number(localStorage.getItem("dev.railW")) || 200);
   const [outFrac, setOutFrac] = useState(() => Number(localStorage.getItem("dev.outFrac")) || 1);
+  // S7 (item 6): slide-out nav — level-1 icon rail + level-2 section panel.
+  type NavSection = "datasets" | "terminology" | "libraries" | "builder" | "views" | "tests" | "settings";
+  const NAV_SECTIONS: { id: NavSection; label: string; glyph: string; title: string }[] = [
+    { id: "datasets", label: "Data", glyph: "▤", title: "Datasets (alt+1)" },
+    { id: "terminology", label: "Term", glyph: "◈", title: "Terminology / ValueSets (alt+2)" },
+    { id: "libraries", label: "Libs", glyph: "❯", title: "Libraries (alt+3)" },
+    { id: "builder", label: "Build", glyph: "✚", title: "Resource builder (alt+4)" },
+    { id: "views", label: "Views", glyph: "▦", title: "ViewDefinitions (alt+5)" },
+    { id: "tests", label: "Tests", glyph: "✓", title: "Measures & expected results (alt+6)" },
+    { id: "settings", label: "Set", glyph: "⚙", title: "Settings / terminology config (alt+7)" },
+  ];
+  const [railSection, setRailSection] = useState<NavSection | null>(null);
+  // Slide-out starts OPEN showing every section (legacy full-rail default);
+  // Esc / click-outside / re-click close it. sectionOn(null) => all sections.
+  const [railClosed, setRailClosed] = useState(false);
+  const slideOpen = !railClosed;
+  const [navFilter, setNavFilter] = useState("");
+  const navRootRef = useRef<HTMLDivElement | null>(null);
+  const openSection = useCallback((s: NavSection) => {
+    setRailClosed(false);
+    setRailSection((cur) => (cur === s ? null : s));
+    setNavFilter("");
+  }, []);
+  const closeNav = useCallback(() => {
+    setRailSection(null);
+    setRailClosed(true);
+  }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeNav();
+      if (e.altKey && e.key >= "1" && e.key <= "7") {
+        e.preventDefault();
+        const s = NAV_SECTIONS[Number(e.key) - 1].id;
+        if (s === "builder") {
+          setBuilderPrefill(null);
+          setRailView({ kind: "builder" });
+        } else if (s === "settings") {
+          setTermDialog(true);
+        } else {
+          openSection(s);
+        }
+      }
+    };
+    const onDown = (e: MouseEvent) => {
+      if (railSection && navRootRef.current && !navRootRef.current.contains(e.target as Node)) {
+        closeNav();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onDown);
+    };
+  }, [railSection, closeNav, openSection]);
+  const sectionOn = useCallback(
+    (...secs: NavSection[]) => railSection === null || secs.includes(railSection),
+    [railSection],
+  );
+
+  const navMatch = useCallback(
+    (t: string | undefined) => !navFilter.trim() || (t ?? "").toLowerCase().includes(navFilter.trim().toLowerCase()),
+    [navFilter],
+  );
+
   const dragRef = useRef<{ kind: "rail" | "out"; startX: number; startVal: number } | null>(null);
 
   const onDividerDown = useCallback((kind: "rail" | "out") => (e: React.PointerEvent) => {
@@ -570,11 +635,44 @@ export function App() {
       </header>
       <main
         className="dev-main"
-        style={{ gridTemplateColumns: `${railW}px 4px 1fr 4px ${outFrac}fr` }}
+        style={{ gridTemplateColumns: `48px ${slideOpen ? railW : 0}px 4px 1fr 4px ${outFrac}fr` }}
       >
-        <aside className="dev-libraries">
-          <h2>Libraries <button className="dev-addrail" title="Add a cql path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("cql")}>+</button><button className="dev-addrail" title="Import a MADiE measure package ZIP (CQL -> cql/, valuesets -> valuesets/, Measure -> measures/)" onClick={() => importMadie("package")}>MADiE pkg</button></h2>
-          {(workspace?.libraries ?? []).map((lib) => (
+        <div ref={navRootRef} className="dev-navwrap">
+        <nav className="dev-iconrail" title="Section navigation (alt+1..7)">
+          {NAV_SECTIONS.map((s) => (
+            <button
+              key={s.id}
+              className={"dev-iconrail-btn" + (railSection === s.id ? " active" : "")}
+              title={s.title}
+              onClick={() => {
+                if (s.id === "builder") {
+                  setBuilderPrefill(null);
+                  setRailView({ kind: "builder" });
+                } else if (s.id === "settings") {
+                  setTermDialog(true);
+                } else {
+                  openSection(s.id);
+                }
+              }}
+            >
+              <span className="dev-iconrail-glyph">{s.glyph}</span>
+              <span className="dev-iconrail-label">{s.label}</span>
+            </button>
+          ))}
+        </nav>
+        <aside className={"dev-libraries dev-slideout" + (slideOpen ? " open" : "")}>
+            <div className="dev-slidesearch">
+            <input
+              className="dev-slidesearchinput"
+              placeholder="Filter sections…"
+              value={navFilter}
+              onChange={(e) => setNavFilter(e.target.value)}
+            />
+          </div>
+        {sectionOn("libraries") && (
+        <>
+        <h2>Libraries <button className="dev-addrail" title="Add a cql path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("cql")}>+</button><button className="dev-addrail" title="Import a MADiE measure package ZIP (CQL -> cql/, valuesets -> valuesets/, Measure -> measures/)" onClick={() => importMadie("package")}>MADiE pkg</button></h2>
+          {(workspace?.libraries ?? []).filter((lib) => navMatch(lib.name)).map((lib) => (
             <div
               key={lib.name}
               className={
@@ -588,8 +686,12 @@ export function App() {
             </div>
           ))}
           {importMsg && <div className="dev-importmsg" role="status">{importMsg}</div>}
+        </>
+        )}
+          {sectionOn("datasets") && (
+          <>
           <h2>Data <button className="dev-addrail" title="Add a data path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("data")}>+</button></h2>
-          {(workspace?.datasets ?? []).map((d) => (
+          {(workspace?.datasets ?? []).filter((d) => navMatch(d.split("/").pop())).map((d) => (
             <div
               key={d}
               className={
@@ -619,8 +721,12 @@ export function App() {
           >
             + Resource
           </div>
+          </>
+          )}
+          {sectionOn("terminology") && (
+          <>
           {(workspace?.valuesets ?? []).length > 0 && <h2>ValueSets <button className="dev-addrail" title="Add a valueset path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("valueset")}>+</button></h2>}
-          {(workspace?.valuesets ?? []).map((v) => (
+          {(workspace?.valuesets ?? []).filter((v) => navMatch(v.split("/").pop())).map((v) => (
             <div
               key={v}
               className={
@@ -676,7 +782,9 @@ export function App() {
               <div className="dev-vspeek-note">expansion preview — membership uses system + code</div>
             </div>
           ) : null}
-          {(workspace?.libraries ?? []).length > 0 && <h2>Parameters</h2>}
+          </>
+          )}
+          {sectionOn("libraries") && (workspace?.libraries ?? []).length > 0 && <h2>Parameters</h2>}
           {(workspace?.libraries ?? []).map((lib) => (
             <div
               key={lib.name}
@@ -692,8 +800,10 @@ export function App() {
               {lib.name} · parameters
             </div>
           ))}
+          {sectionOn("tests") && (
+          <>
           <h2>Measures <button className="dev-addrail" title="Add a measure path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("measure")}>+</button><button className="dev-addrail" title="Import a MADiE test-case ZIP (patient bundles -> data/, expected MeasureReports -> expected store)" onClick={() => importMadie("tests")}>MADiE tests</button></h2>
-          {(workspace?.measures ?? []).map((m) => (
+          {(workspace?.measures ?? []).filter((m) => navMatch(m.split("/").pop())).map((m) => (
             <div
               key={m}
               className={
@@ -705,7 +815,7 @@ export function App() {
               {m.split("/").pop()?.replace(/\.json$/, "")}
             </div>
           ))}
-          {(workspace?.libraries ?? []).map((lib) => (
+          {(workspace?.libraries ?? []).filter((lib) => navMatch(lib.name + " scaffold")).map((lib) => (
             <div
               key={lib.name + "-scaffold"}
               className={
@@ -721,8 +831,12 @@ export function App() {
               + {lib.name} scaffold
             </div>
           ))}
+          </>
+          )}
+          {sectionOn("views") && (
+          <>
           <h2>ViewDefinitions <button className="dev-addrail" title="Add a view path to the workspace (persists to fhir4ds.toml [dev])" onClick={() => setPickerKind("view")}>+</button></h2>
-          {(workspace?.views ?? []).map((v) => (
+          {(workspace?.views ?? []).filter((v) => navMatch(v.split("/").pop())).map((v) => (
             <div
               key={v}
               className={
@@ -734,7 +848,10 @@ export function App() {
               {v.split("/").pop()?.replace(/\.json$/, "")}
             </div>
           ))}
+          </>
+          )}
         </aside>
+        </div>
         <div
           className="dev-divider dev-divider-rail"
           role="separator"
