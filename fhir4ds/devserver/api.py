@@ -247,7 +247,6 @@ class _Handler(BaseHTTPRequestHandler):
                 "system": r.system,
                 "code": r.code,
                 "display": r.display,
-                "rootSource": r.search_mode,
             }
             for r in results
         ]

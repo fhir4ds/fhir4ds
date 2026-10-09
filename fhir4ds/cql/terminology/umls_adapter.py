@@ -33,8 +33,7 @@ Design highlights:
       keyed by ``sha256(version|cui|system)`` so new releases get fresh
       keys, TTL 24h by default (override ``FHIR4DS_UMLS_CACHE_TTL``
       seconds; ``0`` means always revalidate). Writes are atomic
-      (tmp + rename); corrupt entries are deleted and refetched;
-      negative results are never cached.
+      (tmp + rename); corrupt entries are deleted and refetched.
     * Zero-dependency: stdlib ``urllib.request`` only (INV-1/INV-3 —
       module import requires nothing beyond fhir4ds + stdlib).
 """
@@ -131,9 +130,8 @@ class UMLSTerminologyEndpoint:
         self._version = version or DEFAULT_UTS_VERSION
         self._timeout = max(0.5, float(timeout_seconds))
         self._cache_dir = Path(cache_dir) if cache_dir is not None else None
-        self._cache_ttl = (
-            DEFAULT_CACHE_TTL_SECONDS if cache_ttl_seconds is None else max(0.0, float(cache_ttl_seconds))
-        )
+        # None = defer to FHIR4DS_UMLS_CACHE_TTL / default at read time.
+        self._cache_ttl = None if cache_ttl_seconds is None else max(0.0, float(cache_ttl_seconds))
 
     # ------------------------------------------------------------------
     # Protocol surface
