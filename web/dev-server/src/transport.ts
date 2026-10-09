@@ -306,6 +306,23 @@ export interface MadieImportResult {
   expected?: string[];
 }
 
+export interface PatientResourceEntry {
+  id: string;
+  resourceType: string;
+  status?: string | null;
+  date?: string | null;
+  preview: string;
+}
+
+export interface PatientResourcesResult {
+  schema: number;
+  ok: boolean;
+  patient?: string;
+  total?: number;
+  by_type?: Record<string, PatientResourceEntry[]>;
+  diagnostics?: { message: string }[];
+}
+
 export interface TestsExpectedPatient {
   patient: string;
   report: Record<string, unknown>;
@@ -436,6 +453,8 @@ export interface Transport {
   ): Promise<AddPathResult>;
 
   /** S4 (c-cleanroom-ux5 item 4): MADiE importers. */
+  patientResources(patient: string): Promise<PatientResourcesResult>;
+
   madieImportPackage(zipBase64: string): Promise<MadieImportResult>;
   madieImportTests(zipBase64: string, measureName?: string): Promise<MadieImportResult>;
 

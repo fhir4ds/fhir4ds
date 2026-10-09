@@ -34,6 +34,7 @@ export function MeasurePane({
   definitions,
   onMeasureReports,
   onMeasureInfo,
+  onPatient,
 }: {
   transport: HttpTransport;
   library: string;
@@ -43,6 +44,8 @@ export function MeasurePane({
   onMeasureReports?: (reports: Record<string, unknown>[]) => void;
   /** S3b: lifts the scaffolded measure + its name to App (ExpectedResultsPane). */
   onMeasureInfo?: (measure: Record<string, unknown> | null, name: string) => void;
+  /** S5: open the patient-resources slide-out for a subject in the run reports. */
+  onPatient?: (patient: string) => void;
 }) {
   const [rows, setRows] = useState<Record<string, string>>({});
   const [scoring, setScoring] = useState("");
@@ -467,6 +470,23 @@ export function MeasurePane({
                 · {runResult.reports.length} MeasureReport
                 {runResult.reports.length === 1 ? "" : "s"} (per-patient)
               </div>
+              {onPatient && runResult.reports.length > 0 && (
+                <div className="dev-mspatients">
+                  {(runResult.reports as { subject?: { reference?: string } }[])
+                    .map((r) => r.subject?.reference?.split("/").pop() ?? "")
+                    .filter(Boolean)
+                    .map((pid) => (
+                      <button
+                        key={pid}
+                        className="dev-mspatientchip"
+                        title={`resources for ${pid}`}
+                        onClick={() => onPatient(pid)}
+                      >
+                        {pid}
+                      </button>
+                    ))}
+                </div>
+              )}
               <table className="dev-mscounts">
                 <thead>
                   <tr>

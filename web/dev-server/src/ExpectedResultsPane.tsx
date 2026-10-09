@@ -47,12 +47,14 @@ export function ExpectedResultsPane({
   buffer,
   measure,
   measureName,
+  onPatient,
 }: {
   transport: HttpTransport;
   library: string;
   buffer: string;
   measure: Record<string, unknown> | null;
   measureName: string;
+  onPatient?: (patient: string) => void;
 }) {
   const [expectations, setExpectations] = useState<PatientExpectation[]>([]);
   const [runResult, setRunResult] = useState<TestRunResult | null>(null);
@@ -221,7 +223,14 @@ export function ExpectedResultsPane({
           </div>
           {expectations.map((x) => (
             <div key={x.patient} className="dev-expectedrow">
-              <span className="dev-expectedpatient" title={x.patient}>{x.patient}</span>
+              <span
+                className="dev-expectedpatient"
+                title={x.patient + " — click for resources"}
+                style={onPatient ? { cursor: "pointer", textDecoration: "underline dotted" } : undefined}
+                onClick={() => onPatient?.(x.patient)}
+              >
+                {x.patient}
+              </span>
               {codes.map((c) => {
                 const pop = x.groups.flatMap((g) => g.population).find((p) => p.code === c);
                 return (

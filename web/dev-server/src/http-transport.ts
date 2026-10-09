@@ -39,6 +39,7 @@ import type {
   WorkspaceInfo,
   WorkspaceLibrary,
 MadieImportResult,
+PatientResourcesResult,
 } from "./transport";
 
 /** Server-side transport: thin fetch wrappers over the dev-server API. */
@@ -190,6 +191,12 @@ export class HttpTransport implements Transport {
 
   workspaceAddPath(kind: "cql" | "valueset" | "measure" | "data" | "view", path: string): Promise<AddPathResult> {
     return this.post<AddPathResult>("/api/workspace/add-path", { kind, path });
+  }
+
+  patientResources(patient: string): Promise<PatientResourcesResult> {
+    return this.unwrap<PatientResourcesResult>(
+      `/api/patient/resources?id=${encodeURIComponent(patient)}`,
+    );
   }
 
   madieImportPackage(zipBase64: string): Promise<MadieImportResult> {

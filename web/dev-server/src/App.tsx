@@ -26,6 +26,7 @@ import type {
 import { ValueSetPane } from "./ValueSetPane";
 import { ParamsPane } from "./ParamsPane";
 import { ExpectedResultsPane } from "./ExpectedResultsPane";
+import { PatientSlideOut } from "./PatientSlideOut";
 import { TerminologyDialog } from "./TerminologyDialog";
 import { PathPickerDialog } from "./PathPickerDialog";
 import { MeasurePane } from "./MeasurePane";
@@ -93,6 +94,7 @@ export function App() {
   const [termDialog, setTermDialog] = useState(false);
   const [pickerKind, setPickerKind] = useState<"cql" | "valueset" | "measure" | "data" | "view" | null>(null);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [patientSlide, setPatientSlide] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const [tab, setTab] = useState<Tab>("results");
   const [busy, setBusy] = useState(false);
@@ -126,7 +128,7 @@ export function App() {
   >(null);
   const [builderPrefill, setBuilderPrefill] = useState<{
     resource: Record<string, unknown>;
-    datasetPath: string;
+    datasetPath?: string;
   } | null>(null);
   const [vsStale, setVsStale] = useState(false);
   const [patients, setPatients] = useState<string[]>([]);
@@ -753,6 +755,7 @@ export function App() {
                   setLastMeasure(m);
                   setLastMeasureName(name);
                 }}
+                onPatient={setPatientSlide}
               />
             </div>
           ) : railView?.kind === "dataset" ? (
@@ -1054,6 +1057,7 @@ export function App() {
               buffer={buffer}
               measure={lastMeasure}
               measureName={lastMeasureName}
+              onPatient={setPatientSlide}
             />
           )}
         </section>
@@ -1135,6 +1139,16 @@ export function App() {
           </div>
         </section>
       </main>
+      <PatientSlideOut
+        transport={transport}
+        patient={patientSlide}
+        onClose={() => setPatientSlide(null)}
+        onEditInBuilder={(resource) => {
+          setBuilderPrefill({ resource, datasetPath: undefined });
+          setRailView({ kind: "builder" });
+          setPatientSlide(null);
+        }}
+      />
       {termDialog && (
         <TerminologyDialog
           transport={transport}

@@ -837,6 +837,59 @@ class _Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
             return
+        if path == "/api/patient/resources":
+            # S5 (item 7): one patient's resources grouped by resourceType
+            # (patient slide-out). Uses the loader-maintained patient_ref
+            # column; Patient rows themselves carry their own id.
+            from urllib.parse import parse_qs, urlparse
+
+            qs = parse_qs(urlparse(self.path).query)
+            pid = (qs.get("id") or [""])[0].strip()
+            if not pid:
+                self._write_json(
+                    200, _envelope(ok=False, diagnostics=[_diag("id is required")])
+                )
+                return
+            kernel = self.server.kernel_manager.current()
+            try:
+                rows = kernel.conn.execute(
+                    "SELECT id, resourceType, resource, patient_ref FROM resources"
+                    " WHERE id = ? OR patient_ref = ? ORDER BY resourceType, id",
+                    [pid, pid],
+                ).fetchall()
+                by_type: dict[str, list[dict[str, Any]]] = {}
+                for rid, rtype, resource, _pref in rows:
+                    payload = resource if isinstance(resource, dict) else None
+                    if payload is None:
+                        try:
+                            import json as _json
+
+                            payload = _json.loads(resource) if resource else {}
+                        except (ValueError, TypeError):
+                            payload = {}
+                    by_type.setdefault(str(rtype or "?"), []).append(
+                        {
+                            "id": rid,
+                            "resourceType": rtype,
+                            "status": payload.get("status"),
+                            "date": payload.get("effectiveDateTime")
+                            or payload.get("effectiveDate")
+                            or payload.get("authoredOn")
+                            or payload.get("birthDate"),
+                            "preview": str(payload)[:200],
+                        }
+                    )
+                self._write_json(
+                    200,
+                    _envelope(
+                        patient=pid,
+                        total=sum(len(v) for v in by_type.values()),
+                        by_type=by_type,
+                    ),
+                )
+            except Exception as exc:
+                self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
         if path == "/api/define-types":
             # v3 Slice-2 gate: translator-backed define classification for
             # the measure mapping dropdowns (boolean Patient-context defines
