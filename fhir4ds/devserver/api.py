@@ -22,6 +22,16 @@ from fhir4ds.operations.capabilities.measure import (
     output_columns_from_measure,
 )
 
+from .expected_store import (
+    IS_TEST_CASES_URL as IS_TEST_CASES_URL_CONST,
+    build_expected_report,
+    delete_expected_report,
+    is_test_case_report,
+    load_expected_reports,
+    parse_expected_groups,
+    patient_from_report,
+    save_expected_report,
+)
 from .cells import (
     CellRecord,
     CellSessionRegistry,
@@ -1025,6 +1035,9 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/fs/list":
             self._route_fs_list()
             return
+        if path == "/api/tests/expected":
+            self._route_tests_expected_get()
+            return
         if path == "/api/view":
             # v3 Slice 4: ViewDefinition file read (text + parsed header info).
             from urllib.parse import parse_qs, urlparse
@@ -1238,6 +1251,18 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             elif path == "/api/workspace/add-path":
                 self._route_workspace_add_path(body)
+                return
+            elif path == "/api/tests/expected/save":
+                self._route_tests_expected_post(body)
+                return
+            elif path == "/api/tests/expected/delete":
+                self._route_tests_expected_delete(body)
+                return
+            elif path == "/api/tests/capture":
+                self._route_tests_capture(body)
+                return
+            elif path == "/api/tests/run":
+                self._route_tests_run(body)
                 return
             elif path == "/api/valueset/edit":
                 # v3 Slice 1: valueset concept edit. Validate -> apply ->
@@ -1469,6 +1494,244 @@ class _Handler(BaseHTTPRequestHandler):
             scoring=scoring,
         )
         self._write_json(200, result.to_dict())
+
+    def _expected_root(self) -> Path:
+        """measures/expected dir (same resolution as baseline routes)."""
+        snap = self.server.watcher.snapshot
+        roots = [Path(str(d)).parent for d in (getattr(snap, "measures", None) or [])]
+        if roots:
+            return roots[0] / "expected"
+        cfg = getattr(self.server.watcher, "_cfg", None)
+        data_dirs = list(getattr(cfg, "data_dirs", None) or [])
+        if data_dirs:
+            return Path(data_dirs[0]).parent / "measures" / "expected"
+        return Path("measures") / "expected"
+
+    def _evaluate_measure_reports(self, body: dict[str, Any]):
+        """Shared S3 helper: run the measure → (ok, per-patient reports|diag).
+
+        Returns (columns, counts, reports, None) on success or
+        (None, None, None, diagnostics) on failure.
+        """
+        measure = body.get("measure")
+        if not isinstance(measure, dict):
+            return None, None, None, [_diag("measure (JSON object) is required")]
+        try:
+            cols = output_columns_from_measure(measure)
+        except OperationError as exc:
+            return None, None, None, [_diag(str(exc))]
+        includes, main = self._resolve_main(body)
+        if main is None:
+            return None, None, None, [_diag("could not resolve main library")]
+        kernel = self.server.kernel_manager.current()
+        evd = evaluate_library(
+            includes, main, None, kernel.conn,
+            parameters=body.get("parameters"), output_columns=cols,
+        ).to_dict()
+        if not evd.get("ok"):
+            return None, None, None, (evd.get("diagnostics") or [_diag("evaluation failed")])
+        columns = list(cols.keys())
+        mr = measure_report_from_rows(
+            measure, evd.get("rows", []), columns,
+            library_url=(measure.get("library") or [None])[0],
+        )
+        if not mr.ok:
+            return None, None, None, (mr.to_dict().get("diagnostics") or [_diag("report build failed")])
+        counts: dict[str, int] = {}
+        for row in evd.get("rows", []):
+            for col in columns:
+                if row.get(col) is True:
+                    counts[col] = counts.get(col, 0) + 1
+        reports = [_regroup_report_populations(dict(r)) for r in mr.reports]
+        return columns, counts, reports, None
+
+    def _route_tests_expected_get(self) -> None:
+        """GET /api/tests/expected?measure=<name> — per-patient expected MRs."""
+        from urllib.parse import parse_qs, urlparse
+
+        from .expected_store import parse_expected_groups
+
+        qs = parse_qs(urlparse(self.path).query)
+        measure = (qs.get("measure") or [""])[0].strip()
+        if not measure:
+            self._write_json(200, _envelope(False, diagnostics=[_diag("measure query param is required")]))
+            return
+        try:
+            reports = load_expected_reports(self._expected_root(), measure)
+        except ValueError as exc:
+            self._write_json(200, _envelope(False, diagnostics=[_diag(str(exc))]))
+            return
+        self._write_json(
+            200,
+            _envelope(
+                measure=measure,
+                patients=[
+                    {
+                        "patient": patient_from_report(r),
+                        "report": r,
+                        "groups": parse_expected_groups(r),
+                    }
+                    for r in reports
+                ],
+                count=len(reports),
+            ),
+        )
+
+    def _route_tests_expected_post(self, body: dict[str, Any]) -> None:
+        """POST /api/tests/expected — save per-patient expected reports.
+
+        Body: {measure, reports: [MR, ...]} (MADiE cqfm-test-cases shape
+        or our capture shape — groups parsed leniently on compare).
+        """
+        measure = (body.get("measure") or "").strip()
+        reports = body.get("reports")
+        if not measure or not isinstance(reports, list) or not reports:
+            self._write_json(
+                200,
+                _envelope(False, diagnostics=[_diag("measure and non-empty reports[] are required")]),
+            )
+            return
+        root = self._expected_root()
+        written: list[str] = []
+        try:
+            for r in reports:
+                if not isinstance(r, dict) or r.get("resourceType") != "MeasureReport":
+                    raise ValueError("each report must be a MeasureReport object")
+                if not is_test_case_report(r):
+                    # Stamp our marker so MADiE tooling + our loader guard
+                    # recognize the file (additive, per design §0.3).
+                    r.setdefault("modifierExtension", []).append(
+                        {"url": IS_TEST_CASES_URL_CONST, "valueBoolean": True}
+                    )
+                target = save_expected_report(root, measure, r)
+                written.append(str(target))
+        except (ValueError, OSError) as exc:
+            self._write_json(200, _envelope(False, diagnostics=[_diag(str(exc))]))
+            return
+        self.server.watcher.bus.publish(WorkspaceEvent(kind="changed", paths=written))
+        self._write_json(200, _envelope(measure=measure, written=written, count=len(written)))
+
+    def _route_tests_expected_delete(self, body: dict[str, Any]) -> None:
+        """POST /api/tests/expected/delete — remove one patient's expectation."""
+        measure = (body.get("measure") or "").strip()
+        patient = (body.get("patient") or "").strip()
+        if not measure or not patient:
+            self._write_json(
+                200, _envelope(False, diagnostics=[_diag("measure and patient are required")])
+            )
+            return
+        removed = delete_expected_report(self._expected_root(), measure, patient)
+        self._write_json(200, _envelope(measure=measure, patient=patient, removed=removed))
+
+    def _route_tests_capture(self, body: dict[str, Any]) -> None:
+        """POST /api/tests/capture — run the measure, seed per-patient
+        expected reports from ACTUAL results (editable grid start point)."""
+        columns, counts, reports, diag = self._evaluate_measure_reports(body)
+        if diag is not None:
+            self._write_json(200, _envelope(False, diagnostics=diag))
+            return
+        measure_name = (body.get("measure_name") or "").strip()
+        if not measure_name:
+            m = body.get("measure") or {}
+            measure_name = (m.get("name") if isinstance(m, dict) else None) or "CleanroomMeasure"
+        seed = []
+        for r in reports:
+            pid = patient_from_report(r)
+            if pid is None:
+                continue
+            seed.append(
+                build_expected_report(
+                    pid,
+                    parse_expected_groups(r),
+                    library_url=r.get("measure"),
+                )
+            )
+        self._write_json(
+            200,
+            _envelope(
+                measure=measure_name,
+                reports=seed,
+                counts=counts,
+                columns=columns,
+            ),
+        )
+
+    def _route_tests_run(self, body: dict[str, Any]) -> None:
+        """POST /api/tests/run — evaluate + diff per-patient vs expected.
+
+        Body: {library, text?, measure, measure_name?, parameters?}.
+        Returns per-patient rows {patient, code, expected, actual, pass}
+        and a summary. Patients present only on one side surface as
+        missing/extra rows.
+        """
+        from .expected_store import parse_expected_groups
+
+        columns, counts, reports, diag = self._evaluate_measure_reports(body)
+        if diag is not None:
+            self._write_json(200, _envelope(False, diagnostics=diag))
+            return
+        measure_name = (body.get("measure_name") or "").strip()
+        if not measure_name:
+            m = body.get("measure") or {}
+            measure_name = (m.get("name") if isinstance(m, dict) else None) or "CleanroomMeasure"
+        expected_reports = load_expected_reports(self._expected_root(), measure_name)
+
+        expected_by_patient: dict[str, dict[str, int]] = {}
+        for r in expected_reports:
+            pid = patient_from_report(r)
+            if pid is None:
+                continue
+            pop: dict[str, int] = {}
+            for g in parse_expected_groups(r):
+                for p in g.get("population", []):
+                    pop[p["code"]] = pop.get(p["code"], 0) + p["count"]
+            expected_by_patient[pid] = pop
+
+        actual_by_patient: dict[str, dict[str, int]] = {}
+        for r in reports:
+            pid = patient_from_report(r)
+            if pid is None:
+                continue
+            pop: dict[str, int] = {}
+            for g in parse_expected_groups(r):
+                for p in g.get("population", []):
+                    pop[p["code"]] = pop.get(p["code"], 0) + p["count"]
+            actual_by_patient[pid] = pop
+
+        codes = sorted({c for p in expected_by_patient.values() for c in p} |
+                       {c for p in actual_by_patient.values() for c in p})
+        rows: list[dict[str, Any]] = []
+        passed = failed = 0
+        all_patients = sorted(set(expected_by_patient) | set(actual_by_patient))
+        for pid in all_patients:
+            exp = expected_by_patient.get(pid)
+            act = actual_by_patient.get(pid)
+            for code in codes:
+                if exp is None:
+                    rows.append({"patient": pid, "code": code, "expected": None,
+                                 "actual": act.get(code, 0), "pass": False, "reason": "missing expectation"})
+                    failed += 1
+                    continue
+                if act is None:
+                    rows.append({"patient": pid, "code": code, "expected": exp.get(code, 0),
+                                 "actual": None, "pass": False, "reason": "patient absent from run"})
+                    failed += 1
+                    continue
+                e, a = exp.get(code, 0), act.get(code, 0)
+                ok = e == a
+                rows.append({"patient": pid, "code": code, "expected": e, "actual": a, "pass": ok})
+                passed, failed = (passed + 1, failed) if ok else (passed, failed + 1)
+        self._write_json(
+            200,
+            _envelope(
+                measure=measure_name,
+                rows=rows,
+                total=passed + failed,
+                passed=passed,
+                failed=failed,
+                ok=failed == 0,
+            ),
+        )
 
     def _route_measure_run(self, body: dict[str, Any]) -> None:
         """Run a Measure against the loaded dataset.
