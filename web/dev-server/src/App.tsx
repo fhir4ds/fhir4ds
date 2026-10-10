@@ -36,7 +36,7 @@ import { VdPane } from "./VdPane";
 import { DatasetPane } from "./DatasetPane";
 import { ResourceBuilderPane } from "./ResourceBuilderPane";
 
-type Tab = "results" | "cql" | "sql" | "ast";
+type Tab = "results" | "cql" | "sql" | "ast" | "history";
 
 function guideSteps(rail: { kind: string; id?: string } | null): { title: string; steps: string[] } {
   if (!rail) return { title: "Getting started", steps: [
@@ -96,6 +96,8 @@ export function App() {
   // R2: statement-level AST from translate (include_ast).
   const [ast, setAst] = useState<string>("");
   const [termDialog, setTermDialog] = useState(false);
+  // R1: File menu (package import + add-path).
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [pickerKind, setPickerKind] = useState<"cql" | "valueset" | "measure" | "data" | "view" | null>(null);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [patientSlide, setPatientSlide] = useState<string | null>(null);
@@ -116,8 +118,7 @@ export function App() {
     { id: "builder", label: "Build", glyph: "✚", title: "Resource builder (alt+4)" },
     { id: "views", label: "Views", glyph: "▦", title: "ViewDefinitions (alt+5)" },
     { id: "tests", label: "Tests", glyph: "✓", title: "Measures & expected results (alt+6)" },
-    { id: "history", label: "Hist", glyph: "🕘", title: "Run history (alt+7)" },
-    { id: "settings", label: "Set", glyph: "⚙", title: "Settings / terminology config (alt+8)" },
+    { id: "settings", label: "Set", glyph: "⚙", title: "Settings / terminology config (alt+7)" },
   ];
   const [railSection, setRailSection] = useState<NavSection | null>(null);
   // Slide-out starts OPEN showing every section (legacy full-rail default);
@@ -137,8 +138,11 @@ export function App() {
   }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeNav();
-      if (e.altKey && e.key >= "1" && e.key <= "8") {
+      if (e.key === "Escape") {
+        closeNav();
+        setFileMenuOpen(false);
+      }
+      if (e.altKey && e.key >= "1" && e.key <= "7") {
         e.preventDefault();
         const s = NAV_SECTIONS[Number(e.key) - 1].id;
         if (s === "builder") {
@@ -640,6 +644,20 @@ export function App() {
         <button onClick={restartKernel} title="Fresh DB from data dirs">
           Restart kernel
         </button>
+        <button
+          className="dev-filebtn"
+          title="Import packages / add workspace paths"
+          onClick={() => setFileMenuOpen(true)}
+        >
+          File
+        </button>
+        <button
+          className="dev-filebtn"
+          title="Terminology + workspace settings"
+          onClick={() => setTermDialog(true)}
+        >
+          Settings
+        </button>
       </header>
       <main
         className="dev-main"
@@ -857,28 +875,6 @@ export function App() {
             </div>
           ))}
           </>
-          )}
-          {sectionOn("history") && (
-            <RunHistoryPane
-              transport={transport}
-              refreshKey={railSection ?? "all"}
-              onReopen={(kind, target) => {
-                if (kind === "cell") {
-                  const lib = target.split("/")[0];
-                  loadLibrary(lib);
-                } else if (kind === "measure" || kind === "test") {
-                  const m = (workspace?.measures ?? []).find(
-                    (p) => (p.split("/").pop() ?? "").replace(/\.json$/, "") === target,
-                  );
-                  setRailView(m ? { kind: "measure", id: m } : null);
-                } else if (kind === "view") {
-                  const v = (workspace?.views ?? []).find(
-                    (p) => (p.split("/").pop() ?? "").replace(/\.json$/, "") === target,
-                  );
-                  if (v) setRailView({ kind: "view", id: v });
-                }
-              }}
-            />
           )}
         </aside>
         </div>
@@ -1268,7 +1264,7 @@ export function App() {
         />
         <section className="dev-output">
           <div className="dev-tabs">
-            {(["results", "cql", "sql", "ast"] as Tab[]).map((t) => (
+            {(["results", "cql", "sql", "ast", "history"] as Tab[]).map((t) => (
               <button
                 key={t}
                 className={tab === t ? "active" : ""}
@@ -1357,6 +1353,27 @@ export function App() {
             {tab === "ast" && (
               <pre className="dev-sqlpane dev-astpane">{ast || "-- translate a library to see its statement AST"}</pre>
             )}
+            {tab === "history" && (
+              <RunHistoryPane
+                transport={transport}
+                refreshKey={String(tab)}
+                onReopen={(kind, target) => {
+                  if (kind === "cell") {
+                    loadLibrary(target.split("/")[0]);
+                  } else if (kind === "measure" || kind === "test") {
+                    const m = (workspace?.measures ?? []).find(
+                      (p) => (p.split("/").pop() ?? "").replace(/\.json$/, "") === target,
+                    );
+                    if (m) setRailView({ kind: "measure", id: m });
+                  } else if (kind === "view") {
+                    const v = (workspace?.views ?? []).find(
+                      (p) => (p.split("/").pop() ?? "").replace(/\.json$/, "") === target,
+                    );
+                    if (v) setRailView({ kind: "view", id: v });
+                  }
+                }}
+              />
+            )}
             {tab === "sql" && <SQLOutput value={sql} />}
           </div>
         </section>
@@ -1379,6 +1396,35 @@ export function App() {
           patient={evidencePatient}
           onClose={() => setEvidencePatient(null)}
         />
+      )}
+      {fileMenuOpen && (
+        <div className="dev-filemenu" role="dialog" aria-label="File menu">
+          <div className="dev-filemenu-head">
+            <span>File</span>
+            <button onClick={() => setFileMenuOpen(false)} title="Close (Esc)">✕</button>
+          </div>
+          <button onClick={() => { importMadie("package"); setFileMenuOpen(false); }}>
+            Import MADiE package ZIP…
+          </button>
+          <button onClick={() => { importMadie("tests"); setFileMenuOpen(false); }}>
+            Import MADiE test-case ZIP…
+          </button>
+          <button onClick={() => { setPickerKind("cql"); setFileMenuOpen(false); }}>
+            Add CQL path…
+          </button>
+          <button onClick={() => { setPickerKind("data"); setFileMenuOpen(false); }}>
+            Add data path…
+          </button>
+          <button onClick={() => { setPickerKind("valueset"); setFileMenuOpen(false); }}>
+            Add valueset path…
+          </button>
+          <button onClick={() => { setPickerKind("measure"); setFileMenuOpen(false); }}>
+            Add measure path…
+          </button>
+          <button onClick={() => { setPickerKind("view"); setFileMenuOpen(false); }}>
+            Add view path…
+          </button>
+        </div>
       )}
       {termDialog && (
         <TerminologyDialog

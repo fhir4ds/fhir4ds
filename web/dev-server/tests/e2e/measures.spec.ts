@@ -79,7 +79,7 @@ test.beforeAll(async () => {
 
   server = spawn("/usr/bin/python3", ["-m", "fhir4ds.cli", "dev", dir, "--port", "18971", "--no-open"], {
     env: {
-      PYTHONPATH: "/mnt/d/fhir4ds-ux5-20261008",
+      PYTHONPATH: "/mnt/d/fhir4ds-shellrebuild-20261009",
       PATH: process.env.PATH ?? "",
     },
     stdio: "ignore",

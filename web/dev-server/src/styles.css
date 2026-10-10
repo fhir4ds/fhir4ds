@@ -1586,3 +1586,24 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
 /* R2: bottom-bar cql + ast panes (sql pane styling reused) */
 .dev-cqlpane, .dev-astpane { margin: 0; padding: 10px 12px; overflow: auto; font-size: 12px; white-space: pre-wrap; }
 .dev-astpane { font-family: ui-monospace, "Cascadia Mono", monospace; color: #cbd5e1; }
+
+
+/* R1: File/Settings header buttons + file menu */
+.dev-filebtn { border: 1px solid var(--dev-border, #374151); background: transparent; color: #cbd5e1; border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 12px; }
+.dev-filebtn:hover { background: #1f2937; color: #fff; }
+.dev-filemenu {
+  position: fixed; top: 52px; right: 12px; z-index: 70;
+  background: #0b1220; border: 1px solid var(--dev-border, #374151); border-radius: 10px;
+  padding: 6px; min-width: 240px; display: flex; flex-direction: column; gap: 2px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+.dev-filemenu-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px; color: var(--dev-muted, #9ca3af); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+.dev-filemenu-head button { border: none; background: transparent; color: var(--dev-muted, #9ca3af); cursor: pointer; }
+.dev-filemenu > button {
+  text-align: left; border: none; background: transparent; color: #e5e7eb;
+  padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.dev-filemenu > button:hover { background: #1f2937; }
+
+/* R1: history pane inside the bottom bar */
+.dev-output .dev-runhistory { padding: 8px 12px; overflow: auto; max-height: 100%; }

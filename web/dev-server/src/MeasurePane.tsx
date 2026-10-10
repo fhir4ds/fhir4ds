@@ -106,7 +106,7 @@ export function MeasurePane({
     };
     // refetch when the library or buffer identity changes (buffer = client-authoritative)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [library, transport]);
+  }, [library, buffer, transport]);
 
   const mappedCodes = useMemo(
     () => new Set(Object.entries(rows).filter(([, d]) => d).map(([c]) => c)),
