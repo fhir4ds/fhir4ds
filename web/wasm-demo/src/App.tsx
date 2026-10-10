@@ -7,6 +7,7 @@ import { StatusBar, type Metrics } from "./components/StatusBar";
 import { CMSMeasures } from "./components/CMSMeasures";
 import { SMARTLaunch } from "./components/SMARTLaunch";
 import { SDCPlayground } from "./components/SDCPlayground";
+import { ResourceBuilder, type BuilderDataset } from "./components/ResourceBuilder";
 import { WorkspaceLayout, type PaneConfig } from "./components/WorkspaceLayout";
 import { PatientDataViewer } from "./components/PatientDataViewer";
 import { CQL_SAMPLES } from "./lib/sample-cql";
@@ -138,6 +139,8 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
 
   // Global patient selection state for verification
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  // R3 builder port: in-memory bundle datasets (browser-side uploads).
+  const [builderDatasets, setBuilderDatasets] = useState<BuilderDataset[]>([]);
 
   const duckdbRequired = scenario !== "cms-measures";
   const pyodideRequired =
@@ -339,6 +342,14 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
               SDC Forms
             </button>
           )}
+          {config.visibleTabs.includes("builder") && (
+            <button
+              className={`tab-btn${activeTab === "builder" ? " tab-btn--active" : ""}`}
+              onClick={() => setActiveTab("builder")}
+            >
+              Builder
+            </button>
+          )}
         </div>
       )}
 
@@ -467,6 +478,70 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
             onPatientSelect={handlePatientSelect}
             connectionStatus={connectionStatus}
           />
+        </div>
+      )}
+      {activeTab === "builder" && config.visibleTabs.includes("builder") && (
+        <div className="cms-shell">
+          <div className="builder-tab">
+            <div className="builder-upload">
+              <label className="builder-upload-label" htmlFor="builder-upload-input">
+                Upload bundle JSON / NDJSON…
+              </label>
+              <input
+                id="builder-upload-input"
+                type="file"
+                accept=".json,.ndjson,application/json"
+                multiple
+                onChange={async (e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  const next: BuilderDataset[] = [];
+                  for (const f of files) {
+                    const text = await f.text();
+                    const rows: Record<string, unknown>[] = [];
+                    if (f.name.endsWith(".ndjson")) {
+                      for (const line of text.split("\n")) {
+                        if (!line.trim()) continue;
+                        try { rows.push(JSON.parse(line)); } catch { /* skip */ }
+                      }
+                    } else {
+                      try {
+                        const parsed = JSON.parse(text);
+                        if (Array.isArray(parsed)) rows.push(...parsed);
+                        else if (parsed && typeof parsed === "object") {
+                          if (Array.isArray((parsed as { entry?: unknown[] }).entry)) {
+                            for (const en of (parsed as { entry: { resource?: Record<string, unknown> }[] }).entry) {
+                              if (en.resource) rows.push(en.resource);
+                            }
+                          } else rows.push(parsed as Record<string, unknown>);
+                        }
+                      } catch { /* skip file */ }
+                    }
+                    next.push({ name: f.name, resources: rows });
+                  }
+                  setBuilderDatasets((prev) => [...prev, ...next]);
+                }}
+              />
+              {builderDatasets.length > 0 && (
+                <button
+                  className="builder-upload-clear"
+                  onClick={() => setBuilderDatasets([])}
+                  title="Clear in-memory datasets"
+                >
+                  clear ({builderDatasets.length})
+                </button>
+              )}
+            </div>
+            <ResourceBuilder
+              datasets={builderDatasets}
+              onSave={(resource, datasetName) => {
+                setBuilderDatasets((prev) =>
+                  prev.map((d) =>
+                    d.name === datasetName ? { ...d, resources: [...d.resources, resource] } : d,
+                  ),
+                );
+              }}
+            />
+          </div>
         </div>
       )}
     </div>

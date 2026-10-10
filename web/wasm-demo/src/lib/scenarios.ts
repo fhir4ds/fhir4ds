@@ -2,7 +2,7 @@
 
 export type Scenario = "workbench" | "cql-sandbox" | "sdc-forms" | "cms-measures" | "smart-flow";
 
-export type Tab = "playground" | "cms" | "smart" | "forms";
+export type Tab = "playground" | "cms" | "smart" | "forms" | "builder";
 
 export interface ScenarioConfig {
   /** Which tabs are visible in this scenario */
@@ -19,7 +19,7 @@ export interface ScenarioConfig {
 
 export const SCENARIO_CONFIGS: Record<Scenario, ScenarioConfig> = {
   workbench: {
-    visibleTabs: ["playground", "cms", "smart", "forms"],
+    visibleTabs: ["playground", "builder", "cms", "smart", "forms"],
     showTabNav: true,
     showSampleSelectors: true,
     defaultTab: "playground",
@@ -90,7 +90,7 @@ export function getEffectiveConfig(scenario: Scenario, isAuthenticated: boolean)
     return {
       ...SCENARIO_CONFIGS["smart-flow"],
       // Hide the SMART connect tab once signed in; CQL + SDC use EHR data
-      visibleTabs: ["playground", "forms"],
+      visibleTabs: ["playground", "builder", "forms"],
       showTabNav: true,
       showSampleSelectors: false,
       defaultTab: "playground",
