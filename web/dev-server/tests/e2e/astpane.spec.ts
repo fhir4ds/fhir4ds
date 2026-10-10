@@ -92,20 +92,20 @@ test("bottom bar: cql/sql/ast tabs; translate fills ast pane", async ({ page: p 
 
   // bottom-bar tab set
   const bar = page.locator(".dev-bottombar, .dev-out").first();
-  await expect(page.getByRole("button", { name: "ast", exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("button", { name: "AST", exact: true })).toBeVisible({ timeout: 15000 });
 
   // ast tab renders statement JSON
-  await page.getByRole("button", { name: "ast", exact: true }).click();
+  await page.getByRole("button", { name: "AST", exact: true }).click();
   const astPane = page.locator(".dev-astpane");
   await expect(astPane).toBeVisible();
   console.log("APP CONSOLE:", logs.slice(-10).join(" | "));
   await expect(astPane).toContainText("IsPatient", { timeout: 15000 });
 
   // cql tab shows the buffer
-  await page.getByRole("button", { name: "cql", exact: true }).click();
+  await page.getByRole("button", { name: "CQL", exact: true }).click();
   await expect(page.locator(".dev-cqlpane")).toContainText("library AstLib");
 
   // sql tab still works
-  await page.locator("button", { hasText: "Show SQL" }).nth(1).click();
-  await expect(page.locator("button", { hasText: "Show SQL" }).nth(1)).toBeVisible();
+  await page.locator("button", { hasText: "SQL", exact: true }).nth(0).click();
+  await expect(page.locator("button", { hasText: "SQL", exact: true }).first()).toBeVisible();
 });

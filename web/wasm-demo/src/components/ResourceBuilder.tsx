@@ -1130,6 +1130,9 @@ export function ResourceBuilder({ datasets, initialResource = null, onSave }: Pr
               </option>
             ))}
           </select>
+          {datasets.length === 0 && (
+            <span className="dev-rbds-hint">upload a bundle above — save appends to the in-memory dataset</span>
+          )}
           <button className="dev-rbvalidate" disabled={busy || !!jsonError} onClick={validate}>
             Validate
           </button>
@@ -1143,7 +1146,7 @@ export function ResourceBuilder({ datasets, initialResource = null, onSave }: Pr
           </button>
           {validation && (
             <span className={validation.valid ? "dev-rbok" : "dev-rberror"}>
-              {validation.valid ? "✓ valid" : validation.messages.map((m) => m.message).join("; ")}
+              {validation.valid ? "✓ offline check passed (resourceType + id only)" : validation.messages.map((m) => m.message).join("; ")}
             </span>
           )}
           {saveMsg && <span className="dev-rbsavemsg">{saveMsg}</span>}

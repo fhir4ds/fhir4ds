@@ -95,6 +95,8 @@ export function App() {
   const [sql, setSql] = useState("");
   // R2: statement-level AST from translate (include_ast).
   const [ast, setAst] = useState<string>("");
+  // Muse fix: bump whenever a run completes so the history tab refetches while open.
+  const [runsVersion, setRunsVersion] = useState(0);
   const [termDialog, setTermDialog] = useState(false);
   // R1: File menu (package import + add-path).
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
@@ -110,7 +112,7 @@ export function App() {
   const [railW, setRailW] = useState(() => Number(localStorage.getItem("dev.railW")) || 200);
   const [outFrac, setOutFrac] = useState(() => Number(localStorage.getItem("dev.outFrac")) || 1);
   // S7 (item 6): slide-out nav — level-1 icon rail + level-2 section panel.
-  type NavSection = "datasets" | "terminology" | "libraries" | "builder" | "views" | "tests" | "history" | "settings";
+  type NavSection = "datasets" | "terminology" | "libraries" | "builder" | "views" | "tests" | "settings";
   const NAV_SECTIONS: { id: NavSection; label: string; glyph: string; title: string }[] = [
     { id: "datasets", label: "Data", glyph: "▤", title: "Datasets (alt+1)" },
     { id: "terminology", label: "Term", glyph: "◈", title: "Terminology / ValueSets (alt+2)" },
@@ -158,6 +160,11 @@ export function App() {
     const onDown = (e: MouseEvent) => {
       if (railSection && navRootRef.current && !navRootRef.current.contains(e.target as Node)) {
         closeNav();
+      }
+      const fm = document.querySelector(".dev-filemenu");
+      if (fileMenuOpen && fm && !fm.contains(e.target as Node)) {
+        const fb = document.querySelector(".dev-filebtn");
+        if (!fb || !fb.contains(e.target as Node)) setFileMenuOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -450,6 +457,7 @@ export function App() {
         } else {
           const r = await transport.evaluate(libraries, selected);
           setEvaluate(r);
+          if (r.ok) setRunsVersion((v) => v + 1);
           setSql(r.sql ?? "");
           setDiagnostics(r.diagnostics ?? []);
           if (r.ok) {
@@ -647,6 +655,7 @@ export function App() {
         <button
           className="dev-filebtn"
           title="Import packages / add workspace paths"
+          aria-expanded={fileMenuOpen}
           onClick={() => setFileMenuOpen(true)}
         >
           File
@@ -1270,7 +1279,7 @@ export function App() {
                 className={tab === t ? "active" : ""}
                 onClick={() => setTab(t)}
               >
-                {t === "sql" ? "Show SQL" : t}
+                {t === "results" ? "Results" : t === "cql" ? "CQL" : t === "sql" ? "SQL" : t === "ast" ? "AST" : "History"}
               </button>
             ))}
           </div>
@@ -1348,7 +1357,10 @@ export function App() {
               </>
             )}
             {tab === "cql" && (
-              <pre className="dev-sqlpane dev-cqlpane">{buffer || "-- no library selected"}</pre>
+              <>
+                <div className="dev-tabhint">read-only mirror of the editor buffer</div>
+                <pre className="dev-sqlpane dev-cqlpane">{buffer || "-- no library selected"}</pre>
+              </>
             )}
             {tab === "ast" && (
               <pre className="dev-sqlpane dev-astpane">{ast || "-- translate a library to see its statement AST"}</pre>
@@ -1356,7 +1368,7 @@ export function App() {
             {tab === "history" && (
               <RunHistoryPane
                 transport={transport}
-                refreshKey={String(tab)}
+                refreshKey={`${tab}:${runsVersion}`}
                 onReopen={(kind, target) => {
                   if (kind === "cell") {
                     loadLibrary(target.split("/")[0]);
@@ -1398,30 +1410,30 @@ export function App() {
         />
       )}
       {fileMenuOpen && (
-        <div className="dev-filemenu" role="dialog" aria-label="File menu">
+        <div className="dev-filemenu" role="menu" aria-label="File menu">
           <div className="dev-filemenu-head">
             <span>File</span>
             <button onClick={() => setFileMenuOpen(false)} title="Close (Esc)">✕</button>
           </div>
-          <button onClick={() => { importMadie("package"); setFileMenuOpen(false); }}>
+          <button role="menuitem" onClick={() => { importMadie("package"); setFileMenuOpen(false); }}>
             Import MADiE package ZIP…
           </button>
-          <button onClick={() => { importMadie("tests"); setFileMenuOpen(false); }}>
+          <button role="menuitem" onClick={() => { importMadie("tests"); setFileMenuOpen(false); }}>
             Import MADiE test-case ZIP…
           </button>
-          <button onClick={() => { setPickerKind("cql"); setFileMenuOpen(false); }}>
+          <button role="menuitem" onClick={() => { setPickerKind("cql"); setFileMenuOpen(false); }}>
             Add CQL path…
           </button>
-          <button onClick={() => { setPickerKind("data"); setFileMenuOpen(false); }}>
+          <button role="menuitem" onClick={() => { setPickerKind("data"); setFileMenuOpen(false); }}>
             Add data path…
           </button>
-          <button onClick={() => { setPickerKind("valueset"); setFileMenuOpen(false); }}>
+          <button role="menuitem" onClick={() => { setPickerKind("valueset"); setFileMenuOpen(false); }}>
             Add valueset path…
           </button>
-          <button onClick={() => { setPickerKind("measure"); setFileMenuOpen(false); }}>
+          <button role="menuitem" onClick={() => { setPickerKind("measure"); setFileMenuOpen(false); }}>
             Add measure path…
           </button>
-          <button onClick={() => { setPickerKind("view"); setFileMenuOpen(false); }}>
+          <button role="menuitem" onClick={() => { setPickerKind("view"); setFileMenuOpen(false); }}>
             Add view path…
           </button>
         </div>

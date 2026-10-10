@@ -518,17 +518,37 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
                     }
                     next.push({ name: f.name, resources: rows });
                   }
+                  if (next.some((d) => d.resources.length === 0)) {
+                    window.alert("One or more files parsed 0 resources — check the Bundle/NDJSON shape.");
+                  }
                   setBuilderDatasets((prev) => [...prev, ...next]);
                 }}
               />
               {builderDatasets.length > 0 && (
-                <button
-                  className="builder-upload-clear"
-                  onClick={() => setBuilderDatasets([])}
-                  title="Clear in-memory datasets"
-                >
-                  clear ({builderDatasets.length})
-                </button>
+                <>
+                  <button
+                    className="builder-upload-clear"
+                    onClick={() => {
+                      const lines = builderDatasets.flatMap((d) => d.resources.map((r) => JSON.stringify(r)));
+                      const blob = new Blob([lines.join("\n") + "\n"], { type: "text/plain" });
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob);
+                      a.download = "builder-export.ndjson";
+                      a.click();
+                      URL.revokeObjectURL(a.href);
+                    }}
+                    title="Download all in-memory resources as NDJSON"
+                  >
+                    export
+                  </button>
+                  <button
+                    className="builder-upload-clear"
+                    onClick={() => setBuilderDatasets([])}
+                    title="Clear in-memory datasets"
+                  >
+                    clear ({builderDatasets.length})
+                  </button>
+                </>
               )}
             </div>
             <ResourceBuilder

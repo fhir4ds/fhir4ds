@@ -24,8 +24,7 @@ const KINDS = ["all", "cell", "measure", "test", "view"] as const;
  * Run-history pane (parity item 2) — debug-compare primary: newest-first
  * list of run events with kind filter, per-event summary/dataset context,
  * copy-sql-ref (resolves the CURRENT sql store; honest 'superseded' when
- * stale), and reopen-target. Shell-agnostic: renders anywhere (icon-rail
- * slide-out today, bottom-bar history tab later).
+ * stale), and reopen-target. Rendered as the bottom-bar history tab.
  */
 export function RunHistoryPane({
   transport,
@@ -65,8 +64,6 @@ export function RunHistoryPane({
               () => setMsg("SQL copied to clipboard"),
               () => setMsg("clipboard unavailable — SQL shown in console"),
             );
-            // eslint-disable-next-line no-console
-            console.log(r.sql);
           } else {
             setMsg(r.diagnostics?.[0]?.message ?? "sql superseded");
           }
@@ -86,6 +83,7 @@ export function RunHistoryPane({
           <button
             key={k}
             className={"dev-rhfilter" + (filter === k ? " active" : "")}
+            aria-pressed={filter === k}
             onClick={() => setFilter(k)}
           >
             {k}
@@ -95,6 +93,7 @@ export function RunHistoryPane({
           className="dev-rhclear"
           title="Clear the run history (deletes .runlog.jsonl)"
           onClick={() => {
+            if (!window.confirm("Clear the run history (.runlog.jsonl)? This cannot be undone.")) return;
             transport.runsClear().then(reload).catch(() => undefined);
           }}
         >
@@ -106,7 +105,20 @@ export function RunHistoryPane({
         <div className="dev-rhempty">No runs yet — history starts with your first run.</div>
       )}
       {shown.map((r) => (
-        <div key={r.id} className="dev-rhrow" onClick={() => setExpanded(expanded === r.id ? null : r.id)}>
+        <div
+          key={r.id}
+          className="dev-rhrow"
+          role="button"
+          tabIndex={0}
+          aria-expanded={expanded === r.id}
+          onClick={() => setExpanded(expanded === r.id ? null : r.id)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setExpanded(expanded === r.id ? null : r.id);
+            }
+          }}
+        >
           <span className={"dev-rhdot " + r.status} title={r.status} />
           <span className="dev-rhkind" title={r.kind}>{r.kind}</span>
           <span className="dev-rhtarget" title={r.target}>{r.target}</span>

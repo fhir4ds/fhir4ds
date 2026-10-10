@@ -51,9 +51,9 @@ test("shell: File/Settings header buttons + File menu entries", async () => {
   await fileBtn.click();
   const menu = page.locator(".dev-filemenu");
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole("button", { name: /Import MADiE package/i })).toBeVisible();
-  await expect(menu.getByRole("button", { name: /Import MADiE test-case/i })).toBeVisible();
-  await expect(menu.getByRole("button", { name: /Add CQL path/i })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /Import MADiE package/i })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /Import MADiE test-case/i })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /Add CQL path/i })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
 
@@ -64,7 +64,7 @@ test("shell: File/Settings header buttons + File menu entries", async () => {
 
 test("shell: bottom bar has results/cql/sql/ast/history; history pane reachable", async () => {
   for (const t of ["results", "cql", "sql", "ast", "history"]) {
-    await expect(page.locator(".dev-tabs button", { hasText: t === "sql" ? "Show SQL" : t })).toBeVisible();
+    await expect(page.locator(".dev-tabs button", { hasText: t })).toBeVisible();
   }
   await page.locator(".dev-tabs button", { hasText: "history" }).click();
   await expect(page.locator(".dev-runhistory")).toBeVisible();

@@ -1607,3 +1607,5 @@ select { background: #1e1e1e; color: #d4d4d4; border: 1px solid #333; font-size:
 
 /* R1: history pane inside the bottom bar */
 .dev-output .dev-runhistory { padding: 8px 12px; overflow: auto; max-height: 100%; }
+
+.dev-tabhint { font-size: 10px; color: var(--dev-muted, #9ca3af); padding: 2px 12px; }
