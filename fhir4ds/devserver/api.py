@@ -1547,6 +1547,17 @@ class _Handler(BaseHTTPRequestHandler):
         payload = kernel.translate(
             includes, main, emit_sql=bool(body.get("emit_sql", True))
         )
+        # Shell-rebuild R2: bottom-bar ast tab — statement-level AST from
+        # the parse capability (include_ast), attached when requested.
+        if body.get("include_ast") and main is not None:
+            try:
+                from fhir4ds.operations import parse_cql as _parse_cql
+
+                pr = _parse_cql(main.text, include_ast=True)
+                if pr.ok and getattr(pr, "ast", None) is not None:
+                    payload["ast"] = pr.ast
+            except Exception:
+                pass
         self._write_json(200, payload)
 
     def _route_evaluate(self, body: dict[str, Any]) -> None:

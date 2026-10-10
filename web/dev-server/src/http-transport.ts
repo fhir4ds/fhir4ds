@@ -317,8 +317,14 @@ export class HttpTransport implements Transport {
   translate(
     libraries: { name: string; text: string }[],
     library: string,
+    includeAst = true,
   ): Promise<TranslateResult> {
-    return this.post("/api/translate", { libraries, library, emit_sql: true });
+    return this.post("/api/translate", {
+      libraries,
+      library,
+      emit_sql: true,
+      include_ast: includeAst,
+    });
   }
 
   measureScaffold(

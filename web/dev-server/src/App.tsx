@@ -36,7 +36,7 @@ import { VdPane } from "./VdPane";
 import { DatasetPane } from "./DatasetPane";
 import { ResourceBuilderPane } from "./ResourceBuilderPane";
 
-type Tab = "results" | "sql";
+type Tab = "results" | "cql" | "sql" | "ast";
 
 function guideSteps(rail: { kind: string; id?: string } | null): { title: string; steps: string[] } {
   if (!rail) return { title: "Getting started", steps: [
@@ -93,6 +93,8 @@ export function App() {
   const [result, setResult] = useState<QueryResult | null>(null);
   const [evaluate, setEvaluate] = useState<EvaluateResult | null>(null);
   const [sql, setSql] = useState("");
+  // R2: statement-level AST from translate (include_ast).
+  const [ast, setAst] = useState<string>("");
   const [termDialog, setTermDialog] = useState(false);
   const [pickerKind, setPickerKind] = useState<"cql" | "valueset" | "measure" | "data" | "view" | null>(null);
   const [importMsg, setImportMsg] = useState<string | null>(null);
@@ -437,6 +439,7 @@ export function App() {
         if (mode === "translate") {
           const r = await transport.translate(libraries, selected);
           setSql(r.sql ?? "");
+          setAst(r.ast ? JSON.stringify(r.ast, null, 2) : "");
           setDiagnostics(r.diagnostics ?? []);
           setTab(r.ok ? "sql" : "results");
           if (!r.ok) setErrorsOpen(true);
@@ -1004,7 +1007,7 @@ export function App() {
               + cell
             </button>
             <button
-              disabled={busy || !anyCellOk}
+              disabled={busy || !selected}
               onClick={() => apply("translate")}
               title="Show generated SQL (enabled after a cell run succeeds)"
             >
@@ -1265,7 +1268,7 @@ export function App() {
         />
         <section className="dev-output">
           <div className="dev-tabs">
-            {(["results", "sql"] as Tab[]).map((t) => (
+            {(["results", "cql", "sql", "ast"] as Tab[]).map((t) => (
               <button
                 key={t}
                 className={tab === t ? "active" : ""}
@@ -1347,6 +1350,12 @@ export function App() {
                   isLoading={busy}
                 />
               </>
+            )}
+            {tab === "cql" && (
+              <pre className="dev-sqlpane dev-cqlpane">{buffer || "-- no library selected"}</pre>
+            )}
+            {tab === "ast" && (
+              <pre className="dev-sqlpane dev-astpane">{ast || "-- translate a library to see its statement AST"}</pre>
             )}
             {tab === "sql" && <SQLOutput value={sql} />}
           </div>

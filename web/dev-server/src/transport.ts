@@ -36,6 +36,8 @@ export interface TranslateResult {
   sql: string;
   column_types: Record<string, string>;
   definitions: string[];
+  /** R2: statement-level AST (parse include_ast) when requested. */
+  ast?: { library: string; statements: Record<string, unknown> };
 }
 
 export interface EvaluateResult {
