@@ -69,7 +69,7 @@ function spawnServer(cwd: string): ChildProcess {
     cwd,
     env: {
       ...process.env,
-      PYTHONPATH: "/mnt/d/fhir4ds-shellrebuild-20261009",
+      PYTHONPATH: "/mnt/d/fhir4ds-maint-spec-comp-20261012",
       PATH: process.env.PATH ?? "",
     },
     stdio: "ignore",
