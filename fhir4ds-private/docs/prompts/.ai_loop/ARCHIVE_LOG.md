@@ -1,0 +1,10 @@
+
+## maint/spec-comp-20261012b — spec-compliance iteration (2026-10-12, opencode-fix4)
+
+- 2026-10-12T09:15:00-05:00 WORKTREE_READY (cf66ab1d; suffix-b, plain 20261012 taken)
+- 2026-10-12T09:55:00-05:00 PROBE COMPLETE (probe1: 12 checks, 2 GENUINE findings after two probe-shape corrections — BOM write via str not bytes; D7 sandbox expectation inverted: default cql_dirs=["cql"] means root-level and inner/ files are CORRECTLY absent — 10th instance of the probe-error-over-bugs ratio rule).
+- FINDING QA-003 (MEDIUM): discovery.py:99-101 — `path.read_text(encoding="utf-8-sig")` is guarded by `except OSError` only, but non-UTF-8 bytes raise UnicodeDecodeError (a ValueError), which escapes the "unreadable" degrade path and CRASHES scan_workspace (workspace listing, editor library pane). Contradicts the guard's own resilience intent (LibraryFile parse_ok=False + error) and the loader utf-8-sig/BOM doctrine. Repro: cql/Bad.cql containing b"\xff\xfe\x00bad\x00" → scan_workspace raises UnicodeDecodeError instead of listing it as unreadable. Evidence: .temp/qa/maintsc12b/probe1.py D3.
+- FINDING QA-007 (LOW): discovery.py:97 — CQL discovery uses case-sensitive `rglob("*.cql")` while the sibling files() helper (:143-146) lowercases suffixes for measures/valuesets/views/data. Uppercase `.CQL` files are invisible to the library pane on case-sensitive Linux filesystems — asymmetric with every other discovered artifact class and with the 0.0.12 loader case-insensitive doctrine. Evidence: probe1 D8 (UpLib.CQL not discovered while real.json in measures/ is).
+- CLEAN checks: library-name extraction (lead line/block comment/stem fallback), BOM-prefixed CQL parses, deep nested discovery, default config with no toml, cql_dirs from toml honored, sandbox holds (only configured dirs scanned), measures/expected/ subtree excluded (S3b doctrine).
+- 2026-10-12T10:40:00-05:00 GATES: devserver pytest 204/204; dev-server e2e 48/48 FIRST PASS (PYTHONPATHs retargeted to 20261012b, zero stale).
+- VERDICT: 2 FINDINGS (1 MEDIUM + 1 LOW), findings-only per directive — NO product changes; branch left for human merge.
