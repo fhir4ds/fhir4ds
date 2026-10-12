@@ -1,0 +1,7 @@
+
+## maint/spec-comp-20261012c — spec-compliance iteration (2026-10-12, opencode-fix4)
+
+- 2026-10-12T15:15:00-05:00 WORKTREE_READY (cf66ab1d; suffix-c, plain + -b taken)
+- 2026-10-12T15:55:00-05:00 PROBE GREEN (probe1: 8 checks 0 findings after one full re-anchoring — EventBus.subscribe() takes NO args and returns a bounded Queue (not callback-subscription); WorkspaceEvent carries plural paths[] + optional snapshot (no per-path 'path' field); there is NO 'removed' kind — deletions surface through the changed set via old-minus-new diffing; no fhir4ds.devserver.security module exists — 11th instance of the probe-error-over-bugs ratio rule, corrected by reading watcher.py contracts before re-probing). Fresh coverage: EventBus pub/sub with clean unsubscribe (no leak); two-subscriber fan-out delivers one copy each; slow-client contract holds (bounded 256 queue, publisher never blocks, overflow silently dropped); 200-iteration concurrent subscribe/publish/unsubscribe hammer with no deadlock; Watcher poll-loop change detection coalesces two same-window writes into ONE changed event; file deletion surfaces through the changed diff (kind stays 'changed'); data/ modifications route to data-hint ONLY (locked decision 4: data changes never auto-reload the kernel); stop() reaps the watcher thread and is idempotent.
+- 2026-10-12T16:40:00-05:00 GATES: devserver pytest 204/204; dev-server e2e 48/48 FIRST PASS (PYTHONPATHs retargeted to 20261012c, zero stale).
+- VERDICT: CLEAN, 0 findings. Findings-only per directive; branch left for human merge.
