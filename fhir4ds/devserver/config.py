@@ -44,10 +44,9 @@ class DevServerConfig:
     root: Path
     port: int = 8765
     host: str = "127.0.0.1"
-    # c-wasm-bolton S1: which UI build to serve — "wasm" (the product UI,
-    # from web/wasm-demo) or "legacy" (the pre-bolton dev-server shell,
-    # escape hatch through the arc; default flips to wasm in Slice 5).
-    ui_mode: str = "legacy"
+    # c-wasm-bolton S5: "wasm" (the product UI) is the default; "legacy"
+    # accepted through the retirement slice only.
+    ui_mode: str = "wasm"
     cql_dirs: list[Path] = field(default_factory=list)
     valueset_dirs: list[Path] = field(default_factory=list)
     measure_dirs: list[Path] = field(default_factory=list)
@@ -136,10 +135,11 @@ def load_config(
     """
     root = Path(root).expanduser().resolve()
     manifest = _parse_manifest(root / "fhir4ds.toml")
-    # c-wasm-bolton S1: [dev] ui = "wasm" | "legacy" in fhir4ds.toml; the
-    # CLI --ui flag overrides the manifest; default "legacy" until S5.
+    # c-wasm-bolton S5 (retirement): the wasm product UI is the DEFAULT.
+    # "legacy" remains accepted in [dev]/--ui during THIS slice only; the
+    # legacy shell is deleted at slice end making it unreachable.
     if ui_mode is None:
-        ui_mode = manifest.get("ui") or "legacy"
+        ui_mode = manifest.get("ui") or "wasm"
     if ui_mode not in ("wasm", "legacy"):
         raise ValueError(f"ui mode must be 'wasm' or 'legacy', got {ui_mode!r}")
 

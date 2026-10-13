@@ -50,8 +50,19 @@ interface CellCQLEditorProps {
 const COACH_SEEN_KEY = "fhir4ds.cellCoachSeen";
 
 export function CellCQLEditor({ value, onChange, onRunCells, onInsertCell, connected }: CellCQLEditorProps) {
-  const [cellMode, setCellMode] = useState(false);
-  const [runMode, setRunMode] = useState<CellRunMode>("cell_deps");
+  // S5 carry (S3 Muse): persist toggle + run mode across reloads.
+  const [cellMode, setCellMode] = useState(
+    () => localStorage.getItem("fhir4ds.cellMode") === "1",
+  );
+  const [runMode, setRunMode] = useState<CellRunMode>(
+    () => (localStorage.getItem("fhir4ds.runMode") as CellRunMode | null) ?? "cell_deps",
+  );
+  useEffect(() => {
+    localStorage.setItem("fhir4ds.cellMode", cellMode ? "1" : "0");
+  }, [cellMode]);
+  useEffect(() => {
+    localStorage.setItem("fhir4ds.runMode", runMode);
+  }, [runMode]);
   const [results, setResults] = useState<CellResult[]>([]);
   const [running, setRunning] = useState<string | null>(null);
   const [pinnedClosure, setPinnedClosure] = useState<string | null>(null);

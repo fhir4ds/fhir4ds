@@ -79,8 +79,9 @@ class TestApiModeHandshake:
         d_ws = server.mode()["workspace"]
         assert isinstance(d_ws, str) and d_ws
 
-    def test_default_ui_is_legacy(self, server):
-        assert server.mode()["ui"] == "legacy"
+    def test_default_ui_is_wasm_s5_retirement(self, server):
+        # S5: the wasm product UI is the default (legacy deleted).
+        assert server.mode()["ui"] == "wasm"
 
     def test_wasm_ui_mode_reported(self, wasm_server):
         assert wasm_server.mode()["ui"] == "wasm"

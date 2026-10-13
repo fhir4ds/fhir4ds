@@ -96,8 +96,9 @@ export async function handshake(
 }
 
 /** Version-pin check per FDD v2: blocking banner when the server version
- *  falls outside the documented range; never silently degrade. */
+ *  falls outside the documented range; never silently degrade. Applies to
+ *  connected AND degraded (S5 carry: degraded previously bypassed the pin). */
 export function versionPinOk(state: ModeState): boolean {
-  if (state.kind !== "connected") return true;
+  if (state.kind !== "connected" && state.kind !== "degraded") return true;
   return versionSatisfies(state.version, state.serverRange);
 }

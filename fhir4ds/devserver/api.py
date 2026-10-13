@@ -2670,20 +2670,16 @@ class _Handler(BaseHTTPRequestHandler):
     # -- static UI ----------------------------------------------------------
 
     def _serve_static(self, path: str) -> bool:
-        """Serve the committed built UI from fhir4ds/devserver/static*.
+        """Serve the committed wasm product UI from static-wasm/.
 
-        c-wasm-bolton S1: ui_mode selects the build — "wasm" serves the
-        wasm product UI from static-wasm/, "legacy" serves the pre-bolton
-        shell from static/ (unchanged behavior through the arc).
+        c-wasm-bolton S5 (retirement): the legacy dev-server shell is
+        deleted; static/ no longer exists.
         """
         import mimetypes
         from pathlib import Path
 
         pkg = Path(__file__).resolve().parent
-        if getattr(self.server, "ui_mode", "legacy") == "wasm":
-            static_root = pkg / "static-wasm"
-        else:
-            static_root = pkg / "static"
+        static_root = pkg / "static-wasm"
         if path == "/":
             candidate = static_root / "index.html"
         elif path.startswith("/assets/"):

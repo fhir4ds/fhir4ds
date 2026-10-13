@@ -679,7 +679,7 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri, serverUrl }: 
                   <CellCQLEditor
                     value={cqlText}
                     onChange={setCqlText}
-                    connected={connected}
+                    connected={connected && !runBlockedByPin}
                     onRunCells={runCells}
                     onInsertCell={insertCell}
                   />
