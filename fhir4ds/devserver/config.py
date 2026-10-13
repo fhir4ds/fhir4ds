@@ -23,7 +23,7 @@ CONVENTION_DIRS = {
     "view": "views",
 }
 
-_CONFIG_KEYS = {"cql_dirs", "valueset_dirs", "measure_dirs", "data_dirs", "view_dirs"}
+_CONFIG_KEYS = {"cql_dirs", "valueset_dirs", "measure_dirs", "data_dirs", "view_dirs", "ui"}
 _LIST_FIELDS = {
     "cql_dirs": "cql",
     "valueset_dirs": "valueset",
@@ -44,6 +44,10 @@ class DevServerConfig:
     root: Path
     port: int = 8765
     host: str = "127.0.0.1"
+    # c-wasm-bolton S1: which UI build to serve — "wasm" (the product UI,
+    # from web/wasm-demo) or "legacy" (the pre-bolton dev-server shell,
+    # escape hatch through the arc; default flips to wasm in Slice 5).
+    ui_mode: str = "legacy"
     cql_dirs: list[Path] = field(default_factory=list)
     valueset_dirs: list[Path] = field(default_factory=list)
     measure_dirs: list[Path] = field(default_factory=list)
@@ -99,6 +103,15 @@ def _parse_manifest(path: Path) -> dict[str, list[str]]:
                 f"fhir4ds.toml [dev].{key} must be an array of non-empty strings"
             )
         out[kind] = list(value)
+    # c-wasm-bolton S1: [dev] ui = "wasm" | "legacy" (string, validated
+    # by load_config; not a list field).
+    if "ui" in section:
+        ui = section["ui"]
+        if not isinstance(ui, str) or ui not in ("wasm", "legacy"):
+            raise DevConfigError(
+                "fhir4ds.toml [dev].ui must be \"wasm\" or \"legacy\""
+            )
+        out["ui"] = ui
     return out
 
 
@@ -106,6 +119,7 @@ def load_config(
     root: Path | str,
     *,
     port: int | None = None,
+    ui_mode: str | None = None,
     cql_dirs: list[str] | None = None,
     valueset_dirs: list[str] | None = None,
     measure_dirs: list[str] | None = None,
@@ -122,6 +136,12 @@ def load_config(
     """
     root = Path(root).expanduser().resolve()
     manifest = _parse_manifest(root / "fhir4ds.toml")
+    # c-wasm-bolton S1: [dev] ui = "wasm" | "legacy" in fhir4ds.toml; the
+    # CLI --ui flag overrides the manifest; default "legacy" until S5.
+    if ui_mode is None:
+        ui_mode = manifest.get("ui") or "legacy"
+    if ui_mode not in ("wasm", "legacy"):
+        raise ValueError(f"ui mode must be 'wasm' or 'legacy', got {ui_mode!r}")
 
     def merged(kind: str, flags: list[str] | None) -> list[Path]:
         entries: list[str] = [CONVENTION_DIRS[kind]]
@@ -142,6 +162,7 @@ def load_config(
     cfg = DevServerConfig(
         root=root,
         port=port if port is not None else 8765,
+        ui_mode=ui_mode,
         cql_dirs=merged("cql", cql_dirs),
         valueset_dirs=merged("valueset", valueset_dirs),
         measure_dirs=merged("measure", measure_dirs),

@@ -47,6 +47,14 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Do not open the browser automatically",
     )
+    parser.add_argument(
+        "--ui",
+        choices=["wasm", "legacy"],
+        default=None,
+        help="UI build to serve: 'wasm' (cleanroom product UI) or "
+        "'legacy' (pre-bolton dev-server shell). Overrides [dev] ui in "
+        "fhir4ds.toml; default legacy until the bolton arc completes.",
+    )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -56,6 +64,7 @@ def run(args: argparse.Namespace) -> int:
         cfg = load_config(
             args.dir,
             port=args.port,
+            ui_mode=args.ui,
             cql_dirs=args.cql_dirs,
             valueset_dirs=args.valueset_dirs,
             measure_dirs=args.measure_dirs,

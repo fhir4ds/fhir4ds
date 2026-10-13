@@ -13,6 +13,7 @@ import { PatientDataViewer } from "./components/PatientDataViewer";
 import { CQL_SAMPLES } from "./lib/sample-cql";
 import { useDuckDB } from "./hooks/useDuckDB";
 import { usePyodide } from "./hooks/usePyodide";
+import { useModeHandshake } from "./hooks/useModeHandshake";
 import { 
   clearAuth, 
   getStoredSession, 
@@ -57,6 +58,16 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
     // This ensures CQL/SDC tabs are shown immediately when a valid token exists.
     () => getAccessToken() !== null,
   );
+
+  // c-wasm-bolton S1: mode handshake (connecting → connected/standalone).
+  // Standalone + embed behavior is bit-identical to pre-bolton; connected
+  // mode adds the engine badge + workspace name (ServerTransport surfaces
+  // arrive in S2+). Connected mode skips Pyodide init (perf guarantee).
+  const { state: modeState, versionMismatch } = useModeHandshake();
+  const engineBadge =
+    modeState.kind === "connected" ? modeState.version : "wasm";
+  const workspaceName =
+    modeState.kind === "connected" ? modeState.workspace : undefined;
   const [connectedPatientName, setConnectedPatientName] = useState<string | undefined>();
 
   // When the Web Component changes the `scenario` attribute, the `forceScenario`
@@ -412,10 +423,19 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
               />
             }
           />
+          {versionMismatch && modeState.kind === "connected" && (
+            <div className="version-pin-banner" role="alert">
+              UI build expects server {modeState.serverRange} — connected
+              server is {modeState.version}. Restart `fhir4ds dev` with a
+              matching release.
+            </div>
+          )}
           <StatusBar
             metrics={metrics}
             message={statusMessage}
             isError={isStatusError}
+            engineBadge={engineBadge}
+            workspaceName={workspaceName}
           />
         </div>
       )}

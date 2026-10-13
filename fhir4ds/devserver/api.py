@@ -97,6 +97,10 @@ class DevHTTPServer(ThreadingHTTPServer):
     # parity item 2: CURRENT sql store (sha -> text) for copy-sql-ref;
     # stale shas honestly report 'sql superseded'.
     sql_store: dict[str, str] = {}
+    # c-wasm-bolton S1: per-instance handshake nonce (embeds detect stale
+    # handshakes after a server restart) + which UI build is being served.
+    mode_nonce: str = ""
+    ui_mode: str = "legacy"
 
 
 def _utc_now_iso() -> str:
@@ -122,6 +126,11 @@ def create_server(
     server.kernel_manager = kernel_manager
     server.watcher = watcher
     server.cell_registry = CellSessionRegistry()
+    # c-wasm-bolton S1: handshake identity for the wasm app's /api/mode.
+    import secrets as _secrets
+
+    server.mode_nonce = _secrets.token_hex(8)
+    server.ui_mode = getattr(watcher._cfg, "ui_mode", "legacy")
     # v3 Slice 1: set True when a valueset edit was written to disk but the
     # kernel still holds the terminology loaded at startup (restart reloads).
     server.valuesets_stale = False
@@ -714,6 +723,29 @@ class _Handler(BaseHTTPRequestHandler):
                     load_diagnostics=kernel.load_diagnostics,
                     valuesets_stale=self.server.valuesets_stale,
                     terminology=self._terminology_status(),
+                ),
+            )
+            return
+        if path == "/api/mode":
+            # c-wasm-bolton S1: mode handshake for the wasm app. The app
+            # fetches this on boot; 200 + server=true mounts ServerTransport,
+            # a 404 (static hosting) leaves standalone. `nonce` is generated
+            # per server instance so embeds can detect STALE handshakes
+            # after a server restart (nonce change = re-handshake). The
+            # semver range in `server_range` documents the version-pin
+            # contract the UI parses (standard node-semver range syntax —
+            # the UI banner logic is driven by this string, not magic).
+            self._write_json(
+                200,
+                _envelope(
+                    server=True,
+                    version=_version(),
+                    # ^1.0.0-style range; cf66ab1d-era server is 0.0.x so the
+                    # range starts open at 0.0.14 until the arc release bumps.
+                    server_range=">=0.0.13",
+                    workspace=self.server.watcher._cfg.root.name,
+                    nonce=self.server.mode_nonce,
+                    ui=self.server.ui_mode,
                 ),
             )
             return
@@ -2638,11 +2670,20 @@ class _Handler(BaseHTTPRequestHandler):
     # -- static UI ----------------------------------------------------------
 
     def _serve_static(self, path: str) -> bool:
-        """Serve the committed built UI from fhir4ds/devserver/static."""
+        """Serve the committed built UI from fhir4ds/devserver/static*.
+
+        c-wasm-bolton S1: ui_mode selects the build — "wasm" serves the
+        wasm product UI from static-wasm/, "legacy" serves the pre-bolton
+        shell from static/ (unchanged behavior through the arc).
+        """
         import mimetypes
         from pathlib import Path
 
-        static_root = Path(__file__).resolve().parent / "static"
+        pkg = Path(__file__).resolve().parent
+        if getattr(self.server, "ui_mode", "legacy") == "wasm":
+            static_root = pkg / "static-wasm"
+        else:
+            static_root = pkg / "static"
         if path == "/":
             candidate = static_root / "index.html"
         elif path.startswith("/assets/"):
