@@ -41,7 +41,36 @@ export function useModeHandshake(serverUrl?: string): ModeHandshake {
   useEffect(() => {
     if (overrideStandalone) return;
     const ctrl = new AbortController();
-    handshake(serverUrl ?? "", ctrl.signal).then(setState);
+    handshake(serverUrl ?? "", ctrl.signal).then((s) => {
+      setState(s);
+      // P5: when connected, probe the events WebSocket — failure downgrades
+      // the state to degraded (still connected; watcher warning shown).
+      if (s.kind !== "connected") return;
+      try {
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        const ws = new WebSocket(
+          `${proto}//${location.host}${serverUrl ?? ""}/api/events`,
+        );
+        const timer = window.setTimeout(() => {
+          ws.close();
+          setState((cur) =>
+            cur.kind === "connected" ? { ...cur, kind: "degraded" } : cur,
+          );
+        }, 5000);
+        ws.onopen = () => {
+          window.clearTimeout(timer);
+          ws.close();
+        };
+        ws.onerror = () => {
+          window.clearTimeout(timer);
+          setState((cur) =>
+            cur.kind === "connected" ? { ...cur, kind: "degraded" } : cur,
+          );
+        };
+      } catch {
+        /* probe failure handled by the timer */
+      }
+    });
     return () => ctrl.abort();
   }, [serverUrl, attempt, overrideStandalone]);
 

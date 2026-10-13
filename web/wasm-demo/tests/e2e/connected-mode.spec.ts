@@ -88,3 +88,20 @@ test("connected mode shows engine badge + workspace name (handshake resolved)", 
   // No version-pin banner: served server is inside its own documented range.
   await expect(page.locator(".version-pin-banner")).toHaveCount(0);
 });
+
+test("standalone fallback: static hosting shows wasm badge (no server)", async ({ page }) => {
+  // The playwright webServer (vite preview :5173) is a static host — /api/mode 404s
+  await page.goto("/");
+  const badge = page.locator(".status-engine");
+  await expect(badge).toContainText("wasm", { timeout: 30000 });
+  // No workspace name in standalone
+  await expect(page.locator(".status-workspace")).toHaveCount(0);
+});
+
+test("standalone fallback: unreachable server degrades to wasm badge", async ({ page }) => {
+  // Route /api/mode to a dead port via abort
+  await page.route("**/api/mode", (route) => route.abort("connectionrefused"));
+  await page.goto("/");
+  const badge = page.locator(".status-engine");
+  await expect(badge).toContainText("wasm", { timeout: 30000 });
+});

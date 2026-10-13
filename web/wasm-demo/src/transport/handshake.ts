@@ -20,6 +20,16 @@ export type ModeState =
       workspace: string;
       nonce: string;
     }
+  /** P5 (S1 Muse): handshake OK but the events WebSocket failed — stay
+   *  connected (HTTP transport works); the status bar shows a watcher
+   *  warning. Entered by the hook from transport socket failure. */
+  | {
+      kind: "degraded";
+      version: string;
+      serverRange: string;
+      workspace: string;
+      nonce: string;
+    }
   | { kind: "standalone"; reason: "not-found" | "unreachable" };
 
 export interface ModeInfo {

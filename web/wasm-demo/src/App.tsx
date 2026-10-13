@@ -51,6 +51,10 @@ interface AppProps {
   /** Override the scenario instead of reading from ?scenario= URL param.
    *  Used when App is mounted from the Web Component. */
   forceScenario?: string;
+  /** P6 (S1 Muse): base URL of a dev server for embed-connected mode —
+   *  when set and reachable, the app mounts ServerTransport against it;
+   *  unreachable/cross-origin falls back to standalone (FDD §4.1). */
+  serverUrl?: string;
   /** Base URL of the standalone WASM app (e.g. "https://fhir4ds.com/wasm-app/").
    *  Used to compute redirect_uri for SMART OAuth popup in Web Component context. */
   wasmAppUrl?: string;
@@ -59,7 +63,7 @@ interface AppProps {
   smartRedirectUri?: string;
 }
 
-export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = {}) {
+export function App({ forceScenario, wasmAppUrl, smartRedirectUri, serverUrl }: AppProps = {}) {
   const [scenario, setScenario] = useState<Scenario>(
     () => (forceScenario as Scenario | undefined) ?? getScenarioFromURL(),
   );
@@ -73,7 +77,8 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
   // Standalone + embed behavior is bit-identical to pre-bolton; connected
   // mode adds the engine badge + workspace name (ServerTransport surfaces
   // arrive in S2+). Connected mode skips Pyodide init (perf guarantee).
-  const { state: modeState, versionMismatch, transport, retry, useStandalone } = useModeHandshake();
+  const { state: modeState, versionMismatch, transport, retry, useStandalone } =
+    useModeHandshake(serverUrl);
   // P3 (S1 Muse): badge honesty — indeterminate during connecting, never a
   // premature "wasm" assertion.
   const engineBadge =
@@ -84,7 +89,10 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
         : "wasm";
   const workspaceName =
     modeState.kind === "connected" ? modeState.workspace : undefined;
-  const connected = modeState.kind === "connected" && transport !== null;
+  const connected =
+    (modeState.kind === "connected" || modeState.kind === "degraded") &&
+    transport !== null;
+  const degraded = modeState.kind === "degraded";
 
   // S2: single adaptive rail state (stable order both modes).
   const [railOpen, setRailOpen] = useState<RailId | null>(null);
@@ -238,19 +246,26 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
   const { ready: duckdbReady, error: duckdbError, extensionsLoaded, executeQuery, getConnection } = useDuckDB(wasmAppUrl, duckdbRequired);
   const { ready: pyodideReady, error: pyodideError, translate } = usePyodide(pyodideRequired);
 
+  // P4 (S1 Muse): blocking version pin — a mismatched server must not
+  // silently execute with divergent semantics; cell runs fall back to the
+  // in-browser path with an explicit banner (override: engine popover).
+  const runBlockedByPin = versionMismatch;
+
   // S3: cell execution — ServerTransport when connected (evaluate per
   // define through the kernel); in-browser fallback translates the
   // composed library via Pyodide and reports per-define evaluation
   // through DuckDB-WASM (identical RunMode semantics both engines).
   const runCells = useCallback(
     async (names: string[], mode: CellRunMode) => {
+      // P4: pin mismatch forces the in-browser path (never silent).
+      const useServer = connected && transport !== null && !runBlockedByPin;
       const out: Record<string, { ok: boolean; lines: string[] }> = {};
       const graph = buildCellGraph(cqlText);
       const composed = [graph.header, ...names.map((n) => {
         const cells = splitCells(cqlText).cells;
         return cells.find((c) => c.name === n)?.text ?? "";
       })].join("\n\n");
-      if (connected && transport) {
+      if (useServer && transport) {
         const libs = [{ name: "CellLib", text: composed }];
         for (const n of names) {
           try {
@@ -301,7 +316,7 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
       }
       return out;
     },
-    [connected, transport, cqlText, translate, executeQuery],
+    [connected, transport, cqlText, translate, executeQuery, runBlockedByPin],
   );
 
   // Workspace pane visibility — persists across tab switches
@@ -670,11 +685,20 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
               />
             }
           />
+          {degraded && (
+            <div className="data-hint-banner" role="status">
+              <span>
+                Live reload unavailable (events channel failed) — file changes
+                won't refresh automatically. Retry from the engine popover.
+              </span>
+            </div>
+          )}
           {versionMismatch && modeState.kind === "connected" && (
             <div className="version-pin-banner" role="alert">
               UI build expects server {modeState.serverRange} — connected
-              server is {modeState.version}. Restart `fhir4ds dev` with a
-              matching release.
+              server is {modeState.version}. Server-backed runs are disabled;
+              cells run in-browser until you restart `fhir4ds dev` with a
+              matching release (or switch engines in the status bar).
             </div>
           )}
           <StatusBar
