@@ -22,6 +22,7 @@ import {
   RunHistory,
   type RailId,
 } from "./components/CleanroomRail";
+import { TerminologyPane } from "./components/TerminologyPane";
 import { buildCellGraph } from "./lib/cell-deps";
 import { splitCells } from "./lib/cells";
 import { 
@@ -642,12 +643,13 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri, serverUrl }: 
                 if (railOpen === "history") {
                   return <RunHistory transport={transport!} />;
                 }
+                if (railOpen === "terminology") {
+                  return <TerminologyPane transport={transport!} />;
+                }
                 return (
                   <div className="cleanroom-empty cleanroom-todo" role="status">
                     <h3 style={{ textTransform: "capitalize" }}>{railOpen}</h3>
-                    {railOpen === "measures"
-                      ? "Measure scaffold / run / compare land after the cells slice."
-                      : "Terminology import + status land in slice 4."}
+                    Measure scaffold / run / compare land in the next slice.
                   </div>
                 );
               })()}
