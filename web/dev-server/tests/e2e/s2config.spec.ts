@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const WORKTREE = "/mnt/d/fhir4ds-shellrebuild-20261009";
+const WORKTREE = "/mnt/d/fhir4ds-hotfix-qa002";
 const PORT = 19071;
 const BASE = `http://127.0.0.1:${PORT}`;
 
