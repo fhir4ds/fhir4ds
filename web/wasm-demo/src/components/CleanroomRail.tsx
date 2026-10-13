@@ -32,8 +32,6 @@ interface RailEntryDef {
   glyph: string;
   title: string;
   cleanroom: boolean;
-  /** Interior hidden standalone (heavy workflows) vs disabled entry. */
-  interiorOnly?: boolean;
 }
 
 export const RAIL_ENTRIES: RailEntryDef[] = [
@@ -43,8 +41,8 @@ export const RAIL_ENTRIES: RailEntryDef[] = [
   { id: "viewer", label: "Viewer", glyph: "🧑", title: "Patient data viewer (alt+4)", cleanroom: false },
   { id: "libraries", label: "Libraries", glyph: "❯", title: "Workspace libraries (alt+5)", cleanroom: true },
   { id: "valuesets", label: "Valuesets", glyph: "◈", title: "Workspace valuesets (alt+6)", cleanroom: true },
-  { id: "measures", label: "Measures", glyph: "✓", title: "Measures & expected results (alt+7)", cleanroom: true, interiorOnly: true },
-  { id: "terminology", label: "Terminology", glyph: "⌘", title: "Terminology import (alt+8)", cleanroom: true, interiorOnly: true },
+  { id: "measures", label: "Measures", glyph: "✓", title: "Measures & expected results (alt+7)", cleanroom: true },
+  { id: "terminology", label: "Terminology", glyph: "⌘", title: "Terminology import (alt+8)", cleanroom: true },
   { id: "history", label: "History", glyph: "⏱", title: "Run history (alt+9)", cleanroom: true },
 ];
 
@@ -119,6 +117,8 @@ export function WorkspaceFileTree({
   transport,
   suffixFilter,
   subdir,
+  changedPaths,
+  onReload,
   onOpenFile,
 }: {
   transport: HttpTransport;
@@ -126,6 +126,10 @@ export function WorkspaceFileTree({
   /** Conventional subdir to list (e.g. "cql" for libraries) — the
    *  workspace root itself holds directories, not artifacts. */
   subdir?: string;
+  /** Watcher changed paths (per-file dots, mapping rule 5). */
+  changedPaths?: string[];
+  /** Called after a manual refresh — acknowledges the badge. */
+  onReload?: () => void;
   onOpenFile?: (name: string) => void;
 }) {
   const [entries, setEntries] = useState<FsEntry[] | null>(null);
@@ -143,10 +147,15 @@ export function WorkspaceFileTree({
           setEntries(res.entries ?? []);
         }
       })
-      .catch((e: unknown) => setError(String(e)));
-  }, [transport, subdir]);
+      .catch((e: unknown) => setError(String(e)))
+      .finally(() => onReload?.());
+  }, [transport, subdir, onReload]);
 
   useEffect(load, [load]);
+  const changedNames = useMemo(() => {
+    if (!changedPaths || changedPaths.length === 0) return new Set<string>();
+    return new Set(changedPaths.map((p) => p.split("/").pop() ?? p));
+  }, [changedPaths]);
 
   const files = useMemo(() => {
     if (!entries) return null;
@@ -158,7 +167,13 @@ export function WorkspaceFileTree({
   if (error) return <div className="cleanroom-tree-error" role="alert">{error}</div>;
   if (!files) return <div className="cleanroom-tree-loading" aria-live="polite">loading…</div>;
   return (
-    <ul className="cleanroom-tree" role="tree">
+    <div>
+      <div className="cleanroom-tree-actions">
+        <button type="button" className="data-hint-restart" onClick={load}>
+          Refresh
+        </button>
+      </div>
+      <ul className="cleanroom-tree" role="tree">
       {files.map((f) => (
         <li key={f.name} role="treeitem" aria-expanded={f.kind === "dir" ? false : undefined}>
           <button
@@ -166,13 +181,17 @@ export function WorkspaceFileTree({
             className="cleanroom-tree-row"
             onClick={() => f.kind === "file" && onOpenFile?.(f.name)}
             disabled={f.kind === "dir"}
-            title={f.name}
+            title={changedNames.has(f.name) ? `${f.name} — changed on disk` : f.name}
           >
             <span aria-hidden="true">{f.kind === "dir" ? "📁" : "📄"}</span> {f.name}
+            {changedNames.has(f.name) && (
+              <span className="cleanroom-file-dot" aria-label="changed on disk" title="changed on disk" />
+            )}
           </button>
         </li>
       ))}
     </ul>
+    </div>
   );
 }
 
@@ -181,7 +200,7 @@ export function WorkspaceFileTree({
 export function RunHistory({ transport }: { transport: HttpTransport }) {
   const [runs, setRuns] = useState<{ ts: number; kind: string; library?: string }[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cleared, setCleared] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
 
   const load = useCallback(() => {
     transport
@@ -199,41 +218,55 @@ export function RunHistory({ transport }: { transport: HttpTransport }) {
       .catch((e: unknown) => setError(String(e)));
   }, [transport]);
 
-  useEffect(() => {
-    if (!cleared) load();
-  }, [load, cleared]);
+  useEffect(load, [load]);
 
   if (error) return <div className="cleanroom-tree-error" role="alert">{error}</div>;
   if (!runs) return <div className="cleanroom-tree-loading" aria-live="polite">loading…</div>;
-  if (runs.length === 0)
-    return (
-      <div className="cleanroom-empty">
-        <p>No runs yet — run a cell or a measure to populate the history.</p>
-      </div>
-    );
   return (
     <div className="runhistory-list">
       <div className="runhistory-actions">
-        <button
-          type="button"
-          className="data-hint-restart"
-          onClick={() =>
-            transport.runsClear().then(() => setCleared(true)).catch(() => {})
-          }
-        >
-          Clear history
-        </button>
+        {runs.length > 0 && !confirmingClear && (
+          <button type="button" className="data-hint-restart" onClick={() => setConfirmingClear(true)}>
+            Clear history
+          </button>
+        )}
+        {confirmingClear && (
+          <span className="runhistory-confirm" role="alertdialog" aria-label="Confirm clear">
+            Clear {runs.length} run{runs.length === 1 ? "" : "s"}?{" "}
+            <button
+              type="button"
+              onClick={() => {
+                transport
+                  .runsClear()
+                  .then(() => {
+                    setRuns([]);
+                    setConfirmingClear(false);
+                  })
+                  .catch(() => setConfirmingClear(false));
+              }}
+            >
+              Yes, clear
+            </button>
+            <button type="button" onClick={() => setConfirmingClear(false)}>Cancel</button>
+          </span>
+        )}
       </div>
-      <ul className="cleanroom-tree">
-        {runs.map((r, i) => (
-          <li key={i} role="treeitem">
-            <span className="cleanroom-tree-row">
-              {new Date(r.ts).toLocaleTimeString()} · {r.kind}
-              {r.library ? ` · ${r.library}` : ""}
-            </span>
-          </li>
-        ))}
-      </ul>
+      {runs.length === 0 ? (
+        <div className="cleanroom-empty">
+          <p>No runs yet — run a cell or a measure to populate the history.</p>
+        </div>
+      ) : (
+        <ul className="cleanroom-tree">
+          {runs.map((r, i) => (
+            <li key={`${r.ts}-${i}`} role="treeitem">
+              <span className="cleanroom-tree-row">
+                {new Date(r.ts).toLocaleTimeString()} · {r.kind}
+                {r.library ? ` · ${r.library}` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

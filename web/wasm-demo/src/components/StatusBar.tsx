@@ -17,11 +17,36 @@ interface StatusBarProps {
   onUseStandalone?: () => void;
 }
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function StatusBar({ metrics, message, isError, engineBadge, workspaceName, engineBase, onRetry, onUseStandalone }: StatusBarProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const popRef = useRef<HTMLDivElement | null>(null);
+  const badgeRef = useRef<HTMLButtonElement | null>(null);
   const connected = engineBadge !== undefined && engineBadge !== "wasm" && engineBadge !== "…";
+
+  // S2 Muse carry 5: click-outside + Escape-from-anywhere close the
+  // popover; focus stays reachable (2-action popover — no trap needed).
+  useEffect(() => {
+    if (!popoverOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (
+        popRef.current && !popRef.current.contains(e.target as Node) &&
+        badgeRef.current && !badgeRef.current.contains(e.target as Node)
+      ) {
+        setPopoverOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPopoverOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [popoverOpen]);
   const total =
     (metrics.translationTimeMs ?? 0) + (metrics.executionTimeMs ?? 0);
 
@@ -39,6 +64,7 @@ export function StatusBar({ metrics, message, isError, engineBadge, workspaceNam
         <>
           <button
             type="button"
+            ref={badgeRef}
             className="metric status-engine"
             aria-expanded={popoverOpen}
             aria-label={
@@ -46,15 +72,26 @@ export function StatusBar({ metrics, message, isError, engineBadge, workspaceNam
                 ? "In-browser engine (standalone)"
                 : `Connected server ${engineBadge} — engine options`
             }
-            onClick={() => connected && setPopoverOpen((v) => !v)}
-            onKeyDown={(e) => {
-              if (connected && e.key === "Escape") setPopoverOpen(false);
-            }}
+            onClick={() => setPopoverOpen((v) => !v)}
           >
             {engineBadge === "wasm" ? "⚙ wasm" : engineBadge === "…" ? "⚙ …" : `🖧 server ${engineBadge}`}
           </button>
+          {popoverOpen && !connected && engineBadge === "wasm" && (
+            <div ref={popRef} className="engine-popover" role="dialog" aria-label="About the in-browser engine">
+              <h4>In-browser engine</h4>
+              <dl>
+                <dt>mode</dt>
+                <dd>standalone</dd>
+              </dl>
+              <p>
+                Running entirely in your browser. Connect a local workspace for
+                files, measures, terminology, and persistent history:
+              </p>
+              <code>fhir4ds dev</code>
+            </div>
+          )}
           {popoverOpen && connected && (
-            <div className="engine-popover" role="dialog" aria-label="Engine options">
+            <div ref={popRef} className="engine-popover" role="dialog" aria-label="Engine options">
               <h4>Engine</h4>
               <dl>
                 <dt>mode</dt>
@@ -63,6 +100,8 @@ export function StatusBar({ metrics, message, isError, engineBadge, workspaceNam
                 <dd>{engineBadge}</dd>
                 {engineBase && (<><dt>base</dt><dd>{engineBase}</dd></>)}
                 {workspaceName && (<><dt>workspace</dt><dd>{workspaceName}</dd></>)}
+                <dt>capabilities</dt>
+                <dd>translate · evaluate · files · history</dd>
               </dl>
               <div className="engine-actions">
                 <button type="button" onClick={() => { setPopoverOpen(false); onRetry?.(); }}>

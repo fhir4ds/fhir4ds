@@ -85,10 +85,12 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
 
   // S2: single adaptive rail state (stable order both modes).
   const [railOpen, setRailOpen] = useState<RailId | null>(null);
-  // S2: watcher badges (connected) — changed counts per rail section;
-  // data-hint NEVER auto-reloads (locked decision 4) — banner + explicit
-  // restart affordance only.
+  // S2: watcher signals (connected). Badges persist until the section's
+  // tree is REFRESHED (acknowledge-on-reload, not on open — S2 Muse gate);
+  // changed paths feed per-file dots (mapping rule 5). data-hint NEVER
+  // auto-reloads (locked decision 4) — banner + explicit restart only.
   const [changeBadges, setChangeBadges] = useState<Partial<Record<RailId, number>>>({});
+  const [changedPaths, setChangedPaths] = useState<Partial<Record<RailId, string[]>>>({});
   const [dataHint, setDataHint] = useState<string[] | null>(null);
 
   useEffect(() => {
@@ -103,16 +105,38 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
           for (const p of e.paths) {
             if (p.endsWith(".cql")) bump("libraries", 1);
             else if (p.endsWith(".json")) bump("valuesets", 1);
-            else bump("data", 1);
+          }
+          return next;
+        });
+        setChangedPaths((prev) => {
+          const next = { ...prev };
+          const add = (id: RailId, p: string) => {
+            next[id] = [...(next[id] ?? []), p];
+          };
+          for (const p of e.paths) {
+            if (p.endsWith(".cql")) add("libraries", p);
+            else if (p.endsWith(".json")) add("valuesets", p);
           }
           return next;
         });
       } else if (e.kind === "data-hint" && Array.isArray(e.paths)) {
-        setDataHint((prev) => [...(prev ?? []), ...e.paths]);
+        setDataHint((prev) => Array.from(new Set([...(prev ?? []), ...e.paths])));
       }
     });
     return off;
   }, [transport]);
+
+  // S2 Muse must-fix 2: connection-scoped state — a transport drop closes
+  // the slide-out and clears watcher signals (no stale badges/banner, no
+  // null-transport crash path in connected-only panels).
+  useEffect(() => {
+    if (!connected) {
+      setRailOpen(null);
+      setChangeBadges({});
+      setChangedPaths({});
+      setDataHint(null);
+    }
+  }, [connected]);
   const [connectedPatientName, setConnectedPatientName] = useState<string | undefined>();
 
   // When the Web Component changes the `scenario` attribute, the `forceScenario`
@@ -420,12 +444,13 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
             activeId={railOpen}
             changeBadge={changeBadges}
             onSelect={(id) => {
+              // Must-fix 4: core entries are on-screen surfaces — they
+              // never open slide-outs.
+              if (id === "cql" || id === "data" || id === "sql" || id === "viewer") return;
               setRailOpen((cur) => (cur === id ? null : id));
-              // Opening a section acknowledges its change badge.
-              setChangeBadges((prev) => ({ ...prev, [id]: 0 }));
             }}
           />
-          {dataHint && dataHint.length > 0 && (
+          {connected && dataHint && dataHint.length > 0 && (
             <div className="data-hint-banner" role="status">
               <span>
                 Data files changed on disk ({dataHint.length}). The kernel keeps the
@@ -469,6 +494,13 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
                       transport={transport!}
                       subdir="cql"
                       suffixFilter={[".cql"]}
+                      changedPaths={changedPaths.libraries}
+                      onReload={() => {
+                        // Acknowledge-on-reload (S2 Muse): refresh clears
+                        // the section badge + per-file dots.
+                        setChangeBadges((prev) => ({ ...prev, libraries: 0 }));
+                        setChangedPaths((prev) => ({ ...prev, libraries: [] }));
+                      }}
                     />
                   );
                 }
@@ -478,6 +510,11 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
                       transport={transport!}
                       subdir="valuesets"
                       suffixFilter={[".json"]}
+                      changedPaths={changedPaths.valuesets}
+                      onReload={() => {
+                        setChangeBadges((prev) => ({ ...prev, valuesets: 0 }));
+                        setChangedPaths((prev) => ({ ...prev, valuesets: [] }));
+                      }}
                     />
                   );
                 }
@@ -485,8 +522,11 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
                   return <RunHistory transport={transport!} />;
                 }
                 return (
-                  <div className="cleanroom-todo" role="status">
-                    {railOpen} panel lands in the next slice.
+                  <div className="cleanroom-empty cleanroom-todo" role="status">
+                    <h3 style={{ textTransform: "capitalize" }}>{railOpen}</h3>
+                    {railOpen === "measures"
+                      ? "Measure scaffold / run / compare land after the cells slice."
+                      : "Terminology import + status land in slice 4."}
                   </div>
                 );
               })()}
