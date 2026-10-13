@@ -14,6 +14,13 @@ import { CQL_SAMPLES } from "./lib/sample-cql";
 import { useDuckDB } from "./hooks/useDuckDB";
 import { usePyodide } from "./hooks/usePyodide";
 import { useModeHandshake } from "./hooks/useModeHandshake";
+import {
+  CleanroomRail,
+  RailEmptyState,
+  WorkspaceFileTree,
+  REMEDY,
+  type RailId,
+} from "./components/CleanroomRail";
 import { 
   clearAuth, 
   getStoredSession, 
@@ -63,11 +70,21 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
   // Standalone + embed behavior is bit-identical to pre-bolton; connected
   // mode adds the engine badge + workspace name (ServerTransport surfaces
   // arrive in S2+). Connected mode skips Pyodide init (perf guarantee).
-  const { state: modeState, versionMismatch } = useModeHandshake();
+  const { state: modeState, versionMismatch, transport } = useModeHandshake();
+  // P3 (S1 Muse): badge honesty — indeterminate during connecting, never a
+  // premature "wasm" assertion.
   const engineBadge =
-    modeState.kind === "connected" ? modeState.version : "wasm";
+    modeState.kind === "connected"
+      ? modeState.version
+      : modeState.kind === "connecting"
+        ? "…"
+        : "wasm";
   const workspaceName =
     modeState.kind === "connected" ? modeState.workspace : undefined;
+  const connected = modeState.kind === "connected" && transport !== null;
+
+  // S2: single adaptive rail state (stable order both modes).
+  const [railOpen, setRailOpen] = useState<RailId | null>(null);
   const [connectedPatientName, setConnectedPatientName] = useState<string | undefined>();
 
   // When the Web Component changes the `scenario` attribute, the `forceScenario`
@@ -154,10 +171,13 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
   const [builderDatasets, setBuilderDatasets] = useState<BuilderDataset[]>([]);
 
   const duckdbRequired = scenario !== "cms-measures";
+  // P2 (S1 Muse): connected mode NEVER loads Pyodide — the scenario flag
+  // alone would spawn the worker in connected workbench sessions.
   const pyodideRequired =
-    scenario === "workbench" ||
-    scenario === "cql-sandbox" ||
-    (scenario === "smart-flow" && smartAuthenticated);
+    (scenario === "workbench" ||
+      scenario === "cql-sandbox" ||
+      (scenario === "smart-flow" && smartAuthenticated)) &&
+    !connected;
 
   const { ready: duckdbReady, error: duckdbError, extensionsLoaded, executeQuery, getConnection } = useDuckDB(wasmAppUrl, duckdbRequired);
   const { ready: pyodideReady, error: pyodideError, translate } = usePyodide(pyodideRequired);
@@ -366,6 +386,48 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
 
       {activeTab === "playground" && config.visibleTabs.includes("playground") && (
         <div className="app">
+          <CleanroomRail
+            mode={modeState}
+            transport={transport}
+            activeId={railOpen}
+            onSelect={(id) => setRailOpen((cur) => (cur === id ? null : id))}
+          />
+          {railOpen && (
+            <aside className="cleanroom-slideout" aria-label={`${railOpen} panel`}>
+              <header>
+                <h3>{railOpen}</h3>
+                <button type="button" className="cleanroom-close" aria-label="Close panel" onClick={() => setRailOpen(null)}>×</button>
+              </header>
+              {(() => {
+                if (!connected) {
+                  return <RailEmptyState id={railOpen} />;
+                }
+                if (railOpen === "libraries") {
+                  return (
+                    <WorkspaceFileTree
+                      transport={transport!}
+                      subdir="cql"
+                      suffixFilter={[".cql"]}
+                    />
+                  );
+                }
+                if (railOpen === "valuesets") {
+                  return (
+                    <WorkspaceFileTree
+                      transport={transport!}
+                      subdir="valuesets"
+                      suffixFilter={[".json"]}
+                    />
+                  );
+                }
+                return (
+                  <div className="cleanroom-todo" role="status">
+                    {railOpen} panel lands in the next slice.
+                  </div>
+                );
+              })()}
+            </aside>
+          )}
           <Header
             selectedSample={selectedSample}
             onSampleChange={handleSampleChange}

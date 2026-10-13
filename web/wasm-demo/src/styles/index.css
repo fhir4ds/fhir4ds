@@ -1441,3 +1441,98 @@ details[open] > summary > .patient-tree-caret::before {
 }
 .builder-upload input[type="file"] { display: none; }
 .builder-upload-clear { border: 1px solid #7f1d1d; background: transparent; color: #b42318; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+
+/* ---- c-wasm-bolton S2: single adaptive rail + slide-out ---- */
+.cleanroom-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  min-width: 92px;
+}
+.cleanroom-rail-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.cleanroom-rail-btn:hover { background: rgba(255, 255, 255, 0.08); }
+.cleanroom-rail-btn.active { background: rgba(90, 160, 255, 0.22); }
+.cleanroom-rail-btn.disabled { opacity: 0.55; cursor: not-allowed; }
+.cleanroom-rail-glyph { font-size: 14px; }
+.cleanroom-rail-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cleanroom-rail-lock { font-size: 10px; opacity: 0.8; }
+.cleanroom-rail-badge {
+  background: #e5484d;
+  color: #fff;
+  border-radius: 8px;
+  font-size: 10px;
+  min-width: 16px;
+  padding: 0 4px;
+  text-align: center;
+}
+.cleanroom-rail-btn.cleanroom {
+  margin-top: 2px;
+}
+.cleanroom-rail-btn.cleanroom:first-of-type {
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 10px;
+}
+.cleanroom-slideout {
+  width: 280px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 10px;
+  overflow-y: auto;
+}
+.cleanroom-slideout header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.cleanroom-slideout h3 { margin: 0; text-transform: capitalize; }
+.cleanroom-close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+.cleanroom-empty { padding: 16px 8px; opacity: 0.9; }
+.cleanroom-empty code {
+  display: block;
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+.cleanroom-tree { list-style: none; margin: 0; padding: 0; }
+.cleanroom-tree-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+}
+.cleanroom-tree-row:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
+.cleanroom-tree-row:disabled { cursor: default; opacity: 0.8; }
+.cleanroom-tree-loading, .cleanroom-tree-error { font-size: 12px; opacity: 0.8; padding: 8px; }
+.cleanroom-tree-error { color: #ff8888; }
+.cleanroom-todo { font-size: 12px; opacity: 0.75; padding: 12px 8px; }
