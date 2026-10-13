@@ -39,6 +39,8 @@ export interface CellResult {
 interface CellCQLEditorProps {
   value: string;
   onChange: (value: string) => void;
+  /** Insert a new cell marker before/after the given cell (name). */
+  onInsertCell?: (anchor: string, where: "above" | "below") => void;
   /** Run a set of cells; resolves with per-cell output lines. */
   onRunCells: (names: string[], mode: CellRunMode) => Promise<Record<string, { ok: boolean; lines: string[] }>>;
   /** Connected (server) vs standalone (in-browser) — drives the badge. */
@@ -47,14 +49,47 @@ interface CellCQLEditorProps {
 
 const COACH_SEEN_KEY = "fhir4ds.cellCoachSeen";
 
-export function CellCQLEditor({ value, onChange, onRunCells, connected }: CellCQLEditorProps) {
+export function CellCQLEditor({ value, onChange, onRunCells, onInsertCell, connected }: CellCQLEditorProps) {
   const [cellMode, setCellMode] = useState(false);
   const [runMode, setRunMode] = useState<CellRunMode>("cell_deps");
   const [results, setResults] = useState<CellResult[]>([]);
   const [running, setRunning] = useState<string | null>(null);
-  const [pinnedClosure, setPinnedClosure] = useState<string[] | null>(null);
+  const [pinnedClosure, setPinnedClosure] = useState<string | null>(null);
+  const [expandedCells, setExpandedCells] = useState<Set<string>>(new Set());
+  const [focusedCell, setFocusedCell] = useState<string | null>(null);
   const [coachOpen, setCoachOpen] = useState(false);
   const seenCoach = useRef(false);
+
+  /** Splice an edited cell body back into the master buffer by span. */
+  const spliceCell = useCallback(
+    (order: number, newText: string) => {
+      // Recompute spans against the CURRENT buffer (boxes semantics).
+      const lines = value.split("\n");
+      let offset = 0;
+      let cellIdx = -1;
+      let cellStart = -1;
+      let cellEnd = -1;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const isMarker = /^\s*\/\/\s*#\s*%%/.test(line);
+        if (isMarker) {
+          if (cellIdx === order) {
+            // end of the target cell is this marker's start
+            cellEnd = offset;
+            break;
+          }
+          cellIdx += 1;
+          cellStart = offset + line.length + 1; // past marker line + \n
+        }
+        offset += line.length + 1;
+      }
+      if (cellEnd === -1 && cellIdx === order) cellEnd = value.length;
+      if (cellStart === -1 || cellEnd === -1) return;
+      onChange(value.slice(0, cellStart) + (newText.endsWith("\n") ? newText : newText + "\n") + value.slice(cellEnd));
+    },
+    [value, onChange],
+  );
+
 
   useEffect(() => {
     seenCoach.current = localStorage.getItem(COACH_SEEN_KEY) === "1";
@@ -99,17 +134,22 @@ export function CellCQLEditor({ value, onChange, onRunCells, connected }: CellCQ
     [runMode, graph, onRunCells, connected],
   );
 
-  // Esc clears the pinned closure (and coach mark).
+  // Esc clears the pinned closure (and coach mark); Ctrl/Cmd+Enter runs
+  // the focused cell (coach-mark-advertised keybinding — S3 Muse must-fix).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setPinnedClosure(null);
         setCoachOpen(false);
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        if (focusedCell) void runCell(focusedCell);
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [focusedCell, runCell]);
 
   const closureFor = useCallback(
     (name: string) => dependencyClosure(name, graph.refs, new Set(graph.order)),
@@ -162,7 +202,7 @@ export function CellCQLEditor({ value, onChange, onRunCells, connected }: CellCQ
         )}
         {pinnedClosure && (
           <span className="cell-pinned" role="status">
-            pinned deps: {pinnedClosure.join(" · ")}{" "}
+            pinned: {pinnedClosure} · {closureFor(pinnedClosure).join(" · ")}{" "}
             <button type="button" aria-label="Unpin dependency closure" onClick={() => setPinnedClosure(null)}>×</button>
           </span>
         )}
@@ -189,15 +229,38 @@ export function CellCQLEditor({ value, onChange, onRunCells, connected }: CellCQ
               return (
                 <div
                   key={`${cell.name}-${cell.order}`}
-                  className={`cell-card${res && !res.ok ? " cell-error" : ""}`}
+                  className={`cell-card${res && !res.ok ? " cell-error" : ""}${
+                    pinnedClosure && pinnedClosure !== cell.name && closureFor(pinnedClosure).includes(cell.name)
+                      ? " cell-in-closure"
+                      : ""
+                  }${pinnedClosure && !closureFor(pinnedClosure).includes(cell.name) && pinnedClosure !== cell.name ? " cell-dimmed" : ""}`}
                   data-cell={cell.name}
                 >
                   <div className="cell-head">
                     <button
                       type="button"
+                      className="cell-addbtn"
+                      aria-label={`Add cell above ${cell.name}`}
+                      title="Add cell above"
+                      onClick={() => onInsertCell?.(cell.name, "above")}
+                    >
+                      ＋↑
+                    </button>
+                    <button
+                      type="button"
+                      className="cell-addbtn"
+                      aria-label={`Add cell below ${cell.name}`}
+                      title="Add cell below"
+                      onClick={() => onInsertCell?.(cell.name, "below")}
+                    >
+                      ＋↓
+                    </button>
+                    <button
+                      type="button"
                       className="cell-namechip"
                       aria-label={`Cell ${cell.name}${deps.length ? ` — dependencies ${deps.join(", ")}` : ""}`}
-                      onClick={() => setPinnedClosure((cur) => (cur ? null : deps))}
+                      onClick={() => setPinnedClosure((cur) => (cur === cell.name ? null : cell.name))}
+                      onFocus={() => setFocusedCell(cell.name)}
                       title={deps.length ? `Deps: ${deps.join(", ")} (click to pin)` : "No dependencies"}
                     >
                       {cell.name}
@@ -229,13 +292,11 @@ export function CellCQLEditor({ value, onChange, onRunCells, connected }: CellCQ
                     language="sql"
                     theme="vs-dark"
                     value={cell.text}
-                    onChange={(v) => {
-                      // Splice the edited cell body back into the master buffer.
-                      // Chunk-level editors: splice via boxes spans (S3b); the
-                      // simple path re-uses onChange with the full buffer for now.
-                      void v;
+                    onChange={(v) => spliceCell(cell.order, v ?? "")}
+                    onMount={(editor) => {
+                      fixMonacoInputArea(editor);
+                      editor.onDidFocusEditorText(() => setFocusedCell(cell.name));
                     }}
-                    onMount={fixMonacoInputArea}
                     options={{
                       minimap: { enabled: false },
                       fontSize: 13,
@@ -249,22 +310,32 @@ export function CellCQLEditor({ value, onChange, onRunCells, connected }: CellCQ
                     }}
                   />
                   {res && (
-                    <div className={`cell-out${collapsed ? " collapsed" : ""}${res.ok ? "" : " expanded"}`} role="status">
+                    <div className={`cell-out${collapsed && !expandedCells.has(cell.name) ? " collapsed" : ""}${res.ok ? "" : " expanded"}`} role="status">
                       {res.computedLocally && (
                         <span className="cell-localbadge" title="Executed by the in-browser engine">
                           computed locally
                         </span>
                       )}
                       <pre aria-label={`Output for ${cell.name}`}>
-                        {res.lines.slice(0, collapsed ? 0 : res.lines.length).join("\n")}
+                        {collapsed && !expandedCells.has(cell.name)
+                          ? res.lines.slice(0, 4).join("\n") + "\n…"
+                          : res.lines.join("\n")}
                       </pre>
                       {collapsed && (
-                        <button type="button" className="cell-expand" onClick={() => {
-                          setResults((prev) =>
-                            prev.map((r) => (r.cell === cell.name ? { ...r, lines: r.lines, ok: r.ok } : r)),
-                          );
-                        }}>
-                          {res.lines.length} lines — expand
+                        <button
+                          type="button"
+                          className="cell-expand"
+                          aria-expanded={expandedCells.has(cell.name)}
+                          onClick={() =>
+                            setExpandedCells((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(cell.name)) next.delete(cell.name);
+                              else next.add(cell.name);
+                              return next;
+                            })
+                          }
+                        >
+                          {expandedCells.has(cell.name) ? "collapse" : `${res.lines.length} lines — expand`}
                         </button>
                       )}
                     </div>

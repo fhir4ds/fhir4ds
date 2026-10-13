@@ -1715,3 +1715,12 @@ details[open] > summary > .patient-tree-caret::before {
   min-width: 0;
   min-height: 0;
 }
+
+/* S3 Muse must-fixes: closure highlight, add-cell, expand state */
+.cell-card.cell-in-closure { border-color: rgba(90,160,255,0.7); box-shadow: 0 0 0 1px rgba(90,160,255,0.35); }
+.cell-card.cell-dimmed { opacity: 0.55; }
+.cell-addbtn {
+  border: 0; background: transparent; color: inherit; cursor: pointer;
+  font-size: 11px; opacity: 0.7; padding: 1px 4px; border-radius: 3px;
+}
+.cell-addbtn:hover { background: rgba(90,160,255,0.25); opacity: 1; }

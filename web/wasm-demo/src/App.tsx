@@ -246,6 +246,40 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri, serverUrl }: 
   const { ready: duckdbReady, error: duckdbError, extensionsLoaded, executeQuery, getConnection } = useDuckDB(wasmAppUrl, duckdbRequired);
   const { ready: pyodideReady, error: pyodideError, translate } = usePyodide(pyodideRequired);
 
+  /** S3 Muse must-fix 4: insert a new cell marker above/below the named
+   *  cell's marker line in the master buffer. */
+  const insertCell = useCallback(
+    (anchor: string, where: "above" | "below") => {
+      const lines = cqlText.split("\n");
+      let offset = 0;
+      let anchorIdx = -1;
+      for (let i = 0; i < lines.length; i++) {
+        const isMarker = /^\s*\/\/\s*#\s*%%/.test(lines[i]);
+        if (isMarker) {
+          // find the cell after this marker whose name matches
+          // (simple heuristic: scan the following lines for define name)
+          let name = "";
+          for (let j = i + 1; j < lines.length; j++) {
+            const m = /^\s*define\s+(function\s+)?(\"?)([A-Za-z0-9_]+)\2\s*[(:]/.exec(lines[j]);
+            if (m) { name = m[3]; break; }
+            if (/^\s*\/\/\s*#\s*%%/.test(lines[j])) break;
+            const lm = /^\s*\/\/\s*#\s*%%\s*\[name:\s*([A-Za-z0-9_]+)/.exec(lines[i]);
+            if (lm) { name = lm[1]; break; }
+          }
+          const lm = /^\s*\/\/\s*#\s*%%\s*\[name:\s*([A-Za-z0-9_]+)/.exec(lines[i]);
+          if (lm) name = lm[1];
+          if (name === anchor) { anchorIdx = i; break; }
+        }
+        offset += lines[i].length + 1;
+      }
+      if (anchorIdx === -1) return;
+      const insertLine = where === "above" ? anchorIdx : anchorIdx + 1;
+      const next = [...lines.slice(0, insertLine), "// # %%", "define NewCell: 'TODO'", ...lines.slice(insertLine)];
+      setCqlText(next.join("\n"));
+    },
+    [cqlText],
+  );
+
   // P4 (S1 Muse): blocking version pin — a mismatched server must not
   // silently execute with divergent semantics; cell runs fall back to the
   // in-browser path with an explicit banner (override: engine popover).
@@ -645,6 +679,7 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri, serverUrl }: 
                     onChange={setCqlText}
                     connected={connected}
                     onRunCells={runCells}
+                    onInsertCell={insertCell}
                   />
                 ),
                 badge: "editable",
