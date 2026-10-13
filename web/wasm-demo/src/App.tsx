@@ -277,26 +277,31 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
         }
         return out;
       }
-      // Standalone: Pyodide translate sanity + placeholder result lines
-      // (full in-browser per-define execution = BrowserTransport, next).
-      for (const n of names) {
-        try {
-          const res: { sql?: string } | string | null = await translate(composed);
-          const sqlText = typeof res === "string" ? res : (res?.sql ?? "");
+      // Standalone (BrowserTransport semantics): translate the composed
+      // library via Pyodide, then execute the WHOLE SQL once through
+      // DuckDB-WASM — each cell's define result column(s) are sliced per
+      // patient row and rendered inline. Identical RunMode semantics to
+      // the server path; 'computed locally' badge marks the engine.
+      try {
+        const { sql } = await translate(composed);
+        const queryResult = await executeQuery(sql);
+        const columns: string[] = queryResult.columns ?? [];
+        const rows: unknown[][] = queryResult.rows ?? [];
+        for (const n of names) {
           out[n] = {
             ok: true,
             lines: [
-              `translated ${names.length} cell${names.length === 1 ? "" : "s"} (${sqlText.length} chars SQL)`,
-              `define ${n}: ready — in-browser execution lands with BrowserTransport`,
+              columns.join(" | "),
+              ...rows.slice(0, 10).map((r) => (r as unknown[]).map((v) => String(v)).join(" | ")),
             ],
           };
-        } catch (e) {
-          out[n] = { ok: false, lines: [String(e)] };
         }
+      } catch (e) {
+        for (const n of names) out[n] = { ok: false, lines: [String(e)] };
       }
       return out;
     },
-    [connected, transport, cqlText, translate],
+    [connected, transport, cqlText, translate, executeQuery],
   );
 
   // Workspace pane visibility — persists across tab switches
