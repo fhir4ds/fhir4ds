@@ -5,8 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const PORT = 19041;
+<<<<<<< HEAD
 const WORKTREE = "/mnt/d/fhir4ds-hotfix-qa002";
 const WORKTREE = "/mnt/d/fhir4ds-maint-spec-comp-20261012c";
+=======
+const WORKTREE = "/mnt/d/fhir4ds-maint-spec-comp-20261012";
+>>>>>>> maint/spec-comp-20261012
 
 let server: ChildProcess | null = null;
 let dir: string | null = null;

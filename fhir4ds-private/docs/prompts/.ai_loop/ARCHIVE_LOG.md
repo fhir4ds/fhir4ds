@@ -1,4 +1,5 @@
 
+<<<<<<< HEAD
 ## hotfix/qa002-mixed-data-crash (2026-10-13, opencode-fix4)
 
 - 2026-10-13T00:15:00-05:00 WORKTREE_READY (hotfix from dev cf66ab1d; conductor dispatch c-qa002)
@@ -22,3 +23,11 @@
 - CLEAN checks: empty kernel yields a live connection with zero diagnostics; homogeneous suffix routing correct (.ndjson → ndjson_paths, .json → bundle_paths); uppercase .NDJSON routes identically; single-file strict load is all-or-nothing with line-attributed error diagnostics; valueset loading keeps the connection alive; KernelManager current() stable, restart swaps kernel identity atomically (new kernel sees new data w2, old reference drains alive and ISOLATED from new data); 2 churn + 3 reader threads over 5 restarts with zero errors; missing dataset dir leaves a live connection with no diagnostics.
 - 2026-10-12T22:50:00-05:00 GATES: devserver pytest 204/204; dev-server e2e 48/48 FIRST PASS (PYTHONPATHs retargeted to 20261012d).
 - VERDICT: 2 FINDINGS (1 HIGH + 1 MEDIUM), findings-only per directive — NO product changes; branch left for human merge.
+=======
+## maint/spec-comp-20261012 — spec-compliance iteration (2026-10-12, opencode-fix4)
+
+- 2026-10-12T03:20:00-05:00 WORKTREE_READY (cf66ab1d)
+- 2026-10-12T04:05:00-05:00 PROBE GREEN (probe1: 12 checks 0 findings after three probe-shape corrections — _plain_code is a class staticmethod; SearchResult exposes attrs not subscripts; and the no-key ctor is LAZY by documented design so the typed error must be asserted at CALL time not construction — 9th instance of the probe-error-over-bugs ratio rule). Fresh coverage: UMLS adapter unit invariants via fake-urlopen injection — SAB map covers all six documented systems; MTH family excluded from results (no leak through the pipeline); _plain_code extracts URI tails for all source shapes; search->CUI->atoms pipeline returns multi-SAB deduped rows (C1-A duplicate collapses, SNOMED+LOINC both present); apiKey rides the QUERY PARAM (UTS contract, never Basic); the no-key CALL raises the typed UMLSTerminologyEndpointError with env-var guidance and never echoes a key value; fs-list traversal guard semantics (resolve().relative_to) reject escape paths.
+- 2026-10-12T04:55:00-05:00 GATES: terminology pytest 49 passed/4 skipped; devserver pytest 204/204; dev-server e2e 48/48 FIRST PASS (PYTHONPATHs retargeted).
+- VERDICT: CLEAN, 0 findings. Findings-only per directive; branch left for human merge.
+>>>>>>> maint/spec-comp-20261012

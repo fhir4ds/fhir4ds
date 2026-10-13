@@ -6,8 +6,12 @@ import { join } from "node:path";
 
 const PORT = 19021;
 const BASE = `http://127.0.0.1:${PORT}`;
+<<<<<<< HEAD
 const WORKTREE = "/mnt/d/fhir4ds-hotfix-qa002";
 const WORKTREE = "/mnt/d/fhir4ds-maint-spec-comp-20261012c";
+=======
+const WORKTREE = "/mnt/d/fhir4ds-maint-spec-comp-20261012";
+>>>>>>> maint/spec-comp-20261012
 
 let server: ChildProcess | null = null;
 let dir = "";
