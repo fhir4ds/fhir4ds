@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 const PORT = 19041;
 const WORKTREE = "/mnt/d/fhir4ds-hotfix-qa002";
+const WORKTREE = "/mnt/d/fhir4ds-maint-spec-comp-20261012c";
 
 let server: ChildProcess | null = null;
 let dir: string | null = null;

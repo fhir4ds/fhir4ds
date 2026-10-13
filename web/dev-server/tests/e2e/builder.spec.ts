@@ -52,6 +52,7 @@ test.beforeAll(async () => {
     "/usr/bin/python3",
     ["-m", "fhir4ds.cli", "dev", dir, "--port", String(PORT), "--no-open"],
     { cwd: dir, env: { PYTHONPATH: "/mnt/d/fhir4ds-hotfix-qa002", PATH: process.env.PATH ?? "" }, stdio: "ignore" },
+    { cwd: dir, env: { PYTHONPATH: "/mnt/d/fhir4ds-maint-spec-comp-20261012c", PATH: process.env.PATH ?? "" }, stdio: "ignore" },
   );
   for (let i = 0; i < 120; i++) {
     try {

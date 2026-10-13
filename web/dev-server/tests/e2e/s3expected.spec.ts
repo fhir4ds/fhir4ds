@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const WORKTREE = "/mnt/d/fhir4ds-hotfix-qa002";
+const WORKTREE = "/mnt/d/fhir4ds-maint-spec-comp-20261012c";
 const PORT = 19081;
 const BASE = `http://127.0.0.1:${PORT}`;
 

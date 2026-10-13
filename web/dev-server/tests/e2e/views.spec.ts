@@ -70,6 +70,7 @@ test.beforeAll(async () => {
     {
       env: {
         PYTHONPATH: "/mnt/d/fhir4ds-hotfix-qa002",
+        PYTHONPATH: "/mnt/d/fhir4ds-maint-spec-comp-20261012c",
         PATH: process.env.PATH ?? "",
       },
       cwd: dir,

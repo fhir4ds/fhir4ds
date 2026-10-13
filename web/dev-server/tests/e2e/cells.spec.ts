@@ -52,6 +52,7 @@ test.beforeAll(async () => {
     "/usr/bin/python3",
     ["-m", "fhir4ds.cli", "dev", workdir, "--port", String(PORT), "--no-open"],
     { env: { PATH: process.env.PATH, PYTHONPATH: "/mnt/d/fhir4ds-hotfix-qa002" }, stdio: "ignore", cwd: workdir },
+    { env: { PATH: process.env.PATH, PYTHONPATH: "/mnt/d/fhir4ds-maint-spec-comp-20261012c" }, stdio: "ignore", cwd: workdir },
   );
   // Wait for /health.
   const deadline = Date.now() + 60_000;
