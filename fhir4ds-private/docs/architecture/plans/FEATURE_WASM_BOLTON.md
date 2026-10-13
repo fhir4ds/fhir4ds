@@ -1,6 +1,6 @@
 # FDD — c-wasm-bolton: The WASM App Becomes THE Cleanroom Product
 
-**Status**: ROLE_FEATURE_DESIGNER draft v1 — awaiting conductor review + Muse design gate
+**Status**: ROLE_FEATURE_DESIGNER draft v2 — Muse design gate PASS-WITH-CHANGES folded in; awaiting conductor review
 **Author**: opencode-fix4 (campaign c-wasm-bolton, 2026-10-13)
 **Baseline**: dev @ cf66ab1d (committed + pushed; safe rollback point)
 **Directive**: user-directed DIRECTION REVERSAL — the WASM app becomes THE cleanroom product.
@@ -105,17 +105,38 @@ committed `fhir4ds/devserver/static/` build. The wasm app build
 | **connected** | Served by `fhir4ds dev` (or pointed at a server via settings) | Server (native DuckDB, full CQL/DQM) | Real local workspace via server APIs |
 | **embed** | `<fhir4ds-view>` web component on a host page | Per host: standalone by default; connected if host supplies a server URL | Per mode |
 
-**Handshake**: on boot the app fetches `/api/mode` (new endpoint).
-- 200 + `{server: true, version, workspace}` → connected mode; mount
-  `ServerTransport`.
-- fetch failure / 404 → standalone; mount `BrowserTransport`.
-- Web component attribute `server-url` overrides (embed-connected).
-The handshake is a pure additive API — the existing `/health` stays.
+**Handshake** (Muse: never a boolean — four states): on boot the app
+fetches `/api/mode` (new, additive endpoint; `/health` stays).
+- `connecting` — initial state: skeleton rail + "contacting server...".
+  NEVER render the standalone rail as a flash while resolving.
+- `connected` — 200 + `{server: true, version, workspace}`: mount
+  `ServerTransport`. Version pin: if `version` is outside the served
+  build's expected server range, show a blocking banner ("UI build X
+  expects server >= Y"); never silently degrade.
+- `standalone` — 404 (static hosting, no server): mount
+  `BrowserTransport`.
+- `degraded` — handshake OK but WebSocket/events failed: stay
+  connected, watcher-dot warning in the status bar.
+- Web component attribute `server-url` overrides (embed-connected);
+  cross-origin embed falls back to standalone with explicit copy.
+The status-bar engine badge (`wasm` / `server vX.Y`) is clickable:
+popover shows mode, base URL, capability list, "Retry connection",
+and "Use in-browser engine anyway" (manual override both directions).
 
-**Progressive enhancement contract**: every capability degrades
-gracefully along the matrix in §4.4; connected-only capabilities
-render as visible-but-disabled with a "requires a connected server"
- affordance, never as errors.
+**Progressive enhancement contract** (Muse hybrid rule — resolves the
+v1 hidden-vs-disabled contradiction):
+- **Rail entries: ALWAYS visible**, stable order both modes; locked
+  items show lock icon + tooltip "Requires a connected server — run
+  `fhir4ds dev`". Clicking opens an empty-state panel with the command
+  + docs link, never a dead tooltip.
+- **Heavy workflow interiors: hidden standalone** (Measures, Expected
+  results, MADiE, persistent Run History render no fake panels) — but
+  their rail entries + one-line empty states remain.
+- **Data-source duals coexist**: connected mode shows "Workspace
+  files" AND "Upload" as two tabs (connecting must never REMOVE the
+  upload path standalone users just used).
+- Every disabled affordance names the remedy verbatim: "requires a
+  connected server" + the `fhir4ds dev` command inline.
 
 ### 4.2 Transport contract (the engine seam)
 
@@ -162,13 +183,13 @@ dev-server for the transition. Then:
 | Cell editor + per-cell runs | ✅ (in-browser engine; dep closure client-side) | ✅ (server cells API, real dep closure) |
 | SQL view (translate output) | ✅ | ✅ + runs/sql sha history |
 | Datasets: upload/inline | ✅ (Builder/uploader, today) | ✅ |
-| Datasets: local workspace files | ❌ | ✅ fsList/workspaceAddPath/watcher reload |
-| Measures (scaffold/run/compare/baselines) | ❌ (hidden) | ✅ |
-| Expected results (S3b) | ❌ (hidden) | ✅ |
-| MADiE import | ❌ (hidden) | ✅ |
+| Datasets: local workspace files | ❌ (entry disabled + remedy) | ✅ fsList/workspaceAddPath/watcher reload |
+| Measures (scaffold/run/compare/baselines) | entry visible, interior hidden | ✅ |
+| Expected results (S3b) | entry visible, interior hidden | ✅ |
+| MADiE import | entry visible, interior hidden | ✅ |
 | Terminology VSAC/FHIR import | ❌ (paste-inline only) | ✅ full import + resolution status |
-| Terminology UMLS | ❌ | ✅ (existing UMLS endpoints + key state) |
-| Run history | session-local | ✅ persistent runlog |
+| Terminology UMLS | ❌ (env-var empty state) | ✅ (existing UMLS endpoints + key state) |
+| Run history | session-local | ✅ persistent runlog (interior hidden standalone) |
 | Evidence/explain | ❌ (no server) | ✅ |
 | SMART / SDC / CMS viewer / Builder | ✅ unchanged | ✅ unchanged |
 
@@ -206,16 +227,42 @@ dev-server for the transition. Then:
 
 ### 4.6 UI shell design (Muse gate will review)
 
-- Connected mode adds a **workspace rail** (libraries / datasets /
-  valuesets / measures / terminology / history) to the existing
-  `WorkspaceLayout`; standalone shows today's playground rail. One
-  shell, two rail configs — not two shells.
-- Cell mode is a toggle on the editor (monaco decorations for `// # %%`
-  markers; run chips per cell header; results inline below each cell;
-  dep-closure highlight on hover of a define). The playground's
-  whole-buffer Run stays for non-cell buffers.
-- Status bar gains: engine badge (`wasm` / `server vX.Y`),
-  workspace name, watcher state dot (uses existing StatusDot).
+- **Single adaptive rail, stable order both modes** (Muse: two rail
+  configs recreates the two-shell problem at the IA layer):
+  - Core (always active): `CQL · Data · SQL · Viewer` (today's
+    playground vocabulary kept).
+  - Cleanroom section (same position both modes, capability-gated):
+    `Libraries · Datasets · Valuesets · Measures · Terminology ·
+    History`.
+  - Slice 2 gate artifact: icon-MAPPING TABLE (dev-server icon → new
+    rail item → standalone state) — the migration contract for
+    existing `fhir4ds dev` users; reviewed at the Slice 2 Muse gate.
+- **Cell interaction spec** (Muse: v1 was a feature list, not a
+  design; Slice 3 builds from THIS):
+  - Cell mode is an explicit, persistent per-buffer toggle (never
+    auto-detect), with first-run coach mark: "Cells split on
+    `// # %%`. Ctrl/Cmd+Enter runs this cell."
+  - Marker affordances: "add cell above/below" editor actions; a
+    leading header cell is implicit (cell 1 = start of file).
+  - Every gutter state has a text equivalent (chip label +
+    aria-label) — no color-only dep states.
+  - Dep-closure highlighting is PINNED (click a define to pin its
+    closure; Esc clears), not hover-only; identical highlight
+    semantics in both engines.
+  - Inline results: collapsed-by-default when success output exceeds
+    N lines; always-expanded on error; per-cell clear + global "clear
+    all outputs"; max-height + internal scroll (no layout shove).
+  - RunMode is a visible segmented control next to Run
+    (`cell · cell_deps · to_here`), default `cell_deps`; identical
+    semantics in both engines; standalone cell results carry a subtle
+    "computed locally" badge when closure was client-side.
+  - Whole-buffer Run remains for buffers with no markers.
+- Status bar gains: engine badge (`wasm` / `server vX.Y`, clickable —
+  see handshake), workspace name, watcher state dot (StatusDot),
+  engine-readiness state ("engine loading..." while Pyodide/WASM or
+  server kernel init — Run disabled with spinner, file tree
+  skeleton). Connected mode NEVER loads Pyodide (visible perf
+  guarantee, not just a risks-row).
 
 ### 4.7 Risks & mitigations
 
@@ -226,6 +273,9 @@ dev-server for the transition. Then:
 | Cell dep closure parity client vs server | Port `dependency_closure` faithfully (pure function, unit-tested both sides on fixture libs) |
 | Loss of dev-server UX during arc | `--ui legacy` escape hatch until Slice 5; both UIs green through the arc |
 | static/ build freshness (website doctrine) | Commit builds; slice 1 adds CI check that wasm build hash matches `npm run build` output |
+| Perceived data loss on mode transitions (Muse HIGH) | Mode flips NEVER discard buffer/dataset/uploads state; stale outputs get "from previous engine — re-run" badge; uploads persist as session-local tabs beside workspace files |
+| First-run standalone = disabled product (Muse MEDIUM) | Slice 1 ships a first-run panel: "what you can do here / what `fhir4ds dev` unlocks"; measure time-to-first-successful-run before/after |
+| Async engine readiness masquerading as breakage (Muse MEDIUM) | Per-surface readiness states driven by capabilities() + init promises (§4.6) |
 | QA-002 hotfix interleave | Merge hotfix ad936db7 first or with slice 1 (same files: kernel/api surfaces) |
 
 ### 4.8 Retirement plan (arc end, Slice 5)
@@ -245,20 +295,30 @@ dev-server for the transition. Then:
 - **Web**: wasm-demo existing playwright (playground + web-component +
   builder + clinic), NEW per-slice specs (handshake, fs nav, cells,
   terminology), dev-server e2e kept green until Slice 5 migration.
-- **Parity**: cell dep-closure client-vs-server; standalone behavior
-  unchanged (golden flows); embed website suite.
+- **Parity**: cell dep-closure client-vs-server on REAL fixture
+  libraries users open + one adversarial library (shadowing defines,
+  out-of-order cells), not just unit fixtures; standalone behavior
+  unchanged INCLUDING STATE (golden flows + mode-flip state
+  preservation: buffers, uploads, outputs-with-stale-badges survive);
+  embed website suite; first-run panel acceptance criteria.
+- **e2e freeze rule** (Muse Q4): all NEW e2e after Slice 1 targets
+  wasm-connected mode; dev-server specs only port, never grow.
 - **Conformance**: master gate 2832/2832 at arc end (server engine
   untouched, but run to prove it).
 
-## 6. Open questions for conductor / Muse
+## 6. Open questions — Muse-gate resolutions (conductor may override)
 
-1. Rail vocabulary in connected mode — mirror dev-server icon rail or
-   simplify (Muse)?  Proposal: simplify to 6 items.
-2. Should standalone cell execution honor `RunMode` deps modes
-   (cell/cell_deps/to_here) identically to server? Proposal: yes —
-   same semantics, client-computed closure.
-3. UMLS key entry UX in connected mode: env-var-only (server doctrine)
-   or settings dialog writes toml? Proposal: env-var display + link,
-   no secret writing (security doctrine).
-4. Timing of dev-server e2e retirement: per-slice port (proposed) vs
-   big-bang in Slice 5?
+1. Rail vocabulary: **simplified 6-item, task-named, stable order**
+   (`Libraries · Datasets · Valuesets · Measures · Terminology ·
+   History`); dev-server nouns kept (no renames mid-migration);
+   icon-mapping table is the Slice 2 gate artifact.
+2. Standalone cell RunMode: **identical semantics, client-computed
+   closure, labeled** ("computed locally" badge); parity test on real
+   + adversarial fixture libraries.
+3. UMLS key UX: **env-var display + link, no secret writing** —
+   `UMLS: configured / not configured (UMLS_API_KEY)` + "Set
+   UMLS_API_KEY and restart fhir4ds dev" + docs link + recheck button
+   (re-calls ConfigGet); never echo key length/prefix.
+4. E2e retirement: **per-slice port with freeze rule** (no new
+   dev-server-only coverage after Slice 1); delete legacy only when
+   the ported suite is green on the final tree.
