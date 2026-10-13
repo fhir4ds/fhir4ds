@@ -18,7 +18,7 @@ import {
   CleanroomRail,
   RailEmptyState,
   WorkspaceFileTree,
-  REMEDY,
+  RunHistory,
   type RailId,
 } from "./components/CleanroomRail";
 import { 
@@ -70,7 +70,7 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
   // Standalone + embed behavior is bit-identical to pre-bolton; connected
   // mode adds the engine badge + workspace name (ServerTransport surfaces
   // arrive in S2+). Connected mode skips Pyodide init (perf guarantee).
-  const { state: modeState, versionMismatch, transport } = useModeHandshake();
+  const { state: modeState, versionMismatch, transport, retry, useStandalone } = useModeHandshake();
   // P3 (S1 Muse): badge honesty — indeterminate during connecting, never a
   // premature "wasm" assertion.
   const engineBadge =
@@ -85,6 +85,34 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
 
   // S2: single adaptive rail state (stable order both modes).
   const [railOpen, setRailOpen] = useState<RailId | null>(null);
+  // S2: watcher badges (connected) — changed counts per rail section;
+  // data-hint NEVER auto-reloads (locked decision 4) — banner + explicit
+  // restart affordance only.
+  const [changeBadges, setChangeBadges] = useState<Partial<Record<RailId, number>>>({});
+  const [dataHint, setDataHint] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    if (!transport) return;
+    const off = transport.onWorkspaceEvent((e) => {
+      if (e.kind === "changed" && Array.isArray(e.paths)) {
+        setChangeBadges((prev) => {
+          const next = { ...prev };
+          const bump = (id: RailId, n: number) => {
+            next[id] = (next[id] ?? 0) + n;
+          };
+          for (const p of e.paths) {
+            if (p.endsWith(".cql")) bump("libraries", 1);
+            else if (p.endsWith(".json")) bump("valuesets", 1);
+            else bump("data", 1);
+          }
+          return next;
+        });
+      } else if (e.kind === "data-hint" && Array.isArray(e.paths)) {
+        setDataHint((prev) => [...(prev ?? []), ...e.paths]);
+      }
+    });
+    return off;
+  }, [transport]);
   const [connectedPatientName, setConnectedPatientName] = useState<string | undefined>();
 
   // When the Web Component changes the `scenario` attribute, the `forceScenario`
@@ -390,8 +418,41 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
             mode={modeState}
             transport={transport}
             activeId={railOpen}
-            onSelect={(id) => setRailOpen((cur) => (cur === id ? null : id))}
+            changeBadge={changeBadges}
+            onSelect={(id) => {
+              setRailOpen((cur) => (cur === id ? null : id));
+              // Opening a section acknowledges its change badge.
+              setChangeBadges((prev) => ({ ...prev, [id]: 0 }));
+            }}
           />
+          {dataHint && dataHint.length > 0 && (
+            <div className="data-hint-banner" role="status">
+              <span>
+                Data files changed on disk ({dataHint.length}). The kernel keeps the
+                loaded data — restart to reload.
+              </span>
+              <button
+                type="button"
+                className="data-hint-restart"
+                onClick={() => {
+                  transport
+                    ?.restartKernel()
+                    .then(() => setDataHint(null))
+                    .catch(() => {});
+                }}
+              >
+                Restart kernel
+              </button>
+              <button
+                type="button"
+                className="data-hint-dismiss"
+                aria-label="Dismiss"
+                onClick={() => setDataHint(null)}
+              >
+                ×
+              </button>
+            </div>
+          )}
           {railOpen && (
             <aside className="cleanroom-slideout" aria-label={`${railOpen} panel`}>
               <header>
@@ -419,6 +480,9 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
                       suffixFilter={[".json"]}
                     />
                   );
+                }
+                if (railOpen === "history") {
+                  return <RunHistory transport={transport!} />;
                 }
                 return (
                   <div className="cleanroom-todo" role="status">
@@ -498,6 +562,9 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
             isError={isStatusError}
             engineBadge={engineBadge}
             workspaceName={workspaceName}
+            engineBase=""
+            onRetry={retry}
+            onUseStandalone={useStandalone}
           />
         </div>
       )}

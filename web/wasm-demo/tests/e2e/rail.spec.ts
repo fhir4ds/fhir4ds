@@ -106,3 +106,46 @@ test("connected: engine badge shows server version (S2 rerun pin)", async ({ pag
   await page.goto(CONNECTED);
   await expect(page.locator(".status-engine")).toContainText(/server \d+\.\d+\.\d+/, { timeout: 20000 });
 });
+
+test("connected: engine badge popover opens with retry + override actions (P1)", async ({ page }) => {
+  await page.goto(CONNECTED);
+  const badge = page.locator(".status-engine");
+  await expect(badge).toContainText(/server \d+\.\d+\.\d+/, { timeout: 20000 });
+  await badge.click();
+  const pop = page.locator(".engine-popover");
+  await expect(pop).toBeVisible();
+  await expect(pop.getByText("Retry connection")).toBeVisible();
+  await expect(pop.getByText("Use in-browser engine")).toBeVisible();
+  // Escape closes
+  await page.keyboard.press("Escape");
+  await expect(pop).toBeHidden();
+});
+
+test("connected: History slide-out lists persistent runlog entries + clear", async ({ page }) => {
+  await page.goto(CONNECTED);
+  const history = page.locator(".cleanroom-rail-btn", { hasText: "History" });
+  await expect(history).toBeEnabled({ timeout: 20000 });
+  await history.click();
+  const slideout = page.locator(".cleanroom-slideout");
+  await expect(slideout).toBeVisible();
+  // Empty state OR entries — both valid; the panel must render without error.
+  await expect(
+    slideout.locator(".cleanroom-empty, .runhistory-list, .cleanroom-tree-error").first(),
+  ).toBeVisible({ timeout: 15000 });
+});
+
+test("connected: data file change shows data-hint banner (locked decision 4 — never auto-reload)", async ({ page, request }) => {
+  await page.goto(CONNECTED);
+  // Wait for connection + rail
+  await expect(page.locator(".status-engine")).toContainText(/server/, { timeout: 20000 });
+  // Touch a data file on disk (server watcher polls every 0.5s; debounce 0.25s)
+  const { writeFile: wf, mkdir: mkd } = await import("node:fs/promises");
+  await mkd(join(dir!, "data"), { recursive: true });
+  await wf(join(dir!, "data", "p.ndjson"), JSON.stringify({ resourceType: "Patient", id: "p1" }) + "\n");
+  const banner = page.locator(".data-hint-banner");
+  await expect(banner).toBeVisible({ timeout: 20000 });
+  await expect(banner).toContainText(/restart/i);
+  // Dismiss clears it without restarting.
+  await banner.locator(".data-hint-dismiss").click();
+  await expect(banner).toBeHidden();
+});

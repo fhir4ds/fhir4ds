@@ -175,3 +175,65 @@ export function WorkspaceFileTree({
     </ul>
   );
 }
+
+/** Connected run history (persistent runlog via runsList; runs/sql
+ *  drill-down lands with the SQL history tab in S2b). */
+export function RunHistory({ transport }: { transport: HttpTransport }) {
+  const [runs, setRuns] = useState<{ ts: number; kind: string; library?: string }[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [cleared, setCleared] = useState(false);
+
+  const load = useCallback(() => {
+    transport
+      .runsList()
+      .then((res: any) => {
+        const data = res?.data ?? res;
+        if (data?.ok === false) {
+          setError(data?.diagnostics?.[0]?.message ?? "runlog unavailable");
+          setRuns(null);
+        } else {
+          setError(null);
+          setRuns(data?.runs ?? []);
+        }
+      })
+      .catch((e: unknown) => setError(String(e)));
+  }, [transport]);
+
+  useEffect(() => {
+    if (!cleared) load();
+  }, [load, cleared]);
+
+  if (error) return <div className="cleanroom-tree-error" role="alert">{error}</div>;
+  if (!runs) return <div className="cleanroom-tree-loading" aria-live="polite">loading…</div>;
+  if (runs.length === 0)
+    return (
+      <div className="cleanroom-empty">
+        <p>No runs yet — run a cell or a measure to populate the history.</p>
+      </div>
+    );
+  return (
+    <div className="runhistory-list">
+      <div className="runhistory-actions">
+        <button
+          type="button"
+          className="data-hint-restart"
+          onClick={() =>
+            transport.runsClear().then(() => setCleared(true)).catch(() => {})
+          }
+        >
+          Clear history
+        </button>
+      </div>
+      <ul className="cleanroom-tree">
+        {runs.map((r, i) => (
+          <li key={i} role="treeitem">
+            <span className="cleanroom-tree-row">
+              {new Date(r.ts).toLocaleTimeString()} · {r.kind}
+              {r.library ? ` · ${r.library}` : ""}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}

@@ -7,7 +7,7 @@
  * transport.capabilities()).
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { handshake, versionPinOk, type ModeState } from "../transport/handshake";
 import { HttpTransport } from "../transport/http-transport";
 
@@ -20,6 +20,9 @@ export interface ModeHandshake {
    *  documented range — UI must show the blocking banner. */
   versionMismatch: boolean;
   retry: () => void;
+  /** P1 (S1 Muse): "use in-browser engine anyway" — sticky override to
+   *  standalone; retry() clears it. */
+  useStandalone: () => void;
 }
 
 export function useModeHandshake(serverUrl?: string): ModeHandshake {
@@ -43,12 +46,21 @@ export function useModeHandshake(serverUrl?: string): ModeHandshake {
   }, [serverUrl, attempt, overrideStandalone]);
 
   const connected = state.kind === "connected" && !overrideStandalone;
+  const effectiveState: ModeState = overrideStandalone && state.kind === "connected"
+    ? { kind: "standalone", reason: "not-found" }
+    : state;
+  // P7 (S1 Muse): stable transport identity while connected (surfaces
+  // subscribe in S2+).
+  const transport = useMemo(
+    () => (connected ? new HttpTransport(serverUrl ?? "") : null),
+    [connected, serverUrl],
+  );
+  const useStandalone = useCallback(() => setOverrideStandalone(true), []);
   return {
-    state: overrideStandalone && state.kind === "connected"
-      ? { kind: "standalone", reason: "not-found" }
-      : state,
-    transport: connected ? new HttpTransport(serverUrl ?? "") : null,
+    state: effectiveState,
+    transport,
     versionMismatch: connected && !versionPinOk(state),
     retry,
+    useStandalone,
   };
 }

@@ -8,13 +8,20 @@ interface StatusBarProps {
   message: string;
   isError: boolean;
   /** c-wasm-bolton S1: engine badge — "wasm" (standalone) or the connected
-   *  server version; clickable when connected (retry/override popover is
-   *  S2 — S1 renders the badge + workspace name only). */
+   *  server version; S2 P1: clickable popover with retry + override. */
   engineBadge?: string;
   workspaceName?: string;
+  /** Popover content (connected): base URL + capability summary. */
+  engineBase?: string;
+  onRetry?: () => void;
+  onUseStandalone?: () => void;
 }
 
-export function StatusBar({ metrics, message, isError, engineBadge, workspaceName }: StatusBarProps) {
+import { useState } from "react";
+
+export function StatusBar({ metrics, message, isError, engineBadge, workspaceName, engineBase, onRetry, onUseStandalone }: StatusBarProps) {
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const connected = engineBadge !== undefined && engineBadge !== "wasm" && engineBadge !== "…";
   const total =
     (metrics.translationTimeMs ?? 0) + (metrics.executionTimeMs ?? 0);
 
@@ -29,16 +36,45 @@ export function StatusBar({ metrics, message, isError, engineBadge, workspaceNam
         </span>
       )}
       {engineBadge && (
-        <span
-          className="metric status-engine"
-          title={
-            engineBadge === "wasm"
-              ? "In-browser engine (standalone)"
-              : `Connected server ${engineBadge}`
-          }
-        >
-          {engineBadge === "wasm" ? "⚙ wasm" : `🖧 server ${engineBadge}`}
-        </span>
+        <>
+          <button
+            type="button"
+            className="metric status-engine"
+            aria-expanded={popoverOpen}
+            aria-label={
+              engineBadge === "wasm"
+                ? "In-browser engine (standalone)"
+                : `Connected server ${engineBadge} — engine options`
+            }
+            onClick={() => connected && setPopoverOpen((v) => !v)}
+            onKeyDown={(e) => {
+              if (connected && e.key === "Escape") setPopoverOpen(false);
+            }}
+          >
+            {engineBadge === "wasm" ? "⚙ wasm" : engineBadge === "…" ? "⚙ …" : `🖧 server ${engineBadge}`}
+          </button>
+          {popoverOpen && connected && (
+            <div className="engine-popover" role="dialog" aria-label="Engine options">
+              <h4>Engine</h4>
+              <dl>
+                <dt>mode</dt>
+                <dd>connected</dd>
+                <dt>server</dt>
+                <dd>{engineBadge}</dd>
+                {engineBase && (<><dt>base</dt><dd>{engineBase}</dd></>)}
+                {workspaceName && (<><dt>workspace</dt><dd>{workspaceName}</dd></>)}
+              </dl>
+              <div className="engine-actions">
+                <button type="button" onClick={() => { setPopoverOpen(false); onRetry?.(); }}>
+                  Retry connection
+                </button>
+                <button type="button" onClick={() => { setPopoverOpen(false); onUseStandalone?.(); }}>
+                  Use in-browser engine
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
       <div className="status-metrics">
         {metrics.translationTimeMs !== undefined && (

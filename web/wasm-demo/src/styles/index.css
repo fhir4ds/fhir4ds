@@ -1536,3 +1536,70 @@ details[open] > summary > .patient-tree-caret::before {
 .cleanroom-tree-loading, .cleanroom-tree-error { font-size: 12px; opacity: 0.8; padding: 8px; }
 .cleanroom-tree-error { color: #ff8888; }
 .cleanroom-todo { font-size: 12px; opacity: 0.75; padding: 12px 8px; }
+
+/* S2: data-hint banner (locked decision 4 — never auto-reload) */
+.data-hint-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: rgba(229, 72, 77, 0.16);
+  border-bottom: 1px solid rgba(229, 72, 77, 0.4);
+  font-size: 12px;
+}
+.data-hint-banner span { flex: 1; }
+.data-hint-restart {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.data-hint-restart:hover { background: rgba(255, 255, 255, 0.18); }
+.data-hint-dismiss {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+/* P1: engine badge popover (clickable — retry + override) */
+.status-engine {
+  cursor: pointer;
+}
+.engine-popover {
+  position: absolute;
+  right: 8px;
+  bottom: 34px;
+  z-index: 40;
+  min-width: 240px;
+  padding: 10px 12px;
+  background: #1c1f26;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+}
+.engine-popover h4 { margin: 0 0 6px; font-size: 12px; }
+.engine-popover dl { margin: 0 0 8px; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+.engine-popover dt { opacity: 0.7; }
+.engine-popover dd { margin: 0; }
+.engine-popover .engine-actions { display: flex; gap: 8px; }
+.engine-popover button {
+  flex: 1;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.engine-popover button:hover { background: rgba(255, 255, 255, 0.18); }
+
+/* S2: run history list */
+.runhistory-list { font-size: 12px; }
+.runhistory-actions { display: flex; justify-content: flex-end; margin-bottom: 6px; }
