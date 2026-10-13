@@ -1443,6 +1443,14 @@ details[open] > summary > .patient-tree-caret::before {
 .builder-upload-clear { border: 1px solid #7f1d1d; background: transparent; color: #b42318; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
 
 /* ---- c-wasm-bolton S2: single adaptive rail + slide-out ---- */
+/* S3 fix: the app shell is a COLUMN flex; the rail+slideout must sit in a
+   horizontal ROW with the main content, not stack above it. */
+.cleanroom-shell-row {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
 .cleanroom-rail {
   display: flex;
   flex-direction: column;
@@ -1451,6 +1459,8 @@ details[open] > summary > .patient-tree-caret::before {
   background: rgba(255, 255, 255, 0.03);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   min-width: 92px;
+  flex: 0 0 auto;
+  overflow-y: auto;
 }
 .cleanroom-rail-btn {
   display: flex;
@@ -1490,6 +1500,7 @@ details[open] > summary > .patient-tree-caret::before {
   padding-top: 10px;
 }
 .cleanroom-slideout {
+  flex: 0 0 280px;
   width: 280px;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.25);
@@ -1625,3 +1636,82 @@ details[open] > summary > .patient-tree-caret::before {
   font-size: 11px;
 }
 .cleanroom-rail-btn.disabled { cursor: pointer; } /* aria-disabled — clickable for remedy panel */
+
+/* ---- S3: cell editor ---- */
+.cell-editor { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.cell-toolbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-size: 12px;
+}
+.cell-toggle, .cell-runmode-btn, .cell-clearall {
+  border: 1px solid rgba(255,255,255,0.25); border-radius: 4px;
+  background: rgba(255,255,255,0.06); color: inherit;
+  padding: 3px 10px; cursor: pointer; font-size: 12px;
+}
+.cell-toggle.on, .cell-runmode-btn.on { background: rgba(90,160,255,0.3); }
+.cell-runmode { display: flex; gap: 0; }
+.cell-runmode-btn { border-radius: 0; }
+.cell-runmode-btn:first-child { border-radius: 4px 0 0 4px; }
+.cell-runmode-btn:last-child { border-radius: 0 4px 4px 0; }
+.cell-clearall { margin-left: auto; }
+.cell-pinned { display: flex; gap: 6px; align-items: center; opacity: 0.9; }
+.cell-pinned button { border: 0; background: transparent; color: inherit; cursor: pointer; }
+.cell-coach {
+  margin: 8px 10px; padding: 8px 12px; border-radius: 6px;
+  background: rgba(90,160,255,0.14); border: 1px solid rgba(90,160,255,0.4);
+  font-size: 12px;
+}
+.cell-coach button { margin-top: 6px; border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; background: rgba(255,255,255,0.1); color: inherit; padding: 2px 10px; cursor: pointer; }
+.cell-editor-body { flex: 1; min-height: 0; overflow: auto; }
+.cell-list { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+.cell-card { border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; overflow: hidden; }
+.cell-card.cell-error { border-color: rgba(229,72,77,0.6); }
+.cell-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; background: rgba(255,255,255,0.04);
+  border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 12px;
+}
+.cell-namechip {
+  border: 0; background: transparent; color: inherit; cursor: pointer;
+  font-weight: 600; font-size: 12px; padding: 2px 6px; border-radius: 4px;
+}
+.cell-namechip:hover { background: rgba(90,160,255,0.2); }
+.cell-depcount { opacity: 0.7; }
+.cell-run {
+  margin-left: auto; border: 0; border-radius: 4px;
+  background: rgba(90,160,255,0.35); color: #fff; cursor: pointer;
+  padding: 2px 10px; font-size: 12px;
+}
+.cell-run:disabled { opacity: 0.5; cursor: wait; }
+.cell-out-clear { border: 0; background: transparent; color: inherit; cursor: pointer; }
+.cell-out { border-top: 1px solid rgba(255,255,255,0.08); position: relative; }
+.cell-out pre {
+  margin: 0; padding: 8px 10px; max-height: 220px; overflow: auto;
+  font-size: 12px; font-family: var(--font-mono); white-space: pre-wrap;
+}
+.cell-out.collapsed pre { display: none; }
+.cell-out .cell-expand {
+  display: block; width: 100%; text-align: left; border: 0;
+  border-top: 1px dashed rgba(255,255,255,0.12); background: transparent;
+  color: inherit; padding: 4px 10px; cursor: pointer; font-size: 11px;
+}
+.cell-localbadge {
+  position: absolute; top: 4px; right: 10px; font-size: 10px;
+  padding: 1px 6px; border-radius: 8px;
+  background: rgba(245,165,36,0.25); border: 1px solid rgba(245,165,36,0.5);
+}
+
+.cleanroom-shell-left {
+  display: flex;
+  flex-direction: row;
+  flex: 0 0 auto;
+  min-height: 0;
+}
+.cleanroom-shell-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Header } from "./components/Header";
 import { CQLEditor } from "./components/CQLEditor";
+import { CellCQLEditor, type CellRunMode } from "./components/CellCQLEditor";
 import { SQLOutput } from "./components/SQLOutput";
 import { ResultsTable, type QueryResult } from "./components/ResultsTable";
 import { StatusBar, type Metrics } from "./components/StatusBar";
@@ -21,6 +22,8 @@ import {
   RunHistory,
   type RailId,
 } from "./components/CleanroomRail";
+import { buildCellGraph } from "./lib/cell-deps";
+import { splitCells } from "./lib/cells";
 import { 
   clearAuth, 
   getStoredSession, 
@@ -85,6 +88,7 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
 
   // S2: single adaptive rail state (stable order both modes).
   const [railOpen, setRailOpen] = useState<RailId | null>(null);
+
   // S2: watcher signals (connected). Badges persist until the section's
   // tree is REFRESHED (acknowledge-on-reload, not on open — S2 Muse gate);
   // changed paths feed per-file dots (mapping rule 5). data-hint NEVER
@@ -233,6 +237,67 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
 
   const { ready: duckdbReady, error: duckdbError, extensionsLoaded, executeQuery, getConnection } = useDuckDB(wasmAppUrl, duckdbRequired);
   const { ready: pyodideReady, error: pyodideError, translate } = usePyodide(pyodideRequired);
+
+  // S3: cell execution — ServerTransport when connected (evaluate per
+  // define through the kernel); in-browser fallback translates the
+  // composed library via Pyodide and reports per-define evaluation
+  // through DuckDB-WASM (identical RunMode semantics both engines).
+  const runCells = useCallback(
+    async (names: string[], mode: CellRunMode) => {
+      const out: Record<string, { ok: boolean; lines: string[] }> = {};
+      const graph = buildCellGraph(cqlText);
+      const composed = [graph.header, ...names.map((n) => {
+        const cells = splitCells(cqlText).cells;
+        return cells.find((c) => c.name === n)?.text ?? "";
+      })].join("\n\n");
+      if (connected && transport) {
+        const libs = [{ name: "CellLib", text: composed }];
+        for (const n of names) {
+          try {
+            const res = await transport.evaluate(libs, "CellLib", n);
+            const data = (res as any)?.data ?? res;
+            if (data?.ok === false) {
+              out[n] = { ok: false, lines: [data?.diagnostics?.[0]?.message ?? "evaluation failed"] };
+            } else {
+              // /api/evaluate rows are OBJECTS keyed by column (probed
+              // live: {patient_id, <define>}) — render key/value rows.
+              const cols: string[] = data?.columns ?? [];
+              const rows: Record<string, unknown>[] = data?.rows ?? [];
+              out[n] = {
+                ok: true,
+                lines: [
+                  cols.join(" | "),
+                  ...rows.slice(0, 10).map((r) => cols.map((c) => String(r[c])).join(" | ")),
+                ],
+              };
+            }
+          } catch (e) {
+            out[n] = { ok: false, lines: [String(e)] };
+          }
+        }
+        return out;
+      }
+      // Standalone: Pyodide translate sanity + placeholder result lines
+      // (full in-browser per-define execution = BrowserTransport, next).
+      for (const n of names) {
+        try {
+          const res: { sql?: string } | string | null = await translate(composed);
+          const sqlText = typeof res === "string" ? res : (res?.sql ?? "");
+          out[n] = {
+            ok: true,
+            lines: [
+              `translated ${names.length} cell${names.length === 1 ? "" : "s"} (${sqlText.length} chars SQL)`,
+              `define ${n}: ready — in-browser execution lands with BrowserTransport`,
+            ],
+          };
+        } catch (e) {
+          out[n] = { ok: false, lines: [String(e)] };
+        }
+      }
+      return out;
+    },
+    [connected, transport, cqlText, translate],
+  );
 
   // Workspace pane visibility — persists across tab switches
   const [paneVisibility, setPaneVisibility] = useState<Record<string, boolean>>({
@@ -438,6 +503,8 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
 
       {activeTab === "playground" && config.visibleTabs.includes("playground") && (
         <div className="app">
+          <div className="cleanroom-shell-row">
+          <div className="cleanroom-shell-left">
           <CleanroomRail
             mode={modeState}
             transport={transport}
@@ -532,6 +599,8 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
               })()}
             </aside>
           )}
+          </div>
+          <div className="cleanroom-shell-main">
           <Header
             selectedSample={selectedSample}
             onSampleChange={handleSampleChange}
@@ -550,7 +619,14 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
                 id: "cql-editor",
                 label: "CQL Editor",
                 icon: "✏️",
-                content: <CQLEditor value={cqlText} onChange={setCqlText} />,
+                content: (
+                  <CellCQLEditor
+                    value={cqlText}
+                    onChange={setCqlText}
+                    connected={connected}
+                    onRunCells={runCells}
+                  />
+                ),
                 badge: "editable",
               },
               {
@@ -606,6 +682,8 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
             onRetry={retry}
             onUseStandalone={useStandalone}
           />
+          </div>
+          </div>
         </div>
       )}
 

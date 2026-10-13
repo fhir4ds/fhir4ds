@@ -17,6 +17,7 @@ export default defineConfig({
     timeout: 30_000,
   },
   use: {
+    permissions: ["clipboard-read", "clipboard-write"],
     baseURL: "http://localhost:5173",
     trace: "on-first-retry",
     screenshot: "only-on-failure",
@@ -27,7 +28,8 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+    permissions: ["clipboard-read", "clipboard-write"], ...devices["Desktop Chrome"] },
     },
   ],
   webServer: {
