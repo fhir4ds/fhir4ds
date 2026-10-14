@@ -132,8 +132,8 @@ rationale):
 | Resource validator | `validate_resource` + `fhir4ds validate-resource` + `validate_resource_tool` | aligned |
 | Resource schema tree | `resource_schema` / `resource_schema_tree` + MCP tools | aligned |
 | Evidence compare / narratives | `compare_evidence` + NarrativeGenerator (browser TS is a port of the Python original) | aligned by construction |
-| Patient/data browser | interactive UI over the loaded table | human-only |
-| FHIR resource builder, SDC form renderer | form-editing UIs | human-only |
+| Patient/data browser | interactive UI over the loaded table (wasm product app, connected mode) | human-only |
+| FHIR resource builder, SDC form renderer | form-editing UIs (wasm app Builder / SDC tabs) | human-only |
 | SMART on FHIR launch | OAuth browser flow | human-only |
 | SDC calculated/initial expressions | TS engine over `fhirpath_text` SQL | deferred — net-new Python surface, v0.0.18 decision |
 | CMS measure packs — prebuilt SQL + fixtures | runs via `evaluate_library`; pack-format runner | deferred pending packaging decision |

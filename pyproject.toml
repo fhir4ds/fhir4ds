@@ -95,6 +95,12 @@ fhir4ds-mcp = "fhir4ds.mcp.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["fhir4ds"]
+# c-wasm-bolton closeout R1: the 61MB wasm UI build is NOT shipped in the
+# wheel (baseline static/ was 420KB; wholesale packaging would balloon the
+# wheel by ~60MB). The sdist carries it; wheel users get the UI via the
+# static-wasm artifact or `fhir4ds dev` served from an sdist/git checkout.
+# See README "Installing the dev server UI".
+exclude = ["fhir4ds/devserver/static-wasm"]
 
 [tool.hatch.build.targets.sdist]
 include = [

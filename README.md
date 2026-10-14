@@ -114,6 +114,18 @@ result = evaluate(patient, "Patient.name.given")
 # result: ["John"]
 ```
 
+### Local Dev Server (Cleanroom UI)
+
+```bash
+fhir4ds dev ./workspace        # serves the wasm product UI at 127.0.0.1:8765
+```
+
+One app, three modes (standalone browser / connected to your workspace /
+embeddable web component), cell-based CQL editing with per-cell runs and
+dependency closure, workspace file watching, VSAC/UMLS terminology import,
+and persistent run history. See the website docs
+(`user-guide/interfaces/dev-server`) for the full walkthrough.
+
 ## Test Coverage & Compliance
 
 The unified engine is rigorously tested against official specifications.
