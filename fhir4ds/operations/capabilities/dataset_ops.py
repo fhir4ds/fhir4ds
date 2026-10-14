@@ -71,42 +71,55 @@ def load_dataset(dataset: DatasetSpec, conn: Any) -> DatasetResult:
 
     try:
         loader = FHIRDataLoader(conn)
-        if dataset.resources is not None:
-            loader.load_resources(dataset.resources)
-        elif dataset.ndjson_paths:
-            for path in dataset.ndjson_paths:
-                loader.load_ndjson(path, strict=True)
-        elif dataset.bundle_paths:
-            for path in dataset.bundle_paths:
-                with open(path, encoding="utf-8-sig") as fh:
-                    bundle = json.load(fh)
-                # c-cleanroom-ux5 §0.3 defensive guard: MADiE test-case
-                # bundles carry a trailing expected MeasureReport entry
-                # (isTestCases marker / cqfm-test-cases profile). It is
-                # test EXPECTATION, not patient data — never load it.
-                entries = bundle.get("entry")
-                if isinstance(entries, list):
-                    kept = [
-                        e
-                        for e in entries
-                        if not (
-                            isinstance(e, dict)
-                            and _is_expected_measure_report(e.get("resource"))
-                        )
-                    ]
-                    if len(kept) != len(entries):
-                        bundle = dict(bundle, entry=kept)
-                loader.load_bundle(bundle)
-        if dataset.valueset_paths:
-            # QA-026 (iter 18): read the ValueSet JSON file and wrap it in a
-            # list for load_valuesets (the branch used to pass the raw path
-            # string, which load_valuesets rejects with a TypeError).
-            for path in dataset.valueset_paths:
-                with open(path, encoding="utf-8-sig") as fh:
-                    loader.load_valuesets([json.load(fh)])
-        if dataset.valueset_resources:
-            for vs in dataset.valueset_resources:
-                loader.load_valuesets([vs])
+        # QA-004 (12d hotfix): one DatasetSpec = one transaction. Multi-file
+        # specs used to iterate load_ndjson(strict=True) per file, so a
+        # failure in a LATER file left earlier files' rows committed
+        # (order-dependent partial state). Stage everything inside an
+        # explicit transaction: any failure rolls the whole spec back and
+        # surfaces as ok=False with diagnostics; the caller (devserver
+        # Kernel) rebuilds a clean connection.
+        conn.execute("BEGIN TRANSACTION")
+        try:
+            if dataset.resources is not None:
+                loader.load_resources(dataset.resources)
+            elif dataset.ndjson_paths:
+                for path in dataset.ndjson_paths:
+                    loader.load_ndjson(path, strict=True)
+            elif dataset.bundle_paths:
+                for path in dataset.bundle_paths:
+                    with open(path, encoding="utf-8-sig") as fh:
+                        bundle = json.load(fh)
+                    # c-cleanroom-ux5 §0.3 defensive guard: MADiE test-case
+                    # bundles carry a trailing expected MeasureReport entry
+                    # (isTestCases marker / cqfm-test-cases profile). It is
+                    # test EXPECTATION, not patient data — never load it.
+                    entries = bundle.get("entry")
+                    if isinstance(entries, list):
+                        kept = [
+                            e
+                            for e in entries
+                            if not (
+                                isinstance(e, dict)
+                                and _is_expected_measure_report(e.get("resource"))
+                            )
+                        ]
+                        if len(kept) != len(entries):
+                            bundle = dict(bundle, entry=kept)
+                    loader.load_bundle(bundle)
+            if dataset.valueset_paths:
+                # QA-026 (iter 18): read the ValueSet JSON file and wrap it in a
+                # list for load_valuesets (the branch used to pass the raw path
+                # string, which load_valuesets rejects with a TypeError).
+                for path in dataset.valueset_paths:
+                    with open(path, encoding="utf-8-sig") as fh:
+                        loader.load_valuesets([json.load(fh)])
+            if dataset.valueset_resources:
+                for vs in dataset.valueset_resources:
+                    loader.load_valuesets([vs])
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
         counts = _count_from_conn(conn)
     except Exception as exc:
         return DatasetResult(

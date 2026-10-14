@@ -41,18 +41,44 @@ class Kernel:
             from fhir4ds.operations import load_dataset
             from fhir4ds.operations.envelopes import DatasetSpec
 
+            # QA-002 (12d hotfix): a workspace whose data dirs contain BOTH
+            # .ndjson and .json files must boot. DatasetSpec enforces a
+            # one-of shape over (resources, ndjson_paths, bundle_paths), so
+            # group paths by suffix into SEPARATE specs / load_dataset
+            # calls — each kind loads through its dedicated loader path.
             ndjson = [p for p in self.datasets if p.suffix.lower() == ".ndjson"]
             bundles = [p for p in self.datasets if p.suffix.lower() == ".json"]
-            spec = DatasetSpec(
-                ndjson_paths=[str(p) for p in ndjson] or None,
-                bundle_paths=[str(p) for p in bundles] or None,
-                valueset_paths=[str(p) for p in self.valuesets] or None,
-            )
-            result = load_dataset(spec, conn)
-            if not result.ok:
-                self.load_diagnostics = [
-                    d.to_dict() for d in result.diagnostics
-                ]
+            valuesets = [str(p) for p in self.valuesets] or None
+            specs: list[DatasetSpec] = []
+            if ndjson:
+                specs.append(
+                    DatasetSpec(
+                        ndjson_paths=[str(p) for p in ndjson], valueset_paths=valuesets
+                    )
+                )
+                valuesets = None  # load valuesets with exactly one spec
+            if bundles:
+                specs.append(
+                    DatasetSpec(
+                        bundle_paths=[str(p) for p in bundles], valueset_paths=valuesets
+                    )
+                )
+                valuesets = None
+            if valuesets:  # valuesets only, no dataset files
+                specs.append(DatasetSpec(valueset_paths=valuesets))
+            for spec in specs:
+                result = load_dataset(spec, conn)
+                if not result.ok:
+                    # Per-spec atomicity (QA-004): load_dataset rolls its
+                    # own transaction back on failure, so a failed batch
+                    # leaves the table in its pre-spec state. Rebuild a
+                    # clean connection so the kernel never serves partial
+                    # data across specs; diagnostics carry the reason.
+                    self.load_diagnostics = [
+                        d.to_dict() for d in result.diagnostics
+                    ]
+                    conn.close()
+                    conn = fhir4ds.create_connection()
         return conn
 
     # -- evaluation --------------------------------------------------------

@@ -59,16 +59,23 @@ test.beforeAll(async () => {
   throw new Error("dev server did not become healthy (mixed-data boot failed)");
 });
 
-function spawnServer(cwd: string): ChildProcess {
-  const proc = spawn("/usr/bin/python3", ["-m", "fhir4ds.cli", "dev", cwd, "--port", "19059", "--no-open"], {
-    cwd,
-    env: {
-      ...process.env,
-      PYTHONPATH: "/mnt/d/fhir4ds-wasm-bolton",
-      PATH: process.env.PATH ?? "",
+function spawnServer(workspaceDir: string): ChildProcess {
+  // Conductor-verified fix: spawn cwd MUST be the WORKTREE — python resolves
+  // fhir4ds from cwd-on-sys.path (beating PYTHONPATH/site-packages), and
+  // spawning from the /tmp workspace picked the INSTALLED wheel (no `dev`).
+  const proc = spawn(
+    "/usr/bin/python3",
+    ["-m", "fhir4ds.cli", "dev", workspaceDir, "--port", "19059", "--no-open"],
+    {
+      cwd: "/mnt/d/fhir4ds-wasm-bolton",
+      env: {
+        ...process.env,
+        PYTHONPATH: "/mnt/d/fhir4ds-wasm-bolton",
+        PATH: process.env.PATH ?? "",
+      },
+      stdio: "ignore",
     },
-    stdio: "ignore",
-  });
+  );
   return proc;
 }
 
