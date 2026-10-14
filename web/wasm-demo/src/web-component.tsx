@@ -107,7 +107,7 @@ class FhirDsDemo extends HTMLElement {
   private _root?: Root;
 
   static get observedAttributes(): string[] {
-    return ["scenario", "height", "redirect-uri", "server-url"];
+    return ["scenario", "height", "redirect-uri"];
   }
 
   connectedCallback(): void {
@@ -171,16 +171,12 @@ class FhirDsDemo extends HTMLElement {
 
     const scenario = this.getAttribute("scenario") ?? "workbench";
     const smartRedirectUri = this.getAttribute("redirect-uri") ?? undefined;
-    // P6: embed-connected mode — host pages point the component at a
-    // running dev server; unreachable/cross-origin falls back standalone.
-    const serverUrl = this.getAttribute("server-url") ?? undefined;
 
     this._root.render(
       <App
         forceScenario={scenario}
         wasmAppUrl={WASM_APP_BASE}
         smartRedirectUri={smartRedirectUri}
-        serverUrl={serverUrl}
       />
     );
   }

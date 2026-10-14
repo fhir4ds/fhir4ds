@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Header } from "./components/Header";
 import { CQLEditor } from "./components/CQLEditor";
-import { CellCQLEditor, type CellRunMode } from "./components/CellCQLEditor";
 import { SQLOutput } from "./components/SQLOutput";
 import { ResultsTable, type QueryResult } from "./components/ResultsTable";
 import { StatusBar, type Metrics } from "./components/StatusBar";
@@ -14,17 +13,6 @@ import { PatientDataViewer } from "./components/PatientDataViewer";
 import { CQL_SAMPLES } from "./lib/sample-cql";
 import { useDuckDB } from "./hooks/useDuckDB";
 import { usePyodide } from "./hooks/usePyodide";
-import { useModeHandshake } from "./hooks/useModeHandshake";
-import {
-  CleanroomRail,
-  RailEmptyState,
-  WorkspaceFileTree,
-  RunHistory,
-  type RailId,
-} from "./components/CleanroomRail";
-import { TerminologyPane } from "./components/TerminologyPane";
-import { buildCellGraph } from "./lib/cell-deps";
-import { splitCells } from "./lib/cells";
 import { 
   clearAuth, 
   getStoredSession, 
@@ -52,10 +40,6 @@ interface AppProps {
   /** Override the scenario instead of reading from ?scenario= URL param.
    *  Used when App is mounted from the Web Component. */
   forceScenario?: string;
-  /** P6 (S1 Muse): base URL of a dev server for embed-connected mode —
-   *  when set and reachable, the app mounts ServerTransport against it;
-   *  unreachable/cross-origin falls back to standalone (FDD §4.1). */
-  serverUrl?: string;
   /** Base URL of the standalone WASM app (e.g. "https://fhir4ds.com/wasm-app/").
    *  Used to compute redirect_uri for SMART OAuth popup in Web Component context. */
   wasmAppUrl?: string;
@@ -64,7 +48,7 @@ interface AppProps {
   smartRedirectUri?: string;
 }
 
-export function App({ forceScenario, wasmAppUrl, smartRedirectUri, serverUrl }: AppProps = {}) {
+export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = {}) {
   const [scenario, setScenario] = useState<Scenario>(
     () => (forceScenario as Scenario | undefined) ?? getScenarioFromURL(),
   );
@@ -73,83 +57,6 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri, serverUrl }: 
     // This ensures CQL/SDC tabs are shown immediately when a valid token exists.
     () => getAccessToken() !== null,
   );
-
-  // c-wasm-bolton S1: mode handshake (connecting → connected/standalone).
-  // Standalone + embed behavior is bit-identical to pre-bolton; connected
-  // mode adds the engine badge + workspace name (ServerTransport surfaces
-  // arrive in S2+). Connected mode skips Pyodide init (perf guarantee).
-  const { state: modeState, versionMismatch, transport, retry, useStandalone } =
-    useModeHandshake(serverUrl);
-  // P3 (S1 Muse): badge honesty — indeterminate during connecting, never a
-  // premature "wasm" assertion.
-  const engineBadge =
-    modeState.kind === "connected"
-      ? modeState.version
-      : modeState.kind === "connecting"
-        ? "…"
-        : "wasm";
-  const workspaceName =
-    modeState.kind === "connected" ? modeState.workspace : undefined;
-  const connected =
-    (modeState.kind === "connected" || modeState.kind === "degraded") &&
-    transport !== null;
-  const degraded = modeState.kind === "degraded";
-
-  // S2: single adaptive rail state (stable order both modes).
-  const [railOpen, setRailOpen] = useState<RailId | null>(null);
-
-  // S2: watcher signals (connected). Badges persist until the section's
-  // tree is REFRESHED (acknowledge-on-reload, not on open — S2 Muse gate);
-  // changed paths feed per-file dots (mapping rule 5). data-hint NEVER
-  // auto-reloads (locked decision 4) — banner + explicit restart only.
-  const [changeBadges, setChangeBadges] = useState<Partial<Record<RailId, number>>>({});
-  const [changedPaths, setChangedPaths] = useState<Partial<Record<RailId, string[]>>>({});
-  const [dataHint, setDataHint] = useState<string[] | null>(null);
-
-  useEffect(() => {
-    if (!transport) return;
-    const off = transport.onWorkspaceEvent((e) => {
-      if (e.kind === "changed" && Array.isArray(e.paths)) {
-        setChangeBadges((prev) => {
-          const next = { ...prev };
-          const bump = (id: RailId, n: number) => {
-            next[id] = (next[id] ?? 0) + n;
-          };
-          for (const p of e.paths) {
-            if (p.endsWith(".cql")) bump("libraries", 1);
-            else if (p.endsWith(".json")) bump("valuesets", 1);
-          }
-          return next;
-        });
-        setChangedPaths((prev) => {
-          const next = { ...prev };
-          const add = (id: RailId, p: string) => {
-            next[id] = [...(next[id] ?? []), p];
-          };
-          for (const p of e.paths) {
-            if (p.endsWith(".cql")) add("libraries", p);
-            else if (p.endsWith(".json")) add("valuesets", p);
-          }
-          return next;
-        });
-      } else if (e.kind === "data-hint" && Array.isArray(e.paths)) {
-        setDataHint((prev) => Array.from(new Set([...(prev ?? []), ...e.paths])));
-      }
-    });
-    return off;
-  }, [transport]);
-
-  // S2 Muse must-fix 2: connection-scoped state — a transport drop closes
-  // the slide-out and clears watcher signals (no stale badges/banner, no
-  // null-transport crash path in connected-only panels).
-  useEffect(() => {
-    if (!connected) {
-      setRailOpen(null);
-      setChangeBadges({});
-      setChangedPaths({});
-      setDataHint(null);
-    }
-  }, [connected]);
   const [connectedPatientName, setConnectedPatientName] = useState<string | undefined>();
 
   // When the Web Component changes the `scenario` attribute, the `forceScenario`
@@ -236,123 +143,13 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri, serverUrl }: 
   const [builderDatasets, setBuilderDatasets] = useState<BuilderDataset[]>([]);
 
   const duckdbRequired = scenario !== "cms-measures";
-  // P2 (S1 Muse): connected mode NEVER loads Pyodide — the scenario flag
-  // alone would spawn the worker in connected workbench sessions.
   const pyodideRequired =
-    (scenario === "workbench" ||
-      scenario === "cql-sandbox" ||
-      (scenario === "smart-flow" && smartAuthenticated)) &&
-    !connected;
+    scenario === "workbench" ||
+    scenario === "cql-sandbox" ||
+    (scenario === "smart-flow" && smartAuthenticated);
 
   const { ready: duckdbReady, error: duckdbError, extensionsLoaded, executeQuery, getConnection } = useDuckDB(wasmAppUrl, duckdbRequired);
   const { ready: pyodideReady, error: pyodideError, translate } = usePyodide(pyodideRequired);
-
-  /** S3 Muse must-fix 4: insert a new cell marker above/below the named
-   *  cell's marker line in the master buffer. */
-  const insertCell = useCallback(
-    (anchor: string, where: "above" | "below") => {
-      const lines = cqlText.split("\n");
-      let offset = 0;
-      let anchorIdx = -1;
-      for (let i = 0; i < lines.length; i++) {
-        const isMarker = /^\s*\/\/\s*#\s*%%/.test(lines[i]);
-        if (isMarker) {
-          // find the cell after this marker whose name matches
-          // (simple heuristic: scan the following lines for define name)
-          let name = "";
-          for (let j = i + 1; j < lines.length; j++) {
-            const m = /^\s*define\s+(function\s+)?(\"?)([A-Za-z0-9_]+)\2\s*[(:]/.exec(lines[j]);
-            if (m) { name = m[3]; break; }
-            if (/^\s*\/\/\s*#\s*%%/.test(lines[j])) break;
-            const lm = /^\s*\/\/\s*#\s*%%\s*\[name:\s*([A-Za-z0-9_]+)/.exec(lines[i]);
-            if (lm) { name = lm[1]; break; }
-          }
-          const lm = /^\s*\/\/\s*#\s*%%\s*\[name:\s*([A-Za-z0-9_]+)/.exec(lines[i]);
-          if (lm) name = lm[1];
-          if (name === anchor) { anchorIdx = i; break; }
-        }
-        offset += lines[i].length + 1;
-      }
-      if (anchorIdx === -1) return;
-      const insertLine = where === "above" ? anchorIdx : anchorIdx + 1;
-      const next = [...lines.slice(0, insertLine), "// # %%", "define NewCell: 'TODO'", ...lines.slice(insertLine)];
-      setCqlText(next.join("\n"));
-    },
-    [cqlText],
-  );
-
-  // P4 (S1 Muse): blocking version pin — a mismatched server must not
-  // silently execute with divergent semantics; cell runs fall back to the
-  // in-browser path with an explicit banner (override: engine popover).
-  const runBlockedByPin = versionMismatch;
-
-  // S3: cell execution — ServerTransport when connected (evaluate per
-  // define through the kernel); in-browser fallback translates the
-  // composed library via Pyodide and reports per-define evaluation
-  // through DuckDB-WASM (identical RunMode semantics both engines).
-  const runCells = useCallback(
-    async (names: string[], mode: CellRunMode) => {
-      // P4: pin mismatch forces the in-browser path (never silent).
-      const useServer = connected && transport !== null && !runBlockedByPin;
-      const out: Record<string, { ok: boolean; lines: string[] }> = {};
-      const graph = buildCellGraph(cqlText);
-      const composed = [graph.header, ...names.map((n) => {
-        const cells = splitCells(cqlText).cells;
-        return cells.find((c) => c.name === n)?.text ?? "";
-      })].join("\n\n");
-      if (useServer && transport) {
-        const libs = [{ name: "CellLib", text: composed }];
-        for (const n of names) {
-          try {
-            const res = await transport.evaluate(libs, "CellLib", n);
-            const data = (res as any)?.data ?? res;
-            if (data?.ok === false) {
-              out[n] = { ok: false, lines: [data?.diagnostics?.[0]?.message ?? "evaluation failed"] };
-            } else {
-              // /api/evaluate rows are OBJECTS keyed by column (probed
-              // live: {patient_id, <define>}) — render key/value rows.
-              const cols: string[] = data?.columns ?? [];
-              const rows: Record<string, unknown>[] = data?.rows ?? [];
-              out[n] = {
-                ok: true,
-                lines: [
-                  cols.join(" | "),
-                  ...rows.slice(0, 10).map((r) => cols.map((c) => String(r[c])).join(" | ")),
-                ],
-              };
-            }
-          } catch (e) {
-            out[n] = { ok: false, lines: [String(e)] };
-          }
-        }
-        return out;
-      }
-      // Standalone (BrowserTransport semantics): translate the composed
-      // library via Pyodide, then execute the WHOLE SQL once through
-      // DuckDB-WASM — each cell's define result column(s) are sliced per
-      // patient row and rendered inline. Identical RunMode semantics to
-      // the server path; 'computed locally' badge marks the engine.
-      try {
-        const { sql } = await translate(composed);
-        const queryResult = await executeQuery(sql);
-        const columns: string[] = queryResult.columns ?? [];
-        const rows: unknown[][] = queryResult.rows ?? [];
-        for (const n of names) {
-          out[n] = {
-            ok: true,
-            lines: [
-              columns.join(" | "),
-              ...rows.slice(0, 10).map((r) => (r as unknown[]).map((v) => String(v)).join(" | ")),
-            ],
-          };
-        }
-      } catch (e) {
-        for (const n of names) out[n] = { ok: false, lines: [String(e)] };
-      }
-      return out;
-    },
-    [connected, transport, cqlText, translate, executeQuery, runBlockedByPin],
-  );
 
   // Workspace pane visibility — persists across tab switches
   const [paneVisibility, setPaneVisibility] = useState<Record<string, boolean>>({
@@ -558,105 +355,6 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri, serverUrl }: 
 
       {activeTab === "playground" && config.visibleTabs.includes("playground") && (
         <div className="app">
-          <div className="cleanroom-shell-row">
-          <div className="cleanroom-shell-left">
-          <CleanroomRail
-            mode={modeState}
-            transport={transport}
-            activeId={railOpen}
-            changeBadge={changeBadges}
-            onSelect={(id) => {
-              // Must-fix 4: core entries are on-screen surfaces — they
-              // never open slide-outs.
-              if (id === "cql" || id === "data" || id === "sql" || id === "viewer") return;
-              setRailOpen((cur) => (cur === id ? null : id));
-            }}
-          />
-          {connected && dataHint && dataHint.length > 0 && (
-            <div className="data-hint-banner" role="status">
-              <span>
-                Data files changed on disk ({dataHint.length}). The kernel keeps the
-                loaded data — restart to reload.
-              </span>
-              <button
-                type="button"
-                className="data-hint-restart"
-                onClick={() => {
-                  transport
-                    ?.restartKernel()
-                    .then(() => setDataHint(null))
-                    .catch(() => {});
-                }}
-              >
-                Restart kernel
-              </button>
-              <button
-                type="button"
-                className="data-hint-dismiss"
-                aria-label="Dismiss"
-                onClick={() => setDataHint(null)}
-              >
-                ×
-              </button>
-            </div>
-          )}
-          {railOpen && (
-            <aside className="cleanroom-slideout" aria-label={`${railOpen} panel`}>
-              <header>
-                <h3>{railOpen}</h3>
-                <button type="button" className="cleanroom-close" aria-label="Close panel" onClick={() => setRailOpen(null)}>×</button>
-              </header>
-              {(() => {
-                if (!connected) {
-                  return <RailEmptyState id={railOpen} />;
-                }
-                if (railOpen === "libraries") {
-                  return (
-                    <WorkspaceFileTree
-                      transport={transport!}
-                      subdir="cql"
-                      suffixFilter={[".cql"]}
-                      changedPaths={changedPaths.libraries}
-                      onReload={() => {
-                        // Acknowledge-on-reload (S2 Muse): refresh clears
-                        // the section badge + per-file dots.
-                        setChangeBadges((prev) => ({ ...prev, libraries: 0 }));
-                        setChangedPaths((prev) => ({ ...prev, libraries: [] }));
-                      }}
-                    />
-                  );
-                }
-                if (railOpen === "valuesets") {
-                  return (
-                    <WorkspaceFileTree
-                      transport={transport!}
-                      subdir="valuesets"
-                      suffixFilter={[".json"]}
-                      changedPaths={changedPaths.valuesets}
-                      onReload={() => {
-                        setChangeBadges((prev) => ({ ...prev, valuesets: 0 }));
-                        setChangedPaths((prev) => ({ ...prev, valuesets: [] }));
-                      }}
-                    />
-                  );
-                }
-                if (railOpen === "history") {
-                  return <RunHistory transport={transport!} />;
-                }
-                if (railOpen === "terminology") {
-                  return <TerminologyPane transport={transport!} />;
-                }
-                return (
-                  <div className="cleanroom-empty cleanroom-todo" role="status">
-                    <h3 style={{ textTransform: "capitalize" }}>{railOpen}</h3>
-                    Measure scaffold / run / compare land in the next slice.
-                  </div>
-                );
-              })()}
-            </aside>
-          )}
-          </div>
-          <div className="cleanroom-shell-main">
           <Header
             selectedSample={selectedSample}
             onSampleChange={handleSampleChange}
@@ -675,15 +373,7 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri, serverUrl }: 
                 id: "cql-editor",
                 label: "CQL Editor",
                 icon: "✏️",
-                content: (
-                  <CellCQLEditor
-                    value={cqlText}
-                    onChange={setCqlText}
-                    connected={connected && !runBlockedByPin}
-                    onRunCells={runCells}
-                    onInsertCell={insertCell}
-                  />
-                ),
+                content: <CQLEditor value={cqlText} onChange={setCqlText} />,
                 badge: "editable",
               },
               {
@@ -722,34 +412,11 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri, serverUrl }: 
               />
             }
           />
-          {degraded && (
-            <div className="data-hint-banner" role="status">
-              <span>
-                Live reload unavailable (events channel failed) — file changes
-                won't refresh automatically. Retry from the engine popover.
-              </span>
-            </div>
-          )}
-          {versionMismatch && modeState.kind === "connected" && (
-            <div className="version-pin-banner" role="alert">
-              UI build expects server {modeState.serverRange} — connected
-              server is {modeState.version}. Server-backed runs are disabled;
-              cells run in-browser until you restart `fhir4ds dev` with a
-              matching release (or switch engines in the status bar).
-            </div>
-          )}
           <StatusBar
             metrics={metrics}
             message={statusMessage}
             isError={isStatusError}
-            engineBadge={engineBadge}
-            workspaceName={workspaceName}
-            engineBase=""
-            onRetry={retry}
-            onUseStandalone={useStandalone}
           />
-          </div>
-          </div>
         </div>
       )}
 

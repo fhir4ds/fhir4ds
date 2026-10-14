@@ -16,8 +16,7 @@ from fhir4ds.devserver.watcher import EventBus, Watcher
 
 PORT = 18802
 
-# c-wasm-bolton S5: the wasm product build is the UI (static/ deleted).
-STATIC_ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent / "static-wasm"
+STATIC_ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent / "static"
 
 
 @pytest.fixture(scope="module")
@@ -44,16 +43,16 @@ def fetch(path):
 class TestStaticUI:
     def test_index_served(self, server):
         body = fetch("/").read()
-        assert b"<div id=" in body  # wasm build mounts to a root div
+        assert b'<div id="root">' in body
 
     def test_asset_served(self, server):
         import re
 
         idx = fetch("/").read()
-        m = re.search(rb"assets/main-[^\"]+\.js", idx)
+        m = re.search(rb"assets/index-[^\"]+\.js", idx)
         assert m, "index references the hashed bundle"
         js = fetch("/" + m.group().decode()).read()
-        assert len(js) > 1_000  # the vite entry chunk (main bundle code-splits)
+        assert len(js) > 100_000  # the React bundle
 
     def test_traversal_blocked(self, server):
         with pytest.raises(urllib.error.HTTPError) as exc:
