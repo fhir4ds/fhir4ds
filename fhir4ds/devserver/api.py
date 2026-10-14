@@ -100,7 +100,7 @@ class DevHTTPServer(ThreadingHTTPServer):
     # c-wasm-bolton S1: per-instance handshake nonce (embeds detect stale
     # handshakes after a server restart) + which UI build is being served.
     mode_nonce: str = ""
-    ui_mode: str = "legacy"
+    ui_mode: str = "wasm"
 
 
 def _utc_now_iso() -> str:
@@ -130,7 +130,7 @@ def create_server(
     import secrets as _secrets
 
     server.mode_nonce = _secrets.token_hex(8)
-    server.ui_mode = getattr(watcher._cfg, "ui_mode", "legacy")
+    server.ui_mode = getattr(watcher._cfg, "ui_mode", "wasm")
     # v3 Slice 1: set True when a valueset edit was written to disk but the
     # kernel still holds the terminology loaded at startup (restart reloads).
     server.valuesets_stale = False

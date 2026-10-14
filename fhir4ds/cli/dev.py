@@ -51,9 +51,9 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
         "--ui",
         choices=["wasm", "legacy"],
         default=None,
-        help="UI build to serve: 'wasm' (cleanroom product UI) or "
-        "'legacy' (pre-bolton dev-server shell). Overrides [dev] ui in "
-        "fhir4ds.toml; default legacy until the bolton arc completes.",
+        help="UI build to serve: 'wasm' (the product UI; default). "
+        "'legacy' is accepted but UNREACHABLE since the S5 retirement "
+        "(the legacy shell was deleted); overrides [dev] ui in fhir4ds.toml.",
     )
 
 
