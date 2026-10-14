@@ -21,7 +21,7 @@ test.describe("CMS Verification", () => {
     // The selected measure's h3 heading should be visible in the Measure Definition pane
     await expect(page.getByRole("heading", { name: /CMS124/i })).toBeVisible({ timeout: 10_000 });
     // The description text should also be visible
-    await expect(page.locator("text=Women 21–64 who were screened for cervical cancer").first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator("text=Women 21-64 who were screened for cervical cancer").first()).toBeVisible({ timeout: 5_000 });
   });
 
   test("running CMS124 shows results with clickable patient rows", async ({ page }) => {
