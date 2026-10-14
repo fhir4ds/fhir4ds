@@ -2638,17 +2638,42 @@ class _Handler(BaseHTTPRequestHandler):
     # -- static UI ----------------------------------------------------------
 
     def _serve_static(self, path: str) -> bool:
-        """Serve the committed built UI from fhir4ds/devserver/static."""
+        """Serve the committed built UI(s).
+
+        - "/" + "/assets/*": the dev-server shell from static/ (unchanged).
+        - "/cleanroom/*": the cql-cleanroom product shell from
+          static-cleanroom/ (c-cleanroom-redo phase 1 — served UNMODIFIED,
+          additive, not yet the default). Isolation headers are
+          load-bearing: cql-cleanroom's DuckDB-WASM needs
+          SharedArrayBuffer (COOP/COEP on every response incl. worker
+          scripts; CORP cross-origin on assets — the probed recipe).
+        """
         import mimetypes
         from pathlib import Path
 
-        static_root = Path(__file__).resolve().parent / "static"
-        if path == "/":
+        pkg = Path(__file__).resolve().parent
+        extra_headers: list[tuple[str, str]] = []
+        if path == "/cleanroom" or path == "/cleanroom/":
+            path = "/cleanroom/index.html"
+        if path.startswith("/cleanroom/"):
+            rel = path[len("/cleanroom/"):]
+            if ".." in rel:
+                return False
+            static_root = pkg / "static-cleanroom"
+            candidate = static_root / rel
+            extra_headers = [
+                ("Cross-Origin-Opener-Policy", "same-origin"),
+                ("Cross-Origin-Embedder-Policy", "require-corp"),
+                ("Cross-Origin-Resource-Policy", "cross-origin"),
+            ]
+        elif path == "/":
+            static_root = pkg / "static"
             candidate = static_root / "index.html"
         elif path.startswith("/assets/"):
             rel = path[len("/assets/"):]
             if "/" in rel or ".." in rel:
                 return False
+            static_root = pkg / "static"
             candidate = static_root / "assets" / rel
         else:
             return False
@@ -2659,6 +2684,8 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        for name, value in extra_headers:
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
         return True
