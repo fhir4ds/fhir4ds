@@ -35,12 +35,15 @@ export function WorkspaceFilesPanel({
   changedPaths,
   onOpenCql,
   onOpenValuesetJson,
+  onAcknowledgedChanges,
 }: {
   connected: boolean;
   /** Watcher-marked changed file paths (dot badges). */
   changedPaths: Set<string>;
   onOpenCql: (name: string, text: string) => void;
   onOpenValuesetJson: (name: string, text: string) => void;
+  /** S2 Muse MF1: refresh acknowledges (clears) the change badges. */
+  onAcknowledgedChanges?: () => void;
 }) {
   const [trees, setTrees] = useState<Record<string, FsEntry[]> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -162,7 +165,7 @@ export function WorkspaceFilesPanel({
           type="button"
           className="settings-button"
           data-testid="ws-files-refresh"
-          onClick={() => { setNonce((n) => n + 1); }}
+          onClick={() => { setNonce((n) => n + 1); onAcknowledgedChanges?.(); }}
           title="re-list workspace files (clears change badges)"
         >
           Refresh

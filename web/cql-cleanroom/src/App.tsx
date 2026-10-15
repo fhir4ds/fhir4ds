@@ -2835,6 +2835,7 @@ export default function App() {
             views: { ...navSectionModels.views, filter: navFilters.views },
           }}
           navPanel={navPanel}
+          connected={serverMode.kind === "connected"}
           onNavPanelChange={setNavPanel}
           onFilterSection={(id, v) =>
             setNavFilters((f) => ({ ...f, [id]: v }))
@@ -2890,6 +2891,7 @@ export default function App() {
                 changedPaths={wsChanged}
                 onOpenCql={openWorkspaceCql}
                 onOpenValuesetJson={openWorkspaceValueset}
+                onAcknowledgedChanges={() => setWsChanged(new Set())}
               />
             ) : null
           }

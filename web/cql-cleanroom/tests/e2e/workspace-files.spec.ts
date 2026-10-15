@@ -89,3 +89,18 @@ test("connected: valueset click opens the native valueset editor", async ({ page
   await panel.locator('[data-testid="ws-file-valuesets-vs1.json"]').click();
   await expect(page.locator('[data-testid="valueset-editor"], [data-testid="valueset-code-count"]').first()).toBeVisible({ timeout: 15000 });
 });
+
+test("STANDALONE: no workspace section, no /api/fs traffic", async ({ page }) => {
+  const fsHits: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/api/fs/") || r.url().includes("/api/workspace")) {
+      fsHits.push(r.url());
+    }
+  });
+  await page.goto("http://127.0.0.1:5176/", { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(15000);
+  await expect(page.locator('[data-testid="ws-files"]')).toHaveCount(0);
+  // Standalone rail: no Workspace button at all (S2 Muse MF2)
+  await expect(page.getByRole("button", { name: /^Workspace/ })).toHaveCount(0);
+  expect(fsHits, `standalone made ${fsHits.join(", ")}`).toEqual([]);
+});

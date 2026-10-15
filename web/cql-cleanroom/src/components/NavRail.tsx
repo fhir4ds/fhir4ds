@@ -114,6 +114,7 @@ export function NavRail({
   detailSlot,
   testsSlot,
   workspaceSlot,
+  connected = true,
 }: {
   sections: Record<NavSectionId, NavRailSectionModel>;
   /** The single open section (null = collapsed rail). */
@@ -152,6 +153,8 @@ export function NavRail({
   testsSlot?: ReactNode;
   /** S2: connected workspace files panel. */
   workspaceSlot?: ReactNode;
+  /** S2 Muse MF2: standalone omits the workspace section (§3.1 no UI change). */
+  connected?: boolean;
 }) {
   const panelId = navPanel;
   const sec = panelId ? sections[panelId] : null;
@@ -290,7 +293,7 @@ export function NavRail({
             {panelId ? "«" : "»"}
           </button>
         </div>
-        {SECTION_ORDER.map((id) => {
+        {SECTION_ORDER.filter((id) => connected || id !== "workspace").map((id) => {
           const Icon = SECTION_ICONS[id];
           return (
             <button
