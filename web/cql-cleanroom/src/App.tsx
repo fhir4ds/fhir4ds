@@ -38,7 +38,7 @@ import {
   mergeDatasets,
 } from "./lib/bundleIo";
 import { DropdownMenu, DropdownSubmenu } from "./components/DropdownMenu";
-import { detectServer, terminologyPreview, terminologyImport, umlsSearch, terminologyStatus, type ServerMode } from "./lib/serverConnection";
+import { detectServer, terminologyPreview, umlsSearch, terminologyStatus, type ServerMode } from "./lib/serverConnection";
 import { NativeClickButton } from "./components/NativeClickButton";
 import { ResourceContextMenu } from "./components/nav/ResourceContextMenu";
 import type { ContextMenuState } from "./components/nav/ResourceContextMenu";
@@ -593,6 +593,17 @@ export default function App() {
   const [umlsQuery, setUmlsQuery] = useState("");
   const [umlsResults, setUmlsResults] = useState<{ code?: string; display?: string; system?: string }[] | null>(null);
   const [termDialog, setTermDialog] = useState<"none" | "vsac" | "umls">("none");
+  // S1 Muse MF3: Escape dismisses the terminology modal (native convention —
+  // global listener while open, matching DropdownMenu/ResourceContextMenu).
+  useEffect(() => {
+    if (termDialog === "none") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setTermDialog("none");
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [termDialog]);
+
   useEffect(() => {
     let cancelled = false;
     void detectServer().then((m) => {
@@ -2932,7 +2943,16 @@ export default function App() {
       </main>
       <ResourceContextMenu menu={ctxMenu} onClose={() => setCtxMenu(null)} />
       {termDialog !== "none" && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Terminology" data-testid="term-dialog" onClick={() => setTermDialog("none")}>
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Terminology"
+          data-testid="term-dialog"
+          onClick={() => setTermDialog("none")}
+          onKeyDown={(e) => { if (e.key === "Escape") setTermDialog("none"); }}
+          tabIndex={-1}
+        >
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             {termDialog === "vsac" ? (
               <>
@@ -2944,6 +2964,19 @@ export default function App() {
                   placeholder="http://cts.nlm.nih.gov/fhir/ValueSet/…"
                   value={importUrl}
                   onChange={(e) => setImportUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && importUrl.trim() && !termBusy) {
+                      void (async () => {
+                        setTermBusy(true);
+                        try {
+                          const r = await terminologyPreview(importUrl.trim());
+                          setStatusNote(r.message);
+                        } catch (err) {
+                          setStatusNote(`preview failed: ${err instanceof Error ? err.message : String(err)}`);
+                        } finally { setTermBusy(false); }
+                      })();
+                    }
+                  }}
                 />
                 <div className="modal-actions">
                   <button
@@ -2954,6 +2987,8 @@ export default function App() {
                       try {
                         const r = await terminologyPreview(importUrl.trim());
                         setStatusNote(r.message);
+                      } catch (err) {
+                        setStatusNote(`preview failed: ${err instanceof Error ? err.message : String(err)}`);
                       } finally { setTermBusy(false); }
                     }}
                   >
@@ -2965,24 +3000,25 @@ export default function App() {
                     onClick={async () => {
                       setTermBusy(true);
                       try {
-                        const r = await terminologyImport(importUrl.trim());
-                        if (!r.ok) { setStatusNote(r.message); return; }
-                        // Fetch the imported resource from the server valuesets dir? The
-                        // import endpoint writes server-side; for the BROWSER workspace we
-                        // re-fetch the canonical via preview+compose is out of S1 scope —
-                        // instead register the URL as an imported reference valueset.
+                        // Q2 ruling: browser-IndexedDB ONLY. Import =
+                        // preview + hydrate (full expansion concepts in the
+                        // browser workspace); NO server-disk write.
+                        const r = await terminologyPreview(importUrl.trim());
+                        if (!r.ok || !r.valueset) { setStatusNote(r.message); return; }
                         const url = importUrl.trim();
                         setTerminology((t) => ({
                           valuesets: [
                             ...t.valuesets.filter(
                               (v) => String((v as { url?: string }).url ?? "") !== url,
                             ),
-                            { resourceType: "ValueSet", url, name: url.split("/").pop() ?? url, _importedFrom: "vsac" },
+                            r.valueset!,
                           ],
                         }));
                         openEditorTab("valueset", `ws:${url}`);
                         setStatusNote(r.message);
                         setTermDialog("none");
+                      } catch (err) {
+                        setStatusNote(`import failed: ${err instanceof Error ? err.message : String(err)}`);
                       } finally { setTermBusy(false); }
                     }}
                   >
@@ -3013,6 +3049,8 @@ export default function App() {
                           const r = await umlsSearch(umlsQuery.trim());
                           setStatusNote(r.message);
                           setUmlsResults(r.results ?? []);
+                        } catch (err) {
+                          setStatusNote(`UMLS search failed: ${err instanceof Error ? err.message : String(err)}`);
                         } finally { setTermBusy(false); }
                       })();
                     }
@@ -3028,6 +3066,8 @@ export default function App() {
                         const r = await umlsSearch(umlsQuery.trim());
                         setStatusNote(r.message);
                         setUmlsResults(r.results ?? []);
+                      } catch (err) {
+                        setStatusNote(`UMLS search failed: ${err instanceof Error ? err.message : String(err)}`);
                       } finally { setTermBusy(false); }
                     }}
                   >

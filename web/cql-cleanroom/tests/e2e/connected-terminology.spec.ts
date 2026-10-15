@@ -88,7 +88,10 @@ test("connected: File>Add shows terminology items; VSAC dialog opens; UMLS dialo
   await expect(dlg.locator('[data-testid="umls-query"]')).toBeVisible();
   await expect(dlg.locator('[data-testid="umls-search-btn"]')).toBeVisible();
   await expect(dlg).toContainText(/UMLS_API_KEY|configured/);
-  await dlg.getByRole("button", { name: "Close" }).click();
+  // MF5 carry: search disabled without a key (locks the UMLS gating contract)
+  await expect(dlg.locator('[data-testid="umls-search-btn"]')).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(dlg).toBeHidden();
 });
 
 test("connected: bad VSAC URL yields typed error in status note (no crash)", async ({ page }) => {

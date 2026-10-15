@@ -54,13 +54,14 @@ function diagOf(payload: unknown): string {
 
 export interface VsacPreview {
   ok: boolean;
-  name?: string;
-  concept_count?: number;
+  url?: string;
+  concepts?: { system?: string; code?: string; display?: string }[];
+  count?: number;
 }
 
 export async function terminologyPreview(
   url: string,
-): Promise<{ ok: boolean; message: string }> {
+): Promise<{ ok: boolean; message: string; valueset?: Record<string, unknown> }> {
   const res = await fetch("/api/terminology/preview", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -68,9 +69,31 @@ export async function terminologyPreview(
   });
   const d = unwrap<VsacPreview>(await res.json());
   if (!d.ok) return { ok: false, message: diagOf(d) };
+  const concepts = d.concepts ?? [];
+  // Q2 ruling: browser-IndexedDB ONLY — hydrate a full ValueSet from the
+  // expansion (no server-disk write on this path).
+  const valueset: Record<string, unknown> = {
+    resourceType: "ValueSet",
+    url,
+    name: url.split("/").pop() ?? url,
+    compose: {
+      include: concepts.length
+        ? [
+            {
+              system: concepts[0]?.system ?? "",
+              concept: concepts.map((c) => ({
+                code: c.code ?? "",
+                display: c.display ?? "",
+              })),
+            },
+          ]
+        : [],
+    },
+  };
   return {
     ok: true,
-    message: `preview: ${d.name ?? "ValueSet"} — ${d.concept_count ?? "?"} concepts`,
+    message: `preview: ${url.split("/").pop() ?? url} — ${d.count ?? concepts.length} concepts`,
+    valueset,
   };
 }
 
