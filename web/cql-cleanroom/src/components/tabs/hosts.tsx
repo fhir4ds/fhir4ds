@@ -34,6 +34,7 @@ export interface TabHostProps {
   valueset: Record<string, unknown> | null;
   connected?: boolean;
   umlsReady?: boolean;
+  umlsKey?: string;
   onValuesetChange: (vs: Record<string, unknown>) => void;
   /* parameter */
   params: ParamBinding[];
@@ -77,6 +78,7 @@ export function TabHost(p: TabHostProps) {
           onChange={p.onValuesetChange}
           connected={p.connected}
           umlsReady={p.umlsReady}
+          umlsKey={p.umlsKey}
         />
       ) : (
         <p className="pane-hint">valueset not found: {p.tab.resourceId}</p>

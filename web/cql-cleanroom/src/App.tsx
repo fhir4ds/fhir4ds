@@ -598,6 +598,7 @@ export default function App() {
   const [umlsReady, setUmlsReady] = useState(false);
   const [termSettings, setTermSettings] = useState<TerminologySettings>(DEFAULT_TERMINOLOGY_SETTINGS);
   const [termDiagnostics, setTermDiagnostics] = useState<string[]>([]); // surfaced via statusNote; kept for the editor strip + diagnostics pane
+  const [termSettingsOpen, setTermSettingsOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
     void detectServer().then((m) => {
@@ -2616,53 +2617,14 @@ export default function App() {
           {/* REORG 6e: workspace settings — console dock + recalc delay. */}
           <DropdownMenu label="Settings" testId="settings-menu">
             {serverMode.kind === "connected" && (
-              <>
-                <div className="settings-header">Terminology</div>
-                <label className="settings-row" data-testid="settings-vsac-key-row">
-                  <span>VSAC API key</span>
-                  <input
-                    type="password"
-                    data-testid="settings-vsac-key"
-                    placeholder="stored in this browser only"
-                    value={termSettings.vsacApiKey}
-                    onChange={(e) => {
-                      const next = { ...termSettings, vsacApiKey: e.target.value };
-                      setTermSettings(next);
-                      void saveTerminologySettings(next);
-                    }}
-                  />
-                </label>
-                <label className="settings-row" data-testid="settings-fhir-base-row">
-                  <span>FHIR server</span>
-                  <input
-                    type="text"
-                    data-testid="settings-fhir-base"
-                    placeholder="cts.nlm.nih.gov/fhir (default)"
-                    value={termSettings.fhirTermServerBase}
-                    onChange={(e) => {
-                      const next = { ...termSettings, fhirTermServerBase: e.target.value };
-                      setTermSettings(next);
-                      void saveTerminologySettings(next);
-                    }}
-                  />
-                </label>
-                <label className="settings-row">
-                  <span>UMLS</span>
-                  <span className="settings-value" data-testid="settings-umls-status">
-                    {umlsReady ? "enabled (server key)" : "set UMLS_API_KEY on server"}
-                  </span>
-                </label>
-                <label className="settings-row">
-                  <span>ValueSet cache</span>
-                  <button
-                    className="settings-button"
-                    data-testid="settings-clear-term-cache"
-                    onClick={() => void clearTerminologyCache()}
-                  >
-                    Clear
-                  </button>
-                </label>
-              </>
+              <button
+                className="dropdown-item"
+                data-testid="settings-terminology"
+                onClick={() => setTermSettingsOpen(true)}
+                title="VSAC key, FHIR server, UMLS key, cache"
+              >
+                Terminology…
+              </button>
             )}
             <label className="settings-row">
               <span>Console</span>
@@ -2894,7 +2856,8 @@ export default function App() {
               onOpenExpected={openExpectedEditor}
               valueset={hostValueset}
               connected={serverMode.kind === "connected"}
-              umlsReady={umlsReady}
+              umlsReady={umlsReady || !!termSettings.umlsApiKey}
+              umlsKey={termSettings.umlsApiKey || undefined}
               onValuesetChange={(vs) => {
                 const nextUrl = String(vs.url ?? "");
                 // The tab's resourceId (`ws:<url>`) is the identity of the
@@ -3014,7 +2977,86 @@ export default function App() {
         )}
       </main>
       <ResourceContextMenu menu={ctxMenu} onClose={() => setCtxMenu(null)} />
-            {termDiagnostics.length > 0 && (
+            {termSettingsOpen && (
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Terminology Settings"
+          data-testid="term-settings-dialog"
+          onClick={() => setTermSettingsOpen(false)}
+        >
+          <div className="modal-card term-settings-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Terminology</h3>
+            <label className="settings-row" data-testid="settings-vsac-key-row">
+              <span>VSAC API key</span>
+              <input
+                type="password"
+                data-testid="settings-vsac-key"
+                placeholder="stored in this browser only"
+                value={termSettings.vsacApiKey}
+                onChange={(e) => {
+                  const next = { ...termSettings, vsacApiKey: e.target.value };
+                  setTermSettings(next);
+                  void saveTerminologySettings(next);
+                }}
+              />
+            </label>
+            <label className="settings-row" data-testid="settings-fhir-base-row">
+              <span>FHIR server</span>
+              <input
+                type="text"
+                data-testid="settings-fhir-base"
+                placeholder="cts.nlm.nih.gov/fhir (default)"
+                value={termSettings.fhirTermServerBase}
+                onChange={(e) => {
+                  const next = { ...termSettings, fhirTermServerBase: e.target.value };
+                  setTermSettings(next);
+                  void saveTerminologySettings(next);
+                }}
+              />
+            </label>
+            <label className="settings-row" data-testid="settings-umls-key-row">
+              <span>UMLS API key</span>
+              <input
+                type="password"
+                data-testid="settings-umls-key"
+                placeholder={umlsReady ? "server key active — optional override" : "or set UMLS_API_KEY on the server"}
+                value={termSettings.umlsApiKey}
+                onChange={(e) => {
+                  const next = { ...termSettings, umlsApiKey: e.target.value };
+                  setTermSettings(next);
+                  void saveTerminologySettings(next);
+                }}
+              />
+            </label>
+            <label className="settings-row">
+              <span>UMLS status</span>
+              <span className="settings-value" data-testid="settings-umls-status">
+                {termSettings.umlsApiKey
+                  ? "enabled (browser key)"
+                  : umlsReady
+                    ? "enabled (server key)"
+                    : "no key configured"}
+              </span>
+            </label>
+            <label className="settings-row">
+              <span>ValueSet cache</span>
+              <button
+                className="settings-button"
+                data-testid="settings-clear-term-cache"
+                onClick={() => void clearTerminologyCache()}
+              >
+                Clear
+              </button>
+            </label>
+            <div className="modal-actions">
+              <button data-testid="term-settings-close" onClick={() => setTermSettingsOpen(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {termDiagnostics.length > 0 && (
         <div className="term-diag" data-testid="term-diag" role="status">
           {termDiagnostics.length} valueset url{termDiagnostics.length === 1 ? "" : "s"} unresolved — check Settings terminology source
         </div>

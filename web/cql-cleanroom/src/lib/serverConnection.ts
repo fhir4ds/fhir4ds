@@ -124,11 +124,17 @@ export interface UmlsResult {
 
 export async function umlsSearch(
   query: string,
+  umlsApiKey?: string,
 ): Promise<{ ok: boolean; message: string; results?: UmlsResult[] }> {
   const res = await fetch("/api/terminology/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({
+      query,
+      // [2] request-field doctrine: browser key when present; env fallback
+      // server-side otherwise. Never logged or echoed.
+      ...(umlsApiKey ? { api_key: umlsApiKey } : {}),
+    }),
   });
   const d = unwrap<{ ok: boolean; results?: UmlsResult[] }>(await res.json());
   if (!d.ok) return { ok: false, message: diagOf(d) };

@@ -1652,3 +1652,9 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 .umls-strip-results { position: absolute; top: 100%; left: 10px; right: 10px; z-index: 40; list-style: none; margin: 0; padding: 4px; background: var(--bg-panel, #1e222a); border: 1px solid rgba(255,255,255,0.14); border-radius: 6px; max-height: 200px; overflow: auto; }
 .umls-strip-results li button { display: block; width: 100%; text-align: left; border: 0; background: transparent; border-radius: 4px; padding: 4px 6px; }
 .umls-strip-results li button:hover { background: rgba(90,160,255,0.2); }
+
+/* [1] terminology settings popup card */
+.term-settings-card { min-width: 460px; }
+.term-settings-card .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; font-size: 12px; }
+.term-settings-card .settings-row > span:first-child { color: var(--text-dim, #9aa4b2); }
+.term-settings-card input { width: 220px; }

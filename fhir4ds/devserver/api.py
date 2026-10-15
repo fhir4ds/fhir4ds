@@ -241,7 +241,23 @@ class _Handler(BaseHTTPRequestHandler):
                 _envelope(ok=False, diagnostics=[_diag("system must be a string")]),
             )
             return
-        endpoint = self._umls_endpoint()
+        # c-cleanroom-redo [2] (option A): browser-supplied UMLS key rides
+        # the request (same doctrine as VSAC: never logged/echoed/persisted;
+        # env UMLS_API_KEY remains the fallback when absent).
+        request_key = body.get("api_key")
+        endpoint = None
+        if isinstance(request_key, str) and request_key.strip():
+            from fhir4ds.cql.terminology.umls_adapter import (
+                UMLSTerminologyEndpoint,
+            )
+
+            settings = self.server.terminology_settings
+            endpoint = UMLSTerminologyEndpoint(
+                timeout_seconds=settings.timeout_seconds if settings else 15.0,
+                api_key=request_key.strip(),
+            )
+        else:
+            endpoint = self._umls_endpoint()
         if endpoint is None:
             self._write_json(
                 200,

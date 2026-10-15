@@ -62,17 +62,22 @@ test("STANDALONE GUARD: vite-preview shell makes ZERO /api/* requests", async ({
   expect(afterBoot, `standalone made ${apiHits.join(", ")} after handshake`).toBe(0);
 });
 
-test("connected: Settings shows terminology section; key input persists intent; cache clear present", async ({ page }) => {
+test("connected: Settings > Terminology… opens consolidated popup with all controls", async ({ page }) => {
   await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(12000);
   await page.locator('[data-testid="settings-menu"]').click();
-  const keyRow = page.locator('[data-testid="settings-vsac-key-row"]');
-  await expect(keyRow).toBeVisible({ timeout: 10000 });
-  await expect(page.locator('[data-testid="settings-fhir-base-row"]')).toBeVisible();
-  await expect(page.locator('[data-testid="settings-umls-status"]')).toBeVisible();
-  await expect(page.locator('[data-testid="settings-clear-term-cache"]')).toBeVisible();
-  // password-type input (never plain text)
-  await expect(page.locator('[data-testid="settings-vsac-key"]')).toHaveAttribute("type", "password");
+  await page.locator('[data-testid="settings-terminology"]').click();
+  const dlg = page.locator('[data-testid="term-settings-dialog"]');
+  await expect(dlg).toBeVisible({ timeout: 10000 });
+  // All four consolidated controls present; keys are password-type
+  await expect(dlg.locator('[data-testid="settings-vsac-key"]')).toHaveAttribute("type", "password");
+  await expect(dlg.locator('[data-testid="settings-umls-key"]')).toHaveAttribute("type", "password");
+  await expect(dlg.locator('[data-testid="settings-fhir-base"]')).toBeVisible();
+  await expect(dlg.locator('[data-testid="settings-umls-status"]')).toBeVisible();
+  await expect(dlg.locator('[data-testid="settings-clear-term-cache"]')).toBeVisible();
+  // Backdrop + Close dismiss
+  await dlg.getByRole("button", { name: "Close" }).click();
+  await expect(dlg).toBeHidden();
 });
 
 test("connected: valueset editor shows UMLS strip; disabled without key + explain chip", async ({ page }) => {

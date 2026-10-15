@@ -54,14 +54,17 @@ export function ValuesetEditor({
   onChange,
   connected = false,
   umlsReady = false,
+  umlsKey,
 }: {
   valueset: Vs;
   onChange: (next: Vs) => void;
   /** S1R pillar 3: UMLS concept search strip (visible when connected;
-   *  disabled with an explain chip when the server key is absent —
+   *  disabled with an explain chip when no key is available —
    *  conductor ruling 4). */
   connected?: boolean;
   umlsReady?: boolean;
+  /** [2] browser-entry UMLS key (request-field doctrine; optional). */
+  umlsKey?: string;
 }) {
   const [rawMode, setRawMode] = useState(false);
   const [rawText, setRawText] = useState("");
@@ -97,7 +100,10 @@ export function ValuesetEditor({
       const res = await fetch("/api/terminology/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: umlsQuery.trim() }),
+        body: JSON.stringify({
+          query: umlsQuery.trim(),
+          ...(umlsKey ? { api_key: umlsKey } : {}),
+        }),
       });
       const body = (await res.json()) as { data?: { ok?: boolean; results?: { system?: string; code?: string; display?: string }[] } };
       const d = body?.data ?? (body as { ok?: boolean; results?: { system?: string; code?: string; display?: string }[] });
@@ -149,8 +155,8 @@ export function ValuesetEditor({
             {umlsBusy ? "…" : "Search"}
           </button>
           {!umlsReady && (
-            <span className="umls-strip-hint" title="server-side key">
-              set UMLS_API_KEY on the server to enable
+            <span className="umls-strip-hint" title="browser or server key">
+              add a UMLS key in Settings → Terminology to enable
             </span>
           )}
           {umlsHits && umlsHits.length > 0 && (

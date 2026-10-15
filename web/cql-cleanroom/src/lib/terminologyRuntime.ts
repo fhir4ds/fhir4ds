@@ -18,11 +18,13 @@ import type { ServerMode } from "./serverConnection";
 
 export interface TerminologySettings {
   vsacApiKey: string;
+  umlsApiKey: string; // [2] browser-entry UMLS key (request-field doctrine)
   fhirTermServerBase: string; // "" = default (cts.nlm.nih.gov/fhir)
 }
 
 export const DEFAULT_TERMINOLOGY_SETTINGS: TerminologySettings = {
   vsacApiKey: "",
+  umlsApiKey: "",
   fhirTermServerBase: "",
 };
 
