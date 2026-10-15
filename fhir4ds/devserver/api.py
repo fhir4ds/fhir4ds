@@ -121,6 +121,12 @@ def create_server(
     server = DevHTTPServer((host, port), _Handler)
     server.kernel_manager = kernel_manager
     server.watcher = watcher
+    # c-cleanroom-redo S1: handshake identity for connected-mode clients
+    # (nonce changes per server instance; ui reports which shell is served).
+    import secrets as _secrets
+
+    server.mode_nonce = _secrets.token_hex(8)
+    server.ui_mode = "cleanroom" if (Path(getattr(watcher._cfg, "root", "")) / ".cleanroom").exists() else "legacy"
     server.cell_registry = CellSessionRegistry()
     # v3 Slice 1: set True when a valueset edit was written to disk but the
     # kernel still holds the terminology loaded at startup (restart reloads).
@@ -714,6 +720,29 @@ class _Handler(BaseHTTPRequestHandler):
                     load_diagnostics=kernel.load_diagnostics,
                     valuesets_stale=self.server.valuesets_stale,
                     terminology=self._terminology_status(),
+                ),
+            )
+            return
+        if path == "/api/mode":
+            # c-wasm-bolton S1: mode handshake for the wasm app. The app
+            # fetches this on boot; 200 + server=true mounts ServerTransport,
+            # a 404 (static hosting) leaves standalone. `nonce` is generated
+            # per server instance so embeds can detect STALE handshakes
+            # after a server restart (nonce change = re-handshake). The
+            # semver range in `server_range` documents the version-pin
+            # contract the UI parses (standard node-semver range syntax —
+            # the UI banner logic is driven by this string, not magic).
+            self._write_json(
+                200,
+                _envelope(
+                    server=True,
+                    version=_version(),
+                    # ^1.0.0-style range; cf66ab1d-era server is 0.0.x so the
+                    # range starts open at 0.0.14 until the arc release bumps.
+                    server_range=">=0.0.13",
+                    workspace=self.server.watcher._cfg.root.name,
+                    nonce=self.server.mode_nonce,
+                    ui=self.server.ui_mode,
                 ),
             )
             return
