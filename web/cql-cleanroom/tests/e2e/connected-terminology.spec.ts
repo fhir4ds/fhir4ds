@@ -69,11 +69,15 @@ test("connected: Settings > Terminology… opens consolidated popup with all con
   await page.locator('[data-testid="settings-terminology"]').click();
   const dlg = page.locator('[data-testid="term-settings-dialog"]');
   await expect(dlg).toBeVisible({ timeout: 10000 });
-  // All four consolidated controls present; keys are password-type
+  // Consolidated controls present; keys are password-type. This e2e server
+  // runs WITHOUT env keys → all three fields EDITABLE (rider #2).
+  await expect(dlg.locator('[data-testid="settings-vsac-key"]')).toBeEnabled();
+  await expect(dlg.locator('[data-testid="settings-fhir-base"]')).toBeEnabled();
   await expect(dlg.locator('[data-testid="settings-vsac-key"]')).toHaveAttribute("type", "password");
   await expect(dlg.locator('[data-testid="settings-umls-key"]')).toHaveAttribute("type", "password");
   await expect(dlg.locator('[data-testid="settings-fhir-base"]')).toBeVisible();
-  await expect(dlg.locator('[data-testid="settings-umls-status"]')).toBeVisible();
+  // UMLS status row DROPPED per Joel (redundant; env-locked field instead)
+  await expect(dlg.locator('[data-testid="settings-umls-status"]')).toHaveCount(0);
   await expect(dlg.locator('[data-testid="settings-clear-term-cache"]')).toBeVisible();
   // Backdrop + Close dismiss
   await dlg.getByRole("button", { name: "Close" }).click();
@@ -110,4 +114,56 @@ test("connected: no terminology items in File>Add (removed per S1R)", async ({ p
   await page.waitForTimeout(600);
   await expect(page.locator('[data-testid="vsac-import"]')).toHaveCount(0);
   await expect(page.locator('[data-testid="umls-lookup"]')).toHaveCount(0);
+});
+
+test("rider#2: env keys present → all three fields disabled with env placeholders", async ({ page }) => {
+  // Spawn a second server WITH the env vars set (port 19098).
+  const { spawn: sp } = (await import("node:child_process")) as { spawn: typeof import("node:child_process").spawn };
+  const proc = sp(
+    "/usr/bin/python3",
+    ["-m", "fhir4ds.cli", "dev", "/tmp/opencode/ccr-s1-ws", "--port", "19098", "--no-open"],
+    {
+      cwd: "/mnt/d/fhir4ds",
+      env: {
+        ...process.env,
+        PYTHONPATH: "/mnt/d/fhir4ds",
+        PATH: process.env.PATH ?? "",
+        VSAC_API_KEY: "env-test",
+        UMLS_API_KEY: "env-test",
+        FHIR4DS_TERMINOLOGY_BASE_URL: "https://example.org/fhir",
+      },
+      stdio: "ignore",
+    },
+  );
+  try {
+    let up = false;
+    for (let i = 0; i < 40; i++) {
+      try {
+        const r = await fetch("http://127.0.0.1:19098/health");
+        if (r.ok) { up = true; break; }
+      } catch { /* wait */ }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    expect(up).toBe(true);
+    const h = await (await fetch("http://127.0.0.1:19098/health")).json();
+    const term = h?.data?.terminology ?? h?.terminology;
+    expect(term?.vsac_api_key_set).toBe(true);
+    expect(term?.umls_api_key_set).toBe(true);
+    expect(term?.fhir_base_url_set).toBe(true);
+
+    await page.goto("http://127.0.0.1:19098/cleanroom/", { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.waitForTimeout(12000);
+    await page.locator('[data-testid="settings-menu"]').click();
+    await page.locator('[data-testid="settings-terminology"]').click();
+    const dlg = page.locator('[data-testid="term-settings-dialog"]');
+    await expect(dlg).toBeVisible({ timeout: 10000 });
+    await expect(dlg.locator('[data-testid="settings-vsac-key"]')).toBeDisabled();
+    await expect(dlg.locator('[data-testid="settings-vsac-key"]')).toHaveAttribute("placeholder", /server environment/);
+    await expect(dlg.locator('[data-testid="settings-umls-key"]')).toBeDisabled();
+    await expect(dlg.locator('[data-testid="settings-fhir-base"]')).toBeDisabled();
+    // No status rows anywhere
+    await expect(dlg.locator('[data-testid="settings-umls-status"]')).toHaveCount(0);
+  } finally {
+    try { process.kill(proc.pid!); } catch { /* gone */ }
+  }
 });

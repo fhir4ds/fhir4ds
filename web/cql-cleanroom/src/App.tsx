@@ -634,6 +634,12 @@ export default function App() {
   // calls — automated e2e guards this). Server is terminology provider only.
   const [serverMode, setServerMode] = useState<ServerMode>({ kind: "standalone" });
   const [umlsReady, setUmlsReady] = useState(false);
+  // Rider #2: per-field env-present flags from /health (booleans only).
+  const [envFieldSet, setEnvFieldSet] = useState<{
+    vsac: boolean;
+    umls: boolean;
+    fhirBase: boolean;
+  }>({ vsac: false, umls: false, fhirBase: false });
   const [termSettings, setTermSettings] = useState<TerminologySettings>(DEFAULT_TERMINOLOGY_SETTINGS);
   const [termDiagnostics, setTermDiagnostics] = useState<string[]>([]); // surfaced via statusNote; kept for the editor strip + diagnostics pane
   const [termSettingsOpen, setTermSettingsOpen] = useState(false);
@@ -674,7 +680,13 @@ export default function App() {
       setServerMode(m);
       if (m.kind === "connected") {
         void terminologyStatus().then((s) => {
-          if (!cancelled) setUmlsReady(s?.api_key_set === true);
+          if (cancelled) return;
+          setUmlsReady(s?.api_key_set === true);
+          setEnvFieldSet({
+            vsac: s?.vsac_api_key_set === true,
+            umls: s?.umls_api_key_set === true,
+            fhirBase: s?.fhir_base_url_set === true,
+          });
         });
         void loadTerminologySettings().then((s) => {
           if (!cancelled) setTermSettings(s);
@@ -3170,8 +3182,13 @@ export default function App() {
               <input
                 type="password"
                 data-testid="settings-vsac-key"
-                placeholder="stored in this browser only"
-                value={termSettings.vsacApiKey}
+                disabled={envFieldSet.vsac}
+                placeholder={
+                  envFieldSet.vsac
+                    ? "provided by server environment (VSAC_API_KEY)"
+                    : "stored in this browser only"
+                }
+                value={envFieldSet.vsac ? "" : termSettings.vsacApiKey}
                 onChange={(e) => {
                   const next = { ...termSettings, vsacApiKey: e.target.value };
                   setTermSettings(next);
@@ -3184,8 +3201,13 @@ export default function App() {
               <input
                 type="text"
                 data-testid="settings-fhir-base"
-                placeholder="cts.nlm.nih.gov/fhir (default)"
-                value={termSettings.fhirTermServerBase}
+                disabled={envFieldSet.fhirBase}
+                placeholder={
+                  envFieldSet.fhirBase
+                    ? "provided by server environment"
+                    : "cts.nlm.nih.gov/fhir (default)"
+                }
+                value={envFieldSet.fhirBase ? "" : termSettings.fhirTermServerBase}
                 onChange={(e) => {
                   const next = { ...termSettings, fhirTermServerBase: e.target.value };
                   setTermSettings(next);
@@ -3198,24 +3220,19 @@ export default function App() {
               <input
                 type="password"
                 data-testid="settings-umls-key"
-                placeholder={umlsReady ? "server key active — optional override" : "or set UMLS_API_KEY on the server"}
-                value={termSettings.umlsApiKey}
+                disabled={envFieldSet.umls}
+                placeholder={
+                  envFieldSet.umls
+                    ? "provided by server environment (UMLS_API_KEY)"
+                    : "stored in this browser only"
+                }
+                value={envFieldSet.umls ? "" : termSettings.umlsApiKey}
                 onChange={(e) => {
                   const next = { ...termSettings, umlsApiKey: e.target.value };
                   setTermSettings(next);
                   void saveTerminologySettings(next);
                 }}
               />
-            </label>
-            <label className="settings-row">
-              <span>UMLS status</span>
-              <span className="settings-value" data-testid="settings-umls-status">
-                {termSettings.umlsApiKey
-                  ? "enabled (browser key)"
-                  : umlsReady
-                    ? "enabled (server key)"
-                    : "no key configured"}
-              </span>
             </label>
             <label className="settings-row">
               <span>ValueSet cache</span>

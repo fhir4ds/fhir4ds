@@ -20,6 +20,10 @@ export interface TerminologyConfigStatus {
   provider: string;
   configured: boolean;
   api_key_set: boolean;
+  /** Rider #2: per-field env-present booleans (presence only). */
+  vsac_api_key_set?: boolean;
+  umls_api_key_set?: boolean;
+  fhir_base_url_set?: boolean;
 }
 
 /** Boot handshake. Never throws; failures degrade to standalone. */
@@ -144,15 +148,18 @@ export async function umlsSearch(
 export async function terminologyStatus(
   base = "",
 ): Promise<TerminologyConfigStatus | null> {
+  // Rider #2: env-present booleans live in /health's terminology block
+  // (per-field, presence-only); the config endpoint carries provider
+  // settings but NOT the env booleans.
   try {
-    const res = await fetch(`${base}/api/terminology/config`, {
+    const res = await fetch(`${base}/health`, {
       signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) return null;
-    const d = unwrap<{ config?: TerminologyConfigStatus } & Partial<TerminologyConfigStatus>>(
-      await res.json(),
-    );
-    return (d as { config?: TerminologyConfigStatus }).config ?? (d as TerminologyConfigStatus) ?? null;
+    const body = (await res.json()) as {
+      data?: { terminology?: TerminologyConfigStatus };
+    } & { terminology?: TerminologyConfigStatus };
+    return body?.data?.terminology ?? body?.terminology ?? null;
   } catch {
     return null;
   }

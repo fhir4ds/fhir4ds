@@ -171,13 +171,26 @@ class _Handler(BaseHTTPRequestHandler):
         NEVER includes key material — only whether the API key env var is
         SET (presence check, not the value).
         """
+        import os as _os
+
         settings = getattr(self.server, "terminology_settings", None)
         if settings is None:
             return {"provider": "disabled", "configured": False}
+        # c-cleanroom-redo rider #2: per-field env-present booleans so the
+        # UI can render env-authoritative (disabled) fields. Presence
+        # checks only — never key/config VALUES.
         return {
             "provider": settings.provider,
             "configured": settings.provider != "disabled",
             "api_key_set": bool(settings.api_key()),
+            "vsac_api_key_set": bool(_os.environ.get("VSAC_API_KEY")),
+            "umls_api_key_set": bool(
+                _os.environ.get("FHIR4DS_UMLS_API_KEY")
+                or _os.environ.get("UMLS_API_KEY")
+            ),
+            "fhir_base_url_set": bool(
+                _os.environ.get("FHIR4DS_TERMINOLOGY_BASE_URL")
+            ),
         }
 
     def _terminology_endpoint(self):
