@@ -1667,13 +1667,11 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 .ws-files-group-header { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim, #9aa4b2); margin: 4px 0 2px; }
 .ws-file-row { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; border: 0; background: transparent; color: inherit; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 .ws-file-row:hover { background: rgba(255,255,255,0.08); }
+/* Checkpoint Q1: changed files get dot + amber highlight + tinted name */
+.ws-file-row.has-change { background: rgba(245,165,36,0.18); border-radius: 4px; }
+.ws-file-row.has-change .ws-file-name { color: #f5c26b; }
 .ws-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-file-dot { width: 7px; height: 7px; border-radius: 50%; background: #f5a524; flex: 0 0 auto; }
 .ws-data-hint { display: flex; align-items: center; gap: 10px; padding: 5px 12px; background: rgba(229,72,77,0.16); border-bottom: 1px solid rgba(229,72,77,0.4); font-size: 11px; }
 
-/* S3: run-target picker (connected only, beside Run) */
-.run-target-picker { display: inline-flex; gap: 0; margin-left: 6px; font-size: 10px; }
-.run-target-picker button { border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.05); color: inherit; padding: 1px 8px; cursor: pointer; font-size: 10px; }
-.run-target-picker button.on { background: rgba(90,160,255,0.35); }
-.run-target-picker button:first-child { border-radius: 4px 0 0 4px; }
-.run-target-picker button:last-child { border-radius: 0 4px 4px 0; }
+/* Checkpoint ruling: picker removed — target is automatic. */

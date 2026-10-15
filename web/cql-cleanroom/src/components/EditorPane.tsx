@@ -28,8 +28,6 @@ interface Props {
   /** REORG 6g: the header Run button (and Ctrl/Cmd+Enter) — runs the
    *  selection when one exists, else the whole library. */
   onRun?: () => void;
-  /** S3: optional server/browser Run-target picker (connected only). */
-  runTargetPicker?: import("react").ReactNode;
   /** REORG 6d: the visual-editor drawer lives under this pane; its
    *  toggle is a header button (was a standalone bottom bar). */
   graphOpen?: boolean;
@@ -80,7 +78,6 @@ export function EditorPane({
   knownTabKeys,
   onSelectionChange,
   onRun,
-  runTargetPicker,
   graphOpen,
   onGraphOpenChange,
 }: Props) {
@@ -126,7 +123,6 @@ export function EditorPane({
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
   const onRunRef = useRef(onRun);
-  const runTargetNode = runTargetPicker ?? null;
   onRunRef.current = onRun;
   // Selection presence drives the header button label (Run / Run selection).
   const [selText, setSelText] = useState("");
@@ -373,7 +369,6 @@ export function EditorPane({
             {selText.trim() ? "Run selection" : "Run"}
           </button>
         )}
-        {runTargetNode}
       </div>
       <div className="editor-host" data-testid="cql-editor" ref={editorDiv} />
       {outlineOpen && (

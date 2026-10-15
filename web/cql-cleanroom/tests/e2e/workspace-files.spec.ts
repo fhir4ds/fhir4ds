@@ -105,23 +105,25 @@ test("STANDALONE: no workspace section, no /api/fs traffic", async ({ page }) =>
   expect(fsHits, `standalone made ${fsHits.join(", ")}`).toEqual([]);
 });
 
-test("S3 connected: run-target picker appears; server target runs via Run button", async ({ page }) => {
+test("S3 checkpoint ruling: connected → Run goes to SERVER automatically (no picker)", async ({ page }) => {
   await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(12000);
-  const picker = page.locator('[data-testid="run-target-picker"]');
-  await expect(picker).toBeVisible({ timeout: 15000 });
-  await expect(picker.locator('[data-testid="run-target-browser"]')).toHaveAttribute("aria-checked", "true");
-  await picker.locator('[data-testid="run-target-server"]').click();
-  await expect(picker.locator('[data-testid="run-target-server"]')).toHaveAttribute("aria-checked", "true");
-  // S3 Muse MF2: manual Run MUST route through the server — the status
-  // note is now the deterministic wiring proof (no .catch softening).
+  // No picker chrome anywhere
+  await expect(page.locator('[data-testid="run-target-picker"]')).toHaveCount(0);
+  // Whole-library Run on a connected server MUST produce the server-run note
   await page.getByRole("button", { name: /^Run$/ }).click();
   await expect(page.locator('[data-testid="status-note"]')).toContainText(/server run/, { timeout: 60000 });
-  await expect(picker.locator('[data-testid="run-target-server"]')).toHaveAttribute("aria-checked", "true");
 });
 
-test("S3 STANDALONE: no run-target picker", async ({ page }) => {
+test("S3 checkpoint ruling: standalone → Run stays in-browser (no server traffic)", async ({ page }) => {
+  const evalHits: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/api/evaluate")) evalHits.push(r.url());
+  });
   await page.goto("http://127.0.0.1:5176/", { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(15000);
   await expect(page.locator('[data-testid="run-target-picker"]')).toHaveCount(0);
+  await page.getByRole("button", { name: /^Run$/ }).click().catch(() => {});
+  await page.waitForTimeout(3000);
+  expect(evalHits, `standalone made ${evalHits.join(", ")}`).toEqual([]);
 });

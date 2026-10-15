@@ -188,7 +188,7 @@ export function WorkspaceFilesPanel({
                   <button
                     key={f.name}
                     type="button"
-                    className="ws-file-row"
+                    className={`ws-file-row${changed ? " has-change" : ""}`}
                     data-testid={`ws-file-${g.dir}-${f.name}`}
                     onClick={() => void openFile(g.dir, f.name)}
                     title={changed ? `${f.name} — changed on disk` : f.name}

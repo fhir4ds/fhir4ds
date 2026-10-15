@@ -643,9 +643,6 @@ export default function App() {
   const [termSettings, setTermSettings] = useState<TerminologySettings>(DEFAULT_TERMINOLOGY_SETTINGS);
   const [termDiagnostics, setTermDiagnostics] = useState<string[]>([]); // surfaced via statusNote; kept for the editor strip + diagnostics pane
   const [termSettingsOpen, setTermSettingsOpen] = useState(false);
-  // S3: Run-target picker — 'browser' default; 'server' visible ONLY when
-  // connected (additive; standalone UI unchanged).
-  const [runTarget, setRunTarget] = useState<"browser" | "server">("browser");
   // S2: workspace files + watcher (connected-only; data-hint NEVER
   // auto-reloads — locked decision 4: banner with explicit restart).
   const [wsChanged, setWsChanged] = useState<Set<string>>(new Set());
@@ -1119,11 +1116,10 @@ export default function App() {
     if (!manualServer && !canAutoEval) return;
     const seq = ++evalSeqRef.current;
     evalBusyRef.current = true;
-    // S3 (FDD §3.4): optional server Run-target — connected + per-run
-    // opt-in only; results flow into the same native envelopes below.
-    // Auto-recalc (the heartbeat) stays BROWSER (per-run opt-in doctrine);
-    // manual Run forces the server pass when the picker selects it.
-    if (manualServer || (serverMode.kind === "connected" && runTarget === "server")) {
+    // Checkpoint ruling: automatic target — manual whole-library runs on
+    // a connected server evaluate SERVER-side (no picker); the auto-recalc
+    // heartbeat stays BROWSER; unreachable server → typed error (below).
+    if (manualServer) {
       try {
         const res = await fetch("/api/evaluate", {
           method: "POST",
@@ -2062,14 +2058,10 @@ export default function App() {
     nonce: number;
   } | null>(null);
   const runViaConsole = () => {
-    // S3 Muse MF1: the picker steers MANUAL runs — selecting 'server'
-    // routes the whole-library Run through /api/evaluate; selection runs
-    // stay in-browser (evaluate-only slice, browser snippet surface).
-    if (
-      serverMode.kind === "connected" &&
-      runTarget === "server" &&
-      !consoleSelection.trim()
-    ) {
+    // Checkpoint ruling: target is AUTOMATIC — connected to a server →
+    // whole-library runs go to the SERVER; standalone → in-browser WASM.
+    // Selection runs stay in-browser (evaluate-only server contract).
+    if (serverMode.kind === "connected" && !consoleSelection.trim()) {
       void runEvaluation(true);
       return;
     }
@@ -2985,34 +2977,7 @@ export default function App() {
             graphOpen={graphOpen}
             onGraphOpenChange={setGraphOpen}
             onRun={runViaConsole}
-            runTargetPicker={
-              serverMode.kind === "connected" ? (
-                <div className="run-target-picker" role="radiogroup" aria-label="Run target" data-testid="run-target-picker">
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={runTarget === "browser"}
-                    className={runTarget === "browser" ? "on" : ""}
-                    data-testid="run-target-browser"
-                    onClick={() => setRunTarget("browser")}
-                    title="evaluate in this browser (default)"
-                  >
-                    browser
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={runTarget === "server"}
-                    className={runTarget === "server" ? "on" : ""}
-                    data-testid="run-target-server"
-                    onClick={() => setRunTarget("server")}
-                    title="evaluate on the connected fhir4ds server (big datasets)"
-                  >
-                    server
-                  </button>
-                </div>
-              ) : null
-            }
+
             onDiagnostics={(diags) => {
               const idx = activeTabRef.current;
               setLibErrors((prev) => {
