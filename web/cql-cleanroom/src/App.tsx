@@ -637,6 +637,9 @@ export default function App() {
   const [termSettings, setTermSettings] = useState<TerminologySettings>(DEFAULT_TERMINOLOGY_SETTINGS);
   const [termDiagnostics, setTermDiagnostics] = useState<string[]>([]); // surfaced via statusNote; kept for the editor strip + diagnostics pane
   const [termSettingsOpen, setTermSettingsOpen] = useState(false);
+  // S3: Run-target picker — 'browser' default; 'server' visible ONLY when
+  // connected (additive; standalone UI unchanged).
+  const [runTarget, setRunTarget] = useState<"browser" | "server">("browser");
   // S2: workspace files + watcher (connected-only; data-hint NEVER
   // auto-reloads — locked decision 4: banner with explicit restart).
   const [wsChanged, setWsChanged] = useState<Set<string>>(new Set());
@@ -1104,6 +1107,45 @@ export default function App() {
     if (!canAutoEval) return;
     const seq = ++evalSeqRef.current;
     evalBusyRef.current = true;
+    // S3 (FDD §3.4): optional server Run-target — connected + per-run
+    // opt-in only; results flow into the same native envelopes below.
+    if (serverMode.kind === "connected" && runTarget === "server") {
+      try {
+        const res = await fetch("/api/evaluate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            libraries: mainLibs,
+            library: main.name,
+          }),
+        });
+        const b = (await res.json()) as EvaluateResult & {
+          ok?: boolean;
+          diagnostics?: { message: string }[];
+        };
+        if (seq !== evalSeqRef.current) return;
+        if (b?.ok === false) {
+          setStatusNote(
+            `server run failed: ${b?.diagnostics?.[0]?.message ?? "unknown error"}`,
+          );
+          return;
+        }
+        b.evaluated_at = Date.now();
+        setEvalResult(b);
+        setStatusNote(
+          `server run — ${b.patient_count} patients (${main.name})`,
+        );
+      } catch (err) {
+        if (seq === evalSeqRef.current) {
+          setStatusNote(
+            `server run failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      } finally {
+        evalBusyRef.current = false;
+      }
+      return;
+    }
     try {
       const resp = await workerRequest({
         type: "evaluate_library",
@@ -2918,6 +2960,34 @@ export default function App() {
             graphOpen={graphOpen}
             onGraphOpenChange={setGraphOpen}
             onRun={runViaConsole}
+            runTargetPicker={
+              serverMode.kind === "connected" ? (
+                <div className="run-target-picker" role="radiogroup" aria-label="Run target" data-testid="run-target-picker">
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={runTarget === "browser"}
+                    className={runTarget === "browser" ? "on" : ""}
+                    data-testid="run-target-browser"
+                    onClick={() => setRunTarget("browser")}
+                    title="evaluate in this browser (default)"
+                  >
+                    browser
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={runTarget === "server"}
+                    className={runTarget === "server" ? "on" : ""}
+                    data-testid="run-target-server"
+                    onClick={() => setRunTarget("server")}
+                    title="evaluate on the connected fhir4ds server (big datasets)"
+                  >
+                    server
+                  </button>
+                </div>
+              ) : null
+            }
             onDiagnostics={(diags) => {
               const idx = activeTabRef.current;
               setLibErrors((prev) => {
