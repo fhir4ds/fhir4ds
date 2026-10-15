@@ -1103,13 +1103,15 @@ export default function App() {
   // WORKBENCH_REORG phase 5 — the evaluation heartbeat lives in App so
   // the console sub-tabs AND the col2 panes render from one run.
   const canAutoEval = !!evalDataset && !!main?.text;
-  const runEvaluation = async () => {
-    if (!canAutoEval) return;
+  const runEvaluation = async (manualServer = false) => {
+    if (!manualServer && !canAutoEval) return;
     const seq = ++evalSeqRef.current;
     evalBusyRef.current = true;
     // S3 (FDD §3.4): optional server Run-target — connected + per-run
     // opt-in only; results flow into the same native envelopes below.
-    if (serverMode.kind === "connected" && runTarget === "server") {
+    // Auto-recalc (the heartbeat) stays BROWSER (per-run opt-in doctrine);
+    // manual Run forces the server pass when the picker selects it.
+    if (manualServer || (serverMode.kind === "connected" && runTarget === "server")) {
       try {
         const res = await fetch("/api/evaluate", {
           method: "POST",
@@ -2048,6 +2050,17 @@ export default function App() {
     nonce: number;
   } | null>(null);
   const runViaConsole = () => {
+    // S3 Muse MF1: the picker steers MANUAL runs — selecting 'server'
+    // routes the whole-library Run through /api/evaluate; selection runs
+    // stay in-browser (evaluate-only slice, browser snippet surface).
+    if (
+      serverMode.kind === "connected" &&
+      runTarget === "server" &&
+      !consoleSelection.trim()
+    ) {
+      void runEvaluation(true);
+      return;
+    }
     setRunRequest({
       mode: consoleSelection.trim() ? "selection" : "library",
       nonce: Date.now(),
