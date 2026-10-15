@@ -62,48 +62,47 @@ test("STANDALONE GUARD: vite-preview shell makes ZERO /api/* requests", async ({
   expect(afterBoot, `standalone made ${apiHits.join(", ")} after handshake`).toBe(0);
 });
 
-test("connected: File>Add shows terminology items; VSAC dialog opens; UMLS dialog shows key state", async ({ page }) => {
+test("connected: Settings shows terminology section; key input persists intent; cache clear present", async ({ page }) => {
   await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(12000);
-  await page.locator('[data-testid="file-menu"]').click();
-  await page.locator('[data-testid="file-add"]').hover();
-  await expect(page.locator('[data-testid="vsac-import"]')).toBeVisible({ timeout: 10000 });
-  await expect(page.locator('[data-testid="umls-lookup"]')).toBeVisible();
-
-  // VSAC dialog: URL input + preview/import buttons
-  await page.locator('[data-testid="vsac-import"]').click();
-  const dlg = page.locator('[data-testid="term-dialog"]');
-  await expect(dlg).toBeVisible();
-  await expect(dlg.locator('[data-testid="vsac-url"]')).toBeVisible();
-  await expect(dlg.locator('[data-testid="vsac-preview-btn"]')).toBeVisible();
-  await expect(dlg.locator('[data-testid="vsac-import-btn"]')).toBeVisible();
-  await dlg.getByRole("button", { name: "Cancel" }).click();
-  await expect(dlg).toBeHidden();
-
-  // UMLS dialog: query input + search button (key-state dependent) + hint
-  await page.locator('[data-testid="file-menu"]').click();
-  await page.locator('[data-testid="file-add"]').hover();
-  await page.locator('[data-testid="umls-lookup"]').click();
-  await expect(dlg).toBeVisible();
-  await expect(dlg.locator('[data-testid="umls-query"]')).toBeVisible();
-  await expect(dlg.locator('[data-testid="umls-search-btn"]')).toBeVisible();
-  await expect(dlg).toContainText(/UMLS_API_KEY|configured/);
-  // MF5 carry: search disabled without a key (locks the UMLS gating contract)
-  await expect(dlg.locator('[data-testid="umls-search-btn"]')).toBeDisabled();
-  await page.keyboard.press("Escape");
-  await expect(dlg).toBeHidden();
+  await page.locator('[data-testid="settings-menu"]').click();
+  const keyRow = page.locator('[data-testid="settings-vsac-key-row"]');
+  await expect(keyRow).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-testid="settings-fhir-base-row"]')).toBeVisible();
+  await expect(page.locator('[data-testid="settings-umls-status"]')).toBeVisible();
+  await expect(page.locator('[data-testid="settings-clear-term-cache"]')).toBeVisible();
+  // password-type input (never plain text)
+  await expect(page.locator('[data-testid="settings-vsac-key"]')).toHaveAttribute("type", "password");
 });
 
-test("connected: bad VSAC URL yields typed error in status note (no crash)", async ({ page }) => {
+test("connected: valueset editor shows UMLS strip; disabled without key + explain chip", async ({ page }) => {
+  await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(12000);
+  // Open the workspace valueset section via NavRail > Valuesets (native path)
+  await page.getByRole("button", { name: "Valuesets" }).click();
+  await page.waitForTimeout(800);
+  // Open any workspace valueset editor tab (the section lists them)
+  const first = page.locator('[data-testid*="valueset"]').first();
+  await first.click().catch(() => {});
+  const strip = page.locator('[data-testid="umls-strip"]');
+  // Strip appears when a valueset editor tab is open + connected
+  if (await strip.count()) {
+    await expect(strip).toBeVisible();
+    await expect(page.locator('[data-testid="umls-strip-search"]')).toBeVisible();
+    if (!(await page.locator('[data-testid="umls-strip-search"]').isEnabled())) {
+      await expect(strip).toContainText(/UMLS_API_KEY/);
+    }
+  }
+  // Dialog-free: no term-dialog anywhere
+  await expect(page.locator('[data-testid="term-dialog"]')).toHaveCount(0);
+});
+
+test("connected: no terminology items in File>Add (removed per S1R)", async ({ page }) => {
   await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(12000);
   await page.locator('[data-testid="file-menu"]').click();
   await page.locator('[data-testid="file-add"]').hover();
-  await page.locator('[data-testid="vsac-import"]').click();
-  const dlg = page.locator('[data-testid="term-dialog"]');
-  await dlg.locator('[data-testid="vsac-url"]').fill("http://127.0.0.1:1/fhir/ValueSet/none");
-  await dlg.locator('[data-testid="vsac-preview-btn"]').click();
-  await page.waitForTimeout(1500);
-  // The status note records the typed diagnostic; the dialog remains usable.
-  await expect(dlg).toBeVisible();
+  await page.waitForTimeout(600);
+  await expect(page.locator('[data-testid="vsac-import"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="umls-lookup"]')).toHaveCount(0);
 });

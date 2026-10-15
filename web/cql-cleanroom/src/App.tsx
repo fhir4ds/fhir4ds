@@ -38,7 +38,15 @@ import {
   mergeDatasets,
 } from "./lib/bundleIo";
 import { DropdownMenu, DropdownSubmenu } from "./components/DropdownMenu";
-import { detectServer, terminologyPreview, umlsSearch, terminologyStatus, type ServerMode } from "./lib/serverConnection";
+import { detectServer, terminologyStatus, type ServerMode } from "./lib/serverConnection";
+import {
+  loadTerminologySettings,
+  saveTerminologySettings,
+  clearTerminologyCache,
+  resolveRuntimeValuesets,
+  DEFAULT_TERMINOLOGY_SETTINGS,
+  type TerminologySettings,
+} from "./lib/terminologyRuntime";
 import { NativeClickButton } from "./components/NativeClickButton";
 import { ResourceContextMenu } from "./components/nav/ResourceContextMenu";
 import type { ContextMenuState } from "./components/nav/ResourceContextMenu";
@@ -588,22 +596,8 @@ export default function App() {
   // calls — automated e2e guards this). Server is terminology provider only.
   const [serverMode, setServerMode] = useState<ServerMode>({ kind: "standalone" });
   const [umlsReady, setUmlsReady] = useState(false);
-  const [termBusy, setTermBusy] = useState(false);
-  const [importUrl, setImportUrl] = useState("");
-  const [umlsQuery, setUmlsQuery] = useState("");
-  const [umlsResults, setUmlsResults] = useState<{ code?: string; display?: string; system?: string }[] | null>(null);
-  const [termDialog, setTermDialog] = useState<"none" | "vsac" | "umls">("none");
-  // S1 Muse MF3: Escape dismisses the terminology modal (native convention —
-  // global listener while open, matching DropdownMenu/ResourceContextMenu).
-  useEffect(() => {
-    if (termDialog === "none") return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setTermDialog("none");
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [termDialog]);
-
+  const [termSettings, setTermSettings] = useState<TerminologySettings>(DEFAULT_TERMINOLOGY_SETTINGS);
+  const [termDiagnostics, setTermDiagnostics] = useState<string[]>([]); // surfaced via statusNote; kept for the editor strip + diagnostics pane
   useEffect(() => {
     let cancelled = false;
     void detectServer().then((m) => {
@@ -613,10 +607,57 @@ export default function App() {
         void terminologyStatus().then((s) => {
           if (!cancelled) setUmlsReady(s?.api_key_set === true);
         });
+        void loadTerminologySettings().then((s) => {
+          if (!cancelled) setTermSettings(s);
+        });
       }
     });
     return () => { cancelled = true; };
   }, []);
+
+  // S1R P2 (user refinement): pre-run valueset resolution — declared urls
+  // missing from the workspace retrieve (Settings-configured source, cache
+  // beneath) and MATERIALIZE as editable workspace files (IndexedDB, Q2).
+  // Workspace valuesets keep precedence; unresolved urls surface as typed
+  // diagnostics. Runs for BOTH engines (dataset-merge layer = mode-uniform).
+  const termResolveKey = `${serverMode.kind}:${terminology.valuesets.length}`;
+  useEffect(() => {
+    if (serverMode.kind !== "connected") return;
+    let cancelled = false;
+    const wsUrls = new Set(
+      terminology.valuesets
+        .map((v) => (typeof v?.url === "string" ? v.url : null))
+        .filter(Boolean) as string[],
+    );
+    // Compose the library text from open libraries (declared urls scan).
+    const libText = libraries.map((l) => l.text).join("\n");
+    void resolveRuntimeValuesets(libText, wsUrls, termSettings, serverMode).then((r) => {
+      if (cancelled) return;
+      setTermDiagnostics(r.unresolved);
+      if (r.hydrated.length) {
+        setTerminology((t) => {
+          const have = new Set(
+            t.valuesets
+              .map((v) => (typeof v?.url === "string" ? v.url : null))
+              .filter(Boolean) as string[],
+          );
+          const add = r.hydrated.filter((v) => !have.has(String(v.url)));
+          if (!add.length) return t;
+          return { valuesets: [...t.valuesets, ...add] };
+        });
+        setStatusNote(
+          `retrieved ${r.hydrated.length} valueset${r.hydrated.length === 1 ? "" : "s"} into the workspace`,
+        );
+      } else if (r.unresolved.length) {
+        setStatusNote(
+          `valueset not retrievable: ${r.unresolved[0]} — check Settings terminology source`,
+        );
+      }
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [termResolveKey, termSettings, serverMode.kind]);
+
   const fileRef = useRef<HTMLInputElement | null>(null);
   const madieFileRef = useRef<HTMLInputElement | null>(null);
 
@@ -2509,26 +2550,6 @@ export default function App() {
               >
                 FHIR Bundle… (merge)
               </button>
-              {serverMode.kind === "connected" && (
-                <>
-                  <button
-                    className="dropdown-item"
-                    data-testid="vsac-import"
-                    onClick={() => { setTermDialog("vsac"); setUmlsResults(null); }}
-                    title="import a ValueSet from a VSAC / FHIR URL via the connected server"
-                  >
-                    ValueSet from VSAC URL…
-                  </button>
-                  <button
-                    className="dropdown-item"
-                    data-testid="umls-lookup"
-                    onClick={() => { setTermDialog("umls"); setUmlsResults(null); }}
-                    title={umlsReady ? "look up concepts by name via UMLS" : "requires UMLS_API_KEY on the server"}
-                  >
-                    UMLS concept lookup…{umlsReady ? "" : " (key not set)"}
-                  </button>
-                </>
-              )}
             </DropdownSubmenu>
             <DropdownSubmenu label="Save" testId="file-save">
               <button
@@ -2594,6 +2615,55 @@ export default function App() {
           </DropdownMenu>
           {/* REORG 6e: workspace settings — console dock + recalc delay. */}
           <DropdownMenu label="Settings" testId="settings-menu">
+            {serverMode.kind === "connected" && (
+              <>
+                <div className="settings-header">Terminology</div>
+                <label className="settings-row" data-testid="settings-vsac-key-row">
+                  <span>VSAC API key</span>
+                  <input
+                    type="password"
+                    data-testid="settings-vsac-key"
+                    placeholder="stored in this browser only"
+                    value={termSettings.vsacApiKey}
+                    onChange={(e) => {
+                      const next = { ...termSettings, vsacApiKey: e.target.value };
+                      setTermSettings(next);
+                      void saveTerminologySettings(next);
+                    }}
+                  />
+                </label>
+                <label className="settings-row" data-testid="settings-fhir-base-row">
+                  <span>FHIR server</span>
+                  <input
+                    type="text"
+                    data-testid="settings-fhir-base"
+                    placeholder="cts.nlm.nih.gov/fhir (default)"
+                    value={termSettings.fhirTermServerBase}
+                    onChange={(e) => {
+                      const next = { ...termSettings, fhirTermServerBase: e.target.value };
+                      setTermSettings(next);
+                      void saveTerminologySettings(next);
+                    }}
+                  />
+                </label>
+                <label className="settings-row">
+                  <span>UMLS</span>
+                  <span className="settings-value" data-testid="settings-umls-status">
+                    {umlsReady ? "enabled (server key)" : "set UMLS_API_KEY on server"}
+                  </span>
+                </label>
+                <label className="settings-row">
+                  <span>ValueSet cache</span>
+                  <button
+                    className="settings-button"
+                    data-testid="settings-clear-term-cache"
+                    onClick={() => void clearTerminologyCache()}
+                  >
+                    Clear
+                  </button>
+                </label>
+              </>
+            )}
             <label className="settings-row">
               <span>Console</span>
               <select
@@ -2823,6 +2893,8 @@ export default function App() {
               }
               onOpenExpected={openExpectedEditor}
               valueset={hostValueset}
+              connected={serverMode.kind === "connected"}
+              umlsReady={umlsReady}
               onValuesetChange={(vs) => {
                 const nextUrl = String(vs.url ?? "");
                 // The tab's resourceId (`ws:<url>`) is the identity of the
@@ -2942,152 +3014,9 @@ export default function App() {
         )}
       </main>
       <ResourceContextMenu menu={ctxMenu} onClose={() => setCtxMenu(null)} />
-      {termDialog !== "none" && (
-        <div
-          className="modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Terminology"
-          data-testid="term-dialog"
-          onClick={() => setTermDialog("none")}
-          onKeyDown={(e) => { if (e.key === "Escape") setTermDialog("none"); }}
-          tabIndex={-1}
-        >
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            {termDialog === "vsac" ? (
-              <>
-                <h3>Import ValueSet from VSAC / FHIR URL</h3>
-                <p className="modal-hint">Imports into this workspace (browser). Preview first shows name + concept count.</p>
-                <input
-                  className="modal-input"
-                  data-testid="vsac-url"
-                  placeholder="http://cts.nlm.nih.gov/fhir/ValueSet/…"
-                  value={importUrl}
-                  onChange={(e) => setImportUrl(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && importUrl.trim() && !termBusy) {
-                      void (async () => {
-                        setTermBusy(true);
-                        try {
-                          const r = await terminologyPreview(importUrl.trim());
-                          setStatusNote(r.message);
-                        } catch (err) {
-                          setStatusNote(`preview failed: ${err instanceof Error ? err.message : String(err)}`);
-                        } finally { setTermBusy(false); }
-                      })();
-                    }
-                  }}
-                />
-                <div className="modal-actions">
-                  <button
-                    data-testid="vsac-preview-btn"
-                    disabled={termBusy || !importUrl.trim()}
-                    onClick={async () => {
-                      setTermBusy(true);
-                      try {
-                        const r = await terminologyPreview(importUrl.trim());
-                        setStatusNote(r.message);
-                      } catch (err) {
-                        setStatusNote(`preview failed: ${err instanceof Error ? err.message : String(err)}`);
-                      } finally { setTermBusy(false); }
-                    }}
-                  >
-                    {termBusy ? "…" : "Preview"}
-                  </button>
-                  <button
-                    data-testid="vsac-import-btn"
-                    disabled={termBusy || !importUrl.trim()}
-                    onClick={async () => {
-                      setTermBusy(true);
-                      try {
-                        // Q2 ruling: browser-IndexedDB ONLY. Import =
-                        // preview + hydrate (full expansion concepts in the
-                        // browser workspace); NO server-disk write.
-                        const r = await terminologyPreview(importUrl.trim());
-                        if (!r.ok || !r.valueset) { setStatusNote(r.message); return; }
-                        const url = importUrl.trim();
-                        setTerminology((t) => ({
-                          valuesets: [
-                            ...t.valuesets.filter(
-                              (v) => String((v as { url?: string }).url ?? "") !== url,
-                            ),
-                            r.valueset!,
-                          ],
-                        }));
-                        openEditorTab("valueset", `ws:${url}`);
-                        setStatusNote(r.message);
-                        setTermDialog("none");
-                      } catch (err) {
-                        setStatusNote(`import failed: ${err instanceof Error ? err.message : String(err)}`);
-                      } finally { setTermBusy(false); }
-                    }}
-                  >
-                    {termBusy ? "…" : "Import"}
-                  </button>
-                  <button onClick={() => setTermDialog("none")}>Cancel</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <h3>UMLS concept lookup</h3>
-                <p className="modal-hint">
-                  {umlsReady
-                    ? "Server UMLS key configured."
-                    : "Set UMLS_API_KEY on the server and restart fhir4ds dev to enable lookup."}
-                </p>
-                <input
-                  className="modal-input"
-                  data-testid="umls-query"
-                  placeholder="myocardial infarction"
-                  value={umlsQuery}
-                  onChange={(e) => setUmlsQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && umlsQuery.trim() && umlsReady) {
-                      void (async () => {
-                        setTermBusy(true);
-                        try {
-                          const r = await umlsSearch(umlsQuery.trim());
-                          setStatusNote(r.message);
-                          setUmlsResults(r.results ?? []);
-                        } catch (err) {
-                          setStatusNote(`UMLS search failed: ${err instanceof Error ? err.message : String(err)}`);
-                        } finally { setTermBusy(false); }
-                      })();
-                    }
-                  }}
-                />
-                <div className="modal-actions">
-                  <button
-                    data-testid="umls-search-btn"
-                    disabled={termBusy || !umlsQuery.trim() || !umlsReady}
-                    onClick={async () => {
-                      setTermBusy(true);
-                      try {
-                        const r = await umlsSearch(umlsQuery.trim());
-                        setStatusNote(r.message);
-                        setUmlsResults(r.results ?? []);
-                      } catch (err) {
-                        setStatusNote(`UMLS search failed: ${err instanceof Error ? err.message : String(err)}`);
-                      } finally { setTermBusy(false); }
-                    }}
-                  >
-                    {termBusy ? "…" : "Search"}
-                  </button>
-                  <button onClick={() => setTermDialog("none")}>Close</button>
-                </div>
-                {umlsResults && umlsResults.length > 0 && (
-                  <ul className="umls-results" data-testid="umls-results">
-                    {umlsResults.slice(0, 10).map((r, i) => (
-                      <li key={i}>
-                        <code>{r.code}</code> {r.display ?? ""}{" "}
-                        <span className="umls-system">{r.system}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </>
-            )}
-          </div>
+            {termDiagnostics.length > 0 && (
+        <div className="term-diag" data-testid="term-diag" role="status">
+          {termDiagnostics.length} valueset url{termDiagnostics.length === 1 ? "" : "s"} unresolved — check Settings terminology source
         </div>
       )}
       <BootOverlay state={boot} />

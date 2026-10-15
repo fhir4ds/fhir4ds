@@ -32,6 +32,8 @@ export interface TabHostProps {
   onOpenExpected?: () => void;
   /* valueset */
   valueset: Record<string, unknown> | null;
+  connected?: boolean;
+  umlsReady?: boolean;
   onValuesetChange: (vs: Record<string, unknown>) => void;
   /* parameter */
   params: ParamBinding[];
@@ -73,6 +75,8 @@ export function TabHost(p: TabHostProps) {
         <ValuesetEditor
           valueset={p.valueset}
           onChange={p.onValuesetChange}
+          connected={p.connected}
+          umlsReady={p.umlsReady}
         />
       ) : (
         <p className="pane-hint">valueset not found: {p.tab.resourceId}</p>
