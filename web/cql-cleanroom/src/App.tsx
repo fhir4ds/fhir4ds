@@ -39,6 +39,7 @@ import {
 } from "./lib/bundleIo";
 import { DropdownMenu, DropdownSubmenu } from "./components/DropdownMenu";
 import { detectServer, terminologyStatus, type ServerMode } from "./lib/serverConnection";
+import { WorkspaceFilesPanel } from "./components/nav/WorkspaceFilesPanel";
 import {
   loadTerminologySettings,
   saveTerminologySettings,
@@ -367,6 +368,7 @@ export default function App() {
   const [navFilters, setNavFilters] = useState<
     Record<NavSectionId, string>
   >({
+    workspace: "",
     measures: "",
     libraries: "",
     valuesets: "",
@@ -525,6 +527,42 @@ export default function App() {
     ];
     return { ...(dataset ?? { resources: [] }), valueset_resources: merged };
   }, [dataset, terminology]);
+  // S2: workspace-file openers into native editor tabs.
+  const openWorkspaceCql = (name: string, text: string) => {
+    const idx = libraries.findIndex((l) => l.name === name);
+    if (idx >= 0) {
+      setLibraries((libs) => {
+        const next = [...libs];
+        next[idx] = { ...next[idx], text };
+        return next;
+      });
+    } else {
+      setLibraries((libs) => [
+        ...libs,
+        { id: name.toLowerCase(), name, text },
+      ]);
+    }
+    // Editor tabs are the modern surface — open/select the library tab.
+    openEditorTab("library", name);
+    setStatusNote(`opened workspace library ${name}`);
+  };
+  const openWorkspaceValueset = (name: string, jsonText: string) => {
+    try {
+      const vs = JSON.parse(jsonText) as Record<string, unknown>;
+      const url = typeof vs.url === "string" ? vs.url : `ws:${name}`;
+      setTerminology((t) => ({
+        valuesets: [
+          ...t.valuesets.filter((v) => String((v as { url?: string }).url ?? "") !== url),
+          vs,
+        ],
+      }));
+      openEditorTab("valueset", `ws:${url}`);
+      setStatusNote(`opened workspace valueset ${name}`);
+    } catch {
+      setStatusNote(`valueset ${name} is not valid JSON`);
+    }
+  };
+
   // C3-U3: builder prefill for dataset-row editing (nonce re-triggers).
   const [builderPrefill, setBuilderPrefill] = useState<{
     resource: Record<string, unknown>;
@@ -599,6 +637,33 @@ export default function App() {
   const [termSettings, setTermSettings] = useState<TerminologySettings>(DEFAULT_TERMINOLOGY_SETTINGS);
   const [termDiagnostics, setTermDiagnostics] = useState<string[]>([]); // surfaced via statusNote; kept for the editor strip + diagnostics pane
   const [termSettingsOpen, setTermSettingsOpen] = useState(false);
+  // S2: workspace files + watcher (connected-only; data-hint NEVER
+  // auto-reloads — locked decision 4: banner with explicit restart).
+  const [wsChanged, setWsChanged] = useState<Set<string>>(new Set());
+  const [wsDataHint, setWsDataHint] = useState(false);
+  useEffect(() => {
+    if (serverMode.kind !== "connected") return;
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket(`${proto}//${location.host}/api/events`);
+    } catch {
+      return;
+    }
+    ws.onmessage = (msg) => {
+      try {
+        const ev = JSON.parse(msg.data as string) as { kind?: string; paths?: string[] };
+        if (ev.kind === "changed" && Array.isArray(ev.paths)) {
+          setWsChanged((prev) => new Set([...prev, ...ev.paths!]));
+        } else if (ev.kind === "data-hint") {
+          setWsDataHint(true);
+        }
+      } catch {
+        /* ignore malformed frames */
+      }
+    };
+    return () => { try { ws?.close(); } catch { /* noop */ } };
+  }, [serverMode.kind]);
   useEffect(() => {
     let cancelled = false;
     void detectServer().then((m) => {
@@ -1846,6 +1911,7 @@ export default function App() {
     NavSectionId,
     { title: string; items: NavItem[]; count: number }
   > = {
+    workspace: { title: "Workspace", items: [], count: 0 },
     measures: {
       title: "Measures",
       items: filterItems(navMeasureItems, navFilters.measures),
@@ -2739,8 +2805,24 @@ export default function App() {
           } as React.CSSProperties
         }
       >
+        {serverMode.kind === "connected" && wsDataHint && (
+          <div className="ws-data-hint" role="status" data-testid="ws-data-hint">
+            <span>Data files changed on disk — the kernel keeps loaded data.</span>
+            <button
+              type="button"
+              className="settings-button"
+              onClick={() => {
+                void fetch("/api/kernel/restart", { method: "POST" }).then(() => setWsDataHint(false));
+              }}
+            >
+              Restart kernel
+            </button>
+            <button type="button" className="settings-button" aria-label="Dismiss" onClick={() => setWsDataHint(false)}>×</button>
+          </div>
+        )}
         <NavRail
           sections={{
+            workspace: { ...navSectionModels.workspace, filter: navFilters.workspace },
             measures: { ...navSectionModels.measures, filter: navFilters.measures },
             libraries: { ...navSectionModels.libraries, filter: navFilters.libraries },
             valuesets: { ...navSectionModels.valuesets, filter: navFilters.valuesets },
@@ -2800,6 +2882,16 @@ export default function App() {
               onFocusedPidChange={setFocusedPid}
               filter={navFilters.tests}
             />
+          }
+          workspaceSlot={
+            serverMode.kind === "connected" ? (
+              <WorkspaceFilesPanel
+                connected
+                changedPaths={wsChanged}
+                onOpenCql={openWorkspaceCql}
+                onOpenValuesetJson={openWorkspaceValueset}
+              />
+            ) : null
           }
         />
         <div

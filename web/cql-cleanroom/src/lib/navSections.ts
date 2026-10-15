@@ -26,7 +26,8 @@ export type NavSectionId =
   | "parameters"
   | "tests"
   | "expected"
-  | "views";
+  | "views"
+  | "workspace";
 
 export interface NavItem {
   /** Stable identity: `${kind}:${resourceId}`. */

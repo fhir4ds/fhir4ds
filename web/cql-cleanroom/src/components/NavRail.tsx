@@ -8,6 +8,7 @@ import {
   Tags,
   Target,
   type LucideIcon,
+  FolderTree,
 } from "lucide-react";
 import { DrawerSection, DrawerRow } from "./nav/DrawerSection";
 import { DropdownMenu } from "./DropdownMenu";
@@ -35,6 +36,7 @@ export interface NavRailSectionModel {
 }
 
 const SECTION_ORDER: NavSectionId[] = [
+  "workspace",
   "measures",
   "libraries",
   "valuesets",
@@ -52,6 +54,7 @@ const SECTION_ICONS: Record<NavSectionId, LucideIcon> = {
   tests: Database,
   expected: Target,
   views: Table,
+  workspace: FolderTree,
 };
 
 function rowTestId(item: NavItem, index: number): string {
@@ -110,6 +113,7 @@ export function NavRail({
   onDetailWidth,
   detailSlot,
   testsSlot,
+  workspaceSlot,
 }: {
   sections: Record<NavSectionId, NavRailSectionModel>;
   /** The single open section (null = collapsed rail). */
@@ -146,6 +150,8 @@ export function NavRail({
   /** REORG 6e: L3 detail panel, rendered over the section panel. */
   detailSlot?: ReactNode;
   testsSlot?: ReactNode;
+  /** S2: connected workspace files panel. */
+  workspaceSlot?: ReactNode;
 }) {
   const panelId = navPanel;
   const sec = panelId ? sections[panelId] : null;
@@ -317,9 +323,11 @@ export function NavRail({
             showFilter={sec.showFilter !== false}
             actions={actions}
           >
-            {sec.items.length === 0 && panelId !== "tests" && (
-              <div className="nav-empty">none</div>
-            )}
+            {panelId === "workspace" && workspaceSlot
+              ? workspaceSlot
+              : sec.items.length === 0 && panelId !== "tests" && (
+                  <div className="nav-empty">none</div>
+                )}
             {sec.items.map((item, i) => (
               <DrawerRow
                 key={item.id}
