@@ -620,7 +620,7 @@ export default function App() {
   // beneath) and MATERIALIZE as editable workspace files (IndexedDB, Q2).
   // Workspace valuesets keep precedence; unresolved urls surface as typed
   // diagnostics. Runs for BOTH engines (dataset-merge layer = mode-uniform).
-  const termResolveKey = `${serverMode.kind}:${terminology.valuesets.length}`;
+  const termResolveKey = `${serverMode.kind}:${terminology.valuesets.length}:${libraries.map((l) => l.text.length).join(",")}`;
   useEffect(() => {
     if (serverMode.kind !== "connected") return;
     let cancelled = false;
