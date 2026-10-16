@@ -49,10 +49,10 @@ class TestStaticUI:
         import re
 
         idx = fetch("/").read()
-        m = re.search(rb"assets/index-[^\"]+\.js", idx)
+        m = re.search(rb"assets/main-[^\"]+\.js", idx)
         assert m, "index references the hashed bundle"
         js = fetch("/" + m.group().decode()).read()
-        assert len(js) > 100_000  # the React bundle
+        assert len(js) > 500  # the vite entry (code-split: the App chunk carries the bulk)
 
     def test_traversal_blocked(self, server):
         with pytest.raises(urllib.error.HTTPError) as exc:

@@ -106,9 +106,14 @@ class TestUiServing:
         html = body.decode()
         import re
 
-        m = re.search(r'src="(/assets/[^"]+)"', html)
+        m = re.search(r'src="([^"]+assets/[^"]+\.js)"', html) or re.search(
+            r'src="(/assets/[^"]+)"', html
+        )
         assert m, html
-        status, _ = wasm_server.get(m.group(1))
+        asset = m.group(1)
+        if not asset.startswith("/"):
+            asset = "/" + asset.lstrip("./")
+        status, _ = wasm_server.get(asset)
         assert status == 200
 
     def test_traversal_rejected(self, wasm_server):

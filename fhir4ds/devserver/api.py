@@ -2698,13 +2698,15 @@ class _Handler(BaseHTTPRequestHandler):
     def _serve_static(self, path: str) -> bool:
         """Serve the committed built UI(s).
 
-        - "/" + "/assets/*": the dev-server shell from static/ (unchanged).
-        - "/cleanroom/*": the cql-cleanroom product shell from
-          static-cleanroom/ (c-cleanroom-redo phase 1 — served UNMODIFIED,
-          additive, not yet the default). Isolation headers are
-          load-bearing: cql-cleanroom's DuckDB-WASM needs
-          SharedArrayBuffer (COOP/COEP on every response incl. worker
-          scripts; CORP cross-origin on assets — the probed recipe).
+        c-cleanroom-redo S4 (user-confirmed shell swap): the cql-cleanroom
+        product shell is the DEFAULT at "/" and "/assets/*" (from
+        static-cleanroom/), with isolation headers on every response —
+        DuckDB-WASM needs SharedArrayBuffer (COOP/COEP incl. worker
+        scripts; CORP cross-origin on assets — the probed recipe).
+        "/cleanroom/*" keeps resolving to the same product root.
+        The pre-bolton dev-server shell is retired from the default but
+        remains reachable at "/legacy/*" (from static/) so existing deep
+        links survive; no automatic redirect — the product is the landing.
         """
         import mimetypes
         from pathlib import Path
@@ -2724,15 +2726,34 @@ class _Handler(BaseHTTPRequestHandler):
                 ("Cross-Origin-Embedder-Policy", "require-corp"),
                 ("Cross-Origin-Resource-Policy", "cross-origin"),
             ]
-        elif path == "/":
+        elif path == "/legacy" or path == "/legacy/":
             static_root = pkg / "static"
             candidate = static_root / "index.html"
-        elif path.startswith("/assets/"):
-            rel = path[len("/assets/"):]
+        elif path.startswith("/legacy/assets/"):
+            rel = path[len("/legacy/assets/"):]
             if "/" in rel or ".." in rel:
                 return False
             static_root = pkg / "static"
             candidate = static_root / "assets" / rel
+        elif path == "/":
+            static_root = pkg / "static-cleanroom"
+            candidate = static_root / "index.html"
+            extra_headers = [
+                ("Cross-Origin-Opener-Policy", "same-origin"),
+                ("Cross-Origin-Embedder-Policy", "require-corp"),
+                ("Cross-Origin-Resource-Policy", "cross-origin"),
+            ]
+        elif path.startswith("/assets/"):
+            rel = path[len("/assets/"):]
+            if "/" in rel or ".." in rel:
+                return False
+            static_root = pkg / "static-cleanroom"
+            candidate = static_root / "assets" / rel
+            extra_headers = [
+                ("Cross-Origin-Opener-Policy", "same-origin"),
+                ("Cross-Origin-Embedder-Policy", "require-corp"),
+                ("Cross-Origin-Resource-Policy", "cross-origin"),
+            ]
         else:
             return False
         if not candidate.is_file():

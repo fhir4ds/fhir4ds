@@ -127,3 +127,28 @@ test("S3 checkpoint ruling: standalone → Run stays in-browser (no server traff
   await page.waitForTimeout(3000);
   expect(evalHits, `standalone made ${evalHits.join(", ")}`).toEqual([]);
 });
+
+test("S4: / serves the cleanroom product with isolation + NavRail, zero failures", async ({ page }) => {
+  const fails: string[] = [];
+  page.on("requestfailed", (r) => fails.push(r.url().slice(-70)));
+  page.on("pageerror", (e) => fails.push(String(e).slice(0, 80)));
+  await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(25000);
+  const st = await page.evaluate(() => ({
+    isolated: crossOriginIsolated,
+    title: document.title,
+    nav: !!document.querySelector("nav"),
+  }));
+  expect(st.isolated).toBe(true);
+  expect(st.title).toBe("CQL Cleanroom");
+  expect(st.nav).toBe(true);
+  expect(fails, fails.join("; ")).toEqual([]);
+});
+
+test("S4: /legacy/ still serves the pre-bolton shell", async ({ page }) => {
+  await page.goto(`${BASE}/legacy/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(3000);
+  // The legacy shell's title differs from the cleanroom product.
+  const title = await page.title();
+  expect(title).not.toBe("CQL Cleanroom");
+});
