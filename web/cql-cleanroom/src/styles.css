@@ -1768,3 +1768,4 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 }
 
 .nav-item.disk-data-row { cursor: default; opacity: 0.85; }
+.cell-toggle { margin-top: 6px; }

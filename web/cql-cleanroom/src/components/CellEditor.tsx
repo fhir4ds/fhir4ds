@@ -42,13 +42,15 @@ interface CellEditorProps {
   renderEditor: (cell: { name: string; text: string; order: number }) => React.ReactNode;
   /** Run a set of cells; resolves per-cell output lines. */
   onRunCells: (names: string[], mode: CellRunMode) => Promise<Record<string, { ok: boolean; lines: string[] }>>;
+  /** S7: on-demand cellification of a markerless buffer (Auto-split). */
+  onAutoSplit?: () => void | boolean;
   /** Connected (server) vs standalone (in-browser) — drives the badge. */
   connected: boolean;
 }
 
 const COACH_SEEN_KEY = "fhir4ds.cleanroom.cellCoachSeen";
 
-export function CellEditor({ value, renderEditor, onRunCells, connected }: CellEditorProps) {
+export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, connected }: CellEditorProps) {
   // The per-buffer toggle lives in EditorPane (cell-view-toggle) — this
   // component renders cards whenever mounted with markers. Run mode
   // persists across reloads (S3 Muse carry).
@@ -181,8 +183,10 @@ export function CellEditor({ value, renderEditor, onRunCells, connected }: CellE
       {coachOpen && (
         <div className="cell-coach" role="dialog" aria-label="Cell mode tips" data-testid="cell-coach">
           <p>
-            Cells split on <code>// # %%</code> markers. Use the <strong>▶ Run</strong> button on each cell
-            header (Ctrl/Cmd+Enter runs the focused cell). Run mode defaults to
+            Cells split on <code>// # %%</code> markers. Markers may have just been
+            added in-buffer (Ctrl+Z undoes; nothing is saved to disk until you
+            save). Use the <strong>▶ Run</strong> button on each cell header
+            (Ctrl/Cmd+Enter runs the focused cell). Run mode defaults to
             <strong>cell + deps</strong> — it runs this cell and everything it depends on.
             Click a cell's name to pin its dependency closure; Esc unpins.
           </p>
@@ -290,11 +294,26 @@ export function CellEditor({ value, renderEditor, onRunCells, connected }: CellE
           })}
         </div>
       ) : (
-        <p className="pane-hint" style={{ padding: "10px 14px" }} data-testid="cell-empty-hint">
-          No <code>// # %%</code> markers in this buffer. Add{" "}
-          <code>{"// # %% [name: MyDefine]"}</code> above a define to split it into a
-          runnable cell.
-        </p>
+        <div className="pane-hint" style={{ padding: "10px 14px" }} data-testid="cell-empty-hint">
+          <p>
+            No <code>// # %%</code> markers in this buffer. Add{" "}
+            <code>{"// # %% [name: MyDefine]"}</code> above a define to split it
+            into a runnable cell.
+          </p>
+          {onAutoSplit && (
+            <button
+              type="button"
+              className="cell-toggle"
+              data-testid="cell-autosplit"
+              onClick={() => {
+                onAutoSplit();
+              }}
+              title="Insert // # %% markers before each top-level define"
+            >
+              Auto-split
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { workerRequest } from "./BootOverlay";
 import { BuilderPane } from "./BuilderPane";
 import { CellEditor } from "./CellEditor";
 import { countReferences, extractCqlSymbols } from "../lib/cqlSymbols";
+import { cellify, hasSplittableDefines } from "../lib/cellify";
 import { splitCells } from "../lib/cells";
 import type { Diagnostics, ParseResult } from "../lib/protocol";
 
@@ -111,12 +112,56 @@ export function EditorPane({
     () => splitCells(text).cells.length > 0,
     [text],
   );
-  // Muse 2: never strand the user in cell view — auto-close when the
-  // buffer loses ALL markers (the toggle stays reachable while open).
+  // S7: first-open auto-cellification — once per library (keyed by tab),
+  // respects user removal (adopted-and-removed never re-triggers).
+  // Muse 3: removal persists across reloads (localStorage) — markers are
+  // indistinguishable from hand-authored, so there is no provenance to
+  // recover after a reload without this flag.
+  const adoptedRef = useRef<Set<string>>(new Set());
+  const removedPersisted = new Set<string>(
+    JSON.parse(localStorage.getItem("fhir4ds.cleanroom.cellsRemoved") ?? "[]") as string[],
+  );
+  const removedRef = useRef<Set<string>>(removedPersisted);
+  // Muse 5: an explicit in-session close suppresses further auto-opens.
+  const userClosedCellsRef = useRef(false);
+  const applyCellify = useCallback(() => {
+    const next = cellify(textRef.current);
+    if (next != null) onTextChangeRef.current(next);
+    return next != null;
+  }, []);
   useEffect(() => {
-    if (cellViewOpen && !hasCellMarkers) setCellViewOpen(false);
+    if (!onRunCells) return;
+    if (adoptedRef.current.has(tabKey) || removedRef.current.has(tabKey)) return;
+    if (hasCellMarkers) {
+      // Library arrived WITH markers — count as adopted (hand-authored).
+      adoptedRef.current.add(tabKey);
+      return;
+    }
+    if (hasSplittableDefines(text)) {
+      if (applyCellify()) {
+        adoptedRef.current.add(tabKey);
+        if (!userClosedCellsRef.current) setCellViewOpen(true);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabKey, hasCellMarkers, onRunCells]);
+  // Muse 2 (superseded by S7 directive): the toggle now ALWAYS renders —
+  // deleting all markers keeps the view open with the empty hint + the
+  // Auto-split affordance; adoption marks removed when the user saves a
+  // markerless buffer so first-open cellification never fights them.
+  useEffect(() => {
+    if (adoptedRef.current.has(tabKey) && !hasCellMarkers) {
+      removedRef.current.add(tabKey);
+      localStorage.setItem(
+        "fhir4ds.cleanroom.cellsRemoved",
+        JSON.stringify([...removedRef.current]),
+      );
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasCellMarkers]);
+  const onAutoSplit = useCallback(() => {
+    if (applyCellify()) setCellViewOpen(true);
+  }, [applyCellify]);
   // S5: per-cell Monaco editors (name -> editor) so the host can splice
   // cell edits back into the master buffer by span.
   const [cellEditors, setCellEditors] = useState<Map<string, any>>(new Map());
@@ -417,13 +462,26 @@ export function EditorPane({
         >
           {outlineOpen ? "▾" : "▸"} Outline
         </button>
-        {onRunCells && (hasCellMarkers || cellViewOpen) && (
+        {onRunCells && (
           <button
             className="drawer-toggle"
             data-testid="cell-view-toggle"
             aria-pressed={cellViewOpen}
-            onClick={() => setCellViewOpen((v) => !v)}
-            title="Split this buffer into runnable cells (`// # %%` markers)"
+            disabled={!hasCellMarkers && !hasSplittableDefines(text)}
+            onClick={() =>
+              setCellViewOpen((v) => {
+                const next = !v;
+                if (!next) userClosedCellsRef.current = true;
+                return next;
+              })
+            }
+            title={
+              hasCellMarkers
+                ? "Split this buffer into runnable cells (`// # %%` markers)"
+                : hasSplittableDefines(text)
+                  ? "add // # %% markers or use Auto-split to enable"
+                  : "No top-level defines to split"
+            }
           >
             {cellViewOpen ? "▾" : "▸"} Cells
           </button>
@@ -448,6 +506,7 @@ export function EditorPane({
           value={text}
           connected={connected ?? false}
           onRunCells={onRunCells}
+          onAutoSplit={onAutoSplit}
           renderEditor={(cell) => (
             <CellMonacoHost
               cellKey={`${tabKey}#cell-${cell.order}`}
