@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { workerRequest } from "./BootOverlay";
 import { BuilderPane } from "./BuilderPane";
+import { CellEditor } from "./CellEditor";
 import { countReferences, extractCqlSymbols } from "../lib/cqlSymbols";
+import { splitCells } from "../lib/cells";
 import type { Diagnostics, ParseResult } from "../lib/protocol";
 
 /**
@@ -32,6 +34,13 @@ interface Props {
    *  toggle is a header button (was a standalone bottom bar). */
   graphOpen?: boolean;
   onGraphOpenChange?: (open: boolean) => void;
+  /** S5: run a set of cells (cell-based editor execution). */
+  onRunCells?: (
+    names: string[],
+    mode: "cell" | "cell_deps" | "to_here",
+  ) => Promise<Record<string, { ok: boolean; lines: string[] }>>;
+  /** S5: connected (server) vs standalone — drives the local badge. */
+  connected?: boolean;
 }
 
 interface DiagnosticsRowProps {
@@ -80,6 +89,8 @@ export function EditorPane({
   onRun,
   graphOpen,
   onGraphOpenChange,
+  onRunCells,
+  connected,
 }: Props) {
   const editorDiv = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<any>(null);
@@ -94,6 +105,23 @@ export function EditorPane({
   textRef.current = text;
   const tabKeyRef = useRef(tabKey);
   tabKeyRef.current = tabKey;
+  // S5: per-buffer cell mode (split view with cards vs plain editor).
+  const [cellViewOpen, setCellViewOpen] = useState(false);
+  const hasCellMarkers = useMemo(
+    () => splitCells(text).cells.length > 0,
+    [text],
+  );
+  // Muse 2: never strand the user in cell view — auto-close when the
+  // buffer loses ALL markers (the toggle stays reachable while open).
+  useEffect(() => {
+    if (cellViewOpen && !hasCellMarkers) setCellViewOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasCellMarkers]);
+  // S5: per-cell Monaco editors (name -> editor) so the host can splice
+  // cell edits back into the master buffer by span.
+  const [cellEditors, setCellEditors] = useState<Map<string, any>>(new Map());
+  const cellEditorsRef = useRef<Map<string, any>>(new Map());
+  cellEditorsRef.current = cellEditors;
 
   const getOrCreateModel = (key: string) => {
     const monaco = monacoRef.current;
@@ -282,6 +310,40 @@ export function EditorPane({
     editor.focus();
   };
 
+  /**
+   * S5: splice an edited cell body back into the master buffer by cell
+   * ORDER (recompute spans against the CURRENT buffer — bolton
+   * spliceCell semantics). The marker line is preserved.
+   */
+  const spliceCellIntoBuffer = (order: number, newText: string) => {
+    const lines = text.split("\n");
+    let offset = 0;
+    let cellIdx = -1;
+    let cellStart = -1;
+    let cellEnd = -1;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const isMarker = /^\s*\/\/\s*#\s*%%/.test(line);
+      if (isMarker) {
+        if (cellIdx === order) {
+          // end of the target cell is this marker's start
+          cellEnd = offset;
+          break;
+        }
+        cellIdx += 1;
+        cellStart = offset + line.length + 1; // past marker line + \n
+      }
+      offset += line.length + 1;
+    }
+    if (cellEnd === -1 && cellIdx === order) cellEnd = text.length;
+    if (cellStart === -1 || cellEnd === -1) return;
+    onTextChange(
+      text.slice(0, cellStart) +
+        (newText.endsWith("\n") ? newText : newText + "\n") +
+        text.slice(cellEnd),
+    );
+  };
+
   const jumpToLine = (line: number, name: string) => {
     const editor = editorRef.current;
     if (!editor) return;
@@ -355,6 +417,17 @@ export function EditorPane({
         >
           {outlineOpen ? "▾" : "▸"} Outline
         </button>
+        {onRunCells && (hasCellMarkers || cellViewOpen) && (
+          <button
+            className="drawer-toggle"
+            data-testid="cell-view-toggle"
+            aria-pressed={cellViewOpen}
+            onClick={() => setCellViewOpen((v) => !v)}
+            title="Split this buffer into runnable cells (`// # %%` markers)"
+          >
+            {cellViewOpen ? "▾" : "▸"} Cells
+          </button>
+        )}
         {onRun && (
           <button
             className="editor-run-btn"
@@ -370,7 +443,23 @@ export function EditorPane({
           </button>
         )}
       </div>
-      <div className="editor-host" data-testid="cql-editor" ref={editorDiv} />
+      {cellViewOpen && onRunCells ? (
+        <CellEditor
+          value={text}
+          connected={connected ?? false}
+          onRunCells={onRunCells}
+          renderEditor={(cell) => (
+            <CellMonacoHost
+              cellKey={`${tabKey}#cell-${cell.order}`}
+              text={cell.text}
+              onChange={(v) => spliceCellIntoBuffer(cell.order, v)}
+              onMount={(editor) => setCellEditors((m) => new Map(m).set(cell.name, editor))}
+            />
+          )}
+        />
+      ) : (
+        <div className="editor-host" data-testid="cql-editor" ref={editorDiv} />
+      )}
       {outlineOpen && (
         <div
           className="outline-panel"
@@ -443,6 +532,71 @@ export function EditorPane({
 }
 
 /** Light textual scan for `parameter <name> ...` declarations. */
+/**
+ * S5: one lightweight Monaco instance per cell card. The host owns
+ * monaco-setup; edits flow up through onTextChange via the CellEditor's
+ * splice machinery — actually, simpler: each cell editor writes its
+ * whole value up and the parent splices by cell ORDER against the
+ * master buffer (recomputed per render, mirrors bolton spliceCell).
+ */
+function CellMonacoHost({
+  cellKey,
+  text,
+  onChange,
+  onMount,
+}: {
+  cellKey: string;
+  text: string;
+  onChange?: (value: string) => void;
+  onMount?: (editor: any) => void;
+}) {
+  const divRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<any>(null);
+  const textRef = useRef(text);
+  textRef.current = text;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const onMountRef = useRef(onMount);
+  onMountRef.current = onMount;
+
+  useEffect(() => {
+    let disposed = false;
+    (async () => {
+      const monaco = (await import("../lib/monaco-setup")).default;
+      if (disposed || !divRef.current) return;
+      const editor = monaco.editor.create(divRef.current, {
+        value: textRef.current,
+        language: "cql",
+        minimap: { enabled: false },
+        fontSize: 13,
+        automaticLayout: true,
+        scrollBeyondLastLine: false,
+        tabSize: 2,
+        wordWrap: "on",
+        renderLineHighlight: "gutter",
+        padding: { top: 6 },
+      });
+      editor.onDidChangeModelContent(() => onChangeRef.current?.(editor.getValue()));
+      editorRef.current = editor;
+      onMountRef.current?.(editor);
+    })();
+    return () => {
+      disposed = true;
+      editorRef.current?.dispose();
+      editorRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cellKey]);
+
+  // External text sync (master-buffer changes from other surfaces).
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (editor && editor.getValue() !== text) editor.setValue(text);
+  }, [text]);
+
+  return <div className="cell-monaco" ref={divRef} data-testid="cell-monaco" />;
+}
+
 function detectParams(text: string): string[] {
   const names: string[] = [];
   const re = /^\s*(?:public\s+|private\s+)?parameter\s+"?([A-Za-z][A-Za-z0-9_]*)"?\s/mg;

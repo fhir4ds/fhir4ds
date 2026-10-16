@@ -293,3 +293,42 @@ def test_refs_tuple_elements_and_retrieve_exclusion():
     # Retrieve carries no define-name refs; Patient is filtered as context.
     assert refs["Retrieve"] == []
     assert refs["Baseline"] == []
+
+
+def test_split_quoted_define_names_cell():
+    """c-cleanroom-redo S5: quoted define identifiers (define "Combined":)
+    name the cell Combined — mirrors the salvaged bolton client doctrine
+    (client splitCells DEFINE regex); statement identity matches."""
+    text = (
+        "library Q version '1.0.0'\n"
+        "using FHIR version '4.0.1'\n"
+        "context Patient\n"
+        "define A: 1\n"
+        '// # %%\n'
+        'define "Combined": A and A\n'
+    )
+    parsed = split_cells(text)
+    assert parsed.error is None
+    assert [c.name for c in parsed.cells] == ["Combined"]
+
+
+def test_client_server_parity_fixture_authoritative():
+    """The cleanroom cell-parity fixture (client lexical closure vs this
+    server's AST closure) must be generated FROM this server — guards the
+    S5 port against silent divergence when either side changes."""
+    import json
+    from pathlib import Path
+
+    fixture = json.loads(
+        (
+            Path(__file__).resolve().parents[3]
+            / "web/cql-cleanroom/tests/fixtures/cell-parity.json"
+        ).read_text()
+    )
+    for libname, lib in fixture.items():
+        refs = refs_of(lib["text"])
+        names = [c.name for c in split_cells(lib["text"]).cells]
+        assert names, libname
+        for target, expected in lib["closures"].items():
+            got = dependency_closure(target, refs, set(names))
+            assert sorted(got) == sorted(expected), (libname, target)

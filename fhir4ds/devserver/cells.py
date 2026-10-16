@@ -120,7 +120,12 @@ def split_cells(text: str) -> ParsedLibrary:
     return ParsedLibrary(header="\n".join(header_lines), cells=cells)
 
 
-_DEFINE_RE = re.compile(r"^\s*define\s+(function\s+)?([A-Za-z0-9_]+)\s*[(:]", re.IGNORECASE)
+# c-cleanroom-redo S5 (ported from the salvaged bolton S3 client doctrine):
+# quoted define identifiers (define "Combined":) name the cell Combined —
+# statement identity matches the client's splitCells DEFINE regex.
+_DEFINE_RE = re.compile(
+    r"^\s*define\s+(function\s+)?(\"?)([A-Za-z0-9_]+)\2\s*[(:]", re.IGNORECASE
+)
 
 
 def _define_info(body: str) -> tuple[str, bool] | None:
@@ -128,7 +133,7 @@ def _define_info(body: str) -> tuple[str, bool] | None:
     m = _DEFINE_RE.match(body)
     if not m:
         return None
-    return m.group(2), bool(m.group(1))
+    return m.group(3), bool(m.group(1))
 
 
 def refs_of(text: str, identifiers_only: bool = False) -> dict[str, list[str]]:
@@ -571,7 +576,7 @@ def split_boxes(text: str) -> list[ParsedBox]:
         d = _DEFINE_RE.match(stripped)
         if d:
             kind = "define"
-            name = d.group(2)
+            name = d.group(3)
         else:
             kb = _BLOCK_KIND_RE.match(stripped)
             if kb:

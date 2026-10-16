@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { groupDataset } from "./lib/datasetGroup";
+import { buildCellGraph } from "./lib/cell-deps";
+import { splitCells } from "./lib/cells";
 import { PatientDetailPanel } from "./components/nav/PatientDetailPanel";
 import {
   BootOverlay,
@@ -1112,6 +1114,129 @@ export default function App() {
   // WORKBENCH_REORG phase 5 — the evaluation heartbeat lives in App so
   // the console sub-tabs AND the col2 panes render from one run.
   const canAutoEval = !!evalDataset && !!main?.text;
+
+  /**
+   * S5 cell execution — automatic target doctrine applies:
+   * connected → server per-define via /api/evaluate (output_columns
+   * narrowing, one evaluation per cell set; envelope→lines rendering);
+   * standalone → in-browser worker evaluate_library on the composed
+   * header+cells library (identical RunMode semantics both engines).
+   */
+  const runCells = useCallback(
+    async (
+      names: string[],
+      _mode: "cell" | "cell_deps" | "to_here",
+    ): Promise<Record<string, { ok: boolean; lines: string[] }>> => {
+      const out: Record<string, { ok: boolean; lines: string[] }> = {};
+      if (!main) return out;
+      const graph = buildCellGraph(main.text);
+      const cells = splitCells(main.text).cells;
+      const composed = [
+        graph.header,
+        ...names.map((n) => cells.find((c) => c.name === n)?.text ?? ""),
+      ].join("\n\n");
+      const libs: LibraryText[] = [{ name: main.name, text: composed }];
+      if (serverMode.kind === "connected") {
+        // Server: ONE evaluation of the composed library per cell set —
+        // rows carry every define column; slice per cell below. Per-define
+        // narrowing (output_columns) is reserved for selection runs; the
+        // composed library is small so a full projection is fine here.
+        for (const n of names) {
+          try {
+            const res = await fetch("/api/evaluate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                libraries: libs,
+                library: main.name,
+                output_columns: { [n]: n },
+              }),
+            });
+            const data = (await res.json()) as any;
+            if (data?.ok === false) {
+              out[n] = {
+                ok: false,
+                lines: [data?.diagnostics?.[0]?.message ?? "evaluation failed"],
+              };
+            } else {
+              const cols: string[] = data?.columns ?? [];
+              const rows: Record<string, unknown>[] = data?.rows ?? [];
+              out[n] = {
+                ok: true,
+                lines: [
+                  cols.join(" | "),
+                  ...rows
+                    .slice(0, 10)
+                    .map((r) => cols.map((c) => String(r[c])).join(" | ")),
+                ],
+              };
+            }
+          } catch (err) {
+            out[n] = {
+              ok: false,
+              lines: [
+                `server run failed: ${err instanceof Error ? err.message : String(err)}`,
+              ],
+            };
+          }
+        }
+        return out;
+      }
+      // Standalone: one worker evaluation of the composed library; each
+      // cell's define columns slice per row. Dataset required — same
+      // precondition as the heartbeat (typed note, not a crash).
+      if (!evalDataset) {
+        for (const n of names)
+          out[n] = { ok: false, lines: ["no dataset loaded — load data to run cells"] };
+        return out;
+      }
+      try {
+        const resp = await workerRequest({
+          type: "evaluate_library",
+          libraries: libs,
+          main: { name: main.name, text: composed },
+          dataset: evalDataset,
+          parameters: runtimeParameters,
+        });
+        const env: EvaluateResult | null = resp.envelope
+          ? (JSON.parse(resp.envelope) as EvaluateResult)
+          : null;
+        if (!env || !env.ok) {
+          const msg =
+            env?.diagnostics?.[0]?.message ??
+            (resp as { error?: string }).error ??
+            "evaluation failed";
+          for (const n of names) out[n] = { ok: false, lines: [msg] };
+          return out;
+        }
+        const cols: string[] = env.columns ?? [];
+        const rows = (env.rows ?? []) as Array<Record<string, unknown>>;
+        for (const n of names) {
+          const own = cols.filter((c) => c === n);
+          const useCols = own.length ? own : cols;
+          out[n] = {
+            ok: true,
+            lines: [
+              useCols.join(" | "),
+              ...rows
+                .slice(0, 10)
+                .map((r) =>
+                  useCols
+                    .map((c) => String((r as Record<string, unknown>)[c] ?? ""))
+                    .join(" | "),
+                ),
+            ],
+          };
+        }
+      } catch (err) {
+        for (const n of names)
+          out[n] = { ok: false, lines: [String(err)] };
+      }
+      return out;
+    },
+    [main, serverMode.kind, evalDataset, runtimeParameters],
+  );
+
   const runEvaluation = async (manualServer = false) => {
     if (!manualServer && !canAutoEval) return;
     const seq = ++evalSeqRef.current;
@@ -2027,6 +2152,17 @@ export default function App() {
     const id = tabId(kind, resourceId);
     setEditorTabs((ts) => openTabIn(ts, { id, kind, resourceId }));
     setActiveEditorTabId(id);
+    // S5 fix: library tabs selected programmatically (e.g. a workspace
+    // CQL file click) must ALSO select the underlying library index —
+    // the editor pane renders libraries[activeTab]; without this the
+    // tab highlights while the pane keeps showing the previous library.
+    if (kind === "library") {
+      setLibraries((libs) => {
+        const idx = libs.findIndex((l) => l.id === resourceId || l.name === resourceId);
+        if (idx >= 0) setActiveTab(idx);
+        return libs;
+      });
+    }
   };
 
   const closeEditorTabById = (id: TabId) => {
@@ -2962,7 +3098,18 @@ export default function App() {
             tabs={editorTabs}
             activeId={activeEditorTabId}
             labels={tabLabels}
-            onSelect={(id) => setActiveEditorTabId(id as TabId)}
+            onSelect={(id) => {
+              setActiveEditorTabId(id as TabId);
+              // S5 fix: tab-bar library selections must drive the same
+              // activeTab index sync as selectNavItem (see its comment).
+              const { kind, resourceId } = parseTabId(id as TabId);
+              if (kind === "library") {
+                const idx = libraries.findIndex(
+                  (l) => l.id === resourceId || l.name === resourceId,
+                );
+                if (idx >= 0) setActiveTab(idx);
+              }
+            }}
             onClose={(id) => closeEditorTabById(id as TabId)}
           />
           <div className="editor-area">
@@ -2977,6 +3124,8 @@ export default function App() {
             graphOpen={graphOpen}
             onGraphOpenChange={setGraphOpen}
             onRun={runViaConsole}
+            onRunCells={runCells}
+            connected={serverMode.kind === "connected"}
 
             onDiagnostics={(diags) => {
               const idx = activeTabRef.current;
