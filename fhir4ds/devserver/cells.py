@@ -27,7 +27,12 @@ from typing import Any
 
 from fhir4ds.cql.parser import parse_cql
 
-MARKER_RE = re.compile(r"^\s*//\s*#\s*%%(\s*\[name:\s*(?P<name>[A-Za-z0-9_]+)\s*\])?\s*$")
+# S10: marker labels may carry quoted define names WITH SPACES
+# ('[name: Initial Population]' — quoted CQL identifiers). The label
+# charset admits spaces but NOT quotes/brackets (the bracket closes it).
+MARKER_RE = re.compile(
+    r"^\s*//\s*#\s*%%(\s*\[name:\s*(?P<name>[A-Za-z0-9_][A-Za-z0-9_ ]*?)\s*\])?\s*$"
+)
 
 # Cell lifecycle statuses (see CellRecord.status).
 IDLE = "idle"

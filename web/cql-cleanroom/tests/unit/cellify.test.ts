@@ -73,3 +73,54 @@ describe("cellify (S7 auto-cellification)", () => {
     expect(splitCells(out).cells[0]?.name).toBe("Indented");
   });
 });
+
+import { buildCellGraph, dependencyClosure } from "../../src/lib/cell-deps";
+
+describe("S10 quoted-name cells (marker labels with spaces + quoted refs)", () => {
+  const HDR2 = "library B version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n\n";
+
+  it("marker labels may contain spaces and name quoted defines", () => {
+    const src2 =
+      HDR2 +
+      "// # %% [name: Initial Population]\n" +
+      'define "Initial Population": true\n';
+    const { cells } = splitCells(src2);
+    expect(cells.map((c) => c.name)).toEqual(["Initial Population"]);
+  });
+
+  it("quoted references count as deps (S10 binder-repro pin)", () => {
+    const src2 =
+      HDR2 +
+      "// # %% [name: Base]\ndefine \"Base\": 1\n" +
+      "// # %%\ndefine \"Initial Population\": \"Base\" and true\n";
+    const g = buildCellGraph(src2);
+    expect(g.refs["Initial Population"]).toContain("Base");
+    const closure = dependencyClosure("Initial Population", g.refs, new Set(g.order));
+    expect([...closure].sort()).toEqual(["Base", "Initial Population"]);
+  });
+
+  it("CMS125-style chain: Numerator closure carries all transitive deps", () => {
+    const chain =
+      HDR2 +
+      "// # %% [name: InAgeRange]\ndefine \"InAgeRange\": true\n" +
+      "// # %% [name: PreventiveVisit]\ndefine \"PreventiveVisit\": \"InAgeRange\"\n" +
+      "// # %% [name: Initial Population]\ndefine \"Initial Population\": \"InAgeRange\" and \"PreventiveVisit\"\n" +
+      "// # %% [name: Numerator]\ndefine \"Numerator\": \"Initial Population\"\n";
+    const g = buildCellGraph(chain);
+    const closure = dependencyClosure("Numerator", g.refs, new Set(g.order));
+    expect([...closure].sort((a, b) => a.localeCompare(b))).toEqual(
+      ["Initial Population", "InAgeRange", "Numerator", "PreventiveVisit"].sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    );
+  });
+
+  it("plain string literals are NOT deps (quoted-span separation)", () => {
+    const src2 =
+      HDR2 +
+      "// # %% [name: A]\ndefine A: 1\n" +
+      "// # %% [name: B]\ndefine B: 'A' = 'A'\n";
+    const g = buildCellGraph(src2);
+    expect(g.refs["B"]).toEqual([]);
+  });
+});

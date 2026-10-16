@@ -16,7 +16,9 @@ export interface SplitResult {
   cells: SplitCell[];
 }
 
-const MARKER = /^\s*\/\/\s*#\s*%%(\s*\[name:\s*([A-Za-z0-9_]+)\s*\])?\s*$/;
+// S10: marker labels may carry quoted define names WITH SPACES
+// ('[name: Initial Population]').
+const MARKER = /^\s*\/\/\s*#\s*%%(\s*\[name:\s*([A-Za-z0-9_][A-Za-z0-9_ ]*?)\s*\])?\s*$/;
 // c-wasm-bolton S3: quoted define identifiers (define "Combined":) name
 // the cell Combined — mirrors server-side statement identity. (Gap found
 // by the cell-parity harness; pre-bolton dev-server cells.ts misses it.)

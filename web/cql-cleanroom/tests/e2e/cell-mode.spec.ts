@@ -225,3 +225,48 @@ test("S8: library-only workspace (no Measure) runs cells end-to-end", async ({ p
   await page.locator('[data-testid="cell-run"]').first().click();
   await expect(page.locator('[data-testid="cell-out"]').first()).toBeVisible({ timeout: 30000 });
 });
+
+test("S10: multi-cell library — running a LATER cell includes its dependency cells", async ({ page }) => {
+  // The example workspace (this spec's fixture dir ships CellLib with
+  // markers) already covers chain depth 1. This leg targets the EXACT
+  // repro shape: cell N referencing cells < N by name. CellLib's
+  // Combined cell references IsAdult — running it must compose BOTH and
+  // render results (S10 binder-repro pin).
+  await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(12000);
+  await page.locator('[data-testid="nav-toggle-libraries"]').click();
+  const libPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
+  const diskRow = libPanel.locator(".nav-item", { hasText: "CellLib" }).first();
+  await diskRow.click({ timeout: 15000 });
+  await expect(page.getByRole("tab", { name: /CellLib/i })).toBeVisible({ timeout: 15000 });
+  await page.waitForTimeout(3000);
+  const toggle = page.locator('[data-testid="cell-view-toggle"]');
+  if ((await toggle.getAttribute("aria-checked")) !== "true") await toggle.click();
+  await page.waitForTimeout(1200);
+  // S10 layout pin: cards are viewably wide (>= 400px) at default viewport.
+  const cardBox = await page.locator('[data-testid="cell-card"]').first().boundingBox();
+  expect(cardBox?.width ?? 0).toBeGreaterThanOrEqual(400);
+  // Run the LAST cell (Combined — depends on IsAdult).
+  const chips = page.locator('[data-testid="cell-namechip"]');
+  const n = await chips.count();
+  await page.locator('[data-testid="cell-run"]').nth(n - 1).click();
+  // BOTH the target and its dependency produce results (closure fan-out),
+  // identified BY NAME (data-cell on the carrying cards).
+  const outs = page.locator('[data-testid="cell-out"]');
+  await expect(outs.first()).toBeVisible({ timeout: 30000 });
+  const outCards = await page
+    .locator('[data-testid="cell-card"][data-cell]')
+    .evaluateAll((els) =>
+      els
+        .filter((el) => el.querySelector('[data-testid="cell-out"]'))
+        .map((el) => el.getAttribute("data-cell")),
+    );
+  expect(outCards).toContain("Combined");
+  expect(outCards).toContain("IsAdult");
+  // No binder error / empty outputs anywhere.
+  const texts = await outs.allTextContents();
+  for (const t of texts) {
+    expect(t).not.toMatch(/Binder Error|not found in FROM clause/i);
+    expect(t).not.toContain("(no output)");
+  }
+});

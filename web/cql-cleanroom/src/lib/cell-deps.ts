@@ -35,18 +35,40 @@ export function buildCellGraph(text: string): CellGraph {
   const names = new Set(cells.map((c) => c.name));
   const refs: Record<string, string[]> = {};
   for (const cell of cells) {
-    // Strip comments and quoted strings before scanning for identifiers —
-    // string contents are not references.
-    const stripped = cell.text
+    // Strip comments before scanning; collect QUOTED spans separately —
+    // string contents are not references, but QUOTED IDENTIFIERS are
+    // (define "Initial Population": ... "InAgeRange" — the quoted form is
+    // how CQL references defines whose names need quoting; S10 binder
+    // repro: stripping them silently dropped every quoted-name dep).
+    const noComments = cell.text
       .replace(/\/\/[^\n]*/g, " ")
-      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/\/\*[\s\S]*?\*\//g, " ");
+    // CQL: single quotes = string literals (never refs); DOUBLE quotes =
+    // quoted identifiers (valid refs). Only double-quoted spans feed the
+    // identifier set; both are removed from the bare-scan text.
+    const doubleQuoted: string[] = [];
+    const stripped = noComments
       .replace(/'[^']*'/g, " ")
-      .replace(/"[^"]*"/g, " ");
+      .replace(/"[^"]*"/g, (m) => {
+        doubleQuoted.push(m);
+        return " ";
+      });
+    const quotedContents = new Set(
+      doubleQuoted.map((s) => s.slice(1, -1)),
+    );
     const found: string[] = [];
     for (const other of names) {
       if (other === cell.name) continue;
       const re = new RegExp(`\\b${escapeRe(other)}\\b`);
-      if (re.test(stripped)) found.push(other);
+      // Bare identifier reference in code ...
+      if (re.test(stripped)) {
+        found.push(other);
+        continue;
+      }
+      // ... or the exact quoted form ("Other Name" with the quotes).
+      if (quotedContents.has(other)) {
+        found.push(other);
+      }
     }
     refs[cell.name] = found; // last-wins on duplicate names
   }

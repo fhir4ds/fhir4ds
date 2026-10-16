@@ -1677,7 +1677,7 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 /* Checkpoint ruling: picker removed — target is automatic. */
 
 /* ===== S5 cell-based editor (ported from bolton S3) ===== */
-.cell-editor { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.cell-editor { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
 .cell-toolbar {
   display: flex; gap: 8px; align-items: center; padding: 6px 10px; flex-wrap: wrap;
   border-bottom: 1px solid var(--line, rgba(255,255,255,0.08));
@@ -1702,13 +1702,34 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
   border-radius: 8px; background: rgba(90,160,255,0.08); font-size: 13px;
 }
 .cell-coach button { margin-top: 6px; border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; background: rgba(255,255,255,0.1); color: inherit; padding: 2px 10px; cursor: pointer; }
-.cell-list { display: flex; flex-direction: column; gap: 10px; padding: 10px; overflow: auto; }
-.cell-card { border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; overflow: hidden; }
+/* S10 layout fix: cards never squeeze — sane min-width + horizontal
+   scroll on the list (Monaco needs width to be usable). */
+.cell-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  overflow: auto;
+  overflow-x: auto;
+  align-items: stretch;
+}
+.cell-card {
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  overflow: hidden;
+  min-width: min(680px, 100%);
+}
+.cell-card .cell-head, .cell-card .cell-out { min-width: 0; }
+/* Inside a horizontally-scrolling list each card's content may exceed the
+   viewport; the Monaco hosts size to the card. */
+.cell-monaco { width: 100%; min-width: 460px; }
 .cell-card.cell-error { border-color: rgba(229,72,77,0.6); }
 .cell-head {
-  display: flex; gap: 6px; align-items: center; padding: 4px 8px;
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 8px;
   border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 13px;
+  min-width: 0;
 }
+.cell-namechip { max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cell-namechip {
   border: 1px solid rgba(255,255,255,0.2); border-radius: 10px;
   background: rgba(255,255,255,0.06); color: inherit; cursor: pointer;
