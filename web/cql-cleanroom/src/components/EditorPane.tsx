@@ -445,7 +445,11 @@ export function EditorPane({
   return (
     <section className="pane editor-pane" data-testid="editor-pane">
       <div className="pane-header editor-header">
-        {onGraphOpenChange && (
+        {/* S8 directive 4: Visual editor HIDDEN behind a build flag
+            (choice: flag not deletion — the builder machinery may return;
+            import.meta.env.VITE_SHOW_VISUAL_EDITOR enables it in dev
+            builds only; the product build renders no visual chrome). */}
+        {onGraphOpenChange && import.meta.env.VITE_SHOW_VISUAL_EDITOR === "1" && (
           <button
             className="drawer-toggle"
             data-testid="drawer-graph-toggle"
@@ -464,9 +468,11 @@ export function EditorPane({
         </button>
         {onRunCells && (
           <button
-            className="drawer-toggle"
+            className={`drawer-toggle mode-switch${cellViewOpen ? " on" : ""}`}
             data-testid="cell-view-toggle"
-            aria-pressed={cellViewOpen}
+            role="switch"
+            aria-label="Cell view"
+            aria-checked={cellViewOpen}
             disabled={!hasCellMarkers && !hasSplittableDefines(text)}
             onClick={() =>
               setCellViewOpen((v) => {
@@ -476,14 +482,16 @@ export function EditorPane({
               })
             }
             title={
-              hasCellMarkers
-                ? "Split this buffer into runnable cells (`// # %%` markers)"
-                : hasSplittableDefines(text)
-                  ? "add // # %% markers or use Auto-split to enable"
-                  : "No top-level defines to split"
+              cellViewOpen
+                ? "Switch to the plain text editor"
+                : hasCellMarkers
+                  ? "Switch to the cell-based editor (one card per define)"
+                  : hasSplittableDefines(text)
+                    ? "Switch to the cell-based editor (Auto-split adds markers)"
+                    : "No top-level defines to split"
             }
           >
-            {cellViewOpen ? "▾" : "▸"} Cells
+            {cellViewOpen ? "Cells ⇄" : "Text ⇄"}
           </button>
         )}
         {onRun && (
@@ -566,7 +574,7 @@ export function EditorPane({
           ))}
         </div>
       )}
-      {onGraphOpenChange && graphOpen && (
+      {onGraphOpenChange && graphOpen && import.meta.env.VITE_SHOW_VISUAL_EDITOR === "1" && (
         <div className="drawer-body" data-testid="drawer-graph">
           <p className="pane-hint">
             The builder parses ONE define at a time into an editable

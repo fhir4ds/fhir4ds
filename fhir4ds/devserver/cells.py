@@ -124,7 +124,7 @@ def split_cells(text: str) -> ParsedLibrary:
 # quoted define identifiers (define "Combined":) name the cell Combined —
 # statement identity matches the client's splitCells DEFINE regex.
 _DEFINE_RE = re.compile(
-    r"^\s*define\s+(function\s+)?(\"?)([A-Za-z0-9_]+)\2\s*[(:]", re.IGNORECASE
+    r"^\s*define\s+(function\s+)?(\"?)([A-Za-z0-9_ ]+?)\2\s*[(:]", re.IGNORECASE
 )
 
 

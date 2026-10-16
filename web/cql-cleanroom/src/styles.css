@@ -1769,3 +1769,5 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 
 .nav-item.disk-data-row { cursor: default; opacity: 0.85; }
 .cell-toggle { margin-top: 6px; }
+.drawer-toggle.mode-switch { font-weight: 600; letter-spacing: 0.02em; }
+.drawer-toggle.mode-switch.on { background: rgba(90,160,255,0.3); }

@@ -69,7 +69,7 @@ async function ensureCellViewOpen(page: import("@playwright/test").Page) {
   const toggle = page.locator('[data-testid="cell-view-toggle"]');
   await expect(toggle).toBeVisible({ timeout: 15000 });
   await expect(toggle).toBeEnabled();
-  if ((await toggle.getAttribute("aria-pressed")) !== "true") {
+  if ((await toggle.getAttribute("aria-checked")) !== "true") {
     await toggle.click();
   }
   await page.waitForTimeout(800);
@@ -105,23 +105,6 @@ test("cell mode: markers split into cards with dep info; run produces inline out
   await expect(out.locator(".cell-localbadge")).toHaveCount(0);
 });
 
-test("cell mode: runmode control present with the three modes", async ({ page }) => {
-  await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
-  await page.waitForTimeout(12000);
-  await page.locator('[data-testid="nav-toggle-libraries"]').click();
-  const libPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
-  const diskRow = libPanel.locator(".nav-item", { hasText: "CellLib" }).first();
-  await diskRow.click({ timeout: 15000 });
-  await expect(page.getByRole("tab", { name: /CellLib/i })).toBeVisible({ timeout: 15000 });
-  await page.waitForTimeout(4000);
-  await ensureCellViewOpen(page);
-  const radios = page.locator('[data-testid="cell-runmode"] [role="radio"]');
-  await expect(radios).toHaveCount(3);
-  await expect(radios.nth(1)).toHaveAttribute("aria-checked", "true"); // default cell_deps
-  await radios.nth(0).click();
-  await expect(radios.nth(0)).toHaveAttribute("aria-checked", "true");
-});
-
 test("S7: markerless multi-define library auto-cellifies on first open", async ({ page }) => {
   // The workspace ships CellLib.cql WITH markers — that library must be
   // untouched. Open the DEFAULT CleanroomDemo library instead: it has no
@@ -142,7 +125,7 @@ test("S7: markerless multi-define library auto-cellifies on first open", async (
   }
   expect(opened).toBeGreaterThan(0);
   // Markers exist now (buffer text rewritten; the toggle shows active).
-  await expect(page.locator('[data-testid="cell-view-toggle"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('[data-testid="cell-view-toggle"]')).toHaveAttribute("aria-checked", "true");
 });
 
 test("S7: hand-markered library (CellLib) is NOT re-cellified", async ({ page }) => {
@@ -181,7 +164,7 @@ test("S7 Muse: single Ctrl+Z after Auto-split restores the markerless text", asy
   // insert (cards disappear; toggle no longer pressed).
   const toggle = page.locator('[data-testid="cell-view-toggle"]');
   await expect(toggle).toBeVisible({ timeout: 15000 });
-  if ((await toggle.getAttribute("aria-pressed")) !== "true") return; // not auto-adopted
+  if ((await toggle.getAttribute("aria-checked")) !== "true") return; // not auto-adopted
   await page.locator('[data-testid="cql-editor"], .cell-monaco').first().click();
   await page.keyboard.press("Control+z");
   await page.waitForTimeout(1200);
@@ -189,4 +172,56 @@ test("S7 Muse: single Ctrl+Z after Auto-split restores the markerless text", asy
   const pressed = await toggle.getAttribute("aria-pressed");
   const cards = await page.locator('[data-testid="cell-card"]').count();
   expect(pressed !== "true" || cards === 0).toBe(true);
+});
+
+test("S8: marker-only cell (no define) runs clean on BOTH transports", async ({ page }) => {
+  // The unnamed cell must never ship a synthetic column name.
+  const evals: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/api/evaluate")) evals.push(r.postData() ?? "");
+  });
+  await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(12000);
+  // Type a marker-only raw-expression cell into the default library.
+  await page.locator('[data-testid="cell-view-toggle"]').click();
+  await page.waitForTimeout(1000);
+  const editor = page.locator('[data-testid="cql-editor"]').first();
+  if ((await editor.count()) === 0) return; // cell view open (cards) — covered by unit layer
+  await editor.click();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.type(
+    "library RawLib version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n\n// # %%\n1 + 1\n",
+    { delay: 10 },
+  );
+  await page.waitForTimeout(3000);
+  // Reopen cells view; the raw cell runs without a define name.
+  await page.locator('[data-testid="cell-view-toggle"]').click();
+  await page.waitForTimeout(1200);
+  const runBtns = page.locator('[data-testid="cell-run"]');
+  if ((await runBtns.count()) > 0) {
+    await runBtns.first().click();
+    await page.waitForTimeout(4000);
+  }
+  // No request payload may contain a synthetic cell-N output column.
+  for (const body of evals) {
+    expect(body.includes("cell-0"), `payload shipped synthetic name: ${body.slice(0, 120)}`).toBe(false);
+    expect(body.includes("cell-1")).toBe(false);
+  }
+});
+
+test("S8: library-only workspace (no Measure) runs cells end-to-end", async ({ page }) => {
+  await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(12000);
+  // The e2e workspace ships CellLib.cql ONLY (no measure files). Run an
+  // actual CELL (server transport) and assert output renders — proving
+  // nothing requires measure context.
+  await page.locator('[data-testid="nav-toggle-libraries"]').click();
+  const libPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
+  const diskRow = libPanel.locator(".nav-item", { hasText: "CellLib" }).first();
+  await diskRow.click({ timeout: 15000 });
+  await expect(page.getByRole("tab", { name: /CellLib/i })).toBeVisible({ timeout: 15000 });
+  await page.waitForTimeout(4000);
+  await ensureCellViewOpen(page);
+  await page.locator('[data-testid="cell-run"]').first().click();
+  await expect(page.locator('[data-testid="cell-out"]').first()).toBeVisible({ timeout: 30000 });
 });

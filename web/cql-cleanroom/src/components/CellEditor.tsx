@@ -7,8 +7,9 @@
  * - explicit persistent per-buffer toggle (never auto-detect)
  * - first-run coach mark
  * - per-cell name chips with ARIA dep lists (no color-only states)
- * - RunMode segmented control (cell·cell_deps·to_here, default
- *   cell_deps) with IDENTICAL semantics browser+server
+ * - closure-always Run semantics (S8: the RunMode control was removed —
+ *   every Run executes the cell + its dependency closure, identical on
+ *   both engines)
  * - inline per-cell results: collapsed-by-default when > 12 lines,
  *   always-expanded on error, per-cell clear + global clear-all,
  *   max-height + internal scroll (no layout shove)
@@ -21,7 +22,6 @@ import { splitCells } from "../lib/cells";
 import {
   buildCellGraph,
   dependencyClosure,
-  expandRunMode,
   type CellGraph,
 } from "../lib/cell-deps";
 
@@ -51,15 +51,8 @@ interface CellEditorProps {
 const COACH_SEEN_KEY = "fhir4ds.cleanroom.cellCoachSeen";
 
 export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, connected }: CellEditorProps) {
-  // The per-buffer toggle lives in EditorPane (cell-view-toggle) — this
-  // component renders cards whenever mounted with markers. Run mode
-  // persists across reloads (S3 Muse carry).
-  const [runMode, setRunMode] = useState<CellRunMode>(
-    () => (localStorage.getItem("fhir4ds.cleanroom.runMode") as CellRunMode | null) ?? "cell_deps",
-  );
-  useEffect(() => {
-    localStorage.setItem("fhir4ds.cleanroom.runMode", runMode);
-  }, [runMode]);
+  // S8 directive 3: RunMode REMOVED — every Run executes the cell's
+  // dependency closure (one behavior per cell).
   const [results, setResults] = useState<CellResult[]>([]);
   const [running, setRunning] = useState<string | null>(null);
   const [pinnedClosure, setPinnedClosure] = useState<string | null>(null);
@@ -87,8 +80,8 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
     async (name: string) => {
       setRunning(name);
       try {
-        const names = expandRunMode(runMode, name, graph);
-        const out = await onRunCells(names, runMode);
+        const names = dependencyClosure(name, graph.refs, new Set(graph.order));
+        const out = await onRunCells(names, "cell_deps");
         setResults((prev) => [
           ...prev.filter((r) => !names.includes(r.cell)),
           ...names.map((n) => ({
@@ -103,7 +96,7 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
         setRunning(null);
       }
     },
-    [runMode, graph, onRunCells, connected],
+    [graph, onRunCells, connected],
   );
 
   // Esc clears the pinned closure (and coach mark); Ctrl/Cmd+Enter runs
@@ -131,36 +124,7 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
   return (
     <div className="cell-editor" data-testid="cell-editor">
       <div className="cell-toolbar" role="toolbar" aria-label="Cell controls">
-        {hasMarkers && (
-          <div className="cell-runmode" role="radiogroup" aria-label="Run mode" data-testid="cell-runmode">
-            {(["cell", "cell_deps", "to_here"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                role="radio"
-                aria-checked={runMode === m}
-                className={`cell-runmode-btn${runMode === m ? " on" : ""}`}
-                onClick={() => setRunMode(m)}
-                aria-label={
-                  m === "cell"
-                    ? "Run only this cell"
-                    : m === "cell_deps"
-                      ? "Run this cell and its dependency closure"
-                      : "Run all authored cells up to and including this cell"
-                }
-                title={
-                  m === "cell"
-                    ? "Run only this cell"
-                    : m === "cell_deps"
-                      ? "Run this cell and its dependency closure"
-                      : "Run all authored cells up to and including this cell"
-                }
-              >
-                {m === "cell_deps" ? "cell + deps" : m === "to_here" ? "to here" : m}
-              </button>
-            ))}
-          </div>
-        )}
+
         {results.length > 0 && (
           <button
             type="button"
@@ -185,10 +149,10 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
           <p>
             Cells split on <code>// # %%</code> markers. Markers may have just been
             added in-buffer (Ctrl+Z undoes; nothing is saved to disk until you
-            save). Use the <strong>▶ Run</strong> button on each cell header
-            (Ctrl/Cmd+Enter runs the focused cell). Run mode defaults to
-            <strong>cell + deps</strong> — it runs this cell and everything it depends on.
-            Click a cell's name to pin its dependency closure; Esc unpins.
+            save). <strong>▶ Run</strong> on a cell executes it and everything it
+            depends on (Ctrl/Cmd+Enter runs the focused cell). Cells without
+            a define show the whole library's columns. Click a cell's name
+            to pin its dependency closure; Esc unpins.
           </p>
           <button type="button" onClick={() => setCoachOpen(false)}>Got it</button>
         </div>
@@ -220,7 +184,13 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
                     aria-label={`Cell ${cell.name}${deps.length ? ` — dependencies ${deps.join(", ")}` : ""}`}
                     onClick={() => setPinnedClosure((cur) => (cur === cell.name ? null : cell.name))}
                     onFocus={() => setFocusedCell(cell.name)}
-                    title={deps.length ? `Deps: ${deps.join(", ")} (click to pin)` : "No dependencies"}
+                    title={
+                      /^cell-\d+$/.test(cell.name)
+                        ? "Unnamed cell — runs show all columns (add a define or a [name:] marker to narrow)"
+                        : deps.length
+                          ? `Deps: ${deps.join(", ")} (click to pin)`
+                          : "No dependencies"
+                    }
                   >
                     {cell.name}
                   </button>
@@ -231,10 +201,10 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
                     type="button"
                     className="cell-run"
                     data-testid="cell-run"
-                    title={running !== null ? "running…" : `Run ${cell.name} (${runMode})`}
+                    title={running !== null ? "running…" : `Run ${cell.name} and its dependencies`}
                     disabled={running !== null}
                     onClick={() => runCell(cell.name)}
-                    aria-label={`Run ${cell.name} (${runMode})`}
+                    aria-label={`Run ${cell.name} and its dependencies`}
                   >
                     {running === cell.name ? "…" : "▶"}
                   </button>

@@ -1129,7 +1129,9 @@ export default function App() {
    * connected → server per-define via /api/evaluate (output_columns
    * narrowing, one evaluation per cell set; envelope→lines rendering);
    * standalone → in-browser worker evaluate_library on the composed
-   * header+cells library (identical RunMode semantics both engines).
+   * header+cells library. S8: RunMode removed upstream — every call runs
+   * the closure; the _mode param is legacy-unused (kept for the shared
+   * signature).
    */
   const runCells = useCallback(
     async (
@@ -1145,11 +1147,19 @@ export default function App() {
         ...names.map((n) => cells.find((c) => c.name === n)?.text ?? ""),
       ].join("\n\n");
       const libs: LibraryText[] = [{ name: main.name, text: composed }];
+      // S8 bug fix: NEVER ship synthetic fallback names (cell-N) to
+      // output_columns. Only cells whose text carries a real define are
+      // nameable; raw-expression cells run WITHOUT narrowing (full
+      // projection; the composed library defines the columns).
+      const nameable = new Set(
+        cells
+          .filter((c) => c.text.match(/^\s*define\s/i))
+          .map((c) => c.name),
+      );
       if (serverMode.kind === "connected") {
-        // Server: ONE evaluation of the composed library per cell set —
-        // rows carry every define column; slice per cell below. Per-define
-        // narrowing (output_columns) is reserved for selection runs; the
-        // composed library is small so a full projection is fine here.
+        // Server: one evaluation per cell; narrowing ONLY for nameable
+        // defines. Raw-expression cells evaluate the composed library
+        // (all columns) — no synthetic column names ever requested.
         for (const n of names) {
           try {
             const res = await fetch("/api/evaluate", {
@@ -1158,7 +1168,7 @@ export default function App() {
               body: JSON.stringify({
                 libraries: libs,
                 library: main.name,
-                output_columns: { [n]: n },
+                ...(nameable.has(n) ? { output_columns: { [n]: n } } : {}),
               }),
             });
             const data = (await res.json()) as any;
@@ -1221,7 +1231,7 @@ export default function App() {
         const cols: string[] = env.columns ?? [];
         const rows = (env.rows ?? []) as Array<Record<string, unknown>>;
         for (const n of names) {
-          const own = cols.filter((c) => c === n);
+          const own = nameable.has(n) ? cols.filter((c) => c === n) : [];
           const useCols = own.length ? own : cols;
           out[n] = {
             ok: true,

@@ -20,7 +20,9 @@ const MARKER = /^\s*\/\/\s*#\s*%%(\s*\[name:\s*([A-Za-z0-9_]+)\s*\])?\s*$/;
 // c-wasm-bolton S3: quoted define identifiers (define "Combined":) name
 // the cell Combined — mirrors server-side statement identity. (Gap found
 // by the cell-parity harness; pre-bolton dev-server cells.ts misses it.)
-const DEFINE = /^\s*define\s+(function\s+)?("?)([A-Za-z0-9_]+)\2\s*[(:]/;
+// S8: quoted names may contain spaces (define "My Func":) — capture them;
+// identity = the QUOTED name when present, else the bare identifier.
+const DEFINE = /^\s*define\s+(function\s+)?("?)([A-Za-z0-9_ ]+?)\2\s*[(:]/;
 
 export function splitCells(text: string): SplitResult {
   const lines = text.split("\n");
@@ -99,11 +101,11 @@ export function chunkEditor(text: string): EditorChunk[] {
   // Bare `// # %%` markers carry no label; derive the chunk name from the
   // define inside the cell body (mirrors splitCells + server-side identity).
   // The chunk text INCLUDES the marker line, so search past it.
-  const defineAnywhere = /^\s*define\s+(function\s+)?([A-Za-z0-9_]+)\s*[(:]/m;
+  const defineAnywhere = /^\s*define\s+(function\s+)?("?)([A-Za-z0-9_ ]+?)\2\s*[(:]/m;
   for (const chunk of chunks) {
     if (chunk.type === "cell" && !chunk.name) {
       const m = defineAnywhere.exec(chunk.text);
-      if (m?.[2]) chunk.name = m[2];
+      if (m?.[3]) chunk.name = m[3];
     }
   }
   return chunks;
