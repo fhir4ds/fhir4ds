@@ -1744,7 +1744,7 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 }
 .cell-run:disabled { opacity: 0.5; cursor: wait; }
 .cell-out-clear { border: 0; background: transparent; color: inherit; cursor: pointer; }
-.cell-monaco { height: 140px; min-height: 80px; }
+.cell-monaco { min-height: 120px; } /* S11: height set inline per content */
 .cell-out { border-top: 1px solid rgba(255,255,255,0.08); position: relative; }
 .cell-out pre {
   margin: 0; padding: 8px 10px; max-height: 220px; overflow: auto;
@@ -1774,6 +1774,20 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 }
 .cell-out-clear { min-width: 20px; min-height: 20px; border-radius: 4px; }
 .cell-out-clear:hover { background: rgba(255,255,255,0.08); }
+
+/* S11: the editor header (mode switch, outline, run) must stay reachable
+   in cell view. The header lives OUTSIDE .cell-list's scroll container so
+   it never scrolls away today; sticky is belt-and-braces in case pane-level
+   scrolling ever returns. row-gap keeps wrapped rows separated at narrow
+   widths; background matches the pane so a wrap never paints a seam. */
+.cell-mode-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #151a22;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
 
 /* ===== S6 disk-provenance chips + relocated watcher badges ===== */
 .nav-item-pill.on-disk {

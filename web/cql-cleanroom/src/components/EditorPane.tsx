@@ -122,8 +122,10 @@ export function EditorPane({
     JSON.parse(localStorage.getItem("fhir4ds.cleanroom.cellsRemoved") ?? "[]") as string[],
   );
   const removedRef = useRef<Set<string>>(removedPersisted);
-  // Muse 5: an explicit in-session close suppresses further auto-opens.
-  const userClosedCellsRef = useRef(false);
+  // Muse 5: an explicit in-session close suppresses further auto-opens —
+  // PER TAB (a global flag would suppress first-open cellification for
+  // every other library this session).
+  const userClosedCellsRef = useRef<Set<string>>(new Set());
   const applyCellify = useCallback(() => {
     const next = cellify(textRef.current);
     if (next != null) onTextChangeRef.current(next);
@@ -140,7 +142,7 @@ export function EditorPane({
     if (hasSplittableDefines(text)) {
       if (applyCellify()) {
         adoptedRef.current.add(tabKey);
-        if (!userClosedCellsRef.current) setCellViewOpen(true);
+        if (!userClosedCellsRef.current.has(tabKey)) setCellViewOpen(true);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -444,7 +446,7 @@ export function EditorPane({
 
   return (
     <section className="pane editor-pane" data-testid="editor-pane">
-      <div className="pane-header editor-header">
+      <div className="pane-header editor-header cell-mode-header">
         {/* S8 directive 4: Visual editor HIDDEN behind a build flag
             (choice: flag not deletion — the builder machinery may return;
             import.meta.env.VITE_SHOW_VISUAL_EDITOR enables it in dev
@@ -473,11 +475,15 @@ export function EditorPane({
             role="switch"
             aria-label="Cell view"
             aria-checked={cellViewOpen}
-            disabled={!hasCellMarkers && !hasSplittableDefines(text)}
+            disabled={
+              cellViewOpen
+                ? false
+                : !hasCellMarkers && !hasSplittableDefines(text)
+            }
             onClick={() =>
               setCellViewOpen((v) => {
                 const next = !v;
-                if (!next) userClosedCellsRef.current = true;
+                if (!next) userClosedCellsRef.current.add(tabKeyRef.current);
                 return next;
               })
             }
@@ -661,7 +667,22 @@ function CellMonacoHost({
     if (editor && editor.getValue() !== text) editor.setValue(text);
   }, [text]);
 
-  return <div className="cell-monaco" ref={divRef} data-testid="cell-monaco" />;
+  // S11: size to CONTENT — clamp(lines * lineHeight + padding, 120, 420).
+  // Counts \n only: long lines that WRAP visually under-size slightly and
+  // internal Monaco scroll absorbs the remainder (intended). Recomputed
+  // from the CURRENT text each render (automaticLayout handles the editor
+  // internals; this sets the HOST height).
+  const lines = Math.max(1, text.split("\n").length);
+  const lineHeight = 19; // 13px font * ~1.45 line-height
+  const height = Math.min(420, Math.max(120, lines * lineHeight + 16));
+  return (
+    <div
+      className="cell-monaco"
+      ref={divRef}
+      data-testid="cell-monaco"
+      style={{ height: `${height}px` }}
+    />
+  );
 }
 
 function detectParams(text: string): string[] {
