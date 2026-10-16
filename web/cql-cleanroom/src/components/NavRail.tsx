@@ -8,7 +8,6 @@ import {
   Tags,
   Target,
   type LucideIcon,
-  FolderTree,
 } from "lucide-react";
 import { DrawerSection, DrawerRow } from "./nav/DrawerSection";
 import { DropdownMenu } from "./DropdownMenu";
@@ -36,7 +35,6 @@ export interface NavRailSectionModel {
 }
 
 const SECTION_ORDER: NavSectionId[] = [
-  "workspace",
   "measures",
   "libraries",
   "valuesets",
@@ -54,7 +52,6 @@ const SECTION_ICONS: Record<NavSectionId, LucideIcon> = {
   tests: Database,
   expected: Target,
   views: Table,
-  workspace: FolderTree,
 };
 
 function rowTestId(item: NavItem, index: number): string {
@@ -107,14 +104,14 @@ export function NavRail({
   onAddExpected,
   onAddValuesets,
   onImportItem,
+  onRefreshDisk,
+  diskLoading,
   panelWidth,
   detailWidth,
   onPanelWidth,
   onDetailWidth,
   detailSlot,
   testsSlot,
-  workspaceSlot,
-  connected = true,
 }: {
   sections: Record<NavSectionId, NavRailSectionModel>;
   /** The single open section (null = collapsed rail). */
@@ -141,6 +138,10 @@ export function NavRail({
   /** #64: the ▾ split-button — import one item from a file into the
    *  section (`IMPORT_ITEMS[section]` keys the chosen item). */
   onImportItem: (section: NavSectionId, item: string) => void;
+  /** S6: re-list server workspace files (drawers hosting disk items). */
+  onRefreshDisk?: () => void;
+  /** S6: disk listing in flight (suppress the "none" flash). */
+  diskLoading?: boolean;
   /** REORG 6h: resizable slide-outs — px widths + drag callbacks. */
   panelWidth: number;
   detailWidth: number;
@@ -151,10 +152,6 @@ export function NavRail({
   /** REORG 6e: L3 detail panel, rendered over the section panel. */
   detailSlot?: ReactNode;
   testsSlot?: ReactNode;
-  /** S2: connected workspace files panel. */
-  workspaceSlot?: ReactNode;
-  /** S2 Muse MF2: standalone omits the workspace section (§3.1 no UI change). */
-  connected?: boolean;
 }) {
   const panelId = navPanel;
   const sec = panelId ? sections[panelId] : null;
@@ -254,8 +251,20 @@ export function NavRail({
     ) : undefined;
   // Split button: + | ▾ — the ▾ opens the section's file-import items.
   const importItems = panelId ? (IMPORT_ITEMS[panelId] ?? []) : [];
+  const showDiskRefresh =
+    !!onRefreshDisk && (panelId === "libraries" || panelId === "valuesets" || panelId === "views");
   const actions = (
     <>
+      {showDiskRefresh && (
+        <button
+          className="nav-add-btn"
+          data-testid="nav-refresh-disk"
+          title="re-list server workspace files (clears change badges)"
+          onClick={onRefreshDisk}
+        >
+          ⟳
+        </button>
+      )}
       {plusButton}
       {importItems.length > 0 && panelId && (
         <DropdownMenu label="" testId={`nav-import-${panelId}`}>
@@ -293,7 +302,7 @@ export function NavRail({
             {panelId ? "«" : "»"}
           </button>
         </div>
-        {SECTION_ORDER.filter((id) => connected || id !== "workspace").map((id) => {
+        {SECTION_ORDER.map((id) => {
           const Icon = SECTION_ICONS[id];
           return (
             <button
@@ -326,10 +335,11 @@ export function NavRail({
             showFilter={sec.showFilter !== false}
             actions={actions}
           >
-            {panelId === "workspace" && workspaceSlot
-              ? workspaceSlot
-              : sec.items.length === 0 && panelId !== "tests" && (
+            {sec.items.length === 0 && panelId !== "tests" && !diskLoading && (
                   <div className="nav-empty">none</div>
+                )}
+            {sec.items.length === 0 && diskLoading && (
+                  <div className="nav-empty">loading…</div>
                 )}
             {sec.items.map((item, i) => (
               <DrawerRow

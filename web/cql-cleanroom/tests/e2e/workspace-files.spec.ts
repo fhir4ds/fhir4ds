@@ -4,10 +4,11 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { test, expect } from "@playwright/test";
 
-// c-cleanroom-redo S2: workspace files panel (connected) — NavRail gains a
-// Workspace section listing server cql/valuesets via /api/fs/list; CQL click
-// opens the library in the native editor; valueset click opens the native
-// valueset editor; standalone shows the connect hint.
+// c-cleanroom-redo S2→S6: server workspace files flow into the TYPE
+// drawers (S6 dissolved the Workspace rail section). Disk items carry
+// 'on disk' chips; CQL click opens the library in the native editor;
+// valueset click opens the native valueset editor; standalone makes NO
+// /api/fs or /api/workspace requests and the Workspace section is gone.
 
 const BASE = "http://127.0.0.1:19096";
 let dir: string | null = null;
@@ -58,35 +59,42 @@ test.afterAll(async () => {
   if (dir) await rm(dir, { recursive: true, force: true });
 });
 
-test("connected: Workspace nav section lists server files by group", async ({ page }) => {
+test("connected: disk files appear in the TYPE drawers with on-disk chips", async ({ page }) => {
   await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(12000);
-  await page.locator('[data-testid="nav-toggle-workspace"], button:has-text("Workspace")').first().click();
-  const panel = page.locator('[data-testid="ws-files"]').first();
-  await expect(panel).toBeVisible({ timeout: 15000 });
-  await expect(panel.locator('[data-testid="ws-group-cql"]')).toContainText("WsLib.cql");
-  await expect(panel.locator('[data-testid="ws-group-valuesets"]')).toContainText("vs1.json");
-  await expect(panel.locator('[data-testid="ws-files-refresh"]')).toBeVisible();
+  // The Workspace section is GONE (S6).
+  await expect(page.locator('[data-testid="nav-toggle-workspace"]')).toHaveCount(0);
+  // Disk CQL flows into the Libraries drawer.
+  await page.locator('[data-testid="nav-toggle-libraries"]').click();
+  const libPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
+  const diskRow = libPanel.locator(".nav-item", { hasText: "WsLib" }).first();
+  await expect(diskRow).toBeVisible({ timeout: 15000 });
+  await expect(diskRow.locator(".nav-item-pill.on-disk")).toBeVisible();
+  // Disk valueset flows into the Valuesets drawer.
+  await page.locator('[data-testid="nav-toggle-valuesets"]').click();
+  const vsPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
+  const vsRow = vsPanel.locator(".nav-item", { hasText: "wsvs" }).first();
+  await expect(vsRow).toBeVisible({ timeout: 15000 });
 });
 
-test("connected: CQL click opens the library in the native editor", async ({ page }) => {
+test("connected: disk CQL click (Libraries drawer) opens the native editor", async ({ page }) => {
   await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(12000);
-  await page.locator('[data-testid="nav-toggle-workspace"], button:has-text("Workspace")').first().click();
-  const panel = page.locator('[data-testid="ws-files"]').first();
-  await expect(panel).toBeVisible({ timeout: 15000 });
-  await panel.locator('[data-testid="ws-file-cql-WsLib.cql"]').click();
+  await page.locator('[data-testid="nav-toggle-libraries"]').click();
+  const libPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
+  const diskRow = libPanel.locator(".nav-item", { hasText: "WsLib" }).first();
+  await diskRow.click({ timeout: 15000 });
   // The library opens as a native editor tab (tab bar gains WsLib).
   await expect(page.getByRole("tab", { name: /WsLib/i })).toBeVisible({ timeout: 15000 });
 });
 
-test("connected: valueset click opens the native valueset editor", async ({ page }) => {
+test("connected: disk valueset click (Valuesets drawer) opens the native valueset editor", async ({ page }) => {
   await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(12000);
-  await page.locator('[data-testid="nav-toggle-workspace"], button:has-text("Workspace")').first().click();
-  const panel = page.locator('[data-testid="ws-files"]').first();
-  await expect(panel).toBeVisible({ timeout: 15000 });
-  await panel.locator('[data-testid="ws-file-valuesets-vs1.json"]').click();
+  await page.locator('[data-testid="nav-toggle-valuesets"]').click();
+  const vsPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
+  const vsRow = vsPanel.locator(".nav-item", { hasText: "wsvs" }).first();
+  await vsRow.click({ timeout: 15000 });
   await expect(page.locator('[data-testid="valueset-editor"], [data-testid="valueset-code-count"]').first()).toBeVisible({ timeout: 15000 });
 });
 
@@ -99,9 +107,12 @@ test("STANDALONE: no workspace section, no /api/fs traffic", async ({ page }) =>
   });
   await page.goto("http://127.0.0.1:5176/", { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(15000);
-  await expect(page.locator('[data-testid="ws-files"]')).toHaveCount(0);
-  // Standalone rail: no Workspace button at all (S2 Muse MF2)
+  // S6: the Workspace section is gone EVERYWHERE; drawers render in-app
+  // state only (no disk items in standalone).
+  await expect(page.locator('[data-testid="nav-toggle-workspace"]')).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Workspace/ })).toHaveCount(0);
+  await page.locator('[data-testid="nav-toggle-libraries"]').click();
+  await expect(page.locator(".nav-item-pill.on-disk")).toHaveCount(0);
   expect(fsHits, `standalone made ${fsHits.join(", ")}`).toEqual([]);
 });
 

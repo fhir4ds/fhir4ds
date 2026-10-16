@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { groupDataset } from "./lib/datasetGroup";
 import { buildCellGraph } from "./lib/cell-deps";
+import { mergeDiskLibraries, mergeDiskValuesets, mergeDiskViews } from "./lib/navSections";
+import { useWorkspaceFiles } from "./lib/useWorkspaceFiles";
 import { splitCells } from "./lib/cells";
 import { PatientDetailPanel } from "./components/nav/PatientDetailPanel";
 import {
@@ -41,7 +43,6 @@ import {
 } from "./lib/bundleIo";
 import { DropdownMenu, DropdownSubmenu } from "./components/DropdownMenu";
 import { detectServer, terminologyStatus, type ServerMode } from "./lib/serverConnection";
-import { WorkspaceFilesPanel } from "./components/nav/WorkspaceFilesPanel";
 import {
   loadTerminologySettings,
   saveTerminologySettings,
@@ -370,7 +371,6 @@ export default function App() {
   const [navFilters, setNavFilters] = useState<
     Record<NavSectionId, string>
   >({
-    workspace: "",
     measures: "",
     libraries: "",
     valuesets: "",
@@ -649,6 +649,12 @@ export default function App() {
   // auto-reloads — locked decision 4: banner with explicit restart).
   const [wsChanged, setWsChanged] = useState<Set<string>>(new Set());
   const [wsDataHint, setWsDataHint] = useState(false);
+  // S6: disk trees feed the TYPE drawers (Workspace rail dissolves).
+  const wsFiles = useWorkspaceFiles(serverMode.kind === "connected");
+  // Watcher reload hook-up (the WS effect's closure would go stale —
+  // keep the latest reload on a ref).
+  const wsFilesReloadRef = useRef<(() => void) | null>(null);
+  wsFilesReloadRef.current = wsFiles.reload;
   useEffect(() => {
     if (serverMode.kind !== "connected") return;
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -663,6 +669,9 @@ export default function App() {
         const ev = JSON.parse(msg.data as string) as { kind?: string; paths?: string[] };
         if (ev.kind === "changed" && Array.isArray(ev.paths)) {
           setWsChanged((prev) => new Set([...prev, ...ev.paths!]));
+          // S6 Muse: new/renamed/deleted files must appear without a page
+          // reload — watcher events re-list the disk trees.
+          wsFilesReloadRef.current?.();
         } else if (ev.kind === "data-hint") {
           setWsDataHint(true);
         }
@@ -2084,11 +2093,25 @@ export default function App() {
   const navExpectedItems = expectedItems(measures, expectedReports);
   const navViewItems = viewItems(viewDefs);
 
+  // S6: disk-provenance merge — one row per resource; disk wins on
+  // provenance display. Watcher paths map onto the merged rows.
+  const diskRefs = (dir: string) =>
+    (wsFiles.files[dir] ?? []).map((f) => ({
+      name: f.name,
+      changed: wsChanged.has(`${dir}/${f.name}`),
+    }));
+  const navLibDiskItems = mergeDiskLibraries(navLibItems, diskRefs("cql"));
+  const navVsDiskItems = mergeDiskValuesets(navValuesetItems, diskRefs("valuesets"));
+  const navViewDiskItems = mergeDiskViews(
+    navViewItems,
+    diskRefs("views"),
+    diskRefs("data"),
+  );
+
   const navSectionModels: Record<
     NavSectionId,
     { title: string; items: NavItem[]; count: number }
   > = {
-    workspace: { title: "Workspace", items: [], count: 0 },
     measures: {
       title: "Measures",
       items: filterItems(navMeasureItems, navFilters.measures),
@@ -2096,13 +2119,13 @@ export default function App() {
     },
     libraries: {
       title: "Libraries",
-      items: filterItems(navLibItems, navFilters.libraries),
-      count: navLibItems.length,
+      items: filterItems(navLibDiskItems, navFilters.libraries),
+      count: navLibDiskItems.length,
     },
     valuesets: {
       title: "Valuesets",
-      items: filterItems(navValuesetItems, navFilters.valuesets),
-      count: navValuesetItems.length,
+      items: filterItems(navVsDiskItems, navFilters.valuesets),
+      count: navVsDiskItems.length,
     },
     parameters: {
       title: "Parameters",
@@ -2121,8 +2144,8 @@ export default function App() {
     },
     views: {
       title: "Views",
-      items: filterItems(navViewItems, navFilters.views),
-      count: navViewItems.length,
+      items: filterItems(navViewDiskItems, navFilters.views),
+      count: navViewDiskItems.length,
     },
   };
 
@@ -2414,6 +2437,65 @@ export default function App() {
   };
 
   const selectNavItem = (item: NavItem) => {
+    // S6 disk rows: fetch + open through the workspace loaders (same
+    // behavior as the dissolved Workspace panel).
+    const src = item.meta?.source as string | undefined;
+    if (src === "disk" && item.kind === "library") {
+      void (async () => {
+        const name = String(item.meta?.name ?? `${item.label}.cql`);
+        setStatusNote(`loading ${name}…`);
+        try {
+          const res = await fetch(`/api/libraries/${encodeURIComponent(item.label)}`);
+          const b = (await res.json()) as { data?: { text?: string }; text?: string };
+          const text = b?.data?.text ?? b?.text;
+          if (typeof text === "string") openWorkspaceCql(item.label, text);
+          else setStatusNote(`could not load ${name}`);
+        } catch {
+          setStatusNote(`could not load ${name}`);
+        }
+      })();
+      return;
+    }
+    if (src === "disk" && item.kind === "valueset") {
+      void (async () => {
+        const name = String(item.meta?.name ?? `${item.label}.json`);
+        setStatusNote(`loading ${name}…`);
+        try {
+          const wsRes = await fetch("/api/workspace");
+          const wsB = (await wsRes.json()) as { workspace?: { valuesets?: string[] }; data?: { valuesets?: string[] } };
+          const d = wsB?.workspace ?? wsB?.data;
+          const vsPath = (d?.valuesets ?? []).find((p) => String(p).split("/").pop() === name);
+          if (!vsPath) {
+            setStatusNote(`could not load ${name}`);
+            return;
+          }
+          const res2 = await fetch(`/api/valueset?path=${encodeURIComponent(vsPath)}`);
+          const b2 = (await res2.json()) as { data?: { ok?: boolean; url?: string; concepts?: unknown[] } } & { ok?: boolean; url?: string; concepts?: unknown[] };
+          const d2 = b2?.data ?? b2;
+          if (d2?.ok !== false && Array.isArray(d2?.concepts)) {
+            openWorkspaceValueset(
+              item.label,
+              JSON.stringify(
+                { resourceType: "ValueSet", url: d2.url ?? `ws:${item.label}`, compose: { include: [{ system: "", concept: d2.concepts }] } },
+                null,
+                2,
+              ),
+            );
+          } else setStatusNote(`could not load ${name}`);
+        } catch {
+          setStatusNote(`could not load ${name}`);
+        }
+      })();
+      return;
+    }
+    if (src === "disk-view" && item.kind === "view") {
+      setStatusNote(`${String(item.meta?.name ?? item.label)} is a server view file (preview only — reload the page to re-list; view defs load via File > Import)`);
+      return;
+    }
+    if (src === "disk-data" && item.kind === "view") {
+      setStatusNote(`${String(item.meta?.name ?? item.label)} is a server data file (preview only — restart the dev server to pick up data changes)`);
+      return;
+    }
     // Every nav item id is `${kind}:${resourceId}` — nav clicks open (or
     // focus) the matching editor tab. Library tabs also select the
     // underlying Monaco-adjacent library index.
@@ -3017,7 +3099,6 @@ export default function App() {
         )}
         <NavRail
           sections={{
-            workspace: { ...navSectionModels.workspace, filter: navFilters.workspace },
             measures: { ...navSectionModels.measures, filter: navFilters.measures },
             libraries: { ...navSectionModels.libraries, filter: navFilters.libraries },
             valuesets: { ...navSectionModels.valuesets, filter: navFilters.valuesets },
@@ -3030,7 +3111,6 @@ export default function App() {
             views: { ...navSectionModels.views, filter: navFilters.views },
           }}
           navPanel={navPanel}
-          connected={serverMode.kind === "connected"}
           onNavPanelChange={setNavPanel}
           onFilterSection={(id, v) =>
             setNavFilters((f) => ({ ...f, [id]: v }))
@@ -3054,6 +3134,15 @@ export default function App() {
           onAddExpected={openExpectedEditor}
           onAddValuesets={addWorkspaceValueset}
           onImportItem={handleNavImport}
+          diskLoading={serverMode.kind === "connected" && wsFiles.loading}
+          onRefreshDisk={
+            serverMode.kind === "connected"
+              ? () => {
+                  wsFiles.reload();
+                  setWsChanged(new Set());
+                }
+              : undefined
+          }
           panelWidth={navWidths.panel}
           detailWidth={navWidths.detail}
           onPanelWidth={(w) => updateNavWidths({ ...navWidths, panel: w })}
@@ -3078,17 +3167,6 @@ export default function App() {
               onFocusedPidChange={setFocusedPid}
               filter={navFilters.tests}
             />
-          }
-          workspaceSlot={
-            serverMode.kind === "connected" ? (
-              <WorkspaceFilesPanel
-                connected
-                changedPaths={wsChanged}
-                onOpenCql={openWorkspaceCql}
-                onOpenValuesetJson={openWorkspaceValueset}
-                onAcknowledgedChanges={() => setWsChanged(new Set())}
-              />
-            ) : null
           }
         />
         <div

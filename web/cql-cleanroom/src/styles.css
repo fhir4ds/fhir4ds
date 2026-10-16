@@ -1753,3 +1753,18 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 }
 .cell-out-clear { min-width: 20px; min-height: 20px; border-radius: 4px; }
 .cell-out-clear:hover { background: rgba(255,255,255,0.08); }
+
+/* ===== S6 disk-provenance chips + relocated watcher badges ===== */
+.nav-item-pill.on-disk {
+  background: rgba(120,200,120,0.15);
+  border: 1px solid rgba(120,200,120,0.35);
+  font-size: 10px;
+}
+.nav-item.has-change {
+  background: rgba(245,165,36,0.18);
+}
+.nav-item.has-change .nav-item-label {
+  color: #f5c26b;
+}
+
+.nav-item.disk-data-row { cursor: default; opacity: 0.85; }

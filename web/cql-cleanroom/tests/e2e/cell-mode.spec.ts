@@ -68,10 +68,10 @@ test("cell mode: markers split into cards with dep info; run produces inline out
   await page.waitForTimeout(12000);
   // The server workspace has CellLib.cql; open it from the Workspace rail
   // (S6 will dissolve this into the type drawers — legs will follow).
-  await page.locator('[data-testid="nav-toggle-workspace"], button:has-text("Workspace")').first().click();
-  const panel = page.locator('[data-testid="ws-files"]').first();
-  await expect(panel).toBeVisible({ timeout: 15000 });
-  await panel.locator('[data-testid="ws-file-cql-CellLib.cql"]').click();
+  await page.locator('[data-testid="nav-toggle-libraries"]').click();
+  const libPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
+  const diskRow = libPanel.locator(".nav-item", { hasText: "CellLib" }).first();
+  await diskRow.click({ timeout: 15000 });
   await expect(page.getByRole("tab", { name: /CellLib/i })).toBeVisible({ timeout: 15000 });
   await page.waitForTimeout(4000);
   // Toggle the cell view (EditorPane header button appears only when the
@@ -100,10 +100,10 @@ test("cell mode: markers split into cards with dep info; run produces inline out
 test("cell mode: runmode control present with the three modes", async ({ page }) => {
   await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(12000);
-  await page.locator('[data-testid="nav-toggle-workspace"], button:has-text("Workspace")').first().click();
-  const panel = page.locator('[data-testid="ws-files"]').first();
-  await expect(panel).toBeVisible({ timeout: 15000 });
-  await panel.locator('[data-testid="ws-file-cql-CellLib.cql"]').click();
+  await page.locator('[data-testid="nav-toggle-libraries"]').click();
+  const libPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
+  const diskRow = libPanel.locator(".nav-item", { hasText: "CellLib" }).first();
+  await diskRow.click({ timeout: 15000 });
   await expect(page.getByRole("tab", { name: /CellLib/i })).toBeVisible({ timeout: 15000 });
   await page.waitForTimeout(4000);
   await page.locator('[data-testid="cell-view-toggle"]').click();

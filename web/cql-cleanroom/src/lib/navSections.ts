@@ -26,8 +26,7 @@ export type NavSectionId =
   | "parameters"
   | "tests"
   | "expected"
-  | "views"
-  | "workspace";
+  | "views";
 
 export interface NavItem {
   /** Stable identity: `${kind}:${resourceId}`. */
@@ -39,6 +38,12 @@ export interface NavItem {
   pill?: string;
   entry?: boolean;
   error?: boolean;
+  /** S6: item sourced from the server workspace disk (/api/fs). */
+  onDisk?: boolean;
+  /** S6: a session item that ALSO exists on disk (chip copy differs). */
+  diskShadow?: boolean;
+  /** S6: watcher-marked changed on disk (amber row treatment). */
+  changed?: boolean;
   /** Row payload for handlers (index, resource, source, …). */
   meta?: Record<string, unknown>;
 }
@@ -222,4 +227,119 @@ export function viewItems(viewDefs: WorkspaceViewDefEntry[]): NavItem[] {
     ),
     meta: { index: i, viewDefId: v.id },
   }));
+}
+
+/**
+ * S6 disk-provenance merge — /api/fs/list file entries flow into the TYPE
+ * drawers. NavItem gains `onDisk?: boolean` (renders an "on disk" chip)
+ * and `changed?: boolean` (watcher badge relocates onto these rows —
+ * amber highlight treatment from ebdb9e21 carries over).
+ */
+export interface DiskFileRef {
+  name: string;
+  changed?: boolean;
+}
+
+/** Merge rule (S6 directive): one row per resource; when a resource
+ *  exists BOTH on disk and in-session, disk WINS on provenance display
+ *  (the row keeps its in-session id/handlers but shows the on-disk chip
+ *  and carries disk open/changed semantics). */
+export function mergeDiskLibraries(
+  items: NavItem[],
+  disk: DiskFileRef[],
+): NavItem[] {
+  const diskByStem = new Map(disk.map((d) => [d.name.replace(/\.cql$/i, ""), d]));
+  const merged = items.map((it) => {
+    const d = diskByStem.get(it.label) ?? diskByStem.get(it.meta?.libraryId as string ?? "");
+    return d
+      ? { ...it, onDisk: true, diskShadow: true, changed: d.changed }
+      : it;
+  });
+  const sessionLabels = new Set(merged.map((it) => it.label));
+  const extras: NavItem[] = [];
+  for (const [stem, d] of diskByStem) {
+    if (!sessionLabels.has(stem)) {
+      extras.push({
+        id: `library:disk:${stem}`,
+        kind: "library",
+        label: stem,
+        onDisk: true,
+        changed: d.changed,
+        meta: { source: "disk", name: d.name },
+      });
+    }
+  }
+  return [...merged, ...extras];
+}
+
+export function mergeDiskValuesets(
+  items: NavItem[],
+  disk: DiskFileRef[],
+): NavItem[] {
+  const diskByName = new Map(disk.map((d) => [d.name.replace(/\.json$/i, ""), d]));
+  const merged = items.map((it) => {
+    const d = diskByName.get(it.label);
+    return d ? { ...it, onDisk: true, diskShadow: true, changed: d.changed } : it;
+  });
+  const sessionLabels = new Set(merged.map((it) => it.label));
+  const extras: NavItem[] = [];
+  for (const [stem, d] of diskByName) {
+    if (!sessionLabels.has(stem)) {
+      extras.push({
+        id: `valueset:disk:${stem}`,
+        kind: "valueset",
+        label: stem,
+        onDisk: true,
+        changed: d.changed,
+        meta: { source: "disk", name: d.name },
+      });
+    }
+  }
+  return [...merged, ...extras];
+}
+
+export function mergeDiskViews(
+  items: NavItem[],
+  diskViews: DiskFileRef[],
+  diskData: DiskFileRef[],
+): NavItem[] {
+  // Views drawer carries BOTH view files and data files (current
+  // grouping logic: data files keep the data-hint/restart banner
+  // behavior via meta.source === "disk-data").
+  const viewByName = new Map(
+    diskViews.map((d) => [d.name.replace(/\.json$/i, ""), d]),
+  );
+  const merged = items.map((it) => {
+    const d = viewByName.get(it.label);
+    return d ? { ...it, onDisk: true, diskShadow: true, changed: d.changed } : it;
+  });
+  const sessionLabels = new Set(merged.map((it) => it.label));
+  const extras: NavItem[] = [];
+  const dataByName = new Map(
+    diskData.map((d) => [d.name.replace(/\.ndjson$/i, "").replace(/\.json$/i, ""), d]),
+  );
+  const seenExtras = new Set<string>();
+  for (const group of [
+    { map: viewByName, isData: false },
+    { map: dataByName, isData: true },
+  ]) {
+    for (const [stem, d] of group.map) {
+      const dedupeKey = `${group.isData ? "data" : "view"}:${stem}`;
+      if (seenExtras.has(dedupeKey)) continue;
+      const asView = viewByName.has(stem);
+      if (!group.isData && sessionLabels.has(stem)) continue;
+      if (group.isData && asView) continue; // same-stem view wins the row
+      seenExtras.add(dedupeKey);
+      extras.push({
+        id: `${group.isData ? "disk-data" : "disk-view"}:${stem}`,
+        kind: "view",
+        label: stem,
+        onDisk: true,
+        changed: d.changed,
+        sublabel: group.isData ? "data" : "",
+        meta: { source: group.isData ? "disk-data" : "disk-view", name: d.name },
+      });
+    }
+  }
+  return [...merged, ...extras];
 }
