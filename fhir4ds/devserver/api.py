@@ -53,6 +53,132 @@ def _diag(message: str, code: str = "INPUT_ERROR") -> dict[str, Any]:
     return {"code": code, "message": message}
 
 
+_NO_DATASET_MESSAGE = (
+    "no dataset loaded in this workspace — add a data path (Data section, "
+    "+ button) then Restart kernel"
+)
+
+
+def _is_no_dataset_error(exc: BaseException) -> bool:
+    """True ONLY for the specific missing-`resources` catalog error.
+
+    S9: never a blanket catch — a genuine catalog problem (bad column,
+    missing function) must surface verbatim. DuckDB raises
+    duckdb.CatalogException with 'Table with name resources ... does not
+    exist' when translated SQL references the resources table on a
+    dataset-less kernel.
+    """
+    return (
+        type(exc).__name__ == "CatalogException"
+        and _is_no_dataset_message(str(exc))
+    )
+
+
+def _no_dataset_diag() -> dict[str, Any]:
+    return _diag(_NO_DATASET_MESSAGE, code="NO_DATASET")
+
+
+def _is_no_dataset_message(message: str) -> bool:
+    return (
+        "Table with name" in message
+        and "resources" in message
+        and "does not exist" in message
+    )
+
+
+def _map_no_dataset_diagnostics(payload: dict[str, Any]) -> dict[str, Any]:
+    """Rewrite missing-`resources` catalog DIAGNOSTICS to NO_DATASET.
+
+    The operations layer returns engine exceptions as evaluation_error
+    diagnostics inside an ok=False envelope (no exception crosses the
+    kernel boundary) — this maps only the specific catalog message,
+    leaving every other diagnostic untouched.
+    """
+    if not isinstance(payload, dict) or payload.get("ok") is not False:
+        return payload
+    diags = payload.get("diagnostics")
+    if not isinstance(diags, list):
+        return payload
+    mapped = False
+    out: list[dict[str, Any]] = []
+    for d in diags:
+        if (
+            isinstance(d, dict)
+            and d.get("code") == "evaluation_error"
+            and _is_no_dataset_message(str(d.get("message") or ""))
+        ):
+            out.append(_no_dataset_diag())
+            mapped = True
+        else:
+            out.append(d)
+    if not mapped:
+        return payload
+    return {**payload, "diagnostics": out}
+
+
+def _did_you_mean_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """S9: unknown output_columns -> typed diagnostic with closest
+    matches parsed out of the ValueError message (the translator
+    already lists the available definitions — surface them)."""
+    if not isinstance(payload, dict) or payload.get("ok") is not False:
+        return payload
+    diags = payload.get("diagnostics")
+    if not isinstance(diags, list):
+        return payload
+    for d in diags:
+        msg = str(d.get("message") or "") if isinstance(d, dict) else ""
+        if "Unknown definition name(s) in output columns" not in msg:
+            continue
+        import re as _re
+
+        missing_m = _re.search(r"\[([^\]]+)\]", msg)
+        avail_m = _re.search(r"Available definitions: \[(.*?)\]\s*$", msg)
+        missing = [s.strip().strip("'").strip('"') for s in (missing_m.group(1).split(",") if missing_m else [])]
+        avail = [s.strip().strip("'").strip('"') for s in (avail_m.group(1).split(",") if avail_m else [])]
+
+        import difflib
+
+        def _close(name: str) -> list[str]:
+            norm = name.replace(" ", "").replace("_", "").lower()
+            scored: list[str] = []
+            for a in avail:
+                an = a.replace(" ", "").replace("_", "").lower()
+                if an == norm:
+                    scored.insert(0, a)
+                elif norm and (norm in an or an in norm):
+                    scored.append(a)
+            # Typo fallback (transpositions etc.) — capped at 3 total.
+            for cand in difflib.get_close_matches(name, avail, n=3, cutoff=0.6):
+                if cand not in scored:
+                    scored.append(cand)
+            return scored[:3]
+
+        hints = {m: _close(m) for m in missing}
+        hint_text = "; ".join(
+            f"{m} -> did you mean {', '.join(h) or '(no close match)'}"
+            for m, h in hints.items()
+        )
+        names_text = ", ".join(missing)
+        avail_text = ", ".join(avail)
+        target_msg = msg
+        return {
+            **payload,
+            "diagnostics": [
+                *[
+                    d0
+                    for d0 in diags
+                    if not (isinstance(d0, dict) and d0.get("message") == target_msg)
+                ],
+                _diag(
+                    f"unknown output column(s): {names_text}. {hint_text}. "
+                    f"Available definitions: {avail_text}",
+                    code="UNKNOWN_OUTPUT_COLUMN",
+                ),
+            ],
+        }
+    return payload
+
+
 def _first_message(envelope: dict[str, Any]) -> str:
     diags = envelope.get("diagnostics") or []
     if diags and isinstance(diags[0], dict):
@@ -817,6 +943,17 @@ class _Handler(BaseHTTPRequestHandler):
                 stats = [{"resourceType": r[0], "count": r[1]} for r in rows]
                 self._write_json(200, _envelope(ok=True, total=sum(s["count"] for s in stats), by_type=stats))
             except Exception as exc:
+                if _is_no_dataset_error(exc):
+                    self._write_json(
+                        200,
+                        _envelope(
+                            ok=False,
+                            total=0,
+                            by_type=[],
+                            diagnostics=[_no_dataset_diag()],
+                        ),
+                    )
+                    return
                 self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
             return
         if path == "/api/dataset":
@@ -896,6 +1033,16 @@ class _Handler(BaseHTTPRequestHandler):
                 ids = sorted({r[0] for r in rows if r[0] is not None and r[1] == "Patient"})
                 self._write_json(200, _envelope(patients=ids))
             except Exception as exc:
+                if _is_no_dataset_error(exc):
+                    self._write_json(
+                        200,
+                        _envelope(
+                            ok=False,
+                            patients=[],
+                            diagnostics=[_no_dataset_diag()],
+                        ),
+                    )
+                    return
                 self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
             return
         if path == "/api/patient/resources":
@@ -981,6 +1128,16 @@ class _Handler(BaseHTTPRequestHandler):
                     ),
                 )
             except Exception as exc:
+                if _is_no_dataset_error(exc):
+                    self._write_json(
+                        200,
+                        _envelope(
+                            ok=False,
+                            resources=[],
+                            diagnostics=[_no_dataset_diag()],
+                        ),
+                    )
+                    return
                 self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
             return
         if path == "/api/define-types":
@@ -1631,12 +1788,23 @@ class _Handler(BaseHTTPRequestHandler):
             if not isinstance(define, str) or not define:
                 raise ValueError("define must be a non-empty string")
             output_columns = {define: define}
-        payload = kernel.evaluate(
-            includes,
-            main,
-            parameters=body.get("parameters"),
-            output_columns=output_columns,
-        )
+        try:
+            payload = kernel.evaluate(
+                includes,
+                main,
+                parameters=body.get("parameters"),
+                output_columns=output_columns,
+            )
+        except Exception as exc:
+            if _is_no_dataset_error(exc):
+                self._write_json(
+                    200,
+                    _envelope(ok=False, diagnostics=[_no_dataset_diag()]),
+                )
+                return
+            raise
+        payload = _map_no_dataset_diagnostics(payload)
+        payload = _did_you_mean_payload(payload)
         self._write_json(200, payload)
 
     def _route_verify(self, body: dict[str, Any]) -> None:
@@ -1647,7 +1815,17 @@ class _Handler(BaseHTTPRequestHandler):
             self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
             return
         kernel = self.server.kernel_manager.current()
-        payload = kernel.verify(includes, main, cases, parameters=body.get("parameters"))
+        try:
+            payload = kernel.verify(includes, main, cases, parameters=body.get("parameters"))
+        except Exception as exc:
+            if _is_no_dataset_error(exc):
+                self._write_json(
+                    200,
+                    _envelope(ok=False, diagnostics=[_no_dataset_diag()]),
+                )
+                return
+            raise
+        payload = _map_no_dataset_diagnostics(payload)
         self._write_json(200, payload)
 
     def _route_explain(self, body: dict[str, Any]) -> None:
@@ -1656,7 +1834,17 @@ class _Handler(BaseHTTPRequestHandler):
         if not isinstance(patient, str) or not patient:
             raise ValueError("patient_id is required")
         kernel = self.server.kernel_manager.current()
-        payload = kernel.explain(includes, main, patient)
+        try:
+            payload = kernel.explain(includes, main, patient)
+        except Exception as exc:
+            if _is_no_dataset_error(exc):
+                self._write_json(
+                    200,
+                    _envelope(ok=False, diagnostics=[_no_dataset_diag()]),
+                )
+                return
+            raise
+        payload = _map_no_dataset_diagnostics(payload)
         self._write_json(200, payload)
 
     # -- measure scaffold/run (v3 slice 2) ----------------------------------

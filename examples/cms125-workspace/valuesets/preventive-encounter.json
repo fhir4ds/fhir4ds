@@ -1,0 +1,33 @@
+{
+  "resourceType": "ValueSet",
+  "id": "preventive-encounter",
+  "url": "http://example.org/cms125/preventive-encounter",
+  "name": "Preventive Encounter",
+  "status": "active",
+  "compose": {
+    "include": [
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "concept": [
+          {
+            "code": "99395",
+            "display": "Periodic preventive medicine reevaluation, 40-64 yrs"
+          },
+          {
+            "code": "99396",
+            "display": "Periodic preventive medicine reevaluation, 65-74 yrs"
+          }
+        ]
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "concept": [
+          {
+            "code": "308335008",
+            "display": "Patient encounter procedure (procedure)"
+          }
+        ]
+      }
+    ]
+  }
+}

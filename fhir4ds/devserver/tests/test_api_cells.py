@@ -337,3 +337,61 @@ class TestCollectionLiteralClosureApi:
         assert all(r["MaleCount"] == 1 for r in rows)
         ismale = msg["per_cell"]["IsMale"]["rows"]
         assert sorted(bool(r["IsMale"]) for r in ismale) == [False, True]
+
+
+class TestS9NoDatasetAndDidYouMean:
+    """S9: typed NO_DATASET diagnostics + unknown output_columns hints."""
+
+    def test_no_dataset_evaluate_typed_diagnostic(self, tmp_path):
+        # Direct seam check via the api helper functions (no live server).
+        from fhir4ds.devserver.api import (
+            _map_no_dataset_diagnostics,
+            _no_dataset_diag,
+        )
+
+        payload = {
+            "ok": False,
+            "diagnostics": [
+                {
+                    "code": "evaluation_error",
+                    "message": (
+                        "Catalog Error: Table with name resources does not exist!\n"
+                        "Did you mean \"pg_sequences\"?"
+                    ),
+                }
+            ],
+        }
+        mapped = _map_no_dataset_diagnostics(payload)
+        assert mapped["diagnostics"][0]["code"] == "NO_DATASET"
+        assert "no dataset loaded" in mapped["diagnostics"][0]["message"]
+        # non-matching catalog errors pass through untouched
+        other = {
+            "ok": False,
+            "diagnostics": [
+                {"code": "evaluation_error", "message": "Catalog Error: Table with name other does not exist!"}
+            ],
+        }
+        assert _map_no_dataset_diagnostics(other) is other
+        # ok payloads untouched
+        assert _map_no_dataset_diagnostics({"ok": True}) == {"ok": True}
+        assert _no_dataset_diag()["code"] == "NO_DATASET"
+
+    def test_unknown_output_column_did_you_mean(self):
+        from fhir4ds.devserver.api import _did_you_mean_payload
+
+        payload = {
+            "ok": False,
+            "diagnostics": [
+                {
+                    "code": "evaluation_error",
+                    "message": (
+                        "Unknown definition name(s) in output columns: ['InitialPopulation']. "
+                        "Available definitions: ['InAgeRange', 'Initial Population', 'Numerator']"
+                    ),
+                }
+            ],
+        }
+        out = _did_you_mean_payload(payload)
+        diag = out["diagnostics"][-1]
+        assert diag["code"] == "UNKNOWN_OUTPUT_COLUMN"
+        assert "did you mean Initial Population" in diag["message"]
