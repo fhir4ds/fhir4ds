@@ -40,11 +40,37 @@ export interface CellResult {
 }
 
 const CELL_TABLE_ROW_CAP = 100;
+const CELL_HEIGHTS_KEY = "fhir4ds.cleanroom.cellHeights";
+
+/** S14: per-card drag-resize heights, persisted per session (localStorage
+ *  keyed by cell name — survives reloads). */
+function loadCellHeights(libraryKey: string): Record<string, number> {
+  try {
+    const all = JSON.parse(localStorage.getItem(CELL_HEIGHTS_KEY) ?? "{}");
+    return all[libraryKey] ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function writeCellHeights(libraryKey: string, heights: Record<string, number>) {
+  try {
+    const all = JSON.parse(localStorage.getItem(CELL_HEIGHTS_KEY) ?? "{}");
+    all[libraryKey] = heights;
+    localStorage.setItem(CELL_HEIGHTS_KEY, JSON.stringify(all));
+  } catch {
+    /* storage blocked — session-only fallback */
+  }
+}
 
 interface CellEditorProps {
   value: string;
   /** Render one cell's Monaco editor (the host owns monaco-setup). */
-  renderEditor: (cell: { name: string; text: string; order: number }) => React.ReactNode;
+  renderEditor: (
+    cell: { name: string; text: string; order: number },
+    /** S14: per-cell resize override (px) — the host threads it to the editor. */
+    overrideHeight?: number,
+  ) => React.ReactNode;
   /** Run a set of cells; resolves per-cell output lines. */
   onRunCells: (
     names: string[],
@@ -126,6 +152,60 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [focusedCell, runCell]);
+
+  // S14: per-card heights (drag handle). The stored value drives the
+  // editor host height; results keep their fixed 240px internal-scroll
+  // region — the handle sizes the card's editable footprint.
+  const libraryKey =
+    /^\s*library\s+([A-Za-z0-9_]+)/m.exec(value)?.[1] ?? "default";
+  const [cellHeights, setCellHeights] = useState<Record<string, number>>(() =>
+    loadCellHeights(libraryKey),
+  );
+  const cellHeightsRef = useRef(cellHeights);
+  cellHeightsRef.current = cellHeights;
+  const dragCell = useRef<{ name: string; startY: number; startH: number } | null>(null);
+
+  const persistHeights = (next: Record<string, number>, writeThrough = true) => {
+    setCellHeights(next);
+    if (!writeThrough) return; // during drag: state only; write on release
+    writeCellHeights(libraryKey, next);
+  };
+
+  const naturalHeight = (name: string) =>
+    Math.min(
+      420,
+      Math.max(
+        160,
+        (cells.find((c) => c.name === name)?.text.split("\n").length ?? 1) * 19 + 16,
+      ),
+    );
+
+  const beginDrag = (name: string, startY: number) => {
+    dragCell.current = { name, startY, startH: cellHeightsRef.current[name] ?? naturalHeight(name) };
+  };
+  const moveDrag = (e: React.PointerEvent) => {
+    const d = dragCell.current;
+    if (!d) return;
+    const next = Math.min(600, Math.max(160, d.startH + (e.clientY - d.startY)));
+    persistHeights({ ...cellHeightsRef.current, [d.name]: next }, false);
+  };
+  const endDrag = () => {
+    if (dragCell.current) {
+      // Write-through once, on release.
+      writeCellHeights(libraryKey, cellHeightsRef.current);
+    }
+    dragCell.current = null;
+  };
+
+  // Keyboard alternative: Enter/double-click toggles default <-> tall.
+  const cycleHeight = (name: string) => {
+    if (cellHeightsRef.current[name] == null) {
+      persistHeights({ ...cellHeightsRef.current, [name]: 480 });
+    } else {
+      const { [name]: _drop, ...rest } = cellHeightsRef.current;
+      persistHeights(rest);
+    }
+  };
 
   const closureFor = useCallback(
     (name: string) => dependencyClosure(name, graph.refs, new Set(graph.order)),
@@ -233,7 +313,7 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
                   className="cell-monaco"
                   onFocusCapture={() => setFocusedCell(cell.name)}
                 >
-                  {renderEditor(cell)}
+                  {renderEditor(cell, cellHeights[cell.name])}
                 </div>
                 {res && (
                   <div className={"cell-out"} role="status" data-testid="cell-out">
@@ -285,6 +365,40 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
                     )}
                   </div>
                 )}
+                  <div
+                    className="cell-resize-handle"
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label={`Resize ${cell.name}`}
+                    aria-valuenow={cellHeights[cell.name] ?? naturalHeight(cell.name)}
+                    aria-valuemin={160}
+                    aria-valuemax={600}
+                    data-testid="cell-resize"
+                    tabIndex={0}
+                    onPointerDown={(e) => {
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      beginDrag(cell.name, e.clientY);
+                    }}
+                    onPointerMove={moveDrag}
+                    onPointerUp={endDrag}
+                    onPointerCancel={endDrag}
+                    onDoubleClick={() => cycleHeight(cell.name)}
+                    onKeyDown={(e) => {
+                      const cur = cellHeights[cell.name] ?? naturalHeight(cell.name);
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        persistHeights({ ...cellHeights, [cell.name]: Math.min(600, cur + 20) });
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        persistHeights({ ...cellHeights, [cell.name]: Math.max(160, cur - 20) });
+                      } else if (e.key === "Enter") {
+                        cycleHeight(cell.name);
+                      }
+                    }}
+                    title="Drag to resize · double-click or Enter to reset · arrow keys ±20px"
+                  >
+                    <span className="grip" />
+                  </div>
               </div>
             );
           })}

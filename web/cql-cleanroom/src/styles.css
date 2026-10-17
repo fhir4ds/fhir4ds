@@ -1704,15 +1704,18 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 .cell-coach button { margin-top: 6px; border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; background: rgba(255,255,255,0.1); color: inherit; padding: 2px 10px; cursor: pointer; }
 /* S10 layout fix: cards never squeeze — sane min-width + horizontal
    scroll on the list (Monaco needs width to be usable). */
+/* S14: the LIST is the scroll context — cards keep natural height and
+   NEVER flex-shrink into slivers (the many-define cms69 case). */
 .cell-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 10px;
-  overflow: auto;
+  overflow-y: auto;
   overflow-x: auto;
   align-items: stretch;
 }
+.cell-card { flex-shrink: 0; }
 .cell-card {
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 8px;
@@ -1744,7 +1747,27 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 }
 .cell-run:disabled { opacity: 0.5; cursor: wait; }
 .cell-out-clear { border: 0; background: transparent; color: inherit; cursor: pointer; }
-.cell-monaco { min-height: 120px; } /* S11: height set inline per content */
+.cell-monaco { min-height: 120px; } /* height inline: content clamp, S14 floor 160 via inline */
+.cell-resize-handle {
+  height: 8px;
+  cursor: row-resize;
+  background: linear-gradient(to bottom, transparent, rgba(140,170,220,0.25));
+  border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+.cell-resize-handle:hover, .cell-resize-handle:focus-visible {
+  background: rgba(140,170,220,0.45);
+  outline: none;
+}
+.cell-resize-handle .grip {
+  width: 36px; height: 3px; border-radius: 2px;
+  background: rgba(255,255,255,0.35);
+  pointer-events: none;
+}
+.cell-resize-handle:focus-visible .grip { background: rgba(140,200,255,0.9); }
 .cell-out { border-top: 1px solid rgba(255,255,255,0.08); position: relative; }
 .cell-out pre {
   margin: 0; padding: 8px 10px; max-height: 220px; overflow: auto;
@@ -1804,7 +1827,7 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 
 /* ===== S12 structured cell output table ===== */
 .cell-table-wrap {
-  max-height: 300px;
+  max-height: 240px;
   overflow: auto;
   border-top: 1px solid rgba(255,255,255,0.08);
 }

@@ -547,12 +547,13 @@ export function EditorPane({
           connected={connected ?? false}
           onRunCells={onRunCells}
           onAutoSplit={onAutoSplit}
-          renderEditor={(cell) => (
+          renderEditor={(cell, overrideHeight) => (
             <CellMonacoHost
               cellKey={`${tabKey}#cell-${cell.order}`}
               text={cell.text}
               onChange={(v) => spliceCellIntoBuffer(cell.order, v)}
               onMount={(editor) => setCellEditors((m) => new Map(m).set(cell.name, editor))}
+              overrideHeight={overrideHeight}
             />
           )}
         />
@@ -643,11 +644,14 @@ function CellMonacoHost({
   text,
   onChange,
   onMount,
+  overrideHeight,
 }: {
   cellKey: string;
   text: string;
   onChange?: (value: string) => void;
   onMount?: (editor: any) => void;
+  /** S14: per-cell drag-resize height (px), persisted by the caller. */
+  overrideHeight?: number;
 }) {
   const divRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<any>(null);
@@ -693,14 +697,14 @@ function CellMonacoHost({
     if (editor && editor.getValue() !== text) editor.setValue(text);
   }, [text]);
 
-  // S11: size to CONTENT — clamp(lines * lineHeight + padding, 120, 420).
-  // Counts \n only: long lines that WRAP visually under-size slightly and
-  // internal Monaco scroll absorbs the remainder (intended). Recomputed
-  // from the CURRENT text each render (automaticLayout handles the editor
-  // internals; this sets the HOST height).
+  // S14: uniform default sizes — identical content lengths render
+  // identical cards; long content scrolls INSIDE the editor (never
+  // shrinks the card). clamp(lines*19+16, 160 floor, 420 cap). A per-cell
+  // resize override (S14 drag handle) wins when present.
   const lines = Math.max(1, text.split("\n").length);
-  const lineHeight = 19; // 13px font * ~1.45 line-height
-  const height = Math.min(420, Math.max(120, lines * lineHeight + 16));
+  const lineHeight = 19;
+  const natural = Math.min(420, Math.max(160, lines * lineHeight + 16));
+  const height = overrideHeight ?? natural;
   return (
     <div
       className="cell-monaco"

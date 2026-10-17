@@ -79,9 +79,11 @@ test("S11 narrow: cell editors size to CONTENT (long cell taller)", async ({ pag
   const heights = await page.locator('[data-testid="cell-monaco"]').evaluateAll((els) =>
     els.map((el) => el.getBoundingClientRect().height),
   );
-  expect(heights.length).toBe(2);
-  expect(heights[1]).toBeGreaterThan(heights[0] + 60);
-  expect(heights[1]).toBeGreaterThan(200);
+  // Fixture: IsAdult (1 line), Long (13 lines), Combined (1 line).
+  expect(heights.length).toBe(3);
+  const longH = heights[1];
+  for (const h of [heights[0], heights[2]]) expect(longH).toBeGreaterThan(h + 60);
+  expect(longH).toBeGreaterThan(200);
 });
 
 test("S11 narrow: text <-> cells round-trip at 1000px", async ({ page }) => {
@@ -218,4 +220,61 @@ test("S13: dep cells EACH show a populated table after running a dependents", as
     // S13 item 1: results render expanded — no expand button anywhere.
     await expect(card.locator(".cell-expand")).toHaveCount(0);
   }
+});
+
+test("S14: many-define library — cards keep floor height, list scrolls, resize works", async ({ page }) => {
+  await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(12000);
+  // Type a >=10-define library into the default editor. Auto-adoption may
+  // have opened cells on the default library — switch to TEXT first.
+  const toggle0 = page.locator('[data-testid="cell-view-toggle"]');
+  if ((await toggle0.getAttribute("aria-checked")) === "true") await toggle0.click();
+  await page.waitForTimeout(800);
+  const editor = page.locator('[data-testid="cql-editor"]');
+  await editor.click();
+  await page.keyboard.press("Control+a");
+  const defs = Array.from({ length: 12 }, (_, i) => `// # %% [name: D${i + 1}]\ndefine D${i + 1}: ${i + 1} = ${i + 1}`).join("\n\n");
+  await page.keyboard.type(`library ManyLib version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n\n${defs}\n`, { delay: 5 });
+  await page.waitForTimeout(2500);
+  // Open cells.
+  const toggle = page.locator('[data-testid="cell-view-toggle"]');
+  if ((await toggle.getAttribute("aria-checked")) !== "true") await toggle.click();
+  await page.waitForTimeout(1500);
+  // (4) 12 cards, EACH >= 160px tall (editor floor) — no slivers.
+  const heights = await page.locator('[data-testid="cell-monaco"]').evaluateAll((els) =>
+    els.map((el) => el.getBoundingClientRect().height),
+  );
+  expect(heights).toHaveLength(12);
+  for (const h of heights) expect(h).toBeGreaterThanOrEqual(158);
+  // The LIST scrolls (total content exceeds the viewport).
+  const scroll = await page.locator(".cell-list").evaluate(
+    (el) => ({ s: el.scrollHeight, c: el.clientHeight }),
+  );
+  expect(scroll.s).toBeGreaterThan(scroll.c);
+  // (3) Drag-resize: keyboard-resize the first handle, assert its editor grew.
+  const handle = page.locator('[data-testid="cell-resize"]').first();
+  await handle.focus();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.waitForTimeout(400);
+  const grown = await page.locator('[data-testid="cell-monaco"]').first().evaluate((el) => el.getBoundingClientRect().height);
+  expect(grown).toBeGreaterThanOrEqual(heights[0] + 30);
+  // Reset: Enter cycles override off -> back to natural height.
+  await handle.focus();
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(400);
+  const reset = await page.locator('[data-testid="cell-monaco"]').first().evaluate((el) => el.getBoundingClientRect().height);
+  expect(Math.abs(reset - heights[0])).toBeLessThan(8);
+  // Persistence: re-apply a resize, reload, verify it is restored.
+  await handle.focus();
+  await page.keyboard.press("ArrowDown");
+  await page.waitForTimeout(300);
+  const persisted = await page.locator('[data-testid="cell-monaco"]').first().evaluate((el) => el.getBoundingClientRect().height);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(15000);
+  const toggle2 = page.locator('[data-testid="cell-view-toggle"]');
+  if ((await toggle2.getAttribute("aria-checked")) !== "true") await toggle2.click();
+  await page.waitForTimeout(1500);
+  const restored = await page.locator('[data-testid="cell-monaco"]').first().evaluate((el) => el.getBoundingClientRect().height);
+  expect(Math.abs(restored - persisted)).toBeLessThan(8);
 });
