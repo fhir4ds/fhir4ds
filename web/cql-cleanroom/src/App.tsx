@@ -2145,7 +2145,31 @@ export default function App() {
       name: f.name,
       changed: wsChanged.has(`${dir}/${f.name}`),
     }));
-  const navLibDiskItems = mergeDiskLibraries(navLibItems, diskRefs("cql"));
+  // S17 Muse: canonical header names per file stem (one /api/workspace
+  // read when connected) so disk rows display library names, not stems.
+  const [diskHeaderNames, setDiskHeaderNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (serverMode.kind !== "connected") return;
+    let cancelled = false;
+    void fetch("/api/workspace")
+      .then((r) => r.json())
+      .then((b: { workspace?: { libraries?: { name: string; path?: string }[] }; data?: { libraries?: { name: string; path?: string }[] } }) => {
+        if (cancelled) return;
+        const libs = (b?.workspace ?? b?.data)?.libraries ?? [];
+        const out: Record<string, string> = {};
+        for (const l of libs) {
+          const file = (l.path ?? "").split("/").pop() ?? "";
+          const stem = file.replace(/\.cql$/i, "");
+          if (stem) out[stem] = l.name;
+        }
+        setDiskHeaderNames(out);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [serverMode.kind, wsFiles.loading, wsChanged.size]);
+  const navLibDiskItems = mergeDiskLibraries(navLibItems, diskRefs("cql"), diskHeaderNames);
   const navVsDiskItems = mergeDiskValuesets(navValuesetItems, diskRefs("valuesets"));
   const navViewDiskItems = mergeDiskViews(
     navViewItems,
@@ -2489,11 +2513,37 @@ export default function App() {
       void (async () => {
         const name = String(item.meta?.name ?? `${item.label}.cql`);
         setStatusNote(`loading ${name}…`);
+        const canonical = String(item.meta?.libName ?? '');
         try {
-          const res = await fetch(`/api/libraries/${encodeURIComponent(item.label)}`);
-          const b = (await res.json()) as { data?: { text?: string }; text?: string };
-          const text = b?.data?.text ?? b?.text;
-          if (typeof text === "string") openWorkspaceCql(item.label, text);
+          // S17: the disk row shows the FILE stem, but /api/libraries/<n>
+          // resolves by the CQL header library name — try the stem, then
+          // fall back to the workspace listing that matches this row's
+          // file (MADiE zips name files <Lib>-v<ver>.cql, so the stem
+          // rarely equals the library name).
+          const tryFetch = async (libName: string) => {
+            const res = await fetch(`/api/libraries/${encodeURIComponent(libName)}`);
+            const b = (await res.json()) as {
+              data?: { text?: string; ok?: boolean };
+              text?: string;
+              ok?: boolean;
+            };
+            const text = b?.data?.text ?? b?.text;
+            return typeof text === "string" && text ? { text, name: libName } : null;
+          };
+          let hit = canonical ? await tryFetch(canonical) : null;
+          if (!hit) hit = await tryFetch(item.label);
+          if (!hit) {
+            const wsRes = await fetch("/api/workspace");
+            const wsB = (await wsRes.json()) as {
+              workspace?: { libraries?: { name: string; path?: string }[] };
+              data?: { libraries?: { name: string; path?: string }[] };
+            };
+            const libs = (wsB?.workspace ?? wsB?.data)?.libraries ?? [];
+            const fileSuffix = `${item.label}.cql`;
+            const match = libs.find((l) => (l.path ?? "").endsWith(`/${fileSuffix}`) || (l.path ?? "").endsWith(fileSuffix));
+            if (match) hit = await tryFetch(match.name);
+          }
+          if (hit) openWorkspaceCql(hit.name, hit.text);
           else setStatusNote(`could not load ${name}`);
         } catch {
           setStatusNote(`could not load ${name}`);

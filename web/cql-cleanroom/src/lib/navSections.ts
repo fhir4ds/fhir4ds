@@ -247,8 +247,12 @@ export interface DiskFileRef {
 export function mergeDiskLibraries(
   items: NavItem[],
   disk: DiskFileRef[],
+  /** S17 Muse: parsed header names per file (from /api/workspace) — rows
+   *  display the CANONICAL library name; clicks resolve directly. */
+  headerNames?: Record<string, string>,
 ): NavItem[] {
   const diskByStem = new Map(disk.map((d) => [d.name.replace(/\.cql$/i, ""), d]));
+  const headerFor = (stem: string) => headerNames?.[stem] ?? stem;
   const merged = items.map((it) => {
     const d = diskByStem.get(it.label) ?? diskByStem.get(it.meta?.libraryId as string ?? "");
     return d
@@ -258,14 +262,16 @@ export function mergeDiskLibraries(
   const sessionLabels = new Set(merged.map((it) => it.label));
   const extras: NavItem[] = [];
   for (const [stem, d] of diskByStem) {
-    if (!sessionLabels.has(stem)) {
+    const canonical = headerFor(stem);
+    if (!sessionLabels.has(stem) && !sessionLabels.has(canonical)) {
       extras.push({
         id: `library:disk:${stem}`,
         kind: "library",
-        label: stem,
+        label: canonical,
         onDisk: true,
         changed: d.changed,
-        meta: { source: "disk", name: d.name },
+        sublabel: stem === canonical ? undefined : d.name,
+        meta: { source: "disk", name: d.name, libName: canonical },
       });
     }
   }

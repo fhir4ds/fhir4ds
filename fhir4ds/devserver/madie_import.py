@@ -83,9 +83,31 @@ def _write_json_file(path: Path, payload: Any) -> None:
 
 
 def _publish_changed(server: Any, paths: list[str]) -> None:
+    # S17: rescan SYNCHRONOUSLY so imported content is immediately visible
+    # to /api/workspace and the UI (the polling watcher would surface it
+    # on the next tick; imports should not depend on that timing), then
+    # publish the changed event for connected sessions.
+    rescan = getattr(server.watcher, "rescan", None)
+    if rescan is not None:
+        try:
+            rescan()
+        except Exception:
+            pass
+    bus_publish = getattr(getattr(server.watcher, "bus", None), "publish", None)
+    if bus_publish is not None:
+        try:
+            from .watcher import WorkspaceEvent
+
+            bus_publish(WorkspaceEvent(kind="changed", paths=paths))
+        except Exception:
+            pass
+    # Legacy seam: patched publish_changed hooks (test doubles) win too.
     publish = getattr(server.watcher, "publish_changed", None)
     if publish is not None:
-        publish(paths)
+        try:
+            publish(paths)
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +146,7 @@ def import_package_zip(
         for info in zf.infolist():
             if info.is_dir():
                 continue
-            name = info.filename
+            name = info.filename.replace("\\", "/")
             base = name.rsplit("/", 1)[-1]
             lower = base.lower()
             try:
@@ -249,7 +271,7 @@ def import_tests_zip(
         for info in zf.infolist():
             if info.is_dir():
                 continue
-            name = info.filename
+            name = info.filename.replace("\\", "/")
             if not name.lower().endswith(".json"):
                 continue
             try:
