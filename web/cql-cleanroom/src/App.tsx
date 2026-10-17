@@ -131,6 +131,19 @@ declare global {
 }
 (window as any).__cleanroom = workerRequest;
 
+/** S12: compact cell-table text for a value (JSON for objects, trimmed). */
+function fmtCell(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "object") {
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return String(v);
+    }
+  }
+  return String(v);
+}
+
 const DEFAULT_CQL = `library CleanroomDemo version '1.0.0'
 using FHIR version '4.0.1'
 include FHIRHelpers version '4.0.1' called FHIRHelpers
@@ -1138,7 +1151,10 @@ export default function App() {
       names: string[],
       _mode: "cell" | "cell_deps" | "to_here",
     ): Promise<Record<string, { ok: boolean; lines: string[] }>> => {
-      const out: Record<string, { ok: boolean; lines: string[] }> = {};
+      const out: Record<
+        string,
+        { ok: boolean; lines: string[]; columns?: string[]; rows?: Array<Array<string>> }
+      > = {};
       if (!main) return out;
       const graph = buildCellGraph(main.text);
       const cells = splitCells(main.text).cells;
@@ -1188,6 +1204,9 @@ export default function App() {
                     .slice(0, 10)
                     .map((r) => cols.map((c) => String(r[c])).join(" | ")),
                 ],
+                // S12: structured result — the cell renders a real table.
+                columns: cols,
+                rows: rows.map((r) => cols.map((c) => fmtCell(r[c]))),
               };
             }
           } catch (err) {
@@ -1245,6 +1264,11 @@ export default function App() {
                     .join(" | "),
                 ),
             ],
+            // S12: structured result — the cell renders a real table.
+            columns: useCols,
+            rows: rows.map((r) =>
+              useCols.map((c) => fmtCell((r as Record<string, unknown>)[c])),
+            ),
           };
         }
       } catch (err) {

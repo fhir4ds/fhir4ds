@@ -1806,3 +1806,38 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 .cell-toggle { margin-top: 6px; }
 .drawer-toggle.mode-switch { font-weight: 600; letter-spacing: 0.02em; }
 .drawer-toggle.mode-switch.on { background: rgba(90,160,255,0.3); }
+
+/* ===== S12 structured cell output table ===== */
+.cell-table-wrap {
+  max-height: 300px;
+  overflow: auto;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.cell-table {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  min-width: 100%;
+}
+.cell-table th, .cell-table td {
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 3px 8px;
+  text-align: left;
+  white-space: nowrap;
+  max-width: 380px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cell-table thead th {
+  position: sticky;
+  top: 0;
+  background: #1b2330;
+  z-index: 2;
+}
+.cell-table-cap {
+  padding: 4px 10px;
+  font-size: 11px;
+  opacity: 0.8;
+  border-top: 1px dashed rgba(255,255,255,0.12);
+}
+.cell-out.collapsed .cell-table-wrap { display: none; }

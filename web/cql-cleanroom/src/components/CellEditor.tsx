@@ -31,17 +31,27 @@ export interface CellResult {
   cell: string;
   ok: boolean;
   lines: string[];
+  /** S12: structured result (preferred over lines when present). */
+  columns?: string[];
+  rows?: Array<Array<string>>;
   /** standalone (in-browser) execution badge */
   computedLocally?: boolean;
   ts: number;
 }
+
+const CELL_TABLE_ROW_CAP = 100;
 
 interface CellEditorProps {
   value: string;
   /** Render one cell's Monaco editor (the host owns monaco-setup). */
   renderEditor: (cell: { name: string; text: string; order: number }) => React.ReactNode;
   /** Run a set of cells; resolves per-cell output lines. */
-  onRunCells: (names: string[], mode: CellRunMode) => Promise<Record<string, { ok: boolean; lines: string[] }>>;
+  onRunCells: (
+    names: string[],
+    mode: CellRunMode,
+  ) => Promise<
+    Record<string, { ok: boolean; lines: string[]; columns?: string[]; rows?: Array<Array<string>> }>
+  >;
   /** S7: on-demand cellification of a markerless buffer (Auto-split). */
   onAutoSplit?: () => void | boolean;
   /** Connected (server) vs standalone (in-browser) — drives the badge. */
@@ -88,6 +98,8 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
             cell: n,
             ok: out[n]?.ok ?? false,
             lines: out[n]?.lines ?? ["(no output)"],
+            columns: out[n]?.columns,
+            rows: out[n]?.rows,
             computedLocally: !connected,
             ts: Date.now(),
           })),
@@ -163,7 +175,11 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
           {cells.map((cell) => {
             const deps = closureFor(cell.name).filter((d) => d !== cell.name);
             const res = results.find((r) => r.cell === cell.name);
-            const collapsed = res?.ok && res.lines.length > 12;
+            const collapsed =
+              res?.ok &&
+              (res.rows && res.rows.length > 12
+                ? true
+                : !res.rows && res.lines.length > 12);
             return (
               <div
                 key={`${cell.name}-${cell.order}`}
@@ -235,11 +251,45 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
                     {!res.ok && (
                       <span className="cell-errortag" role="alert">error</span>
                     )}
-                    <pre aria-label={`Output for ${cell.name}${res.ok ? "" : " (failed)"}`}>
-                      {collapsed && !expandedCells.has(cell.name)
-                        ? res.lines.slice(0, 4).join("\n") + "\n…"
-                        : res.lines.join("\n")}
-                    </pre>
+                    {res.columns && res.columns.length > 0 && res.rows ? (
+                      <div
+                        className="cell-table-wrap"
+                        data-testid="cell-table"
+                        role="region"
+                        aria-label={`Results table for ${cell.name}`}
+                      >
+                        <table className="cell-table">
+                          <thead>
+                            <tr>
+                              {res.columns.map((c) => (
+                                <th key={c} scope="col">{c}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {res.rows.slice(0, CELL_TABLE_ROW_CAP).map((r, i) => (
+                              <tr key={i}>
+                                {r.map((v, j) => (
+                                  <td key={j} title={v}>{v}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {res.rows.length > CELL_TABLE_ROW_CAP && (
+                          <div className="cell-table-cap" role="status">
+                            showing {CELL_TABLE_ROW_CAP} of {res.rows.length} rows
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                    {!(res.columns && res.columns.length > 0 && res.rows) && (
+                      <pre aria-label={`Output for ${cell.name}${res.ok ? "" : " (failed)"}`}>
+                        {collapsed && !expandedCells.has(cell.name)
+                          ? res.lines.slice(0, 4).join("\n") + "\n…"
+                          : res.lines.join("\n")}
+                      </pre>
+                    )}
                     {collapsed && (
                       <button
                         type="button"
@@ -254,7 +304,9 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
                           })
                         }
                       >
-                        {expandedCells.has(cell.name) ? "collapse" : `${res.lines.length} lines — expand`}
+                        {expandedCells.has(cell.name)
+                          ? "collapse"
+                          : `${res.rows ? `${res.rows.length} rows` : `${res.lines.length} lines`} — expand`}
                       </button>
                     )}
                   </div>

@@ -242,6 +242,15 @@ export function EditorPane({
         monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
         () => onRunRef.current?.(),
       );
+      // S12: blank-editor-after-cells->text fix. The host REMOUNTS when the
+      // cell view closes; the async monaco create can complete before the
+      // container has been laid out (height 0) — automaticLayout only
+      // observes AFTER creation. Explicit layout() at mount plus a rAF
+      // follow-up guarantees the editor renders its model immediately.
+      editor.layout();
+      requestAnimationFrame(() => {
+        if (!disposed) editor.layout();
+      });
     })();
     return () => {
       disposed = true;
@@ -497,7 +506,7 @@ export function EditorPane({
                     : "No top-level defines to split"
             }
           >
-            {cellViewOpen ? "Cells ⇄" : "Text ⇄"}
+            {cellViewOpen ? "Text ⇄" : "Cells ⇄"}
           </button>
         )}
         {onRun && (

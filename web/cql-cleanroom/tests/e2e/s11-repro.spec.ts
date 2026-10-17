@@ -127,3 +127,55 @@ test("S11 narrow-900: unstrandable when all defines deleted; round-trip re-ON", 
   // splittable (Muse 1 fix pin).
   await expect(toggle).toBeEnabled();
 });
+
+test("S12: cells -> text shows NON-EMPTY editor; toggle labels name the destination", async ({ page }) => {
+  await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(12000);
+  await page.locator('[data-testid="nav-toggle-libraries"]').click();
+  const libPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
+  const diskRow = libPanel.locator(".nav-item", { hasText: "CellLib" }).first();
+  await diskRow.click({ timeout: 15000 });
+  await expect(page.getByRole("tab", { name: /CellLib/i })).toBeVisible({ timeout: 15000 });
+  await page.waitForTimeout(3000);
+  const toggle = page.locator('[data-testid="cell-view-toggle"]');
+  if ((await toggle.getAttribute("aria-checked")) !== "true") await toggle.click();
+  await page.waitForTimeout(800);
+  // In cell view the label names the DESTINATION (Text).
+  await expect(toggle).toHaveText(/Text ⇄/);
+  // Switch back -> editor renders with content (S12 blank-editor fix).
+  await toggle.click();
+  await page.waitForTimeout(1200);
+  const host = page.locator('[data-testid="cql-editor"]');
+  await expect(host).toBeVisible();
+  const box = await host.boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThan(100);
+  const text = await host.textContent();
+  expect((text ?? "").trim().length).toBeGreaterThan(0);
+  await expect(toggle).toHaveText(/Cells ⇄/);
+});
+
+test("S12: cell run output renders a TABLE with headers", async ({ page }) => {
+  await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(12000);
+  await page.locator('[data-testid="nav-toggle-libraries"]').click();
+  const libPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
+  const diskRow = libPanel.locator(".nav-item", { hasText: "CellLib" }).first();
+  await diskRow.click({ timeout: 15000 });
+  await expect(page.getByRole("tab", { name: /CellLib/i })).toBeVisible({ timeout: 15000 });
+  await page.waitForTimeout(3000);
+  const toggle = page.locator('[data-testid="cell-view-toggle"]');
+  if ((await toggle.getAttribute("aria-checked")) !== "true") await toggle.click();
+  await page.waitForTimeout(1000);
+  await page.locator('[data-testid="cell-run"]').first().click();
+  const table = page.locator('[data-testid="cell-table"]').first();
+  await expect(table).toBeVisible({ timeout: 30000 });
+  const headers = await table.locator("thead th").allTextContents();
+  expect(headers.length).toBeGreaterThan(0);
+  expect(headers).toContain("patient_id");
+  expect(await table.locator("tbody tr").count()).toBeGreaterThan(0);
+  // Scrollable container + NO raw pipe-delimited <pre> alongside the table.
+  const cls = await table.evaluate((el) => el.className);
+  expect(cls).toContain("cell-table-wrap");
+  const out = table.locator("..");
+  await expect(out.locator("pre")).toHaveCount(0);
+});
