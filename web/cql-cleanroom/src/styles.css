@@ -1865,3 +1865,12 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
   opacity: 0.8;
   border-top: 1px dashed rgba(255,255,255,0.12);
 }
+
+/* S16 item 3: clickable evidence rows */
+.cell-row-evidence { cursor: pointer; }
+.cell-row-evidence:hover td { background: rgba(90,160,255,0.12); }
+
+/* S16 Muse: the mode switch stays put at the right edge — Run All /
+   Clear All appearing never shifts it under the cursor. */
+.editor-header .mode-switch { margin-left: auto; }
+.editor-header .editor-run-btn { margin-left: 0; }

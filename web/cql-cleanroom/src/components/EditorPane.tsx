@@ -42,6 +42,10 @@ interface Props {
   ) => Promise<Record<string, { ok: boolean; lines: string[] }>>;
   /** S5: connected (server) vs standalone — drives the local badge. */
   connected?: boolean;
+  /** S16 item 3: open the evidence popover for a (patient, define) row. */
+  onExplainRow?: (patientId: string, define: string) => void;
+  /** S16 Muse: popover rendered inline in the active cell card. */
+  cellEvidenceSlot?: React.ReactNode;
 }
 
 interface DiagnosticsRowProps {
@@ -92,6 +96,8 @@ export function EditorPane({
   onGraphOpenChange,
   onRunCells,
   connected,
+  onExplainRow,
+  cellEvidenceSlot,
 }: Props) {
   const editorDiv = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<any>(null);
@@ -164,6 +170,21 @@ export function EditorPane({
   const onAutoSplit = useCallback(() => {
     if (applyCellify()) setCellViewOpen(true);
   }, [applyCellify]);
+  // S16: merged header-row controls for the cell view (Run All / Clear All).
+  const [cellControls, setCellControls] = useState<{
+    running: boolean;
+    canRunAll: boolean;
+    hasResults: boolean;
+    onRunAll: () => void;
+    onClearAll: () => void;
+  }>({
+    running: false,
+    canRunAll: false,
+    hasResults: false,
+    onRunAll: () => {},
+    onClearAll: () => {},
+  });
+
   // S5: per-cell Monaco editors (name -> editor) so the host can splice
   // cell edits back into the master buffer by span.
   const [cellEditors, setCellEditors] = useState<Map<string, any>>(new Map());
@@ -494,6 +515,31 @@ export function EditorPane({
         >
           {outlineOpen ? "▾" : "▸"} Outline
         </button>
+        {onRunCells && cellViewOpen && (
+          <>
+            <button
+              type="button"
+              className="drawer-toggle"
+              data-testid="cell-runall"
+              disabled={cellControls.running || !cellControls.canRunAll}
+              onClick={cellControls.onRunAll}
+              title="Run every cell top-to-bottom (each with its dependency closure)"
+            >
+              ▶ Run All
+            </button>
+            {cellControls.hasResults && (
+              <button
+                type="button"
+                className="drawer-toggle"
+                data-testid="cell-clearall"
+                onClick={cellControls.onClearAll}
+                title="Clear all cell outputs"
+              >
+                ✕ Clear All
+              </button>
+            )}
+          </>
+        )}
         {onRunCells && (
           <button
             className={`drawer-toggle mode-switch${cellViewOpen ? " on" : ""}`}
@@ -526,7 +572,7 @@ export function EditorPane({
             {cellViewOpen ? "Text ⇄" : "Cells ⇄"}
           </button>
         )}
-        {onRun && (
+        {onRun && !(cellViewOpen && onRunCells) && (
           <button
             className="editor-run-btn"
             data-testid="editor-run"
@@ -545,6 +591,9 @@ export function EditorPane({
         <CellEditor
           value={text}
           connected={connected ?? false}
+          onExplainRow={onExplainRow}
+          evidenceSlot={cellEvidenceSlot}
+          onToolbarControls={setCellControls}
           onRunCells={onRunCells}
           onAutoSplit={onAutoSplit}
           renderEditor={(cell, overrideHeight) => (

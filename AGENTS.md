@@ -5727,3 +5727,10 @@ ledger). Durable doctrines:
   reconcile verbatim.
 - **97-define Any backlog** (Property 48, Query 44, Binary 4, Identifier 1
   on DQM-47) is the known gap frontier for future type-map work.
+
+## Playwright-First Doctrine (standing rule, 2026-10-17)
+
+Every identified UI/UX issue in the web surfaces gets confirmed via
+Playwright BEFORE the fix lands: write the failing repro test first
+(red), then fix, then confirm the SAME test green. Every handoff report
+states 'repro'd via Playwright: <test name>' for each fixed item.

@@ -301,8 +301,10 @@ test("S15: one-line auto-fit, 5-row results window, single-row toolbar, Run All/
     await page.waitForTimeout(800);
   }
   await expect(page.locator('[data-testid="cell-runall"]')).toBeVisible();
-  const wrap = await page.locator('.cell-toolbar').evaluate((el) => getComputedStyle(el).flexWrap);
-  expect(wrap).toBe("nowrap");
+  // S16: Run All lives in the single editor HEADER row now (the separate
+  // cell-toolbar row was merged away); the header wraps gracefully.
+  const headerCount = await page.locator('.cell-toolbar').count();
+  expect(headerCount).toBe(0);
   // Run All: every cell produces a table (closure semantics per cell).
   await page.locator('[data-testid="cell-runall"]').click();
   const outs = page.locator('[data-testid="cell-table"]');

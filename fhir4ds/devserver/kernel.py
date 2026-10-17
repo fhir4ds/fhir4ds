@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import json
 import threading
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,16 @@ from fhir4ds.operations.envelopes import LibraryText
 from .discovery import WorkspaceSnapshot
 
 _kernel_counter = itertools.count(1)
+
+
+def _is_parameters_resource(path: Path) -> bool:
+    """True when the JSON file is a lone FHIR Parameters resource."""
+    try:
+        with path.open("r", encoding="utf-8-sig") as f:
+            doc = json.load(f)
+    except (OSError, ValueError):
+        return False
+    return isinstance(doc, dict) and doc.get("resourceType") == "Parameters"
 
 
 class Kernel:
@@ -47,7 +58,15 @@ class Kernel:
             # group paths by suffix into SEPARATE specs / load_dataset
             # calls — each kind loads through its dedicated loader path.
             ndjson = [p for p in self.datasets if p.suffix.lower() == ".ndjson"]
-            bundles = [p for p in self.datasets if p.suffix.lower() == ".json"]
+            bundles = [
+                p
+                for p in self.datasets
+                if p.suffix.lower() == ".json"
+                and not _is_parameters_resource(p)
+            ]
+            # S16: lone Parameters resources in data dirs are NOT datasets
+            # (they feed _workspace_parameter_defaults); skip them from
+            # bundle loading instead of failing the whole kernel boot.
             valuesets = [str(p) for p in self.valuesets] or None
             specs: list[DatasetSpec] = []
             if ndjson:

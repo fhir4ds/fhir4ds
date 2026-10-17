@@ -16,6 +16,7 @@ import {
   setCqlCompletionContext,
   setCqlHoverContext,
 } from "./lib/monaco-cql-language";
+import { EvidencePopover } from "./components/EvidencePopover";
 import { NavRail } from "./components/NavRail";
 import { coerceParam, detectParams, joinInterval } from "./lib/params";
 import { importMadiePackage } from "./lib/madiePackage";
@@ -662,6 +663,12 @@ export default function App() {
   // auto-reloads — locked decision 4: banner with explicit restart).
   const [wsChanged, setWsChanged] = useState<Set<string>>(new Set());
   const [wsDataHint, setWsDataHint] = useState(false);
+  // S16 item 3: evidence popover for clicked cell-table rows.
+  const [cellEvidence, setCellEvidence] = useState<{
+    patientId: string;
+    define: string;
+    evidence: import("./lib/protocol").EvidenceResult | null;
+  } | null>(null);
   // S6: disk trees feed the TYPE drawers (Workspace rail dissolves).
   const wsFiles = useWorkspaceFiles(serverMode.kind === "connected");
   // Watcher reload hook-up (the WS effect's closure would go stale —
@@ -1185,6 +1192,10 @@ export default function App() {
                 libraries: libs,
                 library: main.name,
                 ...(nameable.has(n) ? { output_columns: { [n]: n } } : {}),
+                // S16: cell runs pass the SAME runtime parameters the
+                // console run uses (UI-entered values override workspace
+                // Parameters-resource defaults server-side).
+                parameters: runtimeParameters,
               }),
             });
             const data = (await res.json()) as any;
@@ -2841,6 +2852,7 @@ export default function App() {
           : "library";
   const consoleNode = (
     <ResultsConsole
+      connected={serverMode.kind === "connected"}
       libraries={mainLibs}
       main={main}
       dataset={evalDataset}
@@ -2869,6 +2881,52 @@ export default function App() {
       recalcSeconds={recalcSeconds}
     />
   );
+
+  const explainCellRow = async (patientId: string, define: string) => {
+    setCellEvidence({ patientId, define, evidence: null });
+    try {
+      let env: import("./lib/protocol").EvidenceResult;
+      if (serverMode.kind === "connected") {
+        const res = await fetch("/api/explain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            libraries: mainLibs,
+            library: main.name,
+            patient_id: patientId,
+            parameters: runtimeParameters,
+          }),
+        });
+        env = (await res.json()) as import("./lib/protocol").EvidenceResult;
+      } else {
+        const resp = await workerRequest({
+          type: "explain_patient",
+          libraries: mainLibs,
+          main,
+          dataset: evalDataset,
+          patient_id: patientId,
+          parameters: runtimeParameters,
+        });
+        env = JSON.parse(resp.envelope) as import("./lib/protocol").EvidenceResult;
+      }
+      setCellEvidence((cur) =>
+        cur && cur.patientId === patientId && cur.define === define
+          ? { patientId, define, evidence: env }
+          : cur,
+      );
+    } catch (err) {
+      setCellEvidence({
+        patientId,
+        define,
+        evidence: {
+          ok: false,
+          diagnostics: [
+            { code: "explain_error", severity: "error", message: String(err) },
+          ],
+        } as unknown as import("./lib/protocol").EvidenceResult,
+      });
+    }
+  };
 
   return (
     <div className="app">
@@ -3238,6 +3296,17 @@ export default function App() {
             onRun={runViaConsole}
             onRunCells={runCells}
             connected={serverMode.kind === "connected"}
+            onExplainRow={(pid, define) => void explainCellRow(pid, define)}
+            cellEvidenceSlot={
+              cellEvidence ? (
+                <EvidencePopover
+                  evidence={cellEvidence.evidence}
+                  patientId={cellEvidence.patientId}
+                  population={cellEvidence.define}
+                  onClose={() => setCellEvidence(null)}
+                />
+              ) : null
+            }
 
             onDiagnostics={(diags) => {
               const idx = activeTabRef.current;

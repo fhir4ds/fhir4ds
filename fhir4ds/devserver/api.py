@@ -179,6 +179,46 @@ def _did_you_mean_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _workspace_parameter_defaults(snapshot: Any) -> dict[str, Any]:
+    """S16: Parameters resources found in workspace data dirs are the
+    DEFAULT source for CQL parameter values (UI-supplied values override).
+    Accepts value[x] primitives and valuePeriod for intervals (rendered
+    as the CQL Interval[@start, @end] string form the translator parses).
+    """
+    out: dict[str, Any] = {}
+    for dpath in snapshot.datasets:
+        p = Path(str(dpath))
+        if p.suffix.lower() != ".json":
+            continue
+        try:
+            with p.open("r", encoding="utf-8-sig") as f:
+                doc = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(doc, dict) or doc.get("resourceType") != "Parameters":
+            continue
+        for entry in doc.get("parameter") or []:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("name")
+            if not isinstance(name, str):
+                continue
+            if "valuePeriod" in entry:
+                per = entry["valuePeriod"] or {}
+                start = per.get("start")
+                end = per.get("end")
+                if start and end:
+                    # The translator accepts {"start","end"} dicts for
+                    # Interval parameters (set_parameter_binding).
+                    out.setdefault(name, {"start": str(start), "end": str(end)})
+                continue
+            for key, value in entry.items():
+                if key.startswith("value") and value is not None:
+                    out.setdefault(name, value)
+                    break
+    return out
+
+
 def _first_message(envelope: dict[str, Any]) -> str:
     diags = envelope.get("diagnostics") or []
     if diags and isinstance(diags[0], dict):
@@ -1788,11 +1828,17 @@ class _Handler(BaseHTTPRequestHandler):
             if not isinstance(define, str) or not define:
                 raise ValueError("define must be a non-empty string")
             output_columns = {define: define}
+        # S16: workspace Parameters resources are the DEFAULT source;
+        # caller-supplied values override per key.
+        merged_params = _workspace_parameter_defaults(self.server.watcher.snapshot)
+        caller_params = body.get("parameters")
+        if isinstance(caller_params, dict):
+            merged_params.update(caller_params)
         try:
             payload = kernel.evaluate(
                 includes,
                 main,
-                parameters=body.get("parameters"),
+                parameters=merged_params,
                 output_columns=output_columns,
             )
         except Exception as exc:
@@ -1834,8 +1880,16 @@ class _Handler(BaseHTTPRequestHandler):
         if not isinstance(patient, str) or not patient:
             raise ValueError("patient_id is required")
         kernel = self.server.kernel_manager.current()
+        # S16: same parameter-defaults merge as evaluate (workspace
+        # Parameters resources under caller-supplied values).
+        merged_params = _workspace_parameter_defaults(self.server.watcher.snapshot)
+        caller_params = body.get("parameters")
+        if isinstance(caller_params, dict):
+            merged_params.update(caller_params)
         try:
-            payload = kernel.explain(includes, main, patient)
+            payload = kernel.explain(
+                includes, main, patient, parameters=merged_params
+            )
         except Exception as exc:
             if _is_no_dataset_error(exc):
                 self._write_json(

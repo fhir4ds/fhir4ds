@@ -69,6 +69,7 @@ const CONTEXT_TABS: Record<ConsoleContext, Array<{ id: ConsoleTab; label: string
 };
 
 export function ResultsConsole({
+  connected,
   libraries,
   main,
   dataset,
@@ -95,6 +96,8 @@ export function ResultsConsole({
   libraries: LibraryText[];
   main: LibraryText;
   dataset: DatasetSpec | null;
+  /** S16 item 4: connected mode explains via /api/explain (server rows). */
+  connected?: boolean;
   parameters: Record<string, unknown>;
   outputColumns: Record<string, string> | null;
   /** 6g: settings recalc delay — also debounces the Defines matrix. */
@@ -228,16 +231,35 @@ export function ResultsConsole({
   async function explainCell(patientId: string, population: string) {
     setCellEvidence({ patientId, population, evidence: null });
     try {
-      const resp = await workerRequest({
-        type: "explain_patient",
-        libraries,
-        main,
-        dataset,
-        patient_id: patientId,
-        parameters,
-        output_columns: outputColumns,
-      });
-      const env: EvidenceResult = JSON.parse(resp.envelope);
+      // S16 item 4: CONNECTED mode explains against the SERVER (the rows
+      // shown came from the server; the worker path sees only the browser
+      // dataset and fails on required parameters). /api/explain merges
+      // workspace Parameters-resource defaults server-side.
+      let env: EvidenceResult;
+      if (connected) {
+        const res = await fetch("/api/explain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            libraries,
+            library: main.name,
+            patient_id: patientId,
+            parameters,
+          }),
+        });
+        env = (await res.json()) as EvidenceResult;
+      } else {
+        const resp = await workerRequest({
+          type: "explain_patient",
+          libraries,
+          main,
+          dataset,
+          patient_id: patientId,
+          parameters,
+          output_columns: outputColumns,
+        });
+        env = JSON.parse(resp.envelope);
+      }
       setCellEvidence((cur) =>
         cur && cur.patientId === patientId && cur.population === population
           ? { patientId, population, evidence: env }

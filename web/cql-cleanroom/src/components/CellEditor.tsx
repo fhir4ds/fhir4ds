@@ -65,6 +65,19 @@ function writeCellHeights(libraryKey: string, heights: Record<string, number>) {
 
 interface CellEditorProps {
   value: string;
+  /** S16: receives the merged header-row controls (Run All / Clear All)
+   *  each render — the host renders them in its header row. */
+  onToolbarControls: (controls: {
+    running: boolean;
+    canRunAll: boolean;
+    hasResults: boolean;
+    onRunAll: () => void;
+    onClearAll: () => void;
+  }) => void;
+  /** S16 item 3: open the evidence popover for a (patient, define) row. */
+  onExplainRow?: (patientId: string, define: string) => void;
+  /** S16 Muse: popover rendered INLINE in the active card (no app-top jump). */
+  evidenceSlot?: React.ReactNode;
   /** Render one cell's Monaco editor (the host owns monaco-setup). */
   renderEditor: (
     cell: { name: string; text: string; order: number },
@@ -86,7 +99,7 @@ interface CellEditorProps {
 
 const COACH_SEEN_KEY = "fhir4ds.cleanroom.cellCoachSeen";
 
-export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, connected }: CellEditorProps) {
+export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells, onAutoSplit, onExplainRow, evidenceSlot, connected }: CellEditorProps) {
   // S8 directive 3: RunMode REMOVED — every Run executes the cell's
   // dependency closure (one behavior per cell).
   const [results, setResults] = useState<CellResult[]>([]);
@@ -208,50 +221,43 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
     [graph],
   );
 
+  // S16: Run All / Clear All live in the EDITOR HEADER (one row with the
+  // mode switch) — exposed to the host via a slot-render callback.
+  const runAll = useCallback(async () => {
+    if (running !== null || !hasMarkers) return;
+    // S15 Muse: SEQUENTIAL top-to-bottom (spec), one batch flag — no
+    // concurrent closures (races in setResults + premature running-clear),
+    // and per-cell result fan-out stays ordered.
+    setRunning("all");
+    try {
+      for (const c of cells) {
+        await runCell(c.name);
+      }
+    } finally {
+      setRunning(null);
+    }
+  }, [running, hasMarkers, cells, runCell]);
+
+  // Report controls to the host (the header buttons live in EditorPane's
+  // single row). Effect-based: calling the parent's setState during RENDER
+  // crashes React (S16 live-debug: the page white-screened).
+  const controlsRef = useRef({ onToolbarControls });
+  controlsRef.current.onToolbarControls = onToolbarControls;
+  const runAllRef = useRef(runAll);
+  runAllRef.current = runAll;
+  useEffect(() => {
+    controlsRef.current.onToolbarControls({
+      running: running !== null,
+      canRunAll: hasMarkers,
+      hasResults: results.length > 0,
+      onRunAll: () => void runAllRef.current(),
+      onClearAll: () => setResults([]),
+    });
+    // Stable callbacks only — no re-emission while typing.
+  }, [running, hasMarkers, results.length]);
+
   return (
     <div className="cell-editor" data-testid="cell-editor">
-      <div className="cell-toolbar" role="toolbar" aria-label="Cell controls">
-
-        <button
-          type="button"
-          className="cell-runall"
-          data-testid="cell-runall"
-          disabled={running !== null || !hasMarkers}
-          onClick={async () => {
-            // S15 Muse: SEQUENTIAL top-to-bottom (spec), one batch flag —
-            // no concurrent closures (races in setResults + premature
-            // running-clear), and per-cell result fan-out stays ordered.
-            setRunning("all");
-            try {
-              for (const c of cells) {
-                await runCell(c.name);
-              }
-            } finally {
-              setRunning(null);
-            }
-          }}
-          title="Run every cell top-to-bottom (each with its dependency closure)"
-        >
-          ▶ Run All
-        </button>
-        {results.length > 0 && (
-          <button
-            type="button"
-            className="cell-clearall"
-            data-testid="cell-clearall"
-            onClick={() => setResults([])}
-            title="Clear all cell outputs"
-          >
-            ✕ Clear All
-          </button>
-        )}
-        {pinnedClosure && (
-          <span className="cell-pinned" role="status" data-testid="cell-pinned">
-            pinned: {pinnedClosure} · {closureFor(pinnedClosure).join(" · ")}{" "}
-            <button type="button" aria-label="Unpin dependency closure" onClick={() => setPinnedClosure(null)}>×</button>
-          </span>
-        )}
-      </div>
 
       {coachOpen && (
         <div className="cell-coach" role="dialog" aria-label="Cell mode tips" data-testid="cell-coach">
@@ -360,13 +366,39 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
                             </tr>
                           </thead>
                           <tbody>
-                            {res.rows.slice(0, CELL_TABLE_ROW_CAP).map((r, i) => (
-                              <tr key={i}>
-                                {r.map((v, j) => (
-                                  <td key={j} title={v}>{v}</td>
-                                ))}
-                              </tr>
-                            ))}
+                            {res.rows.slice(0, CELL_TABLE_ROW_CAP).map((r, i) => {
+                              const pid = String(res.columns?.[0] === "patient_id" ? r[0] : "");
+                              const clickable = !!pid && !!onExplainRow;
+                              return (
+                                <tr
+                                  key={i}
+                                  className={clickable ? "cell-row-evidence" : undefined}
+                                  title={clickable ? `Click to view evidence for ${pid}` : undefined}
+                                  role={clickable ? "button" : undefined}
+                                  tabIndex={clickable ? 0 : undefined}
+                                  aria-label={clickable ? `Evidence for ${pid}` : undefined}
+                                  onClick={
+                                    clickable
+                                      ? () => onExplainRow?.(pid, cell.name)
+                                      : undefined
+                                  }
+                                  onKeyDown={
+                                    clickable
+                                      ? (e) => {
+                                          if (e.key === "Enter" || e.key === " ") {
+                                            e.preventDefault();
+                                            onExplainRow?.(pid, cell.name);
+                                          }
+                                        }
+                                      : undefined
+                                  }
+                                >
+                                  {r.map((v, j) => (
+                                    <td key={j} title={v}>{v}</td>
+                                  ))}
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                         {res.rows.length > CELL_TABLE_ROW_CAP && (
@@ -374,6 +406,7 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
                             showing {CELL_TABLE_ROW_CAP} of {res.rows.length} rows
                           </div>
                         )}
+                        {evidenceSlot}
                       </div>
                     ) : null}
                     {!(res.columns && res.columns.length > 0 && res.rows) && (
