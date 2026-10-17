@@ -10,9 +10,9 @@
  * - closure-always Run semantics (S8: the RunMode control was removed —
  *   every Run executes the cell + its dependency closure, identical on
  *   both engines)
- * - inline per-cell results: collapsed-by-default when > 12 lines,
- *   always-expanded on error, per-cell clear + global clear-all,
- *   max-height + internal scroll (no layout shove)
+ * - inline per-cell results: ALWAYS expanded (S13 — the table's own
+ *   scroll + 100-row cap replaced auto-collapse), per-cell clear +
+ *   global clear-all, max-height + internal scroll (no layout shove)
  * - "computed locally" badge on standalone runs
  * - dep-closure PINNED (click a define chip to pin its closure; Esc
  *   clears); Ctrl/Cmd+Enter runs the focused cell
@@ -66,7 +66,6 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
   const [results, setResults] = useState<CellResult[]>([]);
   const [running, setRunning] = useState<string | null>(null);
   const [pinnedClosure, setPinnedClosure] = useState<string | null>(null);
-  const [expandedCells, setExpandedCells] = useState<Set<string>>(new Set());
   const [focusedCell, setFocusedCell] = useState<string | null>(null);
   const [coachOpen, setCoachOpen] = useState(false);
   const seenCoach = useRef(false);
@@ -175,11 +174,6 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
           {cells.map((cell) => {
             const deps = closureFor(cell.name).filter((d) => d !== cell.name);
             const res = results.find((r) => r.cell === cell.name);
-            const collapsed =
-              res?.ok &&
-              (res.rows && res.rows.length > 12
-                ? true
-                : !res.rows && res.lines.length > 12);
             return (
               <div
                 key={`${cell.name}-${cell.order}`}
@@ -242,7 +236,7 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
                   {renderEditor(cell)}
                 </div>
                 {res && (
-                  <div className={`cell-out${collapsed && !expandedCells.has(cell.name) ? " collapsed" : ""}${res.ok ? "" : " expanded"}`} role="status" data-testid="cell-out">
+                  <div className={"cell-out"} role="status" data-testid="cell-out">
                     {res.computedLocally && (
                       <span className="cell-localbadge" title="Executed by the in-browser engine">
                         computed locally
@@ -256,6 +250,7 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
                         className="cell-table-wrap"
                         data-testid="cell-table"
                         role="region"
+                        tabIndex={0}
                         aria-label={`Results table for ${cell.name}`}
                       >
                         <table className="cell-table">
@@ -285,29 +280,8 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
                     ) : null}
                     {!(res.columns && res.columns.length > 0 && res.rows) && (
                       <pre aria-label={`Output for ${cell.name}${res.ok ? "" : " (failed)"}`}>
-                        {collapsed && !expandedCells.has(cell.name)
-                          ? res.lines.slice(0, 4).join("\n") + "\n…"
-                          : res.lines.join("\n")}
+                        {res.lines.join("\n")}
                       </pre>
-                    )}
-                    {collapsed && (
-                      <button
-                        type="button"
-                        className="cell-expand"
-                        aria-expanded={expandedCells.has(cell.name)}
-                        onClick={() =>
-                          setExpandedCells((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(cell.name)) next.delete(cell.name);
-                            else next.add(cell.name);
-                            return next;
-                          })
-                        }
-                      >
-                        {expandedCells.has(cell.name)
-                          ? "collapse"
-                          : `${res.rows ? `${res.rows.length} rows` : `${res.lines.length} lines`} — expand`}
-                      </button>
                     )}
                   </div>
                 )}

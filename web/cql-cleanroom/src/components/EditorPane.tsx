@@ -191,7 +191,16 @@ export function EditorPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [declared.join(",")]);
 
-  // Monaco mount (once)
+  // S13 root-cause fix: the plain-editor host is CONDITIONAL (unmounts in
+  // cell view). A mount-once effect captured the first div and never
+  // re-created the editor when a NEW div mounted after cells->text — the
+  // host stayed empty (0 children). Track the CURRENT div identity; the
+  // create effect re-runs whenever a new host attaches.
+  const [editorHostKey, setEditorHostKey] = useState(0);
+  const hostRefCallback = useCallback((el: HTMLDivElement | null) => {
+    editorDiv.current = el;
+    if (el) setEditorHostKey((k) => k + 1);
+  }, []);
   // Latest-callback ref for the mount-only Monaco listener.
   const onTextChangeRef = useRef(onTextChange);
   onTextChangeRef.current = onTextChange;
@@ -213,6 +222,13 @@ export function EditorPane({
       registerCQLLanguage(monaco);
       monacoRef.current = monaco;
       const model = getOrCreateModel(tabKeyRef.current);
+      // S13 Muse: cell-view edits flow through onTextChange but the cached
+      // Monaco model is only updated by the [text] sync effect WHILE the
+      // editor is mounted — on remount the model may hold stale text. Sync
+      // at attach so the editor always shows the current buffer.
+      if (model && model.getValue() !== textRef.current) {
+        model.setValue(textRef.current);
+      }
       const editor = monaco.editor.create(editorDiv.current, {
         model: model ?? undefined,
         value: model ? undefined : textRef.current,
@@ -255,9 +271,10 @@ export function EditorPane({
     return () => {
       disposed = true;
       editorRef.current?.dispose();
+      editorRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [editorHostKey]);
 
   // Tab switch: checkpoint the outgoing view state, swap to the
   // incoming model, restore its view state. Content stays in sync via
@@ -540,7 +557,7 @@ export function EditorPane({
           )}
         />
       ) : (
-        <div className="editor-host" data-testid="cql-editor" ref={editorDiv} />
+        <div className="editor-host" data-testid="cql-editor" ref={hostRefCallback} />
       )}
       {outlineOpen && (
         <div

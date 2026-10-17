@@ -1751,11 +1751,6 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
   font-size: 12px; font-family: var(--font-mono); white-space: pre-wrap;
 }
 
-.cell-out .cell-expand {
-  display: block; width: 100%; text-align: left; border: 0;
-  border-top: 1px dashed rgba(255,255,255,0.12); background: transparent;
-  color: inherit; padding: 4px 10px; cursor: pointer; font-size: 11px;
-}
 .cell-localbadge {
   position: absolute; top: 4px; right: 10px; font-size: 10px;
   padding: 1px 6px; border-radius: 8px;
@@ -1840,4 +1835,3 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
   opacity: 0.8;
   border-top: 1px dashed rgba(255,255,255,0.12);
 }
-.cell-out.collapsed .cell-table-wrap { display: none; }

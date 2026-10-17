@@ -14,9 +14,17 @@ let server: ChildProcess | null = null;
 test.beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "ccr-s11-"));
   await mkdir(join(dir, "cql"), { recursive: true });
+  await mkdir(join(dir, "data"), { recursive: true });
   await writeFile(
     join(dir, "cql", "CellLib.cql"),
-    "library CellLib version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n\n// # %% [name: IsAdult]\ndefine IsAdult: AgeInYearsAt(Today()) >= 18\n\n// # %% [name: Long]\ndefine Long:\n  1 = 1\n  and 2 = 2\n  and 3 = 3\n  and 4 = 4\n  and 5 = 5\n  and 6 = 6\n  and 7 = 7\n  and 8 = 8\n  and 9 = 9\n  and 10 = 10\n  and 11 = 11\n  and 12 = 12\n",
+    "library CellLib version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n\n// # %% [name: IsAdult]\ndefine IsAdult: AgeInYearsAt(Today()) >= 18\n\n// # %% [name: Long]\ndefine Long:\n  1 = 1\n  and 2 = 2\n  and 3 = 3\n  and 4 = 4\n  and 5 = 5\n  and 6 = 6\n  and 7 = 7\n  and 8 = 8\n  and 9 = 9\n  and 10 = 10\n  and 11 = 11\n  and 12 = 12\n\n// # %% [name: Combined]\ndefine Combined: IsAdult and true\n",
+    "utf8",
+  );
+  // Two patients so retrieving/boolean cells return populated rows.
+  await writeFile(
+    join(dir, "data", "patients.ndjson"),
+    '{"resourceType":"Patient","id":"p1","gender":"male","birthDate":"1980-05-01"}\n' +
+      '{"resourceType":"Patient","id":"p2","gender":"female","birthDate":"2015-03-10"}\n',
     "utf8",
   );
   server = spawn(
@@ -149,6 +157,12 @@ test("S12: cells -> text shows NON-EMPTY editor; toggle labels name the destinat
   await expect(host).toBeVisible();
   const box = await host.boundingBox();
   expect(box?.height ?? 0).toBeGreaterThan(100);
+  // S13: Monaco must ACTUALLY attach (the root cause was a mount-once
+  // effect bound to the first host div; the new div stayed empty).
+  const attached = await host.evaluate(
+    (el) => el.querySelectorAll(".monaco-editor").length,
+  );
+  expect(attached).toBeGreaterThan(0);
   const text = await host.textContent();
   expect((text ?? "").trim().length).toBeGreaterThan(0);
   await expect(toggle).toHaveText(/Cells ⇄/);
@@ -178,4 +192,30 @@ test("S12: cell run output renders a TABLE with headers", async ({ page }) => {
   expect(cls).toContain("cell-table-wrap");
   const out = table.locator("..");
   await expect(out.locator("pre")).toHaveCount(0);
+});
+
+test("S13: dep cells EACH show a populated table after running a dependents", async ({ page }) => {
+  await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(12000);
+  await page.locator('[data-testid="nav-toggle-libraries"]').click();
+  const libPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
+  await libPanel.locator(".nav-item", { hasText: "CellLib" }).first().click({ timeout: 15000 });
+  await expect(page.getByRole("tab", { name: /CellLib/i })).toBeVisible({ timeout: 15000 });
+  await page.waitForTimeout(3000);
+  const toggle = page.locator('[data-testid="cell-view-toggle"]');
+  if ((await toggle.getAttribute("aria-checked")) !== "true") await toggle.click();
+  await page.waitForTimeout(1000);
+  // Run the LAST cell (Combined -> closure includes IsAdult).
+  const n = await page.locator('[data-testid="cell-run"]').count();
+  await page.locator('[data-testid="cell-run"]').nth(n - 1).click();
+  await page.waitForTimeout(2000);
+  // BOTH cells show a POPULATED table (S13 item 2 pin — no collapse).
+  for (const cellName of ["Combined", "IsAdult"]) {
+    const card = page.locator(`[data-testid="cell-card"][data-cell="${cellName}"]`);
+    const table = card.locator('[data-testid="cell-table"]');
+    await expect(table).toBeVisible({ timeout: 30000 });
+    expect(await table.locator("tbody tr").count()).toBeGreaterThan(0);
+    // S13 item 1: results render expanded — no expand button anywhere.
+    await expect(card.locator(".cell-expand")).toHaveCount(0);
+  }
 });
