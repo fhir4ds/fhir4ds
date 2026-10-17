@@ -80,10 +80,12 @@ test("S11 narrow: cell editors size to CONTENT (long cell taller)", async ({ pag
     els.map((el) => el.getBoundingClientRect().height),
   );
   // Fixture: IsAdult (1 line), Long (13 lines), Combined (1 line).
+  // S15 auto-fit: 1-line cells ~35px (ONE-line min), 13-line ~263px.
   expect(heights.length).toBe(3);
   const longH = heights[1];
   for (const h of [heights[0], heights[2]]) expect(longH).toBeGreaterThan(h + 60);
   expect(longH).toBeGreaterThan(200);
+  for (const h of [heights[0], heights[2]]) expect(h).toBeLessThan(80);
 });
 
 test("S11 narrow: text <-> cells round-trip at 1000px", async ({ page }) => {
@@ -240,12 +242,15 @@ test("S14: many-define library — cards keep floor height, list scrolls, resize
   const toggle = page.locator('[data-testid="cell-view-toggle"]');
   if ((await toggle.getAttribute("aria-checked")) !== "true") await toggle.click();
   await page.waitForTimeout(1500);
-  // (4) 12 cards, EACH >= 160px tall (editor floor) — no slivers.
+  // S15 auto-fit: 12 one-line defines render ~35px each (one-line min).
   const heights = await page.locator('[data-testid="cell-monaco"]').evaluateAll((els) =>
     els.map((el) => el.getBoundingClientRect().height),
   );
   expect(heights).toHaveLength(12);
-  for (const h of heights) expect(h).toBeGreaterThanOrEqual(158);
+  for (const h of heights) {
+    expect(h).toBeGreaterThanOrEqual(30);
+    expect(h).toBeLessThan(90);
+  }
   // The LIST scrolls (total content exceeds the viewport).
   const scroll = await page.locator(".cell-list").evaluate(
     (el) => ({ s: el.scrollHeight, c: el.clientHeight }),
@@ -277,4 +282,39 @@ test("S14: many-define library — cards keep floor height, list scrolls, resize
   await page.waitForTimeout(1500);
   const restored = await page.locator('[data-testid="cell-monaco"]').first().evaluate((el) => el.getBoundingClientRect().height);
   expect(Math.abs(restored - persisted)).toBeLessThan(8);
+});
+
+test("S15: one-line auto-fit, 5-row results window, single-row toolbar, Run All/Clear All", async ({ page }) => {
+  await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(12000);
+  // Open the fixture library (3 cells: IsAdult, Long, Combined).
+  await page.locator('[data-testid="nav-toggle-libraries"]').click();
+  const libPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
+  await libPanel.locator(".nav-item", { hasText: "CellLib" }).first().click({ timeout: 15000 });
+  await expect(page.getByRole("tab", { name: /CellLib/i })).toBeVisible({ timeout: 15000 });
+  await page.waitForTimeout(3000);
+  // Toolbar: single row (nowrap) with ▶ Run All.
+  const toolbar = page.locator('.cell-toolbar');
+  if ((await toolbar.count()) === 0) {
+    const t0 = page.locator('[data-testid="cell-view-toggle"]');
+    if ((await t0.getAttribute("aria-checked")) !== "true") await t0.click();
+    await page.waitForTimeout(800);
+  }
+  await expect(page.locator('[data-testid="cell-runall"]')).toBeVisible();
+  const wrap = await page.locator('.cell-toolbar').evaluate((el) => getComputedStyle(el).flexWrap);
+  expect(wrap).toBe("nowrap");
+  // Run All: every cell produces a table (closure semantics per cell).
+  await page.locator('[data-testid="cell-runall"]').click();
+  const outs = page.locator('[data-testid="cell-table"]');
+  // Sequential Run All: wait until EVERY cell's table has rendered.
+  await expect(outs).toHaveCount(3, { timeout: 60000 });
+  // 5-row window: wrap scrolls only past 5 rows (2-patient fixture => 2
+  // rows => no vertical scroll needed).
+  const wrapScroll = await outs.first().evaluate((el) => ({
+    s: el.scrollHeight, c: el.clientHeight,
+  }));
+  expect(wrapScroll.s).toBeLessThanOrEqual(wrapScroll.c + 2);
+  // Clear All empties every output.
+  await page.locator('[data-testid="cell-clearall"]').click();
+  await expect(page.locator('[data-testid="cell-table"]')).toHaveCount(0);
 });

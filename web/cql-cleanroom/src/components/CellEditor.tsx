@@ -171,14 +171,10 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
     writeCellHeights(libraryKey, next);
   };
 
-  const naturalHeight = (name: string) =>
-    Math.min(
-      420,
-      Math.max(
-        160,
-        (cells.find((c) => c.name === name)?.text.split("\n").length ?? 1) * 19 + 16,
-      ),
-    );
+  const naturalHeight = (name: string) => {
+    const lines = cells.find((c) => c.name === name)?.text.split("\n").length ?? 1;
+    return Math.min(420, Math.max(19 + 16, lines * 19 + 16));
+  };
 
   const beginDrag = (name: string, startY: number) => {
     dragCell.current = { name, startY, startH: cellHeightsRef.current[name] ?? naturalHeight(name) };
@@ -186,7 +182,7 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
   const moveDrag = (e: React.PointerEvent) => {
     const d = dragCell.current;
     if (!d) return;
-    const next = Math.min(600, Math.max(160, d.startH + (e.clientY - d.startY)));
+    const next = Math.min(600, Math.max(35, d.startH + (e.clientY - d.startY)));
     persistHeights({ ...cellHeightsRef.current, [d.name]: next }, false);
   };
   const endDrag = () => {
@@ -216,6 +212,28 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
     <div className="cell-editor" data-testid="cell-editor">
       <div className="cell-toolbar" role="toolbar" aria-label="Cell controls">
 
+        <button
+          type="button"
+          className="cell-runall"
+          data-testid="cell-runall"
+          disabled={running !== null || !hasMarkers}
+          onClick={async () => {
+            // S15 Muse: SEQUENTIAL top-to-bottom (spec), one batch flag —
+            // no concurrent closures (races in setResults + premature
+            // running-clear), and per-cell result fan-out stays ordered.
+            setRunning("all");
+            try {
+              for (const c of cells) {
+                await runCell(c.name);
+              }
+            } finally {
+              setRunning(null);
+            }
+          }}
+          title="Run every cell top-to-bottom (each with its dependency closure)"
+        >
+          ▶ Run All
+        </button>
         {results.length > 0 && (
           <button
             type="button"
@@ -224,7 +242,7 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
             onClick={() => setResults([])}
             title="Clear all cell outputs"
           >
-            Clear all outputs
+            ✕ Clear All
           </button>
         )}
         {pinnedClosure && (
@@ -371,7 +389,7 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
                     aria-orientation="horizontal"
                     aria-label={`Resize ${cell.name}`}
                     aria-valuenow={cellHeights[cell.name] ?? naturalHeight(cell.name)}
-                    aria-valuemin={160}
+                    aria-valuemin={35}
                     aria-valuemax={600}
                     data-testid="cell-resize"
                     tabIndex={0}
@@ -390,7 +408,7 @@ export function CellEditor({ value, renderEditor, onRunCells, onAutoSplit, conne
                         persistHeights({ ...cellHeights, [cell.name]: Math.min(600, cur + 20) });
                       } else if (e.key === "ArrowUp") {
                         e.preventDefault();
-                        persistHeights({ ...cellHeights, [cell.name]: Math.max(160, cur - 20) });
+                        persistHeights({ ...cellHeights, [cell.name]: Math.max(35, cur - 20) });
                       } else if (e.key === "Enter") {
                         cycleHeight(cell.name);
                       }

@@ -697,13 +697,13 @@ function CellMonacoHost({
     if (editor && editor.getValue() !== text) editor.setValue(text);
   }, [text]);
 
-  // S14: uniform default sizes — identical content lengths render
-  // identical cards; long content scrolls INSIDE the editor (never
-  // shrinks the card). clamp(lines*19+16, 160 floor, 420 cap). A per-cell
-  // resize override (S14 drag handle) wins when present.
+  // S15: AUTO-FIT — N lines render N*lineHeight + padding exactly; typing
+  // grows/shrinks live (recomputed per render from the CURRENT text).
+  // Rider: the minimum is ONE line (empty/new cells render a single-line
+  // box); 420 cap keeps very long cells on internal scroll.
   const lines = Math.max(1, text.split("\n").length);
   const lineHeight = 19;
-  const natural = Math.min(420, Math.max(160, lines * lineHeight + 16));
+  const natural = Math.min(420, Math.max(lineHeight + 16, lines * lineHeight + 16));
   const height = overrideHeight ?? natural;
   return (
     <div
