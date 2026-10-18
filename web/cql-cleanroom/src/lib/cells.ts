@@ -60,6 +60,23 @@ export function splitCells(text: string): SplitResult {
   return { header: headerLines.join("\n"), cells };
 }
 
+/**
+ * S19: single composition authority — both App.runCells (execution) and
+ * CellEditor.runCell (run-context capture for evidence) build the exact
+ * same composed-closure library text through THIS helper. Never duplicate
+ * the recipe.
+ */
+export function composeCellClosure(
+  header: string,
+  cells: Array<{ name: string; text: string }>,
+  names: string[],
+): string {
+  return [
+    header,
+    ...names.map((n) => cells.find((c) => c.name === n)?.text ?? ""),
+  ].join("\n\n");
+}
+
 /** Split the editor buffer into [header, cellText, gap]* render chunks. */
 export interface EditorChunk {
   type: "header" | "cell";

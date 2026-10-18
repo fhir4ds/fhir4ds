@@ -3,7 +3,7 @@ import { groupDataset } from "./lib/datasetGroup";
 import { buildCellGraph } from "./lib/cell-deps";
 import { mergeDiskLibraries, mergeDiskValuesets, mergeDiskViews } from "./lib/navSections";
 import { useWorkspaceFiles } from "./lib/useWorkspaceFiles";
-import { splitCells } from "./lib/cells";
+import { composeCellClosure, splitCells } from "./lib/cells";
 import { PatientDetailPanel } from "./components/nav/PatientDetailPanel";
 import {
   BootOverlay,
@@ -19,6 +19,7 @@ import {
 import { EvidencePopover } from "./components/EvidencePopover";
 import { NavRail } from "./components/NavRail";
 import { coerceParam, detectParams, joinInterval } from "./lib/params";
+import { extractCqlSymbols } from "./lib/cqlSymbols";
 import { importMadiePackage } from "./lib/madiePackage";
 import { exportMadiePackage } from "./lib/madieExport";
 import {
@@ -1070,6 +1071,23 @@ export default function App() {
   // G1 invariant: measure surfaces (MR/funnel/expected) always pin to
   // the ENTRYPOINT library, never merely the edited tab.
   const mainLib = libraries[entrypoint] ?? active;
+
+  // S19: the measure mapping may reference defines from ANOTHER library
+  // (stale import, default measure vs CMS125 demo, etc.) — filter to
+  // expressions the CURRENT main library actually defines so evidence
+  // and population runs never request unknown output columns.
+  const effectiveOutputColumns = useMemo(() => {
+    const cols = outputColumnsFromMeasure(measure);
+    if (!cols) return null;
+    const declared = new Set(
+      extractCqlSymbols(mainLib?.text ?? "").defines.map((d) => d.name),
+    );
+    const filtered: Record<string, string> = {};
+    for (const [code, define] of Object.entries(cols)) {
+      if (declared.has(define)) filtered[code] = define;
+    }
+    return Object.keys(filtered).length ? filtered : null;
+  }, [measure, mainLib?.text]);
   // REORG 6j — runs follow the ACTIVE library tab: opening/executing a
   // specific library evaluates and displays THAT library's output.
   // Host tabs (measure/params/valuesets/…) and the hidden editor fall
@@ -1207,10 +1225,7 @@ export default function App() {
       if (!main) return out;
       const graph = buildCellGraph(main.text);
       const cells = splitCells(main.text).cells;
-      const composed = [
-        graph.header,
-        ...names.map((n) => cells.find((c) => c.name === n)?.text ?? ""),
-      ].join("\n\n");
+      const composed = composeCellClosure(graph.header, cells, names);
       const libs: LibraryText[] = [{ name: main.name, text: composed }];
       // S8 bug fix: NEVER ship synthetic fallback names (cell-N) to
       // output_columns. Only cells whose text carries a real define are
@@ -1409,7 +1424,7 @@ export default function App() {
         parameters: runtimeParameters,
         // 6j: non-entrypoint targets have no population defines — the
         // engine returns ALL of that library's defines instead.
-        output_columns: runIsEntrypoint ? outputColumns : undefined,
+        output_columns: runIsEntrypoint ? effectiveOutputColumns : undefined,
         emit_sql: true,
       });
       const env: EvaluateResult = resp.envelope
@@ -1561,7 +1576,7 @@ export default function App() {
     fire();
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mainLibs, main, evalDataset, outputColumns, measure, runtimeParameters, canAutoEval, recalcSeconds]);
+  }, [mainLibs, main, evalDataset, effectiveOutputColumns, measure, runtimeParameters, canAutoEval, recalcSeconds]);
 
   // M1 write-through: Measure.library[] mirrors the entrypoint pin —
   // primary first, then the dependency closure of that library (6f: the
@@ -2945,7 +2960,7 @@ export default function App() {
       main={main}
       dataset={evalDataset}
       parameters={runtimeParameters}
-      outputColumns={outputColumns}
+      outputColumns={effectiveOutputColumns}
       selection={consoleSelection}
       result={evalResult}
       baselineArtifact={baselineArtifact}
@@ -2970,30 +2985,52 @@ export default function App() {
     />
   );
 
-  const explainCellRow = async (patientId: string, define: string) => {
+  const explainCellRow = async (
+    patientId: string,
+    define: string,
+    context?: {
+      composedText?: string;
+      params?: Record<string, unknown>;
+      /** S19 Muse: local-computed runs explain through the worker even
+       *  while a server is connected (mirrors the S18 run-origin seam). */
+      computedLocally?: boolean;
+    },
+  ) => {
     setCellEvidence({ patientId, define, evidence: null });
+    // S19: explain EXACTLY the run's composition — the clicked row came
+    // from a composed-closure evaluation (App.runCells), so evidence must
+    // evaluate THAT library, not the full buffer (which may declare
+    // parameters/defines outside the closure and mismatch or error).
+    const explainText = context?.composedText ?? main.text;
+    const explainParams = context?.params ?? runtimeParameters;
+    // S19 Muse: keep the OTHER workspace libraries (includes) resolvable —
+    // only the main library's text is replaced with the run composition.
+    const explainLibs: LibraryText[] = [
+      { name: main.name, text: explainText },
+      ...mainLibs.filter((l) => l.name !== main.name),
+    ];
     try {
       let env: import("./lib/protocol").EvidenceResult;
-      if (serverMode.kind === "connected") {
+      if (serverMode.kind === "connected" && !context?.computedLocally) {
         const res = await fetch("/api/explain", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            libraries: mainLibs,
+            libraries: explainLibs,
             library: main.name,
             patient_id: patientId,
-            parameters: runtimeParameters,
+            parameters: explainParams,
           }),
         });
         env = (await res.json()) as import("./lib/protocol").EvidenceResult;
       } else {
         const resp = await workerRequest({
           type: "explain_patient",
-          libraries: mainLibs,
-          main,
+          libraries: explainLibs,
+          main: { name: main.name, text: explainText },
           dataset: evalDataset,
           patient_id: patientId,
-          parameters: runtimeParameters,
+          parameters: explainParams,
         });
         env = JSON.parse(resp.envelope) as import("./lib/protocol").EvidenceResult;
       }
@@ -3374,7 +3411,8 @@ export default function App() {
             onRun={runViaConsole}
             onRunCells={runCells}
             connected={serverMode.kind === "connected"}
-            onExplainRow={(pid, define) => void explainCellRow(pid, define)}
+            onExplainRow={(pid, define, ctx) => void explainCellRow(pid, define, ctx)}
+            parameters={runtimeParameters}
             cellEvidenceSlot={
               cellEvidence ? (
                 <EvidencePopover

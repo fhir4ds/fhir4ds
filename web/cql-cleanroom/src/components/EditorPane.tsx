@@ -42,10 +42,21 @@ interface Props {
   ) => Promise<Record<string, { ok: boolean; lines: string[] }>>;
   /** S5: connected (server) vs standalone — drives the local badge. */
   connected?: boolean;
-  /** S16 item 3: open the evidence popover for a (patient, define) row. */
-  onExplainRow?: (patientId: string, define: string) => void;
+  /** S16/S19: open the evidence popover for a row — carries the run's
+   *  composition + parameters so evidence matches the run exactly. */
+  onExplainRow?: (
+    patientId: string,
+    define: string,
+    context?: {
+      composedText?: string;
+      params?: Record<string, unknown>;
+      computedLocally?: boolean;
+    },
+  ) => void;
   /** S16 Muse: popover rendered inline in the active cell card. */
   cellEvidenceSlot?: React.ReactNode;
+  /** S19: current runtime parameters (stored on each cell run result). */
+  parameters?: Record<string, unknown>;
 }
 
 interface DiagnosticsRowProps {
@@ -98,6 +109,7 @@ export function EditorPane({
   connected,
   onExplainRow,
   cellEvidenceSlot,
+  parameters,
 }: Props) {
   const editorDiv = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<any>(null);
@@ -593,6 +605,7 @@ export function EditorPane({
           connected={connected ?? false}
           onExplainRow={onExplainRow}
           evidenceSlot={cellEvidenceSlot}
+          parameters={parameters}
           onToolbarControls={setCellControls}
           onRunCells={onRunCells}
           onAutoSplit={onAutoSplit}

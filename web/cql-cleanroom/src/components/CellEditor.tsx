@@ -18,7 +18,7 @@
  *   clears); Ctrl/Cmd+Enter runs the focused cell
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { splitCells } from "../lib/cells";
+import { composeCellClosure, splitCells } from "../lib/cells";
 import {
   buildCellGraph,
   dependencyClosure,
@@ -36,6 +36,11 @@ export interface CellResult {
   rows?: Array<Array<string>>;
   /** standalone (in-browser) execution badge */
   computedLocally?: boolean;
+  /** S19: the EXACT composed library text this cell's run evaluated —
+   *  evidence must explain the same composition, never the full buffer. */
+  composedText?: string;
+  /** S19: the parameters the run carried (evidence reuses them). */
+  params?: Record<string, unknown>;
   ts: number;
 }
 
@@ -74,8 +79,20 @@ interface CellEditorProps {
     onRunAll: () => void;
     onClearAll: () => void;
   }) => void;
-  /** S16 item 3: open the evidence popover for a (patient, define) row. */
-  onExplainRow?: (patientId: string, define: string) => void;
+  /** S16 item 3: open the evidence popover for a (patient, define) row.
+   *  S19: the row's run context (composed library + parameters) rides
+   *  along so the evidence explains EXACTLY what produced the rows. */
+  onExplainRow?: (
+    patientId: string,
+    define: string,
+    context?: {
+      composedText?: string;
+      params?: Record<string, unknown>;
+      computedLocally?: boolean;
+    },
+  ) => void;
+  /** S19: current runtime parameters (stored per run result). */
+  parameters?: Record<string, unknown>;
   /** S16 Muse: popover rendered INLINE in the active card (no app-top jump). */
   evidenceSlot?: React.ReactNode;
   /** Render one cell's Monaco editor (the host owns monaco-setup). */
@@ -99,7 +116,7 @@ interface CellEditorProps {
 
 const COACH_SEEN_KEY = "fhir4ds.cleanroom.cellCoachSeen";
 
-export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells, onAutoSplit, onExplainRow, evidenceSlot, connected }: CellEditorProps) {
+export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells, onAutoSplit, onExplainRow, evidenceSlot, connected, parameters }: CellEditorProps) {
   // S8 directive 3: RunMode REMOVED — every Run executes the cell's
   // dependency closure (one behavior per cell).
   const [results, setResults] = useState<CellResult[]>([]);
@@ -130,6 +147,9 @@ export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells,
       try {
         const names = dependencyClosure(name, graph.refs, new Set(graph.order));
         const out = await onRunCells(names, "cell_deps");
+        // S19: capture the EXACT composition this run evaluated — via the
+        // shared composeCellClosure helper (single composition authority).
+        const composedText = composeCellClosure(graph.header, cells, names);
         setResults((prev) => [
           ...prev.filter((r) => !names.includes(r.cell)),
           ...names.map((n) => ({
@@ -139,6 +159,8 @@ export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells,
             columns: out[n]?.columns,
             rows: out[n]?.rows,
             computedLocally: !connected,
+            composedText,
+            params: parameters,
             ts: Date.now(),
           })),
         ]);
@@ -146,7 +168,7 @@ export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells,
         setRunning(null);
       }
     },
-    [graph, onRunCells, connected],
+    [graph, cells, onRunCells, connected, parameters],
   );
 
   // Esc clears the pinned closure (and coach mark); Ctrl/Cmd+Enter runs
@@ -379,7 +401,12 @@ export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells,
                                   aria-label={clickable ? `Evidence for ${pid}` : undefined}
                                   onClick={
                                     clickable
-                                      ? () => onExplainRow?.(pid, cell.name)
+                                      ? () =>
+                                          onExplainRow?.(pid, cell.name, {
+                                            composedText: res.composedText,
+                                            params: res.params,
+                                            computedLocally: res.computedLocally,
+                                          })
                                       : undefined
                                   }
                                   onKeyDown={
@@ -387,7 +414,10 @@ export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells,
                                       ? (e) => {
                                           if (e.key === "Enter" || e.key === " ") {
                                             e.preventDefault();
-                                            onExplainRow?.(pid, cell.name);
+                                            onExplainRow?.(pid, cell.name, {
+                                              composedText: res.composedText,
+                                              params: res.params,
+                                            });
                                           }
                                         }
                                       : undefined
