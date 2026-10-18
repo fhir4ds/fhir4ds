@@ -648,6 +648,13 @@ export default function App() {
   // c-cleanroom-redo S1: connected mode (additive; standalone = zero server
   // calls — automated e2e guards this). Server is terminology provider only.
   const [serverMode, setServerMode] = useState<ServerMode>({ kind: "standalone" });
+  // S21: latest serverMode for call-time reads inside async restore.
+  const serverModeRef = useRef(serverMode);
+  serverModeRef.current = serverMode;
+  // S21 Muse: server detection is a boot prerequisite — the restore
+  // effect awaits it so serverModeRef is accurate before deciding
+  // whether IndexedDB CONTENT may restore (detect races loadWorkspace).
+  const serverDetectedRef = useRef<Promise<ServerMode> | null>(null);
   const [umlsReady, setUmlsReady] = useState(false);
   // Rider #2: per-field env-present flags from /health (booleans only).
   const [envFieldSet, setEnvFieldSet] = useState<{
@@ -728,7 +735,9 @@ export default function App() {
   }, [serverMode.kind]);
   useEffect(() => {
     let cancelled = false;
-    void detectServer().then((m) => {
+    const detected = detectServer();
+    serverDetectedRef.current = detected;
+    void detected.then((m) => {
       if (cancelled) return;
       setServerMode(m);
       if (m.kind === "connected") {
@@ -951,8 +960,32 @@ export default function App() {
       setRestored(true);
       return;
     }
-    loadWorkspace()
+    void Promise.resolve(serverDetectedRef.current)
+      .catch(() => serverModeRef.current)
+      .then(() => loadWorkspace())
       .then((ws) => {
+        // S21 storage doctrine: on CONNECTED sessions the browser store
+        // may hold chrome only (content autosave is standalone-gated);
+        // a stale pre-connect workspace snapshot must NOT resurrect as
+        // the live content. Awaits server detection so the mode is
+        // accurate at decision time. Chrome-only restores (prefs/run
+        // history) still apply below via the pref branches.
+        if (
+          serverModeRef.current?.kind === "connected" &&
+          ws?.libraries?.length
+        ) {
+          // skip content restore; keep chrome (prefs are read below from
+          // the same object, so fall through with content cleared).
+          ws = {
+            ...ws,
+            libraries: [],
+            dataset: null,
+            measures: [],
+            expectedReports: {},
+            viewDefs: [],
+            terminology: { valuesets: [] },
+          } as typeof ws;
+        }
         if (ws?.libraries?.length) {
           setLibraries(ws.libraries);
           setActiveTab(0);
@@ -1046,12 +1079,18 @@ export default function App() {
 
   useEffect(() => {
     if (!restored) return;
+    // S21 storage doctrine: STANDALONE persists the full workspace;
+    // CONNECTED persists CHROME ONLY (prefs, run history, active tab —
+    // INV-4) with content fields emptied (server disk is the source of
+    // truth; a reconnecting session must not resurrect stale content).
+    const connected = serverMode.kind === "connected";
     const t = setTimeout(() => {
       saveWorkspace({
-        libraries,
-        dataset: dataset?.resources?.length
-          ? { resources: dataset.resources as unknown[] }
-          : null,
+        libraries: connected ? [] : libraries,
+        dataset:
+          connected || !dataset?.resources?.length
+            ? null
+            : { resources: dataset.resources as unknown[] },
         // Legacy cases stay in sync with authored expectedReports
         // (v5 zip interop); the reports themselves are first-class.
         cases: expectedReports[activeMeasureEntry?.id ?? ""]?.length
@@ -1062,19 +1101,20 @@ export default function App() {
         prefs: {
           layout: { col1Fr, consolePlacement, editorFr, recalcSeconds },
         },
-        measures,
-        activeMeasureId,
-        expectedReports,
-        viewDefs,
-        paramValues,
-        viewConfig,
+        measures: connected ? [] : measures,
+        activeMeasureId: connected ? null : activeMeasureId,
+        expectedReports: connected ? {} : expectedReports,
+        viewDefs: connected ? [] : viewDefs,
+        paramValues: connected ? {} : paramValues,
+        viewConfig: connected ? null : viewConfig,
         runHistory,
         activeTabPref: consoleTab,
-        terminology,
+        terminology: connected ? { valuesets: [] } : terminology,
       }).catch(() => undefined);
     }, 800);
     return () => clearTimeout(t);
   }, [
+    serverMode.kind,
     libraries,
     dataset,
     measures,
