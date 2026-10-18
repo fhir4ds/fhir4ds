@@ -128,6 +128,7 @@ export function ResultsConsole({
   /** Manual runs (Run button / Ctrl+Enter) land in App's ring. */
   onManualRun: (p: {
     mode: "library" | "selection";
+    origin?: "server" | "browser";
     library: string;
     cql: string;
     ok: boolean;
@@ -203,6 +204,7 @@ export function ResultsConsole({
       // history write; the new entry overrides the displayed result.
       onManualRun({
         mode,
+        origin: 'browser',  // this run path IS the worker
         library: main.name,
         cql: env.cql ?? main.text,
         ok: !!env.ok,
@@ -222,21 +224,28 @@ export function ResultsConsole({
   runRef.current = run;
 
   // Cell-level evidence drill-in for the live results table.
+  // S18: latest displayRun for call-time reads inside async explain.
+  const displayRunRef = useRef(displayRun);
+  displayRunRef.current = displayRun;
   const [cellEvidence, setCellEvidence] = useState<{
     patientId: string;
     population: string;
     evidence: EvidenceResult | null;
   } | null>(null);
 
-  async function explainCell(patientId: string, population: string) {
+  const explainCell = async (patientId: string, population: string) => {
     setCellEvidence({ patientId, population, evidence: null });
+    // S18: displayRun payload is read at CALL time (defined below at
+    // render; closure captures the latest via function ref).
+    const runPayload = displayRunRef.current?.payload as { origin?: string } | null | undefined;
     try {
-      // S16 item 4: CONNECTED mode explains against the SERVER (the rows
-      // shown came from the server; the worker path sees only the browser
-      // dataset and fails on required parameters). /api/explain merges
-      // workspace Parameters-resource defaults server-side.
+      // S18 fix: explain follows the RUN'S ORIGIN, not the connection
+      // state — a browser-origin run (default dataset p1/p2 rows) must
+      // explain through the worker even while connected; a server-origin
+      // run uses /api/explain (which merges workspace parameter defaults).
       let env: EvidenceResult;
-      if (connected) {
+      const runOrigin = runPayload?.origin;
+      if (connected && runOrigin === "server") {
         const res = await fetch("/api/explain", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -285,7 +294,7 @@ export function ResultsConsole({
         },
       });
     }
-  }
+  };
 
   // Diff chips + per-cell diff classes describe the LATEST run; a
   // pinned historical run renders plain (its diff window has moved on).

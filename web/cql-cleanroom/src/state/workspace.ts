@@ -41,6 +41,8 @@ export const WORKSPACE_SCHEMA_VERSION = 7;
  *  carry the synthesized `__snippet__` wrapper text as `cql`. */
 export interface RunEntryPayload {
   mode: "library" | "selection";
+  /** S18: which engine produced this run — drives the explain seam. */
+  origin?: "server" | "browser";
   /** 6j: which library this run executed (active-tab targeting). */
   library?: string;
   cql: string;

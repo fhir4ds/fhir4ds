@@ -41,6 +41,12 @@ export function exportMadiePackage(opts: {
   primaryName: string;
   measure: Record<string, unknown>;
   valuesets?: Array<Record<string, unknown>>;
+  /** S18 rider-2: cleanroom extras ride along (views, expected
+   *  MeasureReports, Parameters resources) — MADiE re-import tolerates
+   *  them (S17 robustness verdict). */
+  views?: Array<Record<string, unknown>>;
+  expectedReports?: Array<Record<string, unknown>>;
+  parameters?: Record<string, unknown>;
 }): Uint8Array {
   const { measure } = opts;
   // 1. Closure of the primary (client-side include walk).
@@ -104,6 +110,31 @@ export function exportMadiePackage(opts: {
     if (!url || !referenced.has(url)) continue;
     const id = typeof vs.id === "string" && vs.id ? vs.id : url.split(/[/:]/).filter(Boolean).pop() ?? "vs";
     files[`resources/valueset-${id}.json`] = enc(JSON.stringify(vs, null, 2));
+  }
+
+  // 5. S18 rider-2: cleanroom extras ride along under resources/extras/ —
+  // the MADiE-required layout stays intact at its expected paths and the
+  // importer ignores/absorbs them harmlessly (S17 robustness verdict).
+  (opts.views ?? []).forEach((v, i) => {
+    const id = typeof v.id === "string" && v.id ? v.id : `view-${i + 1}`;
+    files[`resources/extras/view-${id}.json`] = enc(JSON.stringify(v, null, 2));
+  });
+  (opts.expectedReports ?? []).forEach((mr, i) => {
+    files[`resources/extras/expected-measurereport-${i + 1}.json`] = enc(
+      JSON.stringify(mr, null, 2),
+    );
+  });
+  if (opts.parameters && Object.keys(opts.parameters).length) {
+    const paramResource = {
+      resourceType: "Parameters",
+      parameter: Object.entries(opts.parameters).map(([name, value]) => ({
+        name,
+        value,
+      })),
+    };
+    files["resources/extras/parameters.json"] = enc(
+      JSON.stringify(paramResource, null, 2),
+    );
   }
 
   return zipSync(files);

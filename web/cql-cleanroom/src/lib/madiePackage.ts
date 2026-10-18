@@ -27,6 +27,13 @@ export interface MadiePackage {
   /** Primary library name (Measure.library[0] resolution). */
   primary: string | null;
   warnings: string[];
+  /** S18 Muse: cleanroom extras (resources/extras/) — full-workspace
+   *  round-trip: views, expected MeasureReports, Parameters. */
+  extras: {
+    views: Array<Record<string, unknown>>;
+    expectedReports: Array<Record<string, unknown>>;
+    parameters: Record<string, unknown> | null;
+  };
 }
 
 function libNameFromCql(text: string): string | null {
@@ -135,5 +142,27 @@ export function importMadiePackage(bytes: Uint8Array): MadiePackage {
     }
   }
 
-  return { libraries, measure, primary, warnings };
+  // 6. S18 Muse: unpack cleanroom extras (resources/extras/) so a saved
+  // full-workspace package round-trips views, expected reports, params.
+  const extras = { views: [] as Array<Record<string, unknown>>, expectedReports: [] as Array<Record<string, unknown>>, parameters: null as Record<string, unknown> | null };
+  for (const key of Object.keys(files)) {
+    if (!key.startsWith("resources/extras/")) continue;
+    try {
+      const parsed = JSON.parse(decode(files[key])) as Record<string, unknown>;
+      if (key.includes("view-")) extras.views.push(parsed);
+      else if (key.includes("expected-measurereport-")) extras.expectedReports.push(parsed);
+      else if (key.endsWith("parameters.json")) {
+        const param = (parsed.parameter as Array<{ name?: string; value?: unknown }> | undefined) ?? [];
+        const out: Record<string, unknown> = {};
+        for (const entry of param) {
+          if (entry && typeof entry.name === "string") out[entry.name] = entry.value;
+        }
+        extras.parameters = out;
+      }
+    } catch {
+      warnings.push(`${key}: invalid JSON — skipped`);
+    }
+  }
+
+  return { libraries, measure, primary, warnings, extras };
 }

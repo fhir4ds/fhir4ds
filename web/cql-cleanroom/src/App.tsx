@@ -38,7 +38,6 @@ import { TestsPane } from "./components/TestsPane";
 import { DatasetPane } from "./components/DatasetPane";
 import { ResourceBuilderPane } from "./components/ResourceBuilderPane";
 import {
-  exportBundle,
   importBundle,
   mergeDatasets,
 } from "./lib/bundleIo";
@@ -113,7 +112,6 @@ import type {
 import { deriveCompare } from "./lib/verifyCompare";
 import {
   clearWorkspace,
-  exportWorkspaceZip,
   importWorkspaceZip,
   loadWorkspace,
   newLibraryId,
@@ -769,6 +767,50 @@ export default function App() {
 
   const fileRef = useRef<HTMLInputElement | null>(null);
   const madieFileRef = useRef<HTMLInputElement | null>(null);
+  // S18 rider: MADiE TEST-CASE zip import (File > Open). Connected mode
+  // posts to /api/madie/import-tests (workspace data/ + expected store);
+  // standalone reports a typed pointer to connect a server.
+  const madieTestsFileRef = useRef<HTMLInputElement | null>(null);
+  const importMadieTestsZip = async (file: File) => {
+    if (serverMode.kind !== "connected") {
+      setStatusNote("MADiE test-case import needs a connected server workspace (File > Open works once a devserver serves this page)");
+      return;
+    }
+    try {
+      const b64 = await new Promise<string>((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => {
+          const s = String(fr.result);
+          resolve(s.slice(s.indexOf(",") + 1));
+        };
+        fr.onerror = () => reject(fr.error);
+        fr.readAsDataURL(file);
+      });
+      const res = await fetch("/api/madie/import-tests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ zip_base64: b64 }),
+      });
+      const j = (await res.json()) as {
+        data?: { ok?: boolean; cases?: string[]; expected?: string[]; diagnostics?: { message?: string }[] };
+        ok?: boolean;
+        diagnostics?: { message?: string }[];
+      };
+      const d = (j?.data ?? j) as {
+        ok?: boolean;
+        cases?: string[];
+        expected?: string[];
+        diagnostics?: { message?: string }[];
+      } | undefined;
+      if (d?.ok === false) {
+        setStatusNote(`test-case import failed: ${d?.diagnostics?.[0]?.message ?? "unknown"}`);
+        return;
+      }
+      setStatusNote(`imported test cases: ${d?.cases?.length ?? 0} cases, ${d?.expected?.length ?? 0} expectations (restart kernel to load data)`);
+    } catch (e) {
+      setStatusNote(`test-case import failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
 
   // Built-in eCQM example (CMS69 conformance bundle: 62 patients,
   // 22 ValueSets, real CQL). Loaded from public/examples/.
@@ -1324,6 +1366,29 @@ export default function App() {
         setStatusNote(
           `server run — ${b.patient_count} patients (${main.name})`,
         );
+        // S18: the server run appends its OWN history entry (rows from
+        // the SERVER dataset) so replay + evidence drill-in use the
+        // correct origin seam.
+        const serverEntry: RunEntry = {
+          id: newRunId(),
+          name: defaultRunName(Date.now()),
+          createdAt: Date.now(),
+          libraryHash: "",
+          datasetHash: "",
+          artifact: artifactFromRows(b.rows ?? [], b.columns ?? []),
+          payload: {
+            mode: "library",
+            origin: "server",
+            library: main.name,
+            cql: main.text,
+            rows: b.rows ?? [],
+            columns: b.columns ?? [],
+            column_types: b.column_types,
+            ms: b.timing_ms?.evaluate ?? null,
+          },
+        };
+        setRunHistory((h) => appendRun(h, serverEntry, RUN_HISTORY_CAP));
+        setSelectedRunId(serverEntry.id);
       } catch (err) {
         if (seq === evalSeqRef.current) {
           setStatusNote(
@@ -1383,6 +1448,7 @@ export default function App() {
           // render from the run's own snapshot, not live state.
           payload: {
             mode: "library",
+            origin: "browser", // this entry IS the worker run
             library: runLib.name,
             cql: main.text,
             sql: env.sql,
@@ -1458,6 +1524,7 @@ export default function App() {
               artifact: null,
               payload: {
                 mode: "library",
+                origin: "browser", // worker-failure entry IS browser-origin
                 library: runLib.name,
                 cql: main.text,
                 diags: env.diagnostics ?? [],
@@ -1595,6 +1662,10 @@ export default function App() {
         primaryName,
         measure,
         valuesets: terminology.valuesets,
+        // S18 rider-2: full-workspace carrier — extras ride along.
+        views: viewDefs.map((v) => v.resource ?? { resourceType: "ViewDefinition", id: v.id, name: v.name }),
+        expectedReports: (expectedReports[activeMeasureEntry?.id ?? ""] ?? []) as Array<Record<string, unknown>>,
+        parameters: paramValues,
       });
       const blob = new Blob([bytes as unknown as BlobPart], { type: "application/zip" });
       const url = URL.createObjectURL(blob);
@@ -1619,7 +1690,10 @@ export default function App() {
     try {
       const pkg = importMadiePackage(new Uint8Array(await file.arrayBuffer()));
       if (!pkg.libraries.length) {
-        setStatusNote("package contained no readable CQL libraries");
+        // S18 rider: typed rejection with the File > Add pointer.
+        setStatusNote(
+          "not a MADiE measure package (no cql/*.cql entries) — for bundles or individual resources use File > Add (merge)",
+        );
         return;
       }
       const nextLibs = withLibraryIds(
@@ -1637,6 +1711,18 @@ export default function App() {
       ]);
       setActiveMeasureId(msrId);
       setExpectedReports((er) => ({ ...er, [msrId]: [] }));
+      // S18 Muse: full-workspace round-trip — restore the extras.
+      if (pkg.extras.views.length) setViewDefs(pkg.extras.views.map((v, i) => ({ id: String(v.id ?? `view_${i}`), name: String(v.name ?? v.id ?? `View ${i + 1}`), resource: v })));
+      if (pkg.extras.expectedReports.length) {
+        setExpectedReports((er) => ({ ...er, [msrId]: pkg.extras.expectedReports }));
+      }
+      if (pkg.extras.parameters) {
+        const restored: Record<string, string> = {};
+        for (const [k, v] of Object.entries(pkg.extras.parameters)) {
+          restored[k] = v == null ? "" : String(v);
+        }
+        setParamValues((pv) => ({ ...pv, ...restored }));
+      }
       if (pkg.warnings.length) {
         setStatusNote(`imported with ${pkg.warnings.length} warning(s): ${pkg.warnings[0]}`);
       } else {
@@ -1647,61 +1733,11 @@ export default function App() {
     }
   };
 
-  const exportZip = () => {
-    const bytes = exportWorkspaceZip({
-      libraries,
-      dataset: dataset?.resources?.length
-        ? { resources: dataset.resources as unknown[] }
-        : null,
-      cases: expectedReports[activeMeasureEntry?.id ?? ""]?.length
-        ? (casesFromReports(
-            expectedReports[activeMeasureEntry?.id ?? ""],
-          ) as unknown[])
-        : null,
-      prefs: {},
-      measures,
-      activeMeasureId,
-      expectedReports,
-      viewDefs,
-      paramValues,
-      viewConfig,
-      runHistory,
-      activeTabPref: consoleTab,
-      terminology,
-    });
-    const blob = new Blob([bytes as unknown as BlobPart], {
-      type: "application/zip",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "cql-cleanroom-workspace.zip";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+
 
   // §3.4 Bundle export/import for the dataset.
   const bundleFileRef = useRef<HTMLInputElement | null>(null);
-  const exportBundleFile = () => {
-    const resources = (dataset?.resources ?? []) as Array<
-      Record<string, unknown>
-    >;
-    if (!resources.length) {
-      setStatusNote("nothing to export: dataset is empty");
-      return;
-    }
-    const bundle = exportBundle(resources);
-    const url = URL.createObjectURL(
-      new Blob([JSON.stringify(bundle, null, 2)], {
-        type: "application/fhir+json",
-      }),
-    );
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "cleanroom-dataset-bundle.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+
 
   // 6i.1: bundle import mode is a property of the ACTION (File > Open =
   // replace, File > Add / nav imports = merge), not a Settings toggle —
@@ -2304,6 +2340,7 @@ export default function App() {
   // async-hash-patch flow as the heartbeat.
   const appendManualRun = (p: {
     mode: "library" | "selection";
+    origin?: "server" | "browser";
     library: string;
     cql: string;
     ok: boolean;
@@ -2325,6 +2362,7 @@ export default function App() {
         : null,
       payload: {
         mode: p.mode,
+        origin: p.origin ?? "browser",
         library: p.library,
         cql: p.cql,
         sql: p.sql,
@@ -2988,32 +3026,21 @@ export default function App() {
               separate. Open/Save/Examples are hover flyouts. */}
           <DropdownMenu label="File" testId="file-menu">
             <DropdownSubmenu label="Open" testId="file-open">
-              <button
-                className="dropdown-item"
-                data-testid="workspace-import"
-                onClick={() => {
-                  fileRef.current?.click();
-                }}
-              >
-                Workspace zip…
-              </button>
-              <button
-                className="dropdown-item"
-                data-testid="bundle-import"
-                onClick={() => {
-                  bundleModeRef.current = "replace";
-                  bundleFileRef.current?.click();
-                }}
-                title="replaces the dataset with the bundle's resources"
-              >
-                FHIR Bundle… (replaces dataset)
-              </button>
+              {/* S18 rider: Open is MADiE-zip ONLY for compatibility —
+                  generic bundles/resources import via File > Add. */}
               <button
                 className="dropdown-item"
                 data-testid="madie-import"
                 onClick={() => madieFileRef.current?.click()}
               >
                 Measure package (MADiE)…
+              </button>
+              <button
+                className="dropdown-item"
+                data-testid="madie-tests-import"
+                onClick={() => madieTestsFileRef.current?.click()}
+              >
+                Test cases (MADiE)…
               </button>
               <DropdownSubmenu label="Examples" testId="file-examples">
                 <NativeClickButton
@@ -3038,26 +3065,15 @@ export default function App() {
               </button>
             </DropdownSubmenu>
             <DropdownSubmenu label="Save" testId="file-save">
-              <button
-                className="dropdown-item"
-                data-testid="workspace-export"
-                onClick={exportZip}
-              >
-                Workspace zip
-              </button>
-              <button
-                className="dropdown-item"
-                data-testid="bundle-export"
-                onClick={exportBundleFile}
-              >
-                FHIR Bundle
-              </button>
+              {/* S18 rider: Save exports the MADiE package-zip layout —
+                  the full workspace carrier (MADiE-required entries at
+                  their paths + cleanroom extras under resources/extras/). */}
               <button
                 className="dropdown-item"
                 data-testid="madie-export"
                 onClick={exportMadieZip}
               >
-                Measure package (MADiE)
+                Measure package (MADiE, full workspace)
               </button>
             </DropdownSubmenu>
             <div className="dropdown-sep" />
@@ -3162,6 +3178,18 @@ export default function App() {
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) void importMadieZip(f);
+              e.target.value = "";
+            }}
+          />
+          <input
+            ref={madieTestsFileRef}
+            type="file"
+            accept=".zip"
+            hidden
+            data-testid="madie-tests-import-input"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void importMadieTestsZip(f);
               e.target.value = "";
             }}
           />

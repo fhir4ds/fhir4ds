@@ -507,16 +507,8 @@ export function EditorPane({
             {graphOpen ? "▾" : "▸"} Visual editor
           </button>
         )}
-        <button
-          className="drawer-toggle"
-          data-testid="editor-outline"
-          title="symbols in this library — click to jump"
-          onClick={() => setOutlineOpen((o) => !o)}
-        >
-          {outlineOpen ? "▾" : "▸"} Outline
-        </button>
         {onRunCells && cellViewOpen && (
-          <>
+          <div className="editor-actions-cluster" role="group" aria-label="Run actions">
             <button
               type="button"
               className="drawer-toggle"
@@ -538,7 +530,7 @@ export function EditorPane({
                 ✕ Clear All
               </button>
             )}
-          </>
+          </div>
         )}
         {onRunCells && (
           <button
@@ -572,6 +564,14 @@ export function EditorPane({
             {cellViewOpen ? "Text ⇄" : "Cells ⇄"}
           </button>
         )}
+        <button
+          className="drawer-toggle"
+          data-testid="editor-outline"
+          title="symbols in this library — click to jump"
+          onClick={() => setOutlineOpen((o) => !o)}
+        >
+          {outlineOpen ? "▾" : "▸"} Outline
+        </button>
         {onRun && !(cellViewOpen && onRunCells) && (
           <button
             className="editor-run-btn"
