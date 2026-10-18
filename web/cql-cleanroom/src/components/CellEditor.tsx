@@ -93,8 +93,8 @@ interface CellEditorProps {
   ) => void;
   /** S19: current runtime parameters (stored per run result). */
   parameters?: Record<string, unknown>;
-  /** S16 Muse: popover rendered INLINE in the active card (no app-top jump). */
-  evidenceSlot?: React.ReactNode;
+  /** S20: popover factory — renders only for the clicked cell's card. */
+  evidenceSlotFactory?: (cellName: string) => React.ReactNode;
   /** Render one cell's Monaco editor (the host owns monaco-setup). */
   renderEditor: (
     cell: { name: string; text: string; order: number },
@@ -116,7 +116,7 @@ interface CellEditorProps {
 
 const COACH_SEEN_KEY = "fhir4ds.cleanroom.cellCoachSeen";
 
-export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells, onAutoSplit, onExplainRow, evidenceSlot, connected, parameters }: CellEditorProps) {
+export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells, onAutoSplit, onExplainRow, evidenceSlotFactory, connected, parameters }: CellEditorProps) {
   // S8 directive 3: RunMode REMOVED — every Run executes the cell's
   // dependency closure (one behavior per cell).
   const [results, setResults] = useState<CellResult[]>([]);
@@ -436,7 +436,7 @@ export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells,
                             showing {CELL_TABLE_ROW_CAP} of {res.rows.length} rows
                           </div>
                         )}
-                        {evidenceSlot}
+                        {evidenceSlotFactory?.(cell.name)}
                       </div>
                     ) : null}
                     {!(res.columns && res.columns.length > 0 && res.rows) && (

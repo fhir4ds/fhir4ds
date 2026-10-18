@@ -21,8 +21,13 @@ export function DatasetPane({
   focusedPid,
   onFocusedPidChange,
   filter,
+  serverPatientIds,
 }: {
   dataset: DatasetSpec | null;
+  /** S20: connected mode — the SERVER workspace roster (what the kernel
+   *  actually evaluates). Shown as a banner; the list below remains the
+   *  browser store (standalone's live dataset). */
+  serverPatientIds?: string[] | null;
   /** Focused patient group key (null = L2 list); detail renders beside. */
   focusedPid: string | null;
   onFocusedPidChange: (pid: string | null) => void;
@@ -51,6 +56,30 @@ export function DatasetPane({
 
   return (
     <section className="dataset-pane" data-testid="dataset-pane">
+      {serverPatientIds && serverPatientIds.length > 0 && (
+        <>
+          <div
+            className="pane-hint"
+            data-testid="dataset-source-banner"
+            role="status"
+            style={{ padding: "6px 10px" }}
+          >
+            Live dataset: server workspace ({serverPatientIds.length}{" "}
+            patient{serverPatientIds.length === 1 ? "" : "s"}) — the rows below
+            are the patients the kernel evaluates.
+          </div>
+          <div className="ds-server-roster" data-testid="ds-server-roster">
+            {serverPatientIds.slice(0, 50).map((pid) => (
+              <div key={pid} className="ds-roster-row" data-testid="ds-roster-row">
+                {pid}
+              </div>
+            ))}
+            {serverPatientIds.length > 50 && (
+              <div className="ds-roster-row">+ {serverPatientIds.length - 50} more…</div>
+            )}
+          </div>
+        </>
+      )}
       {dataset && (dataset.resources?.length ?? 0) > 0 && (
         <div className="dataset-tree" data-testid="dataset-tree">
           {groups

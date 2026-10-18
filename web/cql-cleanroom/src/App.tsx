@@ -668,8 +668,34 @@ export default function App() {
     define: string;
     evidence: import("./lib/protocol").EvidenceResult | null;
   } | null>(null);
+  // S20: the popover renders ONLY in the clicked cell's card — keyed by
+  // (cellName, patientId) so opening cell A's evidence never bleeds into
+  // cell B (single-slot state + per-card key check at render).
+  const cellEvidenceKey = cellEvidence
+    ? `${cellEvidence.define}::${cellEvidence.patientId}`
+    : null;
   // S6: disk trees feed the TYPE drawers (Workspace rail dissolves).
   const wsFiles = useWorkspaceFiles(serverMode.kind === "connected");
+  // S20: the SERVER workspace's patient roster (the dataset the kernel
+  // actually evaluates in connected mode) — display surfaces label with
+  // it; standalone surfaces address the browser store.
+  const [serverPatientIds, setServerPatientIds] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (serverMode.kind !== "connected") {
+      setServerPatientIds(null);
+      return;
+    }
+    let cancelled = false;
+    void fetch("/api/patients")
+      .then((r) => r.json())
+      .then((b: { patients?: string[] }) => {
+        if (!cancelled) setServerPatientIds(b?.patients ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [serverMode.kind, wsFiles.loading, wsChanged.size]);
   // Watcher reload hook-up (the WS effect's closure would go stale —
   // keep the latest reload on a ref).
   const wsFilesReloadRef = useRef<(() => void) | null>(null);
@@ -1379,7 +1405,7 @@ export default function App() {
         b.evaluated_at = Date.now();
         setEvalResult(b);
         setStatusNote(
-          `server run — ${b.patient_count} patients (${main.name})`,
+          `server run — ${b.patient_count} patients from the server workspace dataset (${main.name})`,
         );
         // S18: the server run appends its OWN history entry (rows from
         // the SERVER dataset) so replay + evidence drill-in use the
@@ -3370,6 +3396,7 @@ export default function App() {
           testsSlot={
             <DatasetPane
               dataset={dataset}
+              serverPatientIds={serverPatientIds}
               focusedPid={focusedPid}
               onFocusedPidChange={setFocusedPid}
               filter={navFilters.tests}
@@ -3413,8 +3440,8 @@ export default function App() {
             connected={serverMode.kind === "connected"}
             onExplainRow={(pid, define, ctx) => void explainCellRow(pid, define, ctx)}
             parameters={runtimeParameters}
-            cellEvidenceSlot={
-              cellEvidence ? (
+            cellEvidenceSlot={(cellName: string) =>
+              cellEvidence && cellEvidenceKey === `${cellName}::${cellEvidence.patientId}` ? (
                 <EvidencePopover
                   evidence={cellEvidence.evidence}
                   patientId={cellEvidence.patientId}
@@ -3540,6 +3567,7 @@ export default function App() {
               testsSlot={
                 <TestsPane
                   dataset={evalDataset}
+                  serverPatientIds={serverPatientIds}
                   populationCodes={populationCodes}
                   expectedValues={expectedValues}
                   onExpectedValuesChange={updateExpectedValues}

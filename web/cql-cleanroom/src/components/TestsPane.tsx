@@ -22,6 +22,7 @@ interface ExpectedMap {
 
 export function TestsPane({
   dataset,
+  serverPatientIds,
   populationCodes,
   expectedValues,
   onExpectedValuesChange,
@@ -30,6 +31,9 @@ export function TestsPane({
   hasCurrentResult,
 }: {
   dataset: { resources?: Record<string, unknown>[] } | null;
+  /** S20: connected mode — the SERVER workspace's patient roster (the
+   *  dataset the kernel actually evaluates). Null in standalone. */
+  serverPatientIds?: string[] | null;
   populationCodes: string[];
   expectedValues: ExpectedMap | null;
   onExpectedValuesChange: (v: ExpectedMap | null) => void;
@@ -41,6 +45,11 @@ export function TestsPane({
   hasCurrentResult?: boolean;
 }) {
   const patients = useMemo(() => {
+    // S20: in connected mode the LIVE dataset is the SERVER's — the
+    // browser dataset prop is the standalone store (different patients).
+    if (serverPatientIds && serverPatientIds.length) {
+      return [...serverPatientIds].sort();
+    }
     const ids = new Set<string>();
     for (const r of dataset?.resources ?? []) {
       if (r?.resourceType === "Patient" && typeof r.id === "string") {
@@ -48,7 +57,7 @@ export function TestsPane({
       }
     }
     return [...ids].sort();
-  }, [dataset]);
+  }, [dataset, serverPatientIds]);
 
   const expected: ExpectedMap = expectedValues ?? {};
 
@@ -126,6 +135,20 @@ export function TestsPane({
           <span className="editor-name">Expected Results</span>
           <span className="type-badge" data-testid="expected-patient-count">
             {addedPatients.length} patient{addedPatients.length === 1 ? "" : "s"}
+          </span>
+          {/* S20: state WHICH dataset this surface addresses — the grid
+              lists the authored TEST-CASE ROSTER (expected-store
+              patients), while the patient picker draws from the live
+              dataset (server workspace when connected, browser store in
+              standalone). */}
+          <span
+            className="type-badge"
+            data-testid="tests-dataset-source"
+            title="The grid lists the authored test-case roster; runs evaluate the live dataset shown here"
+          >
+            {serverPatientIds && serverPatientIds.length
+              ? `live dataset: server workspace (${serverPatientIds.length})`
+              : "live dataset: browser store"}
           </span>
         </div>
         <div className="pane-actions">

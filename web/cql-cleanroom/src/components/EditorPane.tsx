@@ -53,8 +53,9 @@ interface Props {
       computedLocally?: boolean;
     },
   ) => void;
-  /** S16 Muse: popover rendered inline in the active cell card. */
-  cellEvidenceSlot?: React.ReactNode;
+  /** S20: popover factory — rendered ONLY in the cell whose
+   *  (cellName, patientId) matches the clicked row. */
+  cellEvidenceSlot?: (cellName: string) => React.ReactNode;
   /** S19: current runtime parameters (stored on each cell run result). */
   parameters?: Record<string, unknown>;
 }
@@ -604,7 +605,7 @@ export function EditorPane({
           value={text}
           connected={connected ?? false}
           onExplainRow={onExplainRow}
-          evidenceSlot={cellEvidenceSlot}
+          evidenceSlotFactory={cellEvidenceSlot}
           parameters={parameters}
           onToolbarControls={setCellControls}
           onRunCells={onRunCells}

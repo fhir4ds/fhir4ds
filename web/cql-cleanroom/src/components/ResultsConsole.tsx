@@ -16,6 +16,7 @@ import type {
   EvaluateResult,
   EvidenceResult,
 } from "../lib/protocol";
+import { extractCqlSymbols } from "../lib/cqlSymbols";
 import type { Artifact } from "../lib/runDiff";
 import type { RunEntry } from "../state/workspace";
 import { formatRunTimestamp } from "../lib/runHistory";
@@ -237,7 +238,34 @@ export function ResultsConsole({
     setCellEvidence({ patientId, population, evidence: null });
     // S18: displayRun payload is read at CALL time (defined below at
     // render; closure captures the latest via function ref).
-    const runPayload = displayRunRef.current?.payload as { origin?: string } | null | undefined;
+    const runPayload = displayRunRef.current?.payload as
+      | { origin?: string; library?: string; cql?: string }
+      | null
+      | undefined;
+    // S20: evidence evaluates the DISPLAYED RUN's library — the payload
+    // carries the executed cql + library name. Current-editor props are
+    // IGNORED for the main library (they may have drifted post-run or
+    // belong to a different tab); other workspace libs ride along so
+    // includes resolve. output_columns derive from the RUN text only —
+    // never another library's measure/expected mapping.
+    const explainMainName = runPayload?.library ?? main.name;
+    const explainMainText = runPayload?.cql ?? main.text;
+    const explainLibraries = [
+      { name: explainMainName, text: explainMainText },
+      ...libraries.filter((l) => l.name !== explainMainName),
+    ];
+    const runDeclared = new Set(
+      extractCqlSymbols(explainMainText).defines.map((d) => d.name),
+    );
+    const runColumns: Record<string, string> | null = outputColumns
+      ? Object.fromEntries(
+          Object.entries(outputColumns).filter(([, define]) =>
+            runDeclared.has(define),
+          ),
+        )
+      : null;
+    const explainColumns =
+      runColumns && Object.keys(runColumns).length ? runColumns : null;
     try {
       // S18 fix: explain follows the RUN'S ORIGIN, not the connection
       // state — a browser-origin run (default dataset p1/p2 rows) must
@@ -250,8 +278,8 @@ export function ResultsConsole({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            libraries,
-            library: main.name,
+            libraries: explainLibraries,
+            library: explainMainName,
             patient_id: patientId,
             parameters,
           }),
@@ -260,12 +288,12 @@ export function ResultsConsole({
       } else {
         const resp = await workerRequest({
           type: "explain_patient",
-          libraries,
-          main,
+          libraries: explainLibraries,
+          main: { name: explainMainName, text: explainMainText },
           dataset,
           patient_id: patientId,
           parameters,
-          output_columns: outputColumns,
+          output_columns: explainColumns,
         });
         env = JSON.parse(resp.envelope);
       }

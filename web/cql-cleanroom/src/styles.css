@@ -1880,3 +1880,14 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 .editor-actions-cluster { display: flex; gap: 6px; align-items: center; }
 .editor-header .mode-switch { margin-left: auto; }
 .editor-header .drawer-toggle[data-testid="editor-outline"] { margin-left: 8px; }
+
+/* S20: connected-mode server dataset roster in the Tests drawer */
+.ds-server-roster {
+  display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.ds-roster-row {
+  font-family: var(--font-mono); font-size: 11px; padding: 1px 8px;
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 10px;
+  opacity: 0.85;
+}
