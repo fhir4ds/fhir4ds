@@ -5,6 +5,18 @@ import { CellEditor } from "./CellEditor";
 import { countReferences, extractCqlSymbols } from "../lib/cqlSymbols";
 import { cellify, hasSplittableDefines } from "../lib/cellify";
 import { splitCells } from "../lib/cells";
+
+/**
+ * S22a: the pristine in-browser CleanroomDemo default (raw or
+ * auto-cellified) — the connected boot-purity pass replaces it with the
+ * workspace's first disk library, so cellify/adoption bookkeeping must
+ * skip it while connected (see the auto-cellify effect).
+ */
+function isPristineDemoDefault(text: string): boolean {
+  if (!text.startsWith("library CleanroomDemo")) return false;
+  const cellified = cellify(text);
+  return cellified === null || text === cellified;
+}
 import type { Diagnostics, ParseResult } from "../lib/protocol";
 
 /**
@@ -42,6 +54,13 @@ interface Props {
   ) => Promise<Record<string, { ok: boolean; lines: string[] }>>;
   /** S5: connected (server) vs standalone — drives the local badge. */
   connected?: boolean;
+  /**
+   * S22a: hold the S7 auto-cellify/adoption bookkeeping while TRUE —
+   * the server handshake may still flip the app to connected, where
+   * boot purity replaces the pristine demo default (adopting it first
+   * would persist a bogus cellsRemoved entry for the tab).
+   */
+  holdAutoSplit?: boolean;
   /** S16/S19: open the evidence popover for a row — carries the run's
    *  composition + parameters so evidence matches the run exactly. */
   onExplainRow?: (
@@ -108,6 +127,7 @@ export function EditorPane({
   onGraphOpenChange,
   onRunCells,
   connected,
+  holdAutoSplit,
   onExplainRow,
   cellEvidenceSlot,
   parameters,
@@ -152,6 +172,14 @@ export function EditorPane({
   }, []);
   useEffect(() => {
     if (!onRunCells) return;
+    // S22a: hold while the server handshake is pending OR while the
+    // text is the pristine demo default in a connected session — the
+    // connected boot-purity pass will REPLACE it with the workspace's
+    // first disk library (adopting it first would persist a bogus
+    // cellsRemoved entry for the tab, suppressing cellify for the
+    // real library).
+    if (holdAutoSplit) return;
+    if (connected && isPristineDemoDefault(text)) return;
     if (adoptedRef.current.has(tabKey) || removedRef.current.has(tabKey)) return;
     if (hasCellMarkers) {
       // Library arrived WITH markers — count as adopted (hand-authored).
@@ -165,12 +193,17 @@ export function EditorPane({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabKey, hasCellMarkers, onRunCells]);
+  }, [tabKey, hasCellMarkers, onRunCells, holdAutoSplit, text]);
   // Muse 2 (superseded by S7 directive): the toggle now ALWAYS renders —
   // deleting all markers keeps the view open with the empty hint + the
   // Auto-split affordance; adoption marks removed when the user saves a
   // markerless buffer so first-open cellification never fights them.
+  // S22a: the connected boot-purity swap (default → disk library) must
+  // NOT count as "user saved a markerless buffer" — skip while the text
+  // is still the pristine default being replaced.
   useEffect(() => {
+    if (holdAutoSplit) return;
+    if (connected && isPristineDemoDefault(text)) return;
     if (adoptedRef.current.has(tabKey) && !hasCellMarkers) {
       removedRef.current.add(tabKey);
       localStorage.setItem(
@@ -179,7 +212,7 @@ export function EditorPane({
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasCellMarkers]);
+  }, [hasCellMarkers, holdAutoSplit]);
   const onAutoSplit = useCallback(() => {
     if (applyCellify()) setCellViewOpen(true);
   }, [applyCellify]);

@@ -1891,3 +1891,25 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
   border: 1px solid rgba(255,255,255,0.12); border-radius: 10px;
   opacity: 0.85;
 }
+
+/* S22a: workspace picker (header) — workspaces are directories. */
+.ws-picker { position: relative; display: inline-block; }
+.ws-picker-button { display: inline-flex; align-items: center; gap: 4px; max-width: 220px; }
+.ws-picker-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-picker-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 60;
+  display: flex; flex-direction: column; min-width: 240px;
+  background: #10151d; border: 1px solid #2c3848; border-radius: 8px;
+  padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.ws-picker-item {
+  display: flex; align-items: center; gap: 6px; text-align: left;
+  background: transparent; border: none; color: #c9d4e3;
+  padding: 7px 10px; border-radius: 5px; cursor: pointer; font-size: 12px;
+}
+.ws-picker-item:hover { background: #1f2733; }
+.ws-picker-item[aria-selected="true"] { color: #fff; font-weight: 600; }
+.ws-picker-check { width: 12px; color: #4cc38a; }
+.ws-picker-meta { color: #7b8698; font-weight: 400; }
+.ws-picker-empty { color: #7b8698; font-size: 12px; padding: 7px 10px; }
+.ws-picker-error { color: #ff8f8f; font-size: 11px; padding: 6px 10px 4px; }

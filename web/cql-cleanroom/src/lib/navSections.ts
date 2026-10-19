@@ -281,6 +281,8 @@ export function mergeDiskLibraries(
 export function mergeDiskValuesets(
   items: NavItem[],
   disk: DiskFileRef[],
+  /** S22a: file stem -> FHIR resource id (labels disk rows by identity). */
+  idByStem?: Record<string, string>,
 ): NavItem[] {
   const diskByName = new Map(disk.map((d) => [d.name.replace(/\.json$/i, ""), d]));
   const merged = items.map((it) => {
@@ -294,7 +296,7 @@ export function mergeDiskValuesets(
       extras.push({
         id: `valueset:disk:${stem}`,
         kind: "valueset",
-        label: stem,
+        label: idByStem?.[stem] ?? stem,
         onDisk: true,
         changed: d.changed,
         meta: { source: "disk", name: d.name },

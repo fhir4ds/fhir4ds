@@ -3,6 +3,7 @@ import { groupDataset } from "./lib/datasetGroup";
 import { buildCellGraph } from "./lib/cell-deps";
 import { mergeDiskLibraries, mergeDiskValuesets, mergeDiskViews } from "./lib/navSections";
 import { useWorkspaceFiles } from "./lib/useWorkspaceFiles";
+import { cellify } from "./lib/cellify";
 import { composeCellClosure, splitCells } from "./lib/cells";
 import { PatientDetailPanel } from "./components/nav/PatientDetailPanel";
 import {
@@ -18,6 +19,7 @@ import {
 } from "./lib/monaco-cql-language";
 import { EvidencePopover } from "./components/EvidencePopover";
 import { NavRail } from "./components/NavRail";
+import { WorkspacePicker } from "./components/WorkspacePicker";
 import { coerceParam, detectParams, joinInterval } from "./lib/params";
 import { extractCqlSymbols } from "./lib/cqlSymbols";
 import { importMadiePackage } from "./lib/madiePackage";
@@ -178,6 +180,16 @@ const DEFAULT_DATASET_RESOURCES: Array<Record<string, unknown>> = [
  * no user-authored extras). Pristine workspaces may be replaced by a
  * host-declared default example; edited ones are never touched.
  */
+/**
+ * S22a: the connected-boot pristine check for the in-editor CleanroomDemo
+ * default — TRUE for the untouched default OR its S7 auto-cellified form
+ * (markers appended in-buffer before the purity effect re-runs).
+ */
+function cellifiedDefaultPristine(text: string): boolean {
+  const cellified = cellify(DEFAULT_CQL);
+  return cellified !== null && text === cellified;
+}
+
 function isPristineWorkspace(ws: {
   libraries?: Array<{ name?: string; text?: string }>;
   measures?: unknown[];
@@ -648,6 +660,15 @@ export default function App() {
   // c-cleanroom-redo S1: connected mode (additive; standalone = zero server
   // calls — automated e2e guards this). Server is terminology provider only.
   const [serverMode, setServerMode] = useState<ServerMode>({ kind: "standalone" });
+  // S22a: detection PENDING flag — the S7 auto-cellify must hold while
+  // the handshake may still flip us to connected (the pristine demo
+  // default would otherwise be adopted then swapped by boot purity,
+  // persisting a bogus cellsRemoved entry for the tab). The hold lifts
+  // only when detection AND (when connected) the boot-purity swap have
+  // BOTH settled — a deterministic order instead of an effect race.
+  const [serverDetectPending, setServerDetectPending] = useState(true);
+  const puritySettledRef = useRef(false);
+  const [puritySettled, setPuritySettled] = useState(false);
   // S21: latest serverMode for call-time reads inside async restore.
   const serverModeRef = useRef(serverMode);
   serverModeRef.current = serverMode;
@@ -683,9 +704,12 @@ export default function App() {
     : null;
   // S6: disk trees feed the TYPE drawers (Workspace rail dissolves).
   const wsFiles = useWorkspaceFiles(serverMode.kind === "connected");
-  // S20: the SERVER workspace's patient roster (the dataset the kernel
-  // actually evaluates in connected mode) — display surfaces label with
-  // it; standalone surfaces address the browser store.
+  // S20/S22a: the SERVER workspace's patient roster (the dataset the
+  // kernel actually evaluates in connected mode) — display surfaces label
+  // with it; standalone surfaces address the browser store. S22a: in
+  // connected mode the roster is authoritative EVEN WHEN EMPTY (a
+  // workspace with no data shows "0 patients", never the in-browser
+  // demo dataset); null = not connected yet.
   const [serverPatientIds, setServerPatientIds] = useState<string[] | null>(null);
   useEffect(() => {
     if (serverMode.kind !== "connected") {
@@ -698,7 +722,9 @@ export default function App() {
       .then((b: { patients?: string[] }) => {
         if (!cancelled) setServerPatientIds(b?.patients ?? []);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) setServerPatientIds([]);
+      });
     return () => {
       cancelled = true;
     };
@@ -726,6 +752,11 @@ export default function App() {
           wsFilesReloadRef.current?.();
         } else if (ev.kind === "data-hint") {
           setWsDataHint(true);
+        } else if (ev.kind === "switched") {
+          // S22a: the server re-rooted onto another workspace — reload
+          // so every drawer re-reads the new workspace (fresh handshake
+          // nonce, fresh kernel, fresh disk trees).
+          window.location.reload();
         }
       } catch {
         /* ignore malformed frames */
@@ -740,6 +771,12 @@ export default function App() {
     void detected.then((m) => {
       if (cancelled) return;
       setServerMode(m);
+      setServerDetectPending(false);
+      if (m.kind !== "connected") {
+        // Standalone: no purity pass runs — the hold lifts with detection.
+        puritySettledRef.current = true;
+        setPuritySettled(true);
+      }
       if (m.kind === "connected") {
         void terminologyStatus().then((s) => {
           if (cancelled) return;
@@ -1076,6 +1113,89 @@ export default function App() {
         restoreDoneResolveRef.current?.();
       });
   }, []);
+
+  // S22a connected-boot purity: a CONNECTED session that restored NO
+  // browser content (server disk is the source of truth) must not sit
+  // on the in-browser CleanroomDemo scratch defaults — it opens the
+  // workspace's FIRST disk library instead (the demo workspace is a
+  // real directory now, so "demo state" is just another disk library).
+  // The pristine check tolerates the S7 auto-cellified form (markers
+  // are appended in-buffer before this effect re-runs).
+  useEffect(() => {
+    if (!restored || serverMode.kind !== "connected") return;
+    // Standalone-guard: this effect only runs connected; settle once the
+    // pristine check has a verdict (swap done, declined, or error).
+    const settle = () => {
+      if (!puritySettledRef.current) {
+        puritySettledRef.current = true;
+        setPuritySettled(true);
+      }
+    };
+    if (libraries.length !== 1) {
+      settle();
+      return;
+    }
+    if (libraries[0].name !== "CleanroomDemo") {
+      settle();
+      return;
+    }
+    const pristine =
+      libraries[0].text === DEFAULT_CQL ||
+      cellifiedDefaultPristine(libraries[0].text);
+    if (!pristine) {
+      settle();
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/workspace");
+        const b = (await res.json()) as {
+          workspace?: { libraries?: { name: string }[] };
+          data?: { libraries?: { name: string }[] };
+        };
+        const disk = (b?.workspace ?? b?.data)?.libraries ?? [];
+        if (cancelled) return;
+        if (disk.length === 0) {
+          settle();
+          return;
+        }
+        const first = disk[0].name;
+        const libRes = await fetch(
+          `/api/libraries/${encodeURIComponent(first)}`,
+        );
+        const lb = (await libRes.json()) as {
+          data?: { text?: string };
+          text?: string;
+        };
+        const text = lb?.data?.text ?? lb?.text;
+        if (cancelled) return;
+        if (typeof text !== "string" || !text) {
+          settle();
+          return;
+        }
+        // Name-derived id — NOT the demo's "lib_0": the S7 cellsRemoved
+        // list persists per tab key, and a stale "library:lib_0" entry
+        // from the demo state would suppress auto-cellification for the
+        // workspace library.
+        const libId = newLibraryId([]);
+        setLibraries([{ id: libId, name: first, text }]);
+        setMeasures((ms) =>
+          ms.map((m) =>
+            m.mainLibraryId === "lib_0" ? { ...m, mainLibraryId: libId } : m,
+          ),
+        );
+        settle();
+      } catch {
+        /* offline/absent workspace listing — keep defaults */
+        settle();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restored, serverMode.kind, libraries]);
 
   useEffect(() => {
     if (!restored) return;
@@ -2265,14 +2385,27 @@ export default function App() {
   // S17 Muse: canonical header names per file stem (one /api/workspace
   // read when connected) so disk rows display library names, not stems.
   const [diskHeaderNames, setDiskHeaderNames] = useState<Record<string, string>>({});
+  // S22a: disk valueset rows label by FHIR resource id (from the same
+  // /api/workspace read — {path, id} entries), falling back to file stem.
+  const [diskValuesetIds, setDiskValuesetIds] = useState<Record<string, string>>({});
   useEffect(() => {
     if (serverMode.kind !== "connected") return;
     let cancelled = false;
     void fetch("/api/workspace")
       .then((r) => r.json())
-      .then((b: { workspace?: { libraries?: { name: string; path?: string }[] }; data?: { libraries?: { name: string; path?: string }[] } }) => {
+      .then((b: {
+        workspace?: {
+          libraries?: { name: string; path?: string }[];
+          valuesets?: Array<string | { path: string; id?: string | null }>;
+        };
+        data?: {
+          libraries?: { name: string; path?: string }[];
+          valuesets?: Array<string | { path: string; id?: string | null }>;
+        };
+      }) => {
         if (cancelled) return;
-        const libs = (b?.workspace ?? b?.data)?.libraries ?? [];
+        const d = b?.workspace ?? b?.data;
+        const libs = d?.libraries ?? [];
         const out: Record<string, string> = {};
         for (const l of libs) {
           const file = (l.path ?? "").split("/").pop() ?? "";
@@ -2280,6 +2413,16 @@ export default function App() {
           if (stem) out[stem] = l.name;
         }
         setDiskHeaderNames(out);
+        const vsOut: Record<string, string> = {};
+        for (const v of d?.valuesets ?? []) {
+          if (typeof v === "string") continue;
+          const file = (v.path ?? "").split("/").pop() ?? "";
+          const stem = file.replace(/\.json$/i, "");
+          if (stem && typeof v.id === "string" && v.id.trim()) {
+            vsOut[stem] = v.id.trim();
+          }
+        }
+        setDiskValuesetIds(vsOut);
       })
       .catch(() => undefined);
     return () => {
@@ -2287,7 +2430,11 @@ export default function App() {
     };
   }, [serverMode.kind, wsFiles.loading, wsChanged.size]);
   const navLibDiskItems = mergeDiskLibraries(navLibItems, diskRefs("cql"), diskHeaderNames);
-  const navVsDiskItems = mergeDiskValuesets(navValuesetItems, diskRefs("valuesets"));
+  const navVsDiskItems = mergeDiskValuesets(
+    navValuesetItems,
+    diskRefs("valuesets"),
+    diskValuesetIds,
+  );
   const navViewDiskItems = mergeDiskViews(
     navViewItems,
     diskRefs("views"),
@@ -2676,9 +2823,19 @@ export default function App() {
         setStatusNote(`loading ${name}…`);
         try {
           const wsRes = await fetch("/api/workspace");
-          const wsB = (await wsRes.json()) as { workspace?: { valuesets?: string[] }; data?: { valuesets?: string[] } };
+          // S22a: valuesets entries are {path, id?} — path match by file
+          // name (id is the drawer label, not the file identity).
+          const wsB = (await wsRes.json()) as {
+            workspace?: { valuesets?: Array<string | { path: string; id?: string | null }> };
+            data?: { valuesets?: Array<string | { path: string; id?: string | null }> };
+          };
           const d = wsB?.workspace ?? wsB?.data;
-          const vsPath = (d?.valuesets ?? []).find((p) => String(p).split("/").pop() === name);
+          const entries = (d?.valuesets ?? []).map((v) =>
+            typeof v === "string" ? { path: v, id: undefined } : v,
+          );
+          const vsPath = entries.find(
+            (e) => String(e.path).split("/").pop() === name,
+          )?.path;
           if (!vsPath) {
             setStatusNote(`could not load ${name}`);
             return;
@@ -3334,6 +3491,12 @@ export default function App() {
             {statusNote}
           </span>
         )}
+        {serverMode.kind === "connected" && (
+          <WorkspacePicker
+            activeName={serverMode.workspace}
+            onSwitched={() => window.location.reload()}
+          />
+        )}
         <VersionBadge
           wheelVersion={boot.phase === "ready" ? boot.wheelVersion : null}
         />
@@ -3478,6 +3641,7 @@ export default function App() {
             onRun={runViaConsole}
             onRunCells={runCells}
             connected={serverMode.kind === "connected"}
+            holdAutoSplit={serverDetectPending || (serverMode.kind === "connected" && !puritySettled)}
             onExplainRow={(pid, define, ctx) => void explainCellRow(pid, define, ctx)}
             parameters={runtimeParameters}
             cellEvidenceSlot={(cellName: string) =>

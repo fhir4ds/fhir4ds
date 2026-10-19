@@ -614,6 +614,131 @@ class _Handler(BaseHTTPRequestHandler):
         rel = str(target.relative_to(root)) or "."
         self._write_json(200, _envelope(ok=True, path=rel, entries=entries))
 
+    def _workspace_roots(self) -> list[Path]:
+        """Candidate workspace directories for the picker.
+
+        S22a: workspaces are DIRECTORIES. The registry is the parent of
+        the active workspace (siblings) plus the bundled example
+        workspaces shipped in the repo (``examples/*-workspace``). The
+        active workspace is always present.
+        """
+        cfg = getattr(self.server.watcher, "_cfg", None)
+        roots: dict[str, Path] = {}
+        if cfg is not None:
+            active = cfg.root
+            roots[active.name] = active
+            try:
+                for sibling in sorted(active.parent.iterdir()):
+                    if (
+                        sibling.is_dir()
+                        and not sibling.name.startswith(".")
+                        and (sibling / "cql").is_dir()
+                    ):
+                        roots.setdefault(sibling.name, sibling)
+            except OSError:
+                pass
+        examples = Path(__file__).resolve().parents[2] / "examples"
+        try:
+            for ex in sorted(examples.iterdir()):
+                if ex.is_dir() and ex.name.endswith("-workspace") and (ex / "cql").is_dir():
+                    roots.setdefault(ex.name, ex)
+        except OSError:
+            pass
+        return list(roots.values())
+
+    def _route_workspaces_list(self) -> None:
+        """GET /api/workspaces — picker listing (S22a)."""
+        cfg = getattr(self.server.watcher, "_cfg", None)
+        active_name = cfg.root.name if cfg is not None else ""
+        items = []
+        for root in self._workspace_roots():
+            try:
+                lib_count = sum(
+                    1 for _ in (root / "cql").glob("*.cql")
+                )
+            except OSError:
+                lib_count = 0
+            items.append(
+                {
+                    "name": root.name,
+                    "path": str(root),
+                    "active": root.name == active_name,
+                    "library_count": lib_count,
+                }
+            )
+        self._write_json(200, _envelope(ok=True, workspaces=items, active=active_name))
+
+    def _route_workspace_switch(self, body: dict[str, Any]) -> None:
+        """POST /api/workspace/switch — swap the server's workspace root.
+
+        S22a: switching re-roots the watcher config on the chosen
+        directory, rescans, rebuilds the kernel, and republishes a
+        ``switched`` event so connected UIs reload their state. Unknown
+        or escaping names are typed rejections.
+        """
+        from .config import load_config as _load_config
+
+        cfg = getattr(self.server.watcher, "_cfg", None)
+        if cfg is None:
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag("workspace config unavailable")]))
+            return
+        name = body.get("workspace")
+        if not isinstance(name, str) or not name.strip():
+            self._write_json(
+                200,
+                _envelope(ok=False, diagnostics=[_diag("workspace must be a non-empty string")]),
+            )
+            return
+        target = None
+        for root in self._workspace_roots():
+            if root.name == name:
+                target = root
+                break
+        if target is None:
+            self._write_json(
+                200,
+                _envelope(
+                    ok=False,
+                    diagnostics=[_diag(f"unknown workspace {name!r}", "NOT_FOUND")],
+                ),
+            )
+            return
+        if target.resolve() == cfg.root.resolve():
+            # No-op switch still reports success (idempotent).
+            snap = self.server.watcher.snapshot
+            self._write_json(
+                200,
+                _envelope(ok=True, workspace=target.name, status="unchanged"),
+            )
+            return
+        try:
+            new_cfg = _load_config(target)
+        except Exception as exc:  # config errors are typed DevConfigError
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        self.server.watcher._cfg = new_cfg
+        snap = self.server.watcher.rescan()
+        kernel = self.server.kernel_manager.restart(snap)
+        self.server.cell_registry.mark_stale_all()
+        self.server.valuesets_stale = False
+        import secrets as _secrets
+
+        self.server.mode_nonce = _secrets.token_hex(8)
+        self.server.watcher.bus.publish(
+            WorkspaceEvent(kind="switched", paths=[], workspace_snapshot=snap.to_dict())
+        )
+        self._write_json(
+            200,
+            _envelope(
+                ok=True,
+                workspace=target.name,
+                status="switched",
+                kernel_id=kernel.kernel_id,
+                load_diagnostics=kernel.load_diagnostics,
+                workspace_snapshot=snap.to_dict(),
+            ),
+        )
+
     def _route_workspace_add_path(self, body: dict[str, Any]) -> None:
         """POST /api/workspace/add-path — persist a source path to [dev].
 
@@ -1438,6 +1563,9 @@ class _Handler(BaseHTTPRequestHandler):
                 _envelope(path=v_path, text=text, resource=resource_type, name=name),
             )
             return
+        if path == "/api/workspaces":
+            self._route_workspaces_list()
+            return
         if path == "/api/workspace":
             snap = self.server.watcher.snapshot
             self._write_json(200, _envelope(workspace=snap.to_dict()))
@@ -1746,6 +1874,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._route_resource_validate(body)
             elif path == "/api/resource/save":
                 self._route_resource_save(body)
+            elif path == "/api/workspace/switch":
+                self._route_workspace_switch(body)
             elif path == "/api/kernel/restart":
                 snap = self.server.watcher.snapshot
                 kernel = self.server.kernel_manager.restart(snap)
@@ -2991,6 +3121,18 @@ class _Handler(BaseHTTPRequestHandler):
                 return False
             static_root = pkg / "static-cleanroom"
             candidate = static_root / "assets" / rel
+            extra_headers = [
+                ("Cross-Origin-Opener-Policy", "same-origin"),
+                ("Cross-Origin-Embedder-Policy", "require-corp"),
+                ("Cross-Origin-Resource-Policy", "cross-origin"),
+            ]
+        elif path == "/coi-serviceworker.js":
+            # S22a: the product root serves the coi-serviceworker script
+            # (index.html references it for SharedArrayBuffer reload-on-
+            # install; without this route the S4 isolation leg logs a
+            # requestfailed entry on every boot).
+            static_root = pkg / "static-cleanroom"
+            candidate = static_root / "coi-serviceworker.js"
             extra_headers = [
                 ("Cross-Origin-Opener-Policy", "same-origin"),
                 ("Cross-Origin-Embedder-Policy", "require-corp"),

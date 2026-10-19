@@ -59,12 +59,34 @@ class WorkspaceSnapshot:
                 }
                 for lib in self.libraries
             ],
-            "valuesets": [str(p) for p in self.valuesets],
+            # S22a: valuesets report {path, id} — the FHIR resource `id`
+            # when the file parses (drawers label disk rows by resource
+            # identity, not file stem; malformed files fall back to stem).
+            "valuesets": [
+                {"path": str(p), "id": _valueset_id(p)} for p in self.valuesets
+            ],
             "measures": [str(p) for p in self.measures],
             "datasets": [str(p) for p in self.datasets],
             "views": [str(p) for p in self.views],
             "data_changed_hint": self.data_changed_hint,
         }
+
+
+def _valueset_id(path: Path) -> str | None:
+    """FHIR `id` of a disk ValueSet file, or None when unreadable.
+
+    Kept lenient by design (discovery never crashes on malformed files);
+    callers treat None as "label by file stem".
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            resource = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return None
+    rid = resource.get("id") if isinstance(resource, dict) else None
+    if isinstance(rid, str) and rid.strip():
+        return rid.strip()
+    return None
 
 
 def _library_name(text: str, path: Path) -> str:

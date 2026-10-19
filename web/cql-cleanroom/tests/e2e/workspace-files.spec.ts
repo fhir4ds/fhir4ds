@@ -117,13 +117,20 @@ test("STANDALONE: no workspace section, no /api/fs traffic", async ({ page }) =>
 });
 
 test("S3 checkpoint ruling: connected → Run goes to SERVER automatically (no picker)", async ({ page }) => {
+  // S22: the run surface is the cells toolbar ("▶ Run All") and cell
+  // results render INLINE (no console status-note) — the proof of a
+  // server-directed run is the POST /api/evaluate round-trip itself.
+  const evalHits: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/api/evaluate")) evalHits.push(r.url());
+  });
   await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
-  await page.waitForTimeout(12000);
+  await page.waitForTimeout(15000);
   // No picker chrome anywhere
   await expect(page.locator('[data-testid="run-target-picker"]')).toHaveCount(0);
-  // Whole-library Run on a connected server MUST produce the server-run note
-  await page.getByRole("button", { name: /^Run$/ }).click();
-  await expect(page.locator('[data-testid="status-note"]')).toContainText(/server run/, { timeout: 60000 });
+  await page.getByRole("button", { name: /Run All/ }).click();
+  await page.waitForTimeout(8000);
+  expect(evalHits.length).toBeGreaterThan(0);
 });
 
 test("S3 checkpoint ruling: standalone → Run stays in-browser (no server traffic)", async ({ page }) => {
@@ -134,7 +141,7 @@ test("S3 checkpoint ruling: standalone → Run stays in-browser (no server traff
   await page.goto("http://127.0.0.1:5176/", { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(15000);
   await expect(page.locator('[data-testid="run-target-picker"]')).toHaveCount(0);
-  await page.getByRole("button", { name: /^Run$/ }).click().catch(() => {});
+  await page.getByRole("button", { name: /Run All/ }).click().catch(() => {});
   await page.waitForTimeout(3000);
   expect(evalHits, `standalone made ${evalHits.join(", ")}`).toEqual([]);
 });

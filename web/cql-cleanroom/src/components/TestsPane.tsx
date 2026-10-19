@@ -45,9 +45,10 @@ export function TestsPane({
   hasCurrentResult?: boolean;
 }) {
   const patients = useMemo(() => {
-    // S20: in connected mode the LIVE dataset is the SERVER's — the
-    // browser dataset prop is the standalone store (different patients).
-    if (serverPatientIds && serverPatientIds.length) {
+    // S20/S22a: in connected mode the LIVE dataset is the SERVER's —
+    // authoritative even when EMPTY (a connected workspace with no data
+    // never falls back to the in-browser demo store). null = standalone.
+    if (serverPatientIds) {
       return [...serverPatientIds].sort();
     }
     const ids = new Set<string>();
@@ -146,7 +147,7 @@ export function TestsPane({
             data-testid="tests-dataset-source"
             title="The grid lists the authored test-case roster; runs evaluate the live dataset shown here"
           >
-            {serverPatientIds && serverPatientIds.length
+            {serverPatientIds
               ? `live dataset: server workspace (${serverPatientIds.length})`
               : "live dataset: browser store"}
           </span>

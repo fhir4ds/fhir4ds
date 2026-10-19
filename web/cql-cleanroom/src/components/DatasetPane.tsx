@@ -27,6 +27,7 @@ export function DatasetPane({
   /** S20: connected mode — the SERVER workspace roster (what the kernel
    *  actually evaluates). Shown as a banner; the list below remains the
    *  browser store (standalone's live dataset). */
+  /** Connected roster (S22a: authoritative even when EMPTY; null = standalone). */
   serverPatientIds?: string[] | null;
   /** Focused patient group key (null = L2 list); detail renders beside. */
   focusedPid: string | null;
@@ -80,26 +81,38 @@ export function DatasetPane({
           </div>
         </>
       )}
-      {dataset && (dataset.resources?.length ?? 0) > 0 && (
-        <div className="dataset-tree" data-testid="dataset-tree">
-          {groups
-            .filter(groupMatches)
-            .map((g) => (
-              <PatientRow
-                key={g.key}
-                group={g}
-                focused={focusedPid === g.key}
-                onDrillIn={() => onFocusedPidChange(g.key)}
-              />
-            ))}
+      {serverPatientIds && serverPatientIds.length === 0 && (
+        <div className="pane-hint" data-testid="dataset-empty-server" role="status" style={{ padding: "6px 10px" }}>
+          Live dataset: server workspace (0 patients) — add patient data under
+          the workspace's data directory, then restart the kernel.
         </div>
       )}
-      {dataset && !groups.some((g) => !g.unattributed) && (
-        <div className="pane-empty" data-testid="dataset-no-patients">
-          No patient-attributed resources — patient-context evaluation will
-          see none of these.
-        </div>
+      {serverPatientIds ? null : (
+        dataset &&
+        (dataset.resources?.length ?? 0) > 0 && (
+          <div className="dataset-tree" data-testid="dataset-tree">
+            {groups
+              .filter(groupMatches)
+              .map((g) => (
+                <PatientRow
+                  key={g.key}
+                  group={g}
+                  focused={focusedPid === g.key}
+                  onDrillIn={() => onFocusedPidChange(g.key)}
+                />
+              ))}
+          </div>
+        )
       )}
+      {(!serverPatientIds || serverPatientIds.length === 0) &&
+        !serverPatientIds &&
+        dataset &&
+        !groups.some((g) => !g.unattributed) && (
+          <div className="pane-empty" data-testid="dataset-no-patients">
+            No patient-attributed resources — patient-context evaluation will
+            see none of these.
+          </div>
+        )}
     </section>
   );
 }

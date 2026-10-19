@@ -113,7 +113,14 @@ test("S20-3: bottom-console evidence uses the DISPLAYED run's defines (no Has Na
   await page.waitForTimeout(4000);
   const toggle = page.locator('[data-testid="cell-view-toggle"]');
   if ((await toggle.getAttribute("aria-checked")) === "true") { await toggle.click(); await page.waitForTimeout(1500); }
-  await page.getByRole("button", { name: /^Run$/ }).click();
+  // S15: the whole-library run control is "Run" in text mode (the cell
+  // surface's equivalent is "▶ Run All"); this leg stays in text mode.
+  const runBtn = page.getByRole("button", { name: /^Run$/ });
+  if ((await runBtn.count()) === 0) {
+    await page.getByRole("button", { name: /Run All/ }).click();
+  } else {
+    await runBtn.click();
+  }
   await page.locator(".results-table tbody tr td", { hasText: "w01" }).first().waitFor({ state: "visible", timeout: 45000 });
   await page.locator("td.cell-evidence").first().click();
   const err = page.locator('[data-testid="evidence-popover-error"]');
