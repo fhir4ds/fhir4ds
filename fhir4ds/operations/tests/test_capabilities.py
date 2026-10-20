@@ -253,6 +253,49 @@ class TestExplainCapability:
         assert not ev.ok
         assert ev.diagnostics[0].code.value == "not_found"
 
+    def test_context_patient_property_leaf(self):
+        """S22f (§7/AM4d): derived defines get Patient-property leaves.
+
+        AgeInYearsAt derives from the context Patient.birthDate — no
+        contributing resource exists, so the evidence would render "no
+        contributing resources". The synthesized leaf names the Patient
+        row + the referenced property + its value.
+        """
+        cql = (
+            "library AgeEv version '1.0.0'\n"
+            "using FHIR version '4.0.1'\n"
+            "include FHIRHelpers version '4.0.1' called FHIRHelpers\n"
+            "context Patient\n\n"
+            'define "InAgeRange":\n'
+            "  AgeInYearsAt(@2024-01-01) >= 18\n\n"
+            'define "HasEnc":\n'
+            "  exists([Encounter] E where E.status = 'finished')\n"
+        )
+        resources = [
+            {"resourceType": "Patient", "id": "a1", "birthDate": "2000-05-05"},
+            {
+                "resourceType": "Encounter",
+                "id": "e1",
+                "status": "finished",
+                "subject": {"reference": "Patient/a1"},
+            },
+        ]
+        conn = create_connection()
+        main = LibraryText(name="AgeEv", text=cql)
+        ev = explain_patient(
+            [main], main, DatasetSpec(resources=resources), "a1", conn
+        )
+        assert ev.ok
+        by_col = {d["column"]: d["evidence"] for d in ev.definitions}
+        # Resource-backed define keeps its retrieve leaf.
+        assert by_col["HasEnc"][0]["target"] == "Encounter/e1"
+        # The DERIVED define carries the synthesized context-patient leaf.
+        leaf = by_col["InAgeRange"][0]
+        assert leaf["target"] == "Patient/a1"
+        assert leaf["attribute"] == "birthDate"
+        assert leaf["value"] == "2000-05-05"
+        assert leaf["operator"] == "derived"
+
 
 class TestExplicitOverridesBundled:
     def test_inline_version_wins(self):
