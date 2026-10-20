@@ -240,19 +240,29 @@ def import_tests_zip(
     zip_bytes: bytes,
     *,
     measure_name: str = "",
+    namespace_collisions: bool = False,
 ) -> dict[str, Any]:
-    """Import a MADiE test-case ZIP into data/ + the expected store.
+    """Import a MADiE test-case ZIP into the patient store + expected store.
 
     Layout: ``<patientId>/<case>.json`` Bundle per test; the TRAILING
     entry is the expected MeasureReport (isTestCases-marked). The
     expectation lands in the item-3 store via
-    ``expected_store.save_expected_report``; the remaining patient
-    bundle is written to ``data/<patientId>/<case>.json``.
+    ``expected_store.save_expected_report``; the patient bundle lands in
+    the SINGLE PATIENT STORE (S22d-1 type layout: ``Patient/<pid>/``),
+    with the legacy ``data/<pid>/`` fallback for pre-migration
+    workspaces.
+
+    S22d-2 patient-ID collision policy: a patient id that ALREADY exists
+    in the store is a typed REJECTION by default (silent renaming would
+    break expected MeasureReports); ``namespace_collisions=True`` opts
+    into ``tc-`` prefixing that rewrites bundle resource ids, patient
+    references, and expected-MR subjects in the SAME pass.
     """
     from .expected_store import save_expected_report
 
     diagnostics: list[dict[str, str]] = []
     written_cases: list[str] = []
+    collisions: list[str] = []
     expected_written: list[str] = []
     cfg = getattr(server.watcher, "_cfg", None)
     if cfg is None:
@@ -315,9 +325,35 @@ def import_tests_zip(
             folder = name.split("/", 1)[0] if "/" in name else ""
             pid = pid or folder or "patient"
 
+            # S22d-2: patient-ID collision policy at the single store.
+            # Existing id (Patient/<pid>/ folder OR a legacy data/<pid>/
+            # bundle) is a typed REJECTION by default; the opt-in tc-
+            # namespace rewrites ids + references + expected-MR subjects
+            # in this same pass.
+            store_pid = pid
+            if _patient_exists(root, pid):
+                if not namespace_collisions:
+                    collisions.append(pid)
+                    continue
+                store_pid = f"tc-{pid}"
+                patient_entries = [
+                    {"resource": _rewrite_patient_refs(r, pid, store_pid)}
+                    if isinstance((r := e.get("resource")), dict)
+                    else e
+                    for e in patient_entries
+                ]
+                if expected is not None:
+                    expected = _rewrite_patient_refs(expected, pid, store_pid)
+
             case_stem = _safe_stem(Path(name).stem or "case")
             patient_bundle = {**bundle, "entry": patient_entries}
-            dest = root / "data" / _safe_stem(pid) / f"{case_stem}.json"
+            # Type layout first (Patient/<pid>/); legacy data/ fallback.
+            type_dest = root / "Patient" / _safe_stem(store_pid)
+            dest = (
+                type_dest / f"{case_stem}.json"
+                if (root / "Patient").is_dir() or not (root / "data").is_dir()
+                else root / "data" / _safe_stem(store_pid) / f"{case_stem}.json"
+            )
             _write_json_file(dest, patient_bundle)
             written_cases.append(str(dest.relative_to(root)))
             changed.append(str(dest))
@@ -339,6 +375,25 @@ def import_tests_zip(
                 expected_written.append(str(out.relative_to(root)))
                 changed.append(str(out))
 
+    if collisions:
+        # Typed rejection (AM4a): silent renaming would break expected
+        # MeasureReports; surface the colliding ids + remediation.
+        return {
+            "ok": False,
+            "collisions": sorted(set(collisions)),
+            "diagnostics": [
+                {
+                    "code": "PATIENT_ID_COLLISION",
+                    "message": (
+                        "patient id(s) already in the workspace store: "
+                        + ", ".join(sorted(set(collisions)))
+                        + " — rename them in the package, drop the existing "
+                        "patient, or re-import with tc- namespacing"
+                    ),
+                }
+            ]
+            + diagnostics,
+        }
     if not written_cases:
         summary = {"code": "INPUT_ERROR", "message":
             "no test-case bundles found (expected <patientId>/<case>.json "
@@ -353,3 +408,45 @@ def import_tests_zip(
         "counts": {"cases": len(written_cases), "expected": len(expected_written)},
         "diagnostics": diagnostics,
     }
+
+
+def _patient_exists(root: Path, pid: str) -> bool:
+    """True when pid already lives in the single patient store (or the
+    legacy data/<pid>/ bundle shape)."""
+    if (root / "Patient" / pid).is_dir():
+        return True
+    legacy_dir = root / "data" / pid
+    if legacy_dir.is_dir() and any(legacy_dir.glob("*.json")):
+        return True
+    # Monolith datasets hold the patient too (pre-migration workspaces).
+    for ndjson in (root / "data").glob("*.ndjson"):
+        try:
+            text = ndjson.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if f'"id": "{pid}"' in text or f'"id":"{pid}"' in text:
+            return True
+    return False
+
+
+def _rewrite_patient_refs(resource: dict, old_pid: str, new_pid: str) -> dict:
+    """Rewrite one resource's identity/refs from old_pid to new_pid.
+
+    Touches: the Patient resource's own id; subject/patient/beneficiary
+    references; and the expected-MR subject. Other fields stay verbatim.
+    """
+    out = dict(resource)
+    if (
+        out.get("resourceType") == "Patient"
+        and out.get("id") == old_pid
+    ):
+        out["id"] = new_pid
+    for field in ("subject", "patient", "beneficiary"):
+        value = out.get(field)
+        if (
+            isinstance(value, dict)
+            and isinstance(value.get("reference"), str)
+            and value["reference"] == f"Patient/{old_pid}"
+        ):
+            out[field] = {**value, "reference": f"Patient/{new_pid}"}
+    return out

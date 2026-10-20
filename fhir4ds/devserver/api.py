@@ -1781,6 +1781,9 @@ class _Handler(BaseHTTPRequestHandler):
             elif path == "/api/madie/import-tests":
                 self._route_madie_import_tests(body)
                 return
+            elif path == "/api/measure/export":
+                self._route_measure_export(body)
+                return
             elif path == "/api/tests/capture":
                 self._route_tests_capture(body)
                 return
@@ -2338,10 +2341,59 @@ class _Handler(BaseHTTPRequestHandler):
                 200, _envelope(False, diagnostics=[_diag("measure_name must be a string")])
             )
             return
+        # S22d-2: opt-in tc- namespacing for patient-id collisions.
+        namespace_collisions = body.get("namespace_collisions") is True
         result = import_tests_zip(
-            self.server, zip_bytes, measure_name=(measure_name or "").strip()
+            self.server,
+            zip_bytes,
+            measure_name=(measure_name or "").strip(),
+            namespace_collisions=namespace_collisions,
         )
         self._write_json(200, _envelope(**result))
+
+    def _route_measure_export(self, body: dict[str, Any]) -> None:
+        """POST /api/measure/export — S22d-2 closure-driven MADiE zip.
+
+        Body: ``{measure: <name-or-id>}``. Builds the measure-scoped
+        package from the FHIR-type workspace: CQL include-graph closure
+        (Library/), referenced ValueSets, List/TestCases-referenced
+        patient bundles with trailing expected MeasureReports, and the
+        Measure resource — returned as base64 zip bytes.
+        """
+        import base64
+
+        from .madie_export_closure import export_measure_closure_zip
+
+        cfg = getattr(self.server.watcher, "_cfg", None)
+        if cfg is None:
+            self._write_json(
+                200,
+                _envelope(False, diagnostics=[_diag("workspace config unavailable")]),
+            )
+            return
+        measure = body.get("measure")
+        if not isinstance(measure, str) or not measure.strip():
+            self._write_json(
+                200, _envelope(False, diagnostics=[_diag("measure is required")])
+            )
+            return
+        try:
+            blob = export_measure_closure_zip(
+                Path(cfg.root), measure.strip()
+            )
+        except LookupError as exc:
+            self._write_json(
+                200, _envelope(False, diagnostics=[_diag(str(exc), "NOT_FOUND")])
+            )
+            return
+        self._write_json(
+            200,
+            _envelope(
+                ok=True,
+                measure=measure.strip(),
+                zip_base64=base64.b64encode(blob).decode("ascii"),
+            ),
+        )
 
     def _route_tests_capture(self, body: dict[str, Any]) -> None:
         """POST /api/tests/capture — run the measure, seed per-patient

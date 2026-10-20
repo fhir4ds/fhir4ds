@@ -238,9 +238,10 @@ class TestTestsImport:
         result = import_tests_zip(srv, build_tests_zip(), measure_name="TestMeasure")
         assert result["ok"], result["diagnostics"]
         assert result["counts"] == {"cases": 2, "expected": 2}
-        # Patient bundles (trailing MR stripped) under data/<patientId>/
+        # Patient bundles (trailing MR stripped) into the SINGLE PATIENT
+        # STORE (Patient/<patientId>/ — S22d-2 type-layout targets).
         for pid in ("patient-1", "patient-2"):
-            case = tmp_path / "data" / pid / f"TestMeasure-v1.0.000-{('Case1') if pid=='patient-1' else 'Series1-Case2'}.json"
+            case = tmp_path / "Patient" / pid / f"TestMeasure-v1.0.000-{('Case1') if pid=='patient-1' else 'Series1-Case2'}.json"
             loaded = json.loads(case.read_text())
             rts = [e["resource"]["resourceType"] for e in loaded["entry"]]
             assert rts == ["Patient", "Observation"]  # MR gone
@@ -272,7 +273,7 @@ class TestTestsImport:
         assert result["counts"]["cases"] == 1
         assert any(d["code"] == "NO_EXPECTATION" for d in result["diagnostics"])
         # Plain MR entry KEPT (not marked -> treated as data, per guard doctrine)
-        kept = json.loads((tmp_path / "data" / "px" / "case.json").read_text())
+        kept = json.loads((tmp_path / "Patient" / "px" / "case.json").read_text())
         assert len(kept["entry"]) == 2
 
     def test_measure_name_defaults_from_mr(self, tmp_path):
@@ -340,7 +341,7 @@ class TestApiSurface:
         r = call("/api/madie/import-tests", payload)
         assert r["ok"], r["diagnostics"]
         assert r["counts"] == {"cases": 2, "expected": 2}
-        assert (ws / "data" / "patient-1").is_dir()
+        assert (ws / "Patient" / "patient-1").is_dir()
 
     def test_missing_base64_rejected(self, server):
         r = call("/api/madie/import-package", {})
