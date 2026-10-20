@@ -43,6 +43,13 @@ export interface RunEntryPayload {
   mode: "library" | "selection";
   /** S18: which engine produced this run — drives the explain seam. */
   origin?: "server" | "browser";
+  /**
+   * S22g (§8): which SURFACE this run belongs to — "console" (the
+   * bottom Results console; whole-library/selection runs) or "cell"
+   * (inline per-cell runs; never duplicated into the console history).
+   * Legacy entries default to "console".
+   */
+  surface?: "console" | "cell";
   /** 6j: which library this run executed (active-tab targeting). */
   library?: string;
   cql: string;

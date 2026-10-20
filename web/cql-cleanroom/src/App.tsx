@@ -1580,6 +1580,7 @@ export default function App() {
           payload: {
             mode: "library",
             origin: "server",
+            surface: "console",
             library: main.name,
             cql: main.text,
             rows: b.rows ?? [],
@@ -1650,6 +1651,7 @@ export default function App() {
           payload: {
             mode: "library",
             origin: "browser", // this entry IS the worker run
+            surface: "console",
             library: runLib.name,
             cql: main.text,
             sql: env.sql,
@@ -2591,6 +2593,7 @@ export default function App() {
       payload: {
         mode: p.mode,
         origin: p.origin ?? "browser",
+        surface: "console",
         library: p.library,
         cql: p.cql,
         sql: p.sql,

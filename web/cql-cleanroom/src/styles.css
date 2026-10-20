@@ -1924,3 +1924,10 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
   resize: vertical;
 }
 .patient-editor .patient-resources { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 0; }
+
+/* S22g: per-cell run log (surface: cell) */
+.cell-runs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 10px; }
+.cell-run-chip {
+  font-size: 10px; color: #7b8698; border: 1px solid #232a35;
+  border-radius: 10px; padding: 1px 8px; background: rgba(255,255,255,0.02);
+}

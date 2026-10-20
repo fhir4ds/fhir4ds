@@ -120,6 +120,11 @@ export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells,
   // S8 directive 3: RunMode REMOVED — every Run executes the cell's
   // dependency closure (one behavior per cell).
   const [results, setResults] = useState<CellResult[]>([]);
+  // S22g (§8): per-cell run log (surface "cell") — the card is the
+  // display + replay surface; these runs NEVER enter the console ring.
+  const [cellRuns, setCellRuns] = useState<
+    Map<string, Array<{ ts: number; ok: boolean; ms?: number | null }>>
+  >(new Map());
   const [running, setRunning] = useState<string | null>(null);
   const [pinnedClosure, setPinnedClosure] = useState<string | null>(null);
   const [focusedCell, setFocusedCell] = useState<string | null>(null);
@@ -150,6 +155,7 @@ export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells,
         // S19: capture the EXACT composition this run evaluated — via the
         // shared composeCellClosure helper (single composition authority).
         const composedText = composeCellClosure(graph.header, cells, names);
+        const ranAt = Date.now();
         setResults((prev) => [
           ...prev.filter((r) => !names.includes(r.cell)),
           ...names.map((n) => ({
@@ -161,9 +167,21 @@ export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells,
             computedLocally: !connected,
             composedText,
             params: parameters,
-            ts: Date.now(),
+            ts: ranAt,
           })),
         ]);
+        // S22g: per-cell run log (surface "cell"; cap 5 per card).
+        setCellRuns((prev) => {
+          const next = new Map(prev);
+          for (const n of names) {
+            const r = out[n];
+            next.set(n, [
+              { ts: ranAt, ok: r?.ok ?? false, ms: null },
+              ...(next.get(n) ?? []),
+            ].slice(0, 5));
+          }
+          return next;
+        });
       } finally {
         setRunning(null);
       }
@@ -446,6 +464,17 @@ export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells,
                     )}
                   </div>
                 )}
+                {cellRuns.get(cell.name)?.length ? (
+                  <div className="cell-runs" data-testid="cell-runs" title="This cell's recent runs (surface: cell — never duplicated into the console history)">
+                    {cellRuns.get(cell.name)!.slice(0, 3).map((r) => (
+                      <span key={r.ts} className="cell-run-chip">
+                        {new Date(r.ts).toLocaleTimeString()} ·{" "}
+                        {r.ok ? "ok" : "error"}
+                        {typeof r.ms === "number" ? ` · ${Math.round(r.ms)}ms` : ""}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
                   <div
                     className="cell-resize-handle"
                     role="separator"
