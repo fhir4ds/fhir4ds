@@ -145,6 +145,21 @@ const CQL_MACRO_SQL = [
             evidence := []::STRUCT(target VARCHAR, attribute VARCHAR, value VARCHAR, operator VARCHAR, threshold VARCHAR, trace VARCHAR[])[]
         )
     )`,
+  // S22f-promotion: context-patient property derivation leaf (the
+  // design-note audit_patient_property — same shape as macros/audit.py).
+  `CREATE OR REPLACE MACRO audit_patient_property(val, patient_id_expr, attr, prop_value) AS (
+        struct_pack(
+            result   := val,
+            evidence := list_value(struct_pack(
+                target      := 'Patient/' || CAST(patient_id_expr AS VARCHAR),
+                attribute   := CAST(attr AS VARCHAR),
+                value       := CAST(prop_value AS VARCHAR),
+                operator    := 'derived',
+                threshold   := 'context',
+                trace       := CAST([] AS VARCHAR[])
+            ))::STRUCT(target VARCHAR, attribute VARCHAR, value VARCHAR, operator VARCHAR, threshold VARCHAR, trace VARCHAR[])[]
+        )
+    )`,
   `CREATE OR REPLACE MACRO audit_comparison(result_val, op, lhs, rhs, ev_attr, target_id) AS (
         struct_pack(
             result   := result_val,

@@ -266,6 +266,33 @@ def _contains_aggregate_lambda_identifier(expr: "SQLExpression") -> bool:
     return False
 
 
+def _patient_row_target(call: "SQLFunctionCall") -> "Optional[SQLExpression]":
+    """S22f-promotion seam B: patient-row fhirpath call -> Patient target.
+
+    ``fhirpath_text(<alias>.patient_resource, '<attr>')`` reads the
+    CONTEXT patient's row (the _patients CTE's patient_resource
+    column) — the audit target is ``'Patient/' || <alias>.patient_id``.
+    Returns None for anything else (retrieves, non-patient calls).
+    """
+    if call.name != "fhirpath_text" or len(call.args) < 2:
+        return None
+    from ...translator.types import SQLBinaryOp, SQLCast, SQLLiteral, SQLQualifiedIdentifier
+
+    source = call.args[0]
+    if not isinstance(source, SQLQualifiedIdentifier) or len(source.parts) != 2:
+        return None
+    if source.parts[1] != "patient_resource":
+        return None
+    alias = source.parts[0]
+    pid = SQLQualifiedIdentifier(parts=[alias, "patient_id"])
+    concat = SQLBinaryOp(
+        left=SQLLiteral("Patient/"),
+        operator="||",
+        right=SQLCast(expression=pid, target_type="VARCHAR"),
+    )
+    return concat
+
+
 def _extract_audit_target(
     expr: "SQLExpression",
     context: "Optional[SQLTranslationContext]" = None,
@@ -286,6 +313,13 @@ def _extract_audit_target(
     if isinstance(expr, SQLCast):
         return _extract_audit_target(expr.expression, context)
     if isinstance(expr, SQLFunctionCall):
+        # S22f-promotion (design seam B): a patient-row property call —
+        # fhirpath_text(<alias>.patient_resource, '<attr>') — targets the
+        # CONTEXT PATIENT: 'Patient/' || <alias>.patient_id. The alias is
+        # the _patients CTE reference in scope (conventionally _pt).
+        patient_target = _patient_row_target(expr)
+        if patient_target is not None:
+            return patient_target
         for arg in expr.args:
             t = _extract_audit_target(arg, context)
             if t is not None:

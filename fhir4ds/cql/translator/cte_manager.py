@@ -148,6 +148,43 @@ def generate_function_cte_name(func_name: str, cql_def_name: str) -> str:
     return f"_fn_{func_name}_{safe_name[:32]}_{name_hash}"
 
 
+
+def _find_patient_property(expr):
+    """S22f-promotion seam A helper: find a _patient_property marker.
+
+    The age-family translators attach ``(prop_name, value_sql)`` on the
+    returned SQLFunctionCall (the _audit_target attribute protocol).
+    Walks the expression tree; returns the FIRST marker found (the age
+    family reads exactly one property: birthDate).
+    """
+    if expr is None:
+        return None
+    marker = getattr(expr, "_patient_property", None)
+    if marker is not None:
+        return marker
+    for attr in ("args", "left", "right", "expression", "operand", "expr"):
+        child = getattr(expr, attr, None)
+        if child is None:
+            continue
+        found = _find_patient_property(child)
+        if found is not None:
+            return found
+    if isinstance(expr, (list, tuple)):
+        for item in expr:
+            found = _find_patient_property(item)
+            if found is not None:
+                return found
+    for attr in ("when_clauses", "columns"):
+        seq = getattr(expr, attr, None)
+        if seq:
+            for item in seq:
+                found = _find_patient_property(
+                    item[1] if isinstance(item, tuple) else item
+                )
+                if found is not None:
+                    return found
+    return None
+
 class CTEManagerMixin:
     """Mixin providing CTE management methods for CQLToSQLTranslator."""
 
@@ -662,7 +699,37 @@ class CTEManagerMixin:
                                 f'EXISTS (SELECT 1 FROM "{precte_name}" AS __pre'
                                 f' WHERE __pre.patient_id = _pt.patient_id)'
                             )
-                            audit_expr = SQLFunctionCall(name="audit_leaf", args=[lookup])
+                            # S22f-promotion (design seam A): when the
+                            # define derives from a context-patient
+                            # property (the age family reads
+                            # _pt.birth_date), carry the property leaf —
+                            # audit_patient_property instead of a bare
+                            # audit_leaf (which renders 'no contributing
+                            # resources').
+                            # Context-carried marker (survives all node
+                            # rewrites): the age-family translators record
+                            # _patient_property_defs[define_name].
+                            _ppdefs = getattr(
+                                self._context, "_patient_property_defs", None
+                            ) or {}
+                            patient_prop = _ppdefs.get(name.strip('"'))
+                            if patient_prop is not None:
+                                from ..translator.types import (
+                                    SQLLiteral as _SQLLiteral,
+                                    SQLQualifiedIdentifier as _SQLQI,
+                                )
+                                prop_name, prop_value = patient_prop
+                                audit_expr = SQLFunctionCall(
+                                    name="audit_patient_property",
+                                    args=[
+                                        lookup,
+                                        _SQLQI(parts=["_pt", "patient_id"]),
+                                        _SQLLiteral(value=prop_name),
+                                        prop_value,
+                                    ],
+                                )
+                            else:
+                                audit_expr = SQLFunctionCall(name="audit_leaf", args=[lookup])
                     else:
                         if not is_already_audit:
                             audit_expr = SQLFunctionCall(name="audit_leaf", args=[audit_expr])

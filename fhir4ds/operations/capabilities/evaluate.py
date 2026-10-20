@@ -680,15 +680,9 @@ def explain_patient(
             # audit_mode="full" wraps population values: {result, evidence}
             populations[col] = bool(value.get("result"))
             evidence_by_col[col] = value.get("evidence", [])
-    # S22f (§7/AM4d): context-patient property leaves. A derived define
-    # (AgeInYearsAt/Patient.gender/…) has NO contributing-resource leaf
-    # (the value derives from the context Patient row, not a retrieve) —
-    # the evidence would render "no contributing resources". Synthesize
-    # the leaf from the CQL body: which Patient properties the define
-    # references, read from the kernel's Patient row.
-    evidence_by_col = _add_context_patient_leaves(
-        main.text, evidence_by_col, conn, patient_id
-    )
+    # S22f-promotion: context-patient property leaves now flow from the
+    # TRANSLATOR (audit_patient_property macro + the audit_comparison
+    # patient-row target fill) — the explain-seam backfill was retired.
     definitions = [
         {"column": col, "result": populations.get(col), "evidence": ev}
         for col, ev in evidence_by_col.items()
@@ -698,94 +692,6 @@ def explain_patient(
         populations=populations,
         definitions=definitions,
     )
-
-
-# S22f: context-patient properties recognized in define bodies (§7/AM4d
-# — birthDate, gender, deceased[x], extensions generalized). Maps the
-# CQL property access to the FHIR JSON key.
-_CONTEXT_PATIENT_PROPS: dict[str, str] = {
-    "birthDate": "birthDate",
-    "gender": "gender",
-    "deceased": "deceasedBoolean",
-}
-
-
-def _add_context_patient_leaves(
-    library_text: str,
-    evidence_by_col: dict[str, Any],
-    conn: Any,
-    patient_id: str,
-) -> dict[str, Any]:
-    """Add Patient-property audit leaves for evidence-empty derived defines.
-
-    A define whose evidence list is EMPTY and whose body references a
-    context-patient property (Patient.birthDate, AgeInYearsAt — which
-    the translator derives from the birthDate row, .gender, …) gets a
-    synthesized leaf ``{target: Patient/<id>, attribute: <prop>, value:
-    <v>}`` read from the kernel's Patient row. Resource-backed defines
-    keep their retrieve evidence untouched.
-    """
-    import json as _json
-    import re as _re
-
-    # Cheap per-define body extraction (define "Name": ... to next define).
-    bodies: dict[str, str] = {}
-    parts = _re.split(r'(?m)^\s*define\s+"?([A-Za-z0-9_ ]+)"?\s*:', library_text)
-    for i in range(1, len(parts) - 1, 2):
-        bodies[parts[i].strip()] = parts[i + 1]
-
-    patient_resource: dict | None = None
-    for col, ev in list(evidence_by_col.items()):
-        if ev:  # retrieve-backed — leave untouched
-            continue
-        body = bodies.get(col)
-        if body is None:
-            continue
-        referenced = [
-            (prop, key)
-            for prop, key in _CONTEXT_PATIENT_PROPS.items()
-            if _re.search(rf"\b{prop}\b", body)
-            or (prop == "birthDate" and "AgeInYearsAt" in body)
-        ]
-        if not referenced:
-            continue
-        if patient_resource is None:
-            try:
-                raw = conn.execute(
-                    "SELECT resource FROM resources"
-                    " WHERE resourceType = 'Patient' AND id = ?",
-                    [patient_id],
-                ).fetchone()
-            except Exception:
-                break
-            if not raw:
-                break
-            try:
-                loaded = (
-                    _json.loads(raw[0]) if isinstance(raw[0], str) else raw[0]
-                )
-            except (TypeError, ValueError):
-                break
-            patient_resource = loaded if isinstance(loaded, dict) else None
-            if patient_resource is None:
-                break
-        leaves = []
-        for prop, key in referenced:
-            value = patient_resource.get(key)
-            if value is None and key == "deceasedBoolean":
-                value = patient_resource.get("deceasedDateTime")
-            leaves.append(
-                {
-                    "target": f"Patient/{patient_id}",
-                    "attribute": prop,
-                    "value": value,
-                    "operator": "derived",
-                    "threshold": "context",
-                    "trace": [col],
-                }
-            )
-        evidence_by_col[col] = leaves
-    return evidence_by_col
 
 
 def _audit_definitions(relation: Any) -> list[dict[str, Any]]:

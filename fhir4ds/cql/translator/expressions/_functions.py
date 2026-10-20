@@ -4873,7 +4873,7 @@ class FunctionsMixin:
                 target_type="VARCHAR",
             )
 
-        return SQLFunctionCall(
+        age_call = SQLFunctionCall(
             name="cqlDurationBetween",
             args=[
                 SQLCast(expression=birth_date, target_type="VARCHAR"),
@@ -4881,6 +4881,22 @@ class FunctionsMixin:
                 SQLLiteral(value=unit),
             ],
         )
+        # S22f-promotion (design seam A): this call derives from the
+        # context patient's birthDate — attach the property provenance
+        # so the audit wrapper can emit audit_patient_property instead
+        # of a bare audit_leaf (the _audit_target attribute protocol).
+        # S22f-promotion (design seam A): record the context-patient
+        # property read in the TRANSLATION CONTEXT (keyed by the define
+        # being translated) — node-level Python attributes do not
+        # survive the operator-mixin rebuilds, the context does.
+        current_def = getattr(self.context, "_current_definition", None)
+        if current_def:
+            props = getattr(self.context, "_patient_property_defs", None)
+            if props is None:
+                props = {}
+                self.context._patient_property_defs = props
+            props.setdefault(current_def, ("birthDate", birth_date))
+        return age_call
 
     def _translate_age_at_function(self, name: str, args: List[SQLExpression]) -> SQLExpression:
         """
@@ -4944,13 +4960,22 @@ class FunctionsMixin:
                     ),
                     limit=1,
                 ))
-            return SQLFunctionCall(
+            age_at_call = SQLFunctionCall(
                 name=calc_udf_name,
                 args=[
                     SQLCast(expression=birth_date, target_type="VARCHAR"),
                     SQLCast(expression=args[0], target_type="VARCHAR"),
                 ],
             )
+            # S22f-promotion seam A (see _translate_age_function).
+            current_def = getattr(self.context, "_current_definition", None)
+            if current_def:
+                props = getattr(self.context, "_patient_property_defs", None)
+                if props is None:
+                    props = {}
+                    self.context._patient_property_defs = props
+                props.setdefault(current_def, ("birthDate", birth_date))
+            return age_at_call
         elif len(args) >= 2:
             patient_resource = args[0]
             as_of_date = args[1]

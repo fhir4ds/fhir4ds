@@ -254,12 +254,14 @@ class TestExplainCapability:
         assert ev.diagnostics[0].code.value == "not_found"
 
     def test_context_patient_property_leaf(self):
-        """S22f (§7/AM4d): derived defines get Patient-property leaves.
+        """S22f-promotion: derived defines get Patient-property leaves
+        FROM THE TRANSLATOR (audit_patient_property macro — seam A).
 
         AgeInYearsAt derives from the context Patient.birthDate — no
         contributing resource exists, so the evidence would render "no
-        contributing resources". The synthesized leaf names the Patient
-        row + the referenced property + its value.
+        contributing resources". The macro-sourced leaf names the
+        Patient row + the referenced property + its value. (The S22f
+        explain-seam backfill is retired; this asserts the native path.)
         """
         cql = (
             "library AgeEv version '1.0.0'\n"
