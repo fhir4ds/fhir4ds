@@ -95,7 +95,11 @@ class TestWatcher:
         w.rescan()
         ev = q.get(timeout=5)
         assert ev.kind == "data-hint"
-        assert any("more.ndjson" in p for p in ev.paths)
+        # S22e: the ndjson was TRANSPORT — normalized into the canonical
+        # Patient/<id>/ folder (the monolith archived); the hint names
+        # the canonical file(s).
+        assert any("Patient" in p and "p2" in p for p in ev.paths)
+        assert not (tmp_path / "data" / "more.ndjson").exists()
 
     def test_removal_event(self, tmp_path):
         cfg = make_ws(tmp_path)

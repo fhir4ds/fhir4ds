@@ -310,3 +310,83 @@ def _place_by_reference(root: Path, resource: dict, place) -> None:
     if isinstance(rtype, str) and rtype in FHIR_TYPE_FOLDERS:
         # Unattributed: root type folder, one file per resource.
         place(resource, root / rtype / f"{rid}.json")
+
+
+# ---------------------------------------------------------------------------
+# S22e (§3): normalize-on-ingest — the ONGOING path (not first-boot)
+# ---------------------------------------------------------------------------
+
+def normalize_ndjson_ingest(data: Path, *, root: Path | None = None) -> dict:
+    """Normalize any ``*.ndjson`` files under ``data/`` into the canonical shape.
+
+    ndjson is TRANSPORT only: every monolith under the data dir is
+    parsed once, split into ``Patient/<id>/`` folders (typed patient-ref
+    doctrine) with unattributed resources in their root type folders,
+    then archived to ``_attic/ingest/<name>`` (never deleted).
+    ``root`` defaults to the data dir's parent (the workspace root).
+    Returns ``{normalized: <file count>, patients: <ids>}``.
+    """
+    data = Path(data)
+    if root is None:
+        # Auto-detect: a dir named `data` IS the data dir; anything
+        # containing one is the workspace root.
+        if data.name == "data":
+            root = data.parent
+        elif (data / "data").is_dir():
+            root = data
+            data = data / "data"
+        else:
+            root = data.parent
+    else:
+        root = Path(root)
+    if not data.is_dir():
+        return {"normalized": 0, "patients": []}
+    report = {"normalized": 0, "patients": []}
+    seen_patients: set[str] = set()
+
+    def place(resource: dict, suggested: Path) -> None:
+        target = suggested
+        stem, suffix = suggested.stem, suggested.suffix
+        n = 1
+        while target.exists():
+            target = suggested.with_name(f"{stem}-{n}{suffix}")
+            n += 1
+        write_resource(target, resource)
+
+    for path in sorted(data.rglob("*.ndjson")):
+        try:
+            lines = path.read_text(encoding="utf-8-sig").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                resource = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(resource, dict):
+                continue
+            rtype = resource.get("resourceType")
+            rid = resource.get("id")
+            rid = rid if isinstance(rid, str) and rid else "unknown"
+            if rtype == "Patient":
+                place(resource, root / "Patient" / rid / f"{rid}.json")
+                seen_patients.add(rid)
+                continue
+            pid = _patient_ref_target(resource)
+            if pid is not None:
+                place(
+                    resource,
+                    root / "Patient" / pid / str(rtype) / f"{rid}.json",
+                )
+                seen_patients.add(pid)
+            elif isinstance(rtype, str) and rtype in FHIR_TYPE_FOLDERS:
+                place(resource, root / rtype / f"{rid}.json")
+        attic = root / "_attic" / "ingest" / path.relative_to(data).parent
+        attic.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(path), str(attic / path.name))
+        report["normalized"] += 1
+    report["patients"] = sorted(seen_patients)
+    return report

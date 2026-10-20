@@ -113,6 +113,25 @@ class Watcher:
 
     def rescan(self) -> WorkspaceSnapshot:
         """Take a fresh snapshot, diff, publish events; never raises."""
+        # S22e: normalize-on-ingest BEFORE scanning — any ndjson that
+        # appeared under a data dir is transport; split it into the
+        # canonical per-patient folders so the snapshot (and kernel)
+        # only ever see the canonical shape. Ingested paths join the
+        # data-hint so the UI still offers the (explicit) restart.
+        ingested: list[str] = []
+        try:
+            from .workspace_types import normalize_ndjson_ingest
+
+            for d in self._cfg.data_dirs:
+                if d.is_dir() and any(d.rglob("*.ndjson")):
+                    report = normalize_ndjson_ingest(d)
+                    if report.get("normalized"):
+                        ingested = [
+                            str(p)
+                            for p in sorted((d.parent / "Patient").rglob("*.json"))
+                        ]
+        except Exception:  # normalization never blocks discovery
+            pass
         try:
             snap = scan_workspace(self._cfg)
         except Exception:  # pragma: no cover - discovery guards internally
@@ -150,10 +169,12 @@ class Watcher:
                         kind="changed", paths=code_changes, snapshot=snap.to_dict()
                     )
                 )
-            if data_changes:
+            if data_changes or ingested:
                 # Locked decision 4: data changes NEVER auto-reload.
                 self._bus.publish(
-                    WorkspaceEvent(kind="data-hint", paths=data_changes)
+                    WorkspaceEvent(
+                        kind="data-hint", paths=data_changes + ingested
+                    )
                 )
             if self._on_rescan is not None:
                 try:

@@ -809,11 +809,28 @@ class _Handler(BaseHTTPRequestHandler):
         except (OSError, ValueError) as exc:
             self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
             return
+        # S22e: normalize-on-ingest — an added DATA path carrying ndjson
+        # monoliths is split into canonical per-patient folders (ndjson
+        # is TRANSPORT only; the browser never converts formats), then
+        # the rescan sees the canonical shape.
+        ingest_report: dict | None = None
+        if kind == "data":
+            from .workspace_types import normalize_ndjson_ingest
+
+            ingest_report = normalize_ndjson_ingest(
+                candidate if candidate.is_dir() else candidate.parent
+            )
         snap = self.server.watcher.rescan()
         self._write_json(
             200,
-            _envelope(ok=True, kind=kind, added=rel, snapshot={"datasets": len(snap.datasets),
-                                                               "libraries": len(snap.libraries)}),
+            _envelope(
+                ok=True,
+                kind=kind,
+                added=rel,
+                ingest=ingest_report,
+                snapshot={"datasets": len(snap.datasets),
+                          "libraries": len(snap.libraries)},
+            ),
         )
 
     def _route_terminology_preview(self, body: dict[str, Any]) -> None:
