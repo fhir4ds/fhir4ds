@@ -23,6 +23,33 @@ CONVENTION_DIRS = {
     "view": "views",
 }
 
+# S22d-1 (AM5–AM8): FHIR-type workspace conventions. `load_config` ADDS
+# these type folders to the search paths when present — a type-layout
+# workspace works with zero manifest/flag changes, and legacy shapes keep
+# working alongside (both are searched; discovery dedupes paths).
+TYPE_CONVENTION_DIRS = {
+    "cql": ("Library",),
+    "valueset": ("ValueSet",),
+    "measure": ("Measure",),
+    "data": (
+        "Patient",
+        "Encounter",
+        "Observation",
+        "Condition",
+        "Procedure",
+        "Organization",
+        "Practitioner",
+        "Location",
+        "AllergyIntolerance",
+        "Immunization",
+        "MedicationRequest",
+        "ServiceRequest",
+        "DiagnosticReport",
+        "DocumentReference",
+    ),
+    "view": ("ViewDefinition",),
+}
+
 _CONFIG_KEYS = {"cql_dirs", "valueset_dirs", "measure_dirs", "data_dirs", "view_dirs"}
 _LIST_FIELDS = {
     "cql_dirs": "cql",
@@ -125,6 +152,9 @@ def load_config(
 
     def merged(kind: str, flags: list[str] | None) -> list[Path]:
         entries: list[str] = [CONVENTION_DIRS[kind]]
+        # S22d-1: type-cased conventions append (legacy first so existing
+        # manifests keep their precedence; both shapes are searched).
+        entries.extend(TYPE_CONVENTION_DIRS.get(kind, ()))
         entries.extend(manifest.get(kind, []))
         entries.extend(flags or [])
         seen: set[Path] = set()

@@ -3621,6 +3621,22 @@ def _version() -> str:
 def run_dev_server(cfg: Any) -> None:
     """Build and run the dev server (blocking; CLI entry point)."""
     from .discovery import scan_workspace
+    from .workspace_types import migrate_workspace
+
+    # S22d-1: one-time legacy -> FHIR-type migration on first boot
+    # (originals archived to _attic/; idempotent — no legacy markers,
+    # no migration). Runs BEFORE the first scan so the kernel boots on
+    # the canonical shape.
+    try:
+        report = migrate_workspace(Path(cfg.root))
+        if report.get("migrated"):
+            print(  # noqa: T201
+                f"workspace migrated to FHIR-type layout "
+                f"({report.get('patients', 0)} patient folders; "
+                f"originals in {report.get('attic')})"
+            )
+    except Exception as exc:  # migration failures must not block serving
+        print(f"workspace migration skipped: {exc}")  # noqa: T201
 
     snapshot = scan_workspace(cfg)
     manager = KernelManager(snapshot)

@@ -162,15 +162,17 @@ def scan_workspace(cfg: DevServerConfig) -> WorkspaceSnapshot:
         for d in dirs:
             if not d.is_dir():
                 continue
+            # S22d-1: measure dirs may be the TYPE tree (Measure/<m>/…)
+            # whose inner Parameters/List/MeasureReport/ViewDefinition
+            # entries are NOT Measure resources — same exclusion class
+            # as the legacy `expected` store.
+            skip_parts = {"expected", "Parameters", "List", "MeasureReport", "ViewDefinition"}
             for path in sorted(d.rglob("*")):
+                rel_parts = path.relative_to(d).parts
                 if (
                     path.is_file()
                     and path.suffix.lower() in suffixes
-                    # S3b: expected-results store lives under measures/
-                    # but is not a Measure resource — exclude it from
-                    # measure discovery (it previously captured the saved
-                    # cqfm-test-cases MeasureReports as "measures").
-                    and "expected" not in path.relative_to(d).parts
+                    and not (set(rel_parts[:-1]) & skip_parts)
                 ):
                     out.append(path)
         return out

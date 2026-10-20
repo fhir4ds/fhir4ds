@@ -10,10 +10,15 @@ from fhir4ds.devserver.config import DevConfigError, load_config
 class TestConventionOnly:
     def test_convention_dirs(self, tmp_path):
         cfg = load_config(tmp_path)
-        assert [p.name for p in cfg.cql_dirs] == ["cql"]
-        assert [p.name for p in cfg.valueset_dirs] == ["valuesets"]
-        assert [p.name for p in cfg.measure_dirs] == ["measures"]
-        assert [p.name for p in cfg.data_dirs] == ["data"]
+        # S22d-1: legacy shape first, FHIR-type conventions appended.
+        assert [p.name for p in cfg.cql_dirs][0] == "cql"
+        assert "Library" in [p.name for p in cfg.cql_dirs]
+        assert [p.name for p in cfg.valueset_dirs][0] == "valuesets"
+        assert "ValueSet" in [p.name for p in cfg.valueset_dirs]
+        assert [p.name for p in cfg.measure_dirs][0] == "measures"
+        assert "Measure" in [p.name for p in cfg.measure_dirs]
+        assert [p.name for p in cfg.data_dirs][0] == "data"
+        assert "Patient" in [p.name for p in cfg.data_dirs]
         assert all(str(p).startswith(str(tmp_path)) for p in cfg.all_dirs())
 
     def test_default_port(self, tmp_path):
@@ -33,18 +38,25 @@ class TestManifest:
             '[dev]\ncql_dirs = ["shared-cql"]\ndata_dirs = ["more-data"]\n'
         )
         cfg = load_config(tmp_path)
-        assert [p.name for p in cfg.cql_dirs] == ["cql", "shared-cql"]
-        assert [p.name for p in cfg.data_dirs] == ["data", "more-data"]
+        # Type conventions sit between legacy and manifest entries.
+        names = [p.name for p in cfg.cql_dirs]
+        assert names[0] == "cql" and names[-1] == "shared-cql"
+        assert "Library" in names
+        dnames = [p.name for p in cfg.data_dirs]
+        assert dnames[0] == "data" and dnames[-1] == "more-data"
+        assert "Patient" in dnames
 
     def test_flags_append_after_manifest(self, tmp_path):
         (tmp_path / "fhir4ds.toml").write_text('[dev]\ncql_dirs = ["from-toml"]\n')
         cfg = load_config(tmp_path, cql_dirs=["from-flag"])
-        assert [p.name for p in cfg.cql_dirs] == ["cql", "from-toml", "from-flag"]
+        names = [p.name for p in cfg.cql_dirs]
+        assert names[0] == "cql" and names[-1] == "from-flag"
+        assert "from-toml" in names and "Library" in names
 
     def test_duplicate_dirs_deduped(self, tmp_path):
         (tmp_path / "fhir4ds.toml").write_text('[dev]\ncql_dirs = ["cql"]\n')
         cfg = load_config(tmp_path, cql_dirs=["cql"])
-        assert [p.name for p in cfg.cql_dirs] == ["cql"]
+        assert [p.name for p in cfg.cql_dirs].count("cql") == 1
 
     def test_malformed_toml_exit2_class(self, tmp_path):
         (tmp_path / "fhir4ds.toml").write_text("[dev\nbroken")

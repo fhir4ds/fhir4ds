@@ -58,12 +58,29 @@ class Kernel:
             # group paths by suffix into SEPARATE specs / load_dataset
             # calls — each kind loads through its dedicated loader path.
             ndjson = [p for p in self.datasets if p.suffix.lower() == ".ndjson"]
-            bundles = [
-                p
-                for p in self.datasets
-                if p.suffix.lower() == ".json"
-                and not _is_parameters_resource(p)
-            ]
+            # S22d-1: type-layout workspaces hold LONE resource JSONs
+            # (Patient/<id>/<id>.json etc.), not Bundles — separate them
+            # from real Bundle files; lone resources load via the
+            # resources list (same loader path as load_resources).
+            bundles: list[Path] = []
+            lone_resources: list[dict] = []
+            for p in self.datasets:
+                if p.suffix.lower() != ".json" or _is_parameters_resource(p):
+                    continue
+                try:
+                    with open(p, "r", encoding="utf-8-sig") as fh:
+                        payload = json.load(fh)
+                except (OSError, json.JSONDecodeError):
+                    bundles.append(p)  # let the loader surface the error
+                    continue
+                if isinstance(payload, dict) and payload.get("resourceType") == "Bundle":
+                    bundles.append(p)
+                elif isinstance(payload, dict) and isinstance(
+                    payload.get("resourceType"), str
+                ):
+                    lone_resources.append(payload)
+                else:
+                    bundles.append(p)
             # S16: lone Parameters resources in data dirs are NOT datasets
             # (they feed _workspace_parameter_defaults); skip them from
             # bundle loading instead of failing the whole kernel boot.
@@ -83,6 +100,8 @@ class Kernel:
                     )
                 )
                 valuesets = None
+            if lone_resources:
+                specs.append(DatasetSpec(resources=lone_resources))
             if valuesets:  # valuesets only, no dataset files
                 specs.append(DatasetSpec(valueset_paths=valuesets))
             for spec in specs:
