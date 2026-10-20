@@ -233,6 +233,20 @@ def _evidence_artifact(
             if col != "patient_id" and isinstance(val, (bool, type(None)))
         }
         patients_map[pid] = {"populations": populations}
+    # S22f-promotion downstream: per-patient audit leaves ride along so
+    # the artifact is a full evidence snapshot (compare_evidence keys on
+    # populations; leaves are additive and ignored by the delta).
+    from fhir4ds.operations import explain_patient
+
+    for pid in list(patients_map):
+        try:
+            exp = explain_patient(libraries, main, dataset, pid, conn)
+        except Exception:  # evidence drill-in failures never break verify
+            continue
+        if exp.ok:
+            patients_map[pid]["evidence"] = {
+                d["column"]: d.get("evidence", []) for d in exp.definitions
+            }
     return {"schema": 1, "ok": True, "patients": patients_map}
 
 
