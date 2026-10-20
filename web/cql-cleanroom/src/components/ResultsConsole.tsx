@@ -404,6 +404,32 @@ export function ResultsConsole({
           </div>
         )}
         {payloadRows && payloadColumns && payloadColumns.length > 0 && (
+          <>
+          {/* S22b (Q3): population summary — every evaluated patient is in
+              the table (booleans incl. false/null); the line names the
+              evaluated total + true-counts per Boolean column so the
+              "why only 20 of 22" question answers itself. */}
+          <div
+            className="pane-hint population-summary"
+            data-testid="results-summary"
+            role="status"
+            style={{ padding: "4px 10px" }}
+          >
+            {(() => {
+              const evaluated = payloadRows.length;
+              const boolCols = payloadColumns.filter(
+                (c) => payload?.column_types?.[c] === "Boolean",
+              );
+              const parts = [`Evaluated ${evaluated}`];
+              for (const c of boolCols) {
+                const t = payloadRows.filter(
+                  (r) => (r as Record<string, unknown>)[c] === true,
+                ).length;
+                parts.push(`${c} ${t}`);
+              }
+              return parts.join(" · ");
+            })()}
+          </div>
           <PaginatedTable
             testId="results-table"
             rowCount={payloadRows.length}
@@ -479,6 +505,7 @@ export function ResultsConsole({
               })
             }
           />
+          </>
         )}
         {!payload && (
           <p className="pane-hint" data-testid="console-empty">
