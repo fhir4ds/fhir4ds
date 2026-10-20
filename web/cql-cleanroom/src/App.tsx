@@ -3004,6 +3004,9 @@ export default function App() {
             ? "Expected Results"
             : t.resourceId.replace(/^Patient\//, "");
         break;
+      case "patient":
+        tabLabels[t.id] = `Patient ${t.resourceId}`;
+        break;
       case "view":
         tabLabels[t.id] =
           viewDefs.find((v) => v.id === t.resourceId)?.name || t.resourceId;
@@ -3603,6 +3606,7 @@ export default function App() {
               focusedPid={focusedPid}
               onFocusedPidChange={setFocusedPid}
               filter={navFilters.tests}
+              onOpenPatient={(pid) => openEditorTab("patient", pid)}
             />
           }
         />
@@ -3779,6 +3783,9 @@ export default function App() {
                   onUseCurrentResult={captureExpectedFromRun}
                   hasCurrentResult={!!lastReports?.length}
                 />
+              }
+              onPatientSaved={(pid) =>
+                setStatusNote(`saved patient ${pid} — restart kernel to reload`)
               }
               measureReports={lastReports}
               viewConfig={viewConfig?.overrides ?? null}

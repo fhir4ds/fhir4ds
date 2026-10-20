@@ -22,6 +22,7 @@ export function DatasetPane({
   onFocusedPidChange,
   filter,
   serverPatientIds,
+  onOpenPatient,
 }: {
   dataset: DatasetSpec | null;
   /** S20: connected mode — the SERVER workspace roster (what the kernel
@@ -29,6 +30,8 @@ export function DatasetPane({
    *  browser store (standalone's live dataset). */
   /** Connected roster (S22a: authoritative even when EMPTY; null = standalone). */
   serverPatientIds?: string[] | null;
+  /** S22c: open this patient's data in the resource editor (connected). */
+  onOpenPatient?: (pid: string) => void;
   /** Focused patient group key (null = L2 list); detail renders beside. */
   focusedPid: string | null;
   onFocusedPidChange: (pid: string | null) => void;
@@ -71,7 +74,18 @@ export function DatasetPane({
           </div>
           <div className="ds-server-roster" data-testid="ds-server-roster">
             {serverPatientIds.slice(0, 50).map((pid) => (
-              <div key={pid} className="ds-roster-row" data-testid="ds-roster-row">
+              <div
+                key={pid}
+                className="ds-roster-row ds-roster-row-editable"
+                data-testid="ds-roster-row"
+                role="button"
+                tabIndex={0}
+                title="Open this patient's data in the resource editor"
+                onClick={() => onOpenPatient?.(pid)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") onOpenPatient?.(pid);
+                }}
+              >
                 {pid}
               </div>
             ))}

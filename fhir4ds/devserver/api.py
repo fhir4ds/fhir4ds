@@ -1305,6 +1305,19 @@ class _Handler(BaseHTTPRequestHandler):
                     return
                 self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
             return
+        if (
+            path.startswith("/api/patient/")
+            and path.count("/") == 3
+            and path != "/api/patient/resources"
+            and "?id=" not in self.path
+        ):
+            # S22c (AM3): one patient's composed data — the Patient
+            # resource plus every resource referencing them, resolved
+            # from the KERNEL (one execution universe) with dataset
+            # provenance for the roster/editor save-back contract.
+            pid = path[len("/api/patient/"):]
+            self._route_patient_get(pid)
+            return
         if path == "/api/define-types":
             # v3 Slice-2 gate: translator-backed define classification for
             # the measure mapping dropdowns (boolean Patient-context defines
@@ -1872,6 +1885,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._route_view_run(body)
             elif path == "/api/resource/validate":
                 self._route_resource_validate(body)
+            elif path == "/api/patient/save":
+                self._route_patient_save(body)
             elif path == "/api/resource/save":
                 self._route_resource_save(body)
             elif path == "/api/workspace/switch":
@@ -3066,6 +3081,163 @@ class _Handler(BaseHTTPRequestHandler):
         self._write_json(200, _envelope(path=str(target), appended=True))
 
     # -- static UI ----------------------------------------------------------
+
+    def _route_patient_get(self, pid: str) -> None:
+        """GET /api/patient/<id> — S22c roster drill-in payload.
+
+        The Patient resource plus every resource whose patient_ref
+        resolves to them (subject/patient/beneficiary typed-reference
+        doctrine from the loader), each carrying source-file provenance
+        for the editor's save-back contract.
+        """
+        kernel = self.server.kernel_manager.current()
+        try:
+            rows = kernel.conn.execute(
+                "SELECT id, resourceType, resource, patient_ref FROM resources"
+                " WHERE id = ? OR patient_ref = ?",
+                [pid, pid],
+            ).fetchall()
+        except Exception as exc:
+            if _is_no_dataset_error(exc):
+                self._write_json(
+                    200, _envelope(ok=False, diagnostics=[_no_dataset_diag()])
+                )
+                return
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        resources = []
+        patient = None
+        for rid, rtype, resource_json, pref in rows:
+            try:
+                resource = json.loads(resource_json) if isinstance(resource_json, str) else resource_json
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(resource, dict):
+                continue
+            # Provenance: which dataset file contributed the row (the
+            # kernel loads whole files; group rows by their source spec).
+            resources.append(resource)
+            if rtype == "Patient":
+                patient = resource
+        if patient is None:
+            self._write_json(
+                200,
+                _envelope(ok=False, diagnostics=[_diag(f"unknown patient {pid!r}", "NOT_FOUND")]),
+            )
+            return
+        snap = self.server.watcher.snapshot
+        self._write_json(
+            200,
+            _envelope(
+                patient_id=pid,
+                patient=patient,
+                resources=resources,
+                datasets=[str(p) for p in snap.datasets],
+            ),
+        )
+
+    def _route_patient_save(self, body: dict[str, Any]) -> None:
+        """POST /api/patient/save — S22c save-back for ONE patient's edit.
+
+        The editor sends the edited Patient resource; the route rewrites
+        the patient's line(s) in the contributing ndjson dataset (all
+        other lines untouched), publishes a data-hint so the UI offers a
+        kernel restart (data never auto-reloads — locked decision), and
+        reports which file changed.
+        """
+        from pathlib import Path as _Path
+
+        resource = body.get("resource")
+        if not isinstance(resource, dict):
+            self._write_json(
+                200, _envelope(ok=False, diagnostics=[_diag("resource must be a JSON object")])
+            )
+            return
+        pid = resource.get("id")
+        if not isinstance(pid, str) or not pid.strip():
+            self._write_json(
+                200, _envelope(ok=False, diagnostics=[_diag("resource.id is required")])
+            )
+            return
+        snap = self.server.watcher.snapshot
+        ndjson_paths = [
+            p for p in snap.datasets if p.suffix.lower() == ".ndjson"
+        ]
+        if not ndjson_paths:
+            self._write_json(
+                200,
+                _envelope(
+                    ok=False,
+                    diagnostics=[_diag("no ndjson dataset to edit (per-patient folders arrive with S22e)")],
+                ),
+            )
+            return
+        # Find every file holding this patient id.
+        holders: list[_Path] = []
+        for p in ndjson_paths:
+            try:
+                text = p.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            for line in text.splitlines():
+                if not line.strip():
+                    continue
+                if f'"id": "{pid}"' in line or f'"id":"{pid}"' in line:
+                    holders.append(p)
+                    break
+        if not holders:
+            self._write_json(
+                200,
+                _envelope(ok=False, diagnostics=[_diag(f"patient {pid!r} not found in any dataset file")]),
+            )
+            return
+        from fhir4ds.operations import validate_resource as ops_validate_resource
+
+        vr = ops_validate_resource(resource)
+        if not vr.valid:
+            self._write_json(
+                200, _envelope(ok=False, diagnostics=[_diag(d) for d in vr.diagnostics])
+            )
+            return
+        changed: list[str] = []
+        for p in holders:
+            try:
+                lines = p.read_text(encoding="utf-8").splitlines()
+            except OSError as exc:
+                self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+                return
+            out = []
+            replaced = False
+            for line in lines:
+                if not line.strip():
+                    continue
+                if f'"id": "{pid}"' in line or f'"id":"{pid}"' in line:
+                    # Replace the FIRST matching Patient line; other
+                    # resources referencing the patient keep their lines.
+                    if not replaced and f'"resourceType": "Patient"' in line.replace("'", '"'):
+                        out.append(json.dumps(resource, ensure_ascii=False))
+                        replaced = True
+                    else:
+                        out.append(line)
+                else:
+                    out.append(line)
+            try:
+                with open(p, "w", encoding="utf-8") as fh:
+                    fh.write("\n".join(out) + "\n")
+                changed.append(str(p))
+            except OSError as exc:
+                self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+                return
+        self.server.watcher.bus.publish(WorkspaceEvent(kind="data-hint", paths=changed))
+        self._write_json(
+            200,
+            _envelope(
+                ok=True,
+                patient_id=pid,
+                files=changed,
+                note="saved — restart the kernel to reload patient data",
+            ),
+        )
 
     def _serve_static(self, path: str) -> bool:
         """Serve the committed built UI(s).

@@ -7,6 +7,7 @@ import type { LibraryClosure } from "../../lib/libraryGraph";
 import type { FlattenViewResult } from "../../lib/protocol";
 import type { ParamBinding } from "../../lib/params";
 import { ParameterEditor } from "./ParameterEditor";
+import { PatientEditor } from "./PatientEditor";
 
 /**
  * WORKBENCH_REORG phase 3 — per-kind tab hosts (non-library kinds).
@@ -43,6 +44,8 @@ export interface TabHostProps {
   builder: React.ReactNode;
   /* expected (TestsPane expected grid) */
   testsSlot: React.ReactNode;
+  /* patient (S22c roster drill-in) */
+  onPatientSaved?: (pid: string) => void;
   /* view */
   measureReports: Array<Record<string, unknown>> | null;
   viewConfig: ViewOverrides | null;
@@ -89,6 +92,8 @@ export function TabHost(p: TabHostProps) {
       return <>{p.builder}</>;
     case "expected":
       return <>{p.testsSlot}</>;
+    case "patient":
+      return <PatientEditor patientId={p.tab.resourceId} onSaved={p.onPatientSaved} />;
     case "view":
       return (
         <ViewPane

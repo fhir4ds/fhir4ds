@@ -1913,3 +1913,14 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
 .ws-picker-meta { color: #7b8698; font-weight: 400; }
 .ws-picker-empty { color: #7b8698; font-size: 12px; padding: 7px 10px; }
 .ws-picker-error { color: #ff8f8f; font-size: 11px; padding: 6px 10px 4px; }
+
+/* S22c: patient roster + editor */
+.ds-roster-row-editable { cursor: pointer; }
+.ds-roster-row-editable:hover { background: #1f2733; border-radius: 4px; }
+.patient-editor .patient-json {
+  width: 100%; min-height: 320px; font-family: var(--mono, monospace);
+  font-size: 12px; background: #0d1117; color: #c9d4e3;
+  border: 1px solid #2c3848; border-radius: 6px; padding: 8px;
+  resize: vertical;
+}
+.patient-editor .patient-resources { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 0; }
