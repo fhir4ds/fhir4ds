@@ -266,3 +266,18 @@ All migrations one-time on first boot, archive originals to `_attic/`.
 8. **S22g — Cell-run surface split (§8).**
 
 Each slice: red Playwright test → fix → green → Muse → report.
+
+
+---
+
+## S23 Acceptance Matrix (journey tests pinning plan promises)
+
+| Plan promise (§8 / checkpoint words) | Journey test (s23-journey.spec.ts) | Status |
+|---|---|---|
+| "text editor mode -> results at the bottom console (as today)" showing ALL defines (measure-mapped narrowing belongs to the measure surface) | S23-1: text-mode whole-library Run shows ALL define columns (6-define library + active measure -> console table shows every define) | GREEN |
+| "CELL mode -> results inline per cell ONLY, no bottom-console duplication for cell runs" — cell edits must not leak heartbeat runs into the console | S23-2: with cells open, edit a cell, wait past the debounce -> IndexedDB run history unchanged, console summary unchanged | GREEN |
+
+Engine fix riding along: the topological sort now walks TupleElement
+value expressions (parser stores them in .type) — Tuple-member define
+references (Tuple { young: "Young" }) previously emitted the consumer
+CTE before its dependency (DuckDB: Table "Young" does not exist).

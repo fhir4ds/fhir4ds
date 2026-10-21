@@ -5734,3 +5734,21 @@ Every identified UI/UX issue in the web surfaces gets confirmed via
 Playwright BEFORE the fix lands: write the failing repro test first
 (red), then fix, then confirm the SAME test green. Every handoff report
 states 'repro'd via Playwright: <test name>' for each fixed item.
+
+## Journey-Test Doctrine (S23 process fix, 2026-10-20)
+
+Slice-level tests pin MECHANICS; plans are written in USER-JOURNEY
+language. Every plan section gets a JOURNEY-level Playwright test
+derived from the PLAN'S OWN WORDS (not the slice's implementation
+mechanics) before a campaign section may be called complete — e.g.
+"cell mode renders results inline per cell ONLY, no bottom-console
+duplication" is tested as: edit a cell, wait past the debounce, assert
+the console receives NO new run. Campaign close-out includes the
+acceptance matrix (each plan promise -> the journey test pinning it)
+and a Joel checkpoint review before 'complete' is declared.
+
+
+Every identified UI/UX issue in the web surfaces gets confirmed via
+Playwright BEFORE the fix lands: write the failing repro test first
+(red), then fix, then confirm the SAME test green. Every handoff report
+states 'repro'd via Playwright: <test name>' for each fixed item.

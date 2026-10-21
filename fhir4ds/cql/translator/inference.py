@@ -364,7 +364,19 @@ class InferenceMixin:
                         for item in value:
                             if isinstance(item, Expression):
                                 children.append(item)
-                            elif hasattr(item, 'expression'):
+                            elif hasattr(item, "name") and hasattr(item, "type"):
+                                # S23-1 dependency-order fix: the parser
+                                # stores TupleElement VALUE expressions in
+                                # the .type field — without this walk the
+                                # topological sort misses Tuple-member
+                                # define references (Tuple { x: "Other" })
+                                # and emits the consumer CTE BEFORE its
+                                # dependency (DuckDB: Table "Other" does
+                                # not exist).
+                                item_value = getattr(item, "type")
+                                if item_value is not None and isinstance(item_value, Expression):
+                                    children.append(item_value)
+                            if hasattr(item, 'expression'):
                                 # Handle AST nodes like QuerySource, WithClause, LetClause
                                 child_expr = getattr(item, 'expression')
                                 if isinstance(child_expr, Expression):

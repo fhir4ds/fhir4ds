@@ -669,6 +669,12 @@ export default function App() {
   const [serverDetectPending, setServerDetectPending] = useState(true);
   const puritySettledRef = useRef(false);
   const [puritySettled, setPuritySettled] = useState(false);
+  // S23-2: cell view visibility (lifted from EditorPane) — the auto-
+  // recalc heartbeat is SUPPRESSED while cells are the active surface
+  // (cell edits must not leak whole-library runs into the console).
+  const [cellsViewActive, setCellsViewActive] = useState(false);
+  const cellsViewActiveRef = useRef(cellsViewActive);
+  cellsViewActiveRef.current = cellsViewActive;
   // S21: latest serverMode for call-time reads inside async restore.
   const serverModeRef = useRef(serverMode);
   serverModeRef.current = serverMode;
@@ -1609,9 +1615,11 @@ export default function App() {
         main,
         dataset: evalDataset,
         parameters: runtimeParameters,
-        // 6j: non-entrypoint targets have no population defines — the
-        // engine returns ALL of that library's defines instead.
-        output_columns: runIsEntrypoint ? effectiveOutputColumns : undefined,
+        // S23-1 (journey): the TEXT-MODE whole-library run shows ALL
+        // defines — the measure-mapped narrowing belongs to the MEASURE
+        // surface, never the editor's Run. 6j: non-entrypoint targets
+        // already return every define of that library.
+        output_columns: undefined,
         emit_sql: true,
       });
       const env: EvaluateResult = resp.envelope
@@ -1748,6 +1756,10 @@ export default function App() {
   // (the effect re-fires when the parameter fills) so results auto-heal.
   useEffect(() => {
     if (!canAutoEval || recalcSeconds <= 0) return;
+    // S23-2 (PLAN §8): cell mode renders results inline per cell ONLY —
+    // suppress the heartbeat while the cell view is open (manual console
+    // runs return after switching back to text).
+    if (cellsViewActiveRef.current) return;
     let t: ReturnType<typeof setTimeout>;
     const fire = () => {
       t = setTimeout(() => {
@@ -1764,7 +1776,7 @@ export default function App() {
     fire();
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mainLibs, main, evalDataset, effectiveOutputColumns, measure, runtimeParameters, canAutoEval, recalcSeconds]);
+  }, [mainLibs, main, evalDataset, effectiveOutputColumns, measure, runtimeParameters, canAutoEval, recalcSeconds, cellsViewActive]);
 
   // M1 write-through: Measure.library[] mirrors the entrypoint pin —
   // primary first, then the dependency closure of that library (6f: the
@@ -3647,6 +3659,7 @@ export default function App() {
             onGraphOpenChange={setGraphOpen}
             onRun={runViaConsole}
             onRunCells={runCells}
+            onCellsViewChange={setCellsViewActive}
             connected={serverMode.kind === "connected"}
             holdAutoSplit={serverDetectPending || (serverMode.kind === "connected" && !puritySettled)}
             onExplainRow={(pid, define, ctx) => void explainCellRow(pid, define, ctx)}

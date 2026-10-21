@@ -47,6 +47,9 @@ interface Props {
    *  toggle is a header button (was a standalone bottom bar). */
   graphOpen?: boolean;
   onGraphOpenChange?: (open: boolean) => void;
+  /** S23-2: cell view visibility changes (the App suppresses the
+   *  auto-recalc heartbeat while cells are the active surface). */
+  onCellsViewChange?: (open: boolean) => void;
   /** S5: run a set of cells (cell-based editor execution). */
   onRunCells?: (
     names: string[],
@@ -126,6 +129,7 @@ export function EditorPane({
   graphOpen,
   onGraphOpenChange,
   onRunCells,
+  onCellsViewChange,
   connected,
   holdAutoSplit,
   onExplainRow,
@@ -146,7 +150,19 @@ export function EditorPane({
   const tabKeyRef = useRef(tabKey);
   tabKeyRef.current = tabKey;
   // S5: per-buffer cell mode (split view with cards vs plain editor).
-  const [cellViewOpen, setCellViewOpen] = useState(false);
+  const [cellViewOpen, setCellViewOpenRaw] = useState(false);
+  // S23-2: notify the App on every visibility flip (heartbeat gating).
+  const setCellViewOpen = useCallback(
+    (next: boolean | ((v: boolean) => boolean)) => {
+      setCellViewOpenRaw((prev) => {
+        const value =
+          typeof next === "function" ? (next as (v: boolean) => boolean)(prev) : next;
+        onCellsViewChange?.(value);
+        return value;
+      });
+    },
+    [onCellsViewChange],
+  );
   const hasCellMarkers = useMemo(
     () => splitCells(text).cells.length > 0,
     [text],
