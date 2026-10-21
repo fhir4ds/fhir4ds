@@ -58,21 +58,18 @@ async function openCells(page: import("@playwright/test").Page) {
   await page.waitForTimeout(1200);
 }
 
-test("S20-1: Tests drawer states which dataset runs evaluate (server banner)", async ({ page }) => {
+test("S20-1: Tests drawer lists the server roster (patient-list UX)", async ({ page }) => {
   await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(15000);
-  // The Tests drawer (default open; toggle if collapsed) hosts the
-  // DatasetPane whose banner states the live run dataset.
-  const banner = page.locator('[data-testid="dataset-source-banner"]');
-  if ((await banner.count()) === 0) {
+  // S24-a: the banner is REMOVED — the patient-list UX itself is the
+  // dataset statement. The Tests drawer (default open) hosts the
+  // DatasetPane roster (the kernel's patients) with resource chips.
+  const rosterRow = page.locator('[data-testid="ds-roster-row"]').first();
+  if ((await rosterRow.count()) === 0) {
     await page.locator('[data-testid="nav-toggle-tests"]').click();
     await page.waitForTimeout(2500);
   }
-  await expect(banner).toBeVisible({ timeout: 20000 });
-  await expect(banner).toContainText(/server workspace \(22 patient/);
-  // The drawer lists the SERVER roster rows (the kernel's patients).
-  const rosterRow = page.locator('[data-testid="ds-roster-row"]').first();
-  await expect(rosterRow).toBeVisible({ timeout: 10000 });
+  await expect(rosterRow).toBeVisible({ timeout: 20000 });
   const rosterCount = await page.locator('[data-testid="ds-roster-row"]').count();
   expect(rosterCount).toBeGreaterThanOrEqual(20);
 });

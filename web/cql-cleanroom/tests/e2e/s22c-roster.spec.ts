@@ -78,15 +78,11 @@ test("S22c-1: roster lists patients grouped by source with badges", async ({ pag
   }
   await expect(panel).toBeVisible();
 
-  // Both patients render as roster rows (read-only server roster).
+  // Both patients render as roster rows. S24-a: the banner is removed —
+  // the roster itself is the dataset statement (resource chips per row).
   const rows = panel.locator('[data-testid="ds-roster-row"]');
   await expect(rows.filter({ hasText: "r01" })).toBeVisible({ timeout: 20000 });
   await expect(rows.filter({ hasText: "r02" })).toBeVisible();
-
-  // The source banner names the dataset (grouped-by-source contract).
-  await expect(panel.locator('[data-testid="dataset-source-banner"]')).toContainText(
-    /server workspace \(2 patients\)/,
-  );
 });
 
 test("S22c-2: clicking a patient opens their data in the resource editor; save writes back", async ({ page }) => {
@@ -104,12 +100,13 @@ test("S22c-2: clicking a patient opens their data in the resource editor; save w
   }
   await expect(rosterRow).toBeVisible({ timeout: 15000 });
 
-  // Click r01's roster row -> the patient editor opens (tab + JSON).
-  // Focus + Enter (the row is a role=button with keyboard activation —
-  // dodges a transient rail-overlay pointer interception at this width).
+  // S24-3 interaction: single-click opens the type-grouped slideout;
+  // its 'Edit patient data…' button opens the patient editor (tab + JSON).
   const row = panel.locator('[data-testid="ds-roster-row"]', { hasText: "r01" }).first();
-  await row.focus();
-  await page.keyboard.press("Enter");
+  await row.click();
+  const slideout = page.locator('[data-testid="ds-patient-slideout"]');
+  await expect(slideout).toBeVisible({ timeout: 15000 });
+  await slideout.locator('[data-testid="ds-slideout-edit"]').click();
   const editor = page.locator('[data-testid="patient-editor"]');
   await expect(editor).toBeVisible({ timeout: 30000 });
   // The patient's resources are listed (Patient + their Encounter).

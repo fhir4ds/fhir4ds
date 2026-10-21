@@ -1931,3 +1931,18 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
   font-size: 10px; color: #7b8698; border: 1px solid #232a35;
   border-radius: 10px; padding: 1px 8px; background: rgba(255,255,255,0.02);
 }
+
+/* S24-3: patient roster + type slideout */
+.ds-roster-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.ds-roster-row.active { background: #1f2733; border-radius: 4px; }
+.ds-roster-id { font-weight: 500; }
+.ds-patient-slideout {
+  margin: 6px 8px; border: 1px solid #2c3848; border-radius: 8px;
+  background: #10151d; padding: 8px; max-height: 420px; overflow-y: auto;
+}
+.ds-slideout-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 6px; }
+.ds-slideout-type { padding: 4px 0; }
+.ds-slideout-type-head { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+.ds-slideout-list { list-style: none; margin: 2px 0 2px 4px; padding: 0 0 0 10px; border-left: 1px solid #232a35; }
+.ds-slideout-resource { font-size: 12px; color: #c9d4e3; padding: 1px 0; cursor: default; }
+.ds-slideout-date { color: #7b8698; font-size: 11px; }

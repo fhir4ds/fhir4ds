@@ -1213,7 +1213,34 @@ class _Handler(BaseHTTPRequestHandler):
                     " WHERE resourceType = 'Patient'"
                 ).fetchall()
                 ids = sorted({r[0] for r in rows if r[0] is not None and r[1] == "Patient"})
-                self._write_json(200, _envelope(patients=ids))
+                # S24-3 (published-docs UX): per-patient resource counts
+                # + type breakdown for the roster chips + slideout.
+                counts: dict[str, dict[str, Any]] = {}
+                try:
+                    crows = kernel.conn.execute(
+                        "SELECT patient_ref, resourceType FROM resources"
+                        " WHERE patient_ref IS NOT NULL"
+                    ).fetchall()
+                    for pref, rtype in crows:
+                        entry = counts.setdefault(pref, {"count": 0, "types": {}})
+                        entry["count"] += 1
+                        entry["types"][rtype] = entry["types"].get(rtype, 0) + 1
+                except Exception:
+                    counts = {}
+                self._write_json(
+                    200,
+                    _envelope(
+                        patients=ids,
+                        patient_resources=[
+                            {
+                                "id": pid,
+                                "count": counts.get(pid, {}).get("count", 0),
+                                "types": counts.get(pid, {}).get("types", {}),
+                            }
+                            for pid in ids
+                        ],
+                    ),
+                )
             except Exception as exc:
                 if _is_no_dataset_error(exc):
                     self._write_json(
@@ -3229,6 +3256,36 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
         snap = self.server.watcher.snapshot
+        # S22e: the canonical shape is the per-patient folder
+        # (Patient/<pid>/<pid>.json) — prefer it when present; ndjson
+        # monoliths remain supported (rewritten in place per line).
+        root = Path(getattr(self.server.watcher, "_cfg").root)
+        patient_file = root / "Patient" / str(pid) / f"{pid}.json"
+        if patient_file.is_file():
+            from fhir4ds.operations import validate_resource as ops_vr
+
+            vr = ops_vr(resource)
+            if not vr.valid:
+                self._write_json(
+                    200, _envelope(ok=False, diagnostics=[_diag(d) for d in vr.diagnostics])
+                )
+                return
+            from .workspace_types import write_resource
+
+            write_resource(patient_file, resource)
+            self.server.watcher.bus.publish(
+                WorkspaceEvent(kind="data-hint", paths=[str(patient_file)])
+            )
+            self._write_json(
+                200,
+                _envelope(
+                    ok=True,
+                    patient_id=pid,
+                    files=[str(patient_file)],
+                    note="saved — restart the kernel to reload patient data",
+                ),
+            )
+            return
         ndjson_paths = [
             p for p in snap.datasets if p.suffix.lower() == ".ndjson"
         ]
@@ -3237,7 +3294,7 @@ class _Handler(BaseHTTPRequestHandler):
                 200,
                 _envelope(
                     ok=False,
-                    diagnostics=[_diag("no ndjson dataset to edit (per-patient folders arrive with S22e)")],
+                    diagnostics=[_diag("patient data file not found (no Patient/<id>/ folder and no ndjson dataset)")],
                 ),
             )
             return

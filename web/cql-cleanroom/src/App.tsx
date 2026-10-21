@@ -717,6 +717,11 @@ export default function App() {
   // workspace with no data shows "0 patients", never the in-browser
   // demo dataset); null = not connected yet.
   const [serverPatientIds, setServerPatientIds] = useState<string[] | null>(null);
+  // S24-3: per-patient resource counts + type breakdown for the roster
+  // chips + the type-grouped slideout.
+  const [serverPatientResources, setServerPatientResources] = useState<
+    import("./components/DatasetPane").ServerPatientEntry[] | null
+  >(null);
   useEffect(() => {
     if (serverMode.kind !== "connected") {
       setServerPatientIds(null);
@@ -725,9 +730,18 @@ export default function App() {
     let cancelled = false;
     void fetch("/api/patients")
       .then((r) => r.json())
-      .then((b: { patients?: string[] }) => {
-        if (!cancelled) setServerPatientIds(b?.patients ?? []);
-      })
+      .then(
+        (
+          b: {
+            patients?: string[];
+            patient_resources?: import("./components/DatasetPane").ServerPatientEntry[];
+          },
+        ) => {
+          if (cancelled) return;
+          setServerPatientIds(b?.patients ?? []);
+          setServerPatientResources(b?.patient_resources ?? null);
+        },
+      )
       .catch(() => {
         if (!cancelled) setServerPatientIds([]);
       });
@@ -3618,6 +3632,7 @@ export default function App() {
             <DatasetPane
               dataset={dataset}
               serverPatientIds={serverPatientIds}
+              serverPatientResources={serverPatientResources}
               focusedPid={focusedPid}
               onFocusedPidChange={setFocusedPid}
               filter={navFilters.tests}

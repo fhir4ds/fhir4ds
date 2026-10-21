@@ -151,18 +151,21 @@ export function EditorPane({
   tabKeyRef.current = tabKey;
   // S5: per-buffer cell mode (split view with cards vs plain editor).
   const [cellViewOpen, setCellViewOpenRaw] = useState(false);
-  // S23-2: notify the App on every visibility flip (heartbeat gating).
+  // S23-2/S24-1: notify the App on every visibility flip (heartbeat
+  // gating). The notify runs in a COMMIT effect — calling it inside the
+  // state updater was a render-phase side effect that could be missed
+  // (or double-fired under StrictMode), leaving the App's ref stale.
+  const onCellsViewChangeRef = useRef(onCellsViewChange);
+  onCellsViewChangeRef.current = onCellsViewChange;
   const setCellViewOpen = useCallback(
     (next: boolean | ((v: boolean) => boolean)) => {
-      setCellViewOpenRaw((prev) => {
-        const value =
-          typeof next === "function" ? (next as (v: boolean) => boolean)(prev) : next;
-        onCellsViewChange?.(value);
-        return value;
-      });
+      setCellViewOpenRaw(next);
     },
-    [onCellsViewChange],
+    [],
   );
+  useEffect(() => {
+    onCellsViewChangeRef.current?.(cellViewOpen);
+  }, [cellViewOpen]);
   const hasCellMarkers = useMemo(
     () => splitCells(text).cells.length > 0,
     [text],
