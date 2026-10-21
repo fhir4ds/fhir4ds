@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from fhir4ds import create_connection
 from fhir4ds.operations import (
     DatasetSpec,
@@ -297,6 +298,125 @@ class TestExplainCapability:
         assert leaf["attribute"] == "birthDate"
         assert leaf["value"] == "2000-05-05"
         assert leaf["operator"] == "derived"
+
+    def test_context_patient_leaf_review_guards(self):
+        """S22f-promotion review fixes — the three merge blockers.
+
+        1. Stale marker: a REUSED translator/context must not carry the
+           property marker into a later same-named define (binder error
+           when _patients omits birth_date).
+        2. Query-scope age calls (exists([Obs] O where AgeInYearsAt(..)))
+           keep their pre-campaign behavior — no invalid correlation.
+        3. Included-library age defines carry the leaf (prefixed-key
+           propagation + audit-inheriting child translator).
+        4. Seam B: patient-row comparisons fill the audit_comparison
+           target.
+        5. Partial-birthDate spelling parity (gate checklist).
+        """
+        from fhir4ds.cql import parse_cql as engine_parse
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+        conn = create_connection()
+        # 1. Stale marker across a reused translator.
+        t = CQLToSQLTranslator(connection=conn, audit_mode=True)
+        t.translate_library(
+            engine_parse(
+                "library A version '1.0.0'\nusing FHIR version '4.0.1'\n"
+                "context Patient\ndefine \"D1\": AgeInYearsAt(@2024-01-01) >= 18\n"
+            )
+        )
+        t._context.clear()
+        r_b = t.translate_library(
+            engine_parse(
+                "library B version '1.0.0'\nusing FHIR version '4.0.1'\n"
+                "context Patient\n"
+                "define \"D1\": exists([Encounter] E where E.status = 'finished')\n"
+            )
+        )
+        sql_b = json.dumps({k: str(v) for k, v in r_b.items()})
+        assert "audit_patient_property" not in sql_b
+
+        resources = [
+            {"resourceType": "Patient", "id": "g1", "birthDate": "2000-05-05",
+             "gender": "female"},
+            {"resourceType": "Encounter", "id": "ge1", "status": "finished",
+             "subject": {"reference": "Patient/g1"}},
+        ]
+        # 2. Query-scope age call — executes, retrieve evidence kept.
+        mixed = (
+            "library MQ version '1.0.0'\nusing FHIR version '4.0.1'\n"
+            "include FHIRHelpers version '4.0.1' called FHIRHelpers\n"
+            "context Patient\n\n"
+            'define "Mixed": exists([Encounter] O where AgeInYearsAt(@2024-01-01) >= 18)\n'
+        )
+        main = LibraryText(name="MQ", text=mixed)
+        ev = explain_patient(
+            [main], main, DatasetSpec(resources=resources), "g1", conn
+        )
+        assert ev.ok
+        leaf = next(d for d in ev.definitions if d["column"] == "Mixed")["evidence"]
+        assert leaf and leaf[0]["target"] == "Encounter/ge1"
+
+        # 3. Included-library define carries the leaf.
+        inc = (
+            "library IH version '1.0.0'\nusing FHIR version '4.0.1'\n"
+            "include FHIRHelpers version '4.0.1' called FHIRHelpers\n"
+            "context Patient\n\n"
+            'define "AgeD": AgeInYearsAt(@2024-01-01) >= 18\n'
+        )
+        use = (
+            "library IU version '1.0.0'\nusing FHIR version '4.0.1'\n"
+            "include FHIRHelpers version '4.0.1' called FHIRHelpers\n"
+            "include IH version '1.0.0' called IH\n"
+            "context Patient\n\n"
+            'define "UsesAge": IH.AgeD\n'
+        )
+        libs = [LibraryText(name="IH", text=inc), LibraryText(name="IU", text=use)]
+        ev2 = explain_patient(
+            libs, LibraryText(name="IU", text=use),
+            DatasetSpec(resources=resources), "g1", conn,
+        )
+        assert ev2.ok
+        leaf2 = next(d for d in ev2.definitions if d["column"] == "UsesAge")["evidence"]
+        assert leaf2 and leaf2[0]["target"] == "Patient/g1"
+        assert leaf2[0]["attribute"] == "birthDate"
+
+        # 4. Seam B: patient-row comparison target fill.
+        gender_lib = (
+            "library GB version '1.0.0'\nusing FHIR version '4.0.1'\n"
+            "include FHIRHelpers version '4.0.1' called FHIRHelpers\n"
+            "context Patient\n\n"
+            'define "Female": Patient.gender = \'female\'\n'
+        )
+        gmain = LibraryText(name="GB", text=gender_lib)
+        ev3 = explain_patient(
+            [gmain], gmain, DatasetSpec(resources=resources), "g1", conn
+        )
+        leaf3 = next(d for d in ev3.definitions if d["column"] == "Female")["evidence"]
+        assert leaf3 and leaf3[0]["target"] == "Patient/g1"
+        assert leaf3[0]["attribute"] == "gender"
+
+        # 5. Partial-birthDate spelling parity through the macro path.
+        partial = [
+            {"resourceType": "Patient", "id": "pf", "birthDate": "2000-05-05"},
+            {"resourceType": "Patient", "id": "pm", "birthDate": "1975-03"},
+            {"resourceType": "Patient", "id": "py", "birthDate": "1980"},
+        ]
+        pmain = LibraryText(name="AgeEv", text=(
+            "library AgeEv version '1.0.0'\nusing FHIR version '4.0.1'\n"
+            "include FHIRHelpers version '4.0.1' called FHIRHelpers\n"
+            "context Patient\n\n"
+            'define "InAgeRange": AgeInYearsAt(@2024-01-01) >= 18\n'
+        ))
+        expected = {"pf": "2000-05-05", "pm": "1975-03", "py": "1980"}
+        for pid, want in expected.items():
+            evp = explain_patient(
+                [pmain], pmain, DatasetSpec(resources=partial), pid, conn
+            )
+            leafp = next(
+                d for d in evp.definitions if d["column"] == "InAgeRange"
+            )["evidence"]
+            assert leafp and leafp[0]["value"] == want, (pid, leafp)
 
 
 class TestExplicitOverridesBundled:

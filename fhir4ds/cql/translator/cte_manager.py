@@ -149,42 +149,6 @@ def generate_function_cte_name(func_name: str, cql_def_name: str) -> str:
 
 
 
-def _find_patient_property(expr):
-    """S22f-promotion seam A helper: find a _patient_property marker.
-
-    The age-family translators attach ``(prop_name, value_sql)`` on the
-    returned SQLFunctionCall (the _audit_target attribute protocol).
-    Walks the expression tree; returns the FIRST marker found (the age
-    family reads exactly one property: birthDate).
-    """
-    if expr is None:
-        return None
-    marker = getattr(expr, "_patient_property", None)
-    if marker is not None:
-        return marker
-    for attr in ("args", "left", "right", "expression", "operand", "expr"):
-        child = getattr(expr, attr, None)
-        if child is None:
-            continue
-        found = _find_patient_property(child)
-        if found is not None:
-            return found
-    if isinstance(expr, (list, tuple)):
-        for item in expr:
-            found = _find_patient_property(item)
-            if found is not None:
-                return found
-    for attr in ("when_clauses", "columns"):
-        seq = getattr(expr, attr, None)
-        if seq:
-            for item in seq:
-                found = _find_patient_property(
-                    item[1] if isinstance(item, tuple) else item
-                )
-                if found is not None:
-                    return found
-    return None
-
 class CTEManagerMixin:
     """Mixin providing CTE management methods for CQLToSQLTranslator."""
 

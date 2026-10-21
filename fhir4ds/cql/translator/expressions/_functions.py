@@ -4889,8 +4889,13 @@ class FunctionsMixin:
         # property read in the TRANSLATION CONTEXT (keyed by the define
         # being translated) — node-level Python attributes do not
         # survive the operator-mixin rebuilds, the context does.
+        # REVIEW FIX 2: only when the value is the DIRECT _pt column —
+        # the _pd-correlated subquery built under non-_pt outer aliases
+        # (query scopes like exists([Obs] O where AgeInYearsAt(...)))
+        # does not survive into the define's audit CTE (binder error);
+        # those defines keep their pre-campaign behavior.
         current_def = getattr(self.context, "_current_definition", None)
-        if current_def:
+        if current_def and isinstance(birth_date, SQLQualifiedIdentifier) and birth_date.parts[:1] == ["_pt"]:
             props = getattr(self.context, "_patient_property_defs", None)
             if props is None:
                 props = {}
@@ -4967,9 +4972,10 @@ class FunctionsMixin:
                     SQLCast(expression=args[0], target_type="VARCHAR"),
                 ],
             )
-            # S22f-promotion seam A (see _translate_age_function).
+            # S22f-promotion seam A (see _translate_age_function) —
+            # review fix 2: direct _pt column only (see there).
             current_def = getattr(self.context, "_current_definition", None)
-            if current_def:
+            if current_def and isinstance(birth_date, SQLQualifiedIdentifier) and birth_date.parts[:1] == ["_pt"]:
                 props = getattr(self.context, "_patient_property_defs", None)
                 if props is None:
                     props = {}
