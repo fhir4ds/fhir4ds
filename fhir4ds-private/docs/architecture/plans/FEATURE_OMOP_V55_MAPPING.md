@@ -1,0 +1,241 @@
+# DESIGN: OMOP CDM v5.5 Mapping via ViewDefinitions (fhir4ds side)
+
+Status: DESIGN FOR JOEL + MUSE GATE — branch feat/omop-v55-mapping
+Mission: FHIR R4 → OMOP CDM v5.5 tables as a ViewDefinition library,
+architecture LOCKED by Joel (concept-map runtime join; FHIR-native chain).
+
+## 0. Locked architecture (Joel 2026-10-23, presented as decided)
+
+```
+Athena CONCEPT table
+  └─ (converter — medterm4ds side or shared tool) ─▶ FHIR ConceptMap RESOURCE
+        one group per source vocabulary: source=FHIR system URI, elements
+        {code, target.code=concept_id-as-string, target.equivalence}
+  └─ ConceptMap VIEW: a VD over the ConceptMap resource (conceptmaps table)
+        → long/thin mapping rows: vocabulary_id | concept_code | concept_id
+  └─ per-OMOP-table VDs JOIN the ConceptMap view (native VD `joins`)
+        join keys: source vocabulary_id + concept_code (Joel-locked)
+```
+
+- Runtime join is the ONLY core mechanism. Compile-time %Constant/CASE
+  baking: NOT core (at most a demo nicety; dropped from scope).
+- Live `%translate()` service calls: REJECTED for VDs (couples execution
+  to a service; that is the CQL layer's answer).
+- Everything is FHIR-native resources + VDs end to end.
+
+## 1. ENGINE PREREQUISITE GAP (found by live probe, must be S0)
+
+The VD spec's root-level `joins` PARSE and validate in fhir4ds today but
+the SQL generator NEVER EMITS them — `JoinGenerator` exists
+(fhir4ds/viewdef/join.py:171, unit-tested in isolation at
+tests/unit/test_join.py) and is wired NOWHERE; the integration test at
+tests/integration/test_duckdb.py:2705 documents the gap in its own
+comment ("Current SQL generator generates basic patient query").
+Verified live: a VD with `joins:[{name: cm, resource: ConceptMap, ...}]`
+generates SQL with no JOIN clause and join-aliased paths resolve empty.
+
+**S0 (new slice, before any mapping): emit root joins in
+SQLGenerator.generate()** — table name resolution must honor the
+generator's `source_table` mode (shared `__vd_src` staging joins by
+resourceType, exactly how the base FROM works) so the Viewing Room and
+notebooks can run join VDs unchanged. Includes: ON-clause FHIRPath
+evaluation over the joined resource, join-alias path resolution in
+column paths (e.g. `cm.group.element.target.code`), integration tests,
+and the spec-grammar parity questions (see §7 open questions).
+
+## 2. Scope matrix — mined from OMOP-on-FHIR v5.4-R4 (their coverage first)
+
+Their mapper inventory (omoponfhir-omopv5-r4-mapping/src/main/java/
+edu/gatech/chai/omoponfhir/omopv5/r4/mapping/): per-table starting
+mappings with file citations; v5.5 DDL facts from the official cdm55
+page; gaps marked FRESH where neither they nor we have provenance.
+
+| OMOP v5.5 table | FHIR source(s) | Their file | Their decisions adopted | v5.5 delta / FRESH notes |
+|---|---|---|---|---|
+| person | Patient | OmopPatient.java | person_source_value=Patient.id; gender via Gender-domain concepts (their FhirOmopCodeMap); year/month/day + birth_datetime from birthDate | FRESH: race/ethnicity from us-core-race/ethnicity extensions → Observation fallback per CDM convention; gender_concept_id via ConceptMap join (Gender domain; administrative-gender is NOT a standard vocab — mapping rows must be authored, see §3) |
+| observation_period | Encounter (derived) | (none — they never populate ObservationPeriod; verified: zero ObservationPeriod references) | — | FRESH: min(first event start) .. max(last event end) per person is an AGGREGATE, not a row mapping — out of scope for pure VDs; v1 ships visit-grain rows as observation_period candidates + documented ETL note (THEMIS: EHR periods are ETL-defined) |
+| visit_occurrence | Encounter | OmopEncounter.java | class → visit_concept_id (IMP→9201, AMB→9202, EMER→9203 via v3ActCode); visit_source_value=class code; period.start/end | FRESH: type_concept_id=32810 (EHR encounter) default; provider/care_site remain 0 (FHIR weakly carries them via practitioner/org refs — deferred, see §5) |
+| condition_occurrence | Condition | OmopCondition.java | code→condition_concept_id; category→type_concept_id (problem-list-item→38000245, encounter-diagnosis→43542353; else 0 — OmopConceptMapping.java:76-79); onset[x]→start; abatement→end; encounter→visit_occurrence_id | v5.5: no change vs 5.4 fields. condition_status from clinicalStatus |
+| drug_exposure | **UNION**: MedicationRequest + MedicationStatement + MedicationAdministration + Immunization | OmopMedicationRequest.java, OmopMedicationStatement.java, OmopImmunization.java | each maps to DrugExposure; Immunization→drug (vaccine concept); quantity/daysSupply from dosage; type provenance per source | FRESH: consistent union pattern (§4); MedicationAdministration added (their v5.4 code lacks it — only Request/Statement/Immunization exist); drug_type_concept_id per-branch (prescription-written vs dispensed vs administered per CDM) |
+| procedure_occurrence | Procedure | OmopProcedure.java | code→procedure_concept_id; performed[x]→procedure_date; performer→provider | quantity defaults 1 per CDM when absent |
+| device_exposure | **UNION**: DeviceUseStatement (+ DeviceRequest?) | OmopDeviceUseStatement.java | code→device_concept_id; UDI parsing for unique_device_id | DeviceRequest deferred (their code lacks it); quantity default 1 |
+| measurement | Observation (lab + Quantity-valued) | OmopObservation.java:1380-1440 | **isMeasurementByValuetype: value[x] instanceof Quantity → Measurement**; else domain-check (concept domain 'Measurement' + vocabulary match); BP component split (systolic/diastolic, handleBloodPressure :456) | FRESH: we generalize their Quantity-rule as the PRIMARY discriminator (pure FHIRPath, no Athena domain lookup needed at split time); referenceRange.low/high→range_low/high; unit via UCUM→unit_source_value |
+| observation | Observation (non-lab: Ratio/coded/string/date-valued) | OmopObservation.java | isObservationByValueType: Ratio→Observation; else falls to observation | FRESH: value_as_string/date handling per v5.5 fields (value_as_date is NEW in 5.5) |
+| death | Patient.deceased[x] (+ Observation death certs FRESH) | OmopPatient.java (TODO :85 "death: need to revisit"; never implemented) | — | FRESH: deceasedDateTime→death_date; cause from Condition/observation code where linked; type_concept_id default 32810-ish provenance |
+| note | DocumentReference / Composition | OmopDocumentReference.java | exists in their tree | DEFERRED to v1.1 (notes NLP surface is large; not in the spine Joel listed) |
+| specimen | Specimen | OmopSpecimen.java | exists | DEFERRED to v1.1 (v5.5 only added visit FKs) |
+
+Out of scope v1: payer_plan_period, cost, eras (derived), episode,
+cohort, visit_detail (FHIR has no clean detail grain), provider/
+care_site/location as TARGET tables (see §5).
+
+## 3. Concept-id strategy — the chain, concretely
+
+**Default concept_id = 0** everywhere the join misses (valid OMOP;
+source codes preserved). The ConceptMap resource carries the lift:
+
+- Converter (medterm4ds or shared tool; NOT this campaign's code):
+  Athena CONCEPT rows → ConceptMap groups. `group.source` = the FHIR
+  system URI, `group.target` = `urn:omop:concept` (custom), element.code
+  = concept_code, target[0].code = String(concept_id).
+- ConceptMap VD (ours): `resource: ConceptMap`, `repeat` over
+  group.element.target; columns vocabulary_id (derived from
+  group.source via a system→vocabulary_id constant table IN THE VD's
+  constants — small, closed set, §caveat), concept_code, concept_id,
+  concept_name (target.display), domain_id (needs converter-side
+  pass-through: target.extension or a second group field — open
+  question Q2).
+- OMOP VDs join it: ON (source vocabulary_id, concept_code) equality,
+  LEFT JOIN, COALESCE(concept_id, 0).
+
+Caveat handled as design decision: the FHIR-system→OMOP-vocabulary_id
+table (LOINC→LOINC, SNOMED→SNOMED, ICD-10-CM→ICD10CM, RxNorm→RxNorm,
+CPT4, HCPCS, NDC — exactly OmopCodeableConceptMapping.java:30-43's set,
+adopted) is a CLOSED, small, stable mapping → ships as VD `constant`
+sets (compile-time data, not concept mappings — does not violate the
+constants-rejected ruling; it is vocabulary metadata, not codes).
+
+Fresh-authored mapping rows required at v1 (no Athena vocab covers
+these; small curated ConceptMap supplements): administrative-gender →
+Gender domain (8532/8507/0), v3ActCode encounter classes → Visit
+(9201/9202/9203 — OmopConceptMapping.java:68-71 values adopted),
+condition category → Type Concept (38000245/43542353/0 — :76-79
+adopted), type_concept_id provenance defaults (32810 EHR-era set).
+
+## 4. Union pattern (Joel-locked, designed once)
+
+Per multi-source OMOP table: N resource-specific CHILD VDs (one per
+FHIR resource, full table columns, source-tagged) → one table-level
+UNION VD. Mechanism: the SQL-on-FHIR `unionAll` in select branches
+cannot span resource types (one VD = one resource root), so the union
+is a VD LIBRARY convention: each child VD is generated/executed
+separately and UNION ALL'd by the runner (viewdef runner composing
+named views — `CREATE VIEW omop.drug_exposure AS SELECT ... UNION
+ALL ...`); a thin composition doc per table. Applies to:
+drug_exposure (4 sources), device_exposure (1 now, 2 later),
+observation+measurement (same source, DISJOINT by value-type rule —
+two VDs over Observation with mutually exclusive `where` clauses, not
+a union), death (2 sources).
+
+## 5. Feasibility: required-but-weak fields (documented policy)
+
+- type_concept_id (required in EVERY event table): FHIR carries no
+  provenance of this shape → constant default 32810-family per table
+  with per-source overrides (their category mapping adopted for
+  condition; their encounter-class mapping for visit). Documented as
+  the ETL assumption.
+- provider_id / care_site_id: FHIR has practitioner/organization
+  references but no stable integer ids; v1 emits the reference string
+  in provider-source-adjacent columns and 0 in the FK columns
+  (valid OMOP; documented).
+- person_id/visit_occurrence_id integer grain: FHIR ids are strings.
+  v1 emits `person_id` as the Patient id STRING in a typed
+  `person_source_value`-like column AND a deterministic integer hash
+  where the DDL demands integer (xxhash64 modulo 2^31; documented,
+  stable, collision-risk noted). Same for visit_occurrence_id
+  (Encounter id hash) and *_occurrence_id PKs (resource id hash).
+- *_datetime vs date: FHIR dateTime carries both; date columns take
+  substring(0,10), datetime columns the full value (DuckDB VARCHAR
+  transport per the fixtures-pin doctrine).
+
+## 6. Sample + demo
+
+Synthetic bundle (hand-authored, ~6 patients × spine resources with
+LOINC/SNOMED/ICD10/RxNorm codings + the 25-patient reference set where
+codes permit): runnable BOTH as (a) a Viewing Room sample pack
+(`omop-cdm-55` gallery entries — one per OMOP table view; the
+playground becomes the OMOP demo surface, per Joel's synergy note) and
+(b) `docs/notebooks/omop-mapping.ipynb` (build views over staged NDJSON,
+show resulting OMOP-shaped tables). Expected-row validation: a fixture
+JSON asserting per-table row counts + spot cell values (concept_id
+resolution, date splits, 0-defaults).
+
+## 7. Test strategy (spec-comp doctrine, sectioned suite)
+
+`fhir4ds/viewdef/tests/omop/` (new section family, run with the
+conformance gate):
+- **Schema section**: per-table DDL asserts — exact column-name set +
+  order vs a parsed CDM 5.5 DDL fixture; type shape (integer vs
+  varchar vs date columns typed in the VD).
+- **Required-field section**: non-null asserts on every required=true
+  column (given the demo bundle) + the 0/defaults policy.
+- **Grain section**: one-row-per-expected-resource (and per
+  component for BP measurement split), union counts = sum of children.
+- **Mapping section**: concept resolution through the ConceptMap join
+  (hits→concept_id, misses→0), the value-type measurement/observation
+  split, date/datetime duals, hash stability (same id → same integer).
+- **VD-conformance**: every library VD parses + generates + executes
+  against the sample bundle (the §6 fixture doubles as the corpus).
+
+## 8. Versioning
+
+Library artifact `omop_v55/` under `fhir4ds/viewdef/resources/omop/`
+(one JSON VD per child view + manifest {omop_version: "5.5", fhir4ds
+min version, conceptmap resource, vocabulary constants, union
+composition docs}). v5.4 delta is SMALL (7 optional fields added, 3
+vocab metadata tables — none in our spine scope; verified from
+cdm55Changes) → a `omop_v54` variant is a manifest flag dropping
+value_as_date/unit_source_concept_id/value_as_source_concept_id from
+observation/measurement; designed, not shipped v1.
+
+## 9. Slices (S0 bounded per Muse R3)
+
+- **S0**: engine — root-joins SQL emission (§1) + integration tests
+- **S1**: concept chain — ConceptMap VD + vocabulary constants +
+  curated supplements (§3) + tests
+- **S2**: spine tables — person, visit_occurrence, condition_occurrence,
+  procedure_occurrence (single-source tables, §2 rows 1-4,7) + tests
+- **S3**: unions + split — drug_exposure (4-way), device_exposure,
+  measurement/observation value-type split, death (§2 rows 5-6,8-10) +
+  tests
+- **S4**: demo — sample bundle + Viewing Room sample pack + notebook +
+  expected-row fixtures (§6)
+- **S5**: conformance wiring — sectioned suite into the gate (§7),
+  versioning manifest (§8), docs
+
+## 10. Muse gate verdict + folded recommendations
+
+Verdict: **SHIP-WITH-CHANGES** (Muse endpoint down; gemini fallback
+used as the independent reviewer). Seven recs, all folded:
+
+- R1 → §3: ConceptMap VD filters `target.equivalence in
+  ('equivalent','equal')` and takes `first()` — strict
+  (vocabulary_id, concept_code) → concept_id functional dependency
+  before any event join; multi-target maps CANNOT fan out rows.
+- R2 → §3: explicit coding-selection precedence in every event VD:
+  unnest codings, LEFT JOIN conceptmap per coding with the
+  standard-vocab priority (SNOMED/RxNorm/LOINC > ICD10* > local),
+  pick the highest-priority RESOLVED concept, else the first coding's
+  source value (never `coding.first()` blindly, never row fan-out).
+- R3 → §1/S0: S0 bounded to root-level LEFT JOIN + equality of scalar
+  projected paths + source_table staging resolution. Non-equi joins
+  and arbitrary ON-FHIRPath predicates explicitly deferred.
+- R4 → §5: hash policy upgraded to POSITIVE 63-BIT integers
+  (`xxhash64 & 0x7FFFFFFFFFFFFFFF`) for person/visit/PK columns —
+  collision-safe at any realistic scale (mod-2^31 rejected: ~1%
+  collision at 6.5k entities).
+- R5 → §7: grain section gains multi-coded-resource cardinality
+  preservation (resource count == mapped row count through joins) and
+  referential-integrity asserts (every event.person_id resolves in
+  person).
+- R6 → §4/S4: the union composition ships as a real runner artifact
+  (`CREATE VIEW omop.<table> AS ... UNION ALL ...` over child VD SQL)
+  + the Viewing Room sample pack surfaces the composed tables.
+- R7 → §2 measurement/observation split: Quantity-rule primary;
+  documented trade-off — qualitative labs (valueCodeableConcept) land
+  in observation by the value-type rule; secondary category
+  ('laboratory') fallback considered and deferred to v1.1 (their
+  domain-based logic required Athena at split time; ours stays
+  FHIRPath-pure; documented as the known divergence).
+
+## 11. Open questions for Joel (non-blocking, S0-S1 answers shape S2+)
+
+- Q1: S0 joins emission is ENGINE work beyond pure VD authoring —
+  confirm it belongs in this campaign (recommend YES: nothing else in
+  the locked architecture is buildable without it).
+- Q2: domain_id pass-through — converter includes CONCEPT.domain_id in
+  the ConceptMap (target.extension) OR we omit domain_id from the
+  ConceptMap view v1 (their domain-based split is replaced by the
+  value-type rule anyway; recommend omit v1).
+- Q3: person_id hashing policy — xxhash64-as-integer (recommend) vs
+  emit string-only and leave integer FK columns 0 everywhere.
