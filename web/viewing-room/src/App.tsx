@@ -58,6 +58,9 @@ export default function App() {
     });
   }, []);
 
+  // The last LOADED sample content (dirty-guard baseline).
+  const loadedRef = useRef<{ vd: string; res: string }>({ vd: "", res: "" });
+
   const loadSample = useCallback(async (s: Sample): Promise<{ vd: string; res: string }> => {
     setSample(s);
     const [vd, res] = await Promise.all([
@@ -74,6 +77,7 @@ export default function App() {
     const resText = res.trimEnd() + "\n";
     setVdText(vdText);
     setResourcesText(resText);
+    loadedRef.current = { vd: vdText, res: resText };
     return { vd: vdText, res: resText };
   }, []);
 
@@ -151,6 +155,43 @@ export default function App() {
     ? `${stats.total} resource${stats.total === 1 ? "" : "s"}: ${stats.byType.map((t) => `${t.count} ${t.type}`).join(", ")}`
     : "";
 
+  // Dirty guard (Muse rec): switching samples with edited content asks first.
+  const dirty = resourcesText !== loadedRef.current.res || vdText !== loadedRef.current.vd;
+
+  const selectSample = useCallback(
+    (s: Sample) => {
+      if (dirty && !window.confirm("Editors have unsaved edits — load sample anyway?")) return;
+      void loadSample(s).then((t) => doRunRef.current?.(t.vd, t.res));
+    },
+    [dirty, loadSample],
+  );
+
+  // Splitter (Muse rec): pointer-drag + keyboard resizing between panes.
+  const [splitPct, setSplitPct] = useState(40);
+  const mainRef = useRef<HTMLDivElement | null>(null);
+  const onSplitterKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowLeft") setSplitPct((p) => Math.max(15, p - 3));
+    else if (e.key === "ArrowRight") setSplitPct((p) => Math.min(85, p + 3));
+    else return;
+    e.preventDefault();
+  };
+  const onSplitterPointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const el = mainRef.current;
+    if (!el) return;
+    const move = (ev: PointerEvent) => {
+      const rect = el.getBoundingClientRect();
+      const pct = ((ev.clientX - rect.left) / rect.width) * 100;
+      setSplitPct(Math.min(85, Math.max(15, pct)));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
   return (
     <div className="app">
       <header className="header">
@@ -158,11 +199,12 @@ export default function App() {
         <span className="tagline">live imaging for SQL-on-FHIR views</span>
         <div className="header-spacer" />
         <select
+          aria-label="Load a sample"
           title="Load a sample"
           value={sample?.slug ?? ""}
           onChange={(e) => {
             const s = SAMPLES.find((x) => x.slug === e.target.value);
-            if (s) void loadSample(s).then((t) => doRunRef.current?.(t.vd, t.res));
+            if (s) selectSample(s);
           }}
         >
           {!sample && <option value="" disabled>Load a sample…</option>}
@@ -191,8 +233,8 @@ export default function App() {
         </button>
       </header>
 
-      <div className="main">
-        <section className="pane pane-resources" aria-label="FHIR resources">
+      <div className="main" ref={mainRef}>
+        <section className="pane pane-resources" aria-label="FHIR resources" style={{ flex: `${splitPct} 1 0%` }}>
           <div className="pane-header">
             FHIR Resources
             {run.ranAt && <span className="pane-stats" data-testid="resource-stats">{resourceStatsText}</span>}
@@ -219,7 +261,16 @@ export default function App() {
           </div>
         </section>
 
-        <section className="pane pane-viewdef" aria-label="ViewDefinition">
+        <div
+          className="splitter"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize panes (arrow keys)"
+          tabIndex={0}
+          onKeyDown={onSplitterKeyDown}
+          onPointerDown={onSplitterPointerDown}
+        />
+        <section className="pane pane-viewdef" aria-label="ViewDefinition" style={{ flex: `${100 - splitPct} 1 0%` }}>
           <div className="pane-header">ViewDefinition</div>
           <div className="pane-body">
             <div className="editor-container" style={{ flex: "0 0 38%" }} data-testid="vd-editor">
@@ -241,25 +292,37 @@ export default function App() {
               />
             </div>
             <div className="output-tabs" style={{ flex: "1 1 62%" }}>
-              <div className="tab-strip" role="tablist">
-                <button role="tab" aria-selected={outputTab === "table"} className={outputTab === "table" ? "active" : ""} onClick={() => setOutputTab("table")}>
+              <div
+                className="tab-strip"
+                role="tablist"
+                aria-label="Output views"
+                onKeyDown={(e) => {
+                  const order: OutputTab[] = ["table", "sql", "diagnostics"];
+                  const i = order.indexOf(outputTab);
+                  if (e.key === "ArrowRight") setOutputTab(order[(i + 1) % order.length]);
+                  else if (e.key === "ArrowLeft") setOutputTab(order[(i + order.length - 1) % order.length]);
+                  else return;
+                  e.preventDefault();
+                }}
+              >
+                <button id="vr-tab-table" role="tab" aria-controls="vr-panel-table" aria-selected={outputTab === "table"} className={outputTab === "table" ? "active" : ""} onClick={() => setOutputTab("table")}>
                   Output table
                 </button>
-                <button role="tab" aria-selected={outputTab === "sql"} className={outputTab === "sql" ? "active" : ""} onClick={() => setOutputTab("sql")}>
+                <button id="vr-tab-sql" role="tab" aria-controls="vr-panel-sql" aria-selected={outputTab === "sql"} className={outputTab === "sql" ? "active" : ""} onClick={() => setOutputTab("sql")}>
                   SQL
                 </button>
-                <button role="tab" aria-selected={outputTab === "diagnostics"} className={outputTab === "diagnostics" ? "active" : ""} onClick={() => setOutputTab("diagnostics")}>
+                <button id="vr-tab-diagnostics" role="tab" aria-controls="vr-panel-diagnostics" aria-selected={outputTab === "diagnostics"} className={outputTab === "diagnostics" ? "active" : ""} onClick={() => setOutputTab("diagnostics")}>
                   Diagnostics{run.diagnostics ? ` (${run.diagnostics.length})` : ""}
                 </button>
               </div>
               <div className="output-body">
-                <div className="tab-panel" role="tabpanel" hidden={outputTab !== "table"}>
+                <div className="tab-panel" id="vr-panel-table" role="tabpanel" aria-labelledby="vr-tab-table" hidden={outputTab !== "table"}>
                   <ResultsTable columns={run.columns} rows={run.rows} ranAt={run.ranAt} vdResource={vdResourceOf(vdText)} loadedTypes={stats.byType.map((t) => t.type).join(", ")} />
                 </div>
-                <div className="tab-panel" role="tabpanel" hidden={outputTab !== "sql"}>
+                <div className="tab-panel" id="vr-panel-sql" role="tabpanel" aria-labelledby="vr-tab-sql" hidden={outputTab !== "sql"}>
                   <SqlView sql={run.sql} />
                 </div>
-                <div className="tab-panel" role="tabpanel" hidden={outputTab !== "diagnostics"}>
+                <div className="tab-panel" id="vr-panel-diagnostics" role="tabpanel" aria-labelledby="vr-tab-diagnostics" hidden={outputTab !== "diagnostics"}>
                   <DiagnosticsList diagnostics={run.diagnostics ?? []} />
                 </div>
               </div>
