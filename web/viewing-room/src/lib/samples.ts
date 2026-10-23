@@ -1,0 +1,135 @@
+/**
+ * Sample registry: the six engine-verified gallery samples (public/samples/).
+ * Each sample = { name, slug, description, vdUrl, resourcesUrl }.
+ */
+
+export interface Sample {
+  slug: string;
+  name: string;
+  description: string;
+  vdUrl: string;
+  resourcesUrl: string;
+}
+
+export const SAMPLES: Sample[] = [
+  {
+    slug: "patient-demographics",
+    name: "Patient Demographics",
+    description: "One row per Patient: id, name, gender, birthDate (the default).",
+    vdUrl: "samples/patient-demographics/viewdefinition.json",
+    resourcesUrl: "samples/patient-demographics/resources.ndjson",
+  },
+  {
+    slug: "patient-addresses",
+    name: "Patient Addresses",
+    description: "forEach over Patient.address — one row per address.",
+    vdUrl: "samples/patient-addresses/viewdefinition.json",
+    resourcesUrl: "samples/patient-addresses/resources.ndjson",
+  },
+  {
+    slug: "patient-contact-address-union",
+    name: "Patient + Contact Address Union",
+    description: "unionAll of patient and contact addresses (IG 2.0.0 example).",
+    vdUrl: "samples/patient-contact-address-union/viewdefinition.json",
+    resourcesUrl: "samples/patient-contact-address-union/resources.ndjson",
+  },
+  {
+    slug: "us-core-blood-pressures",
+    name: "US Core Blood Pressures",
+    description: "Deep forEach + where on component coding (LOINC 85354-9 / 8480-6 / 8462-4).",
+    vdUrl: "samples/us-core-blood-pressures/viewdefinition.json",
+    resourcesUrl: "samples/us-core-blood-pressures/resources.ndjson",
+  },
+  {
+    slug: "questionnaire-response-items",
+    name: "Questionnaire Response Items",
+    description: "select.repeat over a nested QuestionnaireResponse item tree.",
+    vdUrl: "samples/questionnaire-response-items/viewdefinition.json",
+    resourcesUrl: "samples/questionnaire-response-items/resources.ndjson",
+  },
+  {
+    slug: "observation-values",
+    name: "Observation Values",
+    description: "collection:true + typed columns (component codes & values as arrays).",
+    vdUrl: "samples/observation-values/viewdefinition.json",
+    resourcesUrl: "samples/observation-values/resources.ndjson",
+  },
+];
+
+export const DEFAULT_SAMPLE = SAMPLES[0];
+
+export function sampleBySlug(slug: string): Sample | undefined {
+  return SAMPLES.find((s) => s.slug === slug);
+}
+
+/**
+ * Sample-asset base: null = document-relative (standalone entry default);
+ * set by the web-component entry to the bundle's own base URL so samples
+ * resolve correctly regardless of the host page's URL.
+ */
+let sampleBase: string | null = null;
+
+export function setSampleBase(base: string): void {
+  sampleBase = base;
+}
+
+export function sampleUrl(path: string): string {
+  if (sampleBase !== null) return `${sampleBase.replace(/\/$/, "")}/${path}`;
+  return new URL(path, document.baseURI).href;
+}
+
+/** Parse NDJSON or a JSON array of resources; a single object is wrapped. */
+export function parseResourcesInput(text: string): {
+  resources: Array<Record<string, unknown>>;
+  error: string | null;
+} {
+  const trimmed = text.trim();
+  if (!trimmed) return { resources: [], error: null };
+  // JSON array (single object wrapped into one by the caller contract)
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!Array.isArray(parsed)) return { resources: [], error: "expected a JSON array" };
+      const bad = parsed.findIndex((r) => r === null || typeof r !== "object" || Array.isArray(r));
+      if (bad >= 0) return { resources: [], error: `element ${bad + 1} is not a JSON object` };
+      return { resources: parsed, error: null };
+    } catch (e) {
+      return { resources: [], error: `invalid JSON array: ${(e as Error).message}` };
+    }
+  }
+  // NDJSON: one resource per line
+  const lines = trimmed.split(/\r?\n/);
+  const resources: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    try {
+      const r = JSON.parse(line);
+      if (r === null || typeof r !== "object" || Array.isArray(r)) {
+        return { resources: [], error: `line ${i + 1}: not a JSON object` };
+      }
+      resources.push(r);
+    } catch (e) {
+      return { resources: [], error: `line ${i + 1}: ${(e as Error).message}` };
+    }
+  }
+  return { resources, error: null };
+}
+
+/** Count resources by resourceType for the resources-pane stats. */
+export function resourceStats(resources: Array<Record<string, unknown>>): {
+  total: number;
+  byType: Array<{ type: string; count: number }>;
+} {
+  const counts = new Map<string, number>();
+  for (const r of resources) {
+    const rt = typeof r.resourceType === "string" ? r.resourceType : "Unknown";
+    counts.set(rt, (counts.get(rt) ?? 0) + 1);
+  }
+  return {
+    total: resources.length,
+    byType: [...counts.entries()]
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type)),
+  };
+}

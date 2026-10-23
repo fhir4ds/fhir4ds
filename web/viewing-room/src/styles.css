@@ -1,0 +1,349 @@
+:root {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --bg-panel: #161b22;
+  --bg-elevated: #1c2128;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --accent: #58a6ff;
+  --accent-soft: rgba(88, 166, 255, 0.15);
+  --ok: #3fb950;
+  --warn: #d29922;
+  --err: #f85149;
+  --null-chip: #6e7681;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 480px;
+}
+
+/* ---------- header ---------- */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex: none;
+}
+
+.header h1 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.header .tagline {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.header-spacer {
+  flex: 1;
+}
+
+.version-badge {
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  color: var(--ok);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.boot-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.boot-status.error {
+  color: var(--err);
+}
+
+.run-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #238636;
+  color: #fff;
+  border: 1px solid rgba(240, 246, 252, 0.1);
+  border-radius: 6px;
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.run-button:hover:not(:disabled) {
+  background: #2ea043;
+}
+
+.run-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.run-kbd {
+  font-size: 10px;
+  opacity: 0.8;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+/* ---------- main two-pane layout ---------- */
+.main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+}
+
+.pane:last-child {
+  border-right: none;
+}
+
+.pane-resources {
+  flex: 4;
+}
+
+.pane-viewdef {
+  flex: 5;
+}
+
+.pane-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  flex: none;
+  text-transform: uppercase;
+}
+
+.pane-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- tabs ---------- */
+.tab-strip {
+  display: flex;
+  gap: 2px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex: none;
+}
+
+.tab-strip button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tab-strip button.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.tab-panel[hidden] {
+  display: none !important;
+}
+
+/* ---------- editors ---------- */
+.editor-container {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---------- output ---------- */
+.output-tabs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.output-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.table-wrap {
+  overflow: auto;
+  max-height: 100%;
+}
+
+table.results {
+  border-collapse: collapse;
+  font-size: 13px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  width: 100%;
+}
+
+table.results th,
+table.results td {
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+table.results th {
+  background: var(--bg-panel);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+table.results td .null-chip {
+  display: inline-block;
+  background: var(--null-chip);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 10px;
+  padding: 1px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+table.results td .json-cell {
+  white-space: pre-wrap;
+  color: var(--accent);
+}
+
+.row-count {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px 2px;
+}
+
+.empty-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 16px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  margin: 8px;
+}
+
+/* ---------- SQL tab ---------- */
+pre.sql-view {
+  margin: 0;
+  padding: 12px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
+
+/* ---------- diagnostics ---------- */
+.diagnostic-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--err);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--bg-elevated);
+}
+
+.diagnostic-card .diag-code {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--err);
+}
+
+.diagnostic-card .diag-message {
+  margin-top: 4px;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---------- boot overlay ---------- */
+.boot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.boot-overlay .spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.boot-overlay .boot-message {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.boot-overlay .boot-error {
+  color: var(--err);
+  font-size: 13px;
+  max-width: 70ch;
+  text-align: center;
+}
