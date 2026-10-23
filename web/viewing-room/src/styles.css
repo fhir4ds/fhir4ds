@@ -347,3 +347,33 @@ pre.sql-view {
   max-width: 70ch;
   text-align: center;
 }
+
+/* ---------- a11y (S4) ---------- */
+button:focus-visible,
+select:focus-visible,
+[role="tab"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.run-button:focus-visible {
+  outline-offset: 1px;
+}
+
+/* ---------- splitter (S4, Muse rec) ---------- */
+.splitter {
+  flex: none;
+  width: 6px;
+  cursor: col-resize;
+  background: var(--border);
+  border: none;
+  padding: 0;
+  min-height: 0;
+}
+.splitter:hover,
+.splitter:focus-visible {
+  background: var(--accent);
+}
+.splitter:focus-visible {
+  outline: none;
+}
