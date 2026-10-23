@@ -1,0 +1,1 @@
+{"resourceType": "Observation", "id": "obs1", "status": "final", "code": {"coding": [{"code": "85354-9"}]}, "effectiveDateTime": "2024-03-01T09:00:00Z", "component": [{"code": {"coding": [{"code": "8480-6"}]}, "valueQuantity": {"value": 120, "unit": "mmHg"}}, {"code": {"coding": [{"code": "8462-4"}]}, "valueQuantity": {"value": 80, "unit": "mmHg"}}]}

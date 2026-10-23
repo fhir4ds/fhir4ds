@@ -1,0 +1,33 @@
+{
+  "name": "observation_values",
+  "status": "draft",
+  "resource": "Observation",
+  "select": [
+    {
+      "column": [
+        {
+          "path": "id",
+          "name": "id",
+          "type": "string"
+        },
+        {
+          "path": "effective.ofType(dateTime)",
+          "name": "effective_dt",
+          "type": "dateTime"
+        },
+        {
+          "path": "component.code.coding.code",
+          "name": "component_codes",
+          "type": "string",
+          "collection": true
+        },
+        {
+          "path": "component.value.ofType(Quantity).value",
+          "name": "component_values",
+          "type": "decimal",
+          "collection": true
+        }
+      ]
+    }
+  ]
+}
