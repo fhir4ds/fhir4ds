@@ -121,12 +121,10 @@ export async function stageAndRunFlat(
         message: String(err instanceof Error ? err.message : err),
       },
     ];
-  } finally {
-    try {
-      await runRaw("DROP TABLE IF EXISTS __vd_src");
-    } catch {
-      /* cleanup best-effort */
-    }
   }
+  // No DROP: the temp table is reused via CREATE OR REPLACE on the next
+  // run. Dropping here RACES a concurrently-started run (sample switch
+  // auto-run) and kills its table mid-query ("Table __vd_src does not
+  // exist"); the connection lives as long as the worker anyway.
   return envelope;
 }
