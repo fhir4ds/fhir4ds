@@ -9,7 +9,7 @@ import { test, expect } from "@playwright/test";
 test("journey: keyboard navigation reaches every control and tabs cycle with arrows", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
-  await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(35, { timeout: 60_000 });
 
   // Tab strip: arrow keys move between tabs; the SQL tab opens via keyboard.
   await page.locator("#vr-tab-table").focus();
@@ -31,7 +31,7 @@ test("journey: keyboard navigation reaches every control and tabs cycle with arr
 test("journey: dirty guard asks before a sample switch discards edits", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
-  await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(35, { timeout: 60_000 });
 
   // Edit the VD, then switch samples: the confirm dialog appears.
   await page.evaluate(() => {

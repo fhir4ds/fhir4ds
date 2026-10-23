@@ -23,8 +23,9 @@ test("web component mounts and boots the engine", async ({ page }) => {
   );
   expect(height).toBeTruthy();
 
-  // Default sample auto-ran inside the component too.
+  // Default sample auto-ran inside the component too (reference patient
+  // set: 35 name rows — S5 alignment).
   await expect(
     el.locator('[data-testid="output-table"] tbody tr'),
-  ).toHaveCount(2, { timeout: 60_000 });
+  ).toHaveCount(35, { timeout: 60_000 });
 });

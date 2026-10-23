@@ -14,8 +14,10 @@ import { DEFAULT_SAMPLE, Sample, SAMPLES, parseResourcesInput, resourceStats, sa
 import { ResultsTable } from "./components/ResultsTable";
 import { DiagnosticsList } from "./components/DiagnosticsList";
 import { SqlView } from "./components/SqlView";
+import { ResourceDataViewer } from "./components/ResourceDataViewer";
 
 type OutputTab = "table" | "sql" | "diagnostics";
+type ResourcesTab = "editor" | "browse";
 
 interface RunState {
   running: boolean;
@@ -44,6 +46,7 @@ export default function App() {
   const [sample, setSample] = useState<Sample | null>(null);
   const [run, setRun] = useState<RunState>(EMPTY_RUN);
   const [outputTab, setOutputTab] = useState<OutputTab>("table");
+  const [resourcesTab, setResourcesTab] = useState<ResourcesTab>("editor");
   const vdRef = useRef<string>("");
   vdRef.current = vdText;
   const resRef = useRef<string>("");
@@ -134,6 +137,26 @@ export default function App() {
   const doRunRef = useRef<((vd?: string, res?: string) => void) | null>(null);
   doRunRef.current = (vd?, res?) => void doRun(vd, res);
 
+  // AUTO-RECALC (Joel, S5): debounced auto-run on editor changes once the
+  // engine is ready AND at least one run has happened (i.e. after the initial
+  // sample auto-run). Rapid edits collapse to the latest text; the single
+  // worker serializes runs naturally (postMessage queue) and the S3
+  // staging-race fix made table reuse safe.
+  const autoRunArmed = useRef(false);
+  const engineReadyRef = useRef(false);
+  engineReadyRef.current = bootStatus.phase === "ready";
+  useEffect(() => {
+    if (!engineReadyRef.current || !run.ranAt) return;
+    autoRunArmed.current = true;
+  }, [bootStatus.phase, run.ranAt]);
+  useEffect(() => {
+    if (!autoRunArmed.current) return;
+    if (!engineReadyRef.current) return;
+    const t = window.setTimeout(() => void doRun(), 800);
+    return () => window.clearTimeout(t);
+    // vdText/resourcesText intentionally read via closure; doRun reads refs.
+  }, [vdText, resourcesText, bootStatus.phase]);
+
   // Cmd/Ctrl+Enter runs.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -147,6 +170,15 @@ export default function App() {
   }, [doRun]);
 
   const engineReady = bootStatus.phase === "ready";
+
+  // Stale badge (S5): editors changed since the last completed run.
+  const lastRunText = useRef<{ vd: string; res: string }>({ vd: "", res: "" });
+  useEffect(() => {
+    if (run.ranAt) lastRunText.current = { vd: vdText, res: resourcesText };
+  }, [run.ranAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  const autoStale =
+    autoRunArmed.current && run.ranAt !== null &&
+    (vdText !== lastRunText.current.vd || resourcesText !== lastRunText.current.res);
 
   // Resource stats (design §4: resource stats on the pane header) —
   // derived from the last PARSED editor content (shown after a run).
@@ -228,7 +260,7 @@ export default function App() {
           </span>
         )}
         <button className="run-button" onClick={() => void doRun()} disabled={!engineReady || run.running}>
-          {run.running ? "Running…" : "Run view"}
+          {run.running ? "Running…" : autoStale ? "Run view (stale)" : "Run view"}
           <span className="run-kbd">⌘⏎</span>
         </button>
       </header>
@@ -239,25 +271,52 @@ export default function App() {
             FHIR Resources
             {run.ranAt && <span className="pane-stats" data-testid="resource-stats">{resourceStatsText}</span>}
           </div>
+          <div className="resources-tabs tab-strip" role="tablist" aria-label="Resources pane views">
+            <button
+              id="vr-res-tab-editor"
+              role="tab"
+              aria-selected={resourcesTab === "editor"}
+              className={resourcesTab === "editor" ? "active" : ""}
+              onClick={() => setResourcesTab("editor")}
+            >
+              Editor
+            </button>
+            <button
+              id="vr-res-tab-browse"
+              role="tab"
+              aria-selected={resourcesTab === "browse"}
+              className={resourcesTab === "browse" ? "active" : ""}
+              onClick={() => setResourcesTab("browse")}
+            >
+              Browse
+            </button>
+          </div>
           <div className="pane-body">
-            <div className="editor-container" data-testid="resources-editor">
-              <Editor
-                language="json"
-                value={resourcesText}
-                onChange={(v) => setResourcesText(v ?? "")}
-                onMount={(editor) => {
-                  (window as any).__vrResourcesEditor = editor;
-                }}
-                theme="vs-dark"
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 12,
-                  wordWrap: "on",
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                }}
+            {resourcesTab === "editor" ? (
+              <div className="editor-container" data-testid="resources-editor">
+                <Editor
+                  language="json"
+                  value={resourcesText}
+                  onChange={(v) => setResourcesText(v ?? "")}
+                  onMount={(editor) => {
+                    (window as any).__vrResourcesEditor = editor;
+                  }}
+                  theme="vs-dark"
+                  options={{
+                    minimap: { enabled: false },
+                    fontSize: 12,
+                    wordWrap: "on",
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                  }}
+                />
+              </div>
+            ) : (
+              <ResourceDataViewer
+                resources={run.parsedResources ?? []}
+                highlightTypes={vdResourceOf(vdText) ? [vdResourceOf(vdText)!] : null}
               />
-            </div>
+            )}
           </div>
         </section>
 

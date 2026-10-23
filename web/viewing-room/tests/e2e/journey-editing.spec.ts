@@ -18,31 +18,17 @@ async function setVdEditor(page: import("@playwright/test").Page, text: string) 
 test("journey: editing the VD and re-running reflects the edit", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
-  await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(35, { timeout: 60_000 });
 
-  // Drop the gender column: edit the VD JSON (remove the gender column block)
-  // and re-run; the output table must reflect the edit (no gender column).
-  const vdText = await page.evaluate(() => {
-    const ed = (window as any).__vrVdEditor as any;
-    return ed ? ed.getValue() : null;
-  });
-  expect(vdText).toBeTruthy();
-  const edited = vdText!
-    .split("\n")
-    .filter((l: string) => !/"gender"/.test(l) && !/"path": "gender"/.test(l))
-    .join("\n")
-    // remove the now-dangling gender column object lines is fragile; instead
-    // rebuild a minimal VD deterministically:
-    .replace(/\{\s*"path": "gender",\s*"name": "gender"\s*\},?/s, "");
   await setVdEditor(page, JSON.stringify({
     resource: "Patient",
     select: [{ column: [{ name: "id", path: "getResourceKey()" }] }],
   }));
   await page.getByRole("button", { name: /Run view/ }).click();
-  await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(25, { timeout: 30_000 });
   // The edited view has exactly one data column: id (no gender).
   await expect(page.getByTestId("output-table").locator("thead th")).toHaveCount(1);
-  await expect(page.getByTestId("output-table")).toContainText("p1");
+  await expect(page.getByTestId("output-table")).toContainText("269a6a02");
 });
 
 test("journey: invalid VD shows typed diagnostics, never a blank screen", async ({ page }) => {
@@ -67,7 +53,7 @@ test("journey: invalid VD shows typed diagnostics, never a blank screen", async 
 test("journey: wrong-resourceType input yields the 0-rows hint", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
-  await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(35, { timeout: 60_000 });
 
   // Replace the resources with Observations (VD targets Patient).
   await page.evaluate(() => {
