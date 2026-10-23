@@ -201,6 +201,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'examples/viewing-room',
+          label: 'Viewing Room',
+        },
+        {
+          type: 'doc',
           id: 'examples/sdc-playground',
           label: 'SDC Forms',
         },

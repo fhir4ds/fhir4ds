@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SQL-on-FHIR Viewing Room — web component</title>
+    <!-- COI shim: COOP/COEP when headers fail; required for duckdb-wasm SAB. -->
+    <script src="./coi-serviceworker.js"></script>
+  </head>
+  <body>
+    <h1 style="font-family: system-ui">Embedded &lt;sqlonfhir-viewing-room&gt;</h1>
+    <sqlonfhir-viewing-room height="85vh"></sqlonfhir-viewing-room>
+    <script>
+      // Static smoke page (NOT a rollup input): load the stable-filename
+      // bundle emitted at the build root after the build completes.
+      const s = document.createElement("script");
+      s.type = "module";
+      s.src = "./sqlonfhir-viewing-room.js";
+      document.body.appendChild(s);
+    </script>
+  </body>
+</html>
