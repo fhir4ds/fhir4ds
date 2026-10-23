@@ -10,7 +10,7 @@ import { test, expect } from "@playwright/test";
 // Engine-verified row counts per sample (validated against the local
 // fhir4ds viewdef generator + duckdb before pinning).
 const SAMPLE_ROWS: Record<string, number> = {
-  "patient-demographics": 2,
+  "patient-demographics": 35,
   "patient-addresses": 3,
   "patient-contact-address-union": 3,
   "us-core-blood-pressures": 2,
@@ -21,7 +21,7 @@ const SAMPLE_ROWS: Record<string, number> = {
 test("journey: every gallery sample loads and renders its rows", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
-  await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(35, { timeout: 60_000 });
 
   const gallery = page.locator("header select");
   const options = await gallery.locator("option").all();

@@ -1,33 +1,34 @@
 {
+  "resource": "Patient",
   "select": [
     {
       "column": [
         {
-          "path": "getResourceKey()",
-          "name": "id"
+          "name": "id",
+          "path": "id",
+          "type": "id"
         },
         {
-          "path": "gender",
-          "name": "gender"
+          "name": "birthDate",
+          "path": "birthDate",
+          "type": "date"
         }
       ]
     },
     {
+      "forEach": "name",
       "column": [
         {
-          "path": "given.join(' ')",
-          "name": "given_name",
-          "description": "A single given name field with all names joined together."
+          "name": "last_name",
+          "path": "family",
+          "type": "string"
         },
         {
-          "path": "family",
-          "name": "family_name"
+          "name": "first_name",
+          "path": "given.join(' ')",
+          "type": "string"
         }
-      ],
-      "forEach": "name.where(use = 'official').first()"
+      ]
     }
-  ],
-  "name": "patient_demographics",
-  "status": "draft",
-  "resource": "Patient"
+  ]
 }

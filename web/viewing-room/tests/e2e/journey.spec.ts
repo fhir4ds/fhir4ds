@@ -21,12 +21,12 @@ test("journey: default sample boots, auto-runs, and renders patient rows", async
   await expect(badge).toBeVisible({ timeout: 120_000 });
   await expect(badge).toContainText(/fhir4ds \d+\.\d+\.\d+/);
 
-  // The default sample auto-ran: output table has Patient rows (p1, p2).
+  // The default sample auto-ran: the reference playground's patient set
+  // (25 Synthea patients, 35 name rows; S5 reference alignment).
   const table = page.getByTestId("output-table");
   await expect(table).toBeVisible({ timeout: 30_000 });
-  await expect(table.locator("tbody tr")).toHaveCount(2, { timeout: 30_000 });
-  await expect(table).toContainText("p1");
-  await expect(table).toContainText("Chalmers");
+  await expect(table.locator("tbody tr")).toHaveCount(35, { timeout: 30_000 });
+  await expect(table).toContainText("Bechtelar572");
 
   // SQL tab shows the verbatim generated SQL.
   await page.getByRole("tab", { name: "SQL" }).click();
