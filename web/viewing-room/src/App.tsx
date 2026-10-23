@@ -46,7 +46,7 @@ export default function App() {
   const [sample, setSample] = useState<Sample | null>(null);
   const [run, setRun] = useState<RunState>(EMPTY_RUN);
   const [outputTab, setOutputTab] = useState<OutputTab>("table");
-  const [resourcesTab, setResourcesTab] = useState<ResourcesTab>("editor");
+  const [resourcesTab, setResourcesTab] = useState<ResourcesTab>("browse");
   const vdRef = useRef<string>("");
   vdRef.current = vdText;
   const resRef = useRef<string>("");
@@ -157,6 +157,16 @@ export default function App() {
     // vdText/resourcesText intentionally read via closure; doRun reads refs.
   }, [vdText, resourcesText, bootStatus.phase]);
 
+  // BOOT-RETRY GAP (S6, Run-button removal): with no Run button, a failed
+  // boot + Retry would leave stale (never-run) editors. When boot reaches
+  // ready and NO run has completed yet, run once automatically.
+  useEffect(() => {
+    if (bootStatus.phase === "ready" && !run.ranAt && !run.running) {
+      const t = window.setTimeout(() => void doRun(), 200);
+      return () => window.clearTimeout(t);
+    }
+  }, [bootStatus.phase, run.ranAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Cmd/Ctrl+Enter runs.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -259,10 +269,7 @@ export default function App() {
             {bootStatus.phase === "booting" ? "booting engine…" : "starting…"}
           </span>
         )}
-        <button className="run-button" onClick={() => void doRun()} disabled={!engineReady || run.running}>
-          {run.running ? "Running…" : autoStale ? "Run view (stale)" : "Run view"}
-          <span className="run-kbd">⌘⏎</span>
-        </button>
+        {autoStale && <span className="boot-status" data-testid="recalc-status">recalculating…</span>}
       </header>
 
       <div className="main" ref={mainRef}>
