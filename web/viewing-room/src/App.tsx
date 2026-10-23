@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { BootStatus, flattenView, onBootStatus } from "./lib/engineClient";
 import { boot as bootEngine } from "./lib/engineClient";
-import { DEFAULT_SAMPLE, Sample, SAMPLES, parseResourcesInput, sampleUrl } from "./lib/samples";
+import { DEFAULT_SAMPLE, Sample, SAMPLES, parseResourcesInput, resourceStats, sampleUrl } from "./lib/samples";
 import { ResultsTable } from "./components/ResultsTable";
 import { DiagnosticsList } from "./components/DiagnosticsList";
 import { SqlView } from "./components/SqlView";
@@ -24,6 +24,7 @@ interface RunState {
   sql: string | null;
   diagnostics: Array<{ code: string; severity?: string; message: string }> | null;
   ranAt: number | null;
+  parsedResources: Array<Record<string, unknown>> | null;
 }
 
 const EMPTY_RUN: RunState = {
@@ -33,6 +34,7 @@ const EMPTY_RUN: RunState = {
   sql: null,
   diagnostics: null,
   ranAt: null,
+  parsedResources: null,
 };
 
 export default function App() {
@@ -120,6 +122,7 @@ export default function App() {
       sql: env.sql ?? null,
       diagnostics: env.ok ? null : (env.diagnostics ?? []),
       ranAt: Date.now(),
+      parsedResources: parsed.resources,
     });
     setOutputTab(env.ok ? "table" : "diagnostics");
   }, []);
@@ -140,6 +143,13 @@ export default function App() {
   }, [doRun]);
 
   const engineReady = bootStatus.phase === "ready";
+
+  // Resource stats (design §4: resource stats on the pane header) —
+  // derived from the last PARSED editor content (shown after a run).
+  const stats = resourceStats(run.parsedResources ?? []);
+  const resourceStatsText = stats.total
+    ? `${stats.total} resource${stats.total === 1 ? "" : "s"}: ${stats.byType.map((t) => `${t.count} ${t.type}`).join(", ")}`
+    : "";
 
   return (
     <div className="app">
@@ -183,43 +193,52 @@ export default function App() {
 
       <div className="main">
         <section className="pane pane-resources" aria-label="FHIR resources">
-          <div className="pane-header">FHIR Resources</div>
+          <div className="pane-header">
+            FHIR Resources
+            {run.ranAt && <span className="pane-stats" data-testid="resource-stats">{resourceStatsText}</span>}
+          </div>
           <div className="pane-body">
-            <Editor
-              className="editor-container"
-              language="json"
-              value={resourcesText}
-              onChange={(v) => setResourcesText(v ?? "")}
-              theme="vs-dark"
-              options={{
-                minimap: { enabled: false },
-                fontSize: 12,
-                wordWrap: "on",
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-              }}
-            />
+            <div className="editor-container" data-testid="resources-editor">
+              <Editor
+                language="json"
+                value={resourcesText}
+                onChange={(v) => setResourcesText(v ?? "")}
+                onMount={(editor) => {
+                  (window as any).__vrResourcesEditor = editor;
+                }}
+                theme="vs-dark"
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 12,
+                  wordWrap: "on",
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                }}
+              />
+            </div>
           </div>
         </section>
 
         <section className="pane pane-viewdef" aria-label="ViewDefinition">
           <div className="pane-header">ViewDefinition</div>
           <div className="pane-body">
-            <div className="editor-container" style={{ flex: "0 0 38%" }}>
-            <Editor
-              className="editor-container"
-              language="json"
-              value={vdText}
-              onChange={(v) => setVdText(v ?? "")}
-              theme="vs-dark"
-              options={{
-                minimap: { enabled: false },
-                fontSize: 12,
-                wordWrap: "on",
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-              }}
-            />
+            <div className="editor-container" style={{ flex: "0 0 38%" }} data-testid="vd-editor">
+              <Editor
+                language="json"
+                value={vdText}
+                onChange={(v) => setVdText(v ?? "")}
+                onMount={(editor) => {
+                  (window as any).__vrVdEditor = editor;
+                }}
+                theme="vs-dark"
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 12,
+                  wordWrap: "on",
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                }}
+              />
             </div>
             <div className="output-tabs" style={{ flex: "1 1 62%" }}>
               <div className="tab-strip" role="tablist">
@@ -235,7 +254,7 @@ export default function App() {
               </div>
               <div className="output-body">
                 <div className="tab-panel" role="tabpanel" hidden={outputTab !== "table"}>
-                  <ResultsTable columns={run.columns} rows={run.rows} ranAt={run.ranAt} vdResource={vdResourceOf(vdText)} />
+                  <ResultsTable columns={run.columns} rows={run.rows} ranAt={run.ranAt} vdResource={vdResourceOf(vdText)} loadedTypes={stats.byType.map((t) => t.type).join(", ")} />
                 </div>
                 <div className="tab-panel" role="tabpanel" hidden={outputTab !== "sql"}>
                   <SqlView sql={run.sql} />
