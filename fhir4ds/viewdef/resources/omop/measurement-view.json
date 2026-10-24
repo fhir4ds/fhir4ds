@@ -1,0 +1,116 @@
+{
+  "name": "omop_measurement",
+  "status": "draft",
+  "resource": "Observation",
+  "constant": [
+    {
+      "name": "loinc_uri",
+      "valueString": "http://loinc.org"
+    },
+    {
+      "name": "snomed_uri",
+      "valueString": "http://snomed.info/sct"
+    },
+    {
+      "name": "ehr_type_concept",
+      "valueString": "32810"
+    }
+  ],
+  "select": [
+    {
+      "column": [
+        {
+          "name": "measurement_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "person_id",
+          "path": "subject.reference.split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "measurement_concept_id",
+          "path": "cm.group.element.target.code.first()",
+          "type": "string"
+        },
+        {
+          "name": "measurement_date",
+          "path": "effective.ofType(dateTime).substring(0, 10)",
+          "type": "date"
+        },
+        {
+          "name": "measurement_datetime",
+          "path": "effective.ofType(dateTime)",
+          "type": "dateTime"
+        },
+        {
+          "name": "measurement_type_concept_id",
+          "path": "%ehr_type_concept",
+          "type": "string"
+        },
+        {
+          "name": "value_as_number",
+          "path": "value.ofType(Quantity).value",
+          "type": "decimal"
+        },
+        {
+          "name": "unit_source_value",
+          "path": "value.ofType(Quantity).unit",
+          "type": "string"
+        },
+        {
+          "name": "range_low",
+          "path": "referenceRange.low.first().value",
+          "type": "decimal"
+        },
+        {
+          "name": "range_high",
+          "path": "referenceRange.high.first().value",
+          "type": "decimal"
+        },
+        {
+          "name": "measurement_source_value",
+          "path": "iif(code.coding.where(system=%loinc_uri).exists(), code.coding.where(system=%loinc_uri).code.first(), code.coding.code.first())",
+          "type": "code"
+        },
+        {
+          "name": "value_source_value",
+          "path": "value.ofType(Quantity).value",
+          "type": "decimal"
+        },
+        {
+          "name": "visit_occurrence_id",
+          "path": "encounter.reference.split('/').last()",
+          "type": "string"
+        }
+      ],
+      "where": [
+        {
+          "path": "value.ofType(Quantity).exists()"
+        }
+      ]
+    }
+  ],
+  "joins": [
+    {
+      "name": "cm",
+      "resource": "ConceptMap",
+      "type": "left",
+      "on": [
+        {
+          "path": "iif(code.coding.where(system=%loinc_uri).exists(), code.coding.where(system=%loinc_uri).code.first(), iif(code.coding.where(system=%snomed_uri).exists(), code.coding.where(system=%snomed_uri).code.first(), code.coding.code.first()))"
+        },
+        {
+          "path": "cm.group.element.code"
+        },
+        {
+          "path": "iif(code.coding.where(system=%loinc_uri).exists(), %loinc_uri, iif(code.coding.where(system=%snomed_uri).exists(), %snomed_uri, code.coding.system.first()))"
+        },
+        {
+          "path": "cm.group.source"
+        }
+      ]
+    }
+  ]
+}

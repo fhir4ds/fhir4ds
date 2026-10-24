@@ -1,0 +1,102 @@
+{
+  "name": "omop_drug_exposure_immunization",
+  "status": "draft",
+  "resource": "Immunization",
+  "constant": [
+    {
+      "name": "cvx_uri",
+      "valueString": "http://hl7.org/fhir/sid/cvx"
+    },
+    {
+      "name": "rx_administered",
+      "valueString": "38000180"
+    }
+  ],
+  "select": [
+    {
+      "column": [
+        {
+          "name": "drug_exposure_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "person_id",
+          "path": "patient.reference.split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "drug_concept_id",
+          "path": "cm.group.element.target.code.first()",
+          "type": "string"
+        },
+        {
+          "name": "drug_exposure_start_date",
+          "path": "occurrenceDateTime.substring(0, 10)",
+          "type": "date"
+        },
+        {
+          "name": "drug_exposure_start_datetime",
+          "path": "occurrenceDateTime",
+          "type": "dateTime"
+        },
+        {
+          "name": "drug_exposure_end_date",
+          "path": "occurrenceDateTime.substring(0, 10)",
+          "type": "date"
+        },
+        {
+          "name": "drug_exposure_end_datetime",
+          "path": "occurrenceDateTime",
+          "type": "dateTime"
+        },
+        {
+          "name": "drug_type_concept_id",
+          "path": "%rx_administered",
+          "type": "string"
+        },
+        {
+          "name": "quantity_num",
+          "path": "doseQuantity.value",
+          "type": "decimal"
+        },
+        {
+          "name": "drug_source_value",
+          "path": "vaccineCode.coding.code.first()",
+          "type": "code"
+        },
+        {
+          "name": "visit_occurrence_id",
+          "path": "encounter.reference.split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "src",
+          "path": "'Immunization'",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "joins": [
+    {
+      "name": "cm",
+      "resource": "ConceptMap",
+      "type": "left",
+      "on": [
+        {
+          "path": "vaccineCode.coding.code.first()"
+        },
+        {
+          "path": "cm.group.element.code"
+        },
+        {
+          "path": "vaccineCode.coding.system.first()"
+        },
+        {
+          "path": "cm.group.source"
+        }
+      ]
+    }
+  ]
+}
