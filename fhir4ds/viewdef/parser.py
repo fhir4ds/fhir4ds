@@ -412,20 +412,30 @@ def _parse_join(join_data: Dict[str, Any]) -> Join:
 
     name = join_data.get('name', '')
     resource = join_data.get('resource', '')
+    view = join_data.get('view')
 
     if not name:
         raise ParseError(f"Join missing required 'name' field: {join_data}")
-    if not resource:
-        raise ParseError(f"Join missing required 'resource' field: {join_data}")
+    if view is not None and resource:
+        raise ParseError(
+            "Join cannot set both 'resource' and 'view' — pick one target kind"
+        )
+    if view is None and not resource:
+        raise ParseError(
+            f"Join missing required 'resource' or 'view' field: {join_data}"
+        )
     try:
         validate_sql_name(name, "Join.name")
     except ValueError as exc:
         raise ParseError(str(exc)) from exc
-    if not isinstance(resource, str):
+    if view is not None:
+        if not isinstance(view, str) or not view:
+            raise ParseError("Join.view must be a non-empty ViewDefinition name")
+    elif not isinstance(resource, str):
         raise ParseError(
             f"Join.resource must be a FHIR ResourceType string, got {type(resource).__name__}"
         )
-    if resource not in KNOWN_FHIR_RESOURCE_TYPES:
+    elif resource not in KNOWN_FHIR_RESOURCE_TYPES:
         raise ParseError(
             f"Join.resource {resource!r} is not in the required ResourceType binding"
         )
@@ -448,6 +458,7 @@ def _parse_join(join_data: Dict[str, Any]) -> Join:
         return Join(
             name=name,
             resource=resource,
+            view=view,
             on=on_conditions,
             type=join_data.get('type', 'inner')
         )

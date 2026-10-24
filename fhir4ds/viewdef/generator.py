@@ -37,6 +37,21 @@ _SIMPLE_FHIRPATH_NAV_RE = re.compile(
 _CONTEXT_SWITCHING_BUILTINS = {"context", "resource", "rootResource"}
 
 
+class _ViewColumnRef:
+    """A routed join path that resolves to a plain SQL column reference.
+
+    Produced by ``_route_join_path`` for view-target joins (rev 2,
+    view-as-join-target): ``cm.concept_id`` becomes the quoted SQL column
+    reference ``"cm"."concept_id"`` — the joined VIEW's rows are already
+    flat, so no FHIRPath compilation applies.
+    """
+
+    __slots__ = ("sql",)
+
+    def __init__(self, sql: str) -> None:
+        self.sql = sql
+
+
 def _quote_identifier(name: str) -> str:
     """Quote a SQL identifier (thin wrapper over the public utils helper).
 
@@ -272,6 +287,14 @@ class SQLGenerator:
         # ViewDefinition.joins; column paths prefixed "<alias>." are routed
         # to the joined table's resource column.
         self._root_joins: dict = {}
+        # View-target joins (rev 2): aliases whose routed paths become SQL
+        # column references into the materialized view's flat output.
+        self._view_join_aliases: set = set()
+        # Runner-provided view table resolution: view name -> table reference
+        # SQL (overrides the <view_schema>.<name> convention).
+        self._view_tables: dict = {}
+        # Schema for view-target table references when not in _view_tables.
+        self.view_schema: str = "omop"
 
     def _get_type_name(self, column_type) -> str | None:
         """Return the normalized FHIR type name for a column type declaration."""
@@ -776,22 +799,52 @@ class SQLGenerator:
         for i in range(0, len(paths), 2):
             left_sql, left_expr = self._join_side_expr(paths[i], join_alias)
             right_sql, right_expr = self._join_side_expr(paths[i + 1], join_alias)
+
+            def side_expr(ref: str, expr) -> str:
+                # View-target side: expr is None and ref IS the column ref.
+                if expr is None:
+                    return f"NULLIF({ref}, '')"
+                return f"NULLIF(fhirpath_text({ref}, {expr}), '')"
+
             conditions.append(
-                f"NULLIF(fhirpath_text({left_sql}, {left_expr}), '') =\n    "
-                f"NULLIF(fhirpath_text({right_sql}, {right_expr}), '')"
+                f"{side_expr(left_sql, left_expr)} =\n    {side_expr(right_sql, right_expr)}"
             )
         return "\n  AND ".join(conditions)
 
     def _join_side_expr(self, path: str, join_alias: str) -> tuple:
-        """Return (resource_ref_sql, fhirpath_expr_sql) for one ON side."""
+        """Return (resource_ref_sql, fhirpath_expr_sql) for one ON side.
+
+        For a view-target join, an ``<alias>.<column>`` path returns the
+        bare quoted column reference as the expression with the alias as
+        the ref — the ON comparison then compares the base-side FHIRPath
+        projection directly against the view column (rev 2).
+        """
         resolved = self._resolve_path(path)
         prefix = f"{join_alias}."
         if resolved.startswith(prefix):
             tail = resolved[len(prefix):]
+            if join_alias in self._view_join_aliases:
+                return f'"{join_alias}"."{tail}"', None  # column ref: expr IS the ref
             expr = self._fhirpath_expression_sql(tail)
             return f'"{join_alias}".resource', expr
         expr = self._fhirpath_expression_sql(resolved)
         return f"{self.table_alias}.resource", expr
+
+    def _get_view_join_table_ref(self, view_name: str) -> str:
+        """Return the FROM-side table reference for a view-target join.
+
+        The runner materializes the target ViewDefinition's output as a
+        named relation (spec: "The executing engine may materialise the
+        view's result or inline it; either approach conforms"). Resolution
+        order: the runner-provided ``view_tables`` map (view name ->
+        table reference SQL), then the ``<view_schema>.<view_name>``
+        convention (view_schema defaults to ``omop``).
+        """
+        table = self._view_tables.get(view_name)
+        if table is not None:
+            return table
+        schema = _quote_table_reference(self.view_schema)
+        return f"{schema}.{_quote_table_reference(view_name)}"
 
     def _route_join_path(self, resolved_path: str, current_resource_var: str) -> tuple:
         """Route a column/where path through a root join when prefixed.
@@ -801,6 +854,11 @@ class SQLGenerator:
         iteration contexts (any current focus other than the base table)
         are NOT routable — join paths only make sense from the base
         resource (S0 bound).
+
+        Rev 2 (view targets): for a view-target join the returned path is
+        a ``_ViewColumnRef`` carrying the quoted SQL column reference —
+        the view's rows are already flat, so the caller emits it verbatim
+        instead of compiling FHIRPath.
         """
         if not self._root_joins:
             return resolved_path, current_resource_var
@@ -813,7 +871,10 @@ class SQLGenerator:
                         "iteration context; join paths are only valid from the "
                         "base resource (S0 bound)"
                     )
-                return resolved_path[len(prefix):], resource_ref
+                tail = resolved_path[len(prefix):]
+                if alias in self._view_join_aliases:
+                    return _ViewColumnRef(f'"{alias}"."{tail}"'), current_resource_var
+                return tail, resource_ref
         return resolved_path, current_resource_var
 
     def _resolve_environment_path_context(
@@ -978,6 +1039,14 @@ class SQLGenerator:
         # Root joins (fhir4ds extension): "<alias>."-prefixed paths route
         # FHIRPath evaluation to the joined table's resource column.
         resolved_path, resource_var = self._route_join_path(resolved_path, resource_var)
+        if isinstance(resolved_path, _ViewColumnRef):
+            # View-target join column reference (rev 2): emit verbatim.
+            quoted_name = _quote_column_identifier(column.name)
+            expr = resolved_path.sql
+            sql_cast = self._get_sql_cast(column.type)
+            if sql_cast:
+                expr = f"TRY_CAST({expr} AS {sql_cast})"
+            return f"{expr} as {quoted_name}"
 
         # %rowIndex: 0-based row counter within the enclosing forEach context
         if resolved_path == "%rowIndex":
@@ -1955,6 +2024,28 @@ class SQLGenerator:
             path = w.get("path", "") if isinstance(w, dict) else ""
             if path:
                 resolved = self._resolve_path(path)
+                # View-target join columns inside a where clause: textual
+                # substitution of '<alias>.<column>' tokens with quoted SQL
+                # column references (S6a bound: view-column vs literal
+                # comparisons; the base-side routing below handles pure
+                # base-resource expressions).
+                view_hit = False
+                for alias in self._view_join_aliases:
+                    if f"{alias}." in resolved:
+                        resolved = re.sub(
+                            rf"\b{re.escape(alias)}\.([A-Za-z_][A-Za-z0-9_]*)",
+                            rf'"{alias}"."\1"',
+                            resolved,
+                        )
+                        view_hit = True
+                if view_hit:
+                    # Remaining operands are literals or other view columns;
+                    # strip FHIRPath quoting around the substituted refs by
+                    # emitting the expression directly as a SQL condition.
+                    where_conditions.append(self._where_condition_sql(
+                        base_resource_var, self._fhirpath_expression_sql(resolved, "0")
+                    ) if False else resolved)
+                    continue
                 resolved, where_var = self._route_join_path(resolved, base_resource_var)
                 resolved, where_var = self._resolve_environment_path_context(
                     resolved,
@@ -2233,6 +2324,7 @@ class SQLGenerator:
         # from the SAME staged table via a derived subquery carrying its
         # own resourceType filter.
         self._root_joins = {}
+        self._view_join_aliases = set()
         root_join_clauses: List[str] = []
         for join in view_definition.joins:
             join_alias = validate_sql_name(join.name, "Join.name")
@@ -2242,8 +2334,16 @@ class SQLGenerator:
                 )
             if join_alias in self._root_joins:
                 raise ValidationError(f"Duplicate join name '{join_alias}'")
-            join_table = self._get_join_table_ref(join.resource)
-            self._root_joins[join_alias] = f'"{join_alias}".resource'
+            if join.view:
+                # View-as-join-target (rev 2): the runner materialized the
+                # target ViewDefinition's flat output; the join reads it as
+                # a virtual table (spec composition semantics).
+                join_table = self._get_view_join_table_ref(join.view)
+                self._root_joins[join_alias] = None  # column-ref routing marker
+                self._view_join_aliases.add(join_alias)
+            else:
+                join_table = self._get_join_table_ref(join.resource)
+                self._root_joins[join_alias] = f'"{join_alias}".resource'
             on_sql = self._generate_join_on(join.on, join_alias)
             keyword = {
                 "inner": "JOIN",
