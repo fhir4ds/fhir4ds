@@ -1,0 +1,102 @@
+{
+  "name": "omop_drug_exposure_medication_statement",
+  "status": "draft",
+  "resource": "MedicationStatement",
+  "constant": [
+    {
+      "name": "rxnorm_uri",
+      "valueString": "http://www.nlm.nih.gov/research/umls/rxnorm"
+    },
+    {
+      "name": "rx_dispensed",
+      "valueString": "38000175"
+    }
+  ],
+  "select": [
+    {
+      "column": [
+        {
+          "name": "drug_exposure_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "person_id",
+          "path": "subject.reference.split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "drug_concept_id",
+          "path": "cm.group.element.target.code.first()",
+          "type": "string"
+        },
+        {
+          "name": "drug_exposure_start_date",
+          "path": "iif(effective.ofType(dateTime).exists(), effective.ofType(dateTime).substring(0, 10), effective.ofType(Period).start.substring(0, 10))",
+          "type": "date"
+        },
+        {
+          "name": "drug_exposure_start_datetime",
+          "path": "iif(effective.ofType(dateTime).exists(), effective.ofType(dateTime), effective.ofType(Period).start)",
+          "type": "dateTime"
+        },
+        {
+          "name": "drug_exposure_end_date",
+          "path": "iif(effective.ofType(Period).end.exists(), effective.ofType(Period).end.substring(0, 10), effective.ofType(dateTime).substring(0, 10))",
+          "type": "date"
+        },
+        {
+          "name": "drug_exposure_end_datetime",
+          "path": "iif(effective.ofType(Period).end.exists(), effective.ofType(Period).end, effective.ofType(dateTime))",
+          "type": "dateTime"
+        },
+        {
+          "name": "drug_type_concept_id",
+          "path": "%rx_dispensed",
+          "type": "string"
+        },
+        {
+          "name": "quantity_num",
+          "path": "dosage[0].doseAndRate[0].doseQuantity.value",
+          "type": "decimal"
+        },
+        {
+          "name": "drug_source_value",
+          "path": "iif(medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).exists(), medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).code.first(), medication.ofType(CodeableConcept).coding.code.first())",
+          "type": "code"
+        },
+        {
+          "name": "visit_occurrence_id",
+          "path": "context.reference.split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "src",
+          "path": "'MedicationStatement'",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "joins": [
+    {
+      "name": "cm",
+      "resource": "ConceptMap",
+      "type": "left",
+      "on": [
+        {
+          "path": "iif(medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).exists(), medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).code.first(), medication.ofType(CodeableConcept).coding.code.first())"
+        },
+        {
+          "path": "cm.group.element.code"
+        },
+        {
+          "path": "iif(medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).exists(), %rxnorm_uri, medication.ofType(CodeableConcept).coding.system.first())"
+        },
+        {
+          "path": "cm.group.source"
+        }
+      ]
+    }
+  ]
+}

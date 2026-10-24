@@ -1,0 +1,22 @@
+{
+  "name": "omop_death",
+  "status": "draft",
+  "resource": "Patient",
+  "constant": [
+    {"name": "ehr_type_concept", "valueString": "32810"}
+  ],
+  "select": [
+    {
+      "column": [
+        {"name": "person_id", "path": "id", "type": "id"},
+        {"name": "death_date", "path": "deceased.ofType(dateTime).substring(0, 10)", "type": "date"},
+        {"name": "death_datetime", "path": "deceased.ofType(dateTime)", "type": "dateTime"},
+        {"name": "death_type_concept_id", "path": "%ehr_type_concept", "type": "string"},
+        {"name": "cause_source_value", "path": "deceased.ofType(dateTime)", "type": "dateTime"}
+      ],
+      "where": [
+        {"path": "deceased.ofType(dateTime).exists()"}
+      ]
+    }
+  ]
+}
