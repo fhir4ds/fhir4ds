@@ -1,7 +1,7 @@
 {
   "name": "omop_device_exposure",
   "status": "draft",
-  "resource": "DeviceUseStatement",
+  "resource": "DeviceUsage",
   "constant": [
     {"name": "ehr_type_concept", "valueString": "32810"}
   ],

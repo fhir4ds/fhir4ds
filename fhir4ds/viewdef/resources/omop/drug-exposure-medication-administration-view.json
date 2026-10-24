@@ -56,9 +56,19 @@
           "type": "string"
         },
         {
+          "name": "sig",
+          "path": "iif(dosage[0].text.exists(), dosage[0].text, iif(dosageText.exists(), dosageText, iif(dosageInstruction[0].text.exists(), dosageInstruction[0].text, null)))",
+          "type": "string"
+        },
+        {
           "name": "quantity_num",
           "path": "dosage.dose.value",
           "type": "decimal"
+        },
+        {
+          "name": "days_supply",
+          "path": "iif(0 = 1, 0, null)",
+          "type": "integer"
         },
         {
           "name": "drug_source_value",

@@ -16,6 +16,8 @@ const SAMPLE_ROWS: Record<string, number> = {
   "us-core-blood-pressures": 2,
   "questionnaire-response-items": 5,
   "observation-values": 3,
+  "omop-patient": 2,
+  "omop-drug-exposure": 1,
 };
 
 test("journey: every gallery sample loads and renders its rows", async ({ page }) => {
@@ -25,7 +27,7 @@ test("journey: every gallery sample loads and renders its rows", async ({ page }
 
   const gallery = page.locator("header select");
   const options = await gallery.locator("option").all();
-  expect(options.length).toBe(6);
+  expect(options.length).toBe(8);
 
   for (const opt of options) {
     const slug = await opt.getAttribute("value");
