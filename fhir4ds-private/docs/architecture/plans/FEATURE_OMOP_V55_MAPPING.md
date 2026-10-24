@@ -239,3 +239,45 @@ used as the independent reviewer). Seven recs, all folded:
   value-type rule anyway; recommend omit v1).
 - Q3: person_id hashing policy — xxhash64-as-integer (recommend) vs
   emit string-only and leave integer FK columns 0 everywhere.
+
+
+## Implementation record (S0-S5, 2026-10-23)
+
+All slices landed on feat/omop-v55-mapping; every acceptance item of the
+design maps to shipped artifacts:
+
+- S0 (7696b13b): root joins emitted (LEFT/INNER/RIGHT/FULL; equality-pair
+  ON; source_table staging via derived subquery; join-prefixed column and
+  where routing; guard rails). 10-test integration suite.
+- S1 (2220db86): conceptmap-view.json + curated supplements (NDJSON
+  element-per-resource) + vocabulary.json. Muse-R1 functional dependency
+  via target.where(...).first().
+- S2 (061dd306): person / visit_occurrence / condition_occurrence /
+  procedure_occurrence with Muse-R2 coding precedence + system-discriminated
+  ON pairs.
+- S3 (bb392829): drug_exposure 4 arms (canonical 14-column set),
+  device_exposure (DeviceUsage — R6 rename), measurement/observation
+  value-type split, death.
+- S4 (35fe98b1): omop_runner.create_omop_views — omop.* schema, unions,
+  positive 63-bit key projection, concept-0 defaults; demo bundle +
+  expected-rows fixture; Viewing Room omop-patient + omop-drug-exposure
+  gallery samples (14/14 e2e); omop-mapping.ipynb executed clean from the
+  built wheel.
+- S5 (this commit): manifest.json (versioned artifact + ETL assumptions +
+  v5.4 variant note) + sectioned conformance suite
+  (conformance/scripts/run_omop.py: schema/required/grain/mapping/
+  vd-conformance) wired into run_all — MASTER GATE 2869/2869 (100%).
+
+Key implementation findings (beyond the design):
+- The join target for concept resolution is the ConceptMap in
+  ELEMENT-PER-RESOURCE form (one thin ConceptMap per mapping row): the S0
+  scalar-equality ON cannot select a nested element inside a monolithic
+  ConceptMap. The converter contract (medterm4ds side) emits that form.
+- DeviceUseStatement was renamed DeviceUsage in the current metadata
+  binding (R6); the device view targets DeviceUsage.
+- OMOP_DIR path bug + report-shape alignment fixed during S5 wiring.
+
+Deferred (documented, out of v1): observation_period (ETL-defined
+aggregate per THEMIS), note/specimen tables, DeviceRequest arm,
+race/ethnicity Observation fallback, provider/care-site integer FKs
+(0 + reference strings), v5.4 manifest variant.

@@ -1,0 +1,44 @@
+{
+  "name": "fhir4ds-omop-mapping",
+  "omop_version": "5.5",
+  "fhir4ds_min_version": "0.0.17",
+  "description": "FHIR R4 -> OMOP CDM v5.5 tables as a ViewDefinition library. Concepts resolve through ConceptMap-resource joins (vocabulary_id + concept_code); unmapped codes keep source values with concept_id 0. Composite runner assembles the omop.* schema with positive 63-bit integer keys.",
+  "views": {
+    "conceptmap-view.json": "ConceptMap resources -> long/thin mapping rows (the join target)",
+    "person-view.json": "Patient -> person",
+    "visit-occurrence-view.json": "Encounter -> visit_occurrence",
+    "condition-occurrence-view.json": "Condition -> condition_occurrence",
+    "procedure-occurrence-view.json": "Procedure -> procedure_occurrence",
+    "drug-exposure-medication-request-view.json": "MedicationRequest -> drug_exposure (arm 1/4)",
+    "drug-exposure-medication-statement-view.json": "MedicationStatement -> drug_exposure (arm 2/4)",
+    "drug-exposure-medication-administration-view.json": "MedicationAdministration -> drug_exposure (arm 3/4)",
+    "drug-exposure-immunization-view.json": "Immunization -> drug_exposure (arm 4/4)",
+    "device-exposure-view.json": "DeviceUsage -> device_exposure",
+    "measurement-view.json": "Observation (Quantity-valued) -> measurement",
+    "observation-view.json": "Observation (non-Quantity) -> observation",
+    "death-view.json": "Patient.deceased -> death"
+  },
+  "unions": {
+    "drug_exposure": [
+      "drug-exposure-medication-request-view.json",
+      "drug-exposure-medication-statement-view.json",
+      "drug-exposure-medication-administration-view.json",
+      "drug-exposure-immunization-view.json"
+    ]
+  },
+  "conceptmap_source": {
+    "canonical_form": "element-per-resource (one thin ConceptMap per mapping row)",
+    "supplements": "conceptmap-supplements.ndjson",
+    "athena_converter": "medterm4ds side (design §0 chain) — emits the same element-per-resource form"
+  },
+  "v54_variant": {
+    "status": "designed, not shipped",
+    "delta": "v5.5 adds only optional fields (observation.value_as_date, unit_source_concept_id, value_as_source_concept_id; measurement.value_as_source_concept_id; specimen visit FKs) and vocabulary metadata tables — none in this spine scope. A v5.4 manifest flags the observation/measurement views to drop those columns."
+  },
+  "etl_assumptions": [
+    "type_concept_id defaults: 32810 (EHR record) family per event table; per-branch drug types 38000177/38000175/38000180; condition category -> 38000245/43542353",
+    "provider/care_site integer FKs left 0 (FHIR carries references, not stable integers) — documented policy",
+    "person/visit/PK ids: xxhash-style positive 63-bit hash of the FHIR id string (runner-side projection)",
+    "observation_period is ETL-defined per THEMIS (aggregate derivation, not a row mapping) — not in the VD library v1"
+  ]
+}

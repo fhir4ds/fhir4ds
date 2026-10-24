@@ -24,6 +24,7 @@ SCRIPTS = [
     ("FHIRPath (R4)", "conformance/scripts/run_fhirpath_r4.py", "conformance/reports/fhirpath_report.json"),
     ("CQL", "conformance/scripts/run_cql.py", "conformance/reports/cql_report.json"),
     ("DQM (QI Core 2025)", "conformance/scripts/run_dqm.py", "conformance/reports/dqm_report.json"),
+    ("OMOP Mapping", "conformance/scripts/run_omop.py", "conformance/reports/omop_report.json"),
 ]
 
 def run_script(name, path):
