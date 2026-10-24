@@ -25,10 +25,20 @@ LOINC = "http://loinc.org"
 SCT = "http://snomed.info/sct"
 
 
-def _cm(cid, source, code, target):
-    return {"resourceType": "ConceptMap", "id": cid, "status": "active",
-            "group": [{"source": source, "element": [
-                {"code": code, "target": [{"code": target, "equivalence": "equivalent"}]}]}]}
+def _stage_maps(con, mappings):
+    """Stage ONE monolithic ConceptMap + materialize the flattened view."""
+    groups = {}
+    for source, code, target in mappings:
+        groups.setdefault(source, []).append(
+            {"code": code, "target": [{"code": target, "equivalence": "equivalent"}]})
+    cm = {"resourceType": "ConceptMap", "id": "test-maps", "status": "active",
+          "group": [{"source": s, "element": els} for s, els in groups.items()]}
+    con.execute("INSERT INTO __vd_src VALUES (?)", [json.dumps(cm)])
+    from fhir4ds.viewdef.omop_runner import OMOP_DIR
+    vd = parse_view_definition(json.loads((OMOP_DIR / "conceptmap-view.json").read_text()))
+    sql = SQLGenerator(source_table="__vd_src").generate(vd)
+    con.execute("CREATE SCHEMA IF NOT EXISTS omop")
+    con.execute(f'CREATE OR REPLACE VIEW omop."omop_conceptmap" AS\n{sql}')
 
 
 _COLUMNS = [
@@ -40,10 +50,10 @@ _COLUMNS = [
 ]
 
 MAPS = [
-    _cm("m-rx", RXNORM, "1049697", "1128940"),
-    _cm("m-cvx", CVX, "140", "4056"),
-    _cm("m-lab", LOINC, "718-7", "3024929"),
-    _cm("m-smoke", LOINC, "72166-2", "4076669"),
+    (RXNORM, "1049697", "1128940"),
+    (CVX, "140", "4056"),
+    (LOINC, "718-7", "3024929"),
+    (LOINC, "72166-2", "4076669"),
 ]
 
 
@@ -51,14 +61,19 @@ MAPS = [
 def conn():
     con = fhir4ds.create_connection()
     con.execute("CREATE OR REPLACE TABLE __vd_src (resource JSON)")
-    for m in MAPS:
-        con.execute("INSERT INTO __vd_src VALUES (?)", [json.dumps(m)])
+    _stage_maps(con, MAPS)
     return con
 
 
 def _run(con, view_name, resources):
+    extra_maps = []
     for r in resources:
-        con.execute("INSERT INTO __vd_src VALUES (?)", [json.dumps(r)])
+        if isinstance(r, tuple):
+            extra_maps.append(r)
+        else:
+            con.execute("INSERT INTO __vd_src VALUES (?)", [json.dumps(r)])
+    if extra_maps:
+        _stage_maps(con, extra_maps)
     vd = parse_view_definition(json.loads((OMOP_DIR / f"{view_name}.json").read_text()))
     sql = SQLGenerator(source_table="__vd_src").generate(vd)
     return con.execute(sql).fetchall()
@@ -135,8 +150,7 @@ class TestMeasurementObservationSplit:
         # fresh conn for the second view (same staging table would double-insert)
         con2 = fhir4ds.create_connection()
         con2.execute("CREATE OR REPLACE TABLE __vd_src (resource JSON)")
-        for r in MAPS:
-            con2.execute("INSERT INTO __vd_src VALUES (?)", [json.dumps(r)])
+        _stage_maps(con2, MAPS)
         o = _run(con2, "observation-view", [self.LAB, self.SMOKING])
         assert sorted(x[0] for x in m) == ["o-lab"]
         assert sorted(x[0] for x in o) == ["o-smoke"]

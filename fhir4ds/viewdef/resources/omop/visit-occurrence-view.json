@@ -23,7 +23,7 @@
         },
         {
           "name": "visit_concept_id",
-          "path": "cm.group.element.target.code.first()",
+          "path": "cm.concept_id",
           "type": "string"
         },
         {
@@ -62,20 +62,20 @@
   "joins": [
     {
       "name": "cm",
-      "resource": "ConceptMap",
+      "view": "omop_conceptmap",
       "type": "left",
       "on": [
         {
           "path": "class.code"
         },
         {
-          "path": "cm.group.element.code"
+          "path": "cm.concept_code"
         },
         {
           "path": "class.system"
         },
         {
-          "path": "cm.group.source"
+          "path": "cm.source_system"
         }
       ]
     }

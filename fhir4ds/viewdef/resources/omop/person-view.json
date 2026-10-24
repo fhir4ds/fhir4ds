@@ -5,25 +5,67 @@
   "select": [
     {
       "column": [
-        {"name": "person_id", "path": "id", "type": "id"},
-        {"name": "gender_concept_id", "path": "cm.group.element.target.code.first()", "type": "string"},
-        {"name": "year_of_birth", "path": "birthDate.substring(0, 4)", "type": "string"},
-        {"name": "month_of_birth", "path": "birthDate.substring(5, 2)", "type": "string"},
-        {"name": "day_of_birth", "path": "birthDate.substring(8, 2)", "type": "string"},
-        {"name": "birth_datetime", "path": "birthDate", "type": "dateTime"},
-        {"name": "person_source_value", "path": "id", "type": "id"},
-        {"name": "gender_source_value", "path": "gender", "type": "code"}
+        {
+          "name": "person_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "gender_concept_id",
+          "path": "cm.concept_id",
+          "type": "string"
+        },
+        {
+          "name": "year_of_birth",
+          "path": "birthDate.substring(0, 4)",
+          "type": "string"
+        },
+        {
+          "name": "month_of_birth",
+          "path": "birthDate.substring(5, 2)",
+          "type": "string"
+        },
+        {
+          "name": "day_of_birth",
+          "path": "birthDate.substring(8, 2)",
+          "type": "string"
+        },
+        {
+          "name": "birth_datetime",
+          "path": "birthDate",
+          "type": "dateTime"
+        },
+        {
+          "name": "person_source_value",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "gender_source_value",
+          "path": "gender",
+          "type": "code"
+        }
       ]
     }
   ],
   "joins": [
     {
       "name": "cm",
-      "resource": "ConceptMap",
+      "view": "omop_conceptmap",
       "type": "left",
       "on": [
-        {"path": "gender"},
-        {"path": "cm.group.element.code"}
+        {
+          "path": "gender"
+        },
+        {
+          "path": "cm.concept_code"
+        },
+        {
+          "path": "'http://hl7.org/fhir/administrative-gender'"
+        },
+        {
+          "path": "cm.source_system"
+        }
       ]
     }
   ]

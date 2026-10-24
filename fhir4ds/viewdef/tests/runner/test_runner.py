@@ -121,7 +121,7 @@ class TestPrimitives:
 class TestRunComposition:
     def test_full_family(self, con, family_dir):
         created = run_composition(con, family_dir / "manifest.json", "resources")
-        assert set(created) == {"person", "events"}
+        assert set(created) - {"__join_targets__"} == {"person", "events"}
         # person hashed + referentially consistent with events
         p1 = con.execute(
             'SELECT person_id FROM fam."person" WHERE person_id IS NOT NULL LIMIT 1').fetchone()
@@ -144,15 +144,77 @@ class TestRunComposition:
         with pytest.raises(ValueError, match="column mismatch"):
             run_composition(con, family_dir / "manifest.json", "resources")
 
-    def test_materialize_extra_join_targets(self, con, family_dir):
-        # an extra view materialized as a join target (conceptmap pattern):
-        # the stem plays ONE role — join target, not a composed table.
+    def test_materialize_override(self, con, family_dir):
+        # 'materialize' is an OVERRIDE/hint: eager materialization under a
+        # custom name (e.g. a view nothing joins yet). Correctness never
+        # depends on it.
         m = json.loads((family_dir / "manifest.json").read_text())
         m["materialize"] = {"genders": "person-view"}
         (family_dir / "manifest.json").write_text(json.dumps(m))
         created = run_composition(con, family_dir / "manifest.json", "resources")
         n = con.execute('SELECT count(*) FROM fam."genders"').fetchone()[0]
         assert n == 2
-        # the materialized stem does NOT double-compose as a table
-        assert "person" not in created
-        assert 'fam."genders"' in created.values()
+
+    def test_dependency_inference_zero_config(self, con, family_dir):
+        # A VD that view-joins another library VD: materialization order is
+        # INFERRED (join target first) with NO manifest materialize entry.
+        (family_dir / "codes-view.json").write_text(json.dumps({
+            "name": "f_codes", "resource": "Patient",
+            "select": [{"column": [
+                {"name": "code", "path": "gender", "type": "code"},
+            ]}],
+        }))
+        (family_dir / "by-code-view.json").write_text(json.dumps({
+            "name": "f_by_code", "resource": "Patient",
+            "select": [{"column": [
+                {"name": "person_id", "path": "id", "type": "id"},
+                {"name": "joined_code", "path": "c.code", "type": "code"},
+            ]}],
+            "joins": [{
+                "name": "c", "view": "f_codes", "type": "left",
+                "on": [{"path": "gender"}, {"path": "c.code"}],
+            }],
+        }))
+        m = json.loads((family_dir / "manifest.json").read_text())
+        m["views"]["codes-view"] = "codes"
+        m["views"]["by-code-view"] = "by-code"
+        (family_dir / "manifest.json").write_text(json.dumps(m))
+        created = run_composition(con, family_dir / "manifest.json", "resources")
+        # the join target materialized (inferred), the consumer composed
+        rows = con.execute('SELECT * FROM fam."by_code" ORDER BY 1').fetchall()
+        assert rows == [("p1", "male"), ("p2", "female")]
+
+    def test_dependency_cycle_rejected(self, con, family_dir):
+        (family_dir / "a-view.json").write_text(json.dumps({
+            "name": "f_a", "resource": "Patient",
+            "select": [{"column": [{"name": "id", "path": "id", "type": "id"},
+                                    {"name": "x", "path": "b.id", "type": "id"}]}],
+            "joins": [{"name": "b", "view": "f_b", "type": "left",
+                       "on": [{"path": "id"}, {"path": "b.id"}]}],
+        }))
+        (family_dir / "b-view.json").write_text(json.dumps({
+            "name": "f_b", "resource": "Patient",
+            "select": [{"column": [{"name": "id", "path": "id", "type": "id"},
+                                    {"name": "x", "path": "a.id", "type": "id"}]}],
+            "joins": [{"name": "a", "view": "f_a", "type": "left",
+                       "on": [{"path": "id"}, {"path": "a.id"}]}],
+        }))
+        m = json.loads((family_dir / "manifest.json").read_text())
+        m["views"]["a-view"] = "a"
+        m["views"]["b-view"] = "b"
+        (family_dir / "manifest.json").write_text(json.dumps(m))
+        with pytest.raises(ValueError, match="cycle"):
+            run_composition(con, family_dir / "manifest.json", "resources")
+
+    def test_unknown_view_target_rejected(self, con, family_dir):
+        (family_dir / "bad-join-view.json").write_text(json.dumps({
+            "name": "f_bad_join", "resource": "Patient",
+            "select": [{"column": [{"name": "id", "path": "id", "type": "id"}]}],
+            "joins": [{"name": "z", "view": "nonexistent", "type": "left",
+                       "on": [{"path": "id"}, {"path": "z.id"}]}],
+        }))
+        m = json.loads((family_dir / "manifest.json").read_text())
+        m["views"]["bad-join-view"] = "bad_join"
+        (family_dir / "manifest.json").write_text(json.dumps(m))
+        with pytest.raises(ValueError, match="nonexistent"):
+            run_composition(con, family_dir / "manifest.json", "resources")

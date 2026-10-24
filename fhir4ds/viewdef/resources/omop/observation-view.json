@@ -3,39 +3,98 @@
   "status": "draft",
   "resource": "Observation",
   "constant": [
-    {"name": "loinc_uri", "valueString": "http://loinc.org"},
-    {"name": "snomed_uri", "valueString": "http://snomed.info/sct"},
-    {"name": "ehr_type_concept", "valueString": "32810"}
+    {
+      "name": "loinc_uri",
+      "valueString": "http://loinc.org"
+    },
+    {
+      "name": "snomed_uri",
+      "valueString": "http://snomed.info/sct"
+    },
+    {
+      "name": "ehr_type_concept",
+      "valueString": "32810"
+    }
   ],
   "select": [
     {
       "column": [
-        {"name": "observation_id", "path": "id", "type": "id"},
-        {"name": "person_id", "path": "subject.reference.split('/').last()", "type": "string"},
-        {"name": "observation_concept_id", "path": "cm.group.element.target.code.first()", "type": "string"},
-        {"name": "observation_date", "path": "effective.ofType(dateTime).substring(0, 10)", "type": "date"},
-        {"name": "observation_datetime", "path": "effective.ofType(dateTime)", "type": "dateTime"},
-        {"name": "observation_type_concept_id", "path": "%ehr_type_concept", "type": "string"},
-        {"name": "value_as_string", "path": "iif(value.ofType(string).exists(), value.ofType(string), iif(value.ofType(CodeableConcept).text.exists(), value.ofType(CodeableConcept).text, iif(value.ofType(CodeableConcept).coding.display.first().exists(), value.ofType(CodeableConcept).coding.display.first(), value.ofType(Ratio).numerator.value)))", "type": "string"},
-        {"name": "observation_source_value", "path": "iif(code.coding.where(system=%loinc_uri).exists(), code.coding.where(system=%loinc_uri).code.first(), iif(code.coding.where(system=%snomed_uri).exists(), code.coding.where(system=%snomed_uri).code.first(), code.coding.code.first()))", "type": "code"},
-        {"name": "value_source_value", "path": "iif(value.ofType(string).exists(), value.ofType(string), value.ofType(CodeableConcept).coding.code.first())", "type": "code"},
-        {"name": "visit_occurrence_id", "path": "encounter.reference.split('/').last()", "type": "string"}
+        {
+          "name": "observation_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "person_id",
+          "path": "subject.reference.split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "observation_concept_id",
+          "path": "cm.concept_id",
+          "type": "string"
+        },
+        {
+          "name": "observation_date",
+          "path": "effective.ofType(dateTime).substring(0, 10)",
+          "type": "date"
+        },
+        {
+          "name": "observation_datetime",
+          "path": "effective.ofType(dateTime)",
+          "type": "dateTime"
+        },
+        {
+          "name": "observation_type_concept_id",
+          "path": "%ehr_type_concept",
+          "type": "string"
+        },
+        {
+          "name": "value_as_string",
+          "path": "iif(value.ofType(string).exists(), value.ofType(string), iif(value.ofType(CodeableConcept).text.exists(), value.ofType(CodeableConcept).text, iif(value.ofType(CodeableConcept).coding.display.first().exists(), value.ofType(CodeableConcept).coding.display.first(), value.ofType(Ratio).numerator.value)))",
+          "type": "string"
+        },
+        {
+          "name": "observation_source_value",
+          "path": "iif(code.coding.where(system=%loinc_uri).exists(), code.coding.where(system=%loinc_uri).code.first(), iif(code.coding.where(system=%snomed_uri).exists(), code.coding.where(system=%snomed_uri).code.first(), code.coding.code.first()))",
+          "type": "code"
+        },
+        {
+          "name": "value_source_value",
+          "path": "iif(value.ofType(string).exists(), value.ofType(string), value.ofType(CodeableConcept).coding.code.first())",
+          "type": "code"
+        },
+        {
+          "name": "visit_occurrence_id",
+          "path": "encounter.reference.split('/').last()",
+          "type": "string"
+        }
       ],
       "where": [
-        {"path": "value.ofType(Quantity).exists().not()"}
+        {
+          "path": "value.ofType(Quantity).exists().not()"
+        }
       ]
     }
   ],
   "joins": [
     {
       "name": "cm",
-      "resource": "ConceptMap",
+      "view": "omop_conceptmap",
       "type": "left",
       "on": [
-        {"path": "iif(code.coding.where(system=%loinc_uri).exists(), code.coding.where(system=%loinc_uri).code.first(), iif(code.coding.where(system=%snomed_uri).exists(), code.coding.where(system=%snomed_uri).code.first(), code.coding.code.first()))"},
-        {"path": "cm.group.element.code"},
-        {"path": "iif(code.coding.where(system=%loinc_uri).exists(), %loinc_uri, iif(code.coding.where(system=%snomed_uri).exists(), %snomed_uri, code.coding.system.first()))"},
-        {"path": "cm.group.source"}
+        {
+          "path": "iif(code.coding.where(system=%loinc_uri).exists(), code.coding.where(system=%loinc_uri).code.first(), iif(code.coding.where(system=%snomed_uri).exists(), code.coding.where(system=%snomed_uri).code.first(), code.coding.code.first()))"
+        },
+        {
+          "path": "cm.concept_code"
+        },
+        {
+          "path": "iif(code.coding.where(system=%loinc_uri).exists(), %loinc_uri, iif(code.coding.where(system=%snomed_uri).exists(), %snomed_uri, code.coding.system.first()))"
+        },
+        {
+          "path": "cm.source_system"
+        }
       ]
     }
   ]

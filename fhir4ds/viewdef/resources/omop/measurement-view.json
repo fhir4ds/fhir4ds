@@ -31,7 +31,7 @@
         },
         {
           "name": "measurement_concept_id",
-          "path": "cm.group.element.target.code.first()",
+          "path": "cm.concept_id",
           "type": "string"
         },
         {
@@ -95,20 +95,20 @@
   "joins": [
     {
       "name": "cm",
-      "resource": "ConceptMap",
+      "view": "omop_conceptmap",
       "type": "left",
       "on": [
         {
           "path": "iif(code.coding.where(system=%loinc_uri).exists(), code.coding.where(system=%loinc_uri).code.first(), iif(code.coding.where(system=%snomed_uri).exists(), code.coding.where(system=%snomed_uri).code.first(), code.coding.code.first()))"
         },
         {
-          "path": "cm.group.element.code"
+          "path": "cm.concept_code"
         },
         {
           "path": "iif(code.coding.where(system=%loinc_uri).exists(), %loinc_uri, iif(code.coding.where(system=%snomed_uri).exists(), %snomed_uri, code.coding.system.first()))"
         },
         {
-          "path": "cm.group.source"
+          "path": "cm.source_system"
         }
       ]
     }
