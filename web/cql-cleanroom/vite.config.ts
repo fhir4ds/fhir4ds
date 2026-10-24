@@ -15,7 +15,7 @@ function discoverWheelName(root: string): string {
     .readdirSync(publicDir)
     .filter((f) => /^fhir4ds_v2-.*\.whl$/.test(f))
     .sort();
-  if (candidates.length === 0) return "fhir4ds_v2-0.0.17-py3-none-any.whl";
+  if (candidates.length === 0) return "fhir4ds_v2-0.0.18-py3-none-any.whl";
   if (candidates.length > 1) {
     throw new Error(
       `multiple wheels in public/: ${candidates.join(", ")} — keep exactly one`,
