@@ -42,7 +42,7 @@
         },
         {
           "name": "drug_exposure_end_date",
-          "path": "iif(effective.ofType(Period).end.exists(), effective.ofType(Period).end.substring(0, 10), effective.ofType(dateTime).substring(0, 10))",
+          "path": "iif(effective.ofType(Period).end.exists(), effective.ofType(Period).end.substring(0, 10), iif(effective.ofType(dateTime).exists(), effective.ofType(dateTime).substring(0, 10), null))",
           "type": "date"
         },
         {
@@ -56,9 +56,19 @@
           "type": "string"
         },
         {
+          "name": "sig",
+          "path": "iif(dosage[0].text.exists(), dosage[0].text, null)",
+          "type": "string"
+        },
+        {
           "name": "quantity_num",
           "path": "dosage[0].doseAndRate[0].doseQuantity.value",
           "type": "decimal"
+        },
+        {
+          "name": "days_supply",
+          "path": "iif(0 = 1, 0, null)",
+          "type": "integer"
         },
         {
           "name": "drug_source_value",

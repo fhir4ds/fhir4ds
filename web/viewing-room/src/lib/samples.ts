@@ -54,6 +54,20 @@ export const SAMPLES: Sample[] = [
     vdUrl: "samples/observation-values/viewdefinition.json",
     resourcesUrl: "samples/observation-values/resources.ndjson",
   },
+  {
+    slug: "omop-patient",
+    name: "OMOP person",
+    description: "OMOP CDM v5.5 person table as a ViewDefinition (concept-map join for gender).",
+    vdUrl: "samples/omop-patient/viewdefinition.json",
+    resourcesUrl: "samples/omop-patient/resources.ndjson",
+  },
+  {
+    slug: "omop-drug-exposure",
+    name: "OMOP drug_exposure (request arm)",
+    description: "OMOP CDM v5.5 drug_exposure child view — RxNorm concept join + provenance type.",
+    vdUrl: "samples/omop-drug-exposure/viewdefinition.json",
+    resourcesUrl: "samples/omop-drug-exposure/resources.ndjson",
+  },
 ];
 
 export const DEFAULT_SAMPLE = SAMPLES[0];

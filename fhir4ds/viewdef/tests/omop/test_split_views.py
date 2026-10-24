@@ -31,6 +31,14 @@ def _cm(cid, source, code, target):
                 {"code": code, "target": [{"code": target, "equivalence": "equivalent"}]}]}]}
 
 
+_COLUMNS = [
+    "drug_exposure_id", "person_id", "drug_concept_id",
+    "drug_exposure_start_date", "drug_exposure_start_datetime",
+    "drug_exposure_end_date", "drug_exposure_end_datetime",
+    "drug_type_concept_id", "sig", "quantity_num", "days_supply",
+    "drug_source_value", "visit_occurrence_id", "src",
+]
+
 MAPS = [
     _cm("m-rx", RXNORM, "1049697", "1128940"),
     _cm("m-cvx", CVX, "140", "4056"),
@@ -84,16 +92,18 @@ class TestDrugExposureChildren:
             "medicationCodeableConcept": {"coding": [{"system": RXNORM, "code": "1049697"}]},
             "subject": {"reference": "Patient/p1"}, "effectiveDateTime": "2024-03-02T14:30:00Z",
             "dosage": {"dose": {"value": 2}}}])
-        r = rows[0]
-        assert r[2] == "1128940" and r[7] == "38000180" and r[8] == 2.0
+        by = dict(zip(_COLUMNS, rows[0]))
+        assert by["drug_concept_id"] == "1128940" and by["drug_type_concept_id"] == "38000180"
+        assert by["quantity_num"] == 2.0 and by["src"] == "MedicationAdministration"
 
     def test_immunization_cvx(self, conn):
         rows = _run(conn, "drug-exposure-immunization-view", [{
             "resourceType": "Immunization", "id": "im1", "status": "completed",
             "vaccineCode": {"coding": [{"system": CVX, "code": "140"}]},
             "patient": {"reference": "Patient/p1"}, "occurrenceDateTime": "2024-02-15"}])
-        r = rows[0]
-        assert r[2] == "4056" and r[9] == "140" and r[11] == "Immunization"
+        by = dict(zip(_COLUMNS, rows[0]))
+        assert by["drug_concept_id"] == "4056" and by["drug_source_value"] == "140"
+        assert by["src"] == "Immunization"
 
 
 class TestMeasurementObservationSplit:

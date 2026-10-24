@@ -1,0 +1,178 @@
+{
+  "person": {
+    "row_count": 2,
+    "columns": [
+      "person_id",
+      "gender_concept_id",
+      "year_of_birth",
+      "month_of_birth",
+      "day_of_birth",
+      "birth_datetime",
+      "person_source_value",
+      "gender_source_value"
+    ],
+    "spot": {
+      "person_source_value->gender_concept_id": [
+        [
+          "pat-001",
+          8507
+        ],
+        [
+          "pat-002",
+          8532
+        ]
+      ]
+    }
+  },
+  "visit_occurrence": {
+    "row_count": 1,
+    "columns": [
+      "visit_occurrence_id",
+      "person_id",
+      "visit_concept_id",
+      "visit_start_date",
+      "visit_start_datetime",
+      "visit_end_date",
+      "visit_end_datetime",
+      "visit_type_concept_id",
+      "visit_source_value"
+    ]
+  },
+  "condition_occurrence": {
+    "row_count": 1,
+    "columns": [
+      "condition_occurrence_id",
+      "person_id",
+      "condition_concept_id",
+      "condition_start_date",
+      "condition_start_datetime",
+      "condition_end_date",
+      "condition_end_datetime",
+      "condition_type_concept_id",
+      "condition_status_concept_id",
+      "condition_source_value",
+      "visit_occurrence_id"
+    ],
+    "spot": {
+      "condition_source_value->condition_concept_id": [
+        [
+          "38341003",
+          313217
+        ]
+      ]
+    }
+  },
+  "procedure_occurrence": {
+    "row_count": 1,
+    "columns": [
+      "procedure_occurrence_id",
+      "person_id",
+      "procedure_concept_id",
+      "procedure_date",
+      "procedure_datetime",
+      "procedure_type_concept_id",
+      "quantity",
+      "procedure_source_value",
+      "visit_occurrence_id"
+    ]
+  },
+  "drug_exposure": {
+    "row_count": 2,
+    "columns": [
+      "drug_exposure_id",
+      "person_id",
+      "drug_concept_id",
+      "drug_exposure_start_date",
+      "drug_exposure_start_datetime",
+      "drug_exposure_end_date",
+      "drug_exposure_end_datetime",
+      "drug_type_concept_id",
+      "sig",
+      "quantity_num",
+      "days_supply",
+      "drug_source_value",
+      "visit_occurrence_id",
+      "src"
+    ],
+    "spot": {
+      "src->drug_concept_id": [
+        [
+          "Immunization",
+          4056
+        ],
+        [
+          "MedicationRequest",
+          1128940
+        ]
+      ]
+    }
+  },
+  "device_exposure": {
+    "row_count": 0,
+    "columns": [
+      "device_exposure_id",
+      "person_id",
+      "device_concept_id",
+      "device_exposure_start_date",
+      "device_exposure_start_datetime",
+      "device_exposure_end_date",
+      "device_exposure_end_datetime",
+      "device_type_concept_id",
+      "unique_device_id",
+      "quantity",
+      "device_source_value",
+      "visit_occurrence_id"
+    ]
+  },
+  "measurement": {
+    "row_count": 1,
+    "columns": [
+      "measurement_id",
+      "person_id",
+      "measurement_concept_id",
+      "measurement_date",
+      "measurement_datetime",
+      "measurement_type_concept_id",
+      "value_as_number",
+      "unit_source_value",
+      "range_low",
+      "range_high",
+      "measurement_source_value",
+      "value_source_value",
+      "visit_occurrence_id"
+    ],
+    "spot": {
+      "value_as_number": 13.5,
+      "measurement_concept_id": 3024929
+    }
+  },
+  "observation": {
+    "row_count": 1,
+    "columns": [
+      "observation_id",
+      "person_id",
+      "observation_concept_id",
+      "observation_date",
+      "observation_datetime",
+      "observation_type_concept_id",
+      "value_as_string",
+      "observation_source_value",
+      "value_source_value",
+      "visit_occurrence_id"
+    ],
+    "spot": {
+      "value_as_string": "Former smoker",
+      "observation_concept_id": 4076669
+    }
+  },
+  "death": {
+    "row_count": 1,
+    "columns": [
+      "person_id",
+      "death_date",
+      "death_datetime",
+      "death_type_concept_id",
+      "cause_source_value"
+    ]
+  }
+}
