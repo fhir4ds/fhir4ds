@@ -7,6 +7,113 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.18
+*October 2026*
+
+Version 0.0.18 is the **engine + platform** release that grew out of the
+CQL Cleanroom campaign. The translator gains deterministic definition
+ordering and patient-property evidence leaves; the operations layer and
+dev server become thread-safe and warm-starting; the connected workbench
+runs every evaluation path server-side; and the terminology integration
+moves to **medterm4ds 0.0.5**. The conformance baseline holds at
+**2832/2832** (ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47).
+
+**CQL translator**
+
+- Definitions are **topologically sorted** (Kahn's algorithm) before
+  translation, so forward references and out-of-order dependents no longer
+  break translation.
+- **Context-patient audit leaves**: patient-property lineage is exported
+  from the translator (`patient_property_defs`) and consumed by
+  `explain_patient`, so evidence for age-derived defines
+  (`AgeInYearsAt`/`CalculateAge*`, including `age in Interval[...]`
+  membership comparisons) names the patient's `birthDate`, the derived
+  value, and the threshold instead of reporting "no contributing
+  resources".
+- Numeric/embedded evidence leaves ride the same audit machinery through
+  `audit_comparison`; the review-round merge blockers around the
+  non-boolean leaf projection are fixed.
+
+**Cell editor definitions**
+
+- Cell markers accept quoted CQL define names with spaces
+  (`[name: Initial Population]`), matching the engine's define grammar —
+  cell labels, dependency graphs, and `// # %%` round-trips agree.
+
+**Operations layer**
+
+- A bounded **translation LRU cache** (keyed on library texts, audit mode,
+  output columns, parameters, patient ids) makes repeat evaluations
+  execute-only: ~3–6 s cold vs ~1 s warm on the CMS125 workspace.
+- The dev server **warm-starts the primary library** at boot (translation
+  and first execution) and after workspace switches / kernel restarts, so
+  the first heartbeat is warm.
+
+**Dev server**
+
+- Kernel operations are serialized behind a re-entrant lock (DuckDB
+  connections are not thread-safe), and superseded kernels are **retired
+  rather than closed**, eliminating a use-after-close race on workspace
+  switches.
+- New/extended routes for the connected workbench: server-side parse
+  (`/api/parse`), MeasureReport materialization from evaluation rows
+  (`/api/measure/report-from-rows`), ViewDefinition flatten with explicit
+  resources, and workspace folder browsing/saving for the File menu.
+- Workspace discovery now ships library versions, ValueSet canonical URLs
+  and versions, and ViewDefinition metadata; workspace `Parameters`
+  defaults surface as bound values in the UI.
+- Expected MeasureReports follow the `MeasureReport/<measure>/<case>.json`
+  convention; the CMS125/CMS69 example workspaces use the official 2025
+  eCQM test cases (66/66 matching expected results for CMS125), and the
+  MADiE closure export was reworked for the canonical type-folder layout.
+
+**Terminology**
+
+- **medterm4ds 0.0.5** dependency (core and `[extraction]` extras). The
+  in-process adapter and notes pipeline were re-verified against the new
+  engine stack (LocalDuckDB hybrid serving); the fail-loud embedding-space
+  / directory pin machinery is exercised by medterm4ds' own configuration.
+
+**WASM runtime parity**
+
+- `ToDate` is now a spec-aware **C++ extension scalar** with the same
+  semantics as the desktop Python UDF: ISO date shapes are validated
+  (month/day ranges, leap years) and datetime-shaped strings have their
+  time portion dropped, always returning `VARCHAR` (NULL for invalid
+  input). The browser previously used a `CAST(x AS DATE)` SQL macro,
+  which returned `DATE` and broke generated population SQL with
+  `Cannot mix values of type DATE and VARCHAR in CASE expression`
+  (CMS125 dementia-medications CTE). The macro is removed; the C++
+  scalar serves both the native and WebAssembly runtimes.
+- The remaining conversion surface now has C++ mirrors for the no-Python
+  runtime: `ToDateTime`, `ToTime`, `ToLong`, `ToRatio`, `ConvertsTo*`, and
+  `CanConvertQuantity` (VARCHAR transport, null-resilient, spec-shaped).
+  Pure-SQL macros `ToString`/`ToInteger`/`ToDecimal`/`ToBoolean`/
+  `ConvertsToString` now carry the desktop bodies verbatim in the browser
+  surface, and a three-way harness asserts **spec-expected vs desktop vs
+  browser** (value + DuckDB type).
+
+**Cleanroom surfaces** (web)
+
+- Persistent footer status bar (workspace location, engine, save state,
+  latest status/error, version) replaces header chips and top-of-page
+  flashes; consistent spinner loading states.
+- Nav restructure: Libraries · Value Sets · Config (Measure + Parameters) ·
+  Test Cases · Expected · Views, with the primary library as the default
+  section; version pills replace on-disk provenance chips.
+- File menu redesign: Open File (MADiE package / test cases), Open
+  Workspace (server folder picker), Recent Workspaces (pinned examples +
+  last 10), Reset, Save Workspace (server folder in connected / download in
+  standalone), Share — with a "Switching workspace…" overlay.
+- Cells: one batch evaluation for Run All (composed library sliced per
+  cell) and a Declarations card styled like the cell cards; console tabs
+  use one "Results" vocabulary per surface; the measure funnel is limited
+  to the measure's own populations.
+
+**Known limitations**
+
+- 21 deep-comparator SQL macros remain browser-gap allowlisted.
+
 ## Version 0.0.17
 *September 2026*
 

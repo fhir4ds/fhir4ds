@@ -87,10 +87,10 @@ function CleanroomComponent({
 
   return (
     <>
-      {popout && <PopoutPill url={`${baseUrl}cql-cleanroom/?example=cms69`} />}
+      {popout && <PopoutPill url={`${baseUrl}cql-cleanroom/?example=cms125-workspace`} />}
       <div className={styles.demoWrapper} style={{ height }}>
         {/* @ts-expect-error cql-cleanroom is a custom element defined by the cleanroom bundle */}
-        <cql-cleanroom height={height} default-example="cms69" style={{ display: "block", width: "100%", height: "100%" }} />
+        <cql-cleanroom height={height} default-example="cms125-workspace" style={{ display: "block", width: "100%", height: "100%" }} />
       </div>
     </>
   );
