@@ -3,34 +3,74 @@
   "status": "draft",
   "resource": "DeviceUsage",
   "constant": [
-    {"name": "ehr_type_concept", "valueString": "32810"}
+    {
+      "name": "ehr_type_concept",
+      "valueString": "32810"
+    }
   ],
   "select": [
     {
       "column": [
-        {"name": "device_exposure_id", "path": "id", "type": "id"},
-        {"name": "person_id", "path": "subject.reference.split('/').last()", "type": "string"},
-        {"name": "device_concept_id", "path": "cm.group.element.target.code.first()", "type": "string"},
-        {"name": "device_exposure_start_date", "path": "timingTiming.event.first().substring(0, 10)", "type": "date"},
-        {"name": "device_exposure_start_datetime", "path": "timingTiming.event.first()", "type": "dateTime"},
-        {"name": "device_exposure_end_date", "path": "timingTiming.event.last().substring(0, 10)", "type": "date"},
-        {"name": "device_exposure_end_datetime", "path": "timingTiming.event.last()", "type": "dateTime"},
-        {"name": "device_type_concept_id", "path": "%ehr_type_concept", "type": "string"},
-        {"name": "unique_device_id", "path": "device.reference.split('/').last()", "type": "string"},
-        {"name": "quantity", "path": "1", "type": "integer"},
-        {"name": "device_source_value", "path": "device.reference.split('/').last()", "type": "string"},
-        {"name": "visit_occurrence_id", "path": "context.reference.split('/').last()", "type": "string"}
-      ]
-    }
-  ],
-  "joins": [
-    {
-      "name": "cm",
-      "resource": "ConceptMap",
-      "type": "left",
-      "on": [
-        {"path": "'DeviceUseStatement'"},
-        {"path": "cm.group.source"}
+        {
+          "name": "device_exposure_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "person_id",
+          "path": "subject.reference.split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "device_concept_id",
+          "path": "iif(0 = 1, '0', null)",
+          "type": "string"
+        },
+        {
+          "name": "device_exposure_start_date",
+          "path": "timingTiming.event.first().substring(0, 10)",
+          "type": "date"
+        },
+        {
+          "name": "device_exposure_start_datetime",
+          "path": "timingTiming.event.first()",
+          "type": "dateTime"
+        },
+        {
+          "name": "device_exposure_end_date",
+          "path": "timingTiming.event.last().substring(0, 10)",
+          "type": "date"
+        },
+        {
+          "name": "device_exposure_end_datetime",
+          "path": "timingTiming.event.last()",
+          "type": "dateTime"
+        },
+        {
+          "name": "device_type_concept_id",
+          "path": "%ehr_type_concept",
+          "type": "string"
+        },
+        {
+          "name": "unique_device_id",
+          "path": "device.reference.split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "quantity",
+          "path": "1",
+          "type": "integer"
+        },
+        {
+          "name": "device_source_value",
+          "path": "device.reference.split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "visit_occurrence_id",
+          "path": "context.reference.split('/').last()",
+          "type": "string"
+        }
       ]
     }
   ]

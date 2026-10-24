@@ -2,43 +2,140 @@
   "name": "fhir4ds-omop-mapping",
   "omop_version": "5.5",
   "fhir4ds_min_version": "0.0.17",
-  "description": "FHIR R4 -> OMOP CDM v5.5 tables as a ViewDefinition library. Concepts resolve through ConceptMap-resource joins (vocabulary_id + concept_code); unmapped codes keep source values with concept_id 0. Composite runner assembles the omop.* schema with positive 63-bit integer keys.",
+  "view_schema": "omop",
+  "description": "FHIR R4 -> OMOP CDM v5.5 tables as a ViewDefinition library. Rev-2 architecture: the STANDARD MONOLITHIC ConceptMap resource ships as the converter contract; the S1 conceptmap VD flattens it (materialized as the omop.omop_conceptmap join target); event VDs join the VIEW via Join.view (spec composition semantics). Unions + projections compose through the generic fhir4ds.viewdef.runner. Materialization order is INFERRED from Join.view references (zero-config); 'materialize' remains an optional override.",
   "views": {
-    "conceptmap-view.json": "ConceptMap resources -> long/thin mapping rows (the join target)",
-    "person-view.json": "Patient -> person",
-    "visit-occurrence-view.json": "Encounter -> visit_occurrence",
-    "condition-occurrence-view.json": "Condition -> condition_occurrence",
-    "procedure-occurrence-view.json": "Procedure -> procedure_occurrence",
-    "drug-exposure-medication-request-view.json": "MedicationRequest -> drug_exposure (arm 1/4)",
-    "drug-exposure-medication-statement-view.json": "MedicationStatement -> drug_exposure (arm 2/4)",
-    "drug-exposure-medication-administration-view.json": "MedicationAdministration -> drug_exposure (arm 3/4)",
-    "drug-exposure-immunization-view.json": "Immunization -> drug_exposure (arm 4/4)",
-    "device-exposure-view.json": "DeviceUsage -> device_exposure",
-    "measurement-view.json": "Observation (Quantity-valued) -> measurement",
-    "observation-view.json": "Observation (non-Quantity) -> observation",
-    "death-view.json": "Patient.deceased -> death"
+    "conceptmap-view": "ConceptMap resources -> flat mapping rows (THE join target; materialized as omop.omop_conceptmap)",
+    "person-view": "Patient -> person",
+    "visit-occurrence-view": "Encounter -> visit_occurrence",
+    "condition-occurrence-view": "Condition -> condition_occurrence",
+    "procedure-occurrence-view": "Procedure -> procedure_occurrence",
+    "drug-exposure-medication-request-view": "MedicationRequest -> drug_exposure (arm 1/4)",
+    "drug-exposure-medication-statement-view": "MedicationStatement -> drug_exposure (arm 2/4)",
+    "drug-exposure-medication-administration-view": "MedicationAdministration -> drug_exposure (arm 3/4)",
+    "drug-exposure-immunization-view": "Immunization -> drug_exposure (arm 4/4)",
+    "device-exposure-view": "DeviceUsage -> device_exposure",
+    "measurement-view": "Observation (Quantity-valued) -> measurement",
+    "observation-view": "Observation (non-Quantity) -> observation",
+    "death-view": "Patient.deceased -> death"
   },
   "unions": {
     "drug_exposure": [
-      "drug-exposure-medication-request-view.json",
-      "drug-exposure-medication-statement-view.json",
-      "drug-exposure-medication-administration-view.json",
-      "drug-exposure-immunization-view.json"
+      "drug-exposure-medication-request-view",
+      "drug-exposure-medication-statement-view",
+      "drug-exposure-medication-administration-view",
+      "drug-exposure-immunization-view"
     ]
   },
+  "projections": {
+    "person": {
+      "hash_keys": [
+        "person_id"
+      ],
+      "defaults": {
+        "gender_concept_id": 0
+      }
+    },
+    "visit_occurrence": {
+      "hash_keys": [
+        "visit_occurrence_id",
+        "person_id"
+      ],
+      "defaults": {
+        "visit_concept_id": 0,
+        "visit_type_concept_id": 0
+      }
+    },
+    "condition_occurrence": {
+      "hash_keys": [
+        "condition_occurrence_id",
+        "person_id",
+        "visit_occurrence_id"
+      ],
+      "defaults": {
+        "condition_concept_id": 0,
+        "condition_type_concept_id": 0,
+        "condition_status_concept_id": 0
+      }
+    },
+    "procedure_occurrence": {
+      "hash_keys": [
+        "procedure_occurrence_id",
+        "person_id",
+        "visit_occurrence_id"
+      ],
+      "defaults": {
+        "procedure_concept_id": 0,
+        "procedure_type_concept_id": 0
+      }
+    },
+    "drug_exposure": {
+      "hash_keys": [
+        "drug_exposure_id",
+        "person_id",
+        "visit_occurrence_id"
+      ],
+      "defaults": {
+        "drug_concept_id": 0,
+        "drug_type_concept_id": 0
+      }
+    },
+    "device_exposure": {
+      "hash_keys": [
+        "device_exposure_id",
+        "person_id",
+        "visit_occurrence_id"
+      ],
+      "defaults": {
+        "device_concept_id": 0,
+        "device_type_concept_id": 0
+      }
+    },
+    "measurement": {
+      "hash_keys": [
+        "measurement_id",
+        "person_id",
+        "visit_occurrence_id"
+      ],
+      "defaults": {
+        "measurement_concept_id": 0,
+        "measurement_type_concept_id": 0
+      }
+    },
+    "observation": {
+      "hash_keys": [
+        "observation_id",
+        "person_id",
+        "visit_occurrence_id"
+      ],
+      "defaults": {
+        "observation_concept_id": 0,
+        "observation_type_concept_id": 0
+      }
+    },
+    "death": {
+      "hash_keys": [
+        "person_id"
+      ],
+      "defaults": {
+        "death_type_concept_id": 0,
+        "cause_concept_id": 0
+      }
+    }
+  },
   "conceptmap_source": {
-    "canonical_form": "element-per-resource (one thin ConceptMap per mapping row)",
-    "supplements": "conceptmap-supplements.ndjson",
-    "athena_converter": "medterm4ds side (design §0 chain) — emits the same element-per-resource form"
+    "canonical_form": "STANDARD MONOLITHIC ConceptMap (all groups in one resource) \u2014 the converter contract",
+    "supplements": "conceptmap-supplements.json (monolithic)",
+    "athena_converter": "medterm4ds side emits the same monolithic form; flattening happens query-side via the conceptmap VD (rev 2)"
   },
   "v54_variant": {
     "status": "designed, not shipped",
-    "delta": "v5.5 adds only optional fields (observation.value_as_date, unit_source_concept_id, value_as_source_concept_id; measurement.value_as_source_concept_id; specimen visit FKs) and vocabulary metadata tables — none in this spine scope. A v5.4 manifest flags the observation/measurement views to drop those columns."
+    "delta": "v5.5 adds only optional fields (observation.value_as_date, unit_source_concept_id, value_as_source_concept_id; measurement.value_as_source_concept_id; specimen visit FKs) and vocabulary metadata tables \u2014 none in this spine scope. A v5.4 manifest flags the observation/measurement views to drop those columns."
   },
   "etl_assumptions": [
     "type_concept_id defaults: 32810 (EHR record) family per event table; per-branch drug types 38000177/38000175/38000180; condition category -> 38000245/43542353",
-    "provider/care_site integer FKs left 0 (FHIR carries references, not stable integers) — documented policy",
-    "person/visit/PK ids: xxhash-style positive 63-bit hash of the FHIR id string (runner-side projection)",
-    "observation_period is ETL-defined per THEMIS (aggregate derivation, not a row mapping) — not in the VD library v1"
+    "provider/care_site integer FKs left 0 (FHIR carries references, not stable integers) \u2014 documented policy",
+    "person/visit/PK ids: xxhash-style positive 63-bit hash of the FHIR id string (runner projections)",
+    "observation_period is ETL-defined per THEMIS (aggregate derivation, not a row mapping) \u2014 not in the VD library v1"
   ]
 }

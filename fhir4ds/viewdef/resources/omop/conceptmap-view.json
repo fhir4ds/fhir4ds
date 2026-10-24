@@ -78,6 +78,11 @@
           "name": "vocabulary_id",
           "path": "iif(source = %loinc_uri, 'LOINC', iif(source = %snomed_uri, 'SNOMED', iif(source = %rxnorm_uri, 'RxNorm', iif(source = %icd10cm_uri, 'ICD10CM', iif(source = %icd10_uri, 'ICD10', iif(source = %cpt4_uri, 'CPT4', iif(source = %hcpcs_uri, 'HCPCS', iif(source = %ndc_uri, 'NDC', source))))))))",
           "type": "string"
+        },
+        {
+          "name": "source_system",
+          "path": "source",
+          "type": "uri"
         }
       ]
     }
