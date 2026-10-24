@@ -281,3 +281,170 @@ Deferred (documented, out of v1): observation_period (ETL-defined
 aggregate per THEMIS), note/specimen tables, DeviceRequest arm,
 race/ethnicity Observation fallback, provider/care-site integer FKs
 (0 + reference strings), v5.4 manifest variant.
+
+---
+
+# REVISION 2 (2026-10-24): View-as-join-target — the thin-form workaround REMOVED
+
+Status: REVISED DESIGN FOR JOEL — pre-implementation review
+Trigger: Joel's reconsideration ruling + spec confirmation (cbus
+2026-10-24 09:58 / 10:03). Supersedes the "architecture finding" in the
+S2 record and §0's converter-contract implication.
+
+## R.0 The ruling and why it is correct
+
+Joel: "we need to be able to join on nested elements. we are able to do
+this WITHIN a ViewDefinition [select/forEach reaches nested elements
+fine]. not sure why we can't do it in a JOIN to one. this seems like we
+have just structured the ViewDefinitions incorrectly."
+
+The S2 "engine constraint" analysis was wrong about the fix. True fact:
+the S0 scalar-equality ON cannot select a nested element inside a
+monolithic ConceptMap resource (an ON path like
+`group.element.code` evaluates the FIRST element only). Wrong
+conclusion: "therefore the converter emits one thin ConceptMap per
+mapping row." Correct conclusion: the JOIN TARGET should be the
+FLATTENED VIEW — the `omop_conceptmap` ViewDefinition (S1) already
+unnests group/element/target via forEach into one row per mapping; the
+join must compose with THAT, exactly as select/forEach composes within
+a VD. The flattening machinery always existed; the S0 join just never
+targeted a view's output.
+
+## R.1 Spec citations (verified against the local IG clone,
+/mnt/d/sql-on-fhir-v2, input/pagecontent + input/fsh)
+
+1. ViewDefinition-notes.md (Joins with Resource and Reference Keys):
+   "While ViewDefinitions do not directly implement joins across
+   resources, the views produced should be easily joined by the
+   database or analytic tools of the user's choice." — joins live in
+   the COMPOSITION layer; the fhir4ds `joins` field remains a
+   documented fhir4ds extension (types.py Join docstring), now aligned
+   with that layer's semantics.
+2. SQLView-notes.md (Query Composition): "References made through
+   relatedArtifact form a directed graph of ViewDefinitions, SQLViews,
+   and SQLQueries, in which **each referenced result acts as a virtual
+   table for the referencing query**." and "The executing engine **may
+   materialise the view's result or inline it**; either approach
+   conforms to this specification." — view-as-join-target is the
+   spec's composition semantics; materialization strategy is an
+   implementation decision.
+3. SQLQuery-notes.md: "An SQLQuery may reference a reusable SQLView as
+   well as ViewDefinitions, letting queries build on one another much
+   like SQL views." with `JOIN bp ON patient.id = bp.patient_id` in the
+   worked example — joining to a view's OUTPUT COLUMNS is the
+   spec-native pattern.
+4. input/fsh/examples/sql-query-examples.fsh `OmopFhirPatientJoin`: the
+   spec's own example joins an `omop_person` view to a FHIR patient
+   view — an OMOP mapping joined at the view layer is precedent IN the
+   spec.
+
+## R.2 Revised architecture (supersedes the S2 finding)
+
+```
+Athena CONCEPT -> STANDARD MONOLITHIC ConceptMap resource (converter contract —
+                  no bespoke form; FHIR-native, inspectable, portable)
+      |
+      v  (S1 omop_conceptmap VD: forEach unnests group/element/target —
+      |   one row per (vocabulary_id, concept_code, concept_id), Muse-R1
+      |   equivalence filter + first-target determinism)
+      v
+  FLATTENED CONCEPTMAP VIEW  (materialized by the runner as
+      |                       omop.conceptmap or inlined as a CTE —
+      |                       spec: "may materialise... or inline it")
+      v
+  per-OMOP-table event VDs JOIN THE VIEW via the extended fhir4ds
+  joins construct (Join.view), ON (event best-coding = view
+  concept_code) AND (event derived vocabulary_id = view vocabulary_id)
+```
+
+- The element-per-resource NDJSON supplements (S1) are REPLACED by the
+  standard monolithic ConceptMap (one resource, three groups, as first
+  authored). The thin form is reclassified as a POSSIBLE FUTURE
+  OPTIMIZATION (pre-split rows for very large maps), never a contract.
+- The medterm4ds converter (via conductor) reverts to emitting the
+  monolithic ConceptMap only.
+
+## R.3 Join.view — the engine extension (S6 slice)
+
+Extend the fhir4ds `joins` extension with a VIEW target alongside the
+resource target:
+
+```json
+{"name": "cm", "view": "omop_conceptmap", "type": "left",
+ "on": [{"path": "<event FHIRPath>"}, {"path": "cm.concept_code"}, ...]}
+```
+
+Semantics (mirroring the spec's virtual-table language):
+- `Join.view` names a ViewDefinition (by VD `name`; manifest-scoped).
+  The runner materializes it first (CREATE VIEW over the staging
+  table) — or the generator inlines it as a CTE; both conform.
+- Join-target SHAPE determines path semantics: RESOURCE target → ON and
+  column paths are FHIRPath over the joined resource JSON (unchanged
+  S0); VIEW target → `<alias>.<name>` paths are SQL COLUMN REFERENCES
+  into the view's output (`"cm"."concept_id"`), because a view's rows
+  are already flat — FHIRPath over a row would be meaningless. The
+  base-side ON expressions remain FHIRPath over the base resource.
+- ON pairing and join keywords unchanged (equality pairs, S0 bounds).
+- Validation: view target must not collide with the base alias; the
+  referenced VD must exist in the library manifest (generate-time
+  check); the referenced column names must exist in the view's output
+  (execution-time, via the materialized view).
+
+Generator changes (S6):
+1. parser/types: `Join.view` (optional, mutually exclusive with
+   `Join.resource`).
+2. `_generate_single_resource`: view-target joins emit
+   `LEFT JOIN omop.<viewname> "cm"` (runner-materialized) — the
+   generator takes a `view_table_prefix` (default `omop`) or an
+   explicit alias→table map from the runner.
+3. `_route_join_path`: view-target routes emit column refs, not
+   FHIRPath: `"cm".concept_id` → `"cm"."concept_id"` (identifier-
+   quoted, no UDF call). Same for ON right-sides.
+
+Runner changes: `create_omop_views` materializes
+`omop.conceptmap` (the S1 VD SQL) BEFORE generating event VDs, and
+passes the view-table mapping to the generator.
+
+## R.4 Migration of shipped artifacts (S6 implementation scope)
+
+- conceptmap-supplements: monolithic form (single ConceptMap, three
+  groups) as the shipped artifact; delete the NDJSON thin form.
+- Event VDs (person/visit/condition/procedure/drug×4/measurement/
+  observation): `joins` entries become view-targets; concept columns
+  become `cm.concept_id` (column ref); ON pairs become
+  (best-coding ↔ cm.concept_code) AND (derived vocabulary_id ↔
+  cm.vocabulary_id). The event-side vocabulary derivation uses the
+  same system→vocabulary constants the conceptmap view uses (single
+  source of truth: vocabulary.json).
+- device_exposure / death: no joins (unchanged).
+- omop_runner: materialize omop.conceptmap first; wire the generator's
+  view-table map.
+- Tests: test_root_joins gains a view-target section; test_conceptmap/
+  test_spine_views/test_split_views/test_composite switch to the
+  monolithic fixture; run_omop conformance unchanged in shape (it
+  asserts the composed schema, which does not change).
+- Demo bundle + Viewing Room samples + notebook: stage the monolithic
+  ConceptMap.
+
+## R.5 What does NOT change
+
+Everything else stands: the spine field mappings (S2), the 4-arm drug
+union + value-type split + death (S3), the composite runner's union
+and 63-bit key projection (S4), the manifest/conformance shape (S5),
+and the concept chain's vocabulary constants + curated supplement
+VALUES. The S0 resource-target join semantics remain valid for
+resource-to-resource joins (e.g. Observation→Patient).
+
+## R.6 Slice plan
+
+- S6a: engine — Join.view (parser + generator column-ref routing +
+  runner view-table map) + view-target tests.
+- S6b: library migration — monolithic supplements, event VDs to view
+  joins, runner order, demo/samples/notebook fixtures.
+- S6c: full regression — OMOP suite, master gate, viewing-room e2e,
+  notebook re-execution.
+
+Open question for Joel (non-blocking): CTE-inlining vs runner
+materialization as the DEFAULT (recommend runner materialization —
+matches the shipped omop_runner and the spec's "either conforms";
+CTE-inlining stays available for single-query use).
