@@ -1,0 +1,85 @@
+{
+  "name": "omop_conceptmap",
+  "status": "draft",
+  "resource": "ConceptMap",
+  "constant": [
+    {
+      "name": "loinc_uri",
+      "valueString": "http://loinc.org"
+    },
+    {
+      "name": "snomed_uri",
+      "valueString": "http://snomed.info/sct"
+    },
+    {
+      "name": "rxnorm_uri",
+      "valueString": "http://www.nlm.nih.gov/research/umls/rxnorm"
+    },
+    {
+      "name": "icd10cm_uri",
+      "valueString": "http://hl7.org/fhir/sid/icd-10-cm"
+    },
+    {
+      "name": "icd10_uri",
+      "valueString": "http://hl7.org/fhir/sid/icd-10"
+    },
+    {
+      "name": "cpt4_uri",
+      "valueString": "http://www.ama-assn.org/go/cpt"
+    },
+    {
+      "name": "hcpcs_uri",
+      "valueString": "urn:oid:2.16.840.1.113883.6.14"
+    },
+    {
+      "name": "ndc_uri",
+      "valueString": "http://hl7.org/fhir/sid/ndc"
+    }
+  ],
+  "select": [
+    {
+      "forEach": "group",
+      "select": [
+        {
+          "forEach": "element",
+          "select": [
+            {
+              "forEach": "target.where(equivalence = 'equivalent' or equivalence = 'equal' or equivalence = 'wider' or equivalence = 'subsumes').first()",
+              "column": [
+                {
+                  "name": "concept_id",
+                  "path": "code",
+                  "type": "string"
+                },
+                {
+                  "name": "concept_name",
+                  "path": "display",
+                  "type": "string"
+                },
+                {
+                  "name": "equivalence",
+                  "path": "equivalence",
+                  "type": "code"
+                }
+              ]
+            }
+          ],
+          "column": [
+            {
+              "name": "concept_code",
+              "path": "code",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "column": [
+        {
+          "name": "vocabulary_id",
+          "path": "iif(source = %loinc_uri, 'LOINC', iif(source = %snomed_uri, 'SNOMED', iif(source = %rxnorm_uri, 'RxNorm', iif(source = %icd10cm_uri, 'ICD10CM', iif(source = %icd10_uri, 'ICD10', iif(source = %cpt4_uri, 'CPT4', iif(source = %hcpcs_uri, 'HCPCS', iif(source = %ndc_uri, 'NDC', source))))))))",
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}
