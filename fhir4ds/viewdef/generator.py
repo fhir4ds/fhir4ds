@@ -267,6 +267,11 @@ class SQLGenerator:
         self.table_alias = "t"  # Base table alias
         self._alias_counter = 0
         self._constant_resolver = None
+        # Root-join routing (fhir4ds extension): join alias -> quoted table
+        # reference SQL for the joined resource. Populated by generate() from
+        # ViewDefinition.joins; column paths prefixed "<alias>." are routed
+        # to the joined table's resource column.
+        self._root_joins: dict = {}
 
     def _get_type_name(self, column_type) -> str | None:
         """Return the normalized FHIR type name for a column type declaration."""
@@ -723,6 +728,94 @@ class SQLGenerator:
             return self._constant_resolver.resolve_in_path(path)
         return path
 
+    def _get_join_table_ref(self, resource: str) -> str:
+        """Return the FROM-side table reference for a root join.
+
+        In ``source_table`` mode the joined resource reads from the SAME
+        staged table through a derived subquery carrying its own
+        resourceType filter (mirrors the base table's filter semantics).
+        Otherwise the pluralized per-type table is used, matching the
+        generator's default table naming.
+        """
+        from .utils import pluralize_resource as _pluralize
+        if resource not in KNOWN_FHIR_RESOURCE_TYPES:
+            raise ValidationError(
+                f"Join.resource {resource!r} is not in the required ResourceType binding"
+            )
+        if self._source_table is not None:
+            staged = _quote_table_reference(self._source_table)
+            return (
+                f"(SELECT resource FROM {staged} "
+                f"WHERE json_extract_string(resource, '$.resourceType') = '{resource}')"
+            )
+        return _pluralize(resource)
+
+    def _generate_join_on(self, on_clauses: List[dict], join_alias: str) -> str:
+        """Generate the ON condition for a root join (bounded S0 surface).
+
+        Each consecutive PATH PAIR forms one equality between scalar
+        FHIRPath projections; a path prefixed with the join alias evaluates
+        against the joined table's resource, otherwise against the base
+        resource. Single unpaired trailing paths are rejected (equality
+        pairs only per the S0 bound).
+        """
+        if not on_clauses:
+            raise ValidationError("Join requires at least one ON clause")
+        paths = []
+        for clause in on_clauses:
+            path = clause.get("path", "")
+            if not path:
+                raise ValidationError("Join ON clause requires a 'path' expression")
+            paths.append(path)
+        if len(paths) % 2 != 0:
+            raise ValidationError(
+                "Join ON clauses must be equality pairs: "
+                "[{path: left}, {path: right}, ...] (S0 bound)"
+            )
+        conditions = []
+        for i in range(0, len(paths), 2):
+            left_sql, left_expr = self._join_side_expr(paths[i], join_alias)
+            right_sql, right_expr = self._join_side_expr(paths[i + 1], join_alias)
+            conditions.append(
+                f"NULLIF(fhirpath_text({left_sql}, {left_expr}), '') =\n    "
+                f"NULLIF(fhirpath_text({right_sql}, {right_expr}), '')"
+            )
+        return "\n  AND ".join(conditions)
+
+    def _join_side_expr(self, path: str, join_alias: str) -> tuple:
+        """Return (resource_ref_sql, fhirpath_expr_sql) for one ON side."""
+        resolved = self._resolve_path(path)
+        prefix = f"{join_alias}."
+        if resolved.startswith(prefix):
+            tail = resolved[len(prefix):]
+            expr = self._fhirpath_expression_sql(tail)
+            return f'"{join_alias}".resource', expr
+        expr = self._fhirpath_expression_sql(resolved)
+        return f"{self.table_alias}.resource", expr
+
+    def _route_join_path(self, resolved_path: str, current_resource_var: str) -> tuple:
+        """Route a column/where path through a root join when prefixed.
+
+        Returns (path, resource_var) where resource_var targets the joined
+        table's resource column for "<alias>."-prefixed paths. Paths under
+        iteration contexts (any current focus other than the base table)
+        are NOT routable — join paths only make sense from the base
+        resource (S0 bound).
+        """
+        if not self._root_joins:
+            return resolved_path, current_resource_var
+        for alias, resource_ref in self._root_joins.items():
+            prefix = f"{alias}."
+            if resolved_path.startswith(prefix):
+                if current_resource_var != f"{self.table_alias}.resource":
+                    raise ValidationError(
+                        f"Join-prefixed path '{resolved_path}' used inside an "
+                        "iteration context; join paths are only valid from the "
+                        "base resource (S0 bound)"
+                    )
+                return resolved_path[len(prefix):], resource_ref
+        return resolved_path, current_resource_var
+
     def _resolve_environment_path_context(
         self,
         resolved_path: str,
@@ -881,6 +974,10 @@ class SQLGenerator:
 
         # Resolve constants in path (%name_use -> 'official')
         resolved_path = self._resolve_path(column.path)
+
+        # Root joins (fhir4ds extension): "<alias>."-prefixed paths route
+        # FHIRPath evaluation to the joined table's resource column.
+        resolved_path, resource_var = self._route_join_path(resolved_path, resource_var)
 
         # %rowIndex: 0-based row counter within the enclosing forEach context
         if resolved_path == "%rowIndex":
@@ -1840,6 +1937,7 @@ class SQLGenerator:
         root_where: List[dict],
         foreachornull_aliases: Optional[List[str]] = None,
         foreachornull_wrapper_ids: Optional[List[object]] = None,
+        root_join_clauses: Optional[List[str]] = None,
     ) -> str:
         """Build a single SELECT query from a list of non-unionAll selects."""
         column_exprs, join_clauses, where_conditions = self._process_selects(
@@ -1857,9 +1955,10 @@ class SQLGenerator:
             path = w.get("path", "") if isinstance(w, dict) else ""
             if path:
                 resolved = self._resolve_path(path)
+                resolved, where_var = self._route_join_path(resolved, base_resource_var)
                 resolved, where_var = self._resolve_environment_path_context(
                     resolved,
-                    base_resource_var,
+                    where_var,
                     base_resource_var,
                 )
                 path_expr = self._fhirpath_expression_sql(resolved, "0")
@@ -1877,6 +1976,7 @@ class SQLGenerator:
             )
 
         parts = [f"SELECT\n    {columns_sql}", from_sql]
+        parts.extend(root_join_clauses or [])
         parts.extend(join_clauses)
         if where_conditions:
             parts.append("WHERE " + "\n  AND ".join(where_conditions))
@@ -2126,6 +2226,35 @@ class SQLGenerator:
         table_name = self._get_table_name(view_definition.resource)
         root_where = list(view_definition.where)
 
+        # Root joins (fhir4ds extension): register routing targets and
+        # build the JOIN clauses. Bounded S0 surface: equality of scalar
+        # FHIRPath projections; left/inner/right/full keywords via the
+        # existing JoinType. In source_table mode the joined side reads
+        # from the SAME staged table via a derived subquery carrying its
+        # own resourceType filter.
+        self._root_joins = {}
+        root_join_clauses: List[str] = []
+        for join in view_definition.joins:
+            join_alias = validate_sql_name(join.name, "Join.name")
+            if join_alias == self.table_alias:
+                raise ValidationError(
+                    f"Join name '{join_alias}' conflicts with the base table alias"
+                )
+            if join_alias in self._root_joins:
+                raise ValidationError(f"Duplicate join name '{join_alias}'")
+            join_table = self._get_join_table_ref(join.resource)
+            self._root_joins[join_alias] = f'"{join_alias}".resource'
+            on_sql = self._generate_join_on(join.on, join_alias)
+            keyword = {
+                "inner": "JOIN",
+                "left": "LEFT JOIN",
+                "right": "RIGHT JOIN",
+                "full": "FULL JOIN",
+            }[join.type.value]
+            root_join_clauses.append(
+                f"{keyword} {join_table} \"{join_alias}\" ON\n    {on_sql}"
+            )
+
         expanded_selects = self._expand_select_list_unions(list(view_definition.select))
         queries: List[str] = []
         # Track forEachOrNull unnest aliases that have already emitted their
@@ -2147,6 +2276,7 @@ class SQLGenerator:
                 root_where,
                 foreachornull_aliases=collected_aliases,
                 foreachornull_wrapper_ids=collected_wrapper_ids,
+                root_join_clauses=root_join_clauses,
             )
             # The paired lists collected above identify union-expansion
             # wrapper copies at ANY nesting depth. A wrapper tagged by

@@ -2685,21 +2685,39 @@ class TestJoins:
         assert len(obs_result) == 2
 
     def test_join_with_view_definition(self, connection, generator):
-        """Test ViewDefinition with join specification."""
-        # Create patient
+        """Test ViewDefinition with join specification.
+
+        Historical note: this test originally documented that the SQL
+        generator IGNORED root joins ("Current SQL generator generates
+        basic patient query") using the value-keyed single-clause ON
+        form. Since the OMOP S0 slice, root joins ARE emitted with a
+        bounded surface: ON clauses are equality PAIRS of FHIRPath
+        projections ({path: left}, {path: right}); the legacy
+        value-keyed single-clause form is rejected by design.
+        """
+        # Create patient + observations in pluralized tables (default mode)
         patient = {
             "resourceType": "Patient",
             "id": "patient-1"
         }
-        connection.execute("CREATE TABLE patients (resource JSON)")
+        connection.execute("CREATE TABLE IF NOT EXISTS patients (resource JSON)")
         connection.execute("INSERT INTO patients VALUES (?)", [json.dumps(patient)])
+        observations = [
+            {"resourceType": "Observation", "id": "obs-1",
+             "subject": {"reference": "Patient/patient-1"}, "status": "final"},
+            {"resourceType": "Observation", "id": "obs-2",
+             "subject": {"reference": "Patient/patient-1"}, "status": "final"},
+        ]
+        connection.execute("CREATE TABLE IF NOT EXISTS observations (resource JSON)")
+        for obs in observations:
+            connection.execute("INSERT INTO observations VALUES (?)", [json.dumps(obs)])
 
-        # ViewDefinition with join (documenting expected structure)
         vd_json = json.dumps({
             "resource": "Patient",
             "select": [{
                 "column": [
-                    {"path": "id", "name": "patient_id"}
+                    {"path": "id", "name": "patient_id"},
+                    {"path": "observations.id", "name": "obs_id"},
                 ]
             }],
             "joins": [{
@@ -2707,7 +2725,8 @@ class TestJoins:
                 "resource": "Observation",
                 "type": "left",
                 "on": [
-                    {"path": "subject.reference", "value": "'Patient/' + id"}
+                    {"path": "'Patient/' + id"},
+                    {"path": "observations.subject.reference"},
                 ]
             }]
         })
@@ -2719,10 +2738,12 @@ class TestJoins:
         assert vd.joins[0].resource == "Observation"
         assert vd.joins[0].type == JoinType.LEFT
 
-        # Current SQL generator generates basic patient query
+        # The generator EMITS the join (S0) and execution returns one row
+        # per matching observation.
         sql = generator.generate(vd)
+        assert "LEFT JOIN" in sql
         result = connection.execute(sql).fetchall()
-        assert len(result) == 1
+        assert len(result) == 2
 
 
 class TestEdgeCases:
