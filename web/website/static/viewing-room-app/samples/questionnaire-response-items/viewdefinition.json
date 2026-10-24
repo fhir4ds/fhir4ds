@@ -1,0 +1,58 @@
+{
+  "name": "questionnaire_response_items",
+  "status": "draft",
+  "resource": "QuestionnaireResponse",
+  "select": [
+    {
+      "column": [
+        {
+          "path": "getResourceKey()",
+          "name": "id"
+        },
+        {
+          "path": "questionnaire",
+          "name": "questionnaire"
+        },
+        {
+          "path": "subject.getReferenceKey(Patient)",
+          "name": "patient_id"
+        },
+        {
+          "path": "authored",
+          "name": "authored"
+        }
+      ]
+    },
+    {
+      "repeat": [
+        "item"
+      ],
+      "column": [
+        {
+          "path": "linkId",
+          "name": "item_link_id"
+        },
+        {
+          "path": "text",
+          "name": "item_text"
+        },
+        {
+          "path": "answer.value.ofType(string)",
+          "name": "answer_value_string"
+        },
+        {
+          "path": "answer.value.ofType(integer)",
+          "name": "answer_value_integer"
+        },
+        {
+          "path": "answer.value.ofType(boolean)",
+          "name": "answer_value_boolean"
+        },
+        {
+          "path": "answer.value.ofType(date)",
+          "name": "answer_value_date"
+        }
+      ]
+    }
+  ]
+}
