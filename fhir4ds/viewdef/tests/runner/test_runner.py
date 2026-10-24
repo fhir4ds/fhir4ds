@@ -1,0 +1,158 @@
+"""Generic composition runner (manifest-driven) — own test suite.
+
+The OMOP library consumes this as an EXTERNAL USER would: a synthetic
+manifest exercises every primitive (materialize, union, projections,
+extra join-targets) with no OMOP content.
+"""
+
+import json
+from pathlib import Path
+
+import pytest
+
+import fhir4ds
+from fhir4ds.viewdef.runner import (
+    apply_projections, compose_union, generate_view_sql,
+    load_manifest, materialize_views, run_composition,
+)
+
+SRC = [
+    {"resourceType": "Patient", "id": "p1", "gender": "male", "birthDate": "1974-12-25"},
+    {"resourceType": "Patient", "id": "p2", "gender": "female", "birthDate": "1985-05-06"},
+    {"resourceType": "Observation", "id": "o1", "status": "final",
+     "code": {"coding": [{"system": "http://loinc.org", "code": "718-7"}]},
+     "subject": {"reference": "Patient/p1"}, "effectiveDateTime": "2024-03-01",
+     "valueQuantity": {"value": 13.5}},
+    {"resourceType": "Immunization", "id": "i1", "status": "completed",
+     "vaccineCode": {"coding": [{"system": "http://hl7.org/fhir/sid/cvx", "code": "140"}]},
+     "patient": {"reference": "Patient/p1"}, "occurrenceDateTime": "2024-02-15"},
+]
+
+
+@pytest.fixture()
+def family_dir(tmp_path):
+    """A synthetic view family: person + two event views + a manifest."""
+    d = tmp_path / "family"
+    d.mkdir()
+    (d / "person-view.json").write_text(json.dumps({
+        "name": "f_person", "status": "draft", "resource": "Patient",
+        "select": [{"column": [
+            {"name": "person_id", "path": "id", "type": "id"},
+            {"name": "gender", "path": "gender", "type": "code"},
+        ]}],
+    }))
+    (d / "obs-view.json").write_text(json.dumps({
+        "name": "f_obs", "status": "draft", "resource": "Observation",
+        "select": [{"column": [
+            {"name": "event_id", "path": "id", "type": "id"},
+            {"name": "person_id", "path": "subject.reference.split('/').last()", "type": "string"},
+            {"name": "code", "path": "code.coding.code.first()", "type": "code"},
+        ]}],
+    }))
+    (d / "imm-view.json").write_text(json.dumps({
+        "name": "f_imm", "status": "draft", "resource": "Immunization",
+        "select": [{"column": [
+            {"name": "event_id", "path": "id", "type": "id"},
+            {"name": "person_id", "path": "patient.reference.split('/').last()", "type": "string"},
+            {"name": "code", "path": "vaccineCode.coding.code.first()", "type": "code"},
+        ]}],
+    }))
+    (d / "manifest.json").write_text(json.dumps({
+        "views": {"person-view": "person", "obs-view": "obs", "imm-view": "imm"},
+        "unions": {"events": ["obs-view", "imm-view"]},
+        "projections": {
+            "person": {"hash_keys": ["person_id"]},
+            "events": {"hash_keys": ["person_id", "event_id"]},
+        },
+        "view_schema": "fam",
+    }))
+    return d
+
+
+@pytest.fixture()
+def con():
+    c = fhir4ds.create_connection()
+    c.execute("CREATE TABLE resources (resource JSON)")
+    for r in SRC:
+        c.execute("INSERT INTO resources VALUES (?)", [json.dumps(r)])
+    return c
+
+
+class TestPrimitives:
+    def test_load_manifest_defaults(self, family_dir):
+        m = load_manifest(family_dir / "manifest.json")
+        assert m["unions"] and m["projections"]
+        with pytest.raises(ValueError, match="views"):
+            bad = family_dir / "bad.json"
+            bad.write_text(json.dumps({"unions": {}}))
+            load_manifest(bad)
+
+    def test_generate_view_sql(self, family_dir):
+        sql = generate_view_sql(family_dir / "person-view.json", "resources")
+        assert "fhirpath_text" in sql and "'Patient'" in sql
+
+    def test_materialize_views(self, con, family_dir):
+        created = materialize_views(con, family_dir, ["person-view"], "resources", schema="fam")
+        assert created == {"person-view": 'fam."person"'}
+        rows = con.execute('SELECT count(*) FROM fam."person"').fetchone()[0]
+        assert rows == 2
+
+    def test_compose_union(self, con, family_dir):
+        children = materialize_views(con, family_dir, ["obs-view", "imm-view"], "resources", schema="fam")
+        name = compose_union(con, [children[s] for s in children], "events", schema="fam")
+        n = con.execute(f"SELECT count(*) FROM {name}").fetchone()[0]
+        assert n == 2
+
+    def test_apply_projections(self, con):
+        wrapped = apply_projections(
+            None, "SELECT 'p1' AS person_id, 'x' AS tag",
+            ["person_id", "tag"], hash_keys=["person_id"],
+        )
+        row = con.execute(wrapped).fetchone()
+        assert row[0] == con.execute("SELECT hash('p1') & 9223372036854775807").fetchone()[0]
+        assert row[1] == "x"
+        # defaults
+        wrapped2 = apply_projections(
+            None, "SELECT NULL AS concept_id", ["concept_id"], defaults={"concept_id": 0},
+        )
+        assert con.execute(wrapped2).fetchone()[0] == 0
+
+
+class TestRunComposition:
+    def test_full_family(self, con, family_dir):
+        created = run_composition(con, family_dir / "manifest.json", "resources")
+        assert set(created) == {"person", "events"}
+        # person hashed + referentially consistent with events
+        p1 = con.execute(
+            'SELECT person_id FROM fam."person" WHERE person_id IS NOT NULL LIMIT 1').fetchone()
+        n = con.execute('SELECT count(*) FROM fam."events"').fetchone()[0]
+        assert n == 2
+        # events.person_id is the SAME hash as person.person_id for p1
+        ev = con.execute(
+            'SELECT DISTINCT e.person_id FROM fam."events" e '
+            'JOIN fam."person" p ON p.person_id = e.person_id').fetchall()
+        assert len(ev) == 1
+
+    def test_union_column_mismatch_rejected(self, con, family_dir):
+        (family_dir / "bad-view.json").write_text(json.dumps({
+            "name": "f_bad", "resource": "Patient",
+            "select": [{"column": [{"name": "only_one", "path": "id", "type": "id"}]}],
+        }))
+        m = json.loads((family_dir / "manifest.json").read_text())
+        m["unions"]["events"] = ["obs-view", "bad-view"]
+        (family_dir / "manifest.json").write_text(json.dumps(m))
+        with pytest.raises(ValueError, match="column mismatch"):
+            run_composition(con, family_dir / "manifest.json", "resources")
+
+    def test_materialize_extra_join_targets(self, con, family_dir):
+        # an extra view materialized as a join target (conceptmap pattern):
+        # the stem plays ONE role — join target, not a composed table.
+        m = json.loads((family_dir / "manifest.json").read_text())
+        m["materialize"] = {"genders": "person-view"}
+        (family_dir / "manifest.json").write_text(json.dumps(m))
+        created = run_composition(con, family_dir / "manifest.json", "resources")
+        n = con.execute('SELECT count(*) FROM fam."genders"').fetchone()[0]
+        assert n == 2
+        # the materialized stem does NOT double-compose as a table
+        assert "person" not in created
+        assert 'fam."genders"' in created.values()
