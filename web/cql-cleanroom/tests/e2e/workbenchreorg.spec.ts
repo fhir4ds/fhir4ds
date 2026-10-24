@@ -63,7 +63,7 @@ test.describe("console sub-tabs + col2 panes", () => {
 
     // Measure editor active → the console shows Measure Report + Funnel
     // tabs (REORG 6e), no run-pipeline tabs.
-    await page.click("[data-testid=nav-toggle-measures]");
+    await page.click("[data-testid=nav-toggle-config]");
     await page.locator("[data-testid^=nav-item-measure-]").first().click();
     await page.waitForSelector("[data-testid=console-tab-mr]");
     await page.waitForSelector(
@@ -172,7 +172,7 @@ test.describe("console sub-tabs + col2 panes", () => {
 
     // MR pivot (m1081 #8): one row PER PATIENT, one column per
     // population — 3 patients in the demo dataset.
-    await page.click("[data-testid=nav-toggle-measures]");
+    await page.click("[data-testid=nav-toggle-config]");
     await page.locator("[data-testid^=nav-item-measure-]").first().click();
     await page.waitForSelector("[data-testid=mr-table]", {
       timeout: 30_000,

@@ -156,14 +156,6 @@ export function DrawerRow({
           {item.pill}
         </span>
       )}
-      {item.onDisk && (
-        <span
-          className="nav-item-pill on-disk"
-          title={item.diskShadow ? "also on disk — opens the session copy" : "on disk — opens the disk copy"}
-        >
-          {item.diskShadow ? "also on disk" : "on disk"}
-        </span>
-      )}
       {item.changed && <span className="ws-file-dot" role="img" aria-label="changed on disk" />}
       {item.entry && <span className="rail-badge entry" aria-label="active" />}
       {item.error && <span className="rail-badge err" aria-label="error" />}

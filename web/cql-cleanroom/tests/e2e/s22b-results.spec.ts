@@ -94,12 +94,9 @@ test("S22b-1: server run table shows ALL 22 patients + summary counts", async ({
     { timeout: 20000 },
   );
 
-  // The summary line names the evaluated count + true-counts for the
-  // boolean population columns.
-  const summary = page.locator('[data-testid="results-summary"]');
-  await expect(summary).toBeVisible({ timeout: 20000 });
-  await expect(summary).toContainText("Evaluated 22");
-  await expect(summary).toContainText("InAgeRange 20");
+  // S27 (Joel): the per-define summary line was REMOVED from the Results
+  // console — funnel/population counts belong to the measure surfaces.
+  expect(await page.locator('[data-testid="results-summary"]').count()).toBe(0);
 });
 
 test("S22b-2: cell table shows ALL patients (not just truthy rows)", async ({ page }) => {

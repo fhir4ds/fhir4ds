@@ -116,10 +116,14 @@ function cacheKey(url: string, version?: string): string {
 /** Extract `valueset "X": <url>` declarations from CQL library text. */
 export function declaredValuesetUrls(libraryText: string): string[] {
   const urls: string[] = [];
-  const re = /^\s*valueset\s+"?([A-Za-z0-9_]+)"?\s*:\s*(\S+)/gm;
+  // S31: quoted valueset NAMES may contain spaces ("Unilateral Mastectomy
+  // Left") — the single-word charset silently skipped them, so a disk-
+  // backed valueset surfaced as a false "unresolved" diagnostic. Mirrors
+  // the server's _declared_valueset_urls fix.
+  const re = /^\s*valueset\s+(?:"([^"]+)"|([A-Za-z0-9_]+))\s*:\s*(\S+)/gm;
   let m: RegExpExecArray | null;
   while ((m = re.exec(libraryText)) !== null) {
-    const raw = m[2].replace(/^['"]/, "").replace(/['",;]+$/, "");
+    const raw = m[3].replace(/^['"]/, "").replace(/['",;]+$/, "");
     if (raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("urn:")) {
       urls.push(raw);
     }

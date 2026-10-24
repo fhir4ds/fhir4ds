@@ -8,6 +8,7 @@ import type {
   LibraryText,
   DatasetSpec,
 } from "../lib/protocol";
+import { Spinner } from "./Spinner";
 
 /**
  * Visual editor step 1 — the live defines matrix. Evaluates the ACTIVE
@@ -104,7 +105,7 @@ export function DefinesMatrix({
   if (state?.loading) {
     return (
       <p className="pane-hint" data-testid="defines-loading">
-        evaluating every define…
+        <Spinner label="evaluating every define" />
       </p>
     );
   }

@@ -111,8 +111,14 @@ class Watcher:
                 continue
         return out
 
-    def rescan(self) -> WorkspaceSnapshot:
-        """Take a fresh snapshot, diff, publish events; never raises."""
+    def rescan(self, *, silent: bool = False) -> WorkspaceSnapshot:
+        """Take a fresh snapshot, diff, publish events; never raises.
+
+        ``silent=True`` (workspace switch): adopt the new snapshot as the
+        baseline WITHOUT diffing against the previous workspace's files —
+        a re-root is not a data change, so no changed/data-hint events
+        fire (the caller publishes the authoritative ``switched`` event).
+        """
         # S22e: normalize-on-ingest BEFORE scanning — any ndjson that
         # appeared under a data dir is transport; split it into the
         # canonical per-patient folders so the snapshot (and kernel)
@@ -156,6 +162,11 @@ class Watcher:
         self._files = new_files
         self.files = new_files
         self._mtimes = self._stat_all()
+
+        if silent:
+            # Switch baseline adoption: state is now the new workspace's;
+            # no diff events (the caller publishes ``switched``).
+            return snap
 
         if changed:
             data_dirs = {str(d) for d in self._cfg.data_dirs}

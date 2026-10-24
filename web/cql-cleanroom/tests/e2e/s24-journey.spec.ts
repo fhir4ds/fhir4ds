@@ -154,7 +154,7 @@ test("S24-2: nothing above the cell results table but the table", async ({ page 
   expect(above).toBe("");
 });
 
-test("S24-3: data section = patient list with chips; click -> type-grouped slideout", async ({ page }) => {
+test("S24-3: data section = patient list with chips; click -> right-side type-grouped detail; resource -> builder", async ({ page }) => {
   await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(18000);
 
@@ -175,14 +175,61 @@ test("S24-3: data section = patient list with chips; click -> type-grouped slide
   await expect(j1).toBeVisible();
   await expect(j1.locator('[data-testid="ds-roster-count"]')).toHaveText("3");
 
-  // Click j1 -> slideout lists their resources grouped BY TYPE.
+  // Click j1 -> the L3 DETAIL panel slides out to the RIGHT (the same
+  // detailSlot mechanism standalone uses), fed from LOCAL FILES: type
+  // groups with counts, one row per resource.
   await j1.click();
-  const slideout = page.locator('[data-testid="ds-patient-slideout"]');
-  await expect(slideout).toBeVisible({ timeout: 15000 });
-  const types = await slideout.locator('[data-testid="ds-slideout-type"]').allTextContents();
-  const typeNames = types.map((t) => t.replace(/\d+.*$/, "").trim());
-  expect(typeNames).toEqual(expect.arrayContaining(["Encounter", "Observation", "Patient"]));
-  // Closing works.
-  await slideout.locator('[data-testid="ds-slideout-close"]').click();
-  await expect(slideout).toHaveCount(0);
+  const detail = page.locator('[data-testid="nav-detail"]');
+  await expect(detail).toBeVisible({ timeout: 15000 });
+  const j1Group = detail.locator('[data-testid="dataset-group-j1"]');
+  await expect(j1Group).toBeVisible({ timeout: 15000 });
+  await expect(j1Group).toContainText("Patient");
+  await expect(j1Group).toContainText("Encounter");
+  await expect(j1Group).toContainText("Observation");
+
+  // Type groups may be collapsed or open — open Encounter if needed.
+  const encToggle = j1Group.locator(
+    '[data-testid="dataset-type-toggle-j1-Encounter"]',
+  );
+  const encRow = j1Group
+    .locator('[data-testid^="dataset-row-"]', { hasText: "Encounter" })
+    .first();
+  if (!(await encRow.isVisible().catch(() => false))) {
+    await encToggle.click();
+  }
+  await expect(encRow).toBeVisible({ timeout: 5000 });
+  // Clicking a resource row opens the RESOURCE BUILDER prefilled with
+  // the full resource (the website flow).
+  await encRow.click();
+  const builder = page.locator('[data-testid="builder-pane"]');
+  await expect(builder).toBeVisible({ timeout: 30000 });
+  // Prefilled from the SERVER resource: the id field holds je1.
+  await expect(
+    builder.locator('[data-testid="builder-field-id"]'),
+  ).toHaveValue("je1", { timeout: 10000 });
+  // OPENING a resource must NOT touch the disk — no data-hint banner
+  // appears even past the builder's debounce (explicit-commit doctrine).
+  await page.waitForTimeout(4000);
+  await expect(page.locator('[data-testid="footer-data-hint"]')).toHaveCount(0);
+
+  // Back closes the detail; the roster stays.
+  await detail.locator('[data-testid="dataset-back"]').click();
+  await expect(detail.locator('[data-testid="dataset-group-j1"]')).toHaveCount(0);
+  await expect(panel.locator('[data-testid="ds-roster-row"]')).toHaveCount(2);
+});
+
+test("S25-1: cells view has NO console; text view has the console", async ({ page }) => {
+  await openCells(page);
+  // CELLS surface: the docked console (and its splitter) are GONE —
+  // cell output renders inline per card only (Joel's raised issue).
+  await expect(page.locator('[data-testid="results-console"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="editor-splitter"]')).toHaveCount(0);
+
+  // TEXT surface: toggle back — the console returns docked at the bottom.
+  await page.locator('[data-testid="cell-view-toggle"]').click();
+  await page.waitForTimeout(1000);
+  await expect(
+    page.locator('[data-testid="results-console"]'),
+  ).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-testid="editor-splitter"]')).toHaveCount(1);
 });

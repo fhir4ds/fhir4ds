@@ -4900,7 +4900,10 @@ class FunctionsMixin:
             if props is None:
                 props = {}
                 self.context._patient_property_defs = props
-            props.setdefault(current_def, ("birthDate", birth_date))
+            # S26 (item 7): 3-tuple (attr, value SQL, deriving operator)
+            # — the operator feeds the explain-seam property leaf;
+            # older 2-tuple readers index positionally-safe.
+            props.setdefault(current_def, ("birthDate", birth_date, "AgeIn" + unit.capitalize() + ("s" if not unit.endswith("s") else "")))
         return age_call
 
     def _translate_age_at_function(self, name: str, args: List[SQLExpression]) -> SQLExpression:
@@ -4980,7 +4983,8 @@ class FunctionsMixin:
                 if props is None:
                     props = {}
                     self.context._patient_property_defs = props
-                props.setdefault(current_def, ("birthDate", birth_date))
+                # S26 (item 7): 3-tuple (attr, value SQL, deriving operator).
+                props.setdefault(current_def, ("birthDate", birth_date, calc_udf_name))
             return age_at_call
         elif len(args) >= 2:
             patient_resource = args[0]

@@ -245,8 +245,9 @@ class TestTestsImport:
             loaded = json.loads(case.read_text())
             rts = [e["resource"]["resourceType"] for e in loaded["entry"]]
             assert rts == ["Patient", "Observation"]  # MR gone
-        # Expected store keyed per patient under measures/expected/patients/
-        reports = load_expected_reports(tmp_path / "measures" / "expected", "TestMeasure")
+        # Expected store keyed per patient under MeasureReport/<measure>/
+        # (S26 type-folder convention).
+        reports = load_expected_reports(tmp_path / "MeasureReport", "TestMeasure")
         assert sorted(patient_from_report(r) for r in reports) == ["patient-1", "patient-2"]
         groups = parse_expected_groups(reports[0])
         assert groups[0]["population"][0]["code"] == "initial-population"
@@ -281,7 +282,7 @@ class TestTestsImport:
         result = import_tests_zip(srv, build_tests_zip("http://example.org/MADiEMeasure|2.0"))
         assert result["ok"]
         # |version suffix stripped from the store key (dir-safe measure name)
-        reports = load_expected_reports(tmp_path / "measures" / "expected", "MADiEMeasure")
+        reports = load_expected_reports(tmp_path / "MeasureReport", "MADiEMeasure")
         assert len(reports) == 2
 
     def test_not_a_bundle_skipped(self, tmp_path):

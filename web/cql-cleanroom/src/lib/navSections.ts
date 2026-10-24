@@ -20,10 +20,9 @@ export type NavKind =
   | "view";
 
 export type NavSectionId =
-  | "measures"
   | "libraries"
   | "valuesets"
-  | "parameters"
+  | "config"
   | "tests"
   | "expected"
   | "views";
@@ -46,6 +45,9 @@ export interface NavItem {
   changed?: boolean;
   /** Row payload for handlers (index, resource, source, …). */
   meta?: Record<string, unknown>;
+  /** S29: sub-group heading rendered before this row (Config panel:
+   *  "Measure" then "Parameters"). A change of value inserts a header. */
+  group?: string;
 }
 
 export function filterItems(items: NavItem[], q: string): NavItem[] {
@@ -198,11 +200,27 @@ export function expectedItems(
 ): NavItem[] {
   return measures.map((m) => {
     const reports = expectedReports[m.id] ?? [];
-    const nPatients = reports.filter(
-      (r) =>
-        typeof (r.subject as { reference?: string } | undefined)
-          ?.reference === "string",
-    ).length;
+    // S26: fixture-official (MADiE) MeasureReports carry the patient in
+    // contained[Parameters].parameter[name=subject]; authored ones use
+    // subject.reference. Count BOTH shapes.
+    const patientOf = (r: Record<string, unknown>): string | null => {
+      const ref = (r.subject as { reference?: string } | undefined)?.reference;
+      if (typeof ref === "string") return ref;
+      for (const c of (r.contained as Array<Record<string, unknown>> | undefined) ?? []) {
+        if (c?.resourceType !== "Parameters") continue;
+        for (const p of (c.parameter as Array<Record<string, unknown>> | undefined) ?? []) {
+          if (p?.name === "subject") {
+            const vr = (p.valueReference as { reference?: string } | undefined)
+              ?.reference;
+            const vs = p.valueString;
+            if (typeof vr === "string") return vr;
+            if (typeof vs === "string") return vs;
+          }
+        }
+      }
+      return null;
+    };
+    const nPatients = reports.filter((r) => patientOf(r) !== null).length;
     const name =
       typeof m.resource?.name === "string"
         ? (m.resource.name as string)
@@ -250,13 +268,21 @@ export function mergeDiskLibraries(
   /** S17 Muse: parsed header names per file (from /api/workspace) — rows
    *  display the CANONICAL library name; clicks resolve directly. */
   headerNames?: Record<string, string>,
+  /** S30: CQL header version per file stem — the nav shows a VERSION
+   *  pill instead of the old "on disk" provenance chip. */
+  versions?: Record<string, string>,
 ): NavItem[] {
   const diskByStem = new Map(disk.map((d) => [d.name.replace(/\.cql$/i, ""), d]));
   const headerFor = (stem: string) => headerNames?.[stem] ?? stem;
   const merged = items.map((it) => {
-    const d = diskByStem.get(it.label) ?? diskByStem.get(it.meta?.libraryId as string ?? "");
+    const stem =
+      disk.find((d) => d.name.replace(/\.cql$/i, "") === it.label)?.name.replace(/\.cql$/i, "") ??
+      (it.meta?.libraryId as string | undefined) ??
+      "";
+    const d = diskByStem.get(it.label) ?? diskByStem.get(stem);
+    const version = versions?.[stem] ?? it.pill;
     return d
-      ? { ...it, onDisk: true, diskShadow: true, changed: d.changed }
+      ? { ...it, onDisk: true, diskShadow: true, changed: d.changed, pill: version }
       : it;
   });
   const sessionLabels = new Set(merged.map((it) => it.label));
@@ -270,6 +296,7 @@ export function mergeDiskLibraries(
         label: canonical,
         onDisk: true,
         changed: d.changed,
+        pill: versions?.[stem],
         sublabel: stem === canonical ? undefined : d.name,
         meta: { source: "disk", name: d.name, libName: canonical },
       });
@@ -281,13 +308,25 @@ export function mergeDiskLibraries(
 export function mergeDiskValuesets(
   items: NavItem[],
   disk: DiskFileRef[],
-  /** S22a: file stem -> FHIR resource id (labels disk rows by identity). */
+  /** S22a: file stem -> display label (name → title → id; S26 review
+   *  fix — OIDs are hostile nav labels). */
   idByStem?: Record<string, string>,
+  /** S30: file stem -> ValueSet.version (nav version pill). */
+  versions?: Record<string, string>,
 ): NavItem[] {
   const diskByName = new Map(disk.map((d) => [d.name.replace(/\.json$/i, ""), d]));
   const merged = items.map((it) => {
     const d = diskByName.get(it.label);
-    return d ? { ...it, onDisk: true, diskShadow: true, changed: d.changed } : it;
+    const stem = d?.name.replace(/\.json$/i, "") ?? it.label;
+    return d
+      ? {
+          ...it,
+          onDisk: true,
+          diskShadow: true,
+          changed: d.changed,
+          pill: versions?.[stem] ?? it.pill,
+        }
+      : it;
   });
   const sessionLabels = new Set(merged.map((it) => it.label));
   const extras: NavItem[] = [];
@@ -299,7 +338,8 @@ export function mergeDiskValuesets(
         label: idByStem?.[stem] ?? stem,
         onDisk: true,
         changed: d.changed,
-        meta: { source: "disk", name: d.name },
+        pill: versions?.[stem],
+        meta: { source: "disk", name: d.name, stem },
       });
     }
   }
@@ -309,11 +349,14 @@ export function mergeDiskValuesets(
 export function mergeDiskViews(
   items: NavItem[],
   diskViews: DiskFileRef[],
-  diskData: DiskFileRef[],
+  /** S30: file stem -> {label, version} from /api/workspace view_meta —
+   *  rows label by VD name (falling back to the stem) and show the
+   *  resource version pill. */
+  meta?: Record<string, { label?: string; version?: string }>,
 ): NavItem[] {
-  // Views drawer carries BOTH view files and data files (current
-  // grouping logic: data files keep the data-hint/restart banner
-  // behavior via meta.source === "disk-data").
+  // S27: the Views drawer lists VIEW files only. Data-dir JSONs
+  // (Parameters resources, patient bundles, ...) are NOT ViewDefinitions
+  // and previously landed here as dead-end rows.
   const viewByName = new Map(
     diskViews.map((d) => [d.name.replace(/\.json$/i, ""), d]),
   );
@@ -323,31 +366,17 @@ export function mergeDiskViews(
   });
   const sessionLabels = new Set(merged.map((it) => it.label));
   const extras: NavItem[] = [];
-  const dataByName = new Map(
-    diskData.map((d) => [d.name.replace(/\.ndjson$/i, "").replace(/\.json$/i, ""), d]),
-  );
-  const seenExtras = new Set<string>();
-  for (const group of [
-    { map: viewByName, isData: false },
-    { map: dataByName, isData: true },
-  ]) {
-    for (const [stem, d] of group.map) {
-      const dedupeKey = `${group.isData ? "data" : "view"}:${stem}`;
-      if (seenExtras.has(dedupeKey)) continue;
-      const asView = viewByName.has(stem);
-      if (!group.isData && sessionLabels.has(stem)) continue;
-      if (group.isData && asView) continue; // same-stem view wins the row
-      seenExtras.add(dedupeKey);
-      extras.push({
-        id: `${group.isData ? "disk-data" : "disk-view"}:${stem}`,
-        kind: "view",
-        label: stem,
-        onDisk: true,
-        changed: d.changed,
-        sublabel: group.isData ? "data" : "",
-        meta: { source: group.isData ? "disk-data" : "disk-view", name: d.name },
-      });
-    }
+  for (const [stem, d] of viewByName) {
+    if (sessionLabels.has(stem)) continue;
+    extras.push({
+      id: `disk-view:${stem}`,
+      kind: "view",
+      label: meta?.[stem]?.label ?? stem,
+      onDisk: true,
+      changed: d.changed,
+      pill: meta?.[stem]?.version,
+      meta: { source: "disk-view", name: d.name },
+    });
   }
   return [...merged, ...extras];
 }

@@ -5,7 +5,6 @@ import { DiagnosticsRow } from "./EditorPane";
 import { EvidencePopover } from "./EvidencePopover";
 import { AstTree } from "./AstPane";
 import { cellDiffClass, diffSummary } from "../lib/runDiff";
-import { DefinesMatrix } from "./DefinesMatrix";
 import { renderValue } from "../lib/formatValue";
 import { useRunDiff } from "./MeasureReportOutput";
 import type { CompareResult } from "../lib/verifyCompare";
@@ -51,9 +50,12 @@ export type ConsoleContext = "library" | "measure" | "view" | "tests";
 export type ConsolePlacement = "bottom" | "right";
 
 const CONTEXT_TABS: Record<ConsoleContext, Array<{ id: ConsoleTab; label: string }>> = {
+  // S26 (items 1+2): the Defines tab is REMOVED from both surfaces —
+  // the library console's Results tab already shows EVERY define's
+  // output (S23-1 all-defines doctrine); the measure surface is
+  // MeasureReport + Funnel only.
   library: [
     { id: "results", label: "Results" },
-    { id: "defines", label: "Defines" },
     { id: "cql", label: "CQL" },
     { id: "sql", label: "SQL" },
     { id: "ast", label: "AST" },
@@ -61,12 +63,13 @@ const CONTEXT_TABS: Record<ConsoleContext, Array<{ id: ConsoleTab; label: string
   measure: [
     { id: "mr", label: "Measure Report" },
     { id: "funnel", label: "Funnel" },
-    { id: "defines", label: "Defines" },
   ],
-  view: [{ id: "view", label: "View Output" }],
+  // S31: one vocabulary — the output tab is "Results" on every surface
+  // (the measure console keeps its Measure Report/Funnel pair).
+  view: [{ id: "view", label: "Results" }],
   // 6h: the Expected Results editor's console context — authored
   // expectations derived against the latest library run (#62).
-  tests: [{ id: "compare", label: "Compare" }],
+  tests: [{ id: "compare", label: "Results" }],
 };
 
 export function ResultsConsole({
@@ -92,7 +95,6 @@ export function ResultsConsole({
   onManualRun,
   activeTab,
   onTabChange,
-  recalcSeconds,
 }: {
   libraries: LibraryText[];
   main: LibraryText;
@@ -102,7 +104,6 @@ export function ResultsConsole({
   parameters: Record<string, unknown>;
   outputColumns: Record<string, string> | null;
   /** 6g: settings recalc delay — also debounces the Defines matrix. */
-  recalcSeconds: number;
   /** Current editor selection text (null/empty disables Run-Selection). */
   selection: string | null;
   /** Live auto-evaluation of the entrypoint library (app heartbeat). */
@@ -257,15 +258,30 @@ export function ResultsConsole({
     const runDeclared = new Set(
       extractCqlSymbols(explainMainText).defines.map((d) => d.name),
     );
-    const runColumns: Record<string, string> | null = outputColumns
-      ? Object.fromEntries(
-          Object.entries(outputColumns).filter(([, define]) =>
-            runDeclared.has(define),
+    // S26a (item 6): evidence explains the CLICKED column's own define.
+    // The clicked column name IS a define of the run's library (cells
+    // carry data-testid cell-<pid>-<column>) — narrow BOTH paths to it:
+    // the worker path (no measure-shaped output_columns leaking another
+    // population's mapping) and the server path (output_columns on
+    // /api/explain, same narrowing seam as _route_evaluate). Only fall
+    // back to the measure-mapped/run columns when the clicked name is
+    // not a declared define (aliased output columns).
+    const clickedIsDefine = runDeclared.has(population);
+    const explainColumns: Record<string, string> | null = clickedIsDefine
+      ? { [population]: population }
+      : outputColumns && Object.keys(
+          Object.fromEntries(
+            Object.entries(outputColumns).filter(([, define]) =>
+              runDeclared.has(define),
+            ),
           ),
-        )
-      : null;
-    const explainColumns =
-      runColumns && Object.keys(runColumns).length ? runColumns : null;
+        ).length
+        ? Object.fromEntries(
+            Object.entries(outputColumns).filter(([, define]) =>
+              runDeclared.has(define),
+            ),
+          )
+        : null;
     try {
       // S18 fix: explain follows the RUN'S ORIGIN, not the connection
       // state — a browser-origin run (default dataset p1/p2 rows) must
@@ -282,6 +298,7 @@ export function ResultsConsole({
             library: explainMainName,
             patient_id: patientId,
             parameters,
+            ...(explainColumns ? { output_columns: explainColumns } : {}),
           }),
         });
         env = (await res.json()) as EvidenceResult;
@@ -405,31 +422,6 @@ export function ResultsConsole({
         )}
         {payloadRows && payloadColumns && payloadColumns.length > 0 && (
           <>
-          {/* S22b (Q3): population summary — every evaluated patient is in
-              the table (booleans incl. false/null); the line names the
-              evaluated total + true-counts per Boolean column so the
-              "why only 20 of 22" question answers itself. */}
-          <div
-            className="pane-hint population-summary"
-            data-testid="results-summary"
-            role="status"
-            style={{ padding: "4px 10px" }}
-          >
-            {(() => {
-              const evaluated = payloadRows.length;
-              const boolCols = payloadColumns.filter(
-                (c) => payload?.column_types?.[c] === "Boolean",
-              );
-              const parts = [`Evaluated ${evaluated}`];
-              for (const c of boolCols) {
-                const t = payloadRows.filter(
-                  (r) => (r as Record<string, unknown>)[c] === true,
-                ).length;
-                parts.push(`${c} ${t}`);
-              }
-              return parts.join(" · ");
-            })()}
-          </div>
           <PaginatedTable
             testId="results-table"
             rowCount={payloadRows.length}
@@ -524,20 +516,8 @@ export function ResultsConsole({
         )}
       </div>
 
-      <div
-        className="tab-panel"
-        hidden={activeTab !== "defines"}
-        data-testid="console-panel-defines"
-      >
-        <DefinesMatrix
-          libraries={libraries}
-          main={main}
-          dataset={dataset}
-          parameters={parameters}
-          visible={activeTab === "defines"}
-          debounceMs={recalcSeconds > 0 ? recalcSeconds * 1000 : 1000}
-        />
-      </div>
+      {/* S26 (items 1+2): the Defines tab-panel is REMOVED with its tab —
+          the Results tab renders every define's output. */}
 
       <div
         className="tab-panel"
@@ -561,7 +541,7 @@ export function ResultsConsole({
         data-testid="console-panel-ast"
       >
         {payload?.cql ? (
-          <AstTree cqlText={payload.cql} />
+          <AstTree cqlText={payload.cql} connected={connected} />
         ) : (
           <p className="pane-hint" data-testid="ast-empty">
             Run an evaluation to see its AST.

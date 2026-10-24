@@ -16,11 +16,19 @@ export interface FsEntry {
   suffix: string;
 }
 
-export const WS_GROUPS: { dir: string; suffixes?: string[] }[] = [
-  { dir: "cql", suffixes: [".cql"] },
-  { dir: "valuesets", suffixes: [".json"] },
-  { dir: "data", suffixes: [".ndjson", ".json"] },
-  { dir: "views", suffixes: [".json"] },
+/**
+ * S26a (item 5): BOTH layout spellings are listed per group — the
+ * legacy dirs (cql/, valuesets/, data/, views/) AND the canonical
+ * FHIR-type convention (Library/, ValueSet/, ViewDefinition/, plus
+ * Patient/ & friends for data). Mirrors devserver config.py's
+ * CONVENTION_DIRS + TYPE_CONVENTION_DIRS merge (both searched,
+ * duplicates impossible across distinct dir names).
+ */
+export const WS_GROUPS: { dirs: string[]; suffixes?: string[] }[] = [
+  { dirs: ["cql", "Library"], suffixes: [".cql"] },
+  { dirs: ["valuesets", "ValueSet"], suffixes: [".json"] },
+  { dirs: ["data", "Patient", "Encounter", "Observation", "Condition", "Procedure"], suffixes: [".ndjson", ".json"] },
+  { dirs: ["views", "ViewDefinition"], suffixes: [".json"] },
 ];
 
 export interface WorkspaceFilesState {
@@ -38,34 +46,45 @@ export function useWorkspaceFiles(connected: boolean): WorkspaceFilesState {
   const load = useCallback(() => {
     if (!connected) return;
     Promise.all(
-      WS_GROUPS.map((g) =>
-        fetch(`/api/fs/list?path=${encodeURIComponent(g.dir)}`)
-          .then((r) => r.json())
-          .then(
-            (
-              b: { data?: { ok?: boolean; entries?: FsEntry[] } } & {
-                ok?: boolean;
-                entries?: FsEntry[];
+      // S26a: one fetch per DIR (each group may carry several layout
+      // spellings; missing dirs resolve to empty entry lists).
+      WS_GROUPS.flatMap((g) =>
+        g.dirs.map((dir) =>
+          fetch(`/api/fs/list?path=${encodeURIComponent(dir)}`)
+            .then((r) => r.json())
+            .then(
+              (
+                b: { data?: { ok?: boolean; entries?: FsEntry[] } } & {
+                  ok?: boolean;
+                  entries?: FsEntry[];
+                },
+              ) => {
+                const d = b?.data ?? b;
+                if (d?.ok === false) {
+                  return { dir, entries: [] as FsEntry[] };
+                }
+                return { dir, entries: d?.entries ?? [] };
               },
-            ) => {
-              const d = b?.data ?? b;
-              if (d?.ok === false) {
-                return { dir: g.dir, entries: [] as FsEntry[] };
-              }
-              return { dir: g.dir, entries: d?.entries ?? [] };
-            },
-          )
-          .catch(() => ({ dir: g.dir, entries: [] as FsEntry[] })),
+            )
+            .catch(() => ({ dir, entries: [] as FsEntry[] })),
+        ),
       ),
     ).then((results) => {
+      const groupOf = (dir: string) =>
+        WS_GROUPS.find((x) => x.dirs.includes(dir));
       const out: Record<string, FsEntry[]> = {};
       for (const r of results) {
-        const g = WS_GROUPS.find((x) => x.dir === r.dir);
-        out[r.dir] = r.entries.filter(
+        const g = groupOf(r.dir);
+        if (!g) continue;
+        const matched = r.entries.filter(
           (e) =>
             e.kind === "file" &&
-            (!g?.suffixes || g.suffixes.includes(e.suffix.toLowerCase())),
+            (!g.suffixes || g.suffixes.includes(e.suffix.toLowerCase())),
         );
+        // Keyed by GROUP's primary dir (legacy spelling) so existing
+        // consumers (diskRefs("cql") etc.) keep working.
+        const key = g.dirs[0];
+        out[key] = [...(out[key] ?? []), ...matched];
       }
       setTrees(out);
     });

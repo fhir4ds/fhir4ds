@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { groupDataset } from "./lib/datasetGroup";
+import { groupDataset, type DatasetRowRef, type PatientGroup } from "./lib/datasetGroup";
 import { buildCellGraph } from "./lib/cell-deps";
 import { mergeDiskLibraries, mergeDiskValuesets, mergeDiskViews } from "./lib/navSections";
 import { useWorkspaceFiles } from "./lib/useWorkspaceFiles";
 import { cellify } from "./lib/cellify";
-import { composeCellClosure, splitCells } from "./lib/cells";
+import { composeCellClosure, splitCells, stripCellMarkers } from "./lib/cells";
 import { PatientDetailPanel } from "./components/nav/PatientDetailPanel";
 import {
   BootOverlay,
-  VersionBadge,
   useBootProgress,
   workerRequest,
 } from "./components/BootOverlay";
@@ -19,8 +18,19 @@ import {
 } from "./lib/monaco-cql-language";
 import { EvidencePopover } from "./components/EvidencePopover";
 import { NavRail } from "./components/NavRail";
-import { WorkspacePicker } from "./components/WorkspacePicker";
+import { StatusBar } from "./components/StatusBar";
+import { switchWorkspace as switchWorkspaceByName } from "./components/WorkspacePicker";
+import { WorkspaceFolderModal } from "./components/WorkspaceFolderModal";
+import {
+  PINNED_EXAMPLES,
+  loadRecents,
+  pushRecent,
+  savePackageToFolder,
+  switchWorkspaceByPath,
+  type RecentWorkspace,
+} from "./lib/workspaceBrowser";
 import { coerceParam, detectParams, joinInterval } from "./lib/params";
+import { materializeMeasureReports } from "./lib/measureReports";
 import { extractCqlSymbols } from "./lib/cqlSymbols";
 import { importMadiePackage } from "./lib/madiePackage";
 import { exportMadiePackage } from "./lib/madieExport";
@@ -112,7 +122,7 @@ import type {
   Diagnostics,
   MeasureRowsResult,
 } from "./lib/protocol";
-import { deriveCompare } from "./lib/verifyCompare";
+import { deriveCompare, populationRows } from "./lib/verifyCompare";
 import {
   clearWorkspace,
   importWorkspaceZip,
@@ -362,8 +372,14 @@ function populationCodesFromMeasure(
   return out;
 }
 
+const EX_LABELS: Record<string, string> = {
+  "demo-workspace": "Demo — Cleanroom basics",
+  "cms69-workspace": "CMS69 BMI Screening (real eCQM)",
+  "cms125-workspace": "CMS125 Breast Cancer Screening (real eCQM)",
+};
+const exLabel = (name: string) => EX_LABELS[name] ?? name;
+
 export default function App() {
-  const boot = useBootProgress();
   // WORKBENCH_V6: collections + active-measure selectors. Panes keep
   // their singleton-shaped props via the derived values below
   // (measure / paramValues / expectedValues / entrypoint index).
@@ -377,6 +393,12 @@ export default function App() {
   const [expectedReports, setExpectedReports] = useState<
     Record<string, Array<Record<string, unknown>>>
   >({});
+  // S27: a disk ViewDefinition opens ONCE in Custom mode; after leaving
+  // the tab, the view pane defaults back to "From Measure".
+  const [pendingViewOpen, setPendingViewOpen] = useState<{
+    id: string;
+    resource: Record<string, unknown>;
+  } | null>(null);
   const [viewDefs, setViewDefs] = useState<
     Array<{ id: string; name: string; resource: Record<string, unknown> }>
   >([]);
@@ -392,14 +414,15 @@ export default function App() {
   // REORG phase 6d — maps-style nav: one section panel open at a time
   // (null = collapsed icon rail). Tests defaults open: the dataset tree
   // is the e2e boot signal and must be visible.
-  const [navPanel, setNavPanel] = useState<NavSectionId | null>("tests");
+  // S29: library-first — the primary library is the default-open section
+  // (the measure's entrypoint is what users land to).
+  const [navPanel, setNavPanel] = useState<NavSectionId | null>("libraries");
   const [navFilters, setNavFilters] = useState<
     Record<NavSectionId, string>
   >({
-    measures: "",
     libraries: "",
     valuesets: "",
-    parameters: "",
+    config: "",
     tests: "",
     expected: "",
     views: "",
@@ -437,10 +460,19 @@ export default function App() {
   );
   // entrypoint index = position of the active measure's main library
   // (drives eval + the rail dot; falls back to the first library).
+  // S26 review fix: adopted disk measures may reference a primary
+  // library whose tab isn't open yet — resolve by NAME first.
+  const entrypointByName = activeMeasureEntry?.primaryLibraryName
+    ? libraries.findIndex(
+        (l) => l.name === activeMeasureEntry.primaryLibraryName,
+      )
+    : -1;
   const entrypoint = Math.max(
     0,
     libraries.findIndex((l) => l.id === activeMeasureEntry?.mainLibraryId),
   );
+  const effectiveEntrypoint =
+    entrypointByName >= 0 ? entrypointByName : entrypoint;
   const expectedValues = useMemo(
     () => expectedMapFromReports(expectedReports[activeMeasureEntry?.id ?? ""]),
     [expectedReports, activeMeasureEntry?.id],
@@ -484,6 +516,31 @@ export default function App() {
    *  MeasurePane picker all land here. */
   const setMainLibrary = (libId: string) => {
     if (!activeMeasureEntry) return;
+    // S26 review fix: disk-choice ids (connected picker) OPEN the
+    // library on demand — fetch its text and bind the real tab id.
+    if (libId.startsWith("disk:")) {
+      const name = libId.slice("disk:".length);
+      void fetch(`/api/libraries/${encodeURIComponent(name)}`)
+        .then((r) => r.json())
+        .then(
+          (b: { text?: string }) => {
+            if (typeof b?.text === "string" && b.text) {
+              openWorkspaceCql(name, b.text);
+              setStatusNote(`opened workspace library ${name}`);
+            }
+          },
+        )
+        .catch(() => undefined);
+      // primaryLibraryName drives the entrypoint until the tab binds.
+      setMeasures((ms) =>
+        ms.map((m) =>
+          m.id === activeMeasureEntry.id
+            ? { ...m, primaryLibraryName: name }
+            : m,
+        ),
+      );
+      return;
+    }
     setMeasures((ms) =>
       ms.map((m) =>
         m.id === activeMeasureEntry.id ? { ...m, mainLibraryId: libId } : m,
@@ -494,6 +551,23 @@ export default function App() {
     const lib = libraries[i];
     if (lib) setMainLibrary(lib.id);
   };
+  // S26 review fix: an adopted disk measure's primary library binds its
+  // tab id the first time that library OPENS (nav click opens on
+  // demand; until then effectiveEntrypoint resolves by name).
+  useEffect(() => {
+    if (!activeMeasureEntry?.primaryLibraryName) return;
+    const match = libraries.find(
+      (l) => l.name === activeMeasureEntry.primaryLibraryName,
+    );
+    if (match && activeMeasureEntry.mainLibraryId !== match.id) {
+      const mid = activeMeasureEntry.id;
+      setMeasures((ms) =>
+        ms.map((m) =>
+          m.id === mid ? { ...m, mainLibraryId: match.id } : m,
+        ),
+      );
+    }
+  }, [libraries, activeMeasureEntry]);
   // MeasureReports from the last evaluation (View drawer default source).
   const [lastReports, setLastReports] = useState<
     Array<Record<string, unknown>> | null
@@ -558,6 +632,21 @@ export default function App() {
   const openWorkspaceCql = (name: string, text: string) => {
     const idx = libraries.findIndex((l) => l.name === name);
     if (idx >= 0) {
+      // S27: re-opening an already-open library must NOT clobber a
+      // CELLIFIED buffer with the markerless disk text — that lost the
+      // `// # %%` markers (cells view then rendered empty) and flagged
+      // the tab as "cells removed", permanently suppressing auto-split.
+      const current = libraries[idx].text ?? "";
+      const stripMarkers = (t: string) =>
+        t
+          .split("\n")
+          .filter((l) => !/^\s*\/\/\s*#\s*%%/.test(l))
+          .join("\n")
+          .trim();
+      if (current && stripMarkers(current) === text.trim()) {
+        openEditorTab("library", name);
+        return;
+      }
       setLibraries((libs) => {
         const next = [...libs];
         next[idx] = { ...next[idx], text };
@@ -657,6 +746,16 @@ export default function App() {
     });
   }
   const [statusNote, setStatusNote] = useState<string | null>(null);
+  // S29 footer: last content save (standalone IndexedDB autosave). The
+  // connected workspace reads local files and writes nothing back, so
+  // the footer explains that dash instead of inventing a timestamp.
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  // S32: Open/Save workspace folder picker + switch overlay + recents.
+  const [folderModal, setFolderModal] = useState<"open" | "save" | null>(null);
+  // S32: view-flatten busy (console output shows the spinner while true).
+  const [viewRunning, setViewRunning] = useState(false);
+  const [switching, setSwitching] = useState<string | null>(null);
+  const [recents, setRecents] = useState<RecentWorkspace[]>(() => loadRecents());
   // c-cleanroom-redo S1: connected mode (additive; standalone = zero server
   // calls — automated e2e guards this). Server is terminology provider only.
   const [serverMode, setServerMode] = useState<ServerMode>({ kind: "standalone" });
@@ -667,6 +766,13 @@ export default function App() {
   // only when detection AND (when connected) the boot-purity swap have
   // BOTH settled — a deterministic order instead of an effect race.
   const [serverDetectPending, setServerDetectPending] = useState(true);
+  // S31: the browser engine (Pyodide + duckdb-wasm) boots LAZILY — never
+  // during the mode-detection window and never for a connected session
+  // (server-side evaluation). It still boots on demand for standalone and
+  // for connected actions that use the in-browser engine (selection runs).
+  const boot = useBootProgress(
+    serverDetectPending || serverMode.kind === "connected",
+  );
   const puritySettledRef = useRef(false);
   const [puritySettled, setPuritySettled] = useState(false);
   // S23-2: cell view visibility (lifted from EditorPane) — the auto-
@@ -691,6 +797,9 @@ export default function App() {
   }>({ vsac: false, umls: false, fhirBase: false });
   const [termSettings, setTermSettings] = useState<TerminologySettings>(DEFAULT_TERMINOLOGY_SETTINGS);
   const [termDiagnostics, setTermDiagnostics] = useState<string[]>([]); // surfaced via statusNote; kept for the editor strip + diagnostics pane
+  // S31: disk ValueSet canonical URLs — the terminology resolver treats
+  // them as workspace-resolved (never "unresolved").
+  const [diskValuesetUrls, setDiskValuesetUrls] = useState<string[]>([]);
   const [termSettingsOpen, setTermSettingsOpen] = useState(false);
   // S2: workspace files + watcher (connected-only; data-hint NEVER
   // auto-reloads — locked decision 4: banner with explicit restart).
@@ -820,20 +929,31 @@ export default function App() {
   // beneath) and MATERIALIZE as editable workspace files (IndexedDB, Q2).
   // Workspace valuesets keep precedence; unresolved urls surface as typed
   // diagnostics. Runs for BOTH engines (dataset-merge layer = mode-uniform).
-  const termResolveKey = `${serverMode.kind}:${terminology.valuesets.length}:${libraries.map((l) => l.text.length).join(",")}`;
+  const termResolveKey = `${serverMode.kind}:${terminology.valuesets.length}:${diskValuesetUrls.length}:${libraries.map((l) => l.text.length).join(",")}`;
   useEffect(() => {
     if (serverMode.kind !== "connected") return;
     let cancelled = false;
-    const wsUrls = new Set(
-      terminology.valuesets
+    const wsUrls = new Set<string>([
+      ...(terminology.valuesets
         .map((v) => (typeof v?.url === "string" ? v.url : null))
-        .filter(Boolean) as string[],
-    );
+        .filter(Boolean) as string[]),
+      // S31: disk-backed workspace ValueSets resolve locally by URL —
+      // they must not surface as "unresolved / check terminology source".
+      ...diskValuesetUrls,
+    ]);
     // Compose the library text from open libraries (declared urls scan).
     const libText = libraries.map((l) => l.text).join("\n");
     void resolveRuntimeValuesets(libText, wsUrls, termSettings, serverMode).then((r) => {
       if (cancelled) return;
       setTermDiagnostics(r.unresolved);
+      if (r.unresolved.length === 0) {
+        // S31: a LATER pass that resolves everything clears the stale
+        // "not retrievable" note (the first pass can run before the disk
+        // valueset URLs are known).
+        setStatusNote((cur) =>
+          cur && cur.startsWith("valueset not retrievable") ? null : cur,
+        );
+      }
       if (r.hydrated.length) {
         setTerminology((t) => {
           const have = new Set(
@@ -859,6 +979,11 @@ export default function App() {
   }, [termResolveKey, termSettings, serverMode.kind]);
 
   const fileRef = useRef<HTMLInputElement | null>(null);
+  // S26 (item 11): true while an example package boot is in flight /
+  // freshly landed — suppresses auto-cellify so examples open in TEXT
+  // view with the console heartbeat running (showcase, not authoring).
+  const exampleBootRef = useRef(false);
+  const [exampleForceTextNonce, setExampleForceTextNonce] = useState(0);
   const madieFileRef = useRef<HTMLInputElement | null>(null);
   // S18 rider: MADiE TEST-CASE zip import (File > Open). Connected mode
   // posts to /api/madie/import-tests (workspace data/ + expected store);
@@ -905,77 +1030,102 @@ export default function App() {
     }
   };
 
-  // Built-in eCQM example (CMS69 conformance bundle: 62 patients,
-  // 22 ValueSets, real CQL). Loaded from public/examples/.
+  // S26 (item 11): examples are MADiE-layout ZIPS built from the repo
+  // workspaces (one loader everywhere — importMadiePackage). The bespoke
+  // 4-file fetch bundle (main.cql/measure.json/valuesets.json/
+  // dataset.ndjson) is RETIRED.
   const loadExample = async (example: string) => {
+    exampleBootRef.current = true;
+    // S26: example loads REPLACE the workspace — land in TEXT view with
+    // the console heartbeat (cells view may be open from the prior
+    // library; showcase content is read-heavy).
+    setCellsViewActive(false);
+    setExampleForceTextNonce((n) => n + 1);
     try {
-      // Resolve against the BUNDLE's asset base, not the document: inside
-      // the website embed the document is a docs page and relative
-      // fetches 404 into the SPA HTML fallback (r.json() then dies on
-      // the DOCTYPE). See exampleAssetUrl in lib/defaultExample.ts.
-      const base = exampleAssetUrl(`examples/${example}`);
-      const [cql, measure, valuesets, ndjson] = await Promise.all([
-        fetch(`${base}/main.cql`).then((r) => r.text()),
-        fetch(`${base}/measure.json`).then((r) => r.json()),
-        fetch(`${base}/valuesets.json`).then((r) => r.json()),
-        fetch(`${base}/dataset.ndjson`).then((r) => r.text()),
-      ]);
-      const m = cql.match(/^\s*library\s+([A-Za-z][A-Za-z0-9_]*)/m);
-      const name = m ? m[1] : example;
-      // Included libraries become VIEWABLE tabs: resolve each include
-      // against the bundled copies (examples/<ex>/includes/<Lib>.cql,
-      // falling back to versionless bundled names served at
-      // /examples/includes/<Lib>.cql).
-      const includeTabs: Array<{ name: string; text: string }> = [];
-      const seenIncludes = new Set<string>([name]);
-      for (const inc of cql.matchAll(/include\s+([A-Za-z][A-Za-z0-9_]*)\s+version\s+'([^']+)'/g)) {
-        const incName = inc[1];
-        if (incName === "FHIRHelpers" || seenIncludes.has(incName)) continue;
-        seenIncludes.add(incName);
-        try {
-          const r = await fetch(`${base}/includes/${incName}.cql`);
-          if (r.ok) {
-            includeTabs.push({ name: incName, text: await r.text() });
-          }
-        } catch {
-          // optional include tab — bundled engine libraries resolve
-          // server-side without a tab
-        }
+      const base = exampleAssetUrl(`examples/${example}.zip`);
+      const buf = await fetch(base).then((r) => {
+        if (!r.ok) throw new Error(`example zip not found (${r.status})`);
+        return r.arrayBuffer();
+      });
+      const pkg = importMadiePackage(new Uint8Array(buf));
+      if (!pkg.libraries.length) {
+        throw new Error(pkg.warnings[0] ?? "no libraries in example zip");
       }
-      const nextLibs = withLibraryIds([{ name, text: cql }, ...includeTabs]);
+      const nextLibs = withLibraryIds(pkg.libraries);
       setLibraries(nextLibs);
       setActiveTab(0);
       const msrId = newMeasureId([]);
       setMeasures([
-        { id: msrId, mainLibraryId: nextLibs[0].id, resource: measure },
+        {
+          id: msrId,
+          mainLibraryId: nextLibs[0].id,
+          resource:
+            pkg.measure ??
+            ({
+              resourceType: "Measure",
+              name: example,
+              status: "draft",
+              scoring: { coding: [{ code: "proportion" }] },
+              library: [`urn:cleanroom:lib:${nextLibs[0].name}`],
+            } as Record<string, unknown>),
+        },
       ]);
       setActiveMeasureId(msrId);
-      setTerminology({ valuesets: Array.isArray(valuesets) ? valuesets : [] });
-      const resources = ndjson
-        .split("\n")
-        .map((l) => l.trim())
-        .filter(Boolean)
-        .map((l) => JSON.parse(l));
-      setDataset({ resources });
-      // Pre-fill declared parameters with sensible defaults where known:
-      // Measurement Period uses the eCQM reporting period the
-      // conformance fixtures encode (2019 calendar year).
+      setTerminology({ valuesets: pkg.valuesets });
+      const resources = pkg.tests.flatMap((t) => t.resources);
+      setDataset(resources.length ? { resources } : null);
+      // eCQM reporting period default (fixture-encoded 2026 calendar
+      // year — matches the example workspaces' expected MeasureReports).
       const defaults: Record<string, string> = {};
-      for (const pm of cql.matchAll(
+      const mainText = pkg.primary
+        ? (pkg.libraries.find((l) => l.name === pkg.primary)?.text ?? pkg.libraries[0].text)
+        : pkg.libraries[0].text;
+      for (const pm of mainText.matchAll(
         /parameter\s+"([^"]+)"(?!.*default)/g,
       )) {
         if (pm[1] === "Measurement Period") {
-          // eCQM reporting period the conformance fixture encodes
-          // (expected MeasureReport period 2026-01-01..2026-12-31).
           defaults[pm[1]] = "2026-01-01T00:00:00.0..2026-12-31T23:59:59.999";
         }
       }
       if (Object.keys(defaults).length) {
         setParamValues(defaults);
       }
-      setStatusNote(`loaded example ${example}: ${resources.length} resources`);
+      if (pkg.extras.parameters) {
+        const extra = pkg.extras.parameters as Record<string, unknown>;
+        setParamValues((p) => {
+          const next = { ...p };
+          for (const [k, v] of Object.entries(extra)) {
+            if (typeof v === "string") next[k] = v;
+          }
+          return next;
+        });
+      }
+      // S32: full-workspace round-trip — the example zips carry the
+      // workspace ViewDefinitions and expected MeasureReports as
+      // cleanroom extras; apply them so WASM matches the dev server
+      // (same Views section, same Expected Results).
+      if (pkg.extras.views.length) {
+        setViewDefs(
+          pkg.extras.views.map((v, i) => ({
+            id: String(v.id ?? `view_${i}`),
+            name: String(v.name ?? v.id ?? `View ${i + 1}`),
+            resource: v,
+          })),
+        );
+      }
+      if (pkg.extras.expectedReports.length) {
+        setExpectedReports({ [msrId]: pkg.extras.expectedReports });
+      }
+      setStatusNote(
+        `loaded example ${example}: ${pkg.libraries.length} libraries, ${resources.length} test resources`,
+      );
     } catch (e) {
       setStatusNote(`example load failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      // S27: the boot hold is only for the LOAD; leaving it set forever
+      // suppressed auto-split on every later library open (cells view
+      // rendered empty with no run output).
+      exampleBootRef.current = false;
     }
   };
 
@@ -1171,16 +1321,41 @@ export default function App() {
       try {
         const res = await fetch("/api/workspace");
         const b = (await res.json()) as {
-          workspace?: { libraries?: { name: string }[] };
+          workspace?: {
+            libraries?: { name: string }[];
+            measures?: Array<
+              string | { resource?: Record<string, unknown> | null }
+            >;
+          };
           data?: { libraries?: { name: string }[] };
         };
-        const disk = (b?.workspace ?? b?.data)?.libraries ?? [];
+        const d = b?.workspace ?? b?.data;
+        const disk = d?.libraries ?? [];
         if (cancelled) return;
         if (disk.length === 0) {
           settle();
           return;
         }
-        const first = disk[0].name;
+        // S26 review fix: prefer the workspace MEASURE's primary library
+        // (Measure.library[0] canonical tail — disk measures ship their
+        // resource in this payload) over the alphabetical first — a
+        // showcase workspace's point is its measure; otherwise the boot
+        // opens an INCLUDE and the heartbeat targets the wrong library.
+        let first = disk[0].name;
+        const diskMeasure = (b?.workspace?.measures ?? []).find(
+          (m) => typeof m !== "string" && !!m?.resource,
+        );
+        const primRef =
+          diskMeasure && typeof diskMeasure !== "string"
+            ? ((diskMeasure.resource?.library as string[] | undefined)?.[0] ??
+              null)
+            : null;
+        const primName = primRef
+          ? (primRef.split("/").filter(Boolean).pop()?.split("|")[0] ?? null)
+          : null;
+        if (primName && disk.some((l) => l.name === primName)) {
+          first = primName;
+        }
         const libRes = await fetch(
           `/api/libraries/${encodeURIComponent(first)}`,
         );
@@ -1198,13 +1373,25 @@ export default function App() {
         // list persists per tab key, and a stale "library:lib_0" entry
         // from the demo state would suppress auto-cellification for the
         // workspace library.
-        const libId = newLibraryId([]);
+        // S27: NAME-derived id (the comment's intent) — newLibraryId([])
+        // returned "lib_0", the SAME tab key the demo boot library used,
+        // so the demo's adoptedRef entry blocked auto-split on the real
+        // library (cells view opened empty and the heartbeat was
+        // suppressed while cells were active → no results table).
+        const libId = `lib_${first.toLowerCase()}`;
         setLibraries([{ id: libId, name: first, text }]);
         setMeasures((ms) =>
           ms.map((m) =>
             m.mainLibraryId === "lib_0" ? { ...m, mainLibraryId: libId } : m,
           ),
         );
+        // S28: re-key the editor tab to the NEW library id. The stale
+        // demo tab key (library:lib_0) kept rendering the swap-in text
+        // under an ADOPTED tab key — the markerless-buffer effect then
+        // persisted library:lib_0 into cellsRemoved, permanently
+        // suppressing cellification for every fresh boot.
+        setEditorTabs([{ id: `library:${libId}`, kind: "library", resourceId: libId }]);
+        setActiveEditorTabId(`library:${libId}`);
         settle();
       } catch {
         /* offline/absent workspace listing — keep defaults */
@@ -1250,7 +1437,13 @@ export default function App() {
         runHistory,
         activeTabPref: consoleTab,
         terminology: connected ? { valuesets: [] } : terminology,
-      }).catch(() => undefined);
+      })
+        .then(() => {
+          // S29: "last saved" is a CONTENT save — connected writes are
+          // chrome-only, so they must not claim the content was saved.
+          if (!connected) setLastSavedAt(Date.now());
+        })
+        .catch(() => undefined);
     }, 800);
     return () => clearTimeout(t);
   }, [
@@ -1276,7 +1469,7 @@ export default function App() {
   const active = libraries[activeTab] ?? libraries[0];
   // G1 invariant: measure surfaces (MR/funnel/expected) always pin to
   // the ENTRYPOINT library, never merely the edited tab.
-  const mainLib = libraries[entrypoint] ?? active;
+  const mainLib = libraries[effectiveEntrypoint] ?? active;
 
   // S19: the measure mapping may reference defines from ANOTHER library
   // (stale import, default measure vs CMS125 demo, etc.) — filter to
@@ -1298,15 +1491,39 @@ export default function App() {
   // specific library evaluates and displays THAT library's output.
   // Host tabs (measure/params/valuesets/…) and the hidden editor fall
   // back to the entrypoint so the measure heartbeat stays truthful.
+  // S26 review fix: when the central editor has NO library open yet
+  // (fresh connected boot), the heartbeat targets the MEASURE's primary
+  // from the last EVALUATED workspace library (primary tx) or the first
+  // workspace library — never the current tab placeholder, so the MR
+  // tab materializes on boot and the measure entrypoint is never an
+  // unrelated include.
+  // S26d review fix: the tab KIND alone decides — never the buffer
+  // content. The earlier `&& !!active?.text` guard flapped to
+  // hosting-tab whenever a user emptied the editor (Ctrl+A Delete),
+  // unmounting the editor pane mid-typing.
   const activeTabIsLibrary =
     !activeEditorTabId || parseTabId(activeEditorTabId).kind === "library";
-  const runLib = activeTabIsLibrary ? active : mainLib;
+  // S26d review fix: the connected NO-LIBRARY-OPEN heartbeat target —
+  // when the editor holds NO library tab (fresh connected boot before
+  // the purity open), the run falls to the measure's primary via
+  // mainLib; keyed on the LIBRARY COUNT (never the transient text —
+  // a Select-All+Delete empties text for a frame and must not flip the
+  // editor column into hosting-tab).
+  const runLib =
+    activeTabIsLibrary && libraries.length > 0 ? (active ?? mainLib) : mainLib;
   const runIsEntrypoint = runLib === mainLib;
   // Stable identity across re-renders (same name+text → same object):
   // the auto-eval effect keys on [main, [main]] — a fresh object per
   // render would re-trigger the 2s debounce forever.
   const main = useMemo<LibraryText>(
-    () => ({ name: runLib.name, text: runLib.text }),
+    () => ({
+      name: runLib.name,
+      // S31: markers are editor metadata — stripping them makes the
+      // evaluation payload identical to the disk text, so the server's
+      // warm translation cache hits on first load (and no marker comment
+      // ever reaches the engine).
+      text: stripCellMarkers(runLib.text),
+    }),
     [runLib.name, runLib.text],
   );
   const mainLibs = useMemo<LibraryText[]>(() => [main], [main]);
@@ -1347,6 +1564,10 @@ export default function App() {
   // (url-deduped — same precedence as evalDataset).
   const measureValuesetSources = useMemo(() => {
     const map: Record<string, "workspace" | "dataset"> = {};
+    // S31: disk ValueSets ARE workspace-sourced — the Measure inputs
+    // table must not report them as "—/unsourced" just because they were
+    // never opened in the browser this session.
+    for (const url of diskValuesetUrls) map[url] = "workspace";
     for (const v of dataset?.valueset_resources ?? []) {
       const url = (v as Record<string, unknown>)?.url;
       if (typeof url === "string") map[url] = "dataset";
@@ -1356,7 +1577,7 @@ export default function App() {
       if (typeof url === "string") map[url] = "workspace";
     }
     return map;
-  }, [dataset, terminology]);
+  }, [dataset, terminology, diskValuesetUrls]);
 
   // Runtime parameter bindings (drawer values, coerced): empty strings
   // are absent — a half-filled binding never reaches the engine.
@@ -1382,17 +1603,32 @@ export default function App() {
   }, [hoverEvalKey]);
   useEffect(() => {
     const evaluateAll = () => {
-      if (!evalDataset || !main.text) return Promise.resolve(null);
+      if (!main.text) return Promise.resolve(null);
+      if (serverMode.kind !== "connected" && !evalDataset) {
+        return Promise.resolve(null);
+      }
       if (hoverEvalRef.current) return hoverEvalRef.current;
-      const p = workerRequest({
-        type: "evaluate_library",
-        libraries: mainLibs,
-        main,
-        dataset: evalDataset,
-        parameters: runtimeParameters,
-        emit_sql: false,
-      })
-        .then((resp) => JSON.parse((resp as { envelope: string }).envelope))
+      // S31: connected hover values come from the SERVER (same dataset as
+      // the heartbeat, warm translation) — never the browser engine.
+      const p = (serverMode.kind === "connected"
+        ? fetch("/api/evaluate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              libraries: mainLibs,
+              library: main.name,
+              parameters: runtimeParameters,
+            }),
+          }).then((r) => r.json())
+        : workerRequest({
+            type: "evaluate_library",
+            libraries: mainLibs,
+            main,
+            dataset: evalDataset,
+            parameters: runtimeParameters,
+            emit_sql: false,
+          }).then((resp) => JSON.parse((resp as { envelope: string }).envelope))
+      )
         .then((env) =>
           env.ok
             ? { columns: env.columns as string[], rows: env.rows }
@@ -1408,7 +1644,17 @@ export default function App() {
 
   // WORKBENCH_REORG phase 5 — the evaluation heartbeat lives in App so
   // the console sub-tabs AND the col2 panes render from one run.
-  const canAutoEval = !!evalDataset && !!main?.text;
+  // S26a (item 4): connected mode has NO in-browser dataset
+  // requirement — the heartbeat evaluates the SERVER workspace dataset.
+  // Standalone still needs the browser dataset (the worker is the
+  // engine there).
+  const canAutoEval =
+    // S31: never evaluate before the mode handshake settles — a pre-
+    // detection heartbeat used the STANDALONE branch and booted Pyodide
+    // (~10s) even though the session is connected.
+    !serverDetectPending &&
+    !!main?.text &&
+    (serverMode.kind === "connected" || !!evalDataset);
 
   /**
    * S5 cell execution — automatic target doctrine applies:
@@ -1422,17 +1668,30 @@ export default function App() {
   const runCells = useCallback(
     async (
       names: string[],
-      _mode: "cell" | "cell_deps" | "to_here",
+      _mode: "cell" | "cell_deps" | "to_here" | "run_all",
     ): Promise<Record<string, { ok: boolean; lines: string[] }>> => {
       const out: Record<
         string,
         { ok: boolean; lines: string[]; columns?: string[]; rows?: Array<Array<string>> }
       > = {};
       if (!main) return out;
-      const graph = buildCellGraph(main.text);
-      const cells = splitCells(main.text).cells;
+      // S32 fix: main.text is the MARKER-STRIPPED evaluation payload
+      // (S31) — the cell graph must read the raw editor buffer, or every
+      // cell run composes an empty library ("no output" / diagnostics).
+      const bufferText = runLib.text;
+      const graph = buildCellGraph(bufferText);
+      const cells = splitCells(bufferText).cells;
       const composed = composeCellClosure(graph.header, cells, names);
-      const libs: LibraryText[] = [{ name: main.name, text: composed }];
+      // S32 fix: the composed library carries ONLY the main library — the
+      // include closure must ride along or the STANDALONE worker cannot
+      // resolve includes ("Could not resolve included library ..."). The
+      // connected server backfills from disk, so this is parity-safe.
+      const libs: LibraryText[] = [
+        { name: main.name, text: composed },
+        ...libraries
+          .filter((l) => l.name !== main.name)
+          .map((l) => ({ name: l.name, text: l.text })),
+      ];
       // S8 bug fix: NEVER ship synthetic fallback names (cell-N) to
       // output_columns. Only cells whose text carries a real define are
       // nameable; raw-expression cells run WITHOUT narrowing (full
@@ -1443,6 +1702,55 @@ export default function App() {
           .map((c) => c.name),
       );
       if (serverMode.kind === "connected") {
+        // S28 (perf, option A): Run All is ONE evaluation — the composed
+        // library translates once (full projection) and each nameable
+        // cell slices its own column, exactly like the standalone
+        // worker path. Single-cell runs keep per-closure evaluation.
+        const batchAll = _mode === "run_all";
+        if (batchAll) {
+          try {
+            const res = await fetch("/api/evaluate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                libraries: libs,
+                library: main.name,
+                parameters: runtimeParameters,
+              }),
+            });
+            const data = (await res.json()) as any;
+            if (data?.ok === false) {
+              const msg = data?.diagnostics?.[0]?.message ?? "evaluation failed";
+              for (const n of names) out[n] = { ok: false, lines: [msg] };
+              return out;
+            }
+            const cols: string[] = data?.columns ?? [];
+            const rows = (data?.rows ?? []) as Array<Record<string, unknown>>;
+            for (const n of names) {
+              const own = nameable.has(n) ? cols.filter((c) => c === n) : [];
+              // S28: patient_id rides along when present — a lone boolean
+              // column per cell is unreadable against 66 patients.
+              const useCols = own.length
+                ? ["patient_id", ...own]
+                : cols;
+              out[n] = {
+                ok: true,
+                lines: [
+                  useCols.join(" | "),
+                  ...rows
+                    .slice(0, 10)
+                    .map((r) => useCols.map((c) => String(r[c] ?? "")).join(" | ")),
+                ],
+                columns: useCols,
+                rows: rows.map((r) => useCols.map((c) => fmtCell(r[c]))),
+              };
+            }
+          } catch (err) {
+            const msg = `server run failed: ${err instanceof Error ? err.message : String(err)}`;
+            for (const n of names) out[n] = { ok: false, lines: [msg] };
+          }
+          return out;
+        }
         // Server: one evaluation per cell; narrowing ONLY for nameable
         // defines. Raw-expression cells evaluate the composed library
         // (all columns) — no synthetic column names ever requested.
@@ -1551,17 +1859,21 @@ export default function App() {
       }
       return out;
     },
-    [main, serverMode.kind, evalDataset, runtimeParameters],
+    [main, runLib.text, libraries, serverMode.kind, evalDataset, runtimeParameters],
   );
 
   const runEvaluation = async (manualServer = false) => {
     if (!manualServer && !canAutoEval) return;
     const seq = ++evalSeqRef.current;
     evalBusyRef.current = true;
-    // Checkpoint ruling: automatic target — manual whole-library runs on
-    // a connected server evaluate SERVER-side (no picker); the auto-recalc
-    // heartbeat stays BROWSER; unreachable server → typed error (below).
-    if (manualServer) {
+    // Checkpoint ruling (S26a item 4 revision): connected mode ALWAYS
+    // evaluates SERVER-side — manual whole-library runs AND the
+    // auto-recalc heartbeat (the server workspace dataset is the
+    // connected engine's truth; a browser-origin heartbeat evaluated
+    // the wrong default 3-patient dataset). Standalone keeps the
+    // in-browser worker heartbeat. Unreachable server → typed error.
+    const useServer = manualServer || serverMode.kind === "connected";
+    if (useServer) {
       try {
         const res = await fetch("/api/evaluate", {
           method: "POST",
@@ -1569,6 +1881,10 @@ export default function App() {
           body: JSON.stringify({
             libraries: mainLibs,
             library: main.name,
+            // S26a/s26c: server runs honor the UI-entered parameters
+            // (same contract as cell runs — UI values override workspace
+            // Parameters-resource defaults server-side).
+            parameters: runtimeParameters,
           }),
         });
         const b = (await res.json()) as EvaluateResult & {
@@ -1611,6 +1927,31 @@ export default function App() {
         };
         setRunHistory((h) => appendRun(h, serverEntry, RUN_HISTORY_CAP));
         setSelectedRunId(serverEntry.id);
+        // S26a: server runs also materialize per-patient MeasureReports
+        // (the MR pane renders from any origin's rows — the worker
+        // helper is a pure row transformation, engine-independent).
+        if (measure && runIsEntrypoint) {
+          try {
+            // Define-keyed heartbeat rows → population columns from the
+            // measure's own mapping (the MR helper reads snake_case codes).
+            const popRows = populationRows(
+              b.rows ?? [],
+              b.columns ?? [],
+              outputColumnsFromMeasure(measure),
+            );
+            const repEnv = await materializeMeasureReports(
+              serverMode.kind === "connected",
+              measure,
+              popRows.rows,
+              popRows.columns,
+            );
+            setLastReports(repEnv.ok ? repEnv.reports ?? [] : null);
+          } catch {
+            setLastReports(null);
+          }
+        } else {
+          setLastReports(null);
+        }
       } catch (err) {
         if (seq === evalSeqRef.current) {
           setStatusNote(
@@ -1713,18 +2054,17 @@ export default function App() {
         // 6j: only entrypoint runs carry population shape.
         if (measure && runIsEntrypoint) {
           try {
-            const repResp = await workerRequest({
-              type: "measure_report_from_rows",
+            const popRows = populationRows(
+              env.rows,
+              env.columns,
+              outputColumnsFromMeasure(measure),
+            );
+            const repEnv = await materializeMeasureReports(
+              false,
               measure,
-              rows: env.rows,
-              columns: env.columns,
-            });
-            const repEnv = JSON.parse(
-              (repResp as { envelope: string }).envelope,
-            ) as {
-              ok: boolean;
-              reports?: Array<Record<string, unknown>>;
-            };
+              popRows.rows,
+              popRows.columns,
+            );
             setLastReports(repEnv.ok ? repEnv.reports ?? [] : null);
           } catch {
             setLastReports(null);
@@ -1773,7 +2113,11 @@ export default function App() {
     // S23-2 (PLAN §8): cell mode renders results inline per cell ONLY —
     // suppress the heartbeat while the cell view is open (manual console
     // runs return after switching back to text).
-    if (cellsViewActiveRef.current) return;
+    // S26d review fix: the suppression is a LIBRARY-TAB concern — on
+    // HOST tabs (measure/expected/valueset…) the cells view is hidden
+    // and the measure surface NEEDS its heartbeat (MR/Funnel starve
+    // otherwise on a fresh boot that auto-cellified).
+    if (cellsViewActiveRef.current && activeTabIsLibrary) return;
     let t: ReturnType<typeof setTimeout>;
     const fire = () => {
       t = setTimeout(() => {
@@ -1790,7 +2134,7 @@ export default function App() {
     fire();
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mainLibs, main, evalDataset, effectiveOutputColumns, measure, runtimeParameters, canAutoEval, recalcSeconds, cellsViewActive]);
+  }, [mainLibs, main, evalDataset, effectiveOutputColumns, measure, runtimeParameters, canAutoEval, recalcSeconds, cellsViewActive, activeTabIsLibrary]);
 
   // M1 write-through: Measure.library[] mirrors the entrypoint pin —
   // primary first, then the dependency closure of that library (6f: the
@@ -1879,9 +2223,87 @@ export default function App() {
     }
   };
 
+  /** S32: switch to a workspace DIRECTORY (absolute path, connected).
+   *  Shows the non-dismissible switching overlay through the server
+   *  re-root + kernel rebuild, then reloads (boot overlay takes over). */
+  const openWorkspacePath = async (path: string, name: string) => {
+    if (serverMode.kind !== "connected") return;
+    setFolderModal(null);
+    setSwitching(`Switching workspace — ${name}`);
+    // Record BEFORE the switch: the server's `switched` WS event reloads
+    // the page immediately, so a post-success write would be dropped.
+    setRecents(pushRecent({ name, path }));
+    try {
+      const r = await switchWorkspaceByPath(path);
+      if (!r.ok) {
+        setSwitching(null);
+        setStatusNote(`workspace switch failed: ${r.message}`);
+        return;
+      }
+      window.location.reload();
+    } catch (e) {
+      setSwitching(null);
+      setStatusNote(`workspace switch failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  /** S32: named switch (registry name) — used by Recent Workspaces and
+   *  pinned examples; records the recent after a successful switch. */
+  const switchWorkspaceNamed = async (name: string) => {
+    if (serverMode.kind === "connected") {
+      setSwitching(`Switching workspace — ${name}`);
+      // Record BEFORE the switch (the `switched` WS event reloads first).
+      setRecents(pushRecent({ name, path: name }));
+      try {
+        const r = await switchWorkspaceByName(name);
+        if (!r.ok) {
+          setSwitching(null);
+          setStatusNote(`workspace switch failed: ${r.message}`);
+          return;
+        }
+        window.location.reload();
+      } catch (e) {
+        setSwitching(null);
+        setStatusNote(`workspace switch failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      return;
+    }
+    // Standalone: examples load as packaged zips (no directory concept).
+    const zip = name !== "demo-workspace";
+    if (!zip) {
+      setStatusNote(
+        "the demo example is a CONNECTED workspace — start a devserver on examples/demo-workspace (or open File > Open File > Measure package)",
+      );
+      return;
+    }
+    void loadExample(name);
+  };
+
+  /** S32: Save Workspace — connected writes the MADiE package into a
+   *  chosen server folder; standalone downloads it (browser dialog). */
+  const saveWorkspacePackage = async (folder: string, _name: string) => {
+    setFolderModal(null);
+    if (!measure) {
+      setStatusNote("nothing to save — need a Measure");
+      return;
+    }
+    const mname = String((measure as Record<string, unknown>).name ?? "measure");
+    setStatusNote("building measure package…");
+    try {
+      const r = await savePackageToFolder(mname, folder);
+      if (!r.ok) {
+        setStatusNote(`package save failed: ${r.message}`);
+        return;
+      }
+      setStatusNote(`package saved — ${r.path}`);
+    } catch (e) {
+      setStatusNote(`package save failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   const exportMadieZip = () => {
     try {
-      const primaryName = libraries[entrypoint]?.name ?? libraries[0]?.name;
+      const primaryName = libraries[effectiveEntrypoint]?.name ?? libraries[0]?.name;
       if (!primaryName || !measure) {
         setStatusNote("nothing to export — need a library and a Measure");
         return;
@@ -2263,7 +2685,7 @@ export default function App() {
           }
         });
         break;
-      case "measures:measure-json":
+      case "config:measure-json":
         pickSectionImport(json, async (f) => {
           try {
             const resource = await readJsonObject(f);
@@ -2313,7 +2735,7 @@ export default function App() {
           }
         });
         break;
-      case "parameters:parameters-json":
+      case "config:parameters-json":
         pickSectionImport(json, (f) => void importParametersResource(f));
         break;
       case "views:view-json":
@@ -2410,9 +2832,56 @@ export default function App() {
       name: f.name,
       changed: wsChanged.has(`${dir}/${f.name}`),
     }));
+  // S26 (slice 3): CONNECTED expected results come from DISK — the
+  // workspace's MeasureReport/<measure>/<case>.json files
+  // (fixture-official for the CMS example workspaces) surface through
+  // the same expectedResults state the Tests/Compare panes render.
+  const expectedDiskKey = `${serverMode.kind}:${activeMeasureEntry?.id ?? ""}:${
+    (measure?.name as string) ?? ""
+  }`;
+  useEffect(() => {
+    if (serverMode.kind !== "connected" || !activeMeasureEntry || !measure?.name) {
+      return;
+    }
+    let cancelled = false;
+    const mKey = String(measure.name);
+    void fetch(
+      `/api/tests/expected?measure=${encodeURIComponent(mKey)}`,
+    )
+      .then((r) => r.json())
+      .then(
+        (
+          b: {
+            patients?: Array<{ report?: Record<string, unknown> }>;
+          },
+        ) => {
+          if (cancelled) return;
+          const reports = (b?.patients ?? [])
+            .map((p) => p.report)
+            .filter(Boolean) as Array<Record<string, unknown>>;
+          setExpectedReports((prev) =>
+            reports.length
+              ? { ...prev, [activeMeasureEntry.id]: reports }
+              : prev,
+          );
+        },
+      )
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expectedDiskKey]);
+
   // S17 Muse: canonical header names per file stem (one /api/workspace
   // read when connected) so disk rows display library names, not stems.
   const [diskHeaderNames, setDiskHeaderNames] = useState<Record<string, string>>({});
+  // S30: version maps for the nav version pills (replacing "on disk").
+  const [diskLibVersions, setDiskLibVersions] = useState<Record<string, string>>({});
+  const [diskVsVersions, setDiskVsVersions] = useState<Record<string, string>>({});
+  const [diskViewMeta, setDiskViewMeta] = useState<
+    Record<string, { label?: string; version?: string }>
+  >({});
   // S22a: disk valueset rows label by FHIR resource id (from the same
   // /api/workspace read — {path, id} entries), falling back to file stem.
   const [diskValuesetIds, setDiskValuesetIds] = useState<Record<string, string>>({});
@@ -2423,83 +2892,224 @@ export default function App() {
       .then((r) => r.json())
       .then((b: {
         workspace?: {
-          libraries?: { name: string; path?: string }[];
-          valuesets?: Array<string | { path: string; id?: string | null }>;
+          libraries?: { name: string; path?: string; version?: string | null }[];
+          valuesets?: Array<
+            | string
+            | {
+                path: string;
+                id?: string | null;
+                name?: string | null;
+                title?: string | null;
+                version?: string | null;
+                url?: string | null;
+              }
+          >;
+          measures?: Array<string | { path: string; resource?: Record<string, unknown> | null }>;
+          view_meta?: Array<{
+            path: string;
+            id?: string | null;
+            name?: string | null;
+            title?: string | null;
+            version?: string | null;
+          }>;
+          parameters?: Record<string, string>;
         };
         data?: {
-          libraries?: { name: string; path?: string }[];
-          valuesets?: Array<string | { path: string; id?: string | null }>;
+          libraries?: { name: string; path?: string; version?: string | null }[];
+          valuesets?: Array<
+            | string
+            | {
+                path: string;
+                id?: string | null;
+                name?: string | null;
+                title?: string | null;
+                version?: string | null;
+                url?: string | null;
+              }
+          >;
+          measures?: Array<string | { path: string; resource?: Record<string, unknown> | null }>;
+          view_meta?: Array<{
+            path: string;
+            id?: string | null;
+            name?: string | null;
+            title?: string | null;
+            version?: string | null;
+          }>;
+          parameters?: Record<string, string>;
         };
       }) => {
         if (cancelled) return;
         const d = b?.workspace ?? b?.data;
         const libs = d?.libraries ?? [];
         const out: Record<string, string> = {};
+        const libVersions: Record<string, string> = {};
         for (const l of libs) {
           const file = (l.path ?? "").split("/").pop() ?? "";
           const stem = file.replace(/\.cql$/i, "");
           if (stem) out[stem] = l.name;
+          if (stem && typeof l.version === "string" && l.version) {
+            libVersions[stem] = l.version;
+          }
         }
         setDiskHeaderNames(out);
+        setDiskLibVersions(libVersions);
+        // S26 review fix: disk valueset rows label by name → title → id
+        // (OIDs are hostile nav labels).
         const vsOut: Record<string, string> = {};
+        const vsVersions: Record<string, string> = {};
         for (const v of d?.valuesets ?? []) {
           if (typeof v === "string") continue;
           const file = (v.path ?? "").split("/").pop() ?? "";
           const stem = file.replace(/\.json$/i, "");
-          if (stem && typeof v.id === "string" && v.id.trim()) {
-            vsOut[stem] = v.id.trim();
+          const label =
+            (typeof v.name === "string" && v.name.trim()) ||
+            (typeof v.title === "string" && v.title.trim()) ||
+            (typeof v.id === "string" && v.id.trim()) ||
+            "";
+          if (stem && label) {
+            vsOut[stem] = label;
+          }
+          if (stem && typeof v.version === "string" && v.version) {
+            vsVersions[stem] = v.version;
           }
         }
         setDiskValuesetIds(vsOut);
+        setDiskVsVersions(vsVersions);
+
+        // S31: disk ValueSet canonical URLs seed the terminology resolver's
+        // workspace set — disk-backed valuesets are NEVER "unresolved".
+        const vsUrls: string[] = [];
+        for (const v of d?.valuesets ?? []) {
+          if (typeof v === "string") continue;
+          if (typeof v.url === "string" && v.url.trim()) vsUrls.push(v.url);
+        }
+        setDiskValuesetUrls(vsUrls);
+
+        // S31: workspace Parameters defaults ARE the bound values the
+        // server applies — surface them in the drawer (never clobber a
+        // value the user already bound this session).
+        const wsParams = d?.parameters ?? {};
+        if (Object.keys(wsParams).length) {
+          setParamValues((prev) => {
+            const next = { ...wsParams, ...prev };
+            return next;
+          });
+        }
+
+        // S30: ViewDefinition nav labels + versions (disk is the source
+        // of truth in connected mode).
+        const viewMeta: Record<string, { label?: string; version?: string }> = {};
+        for (const vm of d?.view_meta ?? []) {
+          const file = (vm.path ?? "").split("/").pop() ?? "";
+          const stem = file.replace(/\.json$/i, "");
+          if (!stem) continue;
+          const label =
+            (typeof vm.name === "string" && vm.name.trim()) ||
+            (typeof vm.title === "string" && vm.title.trim()) ||
+            (typeof vm.id === "string" && vm.id.trim()) ||
+            "";
+          viewMeta[stem] = {
+            label: label || undefined,
+            version:
+              typeof vm.version === "string" && vm.version
+                ? vm.version
+                : undefined,
+          };
+        }
+        setDiskViewMeta(viewMeta);
+        // S26 (slice 3): ADOPT disk Measures in connected mode — the
+        // showcase workspaces' real eCQM Measures become the app's
+        // measure list (disk is the source of truth; the seed
+        // CleanroomMeasure is replaced, not merged).
+        const diskMeasures = (d?.measures ?? []).filter(
+          (m): m is { path: string; resource: Record<string, unknown> } =>
+            typeof m !== "string" && !!m?.resource,
+        );
+        if (diskMeasures.length) {
+          setMeasures((prev) => {
+            // One-shot: only replace while the collection is the seed
+            // (nothing user-authored to clobber).
+            if (prev.length > 1 || prev[0]?.id !== "msr_0") return prev;
+            const adopted = diskMeasures.map((m, i) => ({
+              id: `disk_msr_${i}`,
+              mainLibraryId: "lib_0",
+              resource: m.resource,
+            }));
+            setActiveMeasureId(adopted[0]?.id ?? null);
+            // S26 review fix: adopted disk measures carry the PRIMARY library
+            // to a real tab — Measure.library[0]'s canonical tail names
+            // it (e.g. https://madie.cms.gov/Library/CMS125FHIR...).
+            // Adopted disk libraries are OPENED-ON-DEMAND (nav click);
+            // until the primary tab exists, match by NAME so the
+            // measure surface + heartbeat target the right library.
+            const primRef = (adopted[0]?.resource?.library as string[] | undefined)?.[0];
+            const primName = primRef
+              ? primRef.split("/").filter(Boolean).pop()?.split("|")[0] ?? null
+              : null;
+            if (primName) {
+              (adopted[0] as { primaryLibraryName?: string }).primaryLibraryName = primName;
+            }
+            return adopted;
+          });
+        }
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
   }, [serverMode.kind, wsFiles.loading, wsChanged.size]);
-  const navLibDiskItems = mergeDiskLibraries(navLibItems, diskRefs("cql"), diskHeaderNames);
+  const navLibDiskItems = mergeDiskLibraries(
+    navLibItems,
+    diskRefs("cql"),
+    diskHeaderNames,
+    diskLibVersions,
+  );
   const navVsDiskItems = mergeDiskValuesets(
     navValuesetItems,
     diskRefs("valuesets"),
     diskValuesetIds,
+    diskVsVersions,
   );
   const navViewDiskItems = mergeDiskViews(
     navViewItems,
     diskRefs("views"),
-    diskRefs("data"),
+    diskViewMeta,
   );
 
   const navSectionModels: Record<
     NavSectionId,
     { title: string; items: NavItem[]; count: number }
   > = {
-    measures: {
-      title: "Measures",
-      items: filterItems(navMeasureItems, navFilters.measures),
-      count: navMeasureItems.length,
-    },
     libraries: {
       title: "Libraries",
       items: filterItems(navLibDiskItems, navFilters.libraries),
       count: navLibDiskItems.length,
     },
     valuesets: {
-      title: "Valuesets",
+      title: "Value Sets",
       items: filterItems(navVsDiskItems, navFilters.valuesets),
       count: navVsDiskItems.length,
     },
-    parameters: {
-      title: "Parameters",
-      items: filterItems(navParameterItems, navFilters.parameters),
-      count: navParameterItems.length,
+    // S29: Measure + Parameters ride ONE Setup/Config panel with
+    // sub-group headings (group tags are rendered by NavRail).
+    config: {
+      title: "Config",
+      items: filterItems(
+        [
+          ...navMeasureItems.map((it) => ({ ...it, group: "Measure" })),
+          ...navParameterItems.map((it) => ({ ...it, group: "Parameters" })),
+        ],
+        navFilters.config,
+      ),
+      count: navMeasureItems.length + navParameterItems.length,
     },
     tests: {
-      title: "Tests",
+      title: "Test Cases",
       items: [],
       count: dataset?.resources?.length ?? 0,
     },
     expected: {
-      title: "Expected Results",
+      title: "Expected",
       items: filterItems(navExpectedItems, navFilters.expected),
       count: navExpectedItems.length,
     },
@@ -2673,6 +3283,10 @@ export default function App() {
   const latestRunIsEntrypoint =
     !latestLibraryRun?.payload?.library ||
     latestLibraryRun.payload.library === mainLib.name;
+  const populationColumns = useMemo(
+    () => outputColumnsFromMeasure(measure),
+    [measure],
+  );
   const verifyCompare = useMemo(
     () =>
       latestRunIsEntrypoint
@@ -2680,9 +3294,16 @@ export default function App() {
             latestLibraryRun?.payload?.rows,
             expectedValues ?? {},
             populationCodes,
+            populationColumns,
           )
         : null,
-    [latestRunIsEntrypoint, latestLibraryRun, expectedValues, populationCodes],
+    [
+      latestRunIsEntrypoint,
+      latestLibraryRun,
+      expectedValues,
+      populationCodes,
+      populationColumns,
+    ],
   );
   const compareStale =
     (!!latestLibraryRun && !latestLibraryRun.payload?.rows) ||
@@ -2703,17 +3324,113 @@ export default function App() {
     () => groupDataset(dataset?.resources ?? []),
     [dataset],
   );
+  // S25: CONNECTED mode feeds the SAME L3 panel from local files —
+  // fetch the focused patient's bundle (Patient + every resource the
+  // kernel attributes to them) and synthesize a PatientGroup from it.
+  const [serverFocusedBundle, setServerFocusedBundle] = useState<{
+    pid: string;
+    resources: Array<Record<string, unknown>>;
+  } | null>(null);
+  useEffect(() => {
+    if (serverMode.kind !== "connected" || !focusedPid) {
+      setServerFocusedBundle(null);
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/patient/${encodeURIComponent(focusedPid)}`)
+      .then((r) => r.json())
+      .then(
+        (
+          b: {
+            resources?: Array<Record<string, unknown>>;
+            data?: { resources?: Array<Record<string, unknown>> };
+          },
+        ) => {
+          if (cancelled) return;
+          const resources = b?.resources ?? b?.data?.resources ?? [];
+          if (resources.length > 0) {
+            setServerFocusedBundle({ pid: focusedPid, resources });
+          } else {
+            setServerFocusedBundle(null);
+          }
+        },
+      )
+      .catch(() => {
+        if (!cancelled) setServerFocusedBundle(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [serverMode.kind, focusedPid]);
+  const serverFocusedGroup = useMemo<PatientGroup | null>(() => {
+    if (serverMode.kind !== "connected" || !focusedPid || !serverFocusedBundle)
+      return null;
+    if (serverFocusedBundle.pid !== focusedPid) return null;
+    if (patientGroups.some((g) => g.key === focusedPid)) return null;
+    const rows: DatasetRowRef[] = serverFocusedBundle.resources.map(
+      (resource, i) => ({
+        index: -(i + 1), // negative = server-backed (no storage index)
+        resource,
+        resourceType: String(resource.resourceType ?? "Unknown"),
+        id: String(resource.id ?? ""),
+      }),
+    );
+    return {
+      key: focusedPid,
+      label: focusedPid,
+      phantom: false,
+      unattributed: false,
+      rows,
+    };
+  }, [serverMode.kind, focusedPid, serverFocusedBundle, patientGroups]);
   const focusedGroup = focusedPid
-    ? patientGroups.find((g) => g.key === focusedPid)
+    ? (patientGroups.find((g) => g.key === focusedPid) ??
+      serverFocusedGroup ??
+      undefined)
     : undefined;
   useEffect(() => {
-    if (focusedPid && !patientGroups.some((g) => g.key === focusedPid)) {
+    if (
+      focusedPid &&
+      serverMode.kind !== "connected" &&
+      !patientGroups.some((g) => g.key === focusedPid)
+    ) {
       setFocusedPid(null);
     }
-  }, [focusedPid, patientGroups]);
+  }, [focusedPid, patientGroups, serverMode.kind]);
 
   // Dataset callbacks shared by the L2 list and the L3 detail panel.
   const editDatasetResource = (index: number) => {
+    if (index < 0) {
+      // S25: server-backed row (L3 over local files) — fetch the FULL
+      // resource (the builder handoff contract; previews are truncated)
+      // and prefill the builder from it.
+      const row = serverFocusedGroup?.rows.find((r) => r.index === index);
+      const rtype = row?.resourceType;
+      const rid = row?.id;
+      if (!rtype || !rid) return;
+      void fetch(
+        `/api/patient/resources?resourceType=${encodeURIComponent(rtype)}&rid=${encodeURIComponent(rid)}`,
+      )
+        .then((r) => r.json())
+        .then(
+          (
+            b: {
+              resource?: Record<string, unknown>;
+              data?: { resource?: Record<string, unknown> };
+            },
+          ) => {
+            const resource = b?.resource ?? b?.data?.resource;
+            if (!resource) return;
+            setBuilderPrefill((prev) => ({
+              resource,
+              nonce: (prev?.nonce ?? 0) + 1,
+            }));
+            openEditorTab("test", `server-${rtype}-${rid}`);
+          },
+        )
+        .catch(() => undefined);
+      return;
+    }
     const r = dataset?.resources?.[index];
     if (r && typeof r === "object") {
       setBuilderPrefill((prev) => ({
@@ -2737,6 +3454,7 @@ export default function App() {
   };
   // INV-C3-3: immutable replace — never mutate the dataset in place.
   const deleteDatasetResource = (index: number) => {
+    if (index < 0) return; // server-backed rows are disk-owned (S25)
     if (!dataset) return;
     setDataset({
       ...dataset,
@@ -2889,11 +3607,56 @@ export default function App() {
       return;
     }
     if (src === "disk-view" && item.kind === "view") {
-      setStatusNote(`${String(item.meta?.name ?? item.label)} is a server view file (preview only — reload the page to re-list; view defs load via File > Import)`);
-      return;
-    }
-    if (src === "disk-data" && item.kind === "view") {
-      setStatusNote(`${String(item.meta?.name ?? item.label)} is a server data file (preview only — restart the dev server to pick up data changes)`);
+      // S27: a disk ViewDefinition OPENS — fetch its text, adopt it as a
+      // session view def, and open the view tab (the pane runs it over
+      // the session MeasureReports; the old "preview only" note was a
+      // dead end).
+      void (async () => {
+        const name = String(item.meta?.name ?? `${item.label}.json`);
+        setStatusNote(`opening ${name}…`);
+        try {
+          const wsRes = await fetch("/api/workspace");
+          const wsB = (await wsRes.json()) as {
+            workspace?: { views?: Array<string | { path: string }> };
+            data?: { views?: Array<string | { path: string }> };
+          };
+          const d = wsB?.workspace ?? wsB?.data;
+          const entries = (d?.views ?? []).map((v) =>
+            typeof v === "string" ? { path: v } : v,
+          );
+          const vdPath = entries.find(
+            (e) => String(e.path).split("/").pop() === name,
+          )?.path;
+          if (!vdPath) {
+            setStatusNote(`could not resolve ${name}`);
+            return;
+          }
+          const res = await fetch(`/api/view?path=${encodeURIComponent(vdPath)}`);
+          const b = (await res.json()) as { ok?: boolean; text?: string };
+          if (b?.ok === false || typeof b?.text !== "string") {
+            setStatusNote(`could not load ${name}`);
+            return;
+          }
+          const resource = JSON.parse(b.text) as Record<string, unknown>;
+          const id =
+            typeof resource.id === "string" && resource.id
+              ? resource.id
+              : `vd_${Date.now().toString(36)}`;
+          const vName =
+            (typeof resource.name === "string" && resource.name) || item.label;
+          setViewDefs((vs) => [
+            ...vs.filter((v) => v.id !== id),
+            { id, name: vName, resource },
+          ]);
+          setPendingViewOpen({ id, resource });
+          openEditorTab("view", id);
+          setStatusNote(`opened view ${vName}`);
+        } catch (e) {
+          setStatusNote(
+            `view open failed: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      })();
       return;
     }
     // Every nav item id is `${kind}:${resourceId}` — nav clicks open (or
@@ -3098,6 +3861,11 @@ export default function App() {
           return { id: activeEditorTabId, kind, resourceId };
         })()
       : null;
+  // S27: leaving the view tab drops the one-shot VD — reopening the tab
+  // shows the "From Measure" default.
+  useEffect(() => {
+    if (hostTab?.kind !== "view") setPendingViewOpen(null);
+  }, [hostTab?.id, hostTab?.kind]);
   const hostValueset = (() => {
     if (hostTab?.kind !== "valueset") return null;
     const m = /^([a-z]+):(.*)$/.exec(hostTab.resourceId);
@@ -3162,6 +3930,10 @@ export default function App() {
   const ensuredViewForRef = useRef<string | null>(null);
   useEffect(() => {
     if (!restored || !activeMeasureEntry) return;
+    // S30: connected workspaces list their DISK ViewDefinitions only —
+    // the derived "View 1" seed duplicated the shipped VD (same report
+    // shape, two nav rows). Standalone keeps the one-click default.
+    if (serverMode.kind === "connected") return;
     if (ensuredViewForRef.current === activeMeasureEntry.id) return;
     ensuredViewForRef.current = activeMeasureEntry.id;
     setViewDefs((vs) =>
@@ -3223,20 +3995,28 @@ export default function App() {
       mrOutput={
         <MrPivot reports={lastReports} measure={measure} runDiff={appRunDiff} />
       }
-      funnelOutput={<MrFunnel result={evalResult} />}
+      funnelOutput={
+        <MrFunnel
+          result={evalResult}
+          populationColumns={outputColumnsFromMeasure(measure)}
+        />
+      }
       runRequest={runRequest}
       runs={runHistory}
       displayRun={displayRun}
       onSelectRun={setSelectedRunId}
       onManualRun={appendManualRun}
       viewOutput={
-        <ViewOutputPanel viewResult={viewResult} runDiff={appRunDiff} />
+        <ViewOutputPanel
+          viewResult={viewResult}
+          runDiff={appRunDiff}
+          busy={viewRunning}
+        />
       }
       verifyCompare={verifyCompare}
       compareStale={compareStale}
       activeTab={consoleTab}
       onTabChange={setConsoleTab}
-      recalcSeconds={recalcSeconds}
     />
   );
 
@@ -3312,72 +4092,79 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <h1>CQL Cleanroom</h1>
-        <div className="workspace-actions" data-testid="workspace-actions">
-          {/* #64: desktop-app menu — Open (imports), Save (exports),
-              Examples, share + reset under File; Settings stays
-              separate. Open/Save/Examples are hover flyouts. */}
-          <DropdownMenu label="File" testId="file-menu">
-            <DropdownSubmenu label="Open" testId="file-open">
-              {/* S18 rider: Open is MADiE-zip ONLY for compatibility —
-                  generic bundles/resources import via File > Add. */}
+        <div className="workspace-actions">
+        <DropdownMenu label="File" testId="file-menu">
+            {/* S32 menu redesign:
+                Open File ▸ (MADiE package / test cases — separate MADiE
+                exports), Open Workspace… (server folder picker),
+                Recent Workspaces ▸ (pinned examples + last 10),
+                Reset Workspace, Save Workspace… (server folder in
+                connected / browser download in standalone), Share.
+                Removed: Workspace submenu (folded into Open/Recent),
+                Open > Examples (Recent covers it), Add > Bundle merge
+                (the Test Cases nav ▾ menu imports bundles). */}
+            <DropdownSubmenu label="Open File" testId="file-open">
               <button
                 className="dropdown-item"
                 data-testid="madie-import"
                 onClick={() => madieFileRef.current?.click()}
               >
-                Measure package (MADiE)…
+                MADiE Measure Package…
               </button>
               <button
                 className="dropdown-item"
                 data-testid="madie-tests-import"
                 onClick={() => madieTestsFileRef.current?.click()}
               >
-                Test cases (MADiE)…
+                MADiE Test Cases…
               </button>
-              <DropdownSubmenu label="Examples" testId="file-examples">
+            </DropdownSubmenu>
+            {serverMode.kind === "connected" && (
+              <button
+                className="dropdown-item"
+                data-testid="file-open-workspace"
+                onClick={() => setFolderModal("open")}
+              >
+                Open Workspace…
+              </button>
+            )}
+            <DropdownSubmenu label="Recent Workspaces" testId="file-recent">
+              {PINNED_EXAMPLES.map((ex) => (
                 <NativeClickButton
-                  testId="load-example-cms69"
-                  onClick={() => void loadExample("cms69")}
+                  key={ex.name}
+                  testId={`example-workspace-${ex.name}`}
+                  onClick={() => void switchWorkspaceNamed(ex.name)}
                 >
-                  CMS69 BMI Screening
+                  {exLabel(ex.name)}
                 </NativeClickButton>
-              </DropdownSubmenu>
+              ))}
+              {/* Only NON-pinned recents: the three examples are always
+                  listed above (S32 review: no duplicate rows). */}
+              {recents.some(
+                (r) => !PINNED_EXAMPLES.some((p) => p.name === r.name),
+              ) && <div className="dropdown-sep" />}
+              {recents
+                .filter(
+                  (r) => !PINNED_EXAMPLES.some((p) => p.name === r.name),
+                )
+                .map((r) => (
+                <NativeClickButton
+                  key={r.path}
+                  testId={`recent-workspace-${r.name}`}
+                  onClick={() =>
+                    serverMode.kind === "connected" && r.path.startsWith("/")
+                      ? void openWorkspacePath(r.path, r.name)
+                      : void switchWorkspaceNamed(r.name)
+                  }
+                >
+                  {r.name}
+                </NativeClickButton>
+              ))}
             </DropdownSubmenu>
-            <DropdownSubmenu label="Add" testId="file-add">
-              <button
-                className="dropdown-item"
-                data-testid="bundle-add"
-                onClick={() => {
-                  bundleModeRef.current = "merge";
-                  bundleFileRef.current?.click();
-                }}
-                title="merges the bundle's resources into the current dataset"
-              >
-                FHIR Bundle… (merge)
-              </button>
-            </DropdownSubmenu>
-            <DropdownSubmenu label="Save" testId="file-save">
-              {/* S18 rider: Save exports the MADiE package-zip layout —
-                  the full workspace carrier (MADiE-required entries at
-                  their paths + cleanroom extras under resources/extras/). */}
-              <button
-                className="dropdown-item"
-                data-testid="madie-export"
-                onClick={exportMadieZip}
-              >
-                Measure package (MADiE, full workspace)
-              </button>
-            </DropdownSubmenu>
-            <div className="dropdown-sep" />
-            <button className="dropdown-item" data-testid="share-btn" onClick={shareLink}>
-              Copy share link
-            </button>
             <button
               className="dropdown-item"
               data-testid="workspace-reset"
-              onClick={() => {              // Await the clear BEFORE setting state — fire-and-forget
-                // raced the debounced autosave, resurrecting stale prefs
-                // (notably resultsTab) on the next reload.
+              onClick={() => {
                 {
                   // Reset state SYNCHRONOUSLY; clear IndexedDB in the
                   // background. (The old order — await clearWorkspace()
@@ -3404,7 +4191,21 @@ export default function App() {
                 }
               }}
             >
-              Reset workspace
+              Reset Workspace
+            </button>
+            <div className="dropdown-sep" />
+            <button
+              className="dropdown-item"
+              data-testid="file-save-workspace"
+              onClick={() => {
+                if (serverMode.kind === "connected") setFolderModal("save");
+                else exportMadieZip();
+              }}
+            >
+              Save Workspace…
+            </button>
+            <button className="dropdown-item" data-testid="share-btn" onClick={shareLink}>
+              Share
             </button>
           </DropdownMenu>
           {/* REORG 6e: workspace settings — console dock + recalc delay. */}
@@ -3510,28 +4311,6 @@ export default function App() {
             }}
           />
         </div>
-        {statusNote && (
-          <span
-            className="status-note"
-            data-testid="status-note"
-            ref={(el) => {
-              if (el) {
-                setTimeout(() => setStatusNote(null), 6000);
-              }
-            }}
-          >
-            {statusNote}
-          </span>
-        )}
-        {serverMode.kind === "connected" && (
-          <WorkspacePicker
-            activeName={serverMode.workspace}
-            onSwitched={() => window.location.reload()}
-          />
-        )}
-        <VersionBadge
-          wheelVersion={boot.phase === "ready" ? boot.wheelVersion : null}
-        />
       </header>
       <main
         className={`app-main ${consolePlacement === "right" ? "dock-right" : "dock-bottom"}`}
@@ -3550,27 +4329,11 @@ export default function App() {
           } as React.CSSProperties
         }
       >
-        {serverMode.kind === "connected" && wsDataHint && (
-          <div className="ws-data-hint" role="status" data-testid="ws-data-hint">
-            <span>Data files changed on disk — the kernel keeps loaded data.</span>
-            <button
-              type="button"
-              className="settings-button"
-              onClick={() => {
-                void fetch("/api/kernel/restart", { method: "POST" }).then(() => setWsDataHint(false));
-              }}
-            >
-              Restart kernel
-            </button>
-            <button type="button" className="settings-button" aria-label="Dismiss" onClick={() => setWsDataHint(false)}>×</button>
-          </div>
-        )}
         <NavRail
           sections={{
-            measures: { ...navSectionModels.measures, filter: navFilters.measures },
             libraries: { ...navSectionModels.libraries, filter: navFilters.libraries },
             valuesets: { ...navSectionModels.valuesets, filter: navFilters.valuesets },
-            parameters: { ...navSectionModels.parameters, filter: navFilters.parameters },
+            config: { ...navSectionModels.config, filter: navFilters.config },
             tests: {
               ...navSectionModels.tests,
               filter: navFilters.tests,
@@ -3603,14 +4366,6 @@ export default function App() {
           onAddValuesets={addWorkspaceValueset}
           onImportItem={handleNavImport}
           diskLoading={serverMode.kind === "connected" && wsFiles.loading}
-          onRefreshDisk={
-            serverMode.kind === "connected"
-              ? () => {
-                  wsFiles.reload();
-                  setWsChanged(new Set());
-                }
-              : undefined
-          }
           panelWidth={navWidths.panel}
           detailWidth={navWidths.detail}
           onPanelWidth={(w) => updateNavWidths({ ...navWidths, panel: w })}
@@ -3636,12 +4391,13 @@ export default function App() {
               focusedPid={focusedPid}
               onFocusedPidChange={setFocusedPid}
               filter={navFilters.tests}
-              onOpenPatient={(pid) => openEditorTab("patient", pid)}
             />
           }
         />
         <div
-          className={`pane-col editor-col ${activeTabIsLibrary ? "" : "hosting-tab"}`}
+          className={`pane-col editor-col ${activeTabIsLibrary ? "" : "hosting-tab"}${
+            activeTabIsLibrary && cellsViewActive ? " cells-fullheight" : ""
+          }`}
         >
           <EditorTabs
             tabs={editorTabs}
@@ -3676,7 +4432,17 @@ export default function App() {
             onRunCells={runCells}
             onCellsViewChange={setCellsViewActive}
             connected={serverMode.kind === "connected"}
-            holdAutoSplit={serverDetectPending || (serverMode.kind === "connected" && !puritySettled)}
+            enginePending={serverDetectPending}
+            holdAutoSplit={
+              serverDetectPending ||
+              (serverMode.kind === "connected" && !puritySettled) ||
+              // S26 (item 11): example boots land in TEXT view — showcase
+              // packages are read-heavy content; auto-cellify + tips
+              // modal + console-free cells suppress the heartbeat that
+              // should immediately render results.
+              exampleBootRef.current
+            }
+            cellsViewForceCloseNonce={exampleForceTextNonce}
             onExplainRow={(pid, define, ctx) => void explainCellRow(pid, define, ctx)}
             parameters={runtimeParameters}
             cellEvidenceSlot={(cellName: string) =>
@@ -3708,11 +4474,30 @@ export default function App() {
               onMeasureChange={updateActiveMeasure}
               measureLibs={mainLibs}
               measureMain={main}
-              measureMainLibraryId={activeMeasureEntry?.mainLibraryId}
-              measureLibraryChoices={libraries.map((l) => ({
-                id: l.id,
-                name: l.name,
-              }))}
+              measureMainLibraryId={
+                // S26 review fix: adopted disk measures pin by NAME when
+                // the primary tab isn't open — the picker's value must
+                // match its choices (disk:<name> ids in connected mode).
+                serverMode.kind === "connected" &&
+                  activeMeasureEntry?.primaryLibraryName
+                  ? `disk:${activeMeasureEntry.primaryLibraryName}`
+                  : activeMeasureEntry?.mainLibraryId
+              }
+              measureLibraryChoices={
+                // S26 review fix: connected mode offers the DISK
+                // libraries (tabs open on demand) — the session tabs
+                // alone made the measure picker a one-item list.
+                serverMode.kind === "connected" &&
+                Object.keys(diskHeaderNames).length
+                  ? Object.values(diskHeaderNames).map((n) => ({
+                      id: `disk:${n}`,
+                      name: n,
+                    }))
+                  : libraries.map((l) => ({
+                      id: l.id,
+                      name: l.name,
+                    }))
+              }
               onMeasureMainLibraryChange={setMainLibrary}
               measureClosure={measureClosure}
               measureValuesetSources={measureValuesetSources}
@@ -3780,7 +4565,24 @@ export default function App() {
               }}
               builder={
                 <ResourceBuilderPane
+                  explicitCommitOnly={serverMode.kind === "connected"}
                   onAddResource={(resource) => {
+                    if (serverMode.kind === "connected") {
+                      // S25: connected saves land on DISK (validate +
+                      // append inside a workspace data dir); the data-hint
+                      // offers the kernel restart (never auto-reloads).
+                      void fetch("/api/resource/save", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          resource,
+                          replace: builderPrefill?.sourceIndex === undefined,
+                        }),
+                      }).catch(() => undefined);
+                      setBuilderPrefill(null);
+                      setBuilderContext(null);
+                      return;
+                    }
                     const resources = [
                       ...(dataset?.resources ?? []),
                       resource,
@@ -3792,6 +4594,17 @@ export default function App() {
                     setBuilderContext(null);
                   }}
                   onReplaceResource={(index, resource) => {
+                    if (serverMode.kind === "connected") {
+                      // S25: replacing a server-backed resource rewrites
+                      // it in place (per-patient folder or ndjson line).
+                      void fetch("/api/resource/save", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ resource, replace: true }),
+                      }).catch(() => undefined);
+                      setBuilderPrefill(null);
+                      return;
+                    }
                     const resources = [...(dataset?.resources ?? [])];
                     resources[index] = resource;
                     setDataset(
@@ -3823,29 +4636,71 @@ export default function App() {
               onViewConfigChange={(overrides) => setViewConfig({ overrides })}
               onResult={setViewResult}
               recalcMs={recalcSeconds * 1000}
+              viewReportsPending={!evalResult}
+              onViewBusy={setViewRunning}
+              initialVd={
+                hostTab?.kind === "view" &&
+                pendingViewOpen?.id === hostTab.resourceId
+                  ? pendingViewOpen.resource
+                  : null
+              }
             />
           )}
           </div>
           {/* REORG 6e: the console is PINNED below the editor (default
-              2/3 : 1/3) — drag to adjust; each row scrolls itself. */}
-          {consolePlacement === "bottom" && (
-            <Splitter
-              orientation="horizontal"
-              testid="editor-splitter"
-              value={editorFr}
-              onChange={setEditorFr}
-              label="Resize editor and console"
-            />
-          )}
-          {consolePlacement === "bottom" && consoleNode}
+              2/3 : 1/3) — drag to adjust; each row scrolls itself.
+              S25: the CELLS surface is console-FREE — cell output renders
+              inline per card, so the docked console hides entirely while
+              the active library tab is in cells view (raised repeatedly:
+              cells view must not waste a third of the screen). */}
+          {consolePlacement === "bottom" &&
+            !(activeTabIsLibrary && cellsViewActive) && (
+              <Splitter
+                orientation="horizontal"
+                testid="editor-splitter"
+                value={editorFr}
+                onChange={setEditorFr}
+                label="Resize editor and console"
+              />
+            )}
+          {consolePlacement === "bottom" &&
+            !(activeTabIsLibrary && cellsViewActive) &&
+            consoleNode}
         </div>
         {consolePlacement === "right" && (
           <Splitter value={col1Fr} onChange={setCol1Fr} />
         )}
-        {consolePlacement === "right" && (
-          <div className="pane-col run-col console-dock">{consoleNode}</div>
-        )}
+        {consolePlacement === "right" &&
+          !(activeTabIsLibrary && cellsViewActive) && (
+            <div className="pane-col run-col console-dock">{consoleNode}</div>
+          )}
       </main>
+      <StatusBar
+        connected={serverMode.kind === "connected"}
+        workspace={
+          serverMode.kind === "connected" ? serverMode.workspace : null
+        }
+        engine={
+          serverMode.kind === "connected" ? (serverMode.engine ?? null) : null
+        }
+        lastSavedAt={lastSavedAt}
+        diskSource={serverMode.kind === "connected"}
+        note={statusNote}
+        onDismissNote={() => setStatusNote(null)}
+        dataHint={serverMode.kind === "connected" && wsDataHint}
+        onRestartKernel={() => {
+          void fetch("/api/kernel/restart", { method: "POST" }).then(() =>
+            setWsDataHint(false),
+          );
+        }}
+        version={
+          serverMode.kind === "connected"
+            ? serverMode.version
+            : boot.phase === "ready"
+              ? boot.wheelVersion
+              : null
+        }
+      />
       <ResourceContextMenu menu={ctxMenu} onClose={() => setCtxMenu(null)} />
             {termSettingsOpen && (
         <div
@@ -3934,6 +4789,22 @@ export default function App() {
       {termDiagnostics.length > 0 && (
         <div className="term-diag" data-testid="term-diag" role="status">
           {termDiagnostics.length} valueset url{termDiagnostics.length === 1 ? "" : "s"} unresolved — check Settings terminology source
+        </div>
+      )}
+      {folderModal && (
+        <WorkspaceFolderModal
+          mode={folderModal}
+          onClose={() => setFolderModal(null)}
+          onPick={(path, name) => {
+            if (folderModal === "open") void openWorkspacePath(path, name);
+            else void saveWorkspacePackage(path, name);
+          }}
+        />
+      )}
+      {switching && (
+        <div className="switch-overlay" data-testid="switch-overlay" role="status">
+          <span className="spinner" aria-hidden="true" />
+          <span className="switch-title">Switching workspace…</span>
         </div>
       )}
       <BootOverlay state={boot} />

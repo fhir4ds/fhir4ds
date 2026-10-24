@@ -93,21 +93,11 @@ test("S21-1: connected — disk-file open writes NO workspace content to Indexed
         tx.onerror = () => reject(tx.error);
       };
     });
-    await saveWorkspace({
-      libraries: [{ id: "stale_1", name: "StaleLib", text: "library StaleLib version '1.0.0'" }],
-      dataset: null,
-      cases: null,
-      prefs: {},
-      measures: [],
-      activeMeasureId: null,
-      expectedReports: {},
-      viewDefs: [],
-      paramValues: {},
-      viewConfig: null,
-      runHistory: [],
-      activeTabPref: "cql",
-      terminology: { valuesets: [] },
-    } as Parameters<typeof saveWorkspace>[0]);
+    // NOTE: seeding is complete with the raw put above. An earlier draft
+    // also called saveWorkspace(...) here, but page.evaluate runs in the
+    // BROWSER context where that module function does not exist — the
+    // ReferenceError was silently swallowed by the catch below, so it was
+    // dead code that broke `tsc -b` (npm run build).
   }).catch(() => undefined);
   await page.waitForTimeout(2000);
   // Reload: the connected session must NOT restore StaleLib as content.

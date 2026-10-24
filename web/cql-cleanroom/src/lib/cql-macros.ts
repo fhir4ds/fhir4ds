@@ -83,13 +83,13 @@ const CQL_MACRO_SQL = [
   'CREATE MACRO IF NOT EXISTS "IsTrue"(x) AS (x IS NOT NULL AND x = true)',
   'CREATE MACRO IF NOT EXISTS "IsFalse"(x) AS (x IS NOT NULL AND x = false)',
 
-  "CREATE MACRO IF NOT EXISTS ToString(x) AS CAST(x AS VARCHAR)",
-  "CREATE MACRO IF NOT EXISTS ToInteger(x) AS CAST(x AS INTEGER)",
-  "CREATE MACRO IF NOT EXISTS ToDecimal(x) AS CAST(x AS DECIMAL)",
-  "CREATE MACRO IF NOT EXISTS ToBoolean(x) AS CAST(x AS BOOLEAN)",
-  "CREATE MACRO IF NOT EXISTS ToDate(x) AS CAST(x AS DATE)",
-  "CREATE MACRO IF NOT EXISTS ToDateTime(x) AS CAST(x AS TIMESTAMP)",
-  "CREATE MACRO IF NOT EXISTS ToTime(x) AS TRY_CAST(system.ltrim(CAST(x AS VARCHAR), 'T') AS TIME)",
+  "CREATE MACRO IF NOT EXISTS ToString(x) AS CASE  WHEN ((x IS NULL)) THEN (NULL) WHEN ((ends_with(typeof(x), '[]') OR starts_with(typeof(x), 'STRUCT') OR starts_with(typeof(x), 'MAP') OR (typeof(x) = 'JSON'))) THEN (NULL) WHEN (starts_with(typeof(x), 'DECIMAL')) THEN (CASE  WHEN (ends_with(regexp_replace(CAST(x AS VARCHAR), '0+$', ''), '.')) THEN ((regexp_replace(CAST(x AS VARCHAR), '0+$', '') || '0')) ELSE regexp_replace(CAST(x AS VARCHAR), '0+$', '') END) WHEN (((typeof(x) = 'VARCHAR') AND regexp_full_match(CAST(x AS VARCHAR), '^T[0-9]{2}(:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,3})?)?)?(Z|[+-][0-9]{2}:[0-9]{2})?$'))) THEN (substr(CAST(x AS VARCHAR), 2)) WHEN (((typeof(x) = 'VARCHAR') AND regexp_full_match(CAST(x AS VARCHAR), '^[0-9]{4}(-[0-9]{2}){0,2}T$'))) THEN (regexp_replace(CAST(x AS VARCHAR), 'T$', '')) ELSE CAST(x AS VARCHAR) END",
+  "CREATE MACRO IF NOT EXISTS ToInteger(x) AS CASE  WHEN ((x IS NULL)) THEN (NULL) WHEN ((typeof(x) = 'BOOLEAN')) THEN (CASE  WHEN (TRY_CAST(x AS BOOLEAN)) THEN (1) ELSE 0 END) WHEN ((typeof(x) IN ('TINYINT', 'SMALLINT', 'INTEGER', 'BIGINT'))) THEN (TRY_CAST(x AS INTEGER)) WHEN (((typeof(x) = 'VARCHAR') AND regexp_full_match(CAST(x AS VARCHAR), '^[+-]?[0-9]+$'))) THEN (TRY_CAST(x AS INTEGER)) ELSE NULL END",
+  "CREATE MACRO IF NOT EXISTS ToDecimal(x) AS CASE  WHEN ((x IS NULL)) THEN (NULL) WHEN ((typeof(x) = 'BOOLEAN')) THEN (CAST(CASE  WHEN (TRY_CAST(x AS BOOLEAN)) THEN (1) ELSE 0 END AS DECIMAL(38, 8))) WHEN (((typeof(x) IN ('TINYINT', 'SMALLINT', 'INTEGER', 'BIGINT', 'FLOAT', 'DOUBLE')) OR starts_with(typeof(x), 'DECIMAL'))) THEN (TRY_CAST(x AS DECIMAL(38, 8))) WHEN (((typeof(x) = 'VARCHAR') AND regexp_full_match(CAST(x AS VARCHAR), '^[+-]?[0-9]+(\\.[0-9]+)?$') AND (TRY_CAST(x AS DECIMAL(38, 8)) IS NOT NULL))) THEN (TRY_CAST(x AS DECIMAL(38, 8))) ELSE NULL END",
+  "CREATE MACRO IF NOT EXISTS ToBoolean(x) AS CASE  WHEN ((x IS NULL)) THEN (NULL) WHEN ((typeof(x) = 'BOOLEAN')) THEN (TRY_CAST(x AS BOOLEAN)) WHEN ((((typeof(x) IN ('TINYINT', 'SMALLINT', 'INTEGER', 'BIGINT', 'FLOAT', 'DOUBLE')) OR starts_with(typeof(x), 'DECIMAL')) AND (TRY_CAST(x AS \"DOUBLE\") IN (0, 1)))) THEN (TRY_CAST(x AS BOOLEAN)) WHEN (((typeof(x) = 'VARCHAR') AND (lower(CAST(x AS VARCHAR)) IN ('true', 'false', 't', 'f', 'yes', 'no', 'y', 'n', '1', '0')))) THEN (TRY_CAST(x AS BOOLEAN)) ELSE NULL END",
+  // ToDate is provided by the bundled C++ extension (spec-aware VARCHAR
+  // semantics). A CAST(AS DATE) macro here would shadow it and reintroduce
+  // DATE/VARCHAR CASE binder errors.
   "CREATE MACRO IF NOT EXISTS QuantityToString(q) AS CASE WHEN q IS NULL THEN NULL WHEN typeof(q) = 'VARCHAR' AND q LIKE '{%' AND TRY_CAST(json_extract_string(q, '$.value') AS DECIMAL(38, 8)) IS NOT NULL THEN regexp_replace(regexp_replace(CAST(TRY_CAST(json_extract_string(q, '$.value') AS DECIMAL(38, 8)) AS VARCHAR), '0+$', ''), '[.]$', '') || ' ''' || COALESCE(json_extract_string(q, '$.unit'), json_extract_string(q, '$.code'), '1') || '''' ELSE CAST(q AS VARCHAR) END",
 
   "CREATE MACRO IF NOT EXISTS First(lst) AS CASE WHEN lst IS NULL OR system.array_length(lst) = 0 THEN NULL ELSE lst[1] END",
@@ -223,8 +223,7 @@ const CQL_MACRO_SQL = [
   // Boolean -> true; Integer -> true; Long -> range check; Decimal/FLOAT -> false
   // (CQL 1.5 Table 9-E has no Decimal->Integer conversion); integer-grammar
   // strings -> int32 range check; everything else false.
-  "CREATE MACRO IF NOT EXISTS ConvertsToInteger(x) AS CASE WHEN x IS NULL THEN NULL WHEN typeof(x) = 'BOOLEAN' THEN TRUE WHEN typeof(x) IN ('TINYINT','SMALLINT','INTEGER') THEN TRUE WHEN typeof(x) = 'BIGINT' THEN CAST(x AS BIGINT) BETWEEN -2147483648 AND 2147483647 WHEN starts_with(typeof(x), 'DECIMAL') OR typeof(x) IN ('FLOAT','DOUBLE') THEN FALSE WHEN typeof(x) = 'VARCHAR' AND regexp_full_match(CAST(x AS VARCHAR), '^[+-]?[0-9]+$') THEN TRY_CAST(CAST(x AS VARCHAR) AS BIGINT) BETWEEN -2147483648 AND 2147483647 ELSE FALSE END",
-  "CREATE MACRO IF NOT EXISTS ConvertsToString(x) AS CASE WHEN x IS NULL THEN NULL WHEN ends_with(typeof(x), '[]') OR starts_with(typeof(x), 'STRUCT') OR starts_with(typeof(x), 'MAP') OR typeof(x) = 'JSON' THEN FALSE ELSE TRUE END",
+  "CREATE MACRO IF NOT EXISTS ConvertsToString(x) AS CASE  WHEN ((x IS NULL)) THEN (NULL) WHEN ((ends_with(typeof(x), '[]') OR starts_with(typeof(x), 'STRUCT') OR starts_with(typeof(x), 'MAP') OR (typeof(x) = 'JSON'))) THEN (CAST('f' AS BOOLEAN)) ELSE CAST('t' AS BOOLEAN) END",
 
   // ── Macro-sync additions (C1-U8 §3.5): ported from desktop
   // fhir4ds/cql/duckdb/macros to close browser-surface gaps. The

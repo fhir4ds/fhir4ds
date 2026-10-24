@@ -7,6 +7,10 @@ test("boot reaches ready with wheel version", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "CQL Cleanroom" })).toBeVisible();
   const bootDone = page.waitForSelector("[data-testid=boot-step]", { state: "detached", timeout: 120_000 });
   await bootDone;
-  // After overlay clears, the version badge shows the wheel version
-  await expect(page.locator(".version-badge")).toContainText("fhir4ds-v2", { timeout: 10_000 });
+  // After overlay clears, the footer version badge shows the wheel
+  // version (S29: the badge moved to the status bar and renders the
+  // version alone — the "fhir4ds-v2" prefix was a header-era label).
+  await expect(page.locator(".version-badge")).toContainText(/\d+\.\d+\.\d+/, {
+    timeout: 10_000,
+  });
 });

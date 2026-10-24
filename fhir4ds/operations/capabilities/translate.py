@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -18,10 +19,18 @@ class TranslateResult(_EnvelopeFields):
     sql: str = ""
     column_types: dict[str, str] = field(default_factory=dict)
     definitions: tuple[str, ...] = ()
+    # S26 (item 7): context-patient property lineage — column name ->
+    # (property attribute, deriving operator). Metadata-only (the SQL is
+    # byte-identical); the explain seam uses it to attach property
+    # leaves to NON-boolean defines (boolean wrappers already carry
+    # audit_patient_property leaves in-SQL).
+    patient_property_defs: dict[str, tuple[str, str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.column_types is None:
             object.__setattr__(self, "column_types", {})
+        if self.patient_property_defs is None:
+            object.__setattr__(self, "patient_property_defs", {})
 
     def to_dict(self) -> dict[str, object]:
         out: dict[str, object] = {"schema": self.schema, "ok": self.ok}
@@ -32,6 +41,10 @@ class TranslateResult(_EnvelopeFields):
         out["sql"] = self.sql
         out["column_types"] = dict(self.column_types)
         out["definitions"] = list(self.definitions)
+        if self.patient_property_defs:
+            out["patient_property_defs"] = {
+                col: list(pair) for col, pair in self.patient_property_defs.items()
+            }
         return out
 
 
@@ -94,6 +107,39 @@ def _resolve_all(resolver: LibraryResolver, library, main_name: str):
     return diags
 
 
+# S28 (perf, option B): translation LRU. CQL->SQL generation dominates
+# evaluate wall time (~2.8s of ~3.5s on CMS125) and dev-server traffic
+# repeats identical translations (heartbeats, cell re-runs, compare
+# refreshes). Cached entries hold ONLY successful TranslateResults —
+# failures re-run so diagnostics stay live. Keyed on every input that
+# affects the SQL: library texts, mode, output_columns, parameters,
+# patient_ids. Bounded at 32 entries (an entry is one SQL string).
+_TRANSLATE_CACHE: "OrderedDict[tuple, TranslateResult]" = OrderedDict()
+_TRANSLATE_CACHE_MAX = 32
+
+
+def _translate_cache_key(
+    libraries: list[LibraryText],
+    main: LibraryText,
+    audit_mode: str,
+    patient_ids: list[str] | None,
+    output_columns: dict[str, str] | None,
+    parameters: dict[str, Any] | None,
+) -> tuple | None:
+    """Hashable cache key; None when an input is unhashable (skip cache)."""
+    try:
+        return (
+            tuple((lib.name, lib.text) for lib in libraries),
+            (main.name, main.text),
+            audit_mode,
+            tuple(patient_ids or ()),
+            tuple(sorted((k, v) for k, v in (output_columns or {}).items())),
+            tuple(sorted((k, repr(v)) for k, v in (parameters or {}).items())),
+        )
+    except TypeError:
+        return None
+
+
 def translate_cql(
     libraries: list[LibraryText],
     main: LibraryText,
@@ -124,6 +170,15 @@ def translate_cql(
     metadata) so executors can type result columns without a Python
     library object.
     """
+    cache_key = _translate_cache_key(
+        libraries, main, audit_mode, patient_ids, output_columns, parameters
+    )
+    if cache_key is not None:
+        cached = _TRANSLATE_CACHE.get(cache_key)
+        if cached is not None:
+            _TRANSLATE_CACHE.move_to_end(cache_key)
+            return cached
+
     from fhir4ds.cql.translator import CQLToSQLTranslator
 
     try:
@@ -175,8 +230,26 @@ def translate_cql(
                 diagnostic_from_exception(exc, library=main.name, context="translate"),
             ),
         )
-    return TranslateResult(
+    # S26 (item 7): snapshot the context-carried property lineage
+    # (dict copy — the context recycles after translation). 3-tuples:
+    # (attr, value SQL, deriving operator); older 2-tuples default the
+    # operator to "derived".
+    prop_defs_raw = getattr(
+        getattr(translator, "context", None), "_patient_property_defs", None
+    ) or {}
+    prop_defs: dict[str, tuple[str, str]] = {}
+    for def_name, entry in prop_defs_raw.items():
+        attr = str(entry[0])
+        op = str(entry[2]) if len(entry) > 2 and entry[2] else "derived"
+        prop_defs[def_name] = (attr, op)
+    result = TranslateResult(
         sql=sql,
         column_types=column_types,
         definitions=definitions,
+        patient_property_defs=prop_defs,
     )
+    if cache_key is not None:
+        _TRANSLATE_CACHE[cache_key] = result
+        if len(_TRANSLATE_CACHE) > _TRANSLATE_CACHE_MAX:
+            _TRANSLATE_CACHE.popitem(last=False)
+    return result

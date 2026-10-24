@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * WorkspacePicker (S22a / AM1): workspaces are DIRECTORIES. Connected
@@ -7,6 +7,11 @@ import { useEffect, useRef, useState } from "react";
  * watcher, rebuilds the kernel, bumps the mode nonce). Switching
  * reloads the app so every drawer re-reads the new workspace — the
  * same reload the /api/mode handshake nonce change signals.
+ *
+ * S26 (item 9): the header flyout control is RETIRED — the list now
+ * renders as DropdownMenu items inside File > Workspace. The exported
+ * listWorkspaces/switchWorkspace stay the API; WorkspaceMenuItems is
+ * the menu rendering.
  */
 
 export interface WorkspaceInfo {
@@ -57,23 +62,22 @@ export async function switchWorkspace(
   }
 }
 
-export function WorkspacePicker({
+/**
+ * S26 (item 9): File > Workspace menu items — workspaces with the
+ * active one checked; click = switch + caller-driven reload.
+ */
+export function WorkspaceMenuItems({
   activeName,
   onSwitched,
+  onError,
 }: {
-  /** Current workspace name from the /api/mode handshake. */
   activeName: string;
-  /** Fired after a successful switch (App decides reload timing). */
   onSwitched: (name: string) => void;
+  onError?: (message: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [items, setItems] = useState<WorkspaceInfo[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-
   useEffect(() => {
-    if (!open) return;
     let cancelled = false;
     void listWorkspaces().then((ws) => {
       if (!cancelled) setItems(ws);
@@ -81,80 +85,47 @@ export function WorkspacePicker({
     return () => {
       cancelled = true;
     };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
-
+  }, []);
   const pick = async (name: string) => {
     if (name === activeName || busy) return;
     setBusy(name);
-    setError(null);
     const r = await switchWorkspace(name);
     if (!r.ok) {
-      setError(r.message);
+      onError?.(r.message);
       setBusy(null);
       return;
     }
     onSwitched(name);
   };
-
+  if (items.length === 0) {
+    return <div className="ws-picker-empty">No workspaces found</div>;
+  }
   return (
-    <div className="ws-picker" ref={rootRef} data-testid="workspace-picker-root">
-      <button
-        type="button"
-        className="settings-button ws-picker-button"
-        data-testid="workspace-picker"
-        title="Switch workspace directory"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span className="ws-picker-icon" aria-hidden="true">◧</span>{" "}
-        <span className="ws-picker-name">{activeName || "workspace"}</span>{" "}
-        <span aria-hidden="true">▾</span>
-      </button>
-      {open && (
-        <div className="ws-picker-menu" data-testid="workspace-menu" role="listbox">
-          {items.length === 0 && (
-            <div className="ws-picker-empty">No workspaces found</div>
-          )}
-          {items.map((w) => (
-            <button
-              key={w.name}
-              type="button"
-              className="ws-picker-item"
-              data-testid="workspace-option"
-              role="option"
-              aria-selected={w.name === activeName}
-              disabled={busy !== null}
-              onClick={() => void pick(w.name)}
-            >
-              <span className="ws-picker-check" aria-hidden="true">
-                {w.name === activeName ? "✓" : ""}
+    <>
+      {items.map((w) => (
+        <button
+          key={w.name}
+          type="button"
+          className="dropdown-item ws-picker-item"
+          data-testid="workspace-option"
+          aria-selected={w.name === activeName}
+          disabled={busy !== null}
+          onClick={() => void pick(w.name)}
+        >
+          <span className="ws-picker-check" aria-hidden="true">
+            {w.name === activeName ? "✓" : ""}
+          </span>
+          <span className="ws-picker-label">
+            {w.name}
+            {typeof w.library_count === "number" && (
+              <span className="ws-picker-meta">
+                {" "}
+                · {w.library_count} lib{w.library_count === 1 ? "" : "s"}
               </span>
-              <span className="ws-picker-label">
-                {w.name}
-                {typeof w.library_count === "number" && (
-                  <span className="ws-picker-meta">
-                    {" "}
-                    · {w.library_count} lib{w.library_count === 1 ? "" : "s"}
-                  </span>
-                )}
-              </span>
-            </button>
-          ))}
-          {error && <div className="ws-picker-error">{error}</div>}
-        </div>
-      )}
-    </div>
+            )}
+          </span>
+        </button>
+      ))}
+    </>
   );
 }

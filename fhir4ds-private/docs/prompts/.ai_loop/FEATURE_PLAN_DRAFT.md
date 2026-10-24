@@ -1,220 +1,122 @@
-# FEATURE: c-cleanroom-ux5 — User Feedback Round (8 items)
+# FEATURE PLAN DRAFT — WASM function-surface parity (v1)
 
-**Status:** DESIGN DRAFT for conductor review — 2026-10-08
-**Worktree:** /mnt/d/fhir4ds-ux5-20261008 (branch feat/cleanroom-ux5-20261008 @ 3ccb97bf)
-**Process:** design doc first → conductor review → slices → Muse gate
+## Objective
 
----
+Close the remaining desktop ↔ DuckDB-WASM function-surface gaps for everything
+the CQL translator can emit, with behavioral parity, and make the gap class
+visible to CI (behavior contract, not name contract).
 
-## 0. MADiE research findings (grounds items 3 + 4)
+S32 already fixed `ToDate` (C++ scalar, TS macro removed). This plan covers the
+rest of the conversion surface and the contract upgrade.
 
-Sources read (cloned @ /tmp/opencode/madie_research): `MeasureAuthoringTool/measure-service`,
-`madie-fhir-service`, `packaging-utility` (qicore411 + qicore6 impls).
+## Evidence (three-connection audit, 2026-10-24)
 
-### 0.1 Simple-export package ZIP (PackagingUtilityImpl.qicore411, inherited by qicore6)
+Connections compared:
 
-```
-<Title>-v<version>-FHIR.json      # the full Measure+Library(+valuesets) Bundle, pretty JSON
-<Title>-v<version>-FHIR.xml       # same, XML
-<Title>-v<version>-FHIR.html      # human-readable w/ CSS
-cql/<LibName>-<version>.cql        # one per CQL library (includes FHIRHelpers etc.)
-resources/measure-<name>-<ver>.json/.xml
-resources/library-<name>-<ver>.json/.xml
-```
-The measure Bundle carries valuesets inline (`compose` from their terminology service).
+1. **wasm-equivalent**: C++ extensions only (`fhirpath` + `cql`), no Python UDFs.
+2. **desktop**: `fhir4ds.cql.duckdb.register()` (C++ + Python supplements/shadows
+   + Python SQL macros).
+3. **browser macros**: names extracted from `web/cql-cleanroom/src/lib/cql-macros.ts`.
 
-### 0.2 Test-case export ZIP (madie-fhir-service TestCaseBundleService)
+Results:
 
-```
-<patientId>/<EcqmTitle>-v<ver>-<Series?>-<Title>.json   # one FHIR Bundle PER TEST CASE
-```
-- Each test case = **one Bundle for one patient** (all that patient's resources).
-- The LAST bundle entry is a synthesized **MeasureReport** with:
-  - `meta.profile = cqfm-test-cases` profile,
-  - `modifierExtension` `isTestCases = true`,
-  - extension `cqfm-inputParameters` → `contained[0]` Parameters (period etc.),
-  - `group[].population[]` = **EXPECTED counts** (id = population display id),
-  - `group[].measureScore` + stratifier expectations, composite-score support.
-- Export types can rewrite ids (`madie-generated-uuid`) — default keeps authored ids.
+- 48 public desktop-only names absent from the browser (list-equality macros
+  already allowlisted; the rest are conversion functions).
+- 76 names present on both sides with different implementations (name parity
+  only).
+- `fhir4ds/operations/tests/test_macro_sync.py` enforces macro **names** and
+  carries a 22-entry `BROWSER_MACRO_GAP_ALLOWLIST`.
 
-### 0.3 Compatibility classification (per user clarification: additive OK, test-data conflicts must be fixed)
+## Surface classification
 
-**(a) THEIR shapes (must import cleanly):**
-- Package ZIP: root `<Title>-v<ver>-FHIR.json/.xml/.html` measure bundle + `cql/<Lib>-<ver>.cql` + `resources/*.json|.xml` (§0.1).
-- Test-case ZIP: `<patientId>/<EcqmTitle>-v<ver>[-Series]-<Title>.json` — one Bundle per test case; final entry = expected MeasureReport (§0.2).
+### Class A — desktop implementations are pure SQL macros (browser can/should
+use the same SQL)
 
-**(b) OUR conventions that stay (additive, no conflict):**
-- Per-patient NDJSON files in `data/` — MADiE never ships NDJSON, and our loader treats
-  `.ndjson` vs `.json` by suffix (kernel.py); both coexist in the same dir tree.
-- Our parameters-as-Parameters resource, provenance extensions, baseline naming — none
-  read by MADiE tooling; additive by the user's rule.
-- Our expected store keyed per patient (MADiE's own MR shape, separate dir) — additive.
+`ToString`, `ConvertsToString`, `ToInteger`, `ToDecimal`, `ToBoolean`,
+`ConvertsToInteger`, `QuantityToString`, and the other pure-SQL macros in
+`fhir4ds/cql/duckdb/macros/*.py`.
 
-**(c) Conflicts found → fixes (S3/S4 scope):**
-1. **Trailing expected-MeasureReport ingestion** (the real incompatibility): our
-   `load_bundle` (operations/dataset_ops.py) loads EVERY bundle entry, so a MADiE test
-   bundle dropped into `data/` loads its expectation MeasureReport as a resource
-   (pollutes `resources`, breaks patient counts).
-   Fix (two layers): (i) importer strips the trailing `isTestCases`-marked MeasureReport
-   entry into the expected store before writing the patient bundle; (ii) DEFENSIVE:
-   `load_bundle` skips MeasureReport entries carrying the `cqfm-test-cases` profile /
-   `isTestCases` modifier extension — protects users who drop raw MADiE bundles into
-   `data/` without the importer, and cannot match any legitimate data resource.
-2. **Folder-per-patient layout**: NO fix needed — discovery `rglob("*")` over data_dirs
-   already picks up `data/<patientId>/*.json` recursively (verified in discovery.py).
-3. **XML entries** in their package zips: NO fix — `.json` twins always exist; our
-   suffix filters (.json/.ndjson) simply ignore the `.xml` files.
+Browser status: `ToString`/`ToInteger`/`ToDecimal`/`ToBoolean` are naive
+`CAST(...)` macros; `ConvertsToInteger`/`ConvertsToString` exist with partial
+semantics. These diverge from Appendix B (e.g. `ToInteger('1.0')` must be NULL,
+`ToDecimal('1e2')` must be NULL, `ToBoolean('yes')` must be true,
+`ToString(DECIMAL)` must trim trailing zeros).
 
----
+Plan: replace the TS bodies with the desktop macro bodies verbatim (formatted
+final SQL), so both surfaces run the same SQL. No C++ needed.
 
-## 1. In-app VSAC config (item 1)
+### Class B — desktop implementations are Python UDFs (need native C++)
 
-**Today:** `[terminology]` in fhir4ds.toml (provider/base_url/timeout/api_key_env); key
-value only ever from env by NAME. No in-app editor.
+| Function | Desktop source | Notes |
+|---|---|---|
+| `ToDateTime` | `udf/conversion.py::ToDateTime` via `__cql_to_datetime` | calendar/time/tz validation, partial precision, Z→+00:00 |
+| `ToTime` | `udf/conversion.py::ToTime` | T-prefix output, tz normalization |
+| `ToLong` | `udf/conversion.py::ToLong` | int64 range, boolean overload |
+| `ToRatio` | `udf/conversion.py::ToRatio` | `q:q` text, JSON Ratio identity |
+| `ConvertsToBoolean/Date/DateTime/Decimal/Integer/Long/Quantity/Ratio/String/Time` | `udf/conversion.py` | conversion checks; null → NULL |
+| `CanConvertQuantity` | `udf/quantity.py` | target-unit conversion check |
 
-**Design:**
-- New `/api/terminology/config` GET/POST:
-  - GET returns current settings + `key_env_resolves: bool` (does the env var exist in
-    the server process? never the value) + provider health probe result.
-  - POST body `{provider?, base_url?, timeout_seconds?, api_key_env?}` — VALIDATED
-    (allowlisted keys, types), then **written back to fhir4ds.toml** preserving other
-    content/comments as text where possible (regex-preserving rewrite; tomllib cannot
-    round-trip comments — strategy: line-oriented edit of the `[terminology]` block,
-    append block if missing; documented limitation).
-  - Raw key values remain REJECTED at the API (server never accepts a key value, only
-    a var name) — hard guard + test.
-- UI: a Terminology settings dialog (gear next to terminology status pill):
-  fields provider (vsac/http/off), base_url, timeout, api_key_env; "Test connection"
-  (uses existing /api/terminology/preview with a tiny known OID, or is_healthy-style);
-  Save writes toml + restarts terminology holders (endpoints are lazy holders — reset
-  `_terminology_endpoint_holder`/`_umls_endpoint_holder` on write; kernel untouched).
-- Slice: API+tests → dialog UI → e2e.
+C++ implements these as `RegisterSpecialScalar` VARCHAR→VARCHAR/BOOLEAN
+functions in `extensions/cql/src/cql_extension.cpp`, mirroring the Python
+authority. Desktop keeps the Python shadow (conformance authority); wasm uses
+C++.
 
-## 2. File/directory pickers (item 2)
+### Class C — intentional browser gaps (keep allowlisted)
 
-**Today:** datasets/cql/valuesets/views discovered by convention dirs + `[dev]`
-manifest in fhir4ds.toml (config.py `load_config` merge order convention > manifest >
-flags) + FS watcher.
+- List-equality / deep-comparator family (`CQLListEqualEq`, `CQLListIntersectEq`,
+  `CQLTupleValueEqual`, nested JSON equality, …): the cleanroom evaluates
+  population measures that do not emit them; porting the macros requires the
+  JSON-normalization helpers.
+- `ExpandValueSet`: requires the terminology `valuesets` table (no browser data
+  tier).
+- `CQLListMode`: dynamically composed.
+- `ToDate` (now native-provided; allowlist entry documents why the TS macro was
+  removed).
 
-**Design:**
-- Server-side directory listing API for pickers: `/api/fs/list?path=...` restricted to
-  the workspace root + subdirs (path traversal guard, tests). Browser file `<input
-  type="file" webkitdirectory>` NOT usable for server-side loading (browser sandbox);
-  instead the picker browses the SERVER filesystem via /api/fs/list rooted at the
-  workspace (with an explicit "go up" boundary at workspace root; absolute-path entry
-  field for outside-root dirs).
-- `POST /api/workspace/add-path` `{kind: cql|valueset|measure|data|view, path}`:
-  validates the path exists (dir or file), appends to `[dev]` manifest in
-  fhir4ds.toml (same line-oriented writer as item 1), triggers rescan + watcher
-  update, returns the new snapshot. Duplicate-safe (dedup already in `merged()`).
-- UI: "+ add" button on each rail section header opens the picker dialog (browse +
-  path entry); search field filters the listing client-side.
-- Slice: fs API + add-path API + toml writer shared with item 1 → rail buttons → e2e.
+## Architecture
 
-## 3. Test-cases rework → EXPECTED-RESULTS EDITOR (item 3) — structural
+- **Single implementation per function on each transport**: pure-SQL macros are
+  byte-identical across desktop/browser; Python-UDF-backed functions get a C++
+  mirror for the no-Python path.
+- **Harness**: a Python test-only module
+  `fhir4ds/operations/tests/wasm_surface_harness.py` that:
+  1. opens a native connection, loads both `.duckdb_extension` files;
+  2. extracts every `CREATE ... MACRO ...` string from `cql-macros.ts` and
+     executes it (same regex as `test_macro_sync.py`);
+  3. exposes `browser_query(sql)`.
+  Desktop reference uses `register()`.
+- **Corpus**: Appendix B examples + edge cases per function (invalid dates,
+  leap years, offsets, partial precision, `1.0`/`1e2`/`yes`, Quantity/Ratio
+  shapes, nulls, multi-row).
+- **Contract test**: `test_macro_sync.py` grows a behavior check for
+  non-allowlisted duplicates (same value + DuckDB type) and a "native-provided"
+  section for removed TS macros.
 
-**Today:** TestsPane = per-define boolean grid (patient × define expect true/false)
-posting /api/verify. MeasurePane already has expected-MR paste/compare + v4.2
-"Save as expected baseline" (measures/expected/<name>.baseline.vN.json capture-from-run).
+## Implementation plan
 
-**Design — expected MeasureReport becomes the PRIMARY test surface:**
-- New ExpectedResults pane replaces the bottom TestsPane grid:
-  - **Capture from run** (primary flow): run the measure over the loaded dataset →
-    per-patient actual MRs listed in an editable grid → user tweaks values to intent →
-    saved as the expected baseline (extends v4.2 baseline store; per-patient files
-    keyed by patient id, content = cqfm-test-cases-style MeasureReport, i.e. THE
-    MADiE shape from §0.2).
-  - **Compare view**: run tests = execute measure → diff actual vs expected
-    (normalization via existing /api/measure/compare) → pass/fail per patient with
-    drift details.
-  - **Import from MADiE** (item 4 seam): expected MRs parsed out of MADiE bundles.
-- **Boolean per-define assertions: RETIRED from the grid, folded in as a fallback
-  lane**: when the open library has no measure (plain CQL), the pane degrades to the
-  existing /api/verify define-check surface (same engine work, kept — the grid UI
-  goes; a compact "define checks" section renders inside the same pane). Rationale:
-  define checks remain useful for library-level TDD; MR expectations are the
-  user-facing concept.
-- Slice: capture-from-run per-patient baselines (API reuses measure/run +
-  baseline/save extended with patient key) → pane UI → MADiE import (4) → retire grid.
+1. Harness + corpus (test-only; no production change).
+2. C++ ports, in this order (shared helpers first):
+   `ToDateTime`/`ToTime` (date/time parsers already added for `ToDate`),
+   `ToLong`, `ToRatio`, `ConvertsTo*`, `CanConvertQuantity`.
+3. `cql-macros.ts`: copy Class A bodies; remove macros now served natively
+   (`ToDateTime`, `ToTime`; keep `ToString`/`ToInteger`/`ToDecimal`/`ToBoolean`
+   as aligned macros unless a native body is required by type constraints).
+4. `test_macro_sync.py`: behavior contract + allowlist prune.
+5. Rebuild native + WASM extensions; md5-verify deployment; rebuild the wheel;
+   deploy the Cleanroom targets; rerun all gates.
 
-## 4. MADiE import (item 4)
+## Test strategy
 
-Per §0: two importers.
-- **Package ZIP import** (`POST /api/madie/import-package`, multipart or path):
-  - `<root>.json` measure bundle → parse Measure + Libraries + valuesets; CQL text
-    extracted preferentially from `cql/*.cql` (authoritative, human-readable) into
-    workspace `cql/<lib>.cql`; valuesets from bundle compose → `valuesets/*.json`
-    (VSAC-adapter-style file per valueset); measure metadata → `measures/`.
-  - resources/*.json redundant with the bundle — used only as fallback.
-- **Test-case ZIP import** (`POST /api/madie/import-tests`):
-  - `<patientId>/*.json` bundles → strip trailing expected-MeasureReport entry →
-    patient bundle lands in `data/<patientId>/<case>.json` (new accepted layout,
-    §0.3); expected MRs land in the item-3 expected store keyed by patient.
-  - Verifies `isTestCases` marker before treating the last entry as expectations.
-- Both write via the same add-path/manifest machinery (item 2) so the watcher picks
-  them up; a kernel restart hint appears (existing stale banner pattern).
-- Slice: research-verifier unit tests on synthetic MADiE-shaped zips (built from the
-  §0 source reading) → package importer → tests importer → e2e happy path.
+- Dual-engine harness parity per function (`browser` vs `desktop`).
+- `no_python_connection` tests for every ported function (no Python UDFs).
+- Standalone e2e: cms125 cells + console/views; assert no Catalog/Binder errors.
+- Master conformance 2832/2832; full pytest trees; vitest; clean-venv smoke.
 
-## 5. Builder value[x] layout (item 5)
+## Risks
 
-**Today:** choice-arm child fields (Quantity value/unit, etc.) render inline in one
-`dev-rbchoicerow` (cramped).
-
-**Design:** when a choice arm (or any complex leaf like Quantity/Range/Period/Ratio/
-Coding) is selected, its child fields render as their own labeled rows beneath the
-choice selector (stacked `dev-rbfieldrow` per child: label left, input right) —
-reuse the existing generic child-row renderer instead of the inline widget; the JSON
-view stays authoritative. Pure CSS/markup change + minor state plumbing
-(setQuantityObj already fieldwise). Slice: small, bundles with item 8 UI slice.
-
-## 6. Slide-out nav (item 6)
-
-**Design:** current left rail (datasets/valuesets/libraries sections) becomes a
-level-1 icon rail (fixed ~48px: Datasets, Terminology, Libraries, Builder, Views,
-Tests, Settings). Clicking opens a level-2 slide-out panel (~280px) with that
-section's list + search + add/import actions; the center editor shifts right
-(CSS grid transition). State: `railSection` + `railOpen` replace today's
-`railView`-driven center switch for these sections; center keeps editor/builder.
-Esc/click-outside closes. Keyboard: alt+1..7. No new server surface.
-
-## 7. Patient-resources slide-out (item 7)
-
-**Design:** second slide-out (opens from the right over results, ~360px) when a
-patient is selected (patient chip in results grid / expected-results rows).
-- New `GET /api/patient/resources?id=...` → kernel query `resources` joined on
-  patient_ref (loader already maintains patient_ref; distinct from /api/patients
-  which lists ids) grouped by resourceType; includes each resource's id/status/date
-  + JSON peek (first 200 chars) with "open in builder" action (existing onEditInBuilder).
-- Old-wasm pattern parity: list by type, click → detail view inside the slide-out.
-
-## 8. Resizable panes + SQL surfacing + errors placement (item 8)
-
-- **Resizable:** left rail/slide-out and right output pane get drag handles
-  (pointer events, min/max clamps, persisted to localStorage; CSS grid template
-  driven by state). No lib dependency.
-- **SQL missing — investigation:** output area HAS an sql tab; `setSql` is wired
-  only for translate/evaluate/cells-run. **measure/run, verify, view/run return
-  SQL server-side (audit shows /api/measure/run + /api/view/run build SQL) but the
-  UI discards it** — fix: propagate `sql` through those response types into the
-  shared `sql` state and auto-switch offers a "Show SQL" toggle on every result
-  header (button, not auto-tab-switch). VD pane: surface generated SQL under the
-  run output (VD-SQL parity with old wasm).
-- **Errors tab proposal (per user ask):** KEEP severity split internally; RETIRE
-  the standalone errors tab — diagnostics render as a collapsible section at the
-  top of the results view (red banner w/ count; expand for list), SQL tab stays.
-  Rationale: errors-in-context beats a separate hop; severity still color-coded.
-
----
-
-## Slice plan (implementation order after conductor approval)
-
-1. **S1 config-writer + fs/add-path APIs** (items 1+2 server) — shared toml writer.
-2. **S2 VSAC dialog + picker UIs** (items 1+2 client).
-3. **S3 expected-results core** (item 3: per-patient baselines + pane; grid retired).
-4. **S4 MADiE importers** (item 4; extends S3 expected store + S1 add-path).
-5. **S5 nav + patient slide-outs** (items 6+7).
-6. **S6 builder layout + resizable + SQL/errors** (items 5+8; pure-UI slice).
-7. **Muse gate** over the full slice set; fixes; final report.
-
-Each slice: tests (pytest + e2e where UI), tsc, vite build, gates, one commit.
+- C++ date/time validation must match Python exactly (offset bounds, partial
+  precision, `T` marker, leap years); reuse the S32 `ToDate` parsers.
+- Quantity/Ratio JSON shape rules are subtle (value required, finite Decimal).
+- `ConvertsTo*` null semantics: input NULL → NULL (not false).
+- Elapsed effort: 8–10 functions + harness; keep the port order so each function
+  ships green independently.

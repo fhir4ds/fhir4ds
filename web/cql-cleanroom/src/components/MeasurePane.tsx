@@ -38,6 +38,8 @@ interface Props {
    * the pane can render the per-patient ✓/✗ tally strip. */
   expectedReports?: Array<Record<string, unknown>>;
   onOpenExpected?: () => void;
+  /** S31: connected = server-side parse/validate (no engine boot). */
+  connected?: boolean;
 }
 
 export function MeasurePane({
@@ -52,6 +54,7 @@ export function MeasurePane({
   valuesetSources,
   expectedReports,
   onOpenExpected,
+  connected = false,
 }: Props) {
   const [parse, setParse] = useState<ParseResult | null>(null);
   const [busy, setBusy] = useState(false);
@@ -70,7 +73,18 @@ export function MeasurePane({
 
   useEffect(() => {
     let cancelled = false;
-    workerRequest({ type: "parse_cql", text: main.text })
+    const parsed = connected
+      ? fetch("/api/parse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: main.text }),
+        })
+          .then((r) => r.json())
+          .then((body: { data?: ParseResult } & ParseResult) => ({
+            envelope: JSON.stringify(body?.data ?? body),
+          }))
+      : workerRequest({ type: "parse_cql", text: main.text });
+    parsed
       .then((resp) => {
         if (cancelled) return;
         const env: ParseResult = JSON.parse(
@@ -235,19 +249,36 @@ export function MeasurePane({
       const mapping: MeasureMappingEntry[] = rows
         .filter((r) => r.define && r.code)
         .map((r) => ({ define: r.define, code: r.code }));
-      const resp = await workerRequest({
-        type: "measure_from_definitions",
-        libraries,
-        main,
-        mapping,
-        // Keep the current resource identity through validation rebuilds.
-        library_urls:
-          Array.isArray(
-            (measure as Record<string, unknown> | null)?.library,
-          )
-            ? ((measure as Record<string, unknown>).library as string[])
-            : null,
-      });
+      // S31: connected validates SERVER-side (same operations capability);
+      // standalone keeps the in-browser worker.
+      const libUrls = Array.isArray(
+        (measure as Record<string, unknown> | null)?.library,
+      )
+        ? ((measure as Record<string, unknown>).library as string[])
+        : null;
+      const resp = connected
+        ? await fetch("/api/measure/scaffold", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              libraries,
+              library: main.name,
+              mapping,
+              library_urls: libUrls,
+            }),
+          })
+            .then((r) => r.json())
+            .then((body: { data?: unknown } & Record<string, unknown>) => ({
+              envelope: JSON.stringify(body?.data ?? body),
+            }))
+        : await workerRequest({
+            type: "measure_from_definitions",
+            libraries,
+            main,
+            mapping,
+            // Keep the current resource identity through validation rebuilds.
+            library_urls: libUrls,
+          });
       const env: MeasureResult = JSON.parse(
         (resp as { envelope: string }).envelope,
       );
@@ -311,12 +342,6 @@ export function MeasurePane({
               ))}
             </select>
           )}
-          <button onClick={add} data-testid="measure-add-row">
-            + population
-          </button>
-          <button onClick={suggest} disabled={busy} data-testid="measure-suggest">
-            Suggest
-          </button>
           <button
             onClick={applyViaCapability}
             disabled={busy}
@@ -394,6 +419,20 @@ export function MeasurePane({
       )}
       <div className="mapping-head">
         <span className="assoc-label">Population mapping</span>
+        {/* S31: the population ROW controls sit with the table they edit,
+            not up in the pane header next to the library selector. */}
+        <span className="mapping-actions">
+          <button onClick={add} data-testid="measure-add-row">
+            + population
+          </button>
+          <button
+            onClick={suggest}
+            disabled={busy}
+            data-testid="measure-suggest"
+          >
+            Suggest
+          </button>
+        </span>
       </div>
       {rows.length === 0 ? (
         <p className="pane-hint" data-testid="measure-empty">

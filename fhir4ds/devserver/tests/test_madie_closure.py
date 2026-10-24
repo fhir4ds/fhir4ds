@@ -125,19 +125,15 @@ class TestClosureExport:
         # Referenced valueset ships; the unreferenced one does not.
         assert "resources/valueset-vs1.json" in names
         assert not any("unref" in n for n in names)
-        # LIST-REFERENCED patient t1 ships as one bundle (their resources
-        # inside); t2 does NOT.
-        assert "testcase/patient-t1/t1.json" in names
-        assert "testcase/patient-t1/t1-expected.json" in names
-        assert not any("patient-t2" in n for n in names)
-        t1 = json.loads(zf.read("testcase/patient-t1/t1.json"))
-        rts = sorted(
-            e["resource"]["resourceType"] for e in t1["entry"]
-        )
-        assert rts == ["Observation", "Patient"]
+        # LIST-REFERENCED patient t1 ships under tests/<caseId>/ (one
+        # file per resource — S27 layout per docs/madie-package-layout.md);
+        # t2 does NOT.
+        assert "tests/t1/Patient-t1.json" in names
+        assert "tests/t1/Observation-o1.json" in names
+        assert "tests/t1/MeasureReport-t1.json" in names
+        assert not any("tests/t2/" in n for n in names)
         # The expected MeasureReport rides along (MADiE trailing-entry form).
         assert "resources/measure-MainM-1.0.0.json" in names
-        assert any("expected" in n for n in names)
 
     def test_unknown_measure_rejected(self, tmp_path):
         _make_type_workspace(tmp_path)
@@ -215,3 +211,116 @@ class TestImportCollisionPolicy:
         assert patient["id"] == "tc-w01"
         obs = next(r for r in entries if r["resourceType"] == "Observation")
         assert obs["subject"]["reference"] == "Patient/tc-w01"
+
+
+def _make_canonical_workspace(root: Path) -> None:
+    """S27 canonical flat layout: Measure/<Key>.json, MeasureReport/<Key>/,
+    Patient/<caseId>/ — NO folder-per-measure dir, NO List/TestCases.json."""
+    (root / "Library").mkdir(parents=True)
+    (root / "Library" / "Main.cql").write_text(
+        "library Main version '1.0.0'\n"
+        'valueset "VS": \'http://x/vs1\'\n'
+        "context Patient\n\n"
+        'define "IP": exists([Observation: "VS"])\n'
+    )
+    (root / "Library" / "Core.cql").write_text(
+        "library Core version '1.0.0'\ncontext Patient\n\ndefine A: 1\n"
+    )
+    (root / "ValueSet").mkdir()
+    (root / "ValueSet" / "vs1.json").write_text(
+        json.dumps({"resourceType": "ValueSet", "id": "vs1", "url": "http://x/vs1"})
+    )
+    (root / "Measure").mkdir()
+    (root / "Measure" / "MainM.json").write_text(
+        json.dumps(
+            {
+                "resourceType": "Measure",
+                "id": "MainM",
+                "name": "MainM",
+                "library": ["urn:cleanroom:lib:Main"],
+                "group": [
+                    {
+                        "population": [
+                            {
+                                "code": {"coding": [{"code": "initial-population"}]},
+                                "criteria": {"expression": "IP"},
+                            }
+                        ]
+                    }
+                ],
+            }
+        )
+    )
+    # Expected store: canonical MeasureReport/<Key>/<caseId>.json with the
+    # MADiE contained-Parameters subject shape (no subject.reference).
+    (root / "MeasureReport" / "MainM").mkdir(parents=True)
+    (root / "MeasureReport" / "MainM" / "case-a.json").write_text(
+        json.dumps(
+            {
+                "resourceType": "MeasureReport",
+                "contained": [
+                    {
+                        "resourceType": "Parameters",
+                        "parameter": [
+                            {"name": "subject", "valueString": "case-a"}
+                        ],
+                    }
+                ],
+                "group": [
+                    {
+                        "population": [
+                            {
+                                "code": {"coding": [{"code": "initial-population"}]},
+                                "count": 1,
+                            }
+                        ]
+                    }
+                ],
+            }
+        )
+    )
+    (root / "Patient" / "case-a").mkdir(parents=True)
+    (root / "Patient" / "case-a" / "Patient-case-a.json").write_text(
+        json.dumps({"resourceType": "Patient", "id": "case-a", "gender": "female"})
+    )
+    (root / "Patient" / "case-a" / "Observation-o1.json").write_text(
+        json.dumps(
+            {
+                "resourceType": "Observation",
+                "id": "o1",
+                "status": "final",
+                "code": {"coding": [{"system": "http://x", "code": "1"}]},
+                "subject": {"reference": "Patient/case-a"},
+            }
+        )
+    )
+    # A patient with NO expected report — must NOT ship (expected store
+    # defines test-set membership on the canonical layout).
+    (root / "Patient" / "extra-no-expected").mkdir(parents=True)
+    (root / "Patient" / "extra-no-expected" / "P.json").write_text(
+        json.dumps({"resourceType": "Patient", "id": "extra-no-expected"})
+    )
+
+
+class TestCanonicalLayoutExport:
+    def test_flat_measure_and_expected_store_export(self, tmp_path):
+        _make_canonical_workspace(tmp_path)
+        blob = export_measure_closure_zip(tmp_path, "MainM")
+        zf = zipfile.ZipFile(io.BytesIO(blob))
+        names = set(zf.namelist())
+        # Measure + primary library + valueset ship.
+        assert "resources/measure-MainM-1.0.0.json" in names
+        assert "cql/Main-1.0.0.cql" in names
+        assert "resources/valueset-vs1.json" in names
+        # The case ships under tests/<caseId>/ with its resources + the
+        # trailing expected MeasureReport (docs/madie-package-layout.md).
+        assert "tests/case-a/Patient-case-a.json" in names
+        assert "tests/case-a/Observation-o1.json" in names
+        assert "tests/case-a/MeasureReport-case-a.json" in names
+        # Patients with no expected report do not ship.
+        assert not any("extra-no-expected" in n for n in names)
+
+    def test_canonical_unknown_measure_rejected(self, tmp_path):
+        _make_canonical_workspace(tmp_path)
+        with pytest.raises(LookupError):
+            export_measure_closure_zip(tmp_path, "NoSuchMeasure")

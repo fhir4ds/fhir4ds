@@ -21,7 +21,7 @@ async function loadDataset(page: Page) {
 /** WORKBENCH_REORG phase 5: measure authoring is an editor tab — expand
  *  the Measures drawer (collapsed on fresh boot), then open the tab. */
 async function openMeasureTab(page: Page) {
-  await page.click("[data-testid=nav-toggle-measures]");
+  await page.click("[data-testid=nav-toggle-config]");
   await page.locator("[data-testid^=nav-item-measure-]").first().click();
   await page.waitForSelector("[data-testid=measure-validate]", {
     timeout: 10_000,
@@ -324,7 +324,7 @@ test.describe("view pane flatten", () => {
     await openViewTab(page);
 
     // Custom mode: long-format projection of the engine's MeasureReports.
-    await page.selectOption("[data-testid=view-mode]", "custom");
+    await page.click("[data-testid=view-mode]"); // switch: Form ⇄ -> Text
     await page.fill(
       "[data-testid=vd-editor]",
       JSON.stringify({

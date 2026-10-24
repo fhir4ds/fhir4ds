@@ -1,0 +1,75 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.464.1003.101.12.1008",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:01.920-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1008",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "2.16.840.1.113883.3.464.1003.101.12.1008"
+    }
+  ],
+  "version": "20240110",
+  "name": "OutpatientConsultation",
+  "title": "Outpatient Consultation",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:d2b337c4-0ff2-45e2-8b4b-041c9e672525",
+    "timestamp": "2025-06-20T16:57:28-04:00",
+    "total": 6,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "281036007",
+        "display": "Follow-up consultation (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "77406008",
+        "display": "Confirmatory medical consultation (procedure)"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2024",
+        "code": "99242",
+        "display": "Office or other outpatient consultation for a new or established patient, which requires a medically appropriate history and/or examination and straightforward medical decision making. When using total time on the date of the encounter for code selection, 20 minutes must be met or exceeded."
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2024",
+        "code": "99243",
+        "display": "Office or other outpatient consultation for a new or established patient, which requires a medically appropriate history and/or examination and low level of medical decision making. When using total time on the date of the encounter for code selection, 30 minutes must be met or exceeded."
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2024",
+        "code": "99244",
+        "display": "Office or other outpatient consultation for a new or established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making. When using total time on the date of the encounter for code selection, 40 minutes must be met or exceeded."
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2024",
+        "code": "99245",
+        "display": "Office or other outpatient consultation for a new or established patient, which requires a medically appropriate history and/or examination and high level of medical decision making. When using total time on the date of the encounter for code selection, 55 minutes must be met or exceeded."
+      }
+    ]
+  }
+}

@@ -25,7 +25,7 @@ import {
   type CellGraph,
 } from "../lib/cell-deps";
 
-export type CellRunMode = "cell" | "cell_deps" | "to_here";
+export type CellRunMode = "cell" | "cell_deps" | "to_here" | "run_all";
 
 export interface CellResult {
   cell: string;
@@ -101,6 +101,12 @@ interface CellEditorProps {
     /** S14: per-cell resize override (px) — the host threads it to the editor. */
     overrideHeight?: number,
   ) => React.ReactNode;
+  /** S26 review fix: render the HEADER (declarations) card's editor —
+   *  the library/using/include/valueset statements get a first-class
+   *  card above the define cells (non-runnable; part of every closure). */
+  renderHeaderEditor?: (headerText: string) => React.ReactNode;
+  /** Edit the header text in place (splice into the buffer). */
+  onHeaderChange?: (next: string) => void;
   /** Run a set of cells; resolves per-cell output lines. */
   onRunCells: (
     names: string[],
@@ -116,7 +122,7 @@ interface CellEditorProps {
 
 const COACH_SEEN_KEY = "fhir4ds.cleanroom.cellCoachSeen";
 
-export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells, onAutoSplit, onExplainRow, evidenceSlotFactory, connected, parameters }: CellEditorProps) {
+export function CellEditor({ value, onToolbarControls, renderEditor, renderHeaderEditor, onRunCells, onAutoSplit, onExplainRow, evidenceSlotFactory, connected, parameters }: CellEditorProps) {
   // S8 directive 3: RunMode REMOVED — every Run executes the cell's
   // dependency closure (one behavior per cell).
   const [results, setResults] = useState<CellResult[]>([]);
@@ -263,16 +269,45 @@ export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells,
 
   // S16: Run All / Clear All live in the EDITOR HEADER (one row with the
   // mode switch) — exposed to the host via a slot-render callback.
+  // S28 (perf): Run All is ONE BATCH call (onRunCells with every cell
+  // name, mode "run_all") — connected mode evaluates the composed
+  // library once server-side and slices columns per cell (~1
+  // translation instead of N). Sequential per-cell runCell remains for
+  // single-cell runs.
   const runAll = useCallback(async () => {
     if (running !== null || !hasMarkers) return;
-    // S15 Muse: SEQUENTIAL top-to-bottom (spec), one batch flag — no
-    // concurrent closures (races in setResults + premature running-clear),
-    // and per-cell result fan-out stays ordered.
     setRunning("all");
     try {
-      for (const c of cells) {
-        await runCell(c.name);
-      }
+      const names = cells.map((c) => c.name);
+      const out = await onRunCells(names, "run_all");
+      // Batch composition = header + every cell (the full library).
+      const composedText = composeCellClosure(graph.header, cells, names);
+      const ranAt = Date.now();
+      setResults((prev) => [
+        ...prev.filter((r) => !names.includes(r.cell)),
+        ...names.map((n) => ({
+          cell: n,
+          ok: out[n]?.ok ?? false,
+          lines: out[n]?.lines ?? ["(no output)"],
+          columns: out[n]?.columns,
+          rows: out[n]?.rows,
+          computedLocally: !connected,
+          composedText,
+          params: parameters,
+          ts: ranAt,
+        })),
+      ]);
+      setCellRuns((prev) => {
+        const next = new Map(prev);
+        for (const n of names) {
+          const r = out[n];
+          next.set(n, [
+            { ts: ranAt, ok: r?.ok ?? false, ms: null },
+            ...(next.get(n) ?? []),
+          ].slice(0, 5));
+        }
+        return next;
+      });
     } finally {
       setRunning(null);
     }
@@ -315,6 +350,35 @@ export function CellEditor({ value, onToolbarControls, renderEditor, onRunCells,
 
       {hasMarkers ? (
         <div className="cell-list" data-testid="cell-list">
+          {/* S26 review fix: the HEADER card — declarations/imports/
+              valuesets ride above the define cells (read-mostly; part
+              of every cell's composed closure). */}
+          {graph.header.trim() && (
+            <div
+              className="cell-card cell-header-card"
+              data-cell="__header__"
+              data-testid="cell-header-card"
+            >
+              {/* S31: same head grammar as define cells — a name CHIP
+                  ("Declarations") instead of the old dashed special card. */}
+              <div className="cell-head">
+                <span
+                  className="cell-namechip cell-header-chip"
+                  title="library declarations, includes, valuesets — included in every cell run"
+                >
+                  Declarations
+                </span>
+                <span className="cell-depcount" aria-hidden="true">
+                  included in every run
+                </span>
+              </div>
+              {renderHeaderEditor ? (
+                renderHeaderEditor(graph.header)
+              ) : (
+                <pre className="cell-header-pre">{graph.header}</pre>
+              )}
+            </div>
+          )}
           {cells.map((cell) => {
             const deps = closureFor(cell.name).filter((d) => d !== cell.name);
             const res = results.find((r) => r.cell === cell.name);

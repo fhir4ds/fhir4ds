@@ -88,7 +88,10 @@ function AstTreeNode({
   );
 }
 
-export function AstTree({ cqlText }: Props) {
+export function AstTree({
+  cqlText,
+  connected = false,
+}: Props & { connected?: boolean }) {
   const [parse, setParse] = useState<ParseResult | null>(null);
   const [filterText, setFilterText] = useState("");
 
@@ -96,18 +99,32 @@ export function AstTree({ cqlText }: Props) {
   // there is no refresh control (a manual button re-ran the same parse).
   useEffect(() => {
     let cancelled = false;
-    workerRequest({
-      type: "parse_cql",
-      text: cqlText,
-      include_ast: true,
-    }).then((resp) => {
+    // S31: connected parses SERVER-side — mounting the (hidden) AST panel
+    // must not boot the browser engine.
+    const parsed = connected
+      ? fetch("/api/parse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: cqlText, include_ast: true }),
+        })
+          .then((r) => r.json())
+          .then((body: { data?: ParseResult } & ParseResult) => ({
+            ok: true,
+            envelope: JSON.stringify(body?.data ?? body),
+          }))
+      : workerRequest({
+          type: "parse_cql",
+          text: cqlText,
+          include_ast: true,
+        });
+    parsed.then((resp) => {
       if (cancelled || !resp?.ok || !resp.envelope) return;
       setParse(JSON.parse(resp.envelope));
     });
     return () => {
       cancelled = true;
     };
-  }, [cqlText]);
+  }, [cqlText, connected]);
 
   const statements = useMemo(() => {
     const all = Object.entries(parse?.ast?.statements ?? {});

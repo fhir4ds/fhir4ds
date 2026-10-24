@@ -12,11 +12,11 @@ test("example loads include tabs, prefills MP, auto-recalcs", async ({ page }) =
   await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
 
-  // 1. Load the example. 6i.1: Examples nests under File > Open.
+  // 1. Load the example. S32: examples are pinned at the top of
+  //    File > Recent Workspaces; standalone loads the MADiE-layout zip.
   await page.click("[data-testid=file-menu]");
-  await page.hover("[data-testid=file-open]");
-  await page.hover("[data-testid=file-examples]");
-  await page.click("[data-testid=load-example-cms69]");
+  await page.hover("[data-testid=file-recent]");
+  await page.click("[data-testid=example-workspace-cms69-workspace]");
   await page.waitForFunction(
     () => document.querySelector(".status-note")?.textContent?.includes("loaded example"),
     undefined,
@@ -31,14 +31,23 @@ test("example loads include tabs, prefills MP, auto-recalcs", async ({ page }) =
   if (tabCount < 5) throw new Error(`expected ≥5 tabs (main+4 includes), got ${tabCount - 1}`);
   await page.click("[data-testid=library-tab-1]");
   await page.waitForTimeout(600);
-  const incText = await page.evaluate(() => {
-    // Editor content via the model, not DOM (line numbers pollute textContent).
-    const lines = [...document.querySelectorAll(".view-lines .view-line")].map(
-      (l) => l.textContent ?? "",
+  // Monaco virtualizes lines — poll DOM lines until non-empty (the
+  // model is not exposed on window).
+  let incText = "";
+  for (let i = 0; i < 30; i++) {
+    incText = await page.evaluate(() =>
+      [...document.querySelectorAll(".view-lines .view-line")]
+        .map((l) => l.textContent ?? "")
+        .slice(0, 5)
+        .join(" "),
     );
-    return lines.slice(0, 3).join(" ");
-  });
-  if (!/library\s*(H|P|Q|S)/.test(incText.replace(/\u00a0/g, " "))) {
+    if (incText.trim()) break;
+    await page.waitForTimeout(500);
+  }
+  // S26: main-first ordering puts CMS69's includes in dependency order —
+  // ANY include tab shows a real eCQM library (its define bodies read
+  // like retrieves/unions, and the tab count proves includes landed).
+  if (!/(library\s+\w+|define\s+")/.test(incText.replace(/\u00a0/g, " "))) {
     throw new Error(`include tab content: ${incText}`);
   }
 
@@ -46,7 +55,7 @@ test("example loads include tabs, prefills MP, auto-recalcs", async ({ page }) =
   // REORG phase 6a: parameters are an editor TAB now (the below-editor
   // drawer expander is gone). 6h: interval params use start/end date
   // pickers on ONE shared form.
-  await page.click("[data-testid=nav-toggle-parameters]");
+  await page.click("[data-testid=nav-toggle-config]");
   await page.locator("[data-testid^=nav-item-parameter-]").first().click();
   await page.waitForSelector('[data-testid="param-input-Measurement Period"]', {
     timeout: 10_000,

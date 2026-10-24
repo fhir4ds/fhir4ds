@@ -92,7 +92,7 @@ test("MADiE package import → evaluate → export round-trip", async ({ page })
 
   // MR output renders in the console while a measure editor tab is
   // active (REORG 6b) — open the measure tab from the Measures drawer.
-  await page.click("[data-testid=nav-toggle-measures]");
+  await page.click("[data-testid=nav-toggle-config]");
   await page.locator("[data-testid^=nav-item-measure-]").first().click();
   await page.waitForSelector("[data-testid=mr-table]", { timeout: 60_000 });
 
@@ -101,8 +101,9 @@ test("MADiE package import → evaluate → export round-trip", async ({ page })
     page.waitForEvent("download", { timeout: 30_000 }),
     (async () => {
       await page.click("[data-testid=file-menu]");
-      await page.hover("[data-testid=file-save]");
-      await page.click("[data-testid=madie-export]");
+      // S32: Save Workspace is a direct item (no submenu); standalone
+      // downloads the package via the browser dialog.
+      await page.click("[data-testid=file-save-workspace]");
     })(),
   ]);
   const out = "/tmp/opencode/roundtrip-export.zip";

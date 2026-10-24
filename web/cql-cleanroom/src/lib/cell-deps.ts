@@ -102,7 +102,7 @@ export function dependencyClosure(
  *  cell = [target]; cell_deps = closure; to_here = authored cells up to
  *  and including target (authored order). */
 export function expandRunMode(
-  mode: "cell" | "cell_deps" | "to_here",
+  mode: "cell" | "cell_deps" | "to_here" | "run_all",
   target: string,
   graph: CellGraph,
 ): string[] {

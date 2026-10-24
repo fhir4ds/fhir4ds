@@ -71,7 +71,7 @@ test("cell evidence drill-in and population flow", async ({ page }) => {
   // Population flow (Sankey): the console's Funnel tab while a measure
   // editor tab is active (REORG 6e) — initial_population node with
   // count 2.
-  await page.click("[data-testid=nav-toggle-measures]");
+  await page.click("[data-testid=nav-toggle-config]");
   await page.locator("[data-testid^=nav-item-measure-]").first().click();
   await page.click("[data-testid=console-tab-funnel]");
   await page.waitForSelector("[data-testid=population-sankey]", {

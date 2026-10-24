@@ -94,6 +94,10 @@ export interface WorkspaceMeasureEntry {
   /** Authored Measure resource; null = entry exists but no populations
    *  authored yet (MeasurePane bootstrap mode). */
   resource: Record<string, unknown> | null;
+  /** S26 review fix: adopted disk measures carry the PRIMARY library
+   *  NAME (Measure.library[0] canonical tail) — resolved to a tab id
+   *  when that library opens; drives entrypoint + measure surface. */
+  primaryLibraryName?: string;
 }
 
 /** A stored ViewDefinition resource (WORKBENCH_V6). */

@@ -1,15 +1,15 @@
-import { useRef, type ReactNode } from "react";
+import { Fragment, useRef, type ReactNode } from "react";
 import {
   BookOpen,
   Database,
-  Ruler,
-  SlidersHorizontal,
+  Settings2,
   Table,
   Tags,
   Target,
   type LucideIcon,
 } from "lucide-react";
 import { DrawerSection, DrawerRow } from "./nav/DrawerSection";
+import { Spinner } from "./Spinner";
 import { DropdownMenu } from "./DropdownMenu";
 import type { NavItem, NavSectionId } from "../lib/navSections";
 
@@ -35,20 +35,19 @@ export interface NavRailSectionModel {
 }
 
 const SECTION_ORDER: NavSectionId[] = [
-  "measures",
   "libraries",
   "valuesets",
-  "parameters",
+  "config",
   "tests",
   "expected",
   "views",
 ];
 
 const SECTION_ICONS: Record<NavSectionId, LucideIcon> = {
-  measures: Ruler,
   libraries: BookOpen,
   valuesets: Tags,
-  parameters: SlidersHorizontal,
+  // S29: Measure + Parameters grouped under one Setup/Config section.
+  config: Settings2,
   tests: Database,
   expected: Target,
   views: Table,
@@ -67,13 +66,16 @@ function rowTestId(item: NavItem, index: number): string {
 const IMPORT_ITEMS: Partial<
   Record<NavSectionId, Array<{ item: string; label: string }>>
 > = {
-  measures: [{ item: "measure-json", label: "Import Measure .json…" }],
+  // Config carries both the Measure and the CQL Parameters imports.
+  config: [
+    { item: "measure-json", label: "Import Measure .json…" },
+    { item: "parameters-json", label: "Import Parameters .json…" },
+  ],
   libraries: [
     { item: "library-cql", label: "Import .cql…" },
     { item: "library-json", label: "Import FHIR Library .json…" },
   ],
   valuesets: [{ item: "valueset-json", label: "Import ValueSet .json…" }],
-  parameters: [{ item: "parameters-json", label: "Import Parameters .json…" }],
   views: [{ item: "view-json", label: "Import ViewDefinition .json…" }],
   tests: [
     { item: "resource-json", label: "Import resource .json…" },
@@ -104,7 +106,6 @@ export function NavRail({
   onAddExpected,
   onAddValuesets,
   onImportItem,
-  onRefreshDisk,
   diskLoading,
   panelWidth,
   detailWidth,
@@ -139,7 +140,6 @@ export function NavRail({
    *  section (`IMPORT_ITEMS[section]` keys the chosen item). */
   onImportItem: (section: NavSectionId, item: string) => void;
   /** S6: re-list server workspace files (drawers hosting disk items). */
-  onRefreshDisk?: () => void;
   /** S6: disk listing in flight (suppress the "none" flash). */
   diskLoading?: boolean;
   /** REORG 6h: resizable slide-outs — px widths + drag callbacks. */
@@ -194,7 +194,9 @@ export function NavRail({
     />
   );
   const plusButton =
-    panelId === "measures" ? (
+    // S29: the Config panel's "+" adds a Measure (parameters come from
+    // the workspace Parameters resource / CQL declarations).
+    panelId === "config" ? (
       <button
         className="nav-add-btn"
         data-testid="nav-add-measures"
@@ -251,20 +253,8 @@ export function NavRail({
     ) : undefined;
   // Split button: + | ▾ — the ▾ opens the section's file-import items.
   const importItems = panelId ? (IMPORT_ITEMS[panelId] ?? []) : [];
-  const showDiskRefresh =
-    !!onRefreshDisk && (panelId === "libraries" || panelId === "valuesets" || panelId === "views");
   const actions = (
     <>
-      {showDiskRefresh && (
-        <button
-          className="nav-add-btn"
-          data-testid="nav-refresh-disk"
-          title="re-list server workspace files (clears change badges)"
-          onClick={onRefreshDisk}
-        >
-          ⟳
-        </button>
-      )}
       {plusButton}
       {importItems.length > 0 && panelId && (
         <DropdownMenu label="" testId={`nav-import-${panelId}`}>
@@ -297,7 +287,7 @@ export function NavRail({
             className="rail-collapse-btn"
             data-testid="rail-collapse"
             title={panelId ? "collapse rail" : "expand rail"}
-            onClick={() => onNavPanelChange(panelId ? null : "tests")}
+            onClick={() => onNavPanelChange(panelId ? null : "libraries")}
           >
             {panelId ? "«" : "»"}
           </button>
@@ -310,7 +300,12 @@ export function NavRail({
               className={`rail-item ${panelId === id ? "active" : ""}`}
               data-testid={`nav-toggle-${id}`}
               title={sections[id].title}
-              onClick={() => onNavPanelChange(panelId === id ? null : id)}
+              // S30: clicking the ACTIVE section is a no-op — opening is
+              // idempotent (close via the panel caret or rail-collapse),
+              // so "open the Libraries panel" never closes it by accident.
+              onClick={() => {
+                if (panelId !== id) onNavPanelChange(id);
+              }}
             >
               <span className="rail-glyph">
                 <Icon size={15} strokeWidth={1.8} aria-hidden />
@@ -339,11 +334,21 @@ export function NavRail({
                   <div className="nav-empty">none</div>
                 )}
             {sec.items.length === 0 && diskLoading && (
-                  <div className="nav-empty">loading…</div>
+                  <div className="nav-empty" data-testid="nav-loading">
+                    <Spinner label="loading workspace files" />
+                  </div>
                 )}
             {sec.items.map((item, i) => (
-              <DrawerRow
-                key={item.id}
+              <Fragment key={item.id}>
+                {item.group && item.group !== sec.items[i - 1]?.group && (
+                  <div
+                    className="nav-group-label"
+                    data-testid={`nav-group-${item.group.toLowerCase()}`}
+                  >
+                    {item.group}
+                  </div>
+                )}
+                <DrawerRow
                 item={item}
                 active={item.entry}
                 testId={rowTestId(item, i)}
@@ -356,6 +361,7 @@ export function NavRail({
                 onRenameCommit={onRenameCommit}
                 onRenameCancel={onRenameCancel}
               />
+              </Fragment>
             ))}
             {panelId === "tests" && testsSlot}
           </DrawerSection>

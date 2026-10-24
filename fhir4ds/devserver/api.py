@@ -219,6 +219,74 @@ def _workspace_parameter_defaults(snapshot: Any) -> dict[str, Any]:
     return out
 
 
+def _primary_library_name(snapshot: Any) -> str | None:
+    """The workspace's primary library: Measure.library[0] tail, else the
+    first discovered library."""
+    from .discovery import _measure_resource
+
+    for p in getattr(snapshot, "measures", []) or []:
+        try:
+            res = _measure_resource(Path(str(p)))
+        except Exception:
+            res = None
+        refs = res.get("library") if isinstance(res, dict) else None
+        if isinstance(refs, list) and refs:
+            tail = str(refs[0]).split("/")[-1].split("|")[0]
+            if snapshot.library(tail) is not None:
+                return tail
+    libs = getattr(snapshot, "libraries", []) or []
+    return libs[0].name if libs else None
+
+
+def _warm_primary_translation(snapshot: Any, manager: Any) -> None:
+    """S31 startup: pre-translate AND pre-execute the PRIMARY library with
+    the workspace parameter defaults so the first client heartbeat is warm.
+
+    Two separate costs dominate first load: CQL->SQL translation over the
+    include closure (~3-6s) and DuckDB's first plan/compile for the large
+    population query (~3-4s). Both are paid here, before the browser asks.
+    Runs under the kernel op-lock; best-effort (real evaluations report
+    failures properly).
+    """
+    try:
+        from fhir4ds.operations.capabilities.translate import translate_cql
+
+        name = _primary_library_name(snapshot)
+        if not name:
+            return
+        main_lib = snapshot.library(name)
+        if main_lib is None:
+            return
+        main = main_lib.library_text()
+        includes = [
+            lib.library_text() for lib in snapshot.libraries if lib.name != name
+        ]
+        tr = translate_cql(
+            includes,
+            main,
+            audit_mode="population",
+            parameters=_workspace_parameter_defaults(snapshot),
+        )
+        if not tr.ok:
+            return
+        kernel = manager.current()
+        with kernel.locked():
+            kernel.conn.execute(tr.sql)
+    except Exception:  # pragma: no cover - warm-up is best-effort
+        return
+
+
+def _spawn_warm_translation(snapshot: Any, manager: Any) -> None:
+    import threading
+
+    threading.Thread(
+        target=_warm_primary_translation,
+        args=(snapshot, manager),
+        name="warm-translate",
+        daemon=True,
+    ).start()
+
+
 def _first_message(envelope: dict[str, Any]) -> str:
     diags = envelope.get("diagnostics") or []
     if diags and isinstance(diags[0], dict):
@@ -624,6 +692,12 @@ class _Handler(BaseHTTPRequestHandler):
         """
         cfg = getattr(self.server.watcher, "_cfg", None)
         roots: dict[str, Path] = {}
+
+        def _is_workspace(d: Path) -> bool:
+            # A workspace carries its CQL under cql/ (legacy) OR the
+            # canonical Library/ layout (S22e migration).
+            return (d / "cql").is_dir() or (d / "Library").is_dir()
+
         if cfg is not None:
             active = cfg.root
             roots[active.name] = active
@@ -632,7 +706,7 @@ class _Handler(BaseHTTPRequestHandler):
                     if (
                         sibling.is_dir()
                         and not sibling.name.startswith(".")
-                        and (sibling / "cql").is_dir()
+                        and _is_workspace(sibling)
                     ):
                         roots.setdefault(sibling.name, sibling)
             except OSError:
@@ -640,11 +714,200 @@ class _Handler(BaseHTTPRequestHandler):
         examples = Path(__file__).resolve().parents[2] / "examples"
         try:
             for ex in sorted(examples.iterdir()):
-                if ex.is_dir() and ex.name.endswith("-workspace") and (ex / "cql").is_dir():
+                if ex.is_dir() and ex.name.endswith("-workspace") and _is_workspace(ex):
                     roots.setdefault(ex.name, ex)
         except OSError:
             pass
         return list(roots.values())
+
+    _BROWSE_ROOTS_CACHE: tuple[float, list[Path]] = (0.0, [])
+
+    def _browse_roots(self) -> list[Path]:
+        """Directory roots the Open/Save workspace pickers may browse.
+
+        S32: the active workspace's parent (sibling workspaces), the
+        repo's examples/ directory, and the user's home — deduped.
+        """
+        import time as _t
+
+        now = _t.time()
+        if now - self._BROWSE_ROOTS_CACHE[0] < 30 and self._BROWSE_ROOTS_CACHE[1]:
+            return self._BROWSE_ROOTS_CACHE[1]
+        from pathlib import Path as _P
+
+        roots: dict[str, Path] = {}
+        cfg = getattr(self.server.watcher, "_cfg", None)
+        if cfg is not None:
+            roots[str(cfg.root.parent.resolve())] = cfg.root.parent.resolve()
+        repo_examples = _P(__file__).resolve().parents[2] / "examples"
+        if repo_examples.is_dir():
+            roots[str(repo_examples.resolve())] = repo_examples.resolve()
+        home = _P.home()
+        roots[str(home)] = home
+        out = list(roots.values())
+        self._BROWSE_ROOTS_CACHE = (now, out)
+        return out
+
+    def _route_fs_browse(self) -> None:
+        """GET /api/fs/browse?path=... — directory listing for the
+        Open/Save workspace pickers (S32).
+
+        Unlike /api/fs/list (sandboxed to the workspace root), browse
+        serves ANY directory under one of the allowlisted roots (the
+        active workspace's parent, the repo examples/, the user home).
+        Directories that carry a workspace layout are flagged
+        ``workspace: true`` so the picker can mark them selectable.
+        """
+        from pathlib import Path as _P
+        from urllib.parse import parse_qs, urlparse
+
+        qs = parse_qs(urlparse(self.path).query)
+        raw = (qs.get("path") or [""])[0]
+        roots = self._browse_roots()
+        if not raw:
+            # No path: report the roots themselves as the first level.
+            items = []
+            for r in roots:
+                items.append(
+                    {
+                        "name": r.name or str(r),
+                        "path": str(r),
+                        "kind": "dir",
+                        "workspace": (r / "cql").is_dir() or (r / "Library").is_dir(),
+                    }
+                )
+            self._write_json(200, _envelope(ok=True, entries=items, roots=[str(r) for r in roots]))
+            return
+        target = _P(raw).expanduser()
+        try:
+            resolved = target.resolve()
+            inside = any(
+                resolved == r or r in resolved.parents for r in roots
+            )
+        except OSError:
+            inside = False
+        if not inside:
+            self._write_json(
+                200,
+                _envelope(
+                    ok=False,
+                    diagnostics=[_diag("path is outside the browsable roots")],
+                ),
+            )
+            return
+        if not resolved.is_dir():
+            self._write_json(
+                200,
+                _envelope(ok=False, diagnostics=[_diag("not a directory")]),
+            )
+            return
+        entries = []
+        try:
+            children = sorted(resolved.iterdir())
+        except OSError as exc:
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        for child in children:
+            try:
+                if child.is_dir():
+                    entries.append(
+                        {
+                            "name": child.name,
+                            "path": str(child),
+                            "kind": "dir",
+                            "workspace": (child / "cql").is_dir()
+                            or (child / "Library").is_dir(),
+                        }
+                    )
+            except OSError:
+                continue
+        parent = resolved.parent
+        self._write_json(
+            200,
+            _envelope(
+                ok=True,
+                entries=entries,
+                path=str(resolved),
+                parent=str(parent) if any(parent == r or r in parent.parents for r in roots) or parent in roots else None,
+                workspace=(resolved / "cql").is_dir() or (resolved / "Library").is_dir(),
+            ),
+        )
+
+    def _route_package_save(self, body: dict[str, Any]) -> None:
+        """POST /api/package/save — Save Workspace (S32, connected).
+
+        Body: ``{measure, folder, filename?}``. Builds the closure-driven
+        MADiE package zip (same export as /api/measure/export) and
+        WRITES it into the chosen server folder (must be under the
+        browsable roots). Returns the written path.
+        """
+        import base64
+
+        from .madie_export_closure import export_measure_closure_zip
+
+        cfg = getattr(self.server.watcher, "_cfg", None)
+        if cfg is None:
+            self._write_json(
+                200, _envelope(False, diagnostics=[_diag("workspace config unavailable")])
+            )
+            return
+        measure = body.get("measure")
+        folder = body.get("folder")
+        if not isinstance(measure, str) or not measure.strip():
+            self._write_json(
+                200, _envelope(False, diagnostics=[_diag("measure is required")])
+            )
+            return
+        if not isinstance(folder, str) or not folder.strip():
+            self._write_json(
+                200, _envelope(False, diagnostics=[_diag("folder is required")])
+            )
+            return
+        folder_path = Path(folder).expanduser()
+        try:
+            resolved = folder_path.resolve()
+            inside = any(
+                resolved == r or r in resolved.parents for r in self._browse_roots()
+            )
+        except OSError:
+            inside = False
+        if not inside or not resolved.is_dir():
+            self._write_json(
+                200,
+                _envelope(
+                    False,
+                    diagnostics=[
+                        _diag("folder must be an existing directory under the browsable roots")
+                    ],
+                ),
+            )
+            return
+        try:
+            blob = export_measure_closure_zip(Path(cfg.root), measure.strip())
+        except LookupError as exc:
+            self._write_json(
+                200, _envelope(False, diagnostics=[_diag(str(exc), "NOT_FOUND")])
+            )
+            return
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", measure.strip())
+        filename = body.get("filename")
+        if not isinstance(filename, str) or not filename.strip():
+            filename = f"{safe_name}-package.zip"
+        if not filename.endswith(".zip"):
+            filename += ".zip"
+        out = resolved / filename
+        try:
+            out.write_bytes(blob)
+        except OSError as exc:
+            self._write_json(
+                200, _envelope(False, diagnostics=[_diag(f"write failed: {exc}")])
+            )
+            return
+        self.server.watcher.bus.publish(WorkspaceEvent(kind="changed", paths=[str(out)]))
+        self._write_json(
+            200,
+            _envelope(ok=True, path=str(out), bytes=len(blob)),
+        )
 
     def _route_workspaces_list(self) -> None:
         """GET /api/workspaces — picker listing (S22a)."""
@@ -653,10 +916,11 @@ class _Handler(BaseHTTPRequestHandler):
         items = []
         for root in self._workspace_roots():
             try:
-                lib_count = sum(
-                    1 for _ in (root / "cql").glob("*.cql")
+                lib_dir = next(
+                    d for d in (root / "cql", root / "Library") if d.is_dir()
                 )
-            except OSError:
+                lib_count = sum(1 for _ in lib_dir.glob("*.cql"))
+            except (OSError, StopIteration):
                 lib_count = 0
             items.append(
                 {
@@ -683,26 +947,58 @@ class _Handler(BaseHTTPRequestHandler):
             self._write_json(200, _envelope(ok=False, diagnostics=[_diag("workspace config unavailable")]))
             return
         name = body.get("workspace")
-        if not isinstance(name, str) or not name.strip():
-            self._write_json(
-                200,
-                _envelope(ok=False, diagnostics=[_diag("workspace must be a non-empty string")]),
-            )
-            return
+        raw_path = body.get("path")
         target = None
-        for root in self._workspace_roots():
-            if root.name == name:
-                target = root
-                break
-        if target is None:
-            self._write_json(
-                200,
-                _envelope(
-                    ok=False,
-                    diagnostics=[_diag(f"unknown workspace {name!r}", "NOT_FOUND")],
-                ),
-            )
-            return
+        if isinstance(raw_path, str) and raw_path.strip():
+            # S32: Open Workspace picker — an ABSOLUTE directory path.
+            # Validated exactly like registry switches: it must be a
+            # readable directory with a workspace layout (cql/ or
+            # Library/). Config-load failures are typed rejections.
+            candidate = Path(raw_path).expanduser()
+            if not candidate.is_absolute():
+                self._write_json(
+                    200,
+                    _envelope(
+                        ok=False,
+                        diagnostics=[_diag("path must be absolute")],
+                    ),
+                )
+                return
+            if not (candidate / "cql").is_dir() and not (candidate / "Library").is_dir():
+                self._write_json(
+                    200,
+                    _envelope(
+                        ok=False,
+                        diagnostics=[
+                            _diag(
+                                f"{candidate} is not a workspace "
+                                "(no cql/ or Library/ directory)"
+                            )
+                        ],
+                    ),
+                )
+                return
+            target = candidate
+        else:
+            if not isinstance(name, str) or not name.strip():
+                self._write_json(
+                    200,
+                    _envelope(ok=False, diagnostics=[_diag("workspace must be a non-empty string")]),
+                )
+                return
+            for root in self._workspace_roots():
+                if root.name == name:
+                    target = root
+                    break
+            if target is None:
+                self._write_json(
+                    200,
+                    _envelope(
+                        ok=False,
+                        diagnostics=[_diag(f"unknown workspace {name!r}", "NOT_FOUND")],
+                    ),
+                )
+                return
         if target.resolve() == cfg.root.resolve():
             # No-op switch still reports success (idempotent).
             snap = self.server.watcher.snapshot
@@ -717,8 +1013,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
             return
         self.server.watcher._cfg = new_cfg
-        snap = self.server.watcher.rescan()
+        # Silent rescan: adopt the new workspace WITHOUT diff events —
+        # a re-root is not a data change (no data-hint banner on switch).
+        snap = self.server.watcher.rescan(silent=True)
         kernel = self.server.kernel_manager.restart(snap)
+        # S31: warm the new workspace's primary translation immediately.
+        _spawn_warm_translation(snap, self.server.kernel_manager)
         self.server.cell_registry.mark_stale_all()
         self.server.valuesets_stale = False
         import secrets as _secrets
@@ -1080,6 +1380,9 @@ class _Handler(BaseHTTPRequestHandler):
                     workspace=self.server.watcher._cfg.root.name,
                     nonce=self.server.mode_nonce,
                     ui=self.server.ui_mode,
+                    # S29: footer engine chip — the connected kernel runs
+                    # server-side DuckDB (never WASM).
+                    engine=f"DuckDB {_duckdb_version()}",
                 ),
             )
             return
@@ -1118,10 +1421,11 @@ class _Handler(BaseHTTPRequestHandler):
             # ux3 Part B: real dataset detail — row count + resourceType mix.
             kernel = self.server.kernel_manager.current()
             try:
-                rows = kernel.conn.execute(
-                    "SELECT resource->>'resourceType' AS rt, COUNT(*) AS n"
-                    " FROM resources GROUP BY 1 ORDER BY 2 DESC"
-                ).fetchall()
+                with kernel.locked():
+                    rows = kernel.conn.execute(
+                        "SELECT resource->>'resourceType' AS rt, COUNT(*) AS n"
+                        " FROM resources GROUP BY 1 ORDER BY 2 DESC"
+                    ).fetchall()
                 stats = [{"resourceType": r[0], "count": r[1]} for r in rows]
                 self._write_json(200, _envelope(ok=True, total=sum(s["count"] for s in stats), by_type=stats))
             except Exception as exc:
@@ -1208,19 +1512,21 @@ class _Handler(BaseHTTPRequestHandler):
             # the route selects bare rows and dedupes/storts here.
             kernel = self.server.kernel_manager.current()
             try:
-                rows = kernel.conn.execute(
-                    "SELECT id, resourceType FROM resources"
-                    " WHERE resourceType = 'Patient'"
-                ).fetchall()
+                with kernel.locked():
+                    rows = kernel.conn.execute(
+                        "SELECT id, resourceType FROM resources"
+                        " WHERE resourceType = 'Patient'"
+                    ).fetchall()
                 ids = sorted({r[0] for r in rows if r[0] is not None and r[1] == "Patient"})
                 # S24-3 (published-docs UX): per-patient resource counts
                 # + type breakdown for the roster chips + slideout.
                 counts: dict[str, dict[str, Any]] = {}
                 try:
-                    crows = kernel.conn.execute(
-                        "SELECT patient_ref, resourceType FROM resources"
-                        " WHERE patient_ref IS NOT NULL"
-                    ).fetchall()
+                    with kernel.locked():
+                        crows = kernel.conn.execute(
+                            "SELECT patient_ref, resourceType FROM resources"
+                            " WHERE patient_ref IS NOT NULL"
+                        ).fetchall()
                     for pref, rtype in crows:
                         entry = counts.setdefault(pref, {"count": 0, "types": {}})
                         entry["count"] += 1
@@ -1262,7 +1568,11 @@ class _Handler(BaseHTTPRequestHandler):
 
             qs = parse_qs(urlparse(self.path).query)
             pid = (qs.get("id") or [""])[0].strip()
-            if not pid:
+            full_type_gate = (qs.get("resourceType") or [""])[0].strip()
+            full_rid_gate = (qs.get("rid") or [""])[0].strip()
+            if not pid and not (full_type_gate and full_rid_gate):
+                # S25: the builder-handoff shape (?resourceType=&rid=)
+                # carries its own identity — no patient id needed.
                 self._write_json(
                     200, _envelope(ok=False, diagnostics=[_diag("id is required")])
                 )
@@ -1274,11 +1584,12 @@ class _Handler(BaseHTTPRequestHandler):
                 if full_type and full_rid:
                     # Muse fix: full-resource fetch for the builder handoff
                     # (previews are 200 chars and unparseable).
-                    row = kernel.conn.execute(
-                        "SELECT resource FROM resources"
-                        " WHERE resourceType = ? AND id = ?",
-                        [full_type, full_rid],
-                    ).fetchone()
+                    with kernel.locked():
+                        row = kernel.conn.execute(
+                            "SELECT resource FROM resources"
+                            " WHERE resourceType = ? AND id = ?",
+                            [full_type, full_rid],
+                        ).fetchone()
                     payload = None
                     if row and row[0] is not None:
                         try:
@@ -1301,11 +1612,12 @@ class _Handler(BaseHTTPRequestHandler):
                         ),
                     )
                     return
-                rows = kernel.conn.execute(
-                    "SELECT id, resourceType, resource, patient_ref FROM resources"
-                    " WHERE id = ? OR patient_ref = ? ORDER BY resourceType, id",
-                    [pid, pid],
-                ).fetchall()
+                with kernel.locked():
+                    rows = kernel.conn.execute(
+                        "SELECT id, resourceType, resource, patient_ref FROM resources"
+                        " WHERE id = ? OR patient_ref = ? ORDER BY resourceType, id",
+                        [pid, pid],
+                    ).fetchall()
                 by_type: dict[str, list[dict[str, Any]]] = {}
                 for rid, rtype, resource, _pref in rows:
                     payload = resource if isinstance(resource, dict) else None
@@ -1316,18 +1628,11 @@ class _Handler(BaseHTTPRequestHandler):
                             payload = _json.loads(resource) if resource else {}
                         except (ValueError, TypeError):
                             payload = {}
-                    by_type.setdefault(str(rtype or "?"), []).append(
-                        {
-                            "id": rid,
-                            "resourceType": rtype,
-                            "status": payload.get("status"),
-                            "date": payload.get("effectiveDateTime")
-                            or payload.get("effectiveDate")
-                            or payload.get("authoredOn")
-                            or payload.get("birthDate"),
-                            "preview": str(payload)[:200],
-                        }
-                    )
+                    # S25: ship FULL resources — the published
+                    # PatientDataViewer UX (filter + tree + expandable
+                    # JSON) operates on complete resource objects, not
+                    # id/status/date/preview stubs.
+                    by_type.setdefault(str(rtype or "?"), []).append(payload)
                 self._write_json(
                     200,
                     _envelope(
@@ -1557,6 +1862,9 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/terminology/config":
             self._route_terminology_config_get()
             return
+        if path == "/api/fs/browse":
+            self._route_fs_browse()
+            return
         if path == "/api/fs/list":
             self._route_fs_list()
             return
@@ -1625,7 +1933,19 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/workspace":
             snap = self.server.watcher.snapshot
-            self._write_json(200, _envelope(workspace=snap.to_dict()))
+            ws = snap.to_dict()
+            # S31: workspace Parameters defaults ride the payload in the
+            # UI's parameter STRING form ("<start> .. <end>" intervals) so
+            # the Parameters drawer shows them as BOUND instead of
+            # "unbound" while the server was silently applying them.
+            defaults: dict[str, str] = {}
+            for name, value in _workspace_parameter_defaults(snap).items():
+                if isinstance(value, dict) and value.get("start") and value.get("end"):
+                    defaults[name] = f"{value['start']} .. {value['end']}"
+                elif value is not None:
+                    defaults[name] = str(value)
+            ws["parameters"] = defaults
+            self._write_json(200, _envelope(workspace=ws))
             return
         if path == "/api/libraries":
             snap = self.server.watcher.snapshot
@@ -1825,6 +2145,9 @@ class _Handler(BaseHTTPRequestHandler):
             elif path == "/api/madie/import-tests":
                 self._route_madie_import_tests(body)
                 return
+            elif path == "/api/package/save":
+                self._route_package_save(body)
+                return
             elif path == "/api/measure/export":
                 self._route_measure_export(body)
                 return
@@ -1910,6 +2233,20 @@ class _Handler(BaseHTTPRequestHandler):
                     ),
                 )
                 return
+            if path == "/api/parse":
+                text = body.get("text")
+                if not isinstance(text, str):
+                    self._write_json(
+                        200,
+                        _envelope(False, diagnostics=[_diag("text is required")]),
+                    )
+                    return
+                from fhir4ds.operations import parse_cql as _parse_cql
+
+                result = _parse_cql(text, include_ast=bool(body.get("include_ast")))
+                payload = result.to_dict() if hasattr(result, "to_dict") else result
+                self._write_json(200, payload)
+                return
             if path == "/api/translate":
                 self._route_translate(body)
             elif path == "/api/evaluate":
@@ -1922,6 +2259,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._route_measure_scaffold(body)
             elif path == "/api/measure/run":
                 self._route_measure_run(body)
+            elif path == "/api/measure/report-from-rows":
+                self._route_measure_report_from_rows(body)
             elif path == "/api/measure/compare":
                 self._route_measure_compare(body)
             elif path == "/api/measure/baseline/save":
@@ -1941,6 +2280,7 @@ class _Handler(BaseHTTPRequestHandler):
             elif path == "/api/kernel/restart":
                 snap = self.server.watcher.snapshot
                 kernel = self.server.kernel_manager.restart(snap)
+                _spawn_warm_translation(snap, self.server.kernel_manager)
                 # Cell results evaluated against the OLD kernel are stale.
                 self.server.cell_registry.mark_stale_all()
                 # Restart reloads valuesets from disk — staleness clears.
@@ -1973,7 +2313,13 @@ class _Handler(BaseHTTPRequestHandler):
     # -- routes -------------------------------------------------------------
 
     def _resolve_main(self, body: dict[str, Any]) -> tuple[list[LibraryText], LibraryText]:
-        """Build (includes, main) from explicit inline libraries or the workspace."""
+        """Build (includes, main) from explicit inline libraries or the workspace.
+
+        S26: inline ``libraries[]`` are the EDITED tabs (authoring
+        buffer) — the include closure's members that are NOT inline
+        backfill from the workspace disk (inline wins per name; disk
+        fills the gaps so opening ONLY the main tab still evaluates).
+        """
         snap = self.server.watcher.snapshot
         if "libraries" in body:
             libs = _library_texts(body["libraries"])
@@ -1981,7 +2327,13 @@ class _Handler(BaseHTTPRequestHandler):
             main = next((l for l in libs if l.name == main_name), None)
             if main is None:
                 raise ValueError(f"library {main_name!r} not in libraries")
-            return [l for l in libs if l.name != main_name], main
+            inline_names = {l.name for l in libs}
+            disk_backfill = [
+                lib.library_text()
+                for lib in snap.libraries
+                if lib.name not in inline_names
+            ]
+            return [l for l in libs if l.name != main_name] + disk_backfill, main
         name = body.get("library") or ""
         if not name:
             raise ValueError("library is required")
@@ -2080,7 +2432,15 @@ class _Handler(BaseHTTPRequestHandler):
             merged_params.update(caller_params)
         try:
             payload = kernel.explain(
-                includes, main, patient, parameters=merged_params
+                includes,
+                main,
+                patient,
+                parameters=merged_params,
+                # S26a (item 6): same output_columns narrowing seam as
+                # _route_evaluate — a cell drill-in explains the CLICKED
+                # define, not every definition (kernel.explain forwards
+                # kwargs to operations explain_patient).
+                output_columns=body.get("output_columns"),
             )
         except Exception as exc:
             if _is_no_dataset_error(exc):
@@ -2122,6 +2482,7 @@ class _Handler(BaseHTTPRequestHandler):
             mapping=mapping,
             measure_name=measure_name,
             scoring=scoring,
+            library_urls=body.get("library_urls"),
         )
         self._write_json(200, result.to_dict())
 
@@ -2137,9 +2498,10 @@ class _Handler(BaseHTTPRequestHandler):
         names = [str(d) for d in (getattr(snap, "datasets", None) or [])]
         try:
             kernel = self.server.kernel_manager.current()
-            rows = kernel.conn.execute(
-                "SELECT id FROM resources WHERE resourceType = 'Patient'"
-            ).fetchall()
+            with kernel.locked():
+                rows = kernel.conn.execute(
+                    "SELECT id FROM resources WHERE resourceType = 'Patient'"
+                ).fetchall()
             count = len({r[0] for r in rows if r[0] is not None})
         except Exception:
             count = None
@@ -2190,21 +2552,33 @@ class _Handler(BaseHTTPRequestHandler):
             pass
 
     def _expected_root(self) -> Path:
-        """measures/expected dir (same resolution as baseline routes).
+        """Expected-store root: the workspace's MeasureReport/ dir.
 
-        S3b fix: resolve from the CONFIGURED measures dir — deriving from
-        snapshot.measures (files) made the root drift once save populated
-        measures/expected/patients/... (the saved files themselves became
-        the "measures", moving the root under patients/<M>/expected).
+        Canonical: ``<workspace>/MeasureReport/<measure>/<pid>.json``
+        (type-folder convention, S26 review). Legacy layouts are READ
+        for back-compat: ``<measure_dir>/expected/patients/...`` and
+        ``<workspace>/measures/expected/patients/...``. Writes always
+        target the canonical dir (save_expected_report mkdirs it).
         """
         cfg = getattr(self.server.watcher, "_cfg", None)
+        root = Path(getattr(cfg, "root", None) or ".")
+        canonical = root / "MeasureReport"
+        if canonical.is_dir():
+            return canonical
         measure_dirs = list(getattr(cfg, "measure_dirs", None) or [])
-        if measure_dirs:
+        for d in measure_dirs:
+            if (Path(d) / "expected").is_dir():
+                return Path(d) / "expected"
+        if measure_dirs and (Path(measure_dirs[0]) / "expected").parent.is_dir():
             return Path(measure_dirs[0]) / "expected"
         data_dirs = list(getattr(cfg, "data_dirs", None) or [])
         if data_dirs:
-            return Path(data_dirs[0]).parent / "measures" / "expected"
-        return Path("measures") / "expected"
+            legacy = Path(data_dirs[0]).parent / "measures" / "expected"
+            if legacy.is_dir():
+                return legacy
+            # No legacy store exists yet → canonical wins for NEW writes.
+            return canonical
+        return canonical
 
     def _evaluate_measure_reports(self, body: dict[str, Any]):
         """Shared S3/S6 helper: run the measure.
@@ -2223,11 +2597,12 @@ class _Handler(BaseHTTPRequestHandler):
         if main is None:
             return None, None, None, [_diag("could not resolve main library")], None
         kernel = self.server.kernel_manager.current()
-        evd = evaluate_library(
-            includes, main, None, kernel.conn,
-            parameters=body.get("parameters"), output_columns=cols,
-            emit_sql=True,
-        ).to_dict()
+        with kernel.locked():
+            evd = evaluate_library(
+                includes, main, None, kernel.conn,
+                parameters=body.get("parameters"), output_columns=cols,
+                emit_sql=True,
+            ).to_dict()
         if not evd.get("ok"):
             return None, None, None, (evd.get("diagnostics") or [_diag("evaluation failed")]), None
         columns = list(cols.keys())
@@ -2574,6 +2949,43 @@ class _Handler(BaseHTTPRequestHandler):
             ),
         )
 
+    def _route_measure_report_from_rows(self, body: dict[str, Any]) -> None:
+        """POST /api/measure/report-from-rows — per-patient MeasureReports
+        from evaluation rows (S31).
+
+        Connected mode used to bounce this through the Pyodide worker,
+        which forced the whole browser engine to boot on the first
+        heartbeat (~10s startup). This endpoint calls the SAME operations
+        capability server-side — single source of truth, no worker needed.
+        """
+        measure = body.get("measure")
+        if not isinstance(measure, dict):
+            self._write_json(200, _envelope(False, diagnostics=[_diag("measure is required")]))
+            return
+        rows = body.get("rows")
+        cols = body.get("columns")
+        if not isinstance(rows, list):
+            self._write_json(200, _envelope(False, diagnostics=[_diag("rows must be a list")]))
+            return
+        from fhir4ds.operations import measure_report_from_rows
+
+        try:
+            result = measure_report_from_rows(
+                measure,
+                rows,
+                [str(c) for c in (cols or [])],
+                period_start=body.get("period_start"),
+                period_end=body.get("period_end"),
+            )
+        except Exception as exc:
+            self._write_json(
+                200,
+                _envelope(False, diagnostics=[_diag(str(exc))]),
+            )
+            return
+        payload = result.to_dict() if hasattr(result, "to_dict") else result
+        self._write_json(200, payload)
+
     def _route_measure_run(self, body: dict[str, Any]) -> None:
         """Run a Measure against the loaded dataset.
 
@@ -2600,11 +3012,12 @@ class _Handler(BaseHTTPRequestHandler):
         import time as _time
 
         _t0 = _time.monotonic()
-        ev = evaluate_library(
-            includes, main, None, kernel.conn,
-            parameters=body.get("parameters"), output_columns=cols,
-            emit_sql=True,
-        )
+        with kernel.locked():
+            ev = evaluate_library(
+                includes, main, None, kernel.conn,
+                parameters=body.get("parameters"), output_columns=cols,
+                emit_sql=True,
+            )
         evd = ev.to_dict()
         measure_name = (
             measure.get("name") if isinstance(measure.get("name"), str) else "Measure"
@@ -2715,14 +3128,15 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         kernel = self.server.kernel_manager.current()
-        evd = evaluate_library(
-            includes,
-            main,
-            None,
-            kernel.conn,
-            parameters=body.get("parameters") or {},
-            output_columns=columns,
-        ).to_dict()
+        with kernel.locked():
+            evd = evaluate_library(
+                includes,
+                main,
+                None,
+                kernel.conn,
+                parameters=body.get("parameters") or {},
+                output_columns=columns,
+            ).to_dict()
         if not evd.get("ok"):
             self._write_json(
                 200,
@@ -2852,14 +3266,15 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         kernel = self.server.kernel_manager.current()
-        evd = evaluate_library(
-            includes,
-            main,
-            None,
-            kernel.conn,
-            parameters=body.get("parameters") or {},
-            output_columns=columns,
-        ).to_dict()
+        with kernel.locked():
+            evd = evaluate_library(
+                includes,
+                main,
+                None,
+                kernel.conn,
+                parameters=body.get("parameters") or {},
+                output_columns=columns,
+            ).to_dict()
         if not evd.get("ok"):
             self._write_json(
                 200,
@@ -3037,10 +3452,11 @@ class _Handler(BaseHTTPRequestHandler):
             resources = explicit
         else:
             try:
-                rows = kernel.conn.execute(
-                    "SELECT resource FROM resources WHERE resourceType = ?",
-                    [resource_type],
-                ).fetchall()
+                with kernel.locked():
+                    rows = kernel.conn.execute(
+                        "SELECT resource FROM resources WHERE resourceType = ?",
+                        [resource_type],
+                    ).fetchall()
             except Exception as exc:
                 self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
                 return
@@ -3053,7 +3469,8 @@ class _Handler(BaseHTTPRequestHandler):
         import time as _time
 
         _t0 = _time.monotonic()
-        result = flatten_view(vd, resources, kernel.conn)
+        with kernel.locked():
+            result = flatten_view(vd, resources, kernel.conn)
         vd_name = vd.get("name") if isinstance(vd.get("name"), str) else (v_path or "inline view")
         self._runlog_record(
             kind="view",
@@ -3110,6 +3527,13 @@ class _Handler(BaseHTTPRequestHandler):
         The dataset path must live inside the workspace data dirs (author
         owned); the save publishes a data-hint event so the UI offers a
         kernel restart (data never auto-reloads).
+
+        S25 `replace: true`: when the resource's (resourceType, id)
+        already exists in the workspace data, REPLACE it in place — the
+        canonical per-patient folder file (Patient/<pid>/<Type>-<rid>.json
+        or <pid>.json for the Patient itself) is rewritten; ndjson
+        monoliths get their matching line rewritten. Append stays the
+        default for genuinely new resources.
         """
         from pathlib import Path as _Path
 
@@ -3121,6 +3545,9 @@ class _Handler(BaseHTTPRequestHandler):
                 200,
                 _envelope(ok=False, diagnostics=[_diag("resource must be a JSON object")]),
             )
+            return
+        if body.get("replace") is True and isinstance(resource.get("id"), str):
+            self._route_resource_replace(resource)
             return
         raw_path = str(body.get("dataset_path") or "")
         if not raw_path:
@@ -3176,6 +3603,187 @@ class _Handler(BaseHTTPRequestHandler):
         self.server.watcher.bus.publish(WorkspaceEvent(kind="data-hint", paths=[str(target)]))
         self._write_json(200, _envelope(path=str(target), appended=True))
 
+    def _route_resource_replace(self, resource: dict[str, Any]) -> None:
+        """S25 replace-in-place for one existing workspace resource.
+
+        Resolution order (first hit wins; validation gates the write):
+        1. Canonical per-patient folder file: Patient/<pid>/<pid>.json for
+           a Patient; Patient/<pid>/<Type>-<rid>.json for other types.
+        2. ndjson monolith line whose (resourceType, id) matches.
+        Unknown resources fall through to the caller's append path with
+        `appended=True` semantics preserved by the caller.
+        """
+        from pathlib import Path as _Path
+
+        from fhir4ds.operations.capabilities.validate import validate_resource
+
+        rid = str(resource.get("id"))
+        rtype = str(resource.get("resourceType") or "")
+        if not rid or not rtype:
+            self._write_json(
+                200,
+                _envelope(
+                    ok=False,
+                    diagnostics=[_diag("resource.id and resourceType are required")],
+                ),
+            )
+            return
+        vr = validate_resource(resource)
+        if not vr.valid:
+            self._write_json(
+                200,
+                _envelope(ok=False, diagnostics=[_diag(d) for d in vr.diagnostics]),
+            )
+            return
+        root = _Path(getattr(self.server.watcher, "_cfg").root)
+        snap = self.server.watcher.snapshot
+
+        def _same_resource(payload: dict[str, Any]) -> bool:
+            return payload.get("id") == rid and payload.get("resourceType") == rtype
+
+        # 1. Per-patient folder candidates (any subject/patient ref).
+        pid = self._resource_patient_id(resource)
+        candidates: list[_Path] = []
+        if rtype == "Patient":
+            candidates.append(root / "Patient" / rid / f"{rid}.json")
+        elif pid:
+            candidates.append(root / "Patient" / pid / f"{rtype}-{rid}.json")
+        for cand in candidates:
+            if not cand.is_file():
+                continue
+            try:
+                existing = json.loads(cand.read_text(encoding="utf-8-sig"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(existing, dict) and _same_resource(existing):
+                if existing == resource:
+                    # S25: identical content (e.g. the builder's opening
+                    # auto-commit) — NOT a data change; skip the write so
+                    # no data-hint banner appears for a no-op.
+                    self._write_json(
+                        200,
+                        _envelope(ok=True, path=str(cand), replaced=True, noop=True),
+                    )
+                    return
+                from .workspace_types import write_resource
+
+                write_resource(cand, resource)
+                self.server.watcher.bus.publish(
+                    WorkspaceEvent(kind="data-hint", paths=[str(cand)])
+                )
+                self._write_json(
+                    200,
+                    _envelope(
+                        ok=True,
+                        path=str(cand),
+                        replaced=True,
+                        note="saved — restart the kernel to reload patient data",
+                    ),
+                )
+                return
+
+        # 2. ndjson monolith line rewrite.
+        for p in snap.datasets:
+            if p.suffix.lower() != ".ndjson":
+                continue
+            try:
+                lines = p.read_text(encoding="utf-8-sig").splitlines()
+            except OSError:
+                continue
+        out: list[str] = []
+        replaced = False
+        noop = False
+        for line in lines:
+            if not line.strip():
+                out.append(line)
+                continue
+            try:
+                payload = json.loads(line)
+            except ValueError:
+                out.append(line)
+                continue
+            if not replaced and isinstance(payload, dict) and _same_resource(payload):
+                if payload == resource:
+                    # S25 no-op guard: identical line — leave the file
+                    # untouched (no data-hint for a no-op).
+                    out.append(line)
+                    replaced = True
+                    noop = True
+                else:
+                    out.append(json.dumps(resource, ensure_ascii=False))
+                    replaced = True
+            else:
+                out.append(line)
+            if not replaced:
+                continue
+            if noop:
+                self._write_json(
+                    200,
+                    _envelope(ok=True, path=str(p), replaced=True, noop=True),
+                )
+                return
+            try:
+                with open(p, "w", encoding="utf-8") as fh:
+                    fh.write("\n".join(out) + "\n")
+            except OSError as exc:
+                self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+                return
+            self.server.watcher.bus.publish(
+                WorkspaceEvent(kind="data-hint", paths=[str(p)])
+            )
+            self._write_json(
+                200,
+                _envelope(
+                    ok=True,
+                    path=str(p),
+                    replaced=True,
+                    note="saved — restart the kernel to reload patient data",
+                ),
+            )
+            return
+
+        # No existing copy — place it canonically (per-patient folder;
+        # Patient/<rid> root for unattributed) so genuinely-new resources
+        # from the builder persist. Returns noop=False, appended=True.
+        from .workspace_types import write_resource
+
+        if rtype == "Patient":
+            target = root / "Patient" / rid / f"{rid}.json"
+        elif pid:
+            target = root / "Patient" / pid / f"{rtype}-{rid}.json"
+        else:
+            target = root / "Patient" / f"{rtype}-{rid}.json"
+        try:
+            write_resource(target, resource)
+        except OSError as exc:
+            self._write_json(200, _envelope(ok=False, diagnostics=[_diag(str(exc))]))
+            return
+        self.server.watcher.bus.publish(
+            WorkspaceEvent(kind="data-hint", paths=[str(target)])
+        )
+        self._write_json(
+            200,
+            _envelope(
+                ok=True,
+                path=str(target),
+                appended=True,
+                note="saved — restart the kernel to reload patient data",
+            ),
+        )
+
+    @staticmethod
+    def _resource_patient_id(resource: dict[str, Any]) -> str | None:
+        """Best-effort Patient/<id> extraction for folder placement."""
+        for key in ("subject", "patient", "beneficiary"):
+            ref = resource.get(key)
+            if isinstance(ref, dict) and isinstance(ref.get("reference"), str):
+                raw = ref["reference"]
+                if raw.startswith("Patient/"):
+                    pid = raw[len("Patient/"):].split("/")[0]
+                    if pid:
+                        return pid
+        return None
+
     # -- static UI ----------------------------------------------------------
 
     def _route_patient_get(self, pid: str) -> None:
@@ -3188,11 +3796,12 @@ class _Handler(BaseHTTPRequestHandler):
         """
         kernel = self.server.kernel_manager.current()
         try:
-            rows = kernel.conn.execute(
-                "SELECT id, resourceType, resource, patient_ref FROM resources"
-                " WHERE id = ? OR patient_ref = ?",
-                [pid, pid],
-            ).fetchall()
+            with kernel.locked():
+                rows = kernel.conn.execute(
+                    "SELECT id, resourceType, resource, patient_ref FROM resources"
+                    " WHERE id = ? OR patient_ref = ?",
+                    [pid, pid],
+                ).fetchall()
         except Exception as exc:
             if _is_no_dataset_error(exc):
                 self._write_json(
@@ -3445,6 +4054,11 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        # S25 STEP ZERO (cache hygiene): HTML entry points must ALWAYS
+        # revalidate (a cached index.html pins stale hashed-asset URLs);
+        # hashed /assets/* are immutable so they may cache freely.
+        if ctype == "text/html":
+            self.send_header("Cache-Control", "no-cache, must-revalidate")
         for name, value in extra_headers:
             self.send_header(name, value)
         self.end_headers()
@@ -3744,6 +4358,16 @@ def _version() -> str:
         return "?"
 
 
+def _duckdb_version() -> str:
+    """DuckDB engine version for the UI footer chip (best effort)."""
+    try:
+        import duckdb
+
+        return str(duckdb.__version__)
+    except Exception:  # pragma: no cover - duckdb always present server-side
+        return "unknown"
+
+
 def run_dev_server(cfg: Any) -> None:
     """Build and run the dev server (blocking; CLI entry point)."""
     from .discovery import scan_workspace
@@ -3767,6 +4391,8 @@ def run_dev_server(cfg: Any) -> None:
     snapshot = scan_workspace(cfg)
     manager = KernelManager(snapshot)
     manager.port = cfg.port
+    # S31: warm the primary-library translation while the browser boots.
+    _spawn_warm_translation(snapshot, manager)
     from .watcher import EventBus
 
     bus = EventBus()

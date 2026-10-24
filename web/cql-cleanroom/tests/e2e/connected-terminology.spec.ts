@@ -110,7 +110,7 @@ test("connected: no terminology items in File>Add (removed per S1R)", async ({ p
   await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(12000);
   await page.locator('[data-testid="file-menu"]').click();
-  await page.locator('[data-testid="file-add"]').hover();
+  await page.locator('[data-testid="file-open"]').hover();
   await page.waitForTimeout(600);
   await expect(page.locator('[data-testid="vsac-import"]')).toHaveCount(0);
   await expect(page.locator('[data-testid="umls-lookup"]')).toHaveCount(0);

@@ -139,6 +139,22 @@ class TestTranslateVerifyExplain:
         r = call("/api/explain", {"library": "Demographics", "patient_id": "p1"})
         assert r["ok"] and r.get("patient_id") == "p1"
 
+    def test_explain_output_columns_narrows_to_clicked_define(self, server):
+        """S26a (item 6): /api/explain forwards output_columns — a cell
+        drill-in explains the CLICKED define only (same narrowing seam
+        as _route_evaluate), not every definition."""
+        r = call(
+            "/api/explain",
+            {
+                "library": "Demographics",
+                "patient_id": "p1",
+                "output_columns": {"Male": "Male"},
+            },
+        )
+        assert r["ok"]
+        columns = [d["column"] for d in r.get("definitions", [])]
+        assert columns == ["Male"]
+
     def test_fhirpath_eval(self, server):
         import urllib.parse
 
@@ -293,3 +309,74 @@ class TestWebSocketEvents:
         except urllib.error.HTTPError as e:
             raised = e.code == 400
         assert raised
+
+
+PORT_CONCURRENT = 18812
+
+
+@pytest.fixture(scope="module")
+def concurrent_server(tmp_path_factory):
+    """Live server for the concurrency regression (S27)."""
+    tmp_path = tmp_path_factory.mktemp("ws_conc")
+    (tmp_path / "cql").mkdir()
+    (tmp_path / "cql" / "Demographics.cql").write_text(CQL)
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "patients.ndjson").write_text(
+        '{"resourceType": "Patient", "id": "p1", "gender": "male"}\n'
+        '{"resourceType": "Patient", "id": "p2", "gender": "female"}\n'
+    )
+    cfg = load_config(tmp_path)
+    snap = scan_workspace(cfg)
+    mgr = KernelManager(snap)
+    w = Watcher(cfg, EventBus())
+    srv = create_server(mgr, w, port=PORT_CONCURRENT)
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    time.sleep(0.2)
+    yield srv
+    srv.shutdown()
+
+
+def test_concurrent_evaluations_do_not_corrupt_the_kernel(concurrent_server):
+    """S27 crash fix: the kernel's DuckDB connection is shared across
+    HTTP handler threads and is not thread-safe. Overlapping evaluations
+    corrupted the interpreter (CPython aborted: "XXX lineno ... unknown
+    opcode") and killed the server mid-review. Kernel operations are
+    serialized by the kernel lock; this fires overlapping requests and
+    asserts every one succeeds with the server still healthy."""
+    results: list[dict] = []
+    errors: list[BaseException] = []
+    lock = threading.Lock()
+
+    def hit() -> None:
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{PORT_CONCURRENT}/api/evaluate",
+                data=json.dumps({"library": "Demographics"}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=120) as r:
+                body = json.loads(r.read())
+            with lock:
+                results.append(body)
+        except BaseException as exc:  # noqa: BLE001 - captured for the assertion
+            with lock:
+                errors.append(exc)
+
+    threads = [threading.Thread(target=hit) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=180)
+
+    assert not errors, [repr(e) for e in errors]
+    assert len(results) == 6
+    assert all(r.get("ok") for r in results), [r.get("diagnostics") for r in results]
+    # Server still alive and serving.
+    health = call_on(PORT_CONCURRENT, "/health")
+    assert health.get("status") == "ok"
+
+
+def call_on(port: int, path: str) -> dict:
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=30) as r:
+        return json.loads(r.read())

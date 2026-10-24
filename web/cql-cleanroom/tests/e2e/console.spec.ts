@@ -13,17 +13,60 @@ async function bootReady(page: import("@playwright/test").Page) {
   await page.goto("/");
   await page.waitForSelector(".version-badge", { timeout: 150_000 });
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
+  // S25: cells view is console-FREE by design, and the default library
+  // auto-cellifies (markers injected, cells view opens). These specs
+  // exercise the TEXT editor + console — if cells auto-opened, switch
+  // back to text and wait for a clean re-parse.
+  const gotIt = page.getByRole("button", { name: "Got it" });
+  if (await gotIt.isVisible().catch(() => false)) await gotIt.click();
+  const toggle = page.locator('[data-testid="cell-view-toggle"]');
+  try {
+    await toggle.waitFor({ state: "visible", timeout: 10_000 });
+    if ((await toggle.getAttribute("aria-checked")) === "true") {
+      await toggle.click();
+      await page.waitForFunction(
+        () =>
+          (document
+            .querySelector('[data-testid="parse-status"]')
+            ?.textContent ?? "").includes("parsed ✓"),
+        { timeout: 30_000 },
+      );
+    }
+  } catch {
+    /* toggle absent — text view already */
+  }
 }
 
 async function selectIppBody(page: import("@playwright/test").Page) {
-  // Select line 6 of the default library (the Initial Population
-  // expression body):
+  // Select the Initial Population expression body:
   // `  exists([Patient] P where P.gender = 'female')`
+  // S25: marker-agnostic navigation — the buffer may carry auto-injected
+  // `// # %%` cell markers, so walk down from Home until the caret sits
+  // on the expression-body LINE (derived exactly from the textarea's
+  // selectionStart against the full buffer), then Home + Shift+End.
+  const target = "exists([Patient] P where P.gender = 'female')";
   await page.click("[data-testid=cql-editor] .monaco-editor");
   await page.keyboard.press("Control+Home");
-  for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("Home");
-  await page.keyboard.press("Shift+End");
+  for (let i = 0; i < 15; i++) {
+    const onTarget = await page.evaluate((needle) => {
+      const ta = document.querySelector(
+        "[data-testid=cql-editor] textarea",
+      ) as HTMLTextAreaElement | null;
+      if (!ta) return false;
+      const pos = ta.selectionStart ?? 0;
+      const before = ta.value.slice(0, pos);
+      const lineStart = before.lastIndexOf("\n") + 1;
+      const line = ta.value.slice(lineStart, ta.value.indexOf("\n", lineStart));
+      return line.includes(needle);
+    }, target);
+    if (onTarget) {
+      await page.keyboard.press("Home");
+      await page.keyboard.press("Shift+End");
+      return;
+    }
+    await page.keyboard.press("ArrowDown");
+  }
+  throw new Error("IPP expression body line not found");
 }
 
 async function tableHeader(page: import("@playwright/test").Page) {
@@ -180,8 +223,11 @@ test.describe("run ring + switcher (6g)", () => {
     });
     if (!libRunValue) throw new Error("no library run in the switcher");
     await page.selectOption("[data-testid=console-run-select]", libRunValue);
+    // S26 (items 1+2 doctrine): library runs show EVERY define's column
+    // (all-defines output, S23-1) — including the demo's
+    // Initial Population define, never measure-mapped population codes.
     await expect(page.locator("[data-testid=results-table]")).toContainText(
-      "initial_population",
+      "Initial Population",
       { timeout: 15_000 },
     );
     await page.click("[data-testid=console-tab-sql]");
@@ -241,10 +287,26 @@ test.describe("shape-aware runs + active-tab targeting (6j)", () => {
     const prior = await page
       .locator("[data-testid=console-run-select] option")
       .count();
-    // Select the `define "Initial Population":` line + its body.
+    // Select the `define "Initial Population":` line + its body
+    // (marker-agnostic: walk to the define-header line by content).
+    const needle = 'define "Initial Population":';
     await page.click("[data-testid=cql-editor] .monaco-editor");
     await page.keyboard.press("Control+Home");
-    for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowDown");
+    for (let i = 0; i < 15; i++) {
+      const onTarget = await page.evaluate((n) => {
+        const ta = document.querySelector(
+          "[data-testid=cql-editor] textarea",
+        ) as HTMLTextAreaElement | null;
+        if (!ta) return false;
+        const pos = ta.selectionStart ?? 0;
+        const before = ta.value.slice(0, pos);
+        const lineStart = before.lastIndexOf("\n") + 1;
+        const line = ta.value.slice(lineStart, ta.value.indexOf("\n", lineStart));
+        return line.includes(n);
+      }, needle);
+      if (onTarget) break;
+      await page.keyboard.press("ArrowDown");
+    }
     await page.keyboard.press("Home");
     await page.keyboard.press("Shift+ArrowDown");
     await page.keyboard.press("Shift+End");
@@ -289,49 +351,51 @@ test.describe("shape-aware runs + active-tab targeting (6j)", () => {
     });
     expect(latest).toContain("Library2");
     // Switching back to the entrypoint tab restores the heartbeat's
-    // population columns (auto runs use the measure's population codes;
-    // manual runs show define names — a pre-existing asymmetry).
+    // define columns (S26 doctrine: library runs show every define —
+    // the demo's Initial Population among them).
     await page.click("[data-testid=library-tab-0]");
     await page.waitForFunction(
       () =>
         [...document.querySelectorAll("[data-testid=results-table] th")]
-          .some((th) => th.textContent?.includes("initial_population")),
+          .some((th) => th.textContent?.includes("Initial Population")),
       undefined,
       { timeout: 60_000 },
     );
   });
 });
 
-test.describe("defines matrix (visual editor 1)", () => {
-  test("Defines tab evaluates every define live as you type", async ({
+test.describe("results table (S26 doctrine: all defines, live)", () => {
+  test("Results tab evaluates every define live as you type", async ({
     page,
   }) => {
     await bootReady(page);
-    await page.click("[data-testid=console-tab-defines]");
-    // All defines — including non-population ones the Results table
-    // never shows ("Has Name" is not in the Measure).
-    await page.waitForSelector("[data-testid=defines-table]", {
+    // S26 (items 1+2): the Defines tab is GONE — the Results table IS
+    // the all-defines matrix (every define, population or not).
+    await expect(
+      page.locator("[data-testid=console-tab-defines]"),
+    ).toHaveCount(0);
+    await page.waitForSelector("[data-testid=results-table]", {
       timeout: 120_000,
     });
     const header = (
-      await page.locator("[data-testid=defines-table] th").allTextContents()
+      await page.locator("[data-testid=results-table] th").allTextContents()
     ).join(",");
     expect(header).toContain("patient_id");
     expect(header).toContain("Initial Population");
     expect(header).toContain("Has Name");
     // p1/p3 female → Initial Population true; p2 male → false.
     const rows = await page
-      .locator("[data-testid=defines-table] tbody tr")
+      .locator("[data-testid=results-table] tbody tr")
       .allTextContents();
     expect(rows.find((r) => r.includes("p1")) ?? "").toContain("true");
     expect(rows.find((r) => r.includes("p2")) ?? "").toContain("false");
-    // LIVE: author a new define — it joins the matrix with no manual run.
+    // LIVE: author a new define — it joins the table with no manual run.
     await page.click("[data-testid=cql-editor] .monaco-editor");
     await page.keyboard.press("Control+End");
     await page.keyboard.type('\ndefine "MatrixCheck":\n  true\n');
     await page.waitForFunction(
       () =>
-        [...document.querySelectorAll("[data-testid=defines-table] th")].some(
+        [...document.querySelectorAll("[data-testid=results-table] th")].some(
           (th) => th.textContent?.includes("MatrixCheck"),
         ),
       undefined,
@@ -418,7 +482,11 @@ test.describe("outline + jump-to-define (visual editor 4)", () => {
     await expect(panel).toContainText("Defines");
     await expect(panel).toContainText("Initial Population");
     await expect(panel).toContainText("Has Name");
-    await expect(panel).toContainText("L8");
+    // Line pins are MARKER-DEPENDENT: the buffer may carry auto-injected
+    // `// # %%` cell markers (+2 lines) or not. Assert both defines have
+    // line refs without pinning exact numbers.
+    await expect(panel).toContainText(/L(6|8)/);
+    await expect(panel).toContainText(/L(10|12)/);
     // Jump: the current-line highlight must land on the "Has Name"
     // declaration (line 8) — same viewport row as that view-line.
     await panel

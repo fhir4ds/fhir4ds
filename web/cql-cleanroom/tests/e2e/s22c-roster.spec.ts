@@ -100,30 +100,59 @@ test("S22c-2: clicking a patient opens their data in the resource editor; save w
   }
   await expect(rosterRow).toBeVisible({ timeout: 15000 });
 
-  // S24-3 interaction: single-click opens the type-grouped slideout;
-  // its 'Edit patient data…' button opens the patient editor (tab + JSON).
+  // S25 flow (the website UX): single-click drills into the RIGHT-side
+  // L3 detail panel (type groups from LOCAL FILES); editing the Patient
+  // resource row opens the Resource Builder prefilled from the server.
   const row = panel.locator('[data-testid="ds-roster-row"]', { hasText: "r01" }).first();
   await row.click();
-  const slideout = page.locator('[data-testid="ds-patient-slideout"]');
-  await expect(slideout).toBeVisible({ timeout: 15000 });
-  await slideout.locator('[data-testid="ds-slideout-edit"]').click();
-  const editor = page.locator('[data-testid="patient-editor"]');
-  await expect(editor).toBeVisible({ timeout: 30000 });
-  // The patient's resources are listed (Patient + their Encounter).
-  await expect(editor).toContainText("Rosa");
-  await expect(editor).toContainText("Encounter");
+  const detail = page.locator('[data-testid="nav-detail"]');
+  await expect(detail).toBeVisible({ timeout: 15000 });
+  const r01Group = detail.locator('[data-testid="dataset-group-r01"]');
+  await expect(r01Group).toBeVisible({ timeout: 15000 });
+  await expect(r01Group).toContainText("Rosa");
+  await expect(r01Group).toContainText("Encounter");
 
-  // Edit the Patient resource JSON (gender -> male) and save.
-  const jsonArea = editor.locator("textarea, [contenteditable=true]").first();
-  await expect(jsonArea).toBeVisible();
-  const before = await jsonArea.inputValue?.().catch(() => null);
-  expect(before ?? "").toContain('"female"');
-  await jsonArea.fill((before ?? "").replace('"female"', '"male"'));
-  await editor.locator('[data-testid="patient-save"]').click();
-  await expect(editor.locator('[data-testid="patient-status"]')).toContainText(
-    /saved patient r01/i,
-    { timeout: 20000 },
+  // Edit the Patient resource in the Resource Builder (raw JSON mode):
+  // open the Patient type group, click its row (builder opens prefilled
+  // from the SERVER resource), flip gender, validate + add — the save
+  // goes to DISK (per-patient folder), data-hint offers kernel restart.
+  // Edit the Patient resource in the Resource Builder (raw JSON mode):
+  // open the Patient type group if collapsed, click its row (builder
+  // opens prefilled from the SERVER resource), flip gender, and add —
+  // the save goes to DISK, data-hint offers kernel restart.
+  const patToggle = r01Group.locator(
+    '[data-testid="dataset-type-toggle-r01-Patient"]',
   );
+  const patRow = r01Group
+    .locator('[data-testid^="dataset-row-"]', { hasText: "Patient" })
+    .first();
+  if (!(await patRow.isVisible().catch(() => false))) {
+    await patToggle.click();
+  }
+  await expect(patRow).toBeVisible({ timeout: 5000 });
+  await patRow.click();
+  const builder = page.locator('[data-testid="builder-pane"]');
+  await expect(builder).toBeVisible({ timeout: 30000 });
+  // The prefill lands async (schema fetch → form) — the id field must
+  // hold r01 BEFORE seeding raw mode, or the raw text is a bare skeleton.
+  await expect(
+    builder.locator('[data-testid="builder-field-id"]'),
+  ).toHaveValue("r01", { timeout: 15000 });
+  // Raw JSON round-trip hatch: seed from the prefilled draft, flip
+  // gender, then EXPLICITLY save (connected mode never auto-commits —
+  // opening a resource must not touch the disk).
+  await builder.locator('[data-testid="builder-raw-toggle"]').click();
+  const rawText = builder.locator('[data-testid="builder-raw-text"]');
+  await expect(rawText).toBeVisible();
+  const before = await rawText.inputValue().catch(() => null);
+  expect(before ?? "").toContain('"female"');
+  await rawText.fill((before ?? "").replace('"female"', '"male"'));
+  // Debounced validation must settle (enables Save), then save to DISK.
+  const save = builder.locator('[data-testid="builder-add"]');
+  await expect(save).toBeVisible();
+  await expect(save).toBeEnabled({ timeout: 15000 });
+  await save.click();
+  await page.waitForTimeout(2500);
 
   // Data never auto-reloads (locked decision): restart the kernel, then
   // the patient endpoint (kernel-backed) reflects the edit — proving the

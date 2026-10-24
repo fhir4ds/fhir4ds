@@ -14,6 +14,8 @@ export type ServerMode =
       kind: "connected";
       version: string;
       workspace: string;
+      /** S29: engine label for the footer chip (e.g. "DuckDB 1.5.2"). */
+      engine?: string;
     };
 
 export interface TerminologyConfigStatus {
@@ -38,6 +40,7 @@ export async function detectServer(base = ""): Promise<ServerMode> {
         kind: "connected",
         version: d.version,
         workspace: typeof d.workspace === "string" ? d.workspace : "workspace",
+        engine: typeof d.engine === "string" ? d.engine : undefined,
       };
     }
     return { kind: "standalone" };

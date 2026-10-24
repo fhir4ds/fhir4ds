@@ -27,7 +27,7 @@ test.describe("editor tabs", () => {
   }) => {
     await bootReady(page);
     // Measure tab via the Measures drawer.
-    await page.click("[data-testid=nav-toggle-measures]");
+    await page.click("[data-testid=nav-toggle-config]");
     await page.locator("[data-testid^=nav-item-measure-]").first().click();
     await expect(page.locator("[data-testid^=editor-tab-measure-]")).toBeVisible();
     // The host replaces the editor (which stays mounted, hidden).

@@ -370,7 +370,7 @@ def import_tests_zip(
                 if (patient_from_report(stamped) or "") != pid:
                     stamped = {**stamped, "subject": {"reference": f"Patient/{pid}"}}
                 out = save_expected_report(
-                    Path(root) / "measures" / "expected", mname, stamped
+                    Path(root) / "MeasureReport", mname, stamped
                 )
                 expected_written.append(str(out.relative_to(root)))
                 changed.append(str(out))

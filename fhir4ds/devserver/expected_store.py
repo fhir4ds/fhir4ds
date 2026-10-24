@@ -2,7 +2,9 @@
 
 Expected results are persisted as MeasureReports in the MADiE
 cqfm-test-cases shape (one file per patient under
-``measures/expected/patients/<measure>/<patientId>.json``):
+``MeasureReport/<measure>/<patientId>.json`` — the type-folder
+convention; the legacy ``measures/expected/patients/<measure>/``
+spelling is READ for back-compat, never written):
 
 * ``meta.profile`` = ``http://hl7.org/fhir/us/cqf-measures/StructureDefinition/...``
   style profile marker is intentionally OMITTED (MADiE sets it on export;
@@ -40,8 +42,15 @@ def _safe(name: str) -> bool:
 
 
 def expected_patients_dir(expected_root: Path, measure: str) -> Path:
-    """Per-patient expected dir for a measure (no mkdir)."""
-    return expected_root / "patients" / measure
+    """Per-patient expected dir for a measure (no mkdir).
+
+    ``expected_root`` is the caller-resolved root (see api._expected_root);
+    the canonical layout is ``MeasureReport/<measure>/<patientId>.json``
+    — when the caller passes the WORKSPACE root we detect a sibling
+    MeasureReport/ dir. Legacy ``expected/patients/<measure>/`` under a
+    measures dir is read for back-compat when canonical is absent.
+    """
+    return expected_root / measure
 
 
 def is_test_case_report(resource: dict[str, Any] | None) -> bool:
@@ -143,13 +152,28 @@ def parse_expected_groups(report: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def patient_from_report(report: dict[str, Any]) -> str | None:
-    """Patient id from subject.reference (Patient/<id> or bare id)."""
+    """Patient id of an expected MeasureReport.
+
+    Our shape: ``subject.reference`` (Patient/<id> or bare id). MADiE
+    test-case shape (fixture-official): no subject.reference — the
+    patient rides ``contained[Parameters].parameter[name=subject]
+    .valueString`` (the MADiE expected-results convention).
+    """
     subject = report.get("subject") or {}
     ref = subject.get("reference") if isinstance(subject, dict) else None
-    if not isinstance(ref, str) or not ref:
-        return None
-    tail = ref.rsplit("/", 1)[-1]
-    return tail or None
+    if isinstance(ref, str) and ref:
+        tail = ref.rsplit("/", 1)[-1]
+        if tail:
+            return tail
+    for res in report.get("contained") or []:
+        if not isinstance(res, dict) or res.get("resourceType") != "Parameters":
+            continue
+        for param in res.get("parameter") or []:
+            if isinstance(param, dict) and param.get("name") == "subject":
+                value = param.get("valueString")
+                if isinstance(value, str) and value:
+                    return value.rsplit("/", 1)[-1] or None
+    return None
 
 
 def save_expected_report(
@@ -176,12 +200,20 @@ def load_expected_reports(
     expected_root: Path,
     measure: str,
 ) -> list[dict[str, Any]]:
-    """All per-patient expected reports for a measure, sorted by patient."""
+    """All per-patient expected reports for a measure, sorted by patient.
+
+    Canonical: ``<root>/<measure>/<pid>.json`` (root = the MeasureReport/
+    dir). Legacy: ``<root>/patients/<measure>/<pid>.json`` (root = a
+    measures/expected dir) — read for back-compat when canonical is empty.
+    """
     d = expected_patients_dir(expected_root, measure)
-    if not d.is_dir():
-        return []
+    files = sorted(d.glob("*.json")) if d.is_dir() else []
+    if not files:
+        legacy = expected_root / "patients" / measure
+        if legacy.is_dir():
+            files = sorted(legacy.glob("*.json"))
     out: list[dict[str, Any]] = []
-    for f in sorted(d.glob("*.json")):
+    for f in files:
         try:
             doc = json.loads(f.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -198,6 +230,10 @@ def delete_expected_report(expected_root: Path, measure: str, patient_id: str) -
     target = expected_patients_dir(expected_root, measure) / f"{patient_id}.json"
     if target.is_file():
         target.unlink()
+        return True
+    legacy = expected_root / "patients" / measure / f"{patient_id}.json"
+    if legacy.is_file():
+        legacy.unlink()
         return True
     return False
 

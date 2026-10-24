@@ -34,6 +34,9 @@ export interface TabHostProps {
   /* valueset */
   valueset: Record<string, unknown> | null;
   connected?: boolean;
+  /* S32: view loading spinners (reports pending + flatten busy). */
+  viewReportsPending?: boolean;
+  onViewBusy?: (busy: boolean) => void;
   umlsReady?: boolean;
   umlsKey?: string;
   onValuesetChange: (vs: Record<string, unknown>) => void;
@@ -54,6 +57,8 @@ export interface TabHostProps {
   onResult: (r: FlattenViewResult | null) => void;
   /* REORG 6e: settings recalc delay passed through to the view. */
   recalcMs?: number;
+  /* S27: session-imported VD for this tab (nav Views > disk VD). */
+  initialVd?: Record<string, unknown> | null;
 }
 
 export function TabHost(p: TabHostProps) {
@@ -72,6 +77,7 @@ export function TabHost(p: TabHostProps) {
           valuesetSources={p.measureValuesetSources}
           expectedReports={p.measureExpectedReports}
           onOpenExpected={p.onOpenExpected}
+          connected={p.connected}
         />
       );
     case "valueset":
@@ -104,6 +110,10 @@ export function TabHost(p: TabHostProps) {
           onSql={p.onSql}
           onResult={p.onResult}
           recalcMs={p.recalcMs}
+          initialVd={p.initialVd}
+          connected={p.connected}
+          reportsPending={p.viewReportsPending}
+          onBusy={p.onViewBusy}
         />
       );
     case "library":

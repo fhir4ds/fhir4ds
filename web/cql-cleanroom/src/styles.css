@@ -210,6 +210,12 @@ body { margin: 0; }
   grid-template-rows: auto minmax(0, var(--editor-fr, 2fr)) 6px minmax(0, 1fr);
   height: 100%;
 }
+/* S26 review fix (item 3): cells view claims the console's rows —
+   collapse the splitter + console grid rows so the editor spans the
+   full column height. */
+.app-main.dock-bottom .editor-col.cells-fullheight {
+  grid-template-rows: auto minmax(0, 1fr) 0 0;
+}
 .app-main.dock-bottom .editor-col > .results-console {
   margin-bottom: 0;
   min-height: 0;
@@ -751,6 +757,17 @@ body { margin: 0; }
   color: #5b6a7d;
 }
 .vd-config { display: flex; flex-direction: column; gap: 8px; font-size: 13px; min-width: 0; }
+/* S27: the Custom VD box takes ALL free vertical space in the pane. */
+.view-pane { overflow: hidden; }
+.view-pane > .vd-config { overflow: auto; min-height: 0; }
+.view-pane > .vd-editor {
+  flex: 1 1 auto;
+  min-height: 160px;
+  resize: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
 /* REORG 6f: shared section-label style (survived the 6h chip→table swap) */
 .assoc-label { color: #7b8698; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; }
 /* REORG 6h: measure editor as four sections — identity, inputs,
@@ -1732,6 +1749,20 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
    viewport; the Monaco hosts size to the card. */
 .cell-monaco { width: 100%; min-width: 460px; }
 .cell-card.cell-error { border-color: rgba(229,72,77,0.6); }
+/* S26 review fix: the declarations header card — visually distinct
+   (muted) from runnable define cells. */
+/* S31: the declarations card is a NORMAL cell card — chip head, solid
+   border (no dashed special-case). */
+.cell-card.cell-header-card { opacity: 1; }
+.cell-header-chip { cursor: default; }
+.cell-header-chip:hover { background: rgba(255,255,255,0.06); }
+.cell-header-card .cell-header-pre {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  opacity: 0.8;
+  white-space: pre-wrap;
+}
 .cell-head {
   display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 8px;
   border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 13px;
@@ -1932,17 +1963,209 @@ td.diff-null-cell { background: rgba(148, 163, 184, 0.14) !important; box-shadow
   border-radius: 10px; padding: 1px 8px; background: rgba(255,255,255,0.02);
 }
 
-/* S24-3: patient roster + type slideout */
+/* S24-3/S25: patient roster + slideout — the PUBLISHED PatientDataViewer
+ * styles (web/wasm-demo/src/styles/index.css) ported to the cleanroom's
+ * palette (var(--color-*) replaced with the equivalents). */
 .ds-roster-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .ds-roster-row.active { background: #1f2733; border-radius: 4px; }
 .ds-roster-id { font-weight: 500; }
 .ds-patient-slideout {
-  margin: 6px 8px; border: 1px solid #2c3848; border-radius: 8px;
-  background: #10151d; padding: 8px; max-height: 420px; overflow-y: auto;
+  margin: 6px 8px; display: flex; flex-direction: column;
+  border: 1px solid #2c3848; border-radius: 8px;
+  background: #10151d; padding: 0; max-height: 460px; overflow: hidden;
 }
-.ds-slideout-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 6px; }
-.ds-slideout-type { padding: 4px 0; }
-.ds-slideout-type-head { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
-.ds-slideout-list { list-style: none; margin: 2px 0 2px 4px; padding: 0 0 0 10px; border-left: 1px solid #232a35; }
-.ds-slideout-resource { font-size: 12px; color: #c9d4e3; padding: 1px 0; cursor: default; }
-.ds-slideout-date { color: #7b8698; font-size: 11px; }
+.ds-slideout-head {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border-bottom: 1px solid #232a35;
+}
+.patient-viewer-tools {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border-bottom: 1px solid #232a35; background: rgba(15, 23, 42, 0.52);
+}
+.patient-viewer-filter {
+  flex: 1; min-width: 0; height: 26px; padding: 0 9px;
+  border: 1px solid #2c3848; border-radius: 4px;
+  background: #0d1117; color: #c9d4e3; font-size: 12px;
+}
+.patient-viewer-filter:focus { outline: none; border-color: #4cc38a; }
+.patient-viewer-body { flex: 1; overflow: auto; padding: 10px; font-size: 12px; }
+.patient-viewer-summary { font-size: 11px; color: #7b8698; }
+.patient-resource-tree { display: flex; flex-direction: column; gap: 8px; }
+.patient-resource-group { border: 1px solid #2c3848; border-radius: 4px; background: rgba(2, 6, 23, 0.58); }
+.patient-resource-item { border-radius: 4px; background: rgba(15, 23, 42, 0.64); border: 1px solid rgba(148, 163, 184, 0.12); }
+.json-tree-node { border: 0; background: transparent; }
+.patient-resource-group > summary,
+.patient-resource-item > summary,
+.json-tree-node > summary {
+  display: flex; align-items: center; gap: 8px; min-height: 28px;
+  padding: 4px 10px; cursor: pointer; user-select: none;
+}
+.patient-resource-group > summary { background: rgba(56, 189, 248, 0.08); }
+.patient-resource-list { display: flex; flex-direction: column; gap: 6px; padding: 8px; }
+.patient-resource-title { color: #c9d4e3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.patient-resource-type { color: #4cc38a; font-weight: 700; }
+.patient-resource-count, .patient-resource-meta { color: #7b8698; font-size: 11px; }
+.patient-resource-meta { margin-left: auto; }
+.patient-tree-caret::before {
+  content: "▸"; display: inline-block; width: 12px; color: #7b8698;
+}
+details[open] > summary > .patient-tree-caret::before { content: "▾"; }
+.json-tree-node { margin: 2px 8px 2px; }
+.json-tree-children { margin-left: 16px; padding: 0 0 4px 10px; border-left: 1px solid rgba(148, 163, 184, 0.16); }
+.json-tree-row { padding: 2px 10px; color: #cbd5e1; }
+.json-tree-key { color: #93c5fd; }
+.json-tree-kind { color: #94a3b8; }
+.json-tree-value { color: #e2e8f0; }
+.json-tree-string { color: #a5d6a7; }
+.json-tree-number { color: #fbbf24; }
+.json-tree-boolean { color: #f472b6; }
+.json-tree-null { color: #94a3b8; font-style: italic; }
+
+/* S29: persistent status bar. Location (local files vs browser memory),
+   the latest status/error (previously a 6s header flash), save stamp,
+   engine chip and version live here — one row, never shifts the layout. */
+.app-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 26px;
+  padding: 3px 14px;
+  font-size: 11px;
+  color: #b9c6d8;
+  background: #151a22;
+  border-top: 1px solid #232a35;
+}
+.footer-loc { white-space: nowrap; }
+.footer-dim { color: #7d8ea8; }
+.footer-status {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+.footer-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #e6e9ef;
+}
+.footer-note.error { color: #ff9b9b; }
+.footer-dismiss {
+  border: none;
+  background: transparent;
+  color: #8fa3bf;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.footer-dismiss:hover { color: #e6e9ef; }
+.footer-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #f0c674;
+  white-space: nowrap;
+}
+.footer-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.footer-engine {
+  color: #8fa3bf;
+  border: 1px solid #2c3644;
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+.app-footer .version-badge { margin-left: 0; }
+/* Config panel: sub-group headings (Measure / Parameters). */
+.nav-group-label {
+  padding: 6px 10px 2px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6f8099;
+}
+
+/* S30: one loading indicator across the app (replaces text-only states). */
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #34415a;
+  border-top-color: #8fb4e8;
+  border-radius: 50%;
+  animation: spinner-rotate 0.8s linear infinite;
+  vertical-align: -2px;
+}
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.4s; }
+}
+
+/* S31: population-mapping row controls live with their table. */
+.mapping-head { justify-content: space-between; }
+.mapping-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* S32: workspace folder picker modal + switch overlay. */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(10, 13, 18, 0.72);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-card {
+  background: #151a22; border: 1px solid #2c3644; border-radius: 8px;
+  min-width: 460px; max-width: 640px; max-height: 78vh;
+  display: flex; flex-direction: column;
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-bottom: 1px solid #232a35;
+}
+.modal-title { font-size: 14px; letter-spacing: 0.02em; }
+.modal-path {
+  font-family: ui-monospace, monospace; font-size: 11px; color: #8fa3bf;
+  padding: 6px 14px; border-bottom: 1px solid #232a35;
+  word-break: break-all;
+}
+.folder-list { overflow: auto; min-height: 180px; padding: 6px; }
+.folder-row {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: transparent; border: none; color: #cdd7e5;
+  padding: 5px 10px; border-radius: 4px; cursor: pointer; text-align: left;
+  font-size: 13px;
+}
+.folder-row:hover { background: rgba(90,160,255,0.08); }
+.folder-row.selected { background: rgba(90,160,255,0.18); }
+.folder-up { color: #8fa3bf; }
+.modal-actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 10px 14px; border-top: 1px solid #232a35;
+}
+.settings-button.primary { border-color: #3a6ea5; color: #bcd9ff; }
+.switch-overlay {
+  position: fixed; inset: 0; z-index: 95;
+  background: rgba(16, 20, 26, 0.96);
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 14px;
+}
+.switch-overlay .switch-title { font-size: 15px; color: #cdd7e5; }

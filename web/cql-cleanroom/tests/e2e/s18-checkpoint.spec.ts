@@ -147,9 +147,8 @@ test("S18-6: Save exports the MADiE package; Open re-imports it (round-trip)", a
   const downloadPromise = page.waitForEvent("download", { timeout: 30000 });
   await page.locator('[data-testid="file-menu"]').click();
   await page.waitForTimeout(400);
-  await page.locator('[data-testid="file-save"]').hover();
-  await page.waitForTimeout(600);
-  await page.locator('[data-testid="madie-export"]').click();
+  // S32: Save Workspace is a direct item; standalone downloads.
+  await page.locator('[data-testid="file-save-workspace"]').click();
   const download = await downloadPromise;
   const path = join(dir!, "s18-roundtrip.zip");
   await download.saveAs(path);

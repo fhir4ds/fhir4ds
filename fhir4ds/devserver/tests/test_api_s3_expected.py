@@ -178,8 +178,43 @@ class TestCaptureRunCycle:
         dl = call("/api/tests/expected/delete", {"measure": "S3M", "patient": "p2"})
         assert dl["ok"] and dl["removed"] is True
 
-    def test_files_land_in_measures_expected_patients(self, server):
+    def test_files_land_in_measure_report_dir(self, server):
+        # S26 type-folder convention: expected MeasureReports live in the
+        # workspace MeasureReport/ dir (NOT measures/expected/patients/).
         _, tmp = server
-        expected_dir = tmp / "measures" / "expected" / "patients" / "S3M"
+        expected_dir = tmp / "MeasureReport" / "S3M"
         assert expected_dir.is_dir()
         assert (expected_dir / "p1.json").is_file()
+
+
+class TestPatientFromReportShapes:
+    """S26: the expected-store reader accepts BOTH subject shapes. The
+    fixture-official MADiE MeasureReports carry no subject.reference —
+    the patient rides contained[Parameters].parameter[name=subject]."""
+
+    def test_our_shape_subject_reference(self):
+        from fhir4ds.devserver.expected_store import patient_from_report
+
+        assert patient_from_report({"subject": {"reference": "Patient/p-1"}}) == "p-1"
+
+    def test_madie_shape_contained_parameters_subject(self):
+        from fhir4ds.devserver.expected_store import patient_from_report
+
+        report = {
+            "resourceType": "MeasureReport",
+            "contained": [
+                {
+                    "resourceType": "Parameters",
+                    "parameter": [
+                        {"name": "measurement period", "valuePeriod": {}},
+                        {"name": "subject", "valueString": "01c88972-84e2"},
+                    ],
+                }
+            ],
+        }
+        assert patient_from_report(report) == "01c88972-84e2"
+
+    def test_no_subject_anywhere_returns_none(self):
+        from fhir4ds.devserver.expected_store import patient_from_report
+
+        assert patient_from_report({"resourceType": "MeasureReport"}) is None

@@ -111,3 +111,40 @@ class TestWatcher:
         ev = q.get(timeout=5)
         assert ev.kind == "changed"
         assert w.snapshot.library("Demographics") is None
+
+
+class TestSilentSwitch:
+    def test_switch_rescan_publishes_no_diff_events(self, tmp_path, tmp_path_factory):
+        """S25: a workspace re-root is NOT a data change.
+
+        The switch flow re-roots the watcher onto another workspace and
+        rescans SILENTLY — the old-vs-new file-set diff must not surface
+        as changed/data-hint events (the spurious 'Data files changed
+        on disk' banner Joel hit on every switch).
+        """
+        import queue
+
+        # Workspace A (with data).
+        cfg_a = make_ws(tmp_path)
+        # Workspace B: a sibling with DIFFERENT data + library.
+        ws_b = tmp_path_factory.mktemp("ws_b")
+        (ws_b / "cql").mkdir()
+        (ws_b / "cql" / "Other.cql").write_text(
+            "library Other version '1.0.0'\ndefine \"X\": 1\n"
+        )
+        (ws_b / "data").mkdir()
+        (ws_b / "data" / "p2.ndjson").write_text(
+            '{"resourceType": "Patient", "id": "z9", "gender": "female"}\n'
+        )
+
+        bus = EventBus()
+        w = Watcher(cfg_a, bus)
+        q = bus.subscribe()
+        # Re-root like _route_workspace_switch does, then silent rescan.
+        w._cfg = load_config(ws_b)
+        w.rescan(silent=True)
+        # No changed/data-hint events; only the caller's own `switched`
+        # publish (which the route does itself) is authoritative.
+        assert q.empty()
+        assert w.snapshot.library("Other") is not None
+        assert w.snapshot.library("Demographics") is None

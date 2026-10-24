@@ -73,11 +73,14 @@ class TestPatientResources:
         assert r["ok"]
         assert r["total"] == 3
         assert set(r["by_type"]) == {"Patient", "Observation", "Condition"}
+        # S25: FULL resources ship (the published PatientDataViewer UX +
+        # the builder prefill operate on complete objects, not stubs).
         obs = r["by_type"]["Observation"][0]
         assert obs["id"] == "o1"
         assert obs["status"] == "final"
-        assert obs["date"] == "2026-01-15T10:00:00Z"
-        assert len(obs["preview"]) <= 200
+        assert obs["effectiveDateTime"] == "2026-01-15T10:00:00Z"
+        assert obs["code"] == {"text": "BP"}
+        assert obs["valueQuantity"] == {"value": 120, "unit": "mmHg"}
 
     def test_other_patient_isolated(self, server):
         r = get("/api/patient/resources?id=p2")

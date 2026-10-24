@@ -81,12 +81,31 @@ export function expectedMapFromReports(
   if (!reports?.length) return null;
   const out: ExpectedMap = {};
   for (const r of reports) {
-    const pid =
+    // S26 review fix: fixture-official (MADiE) MeasureReports carry the
+    // patient in contained[Parameters].parameter[name=subject]; authored
+    // ones use subject.reference. Read BOTH.
+    let pid =
       ((r.subject as Record<string, unknown> | undefined)?.reference as
         | string
         | undefined)
         ?.split("/")
         .pop() ?? "";
+    if (!pid) {
+      for (const c of (r.contained as Array<Record<string, unknown>>) ?? []) {
+        if (c?.resourceType !== "Parameters") continue;
+        for (const p of (c.parameter as Array<Record<string, unknown>>) ?? []) {
+          if (p?.name !== "subject") continue;
+          const vr = (
+            p.valueReference as { reference?: string } | undefined
+          )?.reference;
+          const vs = p.valueString;
+          pid =
+            (vr?.split("/").pop() ?? vs ?? "").toString() || "";
+          break;
+        }
+        if (pid) break;
+      }
+    }
     if (!pid) continue;
     const memberships: Record<string, boolean> = {};
     for (const g of (r.group as Array<Record<string, unknown>>) ?? []) {

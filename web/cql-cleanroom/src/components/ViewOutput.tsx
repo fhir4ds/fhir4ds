@@ -1,4 +1,5 @@
 import type { FlattenViewResult } from "../lib/protocol";
+import { Spinner } from "./Spinner";
 import { PaginatedTable } from "./PaginatedTable";
 import { cellDiffClass, diffPopKey, diffRuns } from "../lib/runDiff";
 
@@ -10,10 +11,21 @@ import { cellDiffClass, diffPopKey, diffRuns } from "../lib/runDiff";
 export function ViewOutputPanel({
   viewResult,
   runDiff,
+  busy = false,
 }: {
   viewResult: FlattenViewResult | null;
   runDiff: ReturnType<typeof diffRuns>;
+  /** S32: a flatten is in flight — show the shared spinner instead of
+   *  the empty-state text (no loading-text flash). */
+  busy?: boolean;
 }) {
+  if (busy && (!viewResult || !viewResult.ok)) {
+    return (
+      <p className="pane-hint" data-testid="view-output-loading">
+        <Spinner label="flattening view" />
+      </p>
+    );
+  }
   if (!viewResult?.ok || viewResult.columns.length === 0) {
     return (
       <p className="pane-hint" data-testid="view-output-empty">

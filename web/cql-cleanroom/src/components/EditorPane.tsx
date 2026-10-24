@@ -53,10 +53,13 @@ interface Props {
   /** S5: run a set of cells (cell-based editor execution). */
   onRunCells?: (
     names: string[],
-    mode: "cell" | "cell_deps" | "to_here",
+    mode: "cell" | "cell_deps" | "to_here" | "run_all",
   ) => Promise<Record<string, { ok: boolean; lines: string[] }>>;
   /** S5: connected (server) vs standalone — drives the local badge. */
   connected?: boolean;
+  /** S31: mode handshake still pending — parsing now would pick the
+   *  standalone branch and boot the browser engine for nothing. */
+  enginePending?: boolean;
   /**
    * S22a: hold the S7 auto-cellify/adoption bookkeeping while TRUE —
    * the server handshake may still flip the app to connected, where
@@ -64,6 +67,9 @@ interface Props {
    * would persist a bogus cellsRemoved entry for the tab).
    */
   holdAutoSplit?: boolean;
+  /** S26 (item 11): each bump force-closes cells view (example loads
+   *  land in TEXT view; the nonce pattern avoids boolean re-fire). */
+  cellsViewForceCloseNonce?: number;
   /** S16/S19: open the evidence popover for a row — carries the run's
    *  composition + parameters so evidence matches the run exactly. */
   onExplainRow?: (
@@ -131,7 +137,9 @@ export function EditorPane({
   onRunCells,
   onCellsViewChange,
   connected,
+  enginePending = false,
   holdAutoSplit,
+  cellsViewForceCloseNonce = 0,
   onExplainRow,
   cellEvidenceSlot,
   parameters,
@@ -151,6 +159,12 @@ export function EditorPane({
   tabKeyRef.current = tabKey;
   // S5: per-buffer cell mode (split view with cards vs plain editor).
   const [cellViewOpen, setCellViewOpenRaw] = useState(false);
+  // S26 (item 11): example loads force TEXT view — a nonce prop from
+  // App (0 = none); each bump closes cells for the whole pane.
+  useEffect(() => {
+    if (cellsViewForceCloseNonce > 0) setCellViewOpenRaw(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cellsViewForceCloseNonce]);
   // S23-2/S24-1: notify the App on every visibility flip (heartbeat
   // gating). The notify runs in a COMMIT effect — calling it inside the
   // state updater was a render-phase side effect that could be missed
@@ -223,7 +237,11 @@ export function EditorPane({
   useEffect(() => {
     if (holdAutoSplit) return;
     if (connected && isPristineDemoDefault(text)) return;
-    if (adoptedRef.current.has(tabKey) && !hasCellMarkers) {
+    // S28: poisoning guard — an adopted tab going markerless only counts
+    // as "user erased the markers" when the text no longer carries
+    // splittable defines. A purity SWAP-IN (markerless disk text under a
+    // previously-adopted key) must NOT poison the key.
+    if (adoptedRef.current.has(tabKey) && !hasCellMarkers && !hasSplittableDefines(text)) {
       removedRef.current.add(tabKey);
       localStorage.setItem(
         "fhir4ds.cleanroom.cellsRemoved",
@@ -417,17 +435,33 @@ export function EditorPane({
 
   // Debounced parse → markers
   useEffect(() => {
+    // S31: never parse before the mode handshake settles — a pre-
+    // detection parse used the WORKER and booted Pyodide (~10s) in a
+    // connected session where the server does the parsing.
+    if (enginePending) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       const t0 = performance.now();
-      const resp = await workerRequest({ type: "parse_cql", text });
-      setParseMs(Math.round(performance.now() - t0));
+      // S31: connected parses SERVER-side — the editor must not boot the
+      // browser engine just to draw diagnostics.
       let env: ParseResult | null = null;
       try {
-        env = JSON.parse(resp.envelope);
+        if (connected) {
+          const res = await fetch("/api/parse", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          const body = (await res.json()) as { data?: ParseResult } & ParseResult;
+          env = (body?.data ?? body) as ParseResult;
+        } else {
+          const resp = await workerRequest({ type: "parse_cql", text });
+          env = JSON.parse(resp.envelope);
+        }
       } catch {
         return;
       }
+      setParseMs(Math.round(performance.now() - t0));
       if (!env) return;
       const next = env.diagnostics ?? [];
       setDiags(next);
@@ -458,7 +492,7 @@ export function EditorPane({
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text]);
+  }, [text, enginePending, connected]);
 
   const jumpTo = (d: Diagnostics) => {
     const editor = editorRef.current;
@@ -613,6 +647,13 @@ export function EditorPane({
               setCellViewOpen((v) => {
                 const next = !v;
                 if (!next) userClosedCellsRef.current.add(tabKeyRef.current);
+                // S27: opening Cells on a markerless buffer SPLITS it
+                // immediately — the empty-hint crawl was the "cells
+                // editor shows no output" report. (Auto-split still
+                // runs on text changes when not held.)
+                if (next && !hasCellMarkers && hasSplittableDefines(text)) {
+                  applyCellify();
+                }
                 return next;
               })
             }
@@ -669,6 +710,14 @@ export function EditorPane({
               onChange={(v) => spliceCellIntoBuffer(cell.order, v)}
               onMount={(editor) => setCellEditors((m) => new Map(m).set(cell.name, editor))}
               overrideHeight={overrideHeight}
+            />
+          )}
+          renderHeaderEditor={(headerText) => (
+            <CellMonacoHost
+              cellKey={`${tabKey}#header`}
+              text={headerText}
+              onChange={onTextChangeRef.current}
+              overrideHeight={Math.min(320, Math.max(60, headerText.split("\n").length * 18 + 12))}
             />
           )}
         />

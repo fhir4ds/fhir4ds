@@ -1,4 +1,5 @@
 import type { EvidenceResult } from "../lib/protocol";
+import { Spinner } from "./Spinner";
 
 /**
  * Cell-level evidence popover (E2): rendered under the results table
@@ -49,7 +50,7 @@ export function EvidencePopover({
       </header>
       {!evidence && (
         <p className="pane-hint" data-testid="evidence-loading">
-          explaining…
+          <Spinner label="explaining" />
         </p>
       )}
       {evidence && !evidence.ok && (

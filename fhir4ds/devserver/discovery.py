@@ -23,6 +23,9 @@ class LibraryFile:
     parse_ok: bool = True
     error: str | None = None
     definitions: tuple[str, ...] = ()
+    # S30: `library X version 'v'` — disks rows show a VERSION badge in
+    # the nav (replacing the old "on disk" provenance chip).
+    version: str | None = None
 
     def library_text(self) -> Any:
         from fhir4ds.operations.envelopes import LibraryText
@@ -53,6 +56,7 @@ class WorkspaceSnapshot:
                 {
                     "name": lib.name,
                     "path": str(lib.path),
+                    "version": lib.version,
                     "parse_ok": lib.parse_ok,
                     "error": lib.error,
                     "definitions": list(lib.definitions),
@@ -63,11 +67,24 @@ class WorkspaceSnapshot:
             # when the file parses (drawers label disk rows by resource
             # identity, not file stem; malformed files fall back to stem).
             "valuesets": [
-                {"path": str(p), "id": _valueset_id(p)} for p in self.valuesets
+                # S26 review fix: label by NAME (falling back title → id
+                # → stem) — OIDs are hostile nav labels.
+                {"path": str(p), **_valueset_label(p)} for p in self.valuesets
             ],
-            "measures": [str(p) for p in self.measures],
+            # S26 (slice 3): measures ship the RESOURCE body (parsed)
+            # alongside the path — the connected app adopts disk Measures
+            # (showcase workspaces carry real eCQM Measures); malformed
+            # files fall back to path-only.
+            "measures": [
+                {"path": str(p), "resource": _measure_resource(p)}
+                for p in self.measures
+            ],
             "datasets": [str(p) for p in self.datasets],
             "views": [str(p) for p in self.views],
+            # S30: ViewDefinition label/version metadata for nav badges.
+            "view_meta": [
+                {"path": str(p), **_view_label(p)} for p in self.views
+            ],
             "data_changed_hint": self.data_changed_hint,
         }
 
@@ -86,6 +103,101 @@ def _valueset_id(path: Path) -> str | None:
     rid = resource.get("id") if isinstance(resource, dict) else None
     if isinstance(rid, str) and rid.strip():
         return rid.strip()
+    return None
+
+
+def _valueset_label(path: Path) -> dict[str, str | None]:
+    """Display label parts for a disk ValueSet (S26 review fix).
+
+    Returns {id, name, title}: `name` preferred, then `title`, then the
+    `id` (OID) — the app labels rows by the first non-empty of
+    name → title → id → stem.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            resource = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return {
+            "id": None,
+            "name": None,
+            "title": None,
+            "version": None,
+            "url": None,
+        }
+    if not isinstance(resource, dict):
+        return {
+            "id": None,
+            "name": None,
+            "title": None,
+            "version": None,
+            "url": None,
+        }
+
+    def _clean(v: object) -> str | None:
+        return v.strip() if isinstance(v, str) and v.strip() else None
+
+    return {
+        "id": _clean(resource.get("id")),
+        "name": _clean(resource.get("name")),
+        "title": _clean(resource.get("title")),
+        "version": _clean(resource.get("version")),
+        # S31: canonical URL — the client seeds its workspace-URL set from
+        # disk so disk-backed valuesets are never "unresolved".
+        "url": _clean(resource.get("url")),
+    }
+
+
+def _view_label(path: Path) -> dict[str, str | None]:
+    """Display label parts for a disk ViewDefinition (S30 nav badges).
+
+    Returns {id, name, title, version}: rows label by name → title →
+    id → stem and show the resource version when present.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            resource = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return {
+            "id": None,
+            "name": None,
+            "title": None,
+            "version": None,
+            "url": None,
+        }
+    if not isinstance(resource, dict):
+        return {
+            "id": None,
+            "name": None,
+            "title": None,
+            "version": None,
+            "url": None,
+        }
+
+    def _clean(v: object) -> str | None:
+        return v.strip() if isinstance(v, str) and v.strip() else None
+
+    return {
+        "id": _clean(resource.get("id")),
+        "name": _clean(resource.get("name")),
+        "title": _clean(resource.get("title")),
+        "version": _clean(resource.get("version")),
+    }
+
+
+def _measure_resource(path: Path) -> dict[str, Any] | None:
+    """Parsed Measure resource at the path (S26 slice 3), or None.
+
+    Lenient like _valueset_id — malformed files fall back to path-only.
+    The Measure/expected/ subtree is EXCLUDED by the files() skip set,
+    so only real Measure resources land here.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            resource = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if isinstance(resource, dict) and resource.get("resourceType") == "Measure":
+        return resource
     return None
 
 
@@ -110,6 +222,21 @@ def _library_name(text: str, path: Path) -> str:
     return path.stem
 
 
+def _library_version(text: str) -> str | None:
+    """`library X version 'v'` version token, or None."""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("library "):
+            parts = stripped.split()
+            for i, tok in enumerate(parts):
+                if tok == "version" and i + 1 < len(parts):
+                    return parts[i + 1].strip("'\"") or None
+            return None
+        if stripped and not stripped.startswith("//") and not stripped.startswith("/*"):
+            break
+    return None
+
+
 def scan_workspace(cfg: DevServerConfig) -> WorkspaceSnapshot:
     """Scan all configured directories (missing dirs are simply absent)."""
     libraries: list[LibraryFile] = []
@@ -131,6 +258,7 @@ def scan_workspace(cfg: DevServerConfig) -> WorkspaceSnapshot:
                 )
                 continue
             name = _library_name(text, path)
+            version = _library_version(text)
             parse_ok, error, defs = True, None, ()
             try:
                 from fhir4ds.operations import parse_cql
@@ -154,6 +282,7 @@ def scan_workspace(cfg: DevServerConfig) -> WorkspaceSnapshot:
                     parse_ok=parse_ok,
                     error=error,
                     definitions=defs,
+                    version=version,
                 )
             )
 

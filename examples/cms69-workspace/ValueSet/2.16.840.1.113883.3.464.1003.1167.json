@@ -1,0 +1,63 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.464.1003.1167",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:12.683-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1167",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "2.16.840.1.113883.3.464.1003.1167"
+    }
+  ],
+  "version": "20220820",
+  "name": "PalliativeCareDiagnosis",
+  "title": "Palliative Care Diagnosis",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:33f6cd5e-6056-4b55-a403-52c89c5fd3fa",
+    "timestamp": "2025-06-20T16:59:45-04:00",
+    "total": 4,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "305686008",
+        "display": "Seen by palliative care physician (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "305824005",
+        "display": "Seen by palliative care medicine service (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "441874000",
+        "display": "Seen by palliative care service (finding)"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2024",
+        "code": "Z51.5",
+        "display": "Encounter for palliative care"
+      }
+    ]
+  }
+}

@@ -63,15 +63,36 @@ export function MrPivot({
   );
 }
 
-/** REORG 6e: the "Funnel" console tab — population attrition Sankey. */
-export function MrFunnel({ result }: { result: EvaluateResult | null }) {
-  const populationColumns = (result?.columns ?? []).filter(
-    (c) => c !== "patient_id",
-  );
-  if (!(result && populationColumns.length > 0)) return null;
+/** REORG 6e: the "Funnel" console tab — population attrition Sankey.
+ *
+ * S31: the funnel shows the MEASURE POPULATIONS only (the mapping's
+ * code→define pairs), not every define the evaluation projected. Stages
+ * are labelled by population code; unmapped runs fall back to all
+ * non-patient columns (standalone scratch libraries). */
+export function MrFunnel({
+  result,
+  populationColumns,
+}: {
+  result: EvaluateResult | null;
+  populationColumns?: Record<string, string> | null;
+}) {
+  const mapped = populationColumns ? Object.entries(populationColumns) : [];
+  let columns: string[];
+  let rows: Array<Record<string, unknown>> = result?.rows ?? [];
+  if (mapped.length) {
+    columns = mapped.map(([code]) => code);
+    rows = rows.map((r) => {
+      const out: Record<string, unknown> = { patient_id: r.patient_id };
+      for (const [code, define] of mapped) out[code] = r[define];
+      return out;
+    });
+  } else {
+    columns = (result?.columns ?? []).filter((c) => c !== "patient_id");
+  }
+  if (!(result && columns.length > 0)) return null;
   return (
     <div data-testid="funnel-pane">
-      <SankeyFromRows columns={populationColumns} rows={result.rows} />
+      <SankeyFromRows columns={columns} rows={rows} />
     </div>
   );
 }

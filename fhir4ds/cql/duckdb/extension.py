@@ -73,6 +73,21 @@ _PYTHON_PREFERRED_CPP_CONFLICTS = {
     "quantityToInterval",
     "dateAddQuantity",
     "dateSubtractQuantity",
+    # S32 WASM parity: C++ mirrors exist for the browser runtime, but the
+    # Python UDFs remain the desktop conformance authority.
+    "ToLong",
+    "ToRatio",
+    "CanConvertQuantity",
+    "ConvertsToBoolean",
+    "ConvertsToDate",
+    "ConvertsToDateTime",
+    "ConvertsToDecimal",
+    "ConvertsToInteger",
+    "ConvertsToLong",
+    "ConvertsToQuantity",
+    "ConvertsToRatio",
+    "ConvertsToString",
+    "ConvertsToTime",
     # cqlDateTimeAdd delegates to the dateAddQuantity core; the C++ core
     # nulls sub-input-precision quantity units where the Python authority
     # truncates-and-returns, so Python stays the desktop conformance

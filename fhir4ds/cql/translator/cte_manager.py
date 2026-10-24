@@ -682,7 +682,11 @@ class CTEManagerMixin:
                                     SQLLiteral as _SQLLiteral,
                                     SQLQualifiedIdentifier as _SQLQI,
                                 )
-                                prop_name, prop_value = patient_prop
+                                # S26 (item 7): 3-tuple (attr, value,
+                                # operator) — unpack positionally-safe
+                                # for the older 2-tuple shape.
+                                prop_name = patient_prop[0]
+                                prop_value = patient_prop[1]
                                 audit_expr = SQLFunctionCall(
                                     name="audit_patient_property",
                                     args=[

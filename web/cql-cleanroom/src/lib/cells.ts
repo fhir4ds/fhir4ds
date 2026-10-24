@@ -66,6 +66,17 @@ export function splitCells(text: string): SplitResult {
  * same composed-closure library text through THIS helper. Never duplicate
  * the recipe.
  */
+/** Remove `// # %%` cell markers — the markerless text is what the
+ *  engine evaluates (markers are editor metadata, not CQL). */
+export function stripCellMarkers(text: string): string {
+  // NO trim: the result must stay byte-identical to the disk text so the
+  // server's warm translation cache (keyed on library texts) hits.
+  return text
+    .split("\n")
+    .filter((l) => !/^\s*\/\/\s*#\s*%%/.test(l))
+    .join("\n");
+}
+
 export function composeCellClosure(
   header: string,
   cells: Array<{ name: string; text: string }>,

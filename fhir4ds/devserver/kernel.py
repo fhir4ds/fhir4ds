@@ -39,7 +39,33 @@ class Kernel:
         self.datasets = list(datasets)
         self.valuesets = list(valuesets)
         self.load_diagnostics: list[dict[str, Any]] = []
+        # The DuckDB connection is NOT usable concurrently (a threaded
+        # HTTP server shares it across request threads; overlapping
+        # executes corrupted the interpreter — CPython aborted with
+        # "unknown opcode"). Every connection touch is serialized here.
+        self._op_lock = threading.RLock()
         self._conn = self._build_connection()
+
+    @property
+    def lock(self) -> threading.RLock:
+        """The connection-operation lock (re-entrant)."""
+        return self._op_lock
+
+    class _Locked:
+        """Context manager: hold the kernel's connection lock."""
+
+        def __init__(self, kernel: "Kernel") -> None:
+            self._kernel = kernel
+
+        def __enter__(self) -> "Kernel":
+            self._kernel._op_lock.acquire()
+            return self._kernel
+
+        def __exit__(self, *exc: Any) -> None:
+            self._kernel._op_lock.release()
+
+    def locked(self) -> "Kernel._Locked":
+        return Kernel._Locked(self)
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -142,7 +168,8 @@ class Kernel:
         **kwargs: Any,
     ) -> dict[str, Any]:
         kwargs.pop("emit_sql", None)  # TranslateResult always carries sql
-        result = translate_cql(includes, main, **kwargs)
+        with self._op_lock:
+            result = translate_cql(includes, main, **kwargs)
         return result.to_dict()
 
     def evaluate(
@@ -151,7 +178,8 @@ class Kernel:
         main: LibraryText,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        result = evaluate_library(includes, main, None, self._conn, **kwargs)
+        with self._op_lock:
+            result = evaluate_library(includes, main, None, self._conn, **kwargs)
         return result.to_dict()
 
     def verify(
@@ -161,7 +189,8 @@ class Kernel:
         cases: Any,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        result = run_tests(includes, main, None, cases, self._conn, **kwargs)
+        with self._op_lock:
+            result = run_tests(includes, main, None, cases, self._conn, **kwargs)
         return result.to_dict()
 
     def explain(
@@ -171,9 +200,10 @@ class Kernel:
         patient_id: str,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        result = explain_patient(
-            includes, main, None, patient_id, self._conn, **kwargs
-        )
+        with self._op_lock:
+            result = explain_patient(
+                includes, main, None, patient_id, self._conn, **kwargs
+            )
         return result.to_dict()
 
 
@@ -183,14 +213,27 @@ class KernelManager:
     def __init__(self, snapshot: WorkspaceSnapshot) -> None:
         self._lock = threading.Lock()
         self._kernel = Kernel(snapshot.datasets, snapshot.valuesets)
+        # S27: retired kernels are kept FOREVER (never closed/GC-able) —
+        # see restart(); bounded leak, one connection per restart.
+        self._retired: list[Kernel] = []
 
     def current(self) -> Kernel:
         with self._lock:
             return self._kernel
 
     def restart(self, snapshot: WorkspaceSnapshot) -> Kernel:
-        """Build a fresh kernel; in-flight work on the old one drains."""
-        new_kernel = Kernel(snapshot.datasets, snapshot.valuesets)
+        """Build a fresh kernel; in-flight work on the old one drains.
+
+        S27: the old kernel is RETIRED, never closed and never GC-able —
+        closing raced in-flight requests that had already fetched the
+        old kernel (use-after-close SEGV), and dropping it for GC
+        finalized the connection on an arbitrary thread (watcher-thread
+        SEGV mid-lex). A retired in-memory connection per restart is a
+        bounded, harmless leak in a dev server.
+        """
         with self._lock:
+            old = self._kernel
+            new_kernel = Kernel(snapshot.datasets, snapshot.valuesets)
             self._kernel = new_kernel
+            self._retired.append(old)
         return new_kernel

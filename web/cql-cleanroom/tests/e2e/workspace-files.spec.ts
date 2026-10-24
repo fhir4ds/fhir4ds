@@ -59,7 +59,7 @@ test.afterAll(async () => {
   if (dir) await rm(dir, { recursive: true, force: true });
 });
 
-test("connected: disk files appear in the TYPE drawers with on-disk chips", async ({ page }) => {
+test("connected: disk files appear in the TYPE drawers with version pills", async ({ page }) => {
   await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(12000);
   // The Workspace section is GONE (S6).
@@ -69,7 +69,10 @@ test("connected: disk files appear in the TYPE drawers with on-disk chips", asyn
   const libPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
   const diskRow = libPanel.locator(".nav-item", { hasText: "WsLib" }).first();
   await expect(diskRow).toBeVisible({ timeout: 15000 });
-  await expect(diskRow.locator(".nav-item-pill.on-disk")).toBeVisible();
+  // S30: the "on disk" provenance chip is replaced by the VERSION pill
+  // (WsLib declares version '1.0.0'); provenance now lives in the footer.
+  await expect(diskRow.locator(".nav-item-pill")).toHaveText(/1\.0\.0/);
+  await expect(diskRow.locator(".nav-item-pill.on-disk")).toHaveCount(0);
   // Disk valueset flows into the Valuesets drawer.
   await page.locator('[data-testid="nav-toggle-valuesets"]').click();
   const vsPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
@@ -112,7 +115,7 @@ test("STANDALONE: no workspace section, no /api/fs traffic", async ({ page }) =>
   await expect(page.locator('[data-testid="nav-toggle-workspace"]')).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Workspace/ })).toHaveCount(0);
   await page.locator('[data-testid="nav-toggle-libraries"]').click();
-  await expect(page.locator(".nav-item-pill.on-disk")).toHaveCount(0);
+  await expect(page.getByText("on disk", { exact: true })).toHaveCount(0);
   expect(fsHits, `standalone made ${fsHits.join(", ")}`).toEqual([]);
 });
 

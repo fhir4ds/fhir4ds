@@ -1759,6 +1759,41 @@ static void IntervalFromBoundsFunc(DataChunk &args, ExpressionState &state, Vect
 	}
 }
 
+// intervalFromBounds with DATE/TIMESTAMP bounds (S32 WASM parity).
+//
+// The desktop surface registers a Python UDF of the same name that accepts
+// ANY bound types, so typed bounds (e.g. COALESCE(ToDate(...), ...)) bind
+// fine there; the browser/WASM build has ONLY the C++ VARCHAR signature
+// and failed with "No function matches intervalFromBounds(DATE, VARCHAR,
+// BOOLEAN, BOOLEAN)". Typed bounds serialize to ISO text — semantically
+// identical to the VARCHAR path — then delegate to the shared core.
+static void IntervalFromBoundsTypedFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	// Normalize DATE/TIMESTAMP bounds into a fresh VARCHAR DataChunk —
+	// Vector::Reference cannot switch a vector's type in place.
+	DataChunk text_args;
+	{
+		vector<LogicalType> types = {LogicalType::VARCHAR, LogicalType::VARCHAR,
+		                             LogicalType::BOOLEAN, LogicalType::BOOLEAN};
+		text_args.Initialize(Allocator::DefaultAllocator(), types, count);
+	}
+	text_args.SetCardinality(count);
+	for (idx_t b = 0; b < 2; b++) {
+		auto &v = args.data[b];
+		if (v.GetVectorType() != VectorType::FLAT_VECTOR) {
+			v.Flatten(count);
+		}
+		if (v.GetType().id() == LogicalTypeId::VARCHAR) {
+			text_args.data[b].Reference(v);
+		} else {
+			VectorOperations::DefaultCast(v, text_args.data[b], count);
+		}
+	}
+	text_args.data[2].Reference(args.data[2]);
+	text_args.data[3].Reference(args.data[3]);
+	IntervalFromBoundsFunc(text_args, state, result);
+}
+
 DEFINE_ONE_STR_STR_UDF(IntervalSizeFunc, {
 	auto iv = cql::Interval::parse(a_str);
 	if (!iv || !iv->low || !iv->high) { result_mask.SetInvalid(i); continue; }
@@ -7878,6 +7913,879 @@ static void ToConceptListFunc(DataChunk &args, ExpressionState &state, Vector &r
 }
 
 // =====================================================================
+// ToDate (S32 WASM parity)
+//
+// The desktop surface registers a Python UDF (`__cql_to_date`) whose
+// semantics are spec-aware: ISO date shapes are validated (calendar) and
+// datetime-shaped strings are accepted with the time portion dropped, both
+// returning VARCHAR. The browser/WASM surface has only the C++
+// implementation, so it must mirror those semantics exactly — a plain
+// `CAST(x AS DATE)` macro returns DATE and triggered
+// "Cannot mix values of type DATE and VARCHAR in CASE expression".
+// =====================================================================
+static bool ToDateTryParseFixedInt(const char *s, idx_t n, int &out) {
+	out = 0;
+	for (idx_t i = 0; i < n; i++) {
+		if (s[i] < '0' || s[i] > '9') {
+			return false;
+		}
+		out = out * 10 + (s[i] - '0');
+	}
+	return true;
+}
+
+static bool ToDateIsLeapYear(int year) {
+	return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+}
+
+static int ToDateDaysInMonth(int year, int month) {
+	static const int DAYS[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+	if (month == 2 && ToDateIsLeapYear(year)) {
+		return 29;
+	}
+	return DAYS[month - 1];
+}
+
+// Validates YYYY[-MM[-DD]] and reports the length of the date portion.
+static bool ToDateValidDatePrefix(const char *s, idx_t len, idx_t &date_len) {
+	if (len < 4) {
+		return false;
+	}
+	int year = 0, month = 0, day = 0;
+	if (!ToDateTryParseFixedInt(s, 4, year) || year < 1 || year > 9999) {
+		return false;
+	}
+	date_len = 4;
+	if (len == 4) {
+		return true;
+	}
+	if (s[4] != '-' || len < 7) {
+		return false;
+	}
+	if (!ToDateTryParseFixedInt(s + 5, 2, month) || month < 1 || month > 12) {
+		return false;
+	}
+	date_len = 7;
+	if (len == 7) {
+		return true;
+	}
+	if (s[7] != '-' || len < 10) {
+		return false;
+	}
+	if (!ToDateTryParseFixedInt(s + 8, 2, day) || day < 1 || day > ToDateDaysInMonth(year, month)) {
+		return false;
+	}
+	date_len = 10;
+	return true;
+}
+
+// Validates the CQL datetime suffix after 'T': HH[[:MM[:SS[.fff]]]][tz].
+static bool ToDateValidTimeAndTz(const char *s, idx_t len) {
+	if (len < 2) {
+		return false;
+	}
+	int hour = 0;
+	if (!ToDateTryParseFixedInt(s, 2, hour) || hour < 0 || hour > 23) {
+		return false;
+	}
+	idx_t pos = 2;
+	if (pos < len && s[pos] == ':') {
+		int minute = 0;
+		if (pos + 3 > len || !ToDateTryParseFixedInt(s + pos + 1, 2, minute) || minute < 0 ||
+		    minute > 59) {
+			return false;
+		}
+		pos += 3;
+		if (pos < len && s[pos] == ':') {
+			int second = 0;
+			if (pos + 3 > len || !ToDateTryParseFixedInt(s + pos + 1, 2, second) || second < 0 ||
+			    second > 59) {
+				return false;
+			}
+			pos += 3;
+			if (pos < len && s[pos] == '.') {
+				pos++;
+				idx_t digits = 0;
+				while (pos < len && s[pos] >= '0' && s[pos] <= '9') {
+					pos++;
+					digits++;
+				}
+				if (digits < 1 || digits > 3) {
+					return false;
+				}
+			}
+		}
+	}
+	if (pos == len) {
+		return true;
+	}
+	if (s[pos] == 'Z' && pos + 1 == len) {
+		return true;
+	}
+	if ((s[pos] == '+' || s[pos] == '-') && pos + 6 == len && s[pos + 3] == ':') {
+		int tz_hour = 0, tz_minute = 0;
+		if (!ToDateTryParseFixedInt(s + pos + 1, 2, tz_hour) ||
+		    !ToDateTryParseFixedInt(s + pos + 4, 2, tz_minute)) {
+			return false;
+		}
+		if (tz_hour > 14 || tz_minute > 59) {
+			return false;
+		}
+		return tz_hour < 14 || tz_minute == 0;
+	}
+	return false;
+}
+
+static void ToDateFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto text = a_vals[a_idx].GetString();
+		auto *chars = text.c_str();
+		auto len = static_cast<idx_t>(text.size());
+		auto t_pos = text.find('T');
+		if (t_pos != std::string::npos) {
+			idx_t date_len = 0;
+			if (t_pos != 10 || !ToDateValidDatePrefix(chars, 10, date_len) || date_len != 10 ||
+			    !ToDateValidTimeAndTz(chars + t_pos + 1, len - t_pos - 1)) {
+				result_mask.SetInvalid(i);
+				continue;
+			}
+			result_data[i] = StringVector::AddString(result, chars, t_pos);
+			continue;
+		}
+		idx_t date_len = 0;
+		if (!ToDateValidDatePrefix(chars, len, date_len) || date_len != len) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = StringVector::AddString(result, text);
+	}
+}
+
+// DATE / TIMESTAMP overloads: serialize to text, drop any time portion
+// (Python receives datetime/date objects and returns `date.isoformat()`).
+static void ToDateTypedFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	DataChunk text_args;
+	text_args.Initialize(Allocator::DefaultAllocator(), {LogicalType::VARCHAR}, count);
+	text_args.SetCardinality(count);
+	auto &v = args.data[0];
+	if (v.GetVectorType() != VectorType::FLAT_VECTOR) {
+		v.Flatten(count);
+	}
+	VectorOperations::DefaultCast(v, text_args.data[0], count);
+	auto &text_vec = text_args.data[0];
+	if (text_vec.GetVectorType() != VectorType::FLAT_VECTOR) {
+		text_vec.Flatten(count);
+	}
+	auto vals = FlatVector::GetData<string_t>(text_vec);
+	auto &mask = FlatVector::Validity(text_vec);
+	for (idx_t i = 0; i < count; i++) {
+		if (!mask.RowIsValid(i)) {
+			continue;
+		}
+		auto text = vals[i].GetString();
+		auto space = text.find(' ');
+		if (space != std::string::npos) {
+			vals[i] = StringVector::AddString(text_vec, text.substr(0, space));
+		}
+	}
+	ToDateFunc(text_args, state, result);
+}
+
+// =====================================================================
+// Conversion family (S32 WASM parity)
+//
+// Desktop serves these through Python UDFs/macros; the browser runtime has
+// no Python, so the C++ extension must provide the same spec-aware behavior
+// (CQL 1.5 Appendix B). All temporal/quantity values are transported as
+// VARCHAR, matching the translator's representation.
+// =====================================================================
+
+static bool ConvertsAsciiInteger(const std::string &text, int64_t &out) {
+	if (text.empty()) {
+		return false;
+	}
+	size_t i = 0;
+	bool negative = false;
+	if (text[0] == '+' || text[0] == '-') {
+		negative = text[0] == '-';
+		i = 1;
+		if (i == text.size()) {
+			return false;
+		}
+	}
+	unsigned long long acc = 0;
+	const unsigned long long limit =
+	    negative ? (static_cast<unsigned long long>(9223372036854775807ULL) + 1ULL)
+	             : static_cast<unsigned long long>(9223372036854775807ULL);
+	for (; i < text.size(); i++) {
+		char c = text[i];
+		if (c < '0' || c > '9') {
+			return false;
+		}
+		unsigned digit = static_cast<unsigned>(c - '0');
+		if (acc > (limit - digit) / 10ULL) {
+			return false;
+		}
+		acc = acc * 10ULL + digit;
+	}
+	if (negative) {
+		if (acc == 9223372036854775808ULL) {
+			out = INT64_MIN;
+			return true;
+		}
+		out = -static_cast<int64_t>(acc);
+		return true;
+	}
+	out = static_cast<int64_t>(acc);
+	return true;
+}
+
+static bool ConvertsDecimalString(const std::string &text) {
+	if (text.empty()) {
+		return false;
+	}
+	size_t i = 0;
+	if (text[0] == '+' || text[0] == '-') {
+		i = 1;
+		if (i == text.size()) {
+			return false;
+		}
+	}
+	size_t integer_digits = 0;
+	while (i < text.size() && text[i] >= '0' && text[i] <= '9') {
+		integer_digits++;
+		i++;
+	}
+	if (integer_digits == 0 || integer_digits > 30) {
+		return false;
+	}
+	if (i == text.size()) {
+		return true;
+	}
+	if (text[i] != '.') {
+		return false;
+	}
+	i++;
+	size_t fractional = 0;
+	while (i < text.size() && text[i] >= '0' && text[i] <= '9') {
+		fractional++;
+		i++;
+	}
+	return fractional > 0 && i == text.size();
+}
+
+static bool ConvertsBooleanString(const std::string &text) {
+	std::string lower;
+	lower.reserve(text.size());
+	for (char c : text) {
+		lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+	}
+	return lower == "true" || lower == "false" || lower == "t" || lower == "f" || lower == "yes" ||
+	       lower == "no" || lower == "y" || lower == "n" || lower == "1" || lower == "0";
+}
+
+static bool ConvertsValidDateText(const std::string &text) {
+	idx_t len = static_cast<idx_t>(text.size());
+	idx_t date_len = 0;
+	return ToDateValidDatePrefix(text.c_str(), len, date_len) && date_len == len;
+}
+
+static bool ConvertsValidDateTimeText(const std::string &text) {
+	auto t_pos = text.find('T');
+	if (t_pos == std::string::npos) {
+		return ConvertsValidDateText(text);
+	}
+	idx_t date_len = 0;
+	return t_pos == 10 && ToDateValidDatePrefix(text.c_str(), 10, date_len) && date_len == 10 &&
+	       ToDateValidTimeAndTz(text.c_str() + 11, static_cast<idx_t>(text.size()) - 11);
+}
+
+static bool ConvertsValidTimeText(const std::string &text) {
+	const char *chars = text.c_str();
+	idx_t len = static_cast<idx_t>(text.size());
+	if (len > 0 && chars[0] == 'T') {
+		chars++;
+		len--;
+	}
+	return ToDateValidTimeAndTz(chars, len);
+}
+
+static std::string CompactIntegralQuantityValue(const std::string &json) {
+	// Desktop (Python) Quantity JSON preserves integer-authored values
+	// ("value":10); the C++ formatter always emits a real ("value":10.0).
+	// Ratio composition follows the desktop spelling.
+	return std::regex_replace(json, std::regex(R"("value":(-?[0-9]+)\.0([,}]))"), R"("value":$1$2)");
+}
+
+static bool QuantityJsonWithinExtent(const std::string &json) {
+	auto q = cql::parse_quantity_json(json);
+	return q.has_value() && (q->value == 0.0 || std::fabs(q->value) < 1e30);
+}
+
+// Ratio text: <quantity>:<quantity> (colon outside single quotes).
+static bool ConvertsRatioText(const std::string &text, std::string &out) {
+	bool in_quote = false;
+	size_t split = std::string::npos;
+	for (size_t i = 0; i < text.size(); i++) {
+		if (text[i] == '\'') {
+			in_quote = !in_quote;
+		} else if (text[i] == ':' && !in_quote) {
+			split = i;
+			break;
+		}
+	}
+	if (split == std::string::npos) {
+		return false;
+	}
+	std::string left = text.substr(0, split);
+	std::string right = text.substr(split + 1);
+	left.erase(0, left.find_first_not_of(" \t\n\r"));
+	left.erase(left.find_last_not_of(" \t\n\r") + 1);
+	right.erase(0, right.find_first_not_of(" \t\n\r"));
+	right.erase(right.find_last_not_of(" \t\n\r") + 1);
+	auto numerator = cql::to_quantity(left);
+	auto denominator = cql::to_quantity(right);
+	if (!numerator || !denominator) {
+		return false;
+	}
+	out = "{\"numerator\":" + CompactIntegralQuantityValue(*numerator) +
+	      ",\"denominator\":" + CompactIntegralQuantityValue(*denominator) + "}";
+	return true;
+}
+
+static bool ConvertsRatioJson(const std::string &text, std::string &out) {
+	using namespace duckdb_yyjson; // NOLINT
+	yyjson_doc *doc = yyjson_read(text.c_str(), text.size(), 0);
+	if (!doc) {
+		return false;
+	}
+	yyjson_val *root = yyjson_doc_get_root(doc);
+	bool ok = false;
+	if (root && yyjson_is_obj(root)) {
+		yyjson_val *num = yyjson_obj_get(root, "numerator");
+		yyjson_val *den = yyjson_obj_get(root, "denominator");
+		if (num && den && yyjson_is_obj(num) && yyjson_is_obj(den)) {
+			size_t num_len = 0, den_len = 0;
+			char *num_text = yyjson_val_write(num, 0, &num_len);
+			char *den_text = yyjson_val_write(den, 0, &den_len);
+			if (num_text && den_text) {
+				auto q1 = cql::parse_quantity_json(std::string(num_text, num_len));
+				auto q2 = cql::parse_quantity_json(std::string(den_text, den_len));
+				if (q1 && q2 && QuantityJsonWithinExtent(std::string(num_text, num_len)) &&
+				    QuantityJsonWithinExtent(std::string(den_text, den_len))) {
+					auto j1 = cql::format_quantity_json(*q1);
+					auto j2 = cql::format_quantity_json(*q2);
+					if (j1 && j2) {
+						out = "{\"numerator\":" + CompactIntegralQuantityValue(*j1) +
+						      ",\"denominator\":" + CompactIntegralQuantityValue(*j2) + "}";
+						ok = true;
+					}
+				}
+			}
+			free(num_text);
+			free(den_text);
+		}
+	}
+	yyjson_doc_free(doc);
+	return ok;
+}
+
+static bool ConvertsRatioAny(const std::string &text, std::string &out) {
+	if (ConvertsRatioText(text, out)) {
+		return true;
+	}
+	if (text.size() > 0 && text[0] == '{') {
+		return ConvertsRatioJson(text, out);
+	}
+	return false;
+}
+
+enum class ConversionTarget {
+	BOOLEAN,
+	DATE,
+	DATETIME,
+	DECIMAL,
+	INTEGER,
+	LONG,
+	QUANTITY,
+	RATIO,
+	STRING,
+	TIME,
+};
+
+// Checks a non-string scalar value against the conversion target (Python
+// parity for ConvertsTo* on DuckDB scalar inputs).
+static bool ConvertsScalarValue(const Value &value, ConversionTarget target) {
+	auto type_id = value.type().id();
+	if (type_id == LogicalTypeId::SQLNULL) {
+		return false;
+	}
+	if (type_id == LogicalTypeId::BOOLEAN) {
+		switch (target) {
+		case ConversionTarget::BOOLEAN:
+		case ConversionTarget::DECIMAL:
+		case ConversionTarget::INTEGER:
+		case ConversionTarget::LONG:
+		case ConversionTarget::STRING:
+			return true;
+		default:
+			return false;
+		}
+	}
+	if (type_id == LogicalTypeId::TINYINT || type_id == LogicalTypeId::SMALLINT ||
+	    type_id == LogicalTypeId::INTEGER) {
+		int64_t v = value.GetValue<int64_t>();
+		switch (target) {
+		case ConversionTarget::BOOLEAN:
+			return v == 0 || v == 1;
+		case ConversionTarget::INTEGER:
+		case ConversionTarget::LONG:
+		case ConversionTarget::DECIMAL:
+		case ConversionTarget::STRING:
+			return true;
+		default:
+			return false;
+		}
+	}
+	if (type_id == LogicalTypeId::BIGINT) {
+		int64_t v = value.GetValue<int64_t>();
+		switch (target) {
+		case ConversionTarget::BOOLEAN:
+			return v == 0 || v == 1;
+		case ConversionTarget::INTEGER:
+			return v >= INT32_MIN && v <= INT32_MAX;
+		case ConversionTarget::LONG:
+		case ConversionTarget::DECIMAL:
+		case ConversionTarget::STRING:
+			return true;
+		default:
+			return false;
+		}
+	}
+	if (type_id == LogicalTypeId::DECIMAL || type_id == LogicalTypeId::FLOAT ||
+	    type_id == LogicalTypeId::DOUBLE) {
+		double v = value.GetValue<double>();
+		switch (target) {
+		case ConversionTarget::BOOLEAN:
+			return v == 0.0 || v == 1.0;
+		case ConversionTarget::DECIMAL:
+		case ConversionTarget::STRING:
+			return true;
+		default:
+			return false;
+		}
+	}
+	if (type_id == LogicalTypeId::DATE) {
+		return target == ConversionTarget::DATE || target == ConversionTarget::DATETIME ||
+		       target == ConversionTarget::STRING;
+	}
+	if (type_id == LogicalTypeId::TIME) {
+		return target == ConversionTarget::TIME || target == ConversionTarget::STRING;
+	}
+	if (type_id == LogicalTypeId::TIMESTAMP || type_id == LogicalTypeId::TIMESTAMP_TZ) {
+		return target == ConversionTarget::DATE || target == ConversionTarget::DATETIME ||
+		       target == ConversionTarget::STRING;
+	}
+	return false;
+}
+
+static bool ConvertsStringValue(const std::string &text, ConversionTarget target, std::string &ratio_out) {
+	switch (target) {
+	case ConversionTarget::BOOLEAN:
+		return ConvertsBooleanString(text);
+	case ConversionTarget::DATE:
+		return ConvertsValidDateText(text);
+	case ConversionTarget::DATETIME:
+		return ConvertsValidDateTimeText(text);
+	case ConversionTarget::DECIMAL:
+		return ConvertsDecimalString(text);
+	case ConversionTarget::INTEGER: {
+		int64_t v = 0;
+		return ConvertsAsciiInteger(text, v) && v >= INT32_MIN && v <= INT32_MAX;
+	}
+	case ConversionTarget::LONG: {
+		int64_t v = 0;
+		return ConvertsAsciiInteger(text, v);
+	}
+	case ConversionTarget::QUANTITY: {
+		if (!text.empty() && text[0] == '{') {
+			if (cql::to_quantity(text).has_value()) {
+				return QuantityJsonWithinExtent(text);
+			}
+			std::string ratio;
+			return ConvertsRatioJson(text, ratio);
+		}
+		return cql::to_quantity(text).has_value();
+	}
+	case ConversionTarget::RATIO:
+		return ConvertsRatioAny(text, ratio_out);
+	case ConversionTarget::STRING:
+		return true;
+	case ConversionTarget::TIME:
+		return ConvertsValidTimeText(text);
+	}
+	return false;
+}
+
+static void ConvertsToFunc(DataChunk &args, ExpressionState &state, Vector &result, ConversionTarget target) {
+	idx_t count = args.size();
+	auto &input = args.data[0];
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	auto type_id = input.GetType().id();
+
+	if (type_id == LogicalTypeId::VARCHAR) {
+		UnifiedVectorFormat data;
+		input.ToUnifiedFormat(count, data);
+		auto values = UnifiedVectorFormat::GetData<string_t>(data);
+		for (idx_t i = 0; i < count; i++) {
+			auto idx = data.sel->get_index(i);
+			if (!data.validity.RowIsValid(idx)) {
+				result_mask.SetInvalid(i);
+				continue;
+			}
+			std::string ratio;
+			result_data[i] = ConvertsStringValue(values[idx].GetString(), target, ratio);
+		}
+		return;
+	}
+	for (idx_t i = 0; i < count; i++) {
+		Value value = input.GetValue(i);
+		if (value.IsNull()) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		if (value.type().id() == LogicalTypeId::VARCHAR) {
+			std::string ratio;
+			result_data[i] = ConvertsStringValue(value.GetValue<std::string>(), target, ratio);
+			continue;
+		}
+		auto type_id_now = value.type().id();
+		if (type_id_now == LogicalTypeId::TINYINT || type_id_now == LogicalTypeId::SMALLINT ||
+		    type_id_now == LogicalTypeId::INTEGER || type_id_now == LogicalTypeId::BIGINT ||
+		    type_id_now == LogicalTypeId::DECIMAL || type_id_now == LogicalTypeId::FLOAT ||
+		    type_id_now == LogicalTypeId::DOUBLE) {
+			if (target == ConversionTarget::QUANTITY) {
+				result_data[i] = cql::to_quantity(value.ToString()).has_value();
+				continue;
+			}
+			if (target == ConversionTarget::RATIO) {
+				std::string ratio;
+				result_data[i] = ConvertsRatioAny(value.ToString(), ratio);
+				continue;
+			}
+		}
+		result_data[i] = ConvertsScalarValue(value, target);
+	}
+}
+
+#define DEFINE_CONVERTS_TO_UDF(FuncName, Target)                                                                       \
+	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                   \
+		ConvertsToFunc(args, state, result, Target);                                                                   \
+	}
+
+DEFINE_CONVERTS_TO_UDF(ConvertsToBooleanFunc, ConversionTarget::BOOLEAN)
+DEFINE_CONVERTS_TO_UDF(ConvertsToDateFunc, ConversionTarget::DATE)
+DEFINE_CONVERTS_TO_UDF(ConvertsToDateTimeFunc, ConversionTarget::DATETIME)
+DEFINE_CONVERTS_TO_UDF(ConvertsToDecimalFunc, ConversionTarget::DECIMAL)
+DEFINE_CONVERTS_TO_UDF(ConvertsToIntegerFunc, ConversionTarget::INTEGER)
+DEFINE_CONVERTS_TO_UDF(ConvertsToLongFunc, ConversionTarget::LONG)
+DEFINE_CONVERTS_TO_UDF(ConvertsToQuantityFunc, ConversionTarget::QUANTITY)
+DEFINE_CONVERTS_TO_UDF(ConvertsToRatioFunc, ConversionTarget::RATIO)
+DEFINE_CONVERTS_TO_UDF(ConvertsToStringFunc, ConversionTarget::STRING)
+DEFINE_CONVERTS_TO_UDF(ConvertsToTimeFunc, ConversionTarget::TIME)
+
+static void ToDateTimeFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto text = a_vals[a_idx].GetString();
+		if (!ConvertsValidDateTimeText(text)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		if (!text.empty() && text.back() == 'Z') {
+			text = text.substr(0, text.size() - 1) + "+00:00";
+		}
+		result_data[i] = StringVector::AddString(result, text);
+	}
+}
+
+static void ToDateTimeTypedFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	DataChunk text_args;
+	text_args.Initialize(Allocator::DefaultAllocator(), {LogicalType::VARCHAR}, count);
+	text_args.SetCardinality(count);
+	auto &v = args.data[0];
+	if (v.GetVectorType() != VectorType::FLAT_VECTOR) {
+		v.Flatten(count);
+	}
+	VectorOperations::DefaultCast(v, text_args.data[0], count);
+	auto &text_vec = text_args.data[0];
+	if (text_vec.GetVectorType() != VectorType::FLAT_VECTOR) {
+		text_vec.Flatten(count);
+	}
+	auto vals = FlatVector::GetData<string_t>(text_vec);
+	auto &mask = FlatVector::Validity(text_vec);
+	for (idx_t i = 0; i < count; i++) {
+		if (!mask.RowIsValid(i)) {
+			continue;
+		}
+		auto text = vals[i].GetString();
+		auto space = text.find(' ');
+		if (space != std::string::npos) {
+			text[space] = 'T';
+			vals[i] = StringVector::AddString(text_vec, text);
+		}
+	}
+	ToDateTimeFunc(text_args, state, result);
+}
+
+static void ToTimeFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto text = a_vals[a_idx].GetString();
+		if (!ConvertsValidTimeText(text)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		// Drop the timezone suffix and normalize to the CQL T-prefixed form.
+		auto *chars = text.c_str();
+		idx_t len = static_cast<idx_t>(text.size());
+		if (len > 0 && chars[0] == 'T') {
+			chars++;
+			len--;
+		}
+		// Find the tz start: 'Z' or '+'/'-' after the time digits.
+		idx_t tz_pos = len;
+		for (idx_t p = 0; p < len; p++) {
+			if ((chars[p] == 'Z') || ((chars[p] == '+' || chars[p] == '-') && p > 0)) {
+				tz_pos = p;
+				break;
+			}
+		}
+		std::string normalized = "T";
+		normalized.append(chars, tz_pos);
+		result_data[i] = StringVector::AddString(result, normalized);
+	}
+}
+
+static void ToTimeTypedFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	DataChunk text_args;
+	text_args.Initialize(Allocator::DefaultAllocator(), {LogicalType::VARCHAR}, count);
+	text_args.SetCardinality(count);
+	VectorOperations::DefaultCast(args.data[0], text_args.data[0], count);
+	// Python `time.isoformat()` has no T marker; mirror that for typed TIME.
+	ToTimeFunc(text_args, state, result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		if (!mask.RowIsValid(i)) {
+			continue;
+		}
+		auto text = result_data[i].GetString();
+		if (!text.empty() && text[0] == 'T') {
+			result_data[i] = StringVector::AddString(result, text.substr(1));
+		}
+	}
+}
+
+static void ToLongFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		int64_t value = 0;
+		if (!ConvertsAsciiInteger(a_vals[a_idx].GetString(), value)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = value;
+	}
+}
+
+static void ToLongBoolFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	auto a_vals = UnifiedVectorFormat::GetData<bool>(a_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = a_vals[a_idx] ? 1 : 0;
+	}
+}
+
+static void ToLongIntFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	auto a_vals = UnifiedVectorFormat::GetData<int32_t>(a_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = static_cast<int64_t>(a_vals[a_idx]);
+	}
+}
+
+static void ToLongBigIntFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	auto a_vals = UnifiedVectorFormat::GetData<int64_t>(a_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = a_vals[a_idx];
+	}
+}
+
+static void ToLongAnyFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		result_mask.SetInvalid(i);
+	}
+}
+
+static void ToRatioFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		std::string ratio;
+		if (!ConvertsRatioAny(a_vals[a_idx].GetString(), ratio)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = StringVector::AddString(result, ratio);
+	}
+}
+
+static void CanConvertQuantityFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, b_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto b_idx = b_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx) || !b_data.validity.RowIsValid(b_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto text = a_vals[a_idx].GetString();
+		std::string quantity;
+		if (!text.empty() && text[0] == '{') {
+			auto parsed = cql::parse_quantity_json(text);
+			if (!parsed) {
+				result_data[i] = false;
+				continue;
+			}
+			auto formatted = cql::format_quantity_json(*parsed);
+			if (!formatted) {
+				result_data[i] = false;
+				continue;
+			}
+			quantity = *formatted;
+		} else {
+			auto parsed = cql::to_quantity(text);
+			if (!parsed) {
+				result_data[i] = false;
+				continue;
+			}
+			quantity = *parsed;
+		}
+		result_data[i] = cql::quantity_convert(quantity, b_vals[b_idx].GetString()).has_value();
+	}
+}
+
+// =====================================================================
 // Phase 7: Logical aggregate UDFs
 // =====================================================================
 
@@ -8314,6 +9222,24 @@ static void LoadInternal(ExtensionLoader &loader) {
 	RegisterSpecialScalar(loader, "intervalFromBounds",
 	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::BOOLEAN, LogicalType::BOOLEAN},
 	                      LogicalType::VARCHAR, IntervalFromBoundsFunc);
+	// S32: typed-bound overloads (DATE/TIMESTAMP on either side) — see
+	// IntervalFromBoundsTypedFunc above.
+	{
+		const LogicalType typed_sides[] = {
+		    LogicalType(LogicalTypeId::DATE), LogicalType(LogicalTypeId::TIMESTAMP),
+		};
+		for (const auto &side : typed_sides) {
+			RegisterSpecialScalar(loader, "intervalFromBounds",
+			                      {side, side, LogicalType::BOOLEAN, LogicalType::BOOLEAN},
+			                      LogicalType::VARCHAR, IntervalFromBoundsTypedFunc);
+			RegisterSpecialScalar(loader, "intervalFromBounds",
+			                      {side, LogicalType::VARCHAR, LogicalType::BOOLEAN, LogicalType::BOOLEAN},
+			                      LogicalType::VARCHAR, IntervalFromBoundsTypedFunc);
+			RegisterSpecialScalar(loader, "intervalFromBounds",
+			                      {LogicalType::VARCHAR, side, LogicalType::BOOLEAN, LogicalType::BOOLEAN},
+			                      LogicalType::VARCHAR, IntervalFromBoundsTypedFunc);
+		}
+	}
 	RegisterSpecialScalar(loader, "interval_size", {LogicalType::VARCHAR}, LogicalType::VARCHAR, IntervalSizeFunc);
 	RegisterSpecialScalar(loader, "expand_points1", {LogicalType::VARCHAR}, LogicalType::VARCHAR, ExpandPoints1Func);
 	RegisterSpecialScalar(loader, "expand_points", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
@@ -8732,6 +9658,63 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::VARCHAR, ToConceptListFunc);
 	RegisterSpecialScalar(loader, "ToConceptFromList", {LogicalType::LIST(LogicalType::VARCHAR)},
 	                      LogicalType::VARCHAR, ToConceptListFunc);
+	// Spec-aware ToDate (VARCHAR date/datetime validation, DATE/TIMESTAMP
+	// serialization) — wasm has no Python UDF surface (S32 WASM parity).
+	RegisterSpecialScalar(loader, "ToDate", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, ToDateFunc);
+	RegisterSpecialScalar(loader, "ToDate", {LogicalType::DATE},
+	                      LogicalType::VARCHAR, ToDateTypedFunc);
+	RegisterSpecialScalar(loader, "ToDate", {LogicalType::TIMESTAMP},
+	                      LogicalType::VARCHAR, ToDateTypedFunc);
+	RegisterSpecialScalar(loader, "ToDate", {LogicalType::TIMESTAMP_TZ},
+	                      LogicalType::VARCHAR, ToDateTypedFunc);
+	// Conversion family (S32 WASM parity): desktop Python UDFs/macros have
+	// C++ mirrors for the no-Python browser runtime.
+	RegisterSpecialScalar(loader, "ToDateTime", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, ToDateTimeFunc);
+	RegisterSpecialScalar(loader, "ToDateTime", {LogicalType::DATE},
+	                      LogicalType::VARCHAR, ToDateTimeTypedFunc);
+	RegisterSpecialScalar(loader, "ToDateTime", {LogicalType::TIMESTAMP},
+	                      LogicalType::VARCHAR, ToDateTimeTypedFunc);
+	RegisterSpecialScalar(loader, "ToTime", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, ToTimeFunc);
+	RegisterSpecialScalar(loader, "ToTime", {LogicalType::TIME},
+	                      LogicalType::VARCHAR, ToTimeTypedFunc);
+	RegisterSpecialScalar(loader, "ToLong", {LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, ToLongFunc);
+	RegisterSpecialScalar(loader, "ToLong", {LogicalType::BOOLEAN},
+	                      LogicalType::BIGINT, ToLongBoolFunc);
+	RegisterSpecialScalar(loader, "ToLong", {LogicalType::INTEGER},
+	                      LogicalType::BIGINT, ToLongIntFunc);
+	RegisterSpecialScalar(loader, "ToLong", {LogicalType::BIGINT},
+	                      LogicalType::BIGINT, ToLongBigIntFunc);
+	RegisterSpecialScalar(loader, "ToLong", {LogicalType::ANY},
+	                      LogicalType::BIGINT, ToLongAnyFunc);
+	RegisterSpecialScalar(loader, "ToRatio", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, ToRatioFunc);
+	RegisterSpecialScalar(loader, "CanConvertQuantity",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, CanConvertQuantityFunc);
+	RegisterSpecialScalar(loader, "ConvertsToBoolean", {LogicalType::ANY},
+	                      LogicalType::BOOLEAN, ConvertsToBooleanFunc);
+	RegisterSpecialScalar(loader, "ConvertsToDate", {LogicalType::ANY},
+	                      LogicalType::BOOLEAN, ConvertsToDateFunc);
+	RegisterSpecialScalar(loader, "ConvertsToDateTime", {LogicalType::ANY},
+	                      LogicalType::BOOLEAN, ConvertsToDateTimeFunc);
+	RegisterSpecialScalar(loader, "ConvertsToDecimal", {LogicalType::ANY},
+	                      LogicalType::BOOLEAN, ConvertsToDecimalFunc);
+	RegisterSpecialScalar(loader, "ConvertsToInteger", {LogicalType::ANY},
+	                      LogicalType::BOOLEAN, ConvertsToIntegerFunc);
+	RegisterSpecialScalar(loader, "ConvertsToLong", {LogicalType::ANY},
+	                      LogicalType::BOOLEAN, ConvertsToLongFunc);
+	RegisterSpecialScalar(loader, "ConvertsToQuantity", {LogicalType::ANY},
+	                      LogicalType::BOOLEAN, ConvertsToQuantityFunc);
+	RegisterSpecialScalar(loader, "ConvertsToRatio", {LogicalType::ANY},
+	                      LogicalType::BOOLEAN, ConvertsToRatioFunc);
+	RegisterSpecialScalar(loader, "ConvertsToString", {LogicalType::ANY},
+	                      LogicalType::BOOLEAN, ConvertsToStringFunc);
+	RegisterSpecialScalar(loader, "ConvertsToTime", {LogicalType::ANY},
+	                      LogicalType::BOOLEAN, ConvertsToTimeFunc);
 
 	// Phase 7: Logical aggregate UDFs (6)
 	RegisterSpecialScalar(loader, "logicalAllTrue", {LogicalType::VARCHAR},
