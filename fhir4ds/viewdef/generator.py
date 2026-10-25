@@ -817,13 +817,16 @@ class SQLGenerator:
         For a view-target join, an ``<alias>.<column>`` path returns the
         bare quoted column reference as the expression with the alias as
         the ref — the ON comparison then compares the base-side FHIRPath
-        projection directly against the view column (rev 2).
+        projection directly against the view column (rev 2). The column
+        name is validated as a sql-name identifier so a crafted path can
+        never interpolate raw SQL into the reference.
         """
         resolved = self._resolve_path(path)
         prefix = f"{join_alias}."
         if resolved.startswith(prefix):
             tail = resolved[len(prefix):]
             if join_alias in self._view_join_aliases:
+                validate_sql_name(tail, "Join view column reference")
                 return f'"{join_alias}"."{tail}"', None  # column ref: expr IS the ref
             expr = self._fhirpath_expression_sql(tail)
             return f'"{join_alias}".resource', expr
@@ -873,6 +876,7 @@ class SQLGenerator:
                     )
                 tail = resolved_path[len(prefix):]
                 if alias in self._view_join_aliases:
+                    validate_sql_name(tail, "Join view column reference")
                     return _ViewColumnRef(f'"{alias}"."{tail}"'), current_resource_var
                 return tail, resource_ref
         return resolved_path, current_resource_var
@@ -2032,19 +2036,34 @@ class SQLGenerator:
                 view_hit = False
                 for alias in self._view_join_aliases:
                     if f"{alias}." in resolved:
+                        def _col_sub(m, alias=alias):
+                            validate_sql_name(m.group(1), "Join view column reference")
+                            return f'"{alias}"."{m.group(1)}"'
                         resolved = re.sub(
                             rf"\b{re.escape(alias)}\.([A-Za-z_][A-Za-z0-9_]*)",
-                            rf'"{alias}"."\1"',
+                            _col_sub,
                             resolved,
                         )
                         view_hit = True
                 if view_hit:
-                    # Remaining operands are literals or other view columns;
-                    # strip FHIRPath quoting around the substituted refs by
-                    # emitting the expression directly as a SQL condition.
-                    where_conditions.append(self._where_condition_sql(
-                        base_resource_var, self._fhirpath_expression_sql(resolved, "0")
-                    ) if False else resolved)
+                    # Mixed view+base expressions are rejected at generation
+                    # (typed): the S6a bound supports view-column vs LITERAL
+                    # comparisons. A bare base operand cannot be compiled as
+                    # FHIRPath alongside raw SQL column refs, and emitting it
+                    # verbatim would produce an opaque binder error (or worse,
+                    # resolve against an unrelated flat column) at execution.
+                    remainder = re.sub(
+                        rf'"{re.escape(alias)}"\."[A-Za-z_][A-Za-z0-9_]*"', "", resolved
+                    ).strip(" =<>!'\"")
+                    if re.search(r"[A-Za-z_][A-Za-z0-9_.]*\.[A-Za-z_]", remainder) or re.match(
+                        r"^[A-Za-z_][A-Za-z0-9_.]*$", remainder.strip()
+                    ):
+                        raise ValidationError(
+                            f"Where expression '{path}' mixes view-join columns "
+                            "with base-resource paths; the S6a bound supports "
+                            "view-column vs literal comparisons only"
+                        )
+                    where_conditions.append(resolved)
                     continue
                 resolved, where_var = self._route_join_path(resolved, base_resource_var)
                 resolved, where_var = self._resolve_environment_path_context(
