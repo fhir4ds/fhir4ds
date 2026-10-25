@@ -198,3 +198,46 @@ def parse_and_gen_twice():
         "joins": [PERSON_VIEW_JOIN["joins"][0], PERSON_VIEW_JOIN["joins"][0]],
     })
     return SQLGenerator(source_table="resources").generate(vd)
+
+
+class TestViewJoinReviewHardening:
+    """Release v0.0.19 code-review hardening: identifier validation on
+    view-column references (columns + ON sides) and typed rejection of
+    mixed view+base where expressions (previously emitted an operand that
+    could not bind, surfacing as an opaque execution error)."""
+
+    def test_view_column_reference_validates_identifier(self):
+        from fhir4ds.viewdef.errors import ValidationError
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "select": [{"column": [
+                {"name": "x", "path": "cm.concept_id", "type": "string"},
+            ]}],
+            "joins": [{"name": "cm", "view": "omop_conceptmap", "type": "left",
+                       "on": [{"path": "gender"}, {"path": "cm.vocabulary_id"}]}],
+        })
+        sql = SQLGenerator(source_table="resources").generate(vd)
+        assert '"cm"."concept_id"' in sql
+
+    def test_mixed_view_base_where_rejected_typed(self):
+        from fhir4ds.viewdef.errors import ValidationError
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "select": [{"column": [{"name": "id", "path": "id"}]}],
+            "where": [{"path": "cm.concept_id = gender"}],
+            "joins": [{"name": "cm", "view": "omop_conceptmap", "type": "left",
+                       "on": [{"path": "gender"}, {"path": "cm.vocabulary_id"}]}],
+        })
+        with pytest.raises(ValidationError, match="mixes view-join columns"):
+            SQLGenerator(source_table="resources").generate(vd)
+
+    def test_view_column_vs_literal_where_still_works(self):
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "select": [{"column": [{"name": "id", "path": "id"}]}],
+            "where": [{"path": "cm.concept_id = '8507'"}],
+            "joins": [{"name": "cm", "view": "omop_conceptmap", "type": "left",
+                       "on": [{"path": "gender"}, {"path": "cm.vocabulary_id"}]}],
+        })
+        sql = SQLGenerator(source_table="resources").generate(vd)
+        assert "\"cm\".\"concept_id\" = '8507'" in sql
