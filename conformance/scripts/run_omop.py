@@ -19,9 +19,8 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
 import fhir4ds  # noqa: E402
-from fhir4ds.viewdef.omop_runner import (  # noqa: E402
-    OMOP_DIR, SINGLE_VIEWS, TABLE_UNIONS, create_omop_views,
-)
+from fhir4ds.viewdef.omop_runner import OMOP_DIR, create_omop_views  # noqa: E402
+from fhir4ds.viewdef.runner import load_manifest  # noqa: E402
 from fhir4ds.viewdef.parser import parse_view_definition  # noqa: E402
 from fhir4ds.viewdef.generator import SQLGenerator  # noqa: E402
 
@@ -155,11 +154,14 @@ def main():
     check("mapping", "stable positive 63-bit keys", hash_check)
 
     # -- vd-conformance section ---------------------------------------------
-    all_stems = list(SINGLE_VIEWS) + [s for stems in TABLE_UNIONS.values() for s in stems] + ["conceptmap-view"]
+    manifest = load_manifest(OMOP_DIR / "manifest.json")
+    all_stems = sorted(manifest.get("views", {}))
     for stem in all_stems:
         def vd_check(stem=stem):
             vd = parse_view_definition(json.loads((OMOP_DIR / f"{stem}.json").read_text()))
-            sql = SQLGenerator(source_table="resources").generate(vd)
+            gen = SQLGenerator(source_table="resources")
+            gen.view_schema = "omop"
+            sql = gen.generate(vd)
             con.execute(f"SELECT * FROM ({sql}) LIMIT 1").fetchall()
         check("vd-conformance", f"{stem} parse+generate+execute", vd_check)
 

@@ -81,6 +81,7 @@ interface ArrowTable {
 export async function stageAndRunFlat(
   sql: string,
   resources: Array<Record<string, unknown>>,
+  setupStatements: string[] = [],
 ): Promise<FlattenEnvelope> {
   await initDuckDB();
   const values = resources
@@ -95,6 +96,7 @@ export async function stageAndRunFlat(
   const envelope: FlattenEnvelope = { schema: 1, ok: true };
   try {
     for (const stmt of staged) await runRaw(stmt);
+    for (const stmt of setupStatements) await runRaw(stmt);
     const result = (await runRaw(sql)) as ArrowTable;
     const columns = result.schema.fields.map((f) => f.name);
     const scales: Record<string, number | undefined> = {};

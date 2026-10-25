@@ -66,7 +66,7 @@ async function route(msg: WorkerRequest): Promise<WorkerResponse> {
       }),
     } as WorkerResponse;
   }
-  const envelope = await stageAndRunFlat(gen.sql!, msg.resources);
+  const envelope = await stageAndRunFlat(gen.sql!, msg.resources, gen.setup_sql);
   return {
     id: msg.id,
     type: msg.type,
@@ -78,6 +78,7 @@ async function route(msg: WorkerRequest): Promise<WorkerResponse> {
 interface ViewSqlResult {
   ok: boolean;
   sql: string | null;
+  setup_sql?: string[];
   diagnostics: Array<Record<string, unknown>> | null;
 }
 
@@ -95,7 +96,35 @@ try:
     vd = parse_view_definition(json.loads(__vd_json))
     gen = SQLGenerator(source_table="__vd_src")
     sql = gen.generate(vd)
-    result = {"ok": True, "sql": sql}
+    # View-target joins (rev 2): inline each referenced library view as a
+    # CTE (the spec allows materialize-or-inline). The conceptmap library
+    # VD flattens monolithic ConceptMap resources staged in __vd_src.
+    setup_sql = []
+    view_targets = sorted({j.view for j in vd.joins if j.view})
+    if view_targets:
+        from pathlib import Path
+        import fhir4ds.viewdef as _v
+        omop_dir = Path(_v.__file__).parent / "resources" / "omop"
+        schema = gen.view_schema or "omop"
+        ctes = ['CREATE SCHEMA IF NOT EXISTS "' + schema + '"']
+        for vt in view_targets:
+            stem = next((s for s in json.load(open(omop_dir / "manifest.json"))["views"]
+                         if s.replace("-view", "").replace("-", "_") == vt
+                         or s == vt or s.replace(".json", "") == vt), None)
+            if stem is None:
+                # try by VD name match against each library VD
+                for f in omop_dir.glob("*-view.json"):
+                    cand = json.load(open(f))
+                    if cand.get("name") == vt:
+                        stem = f.name.replace(".json", "")
+                        break
+            if stem is not None:
+                tvd = parse_view_definition(json.load(open(omop_dir / (stem + ".json"))))
+                tgen = SQLGenerator(source_table="__vd_src")
+                tgen.view_schema = schema
+                tsql = tgen.generate(tvd)
+                ctes.append('CREATE OR REPLACE VIEW "' + schema + '"."' + vt + '" AS\\n' + tsql)
+    result = {"ok": True, "sql": sql, "setup_sql": ctes if view_targets else []}
 except Exception as exc:
     from fhir4ds.operations.errors import diagnostic_from_exception
     diag = diagnostic_from_exception(exc, context="flatten_view")
