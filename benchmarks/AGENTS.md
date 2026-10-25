@@ -108,3 +108,17 @@ must treat new major unexplained regressions as blockers.
 ## License
 
 Apache 2.0
+
+## Baseline refresh (2026-10-24, v0.0.18)
+
+`baselines/dqm_2025.json` was refreshed from the v0.0.18 tree (branch
+`feat/cleanroom-redo-20261014` @ `6cdf8dc0`), 47/47 measures at 100% accuracy,
+total 85.0s. The previous baseline (May 2025) read 60.9s; the 1.27x growth is
+intentional correctness-surface accumulation (CMS2-class SQL guards), verified
+identical at S24 (`fb3e65fe`) and HEAD — the S25-S32/0.0.18 campaign itself is
+performance-neutral (0.98x on matched /tmp worktrees; the LRU translation cache
+offsets added surfaces).
+
+Measurement doctrine: single-machine WSL runs differ by disk — /mnt/d (drvfs)
+reads ~12% slower than /tmp worktrees. This baseline was captured on /mnt/d
+(the normal development configuration); compare like-for-like.
