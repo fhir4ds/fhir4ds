@@ -29,10 +29,19 @@ test("journey: every gallery sample loads and renders its rows", async ({ page }
   const options = await gallery.locator("option").all();
   expect(options.length).toBe(8);
 
+  // Auto-accept dirty-guard prompts (auto-recalc marks editors dirty after
+  // the first run; sample switching is this journey's subject).
+  page.on("dialog", (d) => d.accept());
+
+  // Sample switches are explicit user intent; auto-accept the dirty guard
+  // (the editors carry only the auto-run debounce's stale marker). Let any
+  // in-flight auto-run settle before switching — staging races otherwise
+  // run the NEW view over the PREVIOUS sample's data.
   for (const opt of options) {
     const slug = await opt.getAttribute("value");
     const expected = SAMPLE_ROWS[slug!];
     expect(expected, `sample ${slug} has a row expectation`).toBeGreaterThan(0);
+    await page.waitForTimeout(1_500);
     await gallery.selectOption(slug!);
     await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(expected, {
       timeout: 60_000,
