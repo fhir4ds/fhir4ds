@@ -7,6 +7,45 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.19
+*October 2026*
+
+The OMOP release: FHIR R4 to OMOP CDM v5.5 as a ViewDefinition library.
+
+- **OMOP CDM v5.5 mapping library** (`fhir4ds.viewdef.resources.omop`): 13
+  ViewDefinitions covering the CDM spine — person, visit_occurrence,
+  condition_occurrence, procedure_occurrence, drug_exposure (a 4-arm union:
+  MedicationRequest, MedicationStatement, MedicationAdministration,
+  Immunization), device_exposure, measurement/observation (the
+  OMOP-on-FHIR value-type split), and death. Concepts resolve at query
+  time through the rev-2 **view-as-join-target** architecture: a
+  monolithic FHIR ConceptMap (the standard converter contract) is
+  flattened by the conceptmap ViewDefinition into a virtual table that
+  every event view joins on `(source system, code)`; unmapped codes keep
+  their source values with concept_id 0.
+- **`Join.view` engine extension**: root joins may target a materialized
+  VIEW (another ViewDefinition's flat output) per the SQL-on-FHIR
+  composition semantics — each referenced result acts as a virtual table
+  for the referencing query.
+- **Generic composition runner** (`fhir4ds.viewdef.runner`):
+  manifest-driven view composition with union assembly, positive 63-bit
+  integer-key projections, concept-0 defaults, and **dependency
+  inference** (Join.view targets are resolved to their source VDs and
+  materialized in topological order; cycles and unknown targets are
+  typed errors).
+- **Root-join SQL emission** (S0): the fhir4ds-extension `joins` field
+  now generates SQL (equality-pair ON clauses, left/inner/right/full,
+  staged-table mode).
+- **Conformance**: new sectioned OMOP suite (schema / required / grain /
+  mapping / vd-conformance — 37 checks); master gate 2869/2869.
+- **Viewing Room**: two OMOP gallery samples (omop-patient,
+  omop-drug-exposure) resolve concepts in-browser.
+- **Notebook**: `docs/notebooks/omop-mapping.ipynb` walks the full
+  FHIR-to-OMOP pipeline.
+- Sources mined from the OMOP-on-FHIR v5.4-R4 project with per-file
+  attribution; the v5.5 delta (optional fields only) and the v5.4 variant
+  are documented in the library manifest.
+
 ## Version 0.0.18
 *October 2026*
 

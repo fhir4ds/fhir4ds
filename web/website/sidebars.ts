@@ -52,7 +52,7 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Flattening & Modeling',
-          items: ['user-guide/modeling/viewdef'],
+          items: ['user-guide/modeling/viewdef', 'user-guide/modeling/omop-mapping'],
         },
         {
           type: 'category',

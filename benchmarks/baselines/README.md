@@ -101,3 +101,10 @@ The report flags a measure only when both thresholds are exceeded:
 
 The default workflow is non-blocking. Use `--fail-on-regression` only after the
 baseline and hosted runner variability are stable enough for a hard gate.
+
+## OMOP v5.5 mapping timings
+
+`omop_v55_2026.json` / `.md` capture the v0.0.19 release baseline: VD
+generation 214 ms (13 views), composition ~450 ms at 10-2,000 staged
+resources, 8.3M composed rows at the 200x scale. Report-only; rerun via
+the release log or `benchmarks/output/omop_v55_timings.json`.
