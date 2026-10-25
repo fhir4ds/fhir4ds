@@ -17,6 +17,7 @@ The project is now organized under the `fhir4ds` namespace for a clean, professi
 | **CQL** | `fhir4ds.cql` | CQL parser and SQL translator |
 | **CQL (DuckDB)** | `fhir4ds.cql.duckdb` | DuckDB UDFs and translations for CQL |
 | **ViewDefinition** | `fhir4ds.viewdef` | SQL-on-FHIR v2 ViewDefinition to SQL generator |
+| **OMOP Mapping** | `fhir4ds.viewdef.resources.omop` | FHIR R4 → OMOP CDM v5.5 ViewDefinition library (view-join concept resolution, composition runner) |
 | **SQLQuery / SQLView** | `fhir4ds.sqlquery` | SQL-on-FHIR v2 Analytics Layer (Library profiles wrapping raw SQL over materialized ViewDefinitions) |
 | **DQM** | `fhir4ds.dqm` | Digital Quality Measure orchestrator & audit engine |
 
@@ -123,6 +124,7 @@ The unified engine is rigorously tested against official specifications.
 | `fhir4ds.fhirpath` | ✅ Passing | 935/935 FHIRPath R4 (100%) |
 | `fhir4ds.cql` | ✅ Passing | 1706/1706 CQL (100%) |
 | `fhir4ds.viewdef` | ✅ Passing | 144/144 ViewDefinition v2 (100%) |
+| OMOP CDM v5.5 | ✅ Passing | 37/37 OMOP mapping suite (100%) |
 | `fhir4ds.sqlquery` | ✅ Passing | 28/28 SQLQuery / SQLView (Analytics Layer) |
 | `fhir4ds.dqm` | ✅ Passing | 47/47 DQM QI-Core 2025 (100%) |
 

@@ -1,0 +1,25 @@
+{
+  "scale": {
+    "1x_demo": {
+      "resources_staged": 10,
+      "composition_ms": 437.7,
+      "query_all_tables_ms": 113.4,
+      "total_rows": 10
+    },
+    "50x_demo": {
+      "resources_staged": 500,
+      "composition_ms": 447.8,
+      "query_all_tables_ms": 165.8,
+      "total_rows": 145050
+    },
+    "200x_demo": {
+      "resources_staged": 2000,
+      "composition_ms": 451.5,
+      "query_all_tables_ms": 658.1,
+      "total_rows": 8320200
+    }
+  },
+  "meta": {
+    "vd_generation_ms_13_views": 213.7
+  }
+}
