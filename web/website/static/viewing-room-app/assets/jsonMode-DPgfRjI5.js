@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:web/website/static/viewing-room-app/assets/jsonMode-DPgfRjI5.js
 import{m as Et}from"./App-21GE-dVG.js";/*!-----------------------------------------------------------------------------
+========
+import{m as Et}from"./App-hzJo3pw7.js";/*!-----------------------------------------------------------------------------
+>>>>>>>> 6dc05038 (chore(website): refresh static/viewing-room-app snapshot (0.0.19 + suite + HF data)):web/website/static/viewing-room-app/assets/jsonMode-C00NicPP.js
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Version: 0.52.2(404545bded1df6ffa41ea0af4e8ddb219018c6c1)
  * Released under the MIT license
