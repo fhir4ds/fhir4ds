@@ -87,11 +87,12 @@ def test_concept_columns_are_integer_typed(con):
 
 
 def test_union_is_sum_of_children(con):
-    # drug_exposure = sum of the four child views' rows
+    # drug_exposure = sum of the five child views' rows
     n_union = con.execute("SELECT count(*) FROM omop.drug_exposure").fetchone()[0]
     n_children = sum(
         con.execute(f"SELECT count(*) FROM omop.drug_exposure__{suffix}").fetchone()[0]
         for suffix in ("medication_request", "medication_statement",
-                       "medication_administration", "immunization")
+                       "medication_administration", "medication_dispense",
+                       "immunization")
     )
-    assert n_union == n_children == 2
+    assert n_union == n_children == 3  # request + dispense + immunization rows
