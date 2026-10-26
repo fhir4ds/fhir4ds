@@ -23,9 +23,11 @@ test("web component mounts and boots the engine", async ({ page }) => {
   );
   expect(height).toBeTruthy();
 
-  // Default sample auto-ran inside the component too (reference patient
-  // set: 35 name rows — S5 alignment).
+  // suite="omop" attribute: OMOP-only gallery, defaulting to the person
+  // sample over the committed 8-patient fixture slice.
   await expect(
     el.locator('[data-testid="output-table"] tbody tr'),
-  ).toHaveCount(35, { timeout: 60_000 });
+  ).toHaveCount(8, { timeout: 60_000 });
+  const options = await el.locator("header select option").count();
+  expect(options).toBe(4);
 });
