@@ -77,11 +77,18 @@ interface ArrowTable {
   toArray?(): Array<Record<string, unknown>>;
 }
 
-/** Execute VD SQL verbatim against the staged __vd_src temp table. */
+/** Execute VD SQL verbatim against the staged __vd_src temp table.
+ *
+ * ``setupStatements`` replays pre-computed DDL (legacy samples).
+ * ``setupFactory`` derives DDL LIVE after resources are staged — the
+ * SQLQuery samples re-derive their composition from the library views on
+ * every run instead of replaying a build-time snapshot.
+ */
 export async function stageAndRunFlat(
   sql: string,
   resources: Array<Record<string, unknown>>,
   setupStatements: string[] = [],
+  setupFactory?: () => Promise<string[]>,
 ): Promise<FlattenEnvelope> {
   await initDuckDB();
   const values = resources
@@ -97,6 +104,10 @@ export async function stageAndRunFlat(
   try {
     for (const stmt of staged) await runRaw(stmt);
     for (const stmt of setupStatements) await runRaw(stmt);
+    if (setupFactory) {
+      const derived = await setupFactory();
+      for (const stmt of derived) await runRaw(stmt);
+    }
     const result = (await runRaw(sql)) as ArrowTable;
     const columns = result.schema.fields.map((f) => f.name);
     const scales: Record<string, number | undefined> = {};

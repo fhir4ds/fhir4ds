@@ -105,19 +105,13 @@ def _result_columns(con, sql: str) -> List[str]:
     return [d[0] for d in con.execute(f"SELECT * FROM ({sql}) LIMIT 0").description]
 
 
-def apply_projections(
-    con,
+def _projection_sql(
     select_sql: str,
     columns: List[str],
     hash_keys: Optional[List[str]] = None,
     defaults: Optional[Dict[str, int]] = None,
 ) -> str:
-    """Return the projection-wrapped SQL over a composed select.
-
-    ``hash_keys`` columns become ``CAST(hash(col) & MASK AS BIGINT)``;
-    ``defaults`` columns become ``CAST(COALESCE(TRY_CAST(col AS BIGINT),
-    default) AS BIGINT)``. Column order is preserved.
-    """
+    """Pure projection wrapper (no connection needed)."""
     hash_keys = set(hash_keys or [])
     defaults = defaults or {}
     exprs = []
@@ -132,6 +126,22 @@ def apply_projections(
             exprs.append(col)
     return f"SELECT {', '.join(exprs)} FROM (\n{select_sql}\n)"
 
+
+def apply_projections(
+    con,
+    select_sql: str,
+    columns: List[str],
+    hash_keys: Optional[List[str]] = None,
+    defaults: Optional[Dict[str, int]] = None,
+) -> str:
+    """Return the projection-wrapped SQL over a composed select.
+
+    ``hash_keys`` columns become ``CAST(hash(col) & MASK AS BIGINT)``;
+    ``defaults`` columns become ``CAST(COALESCE(TRY_CAST(col AS BIGINT),
+    default) AS BIGINT)``. Column order is preserved. ``con`` is accepted
+    for API stability; the wrapping itself is pure.
+    """
+    return _projection_sql(select_sql, columns, hash_keys=hash_keys, defaults=defaults)
 
 
 def infer_view_dependencies(vd_dir: Path, stems: List[str]) -> Dict[str, List[str]]:
@@ -202,6 +212,185 @@ def resolve_materialization_order(
     return ordered, vd_names
 
 
+def _stem_table_name(stem: str) -> str:
+    """Normalized table name for a single-view stem (person-view -> person)."""
+    return stem.replace("-view", "").replace("-", "_").replace(".", "_")
+
+
+def _union_child_name(table: str, stem: str) -> str:
+    """Child view name under a union family (drug_exposure__medication_request)."""
+    suffix = stem.replace("-view", "").replace("-", "_")
+    family = table.replace("_", "-") + "-"
+    if stem.startswith(family):
+        suffix = stem[len(family):].replace("-view", "").replace("-", "_")
+    return f"{table}__{suffix}"
+
+
+def build_composition_plan(manifest_path: Path) -> dict:
+    """Pure planner: ordered DDL steps for a composition manifest.
+
+    Step shapes:
+      {"type": "view", "role": "join_target"|"union_child"|"single"|"override",
+       "name": <view name>, "table_sql": '<schema>."<name>"', "stem": <stem>,
+       "projection": {hash_keys, defaults} | None}
+      {"type": "union", "role": "union", "table": <table>,
+       "table_sql": '<schema>."<table>"', "children": [child view names],
+       "projection": {...} | None}
+
+    Ordering: join targets (dependency order) -> manifest overrides ->
+    per union (children then the union view) -> remaining single views.
+    One stem maps to exactly one role.
+    """
+    manifest = load_manifest(manifest_path)
+    vd_dir = Path(manifest_path).parent
+    schema = manifest.get("view_schema", "omop")
+    projections = manifest.get("projections", {})
+    all_stems = list(manifest.get("views", {}).keys())
+    ordered, vd_names = resolve_materialization_order(vd_dir, all_stems)
+    name_by_stem = {stem: name for name, stem in vd_names.items()}
+
+    deps = infer_view_dependencies(vd_dir, all_stems)
+    joined_names = set()
+    for targets in deps.values():
+        joined_names.update(targets)
+    union_stems = {s for stems in manifest.get("unions", {}).values() for s in stems}
+
+    steps: List[dict] = []
+    seen_stems = set()
+
+    def _view_step(role, name, stem, projection=None):
+        return {
+            "type": "view",
+            "role": role,
+            "name": name,
+            "table_sql": f'{schema}."{name}"',
+            "stem": stem,
+            "projection": projection,
+        }
+
+    # 1. Join-target VDs first (dependency order), under their VD name.
+    for stem in ordered:
+        if stem not in all_stems:
+            continue
+        vd_name = name_by_stem[stem]
+        if vd_name in joined_names and stem not in union_stems:
+            steps.append(_view_step("join_target", vd_name, stem))
+            seen_stems.add(stem)
+
+    # 2. Manifest overrides (eager materialization under a custom name).
+    for view_name, stem in manifest.get("materialize", {}).items():
+        steps.append(_view_step("override", view_name, stem))
+        seen_stems.add(stem)
+
+    # 3. Union families: child views, then the union + projections.
+    for table, stems in manifest.get("unions", {}).items():
+        children = []
+        for stem in stems:
+            child = _union_child_name(table, stem)
+            steps.append(_view_step("union_child", child, stem))
+            seen_stems.add(stem)
+            children.append(child)
+        steps.append({
+            "type": "union",
+            "role": "union",
+            "table": table,
+            "table_sql": f'{schema}."{table}"',
+            "children": children,
+            "projection": projections.get(table) or None,
+        })
+
+    # 4. Remaining single-table views (with projections when declared).
+    for stem in ordered:
+        if stem in union_stems or stem not in all_stems or stem in seen_stems:
+            continue
+        vd_name = name_by_stem[stem]
+        if vd_name in joined_names:
+            continue  # already materialized as a join target
+        table = _stem_table_name(stem)
+        steps.append(_view_step("single", table, stem, projections.get(table) or None))
+
+    return {"schema": schema, "steps": steps}
+
+
+def render_view_sqls(plan: dict, vd_dir: Path, source_table: str) -> List[dict]:
+    """Generate SQL text for every 'view' step (dependency order, no execution).
+
+    Returns [{"name", "table_sql", "stem", "sql"}] — the caller is expected
+    to execute each as a plain CREATE OR REPLACE VIEW (introspection-ready),
+    then call ``render_composition_ddl`` for the remaining composed steps.
+    """
+    schema = plan["schema"]
+    out = []
+    for step in plan["steps"]:
+        if step["type"] != "view":
+            continue
+        sql = generate_view_sql(Path(vd_dir) / f'{step["stem"]}.json', source_table, view_schema=schema)
+        out.append({
+            "name": step["name"],
+            "table_sql": step["table_sql"],
+            "stem": step["stem"],
+            "sql": sql,
+        })
+    return out
+
+
+def render_composition_ddl(
+    plan: dict,
+    columns_by_view: Dict[str, List[str]],
+    sql_by_view: Optional[Dict[str, str]] = None,
+) -> List[str]:
+    """Pure: remaining DDL after plain view-step CREATEs have been executed.
+
+    Emits, in order:
+      - projected view steps (wrapping ``SELECT * FROM <view>`` with the
+        manifest projection rules),
+      - union steps (UNION ALL over the child views, then projections).
+    Plain view steps without projections are assumed already created and
+    are NOT re-emitted.
+    """
+    schema = plan["schema"]
+    stmts: List[str] = []
+    for step in plan["steps"]:
+        if step["type"] == "view":
+            proj = step.get("projection")
+            if not proj:
+                continue
+            cols = columns_by_view.get(step["name"])
+            if cols is None:
+                raise ValueError(f"missing columns for view {step['name']!r}")
+            # Wrap the ORIGINAL generated SQL: wrapping "SELECT * FROM
+            # <same view>" would be a self-referential CREATE OR REPLACE.
+            base_sql = (sql_by_view or {}).get(step["name"])
+            if base_sql is None:
+                raise ValueError(
+                    f"missing base SQL for projected view {step['name']!r}"
+                )
+            wrapped = _projection_sql(
+                base_sql,
+                cols,
+                hash_keys=proj.get("hash_keys"),
+                defaults=proj.get("defaults"),
+            )
+            stmts.append(f'CREATE OR REPLACE VIEW {step["table_sql"]} AS\n{wrapped}')
+            continue
+        # union step
+        children = [f'{schema}."{c}"' for c in step["children"]]
+        first_cols = columns_by_view.get(step["children"][0])
+        if first_cols is None:
+            raise ValueError(f"missing columns for union child {step['children'][0]!r}")
+        union_select = "\nUNION ALL\n".join(f"SELECT * FROM {t}" for t in children)
+        proj = step.get("projection")
+        if proj:
+            union_select = _projection_sql(
+                union_select,
+                first_cols,
+                hash_keys=proj.get("hash_keys"),
+                defaults=proj.get("defaults"),
+            )
+        stmts.append(f'CREATE OR REPLACE VIEW {step["table_sql"]} AS\n{union_select}')
+    return stmts
+
+
 def run_composition(con, manifest_path: Path, source_table: str) -> Dict[str, str]:
     """Execute a full composition manifest; return table -> view name.
 
@@ -212,105 +401,59 @@ def run_composition(con, manifest_path: Path, source_table: str) -> Dict[str, st
     is an override/hint only (eager materialization under a custom name,
     e.g. a view nothing joins yet) — correctness never depends on it.
 
-    Then: union children -> table-level unions with projections ->
-    single-table views with projections.
+    Steps come from ``build_composition_plan`` (the same plan the
+    text-only renderers use for browser-side derivation).
     """
-    manifest = load_manifest(manifest_path)
+    plan = build_composition_plan(manifest_path)
     vd_dir = Path(manifest_path).parent
-    schema = manifest.get("view_schema", "omop")
-    projections = manifest.get("projections", {})
+    schema = plan["schema"]
     created: Dict[str, str] = {}
     join_targets: Dict[str, str] = {}
 
-    all_stems = list(manifest.get("views", {}).keys())
-    ordered, vd_names = resolve_materialization_order(vd_dir, all_stems)
-
-    # Materialize join-target VDs FIRST (inferred order): every stem that
-    # some other VD view-joins, materialized under its VD name. Stems that
-    # appear ONLY as join targets (not composed into tables) materialize
-    # but do not compose (one stem, one role).
-    joined_names = set()
-    for targets in infer_view_dependencies(vd_dir, all_stems).values():
-        joined_names.update(targets)
-    union_stems = {s for stems in manifest.get("unions", {}).values() for s in stems}
-
-    for stem in ordered:
-        if stem not in all_stems:
+    con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    for step in plan["steps"]:
+        if step["type"] == "view":
+            sql = generate_view_sql(
+                vd_dir / f'{step["stem"]}.json', source_table, view_schema=schema
+            )
+            proj = step.get("projection")
+            if proj:
+                cols = _result_columns(con, sql)
+                sql = _projection_sql(
+                    sql, cols,
+                    hash_keys=proj.get("hash_keys"),
+                    defaults=proj.get("defaults"),
+                )
+            con.execute(f'CREATE OR REPLACE VIEW {step["table_sql"]} AS\n{sql}')
+            if step["role"] in ("join_target", "override"):
+                join_targets[step["name"]] = step["table_sql"]
+            elif step["role"] == "single":
+                created[step["name"]] = step["table_sql"]
             continue
-        vd_name = [n for n, st in vd_names.items() if st == stem][0]
-        if vd_name in joined_names and stem not in union_stems:
-            join_targets.update(materialize_views(
-                con, vd_dir, [stem], source_table, schema=schema,
-                table_name=vd_name,
-            ))
 
-    # Manifest overrides: eager materialization under custom names.
-    for view_name, stem in manifest.get("materialize", {}).items():
-        join_targets.update(materialize_views(
-            con, vd_dir, [stem], source_table, schema=schema, table_name=view_name,
-        ))
-
-    # Union tables: children (prefixed <table>__<suffix>), then the union +
-    # projections (wrapping the CHILD SELECTS — never the union view itself).
-    for table, stems in manifest.get("unions", {}).items():
-        children = {}
-        for stem in stems:
-            suffix = stem.replace("-view", "").replace("-", "_")
-            family = table.replace("_", "-") + "-"
-            if stem.startswith(family):
-                suffix = stem[len(family):].replace("-view", "").replace("-", "_")
-            stem_table = f"{table}__{suffix}"
-            children.update(materialize_views(
-                con, vd_dir, [stem], source_table, schema=schema,
-                table_name=stem_table,
-            ))
-        child_tables = [children[s] for s in stems]
+        # union step
+        child_tables = [f'{schema}."{c}"' for c in step["children"]]
         first_cols = _result_columns(con, f"SELECT * FROM {child_tables[0]}")
         for t in child_tables[1:]:
             cols = _result_columns(con, f"SELECT * FROM {t}")
             if cols != first_cols:
                 raise ValueError(
-                    f"Union '{table}' child column mismatch: {t} has {cols}, "
+                    f"Union '{step['table']}' child column mismatch: {t} has {cols}, "
                     f"expected {first_cols}"
                 )
-        union_select = "\nUNION ALL\n".join(
-            f"SELECT * FROM {t}" for t in child_tables
-        )
-        proj = projections.get(table, {})
-        final_sql = union_select
+        union_select = "\nUNION ALL\n".join(f"SELECT * FROM {t}" for t in child_tables)
+        proj = step.get("projection")
         if proj:
-            final_sql = apply_projections(
-                con, union_select, first_cols,
+            union_select = _projection_sql(
+                union_select, first_cols,
                 hash_keys=proj.get("hash_keys"),
                 defaults=proj.get("defaults"),
             )
-        con.execute(f'CREATE OR REPLACE VIEW {schema}."{table}" AS\n{final_sql}')
-        created[table] = f'{schema}."{table}"'
-
-    # Single-table views (stems not consumed by unions or join-target-only).
-    for stem in ordered:
-        if stem in union_stems or stem not in all_stems:
-            continue
-        vd_name = [n for n, st in vd_names.items() if st == stem][0]
-        if vd_name in joined_names:
-            continue  # already materialized as a join target
-        table = stem.replace("-view", "").replace("-", "_")
-        sql = generate_view_sql(vd_dir / f"{stem}.json", source_table, view_schema=schema)
-        cols = _result_columns(con, sql)
-        proj = projections.get(table, {})
-        if proj:
-            sql = apply_projections(
-                con, sql, cols,
-                hash_keys=proj.get("hash_keys"),
-                defaults=proj.get("defaults"),
-            )
-        con.execute(f'CREATE OR REPLACE VIEW {schema}."{table}" AS\n{sql}')
-        created[table] = f'{schema}."{table}"'
+        con.execute(f'CREATE OR REPLACE VIEW {step["table_sql"]} AS\n{union_select}')
+        created[step["table"]] = step["table_sql"]
 
     created["__join_targets__"] = join_targets  # reserved: not a table
     return created
-
-
 
 
 class _RecordingExecutor:
@@ -346,4 +489,5 @@ def composition_ddl(con, manifest_path: Path, source_table: str) -> list:
 __all__ = [
     "load_manifest", "generate_view_sql", "materialize_views",
     "compose_union", "apply_projections", "run_composition", "composition_ddl",
+    "build_composition_plan", "render_view_sqls", "render_composition_ddl",
 ]
