@@ -9,7 +9,7 @@ import { test, expect } from "@playwright/test";
  */
 
 test("web component mounts and boots the engine", async ({ page }) => {
-  await page.goto("/web-component.html");
+  await page.goto("/web-component.html?data=local");
   const el = page.locator("sqlonfhir-viewing-room");
   await expect(el).toBeAttached();
 

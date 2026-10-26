@@ -100,10 +100,49 @@ Field mappings are mined from the OMOP-on-FHIR v5.4-R4 project with
 per-file attribution; the v5.5 delta (optional fields only) is noted
 there too.
 
+## Sample data
+
+The Viewing Room's **OMOP** sample suite runs on real generated data —
+a 25-patient [Synthea](https://synthetichealth.github.io/synthea/) R4
+cohort (MIT; seed-pinned) — hosted on Hugging Face:
+
+- [fhir4ds/omop-demo](https://huggingface.co/datasets/fhir4ds/omop-demo)
+  — NDJSON bundles (patients, encounters, medications + immunizations)
+  and the RxNorm ConceptMap.
+
+Hugging Face serves dataset files with CORS enabled, so the browser
+(including DuckDB-WASM) fetches them directly — no server, no token
+(the repo is public).
+
+Four samples cover the two-layer story:
+
+| Sample | Layer | Rows (25-pt cohort) |
+|---|---|---|
+| OMOP person | ViewDefinition | 25 |
+| OMOP encounters | ViewDefinition | 1,284 |
+| OMOP medications | ViewDefinition (MedicationRequest arm) | 1,170 |
+| OMOP medications | SQLQuery (5-arm union, composed live) | 1,488 |
+
+Append `?data=local` to the app URL to run against the compact
+committed fixtures instead (8-patient slice + a 36-code RxNorm slice) —
+this is what the e2e suite uses, so tests stay offline and fast.
+
+### ConceptMap transport: chunked resources
+
+The full standard RxNorm set (157k concepts) cannot be shipped as one
+monolithic ConceptMap: DuckDB (and DuckDB-WASM) exhaust memory unnesting
+JSON arrays that large. The dataset ships one thin ConceptMap **per 20
+elements**; the conceptmap ViewDefinition flattens them back into the
+long mapping table. The shipped subset covers the standard classes real
+medication data uses — Ingredient, Clinical Drug, Branded Drug (71,444
+concepts, ~90% of the cohort's medication requests resolve; the rest
+surface concept 0 with their source values, the OMOP no-map
+convention). Extend by appending more chunked ConceptMap lines.
+
 ## Try it
 
 - Notebook: `docs/notebooks/omop-mapping.ipynb`
-- Viewing Room: the **OMOP person** and **OMOP drug_exposure** gallery
-  samples resolve concepts live in the browser
+- Viewing Room: `?suite=omop` — the four OMOP samples above, resolving
+  concepts live in the browser
 - Conformance: `python3 conformance/scripts/run_omop.py` (37 checks —
   schema, required fields, grain, mapping, vd-conformance)

@@ -91,15 +91,22 @@ export async function stageAndRunFlat(
   setupFactory?: () => Promise<string[]>,
 ): Promise<FlattenEnvelope> {
   await initDuckDB();
-  const values = resources
-    .map((r) => `('${JSON.stringify(r).replace(/'/g, "''")}')`)
-    .join(", ");
-  const staged = [
-    "CREATE OR REPLACE TEMP TABLE __vd_src (resource JSON)",
-    values
-      ? `INSERT INTO __vd_src VALUES ${values}`
-      : "INSERT INTO __vd_src SELECT NULL WHERE false",
-  ];
+  // Batch the INSERTs: a single VALUES statement over thousands of
+  // resources (the full RxNorm ConceptMap is ~8k chunked resources) spikes
+  // DuckDB-WASM parse memory and can crash the tab.
+  const staged: string[] = ["CREATE OR REPLACE TEMP TABLE __vd_src (resource JSON)"];
+  if (resources.length === 0) {
+    staged.push("INSERT INTO __vd_src SELECT NULL WHERE false");
+  } else {
+    const BATCH = 150;
+    for (let i = 0; i < resources.length; i += BATCH) {
+      const values = resources
+        .slice(i, i + BATCH)
+        .map((r) => `('${JSON.stringify(r).replace(/'/g, "''")}')`)
+        .join(", ");
+      staged.push(`INSERT INTO __vd_src VALUES ${values}`);
+    }
+  }
   const envelope: FlattenEnvelope = { schema: 1, ok: true };
   try {
     for (const stmt of staged) await runRaw(stmt);

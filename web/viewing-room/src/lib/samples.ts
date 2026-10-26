@@ -11,11 +11,29 @@ export interface Sample {
   resourcesUrl: string;
   /** Optional pre-computed composition DDL (legacy; live derivation is now the default). */
   setupUrl?: string;
+  /** Path under OMOP_DATA_BASE for the full dataset resources (when hosted). */
+  remoteResources?: string;
   /** Gallery suite grouping (dropdown optgroups / ?suite= filter). */
   suite: SampleSuite;
 }
 
 export type SampleSuite = "general" | "uscore" | "omop";
+
+/**
+ * Base URL of the PUBLIC Hugging Face dataset hosting the full OMOP sample
+ * data (25-patient Synthea cohort + the complete standard RxNorm
+ * ConceptMap). HF serves public dataset files with CORS enabled, so the
+ * browser (and DuckDB-WASM/Pyodide workers) fetch them directly.
+ *
+ * Append ?data=local to the app URL to use the committed compact fixtures
+ * instead (offline development / hermetic e2e).
+ */
+export const OMOP_DATA_BASE = "https://huggingface.co/datasets/fhir4ds/omop-demo/resolve/main";
+
+function useLocalSampleData(): boolean {
+  if (typeof window === "undefined") return true;
+  return new URLSearchParams(window.location.search).get("data") === "local";
+}
 
 export const SUITE_LABELS: Record<SampleSuite, string> = {
   general: "General",
@@ -76,33 +94,37 @@ export const SAMPLES: Sample[] = [
     slug: "omop-patient",
     suite: "omop",
     name: "OMOP person",
-    description: "OMOP CDM v5.5 person table as a ViewDefinition (concept-map join for gender).",
+    description: "OMOP CDM v5.5 person over a real Synthea cohort — gender concept join, birth-date splits.",
     vdUrl: "samples/omop-patient/viewdefinition.json",
     resourcesUrl: "samples/omop-patient/resources.ndjson",
+    remoteResources: "omop/synthea-25/patient-resources.ndjson",
+  },
+  {
+    slug: "omop-encounters",
+    suite: "omop",
+    name: "OMOP encounters",
+    description: "OMOP visit_occurrence over Synthea encounters — visit classes (inpatient/outpatient/emergency) resolve through the ConceptMap view.",
+    vdUrl: "samples/omop-encounters/viewdefinition.json",
+    resourcesUrl: "samples/omop-encounters/resources.ndjson",
+    remoteResources: "omop/synthea-25/encounter-resources.ndjson",
   },
   {
     slug: "omop-drug-exposure",
     suite: "omop",
-    name: "OMOP drug_exposure (request arm)",
-    description: "OMOP CDM v5.5 drug_exposure child view — RxNorm concept join + provenance type.",
+    name: "OMOP medications (ViewDefinition)",
+    description: "drug_exposure from MedicationRequest alone — a single-resource ViewDefinition with a live ConceptMap view join.",
     vdUrl: "samples/omop-drug-exposure/viewdefinition.json",
     resourcesUrl: "samples/omop-drug-exposure/resources.ndjson",
+    remoteResources: "omop/synthea-25/medication-resources.ndjson",
   },
   {
     slug: "omop-drug-exposure-sqlquery",
     suite: "omop",
-    name: "OMOP drug_exposure (SQLQuery)",
+    name: "OMOP medications (SQLQuery)",
     description: "Cross-resource drug_exposure via a SQLQuery Library — MedicationRequest, Dispense, Statement, Administration and Immunization unioned over the OMOP views (composed live on every run).",
     vdUrl: "samples/omop-drug-exposure-sqlquery/viewdefinition.json",
     resourcesUrl: "samples/omop-drug-exposure-sqlquery/resources.ndjson",
-  },
-  {
-    slug: "omop-conditions-analysis",
-    suite: "omop",
-    name: "OMOP conditions (SQLQuery)",
-    description: "condition_occurrence joined to person demographics — an analytical SQLQuery Library over the OMOP views (composed live on every run).",
-    vdUrl: "samples/omop-conditions-analysis/viewdefinition.json",
-    resourcesUrl: "samples/omop-conditions-analysis/resources.ndjson",
+    remoteResources: "omop/synthea-25/medication-resources.ndjson",
   },
 ];
 
@@ -136,8 +158,17 @@ export function setSampleBase(base: string): void {
 }
 
 export function sampleUrl(path: string): string {
+  if (/^https?:\/\//.test(path)) return path;
   if (sampleBase !== null) return `${sampleBase.replace(/\/$/, "")}/${path}`;
   return new URL(path, document.baseURI).href;
+}
+
+/** Resolve a sample's resources URL (HF dataset by default, local fixtures with ?data=local). */
+export function sampleResourcesUrl(s: Sample): string {
+  if (!useLocalSampleData() && s.remoteResources) {
+    return `${OMOP_DATA_BASE.replace(/\/$/, "")}/${s.remoteResources}`;
+  }
+  return sampleUrl(s.resourcesUrl);
 }
 
 /** Parse NDJSON or a JSON array of resources; a single object is wrapped. */

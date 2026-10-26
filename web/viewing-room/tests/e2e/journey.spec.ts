@@ -8,7 +8,7 @@
 import { test, expect } from "@playwright/test";
 
 test("journey: default sample boots, auto-runs, and renders patient rows", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?data=local");
 
   // Boot overlay shows while the engine initializes (Pyodide + DuckDB-WASM).
   const overlay = page.getByTestId("boot-overlay");

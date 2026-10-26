@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { BootStatus, flattenView, onBootStatus } from "./lib/engineClient";
 import { boot as bootEngine } from "./lib/engineClient";
-import { DEFAULT_SAMPLE, Sample, SAMPLES, SUITE_LABELS, SampleSuite, activeSamples, parseResourcesInput, resourceStats, sampleUrl } from "./lib/samples";
+import { DEFAULT_SAMPLE, Sample, SAMPLES, SUITE_LABELS, SampleSuite, activeSamples, parseResourcesInput, resourceStats, sampleResourcesUrl, sampleUrl } from "./lib/samples";
 import { ResultsTable } from "./components/ResultsTable";
 import { DiagnosticsList } from "./components/DiagnosticsList";
 import { SqlView } from "./components/SqlView";
@@ -73,7 +73,7 @@ export default function App() {
         if (!r.ok) throw new Error(`sample VD fetch failed: ${s.vdUrl}`);
         return r.text();
       }),
-      fetch(sampleUrl(s.resourcesUrl)).then((r) => {
+      fetch(sampleResourcesUrl(s)).then((r) => {
         if (!r.ok) throw new Error(`sample resources fetch failed: ${s.resourcesUrl}`);
         return r.text();
       }),

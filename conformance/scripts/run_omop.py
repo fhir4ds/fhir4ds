@@ -111,11 +111,19 @@ def main():
     check("grain", "row counts match fixture", grain_check)
 
     def union_sum_check():
+        # Derive the union's child arms from the manifest (5 arms today).
+        from fhir4ds.viewdef.runner import load_manifest
+        manifest = load_manifest(OMOP_DIR / "manifest.json")
         n = con.execute("SELECT count(*) FROM omop.drug_exposure").fetchone()[0]
-        children = sum(
-            con.execute(f"SELECT count(*) FROM omop.drug_exposure__{s}").fetchone()[0]
-            for s in ("medication_request", "medication_statement", "medication_administration", "immunization")
-        )
+        children = 0
+        for stem in manifest.get("unions", {}).get("drug_exposure", []):
+            suffix = stem.replace("-view", "").replace("-", "_")
+            family = "drug-exposure-"
+            if stem.startswith(family):
+                suffix = stem[len(family):].replace("-view", "").replace("-", "_")
+            children += con.execute(
+                f'SELECT count(*) FROM omop."drug_exposure__{suffix}"'
+            ).fetchone()[0]
         assert n == children, f"{n} != {children}"
     check("grain", "union = sum of children", union_sum_check)
 

@@ -16,14 +16,14 @@ const SAMPLE_ROWS: Record<string, number> = {
   "us-core-blood-pressures": 2,
   "questionnaire-response-items": 5,
   "observation-values": 3,
-  "omop-patient": 2,
-  "omop-drug-exposure": 1,
-  "omop-drug-exposure-sqlquery": 3,
-  "omop-conditions-analysis": 1,
+  "omop-patient": 8,
+  "omop-encounters": 464,
+  "omop-drug-exposure": 418,
+  "omop-drug-exposure-sqlquery": 524,
 };
 
 test("journey: every gallery sample loads and renders its rows", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?data=local");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
   await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(35, { timeout: 60_000 });
 
@@ -52,7 +52,7 @@ test("journey: every gallery sample loads and renders its rows", async ({ page }
 });
 
 test("journey: collection column renders as a JSON array", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?data=local");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
   const gallery = page.locator("header select");
   await gallery.selectOption("observation-values");

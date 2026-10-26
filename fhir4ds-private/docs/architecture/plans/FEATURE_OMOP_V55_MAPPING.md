@@ -448,3 +448,41 @@ Open question for Joel (non-blocking): CTE-inlining vs runner
 materialization as the DEFAULT (recommend runner materialization —
 matches the shipped omop_runner and the spec's "either conforms";
 CTE-inlining stays available for single-query use).
+
+
+## Sample data & scale findings (2026-10-26, Joel review follow-up)
+
+Decision chain (Joel): the OMOP samples must use real, license-clean,
+small data — conditions dropped (SNOMED/UMLS encumbrance), medications on
+RxNorm (NLM public domain, self-mapping), data hosted on Hugging Face
+rather than committed to git.
+
+- **Dataset**: `fhir4ds/omop-demo` (public, CORS-enabled) — a 25-patient
+  Synthea 4.0.0 R4 cohort (seed 20261026; MIT) plus the RxNorm ConceptMap
+  subset. Browser fetch works directly (`/resolve/main/...`).
+- **Two data tiers**: HF bundles are the production default
+  (`OMOP_DATA_BASE` in samples.ts); committed compact fixtures (8-patient
+  slice + 36-code map) serve `?data=local`, which the e2e suite uses so
+  tests stay offline/fast. Network smoke test (`journey-remote.spec.ts`)
+  exercises the HF path and skips when the dataset is unreachable.
+- **DuckDB scale limit (verified, desktop + WASM)**: a monolithic
+  ConceptMap with 157k elements cannot be unnested — DuckDB exhausts
+  memory (`json_each`/`UNNEST` over huge JSON arrays; 50 GiB peak before
+  OOM). Transport therefore chunks the map: one thin ConceptMap resource
+  per 20 elements (3,573 resources for 71,444 concepts), flatten 2.4 s
+  desktop / ~10-25 s WASM. Chunk size tunes per-row parse cost.
+- **Subset choice**: RxNorm standard classes Ingredient + Clinical Drug +
+  Branded Drug (71,444) → ~90% of the cohort's medication requests
+  resolve; the remainder surface concept_id 0 with source values (the
+  OMOP no-map convention, demonstrated by real data). Quant*/Pack
+  classes intentionally unmapped.
+- **SQLQuery live composition**: samples no longer ship build-time
+  `setup.sql`. The worker derives the composition DDL per run — Pyodide
+  emits text only (plan + view SQL + render); DuckDB-WASM executes and
+  introspects columns; edits can never leave a stale composition.
+- **Gallery suites**: `?suite=general|uscore|omop` filters the dropdown
+  (optgroups), default sample = first of the active suite; a pill clears
+  the filter. OMOP suite = person, encounters, medications (VD),
+  medications (SQLQuery).
+- **Staging**: inserts are batched (150 rows) — one 20 MB VALUES
+  statement crashed DuckDB-WASM's heap.
