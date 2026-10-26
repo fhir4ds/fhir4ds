@@ -12,7 +12,7 @@ declare const __FHIR4DS_WHEEL_NAME__: string;
 declare const __FHIR4DS_WHEEL_HASH__: string;
 
 import type { WorkerRequest, WorkerResponse } from "../lib/protocol";
-import { stageAndRunFlat } from "../lib/executor";
+import { runRaw, stageAndRunFlat } from "../lib/executor";
 
 const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
 
@@ -68,7 +68,15 @@ async function route(msg: WorkerRequest): Promise<WorkerResponse> {
         }),
       } as WorkerResponse;
     }
-    const envelope = await stageAndRunFlat(gen.sql!, msg.resources, gen.setup_sql);
+    // Live composition: when the sample ships no setup DDL, derive the
+    // OMOP view family from the WHEEL's library on every run (text-only in
+    // Pyodide; DDL executes on DuckDB-WASM after staging). Editing the
+    // Library SQL — or any upstream engine change — can never leave a
+    // stale composition snapshot behind.
+    const needsComposition = !(gen.setup_sql && gen.setup_sql.length);
+    const envelope = needsComposition && /\bomop\./i.test(gen.sql ?? "")
+      ? await stageAndRunFlat(gen.sql!, msg.resources, [], deriveCompositionDdl)
+      : await stageAndRunFlat(gen.sql!, msg.resources, gen.setup_sql);
     return {
       id: msg.id,
       type: msg.type,
@@ -140,6 +148,62 @@ except Exception as exc:
 json.dumps(result)
 `);
   return JSON.parse(out) as ViewSqlResult;
+}
+
+/**
+ * LIVE composition DDL derivation for SQLQuery samples.
+ *
+ * Phase 1 (Pyodide, TEXT ONLY): load the wheel's OMOP composition
+ * manifest, plan the DDL steps and generate every view's SQL. Phase 2
+ * (DuckDB-WASM): create the plain views and introspect their columns.
+ * Phase 3 (Pyodide, TEXT ONLY): render the remaining DDL (union views
+ * and projection wrappers) given the columns. Pyodide never executes
+ * SQL — the earlier attempt to compose on a Pyodide-side duckdb
+ * connection hung the worker.
+ */
+async function deriveCompositionDdl(): Promise<string[]> {
+  await waitForBoot();
+  const phase1: string = pyodide.runPython(`
+import json
+from pathlib import Path
+import fhir4ds.viewdef as _vd_pkg
+from fhir4ds.viewdef.runner import build_composition_plan, render_view_sqls
+
+_manifest = str(Path(_vd_pkg.__file__).parent / "resources" / "omop" / "manifest.json")
+_plan = build_composition_plan(_manifest)
+_views = render_view_sqls(_plan, Path(_manifest).parent, "__vd_src")
+json.dumps({"plan": _plan, "views": _views})
+`);
+  const { plan, views } = JSON.parse(phase1) as {
+    plan: { schema: string; steps: unknown[] };
+    views: Array<{ name: string; table_sql: string; sql: string }>;
+  };
+
+  await runRaw(`CREATE SCHEMA IF NOT EXISTS "${plan.schema}"`);
+  const columns: Record<string, string[]> = {};
+  const sqls: Record<string, string> = {};
+  for (const v of views) {
+    await runRaw(`CREATE OR REPLACE VIEW ${v.table_sql} AS\n${v.sql}`);
+    const probe = (await runRaw(`SELECT * FROM ${v.table_sql} LIMIT 0`)) as {
+      schema: { fields: Array<{ name: string }> };
+    };
+    columns[v.name] = probe.schema.fields.map((f) => f.name);
+    sqls[v.name] = v.sql;
+  }
+
+  pyodide.globals.set("__plan_json", JSON.stringify(plan));
+  pyodide.globals.set("__columns_json", JSON.stringify(columns));
+  pyodide.globals.set("__sqls_json", JSON.stringify(sqls));
+  const phase3: string = pyodide.runPython(`
+import json
+from fhir4ds.viewdef.runner import render_composition_ddl
+json.dumps(render_composition_ddl(
+    json.loads(__plan_json),
+    json.loads(__columns_json),
+    sql_by_view=json.loads(__sqls_json),
+))
+`);
+  return JSON.parse(phase3) as string[];
 }
 
 async function generateViewSql(

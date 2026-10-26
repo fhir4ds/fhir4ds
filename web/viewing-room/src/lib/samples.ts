@@ -9,7 +9,7 @@ export interface Sample {
   description: string;
   vdUrl: string;
   resourcesUrl: string;
-  /** Optional build-time composition DDL replayed before Library queries. */
+  /** Optional pre-computed composition DDL (legacy; live derivation is now the default). */
   setupUrl?: string;
   /** Gallery suite grouping (dropdown optgroups / ?suite= filter). */
   suite: SampleSuite;
@@ -92,18 +92,16 @@ export const SAMPLES: Sample[] = [
     slug: "omop-drug-exposure-sqlquery",
     suite: "omop",
     name: "OMOP drug_exposure (SQLQuery)",
-    description: "Cross-resource drug_exposure via a SQLQuery Library — MedicationRequest, Dispense, Statement, Administration and Immunization unioned over the composed OMOP views.",
+    description: "Cross-resource drug_exposure via a SQLQuery Library — MedicationRequest, Dispense, Statement, Administration and Immunization unioned over the OMOP views (composed live on every run).",
     vdUrl: "samples/omop-drug-exposure-sqlquery/viewdefinition.json",
-    setupUrl: "samples/omop-drug-exposure-sqlquery/setup.sql",
     resourcesUrl: "samples/omop-drug-exposure-sqlquery/resources.ndjson",
   },
   {
     slug: "omop-conditions-analysis",
     suite: "omop",
     name: "OMOP conditions (SQLQuery)",
-    description: "condition_occurrence joined to person demographics — an analytical SQLQuery Library over the composed OMOP views.",
+    description: "condition_occurrence joined to person demographics — an analytical SQLQuery Library over the OMOP views (composed live on every run).",
     vdUrl: "samples/omop-conditions-analysis/viewdefinition.json",
-    setupUrl: "samples/omop-conditions-analysis/setup.sql",
     resourcesUrl: "samples/omop-conditions-analysis/resources.ndjson",
   },
 ];

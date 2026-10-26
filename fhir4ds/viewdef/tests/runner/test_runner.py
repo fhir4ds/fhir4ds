@@ -218,3 +218,58 @@ class TestRunComposition:
         (family_dir / "manifest.json").write_text(json.dumps(m))
         with pytest.raises(ValueError, match="nonexistent"):
             run_composition(con, family_dir / "manifest.json", "resources")
+
+
+class TestPureTextRendering:
+    """The browser path: plan + render_view_sqls + render_composition_ddl.
+
+    Mirrors the Viewing Room worker's live composition: Pyodide produces
+    all SQL text; the connecting layer executes plain view CREATEs and
+    introspects columns; the pure renderer emits the remaining DDL. The
+    resulting schema must match run_composition exactly.
+    """
+
+    def test_text_rendering_matches_connection_composition(self, con, family_dir):
+        from fhir4ds.viewdef.runner import (
+            build_composition_plan, render_view_sqls, render_composition_ddl,
+        )
+
+        # Reference: the connection-driven composition.
+        run_composition(con, family_dir / "manifest.json", "resources")
+        expected = {}
+        for name in ("person", "events"):
+            expected[name] = con.execute(
+                f'SELECT * FROM fam."{name}" ORDER BY 1'
+            ).fetchall()
+
+        # Text-only path on a fresh connection.
+        con2 = fhir4ds.create_connection()
+        con2.execute("CREATE TABLE resources (resource JSON)")
+        for r in SRC:
+            con2.execute("INSERT INTO resources VALUES (?)", [json.dumps(r)])
+
+        manifest_path = family_dir / "manifest.json"
+        plan = build_composition_plan(manifest_path)
+        con2.execute(f'CREATE SCHEMA IF NOT EXISTS {plan["schema"]}')
+        columns = {}
+        for view in render_view_sqls(plan, family_dir, "resources"):
+            con2.execute(f'CREATE OR REPLACE VIEW {view["table_sql"]} AS\n{view["sql"]}')
+            columns[view["name"]] = [
+                d[0] for d in con2.execute(
+                    f'SELECT * FROM {view["table_sql"]} LIMIT 0').description
+            ]
+        sqls = {v["name"]: v["sql"] for v in render_view_sqls(plan, family_dir, "resources")}
+        for stmt in render_composition_ddl(plan, columns, sql_by_view=sqls):
+            con2.execute(stmt)
+
+        for name, rows in expected.items():
+            got = con2.execute(f'SELECT * FROM fam."{name}" ORDER BY 1').fetchall()
+            assert got == rows, f"{name} differs between connection and text paths"
+
+    def test_render_rejects_missing_columns(self, family_dir):
+        import pytest as _pytest
+        from fhir4ds.viewdef.runner import build_composition_plan, render_composition_ddl
+
+        plan = build_composition_plan(family_dir / "manifest.json")
+        with _pytest.raises(ValueError, match="missing columns"):
+            render_composition_ddl(plan, {}, sql_by_view={})
