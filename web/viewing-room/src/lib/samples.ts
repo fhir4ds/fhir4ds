@@ -11,11 +11,22 @@ export interface Sample {
   resourcesUrl: string;
   /** Optional build-time composition DDL replayed before Library queries. */
   setupUrl?: string;
+  /** Gallery suite grouping (dropdown optgroups / ?suite= filter). */
+  suite: SampleSuite;
 }
+
+export type SampleSuite = "general" | "uscore" | "omop";
+
+export const SUITE_LABELS: Record<SampleSuite, string> = {
+  general: "General",
+  uscore: "US Core",
+  omop: "OMOP",
+};
 
 export const SAMPLES: Sample[] = [
   {
     slug: "patient-demographics",
+    suite: "general",
     name: "Patient Demographics",
     description: "One row per Patient: id, name, gender, birthDate (the default).",
     vdUrl: "samples/patient-demographics/viewdefinition.json",
@@ -23,6 +34,7 @@ export const SAMPLES: Sample[] = [
   },
   {
     slug: "patient-addresses",
+    suite: "general",
     name: "Patient Addresses",
     description: "forEach over Patient.address — one row per address.",
     vdUrl: "samples/patient-addresses/viewdefinition.json",
@@ -30,6 +42,7 @@ export const SAMPLES: Sample[] = [
   },
   {
     slug: "patient-contact-address-union",
+    suite: "general",
     name: "Patient + Contact Address Union",
     description: "unionAll of patient and contact addresses (IG 2.0.0 example).",
     vdUrl: "samples/patient-contact-address-union/viewdefinition.json",
@@ -37,6 +50,7 @@ export const SAMPLES: Sample[] = [
   },
   {
     slug: "us-core-blood-pressures",
+    suite: "uscore",
     name: "US Core Blood Pressures",
     description: "Deep forEach + where on component coding (LOINC 85354-9 / 8480-6 / 8462-4).",
     vdUrl: "samples/us-core-blood-pressures/viewdefinition.json",
@@ -44,6 +58,7 @@ export const SAMPLES: Sample[] = [
   },
   {
     slug: "questionnaire-response-items",
+    suite: "general",
     name: "Questionnaire Response Items",
     description: "select.repeat over a nested QuestionnaireResponse item tree.",
     vdUrl: "samples/questionnaire-response-items/viewdefinition.json",
@@ -51,6 +66,7 @@ export const SAMPLES: Sample[] = [
   },
   {
     slug: "observation-values",
+    suite: "general",
     name: "Observation Values",
     description: "collection:true + typed columns (component codes & values as arrays).",
     vdUrl: "samples/observation-values/viewdefinition.json",
@@ -58,6 +74,7 @@ export const SAMPLES: Sample[] = [
   },
   {
     slug: "omop-patient",
+    suite: "omop",
     name: "OMOP person",
     description: "OMOP CDM v5.5 person table as a ViewDefinition (concept-map join for gender).",
     vdUrl: "samples/omop-patient/viewdefinition.json",
@@ -65,6 +82,7 @@ export const SAMPLES: Sample[] = [
   },
   {
     slug: "omop-drug-exposure",
+    suite: "omop",
     name: "OMOP drug_exposure (request arm)",
     description: "OMOP CDM v5.5 drug_exposure child view — RxNorm concept join + provenance type.",
     vdUrl: "samples/omop-drug-exposure/viewdefinition.json",
@@ -72,6 +90,7 @@ export const SAMPLES: Sample[] = [
   },
   {
     slug: "omop-drug-exposure-sqlquery",
+    suite: "omop",
     name: "OMOP drug_exposure (SQLQuery)",
     description: "Cross-resource drug_exposure via a SQLQuery Library — MedicationRequest, Dispense, Statement, Administration and Immunization unioned over the composed OMOP views.",
     vdUrl: "samples/omop-drug-exposure-sqlquery/viewdefinition.json",
@@ -80,6 +99,7 @@ export const SAMPLES: Sample[] = [
   },
   {
     slug: "omop-conditions-analysis",
+    suite: "omop",
     name: "OMOP conditions (SQLQuery)",
     description: "condition_occurrence joined to person demographics — an analytical SQLQuery Library over the composed OMOP views.",
     vdUrl: "samples/omop-conditions-analysis/viewdefinition.json",
@@ -92,6 +112,18 @@ export const DEFAULT_SAMPLE = SAMPLES[0];
 
 export function sampleBySlug(slug: string): Sample | undefined {
   return SAMPLES.find((s) => s.slug === slug);
+}
+
+/**
+ * Resolve the active sample list from the URL's ?suite= parameter.
+ * Unknown/absent values return the full list (suites = null).
+ */
+export function activeSamples(): { samples: Sample[]; suite: SampleSuite | null } {
+  const raw = new URLSearchParams(window.location.search).get("suite");
+  if (raw && (raw === "general" || raw === "uscore" || raw === "omop")) {
+    return { samples: SAMPLES.filter((s) => s.suite === raw), suite: raw };
+  }
+  return { samples: SAMPLES, suite: null };
 }
 
 /**
