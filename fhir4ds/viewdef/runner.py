@@ -311,7 +311,39 @@ def run_composition(con, manifest_path: Path, source_table: str) -> Dict[str, st
     return created
 
 
+
+
+class _RecordingExecutor:
+    """DuckDB stand-in that records every statement instead of executing.
+
+    ``_result_columns`` introspection still needs a real connection; the
+    worker passes a Pyodide-side duckdb connection for that while DDL is
+    captured for remote (DuckDB-WASM) replay.
+    """
+
+    def __init__(self, con):
+        self._con = con
+        self.statements: list = []
+
+    def execute(self, sql, *args):
+        self.statements.append(sql)
+        return self._con.execute(sql, *args)
+
+
+def composition_ddl(con, manifest_path: Path, source_table: str) -> list:
+    """Run the composition while recording every DDL statement executed.
+
+    Returns the statement list (CREATE SCHEMA / CREATE VIEW, in dependency
+    order) suitable for replay on another connection — e.g. the Viewing
+    Room worker replays them on DuckDB-WASM before running a SQLQuery
+    Library over the composed views.
+    """
+    recorder = _RecordingExecutor(con)
+    run_composition(recorder, manifest_path, source_table)
+    return [s for s in recorder.statements if s.lstrip().upper().startswith("CREATE")]
+
+
 __all__ = [
     "load_manifest", "generate_view_sql", "materialize_views",
-    "compose_union", "apply_projections", "run_composition",
+    "compose_union", "apply_projections", "run_composition", "composition_ddl",
 ]

@@ -52,6 +52,31 @@ async function route(msg: WorkerRequest): Promise<WorkerResponse> {
   if (msg.type === "boot") return boot();
   await waitForBoot();
 
+  // SQLQuery Library resource: execute its SQL over the composed OMOP views
+  // (all library views materialized as setup DDL first).
+  if (msg.view_definition?.resourceType === "Library") {
+    const gen = await generateLibrarySql(msg.view_definition, msg.setup_sql ?? []);
+    if (!gen.ok) {
+      return {
+        id: msg.id,
+        type: msg.type,
+        ok: true,
+        envelope: JSON.stringify({
+          schema: 1,
+          ok: false,
+          diagnostics: gen.diagnostics,
+        }),
+      } as WorkerResponse;
+    }
+    const envelope = await stageAndRunFlat(gen.sql!, msg.resources, gen.setup_sql);
+    return {
+      id: msg.id,
+      type: msg.type,
+      ok: true,
+      envelope: JSON.stringify(envelope),
+    } as WorkerResponse;
+  }
+
   // flatten_view is the single capability (S1)
   const gen = await generateViewSql(msg.view_definition);
   if (!gen.ok) {
@@ -80,6 +105,41 @@ interface ViewSqlResult {
   sql: string | null;
   setup_sql?: string[];
   diagnostics: Array<Record<string, unknown>> | null;
+}
+
+async function generateLibrarySql(
+  library: Record<string, unknown>,
+  setupSql: string[],
+): Promise<ViewSqlResult> {
+  await waitForBoot();
+  pyodide.globals.set("__lib_json", JSON.stringify(library));
+  pyodide.globals.set("__setup_json", JSON.stringify(setupSql));
+  const out: string = pyodide.runPython(`
+import json
+from pathlib import Path
+import fhir4ds.viewdef as _v
+
+try:
+    from fhir4ds.sqlquery.parser import parse_library
+    lib = parse_library(json.loads(__lib_json))
+    contents = [c for c in lib.content if c.content_type.startswith("application/sql")]
+    if not contents:
+        raise ValueError("Library carries no application/sql content")
+    sql = contents[0].data
+
+    # Setup DDL ships WITH the sample (setup.sql, generated at build time
+    # via the composition runner) — no Pyodide-side composition at runtime
+    # (the in-Pyodide duckdb execution proved too heavy and crashed the
+    # worker). The App passes it through __setup_json.
+    setup_sql = json.loads(__setup_json)
+    result = {"ok": True, "sql": sql, "setup_sql": setup_sql}
+except Exception as exc:
+    from fhir4ds.operations.errors import diagnostic_from_exception
+    diag = diagnostic_from_exception(exc, context="sqlquery_library")
+    result = {"ok": False, "diagnostics": [diag.to_dict()]}
+json.dumps(result)
+`);
+  return JSON.parse(out) as ViewSqlResult;
 }
 
 async function generateViewSql(

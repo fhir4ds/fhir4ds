@@ -77,7 +77,7 @@
     ]
   },
   "drug_exposure": {
-    "row_count": 2,
+    "row_count": 3,
     "columns": [
       "drug_exposure_id",
       "person_id",
@@ -99,6 +99,10 @@
         [
           "Immunization",
           4056
+        ],
+        [
+          "MedicationDispense",
+          1128940
         ],
         [
           "MedicationRequest",

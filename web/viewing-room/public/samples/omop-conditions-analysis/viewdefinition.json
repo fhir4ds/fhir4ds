@@ -1,0 +1,27 @@
+{
+  "resourceType": "Library",
+  "id": "condition-analysis",
+  "name": "ConditionAnalysis",
+  "title": "ConditionAnalysis",
+  "status": "draft",
+  "type": {
+    "coding": [
+      {
+        "system": "http://hl7.org/fhir/uv/sql-on-fhir/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery"
+    ]
+  },
+  "content": [
+    {
+      "contentType": "application/sql",
+      "data": "LS0gT01PUCBjb25kaXRpb25fb2NjdXJyZW5jZSBqb2luZWQgdG8gcGVyc29uIGRlbW9ncmFwaGljcyDigJQKLS0gYW4gYW5hbHl0aWNhbCBxdWVyeSBvdmVyIHRoZSBjb21wb3NlZCBPTU9QIHZpZXdzLgpTRUxFQ1QKICAgIHAucGVyc29uX2lkLAogICAgcC5wZXJzb25fc291cmNlX3ZhbHVlLAogICAgcC5nZW5kZXJfc291cmNlX3ZhbHVlLAogICAgYy5jb25kaXRpb25fY29uY2VwdF9pZCwKICAgIGMuY29uZGl0aW9uX3NvdXJjZV92YWx1ZSwKICAgIGMuY29uZGl0aW9uX3N0YXJ0X2RhdGUsCiAgICBjLmNvbmRpdGlvbl90eXBlX2NvbmNlcHRfaWQKRlJPTSBvbW9wLnBlcnNvbiBwCkpPSU4gb21vcC5jb25kaXRpb25fb2NjdXJyZW5jZSBjIE9OIGMucGVyc29uX2lkID0gcC5wZXJzb25faWQKT1JERVIgQlkgcC5wZXJzb25fc291cmNlX3ZhbHVlLCBjLmNvbmRpdGlvbl9zdGFydF9kYXRl"
+    }
+  ],
+  "description": "OMOP condition_occurrence joined to person demographics over the composed views."
+}

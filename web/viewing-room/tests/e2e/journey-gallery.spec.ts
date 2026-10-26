@@ -18,6 +18,8 @@ const SAMPLE_ROWS: Record<string, number> = {
   "observation-values": 3,
   "omop-patient": 2,
   "omop-drug-exposure": 1,
+  "omop-drug-exposure-sqlquery": 3,
+  "omop-conditions-analysis": 1,
 };
 
 test("journey: every gallery sample loads and renders its rows", async ({ page }) => {
@@ -27,7 +29,7 @@ test("journey: every gallery sample loads and renders its rows", async ({ page }
 
   const gallery = page.locator("header select");
   const options = await gallery.locator("option").all();
-  expect(options.length).toBe(8);
+  expect(options.length).toBe(10);
 
   // Auto-accept dirty-guard prompts (auto-recalc marks editors dirty after
   // the first run; sample switching is this journey's subject).

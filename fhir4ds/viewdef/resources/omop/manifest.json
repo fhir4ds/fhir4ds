@@ -17,13 +17,15 @@
     "device-exposure-view": "DeviceUsage -> device_exposure",
     "measurement-view": "Observation (Quantity-valued) -> measurement",
     "observation-view": "Observation (non-Quantity) -> observation",
-    "death-view": "Patient.deceased -> death"
+    "death-view": "Patient.deceased -> death",
+    "drug-exposure-medication-dispense-view": "MedicationDispense -> drug_exposure (arm 2/5)"
   },
   "unions": {
     "drug_exposure": [
       "drug-exposure-medication-request-view",
       "drug-exposure-medication-statement-view",
       "drug-exposure-medication-administration-view",
+      "drug-exposure-medication-dispense-view",
       "drug-exposure-immunization-view"
     ]
   },

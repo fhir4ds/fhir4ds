@@ -1,0 +1,112 @@
+{
+  "name": "omop_drug_exposure_medication_dispense",
+  "status": "draft",
+  "resource": "MedicationDispense",
+  "constant": [
+    {
+      "name": "rxnorm_uri",
+      "valueString": "http://www.nlm.nih.gov/research/umls/rxnorm"
+    },
+    {
+      "name": "rx_dispensed",
+      "valueString": "38000175"
+    }
+  ],
+  "select": [
+    {
+      "column": [
+        {
+          "name": "drug_exposure_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "person_id",
+          "path": "subject.reference.split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "drug_concept_id",
+          "path": "cm.concept_id",
+          "type": "string"
+        },
+        {
+          "name": "drug_exposure_start_date",
+          "path": "iif(whenHandedOver.exists(), whenHandedOver.substring(0, 10), whenPrepared.substring(0, 10))",
+          "type": "date"
+        },
+        {
+          "name": "drug_exposure_start_datetime",
+          "path": "iif(whenHandedOver.exists(), whenHandedOver, whenPrepared)",
+          "type": "dateTime"
+        },
+        {
+          "name": "drug_exposure_end_date",
+          "path": "iif(whenHandedOver.exists(), whenHandedOver.substring(0, 10), whenPrepared.substring(0, 10))",
+          "type": "date"
+        },
+        {
+          "name": "drug_exposure_end_datetime",
+          "path": "iif(whenHandedOver.exists(), whenHandedOver, whenPrepared)",
+          "type": "dateTime"
+        },
+        {
+          "name": "drug_type_concept_id",
+          "path": "%rx_dispensed",
+          "type": "string"
+        },
+        {
+          "name": "sig",
+          "path": "dosageInstruction.text.first()",
+          "type": "string"
+        },
+        {
+          "name": "quantity_num",
+          "path": "quantity.value",
+          "type": "decimal"
+        },
+        {
+          "name": "days_supply",
+          "path": "daysSupply.value",
+          "type": "integer"
+        },
+        {
+          "name": "drug_source_value",
+          "path": "iif(medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).exists(), medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).code.first(), medication.ofType(CodeableConcept).coding.code.first())",
+          "type": "code"
+        },
+        {
+          "name": "visit_occurrence_id",
+          "path": "context.reference.split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "src",
+          "path": "'MedicationDispense'",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "joins": [
+    {
+      "name": "cm",
+      "view": "omop_conceptmap",
+      "type": "left",
+      "on": [
+        {
+          "path": "iif(medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).exists(), medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).code.first(), medication.ofType(CodeableConcept).coding.code.first())"
+        },
+        {
+          "path": "cm.concept_code"
+        },
+        {
+          "path": "iif(medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).exists(), %rxnorm_uri, medication.ofType(CodeableConcept).coding.system.first())"
+        },
+        {
+          "path": "cm.source_system"
+        }
+      ]
+    }
+  ]
+}
