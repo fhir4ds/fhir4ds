@@ -138,11 +138,18 @@ export function sampleBySlug(slug: string): Sample | undefined {
  * Resolve the active sample list from the URL's ?suite= parameter.
  * Unknown/absent values return the full list (suites = null).
  */
+let suiteOverride: SampleSuite | null = null;
+
+/** Host-set suite (e.g. the <sqlonfhir-viewing-room suite="omop"> attribute). */
+export function setSuiteOverride(suite: SampleSuite | null): void {
+  suiteOverride = suite;
+}
+
 export function activeSamples(): { samples: Sample[]; suite: SampleSuite | null } {
   const raw = new URLSearchParams(window.location.search).get("suite");
-  if (raw && (raw === "general" || raw === "uscore" || raw === "omop")) {
-    return { samples: SAMPLES.filter((s) => s.suite === raw), suite: raw };
-  }
+  const suite: SampleSuite | null =
+    raw === "general" || raw === "uscore" || raw === "omop" ? raw : suiteOverride;
+  if (suite) return { samples: SAMPLES.filter((s) => s.suite === suite), suite };
   return { samples: SAMPLES, suite: null };
 }
 
