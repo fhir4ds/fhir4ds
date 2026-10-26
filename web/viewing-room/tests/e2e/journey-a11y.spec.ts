@@ -7,7 +7,7 @@
 import { test, expect } from "@playwright/test";
 
 test("journey: keyboard navigation reaches every control and tabs cycle with arrows", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?data=local");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
   await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(35, { timeout: 60_000 });
 
@@ -29,7 +29,7 @@ test("journey: keyboard navigation reaches every control and tabs cycle with arr
 });
 
 test("journey: dirty guard asks before a sample switch discards edits", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?data=local");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
   await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(35, { timeout: 60_000 });
 

@@ -12,7 +12,7 @@
 import { test, expect } from "@playwright/test";
 
 test("journey: the app opens on the Browse tab with resources grouped, no clicks", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?data=local");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
 
   // DEFAULT view is Browse: the grouped tree is present WITHOUT switching
@@ -29,7 +29,7 @@ test("journey: the app opens on the Browse tab with resources grouped, no clicks
 });
 
 test("journey: no Run button — auto-recalc is the only run path", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?data=local");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
 
   // The Run button is gone entirely.

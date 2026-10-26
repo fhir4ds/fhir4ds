@@ -104,6 +104,13 @@ baseline and hosted runner variability are stable enough for a hard gate.
 
 ## OMOP v5.5 mapping timings
 
+`omop_v55_synthea_2026.json` / `.md` — the real-data baseline (25-patient
+Synthea cohort + 71,444-concept chunked RxNorm ConceptMap from the
+`fhir4ds/omop-demo` HF dataset): staging 12 ms–2.4 s, composition ~450 ms
+flat, 1,488 drug rows; browser run ~29 s in DuckDB-WASM.
+
+## OMOP v5.5 demo-bundle timings
+
 `omop_v55_2026.json` / `.md` capture the v0.0.19 release baseline: VD
 generation 214 ms (13 views), composition ~450 ms at 10-2,000 staged
 resources, 8.3M composed rows at the 200x scale. Report-only; rerun via

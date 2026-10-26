@@ -1,0 +1,35 @@
+{
+  "dataset": "fhir4ds/omop-demo (25-patient Synthea cohort + 71,444-concept chunked RxNorm ConceptMap)",
+  "runs": {
+    "patient": {
+      "resources": 26,
+      "staging_ms": 12.2,
+      "composition_ms": 458.0,
+      "rows": {
+        "person": 25,
+        "visit_occurrence": 0,
+        "drug_exposure": 0
+      }
+    },
+    "encounter": {
+      "resources": 1310,
+      "staging_ms": 582.4,
+      "composition_ms": 444.9,
+      "rows": {
+        "person": 25,
+        "visit_occurrence": 1284,
+        "drug_exposure": 0
+      }
+    },
+    "medication": {
+      "resources": 5087,
+      "staging_ms": 2374.7,
+      "composition_ms": 443.8,
+      "rows": {
+        "person": 25,
+        "visit_occurrence": 0,
+        "drug_exposure": 1488
+      }
+    }
+  }
+}
