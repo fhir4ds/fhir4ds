@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { BootStatus, flattenView, onBootStatus } from "./lib/engineClient";
 import { boot as bootEngine } from "./lib/engineClient";
-import { DEFAULT_SAMPLE, Sample, SAMPLES, parseResourcesInput, resourceStats, sampleUrl } from "./lib/samples";
+import { DEFAULT_SAMPLE, Sample, SAMPLES, SUITE_LABELS, SampleSuite, activeSamples, parseResourcesInput, resourceStats, sampleUrl } from "./lib/samples";
 import { ResultsTable } from "./components/ResultsTable";
 import { DiagnosticsList } from "./components/DiagnosticsList";
 import { SqlView } from "./components/SqlView";
@@ -99,11 +99,13 @@ export default function App() {
   }, []);
 
   // Auto-load the default sample once (auto-run on sample load only).
+  // With ?suite=<s>, the default is the FIRST sample of that suite.
   const defaultLoaded = useRef(false);
   useEffect(() => {
     if (defaultLoaded.current) return;
     defaultLoaded.current = true;
-    loadSample(DEFAULT_SAMPLE)
+    const { samples } = activeSamples();
+    loadSample(samples[0] ?? DEFAULT_SAMPLE)
       // Pass the loaded text EXPLICITLY: refs update on render, and the
       // post-promise microtask can run before React commits the new state.
       .then((t) => void doRunRef.current?.(t.vd, t.res, t.setup))
@@ -156,6 +158,7 @@ export default function App() {
   // sample auto-run). Rapid edits collapse to the latest text; the single
   // worker serializes runs naturally (postMessage queue) and the S3
   // staging-race fix made table reuse safe.
+  const activeSuite = activeSamples().suite;
   const autoRunArmed = useRef(false);
   const engineReadyRef = useRef(false);
   engineReadyRef.current = bootStatus.phase === "ready";
@@ -261,12 +264,34 @@ export default function App() {
           }}
         >
           {!sample && <option value="" disabled>Load a sample…</option>}
-          {SAMPLES.map((s) => (
-            <option key={s.slug} value={s.slug}>
-              {s.name}
-            </option>
-          ))}
+          {(Object.keys(SUITE_LABELS) as SampleSuite[]).map((suite) => {
+            const items = activeSamples().samples.filter((s) => s.suite === suite);
+            if (!items.length) return null;
+            return (
+              <optgroup key={suite} label={SUITE_LABELS[suite]}>
+                {items.map((s) => (
+                  <option key={s.slug} value={s.slug}>
+                    {s.name}
+                  </option>
+                ))}
+              </optgroup>
+            );
+          })}
         </select>
+        {activeSuite && (
+          <button
+            className="suite-filter-pill"
+            data-testid="suite-filter"
+            title="Clear the sample-suite filter"
+            onClick={() => {
+              const url = new URL(window.location.href);
+              url.searchParams.delete("suite");
+              window.location.href = url.href;
+            }}
+          >
+            {SUITE_LABELS[activeSuite]} only ✕
+          </button>
+        )}
         {bootStatus.phase === "ready" ? (
           <span className="version-badge" data-testid="version-badge">
             fhir4ds {bootStatus.wheelVersion}

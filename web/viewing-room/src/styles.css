@@ -576,3 +576,18 @@ details[open] > summary > .tree-caret::before {
   color: var(--text-muted);
   padding: 12px;
 }
+
+/* ---------- suite filter pill ---------- */
+.suite-filter-pill {
+  background: var(--bg-elevated);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.suite-filter-pill:hover {
+  background: var(--accent-soft);
+}
