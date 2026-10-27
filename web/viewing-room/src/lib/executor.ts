@@ -2,6 +2,11 @@
  * TS-side executor: runs the Pyodide-generated ViewDefinition SQL
  * VERBATIM on duckdb-wasm and shapes schema:1 envelopes (cloned from the
  * cleanroom flatten path; exact-SQL doctrine — no client-side rewriting).
+ *
+ * BIGINT stays BIGINT on this connection (unlike the CQL apps): OMOP
+ * surrogate keys are 63-bit hashes, and casting them to doubles rounds
+ * them past 2^53. jsonSafe() returns safe integers as numbers and larger
+ * ones as exact digit strings.
  */
 
 import type { FlattenEnvelope } from "./protocol";
@@ -40,7 +45,11 @@ export function jsonSafe(value: unknown, scale?: number): unknown {
     if (scale !== undefined && scale > 0) {
       return Number(value) / Math.pow(10, scale);
     }
-    return Number(value);
+    // OMOP surrogate keys are 63-bit hashes: beyond 2^53 a JS number would
+    // silently round them, so keep the exact digits as text. Everyday
+    // integers (counts, years) still render numerically.
+    const n = Number(value);
+    return Number.isSafeInteger(n) ? n : value.toString();
   }
   if (t === "number" || t === "boolean" || t === "string") return value;
   if (Array.isArray(value)) return value.map((v) => jsonSafe(v));
@@ -83,12 +92,16 @@ interface ArrowTable {
  * ``setupFactory`` derives DDL LIVE after resources are staged — the
  * SQLQuery samples re-derive their composition from the library views on
  * every run instead of replaying a build-time snapshot.
+ * ``wrapSql`` receives the produced column names and returns the SQL to
+ * execute instead (the OMOP key projection); the wrapped SQL is what the
+ * SQL tab shows, since it is what runs.
  */
 export async function stageAndRunFlat(
   sql: string,
   resources: Array<Record<string, unknown>>,
   setupStatements: string[] = [],
   setupFactory?: () => Promise<string[]>,
+  wrapSql?: (columns: string[]) => Promise<string>,
 ): Promise<FlattenEnvelope> {
   await initDuckDB();
   // Batch the INSERTs: a single VALUES statement over thousands of
@@ -115,7 +128,14 @@ export async function stageAndRunFlat(
       const derived = await setupFactory();
       for (const stmt of derived) await runRaw(stmt);
     }
-    const result = (await runRaw(sql)) as ArrowTable;
+    let finalSql = sql;
+    if (wrapSql) {
+      // LIMIT 0 probes the shaped columns without scanning rows: the
+      // projection rewrites only keys the sample actually projects.
+      const probe = (await runRaw(`SELECT * FROM (\n${sql}\n) LIMIT 0`)) as ArrowTable;
+      finalSql = await wrapSql(probe.schema.fields.map((f) => f.name));
+    }
+    const result = (await runRaw(finalSql)) as ArrowTable;
     const columns = result.schema.fields.map((f) => f.name);
     const scales: Record<string, number | undefined> = {};
     for (const f of result.schema.fields) {
@@ -129,7 +149,7 @@ export async function stageAndRunFlat(
       }
       return out;
     });
-    envelope.sql = sql;
+    envelope.sql = finalSql;
     envelope.columns = columns;
     envelope.rows = JSON.parse(JSON.stringify(rows));
   } catch (err) {

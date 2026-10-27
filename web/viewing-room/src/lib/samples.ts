@@ -15,6 +15,9 @@ export interface Sample {
   remoteResources?: string;
   /** Gallery suite grouping (dropdown optgroups / ?suite= filter). */
   suite: SampleSuite;
+  /** OMOP table this sample produces: enables the surrogate-key projection
+   *  so the demo shows the same BIGINT keys as the composed tables. */
+  omopTable?: string;
 }
 
 export type SampleSuite = "general" | "uscore" | "omop";
@@ -98,6 +101,7 @@ export const SAMPLES: Sample[] = [
     vdUrl: "samples/omop-patient/viewdefinition.json",
     resourcesUrl: "samples/omop-patient/resources.ndjson",
     remoteResources: "patient-resources.ndjson",
+    omopTable: "person",
   },
   {
     slug: "omop-encounters",
@@ -107,6 +111,7 @@ export const SAMPLES: Sample[] = [
     vdUrl: "samples/omop-encounters/viewdefinition.json",
     resourcesUrl: "samples/omop-encounters/resources.ndjson",
     remoteResources: "encounter-resources.ndjson",
+    omopTable: "visit_occurrence",
   },
   {
     slug: "omop-drug-exposure",
@@ -116,6 +121,7 @@ export const SAMPLES: Sample[] = [
     vdUrl: "samples/omop-drug-exposure/viewdefinition.json",
     resourcesUrl: "samples/omop-drug-exposure/resources.ndjson",
     remoteResources: "medication-resources.ndjson",
+    omopTable: "drug_exposure",
   },
   {
     slug: "omop-drug-exposure-sqlquery",
@@ -125,6 +131,7 @@ export const SAMPLES: Sample[] = [
     vdUrl: "samples/omop-drug-exposure-sqlquery/viewdefinition.json",
     resourcesUrl: "samples/omop-drug-exposure-sqlquery/resources.ndjson",
     remoteResources: "medication-resources.ndjson",
+    omopTable: "drug_exposure",
   },
 ];
 

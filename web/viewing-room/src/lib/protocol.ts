@@ -26,6 +26,8 @@ export type WorkerRequest =
       view_definition: Record<string, unknown>;
       resources: Array<Record<string, unknown>>;
       setup_sql?: string[];
+      /** OMOP table this sample produces; enables the key projection. */
+      omop_table?: string;
     };
 
 export interface BootOkResponse {
