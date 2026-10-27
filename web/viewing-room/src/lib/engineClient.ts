@@ -85,6 +85,7 @@ export async function flattenView(
   viewDefinition: Record<string, unknown>,
   resources: Array<Record<string, unknown>>,
   setupSql?: string[],
+  omopTable?: string,
 ): Promise<FlattenEnvelope> {
   const w = ensureWorker();
   if (bootStatus.phase === "idle") {
@@ -93,7 +94,14 @@ export async function flattenView(
   const id = nextId++;
   const resp = await new Promise<WorkerResponse>((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    w.postMessage({ id, type: "flatten_view", view_definition: viewDefinition, resources, setup_sql: setupSql });
+    w.postMessage({
+      id,
+      type: "flatten_view",
+      view_definition: viewDefinition,
+      resources,
+      setup_sql: setupSql,
+      omop_table: omopTable,
+    });
   });
   const cap = resp as { ok: boolean; envelope?: string; error?: string };
   if (!cap.ok || !cap.envelope) {

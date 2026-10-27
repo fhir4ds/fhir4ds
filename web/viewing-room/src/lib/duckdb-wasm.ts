@@ -30,7 +30,11 @@ export async function createDuckDBConnection(
     await db.instantiate(duckdbWasmUrl, null);
     await (db.open as any)({
       path: ":memory:",
-      query: { castBigIntToDouble: true },
+      // NOT castBigIntToDouble: the OMOP key projection emits 63-bit
+      // surrogate keys, which a JS double cannot hold (2^53 limit) — the
+      // rows would render rounded. executor.jsonSafe() keeps safe integers
+      // numeric and serializes larger ones as exact digit strings.
+      query: { castBigIntToDouble: false },
       allowUnsignedExtensions: true,
       autoInstallExtensions: false,
       autoLoadExtensions: false,

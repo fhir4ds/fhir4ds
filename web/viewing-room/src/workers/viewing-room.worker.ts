@@ -74,9 +74,12 @@ async function route(msg: WorkerRequest): Promise<WorkerResponse> {
     // Library SQL — or any upstream engine change — can never leave a
     // stale composition snapshot behind.
     const needsComposition = !(gen.setup_sql && gen.setup_sql.length);
+    const project = msg.omop_table
+      ? (cols: string[]) => wrapOmopProjection(msg.omop_table!, gen.sql!, cols)
+      : undefined;
     const envelope = needsComposition && /\bomop\./i.test(gen.sql ?? "")
-      ? await stageAndRunFlat(gen.sql!, msg.resources, [], deriveCompositionDdl)
-      : await stageAndRunFlat(gen.sql!, msg.resources, gen.setup_sql);
+      ? await stageAndRunFlat(gen.sql!, msg.resources, [], deriveCompositionDdl, project)
+      : await stageAndRunFlat(gen.sql!, msg.resources, gen.setup_sql, undefined, project);
     return {
       id: msg.id,
       type: msg.type,
@@ -99,7 +102,16 @@ async function route(msg: WorkerRequest): Promise<WorkerResponse> {
       }),
     } as WorkerResponse;
   }
-  const envelope = await stageAndRunFlat(gen.sql!, msg.resources, gen.setup_sql);
+  const project = msg.omop_table
+    ? (cols: string[]) => wrapOmopProjection(msg.omop_table!, gen.sql!, cols)
+    : undefined;
+  const envelope = await stageAndRunFlat(
+    gen.sql!,
+    msg.resources,
+    gen.setup_sql,
+    undefined,
+    project,
+  );
   return {
     id: msg.id,
     type: msg.type,
@@ -113,6 +125,28 @@ interface ViewSqlResult {
   sql: string | null;
   setup_sql?: string[];
   diagnostics: Array<Record<string, unknown>> | null;
+}
+
+/**
+ * OMOP key projection: wrap the sample's SQL so the demo shows the same
+ * BIGINT surrogate keys the composed tables carry (person_id, visit ids,
+ * concept 0 defaults) while keeping the source value columns readable.
+ * Column-aware: a SQLQuery may project a subset of the table's columns.
+ */
+async function wrapOmopProjection(
+  table: string,
+  innerSql: string,
+  columns: string[],
+): Promise<string> {
+  await waitForBoot();
+  pyodide.globals.set("__omop_table", table);
+  pyodide.globals.set("__omop_inner", innerSql);
+  pyodide.globals.set("__omop_cols", JSON.stringify(columns));
+  return pyodide.runPython(`
+import json
+from fhir4ds.viewdef.omop_runner import omop_key_projection_sql
+omop_key_projection_sql(__omop_table, __omop_inner, json.loads(__omop_cols))
+`);
 }
 
 async function generateLibrarySql(
