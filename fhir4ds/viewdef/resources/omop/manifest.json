@@ -6,7 +6,7 @@
   "description": "FHIR R4 -> OMOP CDM v5.5 tables as a ViewDefinition library. Rev-2 architecture: the STANDARD MONOLITHIC ConceptMap resource ships as the converter contract; the S1 conceptmap VD flattens it (materialized as the omop.omop_conceptmap join target); event VDs join the VIEW via Join.view (spec composition semantics). Unions + projections compose through the generic fhir4ds.viewdef.runner. Materialization order is INFERRED from Join.view references (zero-config); 'materialize' remains an optional override.",
   "views": {
     "conceptmap-view": "ConceptMap resources -> flat mapping rows (THE join target; materialized as omop.omop_conceptmap)",
-    "person-view": "Patient -> person",
+    "person-source-view": "Patient -> person_source (raw reshape; joined and keyed by the person SQLQuery)",
     "visit-occurrence-view": "Encounter -> visit_occurrence",
     "condition-occurrence-view": "Condition -> condition_occurrence",
     "procedure-occurrence-view": "Procedure -> procedure_occurrence",
@@ -30,14 +30,6 @@
     ]
   },
   "projections": {
-    "person": {
-      "hash_keys": [
-        "person_id"
-      ],
-      "defaults": {
-        "gender_concept_id": 0
-      }
-    },
     "visit_occurrence": {
       "hash_keys": [
         "visit_occurrence_id",
@@ -139,5 +131,8 @@
     "provider/care_site integer FKs left 0 (FHIR carries references, not stable integers) \u2014 documented policy",
     "person/visit/PK ids: xxhash-style positive 63-bit hash of the FHIR id string (runner projections)",
     "observation_period is ETL-defined per THEMIS (aggregate derivation, not a row mapping) \u2014 not in the VD library v1"
-  ]
+  ],
+  "sql_queries": {
+    "person": "person-omop"
+  }
 }

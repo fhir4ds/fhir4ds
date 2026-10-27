@@ -51,20 +51,13 @@ def conn():
 
 
 class TestPerson:
-    def test_full_row(self, conn):
+    def test_reshape_keeps_source_columns(self, conn):
+        # The person view is the raw reshape: no join, no concept id. The
+        # SQLQuery (sqlqueries/person-omop.json) joins and keys.
         conn.execute("INSERT INTO __vd_src VALUES (?)", [json.dumps(
             {"resourceType": "Patient", "id": "p1", "gender": "male", "birthDate": "1974-12-25"})])
-        _stage_maps(conn, [(GENDER, "male", "8507")])
-        rows = _run(conn, "person-view")
-        assert rows == [("p1", "8507", "1974", "12", "25", "1974-12-25", "p1", "male")]
-
-    def test_unmapped_gender_null_concept(self, conn):
-        conn.execute("INSERT INTO __vd_src VALUES (?)", [json.dumps(
-            {"resourceType": "Patient", "id": "p2", "gender": "female", "birthDate": "1985-05-06"})])
-        # no maps staged -> view is empty -> LEFT JOIN misses
-        _stage_maps(conn, [(GENDER, "male", "8507")])
-        rows = _run(conn, "person-view")
-        assert rows[0][1] is None
+        rows = _run(conn, "person-source-view")
+        assert rows == [("p1", "1974", "12", "25", "1974-12-25", "p1", "male")]
 
 
 class TestVisitOccurrence:

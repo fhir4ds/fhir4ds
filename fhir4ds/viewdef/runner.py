@@ -24,6 +24,11 @@ Manifest schema (the OMOP ``manifest.json`` shape):
 - ``materialize`` (optional): extra single views to materialize as
   join targets WITHOUT a composed table (e.g. the flattened
   conceptmap). Entries map join-target view name -> VD stem.
+- ``sql_queries`` (optional): table -> SQLQuery stem under
+  ``<manifest dir>/sqlqueries/``. Each SQLQuery (a FHIR ``Library`` of
+  type sql-query) becomes the table's view; its body is executed after
+  every view it references. This is the spec-native way to join, union
+  and key a table — ViewDefinition ``joins`` is a fhir4ds extension.
 
 Spec grounding: SQLView-notes — "each referenced result acts as a
 virtual table for the referencing query"; "The executing engine may
@@ -31,14 +36,69 @@ materialise the view's result or inline it; either approach conforms
 to this specification."
 """
 
+import base64
 import json
+import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 
 from .parser import parse_view_definition
 from .generator import SQLGenerator
 
 _HASH_MASK = "9223372036854775807"
+_SQLQUERY_DIR = "sqlqueries"
+
+
+def _library_sql(path: Path) -> str:
+    """Decode a SQLQuery Library resource's ``application/sql`` content."""
+    library = json.loads(path.read_text())
+    for content in library.get("content", []):
+        if str(content.get("contentType", "")).startswith("application/sql"):
+            return base64.b64decode(content["data"]).decode("utf-8")
+    raise ValueError(f"{path.name}: Library carries no application/sql content")
+
+
+def _referenced_views(sql: str, schema: str, known: Sequence[str]) -> set:
+    """Tables this SQL reads from ``<schema>.<name>``, limited to `known`."""
+    refs = re.findall(
+        rf"\b{re.escape(schema)}\s*\.\s*\"?([A-Za-z_][A-Za-z0-9_]*)\"?",
+        sql,
+        re.IGNORECASE,
+    )
+    return {ref for ref in refs if ref in set(known)}
+
+
+def _order_sql_queries(entries: Dict[str, str], sql_dir: Path, schema: str,
+                       materialized: Sequence[str]) -> List[str]:
+    """Topologically order SQLQuery tables after the views they read.
+
+    Dependencies come from the SQL text itself (``<schema>.<table>``
+    references), so a SQLQuery may build on another SQLQuery or on any
+    materialized view. Cycles and unknown tables are typed errors.
+    """
+    sql_by_table = {
+        table: _library_sql(sql_dir / f"{stem}.json")
+        for table, stem in entries.items()
+    }
+    known = set(materialized) | set(sql_by_table)
+    pending = dict(sql_by_table)
+    ordered: List[str] = []
+    done = set(materialized)
+    while pending:
+        progressed = False
+        for table, sql in list(pending.items()):
+            deps = _referenced_views(sql, schema, known)
+            if deps <= done:
+                ordered.append(table)
+                done.add(table)
+                del pending[table]
+                progressed = True
+        if not progressed:
+            raise ValueError(
+                "SQLQuery composition cycle or unresolved reference: "
+                f"{sorted(pending)}"
+            )
+    return ordered
 
 
 def load_manifest(manifest_path: Path) -> dict:
@@ -309,6 +369,31 @@ def build_composition_plan(manifest_path: Path) -> dict:
         table = _stem_table_name(stem)
         steps.append(_view_step("single", table, stem, projections.get(table) or None))
 
+    # 5. SQLQuery tables (spec-native join/union/keying), after the views
+    #    they read. Their SQL is the artifact; no generated SQL is wrapped
+    #    around them unless the manifest still declares a projection.
+    sql_entries = manifest.get("sql_queries", {})
+    if sql_entries:
+        materialized = [step["name"] for step in steps if step["type"] == "view"]
+        materialized += [step["table"] for step in steps if step["type"] == "union"]
+        materialized += [
+            child
+            for step in steps if step["type"] == "union"
+            for child in step["children"]
+        ]
+        ordered_sql = _order_sql_queries(
+            sql_entries, vd_dir / _SQLQUERY_DIR, schema, materialized
+        )
+        for table in ordered_sql:
+            steps.append({
+                "type": "sqlquery",
+                "role": "table",
+                "table": table,
+                "table_sql": f'{schema}."{table}"',
+                "stem": sql_entries[table],
+                "projection": projections.get(table) or None,
+            })
+
     return {"schema": schema, "steps": steps}
 
 
@@ -322,6 +407,16 @@ def render_view_sqls(plan: dict, vd_dir: Path, source_table: str) -> List[dict]:
     schema = plan["schema"]
     out = []
     for step in plan["steps"]:
+        if step["type"] == "sqlquery":
+            out.append({
+                "name": step["table"],
+                "table_sql": step["table_sql"],
+                "stem": step["stem"],
+                "sql": _library_sql(
+                    Path(vd_dir) / _SQLQUERY_DIR / f'{step["stem"]}.json'
+                ),
+            })
+            continue
         if step["type"] != "view":
             continue
         sql = generate_view_sql(Path(vd_dir) / f'{step["stem"]}.json', source_table, view_schema=schema)
@@ -373,6 +468,16 @@ def render_composition_ddl(
             )
             stmts.append(f'CREATE OR REPLACE VIEW {step["table_sql"]} AS\n{wrapped}')
             continue
+        if step["type"] == "sqlquery":
+            if step.get("projection"):
+                # One mechanism per table: a SQLQuery owns its own shaping
+                # (join, union, key). Declaring a projection here would hash
+                # or default columns twice.
+                raise ValueError(
+                    f"SQLQuery table {step['table']!r} also declares a "
+                    "projection; shape it inside the SQLQuery body instead"
+                )
+            continue  # already created by the plain-view pass
         # union step
         children = [f'{schema}."{c}"' for c in step["children"]]
         first_cols = columns_by_view.get(step["children"][0])
@@ -412,6 +517,17 @@ def run_composition(con, manifest_path: Path, source_table: str) -> Dict[str, st
 
     con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
     for step in plan["steps"]:
+        if step["type"] == "sqlquery":
+            sql = _library_sql(vd_dir / _SQLQUERY_DIR / f'{step["stem"]}.json')
+            if step.get("projection"):
+                raise ValueError(
+                    f"SQLQuery table {step['table']!r} also declares a projection; "
+                    "shape it inside the SQLQuery body instead"
+                )
+            con.execute(f'CREATE OR REPLACE VIEW {step["table_sql"]} AS\n{sql}')
+            created[step["table"]] = step["table_sql"]
+            continue
+
         if step["type"] == "view":
             sql = generate_view_sql(
                 vd_dir / f'{step["stem"]}.json', source_table, view_schema=schema
