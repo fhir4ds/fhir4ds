@@ -29,5 +29,5 @@ test("web component mounts and boots the engine", async ({ page }) => {
     el.locator('[data-testid="output-table"] tbody tr'),
   ).toHaveCount(8, { timeout: 60_000 });
   const options = await el.locator("header select option").count();
-  expect(options).toBe(4);
+  expect(options).toBe(5);
 });

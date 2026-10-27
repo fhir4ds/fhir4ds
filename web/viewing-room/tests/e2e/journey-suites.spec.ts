@@ -13,13 +13,14 @@ test("journey: ?suite=omop filters the gallery and defaults to omop-patient", as
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
   // Default sample = first OMOP sample: person rows render.
   const table = page.getByTestId("output-table");
-  // Local fixture slice: 8 Synthea patients with resolved gender concepts.
+  // Local fixture slice: 8 Synthea patients, raw reshape (no concept ids).
   await expect(table.locator("tbody tr")).toHaveCount(8, { timeout: 60_000 });
-  await expect(table).toContainText("8532");
+  await expect(table).toContainText("person_source_value");
+  await expect(table).toContainText("female");
 
   // The dropdown shows ONLY the OMOP optgroup (4 samples, no General/US Core).
   const options = await page.locator("header select option").allTextContents();
-  expect(options).toHaveLength(4);
+  expect(options).toHaveLength(5);
   expect(options.some((o) => o.includes("Patient Demographics"))).toBe(false);
   expect(options.some((o) => o.includes("OMOP"))).toBe(true);
 
@@ -34,7 +35,7 @@ test("journey: ?suite=omop filters the gallery and defaults to omop-patient", as
   await page.waitForURL((url) => !url.searchParams.has("suite"));
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
   const allOptions = await page.locator("header select option").allTextContents();
-  expect(allOptions).toHaveLength(10);
+  expect(allOptions).toHaveLength(11);
 });
 
 test("journey: unfiltered gallery is grouped by suite", async ({ page }) => {
