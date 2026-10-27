@@ -57,7 +57,9 @@ class TestPerson:
         conn.execute("INSERT INTO __vd_src VALUES (?)", [json.dumps(
             {"resourceType": "Patient", "id": "p1", "gender": "male", "birthDate": "1974-12-25"})])
         rows = _run(conn, "person-source-view")
-        assert rows == [("p1", "1974", "12", "25", "1974-12-25", "p1", "male")]
+        # No person_id: the integer key belongs to the SQLQuery, and the
+        # source id is the only identity the reshape needs to carry.
+        assert rows == [("p1", "1974", "12", "25", "1974-12-25", "male")]
 
 
 class TestVisitOccurrence:

@@ -30,15 +30,14 @@ flowchart LR
 
     Patient --> PersonVD["person<br/>ViewDefinition"]
     ConceptMap --> MapVD["concept map<br/>ViewDefinition"]
-    PersonVD --> Source[("person_source")]
-    MapVD --> SQ["person<br/>SQLQuery"]
-    Source --> SQ
+    PersonVD -->|rows| SQ["person<br/>SQLQuery"]
+    MapVD -->|lookup rows| SQ
     SQ --> Person
 
     classDef default fill:#1e293b,stroke:#38bdf8,color:#cbd5e1,stroke-width:1px
     classDef highlight fill:#38bdf8,stroke:#0ea5e9,color:#0f172a,stroke-width:2px
 
-    class Patient,ConceptMap,PersonVD,MapVD,Source,SQ default
+    class Patient,ConceptMap,PersonVD,MapVD,SQ default
     class Person highlight
 
     linkStyle default stroke:#fff,stroke-width:1px
@@ -79,12 +78,11 @@ is a small JSON file, and it is the whole of the reshaping step:
   "select": [
     {
       "column": [
-        { "name": "person_id",           "path": "id",                        "type": "id" },
+        { "name": "person_source_value", "path": "id",                        "type": "id" },
         { "name": "year_of_birth",       "path": "birthDate.substring(0, 4)", "type": "string" },
         { "name": "month_of_birth",      "path": "birthDate.substring(5, 2)", "type": "string" },
         { "name": "day_of_birth",        "path": "birthDate.substring(8, 2)", "type": "string" },
         { "name": "birth_datetime",      "path": "birthDate",                 "type": "dateTime" },
-        { "name": "person_source_value", "path": "id",                        "type": "id" },
         { "name": "gender_source_value", "path": "gender",                    "type": "code" }
       ]
     }
@@ -105,14 +103,16 @@ Read it as a recipe:
 
 On our cohort that gives 25 rows — one per patient:
 
-| person_id | person_source_value | year_of_birth | gender_source_value |
-|---|---|---|---|
-| `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | 1982 | `male` |
-| `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | 1967 | `female` |
-| `80402b87-2275-392f-bf13-7c25fed62f2c` | `80402b87-2275-392f-bf13-7c25fed62f2c` | 1966 | `male` |
+| person_source_value | year_of_birth | gender_source_value |
+|---|---|---|
+| `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | 1982 | `male` |
+| `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | 1967 | `female` |
+| `80402b87-2275-392f-bf13-7c25fed62f2c` | 1966 | `male` |
 
-This is the reshape only — the ids are still the FHIR strings, and the
-last column is still the FHIR code. OMOP wants `8507` or `8532`.
+This is the reshape only: an intermediate view (`omop.person_source`) with
+the FHIR id as text and the FHIR code still untranslated. There is no
+`person_id` here — OMOP's integer key is created later, in the query that
+consumes these rows.
 
 ## Step 2 — Translate: codes into concept ids
 
@@ -196,7 +196,7 @@ the `person` table:
 
 ```sql
 SELECT
-    CAST(hash(p.person_id) & 9223372036854775807 AS BIGINT) AS person_id,
+    CAST(hash(p.person_source_value) & 9223372036854775807 AS BIGINT) AS person_id,
     COALESCE(TRY_CAST(cm.concept_id AS BIGINT), 0)          AS gender_concept_id,
     p.year_of_birth,
     p.month_of_birth,
