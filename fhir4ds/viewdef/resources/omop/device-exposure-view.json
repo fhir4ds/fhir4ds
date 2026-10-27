@@ -18,7 +18,7 @@
         },
         {
           "name": "person_id",
-          "path": "subject.reference.split('/').last()",
+          "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
           "type": "string"
         },
         {
@@ -53,7 +53,7 @@
         },
         {
           "name": "unique_device_id",
-          "path": "device.reference.split('/').last()",
+          "path": "device.reference.replace('urn:uuid:', '').split('/').last()",
           "type": "string"
         },
         {
@@ -63,12 +63,12 @@
         },
         {
           "name": "device_source_value",
-          "path": "device.reference.split('/').last()",
+          "path": "device.reference.replace('urn:uuid:', '').split('/').last()",
           "type": "string"
         },
         {
           "name": "visit_occurrence_id",
-          "path": "context.reference.split('/').last()",
+          "path": "context.reference.replace('urn:uuid:', '').split('/').last()",
           "type": "string"
         }
       ]

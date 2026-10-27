@@ -22,7 +22,7 @@
         },
         {
           "name": "person_id",
-          "path": "subject.reference.split('/').last()",
+          "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
           "type": "string"
         },
         {
@@ -77,7 +77,7 @@
         },
         {
           "name": "visit_occurrence_id",
-          "path": "context.reference.split('/').last()",
+          "path": "context.reference.replace('urn:uuid:', '').split('/').last()",
           "type": "string"
         },
         {
