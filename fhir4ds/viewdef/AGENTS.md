@@ -1,5 +1,23 @@
 # ViewDefinition Agent Notes
 
+## SQLQuery composition steps (2026-10-27)
+
+`manifest.sql_queries` maps a table to a SQLQuery `Library` under
+`sqlqueries/`. The runner materializes its decoded `application/sql` body as
+`CREATE OR REPLACE VIEW <schema>.<table> AS ...`, after the views it reads
+(`<schema>.<name>` references in the SQL text, topologically ordered; cycles
+and unknown references are typed errors). `render_view_sqls` includes these
+steps so the browser creates them in the same pass. A table owns its shaping:
+declaring a `projections` entry for a SQLQuery table raises, because the SQL
+would then be hashed/defaulted twice. `viewdef` must not import `sqlquery`
+(the dependency is one-way) — the Library content is decoded inline.
+
+`omop.person` is the pilot: `person-source-view.json` (raw reshape) +
+`sqlqueries/person-omop.json` (join + integer key) replace the VD `joins`
+block and the manifest projection. Keys are unchanged from the previous
+implementation (pinned by `test_key_projection.py`). The remaining event
+tables still use `joins`; migrate them the same way.
+
 ## Known Fragile Areas
 
 - UNNEST LOWERING (2026-10-27, feat/unnest-cte-lowering): forEach/
