@@ -210,11 +210,6 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
-          id: 'examples/omop-viewer',
-          label: 'OMOP Demo',
-        },
-        {
-          type: 'doc',
           id: 'examples/sdc-playground',
           label: 'SDC Forms',
         },
