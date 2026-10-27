@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { bootTextReady } from "./bootText";
 
 /**
  * WORKBENCH_REORG phase 3: the editor column is tabbed — one tab per
@@ -7,8 +8,7 @@ import { expect, test } from "@playwright/test";
  */
 
 async function bootReady(page: import("@playwright/test").Page) {
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  await bootTextReady(page);
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
 }
 
@@ -84,6 +84,13 @@ test.describe("editor tabs", () => {
     await page.waitForTimeout(1500);
     await page.reload();
     await page.waitForSelector(".version-badge", { timeout: 150_000 });
+    // S25: reload restores cell view (auto-cellify default) — toggle
+    // back to text before asserting the monaco content.
+    const toggle = page.locator('[data-testid="cell-view-toggle"]');
+    if ((await toggle.getAttribute("aria-checked")) === "true") {
+      await toggle.click();
+      await page.waitForTimeout(1000);
+    }
     await expect(page.locator(".monaco-editor .view-lines")).toContainText(
       "library RenamedDemo",
       { timeout: 30_000 },

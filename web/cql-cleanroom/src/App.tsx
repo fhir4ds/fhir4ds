@@ -750,10 +750,17 @@ export default function App() {
   // connected workspace reads local files and writes nothing back, so
   // the footer explains that dash instead of inventing a timestamp.
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  // S25: an explicit reset marks the workspace so a reload restores the
+  // clean demo instead of re-loading the featured example (pristine-boot
+  // behavior is unchanged for fresh installs, which have no marker).
+  const [postReset, setPostReset] = useState(false);
   // S32: Open/Save workspace folder picker + switch overlay + recents.
   const [folderModal, setFolderModal] = useState<"open" | "save" | null>(null);
   // S32: view-flatten busy (console output shows the spinner while true).
   const [viewRunning, setViewRunning] = useState(false);
+  // S33: reactive evaluation-in-flight state — the results console shows a
+  // spinner instead of the static hint while a run is executing.
+  const [evaluating, setEvaluating] = useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
   const [recents, setRecents] = useState<RecentWorkspace[]>(() => loadRecents());
   // c-cleanroom-redo S1: connected mode (additive; standalone = zero server
@@ -1209,12 +1216,20 @@ export default function App() {
         // visitors who never edited anything still get the featured
         // example, while real work is never clobbered. Share fragments
         // returned early above.
-        if (!ws || !ws.libraries?.length || isPristineWorkspace(ws)) {
+        setPostReset(ws?.postReset === true);
+        if (
+          !ws ||
+          !ws.libraries?.length ||
+          (isPristineWorkspace(ws) && !ws.postReset)
+        ) {
+          // S33: cms125-workspace is the standalone fresh-boot default
+          // (host attr and ?example= still win; e2e pins ?example=demo-workspace
+          // where the scratch library is the contract).
           const defaultExample =
-            takePendingDefaultExample() ?? urlDefaultExample();
-          if (defaultExample) {
-            void loadExample(defaultExample);
-          }
+            takePendingDefaultExample() ??
+            urlDefaultExample() ??
+            "cms125-workspace";
+          void loadExample(defaultExample);
         }
         if (ws?.measures?.length) {
           setMeasures(ws.measures);
@@ -1437,6 +1452,7 @@ export default function App() {
         runHistory,
         activeTabPref: consoleTab,
         terminology: connected ? { valuesets: [] } : terminology,
+        postReset,
       })
         .then(() => {
           // S29: "last saved" is a CONTENT save — connected writes are
@@ -1527,6 +1543,14 @@ export default function App() {
     [runLib.name, runLib.text],
   );
   const mainLibs = useMemo<LibraryText[]>(() => [main], [main]);
+  // S25 parity fix (WASM): the CONNECTED server resolves includes from
+  // the workspace disk; the in-browser engine can only resolve them from
+  // the payload. Ship the full include closure to the worker or every
+  // evaluation dies with "Could not resolve included library ...".
+  const evalLibs = useMemo<LibraryText[]>(
+    () => [main, ...libraries.filter((l) => l.name !== main.name)],
+    [main, libraries],
+  );
   // 6f: the primary library's include closure + valueset declarations,
   // surfaced as read-only chips in the Measure editor.
   const measureClosure = useMemo(
@@ -1597,7 +1621,9 @@ export default function App() {
     columns: string[];
     rows: Array<Record<string, unknown>>;
   } | null> | null>(null);
-  const hoverEvalKey = `${main.name}|${main.text}|${evalDataset?.resources?.length ?? 0}|${JSON.stringify(runtimeParameters)}`;
+  const hoverEvalKey = `${main.name}|${main.text}|${libraries
+    .map((l) => `${l.name}:${l.text.length}`)
+    .join(",")}|${evalDataset?.resources?.length ?? 0}|${JSON.stringify(runtimeParameters)}`;
   useEffect(() => {
     hoverEvalRef.current = null;
   }, [hoverEvalKey]);
@@ -1622,7 +1648,7 @@ export default function App() {
           }).then((r) => r.json())
         : workerRequest({
             type: "evaluate_library",
-            libraries: mainLibs,
+            libraries: evalLibs,
             main,
             dataset: evalDataset,
             parameters: runtimeParameters,
@@ -1833,7 +1859,15 @@ export default function App() {
         const rows = (env.rows ?? []) as Array<Record<string, unknown>>;
         for (const n of names) {
           const own = nameable.has(n) ? cols.filter((c) => c === n) : [];
-          const useCols = own.length ? own : cols;
+          // S25 parity fix: the standalone (WASM) cell table must carry
+          // patient_id exactly like the connected run-all path — a lone
+          // boolean column against 66 patients is unreadable, and the
+          // evidence drill-in keys off patient_id.
+          const useCols = own.length
+            ? cols.includes("patient_id")
+              ? ["patient_id", ...own]
+              : own
+            : cols;
           out[n] = {
             ok: true,
             lines: [
@@ -1866,6 +1900,7 @@ export default function App() {
     if (!manualServer && !canAutoEval) return;
     const seq = ++evalSeqRef.current;
     evalBusyRef.current = true;
+    setEvaluating(true);
     // Checkpoint ruling (S26a item 4 revision): connected mode ALWAYS
     // evaluates SERVER-side — manual whole-library runs AND the
     // auto-recalc heartbeat (the server workspace dataset is the
@@ -1960,13 +1995,14 @@ export default function App() {
         }
       } finally {
         evalBusyRef.current = false;
+        setEvaluating(false);
       }
       return;
     }
     try {
       const resp = await workerRequest({
         type: "evaluate_library",
-        libraries: mainLibs,
+        libraries: evalLibs,
         main,
         dataset: evalDataset,
         parameters: runtimeParameters,
@@ -2101,6 +2137,7 @@ export default function App() {
       }
     } finally {
       evalBusyRef.current = false;
+      setEvaluating(false);
     }
   };
 
@@ -2174,6 +2211,9 @@ export default function App() {
     const name = `Library${libraries.length + 1}`;
     const text = `library ${name} version '1.0.0'\nusing FHIR version '4.0.1'\n`;
     const id = newLibraryId(libraries);
+    // S25: a NEW library opens in TEXT view — the user is about to type
+    // content; auto-cellify would swap the editor out mid-keystroke.
+    setCellsViewActive(false);
     setLibraries((libs) => [...libs, { id, name, text }]);
     setActiveTab(libraries.length);
   };
@@ -2350,6 +2390,11 @@ export default function App() {
       const nextLibs = withLibraryIds(
         pkg.libraries.map((l) => ({ name: l.name, text: l.text })),
       );
+      // S25 doctrine (loadExample parity): package imports land in TEXT
+      // view — imported content is read-heavy showcase material and the
+      // classic editor is the expected surface after an import.
+      setCellsViewActive(false);
+      setExampleForceTextNonce((n) => n + 1);
       setLibraries(nextLibs);
       setActiveTab(0);
       const msrId = newMeasureId([]);
@@ -3983,7 +4028,8 @@ export default function App() {
   const consoleNode = (
     <ResultsConsole
       connected={serverMode.kind === "connected"}
-      libraries={mainLibs}
+      evaluating={evaluating}
+      libraries={evalLibs}
       main={main}
       dataset={evalDataset}
       parameters={runtimeParameters}
@@ -4040,10 +4086,12 @@ export default function App() {
     const explainParams = context?.params ?? runtimeParameters;
     // S19 Muse: keep the OTHER workspace libraries (includes) resolvable —
     // only the main library's text is replaced with the run composition.
-    const explainLibs: LibraryText[] = [
-      { name: main.name, text: explainText },
-      ...mainLibs.filter((l) => l.name !== main.name),
-    ];
+    // S25 bug: this filtered mainLibs (== [main]) → the closure was
+    // EMPTY, so the in-browser explain failed with "Could not resolve
+    // included library ...". Build from the real closure instead.
+    const explainLibs: LibraryText[] = evalLibs.map((l) =>
+      l.name === main.name ? { name: l.name, text: explainText } : l,
+    );
     try {
       let env: import("./lib/protocol").EvidenceResult;
       if (serverMode.kind === "connected" && !context?.computedLocally) {
@@ -4171,6 +4219,10 @@ export default function App() {
                   // THEN set defaults — let a slow IndexedDB clear land
                   // its .then() seconds later, clobbering any state that
                   // changed in between, e.g. an import.)
+                  // S25: reset ALSO returns to text view — the classic
+                  // editor surface is part of the scratch-state contract
+                  // (auto-cellify only applies to real library content).
+                  setCellsViewActive(false);
                   setLibraries([{ id: "lib_0", name: "CleanroomDemo", text: DEFAULT_CQL }]);
                   setActiveTab(0);
                   setDataset({ resources: DEFAULT_DATASET_RESOURCES });
@@ -4178,8 +4230,20 @@ export default function App() {
                     { id: "msr_0", mainLibraryId: "lib_0", resource: DEFAULT_MEASURE },
                   ]);
                   setActiveMeasureId("msr_0");
-                  setExpectedReports({});
-                  setViewDefs([]);
+                  setExpectedReports({ msr_0: [] });
+                  // REORG 6d consistency: the pristine demo carries the
+                  // derived default view ("View 1"). The one-shot seed
+                  // effect skips when the measure id is unchanged, so a
+                  // reset must seed it itself — otherwise the reset state
+                  // is not the state a fresh restore produces.
+                  ensuredViewForRef.current = "msr_0";
+                  setViewDefs([
+                    {
+                      id: "vd_default",
+                      name: "View 1",
+                      resource: buildDerivedView(DEFAULT_MEASURE, null),
+                    },
+                  ]);
                   setLastReports(null);
                   setViewConfig(null);
                   setRunHistory([]);
@@ -4187,7 +4251,42 @@ export default function App() {
                   setConsoleTab("results");
                   setCurrentRun(null);
                   setParamValues({});
-                  void clearWorkspace().catch(() => undefined);
+                  // S25 root fix (non-atomic reset): persist the DEMO
+                  // snapshot immediately (explicit values — setState has
+                  // not applied yet) so an immediate reload can never
+                  // restore stale content or find an empty/pristine key
+                  // that re-triggers the featured-example load. The
+                  // debounced autosave later rewrites the same state.
+                  setPostReset(true);
+                  void (async () => {
+                    try {
+                      await clearWorkspace();
+                      await saveWorkspace({
+                        libraries: [
+                          { id: "lib_0", name: "CleanroomDemo", text: DEFAULT_CQL },
+                        ],
+                        dataset: { resources: DEFAULT_DATASET_RESOURCES as unknown[] },
+                        cases: null,
+                        prefs: {
+                          layout: { col1Fr, consolePlacement, editorFr, recalcSeconds },
+                        },
+                        measures: [
+                          { id: "msr_0", mainLibraryId: "lib_0", resource: DEFAULT_MEASURE },
+                        ],
+                        activeMeasureId: "msr_0",
+                        expectedReports: {},
+                        viewDefs: [],
+                        paramValues: {},
+                        viewConfig: null,
+                        runHistory: [],
+                        activeTabPref: "results",
+                        terminology: { valuesets: [] },
+                        postReset: true,
+                      });
+                    } catch {
+                      /* IndexedDB unavailable — in-memory demo state stands */
+                    }
+                  })();
                 }
               }}
             >
@@ -4636,7 +4735,12 @@ export default function App() {
               onViewConfigChange={(overrides) => setViewConfig({ overrides })}
               onResult={setViewResult}
               recalcMs={recalcSeconds * 1000}
-              viewReportsPending={!evalResult}
+              // S25: the EDITOR form spins only while a run is actually
+              // in flight — a perpetual "waiting for MeasureReports"
+              // spinner (former !evalResult) was confusing: with no run
+              // yet the pane shows the actionable text instead. The
+              // CONSOLE view output keeps the spinner for pending work.
+              viewReportsPending={evaluating}
               onViewBusy={setViewRunning}
               initialVd={
                 hostTab?.kind === "view" &&

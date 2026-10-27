@@ -198,6 +198,12 @@ export function EditorPane({
   // PER TAB (a global flag would suppress first-open cellification for
   // every other library this session).
   const userClosedCellsRef = useRef<Set<string>>(new Set());
+  // S25 root fix: auto-cellify must fire on buffer ARRIVAL (import /
+  // restore / example load), never on the user's own keystrokes — the
+  // old behavior swapped the editor to cells mid-typing once the buffer
+  // gained its first complete define.
+  const userEditedTabsRef = useRef<Set<string>>(new Set());
+  const applyingProgrammaticRef = useRef(false);
   const applyCellify = useCallback(() => {
     const next = cellify(textRef.current);
     if (next != null) onTextChangeRef.current(next);
@@ -213,6 +219,7 @@ export function EditorPane({
     // real library).
     if (holdAutoSplit) return;
     if (connected && isPristineDemoDefault(text)) return;
+    if (userEditedTabsRef.current.has(tabKey)) return;
     if (adoptedRef.current.has(tabKey) || removedRef.current.has(tabKey)) return;
     if (hasCellMarkers) {
       // Library arrived WITH markers — count as adopted (hand-authored).
@@ -348,6 +355,11 @@ export function EditorPane({
         // Mount-only listener: route through a ref so the CURRENT
         // onTextChange closure is used (the captured one goes stale on
         // tab switches and would write into the wrong library).
+        // S25: programmatic model syncs (setValue in the [text] effect)
+        // are NOT user edits — they must not suppress auto-cellify.
+        if (!applyingProgrammaticRef.current) {
+          userEditedTabsRef.current.add(tabKeyRef.current);
+        }
         onTextChangeRef.current(editor.getValue());
       });
       editor.onDidChangeCursorSelection(() => {
@@ -425,7 +437,12 @@ export function EditorPane({
     if (editor.getValue() !== text) {
       const pos = editor.getPosition();
       const reveal = editor.getVisibleRanges()[0]?.top ?? null;
-      editor.setValue(text);
+      applyingProgrammaticRef.current = true;
+      try {
+        editor.setValue(text);
+      } finally {
+        applyingProgrammaticRef.current = false;
+      }
       if (pos) {
         editor.setPosition(pos);
         if (reveal != null) editor.setScrollTop(reveal);

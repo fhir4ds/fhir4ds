@@ -1,5 +1,6 @@
 import { test } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { bootTextReady } from "./bootText";
 
 /**
  * C1-U8 matrix leg 3: run_tests on the §3.8 shared fixture through the
@@ -46,8 +47,7 @@ test("cleanroom matrix leg run_tests", async ({ page }, testInfo) => {
     readFileSync(FIXTURE_PATH, "utf-8"),
   );
 
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  await bootTextReady(page);
   await page.waitForFunction(() =>
     Boolean((window as any).__cleanroom),
   );

@@ -1,3 +1,4 @@
+import { bootTextReady } from "./bootText";
 import { test } from "@playwright/test";
 import { waitDatasetResources, datasetResourceCount } from "./dataset";
 
@@ -10,12 +11,12 @@ import { waitDatasetResources, datasetResourceCount } from "./dataset";
  * "New resource" opens a fresh one; dataset-edit-0 opens a prefilled one.
  */
 test("builder: valid form auto-commits a Patient", async ({ page }) => {
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  await bootTextReady(page);
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
   await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(800);
+  await page.click('[data-testid="nav-toggle-tests"]');
   await page.waitForSelector("[data-testid=dataset-tree]", { timeout: 60_000 });
 
   // Fresh builder tab (defaults to Patient).
@@ -46,12 +47,12 @@ test("builder: valid form auto-commits a Patient", async ({ page }) => {
 });
 
 test("builder: invalid draft never commits", async ({ page }) => {
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  await bootTextReady(page);
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
   await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(800);
+  await page.click('[data-testid="nav-toggle-tests"]');
   await page.waitForSelector("[data-testid=dataset-tree]", { timeout: 60_000 });
 
   // Fresh builder tab, then Raw JSON mode with a resource missing resourceType.
@@ -78,12 +79,12 @@ test("builder: invalid draft never commits", async ({ page }) => {
 });
 
 test("builder: edit auto-replaces the source row", async ({ page }) => {
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  await bootTextReady(page);
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
   await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(800);
+  await page.click('[data-testid="nav-toggle-tests"]');
   await page.waitForSelector("[data-testid=dataset-tree]", { timeout: 60_000 });
 
   // Edit p1 (dataset row 0) via the Resources tree. L3 drill-in first

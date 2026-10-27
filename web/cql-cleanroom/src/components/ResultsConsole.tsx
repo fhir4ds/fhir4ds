@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { workerRequest } from "./BootOverlay";
 import { PaginatedTable } from "./PaginatedTable";
+import { Spinner } from "./Spinner";
 import { DiagnosticsRow } from "./EditorPane";
 import { EvidencePopover } from "./EvidencePopover";
 import { AstTree } from "./AstPane";
@@ -74,6 +75,7 @@ const CONTEXT_TABS: Record<ConsoleContext, Array<{ id: ConsoleTab; label: string
 
 export function ResultsConsole({
   connected,
+  evaluating,
   libraries,
   main,
   dataset,
@@ -96,6 +98,9 @@ export function ResultsConsole({
   activeTab,
   onTabChange,
 }: {
+  /** S33: true while an evaluation is executing — the Results empty state
+   *  shows a spinner instead of the static hint. */
+  evaluating?: boolean;
   libraries: LibraryText[];
   main: LibraryText;
   dataset: DatasetSpec | null;
@@ -499,7 +504,12 @@ export function ResultsConsole({
           />
           </>
         )}
-        {!payload && (
+        {!payload && evaluating && (
+          <div className="pane-hint" data-testid="console-evaluating">
+            <Spinner label="evaluating" />
+          </div>
+        )}
+        {!payload && !evaluating && (
           <p className="pane-hint" data-testid="console-empty">
             Run from the editor toolbar (or Ctrl/Cmd+Enter): the whole
             library runs, a selection runs just that expression. The last

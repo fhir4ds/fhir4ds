@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { bootDemoReady } from "./bootText";
 
 /**
  * REORG 6g: the console is run-centric. Runs are triggered from the
@@ -10,31 +11,8 @@ import { expect, test } from "@playwright/test";
  */
 
 async function bootReady(page: import("@playwright/test").Page) {
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  await bootDemoReady(page);
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
-  // S25: cells view is console-FREE by design, and the default library
-  // auto-cellifies (markers injected, cells view opens). These specs
-  // exercise the TEXT editor + console — if cells auto-opened, switch
-  // back to text and wait for a clean re-parse.
-  const gotIt = page.getByRole("button", { name: "Got it" });
-  if (await gotIt.isVisible().catch(() => false)) await gotIt.click();
-  const toggle = page.locator('[data-testid="cell-view-toggle"]');
-  try {
-    await toggle.waitFor({ state: "visible", timeout: 10_000 });
-    if ((await toggle.getAttribute("aria-checked")) === "true") {
-      await toggle.click();
-      await page.waitForFunction(
-        () =>
-          (document
-            .querySelector('[data-testid="parse-status"]')
-            ?.textContent ?? "").includes("parsed ✓"),
-        { timeout: 30_000 },
-      );
-    }
-  } catch {
-    /* toggle absent — text view already */
-  }
 }
 
 async function selectIppBody(page: import("@playwright/test").Page) {
@@ -484,9 +462,10 @@ test.describe("outline + jump-to-define (visual editor 4)", () => {
     await expect(panel).toContainText("Has Name");
     // Line pins are MARKER-DEPENDENT: the buffer may carry auto-injected
     // `// # %%` cell markers (+2 lines) or not. Assert both defines have
-    // line refs without pinning exact numbers.
-    await expect(panel).toContainText(/L(6|8)/);
-    await expect(panel).toContainText(/L(10|12)/);
+    // line refs without pinning exact numbers (markerless demo:
+    // Initial Population L5, Has Name L8; with markers L7/L10).
+    await expect(panel).toContainText(/L(5|7)/);
+    await expect(panel).toContainText(/L(8|10)/);
     // Jump: the current-line highlight must land on the "Has Name"
     // declaration (line 8) — same viewport row as that view-line.
     await panel

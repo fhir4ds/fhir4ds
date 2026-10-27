@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { bootTextReady } from "./bootText";
 
 /**
  * CMS69 include tabs + Measurement Period default + auto-recalc.
@@ -6,8 +7,7 @@ import { expect, test } from "@playwright/test";
 test("example loads include tabs, prefills MP, auto-recalcs", async ({ page }) => {
   test.setTimeout(300_000);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  await bootTextReady(page);
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
   await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");

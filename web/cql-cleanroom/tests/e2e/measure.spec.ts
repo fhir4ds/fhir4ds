@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { openTestsDrawer, bootDemoReady } from "./bootText";
 
 /**
  * Measure-reports campaign e2e (FEATURE_CLEANROOM_MEASURE_REPORTS.md):
@@ -7,12 +8,11 @@ import { expect, test, type Page } from "@playwright/test";
  */
 
 async function bootReady(page: Page) {
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
-  await page.waitForSelector("[data-testid=cql-editor]", { timeout: 30_000 });
+  await bootDemoReady(page);
 }
 
 async function loadDataset(page: Page) {
+  await openTestsDrawer(page);
   await page.waitForSelector("[data-testid=dataset-tree]", {
     timeout: 30_000,
   });
@@ -483,7 +483,8 @@ test.describe("measure association (reorg 6f)", () => {
     await page.click("[data-testid=file-menu]");
     await page.click("[data-testid=workspace-reset]");
     await page.waitForTimeout(1200);
-    await page.waitForSelector("[data-testid=dataset-tree]", {
+    await openTestsDrawer(page);
+  await page.waitForSelector("[data-testid=dataset-tree]", {
       timeout: 30_000,
     });
 

@@ -151,7 +151,16 @@ test("S21-2: standalone — create a file, reload, IndexedDB restores it", async
   await page.waitForTimeout(2500); // autosave debounce
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForTimeout(15000);
-  const text = await page.locator('[data-testid="cql-editor"]').textContent().catch(() => "");
+  // S25: reload restores cell view (auto-cellify default) — toggle back
+  // to text before asserting the classic editor content.
+  const toggle1 = page.locator('[data-testid="cell-view-toggle"]');
+  if ((await toggle1.getAttribute("aria-checked")) === "true") {
+    await toggle1.click();
+    await page.waitForTimeout(1000);
+  }
+  const restored = page.locator('[data-testid="cql-editor"]');
+  await expect(restored).toBeVisible({ timeout: 20000 });
+  const text = await restored.textContent().catch(() => "");
   expect(text ?? "").toContain("S21Persist");
 });
 

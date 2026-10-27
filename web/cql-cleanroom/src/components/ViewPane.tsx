@@ -72,7 +72,6 @@ export function ViewPane({
     initialVd ? JSON.stringify(initialVd, null, 2) : "",
   );
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const setOverride = (key: string, patch: { name?: string; path?: string }) => {
     const next: ViewOverrides = {
@@ -99,7 +98,6 @@ export function ViewPane({
 
   async function run() {
     busyRef.current = true;
-    setBusy(true);
     onBusy?.(true);
     setError(null);
     try {
@@ -143,7 +141,6 @@ export function ViewPane({
       onResult?.(null);
     } finally {
       busyRef.current = false;
-      setBusy(false);
       onBusy?.(false);
     }
   }
@@ -152,11 +149,8 @@ export function ViewPane({
     <section className="pane view-pane" data-testid="view-pane">
       <header className="pane-header">
         <div className="pane-actions">
-          {busy && (
-            <span className="pane-meta" data-testid="view-busy">
-              <Spinner label="running view" />
-            </span>
-          )}
+          {/* Spinner removed (Joel 2026-10-25): the results console owns
+              in-flight feedback; the editor header stays quiet. */}
           {/* S29: the SAME switch widget as the Builder/Cells toggles —
               Form ("From Measure") ⇄ Text (the VD editor). aria-checked
               tracks TEXT mode. */}

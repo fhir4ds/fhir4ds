@@ -1,5 +1,6 @@
 import { test, type Page } from "@playwright/test";
 import { importBundleResources, waitDatasetResources } from "./dataset";
+import { openTestsDrawer, bootDemoReady } from "./bootText";
 
 /**
  * Workbench-reorg e2e (FEATURE_CLEANROOM_WORKBENCH_REORG.md):
@@ -9,9 +10,7 @@ import { importBundleResources, waitDatasetResources } from "./dataset";
  */
 
 async function bootReady(page: Page) {
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
-  await page.waitForSelector("[data-testid=cql-editor]", { timeout: 30_000 });
+  await bootDemoReady(page);
 }
 
 async function resetWorkspace(page: Page) {
@@ -57,6 +56,11 @@ test.describe("console sub-tabs + col2 panes", () => {
     await page.reload();
     await page.waitForSelector(".version-badge", { timeout: 150_000 });
     await page.waitForSelector(".app-main.dock-right", { timeout: 90_000 });
+    const toggle = page.locator('[data-testid="cell-view-toggle"]');
+    if ((await toggle.getAttribute("aria-checked")) === "true") {
+      await toggle.click();
+      await page.waitForTimeout(1000);
+    }
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 90_000,
     });
@@ -165,7 +169,8 @@ test.describe("console sub-tabs + col2 panes", () => {
   test("measure editor surfaces the report output in the console", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.waitForSelector("[data-testid=dataset-tree]");
+    await openTestsDrawer(page);
+  await page.waitForSelector("[data-testid=dataset-tree]");
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
@@ -197,7 +202,13 @@ test.describe("run history", () => {
     await page.reload();
     await page.waitForSelector(".version-badge", { timeout: 150_000 });
     await page.waitForFunction(() => Boolean((window as any).__cleanroom));
+    const toggle = page.locator('[data-testid="cell-view-toggle"]');
+    if ((await toggle.getAttribute("aria-checked").catch(() => "false")) === "true") {
+      await toggle.click();
+      await page.waitForTimeout(800);
+    }
 
+    await openTestsDrawer(page);
     await page.waitForSelector("[data-testid=dataset-tree]");
 
     // First evaluation (auto): female logic, p1 IPP true.
@@ -248,7 +259,9 @@ test.describe("dataset tree scale", () => {
       });
     }
     await importBundleResources(page, big);
-    await waitDatasetResources(page, 61, 60_000);
+    await openTestsDrawer(page);
+    // S32: nav Tests ▾ Import Bundle is MERGE mode — demo 3 + 61 = 64.
+    await waitDatasetResources(page, 64, 60_000);
 
     // L3 drill-in (reorg 6e): the L2 patient list replaced the inline
     // tree — open "big" to reach its type groups.

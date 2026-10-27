@@ -140,6 +140,10 @@ export interface WorkspaceState {
   terminology: { valuesets: Array<Record<string, unknown>> };
   /** LEGACY v5 param values (migration input only; see paramBindings). */
   viewConfig: WorkspaceViewConfig | null;
+  /** S25: set by an explicit File > Reset Workspace. Suppresses the
+   *  pristine-boot example auto-load so a reset survives a reload —
+   *  "reset" means clean demo, not "featured example again". */
+  postReset?: boolean;
   savedAt: number;
 }
 
@@ -280,6 +284,7 @@ export function migrate(state: Record<string, unknown>): WorkspaceState {
         valuesets: [],
       },
     viewConfig: (current.viewConfig as WorkspaceViewConfig | null) ?? null,
+    postReset: current.postReset === true ? true : undefined,
     savedAt: (current.savedAt as number) ?? Date.now(),
   };
 }

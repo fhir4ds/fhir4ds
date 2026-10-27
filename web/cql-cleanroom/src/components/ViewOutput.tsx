@@ -26,11 +26,24 @@ export function ViewOutputPanel({
       </p>
     );
   }
-  if (!viewResult?.ok || viewResult.columns.length === 0) {
+  if (viewResult && !viewResult.ok) {
+    // Real flatten failure: surface the diagnostics (never a silent
+    // empty state that looks like "not configured").
+    return (
+      <p className="pane-hint" data-testid="view-output-error">
+        {viewResult.diagnostics?.map((d) => d.message).join("; ") ||
+          "view flatten failed"}
+      </p>
+    );
+  }
+  if (!viewResult || viewResult.columns.length === 0) {
+    // PENDING/idle is still work-in-progress territory: the console
+    // shows the shared spinner, never static hint text (Joel doctrine,
+    // repeated): "the flatten is pending" is indistinguishable from
+    // "not configured yet" to the user — a spinner communicates both.
     return (
       <p className="pane-hint" data-testid="view-output-empty">
-        No view output yet — configure the ViewDefinition and let it
-        flatten the saved MeasureReports.
+        <Spinner label="flattening view" />
       </p>
     );
   }

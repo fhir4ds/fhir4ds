@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { zipSync } from "fflate";
 import * as fs from "node:fs";
+import { bootTextReady, openTestsDrawer } from "./bootText";
 
 /**
  * M2+M3 e2e: MADiE package import → evaluate → re-export round-trip.
@@ -40,8 +41,7 @@ const MEASURE = {
 
 test("MADiE package import → evaluate → export round-trip", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  await bootTextReady(page);
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
   // IndexedDB persists across contexts (same origin): start clean so a
   // prior test's workspace can't restore over this import. Wait for the
@@ -87,6 +87,8 @@ test("MADiE package import → evaluate → export round-trip", async ({ page })
   );
 
   // Load dataset + evaluate — Measure came from the package.
+  await openTestsDrawer(page);
+  await openTestsDrawer(page);
   await page.waitForSelector("[data-testid=dataset-tree]");
   await page.waitForSelector("[data-testid=results-table]", { timeout: 90_000 });
 

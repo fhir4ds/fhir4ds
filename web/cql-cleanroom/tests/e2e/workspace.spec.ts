@@ -1,5 +1,6 @@
 import { test, type Page } from "@playwright/test";
 import { waitDatasetResources } from "./dataset";
+import { bootTextReady, openTestsDrawer } from "./bootText";
 
 /**
  * C1-U7 e2e: workspace persistence (IndexedDB), multi-library tabs,
@@ -7,9 +8,11 @@ import { waitDatasetResources } from "./dataset";
  */
 
 async function bootReady(page: Page) {
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
-  await page.waitForSelector("[data-testid=cql-editor]", { timeout: 30_000 });
+  // S25: / boots the cms125 showcase — reset to the scratch demo.
+  await bootTextReady(page);
+  await page.click("[data-testid=file-menu]");
+  await page.click("[data-testid=workspace-reset]");
+  await page.waitForTimeout(800);
 }
 
 test("workspace persists libraries and dataset across reload", async ({ page }) => {
@@ -19,10 +22,12 @@ test("workspace persists libraries and dataset across reload", async ({ page }) 
   // for the count AND the autosave flush before reloading.
   await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
+  await openTestsDrawer(page);
   await waitDatasetResources(page, 3, 10_000);
   await page.waitForTimeout(1500);
 
   // Load dataset + add a second library tab
+  await openTestsDrawer(page);
   await page.waitForSelector("[data-testid=dataset-tree]");
   await page.click("[data-testid=nav-toggle-libraries]");
   await page.click("[data-testid=library-tab-add]");
@@ -36,6 +41,7 @@ test("workspace persists libraries and dataset across reload", async ({ page }) 
   // tabs — REORG 6d).
   await page.reload();
   await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  await openTestsDrawer(page);
   await waitDatasetResources(page, 3, 30_000);
   await page.click("[data-testid=nav-toggle-libraries]");
   await page.waitForSelector("[data-testid=library-tab-1]", { timeout: 30_000 });
@@ -48,6 +54,7 @@ test("workspace persists libraries and dataset across reload", async ({ page }) 
 
 test("cell evidence drill-in and population flow", async ({ page }) => {
   await bootReady(page);
+  await openTestsDrawer(page);
   await page.waitForSelector("[data-testid=dataset-tree]");
 
   // Auto-evaluation runs (no Evaluate button) — wait for results.
@@ -56,7 +63,7 @@ test("cell evidence drill-in and population flow", async ({ page }) => {
   });
 
   // Evidence drill-in is now the CELL POPOVER: click p1's IPP cell.
-  await page.click('[data-testid="cell-p1-initial_population"]');
+  await page.click('[data-testid="cell-p1-Initial Population"]');
   await page.waitForSelector("[data-testid=evidence-popover]", {
     timeout: 60_000,
   });

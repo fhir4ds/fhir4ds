@@ -4,7 +4,10 @@ export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 180_000,
   retries: 0, // zero-flaky policy
-  workers: 1, // pyodide boot is heavy; serialize
+  // Pyodide boot is heavy, but each worker is isolated (own browser +
+  // context); raise PW_WORKERS on big hosts. CAUTION: the specs that
+  // spawn their own devserver use fixed ports — keep those serial.
+  workers: Number(process.env.PW_WORKERS ?? 1),
   use: {
     headless: true,
     baseURL: "http://localhost:5176",

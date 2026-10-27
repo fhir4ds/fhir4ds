@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { bootDemoReady } from "./bootText";
 
 /**
  * REORG phase 6d: maps-style nav — L1 icon rail (nav-toggle-{id}) +
@@ -7,8 +8,9 @@ import { expect, test } from "@playwright/test";
  */
 
 async function bootReady(page: import("@playwright/test").Page) {
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  // S25: / boots the cms125 showcase (10 libs + 32 valuesets) — the
+  // "fresh workspace" contract needs the scratch demo.
+  await bootDemoReady(page);
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
 }
 

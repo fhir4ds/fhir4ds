@@ -1,11 +1,11 @@
 /**
  * Default-example handoff — host-declared initial content.
  *
- * The web component (website embed) sets "cms69" before mounting so the
- * workbench boots with the featured CMS69 example. The standalone SPA
- * honors a ?example=cms69 URL parameter instead (its fresh-boot default
- * stays the CleanroomDemo scratch library that the e2e suite contracts
- * on; share fragments and saved workspaces take precedence everywhere).
+ * Precedence: host web-component attr > ?example= URL param >
+ * "cms125-workspace" (the S33 standalone fresh-boot default, set at the
+ * App call site). Share fragments and saved non-pristine workspaces take
+ * precedence everywhere. E2e specs that contract on the CleanroomDemo
+ * scratch library boot with ?example=demo-workspace.
  */
 
 let pendingDefaultExample: string | null = null;

@@ -50,7 +50,7 @@ async function openCells(page: import("@playwright/test").Page) {
   await page.waitForTimeout(15000);
   await page.locator('[data-testid="nav-toggle-libraries"]').click();
   const libPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
-  await libPanel.locator(".nav-item", { hasText: "CMS125Demo" }).first().click({ timeout: 15000 });
+  await libPanel.locator(".nav-item", { hasText: "CMS125FHIR" }).first().click({ timeout: 15000 });
   await expect(page.getByRole("tab", { name: /CMS125/i })).toBeVisible({ timeout: 30000 });
   await page.waitForTimeout(4000);
   const toggle = page.locator('[data-testid="cell-view-toggle"]');
@@ -100,12 +100,13 @@ test("S20-2: cell evidence is independent per cell (no state bleed)", async ({ p
 test("S20-3: bottom-console evidence uses the DISPLAYED run's defines (no Has Name)", async ({ page }) => {
   await page.goto(`${BASE}/cleanroom/`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(15000);
-  // Open the CMS125Demo library FIRST — the run target follows the
+  // Open the CMS125FHIR library FIRST — the run target follows the
   // ACTIVE tab (the default CleanroomDemo tab legitimately maps Has Name;
-  // Joel's repro ran CMS125 as the displayed run).
+  // Joel's repro ran CMS125 as the displayed run). The real MADiE
+  // example workspace carries CMS125FHIRBreastCancerScreening.
   await page.locator('[data-testid="nav-toggle-libraries"]').click();
   const libPanel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
-  await libPanel.locator(".nav-item", { hasText: "CMS125Demo" }).first().click({ timeout: 15000 });
+  await libPanel.locator(".nav-item", { hasText: "CMS125FHIR" }).first().click({ timeout: 15000 });
   await expect(page.getByRole("tab", { name: /CMS125/i })).toBeVisible({ timeout: 30000 });
   await page.waitForTimeout(4000);
   const toggle = page.locator('[data-testid="cell-view-toggle"]');
@@ -118,15 +119,18 @@ test("S20-3: bottom-console evidence uses the DISPLAYED run's defines (no Has Na
   } else {
     await runBtn.click();
   }
-  await page.locator(".results-table tbody tr td", { hasText: "w01" }).first().waitFor({ state: "visible", timeout: 45000 });
+  // The real MADiE roster uses uuid patient ids — wait for the first
+  // data row of the population table (patient_id column).
+  const firstRow = page.locator(".results-table tbody tr td").first();
+  await firstRow.waitFor({ state: "visible", timeout: 45000 });
   await page.locator("td.cell-evidence").first().click();
-  const err = page.locator('[data-testid="evidence-popover-error"]');
   await expect(page.locator('[data-testid="evidence-popover"]')).toBeVisible({ timeout: 20000 });
+  const err = page.locator('[data-testid="evidence-popover-error"]');
   // 'Has Name' is the default-demo library's define — must NEVER appear
-  // for a CMS125Demo run.
+  // for a CMS125FHIR run.
   await expect(err).toHaveCount(0);
   const allText = await page.locator('[data-testid="evidence-popover"]').first().textContent();
   expect(allText ?? "").not.toContain("Has Name");
-  // Positive: a CMS125Demo define IS present in the evidence output.
+  // Positive: a CMS125FHIR define IS present in the evidence output.
   expect(allText ?? "").toMatch(/Initial Population|InAgeRange|PreventiveVisit|RecentMammogram|Numerator|Summary/);
 });

@@ -33,20 +33,25 @@ export async function waitDatasetResources(
 }
 
 /**
- * Replace the dataset with an in-memory collection Bundle via
- * File > Open > FHIR Bundle (6i.1: Open = replace, Add = merge — the
- * Settings mode select is gone).
+ * Replace the dataset with an in-memory collection Bundle via the
+ * Test Cases section menu (S32: File > Open > FHIR Bundle moved to
+ * nav Tests ▾ "Import Bundle .json…" — merge mode).
  */
 export async function importBundleResources(
   page: Page,
   resources: Array<Record<string, unknown>>,
 ) {
+  // The Tests drawer must be open for the section menu.
+  const tree = page.locator('[data-testid="dataset-tree"]');
+  if (!(await tree.isVisible().catch(() => false))) {
+    await page.click('[data-testid="nav-toggle-tests"]');
+    await page.waitForTimeout(500);
+  }
   const [chooser] = await Promise.all([
     page.waitForEvent("filechooser", { timeout: 15_000 }),
     (async () => {
-      await page.click("[data-testid=file-menu]");
-      await page.hover("[data-testid=file-open]");
-      await page.click("[data-testid=bundle-import]");
+      await page.click("[data-testid=nav-import-tests]");
+      await page.click("[data-testid=nav-import-tests-bundle-json]");
     })(),
   ]);
   await chooser.setFiles({
