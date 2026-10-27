@@ -56,9 +56,9 @@ test("OMOP step-by-step page teaches the three artifacts", async ({ page }) => {
   // One section per step, in reading order.
   for (const h2 of [
     "Two ways to describe the same person",
-    "Step 1 — A table from one kind of resource",
-    "Step 2 — Turning codes into concept ids",
-    "Step 3 — One table from five kinds of resource",
+    "Step 1 — Reshape: documents into columns",
+    "Step 2 — Translate: codes into concept ids",
+    "That is the whole recipe",
     "Try it",
   ]) {
     await expect(page.locator("article h2", { hasText: h2 })).toBeVisible();
@@ -68,9 +68,12 @@ test("OMOP step-by-step page teaches the three artifacts", async ({ page }) => {
   await expect(page.locator("svg[id^='mermaid']").first()).toBeVisible();
   await expect(page.locator("article")).not.toContainText("flowchart LR");
 
-  // Only the SQLQuery body is shown as SQL — no generated engine SQL.
+  // No SQL at all: the page is three JSON artifacts plus prose.
   await expect(page.locator("article")).not.toContainText("fhirpath_text(");
-  await expect(page.locator("article pre", { hasText: "UNION ALL" })).toHaveCount(1);
+  // (Scope to MDX code blocks: the embedded app brings its own <pre>.)
+  // Three JSON artifacts, plus the mermaid block's wrapper.
+  await expect(page.locator("article .theme-code-block", { hasText: "UNION ALL" })).toHaveCount(0);
+  await expect(page.locator("article .theme-code-block")).toHaveCount(4);
 
   // The live demo is embedded at the end.
   await expect(page.locator("sqlonfhir-viewing-room")).toBeAttached();

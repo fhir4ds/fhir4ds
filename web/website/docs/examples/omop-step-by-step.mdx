@@ -2,65 +2,54 @@
 id: omop-step-by-step
 title: OMOP, Step by Step
 sidebar_label: OMOP Step by Step
-description: Turn FHIR R4 resources into OMOP tables in three steps — a ViewDefinition for patients, a ConceptMap for drug codes, and a SQLQuery that unions five medication resource types.
+description: Build one OMOP table from FHIR, end to end — flatten a Patient with a ViewDefinition and translate its gender code into an OMOP concept id with a FHIR ConceptMap.
 ---
 
 import ViewingRoomWC from '@site/src/components/ViewingRoomWC';
 
 # OMOP, Step by Step
 
-You have FHIR. You want OMOP. This page builds three OMOP tables from a
-real FHIR R4 cohort, and explains each piece only when it is needed.
+This page builds **one** OMOP table from FHIR, end to end: the `person`
+table, from a 25-patient cohort. It is deliberately small — one resource
+type, five columns, one code to translate. Every other OMOP table is the
+same recipe with more columns.
 
-By the end you will have:
-
-- **`person`** — one row per patient, with gender as an OMOP concept id.
-- **`drug_exposure`** — one row per prescribed drug, with the drug code
-  converted to a standard concept.
-- **`drug_exposure`, complete** — the same table, now including vaccines
-  and every other FHIR medication resource type.
-
-No FHIR knowledge is assumed beyond "resources are JSON documents". No SQL
-is needed until the last step, where it is the point.
+You do not need to know FHIR beyond "a resource is a JSON document", and
+there is no SQL to read.
 
 ```mermaid
 flowchart LR
-    Patient[Patient] --> PersonVD[person<br/>ViewDefinition] --> Person[(person)]
+    Patient[Patient] --> VD[person<br/>ViewDefinition]
     ConceptMap[ConceptMap] --> MapVD[concept map<br/>ViewDefinition] --> Map[(code to concept)]
-    MedicationRequest[MedicationRequest] --> MedVD[medications<br/>ViewDefinition]
-    Map --> MedVD
-    MedVD --> Drug[(drug_exposure<br/>1,143 rows)]
-    Immunization[Immunization] --> SQ[SQLQuery union]
-    Drug --> SQ
-    SQ --> All[(drug_exposure<br/>1,461 rows)]
+    Map --> VD
+    VD --> Person[(person)]
 ```
 
 ## Two ways to describe the same person
 
 **FHIR** is how clinical systems *exchange* data. A patient is a nested
-JSON document: a birth date, a gender code, lists of names and
-identifiers. A medication is another document that *points at* the
-patient. It is rich, flexible, and easy to send.
+JSON document — a birth date, a gender code, lists of names. A medication
+is another document that points back at the patient. It is flexible and
+easy to send.
 
-**OMOP** is how analysts *study* data. Everything lives in flat tables
-joined by ids. Clinical meaning is carried by numbers called **concept
-ids** — `8507` means male, `19009384` is a particular RxNorm drug — which
-come from standard vocabularies. It is rigid, boring, and very fast to
-query.
+**OMOP** is how analysts *study* data. Everything is a flat table joined
+by ids, and clinical meaning is carried by numbers called **concept ids**:
+`8507` means male, `8532` means female. It is rigid, boring, and fast to
+query at population scale.
 
-Getting from one to the other takes two independent moves: **reshape**
-the documents into tables, and **translate** the codes into concept ids.
-SQL-on-FHIR does the reshaping; a FHIR ConceptMap does the translating.
+So going from one to the other is always two moves:
 
-## Step 1 — A table from one kind of resource
+1. **Reshape** the documents into tables.
+2. **Translate** the codes into concept ids.
 
-The first OMOP table, `person`, needs a patient id, a birth date split
-into year / month / day, and a gender. FHIR already has all of it — it is
-just nested inside one JSON document.
+## Step 1 — Reshape: documents into columns
+
+The `person` table needs an id, a birth date split into year / month /
+day, and a gender. A patient resource already has all of it — just nested
+in one JSON document.
 
 A **ViewDefinition** says which pieces to keep and what to call them. It
-is a small JSON file, and it is the whole of the SQL-on-FHIR "reshape"
-step:
+is a small JSON file, and it is the whole of the reshaping step:
 
 ```json
 {
@@ -82,33 +71,31 @@ step:
 
 Read it as a recipe:
 
-- **`resource`** — start from `Patient`. The engine only looks at those.
-- **`column`** — each entry becomes a column. `name` is the output
-  header; `path` says where the value lives inside the resource.
-- **`path`** is a **FHIRPath** expression: a compact way of pointing into
-  a resource. `birthDate` is a string in FHIR, so `substring(0, 4)` takes
-  the year, `substring(5, 2)` the month, and so on.
+- **`resource`** — start from `Patient`. The engine looks at nothing else.
+- **`column`** — each entry becomes a column: `name` is the header,
+  `path` says where the value lives.
+- **`path`** is a **FHIRPath** expression, a compact way of pointing into
+  a resource. `birthDate` is text in FHIR, so `substring(0, 4)` takes the
+  year and `substring(5, 2)` the month.
 - **`type`** tells the engine what kind of value to expect, so the column
-  comes out usable (`id`, `string`, `code`) instead of "everything is
-  text".
+  comes out usable (`id`, `string`, `code`) rather than all text.
 
-That file alone produces the table. On our 25-patient cohort:
+On our cohort that gives 25 rows — one per patient:
 
 | person_id | year_of_birth | month_of_birth | day_of_birth | gender_source_value |
 |---|---|---|---|---|
-| `e61b54c7-8ae8-907c-4e6d-20f5e86eca63` | 1957 | 01 | 26 | `female` |
-| `7a4ff83b-37bc-fe9a-b385-d2615aeac488` | 1998 | 06 | 02 | `female` |
-| `4e3be038-c545-8835-4859-86cb59cee238` | 1972 | 11 | 09 | `male` |
+| `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | 1982 | 03 | 04 | `male` |
+| `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | 1967 | 07 | 06 | `female` |
+| `80402b87-2275-392f-bf13-7c25fed62f2c` | 1966 | 09 | 07 | `male` |
 
-Twenty-five rows, one per patient. The last column is still the FHIR
-code — `male`, `female`. OMOP wants `8507` and `8532`. That is step 2.
+The last column is still the FHIR code. OMOP wants `8507` or `8532`.
 
-## Step 2 — Turning codes into concept ids
+## Step 2 — Translate: codes into concept ids
 
 A **ConceptMap** is a standard FHIR resource whose only job is to say
 "this code in this system means that code in that system". It is not part
-of SQL-on-FHIR; it is plain FHIR, and any conformant server can store it.
-Here is a real excerpt from the cohort's map:
+of SQL-on-FHIR — any conformant FHIR server can hold one. Here is a real
+excerpt from the cohort's map:
 
 ```json
 {
@@ -127,12 +114,12 @@ Here is a real excerpt from the cohort's map:
 }
 ```
 
-One ConceptMap holds every vocabulary, one `group` per source system. In
-this dataset it carries **108,683 mappings**: RxNorm drugs, CVX vaccine
+One ConceptMap holds every vocabulary, one `group` per source system. This
+dataset's map carries **108,683 mappings** — RxNorm drugs, CVX vaccine
 codes, and small supplements for gender and encounter classes. The
-`target.code` is the OMOP concept id, written as text; `equivalence`
-records how sure the mapping is, and the library only accepts the strong
-ones (`equivalent`, `equal`, `wider`, `subsumes`).
+`target.code` is the OMOP concept id (written as text); `equivalence`
+records confidence, and the library only accepts the strong values
+(`equivalent`, `equal`, `wider`, `subsumes`).
 
 To use it, the map itself becomes a table. A second ViewDefinition walks
 the resource's own structure — `group`, then `element`, then `target` —
@@ -161,23 +148,25 @@ and emits one row per mapping:
 ```
 
 The nesting mirrors the resource: for each group, for each element, take
-the first target we trust. The result is an ordinary lookup table:
-`source_system | concept_code → concept_id`.
+the first target we trust. The result is an ordinary lookup table —
+`source_system + concept_code → concept_id`.
 
-Now the medications ViewDefinition can use it. It reads
-`MedicationRequest`, keeps the drug code, and adds one column taken from
-the map:
+### Adding the join to `person`
+
+Now the person view can borrow a value from that table. We add one column
+(`gender_concept_id`, taken from the map) and one `joins` block that says
+how to match a patient to a mapping row. The birth-date columns from step
+1 are omitted here so the join stays in view:
 
 ```json
 {
-  "name": "omop_drug_exposure_medication_request",
-  "resource": "MedicationRequest",
+  "name": "omop_person",
+  "resource": "Patient",
   "select": [{
     "column": [
-      { "name": "drug_exposure_id",  "path": "id",                                        "type": "id" },
-      { "name": "person_id",         "path": "subject.reference.split('/').last()",        "type": "string" },
-      { "name": "drug_concept_id",   "path": "cm.concept_id",                              "type": "string" },
-      { "name": "drug_source_value", "path": "medication.ofType(CodeableConcept).coding.code.first()", "type": "code" }
+      { "name": "person_id",          "path": "id",       "type": "id" },
+      { "name": "gender_concept_id",  "path": "cm.concept_id", "type": "string" },
+      { "name": "gender_source_value", "path": "gender",  "type": "code" }
     ]
   }],
   "joins": [{
@@ -185,96 +174,63 @@ the map:
     "view": "omop_conceptmap",
     "type": "left",
     "on": [
-      { "path": "medication.ofType(CodeableConcept).coding.code.first()" },
-      { "path": "cm.concept_code" }
+      { "path": "gender" },
+      { "path": "cm.concept_code" },
+      { "path": "'http://hl7.org/fhir/administrative-gender'" },
+      { "path": "cm.source_system" }
     ]
   }]
 }
 ```
 
-`drug_concept_id` is simply `cm.concept_id` — a value the map supplies.
-The `on` list pairs up the expressions to match on: the resource's drug
-code on the left, the map's `concept_code` on the right.
+`gender_concept_id` is simply `cm.concept_id` — a value the map supplies.
+The `on` list pairs expressions up in order: the patient's `gender` against
+the map's `concept_code`, then the gender system against the map's
+`source_system`. Match on both, or you would map a drug code to a gender.
 
-:::note
 `joins` is a **fhir4ds extension**, not part of the SQL-on-FHIR
-specification. It is convenient for a library of related views, and the
-next step shows the standards-based alternative — a SQLQuery.
-:::
+specification — a convenience for composing a library of related views.
+The spec's own composition tool is the SQLQuery, described below.
 
-The result is 1,143 rows, one per prescription, with **zero unmapped
-drugs**:
+The result is a valid `person` row, with a real concept id:
 
-| drug_source_value | drug_concept_id |
-|---|---|
-| 106892 | 19009384 |
-| 106258 | 19008572 |
+| person_id | gender_concept_id | gender_source_value |
+|---|---|---|
+| `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | 8507 | `male` |
+| `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | 8532 | `female` |
+| `80402b87-2275-392f-bf13-7c25fed62f2c` | 8507 | `male` |
 
 Because the join is a *left* join, a code the map does not know keeps its
-row with an empty concept — visible rather than silently dropped.
+row with an empty concept id — visible rather than silently dropped. In
+this cohort every gender resolves.
 
-## Step 3 — One table from five kinds of resource
+## That is the whole recipe
 
-`drug_exposure` is not fed by one resource type. Prescriptions,
-dispensings, statements, administrations and immunizations are all drug
-exposures in OMOP, and each lives in its own FHIR resource.
+- **Reshape** each resource type with a ViewDefinition.
+- **Translate** codes with one shared ConceptMap, flattened once into a
+  lookup view and joined where needed.
+- **Compose** when one OMOP table spans several FHIR resource types.
+  `drug_exposure` is the classic case: prescriptions, dispensings,
+  statements, administrations and immunizations all count as drug
+  exposures in OMOP. A ViewDefinition sees only one resource type, so
+  SQL-on-FHIR wraps the five views in a **SQLQuery** — a FHIR `Library`
+  whose body is a `UNION ALL` over them.
 
-A ViewDefinition sees exactly one resource type, so SQL-on-FHIR answers
-this with a **SQLQuery**: a FHIR `Library` resource whose body is a SQL
-query over the views. This is the piece of SQL worth reading, because it
-*is* the artifact:
-
-```sql
-SELECT drug_exposure_id, person_id, drug_concept_id,
-       drug_exposure_start_date, drug_exposure_end_date,
-       drug_type_concept_id, drug_source_value, src
-FROM omop.drug_exposure__medication_request
-UNION ALL
-SELECT ... FROM omop.drug_exposure__medication_dispense
-UNION ALL
-SELECT ... FROM omop.drug_exposure__medication_statement
-UNION ALL
-SELECT ... FROM omop.drug_exposure__medication_administration
-UNION ALL
-SELECT ... FROM omop.drug_exposure__immunization
-ORDER BY drug_exposure_start_date, src;
-```
-
-The query is stored in the Library as base64 text, alongside the profile
-that marks it as a SQLQuery:
-
-```json
-{
-  "resourceType": "Library",
-  "status": "active",
-  "type": { "coding": [{ "code": "sql-query" }] },
-  "meta": { "profile": ["http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery"] },
-  "content": [{ "contentType": "application/sql", "data": "LS0gQ3Jvc3MtcmVzb3VyY2UgT01PUCBkcnVnX2V4cG9zdXJl..." }]
-}
-```
-
-`UNION ALL` — not `UNION` — because two dispensings of the same drug on
-the same day are two exposures, not one row. Each arm keeps its `src`
-column, so any row can be traced back to the FHIR resource type that
-produced it.
-
-| src | rows | unmapped |
-|---|---|---|
-| MedicationRequest | 1,143 | 0 |
-| Immunization | 318 | 0 |
-| **total** | **1,461** | **0** |
+The rest of the library — encounters, conditions, procedures,
+measurements, observations, deaths — is the same three moves with
+different columns.
 
 ## Try it
 
-The same three steps run below, entirely in your browser: Pyodide brings
-up FHIR4DS, DuckDB-WASM does the SQL, and the data comes straight from
-[Hugging Face](https://huggingface.co/datasets/fhir4ds/omop-demo). Pick a
-sample from the gallery — `OMOP person`, then the two medications samples
-— and watch the row counts and concept ids change as you switch.
+The tables above run live below, in your browser: Pyodide brings up
+FHIR4DS, DuckDB-WASM runs the queries, and the data comes straight from
+[Hugging Face](https://huggingface.co/datasets/fhir4ds/omop-demo). Start
+with **OMOP person**; the two medications samples show the SQLQuery
+composition if you want to see where it leads.
 
 :::info
 First boot takes 30–60 seconds (~30 MB); later visits are cached. Nothing
-is sent anywhere: the query runs on your machine.
+is sent anywhere — the query runs on your machine.
 :::
 
 <ViewingRoomWC height="85vh" suite="omop" popout />
