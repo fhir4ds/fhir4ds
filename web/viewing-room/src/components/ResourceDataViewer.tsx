@@ -217,6 +217,16 @@ function codingDisplay(resource: Record<string, any>): string {
   return coding?.display ?? coding?.code ?? resource.code?.text ?? "";
 }
 
+/**
+ * Children rendered per JSON node before the "show more" control appears.
+ * A ConceptMap can carry 100k+ elements; rendering them in one commit
+ * builds ~1M DOM nodes and freezes the tab. Paging every node keeps any
+ * expansion to ~CHILD_PAGE * nodes-per-entry.
+ */
+const CHILD_PAGE = 100;
+/** Offer a one-click "show all" only when the remainder is small enough. */
+const SHOW_ALL_MAX = 1000;
+
 function JsonTree({
   value,
   name,
@@ -226,7 +236,18 @@ function JsonTree({
   name?: string;
   expanded: boolean;
 }) {
-  if (value === null || typeof value !== "object") {
+  const isObject = value !== null && typeof value === "object";
+  const entries: Array<readonly [string, unknown]> = isObject
+    ? Array.isArray(value)
+      ? value.map((item, index) => [String(index), item] as const)
+      : Object.entries(value as Record<string, unknown>)
+    : [];
+  // Hook must run unconditionally (scalar rows early-return below).
+  const [visibleCount, setVisibleCount] = useState(() =>
+    Math.min(entries.length, CHILD_PAGE),
+  );
+
+  if (!isObject) {
     return (
       <div className="json-tree-row">
         {name && <span className="json-tree-key">{name}: </span>}
@@ -235,12 +256,11 @@ function JsonTree({
     );
   }
 
-  const entries = Array.isArray(value)
-    ? value.map((item, index) => [String(index), item] as const)
-    : Object.entries(value as Record<string, unknown>);
   const label = Array.isArray(value)
     ? `Array(${entries.length})`
     : `Object(${entries.length})`;
+  const shown = entries.slice(0, visibleCount);
+  const remaining = entries.length - shown.length;
 
   return (
     <details className="json-tree-node" open={expanded}>
@@ -250,9 +270,26 @@ function JsonTree({
         <span className="json-tree-kind">{label}</span>
       </summary>
       <div className="json-tree-children">
-        {entries.map(([key, child]) => (
+        {shown.map(([key, child]) => (
           <JsonTree key={key} name={key} value={child} expanded={expanded} />
         ))}
+        {remaining > 0 && (
+          <div className="json-tree-more">
+            <button
+              type="button"
+              onClick={() =>
+                setVisibleCount((n) => Math.min(entries.length, n + CHILD_PAGE))
+              }
+            >
+              Show next {Math.min(CHILD_PAGE, remaining)} ({remaining} more)
+            </button>
+            {remaining <= SHOW_ALL_MAX && (
+              <button type="button" onClick={() => setVisibleCount(entries.length)}>
+                Show all {entries.length}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </details>
   );
