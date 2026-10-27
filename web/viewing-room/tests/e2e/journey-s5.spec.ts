@@ -74,9 +74,11 @@ test("journey: Browse tab groups resources by type and highlights the VD target"
   // VD targets Patient -> the Patient group carries the highlight.
   await expect(group).toHaveClass(/resource-highlight/);
 
-  // The item's JSON tree is rendered expanded by default (Expand all);
-  // verify a resource's content is present.
+  // Resource-type groups start collapsed; open the group, then the item
+  // (JSON trees mount lazily so large datasets stay cheap to render).
+  await group.locator("summary").first().click();
   const item = group.locator(".resource-viewer-item").first();
+  await item.locator("summary").click();
   await expect(item).toContainText("resourceType");
   await expect(item.locator(".json-tree-key").filter({ hasText: "birthDate" })).toBeVisible();
 

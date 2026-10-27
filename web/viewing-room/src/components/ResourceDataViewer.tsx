@@ -17,7 +17,7 @@
  * resource labels/meta (coding display, effective dates), selection hooks.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 export interface ResourceDataViewerProps {
   resources: Array<Record<string, unknown>>;
@@ -25,9 +25,23 @@ export interface ResourceDataViewerProps {
   highlightTypes?: string[] | null;
 }
 
+/**
+ * Per-group initial render cap. Large datasets (e.g. the OMOP medication
+ * bundle: 4,356 resources including 2,843 ConceptMap chunks) must not
+ * eagerly build the whole list; the rest renders on demand.
+ */
+const INITIAL_RENDER_CAP = 200;
+
 export function ResourceDataViewer({ resources, highlightTypes = null }: ResourceDataViewerProps) {
   const [filterText, setFilterText] = useState("");
-  const [expanded, setExpanded] = useState(true);
+  // Groups start collapsed; "Expand all" / "Collapse all" forces every group
+  // open/closed via a generation bump (groups remain user-toggleable).
+  const [expandTarget, setExpandTarget] = useState(false);
+  const [expandGen, setExpandGen] = useState(0);
+  const toggleAll = () => {
+    setExpandTarget((v) => !v);
+    setExpandGen((g) => g + 1);
+  };
 
   const filteredResources = useMemo(() => {
     const query = filterText.trim().toLowerCase();
@@ -57,8 +71,8 @@ export function ResourceDataViewer({ resources, highlightTypes = null }: Resourc
           onChange={(e) => setFilterText(e.target.value)}
           aria-label="Filter resources"
         />
-        <button className="resource-viewer-tree-toggle" onClick={() => setExpanded((v) => !v)}>
-          {expanded ? "Collapse all" : "Expand all"}
+        <button className="resource-viewer-tree-toggle" onClick={toggleAll}>
+          {expandTarget ? "Collapse all" : "Expand all"}
         </button>
       </div>
 
@@ -75,37 +89,14 @@ export function ResourceDataViewer({ resources, highlightTypes = null }: Resourc
             </div>
             <div className="resource-viewer-tree">
               {resourceGroups.map(([type, items]) => (
-                <details
-                  className={`resource-viewer-group${highlightTypes?.includes(type) ? " resource-highlight" : ""}`}
+                <ResourceGroup
                   key={type}
-                  open={expanded}
-                  data-testid={`resource-group-${type}`}
-                >
-                  <summary>
-                    <span className="tree-caret" />
-                    <span className="resource-viewer-type">{type}</span>
-                    <span className="resource-viewer-count">{items.length}</span>
-                  </summary>
-                  <div className="resource-viewer-list">
-                    {items.map((resource, index) => {
-                      const key = `${resource.resourceType ?? "Unknown"}-${resource.id ?? index}`;
-                      return (
-                        <details
-                          className="resource-viewer-item"
-                          key={key}
-                          open={expanded}
-                        >
-                          <summary>
-                            <span className="tree-caret" />
-                            <span className="resource-viewer-title">{resourceLabel(resource)}</span>
-                            <span className="resource-viewer-meta">{resourceMeta(resource)}</span>
-                          </summary>
-                          <JsonTree value={resource} expanded={expanded} />
-                        </details>
-                      );
-                    })}
-                  </div>
-                </details>
+                  type={type}
+                  items={items}
+                  expandTarget={expandTarget}
+                  expandGen={expandGen}
+                  highlighted={Boolean(highlightTypes?.includes(type))}
+                />
               ))}
               {resourceGroups.length === 0 && (
                 <div className="resource-viewer-empty">No resources match "{filterText}".</div>
@@ -115,6 +106,85 @@ export function ResourceDataViewer({ resources, highlightTypes = null }: Resourc
         )}
       </div>
     </div>
+  );
+}
+
+function ResourceGroup({
+  type,
+  items,
+  expandTarget,
+  expandGen,
+  highlighted,
+}: {
+  type: string;
+  items: Array<Record<string, unknown>>;
+  expandTarget: boolean;
+  expandGen: number;
+  highlighted: boolean;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  // Uncontrolled open state kept in sync with the DOM `toggle` event so
+  // manual clicks and the global Expand/Collapse-all button coexist.
+  const [open, setOpen] = useState(expandTarget);
+  const lastGen = useRef(expandGen);
+  if (lastGen.current !== expandGen) {
+    lastGen.current = expandGen;
+    if (open !== expandTarget) setOpen(expandTarget);
+  }
+  const visible = showAll ? items : items.slice(0, INITIAL_RENDER_CAP);
+  return (
+    <details
+      className={`resource-viewer-group${highlighted ? " resource-highlight" : ""}`}
+      open={open}
+      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+      data-testid={`resource-group-${type}`}
+    >
+      <summary>
+        <span className="tree-caret" />
+        <span className="resource-viewer-type">{type}</span>
+        <span className="resource-viewer-count">{items.length}</span>
+      </summary>
+      <div className="resource-viewer-list">
+        {visible.map((resource, index) => {
+          const key = `${resource.resourceType ?? "Unknown"}-${resource.id ?? index}`;
+          return <ResourceItem key={key} resource={resource} />;
+        })}
+        {!showAll && items.length > INITIAL_RENDER_CAP && (
+          <button
+            type="button"
+            className="resource-viewer-show-more"
+            onClick={() => setShowAll(true)}
+          >
+            Show all {items.length} {type} resources
+          </button>
+        )}
+      </div>
+    </details>
+  );
+}
+
+/**
+ * One resource row. The JSON tree mounts ONLY when the row is opened —
+ * a collapsed <details> still mounts its children, so rendering every
+ * resource's tree eagerly built ~1.9M DOM nodes for the 4,356-resource
+ * medication bundle and blocked the main thread for tens of seconds.
+ */
+function ResourceItem({ resource }: { resource: Record<string, unknown> }) {
+  // Uncontrolled: the browser owns the open attribute; state only gates
+  // mounting the (potentially large) JSON tree.
+  const [mounted, setMounted] = useState(false);
+  return (
+    <details
+      className="resource-viewer-item"
+      onToggle={(e) => setMounted((e.currentTarget as HTMLDetailsElement).open)}
+    >
+      <summary>
+        <span className="tree-caret" />
+        <span className="resource-viewer-title">{resourceLabel(resource)}</span>
+        <span className="resource-viewer-meta">{resourceMeta(resource)}</span>
+      </summary>
+      {mounted ? <JsonTree value={resource} expanded /> : null}
+    </details>
   );
 }
 
