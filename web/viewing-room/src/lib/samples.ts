@@ -97,7 +97,7 @@ export const SAMPLES: Sample[] = [
     description: "OMOP CDM v5.5 person over a real Synthea cohort — gender concept join, birth-date splits.",
     vdUrl: "samples/omop-patient/viewdefinition.json",
     resourcesUrl: "samples/omop-patient/resources.ndjson",
-    remoteResources: "omop/synthea-25/patient-resources.ndjson",
+    remoteResources: "patient-resources.ndjson",
   },
   {
     slug: "omop-encounters",
@@ -106,7 +106,7 @@ export const SAMPLES: Sample[] = [
     description: "OMOP visit_occurrence over Synthea encounters — visit classes (inpatient/outpatient/emergency) resolve through the ConceptMap view.",
     vdUrl: "samples/omop-encounters/viewdefinition.json",
     resourcesUrl: "samples/omop-encounters/resources.ndjson",
-    remoteResources: "omop/synthea-25/encounter-resources.ndjson",
+    remoteResources: "encounter-resources.ndjson",
   },
   {
     slug: "omop-drug-exposure",
@@ -115,7 +115,7 @@ export const SAMPLES: Sample[] = [
     description: "drug_exposure from MedicationRequest alone — a single-resource ViewDefinition with a live ConceptMap view join.",
     vdUrl: "samples/omop-drug-exposure/viewdefinition.json",
     resourcesUrl: "samples/omop-drug-exposure/resources.ndjson",
-    remoteResources: "omop/synthea-25/medication-resources.ndjson",
+    remoteResources: "medication-resources.ndjson",
   },
   {
     slug: "omop-drug-exposure-sqlquery",
@@ -124,7 +124,7 @@ export const SAMPLES: Sample[] = [
     description: "Cross-resource drug_exposure via a SQLQuery Library — MedicationRequest, Dispense, Statement, Administration and Immunization unioned over the OMOP views (composed live on every run).",
     vdUrl: "samples/omop-drug-exposure-sqlquery/viewdefinition.json",
     resourcesUrl: "samples/omop-drug-exposure-sqlquery/resources.ndjson",
-    remoteResources: "omop/synthea-25/medication-resources.ndjson",
+    remoteResources: "medication-resources.ndjson",
   },
 ];
 

@@ -15,7 +15,7 @@ const HF_BASE = "https://huggingface.co/datasets/fhir4ds/omop-demo/resolve/main"
 test.setTimeout(300_000);
 
 test("journey: OMOP samples load the full Hugging Face datasets by default", async ({ page, request }) => {
-  const probe = await request.get(`${HF_BASE}/omop/synthea-25/patient-resources.ndjson`, {
+  const probe = await request.get(`${HF_BASE}/patient-resources.ndjson`, {
     timeout: 30_000,
   }).catch(() => null);
   if (!probe || !probe.ok()) {
@@ -29,7 +29,7 @@ test("journey: OMOP samples load the full Hugging Face datasets by default", asy
   const table = page.getByTestId("output-table");
   await expect(table.locator("tbody tr")).toHaveCount(25, { timeout: 120_000 });
 
-  // Switch to the medications ViewDefinition sample (full RxNorm map, ~21MB).
+  // Switch to the medications ViewDefinition sample (SCD/SBD RxNorm map).
   await page.locator("header select").selectOption("omop-drug-exposure");
   await expect(table.locator("tbody tr")).toHaveCount(1170, { timeout: 240_000 });
   // Concepts resolved through the full standard RxNorm ConceptMap.
@@ -41,5 +41,5 @@ test("journey: OMOP samples load the full Hugging Face datasets by default", asy
       return v && v !== "null" && v !== "0";
     }).length;
   });
-  expect(resolved).toBeGreaterThan(1000);  // 71k subset: ~1024/1143
+  expect(resolved).toBeGreaterThan(1000);  // SCD/SBD subset: ~1024/1143
 });

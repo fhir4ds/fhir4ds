@@ -38,7 +38,7 @@ test("viewing-room example page embeds and boots the component", async ({ page }
 
 test("OMOP demo page embeds the suite-filtered component", async ({ page, request }) => {
   const probe = await request
-    .get("https://huggingface.co/datasets/fhir4ds/omop-demo/resolve/main/omop/synthea-25/patient-resources.ndjson", {
+    .get("https://huggingface.co/datasets/fhir4ds/omop-demo/resolve/main/patient-resources.ndjson", {
       timeout: 30_000,
     })
     .catch(() => null);
