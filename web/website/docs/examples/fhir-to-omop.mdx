@@ -2,7 +2,7 @@
 id: fhir-to-omop
 title: FHIR → OMOP
 sidebar_label: FHIR → OMOP
-description: Build one OMOP table from FHIR, end to end — flatten a Patient with a ViewDefinition and translate its gender code into an OMOP concept id with a FHIR ConceptMap.
+description: Build one OMOP table from FHIR, end to end — reshape a Patient with a ViewDefinition, flatten a ConceptMap into a lookup table, and join them with a SQLQuery.
 ---
 
 import ViewingRoomWC from '@site/src/components/ViewingRoomWC';
@@ -10,12 +10,12 @@ import ViewingRoomWC from '@site/src/components/ViewingRoomWC';
 # FHIR → OMOP
 
 A step-by-step walkthrough that builds **one** OMOP table from FHIR, end
-to end: the `person` table, from a 25-patient cohort. It is deliberately small — one resource
-type, a handful of columns, one code to translate. Every other OMOP table
-is the same recipe with more columns.
+to end: the `person` table, from a 25-patient cohort. It is deliberately
+small — one resource type, a handful of columns, one code to translate.
+Every other OMOP table is the same recipe with more columns.
 
-You do not need to know FHIR beyond "a resource is a JSON document", and
-there is no SQL to read.
+Two ViewDefinitions reshape, one SQLQuery composes. All three are
+standard SQL-on-FHIR artifacts, plus a ConceptMap, which is plain FHIR.
 
 ```mermaid
 flowchart LR
@@ -30,13 +30,15 @@ flowchart LR
 
     Patient --> PersonVD["person<br/>ViewDefinition"]
     ConceptMap --> MapVD["concept map<br/>ViewDefinition"]
-    MapVD -->|join| PersonVD
-    PersonVD --> Person
+    PersonVD --> Source[("person_source")]
+    MapVD --> SQ["person<br/>SQLQuery"]
+    Source --> SQ
+    SQ --> Person
 
     classDef default fill:#1e293b,stroke:#38bdf8,color:#cbd5e1,stroke-width:1px
     classDef highlight fill:#38bdf8,stroke:#0ea5e9,color:#0f172a,stroke-width:2px
 
-    class Patient,ConceptMap,PersonVD,MapVD default
+    class Patient,ConceptMap,PersonVD,MapVD,Source,SQ default
     class Person highlight
 
     linkStyle default stroke:#fff,stroke-width:1px
@@ -72,7 +74,7 @@ is a small JSON file, and it is the whole of the reshaping step:
 
 ```json
 {
-  "name": "omop_person",
+  "name": "omop_person_source",
   "resource": "Patient",
   "select": [
     {
@@ -109,11 +111,8 @@ On our cohort that gives 25 rows — one per patient:
 | `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | 1967 | `female` |
 | `80402b87-2275-392f-bf13-7c25fed62f2c` | `80402b87-2275-392f-bf13-7c25fed62f2c` | 1966 | `male` |
 
-Two columns carry the same value on purpose. OMOP separates the **key**
-(`person_id`) from the **source id** (`person_source_value`, a string), so
-the readable id is never lost when the key becomes a number — we come back
-to that at the end. And `gender_source_value` is still the FHIR code; OMOP
-wants `8507` or `8532`.
+This is the reshape only — the ids are still the FHIR strings, and the
+last column is still the FHIR code. OMOP wants `8507` or `8532`.
 
 ## Step 2 — Translate: codes into concept ids
 
@@ -176,113 +175,67 @@ The nesting mirrors the resource: for each group, for each element, take
 the first target we trust. The result is an ordinary lookup table —
 `source_system + concept_code → concept_id`.
 
-### Adding the join to `person`
+## Step 3 — Compose: join the two in a SQLQuery
 
-Now the person view can borrow a value from that table. We add one column
-(`gender_concept_id`, taken from the map) and one `joins` block that says
-how to match a patient to a mapping row. The birth-date columns from step
-1 are omitted here so the join stays in view:
+A ViewDefinition sees exactly one resource type, so it cannot join — that
+is what a **SQLQuery** is for. It is a FHIR `Library` resource of type
+`sql-query` whose body is ordinary SQL over the view names:
 
 ```json
 {
-  "name": "omop_person",
-  "resource": "Patient",
-  "select": [{
-    "column": [
-      { "name": "person_id",           "path": "id",             "type": "id" },
-      { "name": "gender_concept_id",   "path": "cm.concept_id",  "type": "string" },
-      { "name": "person_source_value", "path": "id",             "type": "id" },
-      { "name": "gender_source_value", "path": "gender",         "type": "code" }
-    ]
-  }],
-  "joins": [{
-    "name": "cm",
-    "view": "omop_conceptmap",
-    "type": "left",
-    "on": [
-      { "path": "gender" },
-      { "path": "cm.concept_code" },
-      { "path": "'http://hl7.org/fhir/administrative-gender'" },
-      { "path": "cm.source_system" }
-    ]
-  }]
+  "resourceType": "Library",
+  "status": "active",
+  "type": { "coding": [{ "code": "sql-query" }] },
+  "meta": { "profile": ["http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery"] },
+  "content": [{ "contentType": "application/sql", "data": "LS0gT01PUCBwZXJzb246IHRoZSByYXcgcmVzaGFwZSBqb2luZWQg..." }]
 }
 ```
 
-`gender_concept_id` is simply `cm.concept_id` — a value the map supplies.
-The `on` list pairs expressions up in order: the patient's `gender` against
-the map's `concept_code`, then the gender system against the map's
-`source_system`. Match on both, or you would map a drug code to a gender.
+`content.data` is the query, base64 encoded. Decoded, it is the whole of
+the `person` table:
 
-`joins` is a **fhir4ds extension**, not part of the SQL-on-FHIR
-specification — a convenience for composing a library of related views.
-The spec's own composition tool is the SQLQuery, described below.
+```sql
+SELECT
+    CAST(hash(p.person_id) & 9223372036854775807 AS BIGINT) AS person_id,
+    COALESCE(TRY_CAST(cm.concept_id AS BIGINT), 0)          AS gender_concept_id,
+    p.year_of_birth,
+    p.month_of_birth,
+    p.day_of_birth,
+    p.birth_datetime,
+    p.person_source_value,
+    p.gender_source_value
+FROM omop.person_source AS p
+LEFT JOIN omop.omop_conceptmap AS cm
+       ON p.gender_source_value = cm.concept_code
+      AND cm.source_system = 'http://hl7.org/fhir/administrative-gender';
+```
 
-The result is a valid `person` row, with a real concept id:
+The join matches on **both** the code and the source system — without the
+second condition a drug code could match a gender. `person_source_value`
+keeps the FHIR id, so the integer `person_id` never hides the source
+record.
+
+The result is a finished `person` row:
 
 | person_id | person_source_value | gender_concept_id | gender_source_value |
 |---|---|---|---|
-| `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | 8507 | `male` |
-| `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | 8532 | `female` |
-| `80402b87-2275-392f-bf13-7c25fed62f2c` | `80402b87-2275-392f-bf13-7c25fed62f2c` | 8507 | `male` |
+| 1170511711334034253 | `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | 8507 | `male` |
+| 3325726062766785590 | `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | 8532 | `female` |
+| 1074285768011624945 | `80402b87-2275-392f-bf13-7c25fed62f2c` | 8507 | `male` |
 
 Because the join is a *left* join, a code the map does not know keeps its
 row with an empty concept id — visible rather than silently dropped. In
 this cohort every gender resolves.
 
-## Step 3 — Key: strings become integers
-
-OMOP's `person_id` is a number, and the last table still shows the FHIR
-id in both columns. One more step fixes that: the composition turns each
-natural key into a **stable integer** and leaves the string where it
-belongs.
-
-This is the one step that is **not** a ViewDefinition. FHIRPath — the
-expression language inside a ViewDefinition — has no hash function, and
-adding one would make the file work only in fhir4ds. Instead the keying is one
-expression wrapped around the view's output —
-`CAST(hash(person_id) & 9223372036854775807 AS BIGINT)` — so the view file
-stays portable and the keying is visible in the query that actually runs.
-
-A **SQLQuery** could do this too — its body is ordinary SQL, so a hash is
-just a function call — but the library applies the projection once for all
-tables, so the keys can never drift between them.
-
-The demo below runs that same projection (the **SQL** tab shows the
-wrapper), which is why its `person_id` is an integer while
-`person_source_value` stays the FHIR id.
-
-| person_id | person_source_value | gender_concept_id |
-|---|---|---|
-| `1170511711334034253` | `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | 8507 |
-| `3325726062766785590` | `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | 8532 |
-| `1074285768011624945` | `80402b87-2275-392f-bf13-7c25fed62f2c` | 8507 |
-
-Three properties make this safe:
-
-- **Stable.** The same source id always produces the same key, so
-  reloading the data does not renumber patients or break saved joins.
-- **Unique enough.** 63 bits of hash; a cohort would need billions of
-  patients before a collision was plausible.
-- **Reversible in practice.** `person_source_value` keeps the original
-  id, so you can always walk back to the source record.
-
-Concept ids are never hashed — `8507` is the vocabulary's own identifier
-and must stay exactly that.
-
 ## That is the whole recipe
 
 - **Reshape** each resource type with a ViewDefinition.
-- **Translate** codes with one shared ConceptMap, flattened once into a
-  lookup view and joined where needed.
-- **Key** the table: stable integer ids for people and visits, the source
-  id alongside them.
-- **Compose** when one OMOP table spans several FHIR resource types.
-  `drug_exposure` is the classic case: prescriptions, dispensings,
-  statements, administrations and immunizations all count as drug
-  exposures in OMOP. A ViewDefinition sees only one resource type, so
-  SQL-on-FHIR wraps the five views in a **SQLQuery** — a FHIR `Library`
-  whose body is a `UNION ALL` over them.
+- **Translate** codes with one shared ConceptMap, flattened once by
+  another ViewDefinition into a lookup table.
+- **Compose** with a SQLQuery: joins, unions and the integer ids all live
+  in the SQL, so every artifact stays portable. `drug_exposure` is the
+  classic composition: prescriptions, dispensings, statements,
+  administrations and immunizations unioned into one table.
 
 The rest of the library — encounters, conditions, procedures,
 measurements, observations, deaths — is the same three moves with
@@ -290,12 +243,11 @@ different columns.
 
 ## Try it
 
-The tables above run live below, in your browser: Pyodide brings up
-FHIR4DS, DuckDB-WASM runs the queries, and the data comes straight from
+Both halves run live below, in your browser: Pyodide brings up FHIR4DS,
+DuckDB-WASM runs the queries, and the data comes straight from
 [Hugging Face](https://huggingface.co/datasets/fhir4ds/omop-demo). Start
-with **OMOP person** — its `person_id` is the hashed key from step 3, and
-`person_source_value` is the original FHIR id. The two medications samples
-show the SQLQuery composition if you want to see where it leads.
+with **OMOP person (view)** to see the reshape, then **OMOP person
+(SQLQuery)** for the finished table.
 
 :::info
 First boot takes 30–60 seconds (~30 MB); later visits are cached. Nothing
@@ -311,6 +263,6 @@ is sent anywhere — the query runs on your machine.
 - [ViewDefinition](/docs/user-guide/modeling/viewdef) — the reshaping
   specification in depth.
 - [The view library](https://github.com/fhir4ds/fhir4ds/tree/main/fhir4ds/viewdef/resources/omop)
-  — every OMOP ViewDefinition and the composition manifest, in the repo.
+  — every OMOP ViewDefinition and SQLQuery, plus the composition manifest.
 - Notebook: `docs/notebooks/omop-mapping.ipynb` — the same steps in
   Python, cell by cell.

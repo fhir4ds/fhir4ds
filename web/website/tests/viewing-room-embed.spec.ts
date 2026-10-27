@@ -57,7 +57,7 @@ test("FHIR to OMOP page teaches the three artifacts", async ({ page }) => {
     "Two ways to describe the same person",
     "Step 1 — Reshape: documents into columns",
     "Step 2 — Translate: codes into concept ids",
-    "Step 3 — Key: strings become integers",
+    "Step 3 — Compose: join the two in a SQLQuery",
     "That is the whole recipe",
     "Try it",
   ]) {
@@ -71,11 +71,13 @@ test("FHIR to OMOP page teaches the three artifacts", async ({ page }) => {
   // No SQL at all: the page is three JSON artifacts plus prose.
   await expect(page.locator("article")).not.toContainText("fhirpath_text(");
   // (Scope to MDX code blocks: the embedded app brings its own <pre>.)
-  // Four JSON artifacts and no SQL fences (the mermaid block renders as an
-  // svg outside the code-block wrapper).
-  await expect(page.locator("article .theme-code-block", { hasText: "UNION ALL" })).toHaveCount(0);
-  await expect(page.locator("article .theme-code-block")).toHaveCount(4);
-  // The integer-key step keeps the source id visible.
+  // Three ViewDefinition/ConceptMap/Library JSON artifacts plus the
+  // SQLQuery body (the mermaid block renders as an svg, not a code block).
+  await expect(page.locator("article .theme-code-block")).toHaveCount(5);
+  await expect(
+    page.locator("article .theme-code-block", { hasText: "LEFT JOIN omop.omop_conceptmap" }),
+  ).toHaveCount(1);
+  // The composed table keeps the source id visible next to the integer key.
   await expect(page.locator("article")).toContainText("person_source_value");
 
   // The live demo is embedded at the end.
@@ -97,7 +99,7 @@ test("FHIR to OMOP page boots the embedded OMOP suite", async ({ page, request }
     timeout: 120_000,
   });
   // suite="omop": OMOP-only gallery + the 25-patient cohort as default.
-  await expect(wc.locator("header select option")).toHaveCount(4, { timeout: 60_000 });
+  await expect(wc.locator("header select option")).toHaveCount(5, { timeout: 60_000 });
   await expect(wc.locator('[data-testid="output-table"] tbody tr')).toHaveCount(25, {
     timeout: 180_000,
   });

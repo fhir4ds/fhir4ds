@@ -19,11 +19,14 @@ monolithic FHIR ConceptMap resource          (the standard converter contract �
   │                                           one ConceptMap, groups per source system)
   ▼  conceptmap ViewDefinition (flatten)
 omop.omop_conceptmap virtual table          (vocabulary_id | concept_code | concept_id ...)
-  ▲
-  └── Join.view ◀── every event ViewDefinition joins it ON (source system, code)
-        │
+  ▲                         ▲
+  │                         └── SQLQuery (omop.person): joins the person
+  │                             reshape and assigns the integer key
+  │                             (spec-native composition)
+  └── Join.view ◀── event ViewDefinitions join it ON (source system, code)
+        │           (fhir4ds extension — being migrated to SQLQuery)
         ▼
-omop.person / visit_occurrence / condition_occurrence / ... (13 views, composed)
+omop.visit_occurrence / condition_occurrence / ... (13 views, composed)
 ```
 
 The chain is spec-grounded: SQL-on-FHIR composition semantics state that
@@ -68,8 +71,13 @@ con.execute("SELECT * FROM omop.person").df()
 `create_omop_views` composes the whole `omop.*` schema:
 
 - **Dependency inference**: each view's `Join.view` targets are resolved
-  to their source ViewDefinitions and materialized in topological order
-  (join targets first; cycles and unknown targets are typed errors).
+  to their source ViewDefinitions and materialized in topological order,
+  and each SQLQuery is materialized after the `<schema>.<view>` names its
+  SQL reads (cycles and unknown references are typed errors).
+- **SQLQuery steps**: `manifest.sql_queries` maps a table to a FHIR
+  `Library` of type `sql-query` under `sqlqueries/`. `person` is one:
+  a plain reshape ViewDefinition plus a SQLQuery that performs the join
+  and key assignment, so nothing in that path needs a fhir4ds extension.
 - **Unions**: `drug_exposure` materializes its four arms
   (MedicationRequest / MedicationStatement / MedicationAdministration /
   Immunization) then a table-level `UNION ALL`.
