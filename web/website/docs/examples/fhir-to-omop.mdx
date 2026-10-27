@@ -29,14 +29,14 @@ flowchart LR
     end
 
     Patient --> PersonVD["person<br/>ViewDefinition"]
-    ConceptMap --> MapVD["concept map<br/>ViewDefinition"] --> Map[("code → concept")]
-    Map --> PersonVD
+    ConceptMap --> MapVD["concept map<br/>ViewDefinition"]
+    MapVD -->|join| PersonVD
     PersonVD --> Person
 
     classDef default fill:#1e293b,stroke:#38bdf8,color:#cbd5e1,stroke-width:1px
     classDef highlight fill:#38bdf8,stroke:#0ea5e9,color:#0f172a,stroke-width:2px
 
-    class Patient,ConceptMap,PersonVD,MapVD,Map default
+    class Patient,ConceptMap,PersonVD,MapVD default
     class Person highlight
 
     linkStyle default stroke:#fff,stroke-width:1px
@@ -233,9 +233,24 @@ this cohort every gender resolves.
 ## Step 3 — Key: strings become integers
 
 OMOP's `person_id` is a number, and the last table still shows the FHIR
-id in both columns. One more step fixes that: the library's composition
-turns each natural key into a **stable integer** and leaves the string
-where it belongs.
+id in both columns. One more step fixes that: the composition turns each
+natural key into a **stable integer** and leaves the string where it
+belongs.
+
+This is the one step that is **not** a ViewDefinition. FHIRPath — the
+expression language inside a ViewDefinition — has no hash function, and
+adding one would make the file work only in fhir4ds. Instead the keying is one
+expression wrapped around the view's output —
+`CAST(hash(person_id) & 9223372036854775807 AS BIGINT)` — so the view file
+stays portable and the keying is visible in the query that actually runs.
+
+A **SQLQuery** could do this too — its body is ordinary SQL, so a hash is
+just a function call — but the library applies the projection once for all
+tables, so the keys can never drift between them.
+
+The demo below runs that same projection (the **SQL** tab shows the
+wrapper), which is why its `person_id` is an integer while
+`person_source_value` stays the FHIR id.
 
 | person_id | person_source_value | gender_concept_id |
 |---|---|---|
