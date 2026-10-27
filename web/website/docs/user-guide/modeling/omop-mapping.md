@@ -133,11 +133,14 @@ The full standard RxNorm set (157k concepts) cannot be shipped as one
 monolithic ConceptMap: DuckDB (and DuckDB-WASM) exhaust memory unnesting
 JSON arrays that large. The dataset ships one thin ConceptMap **per 20
 elements**; the conceptmap ViewDefinition flattens them back into the
-long mapping table. The shipped subset covers the standard classes real
-medication data uses — Ingredient, Clinical Drug, Branded Drug (71,444
-concepts, ~90% of the cohort's medication requests resolve; the rest
-surface concept 0 with their source values, the OMOP no-map
-convention). Extend by appending more chunked ConceptMap lines.
+long mapping table. The shipped subset covers the two standard classes
+real medication data uses — Clinical Drug (SCD) and Branded Drug (SBD):
+56,836 mappings, ~90% of the cohort's medication requests resolve; the
+rest (packs and quantified forms outside SCD/SBD) surface concept 0 with
+their source values, the OMOP no-map convention. Element `display`
+fields are omitted (not needed for mapping); `equivalence` is retained
+because FHIR requires it. Extend by appending more chunked ConceptMap
+lines.
 
 ## Try it
 
