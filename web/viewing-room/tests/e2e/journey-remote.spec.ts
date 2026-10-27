@@ -4,8 +4,8 @@
  * dataset is unreachable (environment availability, not a behavior skip).
  *
  * Proves: HF serves the NDJSON bundles with CORS (browser + DuckDB-WASM
- * fetch them directly), the 25-patient cohort renders, and the full
- * standard-RxNorm ConceptMap resolves medication concepts in-browser.
+ * fetch them directly), the 25-patient cohort renders, and the single
+ * ConceptMap resolves every coded medication concept in-browser.
  */
 
 import { test, expect } from "@playwright/test";
@@ -29,9 +29,9 @@ test("journey: OMOP samples load the full Hugging Face datasets by default", asy
   const table = page.getByTestId("output-table");
   await expect(table.locator("tbody tr")).toHaveCount(25, { timeout: 120_000 });
 
-  // Switch to the medications ViewDefinition sample (SCD/SBD RxNorm map).
+  // Switch to the medications ViewDefinition sample (single RxNorm+CVX map).
   await page.locator("header select").selectOption("omop-drug-exposure");
-  await expect(table.locator("tbody tr")).toHaveCount(1170, { timeout: 240_000 });
+  await expect(table.locator("tbody tr")).toHaveCount(1143, { timeout: 240_000 });
   // Concepts resolved through the full standard RxNorm ConceptMap.
   const resolved = await table.locator("tbody tr").evaluateAll((rows) => {
     return rows.filter((r) => {
@@ -41,5 +41,5 @@ test("journey: OMOP samples load the full Hugging Face datasets by default", asy
       return v && v !== "null" && v !== "0";
     }).length;
   });
-  expect(resolved).toBeGreaterThan(1000);  // SCD/SBD subset: ~1024/1143
+  expect(resolved).toBe(1143);  // 100% of coded rows resolve through the map
 });

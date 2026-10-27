@@ -108,7 +108,7 @@ cohort (MIT; seed-pinned) — hosted on Hugging Face:
 
 - [fhir4ds/omop-demo](https://huggingface.co/datasets/fhir4ds/omop-demo)
   — NDJSON bundles (patients, encounters, medications + immunizations)
-  and the RxNorm ConceptMap.
+  and one ConceptMap carrying every vocabulary mapping.
 
 Hugging Face serves dataset files with CORS enabled, so the browser
 (including DuckDB-WASM) fetches them directly — no server, no token
@@ -120,27 +120,40 @@ Four samples cover the two-layer story:
 |---|---|---|
 | OMOP person | ViewDefinition | 25 |
 | OMOP encounters | ViewDefinition | 1,284 |
-| OMOP medications | ViewDefinition (MedicationRequest arm) | 1,170 |
-| OMOP medications | SQLQuery (5-arm union, composed live) | 1,488 |
+| OMOP medications | ViewDefinition (MedicationRequest arm) | 1,143 |
+| OMOP medications | SQLQuery (5-arm union, composed live) | 1,461 |
 
 Append `?data=local` to the app URL to run against the compact
 committed fixtures instead (8-patient slice + a 36-code RxNorm slice) —
 this is what the e2e suite uses, so tests stay offline and fast.
 
-### ConceptMap transport: chunked resources
+### The ConceptMap: one resource, every vocabulary
 
-The full standard RxNorm set (157k concepts) cannot be shipped as one
-monolithic ConceptMap: DuckDB (and DuckDB-WASM) exhaust memory unnesting
-JSON arrays that large. The dataset ships one thin ConceptMap **per 20
-elements**; the conceptmap ViewDefinition flattens them back into the
-long mapping table. The shipped subset covers the two standard classes
-real medication data uses — Clinical Drug (SCD) and Branded Drug (SBD):
-56,836 mappings, ~90% of the cohort's medication requests resolve; the
-rest (packs and quantified forms outside SCD/SBD) surface concept 0 with
-their source values, the OMOP no-map convention. Element `display`
-fields are omitted (not needed for mapping); `equivalence` is retained
-because FHIR requires it. Extend by appending more chunked ConceptMap
-lines.
+A single ConceptMap resource carries all mappings, with one `group` per
+source system:
+
+| group source | mappings | covers |
+|---|---|---|
+| `.../rxnorm` | 108,421 | product-level RxNorm classes: Clinical Drug (SCD), Branded Drug (SBD), Quant Clinical Drug (SCDC), Quant Branded Drug, Clinical Pack (GPCK), Branded Pack (BPCK), Clinical Drug Comp, Branded Drug Comp |
+| `.../sid/cvx` | 255 | immunization vaccine codes |
+| `administrative-gender`, `v3-ActCode`, `condition-category` | 7 | person/encounter/condition supplements |
+
+Every coded row in the cohort resolves — 54/54 RxCUIs (1,143/1,143
+mentions) and 13/13 CVX codes. 27 MedicationRequests in the raw Synthea
+output carry no medication code at all (`medicationCodeableConcept` is
+null); they are not shipped, since a drug exposure with no drug has
+nothing to map.
+
+Element `display` fields are omitted (not needed for mapping);
+`equivalence` is retained because FHIR requires it.
+
+**Chunking is no longer needed.** Earlier revisions of this dataset
+chunked the map at 20 elements per resource because the ViewDefinition
+engine's `forEach` lowering was O(N × payload) and exhausted memory on
+large arrays. That lowering now uses a pipelined unnest (compute the
+array once per parent row, then unnest), so a single 108k-element
+ConceptMap executes in well under a second and 100k-element maps are the
+recommended shape.
 
 ## Try it
 

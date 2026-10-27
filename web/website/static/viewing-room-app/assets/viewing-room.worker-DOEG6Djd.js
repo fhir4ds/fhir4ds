@@ -84,7 +84,7 @@ except Exception as exc:
     diag = diagnostic_from_exception(exc, context="flatten_view")
     result = {"ok": False, "diagnostics": [diag.to_dict()]}
 json.dumps(result)
-`);return JSON.parse(t)}async function C(){if(S)return{id:0,type:"boot",ok:!0};const e=Date.now();try{const{loadPyodide:t}=await import(`${E}pyodide.mjs`);n=await t({indexURL:E}),await n.loadPackage(["micropip","duckdb","orjson","pyarrow"]);const o=new URL("./fhir4ds_v2-0.0.19-py3-none-any.whl?v=7b0277d8930a",import.meta.url).href;n.globals.set("__wheel_url__",o),await n.runPythonAsync(`
+`);return JSON.parse(t)}async function C(){if(S)return{id:0,type:"boot",ok:!0};const e=Date.now();try{const{loadPyodide:t}=await import(`${E}pyodide.mjs`);n=await t({indexURL:E}),await n.loadPackage(["micropip","duckdb","orjson","pyarrow"]);const o=new URL("./fhir4ds_v2-0.0.19-py3-none-any.whl?v=90c6f25847f6",import.meta.url).href;n.globals.set("__wheel_url__",o),await n.runPythonAsync(`
 import micropip, json
 
 await micropip.install([
