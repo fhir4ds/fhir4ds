@@ -11,7 +11,7 @@ hide_table_of_contents: true
 FHIR R4 mapped to **OMOP CDM v5.5**, live in your browser. This is the
 Viewing Room filtered to its OMOP sample suite: a real 25-patient
 [Synthea](https://synthetichealth.github.io/synthea/) cohort with a
-71k-concept RxNorm vocabulary, composed through a ViewDefinition library
+108,683-mapping ConceptMap, composed through a ViewDefinition library
 and resolved at query time through ConceptMap view joins.
 
 :::info
@@ -45,11 +45,15 @@ import ViewingRoomWC from '@site/src/components/ViewingRoomWC';
 
 ## How it works
 
-`Athena CONCEPT` → FHIR **ConceptMap resources** (chunked, standard
-RxNorm classes) → a **conceptmap ViewDefinition** that flattens them into
+`Athena CONCEPT` → one FHIR **ConceptMap resource** (every product-level
+RxNorm class plus CVX) → a **conceptmap ViewDefinition** that flattens them into
 a virtual mapping table → every OMOP table ViewDefinition **joins** that
 view on `(source system, code)`. Swap the ConceptMap to swap
 vocabularies; no ViewDefinition is regenerated.
+
+New to the mapping? [OMOP, Step by Step](/docs/examples/omop-step-by-step)
+builds the person view, the ConceptMap join and the SQLQuery union from
+scratch, with the SQL each step generates.
 
 Full details, the concept-map contract, coverage and ETL assumptions:
 [OMOP CDM v5.5 Mapping](/docs/user-guide/modeling/omop-mapping).

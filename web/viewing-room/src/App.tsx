@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { BootStatus, flattenView, onBootStatus } from "./lib/engineClient";
 import { boot as bootEngine } from "./lib/engineClient";
-import { DEFAULT_SAMPLE, Sample, SAMPLES, SUITE_LABELS, SampleSuite, activeSamples, parseResourcesInput, resourceStats, sampleResourcesUrl, sampleUrl } from "./lib/samples";
+import { DEFAULT_SAMPLE, Sample, SAMPLES, SUITE_LABELS, SampleSuite, activeSamples, parseResourcesInput, requestedSample, resourceStats, sampleResourcesUrl, sampleUrl } from "./lib/samples";
 import { ResultsTable } from "./components/ResultsTable";
 import { DiagnosticsList } from "./components/DiagnosticsList";
 import { SqlView } from "./components/SqlView";
@@ -99,13 +99,14 @@ export default function App() {
   }, []);
 
   // Auto-load the default sample once (auto-run on sample load only).
-  // With ?suite=<s>, the default is the FIRST sample of that suite.
+  // ?suite=<s> narrows the gallery; ?sample=<slug> then picks one of it
+  // (deep links from the docs land directly on a step's live sample).
   const defaultLoaded = useRef(false);
   useEffect(() => {
     if (defaultLoaded.current) return;
     defaultLoaded.current = true;
     const { samples } = activeSamples();
-    loadSample(samples[0] ?? DEFAULT_SAMPLE)
+    loadSample(requestedSample(samples) ?? samples[0] ?? DEFAULT_SAMPLE)
       // Pass the loaded text EXPLICITLY: refs update on render, and the
       // post-promise microtask can run before React commits the new state.
       .then((t) => void doRunRef.current?.(t.vd, t.res, t.setup))

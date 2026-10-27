@@ -145,6 +145,16 @@ export function setSuiteOverride(suite: SampleSuite | null): void {
   suiteOverride = suite;
 }
 
+/**
+ * Sample named by ?sample=<slug>, restricted to the given list (so a
+ * ?suite= filter wins). Returns undefined when absent or unknown.
+ */
+export function requestedSample(samples: Sample[]): Sample | undefined {
+  const slug = new URLSearchParams(window.location.search).get("sample");
+  if (!slug) return undefined;
+  return samples.find((s) => s.slug === slug);
+}
+
 export function activeSamples(): { samples: Sample[]; suite: SampleSuite | null } {
   const raw = new URLSearchParams(window.location.search).get("suite");
   const suite: SampleSuite | null =

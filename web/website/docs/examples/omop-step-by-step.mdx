@@ -1,0 +1,451 @@
+---
+id: omop-step-by-step
+title: OMOP, Step by Step
+sidebar_label: OMOP Step by Step
+description: Build OMOP CDM tables from FHIR R4 in three moves — a ViewDefinition for person, a ConceptMap join for drug_exposure, and a SQLQuery that unions five medication resource types.
+---
+
+# OMOP, Step by Step
+
+OMOP is where FHIR data goes to be analyzed. This page builds three OMOP
+tables from a real FHIR R4 cohort, one artifact at a time:
+
+| Step | Artifact | Standards | Output |
+|---|---|---|---|
+| 1 | ViewDefinition | SQL-on-FHIR v2 | `person` (25 rows) |
+| 2 | ConceptMap + view join | FHIR ConceptMap, SQL-on-FHIR | `drug_exposure` (1,143 rows, 0 unmapped) |
+| 3 | SQLQuery Library | SQL-on-FHIR Analytics | `drug_exposure` (1,461 rows, 5 resource types) |
+
+Every step is a live sample in the Viewing Room. The links below open the
+standalone app on that exact sample — it runs entirely in the browser, on
+data fetched from
+[Hugging Face](https://huggingface.co/datasets/fhir4ds/omop-demo).
+
+:::info
+First boot takes 30–60 seconds (Pyodide + DuckDB-WASM, ~30 MB). Later
+visits are cached. The cohort is a 25-patient
+[Synthea](https://synthetichealth.github.io/synthea/) export: 1,284
+encounters, 1,143 `MedicationRequest`, 318 `Immunization`, and one
+ConceptMap with 108,683 mappings.
+:::
+
+## Background: two schemas, two problems
+
+**OMOP CDM** is a relational, vocabulary-centric model. A clinical fact is
+a row plus *concept ids* — integers that point into a standard vocabulary
+(RxNorm for drugs, SNOMED for conditions, LOINC for labs). It is flat and
+typed, which is what cohort tools (ATLAS, Achilles, CohortMethod) expect.
+
+**FHIR R4** is an exchange model. A drug is a nested `MedicationRequest`:
+the code sits inside `medicationCodeableConcept.coding[]`, the patient and
+encounter are *references*, and the coding system is a URI. It is rich and
+composable, which is what clinical systems need.
+
+Mapping one to the other is therefore two separate jobs:
+
+1. **Structure** — flatten nested JSON into typed columns.
+2. **Semantics** — turn a local code (`106892`) into a standard concept
+   (`19009384`) and record which vocabulary it came from.
+
+SQL-on-FHIR gives each job a portable artifact:
+
+- **ViewDefinition** — a JSON spec that flattens one resource type into a
+  table (`resource`, `select`, `column`, `forEach`, `where`, `unionAll`).
+  The engine translates it to SQL; the spec says a referenced view "acts
+  as a virtual table", so views compose.
+- **ConceptMap** — a standard FHIR resource mapping codes from one system
+  to another. Here the `target.code` is the OMOP `concept_id`, as a string.
+- **SQLQuery** — a `Library` resource of type `sql-query` whose `content`
+  is SQL. It is how you compose across resource types, because a
+  ViewDefinition sees exactly one.
+
+```
+Patient ──────▶ person            (ViewDefinition)
+MedicationRequest ─┐
+                   ├─▶ drug_exposure  (5 ViewDefinitions + SQLQuery UNION ALL)
+Immunization ──────┘         ▲
+                             │ concept_id
+ConceptMap (RxNorm, CVX) ──▶ omop_conceptmap  (ViewDefinition flatten)
+```
+
+## Step 1 — SQL-on-FHIR basics: `person` from `Patient`
+
+Start with the simplest OMOP table. A `person` row needs an id, a gender
+concept, and a birth date split into year/month/day.
+
+A ViewDefinition is just JSON. This is the shipped
+[`omop_person`](https://github.com/fhir4ds/fhir4ds/blob/main/fhir4ds/viewdef/resources/omop/person-view.json)
+view, minus the concept-map join we add in step 2:
+
+```json
+{
+  "name": "omop_person",
+  "status": "draft",
+  "resource": "Patient",
+  "select": [
+    {
+      "column": [
+        { "name": "person_id",           "path": "id",                          "type": "id" },
+        { "name": "year_of_birth",       "path": "birthDate.substring(0, 4)",   "type": "string" },
+        { "name": "month_of_birth",      "path": "birthDate.substring(5, 2)",   "type": "string" },
+        { "name": "day_of_birth",        "path": "birthDate.substring(8, 2)",   "type": "string" },
+        { "name": "birth_datetime",      "path": "birthDate",                   "type": "dateTime" },
+        { "name": "person_source_value", "path": "id",                          "type": "id" },
+        { "name": "gender_source_value", "path": "gender",                      "type": "code" }
+      ]
+    }
+  ]
+}
+```
+
+Three things to notice:
+
+- `resource: "Patient"` — one ViewDefinition, one resource type. The
+  engine adds `WHERE resourceType = 'Patient'` for you.
+- `path` is **FHIRPath**, evaluated against each resource. `birthDate` is
+  a string in FHIR, so `substring` slices it; no date parsing needed.
+- `type` is not decoration. It sets the output SQL type and, with
+  `collection: false` (the default), the engine raises if a path ever
+  yields more than one item. Cardinality violations surface as errors
+  instead of silently collapsed rows.
+
+The generated DuckDB SQL (type guards trimmed for readability):
+
+```sql
+SELECT
+    fhirpath_text(t.resource, 'id')                          AS "person_id",
+    fhirpath_text(t.resource, 'birthDate.substring(0, 4)')   AS "year_of_birth",
+    fhirpath_text(t.resource, 'birthDate.substring(5, 2)')   AS "month_of_birth",
+    fhirpath_text(t.resource, 'birthDate.substring(8, 2)')   AS "day_of_birth",
+    fhirpath_text(t.resource, 'birthDate')                   AS "birth_datetime",
+    fhirpath_text(t.resource, 'id')                          AS "person_source_value",
+    fhirpath_text(t.resource, 'gender')                      AS "gender_source_value"
+FROM "resources" t
+WHERE json_extract_string(t.resource, '$.resourceType') = 'Patient';
+```
+
+`fhirpath_text` is the fhir4ds DuckDB UDF that evaluates FHIRPath; in the
+real output each column is wrapped in a guard that errors on a
+cardinality or type violation.
+
+Result — 25 rows, one per patient:
+
+| person_id | year_of_birth | month_of_birth | day_of_birth | gender_source_value |
+|---|---|---|---|---|
+| `e61b54c7-8ae8-907c-4e6d-20f5e86eca63` | 1957 | 01 | 26 | `female` |
+| `7a4ff83b-37bc-fe9a-b385-d2615aeac488` | 1998 | 06 | 02 | `female` |
+| `4e3be038-c545-8835-4859-86cb59cee238` | 1972 | 11 | 09 | `male` |
+
+`gender_source_value` is still the FHIR code. OMOP wants
+`gender_concept_id = 8507` (male) or `8532` (female). That is step 2.
+
+[Open the `person` sample live](https://fhir4ds.com/viewing-room-app/?suite=omop&sample=omop-patient)
+
+## Step 2 — ConceptMap: codes in, concept ids out
+
+OMOP's `concept_id` is a foreign key into the `concept` table. You can
+stage that table (the classic ETL), or you can keep the mapping in FHIR
+and let the query do it. This library keeps it in FHIR.
+
+### The ConceptMap resource
+
+One standard ConceptMap carries every vocabulary, with one `group` per
+source system. Real fragments from the cohort dataset:
+
+```json
+{
+  "resourceType": "ConceptMap",
+  "status": "active",
+  "group": [
+    {
+      "source": "http://hl7.org/fhir/administrative-gender",
+      "target": "urn:omop:concept",
+      "element": [
+        { "code": "male",   "target": [{ "code": "8507", "equivalence": "equivalent" }] },
+        { "code": "female", "target": [{ "code": "8532", "equivalence": "equivalent" }] }
+      ]
+    },
+    {
+      "source": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "target": "urn:omop:concept",
+      "element": [
+        { "code": "1000000", "target": [{ "code": "40224176", "equivalence": "equal" }] },
+        { "code": "1000001", "target": [{ "code": "40224178", "equivalence": "equal" }] }
+      ]
+    }
+  ]
+}
+```
+
+Two conventions make this work as a join target:
+
+- `target.code` is the OMOP `concept_id`, carried as a **string** (FHIR
+  codes are strings; the engine casts to `BIGINT` when the table is
+  materialized).
+- `target.equivalence` is kept, and only `equivalent`/`equal`/`wider`/
+  `subsumes` targets are used. The flattening view takes the **first**
+  passing target per code, so one code can never fan out event rows —
+  `(system, code) → concept_id` stays a functional dependency.
+
+Group sizes in this dataset: RxNorm 108,421 (every product-level RxNorm
+class: SCD, SBD, quantized forms, packs, components), CVX 255, plus
+gender / v3-ActCode / condition-category supplements.
+
+### Flattening it with a ViewDefinition
+
+A ConceptMap is not a table, so the library ships a ViewDefinition whose
+`resource` is `ConceptMap` and whose `forEach` walks `group → element →
+target`:
+
+```json
+{
+  "name": "omop_conceptmap",
+  "resource": "ConceptMap",
+  "select": [
+    {
+      "forEach": "group",
+      "column": [
+        { "name": "vocabulary_id", "path": "iif(source = %rxnorm_uri, 'RxNorm', ...)", "type": "string" },
+        { "name": "source_system", "path": "source", "type": "uri" }
+      ],
+      "select": [
+        {
+          "forEach": "element",
+          "column": [{ "name": "concept_code", "path": "code", "type": "string" }],
+          "select": [
+            {
+              "forEach": "target.where(equivalence = 'equivalent' or equivalence = 'equal' or equivalence = 'wider' or equivalence = 'subsumes').first()",
+              "column": [
+                { "name": "concept_id",  "path": "code",        "type": "string" },
+                { "name": "equivalence", "path": "equivalence", "type": "code" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+This is the same three-level shape as the data, lowered to SQL by the
+ViewDefinition engine:
+
+```sql
+-- forEach group  -> unnest the group array
+-- forEach element -> unnest the element array
+-- forEach target…first() -> unnest the surviving target
+SELECT
+    unnest(...) AS vocabulary_id,      -- RxNorm | CVX | ... (URI fallback)
+    unnest(...) AS source_system,
+    unnest(...) AS concept_code,
+    unnest(...) AS concept_id,
+    unnest(...) AS equivalence
+FROM ...
+WHERE json_extract_string(t.resource, '$.resourceType') = 'ConceptMap';
+```
+
+Each level is one pipelined subquery: the array is computed once per
+parent row and then unnested, so the 108,683-element map materializes in
+under a second. The result is a plain table you can join:
+
+| vocabulary_id | source_system | concept_code | concept_id | equivalence |
+|---|---|---|---|---|
+| RxNorm | `http://www.nlm.nih.gov/research/umls/rxnorm` | 1000000 | 40224176 | equal |
+| RxNorm | `http://www.nlm.nih.gov/research/umls/rxnorm` | 1000001 | 40224178 | equal |
+| Gender | `http://hl7.org/fhir/administrative-gender` | male | 8507 | equivalent |
+
+### Joining it from the medications ViewDefinition
+
+Now `drug_exposure`. The column that matters is `drug_concept_id`, which
+comes from the map. (The shipped view has fourteen columns and picks an
+RxNorm-system coding with a fallback; the excerpt below keeps the columns
+this step needs and spells the fallback out.)
+
+```json
+{
+  "name": "omop_drug_exposure_medication_request",
+  "resource": "MedicationRequest",
+  "constant": [
+    { "name": "rxnorm_uri", "valueString": "http://www.nlm.nih.gov/research/umls/rxnorm" },
+    { "name": "rx_prescription_written", "valueString": "38000177" }
+  ],
+  "select": [
+    {
+      "column": [
+        { "name": "drug_exposure_id", "path": "id", "type": "id" },
+        { "name": "person_id", "path": "subject.reference.split('/').last()", "type": "string" },
+        { "name": "drug_concept_id", "path": "cm.concept_id", "type": "string" },
+        { "name": "drug_exposure_start_date", "path": "authoredOn.substring(0, 10)", "type": "date" },
+        { "name": "drug_type_concept_id", "path": "%rx_prescription_written", "type": "string" },
+        { "name": "drug_source_value", "path": "iif(medication.ofType(CodeableConcept).coding.where(system = %rxnorm_uri).exists(), medication.ofType(CodeableConcept).coding.where(system = %rxnorm_uri).code.first(), medication.ofType(CodeableConcept).coding.code.first())", "type": "code" },
+        { "name": "src", "path": "'MedicationRequest'", "type": "string" }
+      ]
+    }
+  ],
+  "joins": [
+    {
+      "name": "cm",
+      "view": "omop_conceptmap",
+      "type": "left",
+      "on": [
+        { "path": "iif(medication.ofType(CodeableConcept).coding.where(system = %rxnorm_uri).exists(), medication.ofType(CodeableConcept).coding.where(system = %rxnorm_uri).code.first(), medication.ofType(CodeableConcept).coding.code.first())" },
+        { "path": "cm.concept_code" },
+        { "path": "iif(medication.ofType(CodeableConcept).coding.where(system = %rxnorm_uri).exists(), %rxnorm_uri, medication.ofType(CodeableConcept).coding.system.first())" },
+        { "path": "cm.source_system" }
+      ]
+    }
+  ]
+}
+```
+
+The generated SQL is a normal left join — `on` is a flat list of four
+expressions, paired in order (left key, right key, left key, right key):
+
+```sql
+SELECT
+    ...
+    fhirpath_text(t.resource, 'id')                AS "drug_exposure_id",
+    fhirpath_text(t.resource, 'authoredOn.substring(0, 10)') AS "drug_exposure_start_date",
+    "cm"."concept_id"                              AS "drug_concept_id",
+    ...
+FROM "resources" t
+LEFT JOIN "omop"."omop_conceptmap" "cm"
+       ON fhirpath_text(t.resource, '...coding.code.first()') = "cm"."concept_code"
+      AND fhirpath_text(t.resource, '''http://www.nlm.nih.gov/research/umls/rxnorm''') = "cm"."source_system"
+WHERE json_extract_string(t.resource, '$.resourceType') = 'MedicationRequest';
+```
+
+:::note
+`joins` is a **fhir4ds extension** to the v2 ViewDefinition — no spec
+version defines it. It exists because "referenced views are virtual
+tables" makes joins natural, and it keeps the OMOP library declarative.
+A spec-only implementation expresses the same left join in a SQLQuery
+(step 3). Cross-*resource* composition is what the spec covers, and that
+is the next step.
+:::
+
+Result: 1,143 rows, one per `MedicationRequest`, **zero null concept ids**:
+
+| drug_source_value | drug_concept_id | drug_exposure_start_date | src |
+|---|---|---|---|
+| 106892 | 19009384 | 2019-08-29 | MedicationRequest |
+| 106258 | 19008572 | 2022-07-08 | MedicationRequest |
+
+Unaligned codes are not lost: the join is `LEFT`, so an unmapped code
+keeps its row with `drug_concept_id` NULL, and the composition layer
+turns NULL into `0` — OMOP's "concept 0 = no matching concept" convention.
+
+[Open the medications ViewDefinition sample live](https://fhir4ds.com/viewing-room-app/?suite=omop&sample=omop-drug-exposure)
+
+## Step 3 — SQLQuery: unioning views across resource types
+
+A ViewDefinition sees one resource type. `drug_exposure`, though, is fed
+by five: `MedicationRequest`, `MedicationDispense`, `MedicationStatement`,
+`MedicationAdministration`, and `Immunization` (a vaccine *is* a drug
+exposure in OMOP).
+
+The SQL-on-FHIR answer is a **SQLQuery**: a `Library` resource of type
+`sql-query` whose `content` is SQL over the view names in the library.
+
+```json
+{
+  "resourceType": "Library",
+  "id": "drug-exposure-cross-resource",
+  "status": "active",
+  "type": {
+    "coding": [
+      { "system": "http://hl7.org/fhir/uv/sql-on-fhir/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query" }
+    ]
+  },
+  "meta": { "profile": ["http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery"] },
+  "content": [
+    { "contentType": "application/sql", "data": "LS0gQ3Jvc3MtcmVzb3VyY2UgT01PUCBkcnVnX2V4cG9zdXJl..." }
+  ]
+}
+```
+
+`content.data` is base64. Decoded, the query is five projections unioned
+— the per-arm views are named `omop.drug_exposure__<arm>`:
+
+```sql
+SELECT drug_exposure_id, person_id, drug_concept_id,
+       drug_exposure_start_date, drug_exposure_end_date,
+       drug_type_concept_id, drug_source_value, src
+FROM omop.drug_exposure__medication_request
+UNION ALL
+SELECT ... FROM omop.drug_exposure__medication_dispense
+UNION ALL
+SELECT ... FROM omop.drug_exposure__medication_statement
+UNION ALL
+SELECT ... FROM omop.drug_exposure__medication_administration
+UNION ALL
+SELECT ... FROM omop.drug_exposure__immunization
+ORDER BY drug_exposure_start_date, src;
+```
+
+`UNION ALL`, not `UNION`: two dispensings of the same drug on the same
+day are two exposures, not one. Each arm keeps its own `src` so you can
+always trace a row back to the FHIR resource type that produced it.
+
+Run it against the cohort and you get **1,461 rows** — the 1,143
+prescriptions from step 2 plus 318 immunizations, all with resolved
+concept ids:
+
+| src | rows | unmapped |
+|---|---|---|
+| MedicationRequest | 1,143 | 0 |
+| Immunization | 318 | 0 |
+| **total** | **1,461** | **0** |
+
+The arms are themselves ViewDefinitions from the same library, so one
+`drug_exposure` row is fully traceable: `src` → resource type → view file
+→ FHIRPath columns → ConceptMap group.
+
+[Open the SQLQuery sample live](https://fhir4ds.com/viewing-room-app/?suite=omop&sample=omop-drug-exposure-sqlquery)
+
+## Run the same thing locally
+
+The browser demo composes the views from the bundled manifest. The Python
+API does the same thing on a real DuckDB connection:
+
+```python
+import fhir4ds
+from fhir4ds.viewdef.omop_runner import create_omop_views
+
+con = fhir4ds.create_connection()
+con.execute("CREATE TABLE resources (resource JSON)")
+# stage NDJSON (Patient, MedicationRequest, Immunization, the ConceptMap)
+con.execute("""INSERT INTO resources SELECT CAST(trim(x) AS JSON)
+               FROM read_text('medication-resources.ndjson') r,
+                    unnest(string_split(r.content, chr(10))) AS t(x)
+               WHERE length(trim(x)) > 0""")
+
+create_omop_views(con, source_table="resources")   # composes omop.*
+
+con.execute("SELECT src, count(*) FROM omop.drug_exposure GROUP BY 1 ORDER BY 2 DESC").df()
+con.execute("SELECT * FROM omop.person LIMIT 5").df()
+```
+
+`create_omop_views` walks the manifest, materializes join targets first
+(the conceptmap view), then the event views, then the union — and applies
+the OMOP projections (stable 63-bit ids for natural keys, `BIGINT`
+concepts defaulting to `0`). It is the same manifest the browser derives
+its DDL from, so the two runs agree row for row.
+
+## Where the pieces live
+
+| Artifact | Path |
+|---|---|
+| ViewDefinition library | [`fhir4ds/viewdef/resources/omop/`](https://github.com/fhir4ds/fhir4ds/tree/main/fhir4ds/viewdef/resources/omop) |
+| Composition manifest | [`manifest.json`](https://github.com/fhir4ds/fhir4ds/blob/main/fhir4ds/viewdef/resources/omop/manifest.json) |
+| Python runner | `fhir4ds.viewdef.omop_runner.create_omop_views` |
+| SQLQuery runner | `fhir4ds.sqlquery` (`SQLQueryRunner`) |
+| Cohort data | [fhir4ds/omop-demo](https://huggingface.co/datasets/fhir4ds/omop-demo) on Hugging Face |
+| Notebook walkthrough | `docs/notebooks/omop-mapping.ipynb` |
+
+Further reading: [OMOP CDM v5.5 Mapping](/docs/user-guide/modeling/omop-mapping)
+for the full library (13 tables), coverage, and ETL conventions;
+[ViewDefinition](/docs/user-guide/modeling/viewdef) for the flattening
+spec; [OMOP Demo](/docs/examples/omop-viewer) for the browsing UI.
