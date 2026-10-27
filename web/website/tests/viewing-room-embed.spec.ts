@@ -50,7 +50,7 @@ test("OMOP step-by-step page teaches the three artifacts", async ({ page }) => {
   );
   await expect(page.locator(".pagination-nav__link--next")).toHaveAttribute(
     "href",
-    /\/docs\/examples\/omop-viewer\/$/,
+    /\/docs\/examples\/sdc-playground\/$/,
   );
 
   // One section per step, in reading order.
@@ -79,7 +79,7 @@ test("OMOP step-by-step page teaches the three artifacts", async ({ page }) => {
   await expect(page.locator("sqlonfhir-viewing-room")).toBeAttached();
 });
 
-test("OMOP demo page embeds the suite-filtered component", async ({ page, request }) => {
+test("OMOP step-by-step page boots the embedded OMOP suite", async ({ page, request }) => {
   const probe = await request
     .get("https://huggingface.co/datasets/fhir4ds/omop-demo/resolve/main/patient-resources.ndjson", {
       timeout: 30_000,
@@ -87,17 +87,7 @@ test("OMOP demo page embeds the suite-filtered component", async ({ page, reques
     .catch(() => null);
   if (!probe || !probe.ok()) test.skip(true, "Hugging Face dataset unreachable");
 
-  await page.goto("/docs/examples/omop-viewer");
-  await expect(page.locator("h1")).toHaveText("OMOP Demo");
-  const sidebar = page.locator('nav[aria-label="Docs sidebar"]');
-  await expect(sidebar.getByRole("link", { name: "OMOP Demo" })).toBeVisible();
-  await expect(
-    page.locator(".pagination-nav__link--prev"),
-  ).toHaveAttribute("href", /\/docs\/examples\/omop-step-by-step\/$/);
-  await expect(
-    page.locator(".pagination-nav__link--next"),
-  ).toHaveAttribute("href", /\/docs\/examples\/sdc-playground\/$/);
-
+  await page.goto("/docs/examples/omop-step-by-step");
   const wc = page.locator("sqlonfhir-viewing-room");
   await expect(wc).toBeAttached();
   await expect(wc.locator(".version-badge")).toContainText(/fhir4ds \d+\.\d+\.\d+/, {

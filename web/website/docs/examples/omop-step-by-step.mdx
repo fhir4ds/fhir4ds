@@ -23,6 +23,14 @@ flowchart LR
     ConceptMap[ConceptMap] --> MapVD[concept map<br/>ViewDefinition] --> Map[(code to concept)]
     Map --> VD
     VD --> Person[(person)]
+
+    classDef default fill:#1e293b,stroke:#38bdf8,color:#cbd5e1,stroke-width:1px
+    classDef highlight fill:#38bdf8,stroke:#0ea5e9,color:#0f172a,stroke-width:2px
+
+    class Patient,ConceptMap,VD,MapVD,Map default
+    class Person highlight
+
+    linkStyle default stroke:#fff,stroke-width:1px
 ```
 
 ## Two ways to describe the same person
@@ -241,6 +249,7 @@ is sent anywhere — the query runs on your machine.
   full library (13 tables), coverage and ETL conventions.
 - [ViewDefinition](/docs/user-guide/modeling/viewdef) — the reshaping
   specification in depth.
-- [OMOP Demo](/docs/examples/omop-viewer) — browse the composed tables.
+- [The view library](https://github.com/fhir4ds/fhir4ds/tree/main/fhir4ds/viewdef/resources/omop)
+  — every OMOP ViewDefinition and the composition manifest, in the repo.
 - Notebook: `docs/notebooks/omop-mapping.ipynb` — the same steps in
   Python, cell by cell.
