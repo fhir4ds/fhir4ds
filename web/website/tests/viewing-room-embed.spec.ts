@@ -36,7 +36,7 @@ test("viewing-room example page embeds and boots the component", async ({ page }
   ).toHaveCount(35, { timeout: 60_000 });
 });
 
-test("OMOP step-by-step page documents the three artifacts", async ({ page }) => {
+test("OMOP step-by-step page teaches the three artifacts", async ({ page }) => {
   await page.goto("/docs/examples/omop-step-by-step");
   await expect(page.locator("h1")).toHaveText("OMOP, Step by Step");
 
@@ -53,22 +53,27 @@ test("OMOP step-by-step page documents the three artifacts", async ({ page }) =>
     /\/docs\/examples\/omop-viewer\/$/,
   );
 
-  // One section per step, each with the real artifact.
+  // One section per step, in reading order.
   for (const h2 of [
-    "Step 1 — SQL-on-FHIR basics: person from Patient",
-    "Step 2 — ConceptMap: codes in, concept ids out",
-    "Step 3 — SQLQuery: unioning views across resource types",
+    "Two ways to describe the same person",
+    "Step 1 — A table from one kind of resource",
+    "Step 2 — Turning codes into concept ids",
+    "Step 3 — One table from five kinds of resource",
+    "Try it",
   ]) {
     await expect(page.locator("article h2", { hasText: h2 })).toBeVisible();
   }
-  await expect(page.locator("article pre")).toHaveCount(11);
 
-  // Each step deep-links the live sample it describes.
-  for (const sample of ["omop-patient", "omop-drug-exposure", "omop-drug-exposure-sqlquery"]) {
-    await expect(
-      page.locator(`article a[href*="sample=${sample}"]`).first(),
-    ).toBeVisible();
-  }
+  // The overview diagram is a rendered mermaid graph, not a fenced block.
+  await expect(page.locator("svg[id^='mermaid']").first()).toBeVisible();
+  await expect(page.locator("article")).not.toContainText("flowchart LR");
+
+  // Only the SQLQuery body is shown as SQL — no generated engine SQL.
+  await expect(page.locator("article")).not.toContainText("fhirpath_text(");
+  await expect(page.locator("article pre", { hasText: "UNION ALL" })).toHaveCount(1);
+
+  // The live demo is embedded at the end.
+  await expect(page.locator("sqlonfhir-viewing-room")).toBeAttached();
 });
 
 test("OMOP demo page embeds the suite-filtered component", async ({ page, request }) => {
