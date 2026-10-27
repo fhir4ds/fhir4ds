@@ -57,6 +57,7 @@ test("FHIR to OMOP page teaches the three artifacts", async ({ page }) => {
     "Two ways to describe the same person",
     "Step 1 — Reshape: documents into columns",
     "Step 2 — Translate: codes into concept ids",
+    "Step 3 — Key: strings become integers",
     "That is the whole recipe",
     "Try it",
   ]) {
@@ -70,9 +71,12 @@ test("FHIR to OMOP page teaches the three artifacts", async ({ page }) => {
   // No SQL at all: the page is three JSON artifacts plus prose.
   await expect(page.locator("article")).not.toContainText("fhirpath_text(");
   // (Scope to MDX code blocks: the embedded app brings its own <pre>.)
-  // Three JSON artifacts, plus the mermaid block's wrapper.
+  // Four JSON artifacts and no SQL fences (the mermaid block renders as an
+  // svg outside the code-block wrapper).
   await expect(page.locator("article .theme-code-block", { hasText: "UNION ALL" })).toHaveCount(0);
   await expect(page.locator("article .theme-code-block")).toHaveCount(4);
+  // The integer-key step keeps the source id visible.
+  await expect(page.locator("article")).toContainText("person_source_value");
 
   // The live demo is embedded at the end.
   await expect(page.locator("sqlonfhir-viewing-room")).toBeAttached();

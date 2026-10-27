@@ -11,26 +11,37 @@ import ViewingRoomWC from '@site/src/components/ViewingRoomWC';
 
 A step-by-step walkthrough that builds **one** OMOP table from FHIR, end
 to end: the `person` table, from a 25-patient cohort. It is deliberately small — one resource
-type, five columns, one code to translate. Every other OMOP table is the
-same recipe with more columns.
+type, a handful of columns, one code to translate. Every other OMOP table
+is the same recipe with more columns.
 
 You do not need to know FHIR beyond "a resource is a JSON document", and
 there is no SQL to read.
 
 ```mermaid
 flowchart LR
-    Patient[Patient] --> VD[person<br/>ViewDefinition]
-    ConceptMap[ConceptMap] --> MapVD[concept map<br/>ViewDefinition] --> Map[(code to concept)]
-    Map --> VD
-    VD --> Person[(person)]
+    subgraph FHIR["FHIR resources"]
+        Patient[Patient]
+        ConceptMap[ConceptMap]
+    end
+
+    subgraph OMOP["OMOP tables"]
+        Person[(person)]
+    end
+
+    Patient --> PersonVD["person<br/>ViewDefinition"]
+    ConceptMap --> MapVD["concept map<br/>ViewDefinition"] --> Map[("code → concept")]
+    Map --> PersonVD
+    PersonVD --> Person
 
     classDef default fill:#1e293b,stroke:#38bdf8,color:#cbd5e1,stroke-width:1px
     classDef highlight fill:#38bdf8,stroke:#0ea5e9,color:#0f172a,stroke-width:2px
 
-    class Patient,ConceptMap,VD,MapVD,Map default
+    class Patient,ConceptMap,PersonVD,MapVD,Map default
     class Person highlight
 
     linkStyle default stroke:#fff,stroke-width:1px
+    style FHIR fill:#0f172a,stroke:#38bdf8,color:#cbd5e1
+    style OMOP fill:#0f172a,stroke:#38bdf8,color:#cbd5e1
 ```
 
 ## Two ways to describe the same person
@@ -70,6 +81,8 @@ is a small JSON file, and it is the whole of the reshaping step:
         { "name": "year_of_birth",       "path": "birthDate.substring(0, 4)", "type": "string" },
         { "name": "month_of_birth",      "path": "birthDate.substring(5, 2)", "type": "string" },
         { "name": "day_of_birth",        "path": "birthDate.substring(8, 2)", "type": "string" },
+        { "name": "birth_datetime",      "path": "birthDate",                 "type": "dateTime" },
+        { "name": "person_source_value", "path": "id",                        "type": "id" },
         { "name": "gender_source_value", "path": "gender",                    "type": "code" }
       ]
     }
@@ -90,13 +103,17 @@ Read it as a recipe:
 
 On our cohort that gives 25 rows — one per patient:
 
-| person_id | year_of_birth | month_of_birth | day_of_birth | gender_source_value |
-|---|---|---|---|---|
-| `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | 1982 | 03 | 04 | `male` |
-| `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | 1967 | 07 | 06 | `female` |
-| `80402b87-2275-392f-bf13-7c25fed62f2c` | 1966 | 09 | 07 | `male` |
+| person_id | person_source_value | year_of_birth | gender_source_value |
+|---|---|---|---|
+| `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | 1982 | `male` |
+| `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | 1967 | `female` |
+| `80402b87-2275-392f-bf13-7c25fed62f2c` | `80402b87-2275-392f-bf13-7c25fed62f2c` | 1966 | `male` |
 
-The last column is still the FHIR code. OMOP wants `8507` or `8532`.
+Two columns carry the same value on purpose. OMOP separates the **key**
+(`person_id`) from the **source id** (`person_source_value`, a string), so
+the readable id is never lost when the key becomes a number — we come back
+to that at the end. And `gender_source_value` is still the FHIR code; OMOP
+wants `8507` or `8532`.
 
 ## Step 2 — Translate: codes into concept ids
 
@@ -172,9 +189,10 @@ how to match a patient to a mapping row. The birth-date columns from step
   "resource": "Patient",
   "select": [{
     "column": [
-      { "name": "person_id",          "path": "id",       "type": "id" },
-      { "name": "gender_concept_id",  "path": "cm.concept_id", "type": "string" },
-      { "name": "gender_source_value", "path": "gender",  "type": "code" }
+      { "name": "person_id",           "path": "id",             "type": "id" },
+      { "name": "gender_concept_id",   "path": "cm.concept_id",  "type": "string" },
+      { "name": "person_source_value", "path": "id",             "type": "id" },
+      { "name": "gender_source_value", "path": "gender",         "type": "code" }
     ]
   }],
   "joins": [{
@@ -202,21 +220,48 @@ The spec's own composition tool is the SQLQuery, described below.
 
 The result is a valid `person` row, with a real concept id:
 
-| person_id | gender_concept_id | gender_source_value |
-|---|---|---|
-| `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | 8507 | `male` |
-| `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | 8532 | `female` |
-| `80402b87-2275-392f-bf13-7c25fed62f2c` | 8507 | `male` |
+| person_id | person_source_value | gender_concept_id | gender_source_value |
+|---|---|---|---|
+| `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | 8507 | `male` |
+| `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | 8532 | `female` |
+| `80402b87-2275-392f-bf13-7c25fed62f2c` | `80402b87-2275-392f-bf13-7c25fed62f2c` | 8507 | `male` |
 
 Because the join is a *left* join, a code the map does not know keeps its
 row with an empty concept id — visible rather than silently dropped. In
 this cohort every gender resolves.
+
+## Step 3 — Key: strings become integers
+
+OMOP's `person_id` is a number, and the last table still shows the FHIR
+id in both columns. One more step fixes that: the library's composition
+turns each natural key into a **stable integer** and leaves the string
+where it belongs.
+
+| person_id | person_source_value | gender_concept_id |
+|---|---|---|
+| `1170511711334034253` | `262d2fc9-bc42-2b6e-5eb6-9ab41705f492` | 8507 |
+| `3325726062766785590` | `7ef7fab9-63b4-1376-94be-c9760d4f94f7` | 8532 |
+| `1074285768011624945` | `80402b87-2275-392f-bf13-7c25fed62f2c` | 8507 |
+
+Three properties make this safe:
+
+- **Stable.** The same source id always produces the same key, so
+  reloading the data does not renumber patients or break saved joins.
+- **Unique enough.** 63 bits of hash; a cohort would need billions of
+  patients before a collision was plausible.
+- **Reversible in practice.** `person_source_value` keeps the original
+  id, so you can always walk back to the source record.
+
+Concept ids are never hashed — `8507` is the vocabulary's own identifier
+and must stay exactly that.
 
 ## That is the whole recipe
 
 - **Reshape** each resource type with a ViewDefinition.
 - **Translate** codes with one shared ConceptMap, flattened once into a
   lookup view and joined where needed.
+- **Key** the table: stable integer ids for people and visits, the source
+  id alongside them.
 - **Compose** when one OMOP table spans several FHIR resource types.
   `drug_exposure` is the classic case: prescriptions, dispensings,
   statements, administrations and immunizations all count as drug
@@ -233,8 +278,9 @@ different columns.
 The tables above run live below, in your browser: Pyodide brings up
 FHIR4DS, DuckDB-WASM runs the queries, and the data comes straight from
 [Hugging Face](https://huggingface.co/datasets/fhir4ds/omop-demo). Start
-with **OMOP person**; the two medications samples show the SQLQuery
-composition if you want to see where it leads.
+with **OMOP person** — its `person_id` is the hashed key from step 3, and
+`person_source_value` is the original FHIR id. The two medications samples
+show the SQLQuery composition if you want to see where it leads.
 
 :::info
 First boot takes 30–60 seconds (~30 MB); later visits are cached. Nothing
