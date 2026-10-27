@@ -128,12 +128,23 @@ def main():
     check("grain", "union = sum of children", union_sum_check)
 
     def ri_check():
-        orphans = con.execute("""
-            SELECT count(*) FROM omop.condition_occurrence c
-            LEFT JOIN omop.person p ON p.person_id = c.person_id
-            WHERE p.person_id IS NULL
-        """).fetchone()[0]
-        assert orphans == 0, f"{orphans} orphaned conditions"
+        # Every event table, not just conditions: person_id comes from a
+        # FHIR reference, and a reference form the view does not normalize
+        # (Patient/{id}, absolute URL, bundle-local urn:uuid:{id}) leaves
+        # the key dangling while looking like a valid hashed id.
+        drifted = {}
+        for table in [
+            "visit_occurrence", "condition_occurrence", "procedure_occurrence",
+            "drug_exposure", "device_exposure", "measurement", "observation",
+        ]:
+            orphans = con.execute(f"""
+                SELECT count(*) FROM omop.{table} t
+                LEFT JOIN omop.person p ON p.person_id = t.person_id
+                WHERE p.person_id IS NULL
+            """).fetchone()[0]
+            if orphans:
+                drifted[table] = orphans
+        assert not drifted, f"orphaned event rows: {drifted}"
     check("grain", "referential integrity person<->events", ri_check)
 
     # -- mapping section ----------------------------------------------------

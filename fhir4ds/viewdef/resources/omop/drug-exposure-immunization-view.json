@@ -22,7 +22,7 @@
         },
         {
           "name": "person_id",
-          "path": "patient.reference.split('/').last()",
+          "path": "patient.reference.replace('urn:uuid:', '').split('/').last()",
           "type": "string"
         },
         {
@@ -77,7 +77,7 @@
         },
         {
           "name": "visit_occurrence_id",
-          "path": "encounter.reference.split('/').last()",
+          "path": "encounter.reference.replace('urn:uuid:', '').split('/').last()",
           "type": "string"
         },
         {
