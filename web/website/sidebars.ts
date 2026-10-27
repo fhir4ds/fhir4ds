@@ -206,6 +206,10 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'examples/omop-step-by-step',
+        },
+        {
+          type: 'doc',
           id: 'examples/omop-viewer',
           label: 'OMOP Demo',
         },
