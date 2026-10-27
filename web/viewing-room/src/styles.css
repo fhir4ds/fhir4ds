@@ -591,3 +591,26 @@ details[open] > summary > .tree-caret::before {
 .suite-filter-pill:hover {
   background: var(--accent-soft);
 }
+
+.json-tree-more,
+.resource-viewer-show-more {
+  display: flex;
+  gap: 8px;
+  padding: 4px 10px 6px;
+}
+
+.json-tree-more button,
+.resource-viewer-show-more {
+  font-size: 11px;
+  color: #93c5fd;
+  background: rgba(30, 64, 175, 0.18);
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.json-tree-more button:hover,
+.resource-viewer-show-more:hover {
+  background: rgba(30, 64, 175, 0.32);
+}
