@@ -19,10 +19,10 @@ test("viewing-room example page embeds and boots the component", async ({ page }
   await expect(
     page.locator(".pagination-nav__link--prev"),
   ).toHaveAttribute("href", /\/docs\/examples\/cms-measures\/$/);
-  // Sidebar order: Quality Measures -> Viewing Room -> OMOP Step by Step -> ...
+  // Sidebar order: Quality Measures -> Viewing Room -> FHIR to OMOP -> ...
   await expect(
     page.locator(".pagination-nav__link--next"),
-  ).toHaveAttribute("href", /\/docs\/examples\/omop-step-by-step\/$/);
+  ).toHaveAttribute("href", /\/docs\/examples\/fhir-to-omop\/$/);
 
   // The popout pill points at the standalone app; the embed boots directly.
   const wc = page.locator("sqlonfhir-viewing-room");
@@ -36,14 +36,13 @@ test("viewing-room example page embeds and boots the component", async ({ page }
   ).toHaveCount(35, { timeout: 60_000 });
 });
 
-test("OMOP step-by-step page teaches the three artifacts", async ({ page }) => {
-  await page.goto("/docs/examples/omop-step-by-step");
-  await expect(page.locator("h1")).toHaveText("OMOP, Step by Step");
+test("FHIR to OMOP page teaches the three artifacts", async ({ page }) => {
+  await page.goto("/docs/examples/fhir-to-omop");
+  await expect(page.locator("h1")).toHaveText("FHIR → OMOP");
 
   const sidebar = page.locator('nav[aria-label="Docs sidebar"]');
-  await expect(sidebar.getByRole("link", { name: "OMOP Step by Step" })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "FHIR → OMOP" })).toBeVisible();
 
-  // Pagination: Viewing Room -> OMOP Step by Step -> OMOP Demo.
   await expect(page.locator(".pagination-nav__link--prev")).toHaveAttribute(
     "href",
     /\/docs\/examples\/viewing-room\/$/,
@@ -79,7 +78,7 @@ test("OMOP step-by-step page teaches the three artifacts", async ({ page }) => {
   await expect(page.locator("sqlonfhir-viewing-room")).toBeAttached();
 });
 
-test("OMOP step-by-step page boots the embedded OMOP suite", async ({ page, request }) => {
+test("FHIR to OMOP page boots the embedded OMOP suite", async ({ page, request }) => {
   const probe = await request
     .get("https://huggingface.co/datasets/fhir4ds/omop-demo/resolve/main/patient-resources.ndjson", {
       timeout: 30_000,
@@ -87,7 +86,7 @@ test("OMOP step-by-step page boots the embedded OMOP suite", async ({ page, requ
     .catch(() => null);
   if (!probe || !probe.ok()) test.skip(true, "Hugging Face dataset unreachable");
 
-  await page.goto("/docs/examples/omop-step-by-step");
+  await page.goto("/docs/examples/fhir-to-omop");
   const wc = page.locator("sqlonfhir-viewing-room");
   await expect(wc).toBeAttached();
   await expect(wc.locator(".version-badge")).toContainText(/fhir4ds \d+\.\d+\.\d+/, {
