@@ -1,6 +1,42 @@
 # ViewDefinition Agent Notes
 
 ## Known Fragile Areas
+
+- UNNEST LOWERING (2026-10-27, feat/unnest-cte-lowering): forEach/
+  forEachOrNull/repeat lower to a PIPELINED SUBQUERY CHAIN, not correlated
+  LATERAL joins (the lateral form is O(N x payload): DuckDB re-parses the
+  full resource JSON per output row; 20k-element collections needed ~39 GB,
+  50k+ OOMed, and the Viewing Room SQLQuery sample OOMed in-browser at the
+  3.1 GiB DuckDB-WASM cap). Chain shape per iterator level: compute step
+  `(SELECT src.*, TRY_CAST(fhirpath_json(<bind>, path) AS JSON[]) AS __js_N
+  FROM <prev> AS src)` then expand step `(SELECT src.*, unnest(<elems>) AS
+  <alias>, unnest(<idx>) AS <alias>__row_index FROM ...)`. DuckDB planner
+  constraints that shaped the design (all verified on 1.5.5): (1) SELECT-form
+  lateral subqueries decorrelate into LEFT_DELIM_JOIN+HASH_JOIN which
+  REVERSES row order and re-evaluates per row — never reintroduce
+  `CROSS JOIN LATERAL (SELECT ...)`; (2) a WHERE cannot reference UNNEST
+  aliases defined in the same SELECT — level wheres wrap the expand step in
+  a filter subquery; (3) a SELECT-list expression cannot reference an unnest
+  alias defined in the same SELECT either — level COLUMN projections go in a
+  settle subquery one level up, under private carried aliases (`__col_<name>`)
+  that the outer projection re-aliases (per-level projection is load-bearing:
+  projecting parent element expressions at the outer level re-parses parent
+  payloads per child row — measured 12.6 s -> 0.19 s on nested 4x5k).
+  Process(S,N) step 3 null semantics use CASE arrays (forEachOrNull empty ->
+  `[NULL::JSON]`/`[0]::BIGINT[]`; nested-forEach-under-orn null-preserve via
+  null_preserve_var CASE), NOT UNION ALL synthetic rows. unionAll null-row
+  suppression applies at the alias-defining expand level
+  (chain.suppress_aliases re-assembly), NOT by text-patching branch SQL.
+  Primitives: `unnest(NULL::JSON[])` -> 0 rows (forEach empty = inner join);
+  `unnest([NULL::JSON])` -> 1 NULL row; multi-unnest zips in lockstep incl.
+  NULL slots; fhirpath_json filters JSON null elements AND returns SQL NULL
+  for empty collections (udf.py) so both contracts hold through TRY_CAST.
+  No-iterator VDs keep the legacy flat assembly; the deprecated union.py
+  public compat surface keeps the lateral helpers (SOF-VD-08). Guards:
+  tests/integration/test_unnest_large_collections.py (memory-capped 50k +
+  nested + CI-safe 20k/10s smoke + parity pins). Second opinion (Gemini 4
+  Argon) rejected both the LATERAL-zipped and MATERIALIZED-CTE designs;
+  spot-check table + probes in .temp/qa/unnest-fix/.
 - SOF-VD-10 HISTORIAN pass verified clean (2026-08-23), zero fixes. New
   pins from a fresh fetch of the official validator
   `FHIR/sql-on-fhir.js@main/sof-js/src/validate.js` (cached at
