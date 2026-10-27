@@ -13,7 +13,7 @@ except Exception as exc:
     diag = diagnostic_from_exception(exc, context="flatten_view")
     result = {"ok": False, "diagnostics": [diag.to_dict()]}
 json.dumps(result)
-`);return JSON.parse(e)}async function R(){if(m)return{id:0,type:"boot",ok:!0};const t=Date.now();try{const{loadPyodide:e}=await import(`${b}pyodide.mjs`);a=await e({indexURL:b}),await a.loadPackage(["micropip","duckdb","orjson","pyarrow"]);const o=new URL("./fhir4ds_v2-0.0.17-py3-none-any.whl?v=d7df06a1b48e",import.meta.url).href;a.globals.set("__wheel_url__",o),await a.runPythonAsync(`
+`);return JSON.parse(e)}async function R(){if(m)return{id:0,type:"boot",ok:!0};const t=Date.now();try{const{loadPyodide:e}=await import(`${b}pyodide.mjs`);a=await e({indexURL:b}),await a.loadPackage(["micropip","duckdb","orjson","pyarrow"]);const o=new URL("./fhir4ds_v2-0.0.18-py3-none-any.whl?v=6421536dc60e",import.meta.url).href;a.globals.set("__wheel_url__",o),await a.runPythonAsync(`
 import micropip, json
 
 await micropip.install([

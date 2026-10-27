@@ -109,6 +109,18 @@ moves to **medterm4ds 0.0.5**. The conformance baseline holds at
   cell) and a Declarations card styled like the cell cards; console tabs
   use one "Results" vocabulary per surface; the measure funnel is limited
   to the measure's own populations.
+- Standalone (WASM) parity with the connected workbench: cell runs carry
+  `patient_id` so per-patient cell tables and the evidence drill-in work
+  without a server; the in-browser evaluator, hover evaluation, and cell
+  evidence receive the full include closure (no more "Could not resolve
+  included library" on Run/hover/explain); view output shows real
+  progress/diagnostics instead of a static hint; Reset Workspace is
+  atomic (persists the clean demo snapshot immediately, reload-safe) and
+  auto-cellify fires on buffer arrival only — typing no longer swaps the
+  editor into cells mid-keystroke.
+- All shipped WASM examples now run the same 0.0.18 build: cql-clinic
+  (was 0.0.15, including a stale CQL extension binary) and viewing-room
+  (was 0.0.17) upgraded alongside the cleanroom and playground.
 
 **Known limitations**
 
