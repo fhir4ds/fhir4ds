@@ -30,8 +30,8 @@ flowchart LR
 
     Patient --> PersonVD["person<br/>ViewDefinition"]
     ConceptMap --> MapVD["concept map<br/>ViewDefinition"]
-    PersonVD -->|rows| SQ["person<br/>SQLQuery"]
-    MapVD -->|lookup rows| SQ
+    PersonVD --> SQ["person<br/>SQLQuery"]
+    MapVD --> SQ
     SQ --> Person
 
     classDef default fill:#1e293b,stroke:#38bdf8,color:#cbd5e1,stroke-width:1px
