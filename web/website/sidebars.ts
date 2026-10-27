@@ -206,7 +206,7 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
-          id: 'examples/omop-step-by-step',
+          id: 'examples/fhir-to-omop',
         },
         {
           type: 'doc',
