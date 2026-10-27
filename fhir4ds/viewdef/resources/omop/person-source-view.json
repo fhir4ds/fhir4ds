@@ -6,7 +6,7 @@
     {
       "column": [
         {
-          "name": "person_id",
+          "name": "person_source_value",
           "path": "id",
           "type": "id"
         },
@@ -29,11 +29,6 @@
           "name": "birth_datetime",
           "path": "birthDate",
           "type": "dateTime"
-        },
-        {
-          "name": "person_source_value",
-          "path": "id",
-          "type": "id"
         },
         {
           "name": "gender_source_value",
