@@ -25,30 +25,39 @@ test("journey: OMOP samples load the full Hugging Face datasets by default", asy
   await page.goto("/?suite=omop");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
 
-  // Default OMOP sample = person over the full 25-patient cohort.
+  // Default OMOP sample = the raw person reshape over the 25-patient
+  // cohort: source ids only, no concept ids yet.
   const table = page.getByTestId("output-table");
   await expect(table.locator("tbody tr")).toHaveCount(25, { timeout: 120_000 });
+  await expect(table).toContainText("person_source_value");
 
-  // Key projection: person_id is the BIGINT surrogate key, and the source
-  // id survives in person_source_value (the OMOP convention that lets the
-  // demo keep readable ids while showing integer keys).
+  // The person SQLQuery completes it: joined to the map, integer key,
+  // source id preserved. Both halves of the tutorial are live samples.
+  await page.locator("header select").selectOption("omop-person-sqlquery");
+  // Wait for the SQLQuery's shape (the raw view also has 25 rows).
+  await expect(
+    table.locator("thead th", { hasText: "gender_concept_id" }),
+  ).toHaveCount(1, { timeout: 240_000 });
+  await expect(table.locator("tbody tr")).toHaveCount(25, { timeout: 60_000 });
   const personCells = await table.locator("tbody tr").evaluateAll((rows) =>
-    rows.map((r) => {
-      const cells = [...r.querySelectorAll("td")].map((td) => td.textContent?.trim() ?? "");
-      return cells;
-    }),
+    rows.map((r) =>
+      [...r.querySelectorAll("td")].map((td) => td.textContent?.trim() ?? ""),
+    ),
   );
   const heads = await table.locator("thead th").evaluateAll((ths) =>
     ths.map((t) => t.textContent?.trim() ?? ""),
   );
   const idIdx = heads.indexOf("person_id");
   const srcIdx = heads.indexOf("person_source_value");
+  const conceptIdx = heads.indexOf("gender_concept_id");
   expect(idIdx).toBeGreaterThanOrEqual(0);
   expect(srcIdx).toBeGreaterThanOrEqual(0);
+  expect(conceptIdx).toBeGreaterThanOrEqual(0);
   for (const cells of personCells) {
-    // Digits only: a hashed 63-bit key exceeds 2^53, so it arrives as text.
+    // Digits only: the integer key exceeds 2^53, so it arrives as text.
     expect(cells[idIdx]).toMatch(/^\d+$/);
     expect(cells[srcIdx]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(["8507", "8532"]).toContain(cells[conceptIdx]);
   }
   const personIds = new Set(personCells.map((c) => c[idIdx]));
   expect(personIds.size).toBe(25);

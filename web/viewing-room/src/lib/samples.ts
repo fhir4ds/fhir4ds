@@ -96,12 +96,20 @@ export const SAMPLES: Sample[] = [
   {
     slug: "omop-patient",
     suite: "omop",
-    name: "OMOP person",
-    description: "OMOP CDM v5.5 person over a real Synthea cohort — gender concept join, birth-date splits.",
+    name: "OMOP person (view)",
+    description: "The person reshape: Patient -> person_source columns (birth-date splits, gender code) before the join.",
     vdUrl: "samples/omop-patient/viewdefinition.json",
     resourcesUrl: "samples/omop-patient/resources.ndjson",
     remoteResources: "patient-resources.ndjson",
-    omopTable: "person",
+  },
+  {
+    slug: "omop-person-sqlquery",
+    suite: "omop",
+    name: "OMOP person (SQLQuery)",
+    description: "The same cohort finished: a SQLQuery joins the person reshape to the ConceptMap and assigns the integer person_id.",
+    vdUrl: "samples/omop-person-sqlquery/viewdefinition.json",
+    resourcesUrl: "samples/omop-person-sqlquery/resources.ndjson",
+    remoteResources: "medication-resources.ndjson",
   },
   {
     slug: "omop-encounters",

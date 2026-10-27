@@ -1,5 +1,5 @@
 {
-  "name": "omop_person",
+  "name": "omop_person_source",
   "status": "draft",
   "resource": "Patient",
   "select": [
@@ -9,11 +9,6 @@
           "name": "person_id",
           "path": "id",
           "type": "id"
-        },
-        {
-          "name": "gender_concept_id",
-          "path": "cm.concept_id",
-          "type": "string"
         },
         {
           "name": "year_of_birth",
@@ -44,27 +39,6 @@
           "name": "gender_source_value",
           "path": "gender",
           "type": "code"
-        }
-      ]
-    }
-  ],
-  "joins": [
-    {
-      "name": "cm",
-      "view": "omop_conceptmap",
-      "type": "left",
-      "on": [
-        {
-          "path": "gender"
-        },
-        {
-          "path": "cm.concept_code"
-        },
-        {
-          "path": "'http://hl7.org/fhir/administrative-gender'"
-        },
-        {
-          "path": "cm.source_system"
         }
       ]
     }
