@@ -1,6 +1,68 @@
 # ViewDefinition Agent Notes
 
+## SQLQuery composition steps (2026-10-27)
+
+`manifest.sql_queries` maps a table to a SQLQuery `Library` under
+`sqlqueries/`. The runner materializes its decoded `application/sql` body as
+`CREATE OR REPLACE VIEW <schema>.<table> AS ...`, after the views it reads
+(`<schema>.<name>` references in the SQL text, topologically ordered; cycles
+and unknown references are typed errors). `render_view_sqls` includes these
+steps so the browser creates them in the same pass. A table owns its shaping:
+declaring a `projections` entry for a SQLQuery table raises, because the SQL
+would then be hashed/defaulted twice. `viewdef` must not import `sqlquery`
+(the dependency is one-way) — the Library content is decoded inline.
+
+Every OMOP table now follows this shape: a `*-source-view.json` reshape
+(no joins, carrying the map's code + system as `source_code` /
+`source_system` staging columns) plus a `<table>-omop` SQLQuery that joins
+`omop.omop_conceptmap`, assigns the integer keys and concept defaults, and
+(for `drug_exposure`) unions the five arm views. `manifest.projections` and
+`manifest.unions` are gone; `manifest.materialize` names the conceptmap
+lookup and the five `drug_exposure__<arm>` views. The ViewDefinition
+`joins` feature is still supported (and tested) but the library no longer
+uses it.
+
+Behaviour note: the old projection hashed columns unconditionally, so a
+NULL `visit_occurrence_id` became `hash(NULL) & mask` — a fabricated key.
+The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
+
 ## Known Fragile Areas
+
+- UNNEST LOWERING (2026-10-27, feat/unnest-cte-lowering): forEach/
+  forEachOrNull/repeat lower to a PIPELINED SUBQUERY CHAIN, not correlated
+  LATERAL joins (the lateral form is O(N x payload): DuckDB re-parses the
+  full resource JSON per output row; 20k-element collections needed ~39 GB,
+  50k+ OOMed, and the Viewing Room SQLQuery sample OOMed in-browser at the
+  3.1 GiB DuckDB-WASM cap). Chain shape per iterator level: compute step
+  `(SELECT src.*, TRY_CAST(fhirpath_json(<bind>, path) AS JSON[]) AS __js_N
+  FROM <prev> AS src)` then expand step `(SELECT src.*, unnest(<elems>) AS
+  <alias>, unnest(<idx>) AS <alias>__row_index FROM ...)`. DuckDB planner
+  constraints that shaped the design (all verified on 1.5.5): (1) SELECT-form
+  lateral subqueries decorrelate into LEFT_DELIM_JOIN+HASH_JOIN which
+  REVERSES row order and re-evaluates per row — never reintroduce
+  `CROSS JOIN LATERAL (SELECT ...)`; (2) a WHERE cannot reference UNNEST
+  aliases defined in the same SELECT — level wheres wrap the expand step in
+  a filter subquery; (3) a SELECT-list expression cannot reference an unnest
+  alias defined in the same SELECT either — level COLUMN projections go in a
+  settle subquery one level up, under private carried aliases (`__col_<name>`)
+  that the outer projection re-aliases (per-level projection is load-bearing:
+  projecting parent element expressions at the outer level re-parses parent
+  payloads per child row — measured 12.6 s -> 0.19 s on nested 4x5k).
+  Process(S,N) step 3 null semantics use CASE arrays (forEachOrNull empty ->
+  `[NULL::JSON]`/`[0]::BIGINT[]`; nested-forEach-under-orn null-preserve via
+  null_preserve_var CASE), NOT UNION ALL synthetic rows. unionAll null-row
+  suppression applies at the alias-defining expand level
+  (chain.suppress_aliases re-assembly), NOT by text-patching branch SQL.
+  Primitives: `unnest(NULL::JSON[])` -> 0 rows (forEach empty = inner join);
+  `unnest([NULL::JSON])` -> 1 NULL row; multi-unnest zips in lockstep incl.
+  NULL slots; fhirpath_json filters JSON null elements AND returns SQL NULL
+  for empty collections (udf.py) so both contracts hold through TRY_CAST.
+  No-iterator VDs keep the legacy flat assembly; the deprecated union.py
+  public compat surface keeps the lateral helpers (SOF-VD-08). Guards:
+  tests/integration/test_unnest_large_collections.py (memory-capped 50k +
+  nested + CI-safe 20k/10s smoke + parity pins). Second opinion (Gemini 4
+  Argon) rejected both the LATERAL-zipped and MATERIALIZED-CTE designs;
+  spot-check table + probes in .temp/qa/unnest-fix/.
 - SOF-VD-10 HISTORIAN pass verified clean (2026-08-23), zero fixes. New
   pins from a fresh fetch of the official validator
   `FHIR/sql-on-fhir.js@main/sof-js/src/validate.js` (cached at

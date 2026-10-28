@@ -1,0 +1,88 @@
+{
+  "resourceType": "ConceptMap",
+  "id": "fhir4ds-omop-supplements",
+  "status": "active",
+  "group": [
+    {
+      "source": "http://hl7.org/fhir/administrative-gender",
+      "target": "urn:omop:concept",
+      "element": [
+        {
+          "code": "male",
+          "target": [
+            {
+              "code": "8507",
+              "equivalence": "equivalent"
+            }
+          ]
+        },
+        {
+          "code": "female",
+          "target": [
+            {
+              "code": "8532",
+              "equivalence": "equivalent"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+      "target": "urn:omop:concept",
+      "element": [
+        {
+          "code": "IMP",
+          "target": [
+            {
+              "code": "9201",
+              "equivalence": "equivalent"
+            }
+          ]
+        },
+        {
+          "code": "AMB",
+          "target": [
+            {
+              "code": "9202",
+              "equivalence": "equivalent"
+            }
+          ]
+        },
+        {
+          "code": "EMER",
+          "target": [
+            {
+              "code": "9203",
+              "equivalence": "equivalent"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "target": "urn:omop:concept",
+      "element": [
+        {
+          "code": "problem-list-item",
+          "target": [
+            {
+              "code": "38000245",
+              "equivalence": "equivalent"
+            }
+          ]
+        },
+        {
+          "code": "encounter-diagnosis",
+          "target": [
+            {
+              "code": "43542353",
+              "equivalence": "equivalent"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "resourceType": "Library",
+  "id": "device-exposure-omop",
+  "name": "DeviceExposureOmop",
+  "status": "draft",
+  "type": {
+    "coding": [
+      {
+        "system": "http://hl7.org/fhir/uv/sql-on-fhir/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery"
+    ]
+  },
+  "content": [
+    {
+      "contentType": "application/sql",
+      "data": "U0VMRUNUCiAgICBDQVNFIFdIRU4geC4iZGV2aWNlX2V4cG9zdXJlX2lkIiBJUyBOVUxMIFRIRU4gTlVMTCBFTFNFIENBU1QoaGFzaCh4LiJkZXZpY2VfZXhwb3N1cmVfaWQiKSAmIDkyMjMzNzIwMzY4NTQ3NzU4MDcgQVMgQklHSU5UKSBFTkQgQVMgImRldmljZV9leHBvc3VyZV9pZCIsCiAgICBDQVNFIFdIRU4geC4icGVyc29uX2lkIiBJUyBOVUxMIFRIRU4gTlVMTCBFTFNFIENBU1QoaGFzaCh4LiJwZXJzb25faWQiKSAmIDkyMjMzNzIwMzY4NTQ3NzU4MDcgQVMgQklHSU5UKSBFTkQgQVMgInBlcnNvbl9pZCIsCiAgICBDT0FMRVNDRShUUllfQ0FTVCh4LiJkZXZpY2VfY29uY2VwdF9pZCIgQVMgQklHSU5UKSwgMCkgQVMgImRldmljZV9jb25jZXB0X2lkIiwKICAgIHguImRldmljZV9leHBvc3VyZV9zdGFydF9kYXRlIiwKICAgIHguImRldmljZV9leHBvc3VyZV9zdGFydF9kYXRldGltZSIsCiAgICB4LiJkZXZpY2VfZXhwb3N1cmVfZW5kX2RhdGUiLAogICAgeC4iZGV2aWNlX2V4cG9zdXJlX2VuZF9kYXRldGltZSIsCiAgICBDT0FMRVNDRShUUllfQ0FTVCh4LiJkZXZpY2VfdHlwZV9jb25jZXB0X2lkIiBBUyBCSUdJTlQpLCAwKSBBUyAiZGV2aWNlX3R5cGVfY29uY2VwdF9pZCIsCiAgICB4LiJ1bmlxdWVfZGV2aWNlX2lkIiwKICAgIHguInF1YW50aXR5IiwKICAgIHguImRldmljZV9zb3VyY2VfdmFsdWUiLAogICAgQ0FTRSBXSEVOIHguInZpc2l0X29jY3VycmVuY2VfaWQiIElTIE5VTEwgVEhFTiBOVUxMIEVMU0UgQ0FTVChoYXNoKHguInZpc2l0X29jY3VycmVuY2VfaWQiKSAmIDkyMjMzNzIwMzY4NTQ3NzU4MDcgQVMgQklHSU5UKSBFTkQgQVMgInZpc2l0X29jY3VycmVuY2VfaWQiCkZST00gb21vcC5kZXZpY2VfZXhwb3N1cmVfc291cmNlIEFTIHgK"
+    }
+  ],
+  "description": "OMOP device_exposure: reshape view joined to the flattened ConceptMap, with the integer keys."
+}

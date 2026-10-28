@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fhir4ds-v2"
-version = "0.0.18"
+version = "0.0.19"
 description = "FHIR for Data Science — unified package for FHIRPath, CQL, and SQL-on-FHIR analytics"
 readme = "README.md"
 license = {text = "AGPL-3.0-only"}
@@ -53,16 +53,16 @@ mongo = [
 # adapter. medterm4ds is published on PyPI so it is declared normally —
 # pip install 'fhir4ds-v2[terminology]' pulls both.
 #
-# Bounded to <0.0.6 (0.0.18): the medterm4ds 0.0.5 update (B-prime hybrid
-# serving + mixed pools) was deliberately re-verified for this release —
-# in-process adapter and notes pipeline gates pass. medterm4ds minors have
-# shipped silent behavior changes before (0.0.2 flipped expansion to
-# active-only by default and moved $search to system/searchMode params), so
-# re-verify the integration deliberately before each minor bump — see
-# USER_DIRECTIVES in fhir4ds-private/docs/prompts/.ai_loop/.
+# Bounded to <0.0.8: medterm4ds 0.0.7 (Athena campaign completion) adds
+# exact closure-ancestry query surfaces, the urn:medterm4ds:athena-conceptmap
+# $translate seam, and re-verified LocalDuckDB hybrid serving. medterm4ds
+# minors have shipped silent behavior changes before (0.0.2 flipped
+# expansion to active-only by default and moved $search to system/searchMode
+# params), so re-verify the integration deliberately before each minor
+# bump — see USER_DIRECTIVES in fhir4ds-private/docs/prompts/.ai_loop/.
 terminology = [
     "httpx>=0.24",
-    "medterm4ds>=0.0.5,<0.0.6",
+    "medterm4ds>=0.0.7,<0.0.8",
 ]
 # Phase 4 — Clinical Notes NER. Pulls the medspaCy + HuggingFace NER +
 # SapBERT cascade transitively via medterm4ds[extraction]. fhir4ds
@@ -70,7 +70,7 @@ terminology = [
 # those heavy deps are owned by medterm4ds so the core ``import fhir4ds``
 # path remains zero-dep.
 ner = [
-    "medterm4ds[extraction]>=0.0.5,<0.0.6",
+    "medterm4ds[extraction]>=0.0.7,<0.0.8",
 ]
 # Agentic interfaces: MCP stdio server (fhir4ds-mcp). Optional per the
 # operations-layer FDD — core install stays dependency-lean.

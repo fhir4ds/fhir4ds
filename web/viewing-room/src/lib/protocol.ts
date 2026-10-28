@@ -25,6 +25,7 @@ export type WorkerRequest =
       type: "flatten_view";
       view_definition: Record<string, unknown>;
       resources: Array<Record<string, unknown>>;
+      setup_sql?: string[];
     };
 
 export interface BootOkResponse {

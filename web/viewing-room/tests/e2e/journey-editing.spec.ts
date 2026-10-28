@@ -18,7 +18,7 @@ async function setVdEditor(page: import("@playwright/test").Page, text: string) 
 }
 
 test("journey: editing the VD and re-running reflects the edit", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?data=local");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
   await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(35, { timeout: 60_000 });
 
@@ -33,7 +33,7 @@ test("journey: editing the VD and re-running reflects the edit", async ({ page }
 });
 
 test("journey: invalid VD shows typed diagnostics, never a blank screen", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?data=local");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
   // Let the default sample's first run settle before editing (its
   // load-completion callback runs with the SAMPLE text and would otherwise
@@ -55,7 +55,7 @@ test("journey: invalid VD shows typed diagnostics, never a blank screen", async 
 });
 
 test("journey: wrong-resourceType input yields the 0-rows hint", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?data=local");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
   await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(35, { timeout: 60_000 });
 

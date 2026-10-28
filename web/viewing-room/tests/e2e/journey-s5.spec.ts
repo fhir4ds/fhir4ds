@@ -11,7 +11,7 @@
 import { test, expect } from "@playwright/test";
 
 test("journey: default sample is the reference playground's patient set", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?data=local");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
 
   // The reference bundles 25 Synthea patients; the default VD (reference's
@@ -26,7 +26,7 @@ test("journey: default sample is the reference playground's patient set", async 
 });
 
 test("journey: editing the VD recalcs automatically — no button press", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?data=local");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
   const table = page.getByTestId("output-table");
   await expect(table.locator("tbody tr")).toHaveCount(35, { timeout: 60_000 });
@@ -59,7 +59,7 @@ test("journey: editing the VD recalcs automatically — no button press", async 
 });
 
 test("journey: Browse tab groups resources by type and highlights the VD target", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?data=local");
   await expect(page.getByTestId("version-badge")).toBeVisible({ timeout: 120_000 });
   await expect(page.getByTestId("output-table").locator("tbody tr")).toHaveCount(35, { timeout: 60_000 });
 
@@ -74,9 +74,11 @@ test("journey: Browse tab groups resources by type and highlights the VD target"
   // VD targets Patient -> the Patient group carries the highlight.
   await expect(group).toHaveClass(/resource-highlight/);
 
-  // The item's JSON tree is rendered expanded by default (Expand all);
-  // verify a resource's content is present.
+  // Resource-type groups start collapsed; open the group, then the item
+  // (JSON trees mount lazily so large datasets stay cheap to render).
+  await group.locator("summary").first().click();
   const item = group.locator(".resource-viewer-item").first();
+  await item.locator("summary").click();
   await expect(item).toContainText("resourceType");
   await expect(item.locator(".json-tree-key").filter({ hasText: "birthDate" })).toBeVisible();
 

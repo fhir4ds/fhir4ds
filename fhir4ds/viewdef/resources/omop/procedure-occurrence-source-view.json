@@ -1,0 +1,83 @@
+{
+  "name": "procedure_occurrence_source",
+  "status": "draft",
+  "resource": "Procedure",
+  "constant": [
+    {
+      "name": "snomed_uri",
+      "valueString": "http://snomed.info/sct"
+    },
+    {
+      "name": "icd10cm_uri",
+      "valueString": "http://hl7.org/fhir/sid/icd-10-cm"
+    },
+    {
+      "name": "icd10pcs_uri",
+      "valueString": "http://www.ihe.net/CodeSystem/procedureCodes"
+    },
+    {
+      "name": "cpt4_uri",
+      "valueString": "http://www.ama-assn.org/go/cpt"
+    },
+    {
+      "name": "ehr_type_concept",
+      "valueString": "32810"
+    }
+  ],
+  "select": [
+    {
+      "column": [
+        {
+          "name": "procedure_occurrence_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "person_id",
+          "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "procedure_date",
+          "path": "performed.ofType(dateTime).substring(0, 10)",
+          "type": "date"
+        },
+        {
+          "name": "procedure_datetime",
+          "path": "performed.ofType(dateTime)",
+          "type": "dateTime"
+        },
+        {
+          "name": "procedure_type_concept_id",
+          "path": "%ehr_type_concept",
+          "type": "string"
+        },
+        {
+          "name": "quantity",
+          "path": "1",
+          "type": "integer"
+        },
+        {
+          "name": "procedure_source_value",
+          "path": "iif(code.coding.where(system=%snomed_uri).exists(), code.coding.where(system=%snomed_uri).code.first(), iif(code.coding.where(system=%cpt4_uri).exists(), code.coding.where(system=%cpt4_uri).code.first(), code.coding.code.first()))",
+          "type": "code"
+        },
+        {
+          "name": "visit_occurrence_id",
+          "path": "encounter.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "source_code",
+          "path": "iif(code.coding.where(system=%snomed_uri).exists(), code.coding.where(system=%snomed_uri).code.first(), iif(code.coding.where(system=%cpt4_uri).exists(), code.coding.where(system=%cpt4_uri).code.first(), code.coding.code.first()))",
+          "type": "string"
+        },
+        {
+          "name": "source_system",
+          "path": "iif(code.coding.where(system=%snomed_uri).exists(), %snomed_uri, iif(code.coding.where(system=%cpt4_uri).exists(), %cpt4_uri, code.coding.system.first()))",
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}

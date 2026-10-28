@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+
+# JS build output (committed snapshots live under web/website/static/)
+node_modules/
+web/website/build/
+web/website/.docusaurus/
+web/viewing-room/dist/
+web/viewing-room/test-results/
+web/viewing-room/playwright-report/
+web/website/test-results/
+web/website/playwright-report/
+*.tsbuildinfo
+dist/
+
+# Local scratch and runtime state
+.temp/
+.opencode/goals/

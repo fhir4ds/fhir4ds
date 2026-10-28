@@ -19,9 +19,10 @@ test("viewing-room example page embeds and boots the component", async ({ page }
   await expect(
     page.locator(".pagination-nav__link--prev"),
   ).toHaveAttribute("href", /\/docs\/examples\/cms-measures\/$/);
+  // Sidebar order: Quality Measures -> Viewing Room -> FHIR to OMOP -> ...
   await expect(
     page.locator(".pagination-nav__link--next"),
-  ).toHaveAttribute("href", /\/docs\/examples\/sdc-playground\/$/);
+  ).toHaveAttribute("href", /\/docs\/examples\/fhir-to-omop\/$/);
 
   // The popout pill points at the standalone app; the embed boots directly.
   const wc = page.locator("sqlonfhir-viewing-room");
@@ -33,4 +34,73 @@ test("viewing-room example page embeds and boots the component", async ({ page }
   await expect(
     wc.locator('[data-testid="output-table"] tbody tr'),
   ).toHaveCount(35, { timeout: 60_000 });
+});
+
+test("FHIR to OMOP page teaches the three artifacts", async ({ page }) => {
+  await page.goto("/docs/examples/fhir-to-omop");
+  await expect(page.locator("h1")).toHaveText("FHIR → OMOP");
+
+  const sidebar = page.locator('nav[aria-label="Docs sidebar"]');
+  await expect(sidebar.getByRole("link", { name: "FHIR → OMOP" })).toBeVisible();
+
+  await expect(page.locator(".pagination-nav__link--prev")).toHaveAttribute(
+    "href",
+    /\/docs\/examples\/viewing-room\/$/,
+  );
+  await expect(page.locator(".pagination-nav__link--next")).toHaveAttribute(
+    "href",
+    /\/docs\/examples\/sdc-playground\/$/,
+  );
+
+  // One section per step, in reading order.
+  for (const h2 of [
+    "Two ways to describe the same person",
+    "Step 1 — Reshape: documents into columns",
+    "Step 2 — Translate: codes into concept ids",
+    "Step 3 — Compose: join the two in a SQLQuery",
+    "That is the whole recipe",
+    "Try it",
+  ]) {
+    await expect(page.locator("article h2", { hasText: h2 })).toBeVisible();
+  }
+
+  // The overview diagram is a rendered mermaid graph, not a fenced block.
+  await expect(page.locator("svg[id^='mermaid']").first()).toBeVisible();
+  await expect(page.locator("article")).not.toContainText("flowchart LR");
+
+  // No SQL at all: the page is three JSON artifacts plus prose.
+  await expect(page.locator("article")).not.toContainText("fhirpath_text(");
+  // (Scope to MDX code blocks: the embedded app brings its own <pre>.)
+  // Three ViewDefinition/ConceptMap/Library JSON artifacts plus the
+  // SQLQuery body (the mermaid block renders as an svg, not a code block).
+  await expect(page.locator("article .theme-code-block")).toHaveCount(5);
+  await expect(
+    page.locator("article .theme-code-block", { hasText: "LEFT JOIN omop.omop_conceptmap" }),
+  ).toHaveCount(1);
+  // The composed table keeps the source id visible next to the integer key.
+  await expect(page.locator("article")).toContainText("person_source_value");
+
+  // The live demo is embedded at the end.
+  await expect(page.locator("sqlonfhir-viewing-room")).toBeAttached();
+});
+
+test("FHIR to OMOP page boots the embedded OMOP suite", async ({ page, request }) => {
+  const probe = await request
+    .get("https://huggingface.co/datasets/fhir4ds/omop-demo/resolve/main/patient-resources.ndjson", {
+      timeout: 30_000,
+    })
+    .catch(() => null);
+  if (!probe || !probe.ok()) test.skip(true, "Hugging Face dataset unreachable");
+
+  await page.goto("/docs/examples/fhir-to-omop");
+  const wc = page.locator("sqlonfhir-viewing-room");
+  await expect(wc).toBeAttached();
+  await expect(wc.locator(".version-badge")).toContainText(/fhir4ds \d+\.\d+\.\d+/, {
+    timeout: 120_000,
+  });
+  // suite="omop": OMOP-only gallery + the 25-patient cohort as default.
+  await expect(wc.locator("header select option")).toHaveCount(5, { timeout: 60_000 });
+  await expect(wc.locator('[data-testid="output-table"] tbody tr')).toHaveCount(25, {
+    timeout: 180_000,
+  });
 });

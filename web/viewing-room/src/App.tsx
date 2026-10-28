@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { BootStatus, flattenView, onBootStatus } from "./lib/engineClient";
 import { boot as bootEngine } from "./lib/engineClient";
-import { DEFAULT_SAMPLE, Sample, SAMPLES, parseResourcesInput, resourceStats, sampleUrl } from "./lib/samples";
+import { DEFAULT_SAMPLE, Sample, SAMPLES, SUITE_LABELS, SampleSuite, activeSamples, parseResourcesInput, requestedSample, resourceStats, sampleResourcesUrl, sampleUrl } from "./lib/samples";
 import { ResultsTable } from "./components/ResultsTable";
 import { DiagnosticsList } from "./components/DiagnosticsList";
 import { SqlView } from "./components/SqlView";
@@ -46,6 +46,7 @@ export default function App() {
   const [sample, setSample] = useState<Sample | null>(null);
   const [run, setRun] = useState<RunState>(EMPTY_RUN);
   const [outputTab, setOutputTab] = useState<OutputTab>("table");
+  const [sampleSetup, setSampleSetup] = useState<string[]>([]);
   const [resourcesTab, setResourcesTab] = useState<ResourcesTab>("browse");
   const vdRef = useRef<string>("");
   vdRef.current = vdText;
@@ -64,40 +65,56 @@ export default function App() {
   // The last LOADED sample content (dirty-guard baseline).
   const loadedRef = useRef<{ vd: string; res: string }>({ vd: "", res: "" });
 
-  const loadSample = useCallback(async (s: Sample): Promise<{ vd: string; res: string }> => {
+  const loadSample = useCallback(async (s: Sample): Promise<{ vd: string; res: string; setup: string[] }> => {
     setSample(s);
-    const [vd, res] = await Promise.all([
+    const setupUrl = s.setupUrl ? sampleUrl(s.setupUrl) : null;
+    const [vd, res, setup] = await Promise.all([
       fetch(sampleUrl(s.vdUrl)).then((r) => {
         if (!r.ok) throw new Error(`sample VD fetch failed: ${s.vdUrl}`);
         return r.text();
       }),
-      fetch(sampleUrl(s.resourcesUrl)).then((r) => {
+      fetch(sampleResourcesUrl(s)).then((r) => {
         if (!r.ok) throw new Error(`sample resources fetch failed: ${s.resourcesUrl}`);
         return r.text();
       }),
+      setupUrl
+        ? fetch(setupUrl).then((r) => {
+            if (!r.ok) throw new Error(`sample setup fetch failed: ${s.setupUrl}`);
+            return r.text();
+          })
+        : Promise.resolve(null),
     ]);
     const vdText = vd.trimEnd() + "\n";
     const resText = res.trimEnd() + "\n";
+    // setup.sql: build-time composition DDL; split on statement boundaries
+    // (';' line-terminated) for statement-wise wasm replay.
+    const setupStmts = setup
+      ? setup.split(/;\s*\n/).map((t) => t.trim()).filter((t) => t.length > 0)
+      : [];
     setVdText(vdText);
     setResourcesText(resText);
     loadedRef.current = { vd: vdText, res: resText };
-    return { vd: vdText, res: resText };
+    setSampleSetup(setupStmts);
+    return { vd: vdText, res: resText, setup: setupStmts };
   }, []);
 
   // Auto-load the default sample once (auto-run on sample load only).
+  // ?suite=<s> narrows the gallery; ?sample=<slug> then picks one of it
+  // (deep links from the docs land directly on a step's live sample).
   const defaultLoaded = useRef(false);
   useEffect(() => {
     if (defaultLoaded.current) return;
     defaultLoaded.current = true;
-    loadSample(DEFAULT_SAMPLE)
+    const { samples } = activeSamples();
+    loadSample(requestedSample(samples) ?? samples[0] ?? DEFAULT_SAMPLE)
       // Pass the loaded text EXPLICITLY: refs update on render, and the
       // post-promise microtask can run before React commits the new state.
-      .then((t) => void doRunRef.current?.(t.vd, t.res))
+      .then((t) => void doRunRef.current?.(t.vd, t.res, t.setup))
       .catch((e) => console.error("sample load failed", e));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const doRun = useCallback(async (vdOverride?: string, resOverride?: string) => {
+  const doRun = useCallback(async (vdOverride?: string, resOverride?: string, setupOverride?: string[]) => {
     const vdTextNow = vdOverride ?? vdRef.current;
     const resTextNow = resOverride ?? resRef.current;
     setRun((r) => ({ ...r, running: true }));
@@ -121,7 +138,7 @@ export default function App() {
       setOutputTab("diagnostics");
       return;
     }
-    const env = await flattenView(vd, parsed.resources);
+    const env = await flattenView(vd, parsed.resources, setupOverride ?? sampleSetup);
     setRun({
       running: false,
       columns: env.ok ? (env.columns ?? []) : [],
@@ -134,14 +151,15 @@ export default function App() {
     setOutputTab(env.ok ? "table" : "diagnostics");
   }, []);
 
-  const doRunRef = useRef<((vd?: string, res?: string) => void) | null>(null);
-  doRunRef.current = (vd?, res?) => void doRun(vd, res);
+  const doRunRef = useRef<((vd?: string, res?: string, setup?: string[]) => void) | null>(null);
+  doRunRef.current = (vd?, res?, setup?) => void doRun(vd, res, setup);
 
   // AUTO-RECALC (Joel, S5): debounced auto-run on editor changes once the
   // engine is ready AND at least one run has happened (i.e. after the initial
   // sample auto-run). Rapid edits collapse to the latest text; the single
   // worker serializes runs naturally (postMessage queue) and the S3
   // staging-race fix made table reuse safe.
+  const activeSuite = activeSamples().suite;
   const autoRunArmed = useRef(false);
   const engineReadyRef = useRef(false);
   engineReadyRef.current = bootStatus.phase === "ready";
@@ -190,12 +208,9 @@ export default function App() {
     autoRunArmed.current && run.ranAt !== null &&
     (vdText !== lastRunText.current.vd || resourcesText !== lastRunText.current.res);
 
-  // Resource stats (design §4: resource stats on the pane header) —
-  // derived from the last PARSED editor content (shown after a run).
+  // Loaded-type summary feeding the 0-row hint (the Browse tab's summary
+  // covers the pane-header role; the header itself was removed).
   const stats = resourceStats(run.parsedResources ?? []);
-  const resourceStatsText = stats.total
-    ? `${stats.total} resource${stats.total === 1 ? "" : "s"}: ${stats.byType.map((t) => `${t.count} ${t.type}`).join(", ")}`
-    : "";
 
   // Dirty guard (Muse rec): switching samples with edited content asks first.
   const dirty = resourcesText !== loadedRef.current.res || vdText !== loadedRef.current.vd;
@@ -203,7 +218,7 @@ export default function App() {
   const selectSample = useCallback(
     (s: Sample) => {
       if (dirty && !window.confirm("Editors have unsaved edits — load sample anyway?")) return;
-      void loadSample(s).then((t) => doRunRef.current?.(t.vd, t.res));
+      void loadSample(s).then((t) => doRunRef.current?.(t.vd, t.res, t.setup));
     },
     [dirty, loadSample],
   );
@@ -250,12 +265,34 @@ export default function App() {
           }}
         >
           {!sample && <option value="" disabled>Load a sample…</option>}
-          {SAMPLES.map((s) => (
-            <option key={s.slug} value={s.slug}>
-              {s.name}
-            </option>
-          ))}
+          {(Object.keys(SUITE_LABELS) as SampleSuite[]).map((suite) => {
+            const items = activeSamples().samples.filter((s) => s.suite === suite);
+            if (!items.length) return null;
+            return (
+              <optgroup key={suite} label={SUITE_LABELS[suite]}>
+                {items.map((s) => (
+                  <option key={s.slug} value={s.slug}>
+                    {s.name}
+                  </option>
+                ))}
+              </optgroup>
+            );
+          })}
         </select>
+        {activeSuite && (
+          <button
+            className="suite-filter-pill"
+            data-testid="suite-filter"
+            title="Clear the sample-suite filter"
+            onClick={() => {
+              const url = new URL(window.location.href);
+              url.searchParams.delete("suite");
+              window.location.href = url.href;
+            }}
+          >
+            {SUITE_LABELS[activeSuite]} only ✕
+          </button>
+        )}
         {bootStatus.phase === "ready" ? (
           <span className="version-badge" data-testid="version-badge">
             fhir4ds {bootStatus.wheelVersion}
@@ -274,10 +311,6 @@ export default function App() {
 
       <div className="main" ref={mainRef}>
         <section className="pane pane-resources" aria-label="FHIR resources" style={{ flex: `${splitPct} 1 0%` }}>
-          <div className="pane-header">
-            FHIR Resources
-            {run.ranAt && <span className="pane-stats" data-testid="resource-stats">{resourceStatsText}</span>}
-          </div>
           <div className="resources-tabs tab-strip" role="tablist" aria-label="Resources pane views">
             <button
               id="vr-res-tab-editor"

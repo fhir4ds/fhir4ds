@@ -52,7 +52,7 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Flattening & Modeling',
-          items: ['user-guide/modeling/viewdef'],
+          items: ['user-guide/modeling/viewdef', 'user-guide/modeling/omop-mapping'],
         },
         {
           type: 'category',
@@ -203,6 +203,10 @@ const sidebars: SidebarsConfig = {
           type: 'doc',
           id: 'examples/viewing-room',
           label: 'Viewing Room',
+        },
+        {
+          type: 'doc',
+          id: 'examples/fhir-to-omop',
         },
         {
           type: 'doc',

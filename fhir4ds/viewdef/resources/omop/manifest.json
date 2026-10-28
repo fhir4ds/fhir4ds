@@ -1,0 +1,57 @@
+{
+  "name": "fhir4ds-omop-mapping",
+  "omop_version": "5.5",
+  "fhir4ds_min_version": "0.0.17",
+  "view_schema": "omop",
+  "description": "FHIR R4 -> OMOP CDM v5.5 tables as a ViewDefinition library. Rev-2 architecture: the STANDARD MONOLITHIC ConceptMap resource ships as the converter contract; the S1 conceptmap VD flattens it (materialized as the omop.omop_conceptmap join target); event VDs join the VIEW via Join.view (spec composition semantics). Unions + projections compose through the generic fhir4ds.viewdef.runner. Materialization order is INFERRED from Join.view references (zero-config); 'materialize' remains an optional override.",
+  "views": {
+    "conceptmap-view": "ConceptMap resources -> flat mapping rows (THE join target; materialized as omop.omop_conceptmap)",
+    "person-source-view": "Patient -> person_source (reshape only; joined and keyed by the person SQLQuery)",
+    "visit-occurrence-source-view": "Encounter -> visit_occurrence_source (reshape only)",
+    "condition-occurrence-source-view": "Condition -> condition_occurrence_source (reshape only)",
+    "procedure-occurrence-source-view": "Procedure -> procedure_occurrence_source (reshape only)",
+    "drug-exposure-medication-request-source-view": "MedicationRequest -> drug_exposure__medication_request (reshape only)",
+    "drug-exposure-medication-statement-source-view": "MedicationStatement -> drug_exposure__medication_statement (reshape only)",
+    "drug-exposure-medication-administration-source-view": "MedicationAdministration -> drug_exposure__medication_administration (reshape only)",
+    "drug-exposure-medication-dispense-source-view": "MedicationDispense -> drug_exposure__medication_dispense (reshape only)",
+    "drug-exposure-immunization-source-view": "Immunization -> drug_exposure__immunization (reshape only)",
+    "device-exposure-source-view": "DeviceUsage -> device_exposure_source (reshape only)",
+    "measurement-source-view": "Observation (Quantity-valued) -> measurement_source (reshape only)",
+    "observation-source-view": "Observation (non-Quantity) -> observation_source (reshape only)",
+    "death-source-view": "Patient.deceased -> death_source (reshape only)"
+  },
+  "conceptmap_source": {
+    "canonical_form": "STANDARD MONOLITHIC ConceptMap (all groups in one resource) \u2014 the converter contract",
+    "supplements": "conceptmap-supplements.json (monolithic)",
+    "athena_converter": "medterm4ds side emits the same monolithic form; flattening happens query-side via the conceptmap VD (rev 2)"
+  },
+  "v54_variant": {
+    "status": "designed, not shipped",
+    "delta": "v5.5 adds only optional fields (observation.value_as_date, unit_source_concept_id, value_as_source_concept_id; measurement.value_as_source_concept_id; specimen visit FKs) and vocabulary metadata tables \u2014 none in this spine scope. A v5.4 manifest flags the observation/measurement views to drop those columns."
+  },
+  "etl_assumptions": [
+    "type_concept_id defaults: 32810 (EHR record) family per event table; per-branch drug types 38000177/38000175/38000180; condition category -> 38000245/43542353",
+    "provider/care_site integer FKs left 0 (FHIR carries references, not stable integers) \u2014 documented policy",
+    "person/visit/PK ids: xxhash-style positive 63-bit hash of the FHIR id string (runner projections)",
+    "observation_period is ETL-defined per THEMIS (aggregate derivation, not a row mapping) \u2014 not in the VD library v1"
+  ],
+  "sql_queries": {
+    "person": "person-omop",
+    "visit_occurrence": "visit-occurrence-omop",
+    "condition_occurrence": "condition-occurrence-omop",
+    "procedure_occurrence": "procedure-occurrence-omop",
+    "drug_exposure": "drug-exposure-omop",
+    "device_exposure": "device-exposure-omop",
+    "measurement": "measurement-omop",
+    "observation": "observation-omop",
+    "death": "death-omop"
+  },
+  "materialize": {
+    "omop_conceptmap": "conceptmap-view",
+    "drug_exposure__medication_request": "drug-exposure-medication-request-source-view",
+    "drug_exposure__medication_statement": "drug-exposure-medication-statement-source-view",
+    "drug_exposure__medication_administration": "drug-exposure-medication-administration-source-view",
+    "drug_exposure__medication_dispense": "drug-exposure-medication-dispense-source-view",
+    "drug_exposure__immunization": "drug-exposure-immunization-source-view"
+  }
+}

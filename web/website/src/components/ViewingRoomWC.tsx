@@ -60,6 +60,8 @@ function LaunchCard({ onLaunch }: { onLaunch: () => void }) {
 interface ViewingRoomWCProps {
   /** CSS height. Default: '85vh' */
   height?: string;
+  /** Restrict the sample gallery to one suite (general | uscore | omop). */
+  suite?: "general" | "uscore" | "omop";
   /** Show a "Launch Demo" splash card before loading the heavy bundle. */
   lazyLaunch?: boolean;
   /** Show an "Open in new window ↗" pill above the app that opens the
@@ -69,6 +71,7 @@ interface ViewingRoomWCProps {
 
 function ViewingRoomComponent({
   height = "85vh",
+  suite,
   lazyLaunch = false,
   popout = false,
 }: ViewingRoomWCProps) {
@@ -85,10 +88,10 @@ function ViewingRoomComponent({
 
   return (
     <>
-      {popout && <PopoutPill url={`${baseUrl}viewing-room-app/`} />}
+      {popout && <PopoutPill url={`${baseUrl}viewing-room-app/${suite ? `?suite=${suite}` : ""}`} />}
       <div className={styles.demoWrapper} style={{ height }}>
         {/* @ts-expect-error sqlonfhir-viewing-room is a custom element defined by the viewing-room bundle */}
-        <sqlonfhir-viewing-room height={height} style={{ display: "block", width: "100%", height: "100%" }} />
+        <sqlonfhir-viewing-room height={height} suite={suite} style={{ display: "block", width: "100%", height: "100%" }} />
       </div>
     </>
   );

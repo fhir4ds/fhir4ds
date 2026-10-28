@@ -1007,40 +1007,67 @@ class Join:
     ``https://fhir4ds.org/StructureDefinition/JoinExtension`` is reserved
     for opt-in declaration.
 
-    Within fhir4ds, joins allow linking resources based on FHIRPath
-    expressions.
+    Within fhir4ds, joins allow linking resources OR VIEW OUTPUTS based on
+    join conditions. Exactly one of ``resource`` / ``view`` selects the
+    target kind:
+
+    - ``resource``: the join targets another FHIR resource table; ON and
+      ``<alias>.``-prefixed column paths are FHIRPath expressions
+      evaluated against the joined resource JSON.
+    - ``view`` (rev 2, view-as-join-target): the join targets a
+      materialized VIEW (another ViewDefinition's flat output, per the
+      spec's composition semantics — "each referenced result acts as a
+      virtual table for the referencing query"). ``<alias>.<name>`` paths
+      become SQL column references into the view's output columns; the
+      base-side ON expressions remain FHIRPath over the base resource.
 
     Attributes:
-        name: Name for the joined resource (used as table alias).
-        resource: The FHIR resource type to join.
-        on: List of FHIRPath expressions for join conditions.
+        name: Name for the joined resource/view (used as table alias).
+        resource: The FHIR resource type to join (resource target).
+        view: The ViewDefinition name to join (view target). The runner
+            materializes it (or the generator inlines it as a CTE).
+        on: List of FHIRPath expressions / path pairs for join conditions.
         type: The type of join (inner, left, right, full).
     """
 
     name: str
-    resource: str
+    resource: str = ""
+    view: Optional[str] = None
     on: List[Dict[str, str]] = field(default_factory=list)
     type: JoinType = JoinType.INNER
 
     def __post_init__(self) -> None:
         """Validate public join construction and convert string type values."""
         validate_sql_name(self.name, "Join.name")
-        if not isinstance(self.resource, str) or not self.resource:
-            raise ValueError("Join.resource must be a non-empty FHIR ResourceType string")
-        if self.resource not in KNOWN_FHIR_RESOURCE_TYPES:
-            raise ValueError(
-                f"Join.resource {self.resource!r} is not in the required ResourceType binding"
-            )
+        if self.view is not None:
+            # View target: mutually exclusive with resource.
+            if self.resource:
+                raise ValueError(
+                    "Join cannot set both 'resource' and 'view' — pick one target kind"
+                )
+            if not isinstance(self.view, str) or not self.view:
+                raise ValueError("Join.view must be a non-empty ViewDefinition name")
+        elif not isinstance(self.resource, str) or not self.resource:
+            raise ValueError("Join requires 'resource' (ResourceType) or 'view' (ViewDefinition name)")
+        else:
+            if self.resource not in KNOWN_FHIR_RESOURCE_TYPES:
+                raise ValueError(
+                    f"Join.resource {self.resource!r} is not in the required ResourceType binding"
+                )
         if isinstance(self.type, str):
             self.type = JoinType.from_string(self.type)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d: Dict[str, Any] = {
             "name": self.name,
-            "resource": self.resource,
             "on": [dict(condition) for condition in self.on],
             "type": self.type.value if isinstance(self.type, JoinType) else self.type,
         }
+        if self.view is not None:
+            d["view"] = self.view
+        else:
+            d["resource"] = self.resource
+        return d
 
 
 @dataclass

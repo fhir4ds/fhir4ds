@@ -17,7 +17,7 @@ import { createRoot, type Root } from "react-dom/client";
 import "./lib/monaco-setup";
 import App from "./App";
 import { startMonacoStylePorting } from "./lib/monaco-shadow-fix";
-import { setSampleBase } from "./lib/samples";
+import { SampleSuite, setSampleBase, setSuiteOverride } from "./lib/samples";
 
 // Import full app CSS as a string for Shadow DOM injection.
 import appStyles from "./styles.css?inline";
@@ -69,12 +69,19 @@ class ViewingRoomElement extends HTMLElement {
   private stopStylePorting: (() => void) | null = null;
 
   static get observedAttributes(): string[] {
-    return ["height"];
+    return ["height", "suite"];
+  }
+
+  private applySuite(): void {
+    const raw = this.getAttribute("suite");
+    const valid = raw === "general" || raw === "uscore" || raw === "omop";
+    setSuiteOverride(valid ? (raw as SampleSuite) : null);
   }
 
   connectedCallback() {
     if (this.root) return; // already mounted
 
+    this.applySuite();
     this.container = document.createElement("div");
     this.container.className = "viewing-room-root";
     this.container.style.height = this.getAttribute("height") ?? "85vh";
@@ -134,6 +141,7 @@ class ViewingRoomElement extends HTMLElement {
     if (name === "height" && this.container) {
       this.container.style.height = this.getAttribute("height") ?? "85vh";
     }
+    if (name === "suite") this.applySuite();
   }
 
   disconnectedCallback() {

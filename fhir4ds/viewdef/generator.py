@@ -37,6 +37,21 @@ _SIMPLE_FHIRPATH_NAV_RE = re.compile(
 _CONTEXT_SWITCHING_BUILTINS = {"context", "resource", "rootResource"}
 
 
+class _ViewColumnRef:
+    """A routed join path that resolves to a plain SQL column reference.
+
+    Produced by ``_route_join_path`` for view-target joins (rev 2,
+    view-as-join-target): ``cm.concept_id`` becomes the quoted SQL column
+    reference ``"cm"."concept_id"`` — the joined VIEW's rows are already
+    flat, so no FHIRPath compilation applies.
+    """
+
+    __slots__ = ("sql",)
+
+    def __init__(self, sql: str) -> None:
+        self.sql = sql
+
+
 def _quote_identifier(name: str) -> str:
     """Quote a SQL identifier (thin wrapper over the public utils helper).
 
@@ -102,8 +117,8 @@ from .types import (
 from .errors import ValidationError
 from .metadata import KNOWN_FHIR_RESOURCE_TYPES
 
-from .unnest import generate_foreach_unnest, generate_foreachornull_unnest, generate_repeat_unnest
 from .constants import ConstantResolver, extract_constant_references, iter_constant_references
+from .unnest import generate_foreach_unnest, generate_foreachornull_unnest, generate_repeat_unnest
 from fhir4ds.fhirpath.parser import parse as parse_fhirpath
 
 
@@ -113,6 +128,68 @@ def _load_fhir_array_elements() -> set:
     with open(config_path) as f:
         data = json.load(f)
     return set(data.get("elements", []))
+
+
+def _dollar_quote_literal(text: str) -> str:
+    """Return a SQL dollar-quoted string literal for arbitrary text.
+
+    Used for ``fhirpath_repeat`` path arrays whose JSON serialization may
+    contain quotes; dollar-quoting avoids quadratic quote-doubling.
+    """
+    tag = "fp"
+    while f"${tag}$" in text:
+        tag += "p"
+    return f"${tag}${text}${tag}$"
+
+
+class _Level:
+    """One pipelined subquery level of the unnest chain (internal).
+
+    The chain replaces the former correlated LATERAL joins. Each iterator
+    (forEach/forEachOrNull/repeat) appends levels to the innermost scope;
+    ``columns`` are projected at their defining level (per-level projection
+    keeps parent elements from being re-parsed per child row — the O(N x
+    payload) pathology), and ``wheres`` apply at the level where their
+    iterator alias is in scope.
+    """
+
+    __slots__ = ("columns", "wheres")
+
+    def __init__(self) -> None:
+        self.columns: List[str] = []
+        self.wheres: List[str] = []
+
+
+class _ChainState:
+    """Builds the nested-FROM subquery chain for one (non-union) query.
+
+    Attributes:
+        levels: level stack; levels[0] is the base (root resource) scope.
+            Each iterator pushes a fresh level binding its element alias.
+        ordered_outputs: (name, sql) for every output column in authored
+            order, shared across the recursive _process_selects walk.
+        steps: iterator step descriptors consumed by _assemble_chain.
+    """
+
+    def __init__(self, table_alias: str) -> None:
+        self.levels: List[_Level] = [_Level()]
+        self.table_alias = table_alias
+        self.root_res_alias = f"{table_alias}.resource"
+        self.ordered_outputs: List[Tuple[str, str]] = []
+        self.steps: list = []
+        # forEachOrNull aliases whose null-preserved row must be suppressed
+        # (non-first UNION ALL branches of the same wrapper select — Process
+        # (S, N) step 3 emits one null row total). Applied at the
+        # alias-defining expand level during assembly.
+        self.suppress_aliases: Set[str] = set()
+
+    def push_level(self) -> _Level:
+        lvl = _Level()
+        self.levels.append(lvl)
+        return lvl
+
+    def pop_level(self) -> None:
+        self.levels.pop()
 
 
 class SQLGenerator:
@@ -267,6 +344,23 @@ class SQLGenerator:
         self.table_alias = "t"  # Base table alias
         self._alias_counter = 0
         self._constant_resolver = None
+        # Pipelined-chain handoff for union-branch null-row suppression
+        # (set by _build_single_query, consumed by _generate_single_resource).
+        self._pending_chain: Optional[_ChainState] = None
+        self._pending_chain_filter: Optional[str] = None
+        # Root-join routing (fhir4ds extension): join alias -> quoted table
+        # reference SQL for the joined resource. Populated by generate() from
+        # ViewDefinition.joins; column paths prefixed "<alias>." are routed
+        # to the joined table's resource column.
+        self._root_joins: dict = {}
+        # View-target joins (rev 2): aliases whose routed paths become SQL
+        # column references into the materialized view's flat output.
+        self._view_join_aliases: set = set()
+        # Runner-provided view table resolution: view name -> table reference
+        # SQL (overrides the <view_schema>.<name> convention).
+        self._view_tables: dict = {}
+        # Schema for view-target table references when not in _view_tables.
+        self.view_schema: str = "omop"
 
     def _get_type_name(self, column_type) -> str | None:
         """Return the normalized FHIR type name for a column type declaration."""
@@ -723,6 +817,136 @@ class SQLGenerator:
             return self._constant_resolver.resolve_in_path(path)
         return path
 
+    def _get_join_table_ref(self, resource: str) -> str:
+        """Return the FROM-side table reference for a root join.
+
+        In ``source_table`` mode the joined resource reads from the SAME
+        staged table through a derived subquery carrying its own
+        resourceType filter (mirrors the base table's filter semantics).
+        Otherwise the pluralized per-type table is used, matching the
+        generator's default table naming.
+        """
+        from .utils import pluralize_resource as _pluralize
+        if resource not in KNOWN_FHIR_RESOURCE_TYPES:
+            raise ValidationError(
+                f"Join.resource {resource!r} is not in the required ResourceType binding"
+            )
+        if self._source_table is not None:
+            staged = _quote_table_reference(self._source_table)
+            return (
+                f"(SELECT resource FROM {staged} "
+                f"WHERE json_extract_string(resource, '$.resourceType') = '{resource}')"
+            )
+        return _pluralize(resource)
+
+    def _generate_join_on(self, on_clauses: List[dict], join_alias: str) -> str:
+        """Generate the ON condition for a root join (bounded S0 surface).
+
+        Each consecutive PATH PAIR forms one equality between scalar
+        FHIRPath projections; a path prefixed with the join alias evaluates
+        against the joined table's resource, otherwise against the base
+        resource. Single unpaired trailing paths are rejected (equality
+        pairs only per the S0 bound).
+        """
+        if not on_clauses:
+            raise ValidationError("Join requires at least one ON clause")
+        paths = []
+        for clause in on_clauses:
+            path = clause.get("path", "")
+            if not path:
+                raise ValidationError("Join ON clause requires a 'path' expression")
+            paths.append(path)
+        if len(paths) % 2 != 0:
+            raise ValidationError(
+                "Join ON clauses must be equality pairs: "
+                "[{path: left}, {path: right}, ...] (S0 bound)"
+            )
+        conditions = []
+        for i in range(0, len(paths), 2):
+            left_sql, left_expr = self._join_side_expr(paths[i], join_alias)
+            right_sql, right_expr = self._join_side_expr(paths[i + 1], join_alias)
+
+            def side_expr(ref: str, expr) -> str:
+                # View-target side: expr is None and ref IS the column ref.
+                if expr is None:
+                    return f"NULLIF({ref}, '')"
+                return f"NULLIF(fhirpath_text({ref}, {expr}), '')"
+
+            conditions.append(
+                f"{side_expr(left_sql, left_expr)} =\n    {side_expr(right_sql, right_expr)}"
+            )
+        return "\n  AND ".join(conditions)
+
+    def _join_side_expr(self, path: str, join_alias: str) -> tuple:
+        """Return (resource_ref_sql, fhirpath_expr_sql) for one ON side.
+
+        For a view-target join, an ``<alias>.<column>`` path returns the
+        bare quoted column reference as the expression with the alias as
+        the ref — the ON comparison then compares the base-side FHIRPath
+        projection directly against the view column (rev 2). The column
+        name is validated as a sql-name identifier so a crafted path can
+        never interpolate raw SQL into the reference.
+        """
+        resolved = self._resolve_path(path)
+        prefix = f"{join_alias}."
+        if resolved.startswith(prefix):
+            tail = resolved[len(prefix):]
+            if join_alias in self._view_join_aliases:
+                validate_sql_name(tail, "Join view column reference")
+                return f'"{join_alias}"."{tail}"', None  # column ref: expr IS the ref
+            expr = self._fhirpath_expression_sql(tail)
+            return f'"{join_alias}".resource', expr
+        expr = self._fhirpath_expression_sql(resolved)
+        return f"{self.table_alias}.resource", expr
+
+    def _get_view_join_table_ref(self, view_name: str) -> str:
+        """Return the FROM-side table reference for a view-target join.
+
+        The runner materializes the target ViewDefinition's output as a
+        named relation (spec: "The executing engine may materialise the
+        view's result or inline it; either approach conforms"). Resolution
+        order: the runner-provided ``view_tables`` map (view name ->
+        table reference SQL), then the ``<view_schema>.<view_name>``
+        convention (view_schema defaults to ``omop``).
+        """
+        table = self._view_tables.get(view_name)
+        if table is not None:
+            return table
+        schema = _quote_table_reference(self.view_schema)
+        return f"{schema}.{_quote_table_reference(view_name)}"
+
+    def _route_join_path(self, resolved_path: str, current_resource_var: str) -> tuple:
+        """Route a column/where path through a root join when prefixed.
+
+        Returns (path, resource_var) where resource_var targets the joined
+        table's resource column for "<alias>."-prefixed paths. Paths under
+        iteration contexts (any current focus other than the base table)
+        are NOT routable — join paths only make sense from the base
+        resource (S0 bound).
+
+        Rev 2 (view targets): for a view-target join the returned path is
+        a ``_ViewColumnRef`` carrying the quoted SQL column reference —
+        the view's rows are already flat, so the caller emits it verbatim
+        instead of compiling FHIRPath.
+        """
+        if not self._root_joins:
+            return resolved_path, current_resource_var
+        for alias, resource_ref in self._root_joins.items():
+            prefix = f"{alias}."
+            if resolved_path.startswith(prefix):
+                if current_resource_var != f"{self.table_alias}.resource":
+                    raise ValidationError(
+                        f"Join-prefixed path '{resolved_path}' used inside an "
+                        "iteration context; join paths are only valid from the "
+                        "base resource (S0 bound)"
+                    )
+                tail = resolved_path[len(prefix):]
+                if alias in self._view_join_aliases:
+                    validate_sql_name(tail, "Join view column reference")
+                    return _ViewColumnRef(f'"{alias}"."{tail}"'), current_resource_var
+                return tail, resource_ref
+        return resolved_path, current_resource_var
+
     def _resolve_environment_path_context(
         self,
         resolved_path: str,
@@ -881,6 +1105,18 @@ class SQLGenerator:
 
         # Resolve constants in path (%name_use -> 'official')
         resolved_path = self._resolve_path(column.path)
+
+        # Root joins (fhir4ds extension): "<alias>."-prefixed paths route
+        # FHIRPath evaluation to the joined table's resource column.
+        resolved_path, resource_var = self._route_join_path(resolved_path, resource_var)
+        if isinstance(resolved_path, _ViewColumnRef):
+            # View-target join column reference (rev 2): emit verbatim.
+            quoted_name = _quote_column_identifier(column.name)
+            expr = resolved_path.sql
+            sql_cast = self._get_sql_cast(column.type)
+            if sql_cast:
+                expr = f"TRY_CAST({expr} AS {sql_cast})"
+            return f"{expr} as {quoted_name}"
 
         # %rowIndex: 0-based row counter within the enclosing forEach context
         if resolved_path == "%rowIndex":
@@ -1635,6 +1871,132 @@ class SQLGenerator:
         self._alias_counter += 1
         return alias
 
+    # ------------------------------------------------------------------
+    # Pipelined unnest chain lowering (replaces correlated LATERAL joins).
+    #
+    # Each iterator appends two nested-FROM subqueries:
+    #   step 1 (compute):  SELECT src.*, TRY_CAST(fhirpath_json(<bind>, path) AS JSON[]) AS <js>
+    #   step 2 (expand):   SELECT src.*, unnest(<elems CASE>) AS <alias>,
+    #                              unnest(<idx CASE>) AS <alias>__row_index
+    # DuckDB plans this as a streaming SEQ_SCAN -> PROJECTION -> UNNEST
+    # pipeline (no DELIM/HASH join, no per-row re-evaluation), preserving
+    # document order with flat memory. See test_unnest_large_collections.py
+    # and .temp/qa/unnest-fix/ for the measured matrix.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _chain_src_expr(levels: int) -> str:
+        """Source table reference for the level being built.
+
+        Levels alternate compute/expand steps; both are plain nested
+        subqueries so ``src`` is always the previous parenthesized SELECT.
+        """
+        return "src"  # alias of the previous level in the FROM clause
+
+    def _chain_foreach(
+        self,
+        chain: _ChainState,
+        bind_var: str,
+        path_expr: str,
+        alias: str,
+        is_foreachornull: bool,
+        null_preserve_var: Optional[str] = None,
+    ) -> None:
+        """Append the compute+expand levels for one forEach/forEachOrNull.
+
+        The element array is computed ONCE per parent row at the compute
+        level; the expand level zips ``unnest(elems)`` with
+        ``unnest(range(len(js)))`` in lockstep.
+
+        Null semantics (Process(S, N)):
+        - forEach over an empty collection -> 0 rows (unnest of NULL/[]).
+        - forEachOrNull over an empty collection -> exactly one NULL row:
+          ``[NULL::JSON]`` / ``[0]::BIGINT[]`` singletons via CASE.
+        - forEach nested under an enclosing forEachOrNull (null_preserve_var
+          set): when the enclosing alias IS NULL, expand the same single
+          NULL row so the parent's null row survives step 3.
+        """
+        js_col = f"__js_{self._alias_counter}"
+        elems_expr: str
+        idx_expr: str
+        if is_foreachornull:
+            elems_expr = (
+                f"CASE WHEN len({js_col}) > 0 THEN {js_col} "
+                f"ELSE [CAST(NULL AS JSON)] END"
+            )
+            idx_expr = (
+                f"CASE WHEN len({js_col}) > 0 THEN range(len({js_col})) "
+                f"ELSE [0]::BIGINT[] END"
+            )
+        elif null_preserve_var is not None:
+            elems_expr = (
+                f"CASE WHEN {null_preserve_var} IS NULL "
+                f"THEN [CAST(NULL AS JSON)] ELSE {js_col} END"
+            )
+            idx_expr = (
+                f"CASE WHEN {null_preserve_var} IS NULL "
+                f"THEN [0]::BIGINT[] ELSE range(len({js_col})) END"
+            )
+        else:
+            elems_expr = js_col
+            idx_expr = f"range(len({js_col}))"
+
+        steps = chain.steps
+        steps.append({
+            "kind": "foreach",
+            "js_col": js_col,
+            "compute_bind": bind_var,
+            "compute_path": path_expr,
+            "elems": elems_expr,
+            "idx": idx_expr,
+            "alias": alias,
+        })
+        # The iterator's element alias becomes the resource var carried into
+        # subsequent levels via src.*.
+        chain.push_level()
+
+    def _chain_repeat(
+        self,
+        chain: _ChainState,
+        resolved_paths: list,
+        bind_var: str,
+        alias: str,
+        null_preserve_var: Optional[str] = None,
+    ) -> None:
+        """Append the expand level for one ``repeat`` traversal.
+
+        ``fhirpath_repeat`` already returns the element list; a single
+        unnest level zips elements with their ordinals. Null semantics
+        mirror forEach (null_preserve_var keeps the parent NULL row).
+        """
+        import json as _json
+        paths_literal = _json.dumps(resolved_paths).replace("'", "''")
+        arr_expr = f"fhirpath_repeat({bind_var}, '{paths_literal}')"
+        elems_expr: str
+        idx_expr: str
+        if null_preserve_var is not None:
+            elems_expr = (
+                f"CASE WHEN {null_preserve_var} IS NULL "
+                f"THEN [CAST(NULL AS JSON)] ELSE {arr_expr} END"
+            )
+            idx_expr = (
+                f"CASE WHEN {null_preserve_var} IS NULL "
+                f"THEN [0]::BIGINT[] ELSE range(len({arr_expr})) END"
+            )
+        else:
+            elems_expr = arr_expr
+            idx_expr = f"range(len({arr_expr}))"
+
+        steps = chain.steps
+        steps.append({
+            "kind": "repeat",
+            "elems": elems_expr,
+            "idx": idx_expr,
+            "alias": alias,
+            "null_preserve_var": null_preserve_var,
+        })
+        chain.push_level()
+
     def _process_selects(
         self,
         selects: List[Select],
@@ -1645,12 +2007,19 @@ class SQLGenerator:
         row_index_expr: str = "0",
         foreachornull_aliases: Optional[List[str]] = None,
         foreachornull_wrapper_ids: Optional[List[object]] = None,
+        chain: Optional[_ChainState] = None,
     ) -> Tuple[List[str], List[str], List[str]]:
         """Recursively process a list of Select structures.
 
         Traverses nested selects, tracking the resource variable in scope for
         each forEach/forEachOrNull context and collecting WHERE conditions.
         unionAll branches are NOT processed here — they are handled in generate().
+
+        When ``chain`` is provided (iterator-bearing queries), each iterator
+        appends pipelined subquery levels to the chain instead of emitting
+        correlated LATERAL join fragments (the O(N x payload) lowering — see
+        test_unnest_large_collections.py). Columns/wheres are recorded at
+        their defining level for per-level projection.
 
         Args:
             selects: List of Select structures to process
@@ -1669,9 +2038,13 @@ class SQLGenerator:
                 suppress the null-preserved row in non-first branches per spec
                 Process(S, N) step 3 (one null row total when the wrapper
                 forEachOrNull is empty) — at ANY nesting depth.
+            chain: Chain state for the pipelined lowering (None = legacy
+                lateral path for iterator-free queries).
 
         Returns:
-            Tuple of (column_exprs, join_clauses, where_conditions)
+            Tuple of (column_exprs, join_clauses, where_conditions) — for the
+            chain path, columns are returned in original authored order for
+            the OUTER projection while joins stay empty (levels carry them).
         """
         column_exprs: List[str] = []
         join_clauses: List[str] = []
@@ -1684,34 +2057,37 @@ class SQLGenerator:
             current_runtime_type_guard = runtime_type_guard
             current_row_index_expr = row_index_expr
 
-            # Establish a repeat context (CROSS JOIN LATERAL with recursive
-            # UDF). When enclosed by a forEachOrNull so the parent's NULL
-            # row survives per Process(S, N) step 3, thread
-            # null_preserve_var (already plumbed for WHERE preservation)
-            # so the repeat does not eliminate the preserved NULL row.
+            # Establish a repeat context (recursive UDF traversal). When
+            # enclosed by a forEachOrNull so the parent's NULL row survives
+            # per Process(S, N) step 3, thread null_preserve_var so the
+            # repeat does not eliminate the preserved NULL row.
             if select.repeat:
-                resolved_paths = []
-                for p in select.repeat:
-                    resolved_path = self._resolve_path(p)
-                    resolved_paths.append(resolved_path)
+                resolved_paths = [self._resolve_path(p) for p in select.repeat]
                 alias = self._next_alias("repeat")
-                join_clauses.append(
-                    generate_repeat_unnest(
-                        resolved_paths,
-                        current_var,
-                        alias,
+                if chain is not None:
+                    self._chain_repeat(
+                        chain, resolved_paths, current_var, alias,
                         null_preserve_var=null_preserve_var,
                     )
-                )
+                else:
+                    # Deprecated legacy lateral path (public union.py compat
+                    # surface only; the main generator always uses the chain).
+                    join_clauses.append(
+                        generate_repeat_unnest(
+                            resolved_paths,
+                            current_var,
+                            alias,
+                            null_preserve_var=null_preserve_var,
+                        )
+                    )
                 current_var = alias
                 current_runtime_type_guard = False
                 current_row_index_expr = f"COALESCE({alias}__row_index, 0)"
 
-            # Establish a new forEach context (CROSS JOIN LATERAL, or
-            # null-preserving LEFT JOIN LATERAL when enclosed by a
-            # forEachOrNull so the parent's NULL row survives per
-            # Process(S, N) step 3 — but only when the enclosing
-            # forEachOrNull's foci is itself empty).
+            # Establish a new forEach context (pipelined unnest level, or
+            # null-preserving form when enclosed by a forEachOrNull so the
+            # parent's NULL row survives per Process(S, N) step 3 — but only
+            # when the enclosing forEachOrNull's foci is itself empty).
             if select.forEach:
                 resolved_foreach = self._resolve_path(select.forEach)
                 resolved_foreach, foreach_var = self._resolve_environment_path_context(
@@ -1724,15 +2100,23 @@ class SQLGenerator:
                     resolved_foreach,
                     current_row_index_expr,
                 )
-                join_clauses.append(
-                    generate_foreach_unnest(
-                        resolved_foreach,
-                        foreach_var,
-                        alias,
-                        foreach_path_expr,
+                if chain is not None:
+                    self._chain_foreach(
+                        chain, foreach_var, foreach_path_expr, alias,
+                        is_foreachornull=False,
                         null_preserve_var=null_preserve_var,
                     )
-                )
+                else:
+                    # Deprecated legacy lateral path (union.py compat only).
+                    join_clauses.append(
+                        generate_foreach_unnest(
+                            resolved_foreach,
+                            foreach_var,
+                            alias,
+                            foreach_path_expr,
+                            null_preserve_var=null_preserve_var,
+                        )
+                    )
                 current_var = alias
                 current_runtime_type_guard = False
                 current_row_index_expr = f"COALESCE({alias}__row_index, 0)"
@@ -1748,14 +2132,21 @@ class SQLGenerator:
                     resolved_foreach,
                     current_row_index_expr,
                 )
-                join_clauses.append(
-                    generate_foreachornull_unnest(
-                        resolved_foreach,
-                        foreach_var,
-                        alias,
-                        foreach_path_expr,
+                if chain is not None:
+                    self._chain_foreach(
+                        chain, foreach_var, foreach_path_expr, alias,
+                        is_foreachornull=True,
                     )
-                )
+                else:
+                    # Deprecated legacy lateral path (union.py compat only).
+                    join_clauses.append(
+                        generate_foreachornull_unnest(
+                            resolved_foreach,
+                            foreach_var,
+                            alias,
+                            foreach_path_expr,
+                        )
+                    )
                 current_var = alias
                 in_foreach_or_null = True
                 if foreachornull_aliases is not None:
@@ -1767,17 +2158,34 @@ class SQLGenerator:
                 current_runtime_type_guard = False
                 current_row_index_expr = f"COALESCE({alias}__row_index, 0)"
 
-            # Generate column expressions using the current (possibly forEach) context
+            # Columns project at their defining level (parent scope before
+            # deeper iterators expand) and are collected in authored order
+            # for the outer projection. Iterator-free queries keep the flat
+            # legacy assembly (chain is None there).
+            level = chain.levels[-1] if chain is not None else None
             for col in select.column:
-                column_exprs.append(
-                    self.generate_column_expr(
-                        col,
-                        current_var,
-                        runtime_type_guard=current_runtime_type_guard,
-                        root_resource_var=root_resource_var,
-                        row_index_expr=current_row_index_expr,
-                    )
+                col_expr = self.generate_column_expr(
+                    col,
+                    current_var,
+                    runtime_type_guard=current_runtime_type_guard,
+                    root_resource_var=root_resource_var,
+                    row_index_expr=current_row_index_expr,
                 )
+                column_exprs.append(col_expr)
+                if chain is not None:
+                    # Per-level projection: evaluate the column ONCE at its
+                    # defining level under a private carried alias; the outer
+                    # projection references the carried value (evaluating the
+                    # raw expression at the outer level would re-parse parent
+                    # iterator elements per child row - the O(N x payload)
+                    # pathology in projection form).
+                    carried = f"__col_{col.name}"
+                    chain.ordered_outputs.append((col.name, carried))
+                    quoted_name = _quote_column_identifier(col.name)
+                    suffix = f" as {quoted_name}"
+                    if col_expr.endswith(suffix):
+                        col_expr = col_expr[: -len(suffix)]
+                    level.columns.append(f"{col_expr} AS {carried}")
 
             # WHERE conditions use the current context variable.
             # For forEachOrNull contexts, NULL rows (absent path) must be
@@ -1803,6 +2211,8 @@ class SQLGenerator:
                         # NULL rows by guarding against the null variable.
                         cond = f"({null_preserve_var} IS NULL OR {cond})"
                     where_conditions.append(cond)
+                    if level is not None:
+                        level.wheres.append(cond)
 
             # Recurse into nested selects passing the current forEach context down
             if select.select:
@@ -1821,6 +2231,7 @@ class SQLGenerator:
                     current_row_index_expr,
                     foreachornull_aliases=foreachornull_aliases,
                     foreachornull_wrapper_ids=foreachornull_wrapper_ids,
+                    chain=chain,
                 )
                 column_exprs.extend(sub_cols)
                 join_clauses.extend(sub_joins)
@@ -1832,6 +2243,117 @@ class SQLGenerator:
         """Check if any select in the list contains a unionAll."""
         return any(s.unionAll for s in selects)
 
+    @staticmethod
+    def _select_tree_has_iterator(selects: List[Select]) -> bool:
+        """True when any select in the tree carries an iterator directive."""
+        for s in selects:
+            if s.forEach or s.forEachOrNull or s.repeat:
+                return True
+            if s.select and SQLGenerator._select_tree_has_iterator(s.select):
+                return True
+            if s.unionAll and SQLGenerator._select_tree_has_iterator(s.unionAll):
+                return True
+        return False
+
+    def _assemble_chain(
+        self,
+        chain: "_ChainState",
+        steps: list,
+        table_name: str,
+        root_join_clauses: Optional[List[str]],
+        resource_type_filter: Optional[str],
+    ) -> str:
+        """Assemble the pipelined subquery chain into one nested SELECT.
+
+        Layout (inside-out):
+
+        ::
+
+            (SELECT t.resource AS root_res, <base cols> FROM <table> t
+             <root joins> WHERE <resourceType + root wheres>) src
+            -> per iterator step k (compute + expand nested SELECTs)
+            -> final outer SELECT <authored column order> FROM (...) q
+
+        Levels carry every prior column via ``src.*`` so aliases stay
+        referenceable at deeper levels (per-level projection keeps parent
+        elements from being re-parsed per child row).
+        """
+        # Base subquery: the root resource plus any base-level columns.
+        base_level = chain.levels[0]
+        base_parts = [f"SELECT\n    {self.table_alias}.resource AS __root_res"]
+        if base_level.columns:
+            base_parts.append(",\n    " + ",\n    ".join(base_level.columns))
+        base_parts.append(f"\nFROM {table_name} {self.table_alias}")
+        if root_join_clauses:
+            base_parts.extend(root_join_clauses)
+        base_wheres = []
+        if resource_type_filter:
+            base_wheres.append(resource_type_filter)
+        base_wheres.extend(base_level.wheres)
+        if base_wheres:
+            base_parts.append("WHERE " + "\n  AND ".join(base_wheres))
+        base_sql = "(" + "\n".join(base_parts) + ")"
+
+        # Each iterator appends a compute subquery (fhirpath_json evaluated
+        # once per parent row) plus an expand subquery (zipped unnest).
+        # DuckDB does not allow a WHERE to reference UNNEST aliases defined
+        # in the same SELECT, so level wheres (which reference this level's
+        # iterator alias) wrap the expand subquery in a filter step.
+        current = base_sql
+        for i, step in enumerate(steps):
+            level = chain.levels[i + 1]
+            lvl_wheres = list(level.wheres)
+            alias = step["alias"]
+            if alias in chain.suppress_aliases:
+                lvl_wheres.append(f"{alias} IS NOT NULL")
+            src_ref = f"{current} AS src"
+            if step["kind"] == "foreach":
+                js_col = step["js_col"]
+                compute_sql = (
+                    f"(SELECT src.*, TRY_CAST(fhirpath_json({step['compute_bind']}, "
+                    f"{step['compute_path']}) AS JSON[]) AS {js_col}\nFROM {src_ref})"
+                )
+                src_ref2 = f"{compute_sql} AS src"
+                expand_cols = ["src.*"]
+                expand_cols.append(f"unnest({step['elems']}) AS {step['alias']}")
+                expand_cols.append(f"unnest({step['idx']}) AS {step['alias']}__row_index")
+                expand_sql = (
+                    f"(SELECT {', '.join(expand_cols)}\nFROM {src_ref2})"
+                )
+                if level.columns:
+                    # Settle step: level columns reference this level's
+                    # unnest alias, which DuckDB forbids in the same SELECT
+                    # as the unnest itself; project them one level up.
+                    expand_sql = (
+                        f"(SELECT src.*,\n    " + ",\n    ".join(level.columns)
+                        + f"\nFROM {expand_sql} AS src)"
+                    )
+            else:  # repeat
+                expand_cols = ["src.*"]
+                expand_cols.append(f"unnest({step['elems']}) AS {step['alias']}")
+                expand_cols.append(f"unnest({step['idx']}) AS {step['alias']}__row_index")
+                expand_sql = (
+                    f"(SELECT {', '.join(expand_cols)}\nFROM {src_ref})"
+                )
+                if level.columns:
+                    expand_sql = (
+                        f"(SELECT src.*,\n    " + ",\n    ".join(level.columns)
+                        + f"\nFROM {expand_sql} AS src)"
+                    )
+            if lvl_wheres:
+                expand_sql = (
+                    f"(SELECT src.* FROM {expand_sql} AS src"
+                    + "\nWHERE " + "\n  AND ".join(lvl_wheres)
+                    + ")"
+                )
+            current = expand_sql
+
+        # Outer projection in authored column order: reference the carried
+        # per-level values (computed once at their defining level) and
+        # re-alias them to their official output names.
+        final_cols = [f'q."{carried}" AS "{name}"' for name, carried in chain.ordered_outputs]
+        return f"SELECT\n    {', '.join(final_cols)}\nFROM {current} AS q"
+
     def _build_single_query(
         self,
         selects: List[Select],
@@ -1840,14 +2362,23 @@ class SQLGenerator:
         root_where: List[dict],
         foreachornull_aliases: Optional[List[str]] = None,
         foreachornull_wrapper_ids: Optional[List[object]] = None,
+        root_join_clauses: Optional[List[str]] = None,
     ) -> str:
         """Build a single SELECT query from a list of non-unionAll selects."""
+        use_chain = self._select_tree_has_iterator(selects)
+        # Chain lowering carries the root resource through the subquery
+        # chain under a fixed column name, so all generated fragments
+        # (iterator compute steps, root-routed columns/wheres) must bind to
+        # that name from the start.
+        effective_base_var = "__root_res" if use_chain else base_resource_var
+        chain = _ChainState(self.table_alias) if use_chain else None
         column_exprs, join_clauses, where_conditions = self._process_selects(
             selects,
-            base_resource_var,
-            root_resource_var=base_resource_var,
+            effective_base_var,
+            root_resource_var=effective_base_var,
             foreachornull_aliases=foreachornull_aliases,
             foreachornull_wrapper_ids=foreachornull_wrapper_ids,
+            chain=chain,
         )
 
         if not column_exprs:
@@ -1857,13 +2388,74 @@ class SQLGenerator:
             path = w.get("path", "") if isinstance(w, dict) else ""
             if path:
                 resolved = self._resolve_path(path)
+                # View-target join columns inside a where clause: textual
+                # substitution of '<alias>.<column>' tokens with quoted SQL
+                # column references (S6a bound: view-column vs literal
+                # comparisons; the base-side routing below handles pure
+                # base-resource expressions).
+                view_hit = False
+                for alias in self._view_join_aliases:
+                    if f"{alias}." in resolved:
+                        def _col_sub(m, alias=alias):
+                            validate_sql_name(m.group(1), "Join view column reference")
+                            return f'"{alias}"."{m.group(1)}"'
+                        resolved = re.sub(
+                            rf"\b{re.escape(alias)}\.([A-Za-z_][A-Za-z0-9_]*)",
+                            _col_sub,
+                            resolved,
+                        )
+                        view_hit = True
+                if view_hit:
+                    # Mixed view+base expressions are rejected at generation
+                    # (typed): the S6a bound supports view-column vs LITERAL
+                    # comparisons. A bare base operand cannot be compiled as
+                    # FHIRPath alongside raw SQL column refs, and emitting it
+                    # verbatim would produce an opaque binder error (or worse,
+                    # resolve against an unrelated flat column) at execution.
+                    remainder = re.sub(
+                        rf'"{re.escape(alias)}"\."[A-Za-z_][A-Za-z0-9_]*"', "", resolved
+                    ).strip(" =<>!'\"")
+                    if re.search(r"[A-Za-z_][A-Za-z0-9_.]*\.[A-Za-z_]", remainder) or re.match(
+                        r"^[A-Za-z_][A-Za-z0-9_.]*$", remainder.strip()
+                    ):
+                        raise ValidationError(
+                            f"Where expression '{path}' mixes view-join columns "
+                            "with base-resource paths; the S6a bound supports "
+                            "view-column vs literal comparisons only"
+                        )
+                    where_conditions.append(resolved)
+                    continue
+                resolved, where_var = self._route_join_path(resolved, effective_base_var)
                 resolved, where_var = self._resolve_environment_path_context(
                     resolved,
-                    base_resource_var,
-                    base_resource_var,
+                    where_var,
+                    effective_base_var,
                 )
                 path_expr = self._fhirpath_expression_sql(resolved, "0")
-                where_conditions.append(self._where_condition_sql(where_var, path_expr))
+                cond = self._where_condition_sql(where_var, path_expr)
+                where_conditions.append(cond)
+                if chain is not None:
+                    chain.levels[0].wheres.append(cond)
+
+        if use_chain:
+            resource_type_filter = None
+            if self._source_table is not None and hasattr(self, '_current_resource_type'):
+                resource_type_filter = (
+                    f"json_extract_string({self.table_alias}.resource, '$.resourceType') = "
+                    f"'{self._current_resource_type}'"
+                )
+            # Stash the chain + filter so the union-branch caller can
+            # re-assemble with null-row suppression applied at the defining
+            # level (see _generate_single_resource).
+            self._pending_chain = chain
+            self._pending_chain_filter = resource_type_filter
+            return self._assemble_chain(
+                chain,
+                chain.steps,
+                table_name,
+                root_join_clauses,
+                resource_type_filter,
+            )
 
         columns_sql = ",\n    ".join(column_exprs)
         from_sql = f"FROM {table_name} {self.table_alias}"
@@ -1877,6 +2469,7 @@ class SQLGenerator:
             )
 
         parts = [f"SELECT\n    {columns_sql}", from_sql]
+        parts.extend(root_join_clauses or [])
         parts.extend(join_clauses)
         if where_conditions:
             parts.append("WHERE " + "\n  AND ".join(where_conditions))
@@ -1949,30 +2542,6 @@ class SQLGenerator:
             branch_sqls.append(branch_sql)
 
         return "\nUNION ALL\n".join(branch_sqls)
-
-    def _suppress_null_preserved_row(
-        self, branch_sql: str, null_preserve_alias: str
-    ) -> str:
-        """Add a WHERE filter to a generated branch SQL suppressing rows
-        where the enclosing forEachOrNull unnest alias is NULL.
-
-        Used by ``_generate_single_resource`` to ensure only the first
-        union branch emits the spec-mandated null row when the wrapper
-        forEachOrNull's foci is empty (Process(S, N) step 3: one null
-        row total across the entire selection structure, not one per
-        union branch).
-        """
-        # Insert the filter into the existing WHERE clause; if there is
-        # no WHERE clause, append one. The generated SQL always has a
-        # WHERE clause when the source_table is set (resourceType
-        # filter), so we optimistically patch in-place.
-        filter_expr = f"{null_preserve_alias} IS NOT NULL"
-        marker = "\nWHERE "
-        if marker in branch_sql:
-            return branch_sql.replace(
-                marker, f"{marker}{filter_expr}\n  AND ", 1
-            )
-        return f"{branch_sql}\nWHERE {filter_expr}"
 
     def _generate_multi_resource_union(self, view_definition: ViewDefinition) -> str:
         """Generate UNION ALL query across multiple resource types.
@@ -2126,6 +2695,44 @@ class SQLGenerator:
         table_name = self._get_table_name(view_definition.resource)
         root_where = list(view_definition.where)
 
+        # Root joins (fhir4ds extension): register routing targets and
+        # build the JOIN clauses. Bounded S0 surface: equality of scalar
+        # FHIRPath projections; left/inner/right/full keywords via the
+        # existing JoinType. In source_table mode the joined side reads
+        # from the SAME staged table via a derived subquery carrying its
+        # own resourceType filter.
+        self._root_joins = {}
+        self._view_join_aliases = set()
+        root_join_clauses: List[str] = []
+        for join in view_definition.joins:
+            join_alias = validate_sql_name(join.name, "Join.name")
+            if join_alias == self.table_alias:
+                raise ValidationError(
+                    f"Join name '{join_alias}' conflicts with the base table alias"
+                )
+            if join_alias in self._root_joins:
+                raise ValidationError(f"Duplicate join name '{join_alias}'")
+            if join.view:
+                # View-as-join-target (rev 2): the runner materialized the
+                # target ViewDefinition's flat output; the join reads it as
+                # a virtual table (spec composition semantics).
+                join_table = self._get_view_join_table_ref(join.view)
+                self._root_joins[join_alias] = None  # column-ref routing marker
+                self._view_join_aliases.add(join_alias)
+            else:
+                join_table = self._get_join_table_ref(join.resource)
+                self._root_joins[join_alias] = f'"{join_alias}".resource'
+            on_sql = self._generate_join_on(join.on, join_alias)
+            keyword = {
+                "inner": "JOIN",
+                "left": "LEFT JOIN",
+                "right": "RIGHT JOIN",
+                "full": "FULL JOIN",
+            }[join.type.value]
+            root_join_clauses.append(
+                f"{keyword} {join_table} \"{join_alias}\" ON\n    {on_sql}"
+            )
+
         expanded_selects = self._expand_select_list_unions(list(view_definition.select))
         queries: List[str] = []
         # Track forEachOrNull unnest aliases that have already emitted their
@@ -2147,6 +2754,7 @@ class SQLGenerator:
                 root_where,
                 foreachornull_aliases=collected_aliases,
                 foreachornull_wrapper_ids=collected_wrapper_ids,
+                root_join_clauses=root_join_clauses,
             )
             # The paired lists collected above identify union-expansion
             # wrapper copies at ANY nesting depth. A wrapper tagged by
@@ -2162,8 +2770,18 @@ class SQLGenerator:
                     suppress_aliases.append(alias)
                 elif wrapper_id is not None:
                     seen_union_wrapper_ids.add(wrapper_id)
-            for alias in suppress_aliases:
-                sql = self._suppress_null_preserved_row(sql, alias)
+            if suppress_aliases and self._pending_chain is not None:
+                # Re-assemble with the suppression applied at each alias's
+                # defining expand level (the old text-patch strategy does not
+                # survive the pipelined chain's nested scopes).
+                self._pending_chain.suppress_aliases.update(suppress_aliases)
+                sql = self._assemble_chain(
+                    self._pending_chain,
+                    self._pending_chain.steps,
+                    table_name,
+                    root_join_clauses,
+                    self._pending_chain_filter,
+                )
             queries.append(sql)
         return "\nUNION ALL\n".join(queries)
 

@@ -22,7 +22,7 @@ async function bootReady(page: import("@playwright/test").Page) {
   const wc = page.locator("cql-cleanroom");
   await expect(wc).toBeAttached();
   const badge = wc.locator(".version-badge");
-  await expect(badge.first()).toContainText("fhir4ds-v2", { timeout: 120_000 });
+  await expect(badge.first()).toContainText(/^\d+\.\d+\.\d+$/, { timeout: 120_000 });
   const err = wc.locator("[data-testid=boot-error]");
   if (await err.count()) {
     throw new Error(`boot-error: ${await err.first().textContent()}`);
@@ -30,7 +30,7 @@ async function bootReady(page: import("@playwright/test").Page) {
   return wc;
 }
 
-test("embed File > Open > Examples menu items are clickable", async ({ browser }) => {
+test("embed File > Recent Workspaces example items are clickable", async ({ browser }) => {
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -41,11 +41,10 @@ test("embed File > Open > Examples menu items are clickable", async ({ browser }
   await wc.locator("[data-testid=file-menu]").click();
   await wc.locator("[data-testid=file-open]").hover();
   await expect(wc.locator("[data-testid=file-open-menu]")).toBeVisible();
-  await wc.locator("[data-testid=file-examples]").hover();
-  await expect(wc.locator("[data-testid=file-examples-menu]")).toBeVisible();
 
-  // S26: examples are MADiE-layout zips; the standalone embed loads
-  // the cms125 autozip through the single package loader.
+  // The cleanroom redo folded Open > Examples into Recent Workspaces
+  // (the pinned examples are always listed there).
+  await wc.locator("[data-testid=file-recent]").hover();
   await wc.locator("[data-testid=example-workspace-cms125-workspace]").click();
   const tabs = wc.locator("[data-testid=editor-tabs] .editor-tab-label");
   await expect(tabs.filter({ hasText: "CMS125" }).first()).toBeVisible({ timeout: 90_000 });

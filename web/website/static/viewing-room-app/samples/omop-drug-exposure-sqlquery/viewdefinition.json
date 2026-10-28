@@ -1,0 +1,26 @@
+{
+  "resourceType": "Library",
+  "id": "drug-exposure-omop",
+  "name": "DrugExposureOmop",
+  "status": "draft",
+  "type": {
+    "coding": [
+      {
+        "system": "http://hl7.org/fhir/uv/sql-on-fhir/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery"
+    ]
+  },
+  "content": [
+    {
+      "contentType": "application/sql",
+      "data": "V0lUSCBzb3VyY2UgQVMgKAogICAgU0VMRUNUICogRlJPTSBvbW9wLmRydWdfZXhwb3N1cmVfX21lZGljYXRpb25fcmVxdWVzdApVTklPTiBBTEwKICAgIFNFTEVDVCAqIEZST00gb21vcC5kcnVnX2V4cG9zdXJlX19tZWRpY2F0aW9uX3N0YXRlbWVudApVTklPTiBBTEwKICAgIFNFTEVDVCAqIEZST00gb21vcC5kcnVnX2V4cG9zdXJlX19tZWRpY2F0aW9uX2FkbWluaXN0cmF0aW9uClVOSU9OIEFMTAogICAgU0VMRUNUICogRlJPTSBvbW9wLmRydWdfZXhwb3N1cmVfX21lZGljYXRpb25fZGlzcGVuc2UKVU5JT04gQUxMCiAgICBTRUxFQ1QgKiBGUk9NIG9tb3AuZHJ1Z19leHBvc3VyZV9faW1tdW5pemF0aW9uCikKU0VMRUNUCiAgICBDQVNFIFdIRU4gdS4iZHJ1Z19leHBvc3VyZV9pZCIgSVMgTlVMTCBUSEVOIE5VTEwgRUxTRSBDQVNUKGhhc2godS4iZHJ1Z19leHBvc3VyZV9pZCIpICYgOTIyMzM3MjAzNjg1NDc3NTgwNyBBUyBCSUdJTlQpIEVORCBBUyAiZHJ1Z19leHBvc3VyZV9pZCIsCiAgICBDQVNFIFdIRU4gdS4icGVyc29uX2lkIiBJUyBOVUxMIFRIRU4gTlVMTCBFTFNFIENBU1QoaGFzaCh1LiJwZXJzb25faWQiKSAmIDkyMjMzNzIwMzY4NTQ3NzU4MDcgQVMgQklHSU5UKSBFTkQgQVMgInBlcnNvbl9pZCIsCiAgICBDT0FMRVNDRShUUllfQ0FTVChjbS5jb25jZXB0X2lkIEFTIEJJR0lOVCksIDApIEFTICJkcnVnX2NvbmNlcHRfaWQiLAogICAgdS4iZHJ1Z19leHBvc3VyZV9zdGFydF9kYXRlIiwKICAgIHUuImRydWdfZXhwb3N1cmVfc3RhcnRfZGF0ZXRpbWUiLAogICAgdS4iZHJ1Z19leHBvc3VyZV9lbmRfZGF0ZSIsCiAgICB1LiJkcnVnX2V4cG9zdXJlX2VuZF9kYXRldGltZSIsCiAgICBDT0FMRVNDRShUUllfQ0FTVCh1LiJkcnVnX3R5cGVfY29uY2VwdF9pZCIgQVMgQklHSU5UKSwgMCkgQVMgImRydWdfdHlwZV9jb25jZXB0X2lkIiwKICAgIHUuInNpZyIsCiAgICB1LiJxdWFudGl0eV9udW0iLAogICAgdS4iZGF5c19zdXBwbHkiLAogICAgdS4iZHJ1Z19zb3VyY2VfdmFsdWUiLAogICAgQ0FTRSBXSEVOIHUuInZpc2l0X29jY3VycmVuY2VfaWQiIElTIE5VTEwgVEhFTiBOVUxMIEVMU0UgQ0FTVChoYXNoKHUuInZpc2l0X29jY3VycmVuY2VfaWQiKSAmIDkyMjMzNzIwMzY4NTQ3NzU4MDcgQVMgQklHSU5UKSBFTkQgQVMgInZpc2l0X29jY3VycmVuY2VfaWQiLAogICAgdS4ic3JjIgpGUk9NIHNvdXJjZSBBUyB1CkxFRlQgSk9JTiBvbW9wLm9tb3BfY29uY2VwdG1hcCBBUyBjbQogICAgICAgT04gdS5zb3VyY2VfY29kZSA9IGNtLmNvbmNlcHRfY29kZQogICAgICBBTkQgdS5zb3VyY2Vfc3lzdGVtID0gY20uc291cmNlX3N5c3RlbQo="
+    }
+  ],
+  "description": "OMOP drug_exposure: five FHIR medication resource types unioned, then joined to the ConceptMap with the integer keys."
+}

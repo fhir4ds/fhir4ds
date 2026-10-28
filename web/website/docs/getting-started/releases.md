@@ -7,6 +7,100 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.19
+*October 2026*
+
+The OMOP release: FHIR R4 → OMOP CDM v5.5 through standard SQL-on-FHIR
+artifacts only.
+
+- **OMOP CDM v5.5 mapping library** (`fhir4ds.viewdef.resources.omop`):
+  9 CDM tables (person, visit_occurrence, condition_occurrence,
+  procedure_occurrence, drug_exposure, device_exposure,
+  measurement/observation value-type split, death). Each table is two
+  standard artifacts — a `<table>-source-view.json` reshape (source
+  columns only, no joins) and a `sqlqueries/<table>-omop.json` SQLQuery
+  that joins the flattened ConceptMap, applies concept-0 defaults,
+  assigns stable positive 63-bit integer keys, and (for drug_exposure)
+  unions the five FHIR medication resource types. Coding precedence
+  (SNOMED > ICD-10, LOINC > SNOMED, RxNorm > first coding) lives in the
+  reshape; the query joins on the staged `source_code`/`source_system`.
+- **SQLQuery composition steps**: `manifest.sql_queries` maps a table to
+  a FHIR Library of type `sql-query`; the composition runner materializes
+  its decoded SQL after the views it reads (dependencies inferred from
+  `<schema>.<view>` references in the SQL text). `projections`/`unions`
+  manifest blocks are retired — a table owns its own shaping. The
+  ViewDefinition `joins` extension remains supported but the library no
+  longer uses it.
+- **One ConceptMap, 108,683 mappings** on the demo dataset
+  ([fhir4ds/omop-demo](https://huggingface.co/datasets/fhir4ds/omop-demo),
+  25-patient Synthea cohort): RxNorm (all product-level classes), CVX,
+  and gender/encounter-class supplements — 1,143/1,143 RxCUIs and
+  318/318 immunizations resolve, zero NULL concept ids.
+- **Reference normalization**: bundle-local `urn:uuid:` references (the
+  only form in Synthea's NDJSON) normalize to the target resource id
+  alongside `Patient/{id}` and absolute URLs, so event-table foreign keys
+  actually join person (was 0/1,461). Referential integrity is now
+  checked for every event table in conformance.
+- **Pipelined unnest lowering**: `forEach` computes each array once per
+  parent row and expands it in a pipelined subquery chain — a 5,000 ×
+  100-element ConceptMap-shaped payload went 3.94 s / 4.9 GB → 0.05 s /
+  220 MB; previously-OOM'ing 50,000-row and nested cases complete in
+  under half a second. Monolithic 100k-element maps are the recommended
+  shape.
+- **Viewing Room**: five OMOP samples mirroring the library (person view
+  + SQLQuery, encounters SQLQuery, medications reshape + SQLQuery),
+  paged JSON trees for 100k+-element resources, BIGINT-safe keys, live
+  Hugging Face data. New **FHIR → OMOP** step-by-step walkthrough and
+  OMOP notebook in the docs.
+- **medterm4ds 0.0.7** dependency (core and `[extraction]` extras, the
+  Athena-complete pin): the terminology integration was re-verified
+  deliberately — in-process adapter suite, notes pipeline + autocoding
+  units, and the expansion/search contracts against the published 0.0.7.
+- **Conformance**: OMOP suite at 38 checks; master gate 2870/2870.
+
+  normalizes `Patient/{id}`, absolute URLs and `urn:uuid:` to the target
+  resource id, so `drug_exposure.person_id` actually joins `person` (was
+  0/1,461 before). Conformance now checks referential integrity for
+  every event table. Also fixed: the old key projection hashed NULL
+  into a fabricated key (`hash(NULL)` is a constant); optional foreign
+  keys now stay NULL.
+- **Pipelined unnest lowering** — `forEach` no longer lowers to
+  correlated LATERAL joins: each iterator computes its array once per
+  parent row and expands it in a pipelined subquery chain. A 5,000-row
+  × 100-element ConceptMap-shaped payload went 3.94 s / 4.9 GB →
+  0.05 s / 220 MB; 50,000-row and nested cases that previously OOM'd
+  now complete in under half a second. Monolithic 100k-element maps are
+  the recommended shape (chunking retired).
+- **Viewing Room OMOP suite** — five samples mirroring the library:
+  Person (ViewDef), Person (SQLQuery), Encounters (SQLQuery),
+  Medications (ViewDef), Medications (SQLQuery: 5 arms unioned, mapped,
+  keyed —
+  1,461 rows over live Hugging Face data). Browse tab renders 100k+
+  element resources smoothly (paged JSON trees, lazy groups).
+  BIGINT-safe serialization keeps 63-bit keys exact in the browser.
+- **Docs** — new **FHIR → OMOP** step-by-step walkthrough
+  (`/docs/examples/fhir-to-omop`): reshape → translate → compose, with
+  real cohort data and the demo embedded; OMOP notebook in the Examples
+  gallery (Colab); user-guide mapping page updated to the SQLQuery
+  architecture.
+- **Conformance**: sectioned OMOP suite grown to 38 checks (schema,
+  required, grain incl. per-table referential integrity, mapping,
+  vd-conformance); master gate **2870/2870**.
+
+## Benchmarks (demo scale)
+
+VD generation ~200 ms; composition ~450 ms flat from 10 to 2,000 staged
+resources; the unnest fix above is the headline perf change. Browser:
+1,461-row drug_exposure over the full ConceptMap executes in ~2.5 s in
+DuckDB-WASM.
+
+## Sources & attribution
+
+Field mappings mined from the OMOP-on-FHIR v5.4-R4 project with
+per-file attribution; the v5.5 delta (optional fields only) and the
+v5.4 variant are documented in the library manifest. Vocabulary data
+from OHDSI Athena (pinned snapshot).
+
 ## Version 0.0.18
 *October 2026*
 

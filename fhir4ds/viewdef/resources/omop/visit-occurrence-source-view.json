@@ -1,0 +1,67 @@
+{
+  "name": "visit_occurrence_source",
+  "status": "draft",
+  "resource": "Encounter",
+  "constant": [
+    {
+      "name": "ehr_type_concept",
+      "valueString": "32810"
+    }
+  ],
+  "select": [
+    {
+      "column": [
+        {
+          "name": "visit_occurrence_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "person_id",
+          "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "visit_start_date",
+          "path": "period.start.substring(0, 10)",
+          "type": "date"
+        },
+        {
+          "name": "visit_start_datetime",
+          "path": "period.start",
+          "type": "dateTime"
+        },
+        {
+          "name": "visit_end_date",
+          "path": "period.end.substring(0, 10)",
+          "type": "date"
+        },
+        {
+          "name": "visit_end_datetime",
+          "path": "period.end",
+          "type": "dateTime"
+        },
+        {
+          "name": "visit_type_concept_id",
+          "path": "%ehr_type_concept",
+          "type": "string"
+        },
+        {
+          "name": "visit_source_value",
+          "path": "class.code",
+          "type": "code"
+        },
+        {
+          "name": "source_code",
+          "path": "class.code",
+          "type": "string"
+        },
+        {
+          "name": "source_system",
+          "path": "class.system",
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}

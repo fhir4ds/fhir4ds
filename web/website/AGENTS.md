@@ -60,6 +60,16 @@ run `web/wasm-demo/tests/e2e/cms-measures.spec.ts`; quality-measure examples can
 fail from missing CQL UDF registrations even when the website shell and CQL
 playground examples pass.
 
+**Local embed tests need COOP/COEP headers.** `docusaurus.config.ts`
+deliberately skips COI service-worker registration on `localhost`/`127.0.0.1`
+(the dev guard exists because a cached SW poisons chunk fetches after rebuilds),
+but `docusaurus serve` does **not** add COOP/COEP. Embed tests
+(`tests/viewing-room-embed.spec.ts`, `tests/wasm-demo-wc.spec.ts`,
+cleanroom specs) therefore fail locally with "SharedArrayBuffer is
+unavailable" / a component that never boots. Serve `build/` with
+`Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy:
+require-corp` (or test against a real hostname) before trusting a local run.
+
 Playwright must serve and test the same origin. `PLAYWRIGHT_BASE_URL` controls
 both `use.baseURL` and the `webServer` host/port in `playwright.config.ts`;
 when port 3000 is already occupied, run with an alternate URL such as

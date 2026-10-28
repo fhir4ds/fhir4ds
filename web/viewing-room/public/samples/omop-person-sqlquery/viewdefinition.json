@@ -1,0 +1,27 @@
+{
+  "resourceType": "Library",
+  "id": "person-omop",
+  "name": "PersonOmop",
+  "title": "PersonOmop",
+  "status": "draft",
+  "type": {
+    "coding": [
+      {
+        "system": "http://hl7.org/fhir/uv/sql-on-fhir/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery"
+    ]
+  },
+  "content": [
+    {
+      "contentType": "application/sql",
+      "data": "LS0gT01PUCBwZXJzb246IHRoZSByZXNoYXBlZCBwYXRpZW50cyBqb2luZWQgdG8gdGhlIGZsYXR0ZW5lZCBDb25jZXB0TWFwLgotLSBwZXJzb25faWQgaXMgdGhlIE9NT1Agc3Vycm9nYXRlIGtleSwgYXNzaWduZWQgaGVyZSBmcm9tIHRoZSBzb3VyY2UgaWQ7Ci0tIHBlcnNvbl9zb3VyY2VfdmFsdWUga2VlcHMgdGhhdCBGSElSIGlkIHNvIHRoZSBzb3VyY2UgcmVjb3JkIHN0YXlzCi0tIHJlYWNoYWJsZS4KU0VMRUNUCiAgICBDQVNUKGhhc2gocC5wZXJzb25fc291cmNlX3ZhbHVlKSAmIDkyMjMzNzIwMzY4NTQ3NzU4MDcgQVMgQklHSU5UKSBBUyBwZXJzb25faWQsCiAgICBDT0FMRVNDRShUUllfQ0FTVChjbS5jb25jZXB0X2lkIEFTIEJJR0lOVCksIDApICAgICAgICAgICAgICAgICAgIEFTIGdlbmRlcl9jb25jZXB0X2lkLAogICAgcC55ZWFyX29mX2JpcnRoLAogICAgcC5tb250aF9vZl9iaXJ0aCwKICAgIHAuZGF5X29mX2JpcnRoLAogICAgcC5iaXJ0aF9kYXRldGltZSwKICAgIHAucGVyc29uX3NvdXJjZV92YWx1ZSwKICAgIHAuZ2VuZGVyX3NvdXJjZV92YWx1ZQpGUk9NIG9tb3AucGVyc29uX3NvdXJjZSBBUyBwCkxFRlQgSk9JTiBvbW9wLm9tb3BfY29uY2VwdG1hcCBBUyBjbQogICAgICAgT04gcC5nZW5kZXJfc291cmNlX3ZhbHVlID0gY20uY29uY2VwdF9jb2RlCiAgICAgIEFORCBjbS5zb3VyY2Vfc3lzdGVtID0gJ2h0dHA6Ly9obDcub3JnL2ZoaXIvYWRtaW5pc3RyYXRpdmUtZ2VuZGVyJwo="
+    }
+  ],
+  "description": "OMOP person: Patient reshape joined to the concept map, with the integer person_id."
+}

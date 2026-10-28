@@ -9,11 +9,42 @@ export interface Sample {
   description: string;
   vdUrl: string;
   resourcesUrl: string;
+  /** Optional pre-computed composition DDL (legacy; live derivation is now the default). */
+  setupUrl?: string;
+  /** Path under OMOP_DATA_BASE for the full dataset resources (when hosted). */
+  remoteResources?: string;
+  /** Gallery suite grouping (dropdown optgroups / ?suite= filter). */
+  suite: SampleSuite;
 }
+
+export type SampleSuite = "general" | "uscore" | "omop";
+
+/**
+ * Base URL of the PUBLIC Hugging Face dataset hosting the full OMOP sample
+ * data (25-patient Synthea cohort + the complete standard RxNorm
+ * ConceptMap). HF serves public dataset files with CORS enabled, so the
+ * browser (and DuckDB-WASM/Pyodide workers) fetch them directly.
+ *
+ * Append ?data=local to the app URL to use the committed compact fixtures
+ * instead (offline development / hermetic e2e).
+ */
+export const OMOP_DATA_BASE = "https://huggingface.co/datasets/fhir4ds/omop-demo/resolve/main";
+
+function useLocalSampleData(): boolean {
+  if (typeof window === "undefined") return true;
+  return new URLSearchParams(window.location.search).get("data") === "local";
+}
+
+export const SUITE_LABELS: Record<SampleSuite, string> = {
+  general: "General",
+  uscore: "US Core",
+  omop: "OMOP",
+};
 
 export const SAMPLES: Sample[] = [
   {
     slug: "patient-demographics",
+    suite: "general",
     name: "Patient Demographics",
     description: "One row per Patient: id, name, gender, birthDate (the default).",
     vdUrl: "samples/patient-demographics/viewdefinition.json",
@@ -21,6 +52,7 @@ export const SAMPLES: Sample[] = [
   },
   {
     slug: "patient-addresses",
+    suite: "general",
     name: "Patient Addresses",
     description: "forEach over Patient.address — one row per address.",
     vdUrl: "samples/patient-addresses/viewdefinition.json",
@@ -28,6 +60,7 @@ export const SAMPLES: Sample[] = [
   },
   {
     slug: "patient-contact-address-union",
+    suite: "general",
     name: "Patient + Contact Address Union",
     description: "unionAll of patient and contact addresses (IG 2.0.0 example).",
     vdUrl: "samples/patient-contact-address-union/viewdefinition.json",
@@ -35,6 +68,7 @@ export const SAMPLES: Sample[] = [
   },
   {
     slug: "us-core-blood-pressures",
+    suite: "uscore",
     name: "US Core Blood Pressures",
     description: "Deep forEach + where on component coding (LOINC 85354-9 / 8480-6 / 8462-4).",
     vdUrl: "samples/us-core-blood-pressures/viewdefinition.json",
@@ -42,6 +76,7 @@ export const SAMPLES: Sample[] = [
   },
   {
     slug: "questionnaire-response-items",
+    suite: "general",
     name: "Questionnaire Response Items",
     description: "select.repeat over a nested QuestionnaireResponse item tree.",
     vdUrl: "samples/questionnaire-response-items/viewdefinition.json",
@@ -49,10 +84,56 @@ export const SAMPLES: Sample[] = [
   },
   {
     slug: "observation-values",
+    suite: "general",
     name: "Observation Values",
     description: "collection:true + typed columns (component codes & values as arrays).",
     vdUrl: "samples/observation-values/viewdefinition.json",
     resourcesUrl: "samples/observation-values/resources.ndjson",
+  },
+  {
+    slug: "omop-patient",
+    suite: "omop",
+    name: "OMOP Person (ViewDef)",
+    description: "The person reshape: Patient -> person_source columns (birth-date splits, gender code) before the join.",
+    vdUrl: "samples/omop-patient/viewdefinition.json",
+    resourcesUrl: "samples/omop-patient/resources.ndjson",
+    remoteResources: "patient-resources.ndjson",
+  },
+  {
+    slug: "omop-person-sqlquery",
+    suite: "omop",
+    name: "OMOP Person (SQLQuery)",
+    description: "The same cohort finished: a SQLQuery joins the person reshape to the ConceptMap and assigns the integer person_id.",
+    vdUrl: "samples/omop-person-sqlquery/viewdefinition.json",
+    resourcesUrl: "samples/omop-person-sqlquery/resources.ndjson",
+    remoteResources: "medication-resources.ndjson",
+  },
+  {
+    slug: "omop-encounters",
+    suite: "omop",
+    name: "OMOP Encounters (SQLQuery)",
+    description: "OMOP visit_occurrence over Synthea encounters — the SQLQuery joins the encounter reshape to the ConceptMap and assigns the integer keys.",
+    vdUrl: "samples/omop-encounters/viewdefinition.json",
+    resourcesUrl: "samples/omop-encounters/resources.ndjson",
+    remoteResources: "encounter-resources.ndjson",
+  },
+  {
+    slug: "omop-drug-exposure",
+    suite: "omop",
+    name: "OMOP Medications (ViewDef)",
+    description: "drug_exposure from MedicationRequest alone: the raw view (source columns and the coding system the SQLQuery will join on).",
+    vdUrl: "samples/omop-drug-exposure/viewdefinition.json",
+    resourcesUrl: "samples/omop-drug-exposure/resources.ndjson",
+    remoteResources: "medication-resources.ndjson",
+  },
+  {
+    slug: "omop-drug-exposure-sqlquery",
+    suite: "omop",
+    name: "OMOP Medications (SQLQuery)",
+    description: "Cross-resource drug_exposure via a SQLQuery Library — MedicationRequest, Dispense, Statement, Administration and Immunization unioned, mapped and keyed in one query.",
+    vdUrl: "samples/omop-drug-exposure-sqlquery/viewdefinition.json",
+    resourcesUrl: "samples/omop-drug-exposure-sqlquery/resources.ndjson",
+    remoteResources: "medication-resources.ndjson",
   },
 ];
 
@@ -60,6 +141,35 @@ export const DEFAULT_SAMPLE = SAMPLES[0];
 
 export function sampleBySlug(slug: string): Sample | undefined {
   return SAMPLES.find((s) => s.slug === slug);
+}
+
+/**
+ * Resolve the active sample list from the URL's ?suite= parameter.
+ * Unknown/absent values return the full list (suites = null).
+ */
+let suiteOverride: SampleSuite | null = null;
+
+/** Host-set suite (e.g. the <sqlonfhir-viewing-room suite="omop"> attribute). */
+export function setSuiteOverride(suite: SampleSuite | null): void {
+  suiteOverride = suite;
+}
+
+/**
+ * Sample named by ?sample=<slug>, restricted to the given list (so a
+ * ?suite= filter wins). Returns undefined when absent or unknown.
+ */
+export function requestedSample(samples: Sample[]): Sample | undefined {
+  const slug = new URLSearchParams(window.location.search).get("sample");
+  if (!slug) return undefined;
+  return samples.find((s) => s.slug === slug);
+}
+
+export function activeSamples(): { samples: Sample[]; suite: SampleSuite | null } {
+  const raw = new URLSearchParams(window.location.search).get("suite");
+  const suite: SampleSuite | null =
+    raw === "general" || raw === "uscore" || raw === "omop" ? raw : suiteOverride;
+  if (suite) return { samples: SAMPLES.filter((s) => s.suite === suite), suite };
+  return { samples: SAMPLES, suite: null };
 }
 
 /**
@@ -74,8 +184,17 @@ export function setSampleBase(base: string): void {
 }
 
 export function sampleUrl(path: string): string {
+  if (/^https?:\/\//.test(path)) return path;
   if (sampleBase !== null) return `${sampleBase.replace(/\/$/, "")}/${path}`;
   return new URL(path, document.baseURI).href;
+}
+
+/** Resolve a sample's resources URL (HF dataset by default, local fixtures with ?data=local). */
+export function sampleResourcesUrl(s: Sample): string {
+  if (!useLocalSampleData() && s.remoteResources) {
+    return `${OMOP_DATA_BASE.replace(/\/$/, "")}/${s.remoteResources}`;
+  }
+  return sampleUrl(s.resourcesUrl);
 }
 
 /** Parse NDJSON or a JSON array of resources; a single object is wrapped. */
