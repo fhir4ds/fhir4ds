@@ -120,8 +120,8 @@ export const SAMPLES: Sample[] = [
   {
     slug: "omop-drug-exposure",
     suite: "omop",
-    name: "OMOP medications (reshape)",
-    description: "drug_exposure reshape from MedicationRequest alone: source columns and the coding system the SQLQuery will join on.",
+    name: "OMOP medications (view)",
+    description: "drug_exposure from MedicationRequest alone: the raw view (source columns and the coding system the SQLQuery will join on).",
     vdUrl: "samples/omop-drug-exposure/viewdefinition.json",
     resourcesUrl: "samples/omop-drug-exposure/resources.ndjson",
     remoteResources: "medication-resources.ndjson",

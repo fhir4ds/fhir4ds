@@ -69,7 +69,7 @@ artifacts only.
   the recommended shape (chunking retired).
 - **Viewing Room OMOP suite** — five samples mirroring the library:
   person (view), person (SQLQuery), encounters (SQLQuery), medications
-  (reshape), medications (SQLQuery: 5 arms unioned, mapped, keyed —
+  (view), medications (SQLQuery: 5 arms unioned, mapped, keyed —
   1,461 rows over live Hugging Face data). Browse tab renders 100k+
   element resources smoothly (paged JSON trees, lazy groups).
   BIGINT-safe serialization keeps 63-bit keys exact in the browser.
