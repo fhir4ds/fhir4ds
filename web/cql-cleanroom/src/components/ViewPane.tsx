@@ -7,6 +7,14 @@ import {
   orphanedOverrides,
   type ViewOverrides,
 } from "../lib/viewDerivation";
+import {
+  jsonToVdForm,
+  vdFormBlockedReasons,
+  vdFormRoundTripLosses,
+  vdFormToJson,
+  type VdFormState,
+} from "../lib/vdForm";
+import { VdForm } from "./VdForm";
 import { Spinner } from "./Spinner";
 
 /**
@@ -18,6 +26,13 @@ import { Spinner } from "./Spinner";
  * count column per population, forEach group) with fork-on-edit
  * per-column overrides (ghost-text defaults, keyed by normalized
  * population code). Custom mode: paste any MeasureReport VD.
+ *
+ * FEATURE_VD_FORM_EDITOR §2.1: the custom editor is a TWO-LEVEL
+ * control — Level 1 (Source) [From Measure | Custom]; Level 2 (Custom
+ * presentation) Form ⇄ Raw with the losslessness guard (§2.2/§2.3):
+ * entering Form is BLOCKED for multi-select/nested/unionAll/repeat/
+ * joins VDs and for any round-trip loss; Raw is always available and
+ * the guarded flip never mutates the text.
  */
 
 export function ViewPane({
@@ -72,6 +87,80 @@ export function ViewPane({
     initialVd ? JSON.stringify(initialVd, null, 2) : "",
   );
   const [error, setError] = useState<string | null>(null);
+
+  // FEATURE_VD_FORM_EDITOR §2.1 — Level 2: Custom presentation.
+  const [customForm, setCustomForm] = useState(false);
+  const [vdForm, setVdForm] = useState<VdFormState | null>(null);
+  const [flipError, setFlipError] = useState<string | null>(null);
+
+  /** §2.6 Copy-from-Measure: entering Custom with an EMPTY draft seeds
+   * it once from the derived VD (never overwrites existing text). */
+  const selectSource = (next: "derived" | "custom") => {
+    if (next === "custom" && mode !== "custom" && !customVd.trim()) {
+      setCustomVd(JSON.stringify(buildDerivedView(measure, overrides), null, 2));
+    }
+    if (next !== mode) {
+      setMode(next);
+      setCustomForm(false);
+      setVdForm(null);
+      setFlipError(null);
+    }
+  };
+
+  /** §2.2/§2.3 guarded flip. Raw → Form parses + runs BOTH guard layers
+   * (structural block, then round-trip losses) and NEVER mutates the
+   * raw text; Form → Raw seeds the text from the CURRENT form state so
+   * the textarea shows exactly what the form would emit. */
+  const flipPresentation = () => {
+    if (!customForm) {
+      try {
+        const parsed = JSON.parse(customVd || "null");
+        if (
+          typeof parsed !== "object" ||
+          parsed === null ||
+          Array.isArray(parsed)
+        ) {
+          throw new Error("the ViewDefinition must be a JSON object");
+        }
+        const vd = parsed as Record<string, unknown>;
+        const blocked = vdFormBlockedReasons(vd);
+        if (blocked.length > 0) {
+          throw new Error(
+            `the form can't represent this exactly (${blocked.join("; ")}) — ` +
+              "stay in Raw mode or simplify those fields",
+          );
+        }
+        const losses = vdFormRoundTripLosses(vd);
+        if (losses.length > 0) {
+          throw new Error(
+            `the form can't represent this exactly (${losses
+              .slice(0, 4)
+              .join(", ")}${losses.length > 4 ? ", …" : ""}) — ` +
+              "stay in Raw mode or simplify those fields",
+          );
+        }
+        setVdForm(jsonToVdForm(vd));
+        setFlipError(null);
+        setCustomForm(true);
+      } catch (err) {
+        setFlipError(err instanceof Error ? err.message : String(err));
+      }
+    } else {
+      if (vdForm) {
+        setCustomVd(JSON.stringify(vdFormToJson(vdForm), null, 2));
+      }
+      setCustomForm(false);
+      setVdForm(null);
+      setFlipError(null);
+    }
+  };
+
+  /** Form edit → rewrite the custom VD TEXT (§2.5: the text stays the
+   * single source of truth for run/flatten/history). */
+  const applyVdForm = (next: VdFormState) => {
+    setVdForm(next);
+    setCustomVd(JSON.stringify(vdFormToJson(next), null, 2));
+  };
 
   const setOverride = (key: string, patch: { name?: string; path?: string }) => {
     const next: ViewOverrides = {
@@ -151,30 +240,66 @@ export function ViewPane({
         <div className="pane-actions">
           {/* Spinner removed (Joel 2026-10-25): the results console owns
               in-flight feedback; the editor header stays quiet. */}
-          {/* S29: the SAME switch widget as the Builder/Cells toggles —
-              Form ("From Measure") ⇄ Text (the VD editor). aria-checked
-              tracks TEXT mode. */}
-          <button
-            type="button"
-            className={`drawer-toggle mode-switch${mode === "custom" ? " on" : ""}`}
-            data-testid="view-mode"
-            role="switch"
-            aria-label="View editor mode (form or text)"
-            aria-checked={mode === "custom"}
-            title={
-              mode === "custom"
-                ? "Switch to the From Measure form editor"
-                : "Switch to the ViewDefinition text editor"
-            }
-            onClick={() => setMode(mode === "custom" ? "derived" : "custom")}
+          {/* FEATURE_VD_FORM_EDITOR §2.1 — TWO-LEVEL control. Level 1
+              (Source): [From Measure | Custom] segmented. Level 2
+              (Custom only): Form ⇄ Raw, the same switch widget as the
+              Builder/Cells toggles; the label names the CURRENT state
+              (builder convention); aria-checked tracks FORM mode. */}
+          <div
+            className="vd-source-toggle"
+            data-testid="vd-source-toggle"
+            role="tablist"
+            aria-label="View source"
           >
-            {mode === "custom" ? "Form ⇄" : "Text ⇄"}
-          </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "derived"}
+              className={`vd-source-option${mode === "derived" ? " active" : ""}`}
+              data-testid="vd-source-derived"
+              onClick={() => selectSource("derived")}
+            >
+              From Measure
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "custom"}
+              className={`vd-source-option${mode === "custom" ? " active" : ""}`}
+              data-testid="vd-source-custom"
+              onClick={() => selectSource("custom")}
+            >
+              Custom
+            </button>
+          </div>
+          {mode === "custom" && (
+            <button
+              type="button"
+              className={`drawer-toggle mode-switch${customForm ? " on" : ""}`}
+              data-testid="vd-presentation-toggle"
+              role="switch"
+              aria-label="Custom ViewDefinition presentation (form or raw)"
+              aria-checked={customForm}
+              title={
+                customForm
+                  ? "Switch to the raw JSON editor"
+                  : "Switch to the ViewDefinition form editor (guarded)"
+              }
+              onClick={flipPresentation}
+            >
+              {customForm ? "Form ⇄" : "Raw ⇄"}
+            </button>
+          )}
         </div>
       </header>
       {error && (
         <div className="pane-error" data-testid="view-error">
           {error}
+        </div>
+      )}
+      {mode === "custom" && flipError && (
+        <div className="pane-error" data-testid="vd-flip-error">
+          {flipError}
         </div>
       )}
       {!(measureReports?.length) &&
@@ -261,12 +386,17 @@ export function ViewPane({
             </tbody>
           </table>
         </div>
+      ) : customForm && vdForm ? (
+        <VdForm form={vdForm} onChange={applyVdForm} />
       ) : (
         <textarea
           className="vd-editor"
           data-testid="vd-editor"
           value={customVd}
-          onChange={(e) => setCustomVd(e.target.value)}
+          onChange={(e) => {
+            setCustomVd(e.target.value);
+            setFlipError(null);
+          }}
           placeholder='{"resource": "Patient", "select": [...]}'
           spellCheck={false}
         />

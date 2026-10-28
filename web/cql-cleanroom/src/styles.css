@@ -757,6 +757,87 @@ body { margin: 0; }
   color: #5b6a7d;
 }
 .vd-config { display: flex; flex-direction: column; gap: 8px; font-size: 13px; min-width: 0; }
+
+/* FEATURE_VD_FORM_EDITOR §2.1 — Level 1 segmented source control. */
+.vd-source-toggle {
+  display: inline-flex;
+  border: 1px solid #2a2f3a;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.vd-source-toggle .vd-source-option {
+  background: transparent;
+  border: none;
+  color: #9fb0c3;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.vd-source-toggle .vd-source-option.active {
+  background: rgba(90, 160, 255, 0.25);
+  color: #dce7f5;
+}
+/* §2.2 form fields + §2.3.1 scope pill / preserved pill. */
+.vd-form-fields {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr) minmax(100px, 140px);
+  gap: 8px;
+}
+.vd-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: #9fb0c3;
+}
+.vd-form-field input, .vd-form-field select {
+  background: #0f131a;
+  border: 1px solid #2a2f3a;
+  border-radius: 4px;
+  color: #dce7f5;
+  padding: 3px 6px;
+  font-size: 13px;
+}
+.vd-table-head h3 {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #dce7f5;
+}
+.vd-scope-pill {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(90, 160, 255, 0.4);
+  background: rgba(90, 160, 255, 0.12);
+  font-size: 11px;
+  font-weight: 400;
+  color: #9fc3ff;
+}
+.vd-scope-pill code { color: #cfe2ff; }
+.vd-columns td.vd-row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+.vd-columns td.vd-row-actions button {
+  background: transparent;
+  border: 1px solid #2a2f3a;
+  border-radius: 4px;
+  color: #9fb0c3;
+  padding: 1px 6px;
+  margin-left: 2px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.vd-columns td.vd-row-actions button:hover:not(:disabled) { color: #dce7f5; }
+.vd-columns td.vd-row-actions button:disabled { opacity: 0.35; cursor: default; }
+.vd-columns select {
+  background: #0f131a;
+  border: 1px solid #2a2f3a;
+  border-radius: 4px;
+  color: #dce7f5;
+  padding: 3px 4px;
+  font-size: 12px;
+}
 /* S27: the Custom VD box takes ALL free vertical space in the pane. */
 .view-pane { overflow: hidden; }
 .view-pane > .vd-config { overflow: auto; min-height: 0; }
@@ -2169,3 +2250,83 @@ details[open] > summary > .patient-tree-caret::before { content: "▾"; }
   justify-content: center; gap: 14px;
 }
 .switch-overlay .switch-title { font-size: 15px; color: #cdd7e5; }
+
+/* ===== FEATURE_VD_FORM_EDITOR: VD form editor (§2.1–§2.3.1) ===== */
+.vd-source-toggle {
+  display: inline-flex;
+  border: 1px solid #2a2f3a;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.vd-source-toggle .vd-source-option {
+  background: transparent;
+  border: none;
+  color: #9fb0c3;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.vd-source-toggle .vd-source-option.active {
+  background: rgba(90, 160, 255, 0.25);
+  color: #dce7f5;
+}
+.vd-form-fields {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr) minmax(100px, 140px);
+  gap: 8px;
+}
+.vd-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: #9fb0c3;
+}
+.vd-form-field input, .vd-form-field select {
+  background: #0f131a;
+  border: 1px solid #2a2f3a;
+  border-radius: 4px;
+  color: #dce7f5;
+  padding: 3px 6px;
+  font-size: 13px;
+}
+.vd-table-head h3 {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #dce7f5;
+}
+.vd-scope-pill {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(90, 160, 255, 0.4);
+  background: rgba(90, 160, 255, 0.12);
+  font-size: 11px;
+  font-weight: 400;
+  color: #9fc3ff;
+}
+.vd-scope-pill code { color: #cfe2ff; }
+.vd-columns td.vd-row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+.vd-columns td.vd-row-actions button {
+  background: transparent;
+  border: 1px solid #2a2f3a;
+  border-radius: 4px;
+  color: #9fb0c3;
+  padding: 1px 6px;
+  margin-left: 2px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.vd-columns td.vd-row-actions button:hover:not(:disabled) { color: #dce7f5; }
+.vd-columns td.vd-row-actions button:disabled { opacity: 0.35; cursor: default; }
+.vd-columns select {
+  background: #0f131a;
+  border: 1px solid #2a2f3a;
+  border-radius: 4px;
+  color: #dce7f5;
+  padding: 3px 4px;
+  font-size: 12px;
+}
