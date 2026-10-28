@@ -52,6 +52,10 @@ artifacts only.
   paged JSON trees for 100k+-element resources, BIGINT-safe keys, live
   Hugging Face data. New **FHIR → OMOP** step-by-step walkthrough and
   OMOP notebook in the docs.
+- **medterm4ds 0.0.7** dependency (core and `[extraction]` extras, the
+  Athena-complete pin): the terminology integration was re-verified
+  deliberately — in-process adapter suite, notes pipeline + autocoding
+  units, and the expansion/search contracts against the published 0.0.7.
 - **Conformance**: OMOP suite at 38 checks; master gate 2870/2870.
 
   normalizes `Patient/{id}`, absolute URLs and `urn:uuid:` to the target
