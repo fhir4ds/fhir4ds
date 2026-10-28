@@ -17,9 +17,12 @@ test("cleanroom embed boots under dev-server COOP/COEP", async ({ page }) => {
   const wc = page.locator("cql-cleanroom");
   await expect(wc).toBeAttached();
 
-  // Boot overlay must clear (Ready state surfaces the version badge).
+  // Boot overlay must clear (Ready state surfaces the version badge;
+  // the cleanroom redo renders it as the bare package version).
   const badge = wc.locator(".version-badge");
-  await expect(badge.first()).toContainText("fhir4ds-v2", { timeout: 120_000 });
+  await expect(badge.first()).toContainText(/^\d+\.\d+\.\d+$/, {
+    timeout: 120_000,
+  });
 
   // The hard-failure path renders a boot-error element instead — fail
   // fast with its text if it appears.
