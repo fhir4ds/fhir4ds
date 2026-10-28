@@ -1,5 +1,5 @@
 {
-  "name": "omop_drug_exposure_immunization",
+  "name": "drug_exposure_immunization_source",
   "status": "draft",
   "resource": "Immunization",
   "constant": [
@@ -23,11 +23,6 @@
         {
           "name": "person_id",
           "path": "patient.reference.replace('urn:uuid:', '').split('/').last()",
-          "type": "string"
-        },
-        {
-          "name": "drug_concept_id",
-          "path": "cm.concept_id",
           "type": "string"
         },
         {
@@ -84,27 +79,16 @@
           "name": "src",
           "path": "'Immunization'",
           "type": "string"
-        }
-      ]
-    }
-  ],
-  "joins": [
-    {
-      "name": "cm",
-      "view": "omop_conceptmap",
-      "type": "left",
-      "on": [
-        {
-          "path": "vaccineCode.coding.code.first()"
         },
         {
-          "path": "cm.concept_code"
+          "name": "source_code",
+          "path": "vaccineCode.coding.code.first()",
+          "type": "string"
         },
         {
-          "path": "vaccineCode.coding.system.first()"
-        },
-        {
-          "path": "cm.source_system"
+          "name": "source_system",
+          "path": "vaccineCode.coding.system.first()",
+          "type": "string"
         }
       ]
     }

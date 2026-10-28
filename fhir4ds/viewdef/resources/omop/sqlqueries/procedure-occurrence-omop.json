@@ -1,0 +1,26 @@
+{
+  "resourceType": "Library",
+  "id": "procedure-occurrence-omop",
+  "name": "ProcedureOccurrenceOmop",
+  "status": "draft",
+  "type": {
+    "coding": [
+      {
+        "system": "http://hl7.org/fhir/uv/sql-on-fhir/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery"
+    ]
+  },
+  "content": [
+    {
+      "contentType": "application/sql",
+      "data": "U0VMRUNUCiAgICBDQVNFIFdIRU4geC4icHJvY2VkdXJlX29jY3VycmVuY2VfaWQiIElTIE5VTEwgVEhFTiBOVUxMIEVMU0UgQ0FTVChoYXNoKHguInByb2NlZHVyZV9vY2N1cnJlbmNlX2lkIikgJiA5MjIzMzcyMDM2ODU0Nzc1ODA3IEFTIEJJR0lOVCkgRU5EIEFTICJwcm9jZWR1cmVfb2NjdXJyZW5jZV9pZCIsCiAgICBDQVNFIFdIRU4geC4icGVyc29uX2lkIiBJUyBOVUxMIFRIRU4gTlVMTCBFTFNFIENBU1QoaGFzaCh4LiJwZXJzb25faWQiKSAmIDkyMjMzNzIwMzY4NTQ3NzU4MDcgQVMgQklHSU5UKSBFTkQgQVMgInBlcnNvbl9pZCIsCiAgICBDT0FMRVNDRShUUllfQ0FTVChjbS5jb25jZXB0X2lkIEFTIEJJR0lOVCksIDApIEFTICJwcm9jZWR1cmVfY29uY2VwdF9pZCIsCiAgICB4LiJwcm9jZWR1cmVfZGF0ZSIsCiAgICB4LiJwcm9jZWR1cmVfZGF0ZXRpbWUiLAogICAgQ09BTEVTQ0UoVFJZX0NBU1QoeC4icHJvY2VkdXJlX3R5cGVfY29uY2VwdF9pZCIgQVMgQklHSU5UKSwgMCkgQVMgInByb2NlZHVyZV90eXBlX2NvbmNlcHRfaWQiLAogICAgeC4icXVhbnRpdHkiLAogICAgeC4icHJvY2VkdXJlX3NvdXJjZV92YWx1ZSIsCiAgICBDQVNFIFdIRU4geC4idmlzaXRfb2NjdXJyZW5jZV9pZCIgSVMgTlVMTCBUSEVOIE5VTEwgRUxTRSBDQVNUKGhhc2goeC4idmlzaXRfb2NjdXJyZW5jZV9pZCIpICYgOTIyMzM3MjAzNjg1NDc3NTgwNyBBUyBCSUdJTlQpIEVORCBBUyAidmlzaXRfb2NjdXJyZW5jZV9pZCIKRlJPTSBvbW9wLnByb2NlZHVyZV9vY2N1cnJlbmNlX3NvdXJjZSBBUyB4CkxFRlQgSk9JTiBvbW9wLm9tb3BfY29uY2VwdG1hcCBBUyBjbQogICAgICAgT04geC5zb3VyY2VfY29kZSA9IGNtLmNvbmNlcHRfY29kZQogICAgICBBTkQgeC5zb3VyY2Vfc3lzdGVtID0gY20uc291cmNlX3N5c3RlbQo="
+    }
+  ],
+  "description": "OMOP procedure_occurrence: reshape view joined to the flattened ConceptMap, with the integer keys."
+}

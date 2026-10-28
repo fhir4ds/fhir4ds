@@ -111,19 +111,20 @@ def main():
     check("grain", "row counts match fixture", grain_check)
 
     def union_sum_check():
-        # Derive the union's child arms from the manifest (5 arms today).
+        # The union lives in the drug_exposure SQLQuery; its arms are the
+        # manifest materialization entries named drug_exposure__<arm>.
         from fhir4ds.viewdef.runner import load_manifest
         manifest = load_manifest(OMOP_DIR / "manifest.json")
         n = con.execute("SELECT count(*) FROM omop.drug_exposure").fetchone()[0]
-        children = 0
-        for stem in manifest.get("unions", {}).get("drug_exposure", []):
-            suffix = stem.replace("-view", "").replace("-", "_")
-            family = "drug-exposure-"
-            if stem.startswith(family):
-                suffix = stem[len(family):].replace("-view", "").replace("-", "_")
-            children += con.execute(
-                f'SELECT count(*) FROM omop."drug_exposure__{suffix}"'
-            ).fetchone()[0]
+        arms = [
+            name for name in manifest.get("materialize", {})
+            if name.startswith("drug_exposure__")
+        ]
+        assert len(arms) == 5, f"expected 5 drug_exposure arms, found {arms}"
+        children = sum(
+            con.execute(f'SELECT count(*) FROM omop."{arm}"').fetchone()[0]
+            for arm in arms
+        )
         assert n == children, f"{n} != {children}"
     check("grain", "union = sum of children", union_sum_check)
 

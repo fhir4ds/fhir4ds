@@ -1,5 +1,5 @@
 {
-  "name": "omop_drug_exposure_medication_dispense",
+  "name": "drug_exposure_medication_dispense_source",
   "status": "draft",
   "resource": "MedicationDispense",
   "constant": [
@@ -23,11 +23,6 @@
         {
           "name": "person_id",
           "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
-          "type": "string"
-        },
-        {
-          "name": "drug_concept_id",
-          "path": "cm.concept_id",
           "type": "string"
         },
         {
@@ -84,27 +79,16 @@
           "name": "src",
           "path": "'MedicationDispense'",
           "type": "string"
-        }
-      ]
-    }
-  ],
-  "joins": [
-    {
-      "name": "cm",
-      "view": "omop_conceptmap",
-      "type": "left",
-      "on": [
-        {
-          "path": "iif(medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).exists(), medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).code.first(), medication.ofType(CodeableConcept).coding.code.first())"
         },
         {
-          "path": "cm.concept_code"
+          "name": "source_code",
+          "path": "iif(medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).exists(), medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).code.first(), medication.ofType(CodeableConcept).coding.code.first())",
+          "type": "string"
         },
         {
-          "path": "iif(medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).exists(), %rxnorm_uri, medication.ofType(CodeableConcept).coding.system.first())"
-        },
-        {
-          "path": "cm.source_system"
+          "name": "source_system",
+          "path": "iif(medication.ofType(CodeableConcept).coding.where(system=%rxnorm_uri).exists(), %rxnorm_uri, medication.ofType(CodeableConcept).coding.system.first())",
+          "type": "string"
         }
       ]
     }

@@ -6,116 +6,19 @@
   "description": "FHIR R4 -> OMOP CDM v5.5 tables as a ViewDefinition library. Rev-2 architecture: the STANDARD MONOLITHIC ConceptMap resource ships as the converter contract; the S1 conceptmap VD flattens it (materialized as the omop.omop_conceptmap join target); event VDs join the VIEW via Join.view (spec composition semantics). Unions + projections compose through the generic fhir4ds.viewdef.runner. Materialization order is INFERRED from Join.view references (zero-config); 'materialize' remains an optional override.",
   "views": {
     "conceptmap-view": "ConceptMap resources -> flat mapping rows (THE join target; materialized as omop.omop_conceptmap)",
-    "person-source-view": "Patient -> person_source (raw reshape; joined and keyed by the person SQLQuery)",
-    "visit-occurrence-view": "Encounter -> visit_occurrence",
-    "condition-occurrence-view": "Condition -> condition_occurrence",
-    "procedure-occurrence-view": "Procedure -> procedure_occurrence",
-    "drug-exposure-medication-request-view": "MedicationRequest -> drug_exposure (arm 1/4)",
-    "drug-exposure-medication-statement-view": "MedicationStatement -> drug_exposure (arm 2/4)",
-    "drug-exposure-medication-administration-view": "MedicationAdministration -> drug_exposure (arm 3/4)",
-    "drug-exposure-immunization-view": "Immunization -> drug_exposure (arm 4/4)",
-    "device-exposure-view": "DeviceUsage -> device_exposure",
-    "measurement-view": "Observation (Quantity-valued) -> measurement",
-    "observation-view": "Observation (non-Quantity) -> observation",
-    "death-view": "Patient.deceased -> death",
-    "drug-exposure-medication-dispense-view": "MedicationDispense -> drug_exposure (arm 2/5)"
-  },
-  "unions": {
-    "drug_exposure": [
-      "drug-exposure-medication-request-view",
-      "drug-exposure-medication-statement-view",
-      "drug-exposure-medication-administration-view",
-      "drug-exposure-medication-dispense-view",
-      "drug-exposure-immunization-view"
-    ]
-  },
-  "projections": {
-    "visit_occurrence": {
-      "hash_keys": [
-        "visit_occurrence_id",
-        "person_id"
-      ],
-      "defaults": {
-        "visit_concept_id": 0,
-        "visit_type_concept_id": 0
-      }
-    },
-    "condition_occurrence": {
-      "hash_keys": [
-        "condition_occurrence_id",
-        "person_id",
-        "visit_occurrence_id"
-      ],
-      "defaults": {
-        "condition_concept_id": 0,
-        "condition_type_concept_id": 0,
-        "condition_status_concept_id": 0
-      }
-    },
-    "procedure_occurrence": {
-      "hash_keys": [
-        "procedure_occurrence_id",
-        "person_id",
-        "visit_occurrence_id"
-      ],
-      "defaults": {
-        "procedure_concept_id": 0,
-        "procedure_type_concept_id": 0
-      }
-    },
-    "drug_exposure": {
-      "hash_keys": [
-        "drug_exposure_id",
-        "person_id",
-        "visit_occurrence_id"
-      ],
-      "defaults": {
-        "drug_concept_id": 0,
-        "drug_type_concept_id": 0
-      }
-    },
-    "device_exposure": {
-      "hash_keys": [
-        "device_exposure_id",
-        "person_id",
-        "visit_occurrence_id"
-      ],
-      "defaults": {
-        "device_concept_id": 0,
-        "device_type_concept_id": 0
-      }
-    },
-    "measurement": {
-      "hash_keys": [
-        "measurement_id",
-        "person_id",
-        "visit_occurrence_id"
-      ],
-      "defaults": {
-        "measurement_concept_id": 0,
-        "measurement_type_concept_id": 0
-      }
-    },
-    "observation": {
-      "hash_keys": [
-        "observation_id",
-        "person_id",
-        "visit_occurrence_id"
-      ],
-      "defaults": {
-        "observation_concept_id": 0,
-        "observation_type_concept_id": 0
-      }
-    },
-    "death": {
-      "hash_keys": [
-        "person_id"
-      ],
-      "defaults": {
-        "death_type_concept_id": 0,
-        "cause_concept_id": 0
-      }
-    }
+    "person-source-view": "Patient -> person_source (reshape only; joined and keyed by the person SQLQuery)",
+    "visit-occurrence-source-view": "Encounter -> visit_occurrence_source (reshape only)",
+    "condition-occurrence-source-view": "Condition -> condition_occurrence_source (reshape only)",
+    "procedure-occurrence-source-view": "Procedure -> procedure_occurrence_source (reshape only)",
+    "drug-exposure-medication-request-source-view": "MedicationRequest -> drug_exposure__medication_request (reshape only)",
+    "drug-exposure-medication-statement-source-view": "MedicationStatement -> drug_exposure__medication_statement (reshape only)",
+    "drug-exposure-medication-administration-source-view": "MedicationAdministration -> drug_exposure__medication_administration (reshape only)",
+    "drug-exposure-medication-dispense-source-view": "MedicationDispense -> drug_exposure__medication_dispense (reshape only)",
+    "drug-exposure-immunization-source-view": "Immunization -> drug_exposure__immunization (reshape only)",
+    "device-exposure-source-view": "DeviceUsage -> device_exposure_source (reshape only)",
+    "measurement-source-view": "Observation (Quantity-valued) -> measurement_source (reshape only)",
+    "observation-source-view": "Observation (non-Quantity) -> observation_source (reshape only)",
+    "death-source-view": "Patient.deceased -> death_source (reshape only)"
   },
   "conceptmap_source": {
     "canonical_form": "STANDARD MONOLITHIC ConceptMap (all groups in one resource) \u2014 the converter contract",
@@ -133,6 +36,22 @@
     "observation_period is ETL-defined per THEMIS (aggregate derivation, not a row mapping) \u2014 not in the VD library v1"
   ],
   "sql_queries": {
-    "person": "person-omop"
+    "person": "person-omop",
+    "visit_occurrence": "visit-occurrence-omop",
+    "condition_occurrence": "condition-occurrence-omop",
+    "procedure_occurrence": "procedure-occurrence-omop",
+    "drug_exposure": "drug-exposure-omop",
+    "device_exposure": "device-exposure-omop",
+    "measurement": "measurement-omop",
+    "observation": "observation-omop",
+    "death": "death-omop"
+  },
+  "materialize": {
+    "omop_conceptmap": "conceptmap-view",
+    "drug_exposure__medication_request": "drug-exposure-medication-request-source-view",
+    "drug_exposure__medication_statement": "drug-exposure-medication-statement-source-view",
+    "drug_exposure__medication_administration": "drug-exposure-medication-administration-source-view",
+    "drug_exposure__medication_dispense": "drug-exposure-medication-dispense-source-view",
+    "drug_exposure__immunization": "drug-exposure-immunization-source-view"
   }
 }

@@ -1,0 +1,26 @@
+{
+  "resourceType": "Library",
+  "id": "observation-omop",
+  "name": "ObservationOmop",
+  "status": "draft",
+  "type": {
+    "coding": [
+      {
+        "system": "http://hl7.org/fhir/uv/sql-on-fhir/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery"
+    ]
+  },
+  "content": [
+    {
+      "contentType": "application/sql",
+      "data": "U0VMRUNUCiAgICBDQVNFIFdIRU4geC4ib2JzZXJ2YXRpb25faWQiIElTIE5VTEwgVEhFTiBOVUxMIEVMU0UgQ0FTVChoYXNoKHguIm9ic2VydmF0aW9uX2lkIikgJiA5MjIzMzcyMDM2ODU0Nzc1ODA3IEFTIEJJR0lOVCkgRU5EIEFTICJvYnNlcnZhdGlvbl9pZCIsCiAgICBDQVNFIFdIRU4geC4icGVyc29uX2lkIiBJUyBOVUxMIFRIRU4gTlVMTCBFTFNFIENBU1QoaGFzaCh4LiJwZXJzb25faWQiKSAmIDkyMjMzNzIwMzY4NTQ3NzU4MDcgQVMgQklHSU5UKSBFTkQgQVMgInBlcnNvbl9pZCIsCiAgICBDT0FMRVNDRShUUllfQ0FTVChjbS5jb25jZXB0X2lkIEFTIEJJR0lOVCksIDApIEFTICJvYnNlcnZhdGlvbl9jb25jZXB0X2lkIiwKICAgIHguIm9ic2VydmF0aW9uX2RhdGUiLAogICAgeC4ib2JzZXJ2YXRpb25fZGF0ZXRpbWUiLAogICAgQ09BTEVTQ0UoVFJZX0NBU1QoeC4ib2JzZXJ2YXRpb25fdHlwZV9jb25jZXB0X2lkIiBBUyBCSUdJTlQpLCAwKSBBUyAib2JzZXJ2YXRpb25fdHlwZV9jb25jZXB0X2lkIiwKICAgIHguInZhbHVlX2FzX3N0cmluZyIsCiAgICB4LiJvYnNlcnZhdGlvbl9zb3VyY2VfdmFsdWUiLAogICAgeC4idmFsdWVfc291cmNlX3ZhbHVlIiwKICAgIENBU0UgV0hFTiB4LiJ2aXNpdF9vY2N1cnJlbmNlX2lkIiBJUyBOVUxMIFRIRU4gTlVMTCBFTFNFIENBU1QoaGFzaCh4LiJ2aXNpdF9vY2N1cnJlbmNlX2lkIikgJiA5MjIzMzcyMDM2ODU0Nzc1ODA3IEFTIEJJR0lOVCkgRU5EIEFTICJ2aXNpdF9vY2N1cnJlbmNlX2lkIgpGUk9NIG9tb3Aub2JzZXJ2YXRpb25fc291cmNlIEFTIHgKTEVGVCBKT0lOIG9tb3Aub21vcF9jb25jZXB0bWFwIEFTIGNtCiAgICAgICBPTiB4LnNvdXJjZV9jb2RlID0gY20uY29uY2VwdF9jb2RlCiAgICAgIEFORCB4LnNvdXJjZV9zeXN0ZW0gPSBjbS5zb3VyY2Vfc3lzdGVtCg=="
+    }
+  ],
+  "description": "OMOP observation: reshape view joined to the flattened ConceptMap, with the integer keys."
+}
