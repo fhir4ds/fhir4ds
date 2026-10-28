@@ -15,9 +15,6 @@ export interface Sample {
   remoteResources?: string;
   /** Gallery suite grouping (dropdown optgroups / ?suite= filter). */
   suite: SampleSuite;
-  /** OMOP table this sample produces: enables the surrogate-key projection
-   *  so the demo shows the same BIGINT keys as the composed tables. */
-  omopTable?: string;
 }
 
 export type SampleSuite = "general" | "uscore" | "omop";
@@ -114,32 +111,29 @@ export const SAMPLES: Sample[] = [
   {
     slug: "omop-encounters",
     suite: "omop",
-    name: "OMOP encounters",
-    description: "OMOP visit_occurrence over Synthea encounters — visit classes (inpatient/outpatient/emergency) resolve through the ConceptMap view.",
+    name: "OMOP encounters (SQLQuery)",
+    description: "OMOP visit_occurrence over Synthea encounters — the SQLQuery joins the encounter reshape to the ConceptMap and assigns the integer keys.",
     vdUrl: "samples/omop-encounters/viewdefinition.json",
     resourcesUrl: "samples/omop-encounters/resources.ndjson",
     remoteResources: "encounter-resources.ndjson",
-    omopTable: "visit_occurrence",
   },
   {
     slug: "omop-drug-exposure",
     suite: "omop",
-    name: "OMOP medications (ViewDefinition)",
-    description: "drug_exposure from MedicationRequest alone — a single-resource ViewDefinition with a live ConceptMap view join.",
+    name: "OMOP medications (reshape)",
+    description: "drug_exposure reshape from MedicationRequest alone: source columns and the coding system the SQLQuery will join on.",
     vdUrl: "samples/omop-drug-exposure/viewdefinition.json",
     resourcesUrl: "samples/omop-drug-exposure/resources.ndjson",
     remoteResources: "medication-resources.ndjson",
-    omopTable: "drug_exposure",
   },
   {
     slug: "omop-drug-exposure-sqlquery",
     suite: "omop",
     name: "OMOP medications (SQLQuery)",
-    description: "Cross-resource drug_exposure via a SQLQuery Library — MedicationRequest, Dispense, Statement, Administration and Immunization unioned over the OMOP views (composed live on every run).",
+    description: "Cross-resource drug_exposure via a SQLQuery Library — MedicationRequest, Dispense, Statement, Administration and Immunization unioned, mapped and keyed in one query.",
     vdUrl: "samples/omop-drug-exposure-sqlquery/viewdefinition.json",
     resourcesUrl: "samples/omop-drug-exposure-sqlquery/resources.ndjson",
     remoteResources: "medication-resources.ndjson",
-    omopTable: "drug_exposure",
   },
 ];
 

@@ -48,7 +48,6 @@ export default function App() {
   const [outputTab, setOutputTab] = useState<OutputTab>("table");
   const [sampleSetup, setSampleSetup] = useState<string[]>([]);
   const [resourcesTab, setResourcesTab] = useState<ResourcesTab>("browse");
-  const omopTableRef = useRef<string | undefined>(undefined);
   const vdRef = useRef<string>("");
   vdRef.current = vdText;
   const resRef = useRef<string>("");
@@ -68,7 +67,6 @@ export default function App() {
 
   const loadSample = useCallback(async (s: Sample): Promise<{ vd: string; res: string; setup: string[] }> => {
     setSample(s);
-    omopTableRef.current = s.omopTable;
     const setupUrl = s.setupUrl ? sampleUrl(s.setupUrl) : null;
     const [vd, res, setup] = await Promise.all([
       fetch(sampleUrl(s.vdUrl)).then((r) => {
@@ -140,12 +138,7 @@ export default function App() {
       setOutputTab("diagnostics");
       return;
     }
-    const env = await flattenView(
-      vd,
-      parsed.resources,
-      setupOverride ?? sampleSetup,
-      omopTableRef.current,
-    );
+    const env = await flattenView(vd, parsed.resources, setupOverride ?? sampleSetup);
     setRun({
       running: false,
       columns: env.ok ? (env.columns ?? []) : [],
