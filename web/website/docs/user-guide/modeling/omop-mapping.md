@@ -14,19 +14,38 @@ tables, no offline code mapping step.
 
 ## Architecture
 
-```
-monolithic FHIR ConceptMap resource          (the standard converter contract —
-  │                                           one ConceptMap, groups per source system)
-  ▼  conceptmap ViewDefinition (flatten)
-omop.omop_conceptmap virtual table          (vocabulary_id | concept_code | concept_id ...)
-  ▲
-  │  one SQLQuery per table joins the reshape view to this lookup,
-  │  assigns the integer keys, and (for drug_exposure) unions the arms
-  │
-omop.<table>_source virtual table            (a reshape ViewDefinition per resource type)
-  │
-  ▼
-omop.person / visit_occurrence / condition_occurrence / ... (9 tables, composed)
+```mermaid
+flowchart LR
+    subgraph FHIR["FHIR resources"]
+        ConceptMap[ConceptMap<br/>one resource, one group per source system]
+    end
+
+    MapVD["conceptmap<br/>ViewDefinition"] --> Lookup[("omop.omop_conceptmap<br/>vocabulary_id | concept_code | concept_id")]
+    ConceptMap --> MapVD
+
+    subgraph Reshape["reshape views"]
+        Source[("omop.&lt;table&gt;_source<br/>one ViewDefinition per resource type")]
+    end
+
+    subgraph OMOP["OMOP tables"]
+        Tables[("person / visit_occurrence /<br/>condition_occurrence / ... (9 tables)")]
+    end
+
+    SQ["&lt;table&gt; SQLQuery<br/>join + integer keys<br/>(drug_exposure: unions the arms)"]
+    Lookup --> SQ
+    Source --> SQ
+    SQ --> Tables
+
+    classDef default fill:#1e293b,stroke:#38bdf8,color:#cbd5e1,stroke-width:1px
+    classDef highlight fill:#38bdf8,stroke:#0ea5e9,color:#0f172a,stroke-width:2px
+
+    class ConceptMap,MapVD,Lookup,Source,SQ default
+    class Tables highlight
+
+    linkStyle default stroke:#fff,stroke-width:1px
+    style FHIR fill:#0f172a,stroke:#38bdf8,color:#cbd5e1
+    style Reshape fill:#0f172a,stroke:#38bdf8,color:#cbd5e1
+    style OMOP fill:#0f172a,stroke:#38bdf8,color:#cbd5e1
 ```
 
 The chain is spec-grounded: SQL-on-FHIR composition semantics state that
@@ -109,30 +128,17 @@ there too.
 
 ## Sample data
 
-The Viewing Room's **OMOP** sample suite runs on real generated data —
-a 25-patient [Synthea](https://synthetichealth.github.io/synthea/) R4
-cohort (MIT; seed-pinned) — hosted on Hugging Face:
+A real generated cohort for trying the library — a 25-patient
+[Synthea](https://synthetichealth.github.io/synthea/) R4 cohort (MIT;
+seed-pinned), hosted on Hugging Face:
 
 - [fhir4ds/omop-demo](https://huggingface.co/datasets/fhir4ds/omop-demo)
   — NDJSON bundles (patients, encounters, medications + immunizations)
   and one ConceptMap carrying every vocabulary mapping.
 
-Hugging Face serves dataset files with CORS enabled, so the browser
-(including DuckDB-WASM) fetches them directly — no server, no token
-(the repo is public).
-
-Four samples cover the two-layer story:
-
-| Sample | Layer | Rows (25-pt cohort) |
-|---|---|---|
-| OMOP person | ViewDefinition | 25 |
-| OMOP encounters | ViewDefinition | 1,284 |
-| OMOP medications | ViewDefinition (MedicationRequest arm) | 1,143 |
-| OMOP medications | SQLQuery (5-arm union, composed live) | 1,461 |
-
-Append `?data=local` to the app URL to run against the compact
-committed fixtures instead (8-patient slice + a 36-code RxNorm slice) —
-this is what the e2e suite uses, so tests stay offline and fast.
+Composing the library over the cohort yields: person 25 rows,
+visit_occurrence 1,284, drug_exposure 1,461 (1,143 MedicationRequest +
+318 Immunization), with every coded concept resolved.
 
 ### The ConceptMap: one resource, every vocabulary
 
@@ -154,18 +160,12 @@ nothing to map.
 Element `display` fields are omitted (not needed for mapping);
 `equivalence` is retained because FHIR requires it.
 
-**Chunking is no longer needed.** Earlier revisions of this dataset
-chunked the map at 20 elements per resource because the ViewDefinition
-engine's `forEach` lowering was O(N × payload) and exhausted memory on
-large arrays. That lowering now uses a pipelined unnest (compute the
-array once per parent row, then unnest), so a single 108k-element
-ConceptMap executes in well under a second and 100k-element maps are the
-recommended shape.
-
 ## Try it
 
-- Notebook: `docs/notebooks/omop-mapping.ipynb`
-- Viewing Room: `?suite=omop` — the four OMOP samples above, resolving
-  concepts live in the browser
-- Conformance: `python3 conformance/scripts/run_omop.py` (37 checks —
+The OMOP library ships with the package
+(`fhir4ds.viewdef.resources.omop`): every ViewDefinition and SQLQuery,
+plus the composition manifest. `create_omop_views` composes the whole
+schema from any staged resources table.
+
+- Conformance: `python3 conformance/scripts/run_omop.py` (38 checks —
   schema, required fields, grain, mapping, vd-conformance)
