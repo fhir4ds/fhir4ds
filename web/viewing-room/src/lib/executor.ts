@@ -92,16 +92,12 @@ interface ArrowTable {
  * ``setupFactory`` derives DDL LIVE after resources are staged — the
  * SQLQuery samples re-derive their composition from the library views on
  * every run instead of replaying a build-time snapshot.
- * ``wrapSql`` receives the produced column names and returns the SQL to
- * execute instead (the OMOP key projection); the wrapped SQL is what the
- * SQL tab shows, since it is what runs.
  */
 export async function stageAndRunFlat(
   sql: string,
   resources: Array<Record<string, unknown>>,
   setupStatements: string[] = [],
   setupFactory?: () => Promise<string[]>,
-  wrapSql?: (columns: string[]) => Promise<string>,
 ): Promise<FlattenEnvelope> {
   await initDuckDB();
   // Batch the INSERTs: a single VALUES statement over thousands of
@@ -128,14 +124,7 @@ export async function stageAndRunFlat(
       const derived = await setupFactory();
       for (const stmt of derived) await runRaw(stmt);
     }
-    let finalSql = sql;
-    if (wrapSql) {
-      // LIMIT 0 probes the shaped columns without scanning rows: the
-      // projection rewrites only keys the sample actually projects.
-      const probe = (await runRaw(`SELECT * FROM (\n${sql}\n) LIMIT 0`)) as ArrowTable;
-      finalSql = await wrapSql(probe.schema.fields.map((f) => f.name));
-    }
-    const result = (await runRaw(finalSql)) as ArrowTable;
+    const result = (await runRaw(sql)) as ArrowTable;
     const columns = result.schema.fields.map((f) => f.name);
     const scales: Record<string, number | undefined> = {};
     for (const f of result.schema.fields) {
@@ -149,7 +138,7 @@ export async function stageAndRunFlat(
       }
       return out;
     });
-    envelope.sql = finalSql;
+    envelope.sql = sql;
     envelope.columns = columns;
     envelope.rows = JSON.parse(JSON.stringify(rows));
   } catch (err) {
