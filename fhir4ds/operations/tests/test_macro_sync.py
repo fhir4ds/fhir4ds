@@ -71,6 +71,14 @@ BROWSER_MACRO_GAP_ALLOWLIST = {
     # terminology / dynamic composition
     "ExpandValueSet",
     "CQLListMode",
+    # Provided by the bundled C++ extension as a spec-aware VARCHAR scalar
+    # (S32). A CAST(AS DATE) TS macro shadowed it and returned DATE, causing
+    # DATE/VARCHAR CASE binder errors in generated population SQL.
+    "ToDate",
+    # Native-provided conversion family (S32): Python still defines macros on
+    # desktop, but the browser uses the C++ extension implementations.
+    "ToDateTime",
+    "ToTime",
 }
 
 

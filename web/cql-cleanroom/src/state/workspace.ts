@@ -41,6 +41,15 @@ export const WORKSPACE_SCHEMA_VERSION = 7;
  *  carry the synthesized `__snippet__` wrapper text as `cql`. */
 export interface RunEntryPayload {
   mode: "library" | "selection";
+  /** S18: which engine produced this run — drives the explain seam. */
+  origin?: "server" | "browser";
+  /**
+   * S22g (§8): which SURFACE this run belongs to — "console" (the
+   * bottom Results console; whole-library/selection runs) or "cell"
+   * (inline per-cell runs; never duplicated into the console history).
+   * Legacy entries default to "console".
+   */
+  surface?: "console" | "cell";
   /** 6j: which library this run executed (active-tab targeting). */
   library?: string;
   cql: string;
@@ -85,6 +94,10 @@ export interface WorkspaceMeasureEntry {
   /** Authored Measure resource; null = entry exists but no populations
    *  authored yet (MeasurePane bootstrap mode). */
   resource: Record<string, unknown> | null;
+  /** S26 review fix: adopted disk measures carry the PRIMARY library
+   *  NAME (Measure.library[0] canonical tail) — resolved to a tab id
+   *  when that library opens; drives entrypoint + measure surface. */
+  primaryLibraryName?: string;
 }
 
 /** A stored ViewDefinition resource (WORKBENCH_V6). */
@@ -127,6 +140,10 @@ export interface WorkspaceState {
   terminology: { valuesets: Array<Record<string, unknown>> };
   /** LEGACY v5 param values (migration input only; see paramBindings). */
   viewConfig: WorkspaceViewConfig | null;
+  /** S25: set by an explicit File > Reset Workspace. Suppresses the
+   *  pristine-boot example auto-load so a reset survives a reload —
+   *  "reset" means clean demo, not "featured example again". */
+  postReset?: boolean;
   savedAt: number;
 }
 
@@ -267,6 +284,7 @@ export function migrate(state: Record<string, unknown>): WorkspaceState {
         valuesets: [],
       },
     viewConfig: (current.viewConfig as WorkspaceViewConfig | null) ?? null,
+    postReset: current.postReset === true ? true : undefined,
     savedAt: (current.savedAt as number) ?? Date.now(),
   };
 }

@@ -334,6 +334,29 @@ def build_server() -> Any:
             population_codes=[e["code"] for e in mapping],
         ).to_dict()
 
+    @mcp.tool()
+    def validate_resource_tool(resource: dict) -> dict:
+        """Validate a FHIR resource (loader invariants: resourceType, id
+        pattern, JSON shape) — the workbench validator capability."""
+        from fhir4ds.operations import validate_resource
+
+        return validate_resource(resource).to_dict()
+
+    @mcp.tool()
+    def resource_schema_tool(resource_type: str) -> dict:
+        """Column/schema information for a FHIR resource type."""
+        from fhir4ds.operations import resource_schema
+
+        return resource_schema(resource_type).to_dict()
+
+    @mcp.tool()
+    def resource_schema_tree_tool(resource_type: str) -> dict:
+        """Recursive schema tree for a FHIR resource type (the workbench
+        resource tree capability)."""
+        from fhir4ds.operations import resource_schema_tree
+
+        return resource_schema_tree(resource_type).to_dict()
+
     return mcp
 
 

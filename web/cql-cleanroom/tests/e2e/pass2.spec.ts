@@ -1,21 +1,39 @@
 import { expect, test } from "@playwright/test";
 import { importBundleResources, waitDatasetResources } from "./dataset";
+import { bootTextReady, openTestsDrawer } from "./bootText";
 
 /**
  * PASS2 e2e: nav rail (G1) + terminology pane (G2).
  */
 
 async function bootReady(page: import("@playwright/test").Page) {
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  await bootTextReady(page);
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
 }
 
 async function resetWorkspace(page: import("@playwright/test").Page) {
   await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
+  // Wait for the demo state to LAND before reloading — an immediate
+  // reload races the debounced autosave and resurrects the OLD
+  // workspace (multi-library showcase state) from IndexedDB.
+  await page.waitForFunction(
+    () =>
+      (document.querySelector("[data-testid=cql-editor]")?.textContent ?? "")
+        .includes("CleanroomDemo"),
+    undefined,
+    { timeout: 30_000 },
+  );
+  await page.waitForTimeout(1500); // autosave debounce flush
   await page.reload();
   await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  // S25: reload can restore cell view (auto-cellify) — return to the
+  // text editor surface the legacy specs contract on.
+  const toggle = page.locator('[data-testid="cell-view-toggle"]');
+  if ((await toggle.getAttribute("aria-checked")) === "true") {
+    await toggle.click();
+    await page.waitForTimeout(1000);
+  }
 }
 
 test.describe("nav rail", () => {
@@ -48,7 +66,8 @@ test.describe("nav rail", () => {
   test("evaluation uses the ENTRYPOINT library, not the edited tab", async ({ page }) => {
     await bootReady(page);
     await resetWorkspace(page);
-    await page.waitForSelector("[data-testid=dataset-tree]");
+    await openTestsDrawer(page);
+  await page.waitForSelector("[data-testid=dataset-tree]");
 
     // Add a second library whose IPP differs (male instead of female).
     await page.click("[data-testid=nav-toggle-libraries]");
@@ -70,11 +89,12 @@ define "Has Name":
   exists([Patient] P where P.name.first().given.first() is not null)
 `,
     );
-
     // Entry stays on library 0 (female): running evaluates library 0.
     await page.waitForSelector("[data-testid=results-table]", { timeout: 90_000 });
-    // demo truths: p1 female T, p2 male F, p3 female T → 2 true
-    const cell = await page.textContent("[data-testid=results-table] tbody tr td:nth-child(2)");
+    // demo truths: p1 female T, p2 male F, p3 female T → 2 true.
+    // S26 column order: patient_id, Has Name, Initial Population —
+    // IPP is the THIRD cell.
+    const cell = await page.textContent("[data-testid=results-table] tbody tr td:nth-child(3)");
     if (!cell?.includes("true")) throw new Error(`p1 IPP under entrypoint lib0: ${cell}`);
 
     // Move entrypoint to library 2 (male) WITHOUT editing: p1 flips false.
@@ -83,12 +103,12 @@ define "Has Name":
     await page.waitForFunction(
       () =>
         (document.querySelector(
-          "[data-testid=results-table] tbody tr td:nth-child(2)",
+          "[data-testid=results-table] tbody tr td:nth-child(3)",
         )?.textContent ?? "").includes("false"),
       undefined,
       { timeout: 90_000 },
     );
-    const cell2 = await page.textContent("[data-testid=results-table] tbody tr td:nth-child(2)");
+    const cell2 = await page.textContent("[data-testid=results-table] tbody tr td:nth-child(3)");
     if (!cell2?.includes("false")) throw new Error(`p1 IPP under entrypoint lib1: ${cell2}`);
   });
 
@@ -152,7 +172,10 @@ define "Has Name":
       { resourceType: "Patient", id: "p1", gender: "female", name: [{ given: ["Ann"] }] },
       { resourceType: "Observation", id: "bp1", status: "final", code: { coding: [{ system: "http://loinc.org", code: "8480-6" }] }, subject: { reference: "Patient/p1" } },
     ]);
-    await waitDatasetResources(page, 2, 30_000);
+    await openTestsDrawer(page);
+    // S32: nav Tests ▾ Import Bundle is MERGE mode — imported p1
+    // replaces demo p1 (id+type dedup) and bp1 adds: 3 + 1 = 4.
+    await waitDatasetResources(page, 4, 30_000);
 
     // Evaluate BEFORE adding codes: p1 not in the empty VS → false.
     // The auto-eval may still show the pre-edit demo result (p1=true)
@@ -161,12 +184,12 @@ define "Has Name":
     await page.waitForFunction(
       () =>
         (document.querySelector(
-          "[data-testid=results-table] tbody tr td:nth-child(2)",
+          "[data-testid=results-table] tbody tr td:nth-child(3)",
         )?.textContent ?? "").includes("false"),
       undefined,
       { timeout: 120_000 },
     );
-    const before = await page.textContent("[data-testid=results-table] tbody tr td:nth-child(2)");
+    const before = await page.textContent("[data-testid=results-table] tbody tr td:nth-child(3)");
     if (!before?.includes("false")) throw new Error(`p1 IPP before codes: ${before}`);
 
     // Add the LOINC BP code to the workspace valueset.
@@ -180,12 +203,12 @@ define "Has Name":
     await page.waitForFunction(
       () =>
         (document.querySelector(
-          "[data-testid=results-table] tbody tr td:nth-child(2)",
+          "[data-testid=results-table] tbody tr td:nth-child(3)",
         )?.textContent ?? "").includes("true"),
       undefined,
       { timeout: 90_000 },
     );
-    const after = await page.textContent("[data-testid=results-table] tbody tr td:nth-child(2)");
+    const after = await page.textContent("[data-testid=results-table] tbody tr td:nth-child(3)");
     if (!after?.includes("true")) throw new Error(`p1 IPP after codes: ${after}`);
   });
 

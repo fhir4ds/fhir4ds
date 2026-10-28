@@ -1,0 +1,37 @@
+{
+  "resourceType": "https://sql-on-fhir.org/ig/StructureDefinition/ViewDefinition",
+  "name": "MeasureReportPopulations",
+  "version": "1.0.0",
+  "resource": "MeasureReport",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "patient_id",
+          "path": "%resource.contained.where(resourceType='Parameters').parameter.where(name='subject').valueString",
+          "type": "string"
+        },
+        {
+          "name": "initial_population",
+          "path": "group.population.where(code.coding.code='initial-population').count",
+          "type": "integer"
+        },
+        {
+          "name": "denominator",
+          "path": "group.population.where(code.coding.code='denominator').count",
+          "type": "integer"
+        },
+        {
+          "name": "denominator_exclusion",
+          "path": "group.population.where(code.coding.code='denominator-exclusion').count",
+          "type": "integer"
+        },
+        {
+          "name": "numerator",
+          "path": "group.population.where(code.coding.code='numerator').count",
+          "type": "integer"
+        }
+      ]
+    }
+  ]
+}

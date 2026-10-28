@@ -390,6 +390,11 @@ def _evaluate(
     }
     if want_sql:
         kwargs["sql"] = tr.sql
+    # S26 (item 7): property-lineage map rides the payload so the
+    # explain seam can attach patient-property leaves to non-boolean
+    # defines (explain_patient consumes it below).
+    if audit_mode == "full" and getattr(tr, "patient_property_defs", None):
+        kwargs["patient_property_defs"] = dict(tr.patient_property_defs)
     return (kwargs, relation), diag
 
 
@@ -670,6 +675,7 @@ def explain_patient(
     row = rows[0]
     populations: dict[str, bool] = {}
     evidence_by_col: dict[str, Any] = {}
+    plain_values: dict[str, Any] = {}
     for col in kwargs["columns"]:
         if col == "patient_id":
             continue
@@ -680,8 +686,39 @@ def explain_patient(
             # audit_mode="full" wraps population values: {result, evidence}
             populations[col] = bool(value.get("result"))
             evidence_by_col[col] = value.get("evidence", [])
+        else:
+            plain_values[col] = value
+    # S26f (item 7): NON-boolean defines derived from context-patient
+    # properties (the age family) carry their own property leaf — the
+    # define's evaluated value plus the property it derives from, so
+    # the drill-in explains WHY instead of "no evidence recorded".
+    prop_defs: dict[str, tuple[str, str]] = dict(
+        kwargs.get("patient_property_defs") or {}
+    )
+    for col, value in plain_values.items():
+        lineage = prop_defs.get(col)
+        if lineage is None:
+            continue
+        attr, deriving_op = lineage
+        evidence_by_col[col] = [
+            {
+                "target": f"Patient/{patient_id}",
+                "attribute": attr,
+                "value": "" if value is None else str(value),
+                "operator": "derived",
+                "threshold": deriving_op,
+                "trace": [],
+            }
+        ]
+    # S22f-promotion: context-patient property leaves now flow from the
+    # TRANSLATOR (audit_patient_property macro + the audit_comparison
+    # patient-row target fill) — the explain-seam backfill was retired.
     definitions = [
-        {"column": col, "result": populations.get(col), "evidence": ev}
+        {
+            "column": col,
+            "result": populations.get(col, plain_values.get(col)),
+            "evidence": ev,
+        }
         for col, ev in evidence_by_col.items()
     ]
     return EvidenceResult(

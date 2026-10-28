@@ -570,3 +570,53 @@ define Literal: ToQuantity(5 'mg')
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_todate_native_only_matches_python_semantics_s32() -> None:
+    """The browser/WASM runtime has no Python UDFs: ToDate must be a C++
+    scalar with the same spec-aware semantics as the desktop Python UDF.
+
+    Regression: the TS macro fallback was ``CAST(x AS DATE)`` (DATE return
+    type), which made generated population SQL fail with
+    "Cannot mix values of type DATE and VARCHAR in CASE expression"
+    (cms125 dementia-medications CTE).
+    """
+    from pathlib import Path
+
+    from fhir4ds.cql.duckdb.tests.integration.wasm_runtime_helpers import (
+        extension_paths,
+    )
+
+    con = duckdb.connect(config={"allow_unsigned_extensions": True})
+    try:
+        for src in extension_paths():
+            con.execute(f"LOAD '{src}'")
+        cases = [
+            ("'2024-01-01'", "2024-01-01"),
+            ("'2024-01'", "2024-01"),
+            ("'2024'", "2024"),
+            ("'2024-02-29'", "2024-02-29"),
+            ("'2023-02-29'", None),
+            ("'2024-02-30'", None),
+            ("'2024-01-01T12:30:00'", "2024-01-01"),
+            ("'2024-01-01T12:30:00.123+05:00'", "2024-01-01"),
+            ("'2024-01-01T12:30:00+14:01'", None),
+            ("'2024-01-01T12:30:00Z'", "2024-01-01"),
+            ("'2024-01-01 10:00'", None),
+            ("DATE '2024-01-01'", "2024-01-01"),
+            ("TIMESTAMP '2024-01-01 10:30:00'", "2024-01-01"),
+        ]
+        for expr, expected in cases:
+            got = con.execute(f"SELECT ToDate({expr})").fetchone()[0]
+            assert got == expected, (expr, got, expected)
+        assert (
+            con.execute("SELECT typeof(ToDate('2024-01-01'))").fetchone()[0]
+            == "VARCHAR"
+        )
+
+        # The TS macro list must not shadow the C++ function again.
+        root = Path(__file__).resolve().parents[5]
+        macros_ts = (root / "web/cql-cleanroom/src/lib/cql-macros.ts").read_text()
+        assert "MACRO IF NOT EXISTS ToDate(" not in macros_ts
+    finally:
+        con.close()

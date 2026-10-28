@@ -14,7 +14,7 @@ import { test, expect } from "@playwright/test";
 // artifacts (derived "vd_default" view + empty expected-reports slot),
 // which auto-save persists on the first visit — previously those made
 // isPristineWorkspace fail on every subsequent visit, permanently
-// blocking the host default example (CMS69).
+// blocking the host default example (S26: cms125-workspace zip).
 
 test.setTimeout(240_000);
 
@@ -44,13 +44,15 @@ test("embed File > Open > Examples menu items are clickable", async ({ browser }
   await wc.locator("[data-testid=file-examples]").hover();
   await expect(wc.locator("[data-testid=file-examples-menu]")).toBeVisible();
 
-  await wc.locator("[data-testid=load-example-cms69]").click();
+  // S26: examples are MADiE-layout zips; the standalone embed loads
+  // the cms125 autozip through the single package loader.
+  await wc.locator("[data-testid=example-workspace-cms125-workspace]").click();
   const tabs = wc.locator("[data-testid=editor-tabs] .editor-tab-label");
-  await expect(tabs.filter({ hasText: "CMS69" }).first()).toBeVisible({ timeout: 60_000 });
+  await expect(tabs.filter({ hasText: "CMS125" }).first()).toBeVisible({ timeout: 90_000 });
   await context.close();
 });
 
-test("embed with auto-seeded saved workspace still defaults to CMS69", async ({ browser }) => {
+test("embed with auto-seeded saved workspace still defaults to the featured example", async ({ browser }) => {
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -64,6 +66,6 @@ test("embed with auto-seeded saved workspace still defaults to CMS69", async ({ 
   await page.reload();
   const wc = await bootReady(page);
   const tabs = wc.locator("[data-testid=editor-tabs] .editor-tab-label");
-  await expect(tabs.filter({ hasText: "CMS69" }).first()).toBeVisible({ timeout: 60_000 });
+  await expect(tabs.filter({ hasText: "CMS125" }).first()).toBeVisible({ timeout: 90_000 });
   await context.close();
 });

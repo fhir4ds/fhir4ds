@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { SmartCallbackPage } from "./components/SmartCallbackPage";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { isSmartPopupCallback } from "./lib/smart-auth";
 import "./styles/index.css";
 
@@ -14,7 +15,9 @@ if (isSmartPopupCallback()) {
 } else {
   createRoot(root).render(
     <StrictMode>
-      <App />
+      <ErrorBoundary app="wasm-demo">
+        <App />
+      </ErrorBoundary>
     </StrictMode>,
   );
 }

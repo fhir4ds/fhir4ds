@@ -1,0 +1,20 @@
+{
+  "resourceType": "ValueSet",
+  "id": "demo-mammography",
+  "url": "http://example.org/demo/mammography",
+  "name": "DemoMammography",
+  "status": "active",
+  "compose": {
+    "include": [
+      {
+        "system": "http://loinc.org",
+        "concept": [
+          {
+            "code": "24606-6",
+            "display": "Mammogram breast screening"
+          }
+        ]
+      }
+    ]
+  }
+}

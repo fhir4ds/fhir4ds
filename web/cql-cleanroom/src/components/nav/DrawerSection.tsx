@@ -90,7 +90,7 @@ export function DrawerRow({
   onRenameCommit,
   onRenameCancel,
 }: {
-  item: { id: string; label: string; sublabel?: string; pill?: string; entry?: boolean; error?: boolean };
+  item: { id: string; label: string; sublabel?: string; pill?: string; entry?: boolean; error?: boolean; onDisk?: boolean; diskShadow?: boolean; changed?: boolean; meta?: Record<string, unknown> };
   active?: boolean;
   testId: string;
   onClick?: () => void;
@@ -126,9 +126,22 @@ export function DrawerRow({
   }
   return (
     <button
-      className={`nav-item ${active ? "active" : ""}`}
+      className={`nav-item ${active ? "active" : ""}${item.changed ? " has-change" : ""}${item.meta?.source === "disk-data" ? " disk-data-row" : ""}`}
       data-testid={testId}
-      title={item.sublabel ? `${item.label} — ${item.sublabel}` : item.label}
+      aria-label={
+        item.changed
+          ? `${item.label}, changed on disk`
+          : item.meta?.source === "disk-data"
+            ? `${item.label}, server data file`
+            : undefined
+      }
+      title={
+        item.changed
+          ? `${item.label} — changed on disk${item.sublabel ? ` (${item.sublabel})` : ""}`
+          : item.sublabel
+            ? `${item.label} — ${item.sublabel}`
+            : item.label
+      }
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={(e) => {
@@ -143,6 +156,7 @@ export function DrawerRow({
           {item.pill}
         </span>
       )}
+      {item.changed && <span className="ws-file-dot" role="img" aria-label="changed on disk" />}
       {item.entry && <span className="rail-badge entry" aria-label="active" />}
       {item.error && <span className="rail-badge err" aria-label="error" />}
     </button>

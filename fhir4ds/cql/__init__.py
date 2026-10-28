@@ -79,7 +79,7 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
-__version__ = "0.0.17"
+__version__ = "0.0.18"
 
 
 def parse_cql(cql_text: str):

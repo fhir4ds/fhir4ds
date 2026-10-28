@@ -13,11 +13,12 @@ test.describe("Scenario Routing", () => {
     const tabNav = page.locator("[data-testid='tab-nav']");
     await expect(tabNav).toBeVisible();
     const buttons = tabNav.locator(".tab-btn");
-    await expect(buttons).toHaveCount(4);
+    await expect(buttons).toHaveCount(5);
     await expect(buttons.nth(0)).toContainText("CQL Playground");
     await expect(buttons.nth(1)).toContainText("CMS Measures");
     await expect(buttons.nth(2)).toContainText("SMART on FHIR");
     await expect(buttons.nth(3)).toContainText("SDC Forms");
+    await expect(buttons.nth(4)).toContainText("Builder");
   });
 
   test("?scenario=cql-sandbox shows only CQL Playground with no tab nav", async ({ page }) => {

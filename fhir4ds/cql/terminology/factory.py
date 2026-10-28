@@ -12,7 +12,11 @@ INV-3 guarantee.
 
 Env vars:
     ``FHIR4DS_TERMINOLOGY_MODE``:
-        ``disabled`` (default) | ``http`` | ``in_process``.
+        ``disabled`` (default) | ``http`` | ``in_process`` | ``vsac``.
+        VSAC mode talks to NLM (base URL override via
+        ``FHIR4DS_TERMINOLOGY_URL``; API key via
+        ``FHIR4DS_VSAC_API_KEY`` / ``UMLS_API_KEY``; cache via
+        ``FHIR4DS_VSAC_CACHE_DIR`` / ``FHIR4DS_VSAC_CACHE_TTL``).
     ``FHIR4DS_TERMINOLOGY_URL``:
         Sidecar **FHIR root** URL for HTTP mode — the URL at which the
         server's FHIR R4 API begins. For medterm4ds this is typically
@@ -106,6 +110,19 @@ def get_terminology_endpoint(
             _run_probe(endpoint, cfg.url)
         return endpoint
 
+    if cfg.mode == "vsac":
+        # Lazy adapter import (INV-1, INV-3). The vsac adapter is
+        # stdlib-only (urllib), so no optional dependency guard needed.
+        from .vsac_adapter import VCACTerminologyEndpoint
+
+        endpoint = VCACTerminologyEndpoint(
+            base_url=cfg.url or "https://cts.nlm.nih.gov/fhir",
+            timeout_seconds=cfg.timeout_seconds,
+        )
+        if probe_requested:
+            _run_probe(endpoint, "vsac")
+        return endpoint
+
     if cfg.mode == "in_process":
         # Lazy adapter import.
         from .in_process_adapter import InProcessTerminologyEndpoint
@@ -128,7 +145,7 @@ def get_terminology_endpoint(
 
     raise ValueError(
         f"Unknown terminology mode: {cfg.mode!r}. "
-        "Valid modes: 'disabled', 'http', 'in_process'."
+        "Valid modes: 'disabled', 'http', 'in_process', 'vsac'."
     )
 
 

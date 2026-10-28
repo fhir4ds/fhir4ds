@@ -123,3 +123,44 @@ def test_oversized_inline_payload_rejected(server, monkeypatch):
     with pytest.raises(Exception) as excinfo:
         _call(server, "load_dataset_tool", dataset={"resources": big})
     assert "NDJSON" in str(excinfo.value) or "5MB" in str(excinfo.value) or "exceeds" in str(excinfo.value)
+
+
+# --- WASM-alignment tools (validate_resource / resource_schema[_tree]) ---
+
+
+def test_validate_resource_tool_ok(server):
+    r = _call(
+        server,
+        "validate_resource_tool",
+        resource={"resourceType": "Patient", "id": "p1", "gender": "male"},
+    )
+    assert r["ok"] is True
+    assert r["passed"] is True
+    assert r["resource_type"] == "Patient"
+
+
+def test_validate_resource_tool_bad_id(server):
+    r = _call(
+        server,
+        "validate_resource_tool",
+        resource={"resourceType": "Patient", "id": "under_score"},
+    )
+    assert r["valid"] is False
+    assert r["diagnostics"][0]["code"] == "input_error"
+
+
+def test_resource_schema_tool(server):
+    r = _call(server, "resource_schema_tool", resource_type="Patient")
+    assert r["ok"] is True
+    assert any(f["name"] == "gender" for f in r["fields"])
+
+
+def test_resource_schema_tool_unknown_type(server):
+    r = _call(server, "resource_schema_tool", resource_type="NotAResource")
+    assert r["ok"] is False
+
+
+def test_resource_schema_tree_tool(server):
+    r = _call(server, "resource_schema_tree_tool", resource_type="Patient")
+    assert r["ok"] is True
+    assert r["root"]["name"] == "Patient"

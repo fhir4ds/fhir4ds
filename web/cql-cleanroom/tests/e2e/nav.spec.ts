@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { bootDemoReady } from "./bootText";
 
 /**
  * REORG phase 6d: maps-style nav — L1 icon rail (nav-toggle-{id}) +
@@ -7,49 +8,54 @@ import { expect, test } from "@playwright/test";
  */
 
 async function bootReady(page: import("@playwright/test").Page) {
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  // S25: / boots the cms125 showcase (10 libs + 32 valuesets) — the
+  // "fresh workspace" contract needs the scratch demo.
+  await bootDemoReady(page);
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
 }
 
 test.describe("nav rail + panel", () => {
-  test("seven rail icons; Tests panel opens by default with the boot signal", async ({
+  test("six rail icons; Libraries opens by default (primary library)", async ({
     page,
   }) => {
     await bootReady(page);
+    // S29: Measure + Parameters merged into Config; order is
+    // Libraries · Value Sets · Config · Test Cases · Expected · Views.
     for (const id of [
-      "measures",
       "libraries",
       "valuesets",
-      "parameters",
+      "config",
       "tests",
       "expected",
       "views",
     ]) {
       await expect(page.locator(`[data-testid=nav-toggle-${id}]`)).toBeVisible();
     }
-    // Boot signal is VISIBLE inside the default Tests panel.
-    await expect(page.locator("[data-testid=dataset-tree]")).toBeVisible();
-    await expect(page.locator("[data-testid=nav-sec-tests]")).toBeVisible();
-    // Other sections' content mounts only when their icon opens it.
-    await expect(page.locator("[data-testid=nav-sec-measures]")).toHaveCount(0);
+    // S29: the PRIMARY LIBRARY is the default-open section.
+    await expect(page.locator("[data-testid=nav-sec-libraries]")).toBeVisible();
+    await expect(page.locator("[data-testid=nav-toggle-libraries]")).toHaveClass(/active/);
+    // The dataset tree mounts only when Test Cases opens.
+    await expect(page.locator("[data-testid=dataset-tree]")).toHaveCount(0);
+    // Sections merged away no longer exist as toggles.
+    await expect(page.locator("[data-testid=nav-toggle-measures]")).toHaveCount(0);
+    await expect(page.locator("[data-testid=nav-toggle-parameters]")).toHaveCount(0);
   });
 
   test("panel switches sections; collapse; filters", async ({ page }) => {
     await bootReady(page);
-    // Collapse the rail (close the panel).
+    // Collapse the rail (close the panel) — Libraries was open by default.
     await page.click("[data-testid=rail-collapse]");
-    await expect(page.locator("[data-testid=nav-sec-tests]")).toHaveCount(0);
-    // The Tests icon pops the panel back open.
+    await expect(page.locator("[data-testid=nav-sec-libraries]")).toHaveCount(0);
+    // The Test Cases icon pops the panel open on the dataset tree.
     await page.click("[data-testid=nav-toggle-tests]");
     await expect(page.locator("[data-testid=dataset-tree]")).toBeVisible();
 
-    // Parameters: opens; the filter accepts typing.
-    await page.click("[data-testid=nav-toggle-parameters]");
+    // Config (Measure + Parameters): opens; the filter accepts typing.
+    await page.click("[data-testid=nav-toggle-config]");
     await expect(
-      page.locator("[data-testid=nav-filter-parameters]"),
+      page.locator("[data-testid=nav-filter-config]"),
     ).toBeVisible();
-    await page.fill("[data-testid=nav-filter-parameters]", "zzz-no-match");
+    await page.fill("[data-testid=nav-filter-config]", "zzz-no-match");
 
     // Valuesets: the fresh workspace shows the empty state; ONE panel at
     // a time — opening it closed Parameters.
@@ -57,7 +63,7 @@ test.describe("nav rail + panel", () => {
     await expect(
       page.locator("[data-testid=nav-sec-valuesets] .nav-empty"),
     ).toBeVisible();
-    await expect(page.locator("[data-testid=nav-sec-parameters]")).toHaveCount(0);
+    await expect(page.locator("[data-testid=nav-sec-config]")).toHaveCount(0);
     await page.fill("[data-testid=nav-filter-valuesets]", "zzz-none");
     await expect(page.locator("[data-testid=nav-filter-valuesets]")).toHaveValue(
       "zzz-none",
@@ -81,7 +87,7 @@ test.describe("nav rail + panel", () => {
     page,
   }) => {
     await bootReady(page);
-    await page.click("[data-testid=nav-toggle-measures]");
+    await page.click("[data-testid=nav-toggle-config]");
     const row = page.locator("[data-testid^=nav-item-measure-]").first();
     await row.click({ button: "right" });
     await expect(page.locator("[data-testid=nav-context-menu]")).toBeVisible();
@@ -98,7 +104,7 @@ test.describe("nav rail + panel", () => {
     await page.waitForTimeout(1500);
     await page.reload();
     await page.waitForSelector(".version-badge", { timeout: 150_000 });
-    await page.click("[data-testid=nav-toggle-measures]");
+    await page.click("[data-testid=nav-toggle-config]");
     await expect(page.locator("[data-testid^=nav-item-measure-]").first()).toContainText(
       "RenamedMeasure",
     );

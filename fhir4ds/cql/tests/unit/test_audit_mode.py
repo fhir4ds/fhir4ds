@@ -543,3 +543,35 @@ class TestAuditEvidenceRowContract:
         assert row["nf"]["result"] is False
         targets = sorted(e["target"] for e in row["h"]["evidence"])
         assert targets == ["Observation/oa1", "Observation/oa2"]
+
+
+class TestAuditAgeMembership:
+    """S27: age-family MEMBERSHIP comparisons (`AgeInYearsAt(...) in
+    Interval[a, b]`) must emit an audit leaf carrying the derived age as
+    VALUE and the bounds as THRESHOLD — the `in` operator bypassed the
+    comparison audit wrapper, so age conditions had no usable evidence."""
+
+    def test_age_membership_wraps_audit_comparison_in(self):
+        t = CQLToSQLTranslator(audit_mode=True)
+        lib = parse_cql(
+            "library T\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            "parameter \"Measurement Period\" Interval<DateTime>\n"
+            "define D: AgeInYearsAt(start of \"Measurement Period\") in Interval[42, 74]"
+        )
+        defs = t.translate_library(lib)
+        sql = defs["D"].to_sql()
+        assert "audit_comparison" in sql
+        assert "'in'" in sql or '"in"' in sql
+        # The leaf names the derived property and the context patient.
+        assert "birthDate" in sql
+        assert "Patient/" in sql
+
+    def test_non_age_membership_not_wrapped(self):
+        t = CQLToSQLTranslator(audit_mode=True)
+        lib = parse_cql(
+            "library T\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            "define D: 3 in Interval[1, 5]"
+        )
+        defs = t.translate_library(lib)
+        sql = defs["D"].to_sql()
+        assert "birthDate" not in sql

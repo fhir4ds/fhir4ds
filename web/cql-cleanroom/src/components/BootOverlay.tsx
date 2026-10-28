@@ -88,9 +88,17 @@ export function workerRequest(msg: Record<string, unknown>): Promise<any> {
   });
 }
 
-export function useBootProgress(): BootState {
+export function useBootProgress(skip = false): BootState {
   const [state, setState] = useState<BootState>({ phase: "idle" });
   useEffect(() => {
+    // S31: CONNECTED mode evaluates server-side — do NOT boot Pyodide at
+    // page load (it was the ~10s startup cost). The worker boots lazily
+    // on the first action that actually needs the in-browser engine
+    // (standalone anything, connected selection runs).
+    if (skip) {
+      setState({ phase: "ready", wheelVersion: "", bootMs: 0 });
+      return;
+    }
     setState({ phase: "booting", step: "Loading engine…", startedAt: Date.now() });
     const listener = (msg: any) => {
       if (msg.type !== "boot") return;
@@ -109,7 +117,7 @@ export function useBootProgress(): BootState {
     return () => {
       bootListeners = bootListeners.filter((f) => f !== listener);
     };
-  }, []);
+  }, [skip]);
   return state;
 }
 

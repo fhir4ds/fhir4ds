@@ -998,6 +998,12 @@ class SQLTranslationContext:
         self.valueset_codesystems.clear()
         self.codesystems.clear()
         self.codesystem_versions.clear()
+        # S22f-promotion review fix 1: stale context-patient property
+        # markers poison later translations on a REUSED context (the
+        # per-define cleanup in translator.py handles the intra-library
+        # case; this handles context reuse across libraries).
+        if getattr(self, "_patient_property_defs", None):
+            self._patient_property_defs.clear()
         self.codes.clear()
         self._ctes.clear()
         self._patient_context = PatientContext()

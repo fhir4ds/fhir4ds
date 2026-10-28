@@ -1142,3 +1142,61 @@ define ConceptEquivIntersectionOrderInsensitive: C ~ Concept { codes: { Code { c
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_toconcept_equality_no_crash_on_fallback_cql21_f01() -> None:
+    """CQL-21-F01 regression: ``ToConcept(C1) = ToConcept(C2)`` over declared
+    codes crashed the forced-Python fallback UDF with
+    ``TypeError: float() argument ... NoneType`` while the native C++
+    extension returned the spec-correct False.
+
+    Root cause: the equality lowering wraps a ``quantity_compare(
+    parse_quantity(CAST(ToConcept(...) AS VARCHAR)), ..., '==')`` first arm
+    (Concept JSON re-serialized by ``parse_quantity`` as
+    ``{"value": null, "code": "1", ...}`` — Concepts carry no top-level
+    code/unit, so BOTH sides normalize to the default unit '1'). The Python
+    ``quantityCompare`` same-code fast path then called ``float(None)``.
+
+    Fix: null values in the same-code fast path return None (CQL §Equal null
+    propagation), letting the surrounding COALESCE fall through to the
+    Concept-equality arm — identical results on both backends.
+    """
+    cql = """library Cql21F01Repro version '1.0.0'
+using FHIR version '4.0.1'
+codesystem LOINC: 'http://loinc.org'
+code C1: '8480-6' from LOINC
+code C2: '8462-4' from LOINC
+context Patient
+define CX: ToConcept(C1)
+define CY: ToConcept(C2)
+define Eq: CX = CY
+define SelfEq: CX = CX
+define Ne: CX != CY
+"""
+    population_sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql), output_columns={"Eq": "Eq", "SelfEq": "SelfEq", "Ne": "Ne"}
+    )
+
+    patient = {
+        "resourceType": "Patient",
+        "id": "p1",
+        "gender": "male",
+        "birthDate": "1974-12-25",
+    }
+
+    expected_row = ("p1", False, True, True)
+    for factory in (_python_only_connection, _cpp_connection):
+        con = factory()
+        try:
+            con.execute(
+                "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, "
+                "resource JSON, patient_ref VARCHAR)"
+            )
+            con.execute(
+                "INSERT INTO resources VALUES (?, ?, ?, ?)",
+                [patient["id"], patient["resourceType"], json.dumps(patient), patient["id"]],
+            )
+            rows = con.execute(population_sql).fetchall()
+            assert rows == [expected_row], (factory.__name__, rows)
+        finally:
+            con.close()

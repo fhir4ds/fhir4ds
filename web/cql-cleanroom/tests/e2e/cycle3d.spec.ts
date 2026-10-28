@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { bootDemoReady } from "./bootText";
 
 /**
  * Visual editor 5 e2e: the drawer builder round-trips a define —
@@ -8,10 +9,22 @@ import { expect, test } from "@playwright/test";
  */
 
 async function bootReady(page: import("@playwright/test").Page) {
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  // S25: / boots the cms125 showcase — builder specs contract on the
+  // scratch demo's defines (Initial Population / P alias).
+  await bootDemoReady(page);
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
   await page.waitForSelector("[data-testid=cql-editor] .monaco-editor");
+  // S8 directive: the visual (graph) editor is build-flag gated
+  // (VITE_SHOW_VISUAL_EDITOR=1, dev-only). The PRODUCT build renders no
+  // visual chrome — skip this dev-surface spec there (availability
+  // skip per the repo test policy, not a behavior hide).
+  test.skip(
+    !(await page
+      .locator("[data-testid=drawer-graph-toggle]")
+      .isVisible()
+      .catch(() => false)),
+    "visual editor hidden in the product build (VITE_SHOW_VISUAL_EDITOR!=1)",
+  );
 }
 
 test("builder parses the population define into structured predicates", async ({

@@ -1,0 +1,51 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.3.1092",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:04.238-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1092",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "2.16.840.1.113883.3.526.3.1092"
+    }
+  ],
+  "version": "20170504",
+  "name": "ModerateorSevere",
+  "title": "Moderate or Severe",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:7227b0a3-740c-4b27-8bc1-1224b2a221e2",
+    "timestamp": "2025-06-20T16:54:00-04:00",
+    "total": 2,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "24484000",
+        "display": "Severe (severity modifier) (qualifier value)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "6736007",
+        "display": "Moderate (severity modifier) (qualifier value)"
+      }
+    ]
+  }
+}

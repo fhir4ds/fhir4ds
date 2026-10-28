@@ -1,12 +1,12 @@
 import { test } from "@playwright/test";
+import { bootTextReady } from "./bootText";
 
 /**
  * C2-U3 e2e: EvidencePane Compare mode + share-link round-trip.
  */
 
 async function bootReady(page: import("@playwright/test").Page) {
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  await bootTextReady(page);
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
 }
 

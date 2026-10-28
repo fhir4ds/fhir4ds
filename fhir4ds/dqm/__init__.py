@@ -31,7 +31,7 @@ from .types import (
     SupportingEvidenceDef,
 )
 
-__version__ = "0.0.17"
+__version__ = "0.0.18"
 
 # Lazy re-exports (PEP 562): these modules import pandas/numpy at module
 # top and must not execute when the parser/types surface is imported in

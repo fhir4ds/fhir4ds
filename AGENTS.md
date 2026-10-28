@@ -2952,6 +2952,65 @@ Fresh CQL-05 EXPLORER rerun (2026-05-30) added two recursive/inlining guardrails
 
 ---
 
+## WASM function-surface parity — ToDate slice (2026-10-24, S32)
+
+The v0.0.14 campaign closed the **Catalog-Error class** (10 translator-reachable
+Python-only UDFs; FDD explicitly said "No TS-macro fallbacks ... none exist
+today; do not add"). Functions that already had a `cql-macros.ts` fallback were
+never audited, so a name-only macro-sync contract
+(`fhir4ds/operations/tests/test_macro_sync.py`, `BROWSER_MACRO_GAP_ALLOWLIST`)
+could not see semantic drift.
+
+- **Fixed:** `ToDate`. Desktop `register()` shadows the name with a Python UDF
+  returning validated `VARCHAR`; the browser macro was `CAST(x AS DATE)`
+  (DATE return), which broke generated population SQL with
+  `Cannot mix values of type DATE and VARCHAR in CASE expression` (CMS125
+  dementia-medications CTE). The C++ extension now implements `ToDate`
+  (VARCHAR date validation incl. leap years; datetime input → date prefix;
+  DATE/TIMESTAMP overloads; NULL for invalid), and the TS macro was removed.
+  `ToDate` is allowlisted in `test_macro_sync.py` as native-provided.
+- **Audit method (three connections):** C++ extensions only (wasm surface),
+  desktop `register()` (Python shadows), and the `cql-macros.ts` name set.
+  Result at fix time: 48 public desktop-only names absent from the browser
+  (incl. `ConvertsTo*`, `CanConvertQuantity`, `ToLong`, `ToRatio`,
+  `ExpandValueSet`, and the known list-equality allowlist), plus ~76 names
+  present in both with potentially divergent bodies.
+- **Doctrine:** a TS macro that reimplements a Python/C++ function is a
+  semantic-drift risk. Prefer a C++ extension implementation for the shared
+  surface; when a TS macro must stay, add a behavior parity test, not just a
+  name check. Any new `To*`/`ConvertsTo*`/list-macro port must be verified in
+  the no-Python path (see `wasm_runtime_helpers.no_python_connection`).
+
+## WASM conversion-surface completion (2026-10-24, S32 continuation)
+
+- **Class A (pure SQL macros) needs no C++.** `ToString`, `ToInteger`,
+  `ToDecimal`, `ToBoolean`, `ConvertsToString` desktop bodies use only DuckDB
+  builtins; the browser macros must carry the desktop SQL verbatim (source:
+  `duckdb_functions().macro_definition`, not hand-transcription).
+- **Class B (Python-UDF-backed) needs C++ mirrors:** `ToDateTime`, `ToTime`,
+  `ToLong`, `ToRatio`, `ConvertsTo*`, `CanConvertQuantity`. Implemented as
+  `RegisterSpecialScalar` VARCHAR functions in `cql_extension.cpp`; desktop
+  keeps the Python authority.
+- **CRITICAL registration rule:** adding a C++ function with a name that
+  `_register_python_supplements` also registers silently makes DESKTOP use the
+  C++ implementation (`_SafeConnection.create_function` skips duplicates).
+  To keep the Python authority, add the name to
+  `_PYTHON_PREFERRED_CPP_CONFLICTS` (`fhir4ds/cql/duckdb/extension.py`), which
+  installs the Python UDF plus a shadow macro. Applies to every new mirrored
+  UDF, not just ToDate-style macros (macros always override by name).
+- **Correctness gate, not parity gate:** `fhir4ds/operations/tests/
+  wasm_surface_harness.py` executes the browser-equivalent surface (C++
+  extensions + `cql-macros.ts` verbatim) and asserts **expected vs desktop AND
+  expected vs browser** on `(value, typeof)`. Browser == desktop alone is not
+  acceptance (Joel 2026-10-24).
+- `cql::to_quantity` accepts bare calendar duration keywords (`5 years`,
+  `4 days`) per CQL-06; the JSON Quantity 30-integer-digit extent guard lives
+  at the conversion checks (`ConvertsToQuantity`/`ToRatio`), NOT in
+  `parse_quantity_json` (which would regress `quantityConvert`, which
+  intentionally accepts huge magnitudes).
+- Known open gap: native `ToQuantity` renders integer-authored values as
+  `10.0` vs desktop `10` (JSON-number spelling only; semantic value equal).
+
 ## v0.0.14 WASM C++ Parity Campaign (2026-09-09, feature_implementation)
 
 10 translator-reachable Python-only CQL UDFs ported to the C++ extension
@@ -2999,6 +3058,21 @@ Additionally, `fhir4ds/cql/__init__.py` has a top-level `import duckdb` that mus
 Both issues are permanently mitigated:
 1. **`fhir4ds/cql/__init__.py`**: `import duckdb` is wrapped in `try/except ImportError` that installs a minimal stub. The CQL translator works without the real duckdb package.
 2. **`web/wasm-demo/src/workers/pyodide.worker.ts`**: Uses `micropip.install(wheel, deps=False)` and manually installs only the pure-Python deps (`antlr4-python3-runtime`, `python-dateutil`).
+
+### CQL Cleanroom static deploy (wheel + hashed chunks)
+
+Deploy the SPA with `scripts/deploy_cleanroom_app.sh` — it rebuilds and
+**mirrors the whole `web/cql-cleanroom/dist/`** into both targets
+(`fhir4ds/devserver/static-cleanroom/`, `web/website/static/cql-cleanroom/`),
+then verifies the chunk graph. Never copy a fixed filename list: Vite
+content-hashes every chunk (`App-*`, `main-*`, `monaco-setup-*`,
+`cleanroom.worker-*`, `editor.worker-*`, `duckdb-*`), so a list silently
+leaves the app referencing a missing worker. The wheel must exist at BOTH
+the target root and `target/assets/`: the worker fetches it **relative to
+its own bundle** (`<base>/assets/<wheel>`). 0.0.18 shipped with
+`static-cleanroom/assets/` still on the previous wheel and the new
+`cleanroom.worker-*` chunk missing — check the worker's embedded wheel name
+and the App's worker reference after any deploy.
 
 ### Release Steps for WASM Demo
 
@@ -5727,3 +5801,28 @@ ledger). Durable doctrines:
   reconcile verbatim.
 - **97-define Any backlog** (Property 48, Query 44, Binary 4, Identifier 1
   on DQM-47) is the known gap frontier for future type-map work.
+
+## Playwright-First Doctrine (standing rule, 2026-10-17)
+
+Every identified UI/UX issue in the web surfaces gets confirmed via
+Playwright BEFORE the fix lands: write the failing repro test first
+(red), then fix, then confirm the SAME test green. Every handoff report
+states 'repro'd via Playwright: <test name>' for each fixed item.
+
+## Journey-Test Doctrine (S23 process fix, 2026-10-20)
+
+Slice-level tests pin MECHANICS; plans are written in USER-JOURNEY
+language. Every plan section gets a JOURNEY-level Playwright test
+derived from the PLAN'S OWN WORDS (not the slice's implementation
+mechanics) before a campaign section may be called complete — e.g.
+"cell mode renders results inline per cell ONLY, no bottom-console
+duplication" is tested as: edit a cell, wait past the debounce, assert
+the console receives NO new run. Campaign close-out includes the
+acceptance matrix (each plan promise -> the journey test pinning it)
+and a Joel checkpoint review before 'complete' is declared.
+
+
+Every identified UI/UX issue in the web surfaces gets confirmed via
+Playwright BEFORE the fix lands: write the failing repro test first
+(red), then fix, then confirm the SAME test green. Every handoff report
+states 'repro'd via Playwright: <test name>' for each fixed item.

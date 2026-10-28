@@ -7,6 +7,7 @@ import {
   formToJson,
   isPrimitiveType,
   isRepeatable,
+  formRoundTripLosses,
   jsonToForm,
   newKey,
   scalarValue,
@@ -41,6 +42,13 @@ interface Props {
   onAddResource: (resource: Record<string, unknown>) => void;
   /** Edit mode: replace dataset row at index instead of appending. */
   onReplaceResource?: (index: number, resource: Record<string, unknown>) => void;
+  /**
+   * S25: EXPLICIT-commit mode (connected mode saves to disk). When true,
+   * the 2s auto-commit does NOT fire onAddResource/onReplaceResource —
+   * only explicit user actions (Add to dataset, leaving raw mode) save.
+   * Validation still runs live.
+   */
+  explicitCommitOnly?: boolean;
   /** C3-U3 edit flow: prefills the builder from a dataset row. */
   prefill?: {
     resource: Record<string, unknown>;
@@ -58,6 +66,7 @@ interface Props {
 export function ResourceBuilderPane({
   onAddResource,
   onReplaceResource,
+  explicitCommitOnly = false,
   prefill,
   context,
   dataset,
@@ -218,6 +227,10 @@ export function ResourceBuilderPane({
           const commitKey = `${prefillIndex ?? "new"}:${draftJson}`;
           if (commitKey === lastCommittedRef.current) return; // no-op
           lastCommittedRef.current = commitKey;
+          // S25: connected mode saves to DISK — auto-committing on open
+          // (or mid-typing) would rewrite files for a mere view. Only
+          // explicit user commits save; validation stays live.
+          if (explicitCommitOnly) return;
           const committed = JSON.parse(draftJson);
           if (prefillIndex !== undefined && onReplaceResource) {
             onReplaceResource(prefillIndex, committed);
@@ -289,54 +302,75 @@ export function ResourceBuilderPane({
               ))}
             </select>
           </label>
-          <label className="builder-mode">
-            <input
-              type="checkbox"
-              checked={useRaw}
-              data-testid="builder-raw-toggle"
-              onChange={(e) => {
-                if (e.target.checked) {
-                  // Round-trip hatch: seed the raw editor from the CURRENT
-                  // draft (form → JSON), never a bare skeleton.
-                  const seed = draft ?? { resourceType };
-                  setRawText(JSON.stringify(seed, null, 2));
-                  rawSeedRef.current = JSON.stringify(seed);
-                  setUseRaw(true);
-                } else {
-                  // Back to the form only when the raw text parses —
-                  // raw edits flow INTO the form (JSON → form).
-                  try {
-                    const parsed = JSON.parse(rawText);
-                    if (
-                      typeof parsed !== "object" ||
-                      parsed === null ||
-                      Array.isArray(parsed)
-                    ) {
-                      throw new Error("resource must be a JSON object");
-                    }
-                    if (!root) {
-                      throw new Error("schema still loading — try again");
-                    }
-                    setForm(
-                      jsonToForm(parsed as Record<string, unknown>, root),
-                    );
-                    // Authored from JSON: a late schema fetch must keep
-                    // these values, not reset to an empty form.
-                    dirtyRef.current = true;
-                    setUseRaw(false);
-                    setRawError(null);
-                  } catch (err) {
-                    setRawError(
-                      err instanceof Error ? err.message : String(err),
+          {/* S26 (item 8): the SAME switch widget as the Cells/Text
+              toggle (Form ⇄ / Raw ⇄) — parse-guard stays: flipping back
+              to the form requires the raw text to parse. */}
+          <button
+            type="button"
+            className={`drawer-toggle mode-switch${useRaw ? " on" : ""}`}
+            data-testid="builder-raw-toggle"
+            role="switch"
+            aria-label="Raw JSON mode"
+            aria-checked={useRaw}
+            onClick={() => {
+              if (!useRaw) {
+                // Round-trip hatch: seed the raw editor from the CURRENT
+                // draft (form → JSON), never a bare skeleton.
+                const seed = draft ?? { resourceType };
+                setRawText(JSON.stringify(seed, null, 2));
+                rawSeedRef.current = JSON.stringify(seed);
+                setUseRaw(true);
+              } else {
+                // Back to the form only when the raw text parses —
+                // raw edits flow INTO the form (JSON → form).
+                try {
+                  const parsed = JSON.parse(rawText);
+                  if (
+                    typeof parsed !== "object" ||
+                    parsed === null ||
+                    Array.isArray(parsed)
+                  ) {
+                    throw new Error("resource must be a JSON object");
+                  }
+                  if (!root) {
+                    throw new Error("schema still loading — try again");
+                  }
+                  // S29 losslessness guard: the form is a projection of
+                  // the JSON — flipping back is only safe when the
+                  // round-trip reproduces the resource exactly. Complex
+                  // shapes the form does not model stay in Raw mode.
+                  const losses = formRoundTripLosses(
+                    parsed as Record<string, unknown>,
+                    root,
+                  );
+                  if (losses.length > 0) {
+                    throw new Error(
+                      `the form can't represent this exactly (${losses
+                        .slice(0, 4)
+                        .join(", ")}${losses.length > 4 ? ", …" : ""}) — ` +
+                        "stay in Raw mode or simplify those fields",
                     );
                   }
+                  setForm(
+                    jsonToForm(parsed as Record<string, unknown>, root),
+                  );
+                  // Authored from JSON: a late schema fetch must keep
+                  // these values, not reset to an empty form.
+                  dirtyRef.current = true;
+                  setUseRaw(false);
+                  setRawError(null);
+                } catch (err) {
+                  setRawError(
+                    err instanceof Error ? err.message : String(err),
+                  );
                 }
-                setValidation(null);
-                setStaleOk(true);
-              }}
-            />{" "}
-            Raw JSON
-          </label>
+              }
+              setValidation(null);
+              setStaleOk(true);
+            }}
+          >
+            {useRaw ? "Raw ⇄" : "Form ⇄"}
+          </button>
         </div>
       </div>
 
@@ -407,7 +441,10 @@ export function ResourceBuilderPane({
           </div>
         )}
 
-        <div className="builder-actions" hidden>
+        {/* S25: in explicit-commit (connected/disk) mode the action bar
+         * is the ONLY commit surface — it must be visible. Legacy
+         * auto-commit mode keeps it hidden (keyboard-free UX unchanged). */}
+        <div className="builder-actions" hidden={!explicitCommitOnly}>
           <button
             type="button"
             data-testid="builder-validate"
@@ -423,11 +460,13 @@ export function ResourceBuilderPane({
             disabled={!canAdd}
             title={
               canAdd
-                ? "Append to the dataset"
+                ? explicitCommitOnly
+                  ? "Save to the workspace on disk"
+                  : "Append to the dataset"
                 : "Validate (fresh) before adding — INV-C3-2"
             }
           >
-            Add to dataset
+            {explicitCommitOnly ? "Save to disk" : "Add to dataset"}
           </button>
         </div>
 

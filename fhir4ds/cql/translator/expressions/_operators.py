@@ -266,6 +266,33 @@ def _contains_aggregate_lambda_identifier(expr: "SQLExpression") -> bool:
     return False
 
 
+def _patient_row_target(call: "SQLFunctionCall") -> "Optional[SQLExpression]":
+    """S22f-promotion seam B: patient-row fhirpath call -> Patient target.
+
+    ``fhirpath_text(<alias>.patient_resource, '<attr>')`` reads the
+    CONTEXT patient's row (the _patients CTE's patient_resource
+    column) — the audit target is ``'Patient/' || <alias>.patient_id``.
+    Returns None for anything else (retrieves, non-patient calls).
+    """
+    if call.name != "fhirpath_text" or len(call.args) < 2:
+        return None
+    from ...translator.types import SQLBinaryOp, SQLCast, SQLLiteral, SQLQualifiedIdentifier
+
+    source = call.args[0]
+    if not isinstance(source, SQLQualifiedIdentifier) or len(source.parts) != 2:
+        return None
+    if source.parts[1] != "patient_resource":
+        return None
+    alias = source.parts[0]
+    pid = SQLQualifiedIdentifier(parts=[alias, "patient_id"])
+    concat = SQLBinaryOp(
+        left=SQLLiteral("Patient/"),
+        operator="||",
+        right=SQLCast(expression=pid, target_type="VARCHAR"),
+    )
+    return concat
+
+
 def _extract_audit_target(
     expr: "SQLExpression",
     context: "Optional[SQLTranslationContext]" = None,
@@ -286,6 +313,13 @@ def _extract_audit_target(
     if isinstance(expr, SQLCast):
         return _extract_audit_target(expr.expression, context)
     if isinstance(expr, SQLFunctionCall):
+        # S22f-promotion (design seam B): a patient-row property call —
+        # fhirpath_text(<alias>.patient_resource, '<attr>') — targets the
+        # CONTEXT PATIENT: 'Patient/' || <alias>.patient_id. The alias is
+        # the _patients CTE reference in scope (conventionally _pt).
+        patient_target = _patient_row_target(expr)
+        if patient_target is not None:
+            return patient_target
         for arg in expr.args:
             t = _extract_audit_target(arg, context)
             if t is not None:
@@ -1593,6 +1627,56 @@ class OperatorsMixin:
             args=[result_expr, SQLLiteral(operator), left_sql, right_sql, path_expr, target_expr],
         )
 
+    # S27: age-family MEMBERSHIP (`AgeInYearsAt(...) in Interval[a, b]`)
+    # is a comparison in spirit but lowers through the `in` operator —
+    # which the comparison wrapper never saw, so the age condition
+    # produced NO evidence leaf (Joel: "nothing useable for the age
+    # define"). Wrap it as an audit_comparison with op "in": the leaf
+    # carries the derived age as VALUE, the bounds as THRESHOLD, and the
+    # context patient as TARGET.
+    _AGE_FN_PREFIXES = ("agein", "calculateage", "ageat")
+
+    def _maybe_wrap_age_membership_audit(
+        self,
+        result_expr: "SQLExpression",
+        expr: Any,
+        left_sql: "SQLExpression",
+        right_sql: "SQLExpression",
+    ) -> "SQLExpression":
+        if not self.context.audit_mode or not self.context.audit_expressions:
+            return result_expr
+        left_ast = getattr(expr, "left", None)
+        if not isinstance(left_ast, FunctionRef):
+            return result_expr
+        if not left_ast.name.lower().startswith(self._AGE_FN_PREFIXES):
+            return result_expr
+        from ...translator.types import (
+            SQLBinaryOp,
+            SQLCast,
+            SQLLiteral,
+            SQLQualifiedIdentifier,
+        )
+
+        target_expr: "SQLExpression" = SQLBinaryOp(
+            left=SQLLiteral("Patient/"),
+            operator="||",
+            right=SQLCast(
+                expression=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
+                target_type="VARCHAR",
+            ),
+        )
+        return SQLFunctionCall(
+            name="audit_comparison",
+            args=[
+                result_expr,
+                SQLLiteral("in"),
+                left_sql,
+                right_sql,
+                SQLLiteral("birthDate"),
+                target_expr,
+            ],
+        )
+
     def _is_temporal_cql_expr(self, node, _depth: int = 0) -> bool:
         """Check if a CQL AST node evaluates to a DateTime, Date, or Time type.
 
@@ -2623,7 +2707,12 @@ class OperatorsMixin:
         if operator == "contains":
             return self._translate_contains_op(operator, left, right, expr, boolean_context)
         if operator == "in":
-            return self._translate_in_op(operator, left, right, expr, boolean_context)
+            in_result = self._translate_in_op(
+                operator, left, right, expr, boolean_context
+            )
+            return self._maybe_wrap_age_membership_audit(
+                in_result, expr, left, right
+            )
         # Phase 3 (medterm4ds subsumption): intercept code-vs-code `is` and
         # `is not` BEFORE the type-check / `is null` fallthrough at line 2244.
         # CQL §5.6 between two code-typed operands means "the left code is a

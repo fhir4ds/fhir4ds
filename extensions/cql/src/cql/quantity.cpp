@@ -993,7 +993,28 @@ Optional<std::string> to_quantity(const std::string &s) {
 			return NullOpt<std::string>();
 		}
 	} else if (had_unit_separator_space) {
-		return NullOpt<std::string>();
+		// CQL 1.5 Appendix B §ToQuantity: the unit designator may be a
+		// calendar duration keyword (singular or plural) without quotes;
+		// bare UCUM codes are NOT valid (they must be quoted).
+		static const char *kCalendarUnits[] = {"year",     "years",     "month",
+		                                       "months",   "week",      "weeks",
+		                                       "day",      "days",      "hour",
+		                                       "hours",    "minute",    "minutes",
+		                                       "second",   "seconds",   "millisecond",
+		                                       "milliseconds"};
+		bool is_calendar = false;
+		std::string bare(end);
+		for (const char *kw : kCalendarUnits) {
+			if (bare == kw) {
+				is_calendar = true;
+				break;
+			}
+		}
+		if (!is_calendar || bare.empty()) {
+			return NullOpt<std::string>();
+		}
+		unit = bare;
+		end += bare.size();
 	}
 	if (*end != '\0') return NullOpt<std::string>();
 

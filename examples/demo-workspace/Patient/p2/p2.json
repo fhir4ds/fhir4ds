@@ -1,0 +1,12 @@
+{
+  "id": "p2",
+  "gender": "male",
+  "name": [
+    {
+      "given": [
+        "Bob"
+      ]
+    }
+  ],
+  "resourceType": "Patient"
+}

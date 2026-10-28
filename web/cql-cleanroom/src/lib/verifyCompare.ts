@@ -35,10 +35,22 @@ export interface CompareResult {
   rows: CompareRow[];
 }
 
+/**
+ * The measure's own population mapping: snake_case population column →
+ * DEFINE name (criteria.expression). Library-run rows are keyed by define
+ * name (full projection), so this is the only authority that resolves a
+ * population code to its value — never a guessed column name.
+ */
+export type PopulationColumns = Record<string, string>;
+
+export const populationColumnName = (code: string): string =>
+  code.replace(/-/g, "_");
+
 export function deriveCompare(
   rows: Array<Record<string, unknown>> | undefined,
   expected: ExpectedMap,
   populationCodes: string[],
+  populationColumns: PopulationColumns | null,
 ): CompareResult {
   const byPatient = new Map<string, Record<string, unknown>>();
   for (const r of rows ?? []) {
@@ -51,7 +63,8 @@ export function deriveCompare(
     const actualRow = byPatient.get(pid);
     const cells: CompareCell[] = populationCodes.map((code) => {
       const exp = codes[code] === true;
-      const raw = actualRow?.[code.replace(/-/g, "_")] ?? null;
+      const define = populationColumns?.[populationColumnName(code)];
+      const raw = define !== undefined ? actualRow?.[define] ?? null : null;
       const actual = typeof raw === "boolean" ? raw : null;
       const match = actual !== null && actual === exp;
       total += 1;
@@ -75,4 +88,29 @@ export function deriveCompare(
         : 1,
   );
   return { total, passed, rows: out };
+}
+
+/**
+ * Library-run rows (define-named columns) → the rows MeasureReport
+ * building expects: adds each population's snake_case column from the
+ * measure's define mapping. Rows pass through unchanged without a mapping.
+ */
+export function populationRows(
+  rows: Array<Record<string, unknown>>,
+  columns: string[],
+  populationColumns: PopulationColumns | null,
+): { rows: Array<Record<string, unknown>>; columns: string[] } {
+  if (!populationColumns) return { rows, columns };
+  const popCols = Object.keys(populationColumns);
+  const outRows = rows.map((r) => {
+    const next: Record<string, unknown> = { ...r };
+    for (const [col, define] of Object.entries(populationColumns)) {
+      if (define in r) next[col] = r[define];
+    }
+    return next;
+  });
+  return {
+    rows: outRows,
+    columns: [...columns.filter((c) => !popCols.includes(c)), ...popCols],
+  };
 }

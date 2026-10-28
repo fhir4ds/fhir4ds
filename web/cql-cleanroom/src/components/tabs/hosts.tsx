@@ -7,6 +7,7 @@ import type { LibraryClosure } from "../../lib/libraryGraph";
 import type { FlattenViewResult } from "../../lib/protocol";
 import type { ParamBinding } from "../../lib/params";
 import { ParameterEditor } from "./ParameterEditor";
+import { PatientEditor } from "./PatientEditor";
 
 /**
  * WORKBENCH_REORG phase 3 — per-kind tab hosts (non-library kinds).
@@ -32,6 +33,12 @@ export interface TabHostProps {
   onOpenExpected?: () => void;
   /* valueset */
   valueset: Record<string, unknown> | null;
+  connected?: boolean;
+  /* S32: view loading spinners (reports pending + flatten busy). */
+  viewReportsPending?: boolean;
+  onViewBusy?: (busy: boolean) => void;
+  umlsReady?: boolean;
+  umlsKey?: string;
   onValuesetChange: (vs: Record<string, unknown>) => void;
   /* parameter */
   params: ParamBinding[];
@@ -40,6 +47,8 @@ export interface TabHostProps {
   builder: React.ReactNode;
   /* expected (TestsPane expected grid) */
   testsSlot: React.ReactNode;
+  /* patient (S22c roster drill-in) */
+  onPatientSaved?: (pid: string) => void;
   /* view */
   measureReports: Array<Record<string, unknown>> | null;
   viewConfig: ViewOverrides | null;
@@ -48,6 +57,8 @@ export interface TabHostProps {
   onResult: (r: FlattenViewResult | null) => void;
   /* REORG 6e: settings recalc delay passed through to the view. */
   recalcMs?: number;
+  /* S27: session-imported VD for this tab (nav Views > disk VD). */
+  initialVd?: Record<string, unknown> | null;
 }
 
 export function TabHost(p: TabHostProps) {
@@ -66,6 +77,7 @@ export function TabHost(p: TabHostProps) {
           valuesetSources={p.measureValuesetSources}
           expectedReports={p.measureExpectedReports}
           onOpenExpected={p.onOpenExpected}
+          connected={p.connected}
         />
       );
     case "valueset":
@@ -73,6 +85,9 @@ export function TabHost(p: TabHostProps) {
         <ValuesetEditor
           valueset={p.valueset}
           onChange={p.onValuesetChange}
+          connected={p.connected}
+          umlsReady={p.umlsReady}
+          umlsKey={p.umlsKey}
         />
       ) : (
         <p className="pane-hint">valueset not found: {p.tab.resourceId}</p>
@@ -83,6 +98,8 @@ export function TabHost(p: TabHostProps) {
       return <>{p.builder}</>;
     case "expected":
       return <>{p.testsSlot}</>;
+    case "patient":
+      return <PatientEditor patientId={p.tab.resourceId} onSaved={p.onPatientSaved} />;
     case "view":
       return (
         <ViewPane
@@ -93,6 +110,10 @@ export function TabHost(p: TabHostProps) {
           onSql={p.onSql}
           onResult={p.onResult}
           recalcMs={p.recalcMs}
+          initialVd={p.initialVd}
+          connected={p.connected}
+          reportsPending={p.viewReportsPending}
+          onBusy={p.onViewBusy}
         />
       );
     case "library":

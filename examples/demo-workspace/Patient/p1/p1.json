@@ -1,0 +1,12 @@
+{
+  "id": "p1",
+  "gender": "female",
+  "name": [
+    {
+      "given": [
+        "Ann"
+      ]
+    }
+  ],
+  "resourceType": "Patient"
+}

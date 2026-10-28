@@ -1,0 +1,13 @@
+{
+  "resourceType": "Parameters",
+  "id": "measurement-period-default",
+  "parameter": [
+    {
+      "name": "Measurement Period",
+      "valuePeriod": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      }
+    }
+  ]
+}

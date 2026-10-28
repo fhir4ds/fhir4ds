@@ -1,4 +1,5 @@
 import { test } from "@playwright/test";
+import { bootTextReady } from "./bootText";
 
 /**
  * C2-U2 e2e: parse include_ast (AstPane) + compare_evidence through the
@@ -7,8 +8,7 @@ import { test } from "@playwright/test";
 
 test.describe("cleanroom cycle-2 capabilities", () => {
   test("ast pane renders statement trees", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForSelector(".version-badge", { timeout: 150_000 });
+    await bootTextReady(page);
     await page.waitForFunction(() => Boolean((window as any).__cleanroom));
 
     const ast = await page.evaluate(async () => {
@@ -31,6 +31,11 @@ define "D1":
     }
 
     // UI: AST now lives in Results — run an evaluation, then Show AST.
+    // S25: the showcase boot doesn't auto-evaluate; reset to the demo
+    // (p1/p2/p3 auto-eval) first.
+    await page.click("[data-testid=file-menu]");
+    await page.click("[data-testid=workspace-reset]");
+    await page.waitForTimeout(800);
     await page.waitForSelector("[data-testid=results-table]", {
       timeout: 60_000,
     });
@@ -46,8 +51,7 @@ define "D1":
   });
 
   test("compare_evidence delta through the worker", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForSelector(".version-badge", { timeout: 150_000 });
+    await bootTextReady(page);
     await page.waitForFunction(() => Boolean((window as any).__cleanroom));
 
     const resp = await page.evaluate(async () => {

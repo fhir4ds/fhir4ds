@@ -220,7 +220,14 @@ def mul(ctx, x, y):
     # `mul` was missing the same guard.
     if util.is_number(x) and util.is_number(y):
         return _numeric_arithmetic_result(x, y, x * y)
-    if isinstance(x, nodes.FP_Quantity) or isinstance(y, nodes.FP_Quantity):
+    # FP-18-F01 (2026-10-02): the quantity arm must ALSO exclude Boolean
+    # operands. Python `bool * FP_Quantity` coerces True->1 silently
+    # (`true * 5 'mg'` -> `5 'mg'`), but per §6.6 only Integer/Decimal/
+    # Quantity operands are valid and Boolean->Integer/Decimal is
+    # Explicit-only (§5.5) — native rejects, so the fallback must too.
+    if (
+        isinstance(x, nodes.FP_Quantity) or isinstance(y, nodes.FP_Quantity)
+    ) and not isinstance(x, bool) and not isinstance(y, bool):
         return x * y
     raise FHIRPathError("Cannot " + str(x) + " * " + str(y))
 
@@ -228,9 +235,14 @@ def mul(ctx, x, y):
 def div(ctx, x, y):
     # FP-18 HISTORIAN QA-002 (2026-06-30): Same Boolean-coercion guard as
     # `mul`. Per §6.6 + §5.5, Boolean→Integer/Decimal is Explicit only.
+    # FP-18-F01 (2026-10-02): the Quantity arm must exclude Boolean too —
+    # `true / 5 'mg'` coerced True->1 -> `0.2 '1/mg'` on the fallback
+    # while native rejects (§6.6 operand types; §5.5 Explicit-only).
     if not (util.is_number(x) and util.is_number(y)) and not (
         isinstance(x, nodes.FP_Quantity) or isinstance(y, nodes.FP_Quantity)
     ):
+        raise FHIRPathError("Cannot " + str(x) + " / " + str(y))
+    if isinstance(x, bool) or isinstance(y, bool):
         raise FHIRPathError("Cannot " + str(x) + " / " + str(y))
     if y == 0:
         return []

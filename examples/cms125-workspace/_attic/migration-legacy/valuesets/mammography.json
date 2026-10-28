@@ -1,0 +1,42 @@
+{
+  "resourceType": "ValueSet",
+  "id": "mammography",
+  "url": "http://example.org/cms125/mammography",
+  "name": "Mammography",
+  "status": "active",
+  "compose": {
+    "include": [
+      {
+        "system": "http://loinc.org",
+        "concept": [
+          {
+            "code": "24606-6",
+            "display": "Mammogram breast screening"
+          }
+        ]
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "concept": [
+          {
+            "code": "77067",
+            "display": "Screening mammography, bilateral"
+          },
+          {
+            "code": "77063",
+            "display": "Screening digital breast tomosynthesis"
+          }
+        ]
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "concept": [
+          {
+            "code": "241053004",
+            "display": "Mammography - diagnostic (procedure)"
+          }
+        ]
+      }
+    ]
+  }
+}

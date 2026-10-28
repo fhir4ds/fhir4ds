@@ -25,6 +25,7 @@ surface produces identical results for the same inputs.
 | `explain_patient` | Audit-evidence drill-in: why a patient is in/out of each population |
 | `validate_resource` | Loader-identity validation (resourceType/id rules, JSON-safety guards) — a resource that passes always loads cleanly |
 | `resource_schema` | FHIR R4 StructureDefinition-driven field metadata (types, cardinality, choices, reference targets) for a resource type |
+| `resource_schema_tree` | Recursive schema tree (children, choices, elements) — the browser resource-tree surface |
 | `compare_evidence` | Strict diff of two evidence payloads with moved/added/removed/flipped classifications per patient × population |
 
 The CLI exposes evidence workflows via `fhir4ds verify --evidence PATH`
@@ -117,3 +118,22 @@ Operations are stateless functions over `(inputs, conn)`: supply your own
 DuckDB connection (`fhir4ds.create_connection()` registers the engine's
 UDFs), pass `dataset=None` to evaluate against data already loaded on the
 connection.
+
+
+## WASM Alignment
+
+The browser demo surface maps onto this layer as follows (matrix with
+rationale):
+
+| WASM capability | Aligned surface | Decision |
+|---|---|---|
+| CQL translate / evaluate / SQL output | `translate_cql`, `evaluate_library` + `fhir4ds cql translate/evaluate` | aligned |
+| FHIRPath ad-hoc query | `fhirpath_eval` + `fhir4ds fhirpath` | aligned |
+| Resource validator | `validate_resource` + `fhir4ds validate-resource` + `validate_resource_tool` | aligned |
+| Resource schema tree | `resource_schema` / `resource_schema_tree` + MCP tools | aligned |
+| Evidence compare / narratives | `compare_evidence` + NarrativeGenerator (browser TS is a port of the Python original) | aligned by construction |
+| Patient/data browser | interactive UI over the loaded table | human-only |
+| FHIR resource builder, SDC form renderer | form-editing UIs | human-only |
+| SMART on FHIR launch | OAuth browser flow | human-only |
+| SDC calculated/initial expressions | TS engine over `fhirpath_text` SQL | deferred — net-new Python surface, v0.0.18 decision |
+| CMS measure packs — prebuilt SQL + fixtures | runs via `evaluate_library`; pack-format runner | deferred pending packaging decision |

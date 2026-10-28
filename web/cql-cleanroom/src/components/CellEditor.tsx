@@ -1,0 +1,604 @@
+/**
+ * CellEditor (c-cleanroom-redo S5): cell-based editing surface, ported
+ * from the salvaged Bolton S3 core (CellCQLEditor) into the cleanroom
+ * EditorPane per the arc FDD.
+ *
+ * Muse-hardened interaction spec (carried from bolton S3 review):
+ * - explicit persistent per-buffer toggle (never auto-detect)
+ * - first-run coach mark
+ * - per-cell name chips with ARIA dep lists (no color-only states)
+ * - closure-always Run semantics (S8: the RunMode control was removed —
+ *   every Run executes the cell + its dependency closure, identical on
+ *   both engines)
+ * - inline per-cell results: ALWAYS expanded (S13 — the table's own
+ *   scroll + 100-row cap replaced auto-collapse), per-cell clear +
+ *   global clear-all, max-height + internal scroll (no layout shove)
+ * - "computed locally" badge on standalone runs
+ * - dep-closure PINNED (click a define chip to pin its closure; Esc
+ *   clears); Ctrl/Cmd+Enter runs the focused cell
+ */
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { composeCellClosure, splitCells } from "../lib/cells";
+import {
+  buildCellGraph,
+  dependencyClosure,
+  type CellGraph,
+} from "../lib/cell-deps";
+
+export type CellRunMode = "cell" | "cell_deps" | "to_here" | "run_all";
+
+export interface CellResult {
+  cell: string;
+  ok: boolean;
+  lines: string[];
+  /** S12: structured result (preferred over lines when present). */
+  columns?: string[];
+  rows?: Array<Array<string>>;
+  /** standalone (in-browser) execution badge */
+  computedLocally?: boolean;
+  /** S19: the EXACT composed library text this cell's run evaluated —
+   *  evidence must explain the same composition, never the full buffer. */
+  composedText?: string;
+  /** S19: the parameters the run carried (evidence reuses them). */
+  params?: Record<string, unknown>;
+  ts: number;
+}
+
+const CELL_TABLE_ROW_CAP = 100;
+const CELL_HEIGHTS_KEY = "fhir4ds.cleanroom.cellHeights";
+
+/** S14: per-card drag-resize heights, persisted per session (localStorage
+ *  keyed by cell name — survives reloads). */
+function loadCellHeights(libraryKey: string): Record<string, number> {
+  try {
+    const all = JSON.parse(localStorage.getItem(CELL_HEIGHTS_KEY) ?? "{}");
+    return all[libraryKey] ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function writeCellHeights(libraryKey: string, heights: Record<string, number>) {
+  try {
+    const all = JSON.parse(localStorage.getItem(CELL_HEIGHTS_KEY) ?? "{}");
+    all[libraryKey] = heights;
+    localStorage.setItem(CELL_HEIGHTS_KEY, JSON.stringify(all));
+  } catch {
+    /* storage blocked — session-only fallback */
+  }
+}
+
+interface CellEditorProps {
+  value: string;
+  /** S16: receives the merged header-row controls (Run All / Clear All)
+   *  each render — the host renders them in its header row. */
+  onToolbarControls: (controls: {
+    running: boolean;
+    canRunAll: boolean;
+    hasResults: boolean;
+    onRunAll: () => void;
+    onClearAll: () => void;
+  }) => void;
+  /** S16 item 3: open the evidence popover for a (patient, define) row.
+   *  S19: the row's run context (composed library + parameters) rides
+   *  along so the evidence explains EXACTLY what produced the rows. */
+  onExplainRow?: (
+    patientId: string,
+    define: string,
+    context?: {
+      composedText?: string;
+      params?: Record<string, unknown>;
+      computedLocally?: boolean;
+    },
+  ) => void;
+  /** S19: current runtime parameters (stored per run result). */
+  parameters?: Record<string, unknown>;
+  /** S20: popover factory — renders only for the clicked cell's card. */
+  evidenceSlotFactory?: (cellName: string) => React.ReactNode;
+  /** Render one cell's Monaco editor (the host owns monaco-setup). */
+  renderEditor: (
+    cell: { name: string; text: string; order: number },
+    /** S14: per-cell resize override (px) — the host threads it to the editor. */
+    overrideHeight?: number,
+  ) => React.ReactNode;
+  /** S26 review fix: render the HEADER (declarations) card's editor —
+   *  the library/using/include/valueset statements get a first-class
+   *  card above the define cells (non-runnable; part of every closure). */
+  renderHeaderEditor?: (headerText: string) => React.ReactNode;
+  /** Edit the header text in place (splice into the buffer). */
+  onHeaderChange?: (next: string) => void;
+  /** Run a set of cells; resolves per-cell output lines. */
+  onRunCells: (
+    names: string[],
+    mode: CellRunMode,
+  ) => Promise<
+    Record<string, { ok: boolean; lines: string[]; columns?: string[]; rows?: Array<Array<string>> }>
+  >;
+  /** S7: on-demand cellification of a markerless buffer (Auto-split). */
+  onAutoSplit?: () => void | boolean;
+  /** Connected (server) vs standalone (in-browser) — drives the badge. */
+  connected: boolean;
+}
+
+const COACH_SEEN_KEY = "fhir4ds.cleanroom.cellCoachSeen";
+
+export function CellEditor({ value, onToolbarControls, renderEditor, renderHeaderEditor, onRunCells, onAutoSplit, onExplainRow, evidenceSlotFactory, connected, parameters }: CellEditorProps) {
+  // S8 directive 3: RunMode REMOVED — every Run executes the cell's
+  // dependency closure (one behavior per cell).
+  const [results, setResults] = useState<CellResult[]>([]);
+  // S22g (§8): per-cell run log (surface "cell") — the card is the
+  // display + replay surface; these runs NEVER enter the console ring.
+  const [cellRuns, setCellRuns] = useState<
+    Map<string, Array<{ ts: number; ok: boolean; ms?: number | null }>>
+  >(new Map());
+  const [running, setRunning] = useState<string | null>(null);
+  const [pinnedClosure, setPinnedClosure] = useState<string | null>(null);
+  const [focusedCell, setFocusedCell] = useState<string | null>(null);
+  const [coachOpen, setCoachOpen] = useState(false);
+  const seenCoach = useRef(false);
+
+  const graph: CellGraph = useMemo(() => buildCellGraph(value), [value]);
+  const cells = useMemo(() => splitCells(value).cells, [value]);
+  const hasMarkers = cells.length > 0;
+
+  useEffect(() => {
+    seenCoach.current = localStorage.getItem(COACH_SEEN_KEY) === "1";
+  }, []);
+  useEffect(() => {
+    if (hasMarkers && !seenCoach.current) {
+      setCoachOpen(true);
+      localStorage.setItem(COACH_SEEN_KEY, "1");
+      seenCoach.current = true;
+    }
+  }, [hasMarkers]);
+
+  const runCell = useCallback(
+    async (name: string) => {
+      setRunning(name);
+      try {
+        const names = dependencyClosure(name, graph.refs, new Set(graph.order));
+        const out = await onRunCells(names, "cell_deps");
+        // S19: capture the EXACT composition this run evaluated — via the
+        // shared composeCellClosure helper (single composition authority).
+        const composedText = composeCellClosure(graph.header, cells, names);
+        const ranAt = Date.now();
+        setResults((prev) => [
+          ...prev.filter((r) => !names.includes(r.cell)),
+          ...names.map((n) => ({
+            cell: n,
+            ok: out[n]?.ok ?? false,
+            lines: out[n]?.lines ?? ["(no output)"],
+            columns: out[n]?.columns,
+            rows: out[n]?.rows,
+            computedLocally: !connected,
+            composedText,
+            params: parameters,
+            ts: ranAt,
+          })),
+        ]);
+        // S22g: per-cell run log (surface "cell"; cap 5 per card).
+        setCellRuns((prev) => {
+          const next = new Map(prev);
+          for (const n of names) {
+            const r = out[n];
+            next.set(n, [
+              { ts: ranAt, ok: r?.ok ?? false, ms: null },
+              ...(next.get(n) ?? []),
+            ].slice(0, 5));
+          }
+          return next;
+        });
+      } finally {
+        setRunning(null);
+      }
+    },
+    [graph, cells, onRunCells, connected, parameters],
+  );
+
+  // Esc clears the pinned closure (and coach mark); Ctrl/Cmd+Enter runs
+  // the focused cell.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPinnedClosure(null);
+        setCoachOpen(false);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        if (focusedCell) void runCell(focusedCell);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [focusedCell, runCell]);
+
+  // S14: per-card heights (drag handle). The stored value drives the
+  // editor host height; results keep their fixed 240px internal-scroll
+  // region — the handle sizes the card's editable footprint.
+  const libraryKey =
+    /^\s*library\s+([A-Za-z0-9_]+)/m.exec(value)?.[1] ?? "default";
+  const [cellHeights, setCellHeights] = useState<Record<string, number>>(() =>
+    loadCellHeights(libraryKey),
+  );
+  const cellHeightsRef = useRef(cellHeights);
+  cellHeightsRef.current = cellHeights;
+  const dragCell = useRef<{ name: string; startY: number; startH: number } | null>(null);
+
+  const persistHeights = (next: Record<string, number>, writeThrough = true) => {
+    setCellHeights(next);
+    if (!writeThrough) return; // during drag: state only; write on release
+    writeCellHeights(libraryKey, next);
+  };
+
+  const naturalHeight = (name: string) => {
+    const lines = cells.find((c) => c.name === name)?.text.split("\n").length ?? 1;
+    return Math.min(420, Math.max(19 + 16, lines * 19 + 16));
+  };
+
+  const beginDrag = (name: string, startY: number) => {
+    dragCell.current = { name, startY, startH: cellHeightsRef.current[name] ?? naturalHeight(name) };
+  };
+  const moveDrag = (e: React.PointerEvent) => {
+    const d = dragCell.current;
+    if (!d) return;
+    const next = Math.min(600, Math.max(35, d.startH + (e.clientY - d.startY)));
+    persistHeights({ ...cellHeightsRef.current, [d.name]: next }, false);
+  };
+  const endDrag = () => {
+    if (dragCell.current) {
+      // Write-through once, on release.
+      writeCellHeights(libraryKey, cellHeightsRef.current);
+    }
+    dragCell.current = null;
+  };
+
+  // Keyboard alternative: Enter/double-click toggles default <-> tall.
+  const cycleHeight = (name: string) => {
+    if (cellHeightsRef.current[name] == null) {
+      persistHeights({ ...cellHeightsRef.current, [name]: 480 });
+    } else {
+      const { [name]: _drop, ...rest } = cellHeightsRef.current;
+      persistHeights(rest);
+    }
+  };
+
+  const closureFor = useCallback(
+    (name: string) => dependencyClosure(name, graph.refs, new Set(graph.order)),
+    [graph],
+  );
+
+  // S16: Run All / Clear All live in the EDITOR HEADER (one row with the
+  // mode switch) — exposed to the host via a slot-render callback.
+  // S28 (perf): Run All is ONE BATCH call (onRunCells with every cell
+  // name, mode "run_all") — connected mode evaluates the composed
+  // library once server-side and slices columns per cell (~1
+  // translation instead of N). Sequential per-cell runCell remains for
+  // single-cell runs.
+  const runAll = useCallback(async () => {
+    if (running !== null || !hasMarkers) return;
+    setRunning("all");
+    try {
+      const names = cells.map((c) => c.name);
+      const out = await onRunCells(names, "run_all");
+      // Batch composition = header + every cell (the full library).
+      const composedText = composeCellClosure(graph.header, cells, names);
+      const ranAt = Date.now();
+      setResults((prev) => [
+        ...prev.filter((r) => !names.includes(r.cell)),
+        ...names.map((n) => ({
+          cell: n,
+          ok: out[n]?.ok ?? false,
+          lines: out[n]?.lines ?? ["(no output)"],
+          columns: out[n]?.columns,
+          rows: out[n]?.rows,
+          computedLocally: !connected,
+          composedText,
+          params: parameters,
+          ts: ranAt,
+        })),
+      ]);
+      setCellRuns((prev) => {
+        const next = new Map(prev);
+        for (const n of names) {
+          const r = out[n];
+          next.set(n, [
+            { ts: ranAt, ok: r?.ok ?? false, ms: null },
+            ...(next.get(n) ?? []),
+          ].slice(0, 5));
+        }
+        return next;
+      });
+    } finally {
+      setRunning(null);
+    }
+  }, [running, hasMarkers, cells, runCell]);
+
+  // Report controls to the host (the header buttons live in EditorPane's
+  // single row). Effect-based: calling the parent's setState during RENDER
+  // crashes React (S16 live-debug: the page white-screened).
+  const controlsRef = useRef({ onToolbarControls });
+  controlsRef.current.onToolbarControls = onToolbarControls;
+  const runAllRef = useRef(runAll);
+  runAllRef.current = runAll;
+  useEffect(() => {
+    controlsRef.current.onToolbarControls({
+      running: running !== null,
+      canRunAll: hasMarkers,
+      hasResults: results.length > 0,
+      onRunAll: () => void runAllRef.current(),
+      onClearAll: () => setResults([]),
+    });
+    // Stable callbacks only — no re-emission while typing.
+  }, [running, hasMarkers, results.length]);
+
+  return (
+    <div className="cell-editor" data-testid="cell-editor">
+
+      {coachOpen && (
+        <div className="cell-coach" role="dialog" aria-label="Cell mode tips" data-testid="cell-coach">
+          <p>
+            Cells split on <code>// # %%</code> markers. Markers may have just been
+            added in-buffer (Ctrl+Z undoes; nothing is saved to disk until you
+            save). <strong>▶ Run</strong> on a cell executes it and everything it
+            depends on (Ctrl/Cmd+Enter runs the focused cell). Cells without
+            a define show the whole library's columns. Click a cell's name
+            to pin its dependency closure; Esc unpins.
+          </p>
+          <button type="button" onClick={() => setCoachOpen(false)}>Got it</button>
+        </div>
+      )}
+
+      {hasMarkers ? (
+        <div className="cell-list" data-testid="cell-list">
+          {/* S26 review fix: the HEADER card — declarations/imports/
+              valuesets ride above the define cells (read-mostly; part
+              of every cell's composed closure). */}
+          {graph.header.trim() && (
+            <div
+              className="cell-card cell-header-card"
+              data-cell="__header__"
+              data-testid="cell-header-card"
+            >
+              {/* S31: same head grammar as define cells — a name CHIP
+                  ("Declarations") instead of the old dashed special card. */}
+              <div className="cell-head">
+                <span
+                  className="cell-namechip cell-header-chip"
+                  title="library declarations, includes, valuesets — included in every cell run"
+                >
+                  Declarations
+                </span>
+                <span className="cell-depcount" aria-hidden="true">
+                  included in every run
+                </span>
+              </div>
+              {renderHeaderEditor ? (
+                renderHeaderEditor(graph.header)
+              ) : (
+                <pre className="cell-header-pre">{graph.header}</pre>
+              )}
+            </div>
+          )}
+          {cells.map((cell) => {
+            const deps = closureFor(cell.name).filter((d) => d !== cell.name);
+            const res = results.find((r) => r.cell === cell.name);
+            return (
+              <div
+                key={`${cell.name}-${cell.order}`}
+                className={`cell-card${res && !res.ok ? " cell-error" : ""}${
+                  pinnedClosure && pinnedClosure !== cell.name && closureFor(pinnedClosure).includes(cell.name)
+                    ? " cell-in-closure"
+                    : ""
+                }${pinnedClosure && !closureFor(pinnedClosure).includes(cell.name) && pinnedClosure !== cell.name ? " cell-dimmed" : ""}`}
+                data-cell={cell.name}
+                aria-label={res && !res.ok ? `Cell ${cell.name} failed` : undefined}
+                data-testid="cell-card"
+              >
+                <div className="cell-head">
+                  <button
+                    type="button"
+                    className="cell-namechip"
+                    data-testid="cell-namechip"
+                    aria-label={`Cell ${cell.name}${deps.length ? ` — dependencies ${deps.join(", ")}` : ""}`}
+                    onClick={() => setPinnedClosure((cur) => (cur === cell.name ? null : cell.name))}
+                    onFocus={() => setFocusedCell(cell.name)}
+                    title={
+                      /^cell-\d+$/.test(cell.name)
+                        ? "Unnamed cell — runs show all columns (add a define or a [name:] marker to narrow)"
+                        : deps.length
+                          ? `Deps: ${deps.join(", ")} (click to pin)`
+                          : "No dependencies"
+                    }
+                  >
+                    {cell.name}
+                  </button>
+                  <span className="cell-depcount" aria-hidden="true">
+                    {deps.length ? `${deps.length} dep${deps.length === 1 ? "" : "s"}` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    className="cell-run"
+                    data-testid="cell-run"
+                    title={running !== null ? "running…" : `Run ${cell.name} and its dependencies`}
+                    disabled={running !== null}
+                    onClick={() => runCell(cell.name)}
+                    aria-label={`Run ${cell.name} and its dependencies`}
+                  >
+                    {running === cell.name ? "…" : "▶"}
+                  </button>
+                  {res && (
+                    <button
+                      type="button"
+                      className="cell-out-clear"
+                      aria-label={`Clear output for ${cell.name}`}
+                      onClick={() => setResults((prev) => prev.filter((r) => r.cell !== cell.name))}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+                <div
+                  className="cell-monaco"
+                  onFocusCapture={() => setFocusedCell(cell.name)}
+                >
+                  {renderEditor(cell, cellHeights[cell.name])}
+                </div>
+                {res && (
+                  <div className={"cell-out"} role="status" data-testid="cell-out">
+                    {res.computedLocally && (
+                      <span className="cell-localbadge" title="Executed by the in-browser engine">
+                        computed locally
+                      </span>
+                    )}
+                    {!res.ok && (
+                      <span className="cell-errortag" role="alert">error</span>
+                    )}
+                    {res.columns && res.columns.length > 0 && res.rows ? (
+                      <div
+                        className="cell-table-wrap"
+                        data-testid="cell-table"
+                        role="region"
+                        tabIndex={0}
+                        aria-label={`Results table for ${cell.name}`}
+                      >
+                        <table className="cell-table">
+                          <thead>
+                            <tr>
+                              {res.columns.map((c) => (
+                                <th key={c} scope="col">{c}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {res.rows.slice(0, CELL_TABLE_ROW_CAP).map((r, i) => {
+                              const pid = String(res.columns?.[0] === "patient_id" ? r[0] : "");
+                              const clickable = !!pid && !!onExplainRow;
+                              return (
+                                <tr
+                                  key={i}
+                                  className={clickable ? "cell-row-evidence" : undefined}
+                                  title={clickable ? `Click to view evidence for ${pid}` : undefined}
+                                  role={clickable ? "button" : undefined}
+                                  tabIndex={clickable ? 0 : undefined}
+                                  aria-label={clickable ? `Evidence for ${pid}` : undefined}
+                                  onClick={
+                                    clickable
+                                      ? () =>
+                                          onExplainRow?.(pid, cell.name, {
+                                            composedText: res.composedText,
+                                            params: res.params,
+                                            computedLocally: res.computedLocally,
+                                          })
+                                      : undefined
+                                  }
+                                  onKeyDown={
+                                    clickable
+                                      ? (e) => {
+                                          if (e.key === "Enter" || e.key === " ") {
+                                            e.preventDefault();
+                                            onExplainRow?.(pid, cell.name, {
+                                              composedText: res.composedText,
+                                              params: res.params,
+                                            });
+                                          }
+                                        }
+                                      : undefined
+                                  }
+                                >
+                                  {r.map((v, j) => (
+                                    <td key={j} title={v}>{v}</td>
+                                  ))}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        {res.rows.length > CELL_TABLE_ROW_CAP && (
+                          <div className="cell-table-cap" role="status">
+                            showing {CELL_TABLE_ROW_CAP} of {res.rows.length} rows
+                          </div>
+                        )}
+                        {evidenceSlotFactory?.(cell.name)}
+                      </div>
+                    ) : null}
+                    {!(res.columns && res.columns.length > 0 && res.rows) && (
+                      <pre aria-label={`Output for ${cell.name}${res.ok ? "" : " (failed)"}`}>
+                        {res.lines.join("\n")}
+                      </pre>
+                    )}
+                  </div>
+                )}
+                {cellRuns.get(cell.name)?.length ? (
+                  <div className="cell-runs" data-testid="cell-runs" title="This cell's recent runs (surface: cell — never duplicated into the console history)">
+                    {cellRuns.get(cell.name)!.slice(0, 3).map((r) => (
+                      <span key={r.ts} className="cell-run-chip">
+                        {new Date(r.ts).toLocaleTimeString()} ·{" "}
+                        {r.ok ? "ok" : "error"}
+                        {typeof r.ms === "number" ? ` · ${Math.round(r.ms)}ms` : ""}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                  <div
+                    className="cell-resize-handle"
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label={`Resize ${cell.name}`}
+                    aria-valuenow={cellHeights[cell.name] ?? naturalHeight(cell.name)}
+                    aria-valuemin={35}
+                    aria-valuemax={600}
+                    data-testid="cell-resize"
+                    tabIndex={0}
+                    onPointerDown={(e) => {
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      beginDrag(cell.name, e.clientY);
+                    }}
+                    onPointerMove={moveDrag}
+                    onPointerUp={endDrag}
+                    onPointerCancel={endDrag}
+                    onDoubleClick={() => cycleHeight(cell.name)}
+                    onKeyDown={(e) => {
+                      const cur = cellHeights[cell.name] ?? naturalHeight(cell.name);
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        persistHeights({ ...cellHeights, [cell.name]: Math.min(600, cur + 20) });
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        persistHeights({ ...cellHeights, [cell.name]: Math.max(35, cur - 20) });
+                      } else if (e.key === "Enter") {
+                        cycleHeight(cell.name);
+                      }
+                    }}
+                    title="Drag to resize · double-click or Enter to reset · arrow keys ±20px"
+                  >
+                    <span className="grip" />
+                  </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="pane-hint" style={{ padding: "10px 14px" }} data-testid="cell-empty-hint">
+          <p>
+            No <code>// # %%</code> markers in this buffer. Add{" "}
+            <code>{"// # %% [name: MyDefine]"}</code> above a define to split it
+            into a runnable cell.
+          </p>
+          {onAutoSplit && (
+            <button
+              type="button"
+              className="cell-toggle"
+              data-testid="cell-autosplit"
+              onClick={() => {
+                onAutoSplit();
+              }}
+              title="Insert // # %% markers before each top-level define"
+            >
+              Auto-split
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

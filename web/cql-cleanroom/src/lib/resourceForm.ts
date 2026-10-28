@@ -360,3 +360,41 @@ export function prefillBuilder(
 ): FormState {
   return jsonToForm(json, root);
 }
+
+/** S29: canonical JSON (sorted keys) for lossless round-trip comparison. */
+function canonicalJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(",")}]`;
+  if (v && typeof v === "object") {
+    const rec = v as Record<string, unknown>;
+    return `{${Object.keys(rec)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson(rec[k])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(v);
+}
+
+/**
+ * S29: can this raw JSON be represented by the form editor WITHOUT loss?
+ *
+ * The form is only a projection of the resource; flipping raw → form so
+ * the user can edit fields must never silently drop constructs the form
+ * does not model. `jsonToForm → formToJson` must reproduce the input
+ * exactly (canonicalized). Returns the list of top-level keys whose
+ * values would change — empty means lossless.
+ */
+export function formRoundTripLosses(
+  json: Record<string, unknown>,
+  root: SchemaTreeNode | null,
+): string[] {
+  if (!root) return Object.keys(json).filter((k) => k !== "resourceType");
+  const round = formToJson(jsonToForm(json, root), root);
+  const losses: string[] = [];
+  const keys = new Set([...Object.keys(json), ...Object.keys(round)]);
+  for (const key of keys) {
+    if (canonicalJson(json[key]) !== canonicalJson(round[key])) {
+      losses.push(key);
+    }
+  }
+  return losses;
+}

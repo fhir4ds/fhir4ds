@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { openTestsDrawer, bootDemoReady } from "./bootText";
 
 /**
  * Measure-reports campaign e2e (FEATURE_CLEANROOM_MEASURE_REPORTS.md):
@@ -7,12 +8,11 @@ import { expect, test, type Page } from "@playwright/test";
  */
 
 async function bootReady(page: Page) {
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
-  await page.waitForSelector("[data-testid=cql-editor]", { timeout: 30_000 });
+  await bootDemoReady(page);
 }
 
 async function loadDataset(page: Page) {
+  await openTestsDrawer(page);
   await page.waitForSelector("[data-testid=dataset-tree]", {
     timeout: 30_000,
   });
@@ -21,7 +21,7 @@ async function loadDataset(page: Page) {
 /** WORKBENCH_REORG phase 5: measure authoring is an editor tab — expand
  *  the Measures drawer (collapsed on fresh boot), then open the tab. */
 async function openMeasureTab(page: Page) {
-  await page.click("[data-testid=nav-toggle-measures]");
+  await page.click("[data-testid=nav-toggle-config]");
   await page.locator("[data-testid^=nav-item-measure-]").first().click();
   await page.waitForSelector("[data-testid=measure-validate]", {
     timeout: 10_000,
@@ -324,7 +324,7 @@ test.describe("view pane flatten", () => {
     await openViewTab(page);
 
     // Custom mode: long-format projection of the engine's MeasureReports.
-    await page.selectOption("[data-testid=view-mode]", "custom");
+    await page.click("[data-testid=view-mode]"); // switch: Form ⇄ -> Text
     await page.fill(
       "[data-testid=vd-editor]",
       JSON.stringify({
@@ -483,7 +483,8 @@ test.describe("measure association (reorg 6f)", () => {
     await page.click("[data-testid=file-menu]");
     await page.click("[data-testid=workspace-reset]");
     await page.waitForTimeout(1200);
-    await page.waitForSelector("[data-testid=dataset-tree]", {
+    await openTestsDrawer(page);
+  await page.waitForSelector("[data-testid=dataset-tree]", {
       timeout: 30_000,
     });
 

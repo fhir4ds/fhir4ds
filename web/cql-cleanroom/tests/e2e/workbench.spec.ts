@@ -1,13 +1,19 @@
 import { test, type Page } from "@playwright/test";
 import { waitDatasetResources } from "./dataset";
+import { bootTextReady } from "./bootText";
 
 async function bootReady(page: Page) {
-  await page.goto("/");
-  // Wait for FULL engine boot (pyodide + duckdb-wasm): the version badge
-  // only renders on the boot-ok message. Clicking into a still-booting
-  // worker (runPython during in-flight runPythonAsync) crashes natively.
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  // S25: fresh boots auto-load cms125 and auto-cellify — legacy specs
+  // contract on the text editor + the DEFAULT demo state, so boot to
+  // text, then reset to the scratch demo (3 resources).
+  await bootTextReady(page);
+  await page.click("[data-testid=file-menu]");
+  await page.click("[data-testid=workspace-reset]");
+  await page.waitForTimeout(800);
   await page.waitForSelector("[data-testid=cql-editor]", { timeout: 30_000 });
+  // The Tests drawer hosts the dataset tree (default rail: Libraries).
+  await page.click('[data-testid="nav-toggle-tests"]');
+  await page.waitForSelector("[data-testid=dataset-tree]", { timeout: 30_000 });
 }
 
 test("editor parses and evaluates with typed results", async ({ page }) => {
@@ -35,7 +41,9 @@ test("editor parses and evaluates with typed results", async ({ page }) => {
   await page.waitForSelector("[data-testid=results-table]", {
     timeout: 60_000,
   });
-  const badge = await page.textContent("[data-testid=type-badge-initial_population]");
+  // S26: run columns use the measure's DISPLAY names ("Initial
+  // Population"), not the DQM underscore convention.
+  const badge = await page.textContent("[data-testid=\"type-badge-Initial Population\"]");
   if (badge !== "Boolean") throw new Error(`IPP badge: ${badge}`);
   const meta = await page.textContent("[data-testid=results-table-stats]");
   if (!meta?.includes("3 rows")) throw new Error(`meta: ${meta}`);
@@ -56,6 +64,7 @@ test("tests run against the loaded dataset", async ({ page }) => {
   await page.click("[data-testid=file-menu]");
   await page.click("[data-testid=workspace-reset]");
   await page.waitForTimeout(600);
+  await page.click('[data-testid="nav-toggle-tests"]');
   await page.waitForSelector("[data-testid=dataset-tree]");
 
   // REORG phase 6a: the expected grid is the "expected" editor tab —

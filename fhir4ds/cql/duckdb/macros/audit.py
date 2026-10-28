@@ -61,6 +61,23 @@ AUDIT_MACROS_SQL = [
             evidence := []::{_EVIDENCE_STRUCT_TYPE}
         )
     )""",
+    # S22f-promotion (docs/design/context-patient-audit-leaves.md): a
+    # context-patient PROPERTY derivation (AgeInYearsAt reads the
+    # patient's birthDate row, not a retrieve) carries its own leaf —
+    # target Patient/<id>, operator 'derived', threshold 'context'.
+    f"""CREATE OR REPLACE MACRO audit_patient_property(val, patient_id_expr, attr, prop_value) AS (
+        struct_pack(
+            result   := val,
+            evidence := list_value(struct_pack(
+                target      := 'Patient/' || CAST(patient_id_expr AS VARCHAR),
+                attribute   := CAST(attr AS VARCHAR),
+                value       := CAST(prop_value AS VARCHAR),
+                operator    := 'derived',
+                threshold   := 'context',
+                trace       := CAST([] AS VARCHAR[])
+            ))::{_EVIDENCE_STRUCT_TYPE}
+        )
+    )""",
     # COMPARISON: capture comparison result with evidence (attribute, operands, operator)
     f"""CREATE OR REPLACE MACRO audit_comparison(result_val, op, lhs, rhs, ev_attr, target_id) AS (
         struct_pack(

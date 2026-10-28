@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { zipSync } from "fflate";
 import * as fs from "node:fs";
+import { bootTextReady, openTestsDrawer } from "./bootText";
 
 /**
  * M2+M3 e2e: MADiE package import → evaluate → re-export round-trip.
@@ -40,8 +41,7 @@ const MEASURE = {
 
 test("MADiE package import → evaluate → export round-trip", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/");
-  await page.waitForSelector(".version-badge", { timeout: 150_000 });
+  await bootTextReady(page);
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
   // IndexedDB persists across contexts (same origin): start clean so a
   // prior test's workspace can't restore over this import. Wait for the
@@ -87,12 +87,14 @@ test("MADiE package import → evaluate → export round-trip", async ({ page })
   );
 
   // Load dataset + evaluate — Measure came from the package.
+  await openTestsDrawer(page);
+  await openTestsDrawer(page);
   await page.waitForSelector("[data-testid=dataset-tree]");
   await page.waitForSelector("[data-testid=results-table]", { timeout: 90_000 });
 
   // MR output renders in the console while a measure editor tab is
   // active (REORG 6b) — open the measure tab from the Measures drawer.
-  await page.click("[data-testid=nav-toggle-measures]");
+  await page.click("[data-testid=nav-toggle-config]");
   await page.locator("[data-testid^=nav-item-measure-]").first().click();
   await page.waitForSelector("[data-testid=mr-table]", { timeout: 60_000 });
 
@@ -101,8 +103,9 @@ test("MADiE package import → evaluate → export round-trip", async ({ page })
     page.waitForEvent("download", { timeout: 30_000 }),
     (async () => {
       await page.click("[data-testid=file-menu]");
-      await page.hover("[data-testid=file-save]");
-      await page.click("[data-testid=madie-export]");
+      // S32: Save Workspace is a direct item (no submenu); standalone
+      // downloads the package via the browser dialog.
+      await page.click("[data-testid=file-save-workspace]");
     })(),
   ]);
   const out = "/tmp/opencode/roundtrip-export.zip";

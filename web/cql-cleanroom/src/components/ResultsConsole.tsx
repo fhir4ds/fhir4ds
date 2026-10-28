@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { workerRequest } from "./BootOverlay";
 import { PaginatedTable } from "./PaginatedTable";
+import { Spinner } from "./Spinner";
 import { DiagnosticsRow } from "./EditorPane";
 import { EvidencePopover } from "./EvidencePopover";
 import { AstTree } from "./AstPane";
 import { cellDiffClass, diffSummary } from "../lib/runDiff";
-import { DefinesMatrix } from "./DefinesMatrix";
 import { renderValue } from "../lib/formatValue";
 import { useRunDiff } from "./MeasureReportOutput";
 import type { CompareResult } from "../lib/verifyCompare";
@@ -16,6 +16,7 @@ import type {
   EvaluateResult,
   EvidenceResult,
 } from "../lib/protocol";
+import { extractCqlSymbols } from "../lib/cqlSymbols";
 import type { Artifact } from "../lib/runDiff";
 import type { RunEntry } from "../state/workspace";
 import { formatRunTimestamp } from "../lib/runHistory";
@@ -50,9 +51,12 @@ export type ConsoleContext = "library" | "measure" | "view" | "tests";
 export type ConsolePlacement = "bottom" | "right";
 
 const CONTEXT_TABS: Record<ConsoleContext, Array<{ id: ConsoleTab; label: string }>> = {
+  // S26 (items 1+2): the Defines tab is REMOVED from both surfaces —
+  // the library console's Results tab already shows EVERY define's
+  // output (S23-1 all-defines doctrine); the measure surface is
+  // MeasureReport + Funnel only.
   library: [
     { id: "results", label: "Results" },
-    { id: "defines", label: "Defines" },
     { id: "cql", label: "CQL" },
     { id: "sql", label: "SQL" },
     { id: "ast", label: "AST" },
@@ -60,15 +64,18 @@ const CONTEXT_TABS: Record<ConsoleContext, Array<{ id: ConsoleTab; label: string
   measure: [
     { id: "mr", label: "Measure Report" },
     { id: "funnel", label: "Funnel" },
-    { id: "defines", label: "Defines" },
   ],
-  view: [{ id: "view", label: "View Output" }],
+  // S31: one vocabulary — the output tab is "Results" on every surface
+  // (the measure console keeps its Measure Report/Funnel pair).
+  view: [{ id: "view", label: "Results" }],
   // 6h: the Expected Results editor's console context — authored
   // expectations derived against the latest library run (#62).
-  tests: [{ id: "compare", label: "Compare" }],
+  tests: [{ id: "compare", label: "Results" }],
 };
 
 export function ResultsConsole({
+  connected,
+  evaluating,
   libraries,
   main,
   dataset,
@@ -90,15 +97,18 @@ export function ResultsConsole({
   onManualRun,
   activeTab,
   onTabChange,
-  recalcSeconds,
 }: {
+  /** S33: true while an evaluation is executing — the Results empty state
+   *  shows a spinner instead of the static hint. */
+  evaluating?: boolean;
   libraries: LibraryText[];
   main: LibraryText;
   dataset: DatasetSpec | null;
+  /** S16 item 4: connected mode explains via /api/explain (server rows). */
+  connected?: boolean;
   parameters: Record<string, unknown>;
   outputColumns: Record<string, string> | null;
   /** 6g: settings recalc delay — also debounces the Defines matrix. */
-  recalcSeconds: number;
   /** Current editor selection text (null/empty disables Run-Selection). */
   selection: string | null;
   /** Live auto-evaluation of the entrypoint library (app heartbeat). */
@@ -125,6 +135,7 @@ export function ResultsConsole({
   /** Manual runs (Run button / Ctrl+Enter) land in App's ring. */
   onManualRun: (p: {
     mode: "library" | "selection";
+    origin?: "server" | "browser";
     library: string;
     cql: string;
     ok: boolean;
@@ -200,6 +211,7 @@ export function ResultsConsole({
       // history write; the new entry overrides the displayed result.
       onManualRun({
         mode,
+        origin: 'browser',  // this run path IS the worker
         library: main.name,
         cql: env.cql ?? main.text,
         ok: !!env.ok,
@@ -219,25 +231,94 @@ export function ResultsConsole({
   runRef.current = run;
 
   // Cell-level evidence drill-in for the live results table.
+  // S18: latest displayRun for call-time reads inside async explain.
+  const displayRunRef = useRef(displayRun);
+  displayRunRef.current = displayRun;
   const [cellEvidence, setCellEvidence] = useState<{
     patientId: string;
     population: string;
     evidence: EvidenceResult | null;
   } | null>(null);
 
-  async function explainCell(patientId: string, population: string) {
+  const explainCell = async (patientId: string, population: string) => {
     setCellEvidence({ patientId, population, evidence: null });
+    // S18: displayRun payload is read at CALL time (defined below at
+    // render; closure captures the latest via function ref).
+    const runPayload = displayRunRef.current?.payload as
+      | { origin?: string; library?: string; cql?: string }
+      | null
+      | undefined;
+    // S20: evidence evaluates the DISPLAYED RUN's library — the payload
+    // carries the executed cql + library name. Current-editor props are
+    // IGNORED for the main library (they may have drifted post-run or
+    // belong to a different tab); other workspace libs ride along so
+    // includes resolve. output_columns derive from the RUN text only —
+    // never another library's measure/expected mapping.
+    const explainMainName = runPayload?.library ?? main.name;
+    const explainMainText = runPayload?.cql ?? main.text;
+    const explainLibraries = [
+      { name: explainMainName, text: explainMainText },
+      ...libraries.filter((l) => l.name !== explainMainName),
+    ];
+    const runDeclared = new Set(
+      extractCqlSymbols(explainMainText).defines.map((d) => d.name),
+    );
+    // S26a (item 6): evidence explains the CLICKED column's own define.
+    // The clicked column name IS a define of the run's library (cells
+    // carry data-testid cell-<pid>-<column>) — narrow BOTH paths to it:
+    // the worker path (no measure-shaped output_columns leaking another
+    // population's mapping) and the server path (output_columns on
+    // /api/explain, same narrowing seam as _route_evaluate). Only fall
+    // back to the measure-mapped/run columns when the clicked name is
+    // not a declared define (aliased output columns).
+    const clickedIsDefine = runDeclared.has(population);
+    const explainColumns: Record<string, string> | null = clickedIsDefine
+      ? { [population]: population }
+      : outputColumns && Object.keys(
+          Object.fromEntries(
+            Object.entries(outputColumns).filter(([, define]) =>
+              runDeclared.has(define),
+            ),
+          ),
+        ).length
+        ? Object.fromEntries(
+            Object.entries(outputColumns).filter(([, define]) =>
+              runDeclared.has(define),
+            ),
+          )
+        : null;
     try {
-      const resp = await workerRequest({
-        type: "explain_patient",
-        libraries,
-        main,
-        dataset,
-        patient_id: patientId,
-        parameters,
-        output_columns: outputColumns,
-      });
-      const env: EvidenceResult = JSON.parse(resp.envelope);
+      // S18 fix: explain follows the RUN'S ORIGIN, not the connection
+      // state — a browser-origin run (default dataset p1/p2 rows) must
+      // explain through the worker even while connected; a server-origin
+      // run uses /api/explain (which merges workspace parameter defaults).
+      let env: EvidenceResult;
+      const runOrigin = runPayload?.origin;
+      if (connected && runOrigin === "server") {
+        const res = await fetch("/api/explain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            libraries: explainLibraries,
+            library: explainMainName,
+            patient_id: patientId,
+            parameters,
+            ...(explainColumns ? { output_columns: explainColumns } : {}),
+          }),
+        });
+        env = (await res.json()) as EvidenceResult;
+      } else {
+        const resp = await workerRequest({
+          type: "explain_patient",
+          libraries: explainLibraries,
+          main: { name: explainMainName, text: explainMainText },
+          dataset,
+          patient_id: patientId,
+          parameters,
+          output_columns: explainColumns,
+        });
+        env = JSON.parse(resp.envelope);
+      }
       setCellEvidence((cur) =>
         cur && cur.patientId === patientId && cur.population === population
           ? { patientId, population, evidence: env }
@@ -263,7 +344,7 @@ export function ResultsConsole({
         },
       });
     }
-  }
+  };
 
   // Diff chips + per-cell diff classes describe the LATEST run; a
   // pinned historical run renders plain (its diff window has moved on).
@@ -345,6 +426,7 @@ export function ResultsConsole({
           </div>
         )}
         {payloadRows && payloadColumns && payloadColumns.length > 0 && (
+          <>
           <PaginatedTable
             testId="results-table"
             rowCount={payloadRows.length}
@@ -420,8 +502,14 @@ export function ResultsConsole({
               })
             }
           />
+          </>
         )}
-        {!payload && (
+        {!payload && evaluating && (
+          <div className="pane-hint" data-testid="console-evaluating">
+            <Spinner label="evaluating" />
+          </div>
+        )}
+        {!payload && !evaluating && (
           <p className="pane-hint" data-testid="console-empty">
             Run from the editor toolbar (or Ctrl/Cmd+Enter): the whole
             library runs, a selection runs just that expression. The last
@@ -438,20 +526,8 @@ export function ResultsConsole({
         )}
       </div>
 
-      <div
-        className="tab-panel"
-        hidden={activeTab !== "defines"}
-        data-testid="console-panel-defines"
-      >
-        <DefinesMatrix
-          libraries={libraries}
-          main={main}
-          dataset={dataset}
-          parameters={parameters}
-          visible={activeTab === "defines"}
-          debounceMs={recalcSeconds > 0 ? recalcSeconds * 1000 : 1000}
-        />
-      </div>
+      {/* S26 (items 1+2): the Defines tab-panel is REMOVED with its tab —
+          the Results tab renders every define's output. */}
 
       <div
         className="tab-panel"
@@ -475,7 +551,7 @@ export function ResultsConsole({
         data-testid="console-panel-ast"
       >
         {payload?.cql ? (
-          <AstTree cqlText={payload.cql} />
+          <AstTree cqlText={payload.cql} connected={connected} />
         ) : (
           <p className="pane-hint" data-testid="ast-empty">
             Run an evaluation to see its AST.

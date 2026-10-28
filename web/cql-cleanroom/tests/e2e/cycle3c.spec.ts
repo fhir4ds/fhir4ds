@@ -1,5 +1,6 @@
 import { test } from "@playwright/test";
 import { waitDatasetResources } from "./dataset";
+import { bootTextReady, openTestsDrawer } from "./bootText";
 
 /**
  * C3-U3 e2e: dataset edit/delete + builder prefill round-trip + the F8
@@ -9,10 +10,14 @@ import { waitDatasetResources } from "./dataset";
 
 test.describe("cleanroom cycle-3 dataset editing", () => {
   test("edit prefills builder and replace round-trips", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForSelector(".version-badge", { timeout: 150_000 });
+    await bootTextReady(page);
+    // S25: / boots the cms125 showcase — reset to the scratch demo.
+    await page.click("[data-testid=file-menu]");
+    await page.click("[data-testid=workspace-reset]");
+    await page.waitForTimeout(800);
 
     // Load the default 3-patient dataset.
+    await openTestsDrawer(page);
     await waitDatasetResources(page, 3);
 
     // Edit row 0 (p1, female) → builder prefilled with gender=female.
@@ -49,16 +54,21 @@ test.describe("cleanroom cycle-3 dataset editing", () => {
 
     // Delete p1's row → 2 remain.
     await page.click('[data-testid=dataset-delete-0]');
+    await openTestsDrawer(page);
     await waitDatasetResources(page, 2);
     console.log("DELETE_REMOVED: true");
   });
 
   test("F8 invariant: built resource evaluates in an augmented dataset", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForSelector(".version-badge", { timeout: 150_000 });
+    await bootTextReady(page);
+    // S25: / boots the cms125 showcase — reset to the scratch demo.
+    await page.click("[data-testid=file-menu]");
+    await page.click("[data-testid=workspace-reset]");
+    await page.waitForTimeout(800);
 
     // Build a female patient via the form; AUTO-SAVE commits it.
     // WORKBENCH_REORG phase 5: the builder is a test editor tab now.
+    await openTestsDrawer(page);
     await page.click("[data-testid=nav-add-tests]");
     await page.waitForSelector("[data-testid=builder-field-id]", {
       timeout: 15_000,
@@ -77,7 +87,8 @@ test.describe("cleanroom cycle-3 dataset editing", () => {
     await page.waitForSelector('[data-testid=results-table-stats]', { timeout: 60_000 });
     const meta = await page.textContent('[data-testid=results-table-stats]');
     console.log("EVAL_META:", meta);
-    const badge = await page.textContent('[data-testid=type-badge-initial_population]');
+    // S26 display-name columns: the type badge testid carries the space.
+    const badge = await page.textContent('[data-testid="type-badge-Initial Population"]');
     console.log("TYPE_BADGE_IPP:", badge);
   });
 });

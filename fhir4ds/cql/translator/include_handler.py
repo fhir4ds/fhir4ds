@@ -260,6 +260,12 @@ class IncludeHandlerMixin:
                 _library_cache=self._library_cache,
                 _library_ast_cache=self._library_ast_cache,
                 _resolving_stack=child_stack,
+                # S22f-promotion review fix 3: the child inherits
+                # audit_mode so included defines (age family in SDE/
+                # QICoreCommon-style libs) build their audit wrappers
+                # in the CHILD pass where the property marker lives.
+                audit_mode=context.audit_mode,
+                audit_expressions=context.audit_expressions,
             )
 
             try:
@@ -351,6 +357,21 @@ class IncludeHandlerMixin:
         from the cache so the cached originals remain pristine.
         """
         import copy as _copy
+
+        # S22f-promotion review fix 3: propagate the context-patient
+        # property markers from the child library's context under the
+        # PREFIXED define name (<alias>.<define>) — the child translator
+        # records them in its own context, which is otherwise discarded.
+        _child_ppdefs = getattr(
+            included_translator._context, "_patient_property_defs", None
+        )
+        if _child_ppdefs:
+            _parent_ppdefs = getattr(self._context, "_patient_property_defs", None)
+            if _parent_ppdefs is None:
+                _parent_ppdefs = {}
+                self._context._patient_property_defs = _parent_ppdefs
+            for def_name, marker in _child_ppdefs.items():
+                _parent_ppdefs.setdefault(f"{alias}.{def_name}", marker)
 
         # Copy codes, codesystems, and valuesets from included library to main context
         for code_name, code_info in included_translator._context.codes.items():

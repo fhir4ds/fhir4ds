@@ -7,6 +7,7 @@ import {
   orphanedOverrides,
   type ViewOverrides,
 } from "../lib/viewDerivation";
+import { Spinner } from "./Spinner";
 
 /**
  * ViewPane v2 — the View drawer inside Results (§3.5).
@@ -27,6 +28,10 @@ export function ViewPane({
   onSql,
   onResult,
   recalcMs = 2000,
+  initialVd,
+  connected = false,
+  reportsPending = false,
+  onBusy,
 }: {
   measure: Record<string, unknown> | null;
   measureReports: Array<Record<string, unknown>> | null;
@@ -38,6 +43,18 @@ export function ViewPane({
   onResult?: (r: FlattenViewResult | null) => void;
   /** REORG 6e: auto-recalc delay (settings); 0 disables auto-run. */
   recalcMs?: number;
+  /** S27: a session-imported ViewDefinition (nav Views > disk VD click)
+   *  — the pane boots in Custom mode with this text and runs it over the
+   *  session MeasureReports (same source as the derived view). */
+  initialVd?: Record<string, unknown> | null;
+  /** S31: connected = server-side flatten (/api/view/run with explicit
+   *  resources) — no in-browser engine boot. */
+  connected?: boolean;
+  /** S32: the first heartbeat has not produced MeasureReports yet —
+   *  show a spinner rather than flashing the no-reports hint. */
+  reportsPending?: boolean;
+  /** S32: reports the flatten busy state upward (console output spinner). */
+  onBusy?: (busy: boolean) => void;
 }) {
   const overrides = viewConfig ?? {};
   const columns = useMemo(
@@ -48,10 +65,13 @@ export function ViewPane({
     () => orphanedOverrides(measure, overrides),
     [measure, overrides],
   );
-  const [mode, setMode] = useState<"derived" | "custom">("derived");
-  const [customVd, setCustomVd] = useState("");
+  const [mode, setMode] = useState<"derived" | "custom">(
+    initialVd ? "custom" : "derived",
+  );
+  const [customVd, setCustomVd] = useState(
+    initialVd ? JSON.stringify(initialVd, null, 2) : "",
+  );
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const setOverride = (key: string, patch: { name?: string; path?: string }) => {
     const next: ViewOverrides = {
@@ -78,7 +98,7 @@ export function ViewPane({
 
   async function run() {
     busyRef.current = true;
-    setBusy(true);
+    onBusy?.(true);
     setError(null);
     try {
       const viewDefinition =
@@ -86,14 +106,31 @@ export function ViewPane({
           ? buildDerivedView(measure, overrides)
           : JSON.parse(customVd || "null");
       const resources = measureReports ?? [];
-      const resp = await workerRequest({
-        type: "flatten_view",
-        view_definition: viewDefinition,
-        resources,
-      });
-      const env: FlattenViewResult = JSON.parse(
-        (resp as { envelope: string }).envelope,
-      );
+      // S31: CONNECTED = server-side flatten over the session reports
+      // (/api/view/run accepts explicit `resources`) — no Pyodide boot on
+      // the connected path. Standalone keeps the in-browser worker.
+      let env: FlattenViewResult;
+      if (connected) {
+        const res = await fetch("/api/view/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: JSON.stringify(viewDefinition),
+            resources,
+          }),
+        });
+        const body = (await res.json()) as {
+          data?: FlattenViewResult;
+        } & FlattenViewResult;
+        env = (body?.data ?? body) as FlattenViewResult;
+      } else {
+        const resp = await workerRequest({
+          type: "flatten_view",
+          view_definition: viewDefinition,
+          resources,
+        });
+        env = JSON.parse((resp as { envelope: string }).envelope);
+      }
       onSql?.(env.ok ? (env.sql ?? null) : null);
       onResult?.(env.ok ? env : null);
       if (!env.ok) {
@@ -104,27 +141,35 @@ export function ViewPane({
       onResult?.(null);
     } finally {
       busyRef.current = false;
-      setBusy(false);
+      onBusy?.(false);
     }
   }
 
   return (
-    <section className="pane" data-testid="view-pane">
+    <section className="pane view-pane" data-testid="view-pane">
       <header className="pane-header">
         <div className="pane-actions">
-          {busy && (
-            <span className="pane-meta" data-testid="view-busy">
-              running view…
-            </span>
-          )}
-          <select
-            value={mode}
-            onChange={(e) => setMode(e.target.value as "derived" | "custom")}
+          {/* Spinner removed (Joel 2026-10-25): the results console owns
+              in-flight feedback; the editor header stays quiet. */}
+          {/* S29: the SAME switch widget as the Builder/Cells toggles —
+              Form ("From Measure") ⇄ Text (the VD editor). aria-checked
+              tracks TEXT mode. */}
+          <button
+            type="button"
+            className={`drawer-toggle mode-switch${mode === "custom" ? " on" : ""}`}
             data-testid="view-mode"
+            role="switch"
+            aria-label="View editor mode (form or text)"
+            aria-checked={mode === "custom"}
+            title={
+              mode === "custom"
+                ? "Switch to the From Measure form editor"
+                : "Switch to the ViewDefinition text editor"
+            }
+            onClick={() => setMode(mode === "custom" ? "derived" : "custom")}
           >
-            <option value="derived">From Measure</option>
-            <option value="custom">Custom VD</option>
-          </select>
+            {mode === "custom" ? "Form ⇄" : "Text ⇄"}
+          </button>
         </div>
       </header>
       {error && (
@@ -132,12 +177,17 @@ export function ViewPane({
           {error}
         </div>
       )}
-      {!(measureReports?.length) && (
-        <p className="pane-hint" data-testid="view-no-reports">
-          No MeasureReports yet — run an evaluation with a Measure mapping
-          first.
-        </p>
-      )}
+      {!(measureReports?.length) &&
+        (reportsPending ? (
+          <p className="pane-hint" data-testid="view-reports-loading">
+            <Spinner label="waiting for MeasureReports" />
+          </p>
+        ) : (
+          <p className="pane-hint" data-testid="view-no-reports">
+            No MeasureReports yet — run an evaluation with a Measure mapping
+            first.
+          </p>
+        ))}
       {orphans.length > 0 && (
         <div className="orphan-note" data-testid="view-orphans">
           {orphans.length} override(s) no longer match a population:

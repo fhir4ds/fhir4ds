@@ -148,6 +148,7 @@ def generate_function_cte_name(func_name: str, cql_def_name: str) -> str:
     return f"_fn_{func_name}_{safe_name[:32]}_{name_hash}"
 
 
+
 class CTEManagerMixin:
     """Mixin providing CTE management methods for CQLToSQLTranslator."""
 
@@ -662,7 +663,41 @@ class CTEManagerMixin:
                                 f'EXISTS (SELECT 1 FROM "{precte_name}" AS __pre'
                                 f' WHERE __pre.patient_id = _pt.patient_id)'
                             )
-                            audit_expr = SQLFunctionCall(name="audit_leaf", args=[lookup])
+                            # S22f-promotion (design seam A): when the
+                            # define derives from a context-patient
+                            # property (the age family reads
+                            # _pt.birth_date), carry the property leaf —
+                            # audit_patient_property instead of a bare
+                            # audit_leaf (which renders 'no contributing
+                            # resources').
+                            # Context-carried marker (survives all node
+                            # rewrites): the age-family translators record
+                            # _patient_property_defs[define_name].
+                            _ppdefs = getattr(
+                                self._context, "_patient_property_defs", None
+                            ) or {}
+                            patient_prop = _ppdefs.get(name.strip('"'))
+                            if patient_prop is not None:
+                                from ..translator.types import (
+                                    SQLLiteral as _SQLLiteral,
+                                    SQLQualifiedIdentifier as _SQLQI,
+                                )
+                                # S26 (item 7): 3-tuple (attr, value,
+                                # operator) — unpack positionally-safe
+                                # for the older 2-tuple shape.
+                                prop_name = patient_prop[0]
+                                prop_value = patient_prop[1]
+                                audit_expr = SQLFunctionCall(
+                                    name="audit_patient_property",
+                                    args=[
+                                        lookup,
+                                        _SQLQI(parts=["_pt", "patient_id"]),
+                                        _SQLLiteral(value=prop_name),
+                                        prop_value,
+                                    ],
+                                )
+                            else:
+                                audit_expr = SQLFunctionCall(name="audit_leaf", args=[lookup])
                     else:
                         if not is_already_audit:
                             audit_expr = SQLFunctionCall(name="audit_leaf", args=[audit_expr])
