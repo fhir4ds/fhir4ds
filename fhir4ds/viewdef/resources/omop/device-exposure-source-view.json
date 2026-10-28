@@ -1,5 +1,5 @@
 {
-  "name": "omop_device_exposure",
+  "name": "device_exposure_source",
   "status": "draft",
   "resource": "DeviceUsage",
   "constant": [

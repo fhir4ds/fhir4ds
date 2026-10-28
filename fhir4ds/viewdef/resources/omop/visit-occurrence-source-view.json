@@ -1,5 +1,5 @@
 {
-  "name": "omop_visit_occurrence",
+  "name": "visit_occurrence_source",
   "status": "draft",
   "resource": "Encounter",
   "constant": [
@@ -19,11 +19,6 @@
         {
           "name": "person_id",
           "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
-          "type": "string"
-        },
-        {
-          "name": "visit_concept_id",
-          "path": "cm.concept_id",
           "type": "string"
         },
         {
@@ -55,27 +50,16 @@
           "name": "visit_source_value",
           "path": "class.code",
           "type": "code"
-        }
-      ]
-    }
-  ],
-  "joins": [
-    {
-      "name": "cm",
-      "view": "omop_conceptmap",
-      "type": "left",
-      "on": [
-        {
-          "path": "class.code"
         },
         {
-          "path": "cm.concept_code"
+          "name": "source_code",
+          "path": "class.code",
+          "type": "string"
         },
         {
-          "path": "class.system"
-        },
-        {
-          "path": "cm.source_system"
+          "name": "source_system",
+          "path": "class.system",
+          "type": "string"
         }
       ]
     }

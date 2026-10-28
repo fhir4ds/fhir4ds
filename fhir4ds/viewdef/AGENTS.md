@@ -12,11 +12,19 @@ declaring a `projections` entry for a SQLQuery table raises, because the SQL
 would then be hashed/defaulted twice. `viewdef` must not import `sqlquery`
 (the dependency is one-way) — the Library content is decoded inline.
 
-`omop.person` is the pilot: `person-source-view.json` (raw reshape) +
-`sqlqueries/person-omop.json` (join + integer key) replace the VD `joins`
-block and the manifest projection. Keys are unchanged from the previous
-implementation (pinned by `test_key_projection.py`). The remaining event
-tables still use `joins`; migrate them the same way.
+Every OMOP table now follows this shape: a `*-source-view.json` reshape
+(no joins, carrying the map's code + system as `source_code` /
+`source_system` staging columns) plus a `<table>-omop` SQLQuery that joins
+`omop.omop_conceptmap`, assigns the integer keys and concept defaults, and
+(for `drug_exposure`) unions the five arm views. `manifest.projections` and
+`manifest.unions` are gone; `manifest.materialize` names the conceptmap
+lookup and the five `drug_exposure__<arm>` views. The ViewDefinition
+`joins` feature is still supported (and tested) but the library no longer
+uses it.
+
+Behaviour note: the old projection hashed columns unconditionally, so a
+NULL `visit_occurrence_id` became `hash(NULL) & mask` — a fabricated key.
+The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
 
 ## Known Fragile Areas
 

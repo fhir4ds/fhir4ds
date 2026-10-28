@@ -1,0 +1,26 @@
+{
+  "resourceType": "Library",
+  "id": "condition-occurrence-omop",
+  "name": "ConditionOccurrenceOmop",
+  "status": "draft",
+  "type": {
+    "coding": [
+      {
+        "system": "http://hl7.org/fhir/uv/sql-on-fhir/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery"
+    ]
+  },
+  "content": [
+    {
+      "contentType": "application/sql",
+      "data": "U0VMRUNUCiAgICBDQVNFIFdIRU4geC4iY29uZGl0aW9uX29jY3VycmVuY2VfaWQiIElTIE5VTEwgVEhFTiBOVUxMIEVMU0UgQ0FTVChoYXNoKHguImNvbmRpdGlvbl9vY2N1cnJlbmNlX2lkIikgJiA5MjIzMzcyMDM2ODU0Nzc1ODA3IEFTIEJJR0lOVCkgRU5EIEFTICJjb25kaXRpb25fb2NjdXJyZW5jZV9pZCIsCiAgICBDQVNFIFdIRU4geC4icGVyc29uX2lkIiBJUyBOVUxMIFRIRU4gTlVMTCBFTFNFIENBU1QoaGFzaCh4LiJwZXJzb25faWQiKSAmIDkyMjMzNzIwMzY4NTQ3NzU4MDcgQVMgQklHSU5UKSBFTkQgQVMgInBlcnNvbl9pZCIsCiAgICBDT0FMRVNDRShUUllfQ0FTVChjbS5jb25jZXB0X2lkIEFTIEJJR0lOVCksIDApIEFTICJjb25kaXRpb25fY29uY2VwdF9pZCIsCiAgICB4LiJjb25kaXRpb25fc3RhcnRfZGF0ZSIsCiAgICB4LiJjb25kaXRpb25fc3RhcnRfZGF0ZXRpbWUiLAogICAgeC4iY29uZGl0aW9uX2VuZF9kYXRlIiwKICAgIHguImNvbmRpdGlvbl9lbmRfZGF0ZXRpbWUiLAogICAgQ09BTEVTQ0UoVFJZX0NBU1QoY210eXBlLmNvbmNlcHRfaWQgQVMgQklHSU5UKSwgMCkgQVMgImNvbmRpdGlvbl90eXBlX2NvbmNlcHRfaWQiLAogICAgQ09BTEVTQ0UoVFJZX0NBU1QoeC4iY29uZGl0aW9uX3N0YXR1c19jb25jZXB0X2lkIiBBUyBCSUdJTlQpLCAwKSBBUyAiY29uZGl0aW9uX3N0YXR1c19jb25jZXB0X2lkIiwKICAgIHguImNvbmRpdGlvbl9zb3VyY2VfdmFsdWUiLAogICAgQ0FTRSBXSEVOIHguInZpc2l0X29jY3VycmVuY2VfaWQiIElTIE5VTEwgVEhFTiBOVUxMIEVMU0UgQ0FTVChoYXNoKHguInZpc2l0X29jY3VycmVuY2VfaWQiKSAmIDkyMjMzNzIwMzY4NTQ3NzU4MDcgQVMgQklHSU5UKSBFTkQgQVMgInZpc2l0X29jY3VycmVuY2VfaWQiCkZST00gb21vcC5jb25kaXRpb25fb2NjdXJyZW5jZV9zb3VyY2UgQVMgeApMRUZUIEpPSU4gb21vcC5vbW9wX2NvbmNlcHRtYXAgQVMgY20KICAgICAgIE9OIHguc291cmNlX2NvZGUgPSBjbS5jb25jZXB0X2NvZGUKICAgICAgQU5EIHguc291cmNlX3N5c3RlbSA9IGNtLnNvdXJjZV9zeXN0ZW0KTEVGVCBKT0lOIG9tb3Aub21vcF9jb25jZXB0bWFwIEFTIGNtdHlwZQogICAgICAgT04geC5jYXRlZ29yeV9zb3VyY2VfY29kZSA9IGNtdHlwZS5jb25jZXB0X2NvZGUKICAgICAgQU5EIHguY2F0ZWdvcnlfc291cmNlX3N5c3RlbSA9IGNtdHlwZS5zb3VyY2Vfc3lzdGVtCg=="
+    }
+  ],
+  "description": "OMOP condition_occurrence: code and category joined to the ConceptMap, with the integer keys."
+}

@@ -1,0 +1,26 @@
+{
+  "resourceType": "Library",
+  "id": "measurement-omop",
+  "name": "MeasurementOmop",
+  "status": "draft",
+  "type": {
+    "coding": [
+      {
+        "system": "http://hl7.org/fhir/uv/sql-on-fhir/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery"
+    ]
+  },
+  "content": [
+    {
+      "contentType": "application/sql",
+      "data": "U0VMRUNUCiAgICBDQVNFIFdIRU4geC4ibWVhc3VyZW1lbnRfaWQiIElTIE5VTEwgVEhFTiBOVUxMIEVMU0UgQ0FTVChoYXNoKHguIm1lYXN1cmVtZW50X2lkIikgJiA5MjIzMzcyMDM2ODU0Nzc1ODA3IEFTIEJJR0lOVCkgRU5EIEFTICJtZWFzdXJlbWVudF9pZCIsCiAgICBDQVNFIFdIRU4geC4icGVyc29uX2lkIiBJUyBOVUxMIFRIRU4gTlVMTCBFTFNFIENBU1QoaGFzaCh4LiJwZXJzb25faWQiKSAmIDkyMjMzNzIwMzY4NTQ3NzU4MDcgQVMgQklHSU5UKSBFTkQgQVMgInBlcnNvbl9pZCIsCiAgICBDT0FMRVNDRShUUllfQ0FTVChjbS5jb25jZXB0X2lkIEFTIEJJR0lOVCksIDApIEFTICJtZWFzdXJlbWVudF9jb25jZXB0X2lkIiwKICAgIHguIm1lYXN1cmVtZW50X2RhdGUiLAogICAgeC4ibWVhc3VyZW1lbnRfZGF0ZXRpbWUiLAogICAgQ09BTEVTQ0UoVFJZX0NBU1QoeC4ibWVhc3VyZW1lbnRfdHlwZV9jb25jZXB0X2lkIiBBUyBCSUdJTlQpLCAwKSBBUyAibWVhc3VyZW1lbnRfdHlwZV9jb25jZXB0X2lkIiwKICAgIHguInZhbHVlX2FzX251bWJlciIsCiAgICB4LiJ1bml0X3NvdXJjZV92YWx1ZSIsCiAgICB4LiJyYW5nZV9sb3ciLAogICAgeC4icmFuZ2VfaGlnaCIsCiAgICB4LiJtZWFzdXJlbWVudF9zb3VyY2VfdmFsdWUiLAogICAgeC4idmFsdWVfc291cmNlX3ZhbHVlIiwKICAgIENBU0UgV0hFTiB4LiJ2aXNpdF9vY2N1cnJlbmNlX2lkIiBJUyBOVUxMIFRIRU4gTlVMTCBFTFNFIENBU1QoaGFzaCh4LiJ2aXNpdF9vY2N1cnJlbmNlX2lkIikgJiA5MjIzMzcyMDM2ODU0Nzc1ODA3IEFTIEJJR0lOVCkgRU5EIEFTICJ2aXNpdF9vY2N1cnJlbmNlX2lkIgpGUk9NIG9tb3AubWVhc3VyZW1lbnRfc291cmNlIEFTIHgKTEVGVCBKT0lOIG9tb3Aub21vcF9jb25jZXB0bWFwIEFTIGNtCiAgICAgICBPTiB4LnNvdXJjZV9jb2RlID0gY20uY29uY2VwdF9jb2RlCiAgICAgIEFORCB4LnNvdXJjZV9zeXN0ZW0gPSBjbS5zb3VyY2Vfc3lzdGVtCg=="
+    }
+  ],
+  "description": "OMOP measurement: reshape view joined to the flattened ConceptMap, with the integer keys."
+}

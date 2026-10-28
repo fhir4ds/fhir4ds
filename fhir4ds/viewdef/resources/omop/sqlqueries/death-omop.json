@@ -1,0 +1,26 @@
+{
+  "resourceType": "Library",
+  "id": "death-omop",
+  "name": "DeathOmop",
+  "status": "draft",
+  "type": {
+    "coding": [
+      {
+        "system": "http://hl7.org/fhir/uv/sql-on-fhir/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery"
+    ]
+  },
+  "content": [
+    {
+      "contentType": "application/sql",
+      "data": "U0VMRUNUCiAgICBDQVNFIFdIRU4geC4icGVyc29uX2lkIiBJUyBOVUxMIFRIRU4gTlVMTCBFTFNFIENBU1QoaGFzaCh4LiJwZXJzb25faWQiKSAmIDkyMjMzNzIwMzY4NTQ3NzU4MDcgQVMgQklHSU5UKSBFTkQgQVMgInBlcnNvbl9pZCIsCiAgICB4LiJkZWF0aF9kYXRlIiwKICAgIHguImRlYXRoX2RhdGV0aW1lIiwKICAgIENPQUxFU0NFKFRSWV9DQVNUKHguImRlYXRoX3R5cGVfY29uY2VwdF9pZCIgQVMgQklHSU5UKSwgMCkgQVMgImRlYXRoX3R5cGVfY29uY2VwdF9pZCIsCiAgICB4LiJjYXVzZV9zb3VyY2VfdmFsdWUiCkZST00gb21vcC5kZWF0aF9zb3VyY2UgQVMgeAo="
+    }
+  ],
+  "description": "OMOP death: reshape view joined to the flattened ConceptMap, with the integer keys."
+}
