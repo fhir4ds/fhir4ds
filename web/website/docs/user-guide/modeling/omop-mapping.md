@@ -19,14 +19,14 @@ monolithic FHIR ConceptMap resource          (the standard converter contract �
   │                                           one ConceptMap, groups per source system)
   ▼  conceptmap ViewDefinition (flatten)
 omop.omop_conceptmap virtual table          (vocabulary_id | concept_code | concept_id ...)
-  ▲                         ▲
-  │                         └── SQLQuery (omop.person): joins the person
-  │                             reshape and assigns the integer key
-  │                             (spec-native composition)
-  └── Join.view ◀── event ViewDefinitions join it ON (source system, code)
-        │           (fhir4ds extension — being migrated to SQLQuery)
-        ▼
-omop.visit_occurrence / condition_occurrence / ... (13 views, composed)
+  ▲
+  │  one SQLQuery per table joins the reshape view to this lookup,
+  │  assigns the integer keys, and (for drug_exposure) unions the arms
+  │
+omop.<table>_source virtual table            (a reshape ViewDefinition per resource type)
+  │
+  ▼
+omop.person / visit_occurrence / condition_occurrence / ... (9 tables, composed)
 ```
 
 The chain is spec-grounded: SQL-on-FHIR composition semantics state that
@@ -70,17 +70,16 @@ con.execute("SELECT * FROM omop.person").df()
 
 `create_omop_views` composes the whole `omop.*` schema:
 
-- **Dependency inference**: each view's `Join.view` targets are resolved
-  to their source ViewDefinitions and materialized in topological order,
-  and each SQLQuery is materialized after the `<schema>.<view>` names its
-  SQL reads (cycles and unknown references are typed errors).
+- **Dependency inference**: materialization entries are created first, then
+  each SQLQuery after the `<schema>.<view>` names its SQL reads (cycles and
+  unknown references are typed errors).
 - **SQLQuery steps**: `manifest.sql_queries` maps a table to a FHIR
   `Library` of type `sql-query` under `sqlqueries/`. `person` is one:
   a plain reshape ViewDefinition plus a SQLQuery that performs the join
   and key assignment, so nothing in that path needs a fhir4ds extension.
-- **Unions**: `drug_exposure` materializes its four arms
-  (MedicationRequest / MedicationStatement / MedicationAdministration /
-  Immunization) then a table-level `UNION ALL`.
+- **Unions**: `drug_exposure`'s SQLQuery unions its five arm views
+  (MedicationRequest / Statement / Administration / Dispense /
+  Immunization) and joins the map once, instead of joining each arm.
 - **Projections**: natural-key strings become stable positive 63-bit
   integer ids (`person_id`, `visit_occurrence_id`, ...); concept columns
   become `BIGINT` with `COALESCE 0` defaults.
