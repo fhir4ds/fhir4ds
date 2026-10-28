@@ -3074,6 +3074,65 @@ its own bundle** (`<base>/assets/<wheel>`). 0.0.18 shipped with
 `cleanroom.worker-*` chunk missing — check the worker's embedded wheel name
 and the App's worker reference after any deploy.
 
+### Updating ALL WASM apps (release-surface sync, learned in the 0.0.18 final pass)
+
+There are now FIVE browser apps, each with its own wheel + extension wasm
+copies, plus website snapshots of four of them:
+
+| App | Dev copy | Website snapshot |
+|---|---|---|
+| cql-cleanroom | `web/cql-cleanroom/public/` | `web/website/static/cql-cleanroom/` (+ `fhir4ds/devserver/static-cleanroom/`) |
+| wasm-demo (playground) | `web/wasm-demo/public/` | `web/website/static/wasm-app/` |
+| cql-clinic | `web/cql-clinic/public/` | `web/website/static/cql-clinic-app/` |
+| viewing-room | `web/viewing-room/public/` | `web/website/static/viewing-room-app/` |
+| bulk-publisher | (deployed directly) | `web/website/static/bulk-publisher-app/` |
+
+Rules (each of these bit us at least once):
+
+1. **A wheel update is not enough — refresh the extension wasms too.**
+   cql-clinic shipped a STALE `public/extensions/cql.duckdb_extension.wasm`
+   for three releases (0.0.15→0.0.18) because only its wheel was ever
+   bumped. After any C++ extension rebuild, copy the fresh wasm to EVERY
+   app's `public/extensions/`:
+   `extensions/cql/build/wasm_eh/extension/cql/cql.duckdb_extension.wasm`,
+   `extensions/fhirpath/build/wasm_eh/extension/fhirpath/fhirpath.duckdb_extension.wasm`
+   (viewing-room ships fhirpath only; wasm-demo ships cql only; cleanroom
+   and clinic ship both). Verify by md5 against the build outputs.
+2. **`dist/` never updates itself**: after `npm run build` in each app,
+   re-mirror `dist/` into the website snapshot (`rm -rf` + `cp -a`) —
+   hashed chunk names change per build and stale snapshots 404. The Vite
+   configs auto-discover the wheel in `public/` (single-wheel rule:
+   delete the old one or the build picks arbitrarily).
+3. **Verify the md5 chain for every app**: wheel in `public/` = wheel in
+   `dist/` = wheel in the website snapshot; same for each extension wasm.
+   One `for` loop over `md5sum` beats debugging a browser that silently
+   runs a mixed-version engine.
+4. **Smoke the actual boot, not just the HTTP 200s**: clinic/cleanroom
+   only boot Pyodide when a lesson/cell is opened. The 0.0.18 pass used a
+   Playwright probe (enter lesson 1 → wait out "Loading CQL engine…"/
+   "Loading DuckDB…" → assert "engine ready", zero page errors). An app
+   that renders its shell but fails wheel install looks "up" otherwise.
+5. ** Bisect suspicious e2e failures against the OLD wheel before
+   debugging**: viewing-room's 3 failures (gallery/s5-browse/
+   web-component) failed identically on 0.0.17 — pre-existing, not
+   regressions. Restore the previous wheel from git
+   (`git show HEAD:<old-wheel-path> > <old-name>`), rebuild, rerun the
+   failing specs, then restore the new wheel and rebuild again.
+6. **Website review server trap**: `docusaurus serve` sends NO COOP/COEP
+   headers, and the COI service worker is deliberately NOT registered on
+   localhost:3000 (see `docusaurus.config.ts` isDev guard — a cached SW
+   poisons chunk fetches after rebuilds). So serving the production build
+   locally makes every DuckDB-WASM demo die with "Boot failed:
+   SharedArrayBuffer is unavailable". For local review of the production
+   build, serve `web/website/build/` with a static server that sends
+   `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-
+   Policy: require-corp` (+ `Cross-Origin-Resource-Policy: cross-origin`)
+   on every response. (Dev mode `docusaurus start` gets the headers from
+   `coi-dev-headers-plugin.js`.)
+7. **Stale `vite preview` servers lie**: Playwright's
+   `reuseExistingServer: !CI` will happily test a preview server started
+   BEFORE a rebuild. `pkill -f "vite preview"` before any post-build e2e.
+
 ### Release Steps for WASM Demo
 
 Every release must complete **all** of the following steps:
