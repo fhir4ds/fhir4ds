@@ -93,7 +93,7 @@ export const SAMPLES: Sample[] = [
   {
     slug: "omop-patient",
     suite: "omop",
-    name: "OMOP person (view)",
+    name: "OMOP Person (ViewDef)",
     description: "The person reshape: Patient -> person_source columns (birth-date splits, gender code) before the join.",
     vdUrl: "samples/omop-patient/viewdefinition.json",
     resourcesUrl: "samples/omop-patient/resources.ndjson",
@@ -102,7 +102,7 @@ export const SAMPLES: Sample[] = [
   {
     slug: "omop-person-sqlquery",
     suite: "omop",
-    name: "OMOP person (SQLQuery)",
+    name: "OMOP Person (SQLQuery)",
     description: "The same cohort finished: a SQLQuery joins the person reshape to the ConceptMap and assigns the integer person_id.",
     vdUrl: "samples/omop-person-sqlquery/viewdefinition.json",
     resourcesUrl: "samples/omop-person-sqlquery/resources.ndjson",
@@ -111,7 +111,7 @@ export const SAMPLES: Sample[] = [
   {
     slug: "omop-encounters",
     suite: "omop",
-    name: "OMOP encounters (SQLQuery)",
+    name: "OMOP Encounters (SQLQuery)",
     description: "OMOP visit_occurrence over Synthea encounters — the SQLQuery joins the encounter reshape to the ConceptMap and assigns the integer keys.",
     vdUrl: "samples/omop-encounters/viewdefinition.json",
     resourcesUrl: "samples/omop-encounters/resources.ndjson",
@@ -120,7 +120,7 @@ export const SAMPLES: Sample[] = [
   {
     slug: "omop-drug-exposure",
     suite: "omop",
-    name: "OMOP medications (view)",
+    name: "OMOP Medications (ViewDef)",
     description: "drug_exposure from MedicationRequest alone: the raw view (source columns and the coding system the SQLQuery will join on).",
     vdUrl: "samples/omop-drug-exposure/viewdefinition.json",
     resourcesUrl: "samples/omop-drug-exposure/resources.ndjson",
@@ -129,7 +129,7 @@ export const SAMPLES: Sample[] = [
   {
     slug: "omop-drug-exposure-sqlquery",
     suite: "omop",
-    name: "OMOP medications (SQLQuery)",
+    name: "OMOP Medications (SQLQuery)",
     description: "Cross-resource drug_exposure via a SQLQuery Library — MedicationRequest, Dispense, Statement, Administration and Immunization unioned, mapped and keyed in one query.",
     vdUrl: "samples/omop-drug-exposure-sqlquery/viewdefinition.json",
     resourcesUrl: "samples/omop-drug-exposure-sqlquery/resources.ndjson",

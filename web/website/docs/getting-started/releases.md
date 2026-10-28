@@ -68,8 +68,9 @@ artifacts only.
   now complete in under half a second. Monolithic 100k-element maps are
   the recommended shape (chunking retired).
 - **Viewing Room OMOP suite** — five samples mirroring the library:
-  person (view), person (SQLQuery), encounters (SQLQuery), medications
-  (view), medications (SQLQuery: 5 arms unioned, mapped, keyed —
+  Person (ViewDef), Person (SQLQuery), Encounters (SQLQuery),
+  Medications (ViewDef), Medications (SQLQuery: 5 arms unioned, mapped,
+  keyed —
   1,461 rows over live Hugging Face data). Browse tab renders 100k+
   element resources smoothly (paged JSON trees, lazy groups).
   BIGINT-safe serialization keeps 63-bit keys exact in the browser.
