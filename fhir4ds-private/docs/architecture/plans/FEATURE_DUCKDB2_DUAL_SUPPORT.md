@@ -260,6 +260,24 @@ until ext-2 builds exist.
    → the loud RuntimeError sentence; wheel with both + 1.x → ext-1
    loads, 2.x binary untouched; both + 2.x → ext-2 loads.
 
+## 4.5 2.0-leg residual findings (documented, out of D1/D2 scope)
+
+The py3.11/duckdb-2.0 venv leg (fhir4ds/tests + viewdef + cql-unit:
+3010 passed / 10 failed after venv deps were completed) surfaced:
+- 5 failures are **native-vs-Python-fallback parity gaps**, not 2.0
+  issues — e.g. `type().name` on an unknown JSON object returns
+  LOWERCASE 'object' from the 1.5 native C++ extension but 'Object'
+  from the Python fallback (verified: 1.5.5 + forced fallback also
+  returns 'Object'). These tests pin the native spelling; on the 2.0
+  venv the fallback runs because no ext-2 bundle exists yet. They will
+  close automatically once the 2.0 extension build ships (the native
+  binary answers again), or via a separate case-normalization chunk.
+- 1 perf budget failure (forEach 20k under 10s took 28.9s on the
+  fallback engine — Python-UDF speed, not a planner regression; the
+  native path is the budgeted surface).
+- Fixed in-scope: fhir_loader bulk-register churn (ResourceInUse on 2.0
+  after parameterized executes).
+
 ## 5. Explicitly out of scope
 
 Making 2.0 the default; duckdb-wasm/browser migration; CPython 3.10
