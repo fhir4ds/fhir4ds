@@ -132,7 +132,7 @@ def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
         return False
 
     # duckdb 2.x Python client requires pytz for TIMESTAMPTZ rendering.
-    if _duckdb_version.startswith("2.") :
+    if _duckdb_version.startswith("2."):
         try:
             import pytz  # noqa: F401
         except ImportError:
