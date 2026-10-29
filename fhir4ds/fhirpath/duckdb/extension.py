@@ -79,6 +79,36 @@ def _bundled_extension_filename() -> str | None:
     }.get(key)
 
 
+def _staged_load_path(ext_path: "Path") -> "Path":
+    """DuckDB 2.x enforces the `.duckdb_extension` suffix at LOAD.
+
+    The wheel bundles the 2.0 binary as `<name>.duckdb2_extension`
+    (distinct suffix so a 1.5-only environment can never LOAD the 2.0
+    binary by accident, per D2). DuckDB rejects loading files with any
+    other suffix, so stage the bundle into a content-addressed cache
+    under the loadable name before LOAD. The cache key is the bundle's
+    size+mtime, so a wheel upgrade re-stages automatically.
+    """
+    import hashlib
+    import tempfile
+    from pathlib import Path
+
+    stat = ext_path.stat()
+    key = hashlib.sha1(f"{ext_path.name}:{stat.st_size}:{int(stat.st_mtime)}".encode()).hexdigest()[:16]
+    # Per-bundle cache DIRECTORY (content-keyed) with the plain loadable
+    # filename inside: DuckDB derives the extension entrypoint from the
+    # file name, so it must stay `<name>.duckdb_extension`, while the
+    # per-bundle directory ensures distinct bundles (unit-test fakes,
+    # wheel upgrades) never share a mutable slot — the single-slot design
+    # let a later stage overwrite the binary mid-use and segfault the loader.
+    cache_dir = Path(tempfile.gettempdir()) / "fhir4ds-ext-cache" / key
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    staged = cache_dir / ext_path.name.replace(".duckdb2_extension", ".duckdb_extension")
+    if not staged.exists() or staged.stat().st_size != stat.st_size:
+        staged.write_bytes(ext_path.read_bytes())
+    return staged
+
+
 def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
     """
     Try to load the compiled C++ FHIRPath extension bundled inside this wheel.
@@ -142,6 +172,15 @@ def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
                 "columns. Fix: pip install fhir4ds-v2[duckdb2] (or pytz).",
                 _duckdb_version,
             )
+    # DuckDB 2.x enforces the `.duckdb_extension` suffix at LOAD: stage
+    # the bundled `.duckdb2_extension` binary into the loadable name first.
+    if ext_path.name.endswith(".duckdb2_extension"):
+        try:
+            ext_path = _staged_load_path(ext_path)
+        except OSError as exc:
+            _logger.warning("duckdb_py: failed to stage 2.0 bundle for load: %s", exc)
+            return False
+
     try:
         escaped_path = str(ext_path).replace("'", "''")
         con.execute(f"LOAD '{escaped_path}'")

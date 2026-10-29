@@ -185,3 +185,55 @@ def test_pin_widening_atomicity() -> None:
             "2026-10-29 ruling the pin must stay <2 until the bundles ship "
             "in the same release."
         )
+
+
+class TestV2BundleSuffixStaging:
+    """ext-2: DuckDB 2.x rejects LOAD of files without the
+    ``.duckdb_extension`` suffix, so the wheel's ``.duckdb2_extension``
+    bundle must be staged to the loadable name before LOAD."""
+
+    def test_staged_load_path_renames_suffix(self, tmp_path):
+        from fhir4ds.fhirpath.duckdb.extension import _staged_load_path
+
+        bundle = tmp_path / "fhirpath.duckdb2_extension"
+        bundle.write_bytes(b"payload-1")
+        staged = _staged_load_path(bundle)
+        # Content-keyed staged name: loadable suffix + per-bundle key so
+        # distinct bundles never share a mutable cache slot.
+        assert staged.name == "fhirpath.duckdb_extension"
+        # per-bundle content-keyed directory isolates distinct bundles
+        assert staged.parent.parent.name == "fhir4ds-ext-cache"
+        assert len(staged.parent.name) == 16  # sha1[:16] content key
+        assert staged.read_bytes() == b"payload-1"
+
+    def test_staged_load_path_restages_on_content_change(self, tmp_path):
+        from fhir4ds.fhirpath.duckdb.extension import _staged_load_path
+
+        bundle = tmp_path / "fhirpath.duckdb2_extension"
+        bundle.write_bytes(b"payload-1")
+        first = _staged_load_path(bundle)
+        assert first.read_bytes() == b"payload-1"
+        bundle.write_bytes(b"payload-2-longer")
+        second = _staged_load_path(bundle)
+        assert second.read_bytes() == b"payload-2-longer"
+        assert first != second  # different content keys → different slots
+
+    def test_v2_bundle_filename_selector(self):
+        from fhir4ds.fhirpath.duckdb.extension import _bundled_extension_filename
+
+        key = _major_minor()
+        expected = {(1, 5): "fhirpath.duckdb_extension", (2, 0): "fhirpath.duckdb2_extension"}
+        assert _bundled_extension_filename() == expected.get(key)
+
+    @pytest.mark.skipif(_major_minor() != (2, 0), reason="native LOAD only on the 2.0 leg")
+    def test_register_loads_native_engine_on_2_0(self):
+        from fhir4ds.fhirpath.duckdb import register_fhirpath
+
+        con = duckdb.connect(config={"allow_unsigned_extensions": True})
+        assert register_fhirpath(con) is True
+        row = con.execute(
+            """SELECT fhirpath_text(
+                '{"resourceType":"Patient","id":"p1","name":[{"given":["Alice"]}]}',
+                'name.given.first()')"""
+        ).fetchone()
+        assert row[0] == "Alice"
