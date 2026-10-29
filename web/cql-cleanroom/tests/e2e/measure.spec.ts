@@ -251,7 +251,7 @@ async function openViewTab(page: Page) {
   // in the Views drawer creates a derived VD and opens it.
   await page.click("[data-testid=nav-toggle-views]");
   await page.click("[data-testid=nav-add-views]");
-  await page.waitForSelector("[data-testid=view-mode]", {
+  await page.waitForSelector("[data-testid=vd-source-toggle]", {
     timeout: 30_000,
   });
 }
@@ -324,7 +324,7 @@ test.describe("view pane flatten", () => {
     await openViewTab(page);
 
     // Custom mode: long-format projection of the engine's MeasureReports.
-    await page.click("[data-testid=view-mode]"); // switch: Form ⇄ -> Text
+    await page.click('[data-testid=vd-source-custom]'); // source: From Measure -> Custom (raw)
     await page.fill(
       "[data-testid=vd-editor]",
       JSON.stringify({
