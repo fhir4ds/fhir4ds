@@ -1334,13 +1334,18 @@ class CTEDefinition:
     name: str
     query: SQLSelect
     columns: Optional[List[str]] = None  # Optional column aliases
+    # PERF retrieve-cache: emit AS MATERIALIZED so DuckDB does not inline
+    # the CTE into consumers and push heavy definition predicates into the
+    # base table scans (CMS130 rung5k: 2,178s + 506s + 471s SEQ_SCANs).
+    materialized: bool = False
 
     def to_sql(self) -> str:
         query_sql = self.query.to_sql()
+        mat = "MATERIALIZED " if self.materialized else ""
         if self.columns:
             cols = f"({', '.join(self.columns)})"
-            return f"{self.name}{cols} AS (\n{query_sql}\n)"
-        return f"{self.name} AS (\n{query_sql}\n)"
+            return f"{self.name}{cols} AS {mat}(\n{query_sql}\n)"
+        return f"{self.name} AS {mat}(\n{query_sql}\n)"
 
 
 def _build_precomputed_column_expression(col_def: ColumnDefinition) -> SQLAlias:

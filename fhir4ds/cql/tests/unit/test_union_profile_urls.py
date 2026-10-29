@@ -41,7 +41,7 @@ class TestUnionWithProfiles:
         # meta_profile_filter=True, so they produce separate CTEs with profile
         # WHERE clauses — one per profile, not deduplicated.
         lines = sql.split('\n')
-        condition_ctes = [l for l in lines if '"Condition' in l and 'AS (' in l]
+        condition_ctes = [l for l in lines if '"Condition' in l and ('AS (' in l or 'AS MATERIALIZED (' in l)]
 
         assert len(condition_ctes) == 2, \
             f"Expected 2 Condition CTEs (one per profile with meta_profile_filter), got {len(condition_ctes)}\nSQL:\n{sql[:3000]}"
@@ -86,7 +86,7 @@ class TestUnionWithProfiles:
         # meta_profile_filter=True, so each (profile, valueset) pair produces a
         # separate CTE — 6 CTEs total (3 valuesets × 2 profiles).
         lines = sql.split('\n')
-        condition_ctes = [l for l in lines if '"Condition' in l and 'AS (' in l]
+        condition_ctes = [l for l in lines if '"Condition' in l and ('AS (' in l or 'AS MATERIALIZED (' in l)]
         assert len(condition_ctes) == 6, \
             f"Expected 6 Condition CTEs (3 valuesets × 2 profiles with meta_profile_filter), got {len(condition_ctes)}\nSQL:\n{sql[:3000]}"
 

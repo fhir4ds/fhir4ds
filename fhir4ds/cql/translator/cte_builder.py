@@ -977,3 +977,133 @@ def build_patient_demographics_cte() -> Tuple[str, SQLSelect, Dict[str, ColumnIn
     )
 
     return cte_name, cte_ast, column_info_map
+
+
+def _flatten_and_chain(node):
+    """Flatten a left-deep AND chain of SQL expressions into a list of leaves."""
+    if isinstance(node, SQLBinaryOp) and node.operator == "AND":
+        return _flatten_and_chain(node.left) + _flatten_and_chain(node.right)
+    return [node]
+
+
+def _is_resource_type_predicate(node, resource_type: str) -> bool:
+    """True when *node* is ``r.resourceType = '<resource_type>'``."""
+    if not isinstance(node, SQLBinaryOp) or node.operator != "=":
+        return False
+    left, right = node.left, node.right
+    if not (isinstance(left, SQLQualifiedIdentifier) and left.parts == ["r", "resourceType"]):
+        return False
+    return isinstance(right, SQLLiteral) and right.value == resource_type
+
+
+def extract_retrieve_resource_type(cte_ast) -> Optional[str]:
+    """Return the resource type a retrieve CTE AST filters on, if any.
+
+    A retrieve CTE reads ``FROM resources r`` with a leading
+    ``r.resourceType = '<T>'`` predicate. Returns None for anything else
+    (let CTEs, definition CTEs, already-rewritten children).
+    """
+    if not isinstance(cte_ast, SQLSelect) or cte_ast.where is None:
+        return None
+    fc = cte_ast.from_clause
+    if not (isinstance(fc, SQLAlias) and isinstance(fc.expr, SQLIdentifier)
+            and fc.expr.name == "resources"):
+        return None
+    for leaf in _flatten_and_chain(cte_ast.where):
+        if isinstance(leaf, SQLBinaryOp) and leaf.operator == "=":
+            left, right = leaf.left, leaf.right
+            if (isinstance(left, SQLQualifiedIdentifier)
+                    and left.parts == ["r", "resourceType"]
+                    and isinstance(right, SQLLiteral)
+                    and isinstance(right.value, str)):
+                return right.value
+    return None
+
+
+def rewrite_retrieve_to_base(
+    cte_ast: SQLSelect,
+    base_name: str,
+    resource_type: str,
+) -> SQLSelect:
+    """Rewrite a retrieve CTE body to read from a per-type base CTE.
+
+    Drops the ``r.resourceType = '<T>'`` predicate and repoints
+    ``FROM resources r`` → ``FROM "<base_name>" r``. The base CTE projects
+    ``patient_ref AS patient_id`` and ``resource``, so child references to
+    ``r.patient_ref`` are rewritten to ``r.patient_id``.
+    """
+    leaves = [leaf for leaf in _flatten_and_chain(cte_ast.where)
+              if not _is_resource_type_predicate(leaf, resource_type)]
+    if not leaves:
+        new_where = None
+    elif len(leaves) == 1:
+        new_where = leaves[0]
+    else:
+        new_where = leaves[0]
+        for leaf in leaves[1:]:
+            new_where = SQLBinaryOp(operator="AND", left=new_where, right=leaf)
+
+    def rewrite_ref(node):
+        if isinstance(node, SQLQualifiedIdentifier):
+            if node.parts == ["r", "patient_ref"]:
+                return SQLQualifiedIdentifier(parts=["r", "patient_id"])
+            return node
+        if isinstance(node, SQLBinaryOp):
+            return SQLBinaryOp(
+                operator=node.operator,
+                left=rewrite_ref(node.left),
+                right=rewrite_ref(node.right),
+            )
+        if isinstance(node, SQLAlias):
+            return SQLAlias(expr=rewrite_ref(node.expr), alias=node.alias,
+                            implicit_alias=node.implicit_alias)
+        if isinstance(node, SQLFunctionCall):
+            return SQLFunctionCall(
+                name=node.name,
+                args=[rewrite_ref(a) for a in node.args],
+                distinct=node.distinct,
+            )
+        return node
+
+    return SQLSelect(
+        columns=[rewrite_ref(c) for c in cte_ast.columns],
+        from_clause=SQLAlias(
+            expr=SQLIdentifier(name=base_name, quoted=True),
+            alias="r",
+            implicit_alias=True,
+        ),
+        where=new_where,
+        joins=list(cte_ast.joins) if cte_ast.joins else None,
+        group_by=cte_ast.group_by,
+        having=cte_ast.having,
+        order_by=cte_ast.order_by,
+        limit=cte_ast.limit,
+        distinct=cte_ast.distinct,
+    )
+
+
+def build_resource_type_base_cte(resource_type: str) -> SQLSelect:
+    """Build the per-resourceType base CTE body all retrieves of that type share.
+
+    ``"_rt_<Type>" AS MATERIALIZED (
+        SELECT r.patient_ref AS patient_id, r.resourceType, r.resource
+        FROM resources r WHERE r.resourceType = '<Type>'
+    )``
+    """
+    return SQLSelect(
+        columns=[
+            SQLAlias(
+                expr=SQLQualifiedIdentifier(parts=["r", "patient_ref"]),
+                alias="patient_id",
+            ),
+            SQLQualifiedIdentifier(parts=["r", "resourceType"]),
+            SQLQualifiedIdentifier(parts=["r", "resource"]),
+        ],
+        from_clause=SQLAlias(expr=SQLIdentifier(name="resources"), alias="r",
+                             implicit_alias=True),
+        where=SQLBinaryOp(
+            operator="=",
+            left=SQLQualifiedIdentifier(parts=["r", "resourceType"]),
+            right=SQLLiteral(resource_type),
+        ),
+    )

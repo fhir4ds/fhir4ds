@@ -265,7 +265,10 @@ def propagate_resource_column_lineage(
             merged = dict(inherited)
             merged.update(existing)
             registry.register_cte(cte_name, merged)
-            propagated.append(CTEDefinition(name=cte.name, query=updated_query, columns=cte.columns))
+            propagated.append(CTEDefinition(
+                name=cte.name, query=updated_query, columns=cte.columns,
+                materialized=cte.materialized,
+            ))
         else:
             propagated.append(cte)
 

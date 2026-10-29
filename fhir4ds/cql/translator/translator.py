@@ -817,11 +817,14 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             seen_cte_names.add('_patient_demographics')
 
         # 3. Build retrieve CTEs from optimization phase 2
-        # These must come BEFORE definition CTEs because definitions reference them
+        # These must come BEFORE definition CTEs because definitions reference them.
+        # PERF retrieve-cache: MATERIALIZED prevents DuckDB from inlining each
+        # retrieve into consuming definitions and pushing the heavy definition
+        # predicates (fhirpath_text/intervalEnd CASE chains) into table scans.
         for cte_name, cte_ast in phase2_result.ctes.items():
             quoted = f'"{cte_name}"'
             if quoted not in seen_cte_names:
-                cte_defs.append(CTEDefinition(name=quoted, query=cte_ast))
+                cte_defs.append(CTEDefinition(name=quoted, query=cte_ast, materialized=True))
                 seen_cte_names.add(quoted)
 
         # 3.5. P1.2: Build retrieve CTEs from included libraries
@@ -832,7 +835,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         for cte_name, (cte_ast, col_info) in self._included_retrieve_ctes.items():
             quoted = f'"{cte_name}"'
             if quoted not in seen_cte_names:
-                cte_defs.append(CTEDefinition(name=quoted, query=cte_ast))
+                cte_defs.append(CTEDefinition(name=quoted, query=cte_ast, materialized=True))
                 seen_cte_names.add(quoted)
             elif col_info:
                 # Included library has precomputed columns — check if main has fewer
@@ -841,8 +844,59 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     # Replace the main library's version with the richer one
                     for i, cdef in enumerate(cte_defs):
                         if cdef.name == quoted:
-                            cte_defs[i] = CTEDefinition(name=quoted, query=cte_ast)
+                            cte_defs[i] = CTEDefinition(name=quoted, query=cte_ast, materialized=True)
                             break
+
+        # 3.6. PERF retrieve-cache candidate 1: share ONE table scan per
+        # resource type. For every type with >= 2 retrieve CTEs, prepend a
+        # MATERIALIZED "_rt_<Type>" base CTE and rewrite the retrieve CTEs
+        # of that type to read from it (resourceType predicate dropped).
+        # CMS130 rung5k evidence: 38 retrieve CTEs = 42 resource-table
+        # scans reading 263M rows from a 6.2M-row table.
+        _retrieve_names = set(phase2_result.ctes.keys())
+        _retrieve_names.update(
+            name for name in self._included_retrieve_ctes
+        )
+        if _retrieve_names:
+            from .cte_builder import (
+                build_resource_type_base_cte,
+                extract_retrieve_resource_type,
+                rewrite_retrieve_to_base,
+            )
+            _type_of: dict[int, str] = {}
+            for _i, _cdef in enumerate(cte_defs):
+                if _cdef.name.strip('"') in _retrieve_names:
+                    _t = extract_retrieve_resource_type(_cdef.query)
+                    if _t:
+                        _type_of[_i] = _t
+            _by_type: dict[str, list[int]] = {}
+            for _i, _t in _type_of.items():
+                _by_type.setdefault(_t, []).append(_i)
+            _shared_types = {t for t, idxs in _by_type.items() if len(idxs) >= 2}
+            if _shared_types:
+                _base_defs = []
+                for _i, _cdef in enumerate(cte_defs):
+                    _t = _type_of.get(_i)
+                    if _t in _shared_types:
+                        _base_name = f"_rt_{_t}"
+                        cte_defs[_i] = CTEDefinition(
+                            name=_cdef.name,
+                            query=rewrite_retrieve_to_base(_cdef.query, _base_name, _t),
+                            columns=_cdef.columns,
+                            materialized=True,
+                        )
+                for _t in sorted(_shared_types):
+                    _base_defs.append(CTEDefinition(
+                        name=f'"_rt_{_t}"',
+                        query=build_resource_type_base_cte(_t),
+                        materialized=True,
+                    ))
+                    seen_cte_names.add(f'"_rt_{_t}"')
+                # Base CTEs must precede every consumer: insert after the
+                # last retrieve CTE but before any definition CTE (insert
+                # right before the first rewritten child's position).
+                _first_child = min(_by_type[t][0] for t in _shared_types)
+                cte_defs[_first_child:_first_child] = _base_defs
 
         # 3.7. Build mapping from provisional CTE names (valueset URLs) to actual
         # CTE names (display names) for let-variable CTE resolution.
@@ -993,6 +1047,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                         cte.query, self._context.column_registry
                     ),
                     columns=cte.columns,
+                    materialized=cte.materialized,
                 )
                 for cte in fragment.ctes
             ]
