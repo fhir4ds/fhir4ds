@@ -187,50 +187,43 @@ LOAD fails (unsigned/signature/ABI) → existing per-error handling
 its return dict already reports `fhirpath_cpp`/`cql_cpp` flags, which
 now reflect the selected major's binaries.
 
-### 3.3 Dependency moves — the pip reality (EMPIRICALLY PROBED; Argon-reviewed)
+### 3.3 Dependency moves — FINAL RULING (Joel, 2026-10-29)
 
-**The dispatch's shape (extra flips the base pin) is not expressible in
-pip.** Probed live (pip 24.0 and 26.2.2, py3.10 + py3.11 venvs, scratch
-packages):
+**Option A-refined.** The dispatch's original extra-flips-pin shape is
+pip-impossible (empirically probed, Argon-confirmed — see review record),
+but a wide base + NARROWING extras works (pip intersects; validated live
+with pip 26.x dry-runs):
 
-1. Extra constraining a BASE dependency: pip **ignores the extra's
-   constraint** — the resolver collects only the base specifier
-   (installs 1.5.6 even when `[duckdb2]` demands `>=2`). pip does not
-   re-evaluate base deps per-extra.
-2. `extra == 'duckdb2'` markers ON BASE deps: evaluated with `extra`
-   unset → the 1.x branch always wins even when the extra is requested.
-3. CLI constraint alongside: `pip install pkg[duckdb2] "duckdb>=2,<3"`
-   with base `<2` → ResolutionImpossible (multiple constraints AND).
-4. Argon confirms: no PEP 621/735/723 mechanism flips a base pin on
-   stock pip; the only true flip pattern is removing duckdb from base
-   into per-version extras, which breaks bare installs. The A/B
-   dichotomy below is complete.
+```toml
+dependencies = [
+    "duckdb>=1.5.5,<3",                       # widens ONLY with the ext-2 bundle (atomicity)
+    "pytz; python_version >= '3.11'",         # duckdb 2.x client needs it; cp311+ only
+]
+[project.optional-dependencies]
+duckdb1 = ["duckdb>=1.5.5,<2"]                # narrowing: intersect → 1.x
+duckdb2 = ["duckdb>=2.0.0,<2.1"]              # narrowing: intersect → 2.0.x
+```
 
-**Decision (Argon-informed): Option B now, gated path to A later.**
+- Base-only install on py3.11+: resolver picks newest allowed (2.x) —
+  and that WORKS because the wheel bundles BOTH binaries and register()
+  routes by the running version.
+- `[duckdb1]`/`[duckdb2]` give conservative adopters a one-command pin.
+- Mismatch UX: warn + Python-UDF fallback by default; strict opt-in via
+  `FHIR4DS_REQUIRE_CPP=1`; error wording states SUPPORTED RANGE vs
+  DETECTED version.
+- Loader stays the authority; the runtime selector routes by the
+  built-for (major, minor).
 
-- **Now**: base `duckdb>=1.5.5,<2` (exact resolver default preserved);
-  `[duckdb2] = ["pytz; python_version >= '3.11'"]` + the documented
-  two-step recipe (`pip install fhir4ds-v2[duckdb2] duckdb==2.0.0
-  --no-deps`-free form: install duckdb 2.x FIRST, then fhir4ds with
-  the extra — pip accepts an already-satisfied base pin only if
-  `<2`… NO: probed — conflicts. The working recipe is
-  `pip install fhir4ds-v2[duckdb2] "duckdb<3"` … also conflicts.
-  **The actual working recipe** (probed): install fhir4ds first, then
-  `pip install "duckdb>=2,<3" --upgrade` fails on the base pin →
-  2.x adopters use a constraints-free venv with
-  `pip install fhir4ds-v2 --no-deps duckdb==2.0.0 pytz` OR wait for
-  Option A. Documented verbatim in README/extra metadata.)
-- **Why not A today** (Argon DISAGREE with A): until the 2.0 extension
-  binaries are actually built and bundled, a wide `<3` base makes every
-  fresh py3.11+ install resolve duckdb 2.0.0 and hit the loud
-  mismatch/fallback at register() — a broken default. Even after
-  bundling, wide-base flips the resolver default to 2.x, contradicting
-  §5 ("2.0-default out of scope"). Widen to `<3` ONLY in the release
-  that actually ships the ext-2 binaries (tracked as the Option-A
-  gate in §3.4).
-- **pytz**: inside the extra + a `register()` guard — when duckdb 2.x
-  is active and pytz is missing, ONE WARNING naming the fix; our UDFs
-  render VARCHAR so the tzt path is rare.
+**HARD CONSTRAINT (atomicity)**: the `<2` → `<3` widening and the
+dual-extension bundle ship in the SAME release; if ext-2 bundles slip
+past the release cut, the pin stays `<2` for that release (one-line
+diff, widens next release carrying them). Guarded by
+`test_pin_widening_atomicity` in `fhir4ds/tests/test_duckdb2_dual_support.py`
+(fails the build on pin-allows-2x-without-bundles).
+
+Implementation sequencing on this branch: everything except the one-line
+pin widening lands now; the widening diff is prepared but stays `<2`
+until ext-2 builds exist.
 
 ### 3.4 What does NOT change
 
@@ -276,6 +269,9 @@ dev environment (dev env stays 1.5.5; the 2.0 leg is venv-isolated).
 
 ## 6. Review record
 
+- **Joel ruling (2026-10-29)**: Option A-refined (wide base + narrowing
+  extras + marker-scoped pytz in base + atomicity constraint) — supersedes
+  the Option-B interim decision; §3.3 rewritten to the ruling.
 - **Second opinion (Gemini 4 Argon, repo-grounded, 2026-10-29)** —
   all five answers integrated:
   - A AGREE: pip conclusion correct/complete (PEP 508 intersections,

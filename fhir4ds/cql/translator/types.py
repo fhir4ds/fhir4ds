@@ -941,8 +941,11 @@ class SQLLambda(SQLExpression):
     Used in list_filter, list_apply, etc.
 
     Examples:
-        r -> r.status = 'completed'
-        x -> fhirpath_text(x, 'code')
+        lambda r: r.status = 'completed'
+        lambda x: fhirpath_text(x, 'code')
+
+    Renders DuckDB's `lambda param:` syntax (accepted by DuckDB 1.5 AND
+    2.0; the arrow `param ->` form is removed in 2.0 — D1 migration).
     """
 
     param: str
@@ -950,7 +953,7 @@ class SQLLambda(SQLExpression):
     precedence: int = PRECEDENCE["PRIMARY"]
 
     def to_sql(self, parent_precedence: int = 0) -> str:
-        return f"{self.param} -> {_render_lambda_body(self.body)}"
+        return f"lambda {self.param}: {_render_lambda_body(self.body)}"
 
 
 @dataclass
@@ -959,8 +962,8 @@ class SQLLambda2(SQLExpression):
     Represents a two-parameter lambda expression for list_reduce.
 
     Examples:
-        (x, y) -> x + y
-        (acc, elem) -> acc * elem
+        lambda x, y: x + y
+        lambda acc, elem: acc * elem
     """
 
     params: List[str]
@@ -968,7 +971,7 @@ class SQLLambda2(SQLExpression):
     precedence: int = PRECEDENCE["PRIMARY"]
 
     def to_sql(self, parent_precedence: int = 0) -> str:
-        return f"({', '.join(self.params)}) -> {_render_lambda_body(self.body)}"
+        return f"lambda {', '.join(self.params)}: {_render_lambda_body(self.body)}"
 
 
 @dataclass

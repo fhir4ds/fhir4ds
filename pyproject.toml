@@ -26,7 +26,15 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 dependencies = [
-    "duckdb==1.5.5",
+    # ATOMICITY GATE (Joel ruling 2026-10-29): this pin widens to
+    # ">=1.5.5,<3" ONLY in the release that ships the DuckDB 2.0
+    # extension bundle (fhir4ds/*/extensions/*.duckdb2_extension) —
+    # never widens without it, never bundles without widening.
+    # Guarded by fhir4ds/tests/test_duckdb2_dual_support.py.
+    "duckdb>=1.5.5,<2",
+    # duckdb 2.x Python client requires pytz for TIMESTAMPTZ rendering;
+    # 2.x wheels are cp311+ so the marker scopes it to exactly those.
+    "pytz; python_version >= '3.11'",
     "antlr4-python3-runtime>=4.10,<5.0",
     "python-dateutil>=2.8,<3.0",
     "pyarrow>=14.0.0",
@@ -37,6 +45,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# DuckDB line extras (D2, Joel ruling 2026-10-29 — narrowing only; pip
+# intersects extra constraints with the wide base pin, which ships in the
+# release that carries the dual extension bundle):
+#   pip install fhir4ds-v2[duckdb1]   → pins duckdb to the 1.x line
+#   pip install fhir4ds-v2[duckdb2]   → pins duckdb to 2.0.x (>=2,<2.1)
+# pytz rides in BASE (marker-scoped py>=3.11) so 2.x adopters get it
+# regardless of extra choice.
+duckdb1 = [
+    "duckdb>=1.5.5,<2",
+]
+duckdb2 = [
+    "duckdb>=2.0.0,<2.1",
+]
 measures = [
     "pandas",
 ]

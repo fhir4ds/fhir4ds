@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import inspect
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -106,25 +107,78 @@ _PYTHON_PREFERRED_CPP_CONFLICTS = {
 }
 
 
+def _bundled_extension_filename() -> str | None:
+    """D2 dual-support: pick the bundled binary for the RUNNING DuckDB.
+
+    Extensions are ABI-locked to the DuckDB ``major.minor`` they were
+    built against (a 1.5 binary will not load in 2.0 and vice versa), so
+    the wheel ships one binary per supported line and this selector maps
+    the running version to the right file. Any UNSUPPORTED line (1.4,
+    1.6, 2.1, dev builds of unreleased lines) returns None → the caller
+    falls back to Python UDFs rather than attempting an ABI-mismatched
+    LOAD (FEATURE_DUCKDB2_DUAL_SUPPORT §3.2).
+    """
+    import re
+
+    m = re.match(r"^(\d+)\.(\d+)", duckdb.__version__ or "")
+    if not m:
+        return None
+    key = (int(m.group(1)), int(m.group(2)))
+    return {
+        (1, 5): "cql.duckdb_extension",
+        (2, 0): "cql.duckdb2_extension",
+    }.get(key)
+
+
 def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
     """
     Try to load the compiled C++ CQL extension bundled inside this wheel.
 
     Returns True if loaded successfully, False otherwise.
     """
-    # Version pre-flight: bundled binary is built for DuckDB 1.5.x
+    # D2 dual-support: select the binary for the RUNNING DuckDB line
+    # (extensions are ABI-locked to major.minor). Unsupported lines and
+    # missing bundles fall back to Python UDFs; strict mode (env
+    # FHIR4DS_REQUIRE_CPP=1) turns the missing-bundle case into a loud
+    # error for wheel installs that need the native engine.
     _duckdb_version = duckdb.__version__
-    if not _duckdb_version.startswith("1.5."):
+    filename = _bundled_extension_filename()
+    if filename is None:
         _logger.info(
-            "duckdb_cql_py: skipping C++ extension (built for DuckDB 1.5.x, running %s). "
-            "Falling back to Python UDFs.",
+            "duckdb_cql_py: no bundled C++ extension for DuckDB %s "
+            "(supported build lines: 1.5, 2.0). Falling back to Python UDFs.",
             _duckdb_version,
         )
         return False
 
-    ext_path = Path(__file__).parent / "extensions" / "cql.duckdb_extension"
+    ext_path = Path(__file__).parent / "extensions" / filename
     if not ext_path.exists():
+        msg = (
+            "fhir4ds C++ extension bundle mismatch: SUPPORTED RANGE "
+            "DuckDB 1.5.x / 2.0.x, DETECTED DuckDB %s — this install does "
+            "not bundle the %s binary for the detected version. The Python "
+            "UDF fallback will be used. To get the native engine, install "
+            "a fhir4ds build matching your DuckDB version (extras: "
+            "fhir4ds-v2[duckdb1] for the 1.5.x line, fhir4ds-v2[duckdb2] "
+            "for the 2.0.x line on Python >= 3.11), or set "
+            "FHIR4DS_REQUIRE_CPP=1 to make this mismatch fatal."
+        ) % (_duckdb_version, filename)
+        if os.environ.get("FHIR4DS_REQUIRE_CPP") == "1":
+            raise RuntimeError(msg)
+        _logger.warning("duckdb_cql_py: %s", msg)
         return False
+
+    # duckdb 2.x Python client requires pytz for TIMESTAMPTZ rendering.
+    if _duckdb_version.startswith("2."):
+        try:
+            import pytz  # noqa: F401
+        except ImportError:
+            _logger.warning(
+                "duckdb_cql_py: DuckDB %s detected but pytz is not installed — "
+                "TIMESTAMPTZ rendering will fail on direct timestamp "
+                "columns. Fix: pip install fhir4ds-v2[duckdb2] (or pytz).",
+                _duckdb_version,
+            )
     try:
         escaped_path = str(ext_path).replace("'", "''")
         con.execute(f"LOAD '{escaped_path}'")
@@ -184,8 +238,11 @@ def _register_python_supplements(
                     LIMIT 1
                     """,
                     [name],
-                ).fetchone()
-                return row is not None
+                ).fetchall()
+                # DuckDB 2.0: parameterized results stay open after
+                # fetchone(), blocking create_function (ResourceInUse).
+                # Fully DRAINING the result closes it (1.5-equivalent).
+                return bool(row)
             except duckdb.Error:
                 return False
 

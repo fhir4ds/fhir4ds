@@ -34,7 +34,7 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # Returns NULL if list is NULL or empty
     # ============================================
     con.execute(
-        "CREATE MACRO IF NOT EXISTS First(lst) AS "
+        "CREATE OR REPLACE MACRO First(lst) AS "
         "CASE WHEN lst IS NULL OR system.array_length(lst) = 0 THEN NULL ELSE lst[1] END"
     )
 
@@ -43,7 +43,7 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # Returns NULL if list is NULL or empty
     # ============================================
     con.execute(
-        "CREATE MACRO IF NOT EXISTS Last(lst) AS "
+        "CREATE OR REPLACE MACRO Last(lst) AS "
         "CASE WHEN lst IS NULL OR system.array_length(lst) = 0 THEN NULL ELSE lst[-1] END"
     )
 
@@ -401,16 +401,16 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "CREATE OR REPLACE MACRO CQLNestedListEqElem(_cql_nl_l, _cql_nl_r) AS "
         "CASE WHEN _cql_nl_l IS NULL OR _cql_nl_r IS NULL THEN NULL "
         "WHEN json_array_length(to_json(_cql_nl_l)) != json_array_length(to_json(_cql_nl_r)) THEN FALSE "
-        "WHEN list_contains(list_apply(range(1, CAST(json_array_length(to_json(_cql_nl_l)) AS BIGINT) + 1), i -> CQLJsonEqElem(TRY_CAST(_cql_nl_l AS JSON[])[i], TRY_CAST(_cql_nl_r AS JSON[])[i])), FALSE) THEN FALSE "
-        "WHEN list_count(list_apply(range(1, CAST(json_array_length(to_json(_cql_nl_l)) AS BIGINT) + 1), i -> CQLJsonEqElem(TRY_CAST(_cql_nl_l AS JSON[])[i], TRY_CAST(_cql_nl_r AS JSON[])[i]))) != json_array_length(to_json(_cql_nl_l)) THEN NULL "
+        "WHEN list_contains(list_apply(range(1, CAST(json_array_length(to_json(_cql_nl_l)) AS BIGINT) + 1), lambda i: CQLJsonEqElem(TRY_CAST(_cql_nl_l AS JSON[])[i], TRY_CAST(_cql_nl_r AS JSON[])[i])), FALSE) THEN FALSE "
+        "WHEN list_count(list_apply(range(1, CAST(json_array_length(to_json(_cql_nl_l)) AS BIGINT) + 1), lambda i: CQLJsonEqElem(TRY_CAST(_cql_nl_l AS JSON[])[i], TRY_CAST(_cql_nl_r AS JSON[])[i]))) != json_array_length(to_json(_cql_nl_l)) THEN NULL "
         "ELSE TRUE END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO CQLNestedListEqTemporal(_cql_nl_l, _cql_nl_r) AS "
         "CASE WHEN _cql_nl_l IS NULL OR _cql_nl_r IS NULL THEN NULL "
         "WHEN json_array_length(to_json(_cql_nl_l)) != json_array_length(to_json(_cql_nl_r)) THEN FALSE "
-        "WHEN list_contains(list_apply(range(1, CAST(json_array_length(to_json(_cql_nl_l)) AS BIGINT) + 1), i -> CQLJsonEqTemporal(TRY_CAST(_cql_nl_l AS JSON[])[i], TRY_CAST(_cql_nl_r AS JSON[])[i])), FALSE) THEN FALSE "
-        "WHEN list_count(list_apply(range(1, CAST(json_array_length(to_json(_cql_nl_l)) AS BIGINT) + 1), i -> CQLJsonEqTemporal(TRY_CAST(_cql_nl_l AS JSON[])[i], TRY_CAST(_cql_nl_r AS JSON[])[i]))) != json_array_length(to_json(_cql_nl_l)) THEN NULL "
+        "WHEN list_contains(list_apply(range(1, CAST(json_array_length(to_json(_cql_nl_l)) AS BIGINT) + 1), lambda i: CQLJsonEqTemporal(TRY_CAST(_cql_nl_l AS JSON[])[i], TRY_CAST(_cql_nl_r AS JSON[])[i])), FALSE) THEN FALSE "
+        "WHEN list_count(list_apply(range(1, CAST(json_array_length(to_json(_cql_nl_l)) AS BIGINT) + 1), lambda i: CQLJsonEqTemporal(TRY_CAST(_cql_nl_l AS JSON[])[i], TRY_CAST(_cql_nl_r AS JSON[])[i]))) != json_array_length(to_json(_cql_nl_l)) THEN NULL "
         "ELSE TRUE END"
     )
     con.execute(
@@ -535,7 +535,7 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # Returns empty list if list has 0 or 1 element
     # ============================================
     con.execute(
-        "CREATE MACRO IF NOT EXISTS Tail(lst) AS "
+        "CREATE OR REPLACE MACRO Tail(lst) AS "
         "CASE WHEN lst IS NULL THEN NULL "
         "WHEN system.array_length(lst) <= 1 THEN lst[1:0] "
         "ELSE lst[2:] END"
@@ -597,8 +597,8 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "CASE WHEN typeof(lst) NOT IN ('VARCHAR[]', '\"NULL\"[]', '\"NULL\"') "
         "THEN error('CQL Combine requires List<String> source') "
         "WHEN lst IS NULL THEN NULL "
-        "WHEN system.array_length(list_filter(lst, x -> x IS NOT NULL)) = 0 THEN NULL "
-        "ELSE system.array_to_string(list_filter(lst, x -> x IS NOT NULL), '') END"
+        "WHEN system.array_length(list_filter(lst, lambda x: x IS NOT NULL)) = 0 THEN NULL "
+        "ELSE system.array_to_string(list_filter(lst, lambda x: x IS NOT NULL), '') END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO CombineSep(lst, sep) AS "
@@ -607,8 +607,8 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "WHEN typeof(sep) NOT IN ('VARCHAR', '\"NULL\"') "
         "THEN error('CQL Combine separator must be String') "
         "WHEN lst IS NULL THEN NULL "
-        "WHEN system.array_length(list_filter(lst, x -> x IS NOT NULL)) = 0 THEN NULL "
-        "ELSE system.array_to_string(list_filter(lst, x -> x IS NOT NULL), COALESCE(sep, '')) END"
+        "WHEN system.array_length(list_filter(lst, lambda x: x IS NOT NULL)) = 0 THEN NULL "
+        "ELSE system.array_to_string(list_filter(lst, lambda x: x IS NOT NULL), COALESCE(sep, '')) END"
     )
 
     numeric_list_guard = (
@@ -622,8 +622,8 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     )
     numeric_values = (
         "list_filter("
-        "list_transform(lst, _v -> TRY_CAST(_v AS DOUBLE)), "
-        "_v -> _v IS NOT NULL"
+        "list_transform(lst, lambda _v: TRY_CAST(_v AS DOUBLE)), "
+        "lambda _v: _v IS NOT NULL"
         ")"
     )
 
@@ -646,24 +646,24 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
         f"WHEN system.array_length({numeric_values}) = 0 THEN NULL "
         f"WHEN list_min({numeric_values}) < 0 THEN NULL "
         f"WHEN list_min({numeric_values}) = 0 THEN 0.0 "
-        f"ELSE system.exp(list_aggregate(list_transform({numeric_values}, _v -> system.ln(_v)), 'avg')) END"
+        f"ELSE system.exp(list_aggregate(list_transform({numeric_values}, lambda _v: system.ln(_v)), 'avg')) END"
     )
 
     # CQL Mode returns a single statistical mode. If no non-null mode exists
     # or multiple values are tied for most frequent, return NULL.
     con.execute(
-        "CREATE MACRO IF NOT EXISTS CQLListMode(lst) AS "
+        "CREATE OR REPLACE MACRO CQLListMode(lst) AS "
         "CASE WHEN lst IS NULL THEN NULL ELSE ("
         "SELECT CASE WHEN COUNT(*) = 1 THEN MIN(_value) ELSE NULL END "
         "FROM ("
         "SELECT _value, COUNT(*) AS _count "
-        "FROM (SELECT UNNEST(list_filter(lst, _v -> _v IS NOT NULL)) AS _value) _items "
+        "FROM (SELECT UNNEST(list_filter(lst, lambda _v: _v IS NOT NULL)) AS _value) _items "
         "GROUP BY _value"
         ") _counts "
         "WHERE _count = ("
         "SELECT MAX(_count) FROM ("
         "SELECT _value, COUNT(*) AS _count "
-        "FROM (SELECT UNNEST(list_filter(lst, _v -> _v IS NOT NULL)) AS _value) _max_items "
+        "FROM (SELECT UNNEST(list_filter(lst, lambda _v: _v IS NOT NULL)) AS _value) _max_items "
         "GROUP BY _value"
         ") _max_counts"
         ")"
@@ -686,7 +686,7 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     #   ``(null).descendents()`` for null input.
     # ============================================
     con.execute(
-        "CREATE MACRO IF NOT EXISTS descendents(x) AS "
+        "CREATE OR REPLACE MACRO descendents(x) AS "
         "CASE WHEN x IS NULL THEN NULL ELSE x END"
     )
 

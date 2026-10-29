@@ -99,10 +99,10 @@ const CQL_MACRO_SQL = [
   'CREATE OR REPLACE MACRO "Distinct"(lst) AS CASE WHEN lst IS NULL THEN NULL WHEN system.array_length(lst) = 0 THEN lst ELSE COALESCE((SELECT list(val ORDER BY pos) FROM (SELECT val, MIN(pos) as pos FROM (SELECT unnest(lst) AS val, generate_subscripts(lst, 1) AS pos) GROUP BY val)), []) END',
   "CREATE MACRO IF NOT EXISTS Tail(lst) AS CASE WHEN lst IS NULL THEN NULL WHEN system.array_length(lst) <= 1 THEN lst[1:0] ELSE lst[2:] END",
   "CREATE MACRO IF NOT EXISTS CQLIndexOf(lst, elem) AS CASE WHEN lst IS NULL OR elem IS NULL THEN NULL WHEN list_position(lst, elem) IS NULL THEN -1 WHEN list_position(lst, elem) = 0 THEN -1 ELSE list_position(lst, elem) - 1 END",
-  "CREATE MACRO IF NOT EXISTS Combine(lst) AS CASE WHEN lst IS NULL THEN NULL ELSE system.array_to_string(list_filter(lst, x -> x IS NOT NULL), '') END",
-  "CREATE MACRO IF NOT EXISTS CombineSep(lst, sep) AS CASE WHEN lst IS NULL THEN NULL ELSE system.array_to_string(list_filter(lst, x -> x IS NOT NULL), sep) END",
-  "CREATE MACRO IF NOT EXISTS Product(lst) AS CASE WHEN lst IS NULL THEN NULL ELSE list_aggregate(list_transform(lst, _v -> TRY_CAST(_v AS DOUBLE)), 'product') END",
-  "CREATE MACRO IF NOT EXISTS GeometricMean(lst) AS CASE WHEN lst IS NULL THEN NULL ELSE exp(list_aggregate(list_transform(lst, _v -> ln(TRY_CAST(_v AS DOUBLE))), 'avg')) END",
+  "CREATE MACRO IF NOT EXISTS Combine(lst) AS CASE WHEN lst IS NULL THEN NULL ELSE system.array_to_string(list_filter(lst, lambda x: x IS NOT NULL), '') END",
+  "CREATE MACRO IF NOT EXISTS CombineSep(lst, sep) AS CASE WHEN lst IS NULL THEN NULL ELSE system.array_to_string(list_filter(lst, lambda x: x IS NOT NULL), sep) END",
+  "CREATE MACRO IF NOT EXISTS Product(lst) AS CASE WHEN lst IS NULL THEN NULL ELSE list_aggregate(list_transform(lst, lambda _v: TRY_CAST(_v AS DOUBLE)), 'product') END",
+  "CREATE MACRO IF NOT EXISTS GeometricMean(lst) AS CASE WHEN lst IS NULL THEN NULL ELSE exp(list_aggregate(list_transform(lst, lambda _v: ln(TRY_CAST(_v AS DOUBLE))), 'avg')) END",
   "CREATE MACRO IF NOT EXISTS descendents(x) AS CASE WHEN x IS NULL THEN NULL ELSE x END",
 
   `CREATE OR REPLACE MACRO audit_and(a, b) AS (
@@ -179,7 +179,7 @@ const CQL_MACRO_SQL = [
             result := struct_extract(aud, 'result'),
             evidence := list_transform(
                 COALESCE(struct_extract(aud, 'evidence'), []),
-                _ev -> struct_pack(
+                lambda _ev: struct_pack(
                     target := _ev.target,
                     attribute := _ev.attribute,
                     value := _ev.value,
@@ -230,8 +230,8 @@ const CQL_MACRO_SQL = [
   // macro-sync test (operations/tests/test_macro_sync.py) fails CI when
   // the Python surface grows without a port or allowlist entry.
   "CREATE MACRO IF NOT EXISTS CQLMessage(source, condition, code, severity, message) AS CASE WHEN COALESCE(condition, FALSE) AND lower(CAST(severity AS VARCHAR)) = 'error' THEN error(COALESCE(CAST(code AS VARCHAR), '') || ': ' || COALESCE(CAST(message AS VARCHAR), '')) ELSE source END",
-  "CREATE MACRO IF NOT EXISTS PopulationStdDev(x) AS CASE WHEN x IS NULL THEN NULL WHEN NOT (typeof(x) IN ('TINYINT[]', 'SMALLINT[]', 'INTEGER[]', 'BIGINT[]', 'HUGEINT[]', 'UTINYINT[]', 'USMALLINT[]', 'UINTEGER[]', 'UBIGINT[]', 'UHUGEINT[]', 'FLOAT[]', 'DOUBLE[]', '\"NULL\"[]') OR (starts_with(typeof(x), 'DECIMAL(') AND ends_with(typeof(x), '[]'))) THEN error('CQL PopulationStdDev requires List<Decimal> source') WHEN (starts_with(typeof(x), 'DECIMAL(') AND ends_with(typeof(x), '[]')) THEN list_aggregate(list_transform(list_transform(list_filter(x, _v -> _v IS NOT NULL), _v -> _v - (list_filter(x, _v -> _v IS NOT NULL)[1])), _v -> TRY_CAST(_v AS DOUBLE)), 'stddev_pop') ELSE list_aggregate(list_filter(list_transform(x, _v -> TRY_CAST(_v AS DOUBLE)), _v -> _v IS NOT NULL), 'stddev_pop') END",
-  "CREATE MACRO IF NOT EXISTS PopulationVariance(x) AS CASE WHEN x IS NULL THEN NULL WHEN NOT (typeof(x) IN ('TINYINT[]', 'SMALLINT[]', 'INTEGER[]', 'BIGINT[]', 'HUGEINT[]', 'UTINYINT[]', 'USMALLINT[]', 'UINTEGER[]', 'UBIGINT[]', 'UHUGEINT[]', 'FLOAT[]', 'DOUBLE[]', '\"NULL\"[]') OR (starts_with(typeof(x), 'DECIMAL(') AND ends_with(typeof(x), '[]'))) THEN error('CQL PopulationVariance requires List<Decimal> source') WHEN (starts_with(typeof(x), 'DECIMAL(') AND ends_with(typeof(x), '[]')) THEN list_aggregate(list_transform(list_transform(list_filter(x, _v -> _v IS NOT NULL), _v -> _v - (list_filter(x, _v -> _v IS NOT NULL)[1])), _v -> TRY_CAST(_v AS DOUBLE)), 'var_pop') ELSE list_aggregate(list_filter(list_transform(x, _v -> TRY_CAST(_v AS DOUBLE)), _v -> _v IS NOT NULL), 'var_pop') END",
+  "CREATE MACRO IF NOT EXISTS PopulationStdDev(x) AS CASE WHEN x IS NULL THEN NULL WHEN NOT (typeof(x) IN ('TINYINT[]', 'SMALLINT[]', 'INTEGER[]', 'BIGINT[]', 'HUGEINT[]', 'UTINYINT[]', 'USMALLINT[]', 'UINTEGER[]', 'UBIGINT[]', 'UHUGEINT[]', 'FLOAT[]', 'DOUBLE[]', '\"NULL\"[]') OR (starts_with(typeof(x), 'DECIMAL(') AND ends_with(typeof(x), '[]'))) THEN error('CQL PopulationStdDev requires List<Decimal> source') WHEN (starts_with(typeof(x), 'DECIMAL(') AND ends_with(typeof(x), '[]')) THEN list_aggregate(list_transform(list_transform(list_filter(x, lambda _v: _v IS NOT NULL), lambda _v: _v - (list_filter(x, lambda _v: _v IS NOT NULL)[1])), lambda _v: TRY_CAST(_v AS DOUBLE)), 'stddev_pop') ELSE list_aggregate(list_filter(list_transform(x, lambda _v: TRY_CAST(_v AS DOUBLE)), lambda _v: _v IS NOT NULL), 'stddev_pop') END",
+  "CREATE MACRO IF NOT EXISTS PopulationVariance(x) AS CASE WHEN x IS NULL THEN NULL WHEN NOT (typeof(x) IN ('TINYINT[]', 'SMALLINT[]', 'INTEGER[]', 'BIGINT[]', 'HUGEINT[]', 'UTINYINT[]', 'USMALLINT[]', 'UINTEGER[]', 'UBIGINT[]', 'UHUGEINT[]', 'FLOAT[]', 'DOUBLE[]', '\"NULL\"[]') OR (starts_with(typeof(x), 'DECIMAL(') AND ends_with(typeof(x), '[]'))) THEN error('CQL PopulationVariance requires List<Decimal> source') WHEN (starts_with(typeof(x), 'DECIMAL(') AND ends_with(typeof(x), '[]')) THEN list_aggregate(list_transform(list_transform(list_filter(x, lambda _v: _v IS NOT NULL), lambda _v: _v - (list_filter(x, lambda _v: _v IS NOT NULL)[1])), lambda _v: TRY_CAST(_v AS DOUBLE)), 'var_pop') ELSE list_aggregate(list_filter(list_transform(x, lambda _v: TRY_CAST(_v AS DOUBLE)), lambda _v: _v IS NOT NULL), 'var_pop') END",
 ];
 
 

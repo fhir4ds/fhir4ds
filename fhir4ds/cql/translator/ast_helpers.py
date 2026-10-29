@@ -398,7 +398,7 @@ class ASTHelpersMixin:
 
         Args:
             select: The SQLSelect AST
-            cte_refs: Dict of CTE name -> CTEReference (with alias)
+            cte_refs: Dict of CTE lambda name: CTEReference (with alias)
             patient_alias: The patient table alias
 
         Returns:
@@ -464,7 +464,7 @@ class ASTHelpersMixin:
 
         Args:
             select: The SQLSelect AST to transform
-            cte_refs: Dict of CTE name -> CTEReference (with alias)
+            cte_refs: Dict of CTE lambda name: CTEReference (with alias)
             patient_alias: The patient table alias (default "_pt")
 
         Returns:
@@ -507,7 +507,7 @@ class ASTHelpersMixin:
 
         Args:
             col: The column expression (may be a scalar subquery)
-            cte_refs: Dict of CTE name -> CTEReference
+            cte_refs: Dict of CTE lambda name: CTEReference
             patient_alias: The patient table alias
 
         Returns:
@@ -582,7 +582,7 @@ class ASTHelpersMixin:
 
         Args:
             where: The WHERE expression (may contain nested subqueries)
-            cte_refs: Dict of CTE name -> CTEReference
+            cte_refs: Dict of CTE lambda name: CTEReference
             patient_alias: The patient table alias
             joins: List to append new JOINs to (modified in place)
 
@@ -1145,7 +1145,7 @@ class ASTHelpersMixin:
         Args:
             def_name: The definition name this expression belongs to.
             expr: The SQL expression to search.
-            patterns: Dictionary to store patterns -> list of (def_name, expr) tuples.
+            patterns: Dictionary to store lambda patterns: list of (def_name, expr) tuples.
         """
         from .types import SQLSubquery, SQLSelect, SQLFunctionCall, SQLBinaryOp, SQLUnion
 
@@ -1406,7 +1406,7 @@ class ASTHelpersMixin:
 
         Args:
             expr: The SQL expression to transform.
-            patterns: Dictionary of pattern -> occurrences.
+            patterns: Dictionary of lambda pattern: occurrences.
             pattern_to_cte: Dictionary mapping patterns to CTE names.
 
         Returns:
@@ -1756,7 +1756,7 @@ class ASTHelpersMixin:
         if definition_name:
             escaped_name = definition_name.replace("'", "''")
             evidence_sql = (
-                f"list_transform({evidence_sql}, _ev -> struct_pack("
+                f"list_transform({evidence_sql}, lambda _ev: struct_pack("
                 f"target := _ev.target, "
                 f"attribute := _ev.attribute, "
                 f"value := _ev.value, "

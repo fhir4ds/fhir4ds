@@ -102,7 +102,7 @@ AUDIT_MACROS_SQL = [
             result := struct_extract(aud, 'result'),
             evidence := list_transform(
                 COALESCE(struct_extract(aud, 'evidence'), []),
-                _ev -> struct_pack(
+                lambda _ev: struct_pack(
                     target := _ev.target,
                     attribute := _ev.attribute,
                     value := _ev.value,
