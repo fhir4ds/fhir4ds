@@ -1182,8 +1182,15 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     ),
                 ),
             )
+            # DISTINCT ON (patient_id): one row per patient even when
+            # duplicate Patient rows exist (same id, different resource
+            # JSON). The old correlated-subquery LIMIT 1 guaranteed this;
+            # a plain DISTINCT over (id, resource) would keep every
+            # duplicate and fan out downstream joins (review finding 1.1).
             return SQLSelect(
-                distinct=True,
+                distinct_on=[SQLQualifiedIdentifier(parts=["_target", "patient_id"])]
+                if include_patient_demographics else None,
+                distinct=not include_patient_demographics,
                 columns=columns,
                 from_clause=SQLAlias(
                     expr=SQLIdentifier(name="_fhir4ds_target_patients"),
@@ -1232,8 +1239,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             columns.extend(_demographics_columns(
                 SQLQualifiedIdentifier(parts=["p", "resource"])
             ))
+        # DISTINCT ON (p.id): one row per patient even when duplicate
+        # Patient rows exist (same id, different resource JSON) — the old
+        # correlated-subquery LIMIT 1 guaranteed this (review finding 1.1).
         return SQLSelect(
-            distinct=True,
+            distinct_on=[patient_id_expr] if include_patient_demographics else None,
+            distinct=not include_patient_demographics,
             columns=columns,
             from_clause=SQLAlias(
                 expr=SQLIdentifier(name="resources"),

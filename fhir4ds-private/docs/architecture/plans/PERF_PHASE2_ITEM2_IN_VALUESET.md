@@ -92,3 +92,42 @@ shape churn.
 - valueset suites: test_cpp_valueset_cache.py + test_valueset_udf.py +
   test_clinical_operator_parity.py + test_clinical_type_parity.py all green
   (43 + 45 passed).
+
+## Independent review (Qwen3.8-Max, 2026-10-30) — hardening addendum
+
+Review verdict: REQUEST CHANGES (1 HIGH, 1 MEDIUM). Both addressed in the
+hardening commit:
+
+1. (HIGH, FIXED) `_patients` duplicate-Patient fanout: with demographics
+   projected, duplicate Patient rows (same id, different JSON — a state the
+   resources table sanctions: no unique index) kept N rows per id after the
+   Item-1 rewrite, and downstream LEFT JOINs multiplied them n² per patient.
+   Verified repro: 1 patient duplicated once → 4 output rows (plus the
+   orphan). Fix: `SQLSelect.distinct_on` (new AST field, rendered as DuckDB
+   `DISTINCT ON (p.id)`), used in both literal and target_table scopes when
+   demographics are projected (matching the old LIMIT-1 one-row-per-id
+   contract); `distinct_on` passthrough added to ALL 14 SQLSelect rebuild
+   sites across the translator (audited programmatically; 0 missing).
+2. (MEDIUM, FIXED) test_in_valueset_thread_scaling.py previously registered
+   a pure-Python closure UDF and never exercised the C++ extension path.
+   Reworked to LOAD the built extension and populate g_valueset_cache via
+   cql_valueset_cache_add (mirrors test_cpp_valueset_cache.py fixture).
+3. (LOW, FIXED) ValuesetCacheSizeFunc unique→shared lock (pure read).
+4. (LOW, RELEASE-NOTED) Orphan-Patient inclusion: on NONCONFORMANT sources
+   where Patient rows do NOT carry patient_ref = id (none of the built-in
+   adapters; possible via existing-table/CSV passthrough), the new single
+   Patient scan includes every Patient id, while the old patient_ref
+   enumeration included only ids referenced by some row's patient_ref.
+   For conformant sources the sets are identical. Behavior change is
+   intentional (full Patient denominator) — carry in release notes.
+   New regression: TestPatientsDuplicateCollapse (3 tests incl. end-to-end
+   fanout repro asserting exactly one row per patient id).
+5. (declined, rationale) Tightening the _rt_ collision guard to reject
+   retrieve CTEs literally named `_rt_<T>`: the existing guard already
+   raises on any non-retrieve CTE collision; a retrieve named `_rt_X` for
+   type X would share the base name with itself — DuckDB would surface a
+   duplicate-CTE catalog error at emission, which is a loud failure, not a
+   silent wrong result. Not worth special-casing.
+6. (declined, rationale) Documenting the single-to_sql()-per-fragment
+   assumption: added as a comment in _resolve_materialization instead
+   (cheaper than restructuring; no call path double-renders today).

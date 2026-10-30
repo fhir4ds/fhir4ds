@@ -5345,7 +5345,8 @@ static void ValuesetCacheAddFunc(DataChunk &args, ExpressionState &state, Vector
 static void ValuesetCacheSizeFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	int64_t total = 0;
 	{
-		std::unique_lock<std::shared_mutex> lock(g_valueset_cache_mutex);
+		// PERF phase2 (review note): pure read — shared lock, not unique.
+		std::shared_lock<std::shared_mutex> lock(g_valueset_cache_mutex);
 		for (const auto &entry : g_valueset_cache) {
 			total += static_cast<int64_t>(entry.second.size());
 		}

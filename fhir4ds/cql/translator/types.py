@@ -1162,12 +1162,20 @@ class SQLSelect(SQLExpression):
     order_by: Optional[List[tuple]] = None  # List of (expr, 'ASC'|'DESC')
     limit: Optional[int] = None
     distinct: bool = False
+    # DuckDB DISTINCT ON (expr, ...) — collapses to the first row per
+    # distinct-on key. Used by _patients with demographics to guarantee
+    # ONE row per patient id even when duplicate Patient rows exist (the
+    # loader sanctions same-(id, resourceType) rows; review finding 1.1).
+    distinct_on: Optional[List[SQLExpression]] = None
     precedence: int = PRECEDENCE["PRIMARY"]
 
     def to_sql(self, parent_precedence: int = 0) -> str:
         parts = ["SELECT"]
 
-        if self.distinct:
+        if self.distinct_on:
+            on_parts = [e.to_sql() for e in self.distinct_on]
+            parts.append(f"DISTINCT ON ({', '.join(on_parts)})")
+        elif self.distinct:
             parts.append("DISTINCT")
 
         # Columns
@@ -1647,6 +1655,11 @@ class SQLFragment:
 
         Reference counting is lexical on rendered SQL: each CTE's name is
         counted inside every OTHER CTE's rendered body plus the main query.
+
+        NOTE: resolves by MUTATING the CTEDefinitions in place; assumes
+        to_sql() is called once per fragment (every translator path does —
+        a second call would reuse stale resolutions via the is-not-None
+        guard).
         """
         if not any(cte.materialized is None for cte in self.ctes):
             return

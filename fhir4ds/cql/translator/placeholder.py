@@ -211,6 +211,7 @@ def resolve_placeholders(
                 for expr, direction in ast.order_by
             ] if ast.order_by else None,
             distinct=ast.distinct,
+            distinct_on=ast.distinct_on,
             limit=ast.limit
         )
 

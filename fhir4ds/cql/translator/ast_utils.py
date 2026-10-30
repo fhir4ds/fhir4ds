@@ -1059,6 +1059,7 @@ def replace_qualified_alias(
             having=new_having,
             order_by=new_ob,
             distinct=expr.distinct,
+            distinct_on=expr.distinct_on,
             limit=expr.limit,
         )
 

@@ -447,6 +447,7 @@ class ASTHelpersMixin:
             having=select.having,
             order_by=select.order_by,
             distinct=select.distinct,
+                distinct_on=select.distinct_on,
             limit=select.limit,
         )
 
@@ -493,6 +494,7 @@ class ASTHelpersMixin:
             having=select.having,
             order_by=select.order_by,
             distinct=select.distinct,
+                distinct_on=select.distinct_on,
             limit=select.limit,
         )
 
