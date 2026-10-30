@@ -824,7 +824,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         for cte_name, cte_ast in phase2_result.ctes.items():
             quoted = f'"{cte_name}"'
             if quoted not in seen_cte_names:
-                cte_defs.append(CTEDefinition(name=quoted, query=cte_ast, materialized=True))
+                # PERF phase2 item 3: materialization is AUTO (None) — the
+                # emission pass keeps MATERIALIZED only for multi-reference
+                # CTEs. The Phase-1 pathology (predicate pushdown into base
+                # scans) only re-appears when a multi-consumer CTE is inlined
+                # at several sites; single-consumer CTEs inline safely.
+                cte_defs.append(CTEDefinition(name=quoted, query=cte_ast))
                 seen_cte_names.add(quoted)
 
         # 3.5. P1.2: Build retrieve CTEs from included libraries
@@ -835,7 +840,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         for cte_name, (cte_ast, col_info) in self._included_retrieve_ctes.items():
             quoted = f'"{cte_name}"'
             if quoted not in seen_cte_names:
-                cte_defs.append(CTEDefinition(name=quoted, query=cte_ast, materialized=True))
+                cte_defs.append(CTEDefinition(name=quoted, query=cte_ast))
                 seen_cte_names.add(quoted)
             elif col_info:
                 # Included library has precomputed columns — check if main has fewer
@@ -844,7 +849,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     # Replace the main library's version with the richer one
                     for i, cdef in enumerate(cte_defs):
                         if cdef.name == quoted:
-                            cte_defs[i] = CTEDefinition(name=quoted, query=cte_ast, materialized=True)
+                            cte_defs[i] = CTEDefinition(name=quoted, query=cte_ast)
                             break
 
         # 3.6. PERF retrieve-cache candidate 1: share ONE table scan per
@@ -898,7 +903,6 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                             name=_cdef.name,
                             query=rewrite_retrieve_to_base(_cdef.query, _base_name, _t),
                             columns=_cdef.columns,
-                            materialized=True,
                         )
                 for _t in sorted(_shared_types):
                     _base_defs.append(CTEDefinition(

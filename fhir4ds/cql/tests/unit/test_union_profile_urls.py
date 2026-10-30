@@ -174,9 +174,13 @@ class TestRetrieveBaseSharing:
         """)
         assert '"_rt_Condition" AS MATERIALIZED' in sql
         assert sql.count('FROM "_rt_Condition" r') == 2
-        # children no longer carry the resourceType predicate
-        child = sql.split('FROM "_rt_Condition" r')[0].split("AS MATERIALIZED (")[-1]
-        assert "r.resourceType = 'Condition'" not in child
+        # children no longer carry the resourceType predicate. Extract each
+        # child CTE body by splitting on its FROM clause (the _rt_ base is
+        # also MATERIALIZED, so splitting on "AS MATERIALIZED (" would grab
+        # the base body instead of the children).
+        for seg in sql.split('FROM "_rt_Condition" r'):
+            child = seg.rsplit("AS (", 1)[-1]
+            assert "r.resourceType = 'Condition'" not in child
 
     def test_single_type_stays_unshared(self):
         sql = self._pop_sql("""
