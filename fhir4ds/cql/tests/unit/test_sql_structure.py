@@ -112,6 +112,22 @@ class TestPatientIdConsistency:
         # Should have a patients CTE
         assert "patients" in sql_lower
 
+    def test_patients_cte_is_single_patient_scan(self):
+        """PERF phase2: _patients must be a single Patient scan, not a
+        per-row correlated-subquery enumeration over all resources."""
+        cql = '''
+            library Test version '1.0'
+            define Diabetes: [Condition: "Diabetes"]
+        '''
+
+        sql = self._translate_population(cql)
+        # The patients CTE scans Patient rows directly...
+        assert "resourceType = 'Patient'" in sql
+        # ...and must NOT contain per-row EXISTS probes or correlated
+        # Patient-resource scalar subqueries.
+        assert "EXISTS (SELECT 1 FROM resources AS _pt" not in sql
+        assert "FROM resources AS _pt_resource" not in sql
+
 
 class TestDistinctUsage:
     """Verify DISTINCT is used appropriately."""

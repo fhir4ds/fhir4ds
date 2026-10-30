@@ -1086,59 +1086,6 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             sql_text = demote_audit_in_text(sql_text)
         return sql_text
 
-    def _patient_resource_subquery(
-        self,
-        patient_id_expr: SQLExpression,
-    ) -> SQLSubquery:
-        """Return a scalar subquery for the current Patient resource JSON."""
-        return SQLSubquery(query=SQLSelect(
-            columns=[SQLQualifiedIdentifier(parts=["_pt_resource", "resource"])],
-            from_clause=SQLAlias(
-                expr=SQLIdentifier(name="resources"),
-                alias="_pt_resource",
-            ),
-            where=SQLBinaryOp(
-                operator="AND",
-                left=SQLBinaryOp(
-                    operator="=",
-                    left=SQLQualifiedIdentifier(parts=["_pt_resource", "resourceType"]),
-                    right=SQLLiteral(value="Patient"),
-                ),
-                right=SQLBinaryOp(
-                    operator="=",
-                    left=SQLQualifiedIdentifier(parts=["_pt_resource", "id"]),
-                    right=patient_id_expr,
-                ),
-            ),
-            limit=1,
-        ))
-
-    def _patient_exists_condition(
-        self,
-        patient_id_expr: SQLExpression,
-    ) -> SQLExists:
-        """Return an EXISTS predicate requiring a matching Patient resource."""
-        return SQLExists(subquery=SQLSubquery(query=SQLSelect(
-            columns=[SQLLiteral(value=1)],
-            from_clause=SQLAlias(
-                expr=SQLIdentifier(name="resources"),
-                alias="_pt",
-            ),
-            where=SQLBinaryOp(
-                operator="AND",
-                left=SQLBinaryOp(
-                    operator="=",
-                    left=SQLQualifiedIdentifier(parts=["_pt", "resourceType"]),
-                    right=SQLLiteral(value="Patient"),
-                ),
-                right=SQLBinaryOp(
-                    operator="=",
-                    left=SQLQualifiedIdentifier(parts=["_pt", "id"]),
-                    right=patient_id_expr,
-                ),
-            ),
-        )))
-
     def _build_patients_cte(
         self,
         patient_ids: Optional[List[str]] = None,
@@ -1165,25 +1112,72 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             user-defined CTEs like "Patients". DuckDB treats "patients" and
             "Patients" as the same identifier, so we use "_patients" as the
             internal name for the base patient reference table.
+
+        PERF phase2: this CTE previously enumerated ``patient_ref`` over EVERY
+        resource row and, per row, executed two correlated scalar subqueries
+        (the Patient resource fetch, duplicated for birth_date) plus an EXISTS
+        probe into ``resources`` -- a full pass over the whole table with
+        per-row correlated work (on the scaling cohort: 6.19M rows and ~27%
+        of CMS68 exclusive time). Every conformant source (``FHIRDataLoader``
+        and all built-in source adapters) sets ``patient_ref = id`` on
+        Patient rows, so the Patient row itself always contributes its own
+        id and membership reduces to "a Patient resource with this id
+        exists". The rewrite therefore scans Patient rows once (single
+        sequential scan / hash join); no per-row subqueries over resources.
         """
+        if patient_scope not in ("literal", "target_table"):
+            raise ValueError(
+                "patient_scope must be one of 'literal' or 'target_table', "
+                f"got {patient_scope!r}"
+            )
+
+        # Demographics columns come straight from the joined Patient row;
+        # fhirpath_date normalize() wraps itself in CAST(... AS VARCHAR),
+        # matching the historical CTE output shape.
+        def _demographics_columns(
+            resource_expr: SQLExpression,
+        ) -> List[SQLExpression]:
+            return [
+                SQLAlias(expr=resource_expr, alias="patient_resource"),
+                SQLAlias(
+                    expr=SQLFunctionCall(
+                        name="fhirpath_date",
+                        args=[resource_expr, SQLLiteral(value="birthDate")],
+                    ),
+                    alias="birth_date",
+                ),
+            ]
+
         if patient_scope == "target_table":
-            patient_id_expr = SQLQualifiedIdentifier(parts=["_target", "patient_id"])
-            where_condition: SQLExpression = self._patient_exists_condition(patient_id_expr)
             columns: List[SQLExpression] = [
-                SQLAlias(expr=patient_id_expr, alias="patient_id"),
+                SQLAlias(
+                    expr=SQLQualifiedIdentifier(parts=["_target", "patient_id"]),
+                    alias="patient_id",
+                ),
             ]
             if include_patient_demographics:
-                patient_resource = self._patient_resource_subquery(patient_id_expr)
-                columns.extend([
-                    SQLAlias(expr=patient_resource, alias="patient_resource"),
-                    SQLAlias(
-                        expr=SQLFunctionCall(
-                            name="fhirpath_date",
-                            args=[patient_resource, SQLLiteral(value="birthDate")],
-                        ),
-                        alias="birth_date",
+                columns.extend(_demographics_columns(
+                    SQLQualifiedIdentifier(parts=["p", "resource"])
+                ))
+            # INNER JOIN replaces the old per-row EXISTS probe with a hash
+            # join against the (small) Patient partition.
+            patient_join = SQLJoin(
+                join_type="INNER",
+                table=SQLAlias(expr=SQLIdentifier(name="resources"), alias="p"),
+                on_condition=SQLBinaryOp(
+                    operator="AND",
+                    left=SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["p", "resourceType"]),
+                        right=SQLLiteral(value="Patient"),
                     ),
-                ])
+                    right=SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["p", "id"]),
+                        right=SQLQualifiedIdentifier(parts=["_target", "patient_id"]),
+                    ),
+                ),
+            )
             return SQLSelect(
                 distinct=True,
                 columns=columns,
@@ -1191,24 +1185,22 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     expr=SQLIdentifier(name="_fhir4ds_target_patients"),
                     alias="_target",
                 ),
-                where=where_condition,
+                joins=[patient_join],
             )
 
-        if patient_scope != "literal":
-            raise ValueError(
-                "patient_scope must be one of 'literal' or 'target_table', "
-                f"got {patient_scope!r}"
-            )
-
-        outer_patient_id = SQLQualifiedIdentifier(parts=["_outer", "patient_ref"])
+        patient_id_expr = SQLQualifiedIdentifier(parts=["p", "id"])
         where_condition: SQLExpression = SQLBinaryOp(
             operator="AND",
             left=SQLBinaryOp(
                 operator="IS NOT",
-                left=outer_patient_id,
+                left=patient_id_expr,
                 right=SQLNull(),
             ),
-            right=self._patient_exists_condition(outer_patient_id),
+            right=SQLBinaryOp(
+                operator="=",
+                left=SQLQualifiedIdentifier(parts=["p", "resourceType"]),
+                right=SQLLiteral(value="Patient"),
+            ),
         )
         if patient_ids is not None and len(patient_ids) == 0:
             where_condition = SQLBinaryOp(
@@ -1225,31 +1217,23 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 left=where_condition,
                 right=SQLBinaryOp(
                     operator="IN",
-                    left=outer_patient_id,
+                    left=patient_id_expr,
                     right=SQLList(items=id_literals),
                 ),
             )
-        columns: List[SQLExpression] = [
-            SQLAlias(expr=outer_patient_id, alias="patient_id"),
+        columns = [
+            SQLAlias(expr=patient_id_expr, alias="patient_id"),
         ]
         if include_patient_demographics:
-            patient_resource = self._patient_resource_subquery(outer_patient_id)
-            columns.extend([
-                SQLAlias(expr=patient_resource, alias="patient_resource"),
-                SQLAlias(
-                    expr=SQLFunctionCall(
-                        name="fhirpath_date",
-                        args=[patient_resource, SQLLiteral(value="birthDate")],
-                    ),
-                    alias="birth_date",
-                ),
-            ])
+            columns.extend(_demographics_columns(
+                SQLQualifiedIdentifier(parts=["p", "resource"])
+            ))
         return SQLSelect(
             distinct=True,
             columns=columns,
             from_clause=SQLAlias(
                 expr=SQLIdentifier(name="resources"),
-                alias="_outer",
+                alias="p",
             ),
             where=where_condition,
         )
