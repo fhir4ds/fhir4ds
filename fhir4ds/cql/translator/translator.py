@@ -874,6 +874,21 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 _by_type.setdefault(_t, []).append(_i)
             _shared_types = {t for t, idxs in _by_type.items() if len(idxs) >= 2}
             if _shared_types:
+                # Collision guard (second-opinion risk 5): a definition CTE
+                # legitimately named e.g. "Encounter" would collide with the
+                # _rt_ prefix only if a library defined exactly "_rt_X" —
+                # refuse loudly instead of silently dropping the later CTE.
+                for _t in _shared_types:
+                    _quoted_base = f'"_rt_{_t}"'
+                    if any(
+                        cdef.name == _quoted_base and _i not in _type_of
+                        for _i, cdef in enumerate(cte_defs)
+                    ):
+                        from ..errors import TranslationError
+                        raise TranslationError(
+                            f"retrieve-cache base CTE name collision: "
+                            f"{_quoted_base} already exists as a non-retrieve CTE"
+                        )
                 _base_defs = []
                 for _i, _cdef in enumerate(cte_defs):
                     _t = _type_of.get(_i)

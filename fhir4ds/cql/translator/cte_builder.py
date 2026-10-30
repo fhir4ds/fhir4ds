@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
+from ..errors import TranslationError
 from .types import (
     SQLSelect,
     SQLIdentifier,
@@ -1063,9 +1064,31 @@ def rewrite_retrieve_to_base(
                 args=[rewrite_ref(a) for a in node.args],
                 distinct=node.distinct,
             )
+        if isinstance(node, SQLUnaryOp):
+            return SQLUnaryOp(operator=node.operator, operand=rewrite_ref(node.operand))
+        if isinstance(node, SQLCast):
+            return SQLCast(
+                expression=rewrite_ref(node.expression),
+                target_type=node.target_type,
+                try_cast=node.try_cast,
+            )
+        if isinstance(node, SQLCase):
+            return SQLCase(
+                operand=rewrite_ref(node.operand) if node.operand else None,
+                when_clauses=[
+                    (rewrite_ref(cond), rewrite_ref(res))
+                    for cond, res in node.when_clauses
+                ],
+                else_clause=rewrite_ref(node.else_clause) if node.else_clause else None,
+            )
+        # SQLExists / SQLSubquery: their internals correlate against the
+        # CHILD's alias scope (or their own inner aliases like `m` in the
+        # medication-reference EXISTS), never against outer r.patient_ref —
+        # descending and rewriting here would corrupt inner-scope references.
+        # If that assumption ever breaks, the tripwire assert below fires.
         return node
 
-    return SQLSelect(
+    new_select = SQLSelect(
         columns=[rewrite_ref(c) for c in cte_ast.columns],
         from_clause=SQLAlias(
             expr=SQLIdentifier(name=base_name, quoted=True),
@@ -1080,6 +1103,19 @@ def rewrite_retrieve_to_base(
         limit=cte_ast.limit,
         distinct=cte_ast.distinct,
     )
+
+    # Tripwire (second-opinion risk 1): after the rewrite, no reference to
+    # r.patient_ref may survive — the base CTE does not project it. A leak
+    # would surface as a DuckDB binder error at execution; this turns it
+    # into a translate-time failure with the CTE's name attached.
+    _rendered = new_select.to_sql()
+    if "patient_ref" in _rendered:
+        raise TranslationError(
+            f"retrieve-cache rewrite leaked r.patient_ref into a child CTE "
+            f"reading from {base_name!r} (unhandled SQL AST node type in "
+            f"rewrite_retrieve_to_base). SQL: {_rendered[:300]}"
+        )
+    return new_select
 
 
 def build_resource_type_base_cte(resource_type: str) -> SQLSelect:
