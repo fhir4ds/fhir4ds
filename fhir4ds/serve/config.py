@@ -51,6 +51,13 @@ class ServeConfig:
             error").
         register_udfs: Register the fhir4ds UDF surface on the connection.
         title: Service title used in the CapabilityStatement and OpenAPI docs.
+        data_root: Directory that ``source`` path parameters may name. ``None``
+            disables path sources entirely (only configured names resolve), so a
+            mounted container opts in explicitly with ``--data-root``.
+        cql_facade: Mount the FHIR ``$cql`` conformance facade at
+            ``/fhir/$cql`` and advertise it in the CapabilityStatement.
+        cql_max_request_bytes: Request-body cap for the ``$cql`` facade,
+            mirroring ``fhir4ds.cql.fhir_server.CQLServerConfig``.
     """
 
     host: str = "127.0.0.1"
@@ -61,6 +68,9 @@ class ServeConfig:
     max_rows: int = DEFAULT_MAX_ROWS
     register_udfs: bool = True
     title: str = "fhir4ds SQL-on-FHIR API"
+    data_root: str | None = None
+    cql_facade: bool = True
+    cql_max_request_bytes: int = 1_000_000
 
     def __post_init__(self) -> None:
         if not isinstance(self.host, str) or not self.host:
@@ -81,6 +91,16 @@ class ServeConfig:
         for name, table in self.sources.items():
             require_identifier(name, field_name="sources key")
             require_identifier(table, field_name=f"sources[{name!r}]")
+        if self.data_root is not None and (
+            not isinstance(self.data_root, str) or not self.data_root
+        ):
+            raise ValueError("data_root must be a non-empty string or None")
+        if not isinstance(self.cql_max_request_bytes, int) or isinstance(
+            self.cql_max_request_bytes, bool
+        ):
+            raise ValueError("cql_max_request_bytes must be an integer")
+        if self.cql_max_request_bytes <= 0:
+            raise ValueError("cql_max_request_bytes must be > 0")
 
     def source_table_for(self, source: str | None) -> str:
         """Resolve the ``source`` operation parameter to a physical table.
@@ -115,6 +135,8 @@ class ServeContext:
     lock: threading.Lock = field(default_factory=threading.Lock)
     store: Any = None
     capability_statement: dict = field(default_factory=dict)
+    #: Materialized path sources: table name -> resolved path (see sources.py).
+    loaded_sources: dict[str, str] = field(default_factory=dict)
 
     def run_locked(self, function: Any, *args: Any, **kwargs: Any) -> Any:
         """Call ``function`` while holding the connection lock."""

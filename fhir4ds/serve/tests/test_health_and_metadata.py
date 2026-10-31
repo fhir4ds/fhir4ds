@@ -47,7 +47,8 @@ def test_metadata_declares_both_operations_on_both_resources(client):
 def test_metadata_declares_system_level_sqlquery_run(client):
     document = client.get("/metadata").json()
     system_operations = {entry["name"] for entry in document["rest"][0].get("operation", [])}
-    assert system_operations == {"sqlquery-run"}
+    # Phase 2 mounts the CQL facade by default, so it is a system operation too.
+    assert system_operations == {"sqlquery-run", "cql"}
 
 
 def test_metadata_interactions_come_from_the_route_table(client):

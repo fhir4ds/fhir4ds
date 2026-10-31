@@ -26,7 +26,7 @@ from fhir4ds.operations.capabilities.sqlquery import sqlquery_run
 from fhir4ds.operations.capabilities.tabular import TabularResult
 from fhir4ds.operations.capabilities.viewdefinition_run import viewdefinition_run
 
-from . import formats
+from . import formats, sources
 from .config import ServeContext
 from .errors import bad_request, from_diagnostics
 from .parameters import ParametersBag, ParameterSpec
@@ -126,24 +126,16 @@ _PARAMETER_VALUE_TYPES: Mapping[str, Callable[[Any], Any]] = {
 
 
 def resolve_source_table(context: ServeContext, bag: ParametersBag) -> str:
-    """Map the ``source`` parameter onto a physical table."""
+    """Map the ``source`` parameter onto a physical table.
+
+    Configured names, paths under ``ServeConfig.data_root``, and dataset URIs are
+    all handled by :mod:`fhir4ds.serve.sources`; this wrapper only extracts the
+    parameter so every operation route resolves it the same way.
+    """
     source = bag.text(SOURCE_PARAMETER)
     if source is None:
         return context.config.source_table
-    try:
-        return context.config.source_table_for(source)
-    except KeyError:
-        configured = sorted(context.config.sources)
-        guidance = (
-            f"Configured sources: {', '.join(configured)}"
-            if configured
-            else "This server has no external sources configured."
-        )
-        raise bad_request(
-            f"Unknown source {source!r}. {guidance}",
-            expression=["source"],
-            code="not-supported",
-        ) from None
+    return sources.resolve_source_table(context, source)
 
 
 def nested_parameters(bag: ParametersBag) -> dict[str, Any]:

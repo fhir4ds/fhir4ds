@@ -2,20 +2,24 @@
 
 FHIR R4 HTTP surface that projects the engine as a FHIR API: the SQL-on-FHIR v2
 operations `$sqlquery-run` and `$viewdefinition-run`/`$run`, the Library and
-ViewDefinition registries that back them, and a derived CapabilityStatement.
+ViewDefinition registries that back them, a derived CapabilityStatement, and (as
+of phase 2) the CQL `$cql` conformance facade plus the container image.
 
-Design doc: `docs/design/serve-layer.md`.
+Design doc: `docs/design/serve-layer.md`. Container assets:
+`deploy/docker/fhir4ds-serve/`.
 
 ## Structure
 
 | Module | Responsibility |
 | --- | --- |
-| `app.py` | `create_app(ServeConfig, connection=...)` — builds the FastAPI app, one shared DuckDB connection + `threading.Lock`, error handlers |
-| `config.py` | `ServeConfig` (host/port/database/source_table/sources/max_rows), `ServeContext` (runtime bundle), `context_for(request)` |
+| `app.py` | `create_app(ServeConfig, connection=...)` — builds the FastAPI app, one shared DuckDB connection + `threading.Lock`, error handlers, conditional `$cql` mount |
+| `config.py` | `ServeConfig` (host/port/database/source_table/sources/max_rows/data_root/cql_facade/cql_max_request_bytes), `ServeContext` (runtime bundle incl. `loaded_sources`), `context_for(request)` |
 | `routes/health.py` | `GET /health` |
 | `routes/capability.py` | `GET /metadata` (serves the derived document) |
 | `routes/library.py` | Library CRUD + `$sqlquery-run` at instance/type/system level |
 | `routes/viewdefinition.py` | ViewDefinition CRUD + `$run` at instance/type level |
+| `routes/cql.py` | `POST /fhir/$cql` — the facade mount, its raw-body middleware, and its capability declaration |
+| `sources.py` | `source` resolution: configured names, data-root paths (loaded once), dataset URIs (400) |
 | `metadata.py` | `RouteSpec`, `cap_interaction`, `cap_operation`, `build_capability_statement` |
 | `parameters.py` | FHIR `Parameters` body parsing → typed bag; `ParameterSpec` declarations |
 | `execution.py` | Operation pipeline: validate → negotiate format → cap `_limit` → run under lock → serialize |
@@ -23,6 +27,7 @@ Design doc: `docs/design/serve-layer.md`.
 | `store.py` | `ResourceStore` (DuckDB table `serve_resource_registry`), canonical resolution, dependency resolver |
 | `resources.py` | CRUD helpers (body validation, `searchset` Bundle, `_count`/`_offset`) |
 | `errors.py` | `ServeError`, `Issue`, `OperationOutcome` builders, `DiagnosticCode` → HTTP status |
+| `__main__.py` | `python -m fhir4ds.serve` — the slim entry point (no pandas) |
 
 Capabilities live in `fhir4ds/operations/capabilities/`
 (`sqlquery.py`, `viewdefinition_run.py`, shared `tabular.py`); the CLI entry is
@@ -57,6 +62,27 @@ Capabilities live in `fhir4ds/operations/capabilities/`
 - **One copy of the IG's type table.** `SQL_TO_FHIR_VALUE_TYPE`
   (`operations/capabilities/tabular.py`); `formats.py` reads
   `ResultColumn.fhir_type` instead of re-deriving it.
+- **The `$cql` facade is used, never re-implemented.** `routes/cql.py` calls
+  `fhir4ds.cql.fhir_server.handle_cql_operation` and serializes with that
+  package's `dumps_fhir_json`. `fhir4ds/cql/fhir_server/**` must stay
+  byte-identical: it is the surface `cqframework/cql-tests-runner` drives, and
+  `tests/test_cql_facade.py` compares both servers' status **and** body for ten
+  request shapes. Never "fix" a facade behavior from this side.
+- **The `$cql` route declares no body parameter on purpose.** FastAPI parses
+  `application/*+json` bodies itself (and answers malformed JSON in its own
+  words), which breaks byte parity with `fhir4ds cql-server`. `RawBodyCapture`
+  buffers the raw body for that one path into `scope["state"]` and the handler
+  decodes it. Adding `body: dict = Body(...)` back would silently restore the
+  divergence.
+- **Anything that touches the connection happens under `ServeContext.lock`,
+  including constructors.** `FHIRDataLoader.__init__` issues SQL (table +
+  `resolve()` macro); building it outside the lock deadlocks concurrent
+  path-source requests inside DuckDB. Found by
+  `test_concurrent_path_source_requests_load_once` — keep that test.
+- **`source` paths are confined to `--data-root`.** `sources.py` resolves and
+  re-checks containment (`..` included) before touching the filesystem; a
+  request may only name a path the deployment exposed. Dataset URIs (`hf://`)
+  are a typed 400, not a crash and not a silent empty query.
 
 ## Known Fragile Areas
 
@@ -101,6 +127,25 @@ Capabilities live in `fhir4ds/operations/capabilities/`
 - **`getResourceKey()` columns must declare `type: "string"`.** Declaring `id`
   trips the viewdef runtime type guard (`type().name` for a computed string is
   `String`). The fixture views show the working form.
+- **The `fhir4ds` console script cannot serve a `[serve]`-only install.**
+  `fhir4ds/cli/main.py` imports every subcommand, and `dqm` needs pandas (the
+  `[measures]` extra). The container therefore runs
+  `python -m fhir4ds.serve` (`__main__.py`), which builds the same parser and
+  calls the same `run()`. `tests/test_slim_entrypoint.py` pins that pandas is
+  never imported by that path — do not "simplify" it back to the console script.
+- **`RawBodyCapture` replays the body once, then answers `http.disconnect`** to
+  anything that keeps reading. That matches Starlette's own buffering
+  middleware contract; a hand-written loop that echoes `receive()` afterwards
+  can hang on an exhausted stream.
+- **uvicorn logs to stderr by default.** The image passes
+  `--log-config /app/uvicorn-log.json` (uvicorn's default config with handlers
+  pointed at `sys.stdout`) so `docker logs` shows a single unbuffered stream.
+  Do not drop that flag while "simplifying" the CMD.
+- **Path-source tables are cached per app, not per connection.**
+  `ServeContext.loaded_sources` maps `serve_source_<digest>` → path; two apps
+  over one connection each re-load once (the loader's delete-before-insert makes
+  that idempotent). Do not move the cache to module scope: tests and the CLI
+  rely on per-app isolation.
 
 ## NOT A BUG Registry
 
@@ -133,10 +178,14 @@ Capabilities live in `fhir4ds/operations/capabilities/`
 ## Validation
 
 ```bash
-python3 -m pytest fhir4ds/serve/tests -q          # 137 tests, ~12s
-python3 -m pytest fhir4ds/sqlquery/tests -q
+python3 -m pytest fhir4ds/serve/tests -q          # 166 tests, ~30s
+python3 -m pytest fhir4ds/cql/tests/unit -q       # the facade's own suite, unchanged
 python3 -m ruff check fhir4ds/serve fhir4ds/operations/capabilities/ fhir4ds/cli/
+python3 fhir4ds/serve/tests/container_smoke.py    # docker build + run + 24 probes
 ```
+
+The container smoke needs a Docker daemon and a few minutes; it is a script, not
+a pytest module, so unit runs never depend on Docker.
 
 `fhir4ds/operations/capabilities/measure.py` and `translate.py` carry
 pre-existing Ruff findings unrelated to this package; scope lint checks to the

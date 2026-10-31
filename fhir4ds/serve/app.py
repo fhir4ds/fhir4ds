@@ -23,6 +23,7 @@ from .config import ServeConfig, ServeContext
 from .errors import Issue, ServeError
 from .metadata import build_capability_statement
 from .routes import ROUTERS
+from .routes import cql as cql_routes
 from .store import ResourceStore
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,11 @@ def create_app(
 
     for router in ROUTERS:
         app.include_router(router)
+
+    # The CQL conformance facade is mounted together with its CapabilityStatement
+    # declaration, so /metadata advertises `$cql` exactly when the route exists.
+    if settings.cql_facade:
+        cql_routes.mount(app, settings)
 
     # Derived, never hand-written: walks the registered routes.
     context.capability_statement = build_capability_statement(app, title=settings.title)

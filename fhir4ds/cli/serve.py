@@ -52,6 +52,18 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
         help="Server-side cap applied to _limit (default: 100000)",
     )
     parser.add_argument(
+        "--data-root",
+        metavar="DIR",
+        help="Directory that operation 'source' parameters may name as a path. "
+        "Omit to disable path sources (containers mount data here, e.g. "
+        "--data-root /data)",
+    )
+    parser.add_argument(
+        "--no-cql-facade",
+        action="store_true",
+        help="Do not mount the FHIR $cql conformance facade at /fhir/$cql",
+    )
+    parser.add_argument(
         "--resources",
         metavar="PATH",
         help="FHIR data to load before serving: a Bundle/NDJSON file or a "
@@ -68,6 +80,12 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
         default="info",
         choices=("critical", "error", "warning", "info", "debug", "trace"),
         help="uvicorn log level (default: info)",
+    )
+    parser.add_argument(
+        "--log-config",
+        metavar="PATH",
+        help="uvicorn logging configuration (JSON/YAML/INI). The container "
+        "passes one that writes to stdout instead of uvicorn's default stderr",
     )
 
 
@@ -87,6 +105,8 @@ def build_config(args: argparse.Namespace) -> ServeConfig:
         sources=sources,
         max_rows=args.max_rows,
         register_udfs=not args.no_udfs,
+        data_root=args.data_root,
+        cql_facade=not args.no_cql_facade,
     )
 
 
@@ -134,7 +154,13 @@ def run(args: argparse.Namespace) -> int:
         f"(source table: {config.source_table})",
         file=sys.stderr,
     )
-    uvicorn.run(app, host=config.host, port=config.port, log_level=args.log_level)
+    uvicorn.run(
+        app,
+        host=config.host,
+        port=config.port,
+        log_level=args.log_level,
+        log_config=getattr(args, "log_config", None),
+    )
     return 0
 
 

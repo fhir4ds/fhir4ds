@@ -1,7 +1,10 @@
 # serve layer — FHIR R4 HTTP surface for SQL-on-FHIR
 
-Status: Phase 1 complete (`feat/serve-layer`). Read/execute only — no writes
-beyond the definition registry, no Hugging Face or network calls.
+Status: Phase 2 complete (`feat/serve-layer`). Read/execute only — no writes
+beyond the definition registry, no Hugging Face or network calls. Phase 2 adds
+the container image (`deploy/docker/fhir4ds-serve/`) and mounts the existing CQL
+`$cql` conformance facade at `/fhir/$cql`, with parity against
+`fhir4ds cql-server` proven by test.
 
 ## Why this layer exists
 
@@ -32,10 +35,13 @@ and execution decision stays in the engine modules it calls.
 | GET | `/ViewDefinition/{id}` | resource | ViewDefinition, or 404 |
 | POST | `/ViewDefinition/{id}/$run` | instance | ndjson by default |
 | POST | `/ViewDefinition/$run` | type | needs `viewReference` \| `viewResource` |
+| POST | `/fhir/$cql` | system | `Parameters` (CQL test-runner facade) |
 | GET | `/openapi.json`, `/docs` | service | FastAPI/OpenAPI |
 
 `fhir4ds serve --port 8766 [--resources PATH]` starts it; the `[serve]` extra
-supplies FastAPI + uvicorn.
+supplies FastAPI + uvicorn. In a `[serve]`-only install (the container) use
+`python -m fhir4ds.serve` — the `fhir4ds` console script imports every
+subcommand, and `dqm` needs pandas.
 
 ## Capability mapping
 
@@ -136,10 +142,94 @@ encoder reads `ResultColumn.fhir_type` from it rather than re-deriving a type.
   trips the generator's runtime type guard (`type().name` for a computed string
   is `String`).
 
-## Not in scope (phase 1)
+## The `$cql` facade (phase 2)
+
+`fhir4ds cql-server` already serves the FHIR `$cql` operation that
+`cqframework/cql-tests-runner` drives, implemented in
+`fhir4ds/cql/fhir_server/` over a dependency-free stdlib HTTP adapter. Phase 2
+gives that same handler an ASGI home so one process serves both surfaces
+without forking the facade:
+
+* `routes/cql.py` calls `handle_cql_operation` (the facade's own entry point)
+  with the facade's own `CQLServerConfig`, and serializes with the facade's own
+  `dumps_fhir_json` — so a request produces the same status and the same bytes
+  from either server. Nothing in `fhir4ds/cql/fhir_server/**` changes.
+* The body is read as **raw bytes** by a one-path ASGI middleware
+  (`RawBodyCapture`). FastAPI parses `application/*+json` bodies itself and
+  answers malformed JSON in its own words; the parity contract needs the
+  facade's wording, so the route declares no body parameter and decodes the
+  buffered bytes itself. The handler stays a plain `def`.
+* Mounting is a single call (`routes/cql.mount(app, config)`) that adds the
+  route **and** its CapabilityStatement declaration together, so `/metadata`
+  advertises `cql` exactly when the route exists (`ServeConfig.cql_facade`,
+  `--no-cql-facade` to disable).
+* Parity is a test, not a claim: `tests/test_cql_facade.py` starts the stdlib
+  facade on an ephemeral port and compares status **and** body for ten request
+  shapes — valid expressions, parse errors, missing/duplicate parameters,
+  unsupported top-level parameters, malformed JSON, a JSON array body, and an
+  empty body.
+
+## `source` resolution (phase 2)
+
+The `source` operation parameter used to accept only configured table names
+(`--source NAME=TABLE`). Phase 2 adds the two shapes a deployment needs, in
+`serve/sources.py`:
+
+| `source` value | Behaviour |
+| --- | --- |
+| configured name | that table, no load |
+| path under `--data-root` | loaded once with `FHIRDataLoader` into `serve_source_<digest>`, then reused |
+| `hf://…`, `s3://…` | 400 `not-supported` with an explanation; the Hugging Face dataset store lands in phase 3 |
+
+The data root is opt-in (`--data-root`): without it, path sources are refused,
+so a request can only name a path the deployment explicitly exposed. Resolution
+rejects anything that escapes the root (`..`), and the load runs under the
+connection lock — the loader's **constructor** issues SQL, so constructing it
+outside the lock deadlocks two concurrent path-source requests against DuckDB
+(found by `test_concurrent_path_source_requests_load_once`).
+
+## Deployment (phase 2)
+
+One container, two surfaces, port 7860:
+
+```bash
+docker build -f deploy/docker/fhir4ds-serve/Dockerfile -t fhir4ds-serve:phase2 .
+docker run --rm -p 7860:7860 -v "$PWD/fhir4ds/serve/tests/fixtures/resources":/data:ro \
+  fhir4ds-serve:phase2 \
+  python -m fhir4ds.serve --host 0.0.0.0 --port 7860 --data-root /data --resources /data
+```
+
+| Concern | Decision |
+| --- | --- |
+| Base image | `python:3.11-slim`; `pip install -e ".[serve]"` from the copied tree |
+| Context | repo root, trimmed by a `.dockerignore` (`tests/`, `.git`, `web/`, `extensions/` excluded) |
+| Port | `EXPOSE 7860`, bound to `0.0.0.0` inside the container |
+| Data | always a mount at `/data` (`--resources /data` to preload, `--data-root /data` for `source=`) — nothing is baked in |
+| Secrets | none in any layer: `HF_TOKEN` arrives with `-e`/compose environment; verified by `docker history \| grep -i token` |
+| User | non-root `fhir4ds` (uid 10001); no legacy volume to migrate |
+| Health | `HEALTHCHECK` curls `/health` (curl installed for that purpose only) |
+| Shutdown | exec-form `CMD`, so SIGTERM reaches uvicorn and `docker stop` exits 0 |
+| Logs | `PYTHONUNBUFFERED=1`, uvicorn writes to stdout |
+| Entry point | `python -m fhir4ds.serve` (see below), not the `fhir4ds` console script |
+
+`fhir4ds/serve/__main__.py` exists because of a packaging wart: the installed
+`fhir4ds` console script imports every subcommand at startup, and `dqm` imports
+pandas, which lives in the optional `[measures]` extra. A `[serve]`-only
+install therefore cannot run `fhir4ds serve`. `python -m fhir4ds.serve` runs the
+identical `serve` command without that import; a test pins that pandas is never
+imported by this path.
+
+`fhir4ds/serve/tests/container_smoke.py` is the end-to-end check (build, run
+against mounted fixtures, every surface, the `hf://` answer, SIGTERM exit code,
+`docker history` token scan).
+
+## Not in scope (phase 1 and 2)
 
 Bulk export (`$viewdefinition-export`, `$sqlquery-export`), asynchronous
 operations, `patient`/`group`/`_since`/`resource` filtering, write operations on
-patient data, authentication, and multi-tenant isolation. `ARCHITECTURE` note:
-the lock serializes requests, which is correct for a single-node DuckDB service
-and deliberately not a concurrency story.
+patient data (phase 3: `POST /Bundle`, `PUT`, `DELETE` tombstones, history,
+buffered commits to the dataset repo), the Hugging Face dataset store (phase 3),
+authentication, and multi-tenant isolation. `ARCHITECTURE` note: the lock
+serializes requests and the connection is single-node DuckDB — deliberately a
+single-process serving story, not a concurrency story. A future multi-worker
+deployment would need one connection per worker.
