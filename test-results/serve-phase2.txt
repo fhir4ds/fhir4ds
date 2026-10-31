@@ -1,0 +1,279 @@
+serve layer — phase 2 evidence transcript
+generated: 2026-10-31T23:28:16Z
+worktree:  /mnt/d/fhir4ds/.worktrees/feat-serve
+branch:    feat/serve-layer (a16de83701c)
+base:      80fef086cb9 (dev)
+python:    Python 3.10.12
+docker:    29.1.3
+
+==================================================================
+== 1. docker build (repo root context, serve Dockerfile)
+==================================================================
+$ docker build -f deploy/docker/fhir4ds-serve/Dockerfile -t fhir4ds-serve:phase2 .
+#11 [4/9] COPY pyproject.toml README.md hatch_build.py hatch.toml ./
+#11 CACHED
+
+#12 [6/9] COPY deploy/docker/fhir4ds-serve/uvicorn-log.json ./uvicorn-log.json
+#12 CACHED
+
+#13 [7/9] RUN python -m pip install --no-cache-dir -e ".[serve]" "duckdb==1.5.5"
+#13 CACHED
+
+#14 [8/9] RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin fhir4ds
+#14 CACHED
+
+#15 [9/9] WORKDIR /home/fhir4ds
+#15 CACHED
+
+#16 exporting to image
+#16 exporting layers done
+#16 writing image sha256:d5eb9a3ce0ca4facfc399f6b0cad34ddba3dc7c705e7bc538e09dc91aff2185c done
+#16 naming to docker.io/library/fhir4ds-serve:phase2 done
+#16 DONE 0.0s
+
+exit=0
+
+--- image size ---------------------------------------------------
+fhir4ds-serve:phase2  661MB  d5eb9a3ce0ca
+
+--- installed runtime (pip layer) --------------------------------
+duckdb 1.5.5
+fastapi 0.162.0
+uvicorn 0.54.0
+fhir4ds 0.0.19
+
+--- image has no pandas (the [serve] extra only) -----------------
+pandas present: False
+
+==================================================================
+== 2. docker run + live surface probes (mounted data)
+==================================================================
+$ docker run -d --name fhir4ds-serve-evidence -p 7860:7860 -v /mnt/d/fhir4ds/.worktrees/feat-serve/fhir4ds/serve/tests/fixtures/resources:/data:ro fhir4ds-serve:phase2 \
+    python -m fhir4ds.serve --host 0.0.0.0 --port 7860 --data-root /data --resources /data --log-config /app/uvicorn-log.json
+
+### container logs (stdout, unbuffered)
+loaded 9 resources from /data
+fhir4ds serve listening on http://0.0.0.0:7860 (source table: resources)
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:7860 (Press CTRL+C to quit)
+INFO:     172.17.0.1:34568 - "GET /health HTTP/1.1" 200 OK
+
+--- bundled C++ extensions in the image ---------------------------
+extension load failures: 0  (0 = native path active)
+
+------------------------------------------------------------------
+### GET /health
+HTTP/1.1 200 OK
+date: Sat, 31 Oct 2026 23:28:30 GMT
+server: uvicorn
+content-length: 15
+content-type: application/json
+
+{"status":"ok"}
+------------------------------------------------------------------
+### GET /metadata (CapabilityStatement, one line)
+HTTP/1.1 200 OK
+date: Sat, 31 Oct 2026 23:28:30 GMT
+server: uvicorn
+content-length: 1478
+content-type: application/fhir+json
+
+{"resourceType": "CapabilityStatement", "status": "active", "date": "2026-10-31T23:28:29Z", "kind": "instance", "software": {"name": "fhir4ds", "version": "0.0.19"}, "implementation": {"description": "fhir4ds SQL-on-FHIR API"}, "fhirVersion": "4.0.1", "format": ["application/fhir+json", "json"], "rest": [{"mode": "server", "resource": [{"type": "Library", "interaction": [{"code": "create"}, {"code": "search-type"}, {"code": "read"}], "operation": [{"name": "sqlquery-run", "definition": "http://sql-on-fhir.org/OperationDefinition/$sqlquery-run", "documentation": "Execute a SQLQuery Library against the ViewDefinition tables materialized on this server."}]}, {"type": "ViewDefinition", "interaction": [{"code": "create"}, {"code": "search-type"}, {"code": "read"}], "operation": [{"name": "run", "definition": "http://sql-on-fhir.org/OperationDefinition/$viewdefinition-run", "documentation": "Transform FHIR resources into a tabular row set using one ViewDefinition."}]}], "interaction": [{"code": "transaction"}], "operation": [{"name": "sqlquery-run", "definition": "http://sql-on-fhir.org/OperationDefinition/$sqlquery-run", "documentation": "Execute a SQLQuery Library against the ViewDefinition tables materialized on this server."}, {"name": "cql", "definition": "https://build.fhir.org/ig/HL7/cql-ig/en/OperationDefinition-cql-cql.html", "documentation": "Evaluate a CQL expression and return the result as a FHIR Parameters resource (CQL test-runner facade)."}]}]}
+--- the three operation declarations, extracted -------------------
+fhirVersion: 4.0.1
+  resource Library interactions= ['create', 'search-type', 'read'] operations= [('sqlquery-run', 'http://sql-on-fhir.org/OperationDefinition/$sqlquery-run')]
+  resource ViewDefinition interactions= ['create', 'search-type', 'read'] operations= [('run', 'http://sql-on-fhir.org/OperationDefinition/$viewdefinition-run')]
+  system operations: [('sqlquery-run', 'http://sql-on-fhir.org/OperationDefinition/$sqlquery-run'), ('cql', 'https://build.fhir.org/ig/HL7/cql-ig/en/OperationDefinition-cql-cql.html')]
+
+------------------------------------------------------------------
+### POST /ViewDefinition + POST /Library (fixtures), then GET round-trip
+POST /ViewDefinition  patient-view.json  -> 201
+POST /Library  Library-BloodPressureViewSqlView.json  -> 201
+POST /Library  Library-SqlOnFhirExample.json  -> 201
+
+$ curl -sS -o /dev/null -w "%{http_code}" /Library/SqlOnFhirExample
+-> 200
+
+------------------------------------------------------------------
+### POST /Library/SqlOnFhirExample/$sqlquery-run  (default ndjson, mounted data)
+HTTP/1.1 200 OK
+date: Sat, 31 Oct 2026 23:28:30 GMT
+server: uvicorn
+content-length: 236
+content-type: application/x-ndjson
+
+{"patient_id": "Patient/pt-1", "name": "Smith", "systolic": 120.0, "diastolic": 80.0, "effective_date": "2024-01-15"}
+{"patient_id": "Patient/pt-1", "name": "Smith", "systolic": 118.0, "diastolic": 78.0, "effective_date": "2024-02-20"}
+
+------------------------------------------------------------------
+### POST /fhir/$cql  (facade inside the container)
+HTTP/1.1 200 OK
+date: Sat, 31 Oct 2026 23:28:30 GMT
+server: uvicorn
+content-length: 78
+content-type: application/fhir+json
+
+{"resourceType":"Parameters","parameter":[{"name":"return","valueInteger":2}]}
+------------------------------------------------------------------
+### POST /fhir/$cql  malformed JSON (facade wording, status parity)
+HTTP/1.1 400 Bad Request
+date: Sat, 31 Oct 2026 23:28:33 GMT
+server: uvicorn
+content-length: 136
+content-type: application/fhir+json
+
+{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"invalid","details":{"text":"Request body must be valid JSON"}}]}
+------------------------------------------------------------------
+### source=hf://datasets/fhir4ds/bulk-publish-demo  (OBSERVED BEHAVIOUR)
+$ curl -sS -X POST .../ViewDefinition/patient-view/\$run -d {"parameter":[{"name":"source","valueString":"hf://datasets/fhir4ds/bulk-publish-demo"}]}
+HTTP/1.1 400 Bad Request
+date: Sat, 31 Oct 2026 23:28:33 GMT
+server: uvicorn
+content-length: 366
+content-type: application/fhir+json
+
+{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"not-supported","diagnostics":"Source 'hf://datasets/fhir4ds/bulk-publish-demo' is a Hugging Face dataset URI, which this surface does not serve yet: the dataset store arrives in phase 3, and fhir4ds/bulk-publish-demo holds no data before then. No query was executed.","expression":["source"]}]}
+-> status 400 OperationOutcome, code not-supported; the server is unaffected:
+   GET /health after the hf:// request: {"status":"ok"}
+   GET /ViewDefinition/patient-view/$run with no source still: 200
+
+------------------------------------------------------------------
+### docker stop (SIGTERM -> clean uvicorn shutdown)
+docker stop returned in 634 ms
+container exit code: 0
+last stdout lines:
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1]
+
+==================================================================
+== 3. pytest fhir4ds/serve/tests -q
+==================================================================
+fhir4ds/serve/tests/test_sources.py ...........                          [ 72%]
+fhir4ds/serve/tests/test_sqlquery_run.py ............................... [ 91%]
+                                                                         [ 91%]
+fhir4ds/serve/tests/test_viewdefinition_run.py ..............            [100%]
+
+=============================== warnings summary ===============================
+../../../../../home/jmontavon/.local/lib/python3.10/site-packages/fastapi/testclient.py:1
+  /home/jmontavon/.local/lib/python3.10/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 166 passed, 1 warning in 29.02s ========================
+
+==================================================================
+== 4. pytest fhir4ds/cql/tests/unit -q  (facade suite, unchanged)
+==================================================================
+........................................................................ [ 92%]
+.................................................                        [ 95%]
+fhir4ds/cql/tests/unit/test_v2_function_inlining.py .................... [ 96%]
+.............                                                            [ 97%]
+fhir4ds/cql/tests/unit/test_v2_queries.py .........................      [ 98%]
+fhir4ds/cql/tests/unit/test_window_functions.py ..................       [100%]
+
+======================= 1723 passed, 1 skipped in 59.66s =======================
+
+--- the cql-server CLI + facade files specifically -----------------
+fhir4ds/cql/tests/unit/test_fhir_server_serializer.py ..........         [ 60%]
+fhir4ds/cql/tests/unit/test_fhir_server_terminology_param.py ........... [ 96%]
+.                                                                        [100%]
+
+============================== 30 passed in 3.12s ==============================
+
+==================================================================
+== 5. $cql parity: serve app vs the stdlib cql-server facade
+==================================================================
+../../../../../home/jmontavon/.local/lib/python3.10/site-packages/fastapi/testclient.py:1
+  /home/jmontavon/.local/lib/python3.10/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================= 11 passed, 5 deselected, 1 warning in 19.10s =================
+
+==================================================================
+== 6. ruff check
+==================================================================
+All checks passed!
+exit=0
+
+==================================================================
+== 7. no secrets in any layer
+==================================================================
+$ docker history --no-trunc fhir4ds-serve:phase2 | grep -i token
+exit=1 (1 = no match = no token in any layer)
+
+$ docker run --rm fhir4ds-serve:phase2 env | grep -i token
+exit=1 (1 = no token in the image environment)
+
+==================================================================
+== 8. protected paths untouched (acceptance criteria 12/13)
+==================================================================
+$ git --no-pager diff --stat dev...HEAD | grep -E "cql/fhir_server|viewdef/|sqlquery/runner.py"
+exit=1 (1 = no output = untouched)
+
+$ git --no-pager diff --stat dev...HEAD
+ .dockerignore                                      |   40 +
+ deploy/docker/fhir4ds-serve/Dockerfile             |   64 +
+ deploy/docker/fhir4ds-serve/README.md              |   95 +
+ deploy/docker/fhir4ds-serve/compose.yml            |   44 +
+ deploy/docker/fhir4ds-serve/uvicorn-log.json       |   32 +
+ docs/design/serve-layer.md                         |  235 +++
+ fhir4ds/cli/main.py                                |    9 +
+ fhir4ds/cli/serve.py                               |  177 ++
+ fhir4ds/operations/capabilities/__init__.py        |   28 +-
+ fhir4ds/operations/capabilities/sqlquery.py        |  146 ++
+ fhir4ds/operations/capabilities/tabular.py         |  212 +++
+ .../operations/capabilities/viewdefinition_run.py  |  129 ++
+ fhir4ds/serve/AGENTS.md                            |  192 ++
+ fhir4ds/serve/__init__.py                          |   35 +
+ fhir4ds/serve/__main__.py                          |   35 +
+ fhir4ds/serve/app.py                               |  138 ++
+ fhir4ds/serve/config.py                            |  159 ++
+ fhir4ds/serve/errors.py                            |  182 ++
+ fhir4ds/serve/execution.py                         |  341 ++++
+ fhir4ds/serve/formats.py                           |  472 +++++
+ fhir4ds/serve/metadata.py                          |  239 +++
+ fhir4ds/serve/parameters.py                        |  318 ++++
+ fhir4ds/serve/resources.py                         |  126 ++
+ fhir4ds/serve/routes/__init__.py                   |   19 +
+ fhir4ds/serve/routes/capability.py                 |   25 +
+ fhir4ds/serve/routes/cql.py                        |  234 +++
+ fhir4ds/serve/routes/health.py                     |   17 +
+ fhir4ds/serve/routes/library.py                    |  186 ++
+ fhir4ds/serve/routes/viewdefinition.py             |  171 ++
+ fhir4ds/serve/sources.py                           |  141 ++
+ fhir4ds/serve/store.py                             |  260 +++
+ fhir4ds/serve/tests/__init__.py                    |    0
+ fhir4ds/serve/tests/_helpers.py                    |  103 ++
+ fhir4ds/serve/tests/conftest.py                    |   63 +
+ fhir4ds/serve/tests/container_smoke.py             |  355 ++++
+ fhir4ds/serve/tests/fixtures/README.md             |   64 +
+ .../Library-BloodPressureViewSqlView.json          |   33 +
+ .../libraries/Library-OmopFhirPatientJoin.json     |   71 +
+ .../libraries/Library-SqlOnFhirExample.json        |   78 +
+ .../Library-UniquePatientAddressesQuery.json       |   71 +
+ fhir4ds/serve/tests/fixtures/resources/bundle.json |  222 +++
+ .../fixtures/viewdefinitions/diagnoses-view.json   |   30 +
+ .../fixtures/viewdefinitions/fhir-patient.json     |   30 +
+ .../fixtures/viewdefinitions/omop-person.json      |   25 +
+ .../viewdefinitions/patient-address-view.json      |   51 +
+ .../fixtures/viewdefinitions/patient-view.json     |   30 +
+ fhir4ds/serve/tests/test_capability_envelopes.py   |  196 +++
+ fhir4ds/serve/tests/test_cql_facade.py             |  198 +++
+ fhir4ds/serve/tests/test_health_and_metadata.py    |   81 +
+ fhir4ds/serve/tests/test_live_server.py            |   82 +
+ fhir4ds/serve/tests/test_output_formats.py         |  320 ++++
+ fhir4ds/serve/tests/test_parameters.py             |  162 ++
+ fhir4ds/serve/tests/test_slim_entrypoint.py        |   44 +
+ fhir4ds/serve/tests/test_sources.py                |  151 ++
+ fhir4ds/serve/tests/test_sqlquery_run.py           |  327 ++++
+ fhir4ds/serve/tests/test_viewdefinition_run.py     |  136 ++
+ fhir4ds/sqlquery/types.py                          |   10 +
+ fhir4ds/tests/test_version.py                      |    4 +-
+ pyproject.toml                                     |    7 +
+ test-results/serve-phase1.txt                      | 1858 ++++++++++++++++++++
+ 60 files changed, 9301 insertions(+), 2 deletions(-)
