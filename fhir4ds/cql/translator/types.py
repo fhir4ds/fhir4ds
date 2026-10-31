@@ -941,8 +941,11 @@ class SQLLambda(SQLExpression):
     Used in list_filter, list_apply, etc.
 
     Examples:
-        r -> r.status = 'completed'
-        x -> fhirpath_text(x, 'code')
+        lambda r: r.status = 'completed'
+        lambda x: fhirpath_text(x, 'code')
+
+    Renders DuckDB's `lambda param:` syntax (accepted by DuckDB 1.5 AND
+    2.0; the arrow `param ->` form is removed in 2.0 — D1 migration).
     """
 
     param: str
@@ -950,7 +953,7 @@ class SQLLambda(SQLExpression):
     precedence: int = PRECEDENCE["PRIMARY"]
 
     def to_sql(self, parent_precedence: int = 0) -> str:
-        return f"{self.param} -> {_render_lambda_body(self.body)}"
+        return f"lambda {self.param}: {_render_lambda_body(self.body)}"
 
 
 @dataclass
@@ -959,8 +962,8 @@ class SQLLambda2(SQLExpression):
     Represents a two-parameter lambda expression for list_reduce.
 
     Examples:
-        (x, y) -> x + y
-        (acc, elem) -> acc * elem
+        lambda x, y: x + y
+        lambda acc, elem: acc * elem
     """
 
     params: List[str]
@@ -968,7 +971,7 @@ class SQLLambda2(SQLExpression):
     precedence: int = PRECEDENCE["PRIMARY"]
 
     def to_sql(self, parent_precedence: int = 0) -> str:
-        return f"({', '.join(self.params)}) -> {_render_lambda_body(self.body)}"
+        return f"lambda {', '.join(self.params)}: {_render_lambda_body(self.body)}"
 
 
 @dataclass
@@ -1159,12 +1162,20 @@ class SQLSelect(SQLExpression):
     order_by: Optional[List[tuple]] = None  # List of (expr, 'ASC'|'DESC')
     limit: Optional[int] = None
     distinct: bool = False
+    # DuckDB DISTINCT ON (expr, ...) — collapses to the first row per
+    # distinct-on key. Used by _patients with demographics to guarantee
+    # ONE row per patient id even when duplicate Patient rows exist (the
+    # loader sanctions same-(id, resourceType) rows; review finding 1.1).
+    distinct_on: Optional[List[SQLExpression]] = None
     precedence: int = PRECEDENCE["PRIMARY"]
 
     def to_sql(self, parent_precedence: int = 0) -> str:
         parts = ["SELECT"]
 
-        if self.distinct:
+        if self.distinct_on:
+            on_parts = [e.to_sql() for e in self.distinct_on]
+            parts.append(f"DISTINCT ON ({', '.join(on_parts)})")
+        elif self.distinct:
             parts.append("DISTINCT")
 
         # Columns
@@ -1331,13 +1342,26 @@ class CTEDefinition:
     name: str
     query: SQLSelect
     columns: Optional[List[str]] = None  # Optional column aliases
+    # PERF retrieve-cache / phase2 item 3: emit AS MATERIALIZED so DuckDB
+    # does not inline the CTE into consumers and push heavy definition
+    # predicates into the base table scans (CMS130 rung5k: 2,178s + 506s +
+    # 471s SEQ_SCANs). ``True`` forces MATERIALIZED; ``False`` forces plain;
+    # ``None`` (default) means AUTO: the emission pass resolves it by
+    # reference count — CTEs referenced by more than one consumer keep
+    # MATERIALIZED (re-inlining a multi-ref CTE duplicates the scan and is
+    # what re-created the pathology), single-reference CTEs drop it
+    # (inlining once is equal-or-faster and avoids eager materialization
+    # cost; measured CMS2 rung100 2046->1910ms, CMS130 rung1000
+    # 12801->11658ms, parity row-identical).
+    materialized: Optional[bool] = None
 
     def to_sql(self) -> str:
         query_sql = self.query.to_sql()
+        mat = "MATERIALIZED " if self.materialized is True else ""
         if self.columns:
             cols = f"({', '.join(self.columns)})"
-            return f"{self.name}{cols} AS (\n{query_sql}\n)"
-        return f"{self.name} AS (\n{query_sql}\n)"
+            return f"{self.name}{cols} AS {mat}(\n{query_sql}\n)"
+        return f"{self.name} AS {mat}(\n{query_sql}\n)"
 
 
 def _build_precomputed_column_expression(col_def: ColumnDefinition) -> SQLAlias:
@@ -1583,7 +1607,7 @@ class SQLRetrieveCTE:
         )
 
         # Generate CTE clause
-        mat_hint = "MATERIALIZED " if self.materialized else ""
+        mat_hint = "MATERIALIZED " if self.materialized is True else ""
         # Quote the CTE name to handle colons and spaces
         quoted_name = f'"{self.name}"' if ':' in self.name or ' ' in self.name else self.name
         return f'{quoted_name} AS {mat_hint}({select.to_sql()})'
@@ -1620,10 +1644,47 @@ class SQLFragment:
     main_query: SQLSelect
     ctes: List[CTEDefinition] = field(default_factory=list)
 
+    def _resolve_materialization(self) -> None:
+        """PERF phase2 item 3: resolve AUTO (``materialized is None``) CTEs
+        by reference count. A CTE referenced by MORE THAN ONE consumer keeps
+        ``AS MATERIALIZED`` (re-inlining a multi-ref CTE duplicates its scan
+        and lets DuckDB push heavy consumer predicates into the base table —
+        the exact pathology MATERIALIZED fencing fixed). A CTE referenced at
+        most once drops MATERIALIZED (inlining once is equal-or-faster and
+        avoids eager materialization cost).
+
+        Reference counting is lexical on rendered SQL: each CTE's name is
+        counted inside every OTHER CTE's rendered body plus the main query.
+
+        NOTE: resolves by MUTATING the CTEDefinitions in place; assumes
+        to_sql() is called once per fragment (every translator path does —
+        a second call would reuse stale resolutions via the is-not-None
+        guard).
+        """
+        if not any(cte.materialized is None for cte in self.ctes):
+            return
+        rendered = {
+            cte.name: cte.query.to_sql()
+            for cte in self.ctes
+        }
+        main_sql = self.main_query.to_sql()
+        for cte in self.ctes:
+            if cte.materialized is not None:
+                continue
+            refs = 0
+            name = cte.name
+            for other in self.ctes:
+                if other.name == name:
+                    continue
+                refs += rendered[other.name].count(name)
+            refs += main_sql.count(name)
+            cte.materialized = refs > 1
+
     def to_sql(self) -> str:
         if not self.ctes:
             return self.main_query.to_sql()
 
+        self._resolve_materialization()
         cte_parts = [cte.to_sql() for cte in self.ctes]
         with_clause = "WITH " + ",\n".join(cte_parts)
         return f"{with_clause}\n{self.main_query.to_sql()}"

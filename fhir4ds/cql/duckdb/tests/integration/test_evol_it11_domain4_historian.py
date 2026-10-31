@@ -179,7 +179,11 @@ class TestChainedWithClauses:
 
         translator.set_library_loader(loader)
         sql = translator.translate_library_to_population_sql(lib)
+        # Phase 2 item 3: multi-reference CTEs keep AS MATERIALIZED; accept
+        # both spellings when locating the "X" define body.
         i = sql.find('"X" AS (')
+        if i == -1:
+            i = sql.find('"X" AS MATERIALIZED (')
         seg = sql[i:i + 4000]
         e1_pos = seg.find("FROM \"Encounter: Office Visits\" AS E1")
         v_pos = seg.find("FROM \"Observation: Vital Signs\" AS V")

@@ -3,17 +3,17 @@ SQL Generator for SQL-on-FHIR v2 ViewDefinitions.
 
 Generates DuckDB SQL queries from ViewDefinition objects using the fhirpath() UDF family.
 
-Type mapping (FHIRPath type -> DuckDB UDF):
-    - string -> fhirpath_text()
-    - integer -> fhirpath_number()
-    - decimal -> fhirpath_number()
-    - boolean -> fhirpath_bool()
-    - date -> fhirpath_text()
-    - dateTime -> fhirpath_text()
-    - time -> fhirpath_text()
-    - code -> fhirpath_text()
-    - Coding -> fhirpath_json()
-    - CodeableConcept -> fhirpath_json()
+Type mapping (FHIRPath lambda type: DuckDB UDF):
+    - lambda string: fhirpath_text()
+    - lambda integer: fhirpath_number()
+    - lambda decimal: fhirpath_number()
+    - lambda boolean: fhirpath_bool()
+    - lambda date: fhirpath_text()
+    - lambda dateTime: fhirpath_text()
+    - lambda time: fhirpath_text()
+    - lambda code: fhirpath_text()
+    - lambda Coding: fhirpath_json()
+    - lambda CodeableConcept: fhirpath_json()
 """
 
 import json
@@ -619,12 +619,12 @@ class SQLGenerator:
             allowed_names = self._allowed_actual_type_names(declared_type)
         allowed = self._sql_string_list(allowed_names)
         complex_values = (
-            f"array_length(list_filter({values_expr}, _v -> "
+            f"array_length(list_filter({values_expr}, lambda _v: "
             "COALESCE(json_type(TRY_CAST(CAST(_v AS VARCHAR) AS JSON)) "
             "IN ('OBJECT', 'ARRAY'), false))) > 0"
         )
         incompatible_types = (
-            f"array_length(list_filter({type_names}, _t -> NOT (_t IN ({allowed})))) > 0"
+            f"array_length(list_filter({type_names}, lambda _t: NOT (_t IN ({allowed})))) > 0"
         )
         if declared_type is not None:
             return (
@@ -677,7 +677,7 @@ class SQLGenerator:
             allowed_types = self._JSON_COMPLEX_TYPES | self._JSON_NULL_TYPES
         elif declared_type == "integer64":
             return (
-                f"array_length(list_filter({json_values}, _j -> NOT ("
+                f"array_length(list_filter({json_values}, lambda _j: NOT ("
                 f"json_type(_j) IN ({self._sql_string_list(self._JSON_INTEGER_TYPES | self._JSON_NULL_TYPES)}) "
                 "OR (json_type(_j) = 'VARCHAR' "
                 "AND regexp_matches(json_extract_string(_j, '$'), '^-?[0-9]+$'))"
@@ -699,7 +699,7 @@ class SQLGenerator:
         allowed = self._sql_string_list(allowed_types)
         return (
             f"array_length(list_filter({json_values}, "
-            f"_j -> NOT (json_type(_j) IN ({allowed})))) > 0"
+            f"lambda _j: NOT (json_type(_j) IN ({allowed})))) > 0"
         )
 
     def _runtime_guard_condition(
@@ -736,13 +736,13 @@ class SQLGenerator:
                 elif declared_type is None:
                     allowed = self._sql_string_list(self._PRIMITIVE_TYPE_NAMES)
                     conditions.append(
-                        f"array_length(list_filter({type_names}, _t -> NOT (_t IN ({allowed})))) > 0"
+                        f"array_length(list_filter({type_names}, lambda _t: NOT (_t IN ({allowed})))) > 0"
                     )
                 else:
                     allowed_names = self._allowed_actual_type_names(declared_type)
                     allowed = self._sql_string_list(allowed_names)
                     conditions.append(
-                        f"array_length(list_filter({type_names}, _t -> NOT (_t IN ({allowed})))) > 0"
+                        f"array_length(list_filter({type_names}, lambda _t: NOT (_t IN ({allowed})))) > 0"
                     )
             else:
                 complex_guard = self._expression_runtime_complex_guard_condition(
@@ -905,8 +905,7 @@ class SQLGenerator:
         The runner materializes the target ViewDefinition's output as a
         named relation (spec: "The executing engine may materialise the
         view's result or inline it; either approach conforms"). Resolution
-        order: the runner-provided ``view_tables`` map (view name ->
-        table reference SQL), then the ``<view_schema>.<view_name>``
+        order: the runner-provided ``view_tables`` map (view lambda name:         table reference SQL), then the ``<view_schema>.<view_name>``
         convention (view_schema defaults to ``omop``).
         """
         table = self._view_tables.get(view_name)
@@ -1177,7 +1176,7 @@ class SQLGenerator:
             expr = f"fhirpath({eval_resource_var}, {path_expr})"
             sql_cast = self._get_collection_element_cast(column.type)
             if sql_cast:
-                expr = f"list_transform({expr}, _v -> TRY_CAST(_v AS {sql_cast}))"
+                expr = f"list_transform({expr}, lambda _v: TRY_CAST(_v AS {sql_cast}))"
             guard = self._runtime_guard_condition(
                 eval_resource_var,
                 resolved_path,
@@ -1909,8 +1908,8 @@ class SQLGenerator:
         ``unnest(range(len(js)))`` in lockstep.
 
         Null semantics (Process(S, N)):
-        - forEach over an empty collection -> 0 rows (unnest of NULL/[]).
-        - forEachOrNull over an empty collection -> exactly one NULL row:
+        - forEach over an empty lambda collection: 0 rows (unnest of NULL/[]).
+        - forEachOrNull over an empty lambda collection: exactly one NULL row:
           ``[NULL::JSON]`` / ``[0]::BIGINT[]`` singletons via CASE.
         - forEach nested under an enclosing forEachOrNull (null_preserve_var
           set): when the enclosing alias IS NULL, expand the same single
@@ -2270,8 +2269,7 @@ class SQLGenerator:
         ::
 
             (SELECT t.resource AS root_res, <base cols> FROM <table> t
-             <root joins> WHERE <resourceType + root wheres>) src
-            -> per iterator step k (compute + expand nested SELECTs)
+             <root joins> WHERE <resourceType + root wheres>) lambda src: per iterator step k (compute + expand nested SELECTs)
             -> final outer SELECT <authored column order> FROM (...) q
 
         Levels carry every prior column via ``src.*`` so aliases stay

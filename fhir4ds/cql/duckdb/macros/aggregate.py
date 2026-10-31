@@ -46,8 +46,8 @@ def registerAggregateMacros(con: "duckdb.DuckDBPyConnection") -> None:
     )
     numeric_list = (
         "list_filter("
-        "list_transform(x, _v -> TRY_CAST(_v AS DOUBLE)), "
-        "_v -> _v IS NOT NULL"
+        "list_transform(x, lambda _v: TRY_CAST(_v AS DOUBLE)), "
+        "lambda _v: _v IS NOT NULL"
         ")"
     )
     # Decimal-exact shifted formulation (CQL 1.5 Appendix B: Decimal carries at
@@ -59,12 +59,12 @@ def registerAggregateMacros(con: "duckdb.DuckDBPyConnection") -> None:
     decimal_list_guard = (
         "(starts_with(typeof(x), 'DECIMAL(') AND ends_with(typeof(x), '[]'))"
     )
-    decimal_non_null = "list_filter(x, _v -> _v IS NOT NULL)"
+    decimal_non_null = "list_filter(x, lambda _v: _v IS NOT NULL)"
     decimal_anchor = f"({decimal_non_null}[1])"
     decimal_devs = (
         "list_transform("
-        f"list_transform({decimal_non_null}, _v -> _v - {decimal_anchor}), "
-        "_v -> TRY_CAST(_v AS DOUBLE)"
+        f"list_transform({decimal_non_null}, lambda _v: _v - {decimal_anchor}), "
+        "lambda _v: TRY_CAST(_v AS DOUBLE)"
         ")"
     )
 
@@ -116,24 +116,24 @@ def registerAggregateMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # Boolean aggregates
     # ============================================
     con.execute(
-        "CREATE MACRO IF NOT EXISTS AllTrue(x) AS "
+        "CREATE OR REPLACE MACRO AllTrue(x) AS "
         "CASE WHEN x IS NULL THEN true "
-        "ELSE COALESCE(list_bool_and(list_filter(x, _v -> _v IS NOT NULL)), true) END"
+        "ELSE COALESCE(list_bool_and(list_filter(x, lambda _v: _v IS NOT NULL)), true) END"
     )
     con.execute(
-        "CREATE MACRO IF NOT EXISTS AnyTrue(x) AS "
+        "CREATE OR REPLACE MACRO AnyTrue(x) AS "
         "CASE WHEN x IS NULL THEN false "
-        "ELSE COALESCE(list_bool_or(list_filter(x, _v -> _v IS NOT NULL)), false) END"
+        "ELSE COALESCE(list_bool_or(list_filter(x, lambda _v: _v IS NOT NULL)), false) END"
     )
     con.execute(
-        "CREATE MACRO IF NOT EXISTS AllFalse(x) AS "
+        "CREATE OR REPLACE MACRO AllFalse(x) AS "
         "CASE WHEN x IS NULL THEN true "
-        "ELSE COALESCE(NOT list_bool_or(list_filter(x, _v -> _v IS NOT NULL)), true) END"
+        "ELSE COALESCE(NOT list_bool_or(list_filter(x, lambda _v: _v IS NOT NULL)), true) END"
     )
     con.execute(
-        "CREATE MACRO IF NOT EXISTS AnyFalse(x) AS "
+        "CREATE OR REPLACE MACRO AnyFalse(x) AS "
         "CASE WHEN x IS NULL THEN false "
-        "ELSE COALESCE(NOT list_bool_and(list_filter(x, _v -> _v IS NOT NULL)), false) END"
+        "ELSE COALESCE(NOT list_bool_and(list_filter(x, lambda _v: _v IS NOT NULL)), false) END"
     )
 
 

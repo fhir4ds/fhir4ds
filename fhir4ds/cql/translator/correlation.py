@@ -78,6 +78,7 @@ class CorrelationMixin:
                         having=node.having,
                         order_by=node.order_by,
                         distinct=node.distinct,
+                        distinct_on=node.distinct_on,
                         limit=node.limit,
                     )
                 return node
@@ -93,6 +94,7 @@ class CorrelationMixin:
                 having=node.having,
                 order_by=node.order_by,
                 distinct=node.distinct,
+                distinct_on=node.distinct_on,
                 limit=node.limit,
             )
 
@@ -680,6 +682,7 @@ class CorrelationMixin:
                     order_by=expr.order_by,
                     limit=expr.limit,
                     distinct=expr.distinct,
+                    distinct_on=expr.distinct_on,
                 )
             return expr
 
@@ -904,6 +907,7 @@ class CorrelationMixin:
                     order_by=expr.order_by,
                     limit=expr.limit,
                     distinct=expr.distinct,
+                    distinct_on=expr.distinct_on,
                 )
             return expr
 

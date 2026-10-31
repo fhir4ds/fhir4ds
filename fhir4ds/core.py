@@ -151,8 +151,12 @@ def register_cql(
                     LIMIT 1
                     """,
                     [name],
-                ).fetchone()
-                return row is not None
+                ).fetchall()
+                # DuckDB 2.0: parameterized query results stay open after
+                # fetchone(), blocking create_function on the same
+                # connection (ResourceInUseException). Fully DRAINING the
+                # result (fetchall) closes it; on 1.5 this is equivalent.
+                return bool(row)
             except _duckdb_mod.Error:
                 return False
 

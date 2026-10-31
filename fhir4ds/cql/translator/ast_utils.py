@@ -27,6 +27,7 @@ from ..translator.types import (
     SQLArray,
     SQLList,
     SQLLambda,
+    SQLLambda2,
     SQLJoin,
     SQLUnion,
     SQLIntersect,
@@ -1058,6 +1059,7 @@ def replace_qualified_alias(
             having=new_having,
             order_by=new_ob,
             distinct=expr.distinct,
+            distinct_on=expr.distinct_on,
             limit=expr.limit,
         )
 
@@ -1074,6 +1076,12 @@ def replace_qualified_alias(
     if isinstance(expr, SQLLambda):
         return SQLLambda(
             param=expr.param,
+            body=replace_qualified_alias(expr.body, old_alias, new_alias),
+        )
+
+    if isinstance(expr, SQLLambda2):
+        return SQLLambda2(
+            params=expr.params,
             body=replace_qualified_alias(expr.body, old_alias, new_alias),
         )
 

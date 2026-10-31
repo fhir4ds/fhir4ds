@@ -486,7 +486,9 @@ define "Ethnicity Codes":
             param="x",
             body=SQLFunctionCall(name="upper", args=[SQLIdentifier(name="x")]),
         )
-        assert lam.to_sql() == "x -> upper(x)"
+        # D1 (duckdb 2.0 dual-support): renderers emit DuckDB's
+        # `lambda x:` syntax — valid on 1.5 AND 2.0 (arrow removed in 2.0).
+        assert lam.to_sql() == "lambda x: upper(x)"
 
     def test_lambda2_body_also_guarded(self):
         from fhir4ds.cql.translator.types import SQLFunctionCall, SQLIdentifier, SQLLambda2

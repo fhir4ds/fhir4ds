@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import inspect
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -106,25 +107,117 @@ _PYTHON_PREFERRED_CPP_CONFLICTS = {
 }
 
 
+def _bundled_extension_filename() -> str | None:
+    """D2 dual-support: pick the bundled binary for the RUNNING DuckDB.
+
+    Extensions are ABI-locked to the DuckDB ``major.minor`` they were
+    built against (a 1.5 binary will not load in 2.0 and vice versa), so
+    the wheel ships one binary per supported line and this selector maps
+    the running version to the right file. Any UNSUPPORTED line (1.4,
+    1.6, 2.1, dev builds of unreleased lines) returns None → the caller
+    falls back to Python UDFs rather than attempting an ABI-mismatched
+    LOAD (FEATURE_DUCKDB2_DUAL_SUPPORT §3.2).
+    """
+    import re
+
+    m = re.match(r"^(\d+)\.(\d+)", duckdb.__version__ or "")
+    if not m:
+        return None
+    key = (int(m.group(1)), int(m.group(2)))
+    return {
+        (1, 5): "cql.duckdb_extension",
+        (2, 0): "cql.duckdb2_extension",
+    }.get(key)
+
+
+def _staged_load_path(ext_path: "Path") -> "Path":
+    """DuckDB 2.x enforces the `.duckdb_extension` suffix at LOAD.
+
+    The wheel bundles the 2.0 binary as `<name>.duckdb2_extension`
+    (distinct suffix so a 1.5-only environment can never LOAD the 2.0
+    binary by accident, per D2). DuckDB rejects loading files with any
+    other suffix, so stage the bundle into a content-addressed cache
+    under the loadable name before LOAD. The cache key is the bundle's
+    size+mtime, so a wheel upgrade re-stages automatically.
+    """
+    import hashlib
+    import tempfile
+    from pathlib import Path
+
+    stat = ext_path.stat()
+    key = hashlib.sha1(f"{ext_path.name}:{stat.st_size}:{int(stat.st_mtime)}".encode()).hexdigest()[:16]
+    # Per-bundle cache DIRECTORY (content-keyed) with the plain loadable
+    # filename inside: DuckDB derives the extension entrypoint from the
+    # file name, so it must stay `<name>.duckdb_extension`, while the
+    # per-bundle directory ensures distinct bundles (unit-test fakes,
+    # wheel upgrades) never share a mutable slot — the single-slot design
+    # let a later stage overwrite the binary mid-use and segfault the loader.
+    cache_dir = Path(tempfile.gettempdir()) / "fhir4ds-ext-cache" / key
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    staged = cache_dir / ext_path.name.replace(".duckdb2_extension", ".duckdb_extension")
+    if not staged.exists() or staged.stat().st_size != stat.st_size:
+        staged.write_bytes(ext_path.read_bytes())
+    return staged
+
+
 def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
     """
     Try to load the compiled C++ CQL extension bundled inside this wheel.
 
     Returns True if loaded successfully, False otherwise.
     """
-    # Version pre-flight: bundled binary is built for DuckDB 1.5.x
+    # D2 dual-support: select the binary for the RUNNING DuckDB line
+    # (extensions are ABI-locked to major.minor). Unsupported lines and
+    # missing bundles fall back to Python UDFs; strict mode (env
+    # FHIR4DS_REQUIRE_CPP=1) turns the missing-bundle case into a loud
+    # error for wheel installs that need the native engine.
     _duckdb_version = duckdb.__version__
-    if not _duckdb_version.startswith("1.5."):
+    filename = _bundled_extension_filename()
+    if filename is None:
         _logger.info(
-            "duckdb_cql_py: skipping C++ extension (built for DuckDB 1.5.x, running %s). "
-            "Falling back to Python UDFs.",
+            "duckdb_cql_py: no bundled C++ extension for DuckDB %s "
+            "(supported build lines: 1.5, 2.0). Falling back to Python UDFs.",
             _duckdb_version,
         )
         return False
 
-    ext_path = Path(__file__).parent / "extensions" / "cql.duckdb_extension"
+    ext_path = Path(__file__).parent / "extensions" / filename
     if not ext_path.exists():
+        msg = (
+            "fhir4ds C++ extension bundle mismatch: SUPPORTED RANGE "
+            "DuckDB 1.5.x / 2.0.x, DETECTED DuckDB %s — this install does "
+            "not bundle the %s binary for the detected version. The Python "
+            "UDF fallback will be used. To get the native engine, install "
+            "a fhir4ds build matching your DuckDB version (extras: "
+            "fhir4ds-v2[duckdb1] for the 1.5.x line, fhir4ds-v2[duckdb2] "
+            "for the 2.0.x line on Python >= 3.11), or set "
+            "FHIR4DS_REQUIRE_CPP=1 to make this mismatch fatal."
+        ) % (_duckdb_version, filename)
+        if os.environ.get("FHIR4DS_REQUIRE_CPP") == "1":
+            raise RuntimeError(msg)
+        _logger.warning("duckdb_cql_py: %s", msg)
         return False
+
+    # duckdb 2.x Python client requires pytz for TIMESTAMPTZ rendering.
+    if _duckdb_version.startswith("2."):
+        try:
+            import pytz  # noqa: F401
+        except ImportError:
+            _logger.warning(
+                "duckdb_cql_py: DuckDB %s detected but pytz is not installed — "
+                "TIMESTAMPTZ rendering will fail on direct timestamp "
+                "columns. Fix: pip install fhir4ds-v2[duckdb2] (or pytz).",
+                _duckdb_version,
+            )
+    # DuckDB 2.x enforces the `.duckdb_extension` suffix at LOAD: stage
+    # the bundled `.duckdb2_extension` binary into the loadable name first.
+    if ext_path.name.endswith(".duckdb2_extension"):
+        try:
+            ext_path = _staged_load_path(ext_path)
+        except OSError as exc:
+            _logger.warning("duckdb_py: failed to stage 2.0 bundle for load: %s", exc)
+            return False
+
     try:
         escaped_path = str(ext_path).replace("'", "''")
         con.execute(f"LOAD '{escaped_path}'")
@@ -184,8 +277,11 @@ def _register_python_supplements(
                     LIMIT 1
                     """,
                     [name],
-                ).fetchone()
-                return row is not None
+                ).fetchall()
+                # DuckDB 2.0: parameterized results stay open after
+                # fetchone(), blocking create_function (ResourceInUse).
+                # Fully DRAINING the result closes it (1.5-equivalent).
+                return bool(row)
             except duckdb.Error:
                 return False
 
