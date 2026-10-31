@@ -49,6 +49,19 @@ dependencies = [
 # release that carries the dual extension bundle):
 #   pip install fhir4ds-v2[duckdb1]   → pins duckdb to the 1.x line
 #   pip install fhir4ds-v2[duckdb2]   → pins duckdb to 2.0.x (>=2,<2.1)
+# 2.0 stays OPT-IN, not the default, because of an UPSTREAM DuckDB 2.0
+# optimizer pathology — NOT an fhir4ds defect: planner/optimizer passes
+# scale super-linearly with expression-tree size on CMS2-class SQL
+# (generated SQL ~1.3MB; two structurally-identical ~650KB twin
+# subqueries; `projection_pullup` dominant at ~14s of a ~30-40s total
+# plan tax, corpus-size independent). Baseline and optimized trees are
+# affected EQUALLY — MATERIALIZED shared-retrieve CTEs were exonerated by
+# A/B/C experiment. 2.0 is a large WIN where it matters: CMS68 exec
+# -80..-88% vs baseline, CMS130@5k 228s→5.6s, peak RSS @5k 40.1→15.9GB;
+# CMS130 rung100/rung1000 mixed. Full evidence:
+# fhir4ds-private/docs/architecture/plans/PERF_RCA_DUCKDB2_CMS2_PLANTIME.md
+# (perf/phase2-opt @6b70358; includes the corrected 4-leg matrix with the
+# baseline-on-2.0 leg the first retest lacked).
 # pytz rides in BASE (marker-scoped py>=3.11) so 2.x adopters get it
 # regardless of extra choice.
 duckdb1 = [
