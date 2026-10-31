@@ -1,0 +1,51 @@
+{
+  "id": "patient-address-view",
+  "url": "https://example.org/ViewDefinition/patient_address_view",
+  "description": "One row per patient address.",
+  "resource": "Patient",
+  "select": [
+    {
+      "forEach": "address",
+      "column": [
+        {
+          "name": "patient_id",
+          "type": "string",
+          "path": "%resource.getResourceKey()"
+        },
+        {
+          "name": "address_id",
+          "type": "integer",
+          "path": "%rowIndex"
+        },
+        {
+          "name": "address_line1",
+          "type": "string",
+          "path": "line.first()"
+        },
+        {
+          "name": "city",
+          "type": "string",
+          "path": "city"
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "path": "state"
+        },
+        {
+          "name": "postal_code",
+          "type": "string",
+          "path": "postalCode"
+        },
+        {
+          "name": "updated_at",
+          "type": "dateTime",
+          "path": "%resource.meta.lastUpdated"
+        }
+      ]
+    }
+  ],
+  "resourceType": "ViewDefinition",
+  "status": "active",
+  "name": "patient_address_view"
+}

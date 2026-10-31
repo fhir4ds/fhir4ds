@@ -1,0 +1,33 @@
+{
+  "resourceType": "Library",
+  "id": "blood-pressure-view-sqlview",
+  "url": "https://example.org/ViewDefinition/blood_pressure_view",
+  "name": "BloodPressureViewSqlView",
+  "status": "active",
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLView"
+    ]
+  },
+  "type": {
+    "coding": [
+      {
+        "system": "https://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-view"
+      }
+    ]
+  },
+  "description": "Blood pressure readings with a DATE-typed effective_date, so the SQL-on-FHIR example Library can compare it against a date parameter.",
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "LS0gU1FMVmlldyBkZXBlbmRlbmN5IGZvciB0aGUgU1FMLW9uLUZISVIgZXhhbXBsZSBMaWJyYXJ5Ci0tIExpYnJhcnktU3FsT25GaGlyRXhhbXBsZS5qc29uLgotLQotLSBUaGUgSUcgcXVlcnkgY29tcGFyZXMgYGJsb29kX3ByZXNzdXJlX3ZpZXcuZWZmZWN0aXZlX2RhdGVgIGFnYWluc3QgYQotLSBgZGF0ZWAgcGFyYW1ldGVyLCBzbyB0aGUgZGVwZW5kZW5jeSBtdXN0IGV4cG9zZSBhIHJlYWwgREFURSBjb2x1bW4uCi0tIEEgVmlld0RlZmluaXRpb24gZW1pdHMgdGVtcG9yYWwgY29sdW1ucyBhcyBWQVJDSEFSIChmaXh0dXJlLXBpbm5lZDogdGhlCi0tIG9mZmljaWFsIHNwZWNfdGVzdHMgYXNzZXJ0IHN0cmluZyBlcXVhbGl0eSBmb3IgZGF0ZS9kYXRlVGltZSksIHNvIHRoaXMKLS0gZGVwZW5kZW5jeSBpcyBtYXRlcmlhbGl6ZWQgYXMgYSBTUUxWaWV3IGluc3RlYWQgb2YgYSBWaWV3RGVmaW5pdGlvbiBhbmQKLS0gY2FzdHMgZXhwbGljaXRseS4KU0VMRUNUCiAganNvbl9leHRyYWN0X3N0cmluZyhyLnJlc291cmNlLCAnJC5zdWJqZWN0LnJlZmVyZW5jZScpIEFTIHBhdGllbnRfaWQsCiAgVFJZX0NBU1QoanNvbl9leHRyYWN0KHIucmVzb3VyY2UsICckLmNvbXBvbmVudFswXS52YWx1ZVF1YW50aXR5LnZhbHVlJykgQVMgRE9VQkxFKSBBUyBzeXN0b2xpYywKICBUUllfQ0FTVChqc29uX2V4dHJhY3Qoci5yZXNvdXJjZSwgJyQuY29tcG9uZW50WzFdLnZhbHVlUXVhbnRpdHkudmFsdWUnKSBBUyBET1VCTEUpIEFTIGRpYXN0b2xpYywKICBUUllfQ0FTVChqc29uX2V4dHJhY3Rfc3RyaW5nKHIucmVzb3VyY2UsICckLmVmZmVjdGl2ZURhdGVUaW1lJykgQVMgREFURSkgQVMgZWZmZWN0aXZlX2RhdGUKRlJPTSByZXNvdXJjZXMgQVMgcgpXSEVSRSByLnJlc291cmNlVHlwZSA9ICdPYnNlcnZhdGlvbicKICBBTkQganNvbl9leHRyYWN0X3N0cmluZyhyLnJlc291cmNlLCAnJC5jb2RlLmNvZGluZ1swXS5jb2RlJykgPSAnODUzNTQtOScK",
+      "extension": [
+        {
+          "url": "https://sql-on-fhir.org/ig/StructureDefinition/sql-text",
+          "valueString": "-- SQLView dependency for the SQL-on-FHIR example Library\n-- Library-SqlOnFhirExample.json.\n--\n-- The IG query compares `blood_pressure_view.effective_date` against a\n-- `date` parameter, so the dependency must expose a real DATE column.\n-- A ViewDefinition emits temporal columns as VARCHAR (fixture-pinned: the\n-- official spec_tests assert string equality for date/dateTime), so this\n-- dependency is materialized as a SQLView instead of a ViewDefinition and\n-- casts explicitly.\nSELECT\n  json_extract_string(r.resource, '$.subject.reference') AS patient_id,\n  TRY_CAST(json_extract(r.resource, '$.component[0].valueQuantity.value') AS DOUBLE) AS systolic,\n  TRY_CAST(json_extract(r.resource, '$.component[1].valueQuantity.value') AS DOUBLE) AS diastolic,\n  TRY_CAST(json_extract_string(r.resource, '$.effectiveDateTime') AS DATE) AS effective_date\nFROM resources AS r\nWHERE r.resourceType = 'Observation'\n  AND json_extract_string(r.resource, '$.code.coding[0].code') = '85354-9'\n"
+        }
+      ]
+    }
+  ]
+}

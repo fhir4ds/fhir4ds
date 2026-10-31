@@ -49,9 +49,19 @@ SQLVIEW_LIBRARY_TYPE_CODE = "sql-view"
 # ``type = LibraryTypesCodes#sql-query|sql-view``; a coding whose system is
 # present but different is a different concept and must not satisfy the
 # fixed type.
+#
+# Accepted spellings: the published IG canonical (hl7.org/fhir/uv/...) AND
+# the sql-on-fhir.org/ig form that the IG's OWN example Libraries declare
+# (verified 2026-10-31 against build.fhir.org/ig/FHIR/sql-on-fhir-v2
+# Library-SqlOnFhirExample / UniquePatientAddressesQuery /
+# OmopFhirPatientJoin, which all use
+# ``https://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes``). Without the
+# latter, the spec's published examples could not be executed at all.
 LIBRARY_TYPES_CODESYSTEM_CANONICALS = frozenset({
     "http://hl7.org/fhir/uv/sql-on-fhir/CodeSystem/LibraryTypesCodes",
     "https://hl7.org/fhir/uv/sql-on-fhir/CodeSystem/LibraryTypesCodes",
+    "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+    "https://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
 })
 
 
