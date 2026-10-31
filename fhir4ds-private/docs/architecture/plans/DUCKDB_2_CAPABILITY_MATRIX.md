@@ -42,6 +42,7 @@ Tier definitions used throughout:
 | 17 | Planner/optimizer scaling on wide SQL (duckdb#28181) | flat | super-linear on CMS2-class twin subqueries (~30-40 s plan tax; issue filed 2026-10-30) | CMS2-class measures on 2.0; the reason 2.0 stays opt-in ([RCA]) | **core-both** (gate: upstream fix or translator dedup) |
 
 Sources: [announce] https://duckdb.org/2026/10/21/announcing-duckdb-200.html ·
+[async-io post] https://duckdb.org/2026/07/31/asynchronous-io.html ·
 [gems] https://duckdb.org/2026/10/26/gems-of-duckdb-200.html ·
 [1.5 announce] https://duckdb.org/2026/03/09/announcing-duckdb-150.html ·
 [RCA] `fhir4ds-private/docs/architecture/plans/PERF_RCA_DUCKDB2_CMS2_PLANTIME.md`
@@ -181,7 +182,35 @@ target if load time matters for the product.
 
 ---
 
-## 4. Quack / CONNECT — out of scope (Joel ruling)
+## 4. Streaming surfaces: impact assessment
+
+fhir4ds "streaming" today = (a) `FileSystemSource` out-of-core scans
+(`read_parquet` / `read_json_auto`, filesystem.py:288) — data is never
+fully materialized; (b) viewdef LATERAL/unnest streaming chains — verified
+byte-identical incl. row order on both lines (FINDINGS-2 §a); (c) result
+consumption via fetchdf/Arrow — identical APIs.
+
+Verdict: **same semantics on both lines; the difference is throughput,
+and it is transparent.** Async I/O ([async-io post], 2.0-only) applies
+automatically to Parquet (~3x on S3; ~1.5x cold local; ~2x under
+concurrency) with zero SQL/code change. NDJSON gets NO async benefit in
+2.0.0 — JSON async is roadmap, not shipped — so NDJSON sources stay
+performance-identical until a later DuckDB release.
+
+Deliberate per-version differences (tuning only, never semantics):
+
+| Lever | 1.5.5 | 2.0.0 | Recommendation |
+|---|---|---|---|
+| Async-I/O knobs (`async_threads`, `http_retries`, `http_retry_backoff`) | n/a | available ([async-io post]: tuned config +~22%) | optional s3 preset, feature-detected |
+| `read_ahead_depth` | n/a | `-1` default (memory-governed) | **KEEP `-1`** — the governor yields read-ahead to our MATERIALIZED retrieve bases and join spills under pressure (blog's 8GB test shows graceful degradation toward sync) |
+| Wide-SQL plan tax (#28181) | flat | CMS2-class ~30-40s | orthogonal to I/O; gates planner-sensitive paths only |
+
+Future divergence to watch: a VARIANT + shredded-Parquet storage mode
+(§2) would combine shredded columns WITH async reads — the first case
+where a 2.0-only streaming path genuinely diverges; already gated
+post-#28181.
+
+## 6. Quack / CONNECT — out of scope (Joel ruling)
 
 Documented here only as a **2.0-only, future** tier item: a fhir4ds
 "measure server" (Quack serve + CONNECT from any DuckDB client) is
@@ -192,7 +221,7 @@ public deployment. No design work done here.
 
 ---
 
-## 5. Recommendations & sequencing
+## 7. Recommendations & sequencing
 
 **Tier assignments (summary of §1):**
 - core-both: everything we ship today + lambda migration (14) + storage
