@@ -55,6 +55,11 @@ size**; CMS2's generated SQL is the widest tree we ship.
 - **(a) Upstream report** to DuckDB: `projection_pullup` et al. quadratic on
   wide expression trees (1MB+ single statements with deep scalar subqueries +
   lateral chains). 2.0.0 is fresh; likely fixable pass-side.
+  **FILED: https://github.com/duckdb/duckdb/issues/28181** (2026-10-30) —
+  synthetic no-extension repro on a 100-row table: 1/2/4/8 structurally
+  identical twin subqueries -> 1.7/3.3/8.1/25.1s wall on 2.0.0 (planner
+  ~N^1.7, `deliminator` dominant) vs near-flat on 1.5.5. Generator kept at
+  /tmp/opencode/duckdb_issue/gen.py.
 - **(b) Translator-level expression dedup**: the two 650KB Denominator
   subqueries differ only by alias/valueset strings. A shared-shape CTE (or
   emitting one parameterized define reused twice) would halve SQL size →
