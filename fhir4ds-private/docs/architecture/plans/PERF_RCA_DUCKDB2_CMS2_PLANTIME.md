@@ -71,3 +71,44 @@ size**; CMS2's generated SQL is the widest tree we ship.
   separate, small plan-time effect on 1.5.5 and inverts to -71% at 5k.
 - Future dual-version matrices MUST include a baseline-on-new-version leg
   before attributing version-divergent behavior to the optimization delta.
+
+## Confirmation: full 4-leg matrix re-run (2026-10-30 evening)
+
+Artifacts: `/mnt/d/scaling-data/rerun-results/` (per-leg JSONs + SQL +
+profiles). Protocol: fresh process per leg, exec median of 3 on generated
+SQL, EXPLAIN ANALYZE profile per cell, populations parity base<->opt
+asserted per cell — **all 18 cells identical**. Both base and opt SQL
+executed on the opt-tree runtime (single-runtime caveat: isolates SQL-shape
+delta; the baseline tree cannot register on duckdb 2.0 at all — see below).
+
+Exec median (ms):
+
+| Measure | Rung | base15 | opt15 | Δ | base20 | opt20 | Δ |
+|---|---|---|---|---|---|---|---|
+| CMS68 | 100 | 93 | 52 | -44% | 265 | 47 | -82% |
+| CMS68 | 1,000 | 590 | 156 | -74% | 546 | 79 | -86% |
+| CMS68 | 5,000 | 4,902 | 586 | -88% | 1,276 | 256 | -80% |
+| CMS130 | 100 | 4,664 | 2,212 | -53% | 716 | 738 | +3% |
+| CMS130 | 1,000 | 47,684 | 12,945 | -73% | 2,327 | 1,561 | -33% |
+| CMS130 | 5,000 | 228,125 | 61,586 | -73% | 6,937 | 5,556 | -20% |
+| CMS2 | 100 | 2,152 | 2,084 | -3% | 34,559 | 37,034 | +7% |
+| CMS2 | 1,000 | 3,644 | 2,966 | -19% | 38,397 | 40,064 | +4% |
+| CMS2 | 5,000 | 7,650 | 4,560 | -40% | 39,652 | 43,913 | +11% |
+
+Plan time (planner+optimizer, s): CMS2-on-2.0 pays ~33-38s on BOTH base and
+opt at every rung (CMS130-on-2.0: 0.3-0.4s; everything on 1.5.5: ~0s).
+RCA verdict fully confirmed: the CMS2-on-2.0 wall time is the fixed
+upstream plan tax, not an optimization regression. Peak RSS @5k:
+40.1 GB (base15) -> 15.9 (opt15) / 19.3 (base20) / 19.7 (opt20).
+
+Additional finding: the baseline tree (@12030d89) **cannot register on
+duckdb 2.0 at all** — `ResourceInUseException` in `create_function`
+(result-lifecycle semantics changed in 2.0; dual-support landed after the
+baseline). base20 legs therefore execute baseline SQL files (generated on
+1.5.5) against a 2.0-registered runtime — same UDF surface, so exec
+comparisons remain valid.
+
+Operational notes: the two initial rung5000 opt failures (1.5.5 segfault,
+2.0 surrogate ValueError) were environmental — caused by concurrent 5k legs
+from an overly-eager catch-up script competing for memory; sequential
+retries clean, corpus-wide unpaired-surrogate scan negative (5,002 files).
