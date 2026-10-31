@@ -253,8 +253,8 @@ def main() -> None:
             library = parse_cql(cfg.cql_path.read_text())
             parse_ms = (time.perf_counter() - t0) * 1000
 
-            def library_loader(alias, version=None):
-                for path in cfg.include_paths:
+            def library_loader(alias, version=None, _cfg=cfg):
+                for path in _cfg.include_paths:
                     lib_file = path / f"{alias}.cql"
                     if lib_file.exists():
                         return parse_cql(lib_file.read_text())

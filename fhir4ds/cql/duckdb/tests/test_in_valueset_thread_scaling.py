@@ -59,8 +59,8 @@ def test_in_valueset_thread_scaling_cpp(cpp_con):
     for i in range(20000):
         code = "8867-4" if i % 2 == 0 else "1234-5"
         rows.append(
-            '{"resourceType":"Observation","id":"obs-%d","status":"final",'
-            '"code":{"coding":[{"system":"http://loinc.org","code":"%s"}]}}' % (i, code)
+            f'{{"resourceType":"Observation","id":"obs-{i}","status":"final",'
+            f'"code":{{"coding":[{{"system":"http://loinc.org","code":"{code}"}}]}}}}'
         )
     con.execute("CREATE TABLE obs (resource VARCHAR)")
     con.executemany("INSERT INTO obs VALUES (?)", [(r,) for r in rows])

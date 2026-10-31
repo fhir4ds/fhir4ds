@@ -338,7 +338,6 @@ def main() -> None:
     L.append("")
     dev = []
     cms130 = struct.get("CMS130", {})
-    cms2 = struct.get("CMS2", {})
     a130 = profile_attribution("rung5000_48g", "CMS130") or {}
     a2 = profile_attribution("rung5000_48g", "CMS2") or {}
     a68 = profile_attribution("rung5000_48g", "CMS68") or {}

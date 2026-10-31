@@ -67,7 +67,12 @@ class TestConditionalMaterialization:
         assert '"Cond1" AS (\n' in sql
 
     def test_tri_state_forced_values_survive(self):
-        from fhir4ds.cql.translator.types import CTEDefinition, SQLFragment, SQLSelect, SQLIdentifier
+        from fhir4ds.cql.translator.types import (
+            CTEDefinition,
+            SQLFragment,
+            SQLIdentifier,
+            SQLSelect,
+        )
         sel = SQLSelect(columns=[SQLIdentifier(name="x")],
                         from_clause=SQLIdentifier(name="t"))
         frag = SQLFragment(
