@@ -1,6 +1,6 @@
 {
   "phase": "EVOLUTION",
-  "iteration": 0,
+  "iteration": 6,
   "pipeline": [
     "evolution",
     "code_review",
@@ -161,5 +161,16 @@
     "target_version": "0.0.20",
     "notes": "v0.0.20 release campaign (Joel 2026-11-01): medterm4ds pin 0.0.7->0.0.8 (local dist /mnt/d/medterm4ds/dist, not yet on PyPI), evolution over 12 QA domains x 3 personalities, then code review, release prep (BOTH distro packages), docs review incl release notes, benchmarks, scribe. Working on local dev; incremental checkpoint commits (Joel pushes)."
   },
-  "issues": []
+  "issues": [
+    {
+      "domain": 1,
+      "verdict": "CLEAN",
+      "detail": "3 personalities, ~50 dual-path cases. SKEPTIC r1+r2: 7 flags all probe-expectation errors (FP-02 substring empty-length, FP-03 null-skip count, \u00a75.3 all() null criteria, 3VL null equality, combining-mark codepoint count). HISTORIAN: 12 doctrine pins (FP-13 precision, FP-02 units, FP-01 calendar/UCUM, FP-15 is/as, FP-06 lazy iif, FP-16 dedup) all hold. EXPLORER: 15 category reps incl. contained/repeat/ofType/select/skip \u2014 parity perfect. New 1.5.6 ported binary spot-verified identical (6/6 incl. UTF8 combining boundaries). Probes: .temp/qa/d1_skeptic/"
+    },
+    {
+      "domain": 2,
+      "verdict": "CLEAN",
+      "detail": "3 personalities compressed (untouched engine since FP-01..20 closure). SKEPTIC 15 cases (= vs ~ divergence, iif SC, $this/$index, repeat, trace, | vs combine) + HE/EXPLORER 20 doctrine pins (div/mod-0, INT32 bounds, 1L grammar, tail/indexer, {} propagation, Time-vs-String, toDecimal/Integer, round, Long div exactness, replaceMatches $1+named groups) \u2014 ALL parity-perfect on 1.5.5-native + fallback + new 1.5.6-native. 4 flags were probe-authoring errors (1 L spacing, {}={} pin backwards, non-matching regex 'a(c)' vs 'abc'). Probes: .temp/qa/d2_*"
+    }
+  ]
 }
