@@ -100,6 +100,59 @@ def test_repeated_identifier_parameters_are_anded(client):
     assert bundle["total"] == 0, "one resource cannot match both identifiers"
 
 
+def test_search_pages_carry_self_and_next_links(client):
+    """Review fix 6: a client can follow pages without computing offsets."""
+    seed(client)  # p1, p2, p3
+
+    first = client.get("/Patient", params={"_count": 1, "_id": "p1,p2"}).json()
+    assert first["total"] == 2
+    relations = {link["relation"]: link["url"] for link in first["link"]}
+    assert "self" in relations and "next" in relations
+    assert "_count=1" in relations["next"] and "_offset=1" in relations["next"]
+    assert "_id=p1%2Cp2" in relations["next"], "filters carry over"
+
+    second = client.get(relations["next"]).json()
+    assert second["total"] == 2
+    relations2 = {link["relation"]: link["url"] for link in second["link"]}
+    assert "next" not in relations2, "no link past the last page"
+    assert "_offset=0" in relations2["previous"]
+
+
+def test_search_accepts_the_universal_format_parameter(client):
+    """Regression (review finding 4): ``_format`` is a universal FHIR parameter
+    every generic client sends; it shapes the representation, not the result
+    set, so it is accepted (and ignored — this surface speaks fhir+json)."""
+    seed(client)
+    assert client.get("/Patient", params={"_format": "json"}).status_code == 200
+    assert client.get("/Patient?_format=application/fhir%2Bjson").status_code == 200
+
+
+def test_conditional_create_is_atomic_under_concurrency(client):
+    """Regression (review finding 2): the match decision and the create run in
+    ONE locked section, so concurrent identical conditional creates yield
+    exactly one resource — not one per request."""
+    import threading
+
+    statuses: list[int] = []
+
+    def call() -> None:
+        response = client.post(
+            "/Patient",
+            json=patient("dup", value="DUP"),
+            headers={**FHIR_JSON, "If-None-Exist": "identifier=urn:mrn|DUP"},
+        )
+        statuses.append(response.status_code)
+
+    threads = [threading.Thread(target=call) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=60)
+
+    assert sorted(statuses).count(201) == 1, f"exactly one create, got {statuses}"
+    assert client.get("/Patient", params={"identifier": "urn:mrn|DUP"}).json()["total"] == 1
+
+
 def test_unknown_search_parameter_is_400_not_silently_ignored(client):
     seed(client)
 

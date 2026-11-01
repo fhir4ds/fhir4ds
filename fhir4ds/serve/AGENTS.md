@@ -120,11 +120,20 @@ Capabilities live in `fhir4ds/operations/capabilities/`
   and lets `huggingface_hub` read `HF_TOKEN`; nothing logs or stores it, and the
   unit suite must pass with no token at all (`LocalDirStore`).
 - **Search is an explicit subset and refuses the rest.** `search.py` supports
-  `_id`, `identifier`, `_count`, `_offset`; anything else is `400 not-supported`.
-  Never "just ignore" an unknown parameter — an unfiltered answer that looks
-  filtered is the worst failure mode here. Conditional create/update reuse the
-  same matcher, so a new parameter must land in `parse_search` **and**
+  `_id`, `identifier` plus the non-filter `_count`/`_offset`/`_format`; any
+  other parameter is `400 not-supported`. Never "just ignore" an unknown
+  *filter* — an unfiltered answer that looks filtered is the worst failure mode
+  here. `_format` is the deliberate exception (representation, not result set;
+  every client sends it). A new parameter must land in `parse_search` **and**
   `condition_sql` together.
+- **Conditional create/update decide and act inside ONE `run_locked` section.**
+  Splitting the match check from the write is a check-then-act race under
+  concurrent requests (sync handlers interleave between lock acquisitions);
+  `test_conditional_create_is_atomic_under_concurrency` pins it.
+- **Bundle `entry.request.ifMatch` is a STRING** (FHIR form). A non-string is a
+  400, never silently dropped — the first implementation ignored the
+  precondition entirely and its own test encoded the wrong shape.
+- **`DELETE` takes no Content-Type** (no body). Only `POST`/`PUT` enforce 415.
 - **Generic writes refuse registry-owned types.** `Library`/`ViewDefinition`
   are `400 not-supported` on the generic routes; the registry owns their
   canonical handling. Do not "helpfully" route them into the log.
@@ -189,6 +198,12 @@ Capabilities live in `fhir4ds/operations/capabilities/`
   `--log-config /app/uvicorn-log.json` (uvicorn's default config with handlers
   pointed at `sys.stdout`) so `docker logs` shows a single unbuffered stream.
   Do not drop that flag while "simplifying" the CMD.
+- **A flush failure after the local commit is an UPLOAD retry, not a re-buffer.**
+  `FlushManager._handle_failure` checks `store.current_seq()` before re-prepending
+  rows: rows already written to the tree stay there and only `retry_publish()`
+  is retried. Re-buffering them would write a second part and double-publish
+  once new rows join the batch (`test_upload_failure_does_not_double_publish`).
+  Any new store must implement `pending_files()`/`retry_publish()` honestly.
 - **Version ids are global `_seq`, not per-resource counters.** A second version
   of the third resource is `W/"4"`, not `W/"2"`; tests that assume per-resource
   numbering are wrong (one did).

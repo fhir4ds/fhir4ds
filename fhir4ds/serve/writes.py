@@ -30,7 +30,7 @@ from . import bulk_publish, search, versioning
 from .config import context_for
 from .errors import Issue, ServeError, bad_request, not_found, unprocessable, unsupported
 from .parameters import decode_json_body
-from .resources import search_controls, searchset_bundle
+from .resources import paging_links, search_controls, searchset_bundle
 
 FHIR_JSON = "application/fhir+json"
 JSON_CONTENT_TYPES = ("application/fhir+json", "application/json")
@@ -329,11 +329,20 @@ class ResourceWriter:
             resource = entry.get("resource")
             if not isinstance(resource, dict):
                 raise bad_request("PUT entries require a resource", expression=where, code="required")
-            resume = request.get("ifMatch") or []
+            raw_if_match = request.get("ifMatch")
             if_match = None
-            if isinstance(resume, list) and resume:
-                if_match = parse_if_match(str(resume[0]))
-            return self.update(resource_type, resource_id, resource, if_match=if_match)
+            if raw_if_match is not None:
+                if not isinstance(raw_if_match, str):
+                    raise bad_request(
+                        "Bundle entry request.ifMatch must be a string (an ETag "
+                        f"value); got {type(raw_if_match).__name__}",
+                        expression=[*where, "ifMatch"],
+                        code="value",
+                    )
+                if_match = parse_if_match(raw_if_match)
+            return self.update(
+                resource_type, resource_id, resource, if_match=if_match
+            )
 
         if method == "DELETE":
             if len(segments) != 2 or resource_id is None:
@@ -592,14 +601,26 @@ def create_resource(
     if_none_exist = request.headers.get("if-none-exist")
     if if_none_exist:
         query = _conditional_query(request, resource_type, if_none_exist)
-        matches = context.run_locked(search.match_count, context.connection, query)
-        if matches > 1:
+
+        # The match decision and the create run in ONE locked section: with the
+        # check and the act in separate acquisitions, two concurrent identical
+        # conditional creates could both see "zero matches" and both create.
+        def decide_and_act() -> tuple[str, Any]:
+            matches = search.match_count(context.connection, query)
+            if matches > 1:
+                return "conflict", matches
+            if matches == 1:
+                return "existing", search.first_match(context.connection, query)
+            return "created", context.writer.create(resource_type, resource)
+
+        kind, payload = context.run_locked(decide_and_act)
+        if kind == "conflict":
             raise precondition_failed(
-                f"If-None-Exist {if_none_exist!r} matches {matches} resources; "
+                f"If-None-Exist {if_none_exist!r} matches {payload} resources; "
                 "a conditional create needs zero or one"
             )
-        if matches == 1:
-            existing = context.run_locked(search.first_match, context.connection, query)
+        if kind == "existing":
+            existing = payload
             return Response(
                 content=json.dumps(existing, ensure_ascii=False),
                 media_type=FHIR_JSON,
@@ -610,6 +631,14 @@ def create_resource(
                     "Location": f"{resource_type}/{existing['id']}",
                 },
             )
+        result = payload
+        _enqueue(request, [result])
+        return _resource_response(
+            result,
+            pending=_pending(request),
+            location=f"{resource_type}/{result.resource['id']}",
+            status_code=201,
+        )
 
     result = context.run_locked(context.writer.create, resource_type, resource)
     _enqueue(request, [result])
@@ -631,8 +660,16 @@ def search_resources(resource_type: str, request: Request) -> Response:
     resources, total = context.run_locked(
         search.search, context.connection, query, count=capped, offset=offset
     )
+    links = paging_links(
+        base_url=str(request.url).split("?")[0],
+        params=request.query_params,
+        page=resources,
+        total=total,
+        count=capped,
+        offset=offset,
+    )
     return Response(
-        content=json.dumps(searchset_bundle(resources, total), ensure_ascii=False),
+        content=json.dumps(searchset_bundle(resources, total, links=links), ensure_ascii=False),
         media_type=FHIR_JSON,
     )
 
@@ -647,27 +684,32 @@ def conditional_update(
     query = _conditional_query(request, resource_type, None)
     resource = _decode(request, body)
     context = context_for(request)
+    if_match = version_from_etag_header(request)
 
-    matches = context.run_locked(search.match_count, context.connection, query)
-    if matches > 1:
-        raise precondition_failed(
-            f"The conditional update filter matches {matches} resources; it must "
-            "match zero or one"
-        )
-
-    if matches == 0:
-        result = context.run_locked(context.writer.create, resource_type, resource)
-        status_code = 201
-    else:
-        existing = context.run_locked(search.first_match, context.connection, query)
-        result = context.run_locked(
-            context.writer.update,
+    # One locked section for decide + act (see the conditional-create note).
+    def decide_and_act() -> tuple[str, Any]:
+        matches = search.match_count(context.connection, query)
+        if matches > 1:
+            return "conflict", matches
+        if matches == 0:
+            return "created", context.writer.create(resource_type, resource)
+        existing = search.first_match(context.connection, query)
+        result = context.writer.update(
             resource_type,
             existing["id"],
             {**resource, "id": existing["id"]},
-            if_match=version_from_etag_header(request),
+            if_match=if_match,
         )
-        status_code = 200
+        return "updated", result
+
+    kind, payload = context.run_locked(decide_and_act)
+    if kind == "conflict":
+        raise precondition_failed(
+            f"The conditional update filter matches {payload} resources; it must "
+            "match zero or one"
+        )
+    result = payload
+    status_code = 201 if kind == "created" else 200
 
     _enqueue(request, [result])
     return _resource_response(
@@ -717,8 +759,11 @@ def update_resource(
 
 @router.delete("/{resource_type}/{resource_id}", status_code=204, summary="Delete a resource")
 def delete_resource(resource_type: str, resource_id: str, request: Request) -> Response:
-    """Tombstone: gone from reads, still visible in ``_history``."""
-    require_json_content_type(request)
+    """Tombstone: gone from reads, still visible in ``_history``.
+
+    No Content-Type is required: DELETE carries no body, so a plain
+    ``curl -X DELETE`` is valid.
+    """
     reject_registry_owned(resource_type)
     context = context_for(request)
     result = context.run_locked(context.writer.delete, resource_type, resource_id)

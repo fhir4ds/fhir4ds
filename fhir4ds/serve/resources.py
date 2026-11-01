@@ -77,16 +77,58 @@ def resolve_reference(
     return resource
 
 
-def searchset_bundle(resources: Sequence[dict], total: int) -> dict:
-    """Build a ``searchset`` Bundle (``entry`` omitted when empty)."""
+def searchset_bundle(
+    resources: Sequence[dict], total: int, *, links: Sequence[dict] | None = None
+) -> dict:
+    """Build a ``searchset`` Bundle (``entry`` omitted when empty).
+
+    ``links`` carries FHIR paging relations (``self`` / ``next`` / ``previous``)
+    when the caller supplies them; the definition-registry search (phase 1)
+    passes none and is unchanged.
+    """
     bundle: dict = {
         "resourceType": "Bundle",
         "type": "searchset",
         "total": total,
     }
+    if links:
+        bundle["link"] = list(links)
     if resources:
         bundle["entry"] = [{"resource": resource} for resource in resources]
     return bundle
+
+
+def paging_links(
+    *, base_url: str, params: Any, page: Sequence[dict], total: int,
+    count: int | None, offset: int,
+) -> list[dict]:
+    """``self``/``next``/``previous`` links for one search page.
+
+    Filter parameters are carried through untouched; only ``_count`` and
+    ``_offset`` are rewritten. ``next`` is omitted on the last page (and
+    ``previous`` on the first).
+    """
+    from urllib.parse import urlencode
+
+    default_count = 100
+    size = count if count is not None else default_count
+    filters = [
+        (name, value)
+        for name, value in (params.multi_items() if params else [])
+        if name not in ("_count", "_offset")
+    ]
+
+    def url_for(page_offset: int) -> str:
+        query = urlencode([*filters, ("_count", str(size)), ("_offset", str(page_offset))])
+        return f"{base_url}?{query}"
+
+    links = [{"relation": "self", "url": url_for(offset)}]
+    if offset + len(page) < total and size > 0:
+        links.append({"relation": "next", "url": url_for(offset + len(page))})
+    if offset > 0:
+        previous = max(0, offset - size)
+        links.append({"relation": "previous", "url": url_for(previous)})
+    return links
 
 
 def search_controls(query_params: Any) -> tuple[int | None, int]:

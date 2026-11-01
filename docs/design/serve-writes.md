@@ -145,9 +145,13 @@ tick. `GET /health` reports `pending`, `last_commit`, `last_commit_at`,
    silent upsert would hide a client that meant `PUT`.
 6. **No cross-process locking**, by design and stated in the README: one writer,
    one DuckDB connection, one flush thread.
-7. **Unknown search parameters are a 400**, not ignored (see above). The FHIR
+7. **Unknown search *filter* parameters are a 400**, not ignored. The FHIR
    spec lets a server ignore unknown parameters; doing so would return
-   unfiltered data that looks filtered.
+   unfiltered data that looks filtered. The universal protocol parameter
+   `_format` is the deliberate exception: it shapes the representation, not the
+   result set (this surface speaks fhir+json regardless), and every generic
+   client sends it — so it is accepted and ignored
+   (`search.NON_FILTER_PARAMETERS`).
 8. **`output[].type` stays `"resources"` (no per-type grouping).** Bulk Data uses
    per-type entries because each URL is a per-type NDJSON file. Here a URL is a
    date-partitioned parquet **part** that spans types, so a per-type entry would
@@ -157,6 +161,32 @@ tick. `GET /health` reports `pending`, `last_commit`, `last_commit_at`,
    parts by type (`resources/type=<Type>/dt=…/part-<seq>.parquet`), which
    departs from the brief's fixed layout and re-publishes the dataset — offered,
    not taken.
+
+## Review fixes (post-addendum self-review)
+
+A self-review after the addendum found four real defects and three gaps; all
+seven are fixed, each with a regression test that failed first:
+
+1. **Bundle `entry.request.ifMatch` now takes the FHIR string form** and a
+   non-string is a loud 400. It previously accepted only a list — the
+   precondition inside transactions was silently ignored (the first version's
+   own test had encoded the wrong shape).
+2. **Conditional create/update decide and act in ONE locked section.** With
+   `match_count` / `first_match` / the write in separate acquisitions, two
+   concurrent identical conditional creates could both pass the "zero matches"
+   check; the test now fires four and asserts exactly one resource.
+3. **`DELETE` requires no Content-Type** — it carries no body; a plain
+   `curl -X DELETE` was a 415.
+4. **`_format` is accepted on search** (see decision 7).
+5. **A flush that fails *after* the local commit is retried as an upload, never
+   as a re-buffer.** Re-buffering committed rows would write them into a second
+   part and double-publish them once new rows joined the buffer; the store
+   contract gained `pending_files()` / `retry_publish()` for exactly this.
+6. **Search pages carry `self`/`next`/`previous` links** (filters preserved,
+   no link past the last page).
+7. **The `$cql` body cap is enforced before buffering** — `Content-Length`
+   when stated, the running total when chunked — so an oversized body can no
+   longer be read fully into memory before rejection.
 
 ## Verification
 

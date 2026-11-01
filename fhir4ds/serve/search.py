@@ -27,8 +27,14 @@ from .versioning import LATEST_VIEW
 #: Resource-type lexical space (FHIR `code` for resourceType).
 RESOURCE_TYPE_PATTERN = re.compile(r"^[A-Z][A-Za-z0-9]{0,63}$")
 
+#: Parameters understood but not filters: paging plus the universal FHIR
+#: protocol parameters. ``_format`` shapes the representation, not the result
+#: set — this surface speaks fhir+json regardless — so it is accepted (and
+#: ignored) rather than rejected: every generic FHIR client sends it.
+NON_FILTER_PARAMETERS: tuple[str, ...] = ("_count", "_offset", "_format")
+
 #: Parameters this surface understands.
-SUPPORTED_PARAMETERS: tuple[str, ...] = ("_id", "identifier", "_count", "_offset")
+SUPPORTED_PARAMETERS: tuple[str, ...] = ("_id", "identifier", *NON_FILTER_PARAMETERS)
 
 #: Default page size when ``_count`` is absent.
 DEFAULT_PAGE_SIZE = 100
@@ -55,8 +61,8 @@ def parse_search(resource_type: str, query_params: Any) -> SearchQuery:
     identifiers: list[tuple[str | None, str]] = []
 
     for name, values in _pairs(query_params):
-        if name in ("_count", "_offset"):
-            continue  # paging is read by the caller (search_controls)
+        if name in NON_FILTER_PARAMETERS:
+            continue  # paging / protocol parameters are not filters
         if name not in SUPPORTED_PARAMETERS:
             raise unsupported(
                 f"Unsupported search parameter {name!r}. Supported: "
@@ -192,6 +198,7 @@ def first_match(connection: Any, query: SearchQuery) -> dict | None:
 
 __all__ = [
     "DEFAULT_PAGE_SIZE",
+    "NON_FILTER_PARAMETERS",
     "SUPPORTED_PARAMETERS",
     "SearchQuery",
     "condition_sql",

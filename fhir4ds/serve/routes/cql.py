@@ -84,9 +84,30 @@ class RawBodyCapture:
     sees a normal request.
     """
 
-    def __init__(self, app: Any, *, path: str) -> None:
+    def __init__(self, app: Any, *, path: str, max_bytes: int = 1_000_000) -> None:
         self.app = app
         self.path = path
+        self.max_bytes = max(1, int(max_bytes))
+
+    async def _reject(self, receive: Any, send: Any) -> None:
+        """Answer an oversized body with the facade's own 413 wording."""
+        await _drain(receive)
+        payload = operation_outcome(
+            message="Request body is too large",
+            category=CQLErrorCategory.INVALID_REQUEST,
+        )
+        body = dumps_fhir_json(payload)
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [
+                    (b"content-type", b"application/fhir+json"),
+                    (b"content-length", str(len(body)).encode("ascii")),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
 
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         if (
@@ -97,14 +118,27 @@ class RawBodyCapture:
             await self.app(scope, receive, send)
             return
 
+        # Reject an oversized body BEFORE buffering it: Content-Length when the
+        # client states it, the running total when it does not (chunked).
+        declared = _content_length(scope)
+        if declared is not None and declared > self.max_bytes:
+            await self._reject(receive, send)
+            return
+
         body = bytearray()
+        exceeded = False
         while True:
             message = await receive()
             if message.get("type") == "http.disconnect":
                 return
             body.extend(message.get("body", b""))
+            if not exceeded and len(body) > self.max_bytes:
+                exceeded = True
             if not message.get("more_body", False):
                 break
+        if exceeded:
+            await self._reject(receive, send)
+            return
 
         scope.setdefault("state", {})[RAW_BODY_SCOPE_KEY] = bytes(body)
 
@@ -118,6 +152,27 @@ class RawBodyCapture:
             return {"type": "http.disconnect"}
 
         await self.app(scope, replay, send)
+
+
+def _content_length(scope: Any) -> int | None:
+    """The request's declared Content-Length, when present and parseable."""
+    for name, value in scope.get("headers") or ():
+        if name == b"content-length":
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+async def _drain(receive: Any) -> None:
+    """Consume any remaining request body so the connection stays reusable."""
+    while True:
+        message = await receive()
+        if message.get("type") == "http.disconnect":
+            return
+        if not message.get("more_body", False):
+            return
 
 
 def build_router(config: ServeConfig) -> APIRouter:
@@ -174,7 +229,9 @@ def mount(app: FastAPI, config: ServeConfig) -> bool:
     """
     router = build_router(config)
     _declare_capability(router)
-    app.add_middleware(RawBodyCapture, path=CQL_PATH)
+    app.add_middleware(
+        RawBodyCapture, path=CQL_PATH, max_bytes=config.cql_max_request_bytes
+    )
     app.include_router(router)
     return True
 

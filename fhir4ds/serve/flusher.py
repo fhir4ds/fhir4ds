@@ -121,7 +121,7 @@ class FlushManager:
         """Publish buffered rows. ``force`` takes the whole buffer, else one batch."""
         with self._buffer_lock:
             if not self._buffer:
-                return FlushResult(self._store.revision(), 0)
+                return self._retry_pending()
             if force:
                 rows = self._buffer
                 self._buffer = []
@@ -132,16 +132,50 @@ class FlushManager:
         try:
             revision = self._publish(rows)
         except Exception as exc:  # noqa: BLE001 - keep the buffer, report the error
-            with self._buffer_lock:
-                self._buffer[:0] = rows
-            self.last_error = f"{type(exc).__name__}: {exc}"
-            logger.warning("flush failed, %d row(s) kept: %s", len(rows), exc)
+            self._handle_failure(rows, exc)
             return FlushResult(self._store.revision(), 0)
 
         self.last_commit = revision
         self.last_commit_at = bulk_publish.utc_timestamp()
         self.last_error = None
         return FlushResult(revision, len(rows))
+
+    def _retry_pending(self) -> FlushResult:
+        """Retry publishing files a failed flush committed but could not push."""
+        if not self._store.pending_files():
+            return FlushResult(self._store.revision(), 0)
+        try:
+            revision = self._store.retry_publish()
+        except Exception as exc:  # noqa: BLE001 - keep the error visible on /health
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            logger.warning("publish retry failed: %s", exc)
+            return FlushResult(self._store.revision(), 0)
+        self.last_commit = revision
+        self.last_commit_at = bulk_publish.utc_timestamp()
+        self.last_error = None
+        return FlushResult(revision, 0)
+
+    def _handle_failure(self, rows: list[dict[str, Any]], exc: Exception) -> None:
+        """Record a flush failure, re-buffering only rows NOT already committed.
+
+        A store whose local commit succeeded (part + state written, upload
+        failed) already holds these rows: re-buffering them would write them
+        into a second part and double-publish. Such rows stay committed locally
+        and only the upload is retried (``_retry_pending``).
+        """
+        self.last_error = f"{type(exc).__name__}: {exc}"
+        highest = max(int(row["_seq"]) for row in rows)
+        if self._store.current_seq() >= highest:
+            logger.warning(
+                "flush failed after the local commit (%d row(s) committed, "
+                "upload pending): %s",
+                len(rows),
+                exc,
+            )
+            return
+        with self._buffer_lock:
+            self._buffer[:0] = rows
+        logger.warning("flush failed, %d row(s) kept: %s", len(rows), exc)
 
     def _publish(self, rows: list[dict[str, Any]]) -> str:
         self._store.append(rows)

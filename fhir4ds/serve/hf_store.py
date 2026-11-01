@@ -78,6 +78,16 @@ class HfDatasetStore(TreeStore):
         self._publish_dirty()
         return revision
 
+    def pending_files(self) -> int:
+        self._ensure_downloaded()
+        return len(self.dirty_paths())
+
+    def retry_publish(self) -> str:
+        """Upload files a failed flush committed locally but could not push."""
+        self._ensure_downloaded()
+        self._publish_dirty()
+        return self.revision()
+
     # -- Hub I/O ---------------------------------------------------------
 
     def _ensure_downloaded(self) -> None:

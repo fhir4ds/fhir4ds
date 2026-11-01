@@ -287,7 +287,7 @@ def test_failed_transaction_entry_aborts_everything(client, app_connection):
             [
                 post_entry("p2"),
                 {
-                    "request": {"method": "PUT", "url": "Patient/p1", "ifMatch": ['W/"1"']},
+                    "request": {"method": "PUT", "url": "Patient/p1", "ifMatch": 'W/"1"'},
                     "resource": patient("p1", family="Stale"),
                 },
             ]
@@ -313,6 +313,81 @@ def test_batch_bundle_is_applied(client):
     )
     assert response.status_code == 200
     assert response.json()["type"] == "batch-response"
+
+
+def test_bundle_if_match_string_form_is_enforced(client, app_connection):
+    """Regression (review finding 1): FHIR sends ``ifMatch`` as a STRING.
+
+    A stale string ETag inside a transaction must be a 412 that rolls the whole
+    bundle back — not a silently-ignored precondition.
+    """
+    client.post("/Patient", json=patient("p1"), headers=FHIR_JSON)
+    client.put("/Patient/p1", json=patient("p1", family="Jones"), headers=FHIR_JSON)
+
+    response = client.post(
+        "/Bundle",
+        json=transaction(
+            [
+                post_entry("p2"),
+                {
+                    "request": {"method": "PUT", "url": "Patient/p1", "ifMatch": 'W/"1"'},
+                    "resource": patient("p1", family="Stale"),
+                },
+            ]
+        ),
+        headers=FHIR_JSON,
+    )
+
+    assert response.status_code == 412
+    assert latest_count(app_connection) == 1
+    assert client.get("/Patient/p2").status_code == 404
+    assert client.get("/Patient/p1").json()["name"][0]["family"] == "Jones"
+
+
+def test_bundle_if_match_current_string_is_accepted(client):
+    client.post("/Patient", json=patient("p1"), headers=FHIR_JSON)
+    response = client.post(
+        "/Bundle",
+        json=transaction(
+            [
+                {
+                    "request": {"method": "PUT", "url": "Patient/p1", "ifMatch": 'W/"1"'},
+                    "resource": patient("p1", family="Jones"),
+                }
+            ]
+        ),
+        headers=FHIR_JSON,
+    )
+    assert response.status_code == 200
+    assert response.json()["entry"][0]["response"]["etag"] == 'W/"2"'
+
+
+def test_bundle_if_match_must_be_a_string(client):
+    """A non-string ifMatch is rejected loudly, never silently dropped."""
+    client.post("/Patient", json=patient("p1"), headers=FHIR_JSON)
+    response = client.post(
+        "/Bundle",
+        json=transaction(
+            [
+                {
+                    "request": {"method": "PUT", "url": "Patient/p1", "ifMatch": ['W/"1"']},
+                    "resource": patient("p1", family="Jones"),
+                }
+            ]
+        ),
+        headers=FHIR_JSON,
+    )
+    assert response.status_code == 400
+    assert client.get("/Patient/p1").json()["name"][0]["family"] == "Smith"
+
+
+def test_delete_needs_no_content_type(client, app_connection):
+    """Regression (review finding 3): DELETE carries no body; a plain
+    ``curl -X DELETE`` must not be a 415."""
+    client.post("/Patient", json=patient("p1"), headers=FHIR_JSON)
+    response = client.delete("/Patient/p1")
+    assert response.status_code == 204
+    assert latest_count(app_connection) == 0
 
 
 def test_bundle_rejects_unknown_types(client):
@@ -381,6 +456,77 @@ def test_versions_survive_a_restart(publish_dir, app_connection):
         assert response.headers["etag"] == 'W/"2"'
     finally:
         second_connection.close()
+
+
+def test_upload_failure_does_not_double_publish(tmp_path):
+    """Review fix 5: rows committed locally but not uploaded are retried as an
+    upload — never re-buffered into a second part."""
+    import duckdb as _duckdb
+
+    from fhir4ds.serve.flusher import FlushManager
+    from fhir4ds.serve.store import LocalDirStore
+
+    root = tmp_path / "dataset"
+
+    class FlakyStore(LocalDirStore):
+        """Local tree commits fine; the 'upload' fails on demand.
+
+        Mirrors HfDatasetStore's seam exactly: ``commit`` writes the local tree
+        and then publishes, so raising AFTER ``super().commit()`` is the shape
+        of a Hub outage mid-flush.
+        """
+
+        def __init__(self, root_dir):
+            super().__init__(root_dir)
+            self.fail_upload = False
+
+        def commit(self):
+            revision = super().commit()
+            if self.fail_upload:
+                raise RuntimeError("hub down")
+            return revision
+
+        def pending_files(self):
+            return len(self.dirty_paths())
+
+        def retry_publish(self):
+            if self.fail_upload:
+                raise RuntimeError("hub down")
+            return super().retry_publish()
+
+    store = FlakyStore(root)
+    manager = FlushManager(store, autostart=False)
+
+    def row(seq):
+        return {
+            "id": f"o{seq}", "resourceType": "Observation",
+            "resource": json.dumps({"resourceType": "Observation", "id": f"o{seq}"}),
+            "patient_ref": "p1", "_seq": seq, "_deleted": False,
+            "_ingested_at": "2026-11-01T00:00:00Z",
+        }
+
+    # First flush: local commit succeeds, upload fails.
+    store.fail_upload = True
+    manager.enqueue([row(1), row(2)])
+    result = manager.flush()
+    assert result.committed == 0
+    assert manager.last_error and "hub down" in manager.last_error
+    assert manager.pending() == 0, "committed rows are NOT re-buffered"
+    assert store.current_seq() == 2, "the local tree already holds them"
+
+    # New rows join; the next flush writes them and retries the upload.
+    store.fail_upload = False
+    manager.enqueue([row(3)])
+    result = manager.flush()
+    assert result.committed == 1
+
+    parts = sorted((root / "resources").rglob("*.parquet"))
+    dataset = _duckdb.connect().execute(
+        f"SELECT count(*), count(DISTINCT _seq) FROM read_parquet('{root}/resources/**/*.parquet')"
+    ).fetchone()
+    assert dataset == (3, 3), f"no duplicated _seq across parts; got {dataset}"
+    assert len(parts) == 2
+    assert manager.last_error is None
 
 
 def test_bulk_publish_manifest_lists_the_published_part(client, publish_dir):

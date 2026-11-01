@@ -351,3 +351,34 @@ server stopped
 All checks passed!
 ruff exit=0
 protected-path grep exit=1 (1 = untouched)
+
+==================================================================
+== 10. ADDENDUM 2 (review fixes): 7 findings, 7 fixed
+==================================================================
+Self-review after the addendum found 4 defects + 3 gaps; each fix has a
+regression test that failed before it (5 failures reproduced, then green).
+
+--- suites ---------------------------------------------------------
+$ PYTHONPATH=. pytest fhir4ds/serve/tests -q
+================== 235 passed, 1 skipped, 1 warning in 32.54s ==================
+(227 before the fixes; +8 regression tests)
+
+--- fix verifications (live probes, same app) ----------------------
+1. plain DELETE without Content-Type   -> 404 (unknown id) / 204 (existing);
+   was 415 before the fix.
+2. Bundle PUT entry, stale STRING ifMatch 'W/"1"' -> 412, version unchanged;
+   was silently ignored (200, version bumped) before the fix.
+3. GET /Patient?_format=json           -> 200; was 400 before the fix.
+4. GET /Patient?_count=1               -> link[relation]=self(,next when a
+   page follows); filters carry over, no link past the last page.
+5. $cql oversized/malformed bodies     -> 413 pre-buffered (Content-Length),
+   400 facade wording; parity suite still 11/11 green.
+6. upload-failure flush: committed rows are NOT re-buffered
+   (pending=0, store.current_seq advanced); after recovery the dataset holds
+   exactly one row per _seq across parts (count == count DISTINCT _seq).
+7. concurrent identical conditional creates (4 threads) -> exactly one 201,
+   one resource (decide+act under one lock).
+
+--- gates ----------------------------------------------------------
+ruff: All checks passed (fhir4ds/serve, fhir4ds/cli/serve.py)
+protected paths: git diff --stat dev...HEAD | grep -E "cql/fhir_server|viewdef/|sqlquery/runner.py" -> empty
