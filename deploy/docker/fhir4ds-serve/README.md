@@ -8,6 +8,8 @@ One image, two FHIR surfaces on port 7860:
 | SQL-on-FHIR v2 ViewDefinition `$run` | `/ViewDefinition/{id}/$run`, `/ViewDefinition/$run` |
 | CQL conformance facade (`cqframework/cql-tests-runner`) | `/fhir/$cql` |
 | Registries | `/Library`, `/ViewDefinition`, `/metadata`, `/health`, `/docs`, `/openapi.json` |
+| FHIR writes (phase 3) | `POST /{type}`, `PUT /{type}/{id}`, `DELETE /{type}/{id}`, `GET /{type}/{id}`, `_history`, `POST /Bundle` |
+| Publication | `POST /admin/flush`, `GET /$bulk-publish` |
 
 ## Build
 
@@ -47,6 +49,35 @@ Compose (same thing, `FHIR4DS_DATA` defaults to `./data`):
 ```bash
 HF_TOKEN=... docker compose -f deploy/docker/fhir4ds-serve/compose.yml up --build
 ```
+
+## Writes and publication
+
+The container is a FHIR **writer**: resources are versioned locally and
+published as an append-only parquet dataset.
+
+```bash
+docker run --rm -p 7860:7860 \
+  -v "$PWD/fhir4ds-publish":/publish \
+  -e HF_TOKEN="$HF_TOKEN" \
+  fhir4ds-serve:phase2 \
+  python -m fhir4ds.serve --host 0.0.0.0 --port 7860 --data-root /data \
+    --publish-dir /publish --publish-backend hf \
+    --publish-repository fhir4ds/bulk-publish-demo
+```
+
+* **Single writer only.** One container, one DuckDB connection, one flush
+  thread. Do not scale this image horizontally: two writers would fight over
+  `_seq` and the dataset. (No cross-process lock exists by design.)
+* Writes return the FHIR status (`201`/`200`/`204`) with an `ETag`; the number of
+  rows still awaiting a commit rides `X-Pending-Commits`.
+* Flushes happen every 30 s or every 50 rows; `POST /admin/flush` forces one.
+  `GET /health` reports `pending`, `last_commit`, `last_commit_at`,
+  `last_error` next to `status`.
+* `--publish-dir` must be a **volume** if you want versions to survive a
+  restart: the DuckDB database is in-memory, and `meta/state.json` in that
+  directory is what keeps `_seq` monotonic across restarts.
+* With `--publish-backend local` (the default) nothing leaves the machine; the
+  `$bulk-publish` manifest then carries `file://` URLs.
 
 ## Secrets
 

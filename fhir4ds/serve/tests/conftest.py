@@ -46,12 +46,22 @@ def store(connection):
     return registry
 
 
+@pytest.fixture(scope="session")
+def publish_dir(tmp_path_factory):
+    """One throwaway publish directory for the whole session."""
+    return tmp_path_factory.mktemp("publish")
+
+
 @pytest.fixture()
-def app(connection, store):
+def app(connection, store, publish_dir):
     """The FastAPI application bound to the session connection."""
     from fhir4ds.serve.app import create_app
+    from fhir4ds.serve.config import ServeConfig
 
-    return create_app(connection=connection)
+    return create_app(
+        ServeConfig(publish_dir=str(publish_dir), flush_autostart=False),
+        connection=connection,
+    )
 
 
 @pytest.fixture()

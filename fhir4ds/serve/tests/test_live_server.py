@@ -25,12 +25,14 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def test_live_server_end_to_end(connection, store):
+def test_live_server_end_to_end(connection, store, tmp_path):
     import uvicorn
 
     from fhir4ds.serve.app import create_app
 
-    app = create_app(connection=connection)
+    from ._helpers import serve_config
+
+    app = create_app(serve_config(tmp_path), connection=connection)
     port = _free_port()
     server = uvicorn.Server(
         uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
@@ -50,7 +52,7 @@ def test_live_server_end_to_end(connection, store):
         with httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=60) as client:
             health = client.get("/health")
             assert health.status_code == 200
-            assert health.json() == {"status": "ok"}
+            assert health.json()["status"] == "ok"
 
             metadata = client.get("/metadata")
             assert metadata.status_code == 200

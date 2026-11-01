@@ -37,8 +37,10 @@ def test_instance_run_returns_ndjson_by_default(client):
     assert response.headers["content-type"].startswith("application/x-ndjson")
 
     rows = [json.loads(line) for line in response.text.strip().splitlines()]
-    assert [row["name"] for row in rows] == ["Smith", "Johnson", "Williams"]
-    assert rows[0]["id"] == "Patient/pt-1"
+    # Row order is not part of the contract (ViewDefinition imposes none, and
+    # phase 3 reads through a windowed latest-wins view), so assert membership.
+    assert sorted(row["name"] for row in rows) == ["Johnson", "Smith", "Williams"]
+    assert {row["id"] for row in rows} == {"Patient/pt-1", "Patient/pt-2", "Patient/pt-3"}
 
 
 def test_instance_run_rejects_view_reference_and_resource(client):

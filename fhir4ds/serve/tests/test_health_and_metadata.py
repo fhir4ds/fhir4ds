@@ -8,7 +8,10 @@ from fhir4ds.serve.metadata import FHIR_VERSION
 def test_health_returns_ok(client):
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    payload = response.json()
+    # Phase 3 keeps `status` at the top level and adds publication state.
+    assert payload["status"] == "ok"
+    assert {"pending", "last_commit", "last_commit_at", "last_error"} <= set(payload)
 
 
 def test_metadata_serves_a_capability_statement(client):

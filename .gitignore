@@ -16,3 +16,6 @@ dist/
 # Local scratch and runtime state
 .temp/
 .opencode/goals/
+
+# fhir4ds serve: default local publish directory (phase 3)
+fhir4ds-publish/

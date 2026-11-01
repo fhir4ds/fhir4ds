@@ -82,6 +82,11 @@ serve = [
     "fastapi>=0.110",
     "uvicorn>=0.27",
 ]
+# Phase-3 write surface: the Hub-backed publish store. `serve` works without
+# this extra (LocalDirStore only), so a unit run never needs a token.
+hf = [
+    "huggingface-hub>=0.20",
+]
 measures = [
     "pandas",
 ]

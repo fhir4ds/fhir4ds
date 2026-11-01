@@ -195,4 +195,6 @@ def test_cql_is_not_advertised_when_the_facade_is_disabled(connection, store):
 
     names = {entry["name"] for entry in _operations(client.get("/metadata").json())}
     assert CQL_OPERATION not in names
-    assert client.post(CQL_PATH, json=cql_body("1 + 1")).status_code == 404
+    # Phase 3 adds generic resource routes, so the two-segment path now exists
+    # as GET-only: POST is 405 rather than 404. Either way nothing evaluates CQL.
+    assert client.post(CQL_PATH, json=cql_body("1 + 1")).status_code in (404, 405)

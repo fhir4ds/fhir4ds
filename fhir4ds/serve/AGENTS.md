@@ -2,8 +2,10 @@
 
 FHIR R4 HTTP surface that projects the engine as a FHIR API: the SQL-on-FHIR v2
 operations `$sqlquery-run` and `$viewdefinition-run`/`$run`, the Library and
-ViewDefinition registries that back them, a derived CapabilityStatement, and (as
-of phase 2) the CQL `$cql` conformance facade plus the container image.
+ViewDefinition registries that back them, a derived CapabilityStatement, the CQL
+`$cql` conformance facade and container image (phase 2), and (phase 3) a
+FHIR-native **write** surface over a versioned append-only log that publishes to
+the `fhir4ds/bulk-publish-demo` dataset.
 
 Design doc: `docs/design/serve-layer.md`. Container assets:
 `deploy/docker/fhir4ds-serve/`.
@@ -20,6 +22,12 @@ Design doc: `docs/design/serve-layer.md`. Container assets:
 | `routes/viewdefinition.py` | ViewDefinition CRUD + `$run` at instance/type level |
 | `routes/cql.py` | `POST /fhir/$cql` — the facade mount, its raw-body middleware, and its capability declaration |
 | `sources.py` | `source` resolution: configured names, data-root paths (loaded once), dataset URIs (400) |
+| `versioning.py` | **The versioning model, and the only place it lives**: `resources_base` (append-only), the latest-wins `resources` view, `_history`/vread reads, legacy-table migration, patient-ref extraction |
+| `writes.py` | FHIR write surface: `POST /{type}`, `PUT`, `DELETE` tombstone, `GET`, `_history`, vread, `POST /Bundle`, `/admin/flush`, `/$bulk-publish`; `ResourceWriter` assigns `_seq` and `meta.versionId` |
+| `store.py` | also holds the phase-3 publish store: `PublishStore` protocol, `TreeStore` (part naming, `meta/state.json`, dirty tracking), `LocalDirStore` |
+| `hf_store.py` | `HfDatasetStore`: `snapshot_download` at boot, one `create_commit` per flush, one retry on a `409` parent conflict |
+| `flusher.py` | `FlushManager`: pending buffer, 30 s / 50-row cadence, forced flush, health counters |
+| `bulk_publish.py` | `$bulk-publish` manifest, dataset README, definition files. Path constants |
 | `metadata.py` | `RouteSpec`, `cap_interaction`, `cap_operation`, `build_capability_statement` |
 | `parameters.py` | FHIR `Parameters` body parsing → typed bag; `ParameterSpec` declarations |
 | `execution.py` | Operation pipeline: validate → negotiate format → cap `_limit` → run under lock → serialize |
@@ -84,6 +92,37 @@ Capabilities live in `fhir4ds/operations/capabilities/`
   request may only name a path the deployment exposed. Dataset URIs (`hf://`)
   are a typed 400, not a crash and not a silent empty query.
 
+## Rules (phase 3)
+
+- **One versioning model.** `versioning.py` owns the base table, the view and the
+  history queries. Reads, writes and the SQL-on-FHIR path all go through the
+  `resources` **view**; do not add a second "latest" query anywhere, and never
+  write to `resources` directly (it is a view).
+- **`_seq` is assigned by the writer and never reused.** It resumes at
+  `max(local log max(_seq), published meta/state.json seq)`. A buffered-but-unknown
+  row leaves a gap, which is correct; renumbering is not.
+- **Writes hold the connection lock; the flush loop does not.** `ResourceWriter`
+  methods and `apply_bundle` run inside `ServeContext.run_locked`. `FlushManager`
+  only touches its own buffer lock and the store's files/network, so a Hub
+  round-trip never blocks a request.
+- **A transaction bundle is one DuckDB transaction.** `apply_bundle` wraps the
+  entries in `BEGIN`/`COMMIT`/`ROLLBACK`; publish rows are handed to the flusher
+  only after `COMMIT`, so an aborted bundle publishes nothing.
+- **Generic resource routes are registered last.** FastAPI matches in
+  registration order; `/Library/{id}`, `/ViewDefinition/{id}` and the operations
+  must keep winning over `/{type}/{id}`. `POST /Bundle`, `/$bulk-publish` and
+  `/admin/flush` are registered before `/{type}` for the same reason.
+- **Status codes are FHIR's** (`201`/`200`/`204`/`410`/`412`/`415`), not `202`.
+  The brief's `202 {accepted, pending}` would contradict its own FHIR surface
+  table; buffer state rides `X-Pending-Commits`, `/health` and `/admin/flush`.
+  See `docs/design/serve-writes.md` decisions 1-6.
+- **The token is never in this package.** `HfDatasetStore` passes `token=None`
+  and lets `huggingface_hub` read `HF_TOKEN`; nothing logs or stores it, and the
+  unit suite must pass with no token at all (`LocalDirStore`).
+- **Publish only to `fhir4ds/bulk-publish-demo`.** Other `fhir4ds/*` and
+  `joelmontavon/*` repositories belong to other teams; data must stay synthetic
+  because the repo and its history are public.
+
 ## Known Fragile Areas
 
 - **FastAPI/Starlette route enumeration.** Starlette ≥1.6 wraps included
@@ -141,6 +180,23 @@ Capabilities live in `fhir4ds/operations/capabilities/`
   `--log-config /app/uvicorn-log.json` (uvicorn's default config with handlers
   pointed at `sys.stdout`) so `docker logs` shows a single unbuffered stream.
   Do not drop that flag while "simplifying" the CMD.
+- **The latest-wins view introduces no row order.** `row_number()` decides
+  *which* row survives, not the order rows come back in, so ViewDefinition and
+  SQLQuery output order can differ from insertion order. Tests must assert
+  membership, never position (three phase-1 tests were order-dependent and were
+  corrected in phase 3).
+- **Migration runs once, at boot.** `ensure_schema` folds a legacy plain
+  `resources` table into `resources_base` and drops it. If a future change makes
+  `resources` a table again (e.g. a loader call on a fresh connection), the next
+  boot re-migrates with fresh `_seq` values — fine, but never delete
+  `resources_base` while a dataset holds later versions.
+- **`apply_bundle` opens a DuckDB transaction.** Anything that nests a bundle
+  inside another transaction (or holds the lock while calling it) will fail
+  loudly; do not call it from inside another `run_locked`-held helper.
+- **`FHIR4DS_HF_INTEGRATION=1` + `HF_TOKEN` is the only live-Hub path.**
+  `test_store_hf.py` stubs `huggingface_hub` for the retry semantics (they run
+  everywhere) and skips the publish otherwise. The live test writes to the
+  public demo repo — keep its data synthetic and its ids run-scoped.
 - **Path-source tables are cached per app, not per connection.**
   `ServeContext.loaded_sources` maps `serve_source_<digest>` → path; two apps
   over one connection each re-load once (the loader's delete-before-insert makes
@@ -178,10 +234,12 @@ Capabilities live in `fhir4ds/operations/capabilities/`
 ## Validation
 
 ```bash
-python3 -m pytest fhir4ds/serve/tests -q          # 166 tests, ~30s
+python3 -m pytest fhir4ds/serve/tests -q          # 209 tests, ~35s (1 skipped)
 python3 -m pytest fhir4ds/cql/tests/unit -q       # the facade's own suite, unchanged
 python3 -m ruff check fhir4ds/serve fhir4ds/operations/capabilities/ fhir4ds/cli/
 python3 fhir4ds/serve/tests/container_smoke.py    # docker build + run + 24 probes
+FHIR4DS_HF_INTEGRATION=1 HF_TOKEN=... \
+  python3 -m pytest fhir4ds/serve/tests/test_store_hf.py -q   # live Hub publish
 ```
 
 The container smoke needs a Docker daemon and a few minutes; it is a script, not

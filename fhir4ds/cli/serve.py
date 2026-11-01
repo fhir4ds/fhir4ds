@@ -64,6 +64,29 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
         help="Do not mount the FHIR $cql conformance facade at /fhir/$cql",
     )
     parser.add_argument(
+        "--publish-dir",
+        default="fhir4ds-publish",
+        help="Directory holding the append-only dataset tree and the Hub cache "
+        "(default: ./fhir4ds-publish)",
+    )
+    parser.add_argument(
+        "--publish-backend",
+        default="local",
+        choices=("local", "hf"),
+        help="Where flushed writes are published: a local directory (default) or "
+        "the Hugging Face dataset repository (requires the [hf] extra and HF_TOKEN "
+        "in the environment)",
+    )
+    parser.add_argument(
+        "--publish-repository",
+        help="owner/name of the dataset repository for --publish-backend hf",
+    )
+    parser.add_argument(
+        "--publisher",
+        default="fhir4ds-serve",
+        help="Publisher identity written under publishers/<name>/ (default: fhir4ds-serve)",
+    )
+    parser.add_argument(
         "--resources",
         metavar="PATH",
         help="FHIR data to load before serving: a Bundle/NDJSON file or a "
@@ -107,6 +130,10 @@ def build_config(args: argparse.Namespace) -> ServeConfig:
         register_udfs=not args.no_udfs,
         data_root=args.data_root,
         cql_facade=not args.no_cql_facade,
+        publish_dir=args.publish_dir,
+        publish_backend=args.publish_backend,
+        publish_repository=args.publish_repository,
+        publisher=args.publisher,
     )
 
 
@@ -133,7 +160,7 @@ def run(args: argparse.Namespace) -> int:
 
     if args.resources:
         try:
-            loaded = load_resources(context.connection, config.source_table, Path(args.resources))
+            loaded = load_resources(context, Path(args.resources))
         except Exception as exc:  # noqa: BLE001 - report and exit, never traceback
             print(f"fhir4ds serve: failed to load {args.resources}: {exc}", file=sys.stderr)
             return 2
@@ -164,14 +191,31 @@ def run(args: argparse.Namespace) -> int:
     return 0
 
 
-def load_resources(connection, table_name: str, path: Path) -> int | None:
-    """Load FHIR data for the ViewDefinition tables from ``path``."""
+def load_resources(context, path: Path) -> int:
+    """Load FHIR data into the versioned log (phase 3 preload).
+
+    The loader writes to a plain table, so it fills a scratch table and the rows
+    are then appended through the writer — every preloaded resource gets a
+    ``_seq`` like any other write, and is published with the first flush.
+    """
+    import json
+
     from fhir4ds.cql.loader import FHIRDataLoader
 
-    loader = FHIRDataLoader(connection, table_name=table_name)
-    if path.is_dir():
-        return loader.load_directory(path)
-    return loader.load_file(path)
+    connection = context.connection
+    scratch = "serve_import"
+    with context.lock:
+        loader = FHIRDataLoader(connection, table_name=scratch)
+        loaded = loader.load_directory(path) if path.is_dir() else loader.load_file(path)
+        rows = connection.execute(f"SELECT resource FROM {scratch}").fetchall()
+        connection.execute(f"DROP TABLE {scratch}")
+        imported = context.writer.import_rows(
+            [{"resource": json.loads(row[0]) if isinstance(row[0], str) else row[0]} for row in rows]
+        )
+        # The loader's resolve() macro was bound to the scratch table; rebind it
+        # to the ``resources`` view (CREATE TABLE IF NOT EXISTS is a no-op there).
+        FHIRDataLoader(connection, table_name=context.config.source_table)
+    return imported if imported is not None else loaded
 
 
 __all__ = ["configure_parser", "run", "build_config", "load_resources"]

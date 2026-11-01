@@ -43,7 +43,9 @@ COPY deploy/docker/fhir4ds-serve/uvicorn-log.json ./uvicorn-log.json
 # 1.5.6, and the engine then SILENTLY falls back to Python UDFs — a behavioural
 # change, not a warning. Pin the client to the ABI the bundle ships with.
 ARG DUCKDB_VERSION=1.5.5
-RUN python -m pip install --no-cache-dir -e ".[serve]" "duckdb==${DUCKDB_VERSION}"
+# The image is HF-capable (`[hf]` supplies huggingface-hub). The token is still
+# run-time only: the backend reads HF_TOKEN from the environment.
+RUN python -m pip install --no-cache-dir -e ".[serve,hf]" "duckdb==${DUCKDB_VERSION}"
 
 # Non-root from here on. The image carries no pre-existing volume whose
 # ownership would need migrating; mounted data is read-only and needs no HOME.

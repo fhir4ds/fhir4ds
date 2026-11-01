@@ -159,7 +159,12 @@ def run_body(*extras: dict, values: tuple[tuple[str, str], ...] = SQLONFHIR_PARA
 def run_checks(base: str) -> None:
     say("== GET /health")
     status, _, body = call(base, "/health")
-    check("health 200", status == 200 and json.loads(body) == {"status": "ok"}, str(status))
+    health = json.loads(body)
+    check(
+        "health 200",
+        status == 200 and health.get("status") == "ok",
+        json.dumps(health)[:120],
+    )
 
     say("== GET /metadata")
     status, _, body = call(base, "/metadata")

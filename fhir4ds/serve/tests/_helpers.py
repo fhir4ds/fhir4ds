@@ -6,12 +6,26 @@ import base64
 import json
 import pathlib
 
+from fhir4ds.serve.config import ServeConfig
+
 FIXTURES = pathlib.Path(__file__).parent / "fixtures"
 LIBRARY_FIXTURES = FIXTURES / "libraries"
 VIEWDEFINITION_FIXTURES = FIXTURES / "viewdefinitions"
 RESOURCE_BUNDLE = FIXTURES / "resources" / "bundle.json"
 
 SQLQUERY_PROFILE = "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+
+
+def serve_config(tmp_path, **overrides) -> ServeConfig:
+    """A :class:`~fhir4ds.serve.config.ServeConfig` for tests.
+
+    Every test gets a throwaway publish directory and no background flush
+    thread, so runs never write into the repository and never race the
+    publication tick. Tests that want a flush call ``/admin/flush``.
+    """
+    overrides.setdefault("publish_dir", str(tmp_path / "publish"))
+    overrides.setdefault("flush_autostart", False)
+    return ServeConfig(**overrides)
 
 
 def view_fixture(name: str) -> dict:

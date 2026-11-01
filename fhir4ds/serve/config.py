@@ -58,6 +58,19 @@ class ServeConfig:
             ``/fhir/$cql`` and advertise it in the CapabilityStatement.
         cql_max_request_bytes: Request-body cap for the ``$cql`` facade,
             mirroring ``fhir4ds.cql.fhir_server.CQLServerConfig``.
+        writes_enabled: Serve the FHIR write surface and the publish store.
+        publish_dir: Directory holding the dataset tree (also the Hub cache).
+            ``None`` means "a throwaway directory" — the CLI always passes an
+            explicit path, and tests get isolation for free.
+        publish_backend: ``"local"`` (a directory, no token) or ``"hf"`` (the
+            ``[hf]`` extra publishing to ``publish_repository``).
+        publish_repository: ``owner/name`` of the dataset repository for the
+            ``hf`` backend; also the repository the ``$bulk-publish`` manifest
+            points its URLs at.
+        publisher: Publisher identity written to ``publishers/<name>/``.
+        flush_interval_seconds: Background flush cadence.
+        flush_batch_size: Rows per background flush (``/admin/flush`` takes all).
+        flush_autostart: Start the background flush thread (tests turn it off).
     """
 
     host: str = "127.0.0.1"
@@ -71,6 +84,14 @@ class ServeConfig:
     data_root: str | None = None
     cql_facade: bool = True
     cql_max_request_bytes: int = 1_000_000
+    writes_enabled: bool = True
+    publish_dir: str | None = None
+    publish_backend: str = "local"
+    publish_repository: str | None = None
+    publisher: str = "fhir4ds-serve"
+    flush_interval_seconds: float = 30.0
+    flush_batch_size: int = 50
+    flush_autostart: bool = True
 
     def __post_init__(self) -> None:
         if not isinstance(self.host, str) or not self.host:
@@ -101,6 +122,22 @@ class ServeConfig:
             raise ValueError("cql_max_request_bytes must be an integer")
         if self.cql_max_request_bytes <= 0:
             raise ValueError("cql_max_request_bytes must be > 0")
+        if self.publish_backend not in ("local", "hf"):
+            raise ValueError(
+                f"publish_backend must be 'local' or 'hf'; got {self.publish_backend!r}"
+            )
+        if self.publish_backend == "hf" and not self.publish_repository:
+            raise ValueError("publish_backend='hf' requires publish_repository")
+        if self.publish_dir is not None and (
+            not isinstance(self.publish_dir, str) or not self.publish_dir
+        ):
+            raise ValueError("publish_dir must be a non-empty string or None")
+        if not isinstance(self.publisher, str) or not self.publisher.strip():
+            raise ValueError("publisher must be a non-empty string")
+        if self.flush_interval_seconds < 0:
+            raise ValueError("flush_interval_seconds must be >= 0")
+        if self.flush_batch_size < 1:
+            raise ValueError("flush_batch_size must be >= 1")
 
     def source_table_for(self, source: str | None) -> str:
         """Resolve the ``source`` operation parameter to a physical table.
@@ -121,6 +158,24 @@ class ServeConfig:
             return None
         return min(max(0, requested), self.max_rows)
 
+    def publish_store(self) -> Any:
+        """Build the publish store this configuration describes.
+
+        ``hf`` requires the optional ``[hf]`` extra; the token is never in the
+        configuration — ``huggingface_hub`` reads ``HF_TOKEN`` from the
+        environment.
+        """
+        import tempfile
+
+        from .store import LocalDirStore
+
+        directory = self.publish_dir or tempfile.mkdtemp(prefix="fhir4ds-publish-")
+        if self.publish_backend == "hf":
+            from .hf_store import HfDatasetStore
+
+            return HfDatasetStore(self.publish_repository or "", directory)
+        return LocalDirStore(directory)
+
 
 @dataclass
 class ServeContext:
@@ -137,6 +192,9 @@ class ServeContext:
     capability_statement: dict = field(default_factory=dict)
     #: Materialized path sources: table name -> resolved path (see sources.py).
     loaded_sources: dict[str, str] = field(default_factory=dict)
+    #: Phase-3 write surface (None when writes are disabled).
+    writer: Any = None
+    flusher: Any = None
 
     def run_locked(self, function: Any, *args: Any, **kwargs: Any) -> Any:
         """Call ``function`` while holding the connection lock."""

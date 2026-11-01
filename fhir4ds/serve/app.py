@@ -12,7 +12,9 @@ Shape of the app:
 
 from __future__ import annotations
 
+import json
 import logging
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -24,7 +26,7 @@ from .errors import Issue, ServeError
 from .metadata import build_capability_statement
 from .routes import ROUTERS
 from .routes import cql as cql_routes
-from .store import ResourceStore
+from .store import REGISTRY_TABLE, ResourceStore
 
 logger = logging.getLogger(__name__)
 
@@ -65,10 +67,15 @@ def create_app(
     with context.lock:
         context.store.ensure_schema()
 
+    # Phase 3: the versioned log, the publish store, and the flush loop. Built
+    # before the app so the lifespan can shut the flush thread down.
+    writes_router = _configure_writes(context, settings) if settings.writes_enabled else None
+
     app = FastAPI(
         title=settings.title,
         version=engine_version,
         description=_DESCRIPTION,
+        lifespan=_lifespan(context),
     )
     app.state.serve = context
 
@@ -80,11 +87,84 @@ def create_app(
     if settings.cql_facade:
         cql_routes.mount(app, settings)
 
+    # Generic resource routes come last: FastAPI matches in registration order,
+    # so /Library and /ViewDefinition (and their operations) keep winning.
+    if writes_router is not None:
+        app.include_router(writes_router)
+
     # Derived, never hand-written: walks the registered routes.
     context.capability_statement = build_capability_statement(app, title=settings.title)
 
     _install_error_handlers(app)
     return app
+
+
+def _configure_writes(context: ServeContext, settings: ServeConfig) -> Any:
+    """Create the log, the writer and the flush loop; return the writes router."""
+    from . import versioning
+    from .flusher import FlushManager
+    from .writes import ResourceWriter
+    from .writes import router as writes_router
+
+    with context.lock:
+        versioning.ensure_schema(context.connection)
+        database_seq = versioning.next_seq(context.connection)
+
+    try:
+        publish_store = settings.publish_store()
+    except ImportError as exc:  # pragma: no cover - depends on the install
+        raise RuntimeError(
+            "publish_backend='hf' requires the optional hf extra: "
+            "pip install 'fhir4ds-v2[serve,hf]'"
+        ) from exc
+
+    # The writer continues from whichever is further ahead: the log's own rows
+    # (a database that survived a restart) or the published state (a fresh
+    # in-memory database against an existing dataset).
+    context.writer = ResourceWriter(
+        context.connection, seq=max(database_seq, publish_store.current_seq())
+    )
+    context.flusher = FlushManager(
+        publish_store,
+        interval=settings.flush_interval_seconds,
+        batch_size=settings.flush_batch_size,
+        publisher=settings.publisher,
+        repository=settings.publish_repository,
+        request_url="/$bulk-publish",
+        definition_provider=lambda: _definitions(context),
+        autostart=settings.flush_autostart,
+    )
+    return writes_router
+
+
+def _definitions(context: ServeContext) -> list[dict]:
+    """Served Library/ViewDefinition resources, for the dataset's definition files."""
+    rows = context.run_locked(
+        lambda: context.connection.execute(
+            f"SELECT body FROM {REGISTRY_TABLE} ORDER BY resource_type, id"
+        ).fetchall()
+    )
+    return [json.loads(row[0]) for row in rows]
+
+
+def _lifespan(context: ServeContext) -> Any:
+    """Stop the flush thread on shutdown, publishing anything still buffered."""
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> Any:
+        try:
+            yield
+        finally:
+            flusher = context.flusher
+            if flusher is not None:
+                flusher.stop()
+                if flusher.pending():
+                    try:
+                        flusher.flush()
+                    except Exception:  # noqa: BLE001 - shutdown must not raise
+                        logger.exception("final flush failed")
+
+    return lifespan
 
 
 def _connect(settings: ServeConfig) -> Any:
