@@ -1,0 +1,54 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-14: FHIRPath \u2014 \u00a76.2 Comparison. Test these items: > (Greater Than), < (Less Than), <= (Less or Equal), >= (Greater or Equal). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 Section 6.2 Comparison",
+      "evidence": "Both native C++ and forced Python fallback return true for `true > false` and `truth > falsity`. Section 6.2 defines comparison only for strings, integers, decimals, quantities, dates, datetimes, and times; Boolean comparison should not produce an ordered Boolean result.",
+      "root_cause": "Both backends let host-language Boolean ordering leak into FHIRPath comparison handling even though Section 6.2 does not define ordering for Boolean.",
+      "resolution": "Native C++ now throws FHIRPathSpecError for same-type Boolean comparison operands, and Python fallback raises FHIRPathError. Public result UDFs catch these and return empty/NULL.",
+      "verified_in": "Fresh FP-14 probe, test_comparison_parity.py, native fhirpath.test sqllogictest, full conformance 2822/2822"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 Section 6.2 Comparison",
+      "evidence": "Both native C++ and forced Python fallback return row-resilient empty for `(1 | 2) < 3`, `1 < (2 | 3)`, and `arr < b`, but `fhirpath_is_valid()` returns true. Section 6.2 requires both operands to be singleton collections and says the evaluator throws an error if either side has more than one item.",
+      "root_cause": "Comparison operators returned an empty collection directly for multi-item operands instead of raising the singleton error required by Section 6.2, so literal multi-item cases looked valid to fhirpath_is_valid().",
+      "resolution": "Native C++ and Python fallback now raise typed singleton errors for multi-item comparison operands. Public result UDFs remain row-resilient, while literal multi-item validity checks now return false.",
+      "verified_in": "Fresh FP-14 probe, test_comparison_parity.py, native fhirpath.test sqllogictest, full conformance 2822/2822"
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 Section 6.2 Comparison",
+      "evidence": "Both native C++ and forced Python fallback produce Boolean results for calendar duration keyword vs UCUM duration comparisons above seconds: `1 year > 1 'a'` returns false, `1 month <= 1 'mo'` returns true, and similar week/day/hour/minute cases return false. Section 6.2 says calendar durations and definite quantity durations above seconds are incomparable and should return empty.",
+      "root_cause": "Quantity comparison reused broad unit conversion tables for calendar duration keywords and UCUM duration codes, missing the Section 6.2 rule that those duration families are incomparable above seconds.",
+      "resolution": "Added mixed calendar/UCUM duration guards in Python FP_Quantity.compare and native C++ quantity comparison. Above-second mixed duration comparisons return empty; seconds and milliseconds still compare.",
+      "verified_in": "Fresh FP-14 probe, test_comparison_parity.py, native fhirpath.test sqllogictest, full conformance 2822/2822"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-01: SQL-on-FHIR ViewDefinition - Logical Model: View Definition; Key Elements: Resource; ViewDefinition.resource/profile/fhirVersion. Test these items: ViewDefinition represents a tabular projection of one FHIR resource type; resource 1..1 required FHIR ResourceType binding; profile 0..* canonical profile declarations; fhirVersion 0..* FHIRVersion binding; root resource table selection and resourceType filtering; zero-or-more output rows per resource instance. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nDo not inspect or rely on archived spec_comp outputs as proof of behavior; use current source, active state, official specs/fixtures, and fresh tests. When the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "SOF-VD-01-QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR v2 ViewDefinition logical model: ViewDefinition.resource has cardinality 1..1, type code, required ResourceType binding; each ViewDefinition is tied to a single FHIR resource type.",
+      "evidence": "Archived in ARCHIVE_LOG.md: SOF-VD-01 SKEPTIC ViewDefinition Resource/Profile/FHIRVersion Remediation - 2026-05-20.",
+      "root_cause": "Archived",
+      "resolution": "Resolved: parser/generator reject resource arrays and unknown ResourceType codes.",
+      "verified_in": "Conformance 2822/2822; pytest fhir4ds/ 7240 passed; ViewDefinition pytest 703/703"
+    },
+    {
+      "id": "SOF-VD-01-QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR v2 ViewDefinition logical model: ViewDefinition.profile is 0..* canonical(StructureDefinition), and ViewDefinition.fhirVersion is 0..* code with required FHIRVersion binding.",
+      "evidence": "Archived in ARCHIVE_LOG.md: SOF-VD-01 SKEPTIC ViewDefinition Resource/Profile/FHIRVersion Remediation - 2026-05-20.",
+      "root_cause": "Archived",
+      "resolution": "Resolved: parser preserves and validates profile/fhirVersion.",
+      "verified_in": "Conformance 2822/2822; pytest fhir4ds/ 7240 passed; ViewDefinition pytest 703/703"
+    }
+  ]
+}

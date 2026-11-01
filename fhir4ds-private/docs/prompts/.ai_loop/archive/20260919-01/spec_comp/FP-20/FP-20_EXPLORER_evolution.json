@@ -1,0 +1,54 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-20: FHIRPath — §9 Environment Variables, §10 Types and Reflection, §11 Type Safety, §12 Formal Specifications. Test these items: Environment variable access (%context, %resource, etc.), Model information, SimpleTypeInfo, ClassInfo, ListTypeInfo, TupleTypeInfo, Type safety rules, Formal syntax (ANTLR), URI and media types. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-E1",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_INTERPRETATION",
+      "spec_citation": "FHIRPath 2018Sep §6.3 (as operator) vs official R4 fixtures testFHIRPathAsFunction11/12",
+      "evidence": "status is string -> true but status.as(string) -> empty on both engines. Official R4 fixtures pin as/ofType as EXACT-match for primitives; fixtures outrank spec prose. Reconfirmed on uri-family members and unqualified type specifiers (131-case dual-path probe, 0 parity diffs).",
+      "root_cause": "Fixture-pinned deliberate asymmetry (FP-15 HISTORIAN doctrine)",
+      "resolution": "No change required; doctrine reconfirmed",
+      "verified_in": ".temp/qa/fp20_explorer2_2026_08_19/probe.py"
+    },
+    {
+      "id": "QA-E2",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_COMPLIANCE",
+      "spec_citation": "FHIRPath grammar (2018Sep and N1): literal : '{' '}' — no tuple production",
+      "evidence": "{a: 1}, {a: 'x'}, {a: {b: 1}} all rejected as syntax errors identically on native and fallback. The official grammar has no non-empty literal/tuple production; launch-note supposition that tuple literals are in the grammar is incorrect.",
+      "root_cause": "Grammar conforms to official ANTLR spec",
+      "resolution": "No change required",
+      "verified_in": ".temp/qa/fp20_explorer2_2026_08_19/probe.py"
+    },
+    {
+      "id": "QA-E3",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_INTERPRETATION",
+      "spec_citation": "FHIRPath §9 Environment Variables; FHIR spec fhirpath.html env-var additions (%terminologies)",
+      "evidence": "%terminologies and %environment undefined -> empty with consistent 'undefined environment variable' error classification on both engines; %ucum/%sct/%loinc predefined. FHIR-spec-added terminology-service endpoint is a host extension point; undefined behavior left open by base §9.",
+      "root_cause": "Host extension point; no terminology service configured",
+      "resolution": "No change required",
+      "verified_in": ".temp/qa/fp20_explorer2_2026_08_19/probe.py"
+    }
+  ]
+}

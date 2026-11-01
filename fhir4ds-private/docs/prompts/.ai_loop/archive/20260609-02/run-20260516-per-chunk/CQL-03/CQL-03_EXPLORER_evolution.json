@@ -1,0 +1,43 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "FINAL",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-03: CQL - Types - Temporal and Complex. Test these items: Date type; DateTime type; Time type; Quantity type; Ratio type.\n\nFor DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "CQL03-EXPLORER-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL v1.5.3 Appendix B: ToDate/ToDateTime and ConvertsToDate/ConvertsToDateTime require ISO date/time strings to be valid calendar values and allow partial precision.",
+      "evidence": ".temp/qa/cql03_explorer_repro.py: translated CQL ToDate('2014-01') returned NULL instead of partial date; ToDate('2024-02-30') returned '2024-02-30' instead of NULL; ToDateTime('2014') returned NULL instead of partial DateTime; ToDateTime('2024-02-30') returned '2024-02-30' instead of NULL. Direct DuckDB ToDate/ToDateTime macros already behave correctly.",
+      "root_cause": "The translator had a separate SQLRaw/TRY_CAST lowering path for ToDate/ToDateTime and convert-to-Date/DateTime instead of using the spec-aware DuckDB macros. That local path only recognized day-or-finer shapes, rejected valid partial precision, and preserved invalid calendar strings.",
+      "resolution": "Translated ToDate/ToDateTime and convert-to-Date/DateTime now emit ToDate/ToDateTime macro calls. Regression tests cover valid partial precision and invalid calendar values under both forced Python fallback and native-loaded DuckDB registration.",
+      "verified_in": "PYTHONPATH=/mnt/d/fhir4ds python3 -m pytest fhir4ds/cql/duckdb/tests/integration/test_temporal_complex_parity.py fhir4ds/cql/tests/unit/test_v2_expressions.py -q; PYTHONPATH=/mnt/d/fhir4ds python3 -m pytest fhir4ds/cql -q; PYTHONPATH=/mnt/d/fhir4ds python3 conformance/scripts/run_all.py"
+    },
+    {
+      "id": "CQL03-EXPLORER-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "BACKEND_PARITY",
+      "spec_citation": "CQL v1.5.3 Appendix B: Ratio requires non-null Quantity numerator and denominator; Quantity.value is Decimal. Invalid internal Ratio numeric values must not execute as valid Ratio values.",
+      "evidence": ".temp/qa/cql03_explorer_repro.py: forced Python fallback ratioValue('{\"numerator\":{\"value\":\"abc\"},\"denominator\":{\"value\":2}}') raised InvalidInputException, while native-loaded registration returned NULL. ratioNumeratorValue with the same malformed numeric field also raised in Python fallback and returned NULL natively.",
+      "root_cause": "Python fallback Ratio helpers returned raw JSON values and divided them without Decimal validation. Malformed numeric strings either leaked through DuckDB's DOUBLE return coercion or raised Python TypeError, while native registration returned NULL.",
+      "resolution": "Ratio numerator/denominator extraction now validates finite Decimal shape and returns NULL for malformed values before ratio division. Regression tests compare native-loaded and forced Python fallback behavior for malformed Ratio internals.",
+      "verified_in": "PYTHONPATH=/mnt/d/fhir4ds python3 -m pytest fhir4ds/cql/duckdb/tests/integration/test_temporal_complex_parity.py -q; PYTHONPATH=/mnt/d/fhir4ds python3 -m pytest fhir4ds/cql -q; PYTHONPATH=/mnt/d/fhir4ds python3 conformance/scripts/run_all.py"
+    }
+  ]
+}

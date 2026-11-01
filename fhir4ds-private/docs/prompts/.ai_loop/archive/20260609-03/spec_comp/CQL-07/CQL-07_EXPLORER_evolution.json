@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-07: CQL \u2014 Type Operators - Conversions. Test these items: ToBoolean, ToConcept, ToDate, ToDateTime, ToDecimal, ToLong, ToInteger, ToQuantity, ToRatio, ToString, ToTime. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B, ToQuantity and ToString conversion operators",
+      "evidence": "Translated Patient-context CQL with define Q: ToQuantity('5 ''mg'''); define QS: ToString(Q); define QC: convert Q to String returned internal Quantity JSON {'value':5,'unit':'mg',...} on both native-loaded and forced Python fallback DuckDB. Expected CQL Quantity string representation is 5.0 'mg'. Same issue reproduced when Q came from function MakeQuantity(S): ToQuantity(S).",
+      "root_cause": "CQL type inference did not classify conversion functions such as ToQuantity/ToRatio/ToConcept/ToLong or user-defined function calls by their inlined body type, so Quantity conversion definitions were metadata-classified as resource-shaped and later ToString routing lacked Quantity evidence.",
+      "resolution": "Inferred semantic return types for conversion functions and user-defined function bodies, kept scalar conversion CTEs on value columns, routed statically known Quantity ToString through QuantityToString, and added population SQL parity coverage for direct and function-inlined Quantity aliases.",
+      "verified_in": "python3 .temp/qa/cql07_explorer_probe.py; pytest conversion/check/clinical/primitive/structural parity 46 passed; full conformance 2822/2822"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": ["evolution"],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-08: SQL-on-FHIR ViewDefinition.select.unionAll. Fresh run complete: 3 personalities (SKEPTIC -> HISTORIAN -> EXPLORER) each ran QA/FIX/ARCHITECT with 0 open issues found, 0 fixed, 0 open (1 DEFERRED terminal). All handoff files archived to spec_comp/SOF-VD-08/. Returning control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "LOW",
+      "status": "DEFERRED",
+      "category": "MISSING_FEATURE",
+      "spec_citation": "SQL-on-FHIR v2 (spec-silent on unionAll branch rowset-producer requirement)",
+      "evidence": "unionAll branch with only `where` (no column/select/forEach/unionAll/repeat) generates SELECT NULL WHERE FALSE (0 rows, benign no-op) instead of raising.",
+      "root_cause": "Parser does not require each unionAll branch to contain a rowset producer.",
+      "resolution": "DEFERRED — spec does not mandate rejection; behavior is benign.",
+      "verified_in": "Iteration 1"
+    }
+  ]
+}

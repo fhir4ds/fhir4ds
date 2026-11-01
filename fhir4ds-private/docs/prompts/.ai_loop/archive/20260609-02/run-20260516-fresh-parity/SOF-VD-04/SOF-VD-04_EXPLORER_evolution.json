@@ -1,0 +1,20 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-04: SQL-on-FHIR ViewDefinition - ViewDefinition.select.column.collection; ViewDefinition.select.column.type; ViewDefinition.select.column.tag. Test items: collection default false when unset, error when multiple values are produced for a non-collection column, collection true multi-value output representation, type URI handling for primitive and non-primitive result expectations, type mismatch reporting for generated/executed columns, tag 0..* parsing with required tag.name and tag.value, database/implementation type-hint tags do not affect base semantics unless explicitly handled. Fresh run; prior workflow outputs intentionally not consulted."
+  },
+  "issues": []
+}

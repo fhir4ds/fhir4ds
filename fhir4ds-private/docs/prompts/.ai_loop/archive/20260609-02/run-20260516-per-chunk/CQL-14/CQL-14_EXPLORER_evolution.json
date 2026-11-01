@@ -1,0 +1,32 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-14: CQL - Date/Time Operators Part 2. Test these items: Now(), On Or After precision, On Or Before precision, Same As precision, Same Or After precision, Same Or Before precision, Subtract (left DateTime, right Quantity), Time(hour, minute, second, millisecond), TimeOfDay(), Today(). QA personality: EXPLORER. Abuse chained Date/Time expressions, malformed or boundary temporal strings, dynamic constructor operands, fractional and negative Quantity arithmetic, current-clock helpers inside comparisons, precision synonyms, translated scalar/query execution, native-loaded versus forced Python fallback parity, and no-Python/browser-style C++ helper coverage where functions are public.\n\nThis is the actual per-chunk/per-personality workflow. Start from scratch for this chunk/personality and do not inspect or rely on any archived prior workflow outputs under .ai_loop/spec_comp/**, including CQL-14 artifacts if present and older consolidated-run artifacts. Current source code, active state files, GLOBAL_RULES.md, GLOBAL_KNOWLEDGE.md, AGENTS.md, and current tests may be inspected. Maintain 100% conformance and no pytest regressions.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL v1.5.3 Appendix B, Date and Time Operators, Subtract: the operator decrements a Date/DateTime/Time by a time-valued Quantity and returns null if either argument is null; CQL Logical Specification Date and Time Operators: except as noted, date/time operations with null arguments evaluate to null.",
+      "evidence": "Reproducer: PYTHONPATH=. python3 - <<'PY'\\nimport duckdb\\nfrom fhir4ds.cql.duckdb import register\\nfrom fhir4ds.cql.duckdb.extension import _register_python_supplements\\nfor label, setup in [('forced_python', lambda c: _register_python_supplements(c, cpp_loaded=False, include_fhirpath=True)), ('native_loaded', lambda c: register(c, include_fhirpath=True))]:\\n    con = duckdb.connect(config={'allow_unsigned_extensions': True}); setup(con)\\n    for sql in [\\\"SELECT dateSubtractQuantity('2024-01-01', '{\\\\\\\"unit\\\\\\\":\\\\\\\"day\\\\\\\"}')\\\", \\\"SELECT dateSubtractQuantity('2024-01-01', '{\\\\\\\"value\\\\\\\":null,\\\\\\\"unit\\\\\\\":\\\\\\\"day\\\\\\\"}')\\\", \\\"SELECT dateSubtractQuantity('2024-01-01', '{\\\\\\\"value\\\\\\\":\\\\\\\"abc\\\\\\\",\\\\\\\"unit\\\\\\\":\\\\\\\"day\\\\\\\"}')\\\"]:\\n        print(label, sql, con.execute(sql).fetchone()[0])\\nPY\\nActual: forced Python and native-loaded Python shadow return '2024-01-01' for missing value, and raise InvalidInputException for null/non-numeric value. No-Python C++ public helper returns SQL NULL for the same malformed Quantity inputs. Expected: invalid/null Quantity value should not be treated as zero or raise at row-level public SQL boundary; return SQL NULL consistently.",
+      "root_cause": "Python fallback dateSubtractQuantity negated `float(data.get('value', 0))`, so a missing value became zero and malformed values propagated exceptions. dateAddQuantity already returned NULL for missing/null values but still raised for malformed/non-numeric public helper JSON.",
+      "resolution": "Added a shared Python `_parse_date_quantity_payload()` boundary that requires object-shaped Quantity JSON with finite numeric JSON `value` and string `unit`/`code`, plus C++-matching huge-value guards. dateAddQuantity and dateSubtractQuantity now return None for malformed/missing/null/string/Boolean/non-finite/huge Quantity values, matching the no-Python C++ public helper surface, while valid Quantity arithmetic that overflows CQL date range still raises for official invalid-expression conformance.",
+      "verified_in": "CQL-14 EXPLORER FIX: python3 .temp/qa/cql14_explorer_probe.py (failures=0); pytest fhir4ds/cql/duckdb/tests/integration/test_datetime_part2_parity.py fhir4ds/cql/duckdb/tests/integration/test_wasm_cpp_surface.py -q --tb=short (10 passed); python3 conformance/scripts/run_cql.py summary 1706/1706, CqlDateTimeOperatorsTest.xml 317/317; python3 conformance/scripts/run_all.py summary 2822/2822; python3 -m pytest -q --tb=short (7190 passed, 5 skipped, 9 warnings)"
+    }
+  ]
+}

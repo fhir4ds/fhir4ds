@@ -1,0 +1,43 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-02: FHIRPath \u2014 \u00a74.2 Operators, \u00a74.3 Function Invocations, \u00a74.4 Null and Empty (Propagation), \u00a74.5 Singleton Evaluation of Collections. Test these items: Operator semantics, Function invocation syntax, Null propagation in expressions, Empty collection handling, Singleton evaluation rules. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release §6.8 Operator precedence (dot/function invocation has higher precedence than unary +/-; explicit example -7.combine(3) is an error)",
+      "evidence": "FP-02 EXPLORER probe .temp/qa/fp02_explorer_probe.py compared native C++ and forced Python fallback. Expression `-7.combine(3)` on a Patient resource returned native row ([\"-7\"], \"-7\", \"[-7]\", NULL, -7.0, true), while forced fallback returned empty/NULL and fhirpath_is_valid=false. The spec's own §6.8 example says `-7.combine(3)` parses as `-(7.combine(3))` and errors because unary negation cannot apply to a list.",
+      "root_cause": "Native `Evaluator::evalUnaryOp()` evaluated the operand collection and then applied unary +/- to `operand[0]` without checking whether the operand had multiple items. Because the parser correctly binds dot invocation before unary operators, `-7.combine(3)` produced a two-item operand but native silently negated the first item.",
+      "resolution": "Added a general multi-item singleton guard in native `evalUnaryOp()` before applying unary +/- and rebuilt/copied the bundled DuckDB extension.",
+      "verified_in": "`.temp/qa/fp02_explorer_probe_final.log` (46 cases, mismatch_count=0); `python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_operator_parity.py -q` (8 passed); `./build/release/test/unittest '*fhirpath*'` (342 assertions); full conformance `validation_summary.log` (2822/2822)"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release §6.8 Operator precedence (unary + and unary - are valid unary operators below dot/function invocation)",
+      "evidence": "During focused parity coverage for QA-001, forced Python fallback `fhirpath(?::JSON, '+7.combine(3)')` raised FHIRPathSyntaxError from a wrapper precheck that classifies leading `+` as invalid syntax. The spec lists unary `+` together with unary `-`; `+7.combine(3)` is syntactically valid and should parse as `+(7.combine(3))`, then fail singleton evaluation and return empty/NULL at the public wrapper boundary.",
+      "root_cause": "The forced Python fallback precheck classified leading `+` as an invalid leading binary operator even though FHIRPath defines unary `+` as a valid unary operator.",
+      "resolution": "Removed `+` from the fallback wrapper/evaluator leading-binary-operator rejection patterns so unary plus reaches normal parsing/evaluation and public row resilience.",
+      "verified_in": "`.temp/qa/fp02_explorer_probe_final.log` (46 cases, mismatch_count=0); `python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_operator_parity.py -q` (8 passed); full conformance `validation_summary.log` (2822/2822)"
+    }
+  ]
+}

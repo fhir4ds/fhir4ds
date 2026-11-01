@@ -1,0 +1,54 @@
+{
+  "phase": "QA",
+  "iteration": 2,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-20: FHIRPath — §9 Environment Variables; §10 Types and Reflection; §11 Type Safety; §12 Formal Specifications. Test these items: environment variable access (%context, %resource, etc.), model information, SimpleTypeInfo, ClassInfo, ListTypeInfo, TupleTypeInfo, type safety rules, formal syntax (ANTLR), URI and media types. QA personality: SKEPTIC. Challenge environment-variable scoping, unknown variables, built-ins, %context/%resource consistency, type reflection output shape, namespace and model-info handling, subtype/supertype relationships, invalid type specifiers, static vs runtime type safety, formal grammar edge cases, parser/direct-core/public wrapper parity, and backend parity from the current spec and current code. Do not inspect or rely on any prior workflow output under fhir4ds-private/docs/prompts/.ai_loop/spec_comp/**. For DuckDB-backed FHIRPath surfaces, independently test both the native/C++ extension path and the forced Python fallback path where both exist, and compare outputs between paths. Use fresh probes, focused pytest coverage, and relevant conformance/unit/e2e validation. We are currently at 100% conformance; do not regress conformance or unit/e2e pytest surfaces. When the pipeline is fully complete, set workflow to null, set exit_reason, write qa_handoff.md, engineer_handoff.md, architect_handoff.md, update GLOBAL_KNOWLEDGE.md/ARCHIVE_LOG.md/AGENTS.md as appropriate, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-FP20-SK-001",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath §9 Environment Variables",
+      "evidence": "Forced Python fallback returned fhirpath_is_valid('%unknown') = true and fhirpath_is_valid('%`unknown-var`') = true; native returned false. Undefined environment variable access is an error.",
+      "root_cause": "Fallback evaluator converted undefined environment variable errors to empty results before fhirpath_is_valid could classify the expression as invalid.",
+      "resolution": "Removed undefined-variable swallowing; public result UDFs still return empty/NULL outside strict mode.",
+      "verified_in": "python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_environment_type_parity.py -q; full conformance 2822/2822"
+    },
+    {
+      "id": "QA-FP20-SK-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath §9 Environment Variables; §12 Formal Grammar",
+      "evidence": "Native rejected %'vs-administrative-gender' as invalid; Python grammar accepted the shape but evaluation failed.",
+      "root_cause": "Native percent-variable lexer only supported bare/backtick identifiers; Python external constant evaluation assumed an identifier child and ignored STRING terminal tokens.",
+      "resolution": "Native percent lexing now reads quoted string variable names; Python external constants unescape STRING variable names.",
+      "verified_in": "test_environment_type_parity.py; native SQL fhirpath.test 284 assertions"
+    },
+    {
+      "id": "QA-FP20-SK-003",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath §10 Types and Reflection; §11 Type Safety",
+      "evidence": "Forced fallback hung on contact.as(BackboneElement).name.family; native returned false/empty for contact.is/as(BackboneElement).",
+      "root_cause": "Patient.contact model metadata was self-referential without a BackboneElement parent and TypeInfo.is_type had no cycle guard; native type checks did not fallback object-valued FHIR child fields to BackboneElement.",
+      "resolution": "Added cycle guard and BackboneElement parent handling for self-aliased paths; aligned native object child type checks with existing type() behavior.",
+      "verified_in": "test_environment_type_parity.py; fhir4ds/fhirpath pytest 1303 passed; full conformance 2822/2822"
+    }
+  ]
+}

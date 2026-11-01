@@ -1,0 +1,57 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-02: FHIRPath \u2014 \u00a74.2 Operators, \u00a74.3 Function Invocations, \u00a74.4 Null and Empty (Propagation), \u00a74.5 Singleton Evaluation of Collections. Test these items: Operator semantics, Function invocation syntax, Null propagation in expressions, Empty collection handling, Singleton evaluation rules. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "PARITY_DIVERGENCE",
+      "spec_citation": "FHIRPath N1 \u00a75 Conversion table (Integer/Decimal->Quantity implicit) + \u00a76.6.3/\u00a76.6.4",
+      "summary": "native +/- Integer->Quantity('1') implicit conversion",
+      "verified_in": "Iteration 1 (FP-02 HISTORIAN, 2026-08-16): reproducer probes green, regression tests added, fhirpath pytest 1702/1702, full conformance 2832/2832"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a76.6.1 (`12 'cm' * 3 'cm' // 36 'cm2'`, `3 'cm' * 12 'cm2' // 36 'cm3'`), \u00a76.6.2 (`12 'cm2' / 3 'cm' // 4.0 'cm'`), \u00a76.6.3 (`3 'm' + 3 'cm' // 303 'cm'`)",
+      "summary": "operand-space quantity composition + most-granular addition",
+      "verified_in": "Iteration 1 (FP-02 HISTORIAN, 2026-08-16): reproducer probes green, regression tests added, fhirpath pytest 1702/1702, full conformance 2832/2832"
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a76.2 Comparison (unit-aware, calendar durations per toQuantity) + \u00a75.5.7 factors; sibling surfaces: `1 day = 24 'h'` true, `1 month > 29 'd'` true",
+      "summary": "calendar week/day/time vs UCUM ordering guard",
+      "verified_in": "Iteration 1 (FP-02 HISTORIAN, 2026-08-16): reproducer probes green, regression tests added, fhirpath pytest 1702/1702, full conformance 2832/2832"
+    },
+    {
+      "id": "QA-004",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a76.1.1 Quantity Equality (\"values must be converted to the same unit, or a common unit\"; \"comparison will be made using the most granular unit of either input\")",
+      "summary": "curated derived-unit conversion tables (J/N/W/V/A)",
+      "verified_in": "Iteration 1 (FP-02 HISTORIAN, 2026-08-16): reproducer probes green, regression tests added, fhirpath pytest 1702/1702, full conformance 2832/2832"
+    }
+  ]
+}

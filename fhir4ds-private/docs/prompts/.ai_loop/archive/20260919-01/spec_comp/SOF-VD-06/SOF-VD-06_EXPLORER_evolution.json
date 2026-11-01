@@ -1,0 +1,43 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-06: SQL-on-FHIR ViewDefinition \u2014 ViewDefinition.select.forEach, ViewDefinition.select.forEachOrNull. Test these items: forEach 0..1 FHIRPath expression selects parent elements for the containing select, forEach multiplies rows for each item in the selected collection, forEach suppresses rows when the collection is empty, forEachOrNull preserves one row with null nested values when the collection is empty, nested columns are evaluated relative to each iterated item, built-in ViewDefinition/FHIRPath variables remain correct in iterated contexts, including %context, %resource, %rootResource, and %rowIndex. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_OBSERVATION",
+      "spec_citation": "SQL-on-FHIR v2 Process(S,N) \u2014 no error semantics defined for forEach evaluation",
+      "evidence": "forEach expression that errors at FHIRPath evaluation (e.g. name.where(family = active) with active='notabool') degrades to empty: forEach -> 0 rows; forEachOrNull -> exactly one null-preserved row. Consistent engine-tolerant treatment across native and Python fallback (probes p1 #11/#12, p3 err-foreach/err-fon). Verified fallback==native.",
+      "root_cause": null,
+      "resolution": "Documented; matches FHIRPath tolerant-engine convention and is uniform across both iterators.",
+      "verified_in": "iteration 1"
+    },
+    {
+      "id": "QA-002",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_OBSERVATION",
+      "spec_citation": "SQL-on-FHIR v2 SD ViewDefinition.constant value[x] are primitive singletons",
+      "evidence": "forEach over a %constant list is not expressible: constant valueCode:['a','b'] correctly rejected at parse ('valueCode must be a JSON string'). No array value[x] exists in the SD, so list-constant iteration is out of spec.",
+      "root_cause": null,
+      "resolution": "Documented; parser rejection is spec-correct.",
+      "verified_in": "iteration 1"
+    }
+  ]
+}

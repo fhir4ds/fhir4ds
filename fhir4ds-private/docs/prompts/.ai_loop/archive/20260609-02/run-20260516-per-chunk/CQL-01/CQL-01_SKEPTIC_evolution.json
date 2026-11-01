@@ -1,0 +1,54 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-01: CQL — Types - Primitive. Test these items: Any type, Boolean type, Integer type, Decimal type, String type, Long type (CQL 1.5 trial-use).\n\nStart from scratch for this chunk and do not inspect or rely on any archived workflow outputs under fhir4ds-private/docs/prompts/.ai_loop/spec_comp/**. Use the active prompts, active state files, source code, official/local conformance fixtures, and fresh tests/probes only.\n\nFor DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For CQL primitive types, cover translator behavior, SQL generation, DuckDB execution, direct Python APIs, public DuckDB UDF/macro surfaces, edge coercions, invalid type behavior, and official conformance cases relevant to the chunk. Verify there are no regressions in conformance tests or unit/e2e pytest coverage relevant to this chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write qa_handoff.md, engineer_handoff.md, architect_handoff.md, update GLOBAL_KNOWLEDGE.md/ARCHIVE_LOG.md/AGENTS.md as appropriate, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "CQL01-QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Developer's Guide §3.4.1 System-Defined Types and §3.4 Type Testing",
+      "evidence": "`5 is Any` translates to `json_extract_string(5, '$.resourceType') = 'Any'` and fails in DuckDB with a binder error. Spec says System.Any is the maximal supertype and all values derive from it, so non-null primitive values must satisfy `is Any`.",
+      "root_cause": "CQL `is Any` was not handled as the maximal System.Any supertype; the translator fell through to FHIR resource JSON type matching and attempted `json_extract_string` on primitive SQL literals.",
+      "resolution": "Translate `is Any` to a non-null test, preserving CQL type-system semantics for all non-null values.",
+      "verified_in": "CQL-01 focused probe; primitive parity pytest; CQL official type/literal subset; CQL DuckDB conversion/type parity subset"
+    },
+    {
+      "id": "CQL01-QA-002",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Developer's Guide §3.1.3 Literals and §3.4.1 System-Defined Types",
+      "evidence": "`-2147483648` is rejected because the positive literal operand is range-checked before unary minus; `9223372036854775808L` and `-9223372036854775809L` translate successfully even though Long range is -2^63..2^63-1.",
+      "root_cause": "Primitive numeric literal range validation ran on the positive operand before unary negation, rejecting signed Integer minimum, while Long literals had no range guard.",
+      "resolution": "Added signed-minimum-aware unary negation handling for Integer/Long, positive Long range validation, exact Integer/Long type-test handling, and raw SQL rendering for high-precision Decimal literals.",
+      "verified_in": "CQL-01 focused probe; primitive parity pytest; CQL official type/literal subset; parser/expression/operator unit subset"
+    },
+    {
+      "id": "CQL01-QA-003",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Reference §ToInteger, §ConvertsToInteger, and §ToLong",
+      "evidence": "Public DuckDB surface returns `ToInteger('1.5') = 2` and `ToInteger('1.0') = 1`; direct Python `ConvertsToInteger('1.0')` is true. Spec string format for Integer/Long conversion is `(+|-)?#0`, so non-integer strings must return null/false.",
+      "root_cause": "DuckDB `ToInteger` macro delegated to `CAST`, which rounded decimal-looking strings and raised on out-of-range strings; direct Python Integer/Long conversion checks accepted integral Decimal string forms instead of the spec's integer string format.",
+      "resolution": "Replaced `ToInteger` with a regex-gated null-returning macro and tightened direct Python `ConvertsToInteger`, `ConvertsToLong`, and `ToLong` to the CQL integer-string grammar and Boolean overloads.",
+      "verified_in": "CQL-01 focused probe; primitive parity pytest; CQL DuckDB conversion parity subset; native CQL extension SQL test"
+    }
+  ]
+}

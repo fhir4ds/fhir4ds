@@ -1,0 +1,43 @@
+{
+  "phase": "REVIEW",
+  "iteration": 1,
+  "audit_status": "DONE",
+  "exit_reason": "DEGRADED",
+  "workflow": null,
+  "pipeline": [
+    "code_review"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": null,
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE MILESTONE REVIEW \u2014 20 chunks completed.\n\nSPECIAL DIRECTIVE: investigate the accumulating native binary/source/test parity drift (FP-18 QA-007, FP-19 QA-003, FP-20 QA-005/HISTORIAN QA-004): ~160 integration parity failures, committed extension binary stale vs evaluator.cpp, some parity tests expecting native semantics absent from current source. Diagnose root cause, classify the failures (stale binary vs lost fixes vs wrong test expectations), and recommend a reconciliation plan.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all review files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "REV-006",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "category": "REGRESSION_LOST_FIX",
+      "spec_citation": "FHIRPath \u00a76.4.2/\u00a76.4.3",
+      "evidence": "operators.py::membership() again swallows multi-item singleton operand (returns {}); regression test test_membership_helper_singleton_violations_raise_fhirpath_error FAILS (DID NOT RAISE). File overwritten Aug 18 13:46 after fix landed 11:50.",
+      "root_cause": "sibling-session whole-file clobber of operators.py",
+      "resolution": null,
+      "verified_in": null
+    },
+    {
+      "id": "REV-007",
+      "severity": "MEDIUM",
+      "status": "OPEN",
+      "category": "REGRESSION_LOST_FIX",
+      "spec_citation": "NONE",
+      "evidence": "evaluator.cpp missing verified campaign fixes: powerDecimalExactText/expandScientificToFixed/leastPrecisionDecimalPlaces/frac_digits (FP-11/FP-13), !explicit_namespace isType guard (FP-15, line 10087), extension fhirFieldType entry (FP-12), (1+'x')|99 error-abort (FP-19). 67 integration parity failures attributable. Root cause: concurrent sibling sessions last-writer-wins overwrite. See code_review_findings.md Part B.",
+      "root_cause": "sibling-session whole-file clobber of evaluator.cpp",
+      "resolution": null,
+      "verified_in": null
+    }
+  ]
+}

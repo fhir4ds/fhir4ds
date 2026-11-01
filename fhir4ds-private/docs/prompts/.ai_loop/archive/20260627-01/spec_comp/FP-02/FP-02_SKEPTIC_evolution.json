@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-02: FHIRPath \u2014 \u00a74.2 Operators, \u00a74.3 Function Invocations, \u00a74.4 Null and Empty (Propagation), \u00a74.5 Singleton Evaluation of Collections. Test these items: Operator semantics, Function invocation syntax, Null propagation in expressions, Empty collection handling, Singleton evaluation rules. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath \u00a74.3, \u00a74.4, \u00a74.5",
+      "evidence": "Tombstone: forced Python fallback fhirpath() unknown-function row-resilience fixed; details archived in ARCHIVE_LOG.md under SPEC FP-02 SKEPTIC.",
+      "root_cause": "fhirpath_scalar() re-raised NotImplementedError in non-strict public fallback SQL use.",
+      "resolution": "Return [] for NotImplementedError in non-strict fhirpath_scalar(); preserve strict mode; add native/fallback parity test.",
+      "verified_in": "Iteration 1 FP-02 SKEPTIC: fresh probe 16/16, diff probe 19/19, operator parity 9/9, full conformance 2822/2822"
+    }
+  ]
+}

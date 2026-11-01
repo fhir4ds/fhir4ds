@@ -1,5 +1,5 @@
 {
-  "phase": "CODE_REVIEW",
+  "phase": "COMPLETE",
   "iteration": 36,
   "pipeline": [
     "evolution",
@@ -9,7 +9,7 @@
     "benchmarks",
     "scribe"
   ],
-  "pipeline_step": 1,
+  "pipeline_step": 5,
   "target_version": "0.0.20",
   "qa_schedule": [
     {
@@ -220,10 +220,14 @@
     {
       "domain": 12,
       "verdict": "CLEAN",
-      "detail": "medterm4ds pin 0.0.7->0.0.8 re-verified against the local dist (wheel+sdist at /mnt/d/medterm4ds/dist, not yet on PyPI): 44 passed/1 skipped (in-process adapters, auto_coder grades, coding extensions, notes pipeline) + 49 passed/4 skipped (terminology factory/adapters; skips are UMLS/VSAC credential gates) on duckdb 1.5.6 native. Integration surfaces unchanged from 0.0.7."
+      "detail": "medterm4ds pin 0.0.7->0.0.8 re-verified against the local dist (wheel+sdist at /mnt/d/medterm4ds/dist, not yet on PyPI): 44 passed/1 skipped (in-process adapters, auto_coder grades, coding extensions, notes pipeline) + 49 passed/4 skipped (terminology factory/adapters; skips are UMLS/VSAC credential gates) on duckdb 1.5.6 native. Integration surfaces unchanged from 0.0.7. | PROVENANCE ADDENDUM (Joel 2026-11-01): verified search data source = HF fhir4ds/terminology. Found default 'auto' layout silently serving a legacy fhir4ds/medterm4ds@v0.0.5 cache + July lookup-2026AA.duckdb (pre-repoint). FIXED: MEDTERM4DS_LAYOUT=terminology pinned before first medterm4ds import (factory + adapter, import-free filesystem check), e2e verified (services.search binds terminology, release 2026.10.31.1, 20 graded results), 5 regression tests, commit on dev. medterm4ds 0.0.8 default DEFAULT_TERMINOLOGY_REPO_ID=fhir4ds/terminology confirmed."
     },
     {
       "_summary": "EVOLUTION COMPLETE: 12/12 domains CLEAN, 36/36 iterations. Fresh probe defects: 0. All flags (12 total) traced to probe-authoring errors vs pinned doctrine. Compressed treatment for unchanged engines (D2,4,5,6,7,9,11) per prior-campaign evidence + fresh today-gates; full depth on changed surfaces (D1 incl. new 1.5.6 binary, D3 phase2 SQL shapes, D8/11 serve surface, D12 medterm bump)."
+    },
+    {
+      "_final": "v0.0.20 FULL PIPELINE COMPLETE: evolution (12/12 CLEAN, 36 iterations + medterm provenance fix) -> code_review (CLEAN_WITH_NOTES, code_review_v0020.md) -> pre_release (GO: wheel+sdist built, all 6 ext bundles, clean-venv smoke native, PyPI [terminology] pulls medterm4ds 0.0.8, pip check clean, version consistency 9/9 subpackages) -> docs_audit (READY: 5 notebooks executed, releases.md v0.0.20 section, ALL WASM surfaces 0.0.20 + Playwright 13/13, website build clean) -> benchmarks (DQM 48/48 100%, exec 1.26x vs baseline documented pattern, scaling retest cited, benchmarks_v0020.md) -> scribe (scribe_v0020.md). All commits on local dev; nothing pushed."
     }
-  ]
+  ],
+  "exit_reason": "CLEAN_EXIT"
 }

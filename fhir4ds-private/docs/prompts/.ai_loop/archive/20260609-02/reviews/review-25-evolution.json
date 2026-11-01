@@ -1,0 +1,60 @@
+{
+  "phase": "REVIEW",
+  "iteration": 1,
+  "audit_status": "COMPLETE_REMEDIATED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "code_review"
+  ],
+  "pipeline_step": 0,
+  "config": {
+    "notes": "SPEC COMPLIANCE MILESTONE REVIEW \u2014 25 chunks completed.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all review files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "REV-001",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "ERROR_HANDLING",
+      "spec_citation": "C++ error-handling hygiene for DuckDB public UDF inputs",
+      "evidence": "CQL native numeric parse helpers used catch-all handlers in ParseUncertainRange and cql_precision.",
+      "root_cause": "Parse fallback logic treated every thrown condition as ordinary invalid input.",
+      "resolution": "Replaced catch-all handlers with catch (const std::exception&) in the affected CQL native parse paths.",
+      "verified_in": "CQL native build passed; CQL native unittest passed 612 assertions; full conformance 2822/2822; full pytest 7150 passed, 5 skipped"
+    },
+    {
+      "id": "REV-002",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "BACKEND_PARITY",
+      "spec_citation": "FHIRPath type assertions over FHIR choice elements; DuckDB native-vs-fallback public UDF parity",
+      "evidence": "The vectorized Python fhirpath() public surface did not share the choice-field assertion fallback already used by scalar wrappers.",
+      "root_cause": "Choice assertion handling was implemented in scalar wrapper helpers but not in the vectorized fhirpath_udf path.",
+      "resolution": "Applied choice assertion/ofType fallback handling to fhirpath_udf() and added native/fallback parity tests.",
+      "verified_in": "Focused parity pytest 20 passed; full conformance 2822/2822; full pytest 7150 passed, 5 skipped"
+    },
+    {
+      "id": "REV-003",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "DATA_HANDLING",
+      "spec_citation": "CQL Quantity values must be finite representable numeric quantities at the SQL UDF boundary",
+      "evidence": "Python fallback ToQuantity could accept an extremely large finite decimal string and overflow during float materialization.",
+      "root_cause": "Quantity formatting checked Decimal parseability but not finite DOUBLE representability before JSON serialization.",
+      "resolution": "Added finite Decimal and finite float guards in the Python CQL quantity UDF path.",
+      "verified_in": "Focused parity pytest 20 passed; full conformance 2822/2822; full pytest 7150 passed, 5 skipped"
+    },
+    {
+      "id": "REV-004",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "API_CONTRACT",
+      "spec_citation": "FHIRPath expression validation must reject unknown functions while preserving valid known public functions",
+      "evidence": "fhirpath_is_valid('foo()') could return true from the native parse-only AST path.",
+      "root_cause": "Native expression validation did not reject parsed function-call AST nodes whose function names were unknown.",
+      "resolution": "Added native AST known-function validation and aligned Python fallback NotImplemented handling for true unknown functions.",
+      "verified_in": "Native/fallback sanity matrix passed; native FHIRPath unittest passed 294 assertions; focused parity pytest 20 passed; full conformance 2822/2822; full pytest 7150 passed, 5 skipped"
+    }
+  ]
+}

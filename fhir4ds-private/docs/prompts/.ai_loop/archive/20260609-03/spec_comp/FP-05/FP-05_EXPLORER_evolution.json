@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-05: FHIRPath \u2014 \u00a75.3 Subsetting, \u00a75.4 Combining. Test these items: [index] indexer, single(), first(), last(), tail(), skip(num), take(num), intersect(other), exclude(other), union(other), combine(other). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release \u00a74.4.1 empty propagation and \u00a75.3.6 skip(num)/\u00a75.3.7 take(num)",
+      "evidence": "Fresh FP-05 EXPLORER probe compared native C++ and forced Python fallback. Expressions `a.skip({})` and `a.take({})` returned public empty/NULL results in both paths, but native `fhirpath_is_valid()` returned true while forced fallback returned false after raising `int() argument must be a string, a bytes-like object or a real number, not 'list'`. Spec general empty propagation says a single-input function passed an empty argument returns empty; skip/take do not override that for empty `num`.",
+      "root_cause": "Forced Python fallback `make_param()` correctly returns `[]` for empty singleton arguments, but `filtering.take_fn()` and `filtering.skip_fn()` coerced the empty list with `int(n)` before applying empty propagation.",
+      "resolution": "Updated `take_fn()` and `skip_fn()` to return empty when the evaluated count argument is empty before integer coercion, preserving existing errors for multi-item and non-Integer count arguments.",
+      "verified_in": "`.temp/qa/fp05_explorer_probe.py` 59 cases with 0 mismatches; `python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_collection_operator_parity.py -q` 9 passed; full conformance 2822/2822"
+    }
+  ]
+}

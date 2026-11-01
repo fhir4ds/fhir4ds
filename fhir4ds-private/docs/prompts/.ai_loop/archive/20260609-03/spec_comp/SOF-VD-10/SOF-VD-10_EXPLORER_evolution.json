@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-10: SQL-on-FHIR ViewDefinition \u2014 Terminology Bindings, Constraints: sql-name/sql-expressions, Cardinality and required fields. Test these items: sql-name regex for ViewDefinition.name, constant.name, and column.name, sql-expressions constraint: at most one of forEach, forEachOrNull, or repeat, required field validation for resource, select, column.path, column.name, constant.name, constant.value[x], and where.path, resource binding validation against FHIR ResourceType, fhirVersion binding validation against FHIRVersion, expectError official fixtures fail explicitly rather than being skipped, permissive versus strict validation modes are clearly separated. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "SOF-VD-10-EXPLORER-001",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VALIDATION_FALSE_NEGATIVE",
+      "spec_citation": "SQL-on-FHIR ViewDefinition logical model: ViewDefinition.resource and ViewDefinition.fhirVersion have required terminology bindings; sql-name constrains ViewDefinition.name, ViewDefinition.constant.name, and ViewDefinition.select.column.name to ^[A-Za-z][A-Za-z0-9_]*$ (https://build.fhir.org/ig/FHIR/sql-on-fhir-v2/StructureDefinition-ViewDefinition.html).",
+      "evidence": "Fresh EXPLORER probe .ai_loop/.temp/qa/sof_vd10_explorer_probe.py: validate_view_definition(ViewDefinition(resource=\"DefinitelyNotAResource\", ...)) returned [] instead of a ResourceType warning. The same public permissive validator also returned [] for fhirVersion=[\"9.9.9\"], root name=\"_bad\", column name=\"_bad\", and constant name=\"_bad\" even though strict parse/generation reject these SOF-VD-10 constraints.",
+      "root_cause": "validate_view_definition() only checked missing fields, duplicates, and a narrow set of direct-dataclass warnings. It did not reuse the existing ViewDefinition validators for ResourceType binding, FHIRVersion binding, or sql-name fields, so invalid direct dataclasses were reported as warning-free while strict parser/generator paths rejected them.",
+      "resolution": "Extended permissive validate_view_definition() to collect warnings from existing validators for root metadata, resource, profile, fhirVersion, root name, column fields, constant fields, join item shape, and select iterator shapes without raising. Added focused parser unit coverage for SOF-VD-10 binding/sql-name warning paths.",
+      "verified_in": "EXPLORER probe PASS; parser unit tests 209 passed; ViewDefinition tests 974 passed; ViewDefinition conformance 134/134; full conformance 2822/2822; architect audit PASS."
+    }
+  ]
+}

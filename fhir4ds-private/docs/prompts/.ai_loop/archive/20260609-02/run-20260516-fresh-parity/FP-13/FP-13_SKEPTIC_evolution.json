@@ -1,0 +1,20 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-13: FHIRPath - \u00a76.1 Equality. Test items: = (Equals) incl. Quantity and Date/Time equality, ~ (Equivalent) incl. Quantity, Date/Time, String equivalence, != (Not Equals), !~ (Not Equivalent). Fresh run; prior workflow outputs intentionally not consulted."
+  },
+  "issues": []
+}

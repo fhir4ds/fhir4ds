@@ -1,0 +1,18 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "PENDING",
+  "exit_reason": null,
+  "workflow": "evolution",
+  "pipeline": ["evolution"],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-07: SQL-on-FHIR ViewDefinition.select.repeat. Fresh HISTORIAN run. Systematic spec walkthrough against official spec_tests repeat.json fixtures.\n\nWhen the pipeline is fully complete (3 personalities SKEPTIC -> HISTORIAN -> EXPLORER each run QA/FIX/ARCHITECT), set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": []
+}

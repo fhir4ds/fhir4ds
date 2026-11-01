@@ -1,0 +1,32 @@
+{
+  "phase": null,
+  "iteration": 1,
+  "audit_status": "PENDING",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-17: FHIRPath \u2014 \u00a76.5 Boolean Logic. Test these items: and, or, not(), xor, implies. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "INTENDED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath R4 \u00a76.5 Boolean Logic + Singleton Evaluation of Collections",
+      "evidence": "All boolean logic surfaces treat toBoolean-convertible singletons as truthy true instead of applying toBoolean conversion. Repro (all three engines: core Python engine, DuckDB native C++, DuckDB Python fallback): 0 and true -> true (spec: false); 0 xor false -> true (spec: false); 'false' implies false -> false (spec: true); t implies 'false' -> true (spec: false); 'false'.not() -> false (spec: true); 0.not() -> false (spec: true). Root causes: fhir4ds/fhirpath/engine/invocations/logic.py::_singleton_boolean; fhir4ds/fhirpath/engine/invocations/existence.py::not_fn (via misc.boolean_singleton); fhir4ds/fhirpath/duckdb/operators.py::_get_boolean_value + boolean_not; extensions/fhirpath/src/fhirpath/evaluator.cpp::collectionIsBool (lines 8491-8493). Correct semantics: try toBoolean conversion first (bool; 1/0, 1.0/0.0; strings true/t/yes/y/1, false/f/no/n/0 case-insensitive); only a non-convertible single node evaluates to true. Non-convertible truthy behavior already correct and must be preserved. Native/fallback parity holds (both identically wrong) so parity tests missed it.",
+      "root_cause": "QA misread of the Singleton Evaluation of Collections first branch. The official R4 test suite (testIntegerBooleanNotTrue: `(0).not() = false` -> true; testIntegerBooleanNotFalse: `(1).not() = false` -> true) mandates that non-boolean singletons, including toBoolean-convertible ones (0, 'false'), are TRUTHY in boolean-logic operand evaluation. toBoolean conversion criteria do NOT apply to and/or/xor/implies/not() operands. Original code was correct.",
+      "resolution": "Behavioral change REVERTED per the Recovery Gate after the official fixture testIntegerBooleanNotTrue failed (934/935). Reverted: evaluator.cpp singletonBooleanCoerce + fn_not change, core logic.py/_singleton_boolean + existence.not_fn, duckdb operators.py/_get_boolean_value, bundled + site-packages extension binaries. Added permanent regression tests asserting truthy semantics anchored to the official fixtures (test_conformance_regressions.py, test_boolean_logic_parity.py dual-path). Conformance restored 2832/2832.",
+      "verified_in": "conformance run_all 2832/2832; pytest test_boolean_logic_parity.py + test_conformance_regressions.py 84 passed"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "run": "spec-comp CQL-21 SKEPTIC",
+  "workflow": "evolution",
+  "pipeline": [
+    "evolution"
+  ],
+  "phase": "COMPLETE",
+  "qa_personality": "SKEPTIC",
+  "max_iterations": 3,
+  "fresh_start": true,
+  "issues": [
+    {
+      "id": "CQL-21-F01",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "PARITY",
+      "summary": "Concept-equality ToConcept(X)=ToConcept(Y) crashes the forced-Python-fallback UDF (TypeError float() on NoneType) while native returns False (spec-correct)"
+    }
+  ],
+  "phase_transitions": {
+    "skeptic_started": "2026-10-02T19:10:00Z",
+    "skeptic_completed": "2026-10-02T19:15:07Z"
+  },
+  "exit_reason": "skeptic_complete_clean_1_finding"
+}

@@ -1,0 +1,43 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PENDING",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-15: FHIRPath \u2014 \u00a76.3 Types. Test these items: is type specifier, is(type), as type specifier, as(type). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath \u00a76.3 Types, `is type specifier` and `is(type : type specifier)`",
+      "evidence": "Fresh probe `.temp/qa/fp15_historian_fresh_probe.py` compared native DuckDB/C++ and forced Python fallback. For `missing is Integer` and `missing.is(Integer)` over `{ \"resourceType\": \"Patient\" }`, both engines returned `fhirpath=[]`, `fhirpath_text=NULL`, `fhirpath_bool=NULL`, `fhirpath_is_valid=true`. Current HL7 FHIRPath \u00a76.3 says `is` returns true for a singleton matching type, false for non-matching/all other non-error cases, throws on unresolved type and multi-item input. Expected public result is false (`['false']`, bool false) for empty input. `as` empty-input behavior was already correct.",
+      "root_cause": "Both execution paths short-circuited empty input for `is` as an empty collection. The first remediation exposed an adjacent Python fallback choice-type regression: value[x] assertion helpers used exact suffix matching for `is`, so FHIR primitive subtypes such as `uri` did not satisfy `string`. Full FHIRPath R4 conformance then exposed the R4 fixture sentinel that absent FHIR primitive paths such as `Observation.issued is instant` must remain empty, so the generic empty-input `is=false` rule had to preserve that FHIR primitive path boundary.",
+      "resolution": "Updated Python `types.is_fn()` and native `Evaluator::fn_isType()` so arbitrary empty `is` checks return false after type-specifier validation, while absent FHIR primitive path checks remain empty for R4 conformance. Updated DuckDB Python fallback value[x] assertion helpers so `is` uses the FHIR type hierarchy and `as` preserves exact primitive choice behavior. Added parity coverage for empty `is`, absent FHIR primitive paths, and choice `is`/`as` behavior; rebuilt and copied the bundled native extension.",
+      "verified_in": "python3 .temp/qa/fp15_historian_fresh_probe.py; python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_type_parity.py fhir4ds/fhirpath/duckdb/tests/integration/test_environment_type_parity.py -q; extensions/fhirpath/build/release/test/unittest \"*fhirpath*\"; python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_filter_projection_parity.py fhir4ds/fhirpath/tests/unit/test_conformance_regressions.py -q; python3 conformance/scripts/run_fhirpath_r4.py; python3 conformance/scripts/run_all.py | grep -E \"FAIL|ERROR|accuracy|Suite|OVERALL|ViewDefinition|FHIRPath|CQL|DQM\""
+    },
+    {
+      "id": "ARCH-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath \u00a76.3 Types, `as type specifier` and `as(type : type specifier)`",
+      "evidence": "Fresh architect probe `.temp/architect/fp15_historian_architect_audit_probe.py` found native DuckDB/C++ returns `['http://example.org']` for `Parameters.parameter[0].value.as(string)` when the concrete field is `valueUri`, while the forced Python fallback returns empty. FP-15 invariants and R4 primitive behavior require primitive choice `as` to be exact: `uri is string` may be true via the FHIR primitive hierarchy, but `uri as string` must return empty.",
+      "root_cause": "Native `fn_isType()` uses stored `fhir_type` for choice primitives before falling back to field-name heuristics. For `valueUri`, `val.fhir_type` is `Uri`, but field metadata is often generic `value`, so exact string checks were allowed by fallback to unknown field type. Updated exact `string` handling to reject non-\n`string` `fhir_type` values.",
+      "resolution": "Updated `extensions/fhirpath/src/fhirpath/evaluator.cpp` so exact `string` checks in `fn_isType()` consult lowercase `val.fhir_type` when field metadata is absent; `Parameters.parameter[0].value.as(string)` now returns empty for concrete `valueUri` values while preserving exact `as` behavior for true strings. Added parity coverage for `Parameters.parameter[0].value.as(string)` in `test_environment_type_parity.py` and rebuilt/copied the bundled extension.",
+      "verified_in": "python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_environment_type_parity.py::test_uri_reference_and_media_type_shapes_match_cpp -q; python3 - <<'PY' (custom regression check for Parameters.parameter[0].value.as(string)); python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_type_parity.py::test_choice_type_assertion_after_resource_oftype_matches_fallback -q"
+    }
+  ]
+}

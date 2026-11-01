@@ -1,0 +1,30 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-17: CQL \u2014 Interval Operators Part 3. Test these items: Point From (Interval), Properly Includes precision, Properly Included In precision, Same As precision (Interval), Same Or After precision (Interval), Same Or Before precision (Interval), Size (Interval), Start of (Interval), Starts precision, Union (Interval), Width of (Interval). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "title": "Malformed non-null expand per is treated as omitted per",
+      "verified_in": "CQL-17 EXPLORER iteration 1: probe PASS; interval part3 3/3; interval part1/2/3 + WASM/no-Python 31/31; official interval 412/412; full conformance 2822/2822"
+    }
+  ],
+  "RETRY_QA": false
+}

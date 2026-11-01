@@ -1,0 +1,43 @@
+{
+    "phase": "ARCHITECT",
+  "iteration": 1,
+    "audit_status": "COMPLETE",
+    "exit_reason": "CLEAN",
+    "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-09: FHIRPath \u2014 \u00a75.6.1-\u00a75.6.5 String Manipulation (Search). Test these items: indexOf(substring), substring(start, [length]), startsWith(prefix), endsWith(suffix), contains(substring). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+    "issues": [
+        {
+            "id": "QA-001",
+            "severity": "HIGH",
+            "status": "RESOLVED",
+            "category": "SPEC_VIOLATION",
+            "spec_citation": "FHIRPath Normative Release §5.6.1-§5.6.5 and general function parameter singleton rule",
+            "evidence": "Native C++ ignores extra arguments for FP-09 string-search functions and reports malformed arity as valid. Reproducers: 'abc'.indexOf('a','b') returns ['0'], text '0', number 0.0, bool false, json [0], is_valid true; 'abc'.substring(1,2,3) returns ['bc']; 'abc'.startsWith('a','b'), endsWith('c','b'), and contains('b','c') return true. Forced Python fallback returns empty/NULL and is_valid false for the same malformed calls. Spec signatures are indexOf(substring), substring(start[, length]), startsWith(prefix), endsWith(suffix), contains(substring).",
+            "root_cause": "Native Evaluator::evalFunction had no exact arity guards for §5.6 string-search functions before evaluating node.children[0], so extra arguments were ignored and missing-argument calls fell into row-resilient empty results.",
+            "resolution": "Added native exact arity guards for §5.6 string-search functions before argument access, and preserved public row resilience by throwing FHIRPathSpecError for malformed calls. Added focused native/fallback regression tests.",
+            "verified_in": "Probe .temp/qa/fp09_skeptic_probe_after_fix.log: 35 cases, 0 mismatches; pytest test_string_search_parity.py: 4 passed; native sqllogictest: 436 assertions; full conformance: 2822/2822"
+        },
+        {
+            "id": "QA-002",
+            "severity": "MEDIUM",
+            "status": "RESOLVED",
+            "category": "SPEC_VIOLATION",
+            "spec_citation": "FHIRPath Normative Release §5.6 and general function parameter type rule",
+            "evidence": "Native C++ returns empty but fhirpath_is_valid true for constant wrong-type FP-09 calls that should signal a semantic error: 'abc'.contains(1), 'abc'.startsWith(1), 1.indexOf('1'), 1.contains('1'), 'abc'.substring('1'), 'abc'.substring(1.5), and 'abc'.substring(1,'2'). Forced Python fallback returns empty/NULL with is_valid false for these constant cases.",
+            "root_cause": "Native §5.6 helper functions returned empty for concrete wrong input/argument types instead of throwing FHIRPathSpecError, so fhirpath_is_valid() treated constant semantic errors as valid.",
+            "resolution": "Changed native §5.6 helpers to throw FHIRPathSpecError for concrete non-String inputs/search terms and non-Integer substring bounds, and added forced Python fallback static validation for FP-09 arity/literal-argument errors.",
+            "verified_in": "Probe .temp/qa/fp09_skeptic_probe_after_fix.log: 35 cases, 0 mismatches; pytest test_string_search_parity.py: 4 passed; native sqllogictest: 436 assertions; full conformance: 2822/2822"
+        }
+    ]
+}

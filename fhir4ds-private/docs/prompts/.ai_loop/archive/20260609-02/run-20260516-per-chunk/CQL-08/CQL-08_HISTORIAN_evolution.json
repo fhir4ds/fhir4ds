@@ -1,0 +1,81 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CQL-08 HISTORIAN complete: 6 issues found and resolved; focused parity, native C++ SQL tests, full pytest, and full conformance all passed.",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-08: CQL — Nullological Operators. Test these items: Coalesce, IsNull, IsFalse, IsTrue. HISTORIAN should focus on spec-history/common-regression risks: overload forms, historical CQL XML examples, direct SQL public surface, generated SQL in scalar/query contexts, and native-loaded versus forced Python fallback DuckDB registration parity.\n\nThis is the actual per-chunk/per-personality workflow. Start from scratch for this chunk/personality and do not inspect or rely on any archived prior workflow outputs under .ai_loop/spec_comp/**, including CQL-08 SKEPTIC artifacts and any older CQL-08 consolidated-run artifacts. Current source code, active state files, GLOBAL_RULES.md, GLOBAL_KNOWLEDGE.md, AGENTS.md, and current tests may be inspected. Maintain 100% conformance and no pytest regressions.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-CQL08-HISTORIAN-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "spec_citation": "CQL 1.5.3 Nullological Operators: IsTrue(null) and IsFalse(null) return false.",
+      "evidence": "Direct DuckDB probes over typed BOOLEAN NULL returned SQL NULL for IsTrue(NULL::BOOLEAN) and IsFalse(NULL::BOOLEAN), while the official CQL nullological examples expect false.",
+      "root_cause": "The IsTrue/IsFalse macros compared nullable booleans directly and did not coalesce the comparison result to false.",
+      "resolution": "Updated logical macros so IsTrue/IsFalse require BOOLEAN input and coalesce nullable comparisons to false.",
+      "verification": "Nullological parity tests passed on native-loaded and forced Python fallback registrations; official CQL nullological conformance passed."
+    },
+    {
+      "id": "QA-CQL08-HISTORIAN-002",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "spec_citation": "CQL DateTime(year, month, day) constructs a DateTime with day precision, distinct from a Date.",
+      "evidence": "Translated DateTime(2000, 1, 1) produced a date-shaped value without the day-precision DateTime marker, which broke historical Coalesce DateTime examples and downstream DateTime interval semantics.",
+      "root_cause": "The temporal constructor lowered three-component DateTime values to YYYY-MM-DD without preserving DateTime identity.",
+      "resolution": "Changed DateTime(year, month, day) lowering to emit the explicit day-precision marker YYYY-MM-DDT in literal and runtime paths.",
+      "verification": "Focused temporal/nullological parity tests passed and official DateTime nullological examples remained at 100% conformance."
+    },
+    {
+      "id": "QA-CQL08-HISTORIAN-003",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "spec_citation": "CQL Coalesce returns the first non-null argument across supported overloads, including DateTime values.",
+      "evidence": "Direct public DuckDB Coalesce over TIMESTAMP values failed in the Python fallback path because Python datetime objects were not serialized into a stable return value.",
+      "root_cause": "The generic Coalesce return helper handled scalar JSON/string values but not Python datetime objects returned by DuckDB for TIMESTAMP inputs.",
+      "resolution": "Normalized Python datetime return values to ISO strings in the Coalesce helper before returning through DuckDB.",
+      "verification": "Focused nullological parity tests passed on native-loaded and forced Python fallback registrations."
+    },
+    {
+      "id": "QA-CQL08-HISTORIAN-004",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "spec_citation": "CQL partial-precision DateTime values must remain parseable and comparable at their declared precision.",
+      "evidence": "After preserving YYYY-MM-DDT, Python and native C++ date/time helper parsers rejected that marker form in date/time and interval helper paths.",
+      "root_cause": "The helper parsers accepted year, month, full date, and timestamp shapes but did not recognize the day-precision DateTime marker used internally to distinguish DateTime from Date.",
+      "resolution": "Added YYYY-MM-DDT parsing support to Python datetime helpers and native C++ datetime parsing.",
+      "verification": "Native C++ SQL tests, focused day-precision parity tests, and official CQL conformance all passed."
+    },
+    {
+      "id": "QA-CQL08-HISTORIAN-005",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "spec_citation": "CQL predecessor/successor and interval operations respect point precision for DateTime values.",
+      "evidence": "Official CQL cases for predecessor/successor of DateTime(2000,1,1) and DateTime interval contains/meets/collapse/except initially regressed after day-precision DateTime identity was restored.",
+      "root_cause": "Boundary stepping and interval normalization treated day-precision DateTime markers inconsistently across Python and native C++ helpers.",
+      "resolution": "Made predecessor/successor, interval parsing, normalization, collapse, contains, meets, and output formatting preserve explicit day-precision DateTime markers in both Python and native C++ paths.",
+      "verification": "Official CQL conformance passed 1706/1706; native C++ SQL suite passed 628 assertions."
+    },
+    {
+      "id": "QA-CQL08-HISTORIAN-006",
+      "severity": "CRITICAL",
+      "status": "RESOLVED",
+      "spec_citation": "CQL interval open-bound normalization must use the actual operand precision, not wall-clock midnight heuristics.",
+      "evidence": "DQM focused runs exposed CMS165/CMS56 risk: full timestamp open upper bounds at midnight were normalized as day-precision values, excluding late-day events such as 2026-06-30T23:59:59.000+00:00.",
+      "root_cause": "Python and native interval helpers inferred day precision from midnight timestamps, and dateAddQuantity/dateSubtractQuantity dropped the YYYY-MM-DDT marker for true day-precision DateTime inputs.",
+      "resolution": "Removed the midnight heuristic for full timestamps, made open-bound stepping raw-value aware, preserved explicit day-precision markers through date arithmetic, and mirrored the behavior in native C++.",
+      "verification": "Focused DQM CMS165/CMS56 passed 100%; full DQM passed 47/47; full conformance passed 2822/2822; full fhir4ds pytest passed 7157."
+    }
+  ]
+}

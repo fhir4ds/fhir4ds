@@ -1,0 +1,52 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": ["evolution"],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-SQ-01 (see prior state; unchanged). EXPLORER launch complete: zero non-terminal CRITICAL/HIGH/MEDIUM issues; clean exit at min_iterations=1. Master gate 2832/2832."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_INTERPRETATION",
+      "spec_citation": "FHIR R4 base64Binary; sql-on-fhir-v2 library-profiles.fsh content.data 1..1",
+      "evidence": "content[].data rejects URL-safe alphabet (-/_), embedded whitespace/newlines, missing/extra padding, and empty string with typed SQLQueryParseError. Consistent with SKEPTIC launch's deliberate strict-base64 fix; FHIR JSON strings carry the standard alphabet only.",
+      "root_cause": "Intentional strictness (base64.b64decode validate=True).",
+      "resolution": "No change; documented as intended.",
+      "verified_in": "EXPLORER iter 1 probes (.temp/qa/probe1.py)"
+    },
+    {
+      "id": "QA-002",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_INTERPRETATION",
+      "spec_citation": "library-profiles.fsh: * type = LibraryTypesCodes#sql-query|sql-view",
+      "evidence": "Library.type.coding containing the expected code pinned to a foreign code system raises SQLQueryParseError even when a later coding carries the correct LibraryTypesCodes system. Strictest-coding-first is consistent with the HISTORIAN type-coding-system fix (a same-code/different-system coding is a different concept).",
+      "root_cause": "Intentional strict rejection of foreign-system codings.",
+      "resolution": "No change; documented as intended.",
+      "verified_in": "EXPLORER iter 1 probes"
+    },
+    {
+      "id": "QA-003",
+      "severity": "LOW",
+      "status": "DEFERRED",
+      "category": "ENHANCEMENT",
+      "spec_citation": "library-profiles.fsh contentType extensible binding to AllSQLContentTypeCodes; sql-must-be-sql-expressions invariant (startsWith 'application/sql')",
+      "evidence": "contentType 'application/sql;charset=utf-8' passes parse+validate (invariant only requires the application/sql prefix) but the runner's select_best_content raises UnsupportedDialectError because only exact 'application/sql' and 'application/sql;dialect=duckdb' are supported. Spec permits unenumerated codes; treating charset params as generic SQL at execution time would be a compatible enhancement.",
+      "root_cause": "Runner dialect table is exact-match.",
+      "resolution": "Deferred: parse-side behavior is spec-correct; execution-side charset tolerance is an optional enhancement outside this chunk's invariants.",
+      "verified_in": "EXPLORER iter 1 probes + runner.py review"
+    }
+  ]
+}

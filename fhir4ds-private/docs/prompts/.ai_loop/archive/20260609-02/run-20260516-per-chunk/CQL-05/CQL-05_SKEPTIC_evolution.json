@@ -1,0 +1,69 @@
+{
+  "phase": "COMPLETE",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-05: CQL - Type Operators - Structural. Test these items: As<T>(argument); Children(argument); Convert to<T>(argument); Descendants(argument); Is<T>(argument).\n\nFor DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "CQL05-SKEPTIC-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "summary": "Structural type targets were not validated consistently for `is`, `as`, and `convert`; unknown targets could silently translate."
+    },
+    {
+      "id": "CQL05-SKEPTIC-002",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "summary": "`List<T>` and `Interval<T>` type specifiers were not first-class operands for structural `is` and `as`."
+    },
+    {
+      "id": "CQL05-SKEPTIC-003",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "summary": "Static structural type inference missed aliases, Ratio values, and exact Date/DateTime/Time distinctions."
+    },
+    {
+      "id": "CQL05-SKEPTIC-004",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "summary": "`as Quantity` assertions over FHIR values could lose the `parse_quantity`/`Quantity` shape required by downstream unit-aware comparisons."
+    },
+    {
+      "id": "CQL05-SKEPTIC-005",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "summary": "`Message(..., 'Error', ...) as Interval<T>` wrapped strict-error expressions in type probes instead of preserving the CQLMessage call."
+    },
+    {
+      "id": "CQL05-SKEPTIC-006",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "summary": "Dynamic FHIR `as Concept`/`as Code` assertions could collapse unknown runtime clinical values to NULL before terminology equivalence."
+    },
+    {
+      "id": "CQL05-SKEPTIC-007",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "summary": "Property navigation from function-inlined `ParameterPlaceholder` values failed when the placeholder SQL expression was an `as`-generated SQL CASE."
+    },
+    {
+      "id": "CQL05-SKEPTIC-008",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "summary": "Quantity comparison fallback repaired scalar optimized CTEs but initially ignored incompatible units; fallback is now gated away from JSON Quantity objects."
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-01: FHIRPath \u2014 \u00a74.1 Literals. Test these items: Boolean literals, String literals, Integer literals, Decimal literals, Date literals, Time literals, DateTime literals, Quantity literals (incl. time-valued quantities). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a74.1 literals and local DuckDB UDF contract for fhirpath_timestamp/fhirpath_quantity",
+      "evidence": "Spec distinguishes Boolean/String/Integer/Decimal/Date/Time/DateTime/Quantity literals. DuckDB native and forced Python fallback both return non-typed scalar text from type-specific wrappers: SELECT fhirpath_timestamp('{}'::JSON, 'true'), fhirpath_quantity('{}'::JSON, 'true') returns ('true','true'); @T14:34 returns ('14:34','14:34'); string surrogate-pair literal through those wrappers can raise invalid Unicode/pybind errors. Expected SQL NULL for non-DateTime/non-Quantity results.",
+      "root_cause": "Both wrapper implementations stringified the first FHIRPath result without checking whether the FPValue/result shape matched the wrapper's declared DateTime or Quantity surface.",
+      "resolution": "Python fallback evaluates raw items before wrapper coercion; native C++ now checks DateTime text/FPValue shape for timestamp and Quantity/JSON Quantity shape for quantity before stringifying.",
+      "verified_in": "python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_literal_parity.py fhir4ds/fhirpath/duckdb/tests/integration/test_conversion_parity.py -q; ./build/release/test/unittest '*fhirpath*'; .temp/qa/fp01_historian_literal_probe.py; conformance 2822/2822"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a74.1.5 Date, \u00a74.1.7 DateTime, and formal grammar",
+      "evidence": "Spec Date literals have @YYYY[-MM[-DD]] with no timezone; DateTime requires T and timezone only after a time component. Forced Python fallback returns fhirpath_is_valid=true for invalid literals @2014Z, @2014-01Z, @2014-01-25Z, and @2014TZ while native rejects them. Expected fhirpath_is_valid=false and syntax failure parity.",
+      "root_cause": "Fallback parser validation delegated to the underlying evaluator for temporal tokens and did not precheck timezone placement for Date and partial DateTime forms.",
+      "resolution": "Added shared fallback lexical precheck for invalid timezone placement and wired it into evaluator compilation, cached evaluator creation, and `fhirpath_is_valid`.",
+      "verified_in": "test_invalid_timezone_suffixed_date_literals_are_invalid_in_both_backends; native sqllogictest; backend-isolated QA probe; conformance 2822/2822"
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a74.1.3 Integer",
+      "evidence": "Spec Integer literals are in range -2^31 to 2^31-1 and unary '-' is not part of the literal. Native and forced Python fallback accept 2147483648 and (-2147483649) with fhirpath_is_valid=true; fallback also accepts 9223372036854775808 while native rejects it due int64 parsing. Expected out-of-range Integer expressions to be invalid or execution-empty consistently at the public validation boundary.",
+      "root_cause": "Native parsed integer tokens using the host 64-bit range and fallback did not enforce the FHIRPath 32-bit literal range before parsing/evaluation.",
+      "resolution": "Native parser permits `2147483648` only so unary minus can produce signed minimum, while evaluation rejects positive out-of-range literals; fallback prechecks reject non-Quantity Integer literals outside the 32-bit range with the same unary-minus exception.",
+      "verified_in": "test_integer_literal_range_matches_spec_and_backends; native sqllogictest; backend-isolated QA probe; conformance 2822/2822"
+    }
+  ]
+}

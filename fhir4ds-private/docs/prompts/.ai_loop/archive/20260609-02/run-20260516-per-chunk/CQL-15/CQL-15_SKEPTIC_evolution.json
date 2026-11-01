@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-15: CQL - Interval Operators Part 1. Test these items: After precision (Interval), Before precision (Interval), Collapse(argument, [per]), Contains precision (Interval, point), End of (Interval), Ends precision, Equal (Interval), Equivalent (Interval), Except (Interval), Expand(argument, [per]), In precision (point, Interval), Includes precision (Interval).\n\nQA personality: SKEPTIC. Look for strict spec mismatches, NULL/empty propagation mistakes, open/closed boundary errors, precision uncertainty mistakes, Date versus DateTime promotion leaks, quantity/temporal interval edge cases, malformed interval JSON resilience, collapse/expand adjacency bugs, translated scalar/query execution errors, native-loaded versus forced Python fallback parity, and no-Python/browser-style C++ public helper gaps where functions are registered.\n\nThis is the actual per-chunk/per-personality workflow. Start from scratch for this chunk/personality and do not inspect or rely on any archived prior workflow outputs under .ai_loop/spec_comp/**, including CQL-15 artifacts if present and older consolidated-run artifacts. Current source code, active state files, GLOBAL_RULES.md, GLOBAL_KNOWLEDGE.md, AGENTS.md, and current tests may be inspected. Maintain 100% conformance and no pytest regressions.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B, Interval Operators: Start and End use interval boundary semantics; for open boundaries, the effective boundary is successor/predecessor of the excluded bound.",
+      "evidence": "SKEPTIC probe: SELECT intervalStart('{\"low\":1,\"high\":5,\"lowClosed\":false,\"highClosed\":true}') returned '1' in forced Python fallback and no-Python C++ direct extension; expected '2'. SELECT intervalEnd('{\"low\":\"2024-01-01\",\"high\":\"2024-01-31\",\"lowClosed\":true,\"highClosed\":false}') returned '2024-01-31'; expected '2024-01-30'. Translated CQL `start of Interval(1, 5]` and `end of Interval[@2024-01-01, @2024-01-31)` produced the same incorrect excluded boundaries.",
+      "root_cause": "Python fallback and native C++ intervalStart/intervalEnd returned raw low/high values for authored open bounds. Translator fallback extraction then needed to treat corrected helper outputs as closed effective bounds to avoid double-excluding half-open interval expressions.",
+      "resolution": "Updated Python fallback and native C++ interval helpers to return effective successor/predecessor boundaries for open bounds, rebuilt the bundled CQL DuckDB extension, and updated translator interval-bound fallback extraction to mark helper outputs closed. Added forced Python, native-loaded, translated scalar, CMS159-shaped, and no-Python C++ regression coverage.",
+      "verified_in": "Interval Part 1 parity 6/6; focused interval/public-surface pytest 73/73; native C++ CQL unittest 694 assertions; CMS159 67/67; full conformance 2822/2822; full fhir4ds pytest 7192 passed, 5 skipped; git diff --check clean."
+    }
+  ]
+}

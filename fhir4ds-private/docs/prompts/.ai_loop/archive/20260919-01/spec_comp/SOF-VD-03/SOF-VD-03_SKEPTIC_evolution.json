@@ -1,0 +1,43 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-03: SQL-on-FHIR ViewDefinition \u2014 Key Elements: Select, ViewDefinition.select, ViewDefinition.select.column, ViewDefinition.select.column.path/name/description. Test these items: select 1..* required and non-empty, column 0..* within each select, column.path 1..1 FHIRPath expression relative to the active context, column.name 1..1 SQL-safe output name, column.description 0..1 markdown retention, multiple select blocks and deterministic column ordering, root and select-relative FHIRPath evaluation contexts. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "category": "DOC_ACCURACY",
+      "spec_citation": "SQL-on-FHIR v2 Select.column.collection: 'Implementations SHALL report an error if multiple values are produced' when collection != true",
+      "evidence": "generator.py:1236 preflight warning says 'only the first will be used. Set collection=true to return all values' but runtime guards RAISE (Invalid Input Error) instead of truncating. Warning text contradicts actual spec-compliant behavior.",
+      "root_cause": "Permissive-mode preflight warning text was written for an earlier truncating implementation; runtime SQL guards were later hardened to raise per spec, leaving stale wording.",
+      "resolution": "generator.py warning now states the runtime guard will raise an error; focused test TestCollectionPreflightWarning added (65 unit gen tests pass).",
+      "verified_in": "viewdef pytest 1171 passed; ViewDef conformance 144/144; master gate 2832/2832"
+    },
+    {
+      "id": "QA-002",
+      "severity": "LOW",
+      "status": "DEFERRED",
+      "category": "ERROR_MESSAGE_QUALITY",
+      "spec_citation": "SQL-on-FHIR v2 Select.column.collection (SHALL report error on multiple values)",
+      "evidence": "For a multi-valued PRIMITIVE with type unset (e.g. path name.given, collection=false), runtime error text reads 'violates collection=false / type unset; non-primitive outputs require column.type' \u2014 conflates the multi-value cardinality violation with the missing-type case. Error IS raised (spec-compliant); message misleads. Test suite pins the fragment (test_duckdb.py:386,755,757,866).",
+      "root_cause": "Runtime guard is a single boolean SQL condition combining cardinality and type checks; the single message cannot distinguish which fired. Error IS raised (spec SHALL satisfied); only wording conflates cases.",
+      "resolution": "Deferred: LOW, spec silent on message content; fixing requires splitting guard conditions (net-new restructuring). Test suite pins the fragment at test_duckdb.py:386,755,757,866.",
+      "verified_in": null
+    }
+  ]
+}

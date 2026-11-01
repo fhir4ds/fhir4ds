@@ -1,0 +1,98 @@
+{
+  "phase": "REVIEW",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "code_review"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": null,
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE MILESTONE REVIEW — 25 chunks completed.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all review files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "REV-001",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "HARDENING",
+      "spec_citation": "NONE",
+      "evidence": "evaluator.cpp ~2151 fhirpathSplitUnitTerm still reaches std::stoi on unit terms ending in '-'; not literal-reachable, hardening only.",
+      "root_cause": "unguarded numeric parse",
+      "resolution": null,
+      "verified_in": "review-25"
+    },
+    {
+      "id": "REV-002",
+      "severity": "MEDIUM",
+      "status": "OPEN",
+      "category": "MAINTAINABILITY",
+      "spec_citation": "NONE",
+      "evidence": "Hand-maintained FHIR/CQL metadata maps duplicated across engines (fhirFieldType native table + fhir_path_to_type.json + typecheck.py/nodes.py; new FHIR_TYPE_TO_CQL_TYPE in inference.py is spec-level and acceptable). Drift risk unchanged.",
+      "root_cause": "metadata not generated from single source",
+      "resolution": null,
+      "verified_in": "review-25"
+    },
+    {
+      "id": "REV-003",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "HYGIENE",
+      "spec_citation": "NONE",
+      "evidence": "Unrelated untracked files in campaign tree: conformance/architecture/, fhir4ds/dqm/AGENTS.md.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": "review-25"
+    },
+    {
+      "id": "REV-004",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "HARDENING",
+      "spec_citation": "NONE",
+      "evidence": "exactDecimalRatioText (evaluator.cpp:2606) now bounds inputs (digits<=25, scale<=20) bounding multiplication magnitude, but no explicit 128-bit budget guard.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": "review-25"
+    },
+    {
+      "id": "REV-005",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "DEPRECATION",
+      "spec_citation": "NONE",
+      "evidence": "_compile_regex (fhir4ds/fhirpath/engine/invocations/strings.py:151) still passes mid-pattern inline regex flags to re.compile (DeprecationWarning).",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": "review-25"
+    },
+    {
+      "id": "REV-006",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath §6.4.2/§6.4.3",
+      "evidence": "operators.py::membership raise restored and symbol-verified present; parity 765 passed at milestone-4 reconciliation.",
+      "root_cause": "sibling-session whole-file clobber",
+      "resolution": "re-landed during milestone-4 reconciliation",
+      "verified_in": "review-25"
+    },
+    {
+      "id": "REV-007",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "PROCESS",
+      "spec_citation": "NONE",
+      "evidence": "Lost evaluator.cpp fixes re-landed; symbol spot-check this review (leastPrecisionDecimalPlaces, powerDecimalExactText, expandScientificToFixed, frac_digits, decimalFactorRatio, !explicit_namespace guard, fhirFieldType extension entries) all present.",
+      "root_cause": "concurrent sibling sessions with whole-file rewrites",
+      "resolution": "re-landed + clobber-guard symbol-check doctrine",
+      "verified_in": "review-25"
+    }
+  ]
+}

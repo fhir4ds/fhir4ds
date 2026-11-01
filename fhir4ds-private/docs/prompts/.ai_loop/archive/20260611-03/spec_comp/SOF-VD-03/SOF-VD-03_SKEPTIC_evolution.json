@@ -1,0 +1,20 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-03: SQL-on-FHIR ViewDefinition \u2014 Key Elements: Select; ViewDefinition.select; ViewDefinition.select.column; ViewDefinition.select.column.path/name/description. Test these items: select 1..* required and non-empty; column 0..* within each select; column.path 1..1 FHIRPath expression relative to the active context; column.name 1..1 SQL-safe output name; column.description 0..1 markdown retention; multiple select blocks and deterministic column ordering; root and select-relative FHIRPath evaluation contexts. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk."
+  },
+  "issues": []
+}

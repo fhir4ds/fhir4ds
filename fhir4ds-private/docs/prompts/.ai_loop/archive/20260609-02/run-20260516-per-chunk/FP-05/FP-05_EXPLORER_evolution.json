@@ -1,0 +1,35 @@
+{
+    "phase": "QA",
+  "iteration": 2,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-05: FHIRPath \u2014 \u00a75.3 Subsetting, \u00a75.4 Combining. Test these items: [index] indexer, single(), first(), last(), tail(), skip(num), take(num), intersect(other), exclude(other), union(other), combine(other). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+    "issues": [
+        {
+            "id": "QA-001",
+            "severity": "HIGH",
+            "status": "VERIFIED",
+            "category": "SPEC_VIOLATION",
+            "verified_in": "Iteration 1; archived in ARCHIVE_LOG.md#FP-05-EXPLORER---Iteration-1---2026-05-16"
+        },
+        {
+            "id": "QA-002",
+            "severity": "MEDIUM",
+            "status": "VERIFIED",
+            "category": "SPEC_VIOLATION",
+            "verified_in": "Iteration 1; archived in ARCHIVE_LOG.md#FP-05-EXPLORER---Iteration-1---2026-05-16"
+        }
+    ]
+}

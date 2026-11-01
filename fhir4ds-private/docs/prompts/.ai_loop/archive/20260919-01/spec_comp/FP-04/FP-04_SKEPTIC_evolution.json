@@ -1,0 +1,33 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-04: FHIRPath \u2014 \u00a75.2 Filtering and Projection. Test these items: where(criteria), select(projection), repeat(projection), ofType(type). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "summary": "Native/fallback is/as/ofType/type divergence on unmodelled fields; fixed via structuralFHIRComplexType() in evaluator.cpp; verified iter 1 (probes 0 parity fails; fhirpath pytest 1723; conformance 2832/2832)."
+    },
+    {
+      "id": "QA-002",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "summary": "ofType(System.String)/is System.String non-match on FHIR strings is spec-correct (FHIR page pins is(System.String).not()); both engines agree; terminal."
+    }
+  ]
+}

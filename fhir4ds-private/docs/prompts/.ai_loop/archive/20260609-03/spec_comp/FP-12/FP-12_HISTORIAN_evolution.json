@@ -1,0 +1,43 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-12: FHIRPath \u2014 \u00a75.8 Tree Navigation, \u00a75.9 Utility Functions. Test these items: children(), descendants(), trace(name, [projection]), now(), timeOfDay(), today(). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release \u00a75.8.2 descendants(); FHIR R4 \u00a72.9.1 FHIRPath primitive model",
+      "evidence": "Fresh FP-12 HISTORIAN probe: on a Patient with _birthDate.extension.valueString='midday', native descendants().count() returned ['12'] while forced Python fallback returned ['16']; native descendants().where($this = 'midday').count() returned ['0'] while fallback returned ['1']. \u00a75.8 tree navigation is over child/descendant nodes and FHIR R4 \u00a72.9.1 says FHIRPath abstracts away JSON/XML primitive split representation, so raw _birthDate JSON containers must not leak through descendants() when children() hides them.",
+      "root_cause": "Forced Python fallback descendants() used create_reduce_children(..., False), traversing underscore split-primitive JSON containers that children() deliberately hides.",
+      "resolution": "Changed fallback descendants() to recurse with the same child projection as children(), preserving native/fallback parity and preventing raw _birthDate-style split JSON descendants.",
+      "verified_in": ".temp/qa/fp12_historian_probe_after_fix.log; pytest test_tree_utility_parity.py (6 passed); native sqllogictest 528 assertions; full conformance 2822/2822"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release \u00a75.9.1 trace(name : String [, projection])",
+      "evidence": "Fresh FP-12 HISTORIAN probe: native name.trace(id).given.count() returns ['0'] / [0], while forced Python fallback returns ['2'] / [2] on a Patient with id='p1' and two given names. The trace name argument is the ordinary String argument; \u00a75.9.1 specifically gives only the optional projection special evaluation over the traced input while the function still returns input unchanged.",
+      "root_cause": "Native trace evaluated the String name argument with the traced source collection as focus; only the optional projection should use that traced input focus.",
+      "resolution": "Changed native trace dispatch to evaluate the name argument against outer_input for sourced calls, while preserving projection evaluation against the traced input.",
+      "verified_in": ".temp/qa/fp12_historian_probe_after_fix.log; pytest test_tree_utility_parity.py (6 passed); native sqllogictest 528 assertions; full conformance 2822/2822"
+    }
+  ]
+}

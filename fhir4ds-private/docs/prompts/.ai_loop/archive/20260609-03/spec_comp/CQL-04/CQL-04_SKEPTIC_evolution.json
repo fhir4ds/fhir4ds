@@ -1,0 +1,43 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-04: CQL \u2014 Logical Operators. Test these items: And(left, right), Implies(left, right), Not(argument), Or(left, right), Xor(left, right). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B Logical Operators (And, Or, Xor, Implies, Not)",
+      "evidence": "Direct helpers accepted invalid operands via DuckDB truthiness: \"And\"(1,true)->true, \"Xor\"(1,false)->true, \"Not\"(1)->false; no-Python logicalImplies('yes','false')->true.",
+      "root_cause": "Direct logical macros expanded to raw DuckDB Boolean operators, and the native VARCHAR logicalImplies overload treated any non-true string as false.",
+      "resolution": "Guarded direct logical macros and logicalImplies Boolean-text handling; malformed direct operands now return SQL NULL across forced Python fallback, native-loaded, and no-Python C++ surfaces.",
+      "verified_in": "Iteration 1: cql04_skeptic_probe passed; logical parity pytest 15 passed; native CQL sqllogictest 784 assertions; full conformance 2822/2822."
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B Logical Operators require Boolean operands",
+      "evidence": "Translated CQL accepted Code { code: 'x', system: 'urn:test' } and true and lowered it to SQL over JSON instead of rejecting a non-Boolean operand.",
+      "root_cause": "Static logical operand inference omitted CodeSelector, clinical instances, Quantity/temporal literals, Interval, Tuple, and parameter metadata.",
+      "resolution": "Extended logical operand inference for clinical/complex/static parameter shapes so known non-Boolean operands raise TranslationError before SQL generation.",
+      "verified_in": "Iteration 1: cql04_skeptic_probe passed; logical parity pytest 15 passed; full conformance 2822/2822."
+    }
+  ]
+}

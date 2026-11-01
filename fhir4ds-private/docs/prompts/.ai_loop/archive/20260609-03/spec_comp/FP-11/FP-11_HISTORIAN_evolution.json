@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-11: FHIRPath \u2014 \u00a75.7 Math (STU). Test these items: abs(), ceiling(), exp(), floor(), ln(), log(base), power(exponent), round([precision]), sqrt(), truncate(). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release §5.7.8 round([precision : Integer]) : Decimal",
+      "evidence": "Spec says round() returns Decimal and the optional precision defaults to 0. Fresh native and forced Python fallback probe showed 1.round().type().name -> Integer, 1.round() is Decimal -> false, and 1.round() is Integer -> true, while 1.round(0).type().name -> Decimal. Reproducer: python3 .temp/qa/fp11_historian_probe.py.",
+      "root_cause": "Both math backends special-cased omitted round() precision by returning an Integer, even though the spec return type is Decimal and omitted precision is equivalent to precision 0.",
+      "resolution": "Changed Python rround() and native C++ fn_round() to always materialize Decimal output for round(), including omitted precision. Added native/fallback parity and native sqllogictest coverage for round() type/is behavior.",
+      "verified_in": "python3 .temp/qa/fp11_historian_probe.py; python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_math_parity.py -q; ./build/release/test/unittest \"*fhirpath*\"; python3 conformance/scripts/run_all.py -> 2822/2822"
+    }
+  ]
+}

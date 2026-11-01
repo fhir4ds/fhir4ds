@@ -1,0 +1,5 @@
+# QA Handoff - FP-09 / HISTORIAN
+
+Fresh spec-compliance pass for FHIRPath sections §5.6.1-§5.6.5 String Manipulation (Search). Coverage came from the forced C++ vs Python DuckDB backend matrix, targeted parity pytest suites, full pytest, official conformance, and focused WASM e2e checks.
+
+No open findings for this personality pass.

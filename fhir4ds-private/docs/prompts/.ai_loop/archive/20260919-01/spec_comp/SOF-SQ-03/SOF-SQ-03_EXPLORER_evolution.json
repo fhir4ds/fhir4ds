@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-SQ-03: SQL-on-FHIR Analytics Layer — Cross-package integration (SQLQuery ↔ ViewDefinition ↔ SQLView), Error model integration, Public API surface. Test these items: One-level chain: SQLQuery with one relatedArtifact pointing at a ViewDefinition canonical — materializes VD as view, raw SQL body resolves alias correctly, Two-level chain: SQLQuery → SQLView → ViewDefinition — recursive materialization produces correct rows, Cycle: SQLView A depends on SQLView B depends on SQLView A — SQLQueryCycleError raised before execution, Resolver contract: ViewDefinition dict detected structurally (has 'select' + 'resource' keys), Resolver contract: Library dict detected by resourceType='Library'; parsed ViewDefinition/SQLQuery/SQLView objects handled via isinstance, Resolver failure (any exception) translated to SQLQueryMaterializationError with label + canonical context, Identifier quoting: relatedArtifact.label and parameter.name validated against sql-name and quoted via viewdef.utils.quote_identifier before reaching DuckDB, Error model integration: SQLError inherits from viewdef.errors.SQLOnFHIRError; except SQLOnFHIRError catches all SQLQuery errors transitively, All SQLQuery errors also inherit from ValueError for backward-compat, One-way dependency: fhir4ds/viewdef/ never imports fhir4ds/sqlquery/, Public API surface: parse_library, parse_sqlquery, parse_sqlview, validate_sql_library, select_best_content, SQLQueryRunner, DependencyResolver type alias. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "EXPLORER-001",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "BEHAVIOR_OBSERVATION",
+      "spec_citation": "SQL-on-FHIR v2 Analytics Layer; runner docstring contract (stateless, CREATE OR REPLACE idempotent)",
+      "evidence": "Diamond graph (q->sv1+sv2, both->vd): resolver called twice for the shared canonical; rows correct from both consumers [(2,2,2)]; idempotent re-materialization. Probe: .temp/qa/explorer_probe1.py case 1.",
+      "root_cause": "Runner is stateless per docstring; dedup not required by spec",
+      "resolution": "Documented behavior, no action",
+      "verified_in": "explorer_probe1.py"
+    }
+  ]
+}

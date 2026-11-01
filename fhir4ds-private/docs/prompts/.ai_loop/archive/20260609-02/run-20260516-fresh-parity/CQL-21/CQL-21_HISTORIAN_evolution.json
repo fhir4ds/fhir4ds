@@ -1,0 +1,20 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-21: CQL - Clinical Operators. Test items: AgeInYears|Months|Weeks|Days|Hours|Minutes|Seconds(), AgeInYearsAt|MonthsAt|...At(asOf), CalculateAgeInYears|Months|...InYears(birthDate), CalculateAgeInYearsAt|MonthsAt|...At(birthDate, asOf), Equal (Code/Concept), Equivalent (Code/Concept), In (Codesystem), ExpandValueSet(ValueSet), In (Valueset). Fresh run; prior workflow outputs intentionally not consulted."
+  },
+  "issues": []
+}

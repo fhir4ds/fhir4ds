@@ -1,0 +1,29 @@
+{
+  "phase": "FIX",
+  "iteration": 1,
+  "audit_status": "PENDING",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "bug_fix"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": null,
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "URGENT GATE RESTORATION (bug_fix): DQM conformance is 32/47 — 14 measures fail with 2-column-subquery binder errors plus unresolved urn:cql:code valueset placeholders. Bisect-attributed (CQL-05 HISTORIAN QA-103) to campaign edits in the 2026-08-20 05:29-05:40 window touching fhir4ds/cql/translator/expressions/_operators.py, _lists.py, correlation.py, and translator/inference.py. Failing pattern: fhirpath_text((SELECT patient_id, resource FROM <CTE>), 'period') inside CROSS JOIN LATERAL — a branch/operand being passed where a row resource is expected. Example artifact: tests/output/sql/CMS117.sql:262. Reproducer: /tmp/dqm_subset.py CMS117 CMS122 CMS75 (may need recreation).\n\nRoot-cause the regression, fix it (preserve the sibling chunks' legitimate fixes — reconcile, do not revert them wholesale), and restore the full master gate 2832/2832 (ViewDef 144, FHIRPath 935, CQL 1706, DQM 47).\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-103",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "REGRESSION",
+      "summary": "DQM 32/47: 14 measures fail (2-col subquery binder + urn:cql:code placeholders); gate blocker, foreign to CQL-05",
+      "verified_in": "conformance/scripts/run_dqm.py (47/47, 100% accuracy); run_viewdef.py 144/144; run_fhirpath_r4.py 935/935; run_cql.py 1706/1706; campaign regression suites green (test_structural_type_parity 19/19, test_logical_parity, test_temporal_complex_parity, test_clinical_type_parity, test_cql01_primitive_types, test_v2_expressions 147/147)"
+    }
+  ]
+}

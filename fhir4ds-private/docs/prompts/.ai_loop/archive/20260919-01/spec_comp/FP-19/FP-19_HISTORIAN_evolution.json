@@ -1,0 +1,43 @@
+{
+  "phase": null,
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-19: FHIRPath \u2014 \u00a77 Aggregates (STU), \u00a78 Lexical Elements. Test these items: aggregate(aggregator, [init]), Whitespace rules, Comments, Literals syntax, Symbols, Keywords, Identifiers, Case-sensitivity. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "NOT_A_BUG_PIN",
+      "spec_citation": "FHIRPath grammar DATETIME ('Z'? after partial date) and TIME/TIMEFORMAT ('Z' allowed) vs FHIR dateTime/time datatype semantics; AGENTS.md FP-06/CQL-11 documented decisions",
+      "evidence": "@2018Z and @T12:30Z are rejected (is_valid=false, empty) identically in native extension and Python fallback. Grammar permits 'Z' lexically, but FHIR datetime semantics disallow a timezone without time components and the FHIR time datatype has no timezone; rejection is documented strictness (FP-06 invariant, CQL-11 note). Full dual-engine parity.",
+      "root_cause": null,
+      "resolution": "INTENDED: documented strict temporal-literal policy; both engines lockstep; no fixture mandates acceptance",
+      "verified_in": "iter1 .temp/qa/fp19h/probe1.py, probe2.py"
+    },
+    {
+      "id": "QA-002",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "NOT_A_BUG_PIN",
+      "spec_citation": "FHIRPath \u00a77 aggregate; \u00a77 spec dedup example; grammar LONGNUMBER",
+      "evidence": "HISTORIAN extension coverage all conformant dual-engine: $index inside aggregator is 0-based current-item index (a.aggregate($this+$total+$index,0)=63); init evaluated once and may reference outer context (a.aggregate($this+$total,a.count())=63); chained/nested aggregates work; spec \u00a77 dedup example iif($total contains $this,...) returns [3,2,1] in both engines; collection accumulation union order consistent. Lexical: .5/1./1e3/3.5L rejected; 007/1L/0.0 accepted per grammar; quantity literals 10 'mg'/10 'cm/mmol' parse with .value/.unit; comments not stripped inside string literals; DIV/MOD/IN uppercase rejected; non-ASCII identifiers rejected; empty backtick identifier accepted (grammar allows); whitespace around '.' navigation tolerated. No divergence between native and Python paths on any probe.",
+      "root_cause": null,
+      "resolution": "Verification-only pin; no code change required",
+      "verified_in": "iter1 .temp/qa/fp19h/probe1-3.py + spec-example check"
+    }
+  ]
+}

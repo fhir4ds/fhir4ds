@@ -1,0 +1,393 @@
+{
+ "phase": "COMPLETE",
+ "iteration": 30,
+ "audit_status": "COMPLETE",
+ "exit_reason": null,
+ "workflow": "feature_design",
+ "pipeline": [
+  "feature_design",
+  "feature_implementation",
+  "code_review",
+  "spec_compliance",
+  "evolution",
+  "code_review",
+  "pre_release",
+  "docs_audit",
+  "scribe"
+ ],
+ "pipeline_step": 8,
+ "qa_personality": "SKEPTIC",
+ "config": {
+  "min_iterations": 15,
+  "max_iterations": 24,
+  "exhaustive_mode": false,
+  "target_version": "0.0.14",
+  "qa_schedule": [
+   {
+    "iteration": 1,
+    "domain": 6,
+    "personality": "SKEPTIC"
+   },
+   {
+    "iteration": 2,
+    "domain": 6,
+    "personality": "HISTORIAN"
+   },
+   {
+    "iteration": 3,
+    "domain": 6,
+    "personality": "EXPLORER"
+   },
+   {
+    "iteration": 4,
+    "domain": 7,
+    "personality": "SKEPTIC"
+   },
+   {
+    "iteration": 5,
+    "domain": 7,
+    "personality": "HISTORIAN"
+   },
+   {
+    "iteration": 6,
+    "domain": 7,
+    "personality": "EXPLORER"
+   },
+   {
+    "iteration": 7,
+    "domain": 8,
+    "personality": "SKEPTIC"
+   },
+   {
+    "iteration": 8,
+    "domain": 8,
+    "personality": "HISTORIAN"
+   },
+   {
+    "iteration": 9,
+    "domain": 8,
+    "personality": "EXPLORER"
+   },
+   {
+    "iteration": 10,
+    "domain": 9,
+    "personality": "SKEPTIC"
+   },
+   {
+    "iteration": 11,
+    "domain": 9,
+    "personality": "HISTORIAN"
+   },
+   {
+    "iteration": 12,
+    "domain": 9,
+    "personality": "EXPLORER"
+   },
+   {
+    "iteration": 13,
+    "domain": 10,
+    "personality": "SKEPTIC"
+   },
+   {
+    "iteration": 14,
+    "domain": 10,
+    "personality": "HISTORIAN"
+   },
+   {
+    "iteration": 15,
+    "domain": 10,
+    "personality": "EXPLORER"
+   }
+  ],
+  "focus_domains": [
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "benchmark_commands": null,
+  "benchmark_baseline_path": null,
+  "feature_plan_path": "docs/architecture/plans/FEATURE_WASM_CPP_PARITY.md",
+  "bug_fix_target": null,
+  "bug_fix_validation": null,
+  "notes": "Campaign v0.0.14 'browser-complete': (1) WASM C++ parity \u2014 port 10 translator-reachable Python-only UDFs to C++ (cqlDivide, cqlChildren, cqlDescendants, cqlDateTimeAdd, coding_matches, coding_matches_exact, CQLMessage, ratioCompare, ConceptToListCode, fhirpath_in_valueset), delete 3 dead Python registrations (ConvertQuantity, cqlNormalizeTZ, cqlDateTimeSubtract), reconcile MillisecondsBetween/WeeksBetween casing; Python stays conformance authority on desktop; dual-engine parity tests mandatory; dual-target (native+WASM emsdk 3.1.56) rebuild+redeploy with md5 parity across build/bundles/site-packages; wasm binaries to web/wasm-demo AND web/cql-clinic public/extensions; no TS-macro fallbacks; cql-clinic browser lesson test must pass (original cqlDivide Catalog Error repro). (2) spec_compliance via ROLE_SPEC_COMP_ORCHESTRATOR.md + spec_schedule.json with dual-engine parity first-class; the 10 ported functions get spec-grounded parity probes. (3) Evolution QA campaign domains 6-10 x SKEPTIC/HISTORIAN/EXPLORER (15 min iterations; schedule backup above), gated on the blocking medterm4ds 0.0.4 coordination checkpoint BEFORE evolution starts (handoff to tmux session medterm4ds; install candidate wheel /mnt/d/medterm4ds/dist/medterm4ds-0.0.4-py3-none-any.whl d464d10; run MT-001 re-verification battery early; do NOT bump pyproject pin until pre_release with the real 0.0.4). (4) Two code reviews (step-3 feature diff only; step-6 full 0.0.14 diff). (5) pre_release: bump 0.0.13->0.0.14 across pyproject + all 7 __version__ sites; medterm4ds pin >=0.0.4,<0.0.5 on BOTH extras \u2014 terminology extra -> medterm4ds[search], ner extra -> medterm4ds[search,extraction] (team 2026-09-07); re-verify against FINAL 0.0.4 tag before shipping (candidate != tag; if not on PyPI at pre_release, re-coordinate); wheel ships BOTH native extensions + wasm binaries; clean-venv smoke; dual-Python 3.10+3.11 validation. (6) docs_audit: releases.md v0.0.14 section, website PRODUCT_VERSION, WASM wheel refresh+deploy (exactly ONE wheel in wasm-demo public; snapshot to website static/wasm-app; ALSO refresh web/cql-clinic public wheel+extensions), micropip deps=False rule intact, Playwright e2e green. (7) scribe draft commit; Joel commits. AUTO-ADVANCE doctrine (2026-09-07): feature_design WAIT_FOR_USER_APPROVAL gate WAIVED \u2014 use /second-opinion review instead; record verdict + what changed/ignored in FDD self-audit; one re-review max; adopt safer option and continue on unresolved CRITICAL/HIGH. Hard constraint: master conformance gate 2832/2832 non-regression throughout. Release Engineer artifact gate required before final completion (bundled extensions, wheel contents, WASM artifacts, public APIs, dependency pins). Discovery: repo at 0.0.13 (commit 6acde38e, release committed); USER_DIRECTIVES_WASM_PARITY.md (2026-09-07) holds the verified 3-way inventory backing the feature; working tree may carry uncommitted stragglers from the 0.0.13 window \u2014 verify git status before feature work. Out of scope: _PYTHON_PREFERRED_CPP_CONFLICTS interval family, cql-macros.ts cleanup beyond the 13 functions, translator changes, publishing cql-clinic to website."
+ },
+ "issues": [],
+ "notes": "EXTENSION (web handoff 2026-09-10): fresh D1-D5 campaign on the v0.0.14 tree, 15 more iterations (16-30: D1 x3, D2 x3, D3 x3, D4 x3, D5 x3), fresh probes not relying on 2026-05/08 artifacts. | EXTENSION CAMPAIGN D1-D5 COMPLETE (iters 16-30): fresh probes on v0.0.14 tree, 3 pre-existing bugs found+fixed in D4 (postfix .first() char-slice, is-true-over-audit-struct, both regression-tested), D1/D2/D3/D5 clean. Gate 2832/2832 re-verified after fixes. | FINAL: draft_commit.txt refreshed with D4 translator fixes; pipeline + extension campaign all closed.",
+ "iterations_log": [
+  {
+   "iteration": 1,
+   "domain": 6,
+   "personality": "SKEPTIC",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it1_d6_skeptic/",
+   "findings": "Campaign-own-change probe: fhirpath_in_valueset end-to-end True both engines; 3VL unknown-vs NULL; String-overload ambiguity NULL; notDoneValueSet ext fallback True; dedup last-write-wins; coding_matches_exact population SQL; children/descendants markers byte-identical py==cpp. 145/145 regression battery green."
+  },
+  {
+   "iteration": 2,
+   "domain": 6,
+   "personality": "HISTORIAN",
+   "status": "PASSED",
+   "issues_found": 1,
+   "probe": ".temp/qa/v14_it2_d6_historian/",
+   "findings": "QA-001 HIGH pre-existing FIXED: resolve() macro bind failure whenever CQL macros registered (Trim macro shadowed 2-arg trim; regexp_replace fix in both macro defs + versioned-ref strip alignment). Regression test both load orders. Gate re-run 2832/2832. Also: patient_ref doctrine matrix, NDJSON BOM/CRLF/blank, bundle per-entry validation, dup-JSON-member rejection, lone-surrogate gate, FileSystemSource parity."
+  },
+  {
+   "iteration": 3,
+   "domain": 6,
+   "personality": "EXPLORER",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it3_d6_explorer/",
+   "findings": "Fuzz battery; both flagged 'failures' were probe bugs (load_valuesets MERGES per-URL by design; 30 identical ids dedup to 1 row is doctrine). Domain 6 COMPLETE (1 HIGH fixed)."
+  },
+  {
+   "iteration": 4,
+   "domain": 7,
+   "personality": "SKEPTIC",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it4_d7_skeptic/",
+   "findings": "resolve() 823k lookups/s; ported native UDFs ~= python (~260-330us, dispatch-bound); loader 1k->10k ratio 7.4x; 100k valueset load 0.2s/query 1ms."
+  },
+  {
+   "iteration": 5,
+   "domain": 7,
+   "personality": "HISTORIAN",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it5_d7_historian/",
+   "findings": "50k load 1.1s/84MB, 22-23us/row; population SQL correct at 1k (denom 1000/numer 627) and 10k (10000/6327); probe formula bug initially (engine was right)."
+  },
+  {
+   "iteration": 6,
+   "domain": 7,
+   "personality": "EXPLORER",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it6_d7_explorer/",
+   "findings": "20MB resource 0.4s; 3x10k dup reload 0.2s; 3x100k valueset merges 1.0s; 200-deep nesting instant; descendants wide 3ms parity 504; ambiguity scan <5ms. Domain 7 COMPLETE (0 issues all 3)."
+  },
+  {
+   "iteration": 7,
+   "domain": 8,
+   "personality": "SKEPTIC",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it7_d8_skeptic/",
+   "findings": "10 ported UDFs malformed-input sweep (10 bad-JSON shapes x 3 fns + 14 cases) zero crashes/leaks; resolve() bare con actionable Catalog Error; closed-con contracts hold; fhirpath_in_valueset 3VL both paths."
+  },
+  {
+   "iteration": 8,
+   "domain": 8,
+   "personality": "HISTORIAN",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it8_d8_historian/",
+   "findings": "16-entry public-API error taxonomy matrix all typed/actionable. evaluate_measure signature is (library_path, conn); generate_view_sql from fhir4ds root."
+  },
+  {
+   "iteration": 9,
+   "domain": 8,
+   "personality": "EXPLORER",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it9_d8_explorer/",
+   "findings": "Error-boundary chaos 7 vectors: post-failure recovery, CQLMessage Error raise recovery, dropped valueset_codes table graceful, interleaved subsystems, txn-conflict recovery, register idempotent x3, 200-op error storm. Domain 8 COMPLETE (0 issues all 3)."
+  },
+  {
+   "iteration": 10,
+   "domain": 9,
+   "personality": "SKEPTIC",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it10_d9_skeptic/",
+   "findings": "resolve()-in-where DQM attribution correct; coding_matches_exact population SQL 10/10; one-row-per-patient; IPP=10/DENOM=10/NUM=10 through ported surfaces. PRE-EXISTING flagged (not campaign): Avg over element-rows JSON-integer values NULLs (CQL-20 family; owner next CQL chunk)."
+  },
+  {
+   "iteration": 11,
+   "domain": 9,
+   "personality": "HISTORIAN",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it11_d9_historian/probe.py",
+   "findings": "Summary keys FLAT dict; denominator=RAW count (6) vs denominator_final=after-denex (4); audit structs are per-population cell dicts (result/evidence/findings.target/effective_result); narratives enriched INSIDE structs (narrative key, requires audit=True); denex evidence correctly cites Observation/o0,o1; one-row-per-patient holds. Domain 9 attribution + audit causality + narrative contract all verified against engine behavior. Probe-harness lessons recorded (3rd persona family: read the API contract before asserting attr shapes)."
+  },
+  {
+   "iteration": 12,
+   "domain": 9,
+   "personality": "EXPLORER",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it12_d9_explorer/probe.py",
+   "findings": "Multi-group isolation (g1 denex does not touch g2), stratifier columns + values, filter_to_ip no-op when IPP=all, patient_ids subset (denex correctly fires per-patient), re-evaluate stable after invalidate_prepared_statements, to_measure_report requires period_start/period_end (typed DQMError contract, probe initially violated it), data mutation reflected on fresh evaluator. 2 initial probe FAILs were probe-expectation errors (denex fires p0+p1 in subset; report needs period). Domain 9 CLOSED: SKEPTIC 0 + pre-existing Avg flag, HISTORIAN 0, EXPLORER 0."
+  },
+  {
+   "iteration": 13,
+   "domain": 10,
+   "personality": "SKEPTIC",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it13_d10_skeptic/probe.py",
+   "findings": "register() idempotent x3 (2nd/3rd calls log caught __fhir4ds_py_* Not-implemented warnings \u2014 pre-existing cosmetic, guarded); all 10 ported C++ functions present as SCALARS on LOAD-only con; on register() con 7 scalars + 3 shadowing macros (CQLMessage/cqlDateTimeAdd/ratioCompare = _PYTHON_PREFERRED_CPP_CONFLICTS doctrine, intended); all 8 between-family resolve, forced-python con has camelCase weeks/millisecondsBetween; 0.0.13 wheel ships both extensions, fhirpath md5==repo, cql md5 mismatch is expected pre-release state (0.0.14 wheel rebuilt at pre_release); 7 __version__ sites at 0.0.13 consistent; pip check scoped clean for fhir4ds/medterm4ds. Probe traps: register() returns None (not a dict); build path is build/release/extension/cql/cql.duckdb_extension."
+  },
+  {
+   "iteration": 14,
+   "domain": 10,
+   "personality": "HISTORIAN",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it14_d10_historian/probe.py",
+   "findings": "Dual-Python validation: /tmp/py311env recreated (uv venv --python 3.11.10, ensurepip, wheel install). 3.11: 10/10 C++ scalars LOAD-only, translator emits cqlDivide (translate_cql returns AST dict \u2014 repr-check, needs library header), register() full path 0.3/0.1=3.00000000, site-packages campaign binary md5 30c79e71==repo (copied; 0.0.13 wheel ships pre-campaign c5b22d58 \u2014 expected), python-fallback cqlDivide 3.33333333. 3.10 equivalent surface already covered by iters 1-13 probes. Environment matrix CLOSED."
+  },
+  {
+   "iteration": 15,
+   "domain": 10,
+   "personality": "EXPLORER",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it14_d10_historian/probe.py",
+   "findings": "WASM surface: deployed cql wasm md5 64e75d33 demo==clinic==build-tree; fhirpath afe07dbd demo==clinic==build-tree; all deployed files exist. Import-order matrix clean via PUBLIC API (create_connection / register_cql) \u2014 NOTE: fhir4ds.cql.duckdb is not auto-imported as attribute, must import explicitly or use top-level API. Isolated-cwd site-packages binary loads with 3 sampled ports. Wasm binary embeds all 4 sampled symbol names. EVOLUTION COMPLETE: 15/15 iterations, domains 6-10, 1 HIGH fixed (iter2 resolve/Trim), 1 pre-existing flagged (iter10 Avg JSON-int)."
+  },
+  {
+   "iteration": 16,
+   "domain": 1,
+   "personality": "SKEPTIC",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it16_d1_skeptic/probe.py",
+   "findings": "Fresh D1 campaign (web-mandated): core semantics verified dual-path on v0.0.14 tree \u2014 navigation/filtering/type ops/string-math/null propagation/singleton enforcement all parity-clean. Probe-format lessons: fhirpath() returns list-of-strings; as-FHIR.string is EXACT (FP-15); .year is not FHIRPath; any() not an R4 fn (FP-17); J\u00fcrgen=6 codepoints; 1/3 renders 28-digit Decimal."
+  },
+  {
+   "iteration": 17,
+   "domain": 1,
+   "personality": "HISTORIAN",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it17_d1_historian/probe.py",
+   "findings": "Fresh D1 campaign (web-mandated): core semantics verified dual-path on v0.0.14 tree \u2014 navigation/filtering/type ops/string-math/null propagation/singleton enforcement all parity-clean. Probe-format lessons: fhirpath() returns list-of-strings; as-FHIR.string is EXACT (FP-15); .year is not FHIRPath; any() not an R4 fn (FP-17); J\u00fcrgen=6 codepoints; 1/3 renders 28-digit Decimal."
+  },
+  {
+   "iteration": 18,
+   "domain": 1,
+   "personality": "EXPLORER",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it18_d1_explorer/probe.py",
+   "findings": "Fresh D1 campaign (web-mandated): core semantics verified dual-path on v0.0.14 tree \u2014 navigation/filtering/type ops/string-math/null propagation/singleton enforcement all parity-clean. Probe-format lessons: fhirpath() returns list-of-strings; as-FHIR.string is EXACT (FP-15); .year is not FHIRPath; any() not an R4 fn (FP-17); J\u00fcrgen=6 codepoints; 1/3 renders 28-digit Decimal."
+  },
+  {
+   "iteration": 19,
+   "domain": 2,
+   "personality": "SKEPTIC",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it19_d2_{skeptic,historian,explorer}",
+   "findings": "31/31 iif short-circuit, $this/$index, repeat fixpoints, trace identity, union-vs-combine, = vs ~ distinctions; probe traps: repeat() projection-only no-input-seed, unquoted dates are arithmetic"
+  },
+  {
+   "iteration": 20,
+   "domain": 2,
+   "personality": "HISTORIAN",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it20_d2_{skeptic,historian,explorer}",
+   "findings": "35/35 quantity/collection/temporal = vs ~, empty-collection semantics, boolean singleton 3VL, \u00a76 preamble {} = {} -> empty"
+  },
+  {
+   "iteration": 21,
+   "domain": 2,
+   "personality": "EXPLORER",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it21_d2_{skeptic,historian,explorer}",
+   "findings": "38/38 grammar edges, deep nesting, 1000-item collections, hostile strings, odd JSON shapes; c.count()=1 for empty object node"
+  },
+  {
+   "iteration": 22,
+   "domain": 3,
+   "personality": "SKEPTIC",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it22_d3_*",
+   "findings": "13/13 interval boundaries closed/open both ends, during/overlaps/meets, AgeInYearsAt, params w/ defaults, Sum/distinct/flatten; probe traps: population SQL needs include_fhirpath=True (fhirpath_date), scalar defines count patients not rows"
+  },
+  {
+   "iteration": 23,
+   "domain": 3,
+   "personality": "HISTORIAN",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it23_d3_*",
+   "findings": "16/16 nullologicals, qty unit-aware equality, date precision null vs true, Z==+00:00, unloaded valueset null 3VL, [1,null] contains, open-end end=4, days-between width"
+  },
+  {
+   "iteration": 24,
+   "domain": 3,
+   "personality": "EXPLORER",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it24_d3_*",
+   "findings": "11/11 with/such-that, 10.0/3.0 exact cqlDivide in translated CQL, div0 null, choice as Quantity/FHIR.string routing, nested query return tuples, Message passthrough port"
+  },
+  {
+   "iteration": 25,
+   "domain": 4,
+   "personality": "SKEPTIC",
+   "status": "PASSED",
+   "issues_found": 0,
+   "issues_fixed": 0,
+   "probe": ".temp/qa/v14_it25_d4_*",
+   "findings": "6/6 exclusion-vs-numerator attribution (pC in both -> exclusion wins), performance_rate 0.5"
+  },
+  {
+   "iteration": 26,
+   "domain": 4,
+   "personality": "HISTORIAN",
+   "status": "PASSED",
+   "issues_found": 0,
+   "issues_fixed": 0,
+   "probe": ".temp/qa/v14_it26_d4_*",
+   "findings": "8/8 MP boundary days inclusive, loaded valueset membership, encounter context, Z==+00:00; dup-CTE probe trap"
+  },
+  {
+   "iteration": 27,
+   "domain": 4,
+   "personality": "EXPLORER",
+   "status": "PASSED",
+   "issues_found": 2,
+   "issues_fixed": 2,
+   "probe": ".temp/qa/v14_it27_d4_*",
+   "findings": "8/8 AFTER 2 fixes: QA-1 postfix .first()/.last()/.singleton-from over multi-valued navigation char-sliced the fhirpath_text VARCHAR (list_extract on a string) \u2014 source now swaps to list-returning fhirpath UDF (_lists.py, regression test_postfix_first_last_over_multivalued_navigation_selects_elements_v14ext); QA-2 (X) is true under audit_mode fed the audit STRUCT to IsTrue -> False (silent population inversion) \u2014 IsTrue/IsFalse now extract struct result (_operators.py, regression test_is_true_over_audit_wrapped_comparison_extracts_result_v14ext). Both pre-existing (verified via git-stash bisect). resolve() in where + with/such-that + stratifier verified."
+  },
+  {
+   "iteration": 28,
+   "domain": 5,
+   "personality": "SKEPTIC",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it28_d5_*",
+   "findings": "11/11 forEachOrNull null-row preservation (KEY QUESTION verified: forEach drops, forEachOrNull preserves), nested where, unionAll arms incl NULL-value rows for plain column arms, constants, typed columns (substring needs .toInteger() for declared integer), dup-name rejection"
+  },
+  {
+   "iteration": 29,
+   "domain": 5,
+   "personality": "HISTORIAN",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it29_d5_*",
+   "findings": "9/9 %rowIndex 0-based, collection=true arrays, choice ofType(Quantity), resourceType filter, 3-level nesting, unionAll type-mismatch rejection, root where"
+  },
+  {
+   "iteration": 30,
+   "domain": 5,
+   "personality": "EXPLORER",
+   "status": "PASSED",
+   "issues_found": 0,
+   "probe": ".temp/qa/v14_it30_d5_*",
+   "findings": "9/9 unicode/emoji, JSON null fields, forEach x forEachOrNull interplay, %context=focus vs %resource=root doctrine (SOF-VD-05 pin \u2014 probe expectation corrected, NOT a bug), constants in where, 1000-element collections, deterministic SQL, nested-array degradation"
+  }
+ ]
+}

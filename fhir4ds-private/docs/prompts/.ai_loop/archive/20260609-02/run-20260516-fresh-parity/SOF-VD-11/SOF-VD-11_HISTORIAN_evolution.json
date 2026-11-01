@@ -1,0 +1,20 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-11: SQL-on-FHIR ViewDefinition - View Runner; Examples. Test items: execute a ViewDefinition and return tabular rows, simple Patient and Observation example views, unrolling arrays such as Patient.address into row sets, filtered Observation/resource views, column type coercion into DuckDB result columns, official SQL-on-FHIR v2 spec_tests parity, parser, generator, and DuckDB execution agree for supported examples. Fresh run; prior workflow outputs intentionally not consulted."
+  },
+  "issues": []
+}

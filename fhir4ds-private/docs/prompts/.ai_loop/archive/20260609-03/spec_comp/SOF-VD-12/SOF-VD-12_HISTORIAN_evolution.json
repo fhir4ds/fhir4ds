@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-12: SQL-on-FHIR ViewDefinition \u2014 Profiling, Shareable View Definition, Tabular View Definition, Mappings, XML, JSON. Test these items: Shareable and Tabular profile-required metadata handling, JSON representation uses official field names and round-trips through parser/generator inputs, XML representation support is implemented or explicitly documented as unsupported, canonical URL, version, status, and profile metadata do not break execution, FHIR mapping/profile fields are retained, ignored, or rejected consistently with documented behavior, official examples serialize and parse consistently across supported formats. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "SOF-VD-12-HISTORIAN-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR v2.1.0-pre ShareableViewDefinition lines 92-103 and TabularViewDefinition lines 103-104/244-245: ViewDefinition.status is 1..1 and bound to PublicationStatus; supported profile JSON also shows min=1 for ViewDefinition.status.",
+      "evidence": "Fresh probe fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/sof_vd12_historian_probe.py: parse_view_definition() accepted a ShareableViewDefinition missing status (accepted=True), and validate_view_definition() returned no warning for a direct TabularViewDefinition dataclass missing status. Expected supported Shareable/Tabular profile validation to reject/warn for missing status while preserving valid status execution.",
+      "root_cause": "validate_supported_view_profiles() activated supported Shareable/Tabular profile constraints, but only checked Shareable url/name/fhirVersion/Column.type and Tabular collection/primitive rules. It did not enforce the inherited required CanonicalResource status cardinality for supported profiles, so strict parser/serializer/generator paths and permissive validation could accept profiled views without status.",
+      "resolution": "Added shared supported-profile status validation for ShareableViewDefinition and TabularViewDefinition. Strict parse/to_dict/generator paths now reject missing status, and validate_view_definition() warns through the same shared validator. Added focused parser/generator regressions and kept valid profile fixtures status-complete.",
+      "verified_in": "python3 fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/sof_vd12_historian_probe.py; python3 -m pytest fhir4ds/viewdef/tests/unit/test_parser.py -q (214 passed); python3 -m pytest fhir4ds/viewdef/tests/unit/test_generator.py::TestFullQueryGeneration::test_direct_view_definition_supported_profiles_are_validated -q (1 passed); python3 -m pytest fhir4ds/viewdef/tests -q (984 passed); python3 conformance/scripts/run_viewdef.py (134/134); python3 conformance/scripts/run_all.py (2822/2822)"
+    }
+  ]
+}

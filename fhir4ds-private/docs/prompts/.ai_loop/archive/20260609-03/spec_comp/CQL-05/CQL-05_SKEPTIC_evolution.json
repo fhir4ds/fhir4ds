@@ -1,0 +1,66 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-05: CQL \u2014 Type Operators - Structural. Test these items: As<T>(argument), Children(argument), Convert to<T>(argument), Descendants(argument), Is<T>(argument). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B Type Operators: As and Is; Logical Specification Type Operators Is/As",
+      "evidence": "Fresh .temp/qa/cql05_skeptic_probe.py: `(convert 5 to Any) as String` translated to CASE over SQL value 5 and returned 5 instead of NULL. Ad hoc confirmation also showed `(convert '5' to Any) as Integer` returned 5 and `(convert 5 to Any) is String` returned true. Per spec, as is a runtime type assertion and is tests actual runtime type; convert to Any must not erase the source primitive type and permit later assertion/conversion-like behavior.",
+      "root_cause": "See ARCHIVE_LOG.md CQL-05 SKEPTIC section for detailed root cause.",
+      "resolution": "Static convert type inference now preserves source type for `convert ... to Any` and exposes non-Any conversion targets for downstream `is`/`as`.",
+      "verified_in": "Fresh probe; focused pytest 28 passed; conformance 2822/2822"
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B Type Operators: Convert and ToString/ToQuantity conversion semantics",
+      "evidence": "Fresh .temp/qa/cql05_skeptic_probe.py after QA-001 fix: `convert (convert '5 ''mg''' to Quantity) to String` returned the internal Quantity JSON `{'value':5.0,...}` instead of CQL Quantity string form `5.0 'mg'`. The direct spec conversion table supports Quantity -> String, and ToString(Quantity) defines the public textual representation.",
+      "root_cause": "See ARCHIVE_LOG.md CQL-05 SKEPTIC section for detailed root cause.",
+      "resolution": "`ToQuantity` and CQL `convert ... to Quantity` are recognized as Quantity-shaped, routing nested Quantity-to-String conversion through `QuantityToString`.",
+      "verified_in": "Fresh probe; structural/conversion pytest; conformance 2822/2822"
+    },
+    {
+      "id": "QA-003",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B Type Operators: Is; Logical Specification Type Operators Is",
+      "evidence": "Fresh .temp/qa/cql05_skeptic_probe.py: `(null as List<Integer>) is List<Integer>` returned SQL NULL. The `Is` operator is a Boolean type test: true when the runtime type matches, false otherwise. Existing primitive/null behavior already lowers `null is Any` and `(null as Integer) is Integer` to false; composite List<T> typed null should not leak NULL through JSON resourceType probing.",
+      "root_cause": "See ARCHIVE_LOG.md CQL-05 SKEPTIC section for detailed root cause.",
+      "resolution": "Composite `as` targets now expose structural type metadata so typed-null List/Interval/Choice/Tuple `is` checks return false instead of SQL NULL.",
+      "verified_in": "Fresh probe; structural pytest; conformance 2822/2822"
+    },
+    {
+      "id": "QA-004",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B ToString: Quantity string representation (-)?#0.0# '<unit>'",
+      "evidence": "Fresh .temp/qa/cql05_skeptic_probe.py dynamic FHIR path: `convert FirstQuantity to String` over a FHIR Quantity with integer JSON value returned `5 'mg'` on forced Python fallback and `5.0 'mg'` on native-loaded registration. CQL ToString for Quantity requires decimal-format numeric text (`#0.0#`) and native/fallback parity.",
+      "root_cause": "See ARCHIVE_LOG.md CQL-05 SKEPTIC section for detailed root cause.",
+      "resolution": "`QuantityToString` normalizes JSON numeric values to CQL Quantity string format with at least one fractional digit.",
+      "verified_in": "Fresh probe; wasm/no-Python surface pytest; conformance 2822/2822"
+    }
+  ],
+  "RETRY_QA": false
+}

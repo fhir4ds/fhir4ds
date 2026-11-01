@@ -1,0 +1,54 @@
+{
+  "phase": "QA",
+  "iteration": 2,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-08: CQL \u2014 Nullological Operators. Test these items: Coalesce, IsNull, IsFalse, IsTrue. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B, Nullological Operators, Coalesce<T>(arguments List<T>) and Coalesce<T>(argument1 T, argument2 T, argument3 T, argument4 T, argument5 T)",
+      "evidence": "Fresh EXPLORER direct public helper probe showed SELECT \"Coalesce\"(NULL, false), SELECT \"Coalesce\"([NULL::BOOLEAN, false]), and IsTrue/IsFalse over those results raised DuckDB TypeMismatchException or returned false predicates instead of preserving Boolean false/true across forced Python fallback and native-loaded registrations.",
+      "root_cause": "Python Coalesce returned raw Python bool values through a DuckDB VARIANT-returning UDF, which DuckDB rejected during result conversion; IsTrue/IsFalse macros also only accepted typeof(x) = BOOLEAN and therefore ignored Boolean values transported as VARIANT.",
+      "resolution": "Wrap Boolean Coalesce return values as explicit DuckDB VARIANT values when VARIANT is available, and teach IsTrue/IsFalse to recognize VARIANT JSON true/false while keeping string and numeric truthiness rejected.",
+      "verified_in": "CQL-08 EXPLORER: .temp/qa/cql08_explorer_probe.py; test_nullological_parity.py 11/11; official nullological compliance 44/44; adjacent parity 77/77; full conformance 2822/2822"
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B, Nullological Operators, Coalesce<T> returns the first non-null T; CQL Quantity comparisons require unit-aware Quantity semantics",
+      "evidence": "Fresh EXPLORER translated probe showed Coalesce((from {null as Quantity, 5 'mg'} Q return Q)) = 5 'mg' returned SQL NULL, and Coalesce({null as Quantity, 5 'mg'}) = 5 'mg' could fall into scalar comparison instead of quantity_compare.",
+      "root_cause": "Quantity-producing Coalesce expressions and query-list Coalesce expressions did not carry Quantity type evidence into comparison translation, so the generic comparison path reduced or cast Quantity JSON instead of dispatching to quantity_compare.",
+      "resolution": "Extend Quantity inference to recognize SQL COALESCE branches containing Quantity values and CQL Coalesce/list/query expressions that produce Quantity values, preserving whole-Quantity Coalesce results for unit-aware comparison.",
+      "verified_in": "CQL-08 EXPLORER: .temp/qa/cql08_explorer_probe.py; test_nullological_parity.py 11/11; official nullological compliance 44/44; full conformance 2822/2822"
+    },
+    {
+      "id": "QA-003",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B, Nullological Operators, Coalesce<T> over Boolean values returns Boolean T; Quantity.value is Decimal, not Quantity",
+      "evidence": "Fresh EXPLORER Patient-context probe showed Coalesce(Patient.active, false) lowered through numeric/VARCHAR paths and could fail binding or erase Boolean values. Full conformance then exposed CMS832 failing with a mixed list_value(VARCHAR, INTEGER) binder error after Quantity Coalesce inference made IndexCreatinine(...).value / 0.9 look Quantity-valued.",
+      "root_cause": "Coalesce numeric detection treated Boolean SQL literals as numeric because bool is an int subclass, and Quantity inference recursively treated .value on a Quantity-producing source as another Quantity rather than Decimal.",
+      "resolution": "Exclude Boolean literals from Coalesce numeric detection, route FHIR Boolean path arguments paired with Boolean Coalesce defaults through fhirpath_bool, and stop propagating Quantity type through Quantity.value property access.",
+      "verified_in": "CQL-08 EXPLORER: .temp/qa/cql08_explorer_probe.py; CMS832 single-measure DQM accuracy 100%; test_nullological_parity.py 11/11; adjacent parity 77/77; full conformance 2822/2822"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-02: FHIRPath \u2014 \u00a74.2 Operators, \u00a74.3 Function Invocations, \u00a74.4 Null and Empty (Propagation), \u00a74.5 Singleton Evaluation of Collections. Test these items: Operator semantics, Function invocation syntax, Null propagation in expressions, Empty collection handling, Singleton evaluation rules. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "API_CONTRACT",
+      "spec_citation": "FHIRPath Normative Release \u00a75.5.1 iif() and official R4 testIif6 strict semantic-error fixture",
+      "evidence": "Fresh native-vs-forced-Python DuckDB parity probe: fhirpath_json(Patient{gender:'female'}, 'iif(gender, 1, 2)') returned '[1]' on native C++ but NULL/empty on the Python fallback. Strict core evaluation must still reject literal non-Boolean criteria per official R4 testIif6; the defect is the non-strict DuckDB fallback/native wrapper contract drift for single FHIR nodes.",
+      "root_cause": "The Python fallback used util.is_true() for iif() criteria, which always rejected singleton non-Boolean values. Native DuckDB wrappers are non-strict/resilient and treat single FHIR nodes as truthy, while strict core conformance must still reject literal non-Boolean iif criteria.",
+      "resolution": "Added an explicit singleton_non_boolean option to util.is_true() and enabled it only for non-strict iif_macro calls. Added native-vs-forced-Python DuckDB parity coverage for iif(gender, 1, 2), while preserving strict R4 testIif6 behavior.",
+      "verified_in": "python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_operator_parity.py::test_boolean_singleton_evaluation_matches_python_fallback -q; python3 -m pytest fhir4ds/fhirpath/tests/unit/test_conformance_regressions.py -q; python3 -m pytest fhir4ds/fhirpath -q; python3 conformance/scripts/run_all.py | grep -E \"FAIL|ERROR|accuracy|Suite|OVERALL|ViewDefinition|FHIRPath|CQL|DQM\""
+    }
+  ]
+}

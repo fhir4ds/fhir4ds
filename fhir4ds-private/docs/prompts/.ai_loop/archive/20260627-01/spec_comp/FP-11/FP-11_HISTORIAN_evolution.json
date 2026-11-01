@@ -1,0 +1,51 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-11: FHIRPath \u2014 \u00a75.7 Math (STU). Test these items: abs(), ceiling(), exp(), floor(), ln(), log(base), power(exponent), round([precision]), sqrt(), truncate(). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath continuous build §5.7 Math abs()",
+      "root_cause": "Native Integer/Long abs/unary negation used double at int64 boundaries.",
+      "resolution": "Exact int64 native handling for representable abs/unary results; unrepresentable LLONG_MIN cases return empty.",
+      "verified_in": "FP-11 HISTORIAN iteration 1: fresh probe, math parity, native unittest, full conformance 2822/2822."
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath continuous build §5.7 Math abs(), ceiling(), floor(), round(), truncate()",
+      "root_cause": "Fallback Quantity singleton detection bypassed shared parsing for ResourceNode/plain-dict FHIR Quantity JSON.",
+      "resolution": "Fallback Quantity-capable math now routes through util.parse_value(util.val_data_converted(...)) before dispatch.",
+      "verified_in": "FP-11 HISTORIAN iteration 1: fresh probe, math parity, full conformance 2822/2822."
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath continuous build §5.7 power() and §5.5 String Conversion toString()",
+      "root_cause": "Fallback Decimal toString omitted the required fractional digit for integral Decimal values.",
+      "resolution": "Fallback Decimal toString now appends .0 when needed while preserving existing scale.",
+      "verified_in": "FP-11 HISTORIAN iteration 1: fresh probe, math/conversion parity, full conformance 2822/2822."
+    }
+  ]
+}

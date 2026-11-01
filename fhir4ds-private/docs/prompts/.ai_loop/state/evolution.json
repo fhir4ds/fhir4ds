@@ -1,0 +1,61 @@
+{
+  "phase": "REVIEW",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN_EXIT",
+  "workflow": "null",
+  "pipeline": [
+    "feature_design",
+    "feature_implementation",
+    "code_review",
+    "pre_release",
+    "docs_audit",
+    "scribe"
+  ],
+  "pipeline_step": 5,
+  "qa_personality": null,
+  "config": {
+    "min_iterations": 15,
+    "max_iterations": 40,
+    "exhaustive_mode": false,
+    "target_version": "0.0.18",
+    "qa_schedule": null,
+    "benchmark_commands": null,
+    "benchmark_baseline_path": null,
+    "feature_plan_path": "fhir4ds-private/docs/architecture/plans/FEATURE_WASM_SURFACE_PARITY.md",
+    "bug_fix_target": null,
+    "bug_fix_validation": null,
+    "notes": "WASM FUNCTION-SURFACE PARITY campaign (S32 follow-up). PRIMARY MANDATE: .ai_loop/USER_DIRECTIVES.md. Discovery: target version 0.0.18 is built and deployed but not yet committed/published; the S32 ToDate fix is already landed and verified (C++ extension scalar for ToDate, TS CAST macro removed, native+wasm rebuilt, wheel md5 93eed0b5, standalone cms125 cells run clean, conformance 2832/2832, vitest 197, devserver+operations+tests 444). Remaining gaps from the three-connection audit (/tmp/opencode/surface_diff.json): 48 public desktop-only names absent from the browser (ConvertsTo* family, CanConvertQuantity, ToLong, ToRatio, ExpandValueSet, allowlisted list-equality macros) and ~76 names implemented differently on the two surfaces; fhir4ds/operations/tests/test_macro_sync.py enforces NAMES only. The campaign must build a behavioral harness over the browser-equivalent surface, port the missing conversion UDFs to C++, align or remove diverging TS macros, and upgrade the macro-sync contract to behavior parity. No commits by the agent. Extension rebuilds must cover BOTH native and WASM and be md5-verified in build/bundle/site-packages/public; wheels must be rebuilt before deploy. | feature_design COMPLETE: FDD v2 at fhir4ds-private/docs/architecture/plans/FEATURE_WASM_SURFACE_PARITY.md, self-audit ARCHITECT_REVIEW.md (7 notes applied), design_handoff.md written. AWAITING JOEL APPROVAL before feature_implementation. | Joel APPROVED the v2 plan (2026-10-24) with one clarification: the acceptance target is CORRECT output per spec/fixtures on BOTH surfaces (three-way harness: expected vs desktop AND expected vs browser, value+typeof) \u2014 not merely cross-surface equality; desktop bugs are in scope to fix. feature_implementation starting with slice 1 (harness + Class A macro alignment). | feature_implementation slice 1 COMPLETE: Class A macro bodies aligned (ToString/ToInteger/ToDecimal/ToBoolean/ConvertsToString copied from desktop); Class B C++ ports landed (ToDateTime/ToTime/ToLong/ToRatio/ConvertsTo*/CanConvertQuantity); cql::to_quantity bare calendar keywords + conversion-only decimal extent guard; desktop authority preserved via _PYTHON_PREFERRED_CPP_CONFLICTS; three-way harness (expected vs desktop vs browser, value+typeof) with 59 cases green; macro-sync allowlist updated. Artifacts: native+wasm rebuilt/deployed, wheel 0f4760ee deployed, standalone cms125 cells clean. Gates: targeted conversion suites 83 green; fhirpath+viewdef+dqm+devserver+ops+tests 4046 passed with 2 documented pre-existing FHIRPath parity failures; master conformance running; full cql tree running in PTY. | CAMPAIGN COMPLETE (CLEAN_EXIT): feature_design -> feature_implementation -> code_review (CLEAN_WITH_NOTES, code_review_s32.md) -> pre_release (pre_release_s32.md) -> docs_audit (docs_audit_s32.md) -> scribe (scribe_s32.md). Final artifacts: native bd8ec289, wasm 5bc222aa, wheel cdcaacf. Gates: conformance 2832/2832; cql 3194 passed (10 skipped, 1 xfail) in chunked fresh processes after one WSL SIGBUS flake; fhirpath/viewdef/dqm/devserver/ops/tests 4046 passed + 2 documented pre-existing FHIRPath parity failures; vitest 197; standalone CMS125 cells clean; clean-venv smoke clean. Open: GAP-001 ToQuantity integral spelling (MEDIUM), GAP-002 Class C allowlist (LOW). Nothing committed. | RELEASE PREP (post-campaign, Joel 2026-10-24): WASM rebuilt after final C++ (5bc222aa) and retested standalone (17 cells, Run All clean, DuckDB-WASM 0.0.18); branch merged origin/main (6cdf8dc0, merge not rebase: 27 behind/139 ahead, force-push prohibited) with only notebook conflicts, resolved by taking main's E2E notebooks, bumping 0.0.18, re-executing 4/4 clean; benchmarks recorded (47 measures, 100% accuracy, 1.42x total on loaded host, median 1.12x). See release_prep_s32.md + benchmarks_s32.md. | BENCHMARKS REVISED (Joel-requested rerun + attribution): on identical /tmp worktrees HEAD(0.0.18) vs S24 pre-campaign is 0.98x total (translation 0.97x, sql_gen 0.99x, execution 0.98x) \u2014 the campaign is performance-NEUTRAL; the 60.9->86.7s (1.42x) first read mixed the stale May baseline (1.27x pre-existing correctness-surface growth, present already at S24: CMS2 sql_gen 6.7->13.2s unchanged) plus a ~12% /mnt/d drvfs disk penalty. Accuracy 100% on all 47 measures at both commits; run-to-run median 1.014. See benchmarks_s32.md (revised)."
+  },
+  "issues": [
+    {
+      "id": "GAP-001",
+      "status": "OPEN",
+      "severity": "MEDIUM",
+      "category": "PARITY",
+      "spec_citation": "CQL 1.5 Appendix B ToQuantity",
+      "evidence": {
+        "actual": "Native ToQuantity renders integer-authored values as JSON reals (\"value\":10.0) while desktop Python renders \"value\":10.",
+        "expected": "Both surfaces should produce the same canonical Quantity JSON spelling (or the harness must declare numeric JSON equivalence).",
+        "files": [
+          "extensions/cql/src/cql/quantity.cpp",
+          "fhir4ds/cql/duckdb/udf/quantity.py"
+        ]
+      }
+    },
+    {
+      "id": "GAP-002",
+      "status": "OPEN",
+      "severity": "LOW",
+      "category": "SCOPE",
+      "spec_citation": null,
+      "evidence": {
+        "actual": "Class C functions (list-equality family, ExpandValueSet, CQLListMode) remain browser gaps.",
+        "expected": "Documented allowlist; no change in this campaign.",
+        "files": [
+          "fhir4ds/operations/tests/test_macro_sync.py"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-16: FHIRPath \u2014 \u00a76.4 Collections. Test these items: | (union collections), in (membership), contains (containership). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "verified_in": 1,
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath \u00a76.4.2 in / \u00a76.4.3 contains (multi-item singleton operand must throw)",
+      "evidence": "fhir4ds/fhirpath/duckdb/operators.py membership()/contains() helpers returned empty FHIRPathCollection for multi-item singleton operands instead of raising FHIRPathError; core engine (collections.py L354/365) and native evaluator.cpp (L9217/9231) raise. Reproducer: membership(FHIRPathCollection([1,2]), FHIRPathCollection([1,2,3])) -> {} (expected FHIRPathError). 12th instance of 'exported helper API forgotten' family.",
+      "root_cause": "Helper duplicated operator semantics with lenient error swallowing instead of mirroring engine singleton-violation errors",
+      "resolution": "operators.py membership/contains now raise FHIRPathError with the exact engine messages; regression test added in test_collection_operator_parity.py::test_membership_helper_singleton_violations_raise_fhirpath_error; unit tests 12/12 file, conformance 2832/2832."
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-15: CQL \u2014 Interval Operators Part 1. Test these items: After precision (Interval), Before precision (Interval), Collapse(argument, [per]), Contains precision (Interval, point), End of (Interval), Ends precision, Equal (Interval), Equivalent (Interval), Except (Interval), Expand(argument, [per]), In precision (point, Interval), Includes precision (Interval). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator.\n\nARCHITECT RETRY NOTE: Architect found valid collapse ... per still bypasses per-driven partition semantics; confirm with focused compatible-per translated CQL and remediate by routing valid per through expand/collapse or an equivalent helper."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "summary": "collapse over empty interval lists returns NULL on Python/native-loaded surfaces instead of empty list.",
+      "verified_in": "CQL-15 EXPLORER: .temp/qa/cql15_explorer_probe.py; interval part1/2/3 + wasm 27/27; official interval 412/412; full conformance 2822/2822"
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "summary": "collapse/expand per Quantity compatibility is not enforced for numeric intervals, and collapse silently omits per.",
+      "verified_in": "CQL-15 EXPLORER: .temp/qa/cql15_explorer_probe.py; interval part1/2/3 + wasm 27/27; official interval 412/412; full conformance 2822/2822"
+    },
+    {
+      "id": "ARCH-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "summary": "Valid collapse ... per still does not participate in translated collapse semantics.",
+      "verified_in": "CQL-15 EXPLORER: .temp/qa/cql15_explorer_probe.py; interval part1/2/3 + wasm 27/27; official interval 412/412; full conformance 2822/2822"
+    }
+  ]
+}

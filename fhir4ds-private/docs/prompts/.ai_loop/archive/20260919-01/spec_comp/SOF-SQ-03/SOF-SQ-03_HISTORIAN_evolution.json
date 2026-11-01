@@ -1,0 +1,35 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-SQ-03: SQL-on-FHIR Analytics Layer \u2014 Cross-package integration (SQLQuery \u2194 ViewDefinition \u2194 SQLView), Error model integration, Public API surface. Test these items: One-level chain: SQLQuery with one relatedArtifact pointing at a ViewDefinition canonical \u2014 materializes VD as view, raw SQL body resolves alias correctly, Two-level chain: SQLQuery \u2192 SQLView \u2192 ViewDefinition \u2014 recursive materialization produces correct rows, Cycle: SQLView A depends on SQLView B depends on SQLView A \u2014 SQLQueryCycleError raised before execution, Resolver contract: ViewDefinition dict detected structurally (has 'select' + 'resource' keys), Resolver contract: Library dict detected by resourceType='Library'; parsed ViewDefinition/SQLQuery/SQLView objects handled via isinstance, Resolver failure (any exception) translated to SQLQueryMaterializationError with label + canonical context, Identifier quoting: relatedArtifact.label and parameter.name validated against sql-name and quoted via viewdef.utils.quote_identifier before reaching DuckDB, Error model integration: SQLError inherits from viewdef.errors.SQLOnFHIRError; except SQLOnFHIRError catches all SQLQuery errors transitively, All SQLQuery errors also inherit from ValueError for backward-compat, One-way dependency: fhir4ds/viewdef/ never imports fhir4ds/sqlquery/, Public API surface: parse_library, parse_sqlquery, parse_sqlview, validate_sql_library, select_best_content, SQLQueryRunner, DependencyResolver type alias. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-005",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "summary": "main-body engine errors raw; NOT A BUG registry",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-006",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "summary": "resolver docstring contract fixed in runner.py",
+      "verified_in": "Iteration 1 (113/113, gate 2832/2832)"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "phase": "COMPLETE",
+  "iteration": 5,
+  "audit_status": "COMPLETE",
+  "exit_reason": "MIN_ITERATIONS_REACHED",
+  "workflow": null,
+  "pipeline": ["evolution", "code_review", "scribe"],
+  "pipeline_step": 3,
+  "qa_personality": null,
+  "config": {
+    "min_iterations": 5,
+    "max_iterations": 10,
+    "target_version": "0.0.4",
+    "focus_domains": [4],
+    "notes": "Pipeline complete. 7 bugs fixed across 5 evolution iterations + code review. DQM: 41/46→43/46. Overall: 2818/2821 (99.9%). Zero regressions.",
+    "personality_override": null,
+    "specialist_domain_override": null,
+    "wheel_filename": null
+  },
+  "issues": [
+    {"id": "QA-001", "status": "RESOLVED", "summary": "C++ YearsBetween off-by-one"},
+    {"id": "QA-002", "status": "RESOLVED", "summary": "C++ MonthsBetween edge case"},
+    {"id": "QA-003", "status": "RESOLVED", "summary": "Fix bundles path mismatch"},
+    {"id": "QA-003b", "status": "RESOLVED", "summary": "QICore notDoneValueSet fallback"},
+    {"id": "QA-004", "status": "RESOLVED", "summary": "audit_and evidence reordering"},
+    {"id": "QA-005", "status": "DEFERRED", "summary": "population_basis not propagated (latent)"},
+    {"id": "QA-006", "status": "DEFERRED", "summary": "C++ quantity serialization cosmetic"},
+    {"id": "ARCH-001", "status": "RESOLVED", "summary": "notDoneValueSet returns None on parse errors"},
+    {"id": "QA-007", "status": "RESOLVED", "summary": "Multi-group summary_report bug"},
+    {"id": "REV-001", "status": "RESOLVED", "summary": "notDoneValueSet return type annotation fixed"},
+    {"id": "REV-002", "status": "RESOLVED", "summary": "SQL injection guard on table_name methods"}
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-11: CQL \u2014 Arithmetic Operators Part 2. Test these items: Maximum, Minimum, Modulo, Multiply, Negate, Precision, Predecessor, Power, Round, Subtract, Successor, Truncate, TruncatedDivide. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 Appendix B Arithmetic Operators intro + Successor/Predecessor: overflow beyond the type's representable range yields null, not an out-of-type value",
+      "evidence": "translate+execute `successor of Coalesce({2147483647})` -> 2147483648 and `predecessor of Coalesce({-2147483648})` -> -2147483649 on BOTH native cpp and Python fallback; Long/Decimal/temporal boundaries correctly return null. Prior CQL-11 EXPLORER fix only guards literal operands; statically Integer non-literal operands pass through the BIGINT helper which clamps only at Long bounds.",
+      "root_cause": "Translator: _infer_static_numeric_type extended to Coalesce; successor/predecessor emit CASE boundary guard for statically Integer non-literal operands (_operators.py)",
+      "resolution": "Translator: _infer_static_numeric_type extended to Coalesce; successor/predecessor emit CASE boundary guard for statically Integer non-literal operands (_operators.py)",
+      "verified_in": "fhir4ds/cql/duckdb/tests/integration/test_arithmetic_part2_parity.py::test_*_cql11_explorer2; conformance 2832/2832; cql pytest 5749 passed"
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 Negate (Integer overload) + Duration Between (returns Integer): negating an Integer-valued duration result is valid CQL",
+      "evidence": "`-(days between @2024-01-01 and @2024-01-10)` translates to `- cqlDurationBetween(...)`; cqlDurationBetween returns VARCHAR so DuckDB binder fails: \"No function matches -(VARCHAR)\" on both engines. Binary + routes through cqlUncertainAdd, unary minus has no such normalization.",
+      "root_cause": "Translator: unary minus wraps cqlDurationBetween/cqlDifferenceBetween operands in TRY_CAST(... AS BIGINT) before prefix minus (_operators.py)",
+      "resolution": "Translator: unary minus wraps cqlDurationBetween/cqlDifferenceBetween operands in TRY_CAST(... AS BIGINT) before prefix minus (_operators.py)",
+      "verified_in": "fhir4ds/cql/duckdb/tests/integration/test_arithmetic_part2_parity.py::test_*_cql11_explorer2; conformance 2832/2832; cql pytest 5749 passed"
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 Negate: \"When negating quantities, the unit is unchanged\"; dual-engine lockstep rule",
+      "evidence": "`-(3 days)` -> Python fallback JSON unit/code 'day', native cpp 'd' (pint round-trip in Python quantityNegate normalizes the calendar keyword to UCUM).",
+      "root_cause": "Python fallback quantityNegate no longer round-trips pint; negates value and preserves unit verbatim, JSON key order aligned to native (udf/quantity.py)",
+      "resolution": "Python fallback quantityNegate no longer round-trips pint; negates value and preserves unit verbatim, JSON key order aligned to native (udf/quantity.py)",
+      "verified_in": "fhir4ds/cql/duckdb/tests/integration/test_arithmetic_part2_parity.py::test_*_cql11_explorer2; conformance 2832/2832; cql pytest 5749 passed"
+    },
+    {
+      "id": "QA-004",
+      "severity": "LOW",
+      "status": "VERIFIED",
+      "category": "API_CONTRACT",
+      "spec_citation": "CQL grammar: a well-formed expression consumes the entire input",
+      "evidence": "parse_expression(\"successor of T05:30\") silently returns Identifier('T05') ignoring ':30' trailing tokens; parse_cql correctly rejects.",
+      "root_cause": "parse_expression now raises ParseError on trailing tokens (parser.py)",
+      "resolution": "parse_expression now raises ParseError on trailing tokens (parser.py)",
+      "verified_in": "fhir4ds/cql/duckdb/tests/integration/test_arithmetic_part2_parity.py::test_*_cql11_explorer2; conformance 2832/2832; cql pytest 5749 passed"
+    }
+  ]
+}

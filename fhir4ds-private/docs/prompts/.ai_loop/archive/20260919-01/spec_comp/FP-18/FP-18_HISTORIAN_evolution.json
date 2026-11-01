@@ -1,0 +1,87 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-18: FHIRPath \u2014 \u00a76.6 Math Operations, \u00a76.7 Date/Time Arithmetic. Test these items: * (multiplication), / (division), + (addition), - (subtraction), div (truncated division), mod (modulo), & (string concatenation), + (dateTime addition), - (dateTime subtraction). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "DEFERRED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a76.6 preamble, \u00a76.6.1, \u00a76.6.2, \u00a76.6.3, \u00a76.6.4 (quantity result unit = most granular unit of either input; spec examples: 12 'cm' * 3 'cm' // 36 'cm2'; 3 'm' + 3 'cm' // 303 'cm'; 3 'm' - 3 'cm' // 297 'cm'; 12 'cm2' / 3 'cm' // 4.0 'cm')",
+      "evidence": "Native C++ path (fhirpath_text): \"12 'cm' * 3 'cm'\" -> 0.0036 'm2'; \"3 'cm' * 12 'cm2'\" -> 0.000036 'm.m2' (non-canonical unit); \"12 'cm2' / 3 'cm'\" -> 0.04 'm2/m'; \"3 'm' + 3 'cm'\" -> 3.03 'm'; \"3 'm' - 3 'cm'\" -> 2.97 'm'. Python core + fallback return the spec-example values (36 'cm2', 36 'cm3', 4.0 'cm', 303 'cm', 297 'cm'). Native normalizes to SI base units instead of the normative most-granular-unit result; values are semantically equal but unit rendering and the normative examples diverge, and native/fallback parity breaks. Repro: .temp/qa/fp18_historian2_2026_08/probe.py",
+      "root_cause": null,
+      "resolution": "DEFERRED \u2014 native Quantity unit-space composition port (see ARCHIVE_LOG.md / engineer_handoff.md)",
+      "verified_in": null
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "PARITY",
+      "spec_citation": "FHIRPath N1 \u00a75.5.8 toString (Time representation hh:mm:ss.fff, no leading T) + \u00a76.7 result rendering consistency",
+      "evidence": "(archived to ARCHIVE_LOG.md, FP-18 HISTORIAN 2026-08-18)",
+      "root_cause": "fn_dateArith Time branch stored the result FPValue.string_val with a leading \"T\" while every other native Time path (TimeLiteral via normalizeTimeLiteralString, JSON-field detection, parseTimeParts consumers) stores bare hh:mm:ss[.fff].",
+      "resolution": "RESOLVED \u2014 native fn_dateArith Time result stored without leading T; extension rebuilt+redeployed (md5 90ba446f). verified_in: TestDualEngineParityHistorianFP18, drill parity, conformance 2832/2832",
+      "verified_in": "test_fp18_math_operators.py TestDualEngineParityHistorianFP18 + drill.py parity (66/66); conformance 2832/2832"
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "INTENDED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a76.6 preamble: 'Operations that cause arithmetic overflow or underflow will result in empty ({ }).' \u00a74.1.3 Integer range -2^31..2^31-1.",
+      "evidence": "Both engines silently promote Integer arithmetic overflow to Decimal instead of returning empty: '2147483647 + 1' -> '2147483648.0' (native AND fallback); '2000000000 * 2' -> '4000000000.0'; '2147483647 + 2147483647' -> '4294967294.0'; '1000000 * 1000000 * 1000000' -> '1000000000000000000.0'. Core returns Decimal('4294967294'). Additionally '-2147483648 - 1' native '-2147483649.0' vs fallback empty (parity break). Repro: .temp/qa/fp18_historian2_2026_08/probe.py + core probe",
+      "root_cause": null,
+      "resolution": "INTENDED \u2014 Integer overflow\u2192Decimal is documented cross-engine doctrine (AGENTS.md NOT A BUG registry)",
+      "verified_in": null
+    },
+    {
+      "id": "QA-004",
+      "severity": "MEDIUM",
+      "status": "INTENDED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a76.7: 'If a definite-quantity duration above seconds appears in a date/time arithmetic calculation, the evaluation will end and signal an error to the calling environment.'",
+      "evidence": "Definite-duration UCUM units above seconds are accepted (no error) on BOTH engines: '@2019-03-01T10:30:00 + 1 \\'wk\\'' -> 2019-03-08T10:30:00; '+ 1 \\'d\\'' -> 2019-03-02; '+ 1 \\'h\\'' -> 11:30:00; '+ 1 \\'min\\'' -> 10:31:00; Date '+ 1 \\'d\\''/'\\'wk\\'' also accepted; Time '+ 1 \\'h\\'' accepted. Only 'a'/'mo' currently error (FP-18 SKEPTIC QA-005). Spec allows only calendar duration keywords plus 's'/'ms' UCUM. Repro: .temp/qa/fp18_historian2_2026_08/probe.py + drill.py",
+      "root_cause": null,
+      "resolution": "INTENDED \u2014 fixtures testPlusDate13-22 pin UCUM d/wk/h/min as valid \u00a76.7 units",
+      "verified_in": null
+    },
+    {
+      "id": "QA-005",
+      "severity": "MEDIUM",
+      "status": "INTENDED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a76.7.1/\u00a76.7.2: 'For precisions above seconds, the decimal portion of the time-valued quantity is ignored' \u2014 implying at seconds and below it is NOT ignored.",
+      "evidence": "Sub-second quantities silently lose their fractional part when the operand has second precision, on BOTH engines: '@2019-03-01T10:30:00 + 1.5 seconds' -> 2019-03-01T10:30:01 (expected ...:01.5); '+ 1500 \\'ms\\'' -> 2019-03-01T10:30:01 (expected ...:01.5); '@T10:30:00 + 1500 milliseconds' -> T10:30:01. Millisecond-precision operands are handled correctly ('...T10:30:00.500 + 1500 \\'ms\\'' -> ...:02.000). Repro: .temp/qa/fp18_historian2_2026_08/probe.py + drill.py",
+      "root_cause": null,
+      "resolution": "INTENDED \u2014 fixtures pin fractional-quantity truncation (testPlusDate19 no-op)",
+      "verified_in": null
+    },
+    {
+      "id": "QA-006",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "category": "PARITY",
+      "spec_citation": "FHIRPath N1 \u00a74.1.3 Integer range -2^31..2^31-1 (minimum is a representable Integer)",
+      "evidence": "(archived to ARCHIVE_LOG.md, FP-18 HISTORIAN 2026-08-18)",
+      "root_cause": "number_literal range check applied to the unsigned literal 2147483648 before unary negation; \u00a74.1.3 defines the minus as the unary negation operator, so the valid Integer minimum -2147483648 was rejected while native accepted it.",
+      "resolution": "RESOLVED \u2014 polarity_expression accepts -2147483648 (INT32_MIN, \u00a74.1.3 unary-negation doctrine). verified_in: TestFP18Historian2026_08_18, dual-UDF parity, conformance 2832/2832",
+      "verified_in": "test_fp18_math_operators.py TestFP18Historian2026_08_18; dual-UDF parity probe; conformance 2832/2832"
+    }
+  ]
+}

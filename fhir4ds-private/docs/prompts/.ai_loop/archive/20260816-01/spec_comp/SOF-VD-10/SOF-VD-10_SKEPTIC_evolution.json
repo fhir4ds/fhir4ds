@@ -1,0 +1,18 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "PENDING",
+  "exit_reason": null,
+  "workflow": "evolution",
+  "pipeline": ["evolution"],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-10: Terminology Bindings, Constraints (sql-name, sql-expressions), Cardinality. Fresh SKEPTIC run. Items: sql-name regex for name/constant.name/column.name; sql-expressions constraint (at most one of forEach/forEachOrNull/repeat); required field validation; resource binding; fhirVersion binding; expectError fixtures fail explicitly; strict vs permissive modes.\n\nWhen the pipeline is fully complete (3 personalities SKEPTIC -> HISTORIAN -> EXPLORER each run QA/FIX/ARCHITECT), set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": []
+}

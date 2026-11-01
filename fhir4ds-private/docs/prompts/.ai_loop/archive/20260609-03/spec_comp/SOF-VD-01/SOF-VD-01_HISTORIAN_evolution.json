@@ -1,0 +1,32 @@
+{
+  "phase": "QA",
+  "iteration": 2,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-01: SQL-on-FHIR ViewDefinition \u2014 Logical Model: View Definition, Key Elements: Resource, ViewDefinition.resource/profile/fhirVersion. Test these items: ViewDefinition represents a tabular projection of one FHIR resource type, resource 1..1 required FHIR ResourceType binding, profile 0..* canonical profile declarations, fhirVersion 0..* FHIRVersion binding, root resource table selection and resourceType filtering, zero-or-more output rows per resource instance. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "SOF-VD-01-HISTORIAN-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR v2.1.0-pre ViewDefinition logical model: resource 1..1 ResourceType code, profile 0..* canonical(StructureDefinition), fhirVersion 0..* FHIRVersion code binding.",
+      "evidence": "Fresh .temp/qa/sof_vd01_historian_probe.py showed ViewDefinition.to_dict() succeeds for direct dataclass values that violate root logical-model fields: resource=[\"Patient\"], resource=\"DefinitelyNotAResource\", fhirVersion=\"4.0.1\" (serialized as characters), fhirVersion=[\"9.9.9\"], and invalid meta.profile. Parser and SQLGenerator reject adjacent cases; serializer can emit invalid JSON.",
+      "root_cause": "ViewDefinition.to_dict() hand-built root JSON without reusing parser/generator root logical-model validators, so direct dataclass values could bypass ResourceType, canonical profile, FHIRVersion, and metadata profile guards.",
+      "resolution": "Added shared validate_resource_type() and validate_fhir_version_array() helpers in viewdef/types.py; routed parser, SQLGenerator, and ViewDefinition.to_dict() through the shared root validators; to_dict() now validates root metadata via validate_root_metadata_fields(). Added serializer regression coverage.",
+      "verified_in": ".temp/qa/sof_vd01_historian_probe.py; focused parser/generator tests 14 passed; fhir4ds/viewdef/tests 906 passed; run_viewdef.py 134/134; run_all.py 2822/2822."
+    }
+  ]
+}

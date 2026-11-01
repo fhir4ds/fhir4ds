@@ -1,0 +1,56 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-12: FHIRPath \u2014 \u00a75.8 Tree Navigation, \u00a75.9 Utility Functions. Test these items: children(), descendants(), trace(name, [projection]), now(), timeOfDay(), today(). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator.\n\nARCHITECT RETRY NOTE: descendants() repeat-style de-dup must include semantically equal complex JSON objects with different key order, e.g. {\"a\":{\"x\":1,\"y\":2},\"b\":{\"y\":2,\"x\":1}}."
+  },
+  "RETRY_QA": false,
+  "retry_note": null,
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release v2.0.0 \u00a75.8.2 descendants()",
+      "evidence": "Spec says descendants() returns all descendants and is shorthand for repeat(children()). Fresh FP-12 EXPLORER probe: descendants().count() = repeat(children()).count() returned false in both native/C++ and forced Python fallback on repeated-looking nested JSON with duplicate primitive and complex values. Probe log: .temp/qa/fp12_explorer_probe.log.",
+      "root_cause": "Both implementations accumulated every recursive child in descendants() instead of using repeat(children()) de-duplication semantics for newly produced items.",
+      "resolution": "Updated Python fallback and native C++ descendants() to traverse only newly seen child values using repeat-style semantic keys; added native/fallback regression coverage for repeated-looking nested values and updated null descendant expectations.",
+      "verified_in": ".temp/qa/fp12_explorer_probe_after_fix.log; python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_tree_utility_parity.py -q; ./build/release/test/unittest '*fhirpath*'; python3 conformance/scripts/run_all.py"
+    },
+    {
+      "id": "ARCH-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release v2.0.0 \u00a75.8.2 descendants() and \u00a75.2.3 repeat()",
+      "evidence": "Retry QA probe .temp/qa/fp12_explorer_probe_retry.log: on {\"a\":{\"x\":1,\"y\":2},\"b\":{\"y\":2,\"x\":1}}, native descendants().count() returned 4 while forced fallback returned 3; native descendants().count() = repeat(children()).count() returned false while fallback returned true. The two object children compare equal under repeat(children()) but the native descendants() key path treated serialized key order as distinct.",
+      "root_cause": "The first remediation used canonical-ish repeat keys, but native JSON object keys were not normalized before hashing, so the descendants() de-dup layer could drift from repeat(children()) equality.",
+      "resolution": "Native repeat keys now canonicalize JSON recursively with sorted object keys and normalized primitive values before de-duplication; added ordered-key object parity coverage and native sqllogictest coverage.",
+      "verified_in": ".temp/qa/fp12_explorer_probe_after_retry_fix.log; python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_tree_utility_parity.py -q; ./build/release/test/unittest '*fhirpath*'; python3 conformance/scripts/run_all.py"
+    },
+    {
+      "id": "ARCH-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release v2.0.0 \u00a75.8.2 descendants()",
+      "evidence": "Architect audit probe built a 105-level nested resource and evaluated descendants().where($this = 'v104').count(). Native/C++ returned 0 while forced Python fallback returned 1, showing native descendants() silently truncates traversal at depth 100.",
+      "root_cause": "Native fn_descendants() has a hard depth < 100 loop guard inherited from a safety limit, which drops valid deep descendants instead of traversing until exhaustion.",
+      "resolution": "Removed the native descendants() depth cutoff and retained the existing result-size safety limit; added a 105-level native/fallback parity regression to the FP-12 tree utility test and QA probe.",
+      "verified_in": ".temp/qa/fp12_explorer_probe_after_deep_fix.log; python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_tree_utility_parity.py -q; ./build/release/test/unittest '*fhirpath*'; python3 conformance/scripts/run_all.py"
+    }
+  ]
+}

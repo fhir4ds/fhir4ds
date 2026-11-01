@@ -1,0 +1,65 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-07: SQL-on-FHIR ViewDefinition — ViewDefinition.select.repeat. Test these items: repeat 0..* FHIRPath expressions for recursive traversal, view runner recursively follows each path to any depth, multiple repeat paths are combined using union semantics, duplicates and ordering behavior for recursive results, cycle/depth guard behavior under malformed or cyclic structures, columns are evaluated against each repeated node context. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_INTERPRETATION",
+      "spec_citation": "SQL-on-FHIR v2 ViewDefinition.select.repeat — union semantics",
+      "evidence": "Value-based union dedup collapses distinct-but-identical sibling nodes (2 identical item subtrees -> 1 row). Consistent with FHIRPath '='-equality union; no fixture pins node-identity dedup. Re-confirmed fresh this launch.",
+      "root_cause": null,
+      "resolution": "Doctrine pin (SOF-VD-05/SOF-VD-07 SKEPTIC). Do not fix without a fixture pin.",
+      "verified_in": "iteration 1 HISTORIAN"
+    },
+    {
+      "id": "QA-002",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_INTERPRETATION",
+      "spec_citation": "SQL-on-FHIR v2 select.repeat — no row-order requirement",
+      "evidence": "Repeat output row order is unnest order, not document order; official runner sorts before compare. Re-confirmed fresh (H5 where probe).",
+      "root_cause": null,
+      "resolution": "Doctrine pin: never order-assert across unnest levels.",
+      "verified_in": "iteration 1 HISTORIAN"
+    },
+    {
+      "id": "QA-003",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_INTERPRETATION",
+      "spec_citation": "SOF-VD-05 doctrine (pinned), re-verified under repeat",
+      "evidence": "Primitive-yielding repeat paths return empty (dict-only collection; children() probe H8: primitives filtered identically on both engines).",
+      "root_cause": null,
+      "resolution": "Reference-impl-consistent doctrine pin.",
+      "verified_in": "iteration 1 HISTORIAN"
+    },
+    {
+      "id": "QA-004",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_INTERPRETATION",
+      "spec_citation": "FHIRPath constants are values, not dynamic navigation",
+      "evidence": "repeat: ['%P'] with string constant valueString 'item' yields empty on BOTH engines (constant evaluates to the string 'item', filtered by dict-only collection). Consistent FHIRPath semantics; engine parity holds.",
+      "root_cause": null,
+      "resolution": "Doctrine pin: %constants in repeat paths are values, not path fragments.",
+      "verified_in": "iteration 1 HISTORIAN"
+    }
+  ]
+}

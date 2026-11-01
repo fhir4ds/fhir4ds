@@ -1,0 +1,50 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PENDING",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-09: FHIRPath \u2014 \u00a75.6.1-\u00a75.6.5 String Manipulation (Search). Test these items: indexOf(substring), substring(start, [length]), startsWith(prefix), endsWith(suffix), contains(substring). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "summary": "index_of direct helper added (\u00a75.6.1); details in ARCHIVE_LOG.md / spec_comp handoffs",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-002",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SHARED_CONVENTION",
+      "spec_citation": "FHIRPath \u00a75.6.2 (ambiguous: start lies outside the length)",
+      "evidence": "''.substring(0) -> {} in both engines and the direct helper; start==length==0 boundary treated as outside. No fixture pins it.",
+      "root_cause": null,
+      "resolution": "Documented shared convention; do not fix",
+      "verified_in": null
+    },
+    {
+      "id": "QA-003",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SHARED_CONVENTION",
+      "spec_citation": "FHIRPath \u00a75.6.2 (start/length validity unspecified for negatives)",
+      "evidence": "'abcdefg'.substring(-1) and substring(1,-2) -> {} in both engines and the direct helper; consistent with CQL-12 Substring invalid-boundary doctrine.",
+      "root_cause": null,
+      "resolution": "Documented shared convention; do not fix",
+      "verified_in": null
+    }
+  ]
+}

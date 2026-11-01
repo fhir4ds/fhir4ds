@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-05: FHIRPath \u2014 \u00a75.3 Subsetting, \u00a75.4 Combining. Test these items: [index] indexer, single(), first(), last(), tail(), skip(num), take(num), intersect(other), exclude(other), union(other), combine(other). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release \u00a75.3.1-\u00a75.3.9 and \u00a75.4.1-\u00a75.4.2",
+      "evidence": "Spec signatures require [index: Integer], zero-arg single()/first()/last()/tail(), one-arg skip(num)/take(num)/intersect(other)/exclude(other)/union(other)/combine(other). Native C++ accepts malformed calls that forced fallback rejects. Reproducer: .temp/qa/fp05_skeptic_probe.py. Native outputs include a.first(0) -> ['zero'] with fhirpath_is_valid=true, a.tail(0) -> ['one','two'] with is_valid=true, a.skip(1, 2) -> ['one','two'] with is_valid=true, a.union(b, ints) -> ['zero','one','two','three'] with is_valid=true, and a.skip(1.0) has is_valid=true on sparse validation input. Forced Python fallback returns empty/NULL and fhirpath_is_valid=false for these malformed calls.",
+      "root_cause": "Native Evaluator::evalFunction dispatched FP-05 functions without exact child-count validation, so zero-argument functions ignored unexpected arguments and one-argument collection functions ignored extra arguments. fn_skip/fn_take also returned early for empty input before validating the num argument, letting fhirpath_is_valid() accept invalid count expressions on its sparse Patient validation resource.",
+      "resolution": "Added exact arity guards for single/first/last/tail, skip/take, and combine/intersect/exclude/union in the native evaluator. Reordered skip/take count validation before empty-input short-circuiting. Added native sqllogictest and Python native-vs-forced-fallback parity coverage, rebuilt and copied bundled fhirpath.duckdb_extension.",
+      "verified_in": ".temp/qa/fp05_skeptic_probe.py: 46 cases, 0 mismatches; pytest test_collection_operator_parity.py: 8 passed; native FHIRPath unittest: 366 assertions; full conformance: ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706, DQM 47/47, overall 2822/2822"
+    }
+  ]
+}

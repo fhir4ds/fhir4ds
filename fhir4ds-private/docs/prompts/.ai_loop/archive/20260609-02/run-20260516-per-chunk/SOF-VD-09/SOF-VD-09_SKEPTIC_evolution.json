@@ -1,0 +1,43 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-09: SQL-on-FHIR ViewDefinition - Key Elements: Where; ViewDefinition.where; ViewDefinition.where.path/description. Test these items: where 0..* root-level FHIRPath constraints; every where constraint must evaluate true for resource inclusion; false, empty, and null filter results exclude rows as specified; non-boolean where results are rejected or surfaced as spec errors; where.description 0..1 human-readable text retention; constant references and complex FHIRPath expressions inside where clauses; filter SQL generation preserves intended root-resource scope. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR v2.0.0 ViewDefinition.where.path exact true inclusion rule",
+      "evidence": "Archived in ARCHIVE_LOG.md SOF-VD-09 SKEPTIC",
+      "root_cause": "Archived in ARCHIVE_LOG.md SOF-VD-09 SKEPTIC",
+      "resolution": "ViewDefinition where SQL now requires fhirpath_json(...) = '[true]' for exact singleton Boolean true.",
+      "verified_in": "Iteration 1: focused tests 31/31, ViewDefinition pytest 872/872, ViewDefinition conformance 134/134, full conformance 2822/2822"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR v2.0.0 ViewDefinition.where.description 0..1 string metadata",
+      "evidence": "Archived in ARCHIVE_LOG.md SOF-VD-09 SKEPTIC",
+      "root_cause": "Archived in ARCHIVE_LOG.md SOF-VD-09 SKEPTIC",
+      "resolution": "Shared where validation now rejects present non-string/null descriptions and retains valid strings.",
+      "verified_in": "Iteration 1: focused tests 31/31, ViewDefinition pytest 872/872, full conformance 2822/2822"
+    }
+  ]
+}

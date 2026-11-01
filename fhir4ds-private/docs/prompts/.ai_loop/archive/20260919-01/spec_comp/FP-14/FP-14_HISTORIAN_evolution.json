@@ -1,0 +1,65 @@
+{
+  "phase": null,
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-14: FHIRPath \u2014 \u00a76.2 Comparison. Test these items: > (Greater Than), < (Less Than), <= (Less or Equal), >= (Greater or Equal). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath \u00a76.2 Comparison (decimal sub-second semantics) + dual-engine lockstep invariant",
+      "evidence": "SELECT fhirpath(...,'@2018-03-01T10:30:00.1234 < @2018-03-01T10:30:00.1236'): native=false, python=true; equality native=true, python=false; same for @T times and > with .1234 vs .1230. Root cause: extensions/fhirpath/src/fhirpath/evaluator.cpp parseDateTimeParts/parseTimeParts truncate fractional seconds to 3 digits (ms_str.substr(0,3)) and compareDateTimes compares the truncated int; Python fallback uses full-precision timestamp(). Repro: .temp/qa/fp14_historian_2026_08_18/probe.py",
+      "root_cause": "Native parseDateTimeParts/parseTimeParts truncated fractional seconds to 3 digits; compareDateTimes compared the truncated millisecond int, losing sub-millisecond precision vs the Python fallback's full-precision timestamp().",
+      "resolution": "Added untruncated frac_digits to DateTimeParts in evaluator.cpp (both parsers); compareDateTimes now compares whole seconds via the field loop and sub-second fraction digits as decimals (right-padded to equal width) per \u00a76.2 decimal comparison semantics. Extension rebuilt and redeployed to repo bundle + user site-packages. 19-case dual-engine parity regression test added.",
+      "verified_in": "Iteration 1 (focused 178/178, fhirpath tree 1896 passed, conformance 2832/2832)"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath \u00a76.2 (types differ -> error -> empty); conversion table defines no Time<->Date/DateTime conversion",
+      "evidence": "DateTimeComparisons.greater_than(FHIRTime('T12:00:00'), FHIRDateTime('2018-03-01T12:00')) -> False; also Time vs Date -> False. Engine expression @T12:00:00 < @2014-01-01 -> empty. 10th instance of exported-helper-API-forgotten family.",
+      "root_cause": "Helper _engine_compare called engine FP_*.compare() directly, bypassing the expression-level type guard; FP_Time.compare accepts any FP_TimeBase (incl. FP_Date/FP_DateTime) and returns a definitive result where no implicit conversion exists.",
+      "resolution": "Type guard in _engine_compare: Time never compares to Date/DateTime (no implicit conversion) -> None/empty. Unit regression test added.",
+      "verified_in": "Iteration 1 (focused 178/178, fhirpath tree 1896 passed, conformance 2832/2832)"
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "ROBUSTNESS",
+      "spec_citation": "FHIRPath \u00a76.2 (invalid/uncertain temporal input -> empty); public helper API must not crash",
+      "evidence": "FHIRDate.from_string('2018-03-01+05:00') is accepted (dates carry no offset per spec) and DateTimeComparisons.less_than(<that>, FHIRDate('2018-03-02')) raises AttributeError: 'NoneType' object has no attribute 'compare' \u2014 FP_Date(invalid lexical) returns None and _engine_compare calls .compare() unguarded.",
+      "root_cause": "_engine_compare dereferenced FP temporal constructors that return None for invalid lexical forms; FHIRDate.from_string over-accepts offset-carrying dates.",
+      "resolution": "None-guard on engine node construction in _engine_compare; invalid lexical operand -> None (empty). Unit regression test added.",
+      "verified_in": "Iteration 1 (focused 178/178, fhirpath tree 1896 passed, conformance 2832/2832)"
+    },
+    {
+      "id": "QA-004",
+      "severity": "LOW",
+      "status": "UNCONFIRMED",
+      "category": "SPEC_AMBIGUITY",
+      "spec_citation": "FHIRPath \u00a76.2 partial-date comparison precision walk; implicit Date->DateTime conversion is defined",
+      "evidence": "@2018-03-02 > @2018-03-01T12:00 -> true in both engines (definitive at shared day precision despite different precision levels). Spec prose conflicts: precision-mismatch -> empty stated unconditionally, but the walk 'proceeding to the finest precision' stops at first difference. No official fixture covers Date-vs-DateTime ordering. Both engines agree; no parity divergence. Filed for human/spec-clarification tracking only.",
+      "root_cause": null,
+      "resolution": "DEFERRED to human/spec clarification",
+      "verified_in": null
+    }
+  ]
+}

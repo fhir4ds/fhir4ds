@@ -1,0 +1,55 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-19: FHIRPath \u2014 \u00a77 Aggregates (STU); \u00a78 Lexical Elements. Test these items: aggregate(aggregator, [init]), whitespace rules, comments, literals syntax, symbols, keywords, identifiers, and case-sensitivity. QA personality: HISTORIAN. Reconstruct behavior from the current spec text, official examples/conformance cases, and current code only. Do not inspect or rely on any prior workflow output under fhir4ds-private/docs/prompts/.ai_loop/spec_comp/**. For DuckDB-backed FHIRPath surfaces, independently test both the native/C++ extension path and the forced Python fallback path where both exist, and compare outputs between paths. Include historical parser and evaluator edge cases around aggregate accumulator/index semantics, empty collections, init/no-init behavior, variable scoping, comments, whitespace, delimited identifiers and escapes, keyword casing, identifier casing, literal boundaries, malformed lexemes, and wrapper-result validity. Use fresh probes, focused pytest coverage, and relevant conformance/unit/e2e validation. We are currently at 100% conformance; do not regress conformance or unit/e2e pytest surfaces. When the pipeline is fully complete, set workflow to null, set exit_reason, write qa_handoff.md, engineer_handoff.md, architect_handoff.md, update GLOBAL_KNOWLEDGE.md/ARCHIVE_LOG.md/AGENTS.md as appropriate, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-FP19-HISTORIAN-001",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release \u00a77.1 aggregate() and \u00a75 expression-parameter iteration variables: $total is scoped to aggregate evaluation; $this/$index are expression-parameter iteration variables and must not leak after function evaluation.",
+      "evidence": "Fresh native-vs-forced-fallback DuckDB probe: native fhirpath_json({}, \"(1|2).aggregate($this+$total,0) + $index\") returned NULL/empty, while forced Python fallback returned [4]. Direct Python evaluate returned [4]. Similar drift for + $total and combine($index)/combine($total), showing aggregate_macro leaves $total and $index in ctx after returning.",
+      "root_cause": "See ARCHIVE_LOG.md FP-19 HISTORIAN entry.",
+      "resolution": "Python expression parameters restore $this; aggregate_macro restores $total/$index after evaluation.",
+      "verified_in": "Focused pytest 27/27; full conformance 2822/2822"
+    },
+    {
+      "id": "QA-FP19-HISTORIAN-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release \u00a78.2 Comments: single-line and multi-line comments are ignored by the language.",
+      "evidence": "Fresh native-vs-forced-fallback DuckDB probe: native fhirpath_json(resource, \"/* lead */ id\") returned [\"p\"] and fhirpath_is_valid=true. Forced Python fallback raised FHIRPathSyntaxError from _INVALID_EXPR_PATTERNS because it classified the leading / in a block comment as a leading operator.",
+      "root_cause": "See ARCHIVE_LOG.md FP-19 HISTORIAN entry.",
+      "resolution": "DuckDB fallback wrapper prechecks strip ignored comments and delimiter balance ignores strings/delimited identifiers/comments.",
+      "verified_in": "test_aggregate_lexical_parity.py passed; full conformance 2822/2822"
+    },
+    {
+      "id": "QA-FP19-HISTORIAN-003",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release \u00a78.3 Literals: string literals are strings enclosed in single ticks; fhirpath_json must serialize String values as JSON strings, not reinterpret their contents as JSON arrays/objects.",
+      "evidence": "Fresh native-vs-forced-fallback DuckDB probe: native fhirpath_json(resource, \"'['\") returned malformed JSON \"[[]\" and native fhirpath_json(resource, \"'[1]'\") returned [[1]], while forced Python fallback returned [\"[\"] and [\"[1]\"] respectively. The native fhirpath() scalar correctly returned the string, so the bug is native JSON materialization only.",
+      "root_cause": "See ARCHIVE_LOG.md FP-19 HISTORIAN entry.",
+      "resolution": "Native fhirpath_json uses an internal owned-JSON marker instead of first-character raw JSON inference; rebuilt/copied bundled extension.",
+      "verified_in": "Native C++ suite 276 assertions; focused pytest 27/27; full conformance 2822/2822"
+    }
+  ],
+  "RETRY_QA": false
+}

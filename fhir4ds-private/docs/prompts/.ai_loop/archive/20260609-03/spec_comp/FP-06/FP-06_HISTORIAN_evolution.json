@@ -1,0 +1,43 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-06: FHIRPath \u2014 \u00a75.5.1 iif, \u00a75.5.2 Boolean Conversion, \u00a75.5.3 Integer Conversion. Test these items: iif(criterion, true-result, otherwise-result), toBoolean(), convertsToBoolean(), toInteger(), convertsToInteger(). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release §5.5.1 iif and §4.5 singleton evaluation",
+      "evidence": "Fresh FP-06 HISTORIAN probe found native C++ accepts malformed iif calls. `fhirpath_is_valid('iif(true)')` returned true, `fhirpath_json('{}', \"iif(true, 'yes', 'no', 'extra')\")` returned `[\"yes\"]`, and `fhirpath_is_valid(\"iif(1|2, 'yes', 'no')\")` returned true. Forced Python fallback returned empty/NULL with `fhirpath_is_valid=false`. Spec signature is `iif(criterion, true-result [, otherwise-result])`, and multi-item singleton Boolean evaluation must signal an error.",
+      "root_cause": "Native evaluator dispatch accepted any iif() call with at least two children and returned empty for one-argument/multi-item-criterion paths instead of throwing a spec error, so fhirpath_is_valid treated malformed iif expressions as valid.",
+      "resolution": "Added exact native iif arity validation, changed native iif multi-item input/criterion handling to throw FHIRPathSpecError, and added native/Python parity plus sqllogictest coverage for malformed iif arity, multi-item criterion, and lazy unselected branches.",
+      "verified_in": "python3 .temp/qa/fp06_historian_probe.py; python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_conversion_parity.py -q; extensions/fhirpath/build/release/test/unittest '*fhirpath*'; python3 conformance/scripts/run_all.py"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release §5.5.2 Boolean Conversion and §5.5.3 Integer Conversion",
+      "evidence": "Fresh FP-06 HISTORIAN probe found native C++ ignores extra args for zero-argument `toBoolean()`/`toInteger()` calls: `true.toBoolean(1)` returned true and `'1'.toInteger(2)` returned 1 with `fhirpath_is_valid=true`. The same probe found forced Python fallback returned `fhirpath_is_valid=true` for constant multi-item inputs like `(true|false).toBoolean()`, `(1|2).toInteger()`, and `(1|2).convertsToInteger()` instead of treating the spec-required multi-item converter error as invalid.",
+      "root_cause": "Native toBoolean()/toInteger() dispatch did not enforce the zero-argument signatures and ignored extra children. Python fallback toInteger()/toBoolean()/generic convertsTo helpers returned empty for multi-item input instead of signaling the spec-required multi-item conversion error, leaving fhirpath_is_valid parity gaps.",
+      "resolution": "Added native exact arity checks for toBoolean()/toInteger(), changed Python fallback Boolean/Integer conversion helpers and generic convertsTo helper to raise on multi-item input while preserving empty propagation, and added regression coverage for wrong arity and constant multi-item converter inputs.",
+      "verified_in": "python3 .temp/qa/fp06_historian_probe.py; python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_conversion_parity.py -q; extensions/fhirpath/build/release/test/unittest '*fhirpath*'; python3 conformance/scripts/run_all.py"
+    }
+  ]
+}

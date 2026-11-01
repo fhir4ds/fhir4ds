@@ -1,0 +1,34 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-04: FHIRPath \u2014 \u00a75.2 Filtering and Projection. Test these items: where(criteria), select(projection), repeat(projection), ofType(type). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release v2.0.0 Section 5.2.4, ofType(type : type specifier)",
+      "evidence": "Fresh FP-04 HISTORIAN probe found native fhirpath_is_valid('entry.resource.ofType()') returned true while forced Python fallback returned false. Section 5.2.4 requires a type specifier argument.",
+      "root_cause": "Native Evaluator::evalOfType returned an empty collection when the AST had no type-argument child, so fhirpath_is_valid treated missing ofType arguments as valid empty evaluation.",
+      "resolution": "Changed native evalOfType to require exactly one type argument and throw FHIRPathSpecError otherwise; added native/fallback parity and native sqllogictest regression coverage; rebuilt and copied bundled extension.",
+      "verified_in": "FP-04 HISTORIAN iteration 1: post-fix probe 26/26; pytest test_filter_projection_parity.py 6/6; native extension unittest 350 assertions; full conformance 2822/2822."
+    }
+  ],
+  "RETRY_QA": false,
+  "retry_note": null
+}

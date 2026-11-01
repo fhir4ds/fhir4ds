@@ -1,0 +1,65 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-08: CQL \u2014 Nullological Operators. Test these items: Coalesce, IsNull, IsFalse, IsTrue. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 Developer's Guide \u00a7Nullological Operators \u2014 Coalesce: 'first non-null expression among two or more' (variadic, unbounded); Appendix B Coalesce<T>(arguments List<T>)",
+      "evidence": "archived to ARCHIVE_LOG.md (CQL-08 SKEPTIC 2026-08-20)",
+      "root_cause": "Artificial 2..5 scalar arity cap; spec defines no upper bound.",
+      "resolution": "Removed the artificial 2..5 scalar-arity cap: _translate_coalesce (expressions/_functions.py) now rejects only <2 scalar args; public UDF Coalesce (udf/logical.py) same. CQL 1.5 \u00a7Coalesce variadic, no upper bound.",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 \u00a7Coalesce: arguments 'may be of any type, but ... implicitly castable to a common type'; Integer and String are not",
+      "evidence": "archived to ARCHIVE_LOG.md (CQL-08 SKEPTIC 2026-08-20)",
+      "root_cause": "Translator passes mixed static types straight to DuckDB COALESCE; binder acceptance is order-dependent.",
+      "resolution": "AST-level static type-family check in _translate_function_ref: Coalesce mixing String-family with Integer/Long/Decimal static operands raises TranslationError uniformly in both argument orders.",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-003",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_DIVERGENCE_LENIENT",
+      "spec_citation": "CQL 1.5 \u00a7IsTrue/\u00a7IsFalse: argument Boolean",
+      "evidence": "IsTrue(1) / IsFalse('false') return false instead of a type error; pinned deliberately by test_cql_infix_is_true_false_rejects_sql_truthiness (never-null, no SQL truthiness).",
+      "root_cause": "Deliberate lenient runtime predicate; no null leak, no truthiness.",
+      "resolution": "INTENDED",
+      "verified_in": "test_nullological_parity.py"
+    },
+    {
+      "id": "QA-004",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_SUPERSET",
+      "spec_citation": "CQL 1.5 \u00a7Nullological Operators defines only operator form 'is not null'; no IsNotNull function",
+      "evidence": "IsNotNull(1) \u2192 true via macro IsNotNull(x)=x IS NOT NULL. Harmless superset equivalent to 'is not null'; kept for translation-symmetry with IsNull.",
+      "root_cause": "Alias macro mirroring IsNull.",
+      "resolution": "INTENDED",
+      "verified_in": "macros/logical.py"
+    }
+  ]
+}

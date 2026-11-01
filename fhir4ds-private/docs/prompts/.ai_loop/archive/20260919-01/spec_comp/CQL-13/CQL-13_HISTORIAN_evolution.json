@@ -1,0 +1,54 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-13: CQL — Date/Time Operators Part 1. Test these items: Add (left DateTime, right Quantity), After precision of, Before precision of, Date(year, month, day), DateTime(year, month, day, ...), Component From precision, Difference in precision between, Duration in precision between. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 STU4 §8.7 Difference Between: 'returns the number of boundaries crossed for the specified precision between the first and second arguments.' Day precision already uses calendar-day boundary counting; sub-day precisions must count boundaries too, not truncate elapsed time.",
+      "evidence": "difference in hours between @2024-01-01T10:30:00 and @2024-01-01T12:15:00 returns '1' (elapsed 1.75h truncated); spec requires 2 (hour boundaries 11:00 and 12:00 crossed). Same for minutes (@T10:30:30 vs @T10:32:10 -> 1, expected 2), seconds (@T00:00:00.900 vs @T00:00:02.100 -> 1, expected 2), and negative direction (returns -1, expected -2). Identical on native C++ and Python paths (probe: .temp/qa/cql13_hist/probe3.py). Duration (hours between ...) correctly returns 1 — Difference-vs-Duration distinctness violated for sub-day precisions. Root cause: _compute_difference (fhir4ds/cql/duckdb/udf/datetime.py:403-413) and ComputeDifferenceBetweenValue (extensions/cql/src/cql_extension.cpp:3355-3367) use int(elapsed/unit) truncation for hour/minute/second/millisecond; legacy differenceIn{Hours,Minutes,Seconds,Milliseconds} UDFs share the defect.",
+      "root_cause": "Sub-day Difference reuses duration truncation math (int(total_seconds/unit)) instead of boundary-index counting; day/month/year/week were fixed earlier but hour/minute/second/millisecond were not.",
+      "resolution": "Sub-day Difference now counts boundaries as floor(epoch-millis/unit-ms) index difference (UTC-normalized for aware pairs, endpoint marks included): Python _subday_boundary_difference used by _compute_difference and legacy differenceIn{Hours,Minutes,Seconds}; C++ ComputeDifferenceBetweenValue + legacy DifferenceIn*Funcs with new FloorDivInt64. Extension rebuilt/deployed md5 c08b7f98656eff298ade8b4a7379043b.",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 STU4 §8.1 Add / §8.15 Subtract: 'For Time values, the quantity unit must be one of: hours, minutes, seconds, or milliseconds.'",
+      "evidence": "@T12:30 + 1 week and @T12:30 + 1 'd' return 'T12:30' (input unchanged, silent no-op) on both engines; expected null. + 1 month / + 1 year correctly return null. The CQL-13 SKEPTIC launch fixed the analogous Date restriction (Date + sub-day unit -> null) but the Time restriction for week/day units was left as a no-op. Root cause: Python dateAddQuantity Time branch dispatches on _TIMEDELTA_UNITS which includes week/day; C++ DateAddQuantityFunc Time branch accepts day/week equivalently.",
+      "root_cause": "Time-operand unit allowlist not enforced: _TIMEDELTA_UNITS map used for Time arithmetic includes week/day aliases (datetime.py:79-86,1338-1341); C++ Time branch mirrors it.",
+      "resolution": "Time-operand unit allowlist (hours/minutes/seconds/milliseconds, keyword+UCUM) enforced before precision conversion in Python dateAddQuantity Time branch and via IsDayLevelUnit guards in C++ DateAddQuantityFunc/DateSubtractQuantityFunc; dateSubtractQuantity delegates to dateAddQuantity.",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-003",
+      "severity": "LOW",
+      "status": "DEFERRED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 STU4 §8.2/§8.3: 'Note specifically that due to variability in the way week numbers are determined, comparisons involving weeks are not supported.' §8.6: week extraction not supported. §8.2/§8.7/§8.8 per-type precision allowlists (Date: year/month/day; Time: hour..millisecond).",
+      "evidence": "@2024-01-10 after week of @2024-01-01 and same week as evaluate to null (not rejected) while 'week from' is a translation error; after hour of on two Date literals returns true; difference in weeks/days between two Time literals returns 0; hours between two Date literals returns uncertainty interval [0,47]. Lenient typing, no incorrect non-null value produced.",
+      "root_cause": "Translator does not statically validate per-type precision keywords for every temporal operator; null results keep these safe.",
+      "resolution": "DEFERRED: results are null (never wrong data); static per-type precision rejection is net-new translator typing functionality beyond this chunk's fix scope.",
+      "verified_in": null
+    }
+  ]
+}

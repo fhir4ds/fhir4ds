@@ -1,0 +1,54 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "DONE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-22: CQL \u2014 Errors and Messaging. Test these items: Message(source, condition, code, severity, message). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 \u00a79 (Query where clause filters the returned elements) + Appendix B Errors and Messaging (Message with Error severity and true condition stops evaluation)",
+      "evidence": "define X: Patient.name N where Message(true, First(N.given) = 'Ann', 'F', 'Error', 'first given not Ann') return N.given \u2014 and equally the non-Message form \u2014 translated to from_json(fhirpath(_pt.patient_resource,'name.given'),...) with NO where clause: unfiltered givens returned for every patient and the Error-severity Message raise swallowed on BOTH engine paths (py fallback and C++ extension; translation-level).",
+      "root_cause": "_query.py: WHERE application on a scalar fhirpath_text/fhirpath source CASE-wrapped the whole list, then the RETURN clause's list_transform path (_did_list_transform) discarded that CASE entirely, returning the raw return projection.",
+      "resolution": "Defer the WHERE to the per-element list path: when the source is fhirpath_text/fhirpath and both where+return exist, translate the where inside the lambda scope and apply list_filter before list_transform (or a WHERE in the UNNEST variant when subqueries are present). Regression test added py+cpp.",
+      "verified_in": "test_message_parity.py 13/13; master gate 2832/2832 fresh on final tree"
+    },
+    {
+      "id": "QA-002",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "MISSING_FEATURE",
+      "spec_citation": "CQL Appendix B: Trace/Message/Warning severities are informational",
+      "evidence": "Informational severity channel unimplemented (no logging sink in translate-to-SQL); carried from SKEPTIC launch.",
+      "root_cause": null,
+      "resolution": "By design; fixtures 4/4.",
+      "verified_in": "CqlErrorsAndMessagingOperatorsTest.xml 4/4 in gate"
+    },
+    {
+      "id": "QA-003",
+      "severity": "LOW",
+      "status": "UNCONFIRMED",
+      "category": "MISSING_FEATURE",
+      "spec_citation": "Appendix B does not pin error text format",
+      "evidence": "Raised error text is 'code: message' (engine-defined); null code yields leading ': '. Cosmetic; carried from HISTORIAN launch.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": null
+    }
+  ]
+}

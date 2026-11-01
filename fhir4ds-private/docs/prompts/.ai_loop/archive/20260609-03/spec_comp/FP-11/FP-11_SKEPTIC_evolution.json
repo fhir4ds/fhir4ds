@@ -1,0 +1,65 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-11: FHIRPath \u2014 \u00a75.7 Math (STU). Test these items: abs(), ceiling(), exp(), floor(), ln(), log(base), power(exponent), round([precision]), sqrt(), truncate(). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release §5.7 Math, signatures for abs(), ceiling(), exp(), floor(), ln(), log(base), power(exponent), round([precision]), sqrt(), truncate(); §5.7 intro lines 1416-1417",
+      "evidence": "Native/C++ accepts malformed arity and often returns computed values while forced Python fallback rejects them. Repro from .temp/qa/fp11_skeptic_probe.py: 1.abs(2) native -> ['1'], valid=true; fallback -> empty, valid=false. 1.exp(2) native -> ['2.7182818284590451']; 10.log() native valid=true; 10.log(2, 3) native -> ['3.3219280948873626']; 2.power(3, 4) native -> ['8.0']; 2.sqrt(1) native -> ['1.4142135623730951']; 2.truncate(1) native -> ['2'].",
+      "root_cause": "Native evalFunction did not include §5.7 math functions in exact arity validation, so no-arg and one-arg functions ignored missing or extra children.",
+      "resolution": "Added exact native arity guards for FP-11 math functions and aligned fallback registry arity metadata for zero-argument math helpers.",
+      "verified_in": ".temp/qa/fp11_skeptic_probe_after_fix.log; pytest test_math_parity.py; native fhirpath sqllogictest; full conformance 2822/2822"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release §5.7 Math intro lines 1416-1417; §5.7.1 abs(); §5.7.2 ceiling(); §5.7.9 sqrt()",
+      "evidence": "Native/C++ returns empty and reports fhirpath_is_valid=true for concrete incompatible math inputs that should signal an evaluation error. Repro: '2.5'.sqrt(), true.abs(), 5 'mg'.sqrt(), and 5 'mg'.ceiling() are native valid=true; forced Python fallback valid=false. Public result UDFs are row-resilient empty/NULL in both paths.",
+      "root_cause": "Native math helpers returned empty for concrete incompatible non-numeric inputs instead of signaling the §5.7 singleton/type evaluation error.",
+      "resolution": "Changed native math helpers to throw FHIRPathSpecError for non-empty incompatible inputs and arguments while preserving empty results for empty input and domain-empty cases.",
+      "verified_in": ".temp/qa/fp11_skeptic_probe_after_fix.log; pytest test_math_parity.py; native fhirpath sqllogictest; full conformance 2822/2822"
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release §4.3 Function Invocations and §5.7.6 log(base : Decimal)",
+      "evidence": "Native/C++ sourced log(base) evaluates a dynamic argument against the source scalar instead of the outer invocation focus. Repro resource {'p':2.5,'base':2}: p.log(base) native -> empty/NULL; forced Python fallback -> 1.3219280948873624.",
+      "root_cause": "The native special-case log() dispatch evaluated the base argument against the source scalar instead of the outer invocation focus.",
+      "resolution": "Changed native log(base) argument evaluation to use outer_input when present, matching other sourced function argument handling.",
+      "verified_in": ".temp/qa/fp11_skeptic_probe_after_fix.log; pytest test_math_parity.py; native fhirpath sqllogictest; full conformance 2822/2822"
+    },
+    {
+      "id": "QA-004",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release §5.7.7 power(exponent : Integer | Decimal)",
+      "evidence": "The spec states power() used with Integers returns an Integer, but both native/C++ and forced Python fallback materialize 2.power(3) as Decimal text/json shape: fhirpath_text -> '8.0', fhirpath_json -> [8.0].",
+      "root_cause": "Both native and fallback power() converted integer operands through Decimal/double result paths, losing the spec-defined Integer result shape for integer operands.",
+      "resolution": "Preserved Integer output for non-negative integer power operands in native and fallback paths, with fallback Decimal power output normalized for parity.",
+      "verified_in": ".temp/qa/fp11_skeptic_probe_after_fix.log; pytest test_math_parity.py; native fhirpath sqllogictest; full conformance 2822/2822"
+    }
+  ]
+}

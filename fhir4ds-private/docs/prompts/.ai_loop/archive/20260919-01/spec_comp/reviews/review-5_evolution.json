@@ -1,0 +1,54 @@
+{
+  "phase": "REVIEW",
+  "iteration": 1,
+  "audit_status": "PENDING",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "code_review"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": null,
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE MILESTONE REVIEW — 5 chunks completed.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all review files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "REV-001",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "ROBUSTNESS",
+      "spec_citation": "NONE",
+      "evidence": "extensions/fhirpath/src/fhirpath/evaluator.cpp fhirpathSplitUnitTerm: the '-' sign-strip branch can call std::stoi(\"-\") (std::invalid_argument) for a unit term ending in '-' (e.g. 'x-'). Currently masked — probes show 1 'x-' = 1 'y' / * / toQuantity() return empty natively and the strict Python core rejects the literal — but any future path feeding composed unit strings into fhirpathParseUnitExponents surfaces a raw stoi exception instead of the unconvertible->empty convention. Fix: only strip '-' when trailing digits were consumed (end < term.size()).",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": null
+    },
+    {
+      "id": "REV-002",
+      "severity": "MEDIUM",
+      "status": "OPEN",
+      "category": "MODEL_KNOWLEDGE_IN_LOGIC",
+      "spec_citation": "NONE",
+      "evidence": "FHIR type metadata is now hand-maintained in two engines: native C++ tables (fhirFieldType issued/authoredOn/date, structuralFHIRComplexType curated backbone set, infer_fhir_type 'Instant' suffix, fhirTypeIsA instant->Element) vs Python models/r4/fhir_path_to_type.json + duckdb/fhir_types_generated.py. The diff keeps them aligned and test_environment_type_parity.py guards it, but the next field addition can land in one side only. Recommend generating the native table from models/r4 metadata.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": null
+    },
+    {
+      "id": "REV-003",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "HOUSEKEEPING",
+      "spec_citation": "NONE",
+      "evidence": "Working tree contains unrelated untracked files (conformance/architecture/, fhir4ds/dqm/AGENTS.md, fhir4ds/cql/tests/unit/loader/test_iter4_qa_regression.py, test_iter6_qa_regression.py) and tracked build artifacts (extensions/fhirpath/.cache/clangd/*/compile_commands.json modified). Risk of mixing unrelated work into the milestone commit; stage campaign files explicitly and consider gitignoring .cache/clangd.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": null
+    }
+  ]
+}

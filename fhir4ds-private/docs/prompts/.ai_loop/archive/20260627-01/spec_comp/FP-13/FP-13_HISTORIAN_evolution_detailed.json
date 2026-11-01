@@ -1,0 +1,43 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PENDING",
+  "exit_reason": null,
+  "workflow": "evolution",
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-13: FHIRPath \u2014 \u00a76.1 Equality. Test these items: = (Equals) incl. Quantity and Date/Time equality, ~ (Equivalent) incl. Quantity, Date/Time, String equivalence, != (Not Equals), !~ (Not Equivalent). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath \u00a76.1 Equality / Equivalent. Official continuous-build source lines 410 and 428 include examples `23 = 23 '1'` and `23 ~ 23 '1'` returning true via implicit numeric-to-Quantity unit '1' conversion.",
+      "evidence": "Fresh probe `.temp/qa/fp13_historian_fresh_probe.py` showed native DuckDB and forced Python fallback both return empty/NULL for `23 = 23 '1'` and `23 != 23 '1'`, and false/true for `23 ~ 23 '1'` / `23 !~ 23 '1'`. Resource-backed UCUM unit `1` Quantity cases such as `component[0].value = 23` and multi-item `component.value = (23 | 24)` fail the same way.",
+      "root_cause": "Python fallback and native equality/equivalence paths did not coerce numeric primitives to implicit Quantity unit '1', and native multi-item/complex comparison helpers bypassed Quantity-aware equality.",
+      "resolution": "Added numeric-to-unit-1 Quantity coercion across fallback, native singleton, multi-item, collection helper, and complex JSON equality/equivalence paths; added resource-backed unit '1' parity and native sqllogictest coverage.",
+      "verified_in": "`.temp/qa/fp13_historian_fresh_probe.py`; `test_equality_parity.py`; native `fhirpath.test`; full conformance 2822/2822."
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath \u00a76.1 Quantity Equivalence. Official continuous-build source lines 429-433 say Quantity equivalence converts to the least granular unit and returns empty when conversion is empty, for example invalid or non-commensurable units.",
+      "evidence": "Fresh probe `.temp/qa/fp13_historian_fresh_probe.py` showed native DuckDB and forced Python fallback both return false for `1 'cm' ~ 1 's'` and true for `1 'cm' !~ 1 's'`; expected public result is empty/NULL for both because length and time units are not commensurable.",
+      "root_cause": "Quantity equivalence returned boolean false/true for conversion-empty comparisons; fallback `_quantity_base()` also used a stale local UCUM subset that missed `[lb_av]`.",
+      "resolution": "Propagated empty/NULL for non-commensurable Quantity equivalence, routed fallback base conversion through `FP_Quantity.conv_unit_to_base()`, and added pound-vs-kg R4 sentinel coverage.",
+      "verified_in": "`.temp/qa/fp13_historian_fresh_probe.py`; exact native/fallback DuckDB sentinel check; `run_fhirpath_r4.py`; full conformance 2822/2822."
+    }
+  ]
+}

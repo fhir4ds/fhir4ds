@@ -1,0 +1,87 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-18: CQL \u2014 List Operators Part 1. Test these items: Contains(list, element), Distinct(list), Equal (List), Equivalent (List), Except (List), Exists(list), Flatten(list), First(list), In(element, list), Includes(list), Included In (list), IndexOf(list, element), Intersect (List). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "CRITICAL",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 STU4 Appendix B 10.x (fetched this session) \u00a710.6 Exists: returns true if the list contains any non-null elements",
+      "evidence": "`exists Patient.name.given` -> false for a patient with given names (reproducer .temp/qa/cql18_skeptic2/probe4.py (patient p1, name.given=[Jim,Peter]+[Jim])). Generated SQL uses `fhirpath_bool(resource,'name.given') IS NOT NULL` which is NULL for non-boolean collections. Silent wrong answer.",
+      "root_cause": "Dynamic multi-valued FHIR property operands lower to scalar fhirpath_text (first-node truncation); list operators compared/typed the wrong shape.",
+      "resolution": "Centralized _promote_fhirpath_text_list() in translator/expressions/_utils.py applied across list-macro helpers, Equivalent dispatch, Contains fallthrough, Exists fhirpath_bool branch, Distinct fallback, IndexOf dispatch, and new flatten pre-translate.",
+      "verified_in": "probe4 all 17 cases; new population-SQL regression test (py+cpp); master gate 2832/2832"
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 STU4 Appendix B 10.x (fetched this session) \u00a710.1 Contains: true if element is in the list using equality semantics",
+      "evidence": "`Patient.name.given contains 'Ji'` -> true (substring semantics) and `contains 'Peter'` -> false (only first node considered). Generated SQL: `system.contains(fhirpath_text(...),x)`. Reproducer .temp/qa/cql18_skeptic2/probe4.py (patient p1, name.given=[Jim,Peter]+[Jim]).",
+      "root_cause": "Dynamic multi-valued FHIR property operands lower to scalar fhirpath_text (first-node truncation); list operators compared/typed the wrong shape.",
+      "resolution": "Centralized _promote_fhirpath_text_list() in translator/expressions/_utils.py applied across list-macro helpers, Equivalent dispatch, Contains fallthrough, Exists fhirpath_bool branch, Distinct fallback, IndexOf dispatch, and new flatten pre-translate.",
+      "verified_in": "probe4 all 17 cases; new population-SQL regression test (py+cpp); master gate 2832/2832"
+    },
+    {
+      "id": "QA-003",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 STU4 Appendix B 10.x (fetched this session) \u00a710.2 Distinct / \u00a710.3 Equal / \u00a710.4 Equivalent",
+      "evidence": "`distinct Patient.name.given` (and Count(distinct ...)) -> BinderException 'patient_id must appear in GROUP BY'; `Patient.name.given = {'Jim','Peter'}` and `~` -> BinderException array_length(VARCHAR). Reproducer .temp/qa/cql18_skeptic2/probe4.py (patient p1, name.given=[Jim,Peter]+[Jim]).",
+      "root_cause": "Dynamic multi-valued FHIR property operands lower to scalar fhirpath_text (first-node truncation); list operators compared/typed the wrong shape.",
+      "resolution": "Centralized _promote_fhirpath_text_list() in translator/expressions/_utils.py applied across list-macro helpers, Equivalent dispatch, Contains fallthrough, Exists fhirpath_bool branch, Distinct fallback, IndexOf dispatch, and new flatten pre-translate.",
+      "verified_in": "probe4 all 17 cases; new population-SQL regression test (py+cpp); master gate 2832/2832"
+    },
+    {
+      "id": "QA-004",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 STU4 Appendix B 10.x (fetched this session) \u00a710.5 Except / \u00a710.14 Intersect / \u00a710.13 IndexOf",
+      "evidence": "`Patient.name.given except {'Jim'}`, `intersect {...}`, `IndexOf(Patient.name.given,'Jim')` -> BinderException 'UNNEST() for correlated expressions is not supported yet' (list macros expand to correlated unnest subqueries against the retrieval subquery). Reproducer .temp/qa/cql18_skeptic2/probe4.py (patient p1, name.given=[Jim,Peter]+[Jim]).",
+      "root_cause": "Dynamic multi-valued FHIR property operands lower to scalar fhirpath_text (first-node truncation); list operators compared/typed the wrong shape.",
+      "resolution": "Centralized _promote_fhirpath_text_list() in translator/expressions/_utils.py applied across list-macro helpers, Equivalent dispatch, Contains fallthrough, Exists fhirpath_bool branch, Distinct fallback, IndexOf dispatch, and new flatten pre-translate.",
+      "verified_in": "probe4 all 17 cases; new population-SQL regression test (py+cpp); master gate 2832/2832"
+    },
+    {
+      "id": "QA-005",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 STU4 Appendix B 10.x (fetched this session) \u00a710.10 Includes / \u00a710.11 Included In",
+      "evidence": "`Patient.name.given includes {'Jim'}` and `{'Jim'} included in Patient.name.given` -> BinderException 'Cannot mix values of type VARCHAR and NULL[] in COALESCE'. Reproducer .temp/qa/cql18_skeptic2/probe4.py (patient p1, name.given=[Jim,Peter]+[Jim]).",
+      "root_cause": "Dynamic multi-valued FHIR property operands lower to scalar fhirpath_text (first-node truncation); list operators compared/typed the wrong shape.",
+      "resolution": "Centralized _promote_fhirpath_text_list() in translator/expressions/_utils.py applied across list-macro helpers, Equivalent dispatch, Contains fallthrough, Exists fhirpath_bool branch, Distinct fallback, IndexOf dispatch, and new flatten pre-translate.",
+      "verified_in": "probe4 all 17 cases; new population-SQL regression test (py+cpp); master gate 2832/2832"
+    },
+    {
+      "id": "QA-006",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 STU4 Appendix B 10.x (fetched this session) \u00a710.7 Flatten",
+      "evidence": "`Count(flatten { Patient.name.given })` -> BinderException flatten(VARCHAR[]): list-literal wrapping of a dynamic list loses the nesting level. Reproducer .temp/qa/cql18_skeptic2/probe4.py (patient p1, name.given=[Jim,Peter]+[Jim]).",
+      "root_cause": "Dynamic multi-valued FHIR property operands lower to scalar fhirpath_text (first-node truncation); list operators compared/typed the wrong shape.",
+      "resolution": "Centralized _promote_fhirpath_text_list() in translator/expressions/_utils.py applied across list-macro helpers, Equivalent dispatch, Contains fallthrough, Exists fhirpath_bool branch, Distinct fallback, IndexOf dispatch, and new flatten pre-translate.",
+      "verified_in": "probe4 all 17 cases; new population-SQL regression test (py+cpp); master gate 2832/2832"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "campaign": "maint/spec-comp sweep",
+  "chunk": {
+    "id": "FP-02",
+    "spec": "FHIRPath 2018Sep",
+    "sections": [
+      "\u00a74.2 Operators",
+      "\u00a74.3 Function Invocations",
+      "\u00a74.4 Null and Empty (Propagation)",
+      "\u00a74.5 Singleton Evaluation of Collections"
+    ],
+    "items": [
+      "Operator semantics",
+      "Function invocation syntax",
+      "Null propagation in expressions",
+      "Empty collection handling",
+      "Singleton evaluation rules"
+    ]
+  },
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 1,
+  "phase": "COMPLETE",
+  "iteration": 1,
+  "qa_personality": "SKEPTIC",
+  "max_iterations": 3,
+  "fresh_start": true,
+  "phase_transitions": {
+    "chunk_started": "2026-10-02T03:27:45Z",
+    "skeptic_started": "2026-10-02T03:27:45Z",
+    "skeptic_completed": "2026-10-02T03:30:39Z"
+  },
+  "issues": [],
+  "exit_reason": "skeptic_complete_clean_0_issues"
+}

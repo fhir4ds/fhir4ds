@@ -1,0 +1,43 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-13: CQL \u2014 Date/Time Operators Part 1. Test these items: Add (left DateTime, right Quantity), After precision of, Before precision of, Date(year, month, day), DateTime(year, month, day, ...), Component From precision, Difference in precision between, Duration in precision between. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 STU4 \u00a78.7 Difference: 'For calculations involving weeks, Sunday is considered to be the first day of the week for the purposes of determining the number of boundaries crossed.'",
+      "evidence": "difference in weeks between @2024-01-04 and @2024-01-10 returns 0 (both py and cpp engines); spec requires 1 (Sunday 2024-01-07 boundary crossed). Implementation computes truncated day-span/7 (duration semantics) instead of counting Sunday boundaries: _compute_difference week branch (fhir4ds/cql/duckdb/udf/datetime.py) returns int((e.date()-s.date()).days/7); C++ ComputeDifferenceBetweenValue (extensions/cql/src/cql_extension.cpp) returns diff_days/7. Same divergence for @2024-01-06 -> @2024-01-07 (spec 1, got 0). Cases where day-span is a multiple of 7 coincidentally agree.",
+      "root_cause": "Week difference in both engines used truncated day-span/7 (duration semantics) instead of counting Sunday-first-day week boundaries (CQL 1.5 \u00a78.7).",
+      "resolution": "Python _compute_difference week branch now uses the Sunday-based week index (ordinal // 7, ordinal 7 = 0001-01-07 Sunday); C++ ComputeDifferenceBetweenValue uses (jdn + 1) / 7 with Julian Day Numbers (JDN 0 = Monday). Extension rebuilt and deployed md5 be8c0ba575df910c4e01f8459a47b32a to the repo bundle. Regression test added in test_datetime_part1_parity.py (8 week cases).",
+      "verified_in": "test_datetime_part1_parity.py::test_cql_datetime_part1_week_difference_and_date_unit_restriction (both engines); full conformance run_all 2832/2832 (ViewDef 144, FHIRPath 935, CQL 1706, DQM 47); pytest fhir4ds/cql 5754 passed / 9 skipped."
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 STU4 \u00a78.1 Add: 'For Date values, the quantity unit must be one of: years, months, weeks, or days.' (\u00a78.15 Subtract same restriction.)",
+      "evidence": "@2024-01-01 + 1 hour returns '2024-01-01' unchanged on both engines (also - 1 hour). Spec unit restriction is violated via a silent fallback: dateAddQuantity converts the finer quantity to the input precision with truncation (1 hour -> 0 days), so an invalid unit silently no-ops instead of returning null. Non-temporal units (1 'cm') correctly return null.",
+      "root_cause": "dateAddQuantity converted finer-than-input quantities by truncating toward the input precision, so invalid sub-day units on Date values (no 'T' marker) silently no-opped instead of returning null (CQL 1.5 \u00a78.1/\u00a78.15 restrict Date quantity units to years/months/weeks/days).",
+      "resolution": "Python dateAddQuantity (covers dateSubtractQuantity via negation) and C++ DateAddQuantityFunc/DateSubtractQuantityFunc now return NULL for sub-day units (hour/minute/second/millisecond incl. UCUM aliases) on date-only values. Extension rebuilt/deployed. 8 regression expectations added (nulls + still-works guards).",
+      "verified_in": "test_datetime_part1_parity.py::test_cql_datetime_part1_week_difference_and_date_unit_restriction (both engines); full conformance run_all 2832/2832 (ViewDef 144, FHIRPath 935, CQL 1706, DQM 47); pytest fhir4ds/cql 5754 passed / 9 skipped."
+    }
+  ]
+}

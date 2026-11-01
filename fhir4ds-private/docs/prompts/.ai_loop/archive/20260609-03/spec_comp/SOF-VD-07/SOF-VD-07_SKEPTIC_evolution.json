@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-07: SQL-on-FHIR ViewDefinition \u2014 ViewDefinition.select.repeat. Test these items: repeat 0..* FHIRPath expressions for recursive traversal, view runner recursively follows each path to any depth, multiple repeat paths are combined using union semantics, duplicates and ordering behavior for recursive results, cycle/depth guard behavior under malformed or cyclic structures, columns are evaluated against each repeated node context. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "SOFVD07-SKEPTIC-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR ViewDefinition.select.repeat is 0..* string and repeat recursively evaluates each FHIRPath path; FHIR JSON array properties should be omitted when empty unless explicitly allowed, so present repeat: [] is invalid input and must not behave like repeat absence.",
+      "evidence": "Fresh QA probe showed parse_view_definition({select:[{repeat: [], column:[...]}]}) accepted repeat=[]; SQLGenerator emitted SQL without fhirpath_repeat; direct ViewDefinition(... Select(repeat=[])).to_dict() emitted repeat: [] and generator also omitted repeat traversal. This converts invalid present-empty repeat into default $this/root column evaluation.",
+      "root_cause": "validate_repeat_paths() accepted an empty list, and downstream SQL generation used truthiness checks (`if select.repeat`) so present repeat: [] bypassed fhirpath_repeat and behaved like an absent repeat directive.",
+      "resolution": "Require present Select.repeat arrays to contain at least one non-empty string in the shared validate_repeat_paths() helper, covering parser, ViewDefinition.from_dict(), Select.to_dict(), and direct SQLGenerator preflight. Added parser, serializer, generator, and fresh native/fallback execution probe coverage.",
+      "verified_in": "Architect audit: central validate_repeat_paths() fix verified across parser/from_dict/to_dict/direct generator boundaries; fresh probe PASS; focused parser/generator/TestRepeat pytest 259 passed; ViewDefinition pytest 952 passed; ViewDefinition conformance 134/134; full conformance 2822/2822."
+    }
+  ]
+}

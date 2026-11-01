@@ -1,0 +1,79 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-10: CQL - Arithmetic Operators Part 1. Test these items: Abs, Add, Ceiling, Divide, Floor, Exp, HighBoundary, Log, Ln, LowBoundary. HISTORIAN should focus on official XML history, CQL version semantics, prior edge-case patterns in arithmetic and Quantity/date interactions, public helper behavior, native-loaded versus forced Python fallback parity, generated SQL execution in scalar and population-style contexts, and regressions against already-passing conformance.\n\nThis is a fresh per-chunk/per-personality workflow. Start from scratch for this chunk/personality and do not inspect or rely on any archived prior workflow outputs under .ai_loop/spec_comp/**, including CQL-10 artifacts and older consolidated-run artifacts. Current source code, active state files, GLOBAL_RULES.md, GLOBAL_KNOWLEDGE.md, AGENTS.md, and current tests may be inspected. Maintain 100% conformance and no pytest regressions.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-CQL10-HISTORIAN-001",
+      "title": "Boundary helper time strings with timezone suffixes were malformed",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "scope": "CQL HighBoundary/LowBoundary public DuckDB helper surfaces, Python fallback, and native C++ browser surface",
+      "finding": "HighBoundary/LowBoundary accepted time strings from public helper and conversion surfaces but appended filled components after the timezone suffix or misparsed negative offsets, producing malformed values such as T10:30Z:59.999 and T10:-0--5:T0.",
+      "resolution": "Python fallback and native C++ boundary helpers now split and preserve Z/+HH:MM/-HH:MM suffixes while filling time components. The CQL translator still rejects @T...Z/+/- literals because the official XML treats those as invalid time literals.",
+      "verification": [
+        "python3 -m pytest fhir4ds/cql/duckdb/tests/integration/test_arithmetic_operator_parity.py::test_cql_time_boundary_timezone_strings_match_cpp_and_python -q",
+        "python3 -m pytest fhir4ds/cql/duckdb/tests/integration/test_wasm_cpp_surface.py::test_cql_browser_interval_and_boundary_udfs_run_without_python_fallback -q",
+        "python3 conformance/scripts/run_cql.py"
+      ]
+    },
+    {
+      "id": "QA-CQL10-HISTORIAN-002",
+      "title": "Python fallback boundary helpers treated numeric strings as temporal text",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "scope": "CQL HighBoundary/LowBoundary Python fallback parity with native C++",
+      "finding": "HighBoundary('1.587', 8) and LowBoundary('1.587', 8) in forced Python fallback went through temporal parsing, returning NULL or date-shaped output instead of decimal boundary strings. A naive numeric-string fix would regress official year-only date precision cases such as HighBoundary(@2014, 6).",
+      "resolution": "Python fallback boundary helpers now route numeric strings through decimal boundary logic while preserving four-digit year-only date strings as temporal year precision.",
+      "verification": [
+        "python3 -m pytest fhir4ds/cql/duckdb/tests/integration/test_arithmetic_operator_parity.py::test_cql_time_boundary_timezone_strings_match_cpp_and_python -q",
+        "python3 conformance/scripts/run_cql.py",
+        "python3 conformance/scripts/run_all.py"
+      ]
+    }
+  ],
+  "verification": [
+    {
+      "command": "cd extensions/cql && cmake --build build/release --config Release -j 8",
+      "result": "passed"
+    },
+    {
+      "command": "cp extensions/cql/build/release/extension/cql/cql.duckdb_extension fhir4ds/cql/duckdb/extensions/cql.duckdb_extension",
+      "result": "passed"
+    },
+    {
+      "command": "cd extensions/cql && ./build/release/test/unittest \"*cql*\"",
+      "result": "passed, 638 assertions"
+    },
+    {
+      "command": "python3 -m pytest fhir4ds/cql/duckdb/tests/integration/test_arithmetic_operator_parity.py fhir4ds/cql/duckdb/tests/integration/test_arithmetic_part2_parity.py fhir4ds/cql/duckdb/tests/integration/test_datetime_part2_parity.py fhir4ds/cql/duckdb/tests/integration/test_wasm_cpp_surface.py -q",
+      "result": "passed, 15 tests"
+    },
+    {
+      "command": "python3 conformance/scripts/run_cql.py",
+      "result": "passed, 1706/1706"
+    },
+    {
+      "command": "python3 conformance/scripts/run_all.py",
+      "result": "passed, ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706, DQM 47/47, overall 2822/2822"
+    },
+    {
+      "command": "python3 -m pytest fhir4ds -q",
+      "result": "passed, 7171 passed, 5 skipped, 9 warnings"
+    }
+  ]
+}

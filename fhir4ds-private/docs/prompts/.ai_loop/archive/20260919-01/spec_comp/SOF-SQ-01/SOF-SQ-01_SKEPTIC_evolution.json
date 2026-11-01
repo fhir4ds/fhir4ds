@@ -1,0 +1,87 @@
+{
+  "phase": null,
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-SQ-01: SQL-on-FHIR Analytics Layer \u2014 SQLQuery Library profile, SQLView Library profile, sql-must-be-sql-expressions invariant. Test these items: Library.meta.profile dispatches between SQLQuery (https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery) and SQLView (https://sql-on-fhir.org/StructureDefinition/SQLView); both declared = rejected as ambiguous, Library.type.coding must include code 'sql-query' (LibraryTypesCodes), content 1..* cardinality enforced; each entry has contentType (non-empty string) and data (base64-encoded UTF-8 SQL), sql-must-be-sql-expressions invariant: every content[].contentType starts with 'application/sql', relatedArtifact entries: type='depends-on', label satisfies sql-name, resource is non-empty canonical, SQLView forbids parameter (0..0); SQLQuery allows 1..* with name (non-empty), type (FHIR primitive), use='in', rejection paths: missing profile, wrong profile, missing content, bad base64, wrong type coding \u2014 all raise typed SQLQueryParseError, extra_fields bag preserves unknown Library keys verbatim through parse_library / to_dict roundtrip, Public API: parse_library, parse_sqlquery (strict), parse_sqlview (strict) return typed SQLQuery or SQLView dataclass. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "sql-on-fhir-v2 sushi-config.yaml canonical=http://hl7.org/fhir/uv/sql-on-fhir; input/fsh/profiles/library-profiles.fsh (upstream/sqlquery-view-sources)",
+      "evidence": "parse_library rejects Libraries declaring official canonicals http(s)://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery|SQLView (SQLQueryParseError 'does not declare a profile'). Precedent: fhir4ds/viewdef/metadata.py accepts both sql-on-fhir.org/ig and hl7.org/fhir/uv forms for Shareable/Tabular profiles.",
+      "root_cause": "see qa_handoff/engineer_handoff",
+      "resolution": "fixed in fhir4ds/sqlquery (types/parser/validator); regression tests in tests/test_sof_sq01_compliance.py",
+      "verified_in": "Iteration 1 (master gate 2832/2832 + sqlquery 55/55)"
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "library-profiles.fsh: 'Profile: SQLView ... * type = LibraryTypesCodes#sql-view'; terminology.fsh defines #sql-view code",
+      "evidence": "SQLView Library with type.coding code 'sql-view' (spec-mandated) is rejected: parser _require_type_coding demands 'sql-query' for BOTH profiles; conversely a Library typed sql-query but profiled SQLView is accepted.",
+      "root_cause": "see qa_handoff/engineer_handoff",
+      "resolution": "fixed in fhir4ds/sqlquery (types/parser/validator); regression tests in tests/test_sof_sq01_compliance.py",
+      "verified_in": "Iteration 1 (master gate 2832/2832 + sqlquery 55/55)"
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "library-profiles.fsh: content.data ^short 'SQL query (base64-encoded)'; FHIR base64Binary type",
+      "evidence": "base64.b64decode called without validate=True: content.data='%%%%' (no base64 chars) decodes to empty string and PASSES parse as valid SQLView/SQLQuery with empty SQL. Non-base64 garbage silently discarded.",
+      "root_cause": "see qa_handoff/engineer_handoff",
+      "resolution": "fixed in fhir4ds/sqlquery (types/parser/validator); regression tests in tests/test_sof_sq01_compliance.py",
+      "verified_in": "Iteration 1 (master gate 2832/2832 + sqlquery 55/55)"
+    },
+    {
+      "id": "QA-004",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "library-profiles.fsh: '* parameter.use 1..1 MS' (SQLQuery profile)",
+      "evidence": "_parse_parameter defaults missing 'use' to 'in' (entry.get('use','in')) instead of rejecting; a parameter without use parses successfully though cardinality is 1..1.",
+      "root_cause": "see qa_handoff/engineer_handoff",
+      "resolution": "fixed in fhir4ds/sqlquery (types/parser/validator); regression tests in tests/test_sof_sq01_compliance.py",
+      "verified_in": "Iteration 1 (master gate 2832/2832 + sqlquery 55/55)"
+    },
+    {
+      "id": "QA-005",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "models.fsh Invariant sql-name: ^[A-Za-z][A-Za-z0-9_]*$ (ASCII only)",
+      "evidence": "validator.py uses ra.label[0].isalpha() which accepts unicode letters: label '\u00e9foo' passes validation though it violates sql-name regex; also digits/underscore remainder unchecked.",
+      "root_cause": "see qa_handoff/engineer_handoff",
+      "resolution": "fixed in fhir4ds/sqlquery (types/parser/validator); regression tests in tests/test_sof_sq01_compliance.py",
+      "verified_in": "Iteration 1 (master gate 2832/2832 + sqlquery 55/55)"
+    },
+    {
+      "id": "QA-006",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "MISSING_API",
+      "spec_citation": "Chunk mandate SOF-SQ-01: 'extra_fields bag preserves unknown Library keys verbatim through parse_library / to_dict roundtrip'",
+      "evidence": "SQLQuery/SQLView dataclasses have no to_dict; extra_fields is preserved at parse but cannot roundtrip back to Library JSON. Mandate item unimplemented.",
+      "root_cause": "see qa_handoff/engineer_handoff",
+      "resolution": "fixed in fhir4ds/sqlquery (types/parser/validator); regression tests in tests/test_sof_sq01_compliance.py",
+      "verified_in": "Iteration 1 (master gate 2832/2832 + sqlquery 55/55)"
+    }
+  ]
+}

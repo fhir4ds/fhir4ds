@@ -1,0 +1,224 @@
+{
+  "phase": "DOCS_AUDIT",
+  "iteration": 21,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution",
+    "code_review",
+    "pre_release",
+    "docs_audit",
+    "scribe"
+  ],
+  "pipeline_step": 5,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 21,
+    "max_iterations": 30,
+    "exhaustive_mode": false,
+    "target_version": "0.0.12",
+    "qa_schedule": [
+      {
+        "iteration": 1,
+        "domain": 6,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 2,
+        "domain": 6,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 3,
+        "domain": 6,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 4,
+        "domain": 7,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 5,
+        "domain": 7,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 6,
+        "domain": 7,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 7,
+        "domain": 8,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 8,
+        "domain": 8,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 9,
+        "domain": 8,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 10,
+        "domain": 9,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 11,
+        "domain": 9,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 12,
+        "domain": 9,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 13,
+        "domain": 10,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 14,
+        "domain": 10,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 15,
+        "domain": 10,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 16,
+        "domain": 11,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 17,
+        "domain": 11,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 18,
+        "domain": 11,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 19,
+        "domain": 12,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 20,
+        "domain": 12,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 21,
+        "domain": 12,
+        "personality": "EXPLORER"
+      }
+    ],
+    "focus_domains": [
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "specialist_domain_override": 12,
+    "benchmark_commands": null,
+    "benchmark_baseline_path": null,
+    "feature_plan_path": null,
+    "bug_fix_target": null,
+    "bug_fix_validation": null,
+    "notes": "Human mandate (USER_DIRECTIVES.md): prepare and ship fhir4ds-v2 0.0.12. Evolution QA campaign over domains 6-10 (infrastructure) plus campaign tracks 11 (API surface contract testing) and 12 (medterm4ds integration), each domain run exactly three times: SKEPTIC -> HISTORIAN -> EXPLORER, in domain order 6,7,8,9,10,11,12 (21 iterations minimum, max 30). Then code_review -> pre_release -> docs_audit -> scribe. Discovery: pyproject.toml at repo root /mnt/d/fhir4ds is 0.0.11 (Release Engineer bumps to 0.0.12); git tree carries ~165 modified + 16 untracked files = the uncommitted 58-chunk SQL-on-FHIR/CQL/FHIRPath spec-compliance campaign and medterm4ds 0.0.2 integration this release ships; recent commits are the viewdef/sqlquery spec-compliance work. Key campaign constraints: (1) non-regression hard gate PYTHONPATH=/mnt/d/fhir4ds conformance/scripts/run_all.py -> 2832/2832 (ViewDef 144, FHIRPath 935, CQL 1706, DQM 47); (2) domain 9 first action: root-cause and fix the known failing test fhir4ds/cql/tests/unit/test_audit_mode.py::TestMinMaxAttribution (translator emits no arg_min/arg_max for query-level Min/Max attribution, logged MT-008, unrelated to terminology); (3) test medterm against installed 0.0.2, do not reinstall; env-gated live HTTP tests (MEDTERM4DS_TEST_URL) skip-note without sidecar; (4) fix root causes only - no workaround shims or hint wrappers; single-writer discipline on the large uncommitted tree; no commits at any step (Joel commits); validation per PROC_VALIDATION.md. Release work touches package metadata, dependencies (medterm4ds >=0.0.2,<0.0.3 bound), public APIs, wheel contents, extension binaries, and WASM wheel artifacts, so a Release Engineer artifact gate is required before final completion; do not run it during initialization."
+  },
+  "issues": [
+    {
+      "id": "QA-009",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "summary": "Domain 8 fix/finding",
+      "verified_in": "iter3: test_fhir_loader.py 76/76; loader+sources 438/2; gate 2832/2832"
+    },
+    {
+      "id": "QA-010",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "summary": "Domain 8 fix/finding",
+      "verified_in": "iter3: test_fhir_loader.py 76/76; loader+sources 438/2; gate 2832/2832"
+    },
+    {
+      "id": "QA-011",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "summary": "Domain 8 fix/finding",
+      "verified_in": "iter3: test_fhir_loader.py 76/76; loader+sources 438/2; gate 2832/2832"
+    },
+    {
+      "id": "QA-012",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "summary": "Domain 8 fix/finding",
+      "verified_in": "iter3: test_fhir_loader.py 76/76; loader+sources 438/2; gate 2832/2832"
+    },
+    {
+      "id": "QA-013",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "summary": "Domain 8 fix/finding",
+      "verified_in": "iter4: test_fhir_loader.py (bulk + fallback + NULL-handling tests); 516 passed/2 skipped; gate 2832/2832"
+    },
+    {
+      "id": "QA-014",
+      "severity": "MEDIUM",
+      "status": "INTENDED",
+      "summary": "Domain 8 fix/finding",
+      "verified_in": "iter7: test_udf_registration_guard.py (3 tests); case-boolean integration; gate 2832/2832"
+    },
+    {
+      "id": "QA-015",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "summary": "Domain 8 fix/finding",
+      "verified_in": "iter9: test_udf_registration_guard.py; cql unit+integration 1863 passed (only documented MT-008 pre-existing failures); gate 2832/2832"
+    },
+    {
+      "id": "QA-016",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "summary": "Domain 8 fix/finding",
+      "verified_in": "iter9: same validation run as QA-015"
+    },
+    {
+      "id": "QA-017",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "summary": "MT-008 root fix",
+      "verified_in": "iter10: test_audit_mode.py 30/30 (incl. TestMinMaxAttribution + new e2e TestMinMaxQuantityEvidenceEndToEnd); cql unit+integration 1865 passed/0 failed (first fully-green run \u2014 the 2 documented failures fixed); gate 2832/2832"
+    },
+    {
+      "id": "QA-018",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "summary": "Domain 9 audit row-contract fix",
+      "verified_in": "iter11: TestAuditEvidenceRowContract; audit 31/31; cql 1867/0; gate 2832/2832"
+    },
+    {
+      "id": "QA-019",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "summary": "Domain 11 API guard",
+      "verified_in": "iter17: test_parameters_type_guard; 58 passed; gate 2832/2832"
+    }
+  ]
+}

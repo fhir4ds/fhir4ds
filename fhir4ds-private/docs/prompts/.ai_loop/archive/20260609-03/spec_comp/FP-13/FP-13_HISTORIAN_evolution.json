@@ -1,0 +1,43 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-13: FHIRPath \u2014 \u00a76.1 Equality. Test these items: = (Equals) incl. Quantity and Date/Time equality, ~ (Equivalent) incl. Quantity, Date/Time, String equivalence, != (Not Equals), !~ (Not Equivalent). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a76.1.1 Equality, Quantity Equality, Date/Time Equality; \u00a76.1.3 Not Equals",
+      "evidence": "Fresh probe `.temp/qa/fp13_historian_probe.py` showed native C++ returns false/true for ordered multi-item equality/inequality when a paired singleton comparison is empty. Repro: `(@2012 | @2013) = (@2012-01 | @2013)` native `[false]`/False vs fallback empty/NULL; `(1 'cm' | 2 'cm') = (1 'g' | 2 'cm')` native `[false]`/False vs fallback empty/NULL. Expected empty because Date/Time precision mismatch and incompatible Quantity dimensions make the paired singleton equality indeterminate; `!=` is `(=).not()` and also empty.",
+      "root_cause": "Native ordered multi-item equality reused Boolean-only fpValuesEqual(), which cannot represent singleton equality returning empty for Date/Time precision mismatch, timezone indeterminacy, incompatible Quantity dimensions, or other incompatible singleton pairs.",
+      "resolution": "Added native tri-state singleton equality evaluation for ordered multi-item `=`/`!=`; it returns empty for indeterminate paired comparisons and only collapses to Boolean for true/false pairs. Added parity and native sqllogictest regressions.",
+      "verified_in": "`.temp/qa/fp13_historian_probe_after_fix.log` 47/47 clean; `pytest test_equality_parity.py` 8 passed; native sqllogictest 548 assertions; full conformance 2822/2822."
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a76.1.2 Equivalent and Complex Type Equivalence",
+      "evidence": "Fresh probe `.temp/qa/fp13_historian_probe.py` showed forced Python fallback returns empty/NULL for `objA ~ objB` and `objA !~ objB` when equivalent complex objects contain list-valued child properties with complex elements in different order; native returns true/false. stderr shows `TypeError: '<' not supported between instances of 'dict' and 'dict'`. Expected complex equivalence to recurse through child equivalence and compare multi-item collections order-independently.",
+      "root_cause": "Forced Python fallback complex equivalence sorted child lists directly; Python cannot order dict elements, so recursive equivalence over list-valued complex child properties raised TypeError and public UDFs returned empty/NULL.",
+      "resolution": "Replaced direct sorting with recursive order-independent matching for list-valued complex children and routed numeric child comparison through existing FHIRPath equivalence rounding. Added parity coverage for nested complex child lists.",
+      "verified_in": "`.temp/qa/fp13_historian_probe_after_fix.log` 47/47 clean; `pytest test_equality_parity.py` 8 passed; native sqllogictest 548 assertions; full conformance 2822/2822."
+    }
+  ]
+}

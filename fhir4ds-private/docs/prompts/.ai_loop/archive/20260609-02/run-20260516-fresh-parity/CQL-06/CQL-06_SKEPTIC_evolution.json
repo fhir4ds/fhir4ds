@@ -1,0 +1,32 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-06: CQL - Type Operators - Conversion Checks. Test items: CanConvertQuantity, ConvertQuantity, ConvertsToBoolean, ConvertsToDate, ConvertsToDateTime, ConvertsToDecimal, ConvertsToLong, ConvertsToInteger, ConvertsToQuantity, ConvertsToRatio, ConvertsToString, ConvertsToTime. Fresh run; prior workflow outputs intentionally not consulted."
+  },
+  "issues": [
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "API_CONTRACT",
+      "spec_citation": "CQL v1.5.3 conversion-check operators",
+      "evidence": "Forced Python fallback through fhir4ds.core.register lacked ConvertsToBoolean/ConvertsToInteger/ConvertsToDecimal while native C++ exposed them.",
+      "root_cause": "fhir4ds.core.register_cql omitted registerConversionCheckUdfs from its Python fallback registration group.",
+      "resolution": "Registered the conversion-check UDF group in fhir4ds.core.register_cql and added forced-backend public-core parity coverage.",
+      "verified_in": "forced backend matrix; pytest fhir4ds/; conformance run_all.py"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-21: CQL \u2014 Clinical Operators. Test these items: AgeInYears|Months|Weeks|Days|Hours|Minutes|Seconds(), AgeInYearsAt|MonthsAt|...At(asOf), CalculateAgeInYears|Months|...InYears(birthDate), CalculateAgeInYearsAt|MonthsAt|...At(birthDate, asOf), Equal (Code/Concept), Equivalent (Code/Concept), In (Codesystem), ExpandValueSet(ValueSet), In (Valueset). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "spec_citation": "CQL 1.5 Appendix B (Age/CalculateAgeAt are Integer-typed duration calculations) + In (list) membership uses equality semantics; a crisp age of 36 in {9,36} must be true.",
+      "evidence": "Population define `AgeInYearsAt(@2026-05-14) in {9,36}` with birthDate '1990-05-14' (crisp age 36) returns False. Lowering emits CQLListContainsEq([9,36], CalculateAgeInYearsAt(...)::VARCHAR); DuckDB binds but INTEGER literals vs VARCHAR age never match \u2014 silent wrong result on both py and native engines. Root cause: SKEPTIC uncertainty fix changed age operands to VARCHAR; in-list lowering was not updated (comparisons and interval-in were).",
+      "resolution": "Fixed in working tree (dual-engine + native rebuild md5 da6c07adb08ef224d0621b9d222b6bae); regression test test_cql_clinical_age_in_list_negate_minmax_uncertainty_matches_cpp_registration added."
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "spec_citation": "CQL 1.5 Min/Max list aggregates over Integer elements return numeric min/max.",
+      "evidence": "Min({AgeInYearsAt(@2026-05-14), AgeInYearsAt(@2017-05-14)}) with crisp ages {36,8} returns 27 (must be 8); direct list_min/list_max over VARCHAR ages {36,9} return 36 and 9 (lexicographic). Both engines identically wrong \u2014 silent incorrect results.",
+      "resolution": "Fixed in working tree (dual-engine + native rebuild md5 da6c07adb08ef224d0621b9d222b6bae); regression test test_cql_clinical_age_in_list_negate_minmax_uncertainty_matches_cpp_registration added."
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "spec_citation": "CQL 1.5 Negate (-Integer) and binary Max with implicit numeric conversions.",
+      "evidence": "`- AgeInYearsAt(@2026-05-14)` -> BinderException \"No function matches '-(VARCHAR)'\"; `Max(AgeInYearsAt(@2026-05-14), 30)` -> BinderException \"Cannot combine VARCHAR and INTEGER_LITERAL\". Valid CQL translates to non-binding SQL on both engines.",
+      "resolution": "Fixed in working tree (dual-engine + native rebuild md5 da6c07adb08ef224d0621b9d222b6bae); regression test test_cql_clinical_age_in_list_negate_minmax_uncertainty_matches_cpp_registration added."
+    },
+    {
+      "id": "QA-004",
+      "severity": "MEDIUM",
+      "status": "DEFERRED",
+      "spec_citation": "CQL 1.5 Logical Operators (Boolean operands).",
+      "evidence": "Pre-existing (bisect-verified vs db1e4164 in prior SKEPTIC launch): `define F: Patient.active; define G: F and true` -> TranslationError (CQL-19 dynamic-list marking vs CQL-04 boolean guard on single-valued Boolean properties). Not on the CQL-21 path; deferred to list/property-typing owner. Suggested fix: gate dynamic-list marking on FHIR max-cardinality > 1."
+    },
+    {
+      "id": "QA-005",
+      "severity": "LOW",
+      "status": "DEFERRED",
+      "spec_citation": "CQL 1.5 In (list) equality over uncertainty-capable elements.",
+      "evidence": "Architect audit: uncertainty-capable elements inside DYNAMIC (non-literal) lists still lower to CQLListContainsEq; interval-JSON values would not match. No known real-world CQL pattern (age is per-patient scalar); literal-list path fixed this launch. Documented in AGENTS.md."
+    }
+  ]
+}

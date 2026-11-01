@@ -1,0 +1,57 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CQL-12 EXPLORER completed: 4 issues found, fixed, and verified; 0 open.",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-12: CQL - String Operators. Test these items: Combine, Concatenate, EndsWith, Indexer, LastPositionOf, Length, Lower, Matches, PositionOf, ReplaceMatches, Split, SplitOnMatches, StartsWith, Substring, Upper. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-CQL12-EXPLORER-001",
+      "status": "RESOLVED",
+      "severity": "MEDIUM",
+      "title": "CombineSep used DuckDB's comma default for null separators",
+      "evidence": "Combine({'a','b'}, null) returned 'a,b' because array_to_string(list, NULL) uses a comma separator in DuckDB. CQL Combine with a null separator should use the default empty separator.",
+      "fix": "Updated CombineSep to pass COALESCE(sep, '') to array_to_string while preserving NULL for null/all-null lists.",
+      "verification": "Covered by translated and direct no-Python/browser-style string parity tests."
+    },
+    {
+      "id": "QA-CQL12-EXPLORER-002",
+      "status": "RESOLVED",
+      "severity": "HIGH",
+      "title": "Derived string indexers lowered through list extraction",
+      "evidence": "Expressions such as Combine({'a','b'})[2], ReplaceMatches('abc','b','x')[3], and Last(Split('ab/cd','/'))[2] were treated as list indexers and returned empty strings at the boundary instead of NULL.",
+      "fix": "Expanded the string-index source classifier to recognize Combine, ReplaceMatches, Replace, and Last over Split/SplitOnMatches or string lists, and route those sources through the CQL Indexer macro.",
+      "verification": "Covered by focused string operator parity tests across forced Python fallback, native-loaded DuckDB, and no-Python/browser-style direct SQL surfaces."
+    },
+    {
+      "id": "QA-CQL12-EXPLORER-003",
+      "status": "RESOLVED",
+      "severity": "HIGH",
+      "title": "CQL ampersand concatenation incorrectly null-propagated",
+      "evidence": "Translated null & 'b', 'a' & null, and null & null lowered to SQL || and returned NULL. CQL & treats null operands as empty strings.",
+      "fix": "Lowered operator '&' to COALESCE(left, '') || COALESCE(right, '') while leaving Concatenate as the null-propagating operator.",
+      "verification": "Covered by translated parity tests on forced Python fallback and native-loaded DuckDB registrations."
+    },
+    {
+      "id": "QA-CQL12-EXPLORER-004",
+      "status": "RESOLVED",
+      "severity": "HIGH",
+      "title": "Regex-backed string operators lacked advanced regex parity across public surfaces",
+      "evidence": "Direct public calls such as Matches('aa', '(.)\\1'), Matches('ab', '(?=b)'), ReplaceMatches('book', '(.)\\1', 'X'), and SplitOnMatches('ab', '(?=b)') failed or diverged between native C++ and Python fallback paths.",
+      "fix": "Added cqlRegexMatches, cqlRegexReplaceMatches, and cqlRegexSplitOnMatches helper UDFs in Python fallback and native C++ code; string macros now call those helpers to preserve single-line mode, backreferences, lookahead, global replacement, CQL replacement capture semantics, and ReDoS guarding.",
+      "verification": "Covered by focused string parity tests, no-Python/browser-style direct SQL probes, native C++ CQL unittest, official CQL conformance, full conformance, and full fhir4ds pytest."
+    }
+  ]
+}

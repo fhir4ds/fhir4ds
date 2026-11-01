@@ -1,0 +1,35 @@
+{
+  "phase": "COMPLETE",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-11: SQL-on-FHIR ViewDefinition \u2014 View Runner, Examples. Test these items: execute a ViewDefinition and return tabular rows, simple Patient and Observation example views, unrolling arrays such as Patient.address into row sets, filtered Observation/resource views, column type coercion into DuckDB result columns, official SQL-on-FHIR v2 spec_tests parity at 144 tests (FHIR/sql-on-fhir.js snapshot as of 2026-08-11; re-sync per fhir4ds-private/docs/release-checklist.md before each release), parser, generator, and DuckDB execution agree for supported examples. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "FIXED",
+      "spec_citation": "SQL-on-FHIR v2 runner doctrine + GLOBAL_RULES dual-engine lockstep: every FHIRPath semantic must match between native and Python fallback; a valid deeply-nested resource result must not silently diverge to empty",
+      "evidence": "fhirpath_scalar('extension' on 300-deep chained extensions): native returns full JSON; fallback returned [] because orjson.dumps raises TypeError('Recursion limit reached') at ~127 nesting levels and the row-resilient except TypeError swallowed it. Fix: _json_serialize falls back to existing _json_serialize_iterative. Regression: fhir4ds/fhirpath/duckdb/tests/integration/test_deep_json_serialization_parity.py (2 passed). Probe: .temp/qa/sof_vd11_explorer/probe3.py"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "FIXED",
+      "spec_citation": "PROC_VALIDATION master-gate reliability; AGENTS.md WSL/drvfs environment caveats; REV-009 single-retry doctrine",
+      "evidence": "run_all.py DQM child intermittently crashed at `import argparse` (FileNotFoundError from FileFinder on relative 'conformance/scripts'); os.getcwd() itself observed failing in the parent under heavy drvfs IO. Summary then read a STALE dqm_report.json (no log_run entry). Fix: absolute script paths + one bounded retry. Verified 2 clean 2832/2832 runs with fresh DQM log entries."
+    }
+  ]
+}

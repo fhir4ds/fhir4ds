@@ -1,0 +1,209 @@
+{
+  "phase": "SCRIBE",
+  "iteration": 30,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution",
+    "code_review",
+    "pre_release",
+    "docs_audit",
+    "benchmarks",
+    "scribe"
+  ],
+  "pipeline_step": 6,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 30,
+    "max_iterations": 45,
+    "exhaustive_mode": false,
+    "target_version": "0.0.9",
+    "qa_schedule": [
+      {
+        "iteration": 1,
+        "domain": 1,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 2,
+        "domain": 2,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 3,
+        "domain": 3,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 4,
+        "domain": 4,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 5,
+        "domain": 5,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 6,
+        "domain": 6,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 7,
+        "domain": 7,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 8,
+        "domain": 8,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 9,
+        "domain": 9,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 10,
+        "domain": 10,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 11,
+        "domain": 1,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 12,
+        "domain": 2,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 13,
+        "domain": 3,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 14,
+        "domain": 4,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 15,
+        "domain": 5,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 16,
+        "domain": 6,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 17,
+        "domain": 7,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 18,
+        "domain": 8,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 19,
+        "domain": 9,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 20,
+        "domain": 10,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 21,
+        "domain": 1,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 22,
+        "domain": 2,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 23,
+        "domain": 3,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 24,
+        "domain": 4,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 25,
+        "domain": 5,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 26,
+        "domain": 6,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 27,
+        "domain": 7,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 28,
+        "domain": 8,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 29,
+        "domain": 9,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 30,
+        "domain": 10,
+        "personality": "EXPLORER"
+      }
+    ],
+    "benchmark_commands": null,
+    "benchmark_baseline_path": null,
+    "feature_plan_path": null,
+    "bug_fix_target": null,
+    "bug_fix_validation": null,
+    "focus_domains": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "notes": "Human requests autonomous 0.0.9 release-preparation pipeline: evolution, code_review, pre_release, docs_audit, benchmarks, and scribe. USER_DIRECTIVES.md is the primary mandate and provides an exact 30-pass QA domain/personality schedule: domains 1-10 each run once as SKEPTIC, HISTORIAN, and EXPLORER. Discovery: pyproject.toml currently reports version 0.0.8 while the release target is 0.0.9, so version and public release surfaces require Release Engineer validation before final completion. Full git status was attempted but exceeded a 20 second timeout in this workspace; keep unrelated worktree changes isolated and use narrower status/diff checks during role execution. Benchmarks are a required first-class gate and must produce benchmark_report.md.",
+    "specialist_domain_override": 10
+  },
+  "issues": [
+    {
+      "id": "QA-009-D10-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "REGRESSION_RISK",
+      "spec_citation": "Repository AGENTS.md Release Version Consistency and USER_DIRECTIVES.md target_version 0.0.9",
+      "evidence": "Archived in ARCHIVE_LOG.md under Release 0.0.9 Domain 10.",
+      "root_cause": "Release target was advanced in USER_DIRECTIVES.md without corresponding package metadata, public __version__ constants, website/WASM version references, notebook snippets, or bundled browser wheel artifacts being updated from 0.0.8.",
+      "resolution": "Updated package and public version surfaces to 0.0.9, added 0.0.9 release notes, updated current notebook/WASM docs, built the 0.0.9 wheel, replaced the WASM demo public wheel, rebuilt web/wasm-demo, and refreshed web/website/static/wasm-app.",
+      "verified_in": "Release 0.0.9 iteration 10 remediation"
+    }
+  ],
+  "RETRY_QA": false,
+  "retry_note": null
+}

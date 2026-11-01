@@ -1,0 +1,33 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-18: CQL - List Operators Part 1. Test these items: Contains(list, element); Distinct(list); Equal (List); Equivalent (List); Except (List); Exists(list); Flatten(list); First(list); In(element, list); Includes(list); Included In (list); IndexOf(list, element); Intersect (List). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. Do not inspect or rely on archived prior workflow outputs as proof; use current source, specs, current tests, and fresh probes. When the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL Reference v1.5.3 Appendix B, List Operators and numeric equivalence.",
+      "evidence": "Tombstone: exact mixed Long/Decimal list comparison issue archived in ARCHIVE_LOG.md under CQL-18 EXPLORER.",
+      "root_cause": "DOUBLE precision collapse in list helper and scalar literal-list equivalence paths.",
+      "resolution": "Exact DECIMAL(38,8) comparison/rounding implemented for affected paths.",
+      "verified_in": "Iteration 1 architect validation: fresh three-surface probe passed; list cluster 54 passed; CqlListOperatorsTest 212 passed; conformance 2822/2822; full pytest 7213 passed, 5 skipped, 9 warnings."
+    }
+  ],
+  "RETRY_QA": false
+}

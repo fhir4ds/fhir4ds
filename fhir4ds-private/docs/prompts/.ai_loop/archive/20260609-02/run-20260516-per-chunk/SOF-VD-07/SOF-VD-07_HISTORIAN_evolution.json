@@ -1,0 +1,31 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "VERIFIED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-07: SQL-on-FHIR ViewDefinition \u2014 ViewDefinition.select.repeat. Test these items: repeat 0..* FHIRPath expressions for recursive traversal, view runner recursively follows each path to any depth, multiple repeat paths are combined using union semantics, duplicates and ordering behavior for recursive results, cycle/depth guard behavior under malformed or cyclic structures, columns are evaluated against each repeated node context. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "summary": "Forced Python fallback now matches native/C++ for $this current-focus paths in select.repeat columns and repeat expressions.",
+      "verified_in": "SOF-VD-07 HISTORIAN iteration 1: fresh repeat probe passed; TestRepeat 5/5; TestIterationVariables 7/7; ViewDefinition+variables pytest 898/898; conformance 2822/2822; full pytest 7386 passed.",
+      "resolution": "Fixed fallback $this semantics: $this now resolves to current focus outside explicit iteration, and $name.path variable expressions evaluate the trailing path against the resolved value. Added direct FHIRPath and ViewDefinition repeat native/fallback regression coverage."
+    }
+  ],
+  "RETRY_QA": false
+}

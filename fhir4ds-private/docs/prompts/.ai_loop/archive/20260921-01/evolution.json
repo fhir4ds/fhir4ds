@@ -1,0 +1,31 @@
+{
+  "phase": "PIPELINE",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "PIPELINE_COMPLETE",
+  "workflow": null,
+  "pipeline": [
+    "feature_design",
+    "feature_implementation",
+    "code_review",
+    "pre_release",
+    "docs_audit",
+    "scribe"
+  ],
+  "pipeline_step": 5,
+  "qa_personality": null,
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 30,
+    "exhaustive_mode": false,
+    "target_version": "0.0.16",
+    "qa_schedule": null,
+    "benchmark_commands": null,
+    "benchmark_baseline_path": null,
+    "feature_plan_path": null,
+    "bug_fix_target": null,
+    "bug_fix_validation": null,
+    "notes": "v0.0.16 CQL TYPE SYSTEM campaign (Option A: complete, authoritative CQL type-inference layer). PRIMARY MANDATE: .ai_loop/USER_DIRECTIVES.md. Binding constraints: (1) metadata-only in v0.0.16 \u2014 lowering routes must NOT change; acceptance proof is byte-identical generated SQL across the DQM 47-measure corpus; (2) one authoritative classifier consolidating scattered inference helpers, CQLTypeRef canonical representation; (3) both consumers, one source (CQLResultMetadata + definition_meta readers); (4) serializer flips to metadata-first with logged runtime-inference fallback; (5) complete type-source enumeration per FDD; (6) Unknown/Any is first-class \u2014 never guess; (7) dual-engine parity preserved, translator-layer Python only, no extension rebuilds expected. Human chat override (2026-09-20): the FDD WAIT_FOR_USER_APPROVAL gate is REPLACED \u2014 get a /second-opinion review (glm) on the core architecture choice at end of feature design, incorporate feedback as appropriate, and auto-advance without stopping for human feedback. Option C facade fixes, REV-010 route unification, spec-compliance re-campaign all OUT OF SCOPE. Discovery: tree at 0.0.15 (pyproject version = 0.0.15), v0.0.15 pipeline finished CLEAN, working tree clean, DuckDB 1.5.5 pin. Release Engineer artifact gate required before final completion (package metadata + wheel + facade API surface change). Acceptance gates 1-6 in USER_DIRECTIVES are binding for implementation. No commits at any step \u2014 Joel commits."
+  },
+  "issues": []
+}

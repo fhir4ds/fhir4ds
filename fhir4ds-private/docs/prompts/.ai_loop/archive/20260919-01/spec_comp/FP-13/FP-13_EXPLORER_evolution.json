@@ -1,0 +1,51 @@
+{
+  "phase": "QA",
+  "iteration": 2,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-13: FHIRPath \u2014 \u00a76.1 Equality. Test these items: = (Equals) incl. Quantity and Date/Time equality, ~ (Equivalent) incl. Quantity, Date/Time, String equivalence, != (Not Equals), !~ (Not Equivalent). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath \u00a76.1.2",
+      "root_cause": "native quantity ~ trailing-zero precision",
+      "resolution": "leastPrecisionDecimalPlaces at both tolerance sites",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath \u00a76.1.2",
+      "root_cause": "jsonNumbersEquivalent binary64 coercion of JSON integers",
+      "resolution": "exact yyjson_get_sint compare for int/int",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-003",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath \u00a76.1.2",
+      "root_cause": null,
+      "resolution": "incomparable-quantity ~ EMPTY doctrine pin",
+      "verified_in": "Iteration 1"
+    }
+  ]
+}

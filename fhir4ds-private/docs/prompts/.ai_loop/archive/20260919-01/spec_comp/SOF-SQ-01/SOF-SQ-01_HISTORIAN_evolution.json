@@ -1,0 +1,51 @@
+{
+  "phase": null,
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-SQ-01: SQL-on-FHIR Analytics Layer \u2014 SQLQuery Library profile, SQLView Library profile, sql-must-be-sql-expressions invariant. Test these items: Library.meta.profile dispatches between SQLQuery and SQLView (official canonicals http://hl7.org/fhir/uv/sql-on-fhir/StructureDefinition/SQLQuery|SQLView plus legacy sql-on-fhir.org/ig forms); both declared = rejected as ambiguous, Library.type.coding must include per-profile code 'sql-query' or 'sql-view', content 1..* cardinality enforced; each entry has contentType (non-empty string) and data (strict base64-encoded UTF-8 SQL), sql-must-be-sql-expressions invariant: every content[].contentType starts with 'application/sql', relatedArtifact entries: type='depends-on', label satisfies ASCII sql-name, resource is non-empty canonical, SQLView forbids parameter (0..0); SQLQuery allows 0..* with name (non-empty), type (FHIR primitive), use 1..1, rejection paths all raise typed SQLQueryParseError, extra_fields bag preserves unknown Library keys verbatim through parse_library / to_dict roundtrip, Public API: parse_library, parse_sqlquery (strict), parse_sqlview (strict) return typed SQLQuery or SQLView dataclass. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-003",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-004",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-005",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 1"
+    }
+  ]
+}

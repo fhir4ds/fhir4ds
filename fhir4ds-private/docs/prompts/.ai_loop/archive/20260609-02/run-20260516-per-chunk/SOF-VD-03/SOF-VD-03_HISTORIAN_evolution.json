@@ -1,0 +1,37 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-03: SQL-on-FHIR ViewDefinition \u2014 Key Elements: Select, ViewDefinition.select, ViewDefinition.select.column, ViewDefinition.select.column.path/name/description. Test these items: select 1..* required and non-empty, column 0..* within each select, column.path 1..1 FHIRPath expression relative to the active context, column.name 1..1 SQL-safe output name, column.description 0..1 markdown retention, multiple select blocks and deterministic column ordering, root and select-relative FHIRPath evaluation contexts. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-SOF-VD-03-HISTORIAN-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "summary": "Present null repeating select containers rejected; archived in ARCHIVE_LOG.md SOF-VD-03 HISTORIAN.",
+      "verified_in": "Iteration 1: ViewDefinition pytest 771/771; conformance 2822/2822"
+    },
+    {
+      "id": "QA-SOF-VD-03-HISTORIAN-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "summary": "unionAll effective schema duplicate names rejected; archived in ARCHIVE_LOG.md SOF-VD-03 HISTORIAN.",
+      "verified_in": "Iteration 1: ViewDefinition pytest 771/771; conformance 2822/2822"
+    }
+  ]
+}

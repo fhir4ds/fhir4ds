@@ -1,0 +1,69 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-10: FHIRPath \u2014 \u00a75.6.6-\u00a75.6.12 String Manipulation (Transform). Test these items: upper(), lower(), replace(pattern, substitution), matches(regex), replaceMatches(regex, substitution), length(), toChars(). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "PARITY",
+      "resolution": "PCRE $ trailing-newline lookahead fix (native)",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "PARITY",
+      "resolution": "applyInlineRegexFlags (native)",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "PARITY",
+      "resolution": "ASCII-class doctrine via _translate_pcre_ascii_classes (fallback)",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-004",
+      "severity": "LOW",
+      "status": "DEFERRED",
+      "category": "PARITY",
+      "resolution": "lookbehind: spec-sanctioned std::regex dialect limitation; pinned divergence test",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-005",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "resolution": "_mask_string_literals for dollar prechecks (udf.py)",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-006",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "resolution": "helper replace_matches engine delegation + replace guards",
+      "verified_in": "Iteration 1"
+    }
+  ]
+}

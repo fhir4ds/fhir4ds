@@ -1,0 +1,1399 @@
+{
+  "version": "1.1",
+  "created": "2026-05-16",
+  "last_updated": "2026-08-11",
+  "spec_sources": {
+    "FHIRPath": "http://hl7.org/fhirpath (v2.0.0)",
+    "CQL": "https://cql.hl7.org/09-b-cqlreference.html (v1.5.3)",
+    "SQL-on-FHIR ViewDefinition": "https://build.fhir.org/ig/FHIR/sql-on-fhir-v2/StructureDefinition-ViewDefinition.html (v2.1.0-pre CI build, draft 2026-05-12)",
+    "SQL-on-FHIR Analytics Layer": "https://build.fhir.org/ig/FHIR/sql-on-fhir-v2/ (SQLQuery + SQLView Library profiles, v2.1.0-pre CI build)"
+  },
+  "config": {
+    "inner_max_iterations": 3,
+    "personality_rotation": [
+      "SKEPTIC",
+      "HISTORIAN",
+      "EXPLORER"
+    ],
+    "review_every_n_chunks": 5
+  },
+  "summary": {
+    "total_chunks": 58,
+    "completed": 58,
+    "in_progress": 0,
+    "passed": 58,
+    "failed": 0,
+    "pending": 0,
+    "total_bugs_found": 463,
+    "total_bugs_fixed": 325,
+    "total_bugs_open": 0
+  },
+  "chunks": [
+    {
+      "id": "FP-01",
+      "spec": "FHIRPath",
+      "sections": [
+        "§4.1 Literals"
+      ],
+      "items": [
+        "Boolean literals",
+        "String literals",
+        "Integer literals",
+        "Decimal literals",
+        "Date literals",
+        "Time literals",
+        "DateTime literals",
+        "Quantity literals (incl. time-valued quantities)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-01",
+      "bugs_found": 13,
+      "bugs_fixed": 12,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-16: 13 found/12 fixed/0 open (SKEPTIC 8/8, HISTORIAN 3/2+1 INTENDED, EXPLORER 2/2); all CLEAN exits; conformance 2832/2832"
+    },
+    {
+      "id": "FP-02",
+      "spec": "FHIRPath",
+      "sections": [
+        "§4.2 Operators",
+        "§4.3 Function Invocations",
+        "§4.4 Null and Empty (Propagation)",
+        "§4.5 Singleton Evaluation of Collections"
+      ],
+      "items": [
+        "Operator semantics",
+        "Function invocation syntax",
+        "Null propagation in expressions",
+        "Empty collection handling",
+        "Singleton evaluation rules"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-02",
+      "bugs_found": 13,
+      "bugs_fixed": 11,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-16: 13 found/11 fixed/0 open (SKEPTIC 4/4, HISTORIAN 4/4, EXPLORER 3 fixed + 2 LOW DEFERRED: unknown-fn chaining divergence, Composition.type metadata); all CLEAN; conformance 2832/2832"
+    },
+    {
+      "id": "FP-03",
+      "spec": "FHIRPath",
+      "sections": [
+        "§5.1 Existence"
+      ],
+      "items": [
+        "empty()",
+        "exists([criteria])",
+        "all(criteria)",
+        "allTrue()",
+        "anyTrue()",
+        "allFalse()",
+        "anyFalse()",
+        "subsetOf(other)",
+        "supersetOf(other)",
+        "count()",
+        "distinct()",
+        "isDistinct()"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-03",
+      "bugs_found": 3,
+      "bugs_fixed": 2,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-17: 3 found/2 fixed/0 open (SKEPTIC 3/2 + 1 INTENDED; HISTORIAN and EXPLORER clean); conformance 2832/2832"
+    },
+    {
+      "id": "FP-04",
+      "spec": "FHIRPath",
+      "sections": [
+        "§5.2 Filtering and Projection"
+      ],
+      "items": [
+        "where(criteria)",
+        "select(projection)",
+        "repeat(projection)",
+        "ofType(type)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-04",
+      "bugs_found": 2,
+      "bugs_fixed": 1,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-17: 2 found/1 fixed/0 open (SKEPTIC 2/1 + 1 INTENDED; HISTORIAN/EXPLORER clean); conformance 2832/2832"
+    },
+    {
+      "id": "FP-05",
+      "spec": "FHIRPath",
+      "sections": [
+        "§5.3 Subsetting",
+        "§5.4 Combining"
+      ],
+      "items": [
+        "[index] indexer",
+        "single()",
+        "first()",
+        "last()",
+        "tail()",
+        "skip(num)",
+        "take(num)",
+        "intersect(other)",
+        "exclude(other)",
+        "union(other)",
+        "combine(other)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-05",
+      "bugs_found": 1,
+      "bugs_fixed": 1,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-17: 1 found/1 fixed/0 open (SKEPTIC 1/1; HISTORIAN/EXPLORER clean); conformance 2832/2832"
+    },
+    {
+      "id": "FP-06",
+      "spec": "FHIRPath",
+      "sections": [
+        "§5.5.1 iif",
+        "§5.5.2 Boolean Conversion",
+        "§5.5.3 Integer Conversion"
+      ],
+      "items": [
+        "iif(criterion, true-result, otherwise-result)",
+        "toBoolean()",
+        "convertsToBoolean()",
+        "toInteger()",
+        "convertsToInteger()"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-06",
+      "bugs_found": 8,
+      "bugs_fixed": 4,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-17: 8 found/4 fixed/0 open (fallback regex anchors, iif scope x2; 3 INTENDED/1 DEFERRED JSON-null-root); conformance 2832/2832"
+    },
+    {
+      "id": "FP-07",
+      "spec": "FHIRPath",
+      "sections": [
+        "§5.5.4 Date Conversion",
+        "§5.5.5 DateTime Conversion",
+        "§5.5.6 Decimal Conversion"
+      ],
+      "items": [
+        "toDate()",
+        "convertsToDate()",
+        "toDateTime()",
+        "convertsToDateTime()",
+        "toDecimal()",
+        "convertsToDecimal()"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-07",
+      "bugs_found": 4,
+      "bugs_fixed": 2,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-17: 4 found/2 fixed/0 open (regex anchor, Z-suffix preservation; 2 INTENDED conventions); conformance 2832/2832"
+    },
+    {
+      "id": "FP-08",
+      "spec": "FHIRPath",
+      "sections": [
+        "§5.5.7 Quantity Conversion",
+        "§5.5.8 String Conversion",
+        "§5.5.9 Time Conversion"
+      ],
+      "items": [
+        "toQuantity([unit])",
+        "convertsToQuantity([unit])",
+        "toString()",
+        "convertsToString()",
+        "toTime()",
+        "convertsToTime()"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-08",
+      "bugs_found": 8,
+      "bugs_fixed": 7,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-17: 8 found/7 fixed/0 open (spec duration table, exact Decimal metric parity, toTime parsing, direct-key base bridge); conformance 2832/2832"
+    },
+    {
+      "id": "FP-09",
+      "spec": "FHIRPath",
+      "sections": [
+        "§5.6.1-§5.6.5 String Manipulation (Search)"
+      ],
+      "items": [
+        "indexOf(substring)",
+        "substring(start, [length])",
+        "startsWith(prefix)",
+        "endsWith(suffix)",
+        "contains(substring)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-09",
+      "bugs_found": 4,
+      "bugs_fixed": 2,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-17: 4 found/2 fixed/0 open (helper API gaps x2; 2 INTENDED conventions); conformance 2832/2832"
+    },
+    {
+      "id": "FP-10",
+      "spec": "FHIRPath",
+      "sections": [
+        "§5.6.6-§5.6.12 String Manipulation (Transform)"
+      ],
+      "items": [
+        "upper()",
+        "lower()",
+        "replace(pattern, substitution)",
+        "matches(regex)",
+        "replaceMatches(regex, substitution)",
+        "length()",
+        "toChars()"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-10",
+      "bugs_found": 10,
+      "bugs_fixed": 8,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-17: 10 found/8 fixed/0 open (regex dialect parity incl. named groups, lexer escaped-backslash); conformance 2832/2832"
+    },
+    {
+      "id": "FP-11",
+      "spec": "FHIRPath",
+      "sections": [
+        "§5.7 Math (STU)"
+      ],
+      "items": [
+        "abs()",
+        "ceiling()",
+        "exp()",
+        "floor()",
+        "ln()",
+        "log(base)",
+        "power(exponent)",
+        "round([precision])",
+        "sqrt()",
+        "truncate()"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-11",
+      "bugs_found": 10,
+      "bugs_fixed": 7,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-18: 10 found/7 fixed/0 open (power typing, exact Decimal power, decimal rendering precision); conformance 2832/2832"
+    },
+    {
+      "id": "FP-12",
+      "spec": "FHIRPath",
+      "sections": [
+        "§5.8 Tree Navigation",
+        "§5.9 Utility Functions"
+      ],
+      "items": [
+        "children()",
+        "descendants()",
+        "trace(name, [projection])",
+        "now()",
+        "timeOfDay()",
+        "today()"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-12",
+      "bugs_found": 8,
+      "bugs_fixed": 8,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-18: 8 found/8 fixed/0 open (children typing both engines, parse_value sentinel, None-repr, recursive backbones); conformance 2832/2832"
+    },
+    {
+      "id": "FP-13",
+      "spec": "FHIRPath",
+      "sections": [
+        "§6.1 Equality"
+      ],
+      "items": [
+        "= (Equals) incl. Quantity and Date/Time equality",
+        "~ (Equivalent) incl. Quantity, Date/Time, String equivalence",
+        "!= (Not Equals)",
+        "!~ (Not Equivalent)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-13",
+      "bugs_found": 7,
+      "bugs_fixed": 4,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-18: 7 found/4 fixed/0 open (least-precision ~ x2, whitespace class, >2^53 int merge); conformance 2832/2832"
+    },
+    {
+      "id": "FP-14",
+      "spec": "FHIRPath",
+      "sections": [
+        "§6.2 Comparison"
+      ],
+      "items": [
+        "> (Greater Than)",
+        "< (Less Than)",
+        "<= (Less or Equal)",
+        ">= (Greater or Equal)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-14",
+      "bugs_found": 11,
+      "bugs_fixed": 9,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-18: 11 found/9 fixed/0 open (sub-ms temporal compare both engines, helper delegation); 1 UNCONFIRMED spec ambiguity, 1 DEFERRED orderBy"
+    },
+    {
+      "id": "FP-15",
+      "spec": "FHIRPath",
+      "sections": [
+        "§6.3 Types"
+      ],
+      "items": [
+        "is type specifier",
+        "is(type)",
+        "as type specifier",
+        "as(type)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-15",
+      "bugs_found": 14,
+      "bugs_fixed": 10,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-18: 14 found/10 fixed/0 open (is/as chains parser, uuid/oid, instant typings, choice hijack); conformance 2832/2832"
+    },
+    {
+      "id": "FP-16",
+      "spec": "FHIRPath",
+      "sections": [
+        "§6.4 Collections"
+      ],
+      "items": [
+        "| (union collections)",
+        "in (membership)",
+        "contains (containership)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-16",
+      "bugs_found": 1,
+      "bugs_fixed": 1,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-18: 1 found/1 fixed/0 open (helper error contract); HISTORIAN/EXPLORER clean; conformance 2832/2832"
+    },
+    {
+      "id": "FP-17",
+      "spec": "FHIRPath",
+      "sections": [
+        "§6.5 Boolean Logic"
+      ],
+      "items": [
+        "and",
+        "or",
+        "not()",
+        "xor",
+        "implies"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-17",
+      "bugs_found": 1,
+      "bugs_fixed": 0,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-18: 1 found/0 fixed/0 open (truthy-singleton doctrine fixture-pinned, change reverted); 3 clean launches; conformance 2832/2832"
+    },
+    {
+      "id": "FP-18",
+      "spec": "FHIRPath",
+      "sections": [
+        "§6.6 Math Operations",
+        "§6.7 Date/Time Arithmetic"
+      ],
+      "items": [
+        "* (multiplication)",
+        "/ (division)",
+        "+ (addition)",
+        "- (subtraction)",
+        "div (truncated division)",
+        "mod (modulo)",
+        "& (string concatenation)",
+        "+ (dateTime addition)",
+        "- (dateTime subtraction)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-18",
+      "bugs_found": 16,
+      "bugs_fixed": 9,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-18: 16 found/9 fixed/0 open (exact div/mod, INT32/INT64 literals, Time-arith rendering, & repr, unary overflow); DEFERRED: native unit-space port, / rendering, QA-007 parity-suite drift; conformance 2832/2832"
+    },
+    {
+      "id": "FP-19",
+      "spec": "FHIRPath",
+      "sections": [
+        "§7 Aggregates (STU)",
+        "§8 Lexical Elements"
+      ],
+      "items": [
+        "aggregate(aggregator, [init])",
+        "Whitespace rules",
+        "Comments",
+        "Literals syntax",
+        "Symbols",
+        "Keywords",
+        "Identifiers",
+        "Case-sensitivity"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-19",
+      "bugs_found": 7,
+      "bugs_fixed": 2,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-18: 7 found/2 fixed/0 open (native arithmetic error-signal, mixed-unit granularity); DEFERRED: native derived-UCUM/number±quantity gap — corroborates FP-18 QA-007 drift; conformance 2832/2832"
+    },
+    {
+      "id": "FP-20",
+      "spec": "FHIRPath",
+      "sections": [
+        "§9 Environment Variables",
+        "§10 Types and Reflection",
+        "§11 Type Safety",
+        "§12 Formal Specifications"
+      ],
+      "items": [
+        "Environment variable access (%context, %resource, etc.)",
+        "Model information",
+        "SimpleTypeInfo",
+        "ClassInfo",
+        "ListTypeInfo",
+        "TupleTypeInfo",
+        "Type safety rules",
+        "Formal syntax (ANTLR)",
+        "URI and media types"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/FP-20",
+      "bugs_found": 12,
+      "bugs_fixed": 3,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-19: 12 found/3 fixed/0 open (Meta uri-family typing, docstrings; grammar conformant; drift family documented for milestone-4 review); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-01",
+      "spec": "CQL",
+      "sections": [
+        "Types - Primitive"
+      ],
+      "items": [
+        "Any type",
+        "Boolean type",
+        "Integer type",
+        "Decimal type",
+        "String type",
+        "Long type (CQL 1.5 trial-use)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-01",
+      "bugs_found": 12,
+      "bugs_fixed": 11,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-19: 12 found/11 fixed/0 open (exact Decimal arithmetic: overflow guards, cqlDivide, typed Sum/Avg, alias casts); 1 fixture-pinned INTENDED; conformance 2832/2832"
+    },
+    {
+      "id": "CQL-02",
+      "spec": "CQL",
+      "sections": [
+        "Types - Clinical"
+      ],
+      "items": [
+        "Code type",
+        "CodeSystem type (CQL 1.5 trial-use)",
+        "Concept type",
+        "ValueSet type (CQL 1.5 trial-use)",
+        "Vocabulary type (CQL 1.5 trial-use)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-02",
+      "bugs_found": 11,
+      "bugs_fixed": 10,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-19: 11 found/10 fixed/0 open (Code/Concept equivalence matrices, VS/CS alias membership, .codes typing); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-03",
+      "spec": "CQL",
+      "sections": [
+        "Types - Temporal and Complex"
+      ],
+      "items": [
+        "Date type",
+        "DateTime type",
+        "Time type",
+        "Quantity type",
+        "Ratio type"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-03",
+      "bugs_found": 13,
+      "bugs_fixed": 11,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-20: 13 found/11 fixed/0 open (temporal accessors, strict lexing, UCUM validity, Ratio, sub-second precision); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-04",
+      "spec": "CQL",
+      "sections": [
+        "Logical Operators"
+      ],
+      "items": [
+        "And(left, right)",
+        "Implies(left, right)",
+        "Not(argument)",
+        "Or(left, right)",
+        "Xor(left, right)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-04",
+      "bugs_found": 6,
+      "bugs_fixed": 4,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-20: 6 found/4 fixed/0 open (not precedence per grammar, case first-match, Boolean define-refs casting); 3VL doctrine pins; conformance 2832/2832"
+    },
+    {
+      "id": "CQL-05",
+      "spec": "CQL",
+      "sections": [
+        "Type Operators - Structural"
+      ],
+      "items": [
+        "As<T>(argument)",
+        "Children(argument)",
+        "Convert to<T>(argument)",
+        "Descendants(argument)",
+        "Is<T>(argument)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-05",
+      "bugs_found": 12,
+      "bugs_fixed": 10,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-20: 12 found/10 fixed/0 open (structural Is/As/Children/Descendants/Convert incl. DQM gate restoration); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-06",
+      "spec": "CQL",
+      "sections": [
+        "Type Operators - Conversion Checks"
+      ],
+      "items": [
+        "CanConvertQuantity",
+        "ConvertQuantity",
+        "ConvertsToBoolean",
+        "ConvertsToDate",
+        "ConvertsToDateTime",
+        "ConvertsToDecimal",
+        "ConvertsToLong",
+        "ConvertsToInteger",
+        "ConvertsToQuantity",
+        "ConvertsToRatio",
+        "ConvertsToString",
+        "ConvertsToTime"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-06",
+      "bugs_found": 5,
+      "bugs_fixed": 4,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-21: 5 found/4 fixed/0 open (.value accessor identity, ConvertsToDecimal regex, calendar ToString; 1 fixture-pinned INTENDED ToTime tz); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-07",
+      "spec": "CQL",
+      "sections": [
+        "Type Operators - Conversions"
+      ],
+      "items": [
+        "ToBoolean",
+        "ToConcept",
+        "ToDate",
+        "ToDateTime",
+        "ToDecimal",
+        "ToLong",
+        "ToInteger",
+        "ToQuantity",
+        "ToRatio",
+        "ToString",
+        "ToTime"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-07",
+      "bugs_found": 4,
+      "bugs_fixed": 3,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-21: 4 found/3 fixed/0 open (Decimal truncation, .value unwrap, ToQuantity identity); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-08",
+      "spec": "CQL",
+      "sections": [
+        "Nullological Operators"
+      ],
+      "items": [
+        "Coalesce",
+        "IsNull",
+        "IsFalse",
+        "IsTrue"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-08",
+      "bugs_found": 11,
+      "bugs_fixed": 5,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-21: 11 found/5 fixed/0 open (variadic+typed Coalesce; CQL-07 Decimal-truncation reverted per Table 9-E); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-09",
+      "spec": "CQL",
+      "sections": [
+        "Comparison Operators"
+      ],
+      "items": [
+        "Between",
+        "Equal",
+        "Equivalent",
+        "Greater",
+        "GreaterOrEqual",
+        "Less",
+        "LessOrEqual",
+        "NotEqual",
+        "NotEquivalent"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-09",
+      "bugs_found": 10,
+      "bugs_fixed": 6,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-21: 10 found/6 fixed/0 open (list/interval/tuple null-uncertainty equality, unit-1 promotion); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-10",
+      "spec": "CQL",
+      "sections": [
+        "Arithmetic Operators Part 1"
+      ],
+      "items": [
+        "Abs",
+        "Add",
+        "Ceiling",
+        "Divide",
+        "Floor",
+        "Exp",
+        "HighBoundary",
+        "Log",
+        "Ln",
+        "LowBoundary"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-10",
+      "bugs_found": 9,
+      "bugs_fixed": 9,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-21: 9 found/9 fixed/0 open (boundary exactness, overflow guards, unit cancellation, typed guards); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-11",
+      "spec": "CQL",
+      "sections": [
+        "Arithmetic Operators Part 2"
+      ],
+      "items": [
+        "Maximum",
+        "Minimum",
+        "Modulo",
+        "Multiply",
+        "Negate",
+        "Precision",
+        "Predecessor",
+        "Power",
+        "Round",
+        "Subtract",
+        "Successor",
+        "Truncate",
+        "TruncatedDivide"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-11",
+      "bugs_found": 9,
+      "bugs_fixed": 9,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-21: 9 found/9 fixed/0 open (exact div, Round shadowing, overflow nulls, negate/duration); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-12",
+      "spec": "CQL",
+      "sections": [
+        "String Operators"
+      ],
+      "items": [
+        "Combine",
+        "Concatenate",
+        "EndsWith",
+        "Indexer",
+        "LastPositionOf",
+        "Length",
+        "Lower",
+        "Matches",
+        "PositionOf",
+        "ReplaceMatches",
+        "Split",
+        "SplitOnMatches",
+        "StartsWith",
+        "Substring",
+        "Upper"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-12",
+      "bugs_found": 8,
+      "bugs_fixed": 4,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-21: 8 found/4 fixed/0 open (Indexer over defines + chained navigation, Combine guard, SplitOnMatches parity); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-13",
+      "spec": "CQL",
+      "sections": [
+        "Date/Time Operators Part 1"
+      ],
+      "items": [
+        "Add (left DateTime, right Quantity)",
+        "After precision of",
+        "Before precision of",
+        "Date(year, month, day)",
+        "DateTime(year, month, day, ...)",
+        "Component From precision",
+        "Difference in precision between",
+        "Duration in precision between"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-13",
+      "bugs_found": 8,
+      "bugs_fixed": 7,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-21: 8 found/7 fixed/0 open (Difference boundaries, Duration uncertainty, ctor nulls, unit restrictions); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-14",
+      "spec": "CQL",
+      "sections": [
+        "Date/Time Operators Part 2"
+      ],
+      "items": [
+        "Now()",
+        "On Or After precision",
+        "On Or Before precision",
+        "Same As precision",
+        "Same Or After precision",
+        "Same Or Before precision",
+        "Subtract (left DateTime, right Quantity)",
+        "Time(hour, minute, second, millisecond)",
+        "TimeOfDay()",
+        "Today()"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-14",
+      "bugs_found": 7,
+      "bugs_fixed": 7,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-22: 7 found/7 fixed/0 open (same-as/or-after parsing+bounds, interval precisions, Now ms); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-15",
+      "spec": "CQL",
+      "sections": [
+        "Interval Operators Part 1"
+      ],
+      "items": [
+        "After precision (Interval)",
+        "Before precision (Interval)",
+        "Collapse(argument, [per])",
+        "Contains precision (Interval, point)",
+        "End of (Interval)",
+        "Ends precision",
+        "Equal (Interval)",
+        "Equivalent (Interval)",
+        "Except (Interval)",
+        "Expand(argument, [per])",
+        "In precision (point, Interval)",
+        "Includes precision (Interval)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-15",
+      "bugs_found": 11,
+      "bugs_fixed": 10,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-22: 11 found/10 fixed/0 open (collapse-per semantics, ends conjunct, LIST_EXTRACT intervals, expand truncation, CMS128 regression repair); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-16",
+      "spec": "CQL",
+      "sections": [
+        "Interval Operators Part 2"
+      ],
+      "items": [
+        "Included In precision",
+        "Intersect (Interval)",
+        "Meets precision",
+        "Meets Before precision",
+        "Meets After precision",
+        "Not Equal (Interval)",
+        "Not Equivalent (Interval)",
+        "On Or After precision (Interval)",
+        "On Or Before precision (Interval)",
+        "Overlaps precision",
+        "Overlaps Before precision",
+        "Overlaps After precision"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-16",
+      "bugs_found": 8,
+      "bugs_fixed": 6,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-22: 8 found/6 fixed/0 open (in-keyword dispatch, sentinel bounds x3 generations, native open-bound intersect + cross-numeric compare); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-17",
+      "spec": "CQL",
+      "sections": [
+        "Interval Operators Part 3"
+      ],
+      "items": [
+        "Point From (Interval)",
+        "Properly Includes precision",
+        "Properly Included In precision",
+        "Same As precision (Interval)",
+        "Same Or After precision (Interval)",
+        "Same Or Before precision (Interval)",
+        "Size (Interval)",
+        "Start of (Interval)",
+        "Starts precision",
+        "Union (Interval)",
+        "Width of (Interval)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-17",
+      "bugs_found": 10,
+      "bugs_fixed": 8,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-22: 10 found/8 fixed/0 open (interval-scalar arithmetic dispatch, same-as point kinds, canonical bounds); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-18",
+      "spec": "CQL",
+      "sections": [
+        "List Operators Part 1"
+      ],
+      "items": [
+        "Contains(list, element)",
+        "Distinct(list)",
+        "Equal (List)",
+        "Equivalent (List)",
+        "Except (List)",
+        "Exists(list)",
+        "Flatten(list)",
+        "First(list)",
+        "In(element, list)",
+        "Includes(list)",
+        "Included In (list)",
+        "IndexOf(list, element)",
+        "Intersect (List)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-18",
+      "bugs_found": 15,
+      "bugs_fixed": 15,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-23: 15 found/15 fixed/0 open (dynamic multi-valued list semantics incl. 2 CRITICALs: exists false-with-data, deep navigation aliases); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-19",
+      "spec": "CQL",
+      "sections": [
+        "List Operators Part 2"
+      ],
+      "items": [
+        "Last(list)",
+        "Length(list)",
+        "Not Equal (List)",
+        "Not Equivalent (List)",
+        "Properly Includes (list)",
+        "Properly Included In (list)",
+        "Singleton From (list)",
+        "Skip(list, number)",
+        "Tail(list)",
+        "Take(list, number)",
+        "Union (List)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-19",
+      "bugs_found": 13,
+      "bugs_fixed": 11,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-22: 13 found/11 fixed/0 open (list-op materialization over retrieves/unions/aliases; Count/singleton-from/union-null); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-20",
+      "spec": "CQL",
+      "sections": [
+        "Aggregate Functions"
+      ],
+      "items": [
+        "AllTrue(list)",
+        "AnyTrue(list)",
+        "Avg(list)",
+        "Count(list)",
+        "GeometricMean(list)",
+        "Max(list)",
+        "Min(list)",
+        "Median(list)",
+        "Mode(list)",
+        "PopulationStdDev(list)",
+        "PopulationVariance(list)",
+        "Product(list)",
+        "StdDev(list)",
+        "Sum(list)",
+        "Variance(list)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-20",
+      "bugs_found": 15,
+      "bugs_fixed": 10,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-23: 15 found/10 fixed/0 open (Quantity aggregates, exact-typed numeric dispatch, shifted exact-decimal stats); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-21",
+      "spec": "CQL",
+      "sections": [
+        "Clinical Operators"
+      ],
+      "items": [
+        "AgeInYears|Months|Weeks|Days|Hours|Minutes|Seconds()",
+        "AgeInYearsAt|MonthsAt|...At(asOf)",
+        "CalculateAgeInYears|Months|...InYears(birthDate)",
+        "CalculateAgeInYearsAt|MonthsAt|...At(birthDate, asOf)",
+        "Equal (Code/Concept)",
+        "Equivalent (Code/Concept)",
+        "In (Codesystem)",
+        "ExpandValueSet(ValueSet)",
+        "In (Valueset)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-21",
+      "bugs_found": 12,
+      "bugs_fixed": 7,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-23: 12 found/7 fixed/0 open (age uncertainty family, dynamic Code equality, uncertain Sum/Average); conformance 2832/2832"
+    },
+    {
+      "id": "CQL-22",
+      "spec": "CQL",
+      "sections": [
+        "Errors and Messaging"
+      ],
+      "items": [
+        "Message(source, condition, code, severity, message)"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/CQL-22",
+      "bugs_found": 7,
+      "bugs_fixed": 1,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-23: 7 found/1 fixed/0 open (where-clause drop on aliased nav queries; informational channel INTENDED); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-VD-01",
+      "spec": "SQL-on-FHIR ViewDefinition",
+      "sections": [
+        "Logical Model: View Definition",
+        "Key Elements: Resource",
+        "ViewDefinition.resource/profile/fhirVersion"
+      ],
+      "items": [
+        "ViewDefinition represents a tabular projection of one FHIR resource type",
+        "resource 1..1 required FHIR ResourceType binding",
+        "profile 0..* canonical profile declarations",
+        "fhirVersion 0..* FHIRVersion binding",
+        "root resource table selection and resourceType filtering",
+        "zero-or-more output rows per resource instance"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-VD-01",
+      "bugs_found": 4,
+      "bugs_fixed": 3,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-23: 4 found/3 fixed/0 open (fhirVersion full-codesystem binding, DeviceAlert); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-VD-02",
+      "spec": "SQL-on-FHIR ViewDefinition",
+      "sections": [
+        "Key Elements: Constants",
+        "ViewDefinition.constant",
+        "ViewDefinition.constant.name",
+        "ViewDefinition.constant.value[x]"
+      ],
+      "items": [
+        "constant 0..* parsing using the spec singular field name",
+        "constant.name 1..1 with sql-name validation and %name FHIRPath reference",
+        "value[x] 1..1 exactly-one behavior",
+        "primitive value types: base64Binary, boolean, canonical, code, date, dateTime, decimal, id, instant, integer, integer64, oid, string, positiveInt, time, unsignedInt, uri, url, uuid",
+        "constant substitution in column paths and where filters",
+        "invalid/missing constant values raise explicit spec errors"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-VD-02",
+      "bugs_found": 6,
+      "bugs_fixed": 4,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-23: 6 found/4 fixed/0 open (integer64 range, decimal serialization/parsing, boolean constant column guard); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-VD-03",
+      "spec": "SQL-on-FHIR ViewDefinition",
+      "sections": [
+        "Key Elements: Select",
+        "ViewDefinition.select",
+        "ViewDefinition.select.column",
+        "ViewDefinition.select.column.path/name/description"
+      ],
+      "items": [
+        "select 1..* required and non-empty",
+        "column 0..* within each select",
+        "column.path 1..1 FHIRPath expression relative to the active context",
+        "column.name 1..1 SQL-safe output name",
+        "column.description 0..1 markdown retention",
+        "multiple select blocks and deterministic column ordering",
+        "root and select-relative FHIRPath evaluation contexts"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-VD-03",
+      "bugs_found": 4,
+      "bugs_fixed": 1,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-23: 4 found/1 fixed/0 open (preflight warning text; select semantics verified vs IG: sibling CROSS JOIN, deep nesting deterministic); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-VD-04",
+      "spec": "SQL-on-FHIR ViewDefinition",
+      "sections": [
+        "ViewDefinition.select.column.collection",
+        "ViewDefinition.select.column.type",
+        "ViewDefinition.select.column.tag"
+      ],
+      "items": [
+        "collection default false when unset",
+        "error when multiple values are produced for a non-collection column",
+        "collection true multi-value output representation",
+        "type URI handling for primitive and non-primitive result expectations",
+        "type mismatch reporting for generated/executed columns",
+        "tag 0..* parsing with required tag.name and tag.value",
+        "database/implementation type-hint tags do not affect base semantics unless explicitly handled"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-VD-04",
+      "bugs_found": 5,
+      "bugs_fixed": 4,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-23: 5 found/4 fixed/0 open (unknown-key rejection, element-ID validation, dotted-URI fix, tag whitespace strings); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-VD-05",
+      "spec": "SQL-on-FHIR ViewDefinition",
+      "sections": [
+        "ViewDefinition.select.select",
+        "Nested select contentReference"
+      ],
+      "items": [
+        "nested select 0..* recursion through contentReference to ViewDefinition.select",
+        "child selects use the parent forEach/forEachOrNull context when present",
+        "default context is effectively $this when row generators are absent",
+        "parent and child columns combine into expected output rows",
+        "column name collision and duplicate-name validation behavior",
+        "empty nested select and column combinations produce defined output or errors"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-VD-05",
+      "bugs_found": 5,
+      "bugs_fixed": 2,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-24: 5 found/2 fixed/0 open (select unknown-field + minItems validation; nesting semantics verified against formal Process(S,N) semantics); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-VD-06",
+      "spec": "SQL-on-FHIR ViewDefinition",
+      "sections": [
+        "ViewDefinition.select.forEach",
+        "ViewDefinition.select.forEachOrNull"
+      ],
+      "items": [
+        "forEach 0..1 FHIRPath expression selects parent elements for the containing select",
+        "forEach multiplies rows for each item in the selected collection",
+        "forEach suppresses rows when the collection is empty",
+        "forEachOrNull preserves one row with null nested values when the collection is empty",
+        "nested columns are evaluated relative to each iterated item",
+        "built-in ViewDefinition/FHIRPath variables remain correct in iterated contexts, including %context, %resource, %rootResource, and %rowIndex"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-VD-06",
+      "bugs_found": 6,
+      "bugs_fixed": 0,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-24: 6 found/0 fixed/0 open (all spec-observation pins; forEach family fully verified against Process(S,N) over 3 clean launches); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-VD-07",
+      "spec": "SQL-on-FHIR ViewDefinition",
+      "sections": [
+        "ViewDefinition.select.repeat"
+      ],
+      "items": [
+        "repeat 0..* FHIRPath expressions for recursive traversal",
+        "view runner recursively follows each path to any depth",
+        "multiple repeat paths are combined using union semantics",
+        "duplicates and ordering behavior for recursive results",
+        "cycle/depth guard behavior under malformed or cyclic structures",
+        "columns are evaluated against each repeated node context"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-VD-07",
+      "bugs_found": 10,
+      "bugs_fixed": 2,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-24: 10 found/2 fixed/0 open (recursion segfault guard, extension-only-element navigation drop; repeat family fully verified); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-VD-08",
+      "spec": "SQL-on-FHIR ViewDefinition",
+      "sections": [
+        "ViewDefinition.select.unionAll"
+      ],
+      "items": [
+        "unionAll 0..* combines all rows from branch selection structures",
+        "UNION ALL semantics preserve duplicate rows",
+        "branch column compatibility and missing-column behavior",
+        "nested unionAll recursion",
+        "unionAll branches combined with forEach, forEachOrNull, repeat, and nested select",
+        "where filters interact with branch generation according to their scope"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-VD-08",
+      "bugs_found": 3,
+      "bugs_fixed": 3,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-24: 3 found/3 fixed/0 open (unionAll null-row suppression at all depths, backtick %constants); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-VD-09",
+      "spec": "SQL-on-FHIR ViewDefinition",
+      "sections": [
+        "Key Elements: Where",
+        "ViewDefinition.where",
+        "ViewDefinition.where.path/description"
+      ],
+      "items": [
+        "where 0..* root-level FHIRPath constraints",
+        "every where constraint must evaluate true for resource inclusion",
+        "false, empty, and null filter results exclude rows as specified",
+        "non-boolean where results are rejected or surfaced as spec errors",
+        "where.description 0..1 human-readable text retention",
+        "constant references and complex FHIRPath expressions inside where clauses",
+        "filter SQL generation preserves intended root-resource scope"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-VD-09",
+      "bugs_found": 2,
+      "bugs_fixed": 2,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-24: 2 found/2 fixed/0 open (official where shape, prefix-mixed-focus fail-loud); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-VD-10",
+      "spec": "SQL-on-FHIR ViewDefinition",
+      "sections": [
+        "Terminology Bindings",
+        "Constraints: sql-name/sql-expressions",
+        "Cardinality and required fields"
+      ],
+      "items": [
+        "sql-name regex for ViewDefinition.name, constant.name, and column.name",
+        "sql-expressions constraint: at most one of forEach, forEachOrNull, or repeat",
+        "required field validation for resource, select, column.path, column.name, constant.name, constant.value[x], and where.path",
+        "resource binding validation against FHIR ResourceType",
+        "fhirVersion binding validation against FHIRVersion",
+        "expectError official fixtures fail explicitly rather than being skipped",
+        "permissive versus strict validation modes are clearly separated"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-VD-10",
+      "bugs_found": 9,
+      "bugs_fixed": 1,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-24: 9 found/1 fixed/0 open (cross-cutting validation sweep: RecursionError boundary; bindings/invariants/expectError verified); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-VD-11",
+      "spec": "SQL-on-FHIR ViewDefinition",
+      "sections": [
+        "View Runner",
+        "Examples"
+      ],
+      "items": [
+        "execute a ViewDefinition and return tabular rows",
+        "simple Patient and Observation example views",
+        "unrolling arrays such as Patient.address into row sets",
+        "filtered Observation/resource views",
+        "column type coercion into DuckDB result columns",
+        "official SQL-on-FHIR v2 spec_tests parity at 144 tests (FHIR/sql-on-fhir.js snapshot as of 2026-08-11; re-sync per fhir4ds-private/docs/release-checklist.md before each release)",
+        "parser, generator, and DuckDB execution agree for supported examples"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-VD-11",
+      "bugs_found": 3,
+      "bugs_fixed": 3,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-24: 3 found/3 fixed/0 open (extension-retry dead branch, orjson deep-JSON fallback, run_all drvfs retry); IG examples + spec_tests parity verified; conformance 2832/2832"
+    },
+    {
+      "id": "SOF-VD-12",
+      "spec": "SQL-on-FHIR ViewDefinition",
+      "sections": [
+        "Profiling",
+        "Shareable View Definition",
+        "Tabular View Definition",
+        "Mappings",
+        "XML",
+        "JSON"
+      ],
+      "items": [
+        "Shareable and Tabular profile-required metadata handling",
+        "JSON representation uses official field names and round-trips through parser/generator inputs",
+        "XML representation support is implemented or explicitly documented as unsupported",
+        "canonical URL, version, status, and profile metadata do not break execution",
+        "FHIR mapping/profile fields are retained, ignored, or rejected consistently with documented behavior",
+        "official examples serialize and parse consistently across supported formats"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-VD-12",
+      "bugs_found": 2,
+      "bugs_fixed": 2,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-24: 2 found/2 fixed/0 open (Shareable/Tabular official canonicals, Decimal to_dict JSON serialization); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-VD-13",
+      "spec": "SQL-on-FHIR ViewDefinition",
+      "sections": [
+        "CanonicalResource / DomainResource inheritance",
+        "Invariants: cnl-0, cnl-1",
+        "column.tag.name namespace recommendation"
+      ],
+      "items": [
+        "cnl-1 URL invariant enforced on ViewDefinition.url: rejects |, #, and space (regex ^[^|# ]+$)",
+        "cnl-1 strictness applies to canonical URL fields (url) but NOT to Column.type — spec accepts relative URIs and element-ID references there (e.g. 'Observation.referenceRange', 'relative/path')",
+        "profile[] and meta.profile[] use FHIR canonical form: |version suffix permitted (canonical type semantics, distinct from cnl-1)",
+        "cnl-0 name warning: ViewDefinition.name must start with capital letter and be 2-255 chars total; warning severity per spec (do not promote to error)",
+        "sql-name invariant ^[A-Za-z][A-Za-z0-9_]*$ enforced at parser/dataclass/serializer boundaries on name, column.name, constant.name, relatedArtifact.label",
+        "CanonicalResource/DomainResource roundtrip via extra_fields dict preserves unknown top-level keys verbatim through from_dict/to_dict (no validation, no coercion)",
+        "DomainResource text.div narrative round-trips byte-for-byte at the JSON level",
+        "column.tag.name namespace recommendation surfaces as warning when name lacks a '/' prefix (spec 'recommended', not 'shall')",
+        "extra_fields has repr=False, compare=False so dataclass repr/equality semantics are unaffected"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-VD-13",
+      "bugs_found": 3,
+      "bugs_fixed": 2,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-24: 3 found/2 fixed/0 open (cnl-1 ERROR->WARNING per SD severity, ASCII capital check); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-SQ-01",
+      "spec": "SQL-on-FHIR Analytics Layer",
+      "sections": [
+        "SQLQuery Library profile",
+        "SQLView Library profile",
+        "sql-must-be-sql-expressions invariant"
+      ],
+      "items": [
+        "Library.meta.profile dispatches between SQLQuery (https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery) and SQLView (https://sql-on-fhir.org/StructureDefinition/SQLView); both declared = rejected as ambiguous",
+        "Library.type.coding must include code 'sql-query' (LibraryTypesCodes)",
+        "content 1..* cardinality enforced; each entry has contentType (non-empty string) and data (base64-encoded UTF-8 SQL)",
+        "sql-must-be-sql-expressions invariant: every content[].contentType starts with 'application/sql'",
+        "relatedArtifact entries: type='depends-on', label satisfies sql-name ^[A-Za-z][A-Za-z0-9_]*$, resource is non-empty canonical",
+        "SQLView forbids parameter (cardinality 0..0); SQLQuery allows 1..* with name (non-empty), type (FHIR primitive), use='in'",
+        "Rejection paths: missing profile, wrong profile, missing content, bad base64, wrong type coding — all raise typed SQLQueryParseError",
+        "extra_fields bag preserves unknown Library keys verbatim through parse_library / to_dict roundtrip",
+        "Public API: parse_library, parse_sqlquery (strict), parse_sqlview (strict) return typed SQLQuery or SQLView dataclass"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-SQ-01",
+      "bugs_found": 14,
+      "bugs_fixed": 11,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-24: 14 found/11 fixed/0 open (profile canonicals, sql-view code, strict base64/use/sql-name, verbatim Library roundtrip); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-SQ-02",
+      "spec": "SQL-on-FHIR Analytics Layer",
+      "sections": [
+        "Runner materialization",
+        "Parameter binding",
+        "DuckDB execution semantics"
+      ],
+      "items": [
+        "Each relatedArtifact materializes as CREATE OR REPLACE VIEW \"<label>\" AS <generated SQL>; label quoted via viewdef.utils.quote_identifier",
+        "ViewDefinition dependencies generate SQL via viewdef.SQLGenerator(source_table=...) and become DuckDB views",
+        "SQLView dependencies recurse: materialize their own relatedArtifact first, then CREATE VIEW from their content.data SQL body",
+        "Dependency cycle detection (set of canonicals currently being resolved) raises SQLQueryCycleError before DuckDB execution",
+        "Content selection prefers 'application/sql;dialect=duckdb', falls back to 'application/sql', rejects other dialects with UnsupportedDialectError",
+        "Parameter binding via DuckDB prepared statements — no string interpolation of caller-supplied values anywhere on the parameter path",
+        "FHIR-type → DuckDB-type coercion via dict-driven registry in viewdef.types._FHIR_TYPE_TO_DUCKDB (string→VARCHAR, integer→INTEGER, decimal→DOUBLE, boolean→BOOLEAN, date→DATE, dateTime→TIMESTAMP, time→TIME, etc.)",
+        "Missing required parameter raises SQLQueryTypeError with parameter name context",
+        "Wrong-type parameter (e.g., string for declared boolean/integer/decimal) raises SQLQueryTypeError with declared vs. got detail",
+        "Unsupported FHIR type (e.g., CodeableConcept, Quantity, Period — complex types not in the MVP registry) raises SQLQueryTypeError",
+        "Idempotent re-execution: CREATE OR REPLACE VIEW does not error on existing view; callers may DROP VIEW to release names"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-SQ-02",
+      "bugs_found": 11,
+      "bugs_fixed": 9,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-24: 11 found/9 fixed/0 open (temporal coercion both axes, :name placeholder rewriting, tz-aware binding); conformance 2832/2832"
+    },
+    {
+      "id": "SOF-SQ-03",
+      "spec": "SQL-on-FHIR Analytics Layer",
+      "sections": [
+        "Cross-package integration (SQLQuery ↔ ViewDefinition ↔ SQLView)",
+        "Error model integration",
+        "Public API surface"
+      ],
+      "items": [
+        "One-level chain: SQLQuery with one relatedArtifact pointing at a ViewDefinition canonical — materializes VD as view, raw SQL body resolves alias correctly",
+        "Two-level chain: SQLQuery → SQLView → ViewDefinition — recursive materialization produces correct rows",
+        "Cycle: SQLView A depends on SQLView B depends on SQLView A — SQLQueryCycleError raised before execution",
+        "Resolver contract: ViewDefinition dict detected structurally (has 'select' + 'resource' keys, since ViewDefinition has no FHIR resourceType the way Library does)",
+        "Resolver contract: Library dict detected by resourceType='Library'; parsed ViewDefinition/SQLQuery/SQLView objects handled via isinstance",
+        "Resolver failure (any exception) translated to SQLQueryMaterializationError with label + canonical context",
+        "Identifier quoting: relatedArtifact.label and parameter.name validated against sql-name and quoted via viewdef.utils.quote_identifier before reaching DuckDB",
+        "Error model integration: SQLError inherits from viewdef.errors.SQLOnFHIRError (BUGFIX-001); except SQLOnFHIRError catches all SQLQuery errors transitively",
+        "All SQLQuery errors also inherit from ValueError (via SQLOnFHIRError) for backward-compat with callers catching the broad parent",
+        "One-way dependency: fhir4ds/viewdef/ never imports fhir4ds/sqlquery/ (verified by grep)",
+        "Public API surface: parse_library, parse_sqlquery, parse_sqlview, validate_sql_library, select_best_content, SQLQueryRunner, DependencyResolver type alias"
+      ],
+      "status": "passed",
+      "archive_dir": "fhir4ds-private/docs/prompts/.ai_loop/spec_comp/SOF-SQ-03",
+      "bugs_found": 7,
+      "bugs_fixed": 5,
+      "bugs_open": 0,
+      "notes": "PASSED fresh v1.1 pass 2026-08-24: 7 found/5 fixed/0 open (resolver contract, typed error wrapping, ambiguity guards, param sql-name); all 10 integration boundaries clean; conformance 2832/2832"
+    }
+  ]
+}

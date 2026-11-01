@@ -1,0 +1,41 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-SQ-02: SQL-on-FHIR Analytics Layer \u2014 Runner materialization, Parameter binding, DuckDB execution semantics. Test these items: Each relatedArtifact materializes as CREATE OR REPLACE VIEW \"<label>\" AS <generated SQL>; label quoted via viewdef.utils.quote_identifier, ViewDefinition dependencies generate SQL via viewdef.SQLGenerator(source_table=...) and become DuckDB views, SQLView dependencies recurse: materialize their own relatedArtifact first, then CREATE VIEW from their content.data SQL body, Dependency cycle detection raises SQLQueryCycleError before DuckDB execution, Content selection prefers 'application/sql;dialect=duckdb', falls back to 'application/sql', rejects other dialects with UnsupportedDialectError, Parameter binding via DuckDB prepared statements \u2014 no string interpolation of caller-supplied values anywhere on the parameter path, FHIR-type to DuckDB-type coercion via dict-driven registry, Missing required parameter raises SQLQueryTypeError with parameter name context, Wrong-type parameter raises SQLQueryTypeError with declared vs. got detail, Unsupported FHIR type raises SQLQueryTypeError, Idempotent re-execution: CREATE OR REPLACE VIEW does not error on existing view; callers may DROP VIEW to release names. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "status": "RESOLVED",
+      "verified_in": 1
+    },
+    {
+      "id": "QA-002",
+      "status": "RESOLVED",
+      "verified_in": 1
+    },
+    {
+      "id": "QA-003",
+      "status": "INTENDED",
+      "verified_in": 1
+    },
+    {
+      "id": "QA-004",
+      "status": "INTENDED",
+      "verified_in": 1
+    }
+  ]
+}

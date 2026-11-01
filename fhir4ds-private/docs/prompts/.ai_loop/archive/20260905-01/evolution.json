@@ -1,0 +1,181 @@
+{
+  "phase": "REVIEW",
+  "iteration": 22,
+  "audit_status": "PENDING",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution",
+    "code_review",
+    "pre_release",
+    "docs_audit",
+    "scribe"
+  ],
+  "pipeline_step": 5,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 21,
+    "max_iterations": 30,
+    "exhaustive_mode": false,
+    "target_version": "0.0.13",
+    "focus_domains": [
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "qa_schedule": [
+      {
+        "iteration": 1,
+        "domain": 6,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 2,
+        "domain": 6,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 3,
+        "domain": 6,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 4,
+        "domain": 7,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 5,
+        "domain": 7,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 6,
+        "domain": 7,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 7,
+        "domain": 8,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 8,
+        "domain": 8,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 9,
+        "domain": 8,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 10,
+        "domain": 9,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 11,
+        "domain": 9,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 12,
+        "domain": 9,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 13,
+        "domain": 10,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 14,
+        "domain": 10,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 15,
+        "domain": 10,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 16,
+        "domain": 11,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 17,
+        "domain": 11,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 18,
+        "domain": 11,
+        "personality": "EXPLORER"
+      },
+      {
+        "iteration": 19,
+        "domain": 12,
+        "personality": "SKEPTIC"
+      },
+      {
+        "iteration": 20,
+        "domain": 12,
+        "personality": "HISTORIAN"
+      },
+      {
+        "iteration": 21,
+        "domain": 12,
+        "personality": "EXPLORER"
+      }
+    ],
+    "benchmark_commands": null,
+    "benchmark_baseline_path": null,
+    "feature_plan_path": null,
+    "bug_fix_target": null,
+    "bug_fix_validation": null,
+    "notes": "Ship fhir4ds-v2 0.0.13: evolution QA campaign (domains 6-10 infrastructure + 11 API surface contract + 12 medterm4ds integration, each SKEPTIC/HISTORIAN/EXPLORER), then code_review, pre_release, docs_audit, scribe. 0.0.13 is the release vehicle for: (1) medterm4ds >=0.0.3,<0.0.4 bump on both extras \u2014 install 0.0.3 FIRST in domain 12 and diff-audit the 0.0.2->0.0.3 surface before trusting adapters; (2) post-0.0.12 reliability fixes already on dev (4f7de65b: orjson 3.12 deep-nesting message match, numpy-safe DQM _truthy, _declared_parameters_only, recursion-limit leak, httpx dev extra); (3) this campaign's hardening. HARD CONSTRAINT: PYTHONPATH=/mnt/d/fhir4ds conformance/scripts/run_all.py = 2832/2832 (ViewDef 144, FHIRPath 935, CQL 1706, DQM 47) after every fix; DQM ERRORs get one retry (REV-009). Dual-Python: CI runs 3.10 AND 3.11 (3.11 venv at /tmp/py311env or recreate with uv); version-sensitive string matches must be probed on both. Discovery: branch dev @ 4f7de65b, up to date with origin/dev; only dirty file is conformance/reports/dqm_report.json (report artifact). pyproject currently 0.0.12 \u2014 Release Engineer bumps to 0.0.13 (plus root __version__ + 6 subpackage constants; test_public_subpackage_versions_match_root enforces). Work affects package metadata, dependencies, wheel contents, WASM wheel artifacts, and website release info: a Release Engineer artifact gate (wheel bound verification, extension md5 parity, dual-Python CI invocation) is REQUIRED before final completion; do not run it during initialization \u2014 test the final candidate artifact after implementation. Website release info follows web/website/AGENTS.md exactly (micropip deps=False snippet rule is load-bearing). No commits at any pipeline step \u2014 Joel reviews and commits. Single-writer discipline; fix root causes, no workaround shims/hint wrappers. GitHub Actions has not queued a run for 4f7de65b \u2014 local dual-Python runs are the authoritative gate.",
+    "specialist_domain_override": 12,
+    "wheel_filename": "fhir4ds_v2-0.0.13-py3-none-any.whl"
+  },
+  "issues": [
+    {
+      "id": "QA-018",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "summary": "carried: 6 CQL translator lost-work failures; 9/15 fixed",
+      "verified_in": "Iter 21: string_operator_parity 11/11; cql unit+integration 2099 passed / 5 failed (the carried set); gate 2832/2832 (iter 19)",
+      "resolution": "PARTIAL (iterations 7-21): 10/15 lost-work failures fixed \u2014 7 fhirpath-native (iter 8), CQL-04 alias-3VL + CQL-12 indexer (iter 9), ext(url).value NULL semantics (iter 21: dynamic-list promotion exempts ext().value fused FHIRPath so non-matching URLs yield NULL not []). Remaining 5: structural parity x3, ratio tuple comparison, wasm no-python gate. Loop continues past the 21-iteration schedule on this carried HIGH per state rules.",
+      "evidence": " REMAINING 5 at evolution exit: test_structural_type_parity x3 (mixed-type tuple through Children() trips _validate_list_selector_common_type at translate time; lost tree allowed translate + runtime is-checks), test_temporal_complex_parity ratio tuple comparison, test_wasm_translate_execute_gate no-python gate. All A/B-verified pre-existing (0.0.12 release-commit lost-work incident); best resolution likely recovering Joel's uncommitted tree."
+    },
+    {
+      "id": "REV-017",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "MODEL_KNOWLEDGE",
+      "spec_citation": "Code-review rubric: resource-specific branches in generic translator code",
+      "evidence": "translator.py `_definition_is_dynamic_list` exemption regex `extension\\.where\\(.+\\)\\.value$` encodes the FHIRCommon ext() lowering shape inside generic define-shaping logic. Base-R4 structure (allowed carve-out, mirrors loader subject/patient/beneficiary doctrine) and keyed to this codebase's own ext() emission; flag for centralization if further where()-pattern rules appear."
+    },
+    {
+      "id": "REV-018",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "PERF",
+      "spec_citation": "Redundant parsing dimension",
+      "evidence": "dqm/batch.py `_declared_parameters_only` re-parses each CQL library (parse_cql) per measure run; the library is parsed again downstream for evaluation. Measure-scale cost (not per-row) \u2014 pre-existing from 4f7de65b; note for a future parse-once cache."
+    },
+    {
+      "id": "REV-019",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "STYLE",
+      "spec_citation": "Idiomatic C++",
+      "evidence": "evaluator.cpp `translateNamedGroupSubstitution` uses goto/label control flow (appended:) inside the substitution loop \u2014 correct but non-idiomatic; restructure with a helper predicate when next touched."
+    }
+  ]
+}

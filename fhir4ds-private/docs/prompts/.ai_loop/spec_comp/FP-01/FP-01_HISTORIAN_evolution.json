@@ -1,0 +1,28 @@
+{
+  "run": "maint-speccomp2-20261001",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "phase": "COMPLETE",
+  "iteration": 1,
+  "max_iterations": 3,
+  "qa_personality": "HISTORIAN",
+  "chunk": {
+    "id": "FP-01",
+    "spec": "FHIRPath 2018Sep",
+    "sections": [
+      "4.1"
+    ],
+    "items": [
+      "Boolean/String/Integer/Decimal/Date/Time/DateTime/Quantity literals incl. time-valued quantities"
+    ]
+  },
+  "fresh_start": true,
+  "phase_transitions": {
+    "personality_started": "2026-10-02T03:24:51Z"
+  },
+  "issues": [],
+  "exit_reason": "historian_complete_clean_0_issues",
+  "audit_status": "COMPLETE"
+}

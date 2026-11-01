@@ -1,0 +1,29 @@
+{
+  "phase": "QA",
+  "iteration": 2,
+  "audit_status": "PENDING",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-04: CQL \u2014 Logical Operators. Test these items: And(left, right), Implies(left, right), Not(argument), Or(left, right), Xor(left, right). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "summary": "unary not parsed at wrong precedence (not X in Y \u2192 TranslationError); fixed via parse_not_expression between and/equality levels",
+      "verified_in": "Iteration 1 (CQL-04 HISTORIAN): probe all-spec-correct both paths; CQL pytest 5710/9 skipped; conformance 2832/2832"
+    }
+  ]
+}

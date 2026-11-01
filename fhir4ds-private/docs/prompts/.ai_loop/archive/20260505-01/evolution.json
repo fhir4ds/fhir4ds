@@ -1,0 +1,36 @@
+{
+  "phase": "SCRIBE",
+  "iteration": 5,
+  "audit_status": "COMPLETE",
+  "exit_reason": null,
+  "workflow": null,
+  "pipeline": ["evolution", "code_review", "scribe"],
+  "pipeline_step": 2,
+  "qa_personality": null,
+  "config": {
+    "min_iterations": 5,
+    "max_iterations": 10,
+    "target_version": "0.0.4",
+    "notes": "Code review complete. 6 findings (1 HIGH, 2 MEDIUM, 3 LOW). Executing scribe pipeline step to generate commit message."
+  },
+  "issues": [
+    {"id": "QA-001", "status": "TOMBSTONE", "note": "Fixed iter 1."},
+    {"id": "QA-002", "status": "TOMBSTONE", "note": "Unconfirmed iter 1."},
+    {"id": "QA-003", "status": "TOMBSTONE", "note": "Unconfirmed iter 1."},
+    {"id": "QA-004", "status": "TOMBSTONE", "note": "Unconfirmed iter 1."},
+    {"id": "QA-005", "status": "TOMBSTONE", "note": "Unconfirmed iter 1."},
+    {"id": "ARCH-002", "status": "TOMBSTONE", "note": "Fixed iter 2."},
+    {"id": "ARCH-003", "status": "TOMBSTONE", "note": "Fixed iter 2."},
+    {"id": "NEW-001", "status": "TOMBSTONE", "note": "Fixed iter 2."},
+    {"id": "OBS-001", "status": "TOMBSTONE", "note": "Downgraded iter 2."},
+    {"id": "ARCH-001", "status": "TOMBSTONE", "note": "Fixed iter 3."},
+    {"id": "ARCH-004", "status": "TOMBSTONE", "note": "Dead code iter 3."},
+    {"id": "EXP-001", "status": "TOMBSTONE", "note": "Fixed iter 4."},
+    {"id": "REV-001", "status": "OPEN", "severity": "HIGH", "note": "Runtime crash from local function called as method"},
+    {"id": "REV-002", "status": "OPEN", "severity": "MEDIUM", "note": "Inconsistent COALESCE semantics for open-ended intervals"},
+    {"id": "REV-003", "status": "OPEN", "severity": "MEDIUM", "note": "Type inconsistency in COALESCE sentinel"},
+    {"id": "REV-004", "status": "OPEN", "severity": "LOW", "note": "Dead comment after return"},
+    {"id": "REV-005", "status": "OPEN", "severity": "LOW", "note": "Dead branch in fallback chain"},
+    {"id": "REV-006", "status": "OPEN", "severity": "LOW", "note": "Redundant lookup call"}
+  ]
+}

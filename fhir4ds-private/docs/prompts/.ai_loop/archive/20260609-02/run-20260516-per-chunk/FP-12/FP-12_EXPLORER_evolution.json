@@ -1,0 +1,33 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "personality_override": "EXPLORER",
+    "notes": "SPEC COMPLIANCE CHUNK FP-12: FHIRPath \u2014 \u00a75.8 Tree Navigation; \u00a75.9 Utility Functions. Test these items: children(), descendants(), trace(name, [projection]), now(), timeOfDay(), today(). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. Start from scratch for this chunk/personality and do not inspect or rely on any archived prior workflow outputs under .ai_loop/spec_comp/**, including FP-12 SKEPTIC/HISTORIAN archives. Maintain 100% conformance and no pytest regressions. When the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a75.9.2 Current date and time functions",
+      "evidence": "Archived in ARCHIVE_LOG.md#fp-12-explorer---iteration-1---2026-05-16.",
+      "root_cause": "Uncached native current-time reads inside one expression.",
+      "resolution": "Cached one timestamp per Evaluator::evaluate(); rebuilt bundled extension; added native/fallback parity regression.",
+      "verified_in": "Iteration 1: focused FP-12 pytest, native SQL 226 assertions, FHIRPath pytest 1200/1200, full conformance 2822/2822."
+    }
+  ]
+}

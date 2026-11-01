@@ -1,0 +1,18 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "PENDING",
+  "exit_reason": null,
+  "workflow": "evolution",
+  "pipeline": ["evolution"],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-06: SQL-on-FHIR ViewDefinition.select.forEach / forEachOrNull. Fresh SKEPTIC run. Items: forEach 0..1 FHIRPath expression selects parent elements; forEach multiplies rows per collection item; forEach suppresses rows when collection empty; forEachOrNull preserves one row with null nested values when collection empty; nested columns evaluated relative to each iterated item; built-in %context/%resource/%rootResource/%rowIndex correct in iterated contexts.\n\nWhen the pipeline is fully complete (3 personalities SKEPTIC -> HISTORIAN -> EXPLORER each run QA/FIX/ARCHITECT), set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": []
+}

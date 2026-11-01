@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-06: CQL \u2014 Type Operators - Conversion Checks. Test these items: CanConvertQuantity, ConvertQuantity, ConvertsToBoolean, ConvertsToDate, ConvertsToDateTime, ConvertsToDecimal, ConvertsToLong, ConvertsToInteger, ConvertsToQuantity, ConvertsToRatio, ConvertsToString, ConvertsToTime. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B Type Operators - conversion checks and ToQuantity/ToRatio conversion semantics",
+      "evidence": "Archived in ARCHIVE_LOG.md: CQL-06 HISTORIAN Conversion Check Remediation - 2026-05-30",
+      "root_cause": "Public Quantity/Ratio conversion checks accepted non-representable Decimal values and missed valid Ratio JSON for ConvertsToQuantity.",
+      "resolution": "Strict Decimal validation applied at public conversion boundaries; generic parse_quantity kept permissive for runtime arithmetic intermediates.",
+      "verified_in": "Probe, focused pytest, native sqllogictest, CMS832 targeted DQM, full conformance 2822/2822"
+    }
+  ]
+}

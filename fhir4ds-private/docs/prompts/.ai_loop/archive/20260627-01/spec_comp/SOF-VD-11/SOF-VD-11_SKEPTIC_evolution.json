@@ -1,0 +1,20 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-11: SQL-on-FHIR ViewDefinition \u2014 View Runner, Examples. Test these items: execute a ViewDefinition and return tabular rows, simple Patient and Observation example views, unrolling arrays such as Patient.address into row sets, filtered Observation/resource views, column type coercion into DuckDB result columns, official SQL-on-FHIR v2 spec_tests parity, parser, generator, and DuckDB execution agree for supported examples. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nRerun at 2026-06-12T19:00:00Z and no issues were found."
+  },
+  "issues": []
+}

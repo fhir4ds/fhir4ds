@@ -1,0 +1,76 @@
+{
+  "phase": null,
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-21: CQL \u2014 Clinical Operators. Test these items: AgeInYears|Months|Weeks|Days|Hours|Minutes|Seconds(), AgeInYearsAt|MonthsAt|...At(asOf), CalculateAgeInYears|Months|...InYears(birthDate), CalculateAgeInYearsAt|MonthsAt|...At(birthDate, asOf), Equal (Code/Concept), Equivalent (Code/Concept), In (Codesystem), ExpandValueSet(ValueSet), In (Valueset). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "see qa_handoff/engineer_handoff",
+      "evidence": "archived to ARCHIVE_LOG.md",
+      "root_cause": "no dynamic `=` path",
+      "resolution": "coding_matches_exact dynamic equality",
+      "verified_in": "iteration 1"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "see engineer_handoff",
+      "evidence": "archived",
+      "root_cause": "list aggregates not uncertainty-aware",
+      "resolution": "cqlUncertainListSum py+native",
+      "verified_in": "iteration 1"
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "see engineer_handoff",
+      "evidence": "archived",
+      "root_cause": "'average' unregistered keyword",
+      "resolution": "pre-translate + name normalization",
+      "verified_in": "iteration 1"
+    },
+    {
+      "id": "QA-004",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "DOCUMENTED_BEHAVIOR",
+      "spec_citation": "CQL 1.5 \u00a7In (Valueset)",
+      "evidence": "population define-boundary null\u2192False collapse; direct UDF NULL correct",
+      "root_cause": "documented filter-based defines",
+      "resolution": "documented",
+      "verified_in": "iteration 1"
+    },
+    {
+      "id": "QA-005",
+      "severity": "LOW",
+      "status": "DEFERRED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 Authors Guide \u00a7Comparison Operators (Equal, Concept)",
+      "evidence": "Architect residual: dynamic Concept-vs-literal `=` still has no dynamic path (QA-001 fixed single Code only); raw JSON comparison remains for Concept operands. Appendix B does not formally pin Equal(Concept) set semantics, and the pattern is rare in eCQMs (which use `~` / `in`).",
+      "root_cause": "same class as QA-001, Concept variant",
+      "resolution": "deferred to a terminology-operator chunk owner",
+      "verified_in": null
+    }
+  ]
+}

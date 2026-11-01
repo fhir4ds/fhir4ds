@@ -1,0 +1,32 @@
+{
+    "phase": "ARCHITECT",
+  "iteration": 1,
+    "audit_status": "COMPLETE",
+    "exit_reason": "CLEAN",
+    "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-08: FHIRPath \u2014 \u00a75.5.7 Quantity Conversion, \u00a75.5.8 String Conversion, \u00a75.5.9 Time Conversion. Test these items: toQuantity([unit]), convertsToQuantity([unit]), toString(), convertsToString(), toTime(), convertsToTime(). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+    "issues": [
+        {
+            "id": "QA-001",
+            "severity": "MEDIUM",
+            "status": "RESOLVED",
+            "category": "SPEC_VIOLATION",
+            "spec_citation": "FHIRPath Normative Release v2.0.0 Section 4.4 empty collection propagation and Section 5.5.7 toQuantity([unit]) / convertsToQuantity([unit])",
+            "evidence": "EXPLORER probe .temp/qa/fp08_explorer_probe.py found forced Python fallback mismatch for empty optional unit arguments. Native C++ returned empty for 1.toQuantity({}) and 1.convertsToQuantity({}); fallback returned [\"1 '1'\"] / true. Spec says single-input functions passed an empty argument return empty, and FP-08 unit is an optional singleton String argument.",
+            "root_cause": "Forced Python fallback represents an explicitly empty singleton argument as [] from make_param(); misc.to_quantity() and misc.converts_to_quantity() treated falsey [] the same as an omitted optional unit argument.",
+            "resolution": "Preserve None as omitted unit and return empty when to_unit == [] for toQuantity([unit]) and convertsToQuantity([unit]) in the Python fallback.",
+            "verified_in": ".temp/qa/fp08_explorer_probe_after_fix.log: 35 cases, mismatch_count=0, expectation_failure_count=0; pytest test_fp08_empty_quantity_unit_parity.py plus test_conversion_parity.py: 19 passed; full conformance validation_summary.log: 2822/2822"
+        }
+    ]
+}

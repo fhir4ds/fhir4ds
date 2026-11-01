@@ -1,0 +1,20 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-02: FHIRPath \u2014 \u00a74.2 Operators; \u00a74.3 Function Invocations; \u00a74.4 Null and Empty (Propagation); \u00a74.5 Singleton Evaluation of Collections. Test these items: Operator semantics; Function invocation syntax; Null propagation in expressions; Empty collection handling; Singleton evaluation rules. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk."
+  },
+  "issues": []
+}

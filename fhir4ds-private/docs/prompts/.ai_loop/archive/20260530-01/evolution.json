@@ -1,0 +1,25 @@
+{
+  "phase": "VERIFY",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "feature_design",
+    "feature_implementation",
+    "code_review",
+    "pre_release",
+    "docs_audit"
+  ],
+  "pipeline_step": 1,
+  "qa_personality": null,
+  "config": {
+    "min_iterations": 25,
+    "max_iterations": 50,
+    "exhaustive_mode": false,
+    "target_version": "0.0.7",
+    "feature_plan_path": "docs/architecture/plans/FEATURE_MONGO_FHIR_SERVER_SOURCE.md",
+    "notes": "Primary mandate from USER_DIRECTIVES.md: design a read-only zero-ETL MongoDB-backed FHIR server source parallel to the HAPI PostgreSQL integration, targeting Mongo-backed servers such as icanbwell/fhir-server / Helix FHIR Server. Start with feature_design because no pre-approved implementation plan exists. Design must prove current-resource/deleted-resource collection semantics before hardcoding schema assumptions, preserve the standard resources view contract (id, resourceType, resource, patient_ref), use DuckDB's community mongo extension for analytical reads, and include a Docker development/smoke stack plus docs and website updates. Security focus: quote identifiers and SQL literals separately, avoid leaking Mongo credentials, and cover malicious URI/database/collection/patient-reference inputs. Release Engineer artifact gate is required before final completion because the likely work may affect optional dependencies, Docker image contents/workflows, public exports, docs navigation, release artifacts, and DuckDB extension behavior. Discovery: pyproject.toml reports target package version 0.0.7; git status checks are slow in this workspace, so design should inspect relevant source-adapter and Docker/doc directories directly."
+  },
+  "issues": []
+}

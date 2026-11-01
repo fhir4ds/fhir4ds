@@ -1,0 +1,76 @@
+{
+  "phase": "REVIEW",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "code_review"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": null,
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE MILESTONE REVIEW — 30 chunks completed.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all review files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "REV-001",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "HARDENING",
+      "spec_citation": "NONE",
+      "evidence": "Unguarded std::stoi at extensions/fhirpath/src/fhirpath/evaluator.cpp:1375,1516,2235 (fhirpathSplitUnitTerm/scientific exponent paths). Unreachable from well-formed literals; would throw std::invalid_argument instead of returning empty.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": null
+    },
+    {
+      "id": "REV-002",
+      "severity": "MEDIUM",
+      "status": "OPEN",
+      "category": "MAINTAINABILITY",
+      "spec_citation": "NONE",
+      "evidence": "Hand-maintained type/keyword metadata duplicated across Python and native engines (e.g. FHIR_TYPE_TO_CQL_TYPE inference.py:41); acceptable spec-level mapping but a drift surface. Positive note: CQL-09 calendar keywords moved to a registry (_CQL_CALENDAR_DURATION_UNITS).",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": null
+    },
+    {
+      "id": "REV-003",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "HYGIENE",
+      "spec_citation": "NONE",
+      "evidence": "Unrelated untracked files in tree: conformance/architecture/, fhir4ds/dqm/AGENTS.md.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": null
+    },
+    {
+      "id": "REV-004",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "HARDENING",
+      "spec_citation": "NONE",
+      "evidence": "exactDecimalRatioText (evaluator.cpp:2606) bounds inputs (digits>25 / scale>20 reject) but lacks an explicit 128-bit intermediate budget guard.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": null
+    },
+    {
+      "id": "REV-005",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "HARDENING",
+      "spec_citation": "NONE",
+      "evidence": "_compile_regex (fhir4ds/fhirpath/engine/invocations/strings.py:155) passes patterns verbatim to re.compile; mid-pattern inline flags deprecated since Python 3.11.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": null
+    }
+  ]
+}

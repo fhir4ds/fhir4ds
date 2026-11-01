@@ -1,0 +1,43 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-17: FHIRPath \u2014 \u00a76.5 Boolean Logic. Test these items: and, or, not(), xor, implies. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release \u00a76.5.3 not() and \u00a74.5 Singleton Evaluation of Collections",
+      "evidence": "Archived in ARCHIVE_LOG.md#fp-17-skeptic-boolean-logic-remediation---2026-05-24 and handoff files.",
+      "root_cause": "Native C++ parser treated the keyword `not` as valid after a dot but not as a standalone function token, and evalFunction dispatched `not` without checking child argument count.",
+      "resolution": "Added root `not()` parse support and a zero-argument guard for native `not` before dispatch",
+      "verified_in": "Iteration 1: FP-17 focused probe, focused pytest 166 passed, native sqllogictest 594 assertions, full conformance 2822/2822."
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release \u00a76.5 Boolean logic and \u00a74.5 Singleton Evaluation of Collections",
+      "evidence": "Archived in ARCHIVE_LOG.md#fp-17-skeptic-boolean-logic-remediation---2026-05-24 and handoff files.",
+      "root_cause": "Direct Python helper `_get_boolean_value()` treated non-Boolean singleton operands as empty/unknown and treated multi-item operands as empty instead of applying Section 4.5 singleton Boolean evaluation.",
+      "resolution": "Changed direct helpers to return true for any non-Boolean singleton and raise FHIRPathError for multi-item operands",
+      "verified_in": "Iteration 1: FP-17 focused probe, focused pytest 166 passed, native sqllogictest 594 assertions, full conformance 2822/2822."
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-03: FHIRPath \u2014 \u00a75.1 Existence. Test these items: empty(), exists([criteria]), all(criteria), allTrue(), anyTrue(), allFalse(), anyFalse(), subsetOf(other), supersetOf(other), count(), distinct(), isDistinct(). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath \u00a75.1 subsetOf(other) / supersetOf(other); scoped function semantics for expressions evaluated inside select()/exists()/all()",
+      "evidence": "Archived in ARCHIVE_LOG.md under Spec Compliance FP-03 - FHIRPath Existence, SKEPTIC (2026-06-11).",
+      "root_cause": "Archived",
+      "resolution": "Native subsetOf()/supersetOf() arguments now use outer_input in scoped expressions; bundled extension rebuilt/copied.",
+      "verified_in": "Iteration 1; FP-03 probe PASS; existence parity 13/13; native unittest 740 assertions; full conformance 2822/2822."
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-01: SQL-on-FHIR ViewDefinition \u2014 Logical Model: View Definition, Key Elements: Resource, ViewDefinition.resource/profile/fhirVersion. Test these items: ViewDefinition represents a tabular projection of one FHIR resource type, resource 1..1 required FHIR ResourceType binding, profile 0..* canonical profile declarations, fhirVersion 0..* FHIRVersion binding, root resource table selection and resourceType filtering, zero-or-more output rows per resource instance. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "SOF-VD-01-SKEPTIC-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR v2.1.0-pre ViewDefinition.profile: 0..* canonical(StructureDefinition), each profile SHALL be based on ViewDefinition.resource; FHIR JSON repeating elements must be arrays and canonical values use the FHIR canonical primitive syntax.",
+      "evidence": "Fresh probe: parse_view_definition({'resource':'Patient','profile':['not a canonical with spaces'], ...}) accepted the malformed canonical. Direct ViewDefinition(resource='Patient', profile='not a list', select=[...]) generated SQL instead of rejecting the 0..* canonical-array shape.",
+      "root_cause": "The parser treated ViewDefinition.profile as a generic string array and SQLGenerator only validated fhirVersion for direct ViewDefinition dataclass inputs. That let canonical primitive validation and repeating-field shape checks drift between parser, serializer, and direct generation paths.",
+      "resolution": "Added validate_canonical_array() and reused it for root profile parsing, meta.profile validation, ViewDefinition.to_dict(), and SQLGenerator direct-input guards. Added parser and generator regression tests plus a fresh mixed-resource native/fallback probe.",
+      "verified_in": "python3 .temp/qa/sof_vd01_skeptic_probe.py; python3 -m pytest fhir4ds/viewdef/tests --tb=short; python3 conformance/scripts/run_viewdef.py; python3 conformance/scripts/run_all.py"
+    }
+  ]
+}

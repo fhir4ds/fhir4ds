@@ -1,0 +1,43 @@
+{
+  "phase": null,
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-19: FHIRPath \u2014 \u00a77 Aggregates (STU), \u00a78 Lexical Elements. Test these items: aggregate(aggregator, [init]), Whitespace rules, Comments, Literals syntax, Symbols, Keywords, Identifiers, Case-sensitivity. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "LOW",
+      "status": "DEFERRED",
+      "category": "SPEC_LENIENCE",
+      "spec_citation": "FHIRPath grammar STRING/ESC/UNICODE (fhirpath.g4): \\u requires exactly 4 hex digits; undefined escapes not in ESC set",
+      "evidence": "fhirpath(?::JSON,'bad \\uZZ hex') and 'short \\u41' return 'bad uZZ hex'/'short u41' (backslash silently dropped) identically in native extension and Python fallback; fhirpath_is_valid=true. Strict grammar reading would reject these lexically. Repo grammar comment documents deliberate raw-backslash tolerance (FP-10 corner). No official R4 fixture covers malformed \\u or unknown escapes; both engines lockstep, UDF-surface outputs identical.",
+      "root_cause": "Documented tolerant-grammar corner: STRING fallback alternative ~['] admits raw backslash, and the unescape step drops it for unknown escapes",
+      "resolution": "DEFERRED: dual-engine parity holds, no fixture mandate, tightening would change documented FP-10 tolerance semantics; revisit only if an official fixture pins strict rejection",
+      "verified_in": "iter1 probes (.temp/qa/probe2.py, probe3.py)"
+    },
+    {
+      "id": "QA-002",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "NOT_A_BUG_PIN",
+      "spec_citation": "FHIRPath \u00a77 aggregate; official R4 fixture tests-fhir-r4.xml testAggregate3/4",
+      "evidence": "One-arg aggregate(x).aggregate($this+$total) returns empty because $total starts EMPTY (fixture-canonical pattern iif($total.empty(),...)); {}.aggregate(f,0)->0; collection init works; $total/$this/$index scope saved+restored; iif lazy in both engines. Verified against fixtures 554-557 and both engine paths.",
+      "root_cause": null,
+      "resolution": "Behavior is fixture-pinned and correct",
+      "verified_in": "iter1 probes probe1-probe4 + conformance 935/935"
+    }
+  ]
+}

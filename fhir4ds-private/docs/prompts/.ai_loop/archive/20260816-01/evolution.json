@@ -1,0 +1,93 @@
+{
+  "phase": "REVIEW",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": "code_review",
+  "pipeline": ["bug_fix", "code_review"],
+  "pipeline_step": 2,
+  "_clean_exit": "2026-08-11 polish pipeline complete; all 6 BUGFIX issues RESOLVED, no new findings in code review",
+
+  "qa_personality": null,
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 50,
+    "exhaustive_mode": false,
+    "target_version": "0.0.13",
+    "qa_schedule": null,
+    "benchmark_commands": null,
+    "benchmark_baseline_path": null,
+    "feature_plan_path": null,
+    "bug_fix_target": "Close the 6 review findings (4 from FEATURE_PLAN_DRAFT_REVIEW.md external review + REV-003/004 from internal code review) on the SQL-on-FHIR v2 spec compliance + Analytics Layer feature (commits 050e5e78 + e83631a5). See USER_DIRECTIVES.md for per-issue scope and validation.",
+    "bug_fix_validation": "pytest fhir4ds/viewdef/ fhir4ds/fhirpath/ fhir4ds/sqlquery/ must remain green at 2710/2710. Each issue's resolution must include a verified_in field citing the test or inspection that proves the fix.",
+    "notes": "Polish/cleanup feature. Pipeline is bug_fix + code_review (skip feature_design — fixes are well-specified). Remediation order per USER_DIRECTIVES §Sequencing: BUGFIX-001 (SQLError inheritance) first since it touches public error hierarchy; then BUGFIX-002 (cnl-0 min length); bundle BUGFIX-003 + BUGFIX-004 (test count floor + gap analysis banner) into one commit if convenient; BUGFIX-005 + BUGFIX-006 last since both touch test_parser.py.\n\nSource documents for the issues:\n- fhir4ds-private/docs/prompts/.ai_loop/FEATURE_PLAN_DRAFT_REVIEW.md (external review on v1 plan)\n- archive/20260811-sql-on-fhir-v2-feature/code_review_findings.md (internal code review from prior cycle; the REV-001..004 issues are the source of BUGFIX-002, BUGFIX-003 (counted as both REV-003 and external #3), BUGFIX-005 (REV-003), and BUGFIX-006)\n\nNon-regression: viewdef+fhirpath+sqlquery 2710/2710 (pre-fix baseline). Post-fix: 2712/2712 (+2 new tests, no regressions).\n\nAll 6 BUGFIX items RESOLVED. bug_fix workflow complete; advancing pipeline_step to 1 (code_review)."
+  },
+  "issues": [
+    {
+      "id": "BUGFIX-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "ERROR_MODEL",
+      "spec_citation": "External review finding #5 (FEATURE_PLAN_DRAFT_REVIEW.md §HIGH)",
+      "evidence": "`fhir4ds/sqlquery/errors.py` defines `SQLError(ValueError)`. Recommended inheritance: `SQLError(SQLOnFHIRError)` so consumers catching the existing `viewdef.errors.SQLOnFHIRError` root also catch SQLQuery errors. Since `SQLOnFHIRError` already inherits from `ValueError`, the broader-catch behavior is preserved.\n\nExpected behavior: `except SQLOnFHIRError` catches `SQLQueryParseError`, `SQLQueryValidationError`, `SQLQueryCycleError`, `SQLQueryMaterializationError`, `SQLQueryTypeError`, `UnsupportedDialectError`.\n\nReproducer: `try: raise SQLQueryParseError('x'); except SQLOnFHIRError: pass` should not propagate.",
+      "root_cause": "SQLError was defined with `ValueError` parent for backward-compat, bypassing the existing SQLOnFHIRError root in viewdef/errors.py.",
+      "resolution": "Changed `class SQLError(ValueError)` to `class SQLError(SQLOnFHIRError)` in fhir4ds/sqlquery/errors.py. Imported SQLOnFHIRError from fhir4ds.viewdef.errors. Updated module docstring. Added test_error_hierarchy_inherits_sqlofhiriroot in TestPackageImports verifying issubclass + behavioral catch via except SQLOnFHIRError.",
+      "verified_in": "fhir4ds/sqlquery/tests/test_smoke.py::TestPackageImports::test_error_hierarchy_inherits_sqlofhiriroot — asserts issubclass(SQLError, SQLOnFHIRError), issubclass(SQLError, ValueError), and except SQLOnFHIRError catches each typed subclass. 29/29 sqlquery tests pass."
+    },
+    {
+      "id": "BUGFIX-002",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR v2 cnl-0: `^[A-Z]([A-Za-z0-9_]){1,254}$` (2-255 chars). External review finding #10; internal REV-004.",
+      "evidence": "`fhir4ds/viewdef/parser.py:validate_view_definition()` checks `not vd.name[0].isupper() or len(vd.name) > 255` for cnl-0 warning. Missing condition: `len(vd.name) < 2`. A name like `'A'` violates cnl-0 (regex requires 2+ chars) but currently passes our warning.\n\nExpected behavior: `validate_view_definition(ViewDefinition(name='A', ...))` returns a warning containing 'cnl-0'.",
+      "root_cause": "Conservative scoping during initial §G-2 implementation skipped minimum-length enforcement.",
+      "resolution": "Added `len(vd.name) < 2` to the cnl-0 warning condition in fhir4ds/viewdef/parser.py:validate_view_definition. Updated the test docstring in test_single_char_name_warns to assert the warning fires (previously documented the gap as accepted).",
+      "verified_in": "fhir4ds/viewdef/tests/unit/test_parser.py::TestCnl0NameWarningPerSpecG2::test_single_char_name_warns — asserts any('cnl-0' in w for w in warnings) for name='A'. 5/5 cnl-0 tests pass."
+    },
+    {
+      "id": "BUGFIX-003",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "TEST_INFRASTRUCTURE",
+      "spec_citation": "External review finding #3 (FEATURE_PLAN_DRAFT_REVIEW.md §HIGH)",
+      "evidence": "`fhir4ds/viewdef/tests/test_spec_compliance.py:633` asserts `assert len(all_tests) == 144`. Strict equality means the next upstream spec suite growth breaks the test runner.\n\nExpected behavior: assertion uses `>= 144` floor with a logged actual count so growth does not break the runner.",
+      "root_cause": "Strict equality inherited from prior 134-assertion; updated mechanically during §G-5 refresh without future-proofing.",
+      "resolution": "Replaced strict `== 144` with `>= MIN_EXPECTED_SPEC_TESTS` (constant = 144) in fhir4ds/viewdef/tests/test_spec_compliance.py. Added helpful error message pointing at upstream URL if floor violated. Existing diagnostic print above still logs the actual count.",
+      "verified_in": "fhir4ds/viewdef/tests/test_spec_compliance.py::TestSpecCoverage::test_spec_test_count passes (144 >= 144)."
+    },
+    {
+      "id": "BUGFIX-004",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "category": "DOCUMENTATION_HYGIENE",
+      "spec_citation": "External review finding #12 (FEATURE_PLAN_DRAFT_REVIEW.md §LOW)",
+      "evidence": "`fhir4ds-private/docs/plans/SQL_ON_FHIR_V2_GAP_ANALYSIS.md` is now stale. Its 'Compliance Summary' table claims '134/134 stale, 9 of 22 files differ' — both resolved by the §G-5 spec suite refresh.\n\nExpected behavior: a banner at the top marks the doc as superseded.",
+      "root_cause": "Gap analysis was the input to the feature; once the feature shipped, the analysis became historical context but was never marked as such.",
+      "resolution": "Added ⚠️ SUPERSEDED (2026-08-11) blockquote banner at the top of SQL_ON_FHIR_V2_GAP_ANALYSIS.md pointing at the FDD, conformance report, release checklist, and joins-extension disclosure. Preserved rest of document as historical context.",
+      "verified_in": "Manual inspection of fhir4ds-private/docs/plans/SQL_ON_FHIR_V2_GAP_ANALYSIS.md — banner present; body content unchanged."
+    },
+    {
+      "id": "BUGFIX-005",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "category": "CODE_QUALITY",
+      "spec_citation": "External review finding #2 (FEATURE_PLAN_DRAFT_REVIEW.md §HIGH); internal REV-003.",
+      "evidence": "`fhir4ds/viewdef/types.py:ViewDefinition._extensions` uses a leading underscore, which is unconventional for a dataclass field.\n\nExpected behavior: field renamed to `extra_fields: Dict[str, Any] = field(default_factory=dict, repr=False, compare=False)`.",
+      "root_cause": "Naming choice during initial §G-3 implementation traded readability for an unneeded privacy signal.",
+      "resolution": "Renamed ViewDefinition._extensions → extra_fields with repr=False, compare=False in fhir4ds/viewdef/types.py. Same rename for _SQLLibraryBase in fhir4ds/sqlquery/types.py. Updated parser construction sites (viewdef/parser.py, sqlquery/parser.py). Renamed sqlquery/parser.py:_collect_extensions → _collect_extra_fields. Updated test_known_keys_are_not_treated_as_extensions in test_parser.py.",
+      "verified_in": "grep -rn '\\b_extensions\\b' fhir4ds/ returns nothing. pytest fhir4ds/viewdef/ fhir4ds/sqlquery/ = 1146/1146 green."
+    },
+    {
+      "id": "BUGFIX-006",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "category": "TEST_COVERAGE",
+      "spec_citation": "External review finding #1 (FEATURE_PLAN_DRAFT_REVIEW.md §HIGH)",
+      "evidence": "`TestCanonicalResourceRoundtripPerSpecG3` covers nested extension arrays and `meta.tag` arrays, but not specifically DomainResource `text` narrative.\n\nExpected behavior: a new test roundtrips a ViewDefinition with `text: {status, div}` and asserts JSON-level byte survival of the inner structure.",
+      "root_cause": "Initial §G-3 test corpus sampled structurally-similar nested shapes but not the FHIR narrative case specifically.",
+      "resolution": "Added test_narrative_text_div_survives_roundtrip to TestCanonicalResourceRoundtripPerSpecG3 in fhir4ds/viewdef/tests/unit/test_parser.py. Roundtrips text={status, div} and asserts json.dumps(out['text'], sort_keys=True) == json.dumps(text, sort_keys=True). Verified FHIR JSON key name: 'div' (no underscore; the _primitive convention applies only to primitives carrying extensions).",
+      "verified_in": "fhir4ds/viewdef/tests/unit/test_parser.py::TestCanonicalResourceRoundtripPerSpecG3::test_narrative_text_div_survives_roundtrip passes. 8/8 §G-3 tests pass."
+    }
+  ]
+}

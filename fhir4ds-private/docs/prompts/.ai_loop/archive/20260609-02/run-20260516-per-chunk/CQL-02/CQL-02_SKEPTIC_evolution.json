@@ -1,0 +1,55 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [],
+  "pipeline_step": null,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-02: CQL - Types - Clinical. SKEPTIC pass covered Code, CodeSystem, Concept, ValueSet, and Vocabulary clinical type behavior across translator output and DuckDB native/forced-fallback execution."
+  },
+  "issues": [
+    {
+      "id": "QA-CQL02-SKEPTIC-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "title": "Code selectors and named code references lost CQL Code shape",
+      "evidence": "Fresh probes showed `Code '8480-6' from LOINC is Code` translated through JSON resourceType extraction over the legacy string `http://loinc.org|8480-6`, raising malformed JSON, while `ToConcept(Code '8480-6' from LOINC)` returned NULL in both DuckDB native and forced Python fallback paths.",
+      "resolution": "Code selectors, named code refs, and codesystem-qualified code refs now translate to JSON-shaped CQL Code literals with code/system/display fields. Concept refs now translate to JSON-shaped CQL Concept literals.",
+      "verification": "fhir4ds/cql/duckdb/tests/integration/test_clinical_type_parity.py passed on native and forced Python fallback; official CQL conformance passed 1706/1706."
+    },
+    {
+      "id": "QA-CQL02-SKEPTIC-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "title": "Clinical `is` checks fell through to FHIR resource-type probing",
+      "evidence": "Clinical literals and references such as `System.ValueSet{id: '123'} is Vocabulary`, named value sets, named concepts, and code selectors needed static CQL clinical type identity rather than FHIR JSON `resourceType` extraction.",
+      "resolution": "Added static clinical type detection for Code, Concept, ValueSet, CodeSystem, and Vocabulary and evaluated those before the generic FHIR resource-type path.",
+      "verification": "Clinical type parity tests assert translation and execution results for ValueSet/CodeSystem as Vocabulary, Code as Code, Code not Concept, named Code/Concept/ValueSet refs, and code selectors."
+    },
+    {
+      "id": "QA-CQL02-SKEPTIC-003",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "title": "Clinical `as` assertions accepted mismatched clinical types",
+      "evidence": "`System.ValueSet{id: '123'} as CodeSystem`, `Code { code: '8480-6' } as Concept`, and `Code '8480-6' from LOINC as Concept` returned source values instead of NULL.",
+      "resolution": "Clinical `as` now behaves as a type assertion: exact clinical type matches pass through, Vocabulary accepts only ValueSet and CodeSystem, and mismatches lower to SQL NULL.",
+      "verification": "Native-loaded and forced Python fallback DuckDB connections now agree on NULL for mismatched clinical assertions and JSON output for valid Vocabulary/Concept results."
+    },
+    {
+      "id": "QA-CQL02-SKEPTIC-004",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "title": "Static clinical `as` remediation regressed dynamic FHIR clinical assertions",
+      "evidence": "Architect validation caught a DQM regression: full conformance dropped DQM to 39/47 because dynamic FHIR expressions such as `Observation.value as Concept ~ \"Stage\"` were statically lowered to NULL/FALSE when the source clinical type was not known at translation time.",
+      "resolution": "Clinical `as` now short-circuits only when the source expression has a statically known clinical type. Unknown or dynamic FHIR values fall through to the existing runtime assertion path so CodeableConcept/Concept comparisons still generate code matching SQL.",
+      "verification": "Clinical type parity pytest passed 5/5; targeted DQM measures CMS646, CMS1056, CMS826, and CMS122 passed 4/4 at 100%; broad CQL unit/integration/DuckDB pytest passed 4894 with 5 skips; full conformance passed 2822/2822."
+    }
+  ]
+}

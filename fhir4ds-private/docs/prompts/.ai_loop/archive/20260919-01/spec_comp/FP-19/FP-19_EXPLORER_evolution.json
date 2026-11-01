@@ -1,0 +1,42 @@
+{
+  "phase": null,
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-19: FHIRPath \u2014 \u00a77 Aggregates (STU), \u00a78 Lexical Elements. Test these items: aggregate(aggregator, [init]), Whitespace rules, Comments, Literals syntax, Symbols, Keywords, Identifiers, Case-sensitivity. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "summary": "incompatible-operand arithmetic error swallow (native)",
+      "verified_in": "iteration 1"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "summary": "mixed-unit quantity sum canonical-unit instead of most-granular (native)",
+      "verified_in": "iteration 1"
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "DEFERRED",
+      "summary": "pre-existing native UCUM derived-unit table + number\u00b1quantity gaps (out of chunk; 86 parity failures)",
+      "verified_in": null
+    }
+  ]
+}

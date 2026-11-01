@@ -1,0 +1,65 @@
+{
+    "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-10: FHIRPath \u2014 \u00a75.6.6-\u00a75.6.12 String Manipulation (Transform). Test these items: upper(), lower(), replace(pattern, substitution), matches(regex), replaceMatches(regex, substitution), length(), toChars(). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+    "issues": [
+        {
+            "id": "QA-001",
+            "severity": "HIGH",
+            "status": "RESOLVED",
+            "category": "SPEC_VIOLATION",
+            "spec_citation": "FHIRPath Normative Release \u00a75.6.6-\u00a75.6.12 function signatures and \u00a75.6 single-item string-function contract",
+            "evidence": "Fresh probe .temp/qa/fp10_skeptic_probe.py: native C++ accepts malformed calls such as s.upper(1), s.lower(1), s.replace('a','b','c'), s.matches('a','b'), s.replaceMatches('a','b','c'), s.length(1), and s.toChars(1), returning concrete data with fhirpath_is_valid=true. Forced Python fallback result UDFs often return empty, but fhirpath_is_valid also reports true for several invalid arity forms. Spec definitions give exact signatures: upper()/lower()/length()/toChars() take no args, matches(regex) takes one String, and replace/replaceMatches take two String args.",
+            "root_cause": "Native evalFunction did not enforce FP-10 exact arity before dispatch, and fallback fhirpath_is_valid only had static arity checks for FP-09 string-search functions.",
+            "resolution": "Added native exact-signature checks for upper/lower/replace/matches/replaceMatches/length/toChars and extended fallback static validation to FP-10 transform arity.",
+            "verified_in": ".temp/qa/fp10_skeptic_probe_after_fix.log; pytest test_string_transform_parity.py; native fhirpath sqllogictest; full conformance 2822/2822"
+        },
+        {
+            "id": "QA-002",
+            "severity": "MEDIUM",
+            "status": "RESOLVED",
+            "category": "SPEC_VIOLATION",
+            "spec_citation": "FHIRPath Normative Release \u00a74.3 function invocation chaining and \u00a75.6.8-\u00a75.6.10 string transform argument semantics",
+            "evidence": "Fresh probe .temp/qa/fp10_skeptic_probe.py: native C++ returns empty for s.replace(pattern, sub) and s.matches(regex), while forced Python fallback returns Abc X and false respectively. The resource contains sibling fields pattern='abc', sub='X', regex='[a-z]+'. Native evaluates transform arguments against the source string focus instead of the outer invocation focus, matching a previously fixed FP-09 bug class for string-search functions.",
+            "root_cause": "Native transform argument expressions were evaluated against the sourced string input instead of the outer invocation focus, so sibling fields were invisible.",
+            "resolution": "Changed native matches/replace/replaceMatches argument evaluation to use the outer invocation focus for sourced calls while preserving ordinary current-focus evaluation for unsourced calls.",
+            "verified_in": ".temp/qa/fp10_skeptic_probe_after_fix.log; test_string_transform_dynamic_arguments_match_python_fallback; native fhirpath sqllogictest; full conformance 2822/2822"
+        },
+        {
+            "id": "QA-003",
+            "severity": "MEDIUM",
+            "status": "RESOLVED",
+            "category": "SPEC_VIOLATION",
+            "spec_citation": "FHIRPath Normative Release \u00a75.6 and \u00a75.6.11 length() : Integer",
+            "evidence": "Fresh probe .temp/qa/fp10_skeptic_probe.py: forced Python fallback returns ['3']/3 for arr.length() where arr has two strings ['abc','def']; native C++ returns row-resilient empty. \u00a75.6 says string manipulation functions operate on collections with a single item and signal an error on more than one item.",
+            "root_cause": "Fallback strings.length read util.get_data(coll[0]) directly instead of enforcing a singleton String collection.",
+            "resolution": "Updated fallback length() to use ensure_string_singleton(), matching the other transform helpers and public row-resilient error behavior.",
+            "verified_in": ".temp/qa/fp10_skeptic_probe_after_fix.log; pytest test_string_transform_parity.py and test_string.py; full conformance 2822/2822"
+        },
+        {
+            "id": "QA-004",
+            "severity": "MEDIUM",
+            "status": "RESOLVED",
+            "category": "SPEC_VIOLATION",
+            "spec_citation": "FHIRPath Normative Release \u00a75.6 single String input/argument contract and project regex ReDoS guard invariant",
+            "evidence": "Fresh probe .temp/qa/fp10_skeptic_probe.py: native fhirpath_is_valid returns true for constant invalid transforms such as 123.upper(), 123.replace('2','x'), and 'abc'.matches('(a+)+'); both native and forced fallback return fhirpath_is_valid=true for path-shaped unsafe regex cases like s.matches('(a+)+') when sparse validation input makes s empty. These should be invalid because \u00a75.6 requires String inputs/arguments and local rules require regex paths to reject nested-quantifier ReDoS patterns before evaluation.",
+            "root_cause": "Native regex helpers returned empty after catching validation/regex errors, the native overlong-pattern limit was looser than the Python guard, and fallback fhirpath_is_valid did not statically inspect FP-10 literal regex arguments; sparse validation input could bypass concrete argument checks.",
+            "resolution": "Made native matches/replaceMatches validate String arguments and unsafe regex patterns before input-empty short-circuiting, throw typed spec errors on invalid regexes, aligned native overlong-regex rejection to the Python 1000-character limit, and added fallback literal argument/union/regex checks for FP-10.",
+            "verified_in": ".temp/qa/fp10_skeptic_probe_after_fix.log; test_string_transform_invalid_signatures_and_regex_validation_match_fallback; native fhirpath sqllogictest; full conformance 2822/2822"
+        }
+    ]
+}

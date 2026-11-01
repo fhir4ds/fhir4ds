@@ -1,0 +1,77 @@
+{
+  "phase": "REVIEW",
+  "iteration": 8,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN_EXIT",
+  "workflow": "code_review",
+  "pipeline": [
+    "bug_fix",
+    "feature_implementation",
+    "feature_design",
+    "feature_implementation",
+    "code_review"
+  ],
+  "pipeline_step": 4,
+  "qa_personality": null,
+  "config": {
+    "min_iterations": 15,
+    "max_iterations": 40,
+    "exhaustive_mode": false,
+    "target_version": "0.0.17",
+    "qa_schedule": null,
+    "benchmark_commands": null,
+    "benchmark_baseline_path": null,
+    "feature_plan_path": null,
+    "bug_fix_target": "Cleanroom connected-mode truth: items 4/5/6 of the S26 directives (server-side dataset for the auto-recalc heartbeat, Valuesets pane from server workspace, evidence click-targeting)",
+    "bug_fix_validation": "Playwright-first: failing repro in web/cql-cleanroom/tests/e2e (connected spec), then fix, then same test green; s24-journey 4/4, s22c 2/2, cell-mode 8/8, nav 9/9, devserver pytest green",
+    "notes": "S26 CLEANROOM WORKSPACE CONVERGENCE campaign. PRIMARY MANDATE: .ai_loop/USER_DIRECTIVES.md (12 session decisions, work-type classification, 3 slices, 9 binding gates). Pipeline: bug_fix (items 4/5/6 connected-mode truth) -> feature_implementation (items 1/2/3/8/9/10/11/12, slices 1-3) -> feature_design (item 7 audit property-leaves, gated) -> feature_implementation (item 7) -> code_review (full campaign). Discovery: tree at fb3e65fe (S24) with the UNCOMMITTED S25 working set (data-section UX, workspace switching, cells view, save-to-disk) awaiting Joel's review \u2014 do not revert; build on it. Version 0.0.17, no version bump. Extension binaries md5-stable unless item 7 requires native rebuild. No commits \u2014 Joel commits. Live devserver for manual checks: python3 -m fhir4ds.cli dev examples/demo-workspace --port 19250 (PYTHONPATH=/mnt/d/fhir4ds). Envelope API is FLAT {schema, ok, ...payload}. Build+deploy loop: npm run build in web/cql-cleanroom then copy dist assets into fhir4ds/devserver/static-cleanroom/. | S26a bug_fix COMPLETE (iter 1): 3/3 red->green in s26a-connected-truth.spec.ts; s24-journey 4/4, s22c 2/2, cell-mode 8/8, nav 9/9, vitest 195, devserver pytest 243 (incl. new explain output_columns test). 2 console.spec failures are pre-existing stale pins (verified at clean HEAD) - resolved by items 1/2 in feature_implementation. Also re-landed S25 hunks lost to the stash incident (serverFocusedBundle/Group, negative-index builder handoff, explicitCommitOnly save-to-disk, cells console-free guard). | S26 feature_implementation COMPLETE (iters 2-4): slice 1 workspaces+surfaces (generator scripts/gen_example_workspaces.py idempotent, cms125 real MAT CQL+26 VS+6 MADiE cases namespaced sha1 ids, cms69 60 cases+MAT Measure from export zip, demo+valueset define; File>Workspace menu; File>Open>Examples=workspace switches; Defines tabs REMOVED both contexts; builder Form/Raw switch). slice 2 zip convergence (MADiE-layout zips in public/examples, loadExample=importMadiePackage ONE loader with valuesets+tests additive reading, canonicalTail bare-name+http fallbacks, Measure library[0] synthesis for MAT measures, exampleBootRef+cellsViewForceCloseNonce text-view landing, website CleanroomWC+embed tests flipped to cms125-workspace). slice 3 showcase (expected store Measure/expected/patients/<measure>/ shape, _expected_root first-EXISTING-dir fix, discovery ships Measure resources, connected adopts disk measures, expectedItems counts MADiE contained-Parameters subject shape, ViewDefinition/MeasureReportPopulations.json shipped, _resolve_main disk-backfill for non-inline includes, runEvaluation server path sends parameters). 4/6 cms125 fixture cases match official pins (Claim/EOB numerator needs DQM draft libs absent from repo - documented honest gap). Gates: 42 e2e green (s26a 3 + s26b 4 + s26c 2 + s24 4 + s22c 2 + cell 8 + nav 9 + console 12 - wait recount via suites) + vitest 195 + devserver pytest 243 + website typecheck/build. | S26 feature_design COMPLETE (iter 5): item 7 FDD at fhir4ds-private/docs/architecture/plans/FEATURE_AUDIT_PROPERTY_LEAVES.md. Key research findings: (1) audit surfaces are Python SQL macros (macros/audit.py register_audit_macros per-connection) \u2014 NO native rebuild needed; (2) the S22f seam already emits birthDate derived leaves for BOOLEAN-wrapped age defines (AgeInRange works via _patient_property_defs + audit_patient_property); (3) bare non-boolean defines (AgeYears) get no definition AT ALL \u2014 non-Boolean PATIENT_SCALAR shapes are audit-demoted (cte_manager _deep_demote_audit_in_sql, a deliberate binder-safety doctrine) and operations explain only extracts {result,evidence} dict cells; (4) DESIGN: export _patient_property_defs on TranslateResult (metadata-only, byte-identical SQL) + enrich at the explain seam (operations explain_patient) \u2014 never touch the demote doctrine or population SQL. The 0.0.16 campaign precedent replaced the design WAIT gate with /second-opinion review; the S26 directives keep the standard gate \u2014 but Joel auto-advance ordered, and the loop is one-writer: proceeding to implementation per the auto-advance directive with the FDD as the contract. | S26 item 7 feature_implementation COMPLETE (iter 6-7): TranslateResult.patient_property_defs export (3-tuple attr/value-SQL/deriving-operator at both S22f sites; cte_manager unpack positionally-safe; AgeIn<unit> label), _evaluate threads lineage into kwargs under audit_mode=full, explain_patient enriches non-boolean property-derived defines (raw result + Patient/<id> birthDate derived leaf, threshold=operator). Guard-indent bug found+fixed (props.setdefault escaped the current_def guard -> UnboundLocalError on query-scope age calls \u2014 caught by test_context_patient_leaf_review_guards). New test test_context_patient_property_leaf_non_boolean_defines. Gates: operations 25, devserver+ops 435, cql unit 1712, conformance 2832/2832 (ViewDef 144 FHIRPath 935 CQL 1706 DQM 47), vitest 195, e2e suites green (s26a-3 hardened against first-explain race; cell-mode 8/8 three consecutive runs after one S8 flake). | S26 code_review COMPLETE (iter 8): CLEAN_WITH_NOTES. Findings at state/s26_code_review.md (full acceptance matrix promise->test). Security: resource-replace traversal probed SAFE (validate_resource FHIR-id gate runs first); no innerHTML/eval/secret surfaces; binaries untouched (Python/TS-only campaign verified). Mid-loop guard-indent bug on AgeAt site was caught by existing review-guards test and fixed. All gates rerun on final tree: operations 25, devserver+ops 435, cql unit 1712, conformance 2832/2832 SUCCESS, vitest 195, website typecheck+build, cleanroom e2e suites green (cell-mode S8 one flake under load, 3x consecutive 8/8 after). 3 LOW informational notes (tuple-shape JSON serialization, single-Parameters contained assumption, 2 non-code tracked files). PIPELINE COMPLETE: bug_fix -> feature_impl (3 slices) -> feature_design -> feature_impl (item 7) -> code_review. No commits made (Joel commits). | S26d REVIEW FIXBACK COMPLETE (Joel checkpoint 2026-10-22, 9 findings, all fixed with journey tests s26d-review-fixback.spec.ts 7/7): (1) measure primary-library resolution \u2014 boot purity opens the MEASURE PRIMARY (Measure.library[0] tail from /api/workspace) not the alphabetical first; adopted disk measures carry primaryLibraryName (binds on open); entrypoint falls back by name; connected picker offers DISK libraries (disk:<name> ids open on demand). (2) MR tab rows \u2014 heartbeat suppression is now LIBRARY-TAB-only (host tabs always heartbeat; cellsViewActiveRef gated by activeTabIsLibrary), so measure surfaces never starve; runIsEntrypoint now true on the primary. (3) cells full-height \u2014 .cells-fullheight grid collapse (auto minmax(0,1fr) 0 0). (4) declarations header card (cell-header-card, renderHeaderEditor Monaco, dashed style) above define cells. (5) stray status line was the stale CMS125Demo library (7). (6) valuesets label name\u2192title\u2192id (discovery ships name/title; App + expectedItems + expectedMapFromReports read MADiE contained-Parameters subject). (8) expected results populate (MADiE subject shape). (9) MeasureReportPopulations VD fixed (canonical resourceType + MADiE-shaped paths group.population.where(code...) + contained-Parameters patient_id; executes 6 rows). ROOT-CAUSE BONUS FIX: activeTabIsLibrary flapped on Ctrl+A+Delete (empty text -> hosting-tab unmount) \u2014 now tab-KIND only; runLib falls to mainLib when no libraries. Gates: s26d 7/7, s26a 3/3 (valueset pin updated to name doctrine), s26b 4/4, s26c 2/2, s24+s22c 8/8, console 12/12, vitest 195, devserver 243x2 (18801 port-leak cascade cleaned), operations 25."
+  },
+  "issues": [
+    {
+      "id": "BUGFIX-001",
+      "status": "RESOLVED",
+      "severity": "HIGH",
+      "category": "REGRESSION_RISK",
+      "spec_citation": null,
+      "evidence": {
+        "actual": "Connected mode: switching to cms125-workspace leaves the auto-recalc heartbeat evaluating the browser-default 3-patient demo dataset (wrong patients, phantom-patient evidence); runEvaluation (src/App.tsx ~1563) is browser-origin and evalDataset stays the in-browser default.",
+        "expected": "Connected mode heartbeat evaluates against the SERVER workspace kernel dataset (the workspace's own patients); evidence cites real workspace patients.",
+        "files": [
+          "web/cql-cleanroom/src/App.tsx"
+        ]
+      },
+      "resolution": "S26a bug_fix: all three fixed Playwright-first (s26a-connected-truth.spec.ts red->green). Heartbeat server-side in connected mode (runEvaluation useServer + canAutoEval); WS_GROUPS dual-layout dirs + /api/explain output_columns narrowing (route fix + devserver test)."
+    },
+    {
+      "id": "BUGFIX-002",
+      "status": "RESOLVED",
+      "severity": "MEDIUM",
+      "category": "REGRESSION_RISK",
+      "spec_citation": null,
+      "evidence": {
+        "actual": "Valuesets pane shows nothing in connected mode (cms125 ValueSet/ folder never surfaced in the navbar Valuesets section).",
+        "expected": "Valuesets section lists the workspace's ValueSet resources from the server in connected mode.",
+        "files": [
+          "web/cql-cleanroom/src/App.tsx",
+          "fhir4ds/devserver/api.py"
+        ]
+      },
+      "resolution": "S26a bug_fix: all three fixed Playwright-first (s26a-connected-truth.spec.ts red->green). Heartbeat server-side in connected mode (runEvaluation useServer + canAutoEval); WS_GROUPS dual-layout dirs + /api/explain output_columns narrowing (route fix + devserver test)."
+    },
+    {
+      "id": "BUGFIX-003",
+      "status": "RESOLVED",
+      "severity": "MEDIUM",
+      "category": "REGRESSION_RISK",
+      "spec_citation": null,
+      "evidence": {
+        "actual": "Text-editor evidence click targets the wrong population (click InAgeRange -> initial_population/Encounter/gender evidence) and wrong patient on the browser-origin heartbeat path.",
+        "expected": "Evidence click shows the clicked define's own population mapping; rides the BUGFIX-001 server-dataset fix (browser-origin phantom-patient path disappears).",
+        "files": [
+          "web/cql-cleanroom/src/App.tsx"
+        ]
+      },
+      "resolution": "S26a bug_fix: all three fixed Playwright-first (s26a-connected-truth.spec.ts red->green). Heartbeat server-side in connected mode (runEvaluation useServer + canAutoEval); WS_GROUPS dual-layout dirs + /api/explain output_columns narrowing (route fix + devserver test)."
+    }
+  ]
+}

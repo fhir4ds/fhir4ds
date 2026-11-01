@@ -1,0 +1,20 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-02: SQL-on-FHIR ViewDefinition - Key Elements: Constants; ViewDefinition.constant; ViewDefinition.constant.name; ViewDefinition.constant.value[x]. Test items: constant 0..* parsing using the spec singular field name, constant.name 1..1 with sql-name validation and %name FHIRPath reference, value[x] 1..1 exactly-one behavior, primitive value types: base64Binary, boolean, canonical, code, date, dateTime, decimal, id, instant, integer, integer64, oid, string, positiveInt, time, unsignedInt, uri, url, uuid, constant substitution in column paths and where filters, invalid/missing constant values raise explicit spec errors. Fresh run; prior workflow outputs intentionally not consulted."
+  },
+  "issues": []
+}

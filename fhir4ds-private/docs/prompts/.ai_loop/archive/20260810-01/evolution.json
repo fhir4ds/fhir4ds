@@ -1,0 +1,287 @@
+{
+  "phase": "COMPLETE",
+  "iteration": 8,
+  "audit_status": "CLEAN",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution",
+    "code_review",
+    "pre_release",
+    "docs_audit",
+    "benchmarks",
+    "scribe"
+  ],
+  "pipeline_step": 6,
+  "qa_personality": "HISTORIAN",
+  "domain_audit": {
+    "iteration": 8,
+    "domain": 10,
+    "personality": "HISTORIAN",
+    "verdict": "CLEAN",
+    "summary": "Domain 10 (Installation and Environment) audit returns CLEAN. HISTORIAN (Spec Compliance Verifier) systematically walked the install/import/environment surface against the SPEC_QA_DOMAINS.md Domain 10 anchor and the README install docs. Built candidate wheel fhir4ds_v2-0.0.11-py3-none-any.whl (10,398,155 bytes; 802 entries). Wheel METADATA reports Version: 0.0.11. Wheel ships BOTH native extensions: fhir4ds/cql/duckdb/extensions/cql.duckdb_extension (11,249,246 bytes) and fhir4ds/fhirpath/duckdb/extensions/fhirpath.duckdb_extension (11,567,614 bytes) \u2014 sizes match source tree exactly. ELF 64-bit LSB shared object x86-64 with valid BuildID, dynamically linked against libstdc++.so.6/libm.so.6/libc.so.6. All 7 public __init__.py files in the wheel report __version__ = '0.0.11' (fhir4ds, fhir4ds.fhirpath, fhir4ds.fhirpath.duckdb, fhir4ds.cql, fhir4ds.cql.duckdb, fhir4ds.viewdef, fhir4ds.dqm) \u2014 confirms the iter-6 QA-011 fix holds at the wheel level. Fresh-venv install (/tmp/fhir4ds-venv, Python 3.10.12, pip install + [measures] extra) clean: pip check returns 'No broken requirements found'. Import smoke: `import fhir4ds; fhir4ds.__version__` returns '0.0.11'. register(con) returns {'fhirpath_cpp': True, 'cql_cpp': True} under DuckDB 1.5.2 with allow_unsigned_extensions=True; calling register(con) twice is idempotent (no raise, same dict both times). Native C++ vs forced Python fallback parity: 9/9 representative FHIRPath cases (navigation multi-value, where() filter, valueQuantity.value, boolean singleton, missing path -> empty, gender=male true/false/empty, birthDate singleton) produce byte-identical output. Fallback was forced via documented duckdb.__version__='0.0.0-forced-python-fallback' trick \u2014 register() correctly returns {'fhirpath_cpp': False, 'cql_cpp': False}, so users are NEVER silently on the fallback. register_fhirpath(con) standalone and register_cql(con) standalone both load successfully. register(con=None) raises TypeError as designed. create_connection() helper returns a working DuckDBPyConnection with UDFs pre-registered. test_version.py 2/2 PASS. Conformance 2822/2822 unchanged (ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706, DQM 47/47) \u2014 no regression from read-only probes. NON-BLOCKING OBSERVATION (not filed as bug): `import fhir4ds.dqm` requires `pandas` which is in optional [measures] extra (because evaluate_measure returns DataFrames); top-level `import fhir4ds` is unaffected and this is the documented extra-bounded install contract \u2014 pre-existing intentional design. No new issues filed.",
+    "issues_filed": [],
+    "artifacts": [
+      "fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/iter8/probe1_install_smoke.py",
+      "fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/iter8/probe2_native_vs_fallback_parity.py",
+      "fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/iter8/probe3_register_surface.py"
+    ],
+    "prior_audit": {
+      "iteration": 7,
+      "domain": 9,
+      "personality": "ARCHAEEOLOGIST",
+      "verdict": "OPEN_ISSUES",
+      "summary": "Domain 9 (Audit Evidence and DQM) audit returns 4 OPEN issues (1 HIGH, 2 MEDIUM, 1 LOW). ARCHAEOLOGIST fuzz threw pathological inputs at MeasureEvaluator via real CMS135/CMS71/CMS165/CMS996/CMS2 fixtures with audit_mode in {none, population, full}. Top finding (QA-016 HIGH): audit_mode='full' raises DQMError on 4/5 sampled CMS measures \u2014 unbound 'p' alias in audit SQL emission (ast_helpers.py:1698/1712/1725) and malformed struct_pack. The conformance runner silently falls back to non-audit SQL (runner.py:201-213) AND run_dqm.py hardcodes audit=False, so the release gate never exercises the broken code path \u2014 only 1/47 measures (CMS157) ships a working _audit_full.sql. (All 4 issues RESOLVED in iter-7.)",
+      "issues_filed": [
+        "QA-016",
+        "QA-017",
+        "QA-018",
+        "QA-019"
+      ]
+    }
+  },
+  "config": {
+    "min_iterations": 8,
+    "max_iterations": 16,
+    "exhaustive_mode": false,
+    "target_version": "0.0.11",
+    "wheel_filename": null,
+    "feature_plan_path": null,
+    "personality_override": null,
+    "specialist_domain_override": 10,
+    "focus_domains": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "qa_schedule": null,
+    "benchmark_commands": [
+      "python3 benchmarks/runner/dqm_perf_report.py --current conformance/reports/dqm_report.json --baseline benchmarks/baselines/dqm_2025.json --output-json benchmarks/output/dqm-performance-report.json --output-md benchmarks/output/dqm-performance-report.md"
+    ],
+    "benchmark_baseline_path": "fhir4ds-private/docs/prompts/.ai_loop/archive/20260627-01/benchmark_report.md",
+    "bug_fix_target": null,
+    "bug_fix_validation": null,
+    "notes": "Pressure-test and prepare release 0.0.11. Pipeline per USER_DIRECTIVES: evolution (>=8 iterations covering QA domains 3-10) -> code_review -> pre_release -> docs_audit -> benchmarks -> scribe. Domain coverage requirement: at least one QA iteration for each of domains 3 (CQL translation), 4 (CQL eCQM patterns), 5 (SQL-on-FHIR v2 ViewDefinition), 6 (data ingestion/schema), 7 (performance/scale), 8 (errors/API contract), 9 (audit/DQM), 10 (install/environment). Do not advance from a domain iteration while it has unresolved non-terminal CRITICAL/HIGH/MEDIUM issues \u2014 fix and architect-review first. Final gates must include: (a) python3 conformance/scripts/run_all.py with 100% spec compliance; (b) full package pytest suite (unless a documented env limit blocks it); (c) DQM performance benchmark vs prior 0.0.10 baseline (archive/20260627-01/benchmark_report.md) with scaling cliffs / memory spikes / major regressions treated as release blockers; (d) DuckDB native C++ extension path AND forced Python fallback path tested and outputs compared wherever both exist. Discovery notes: pyproject.toml confirms version 0.0.11 (no override in directives). Recent commits since 0.0.10 focus on medterm4ds integration (terminology services, auto-coding, subsumption, clinical NER), FHIRDataLoader parallel augmentation knobs (batch_size, workers), in-process medterm4ds integration tests, and Terminology.expand_url facade for ValueSet expansion. Working tree is dirty: conformance/reports/dqm_report.json modified, conformance/scripts/run_cql.py modified, results.json untracked, new fixture fhir4ds/cql/tests/fixtures/conditions_text_only.ndjson \u2014 Investigator/Remediation Engineer should reconcile these before pre_release. The medterm4ds integration and loader parallel augmentation are the highest-risk surfaces this campaign. RELEASE ENGINEER ARTIFACT GATE REQUIRED: 0.0.11 affects package metadata, wheel contents, and DuckDB native extension registration \u2014 the final candidate wheel/import/package must be tested after implementation and before clean exit. Per USER_DIRECTIVES \u00a7Focus Areas, include release/package/import checks for 0.0.11 during pre_release validation."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "ARCH-001",
+      "severity": "LOW",
+      "status": "OPEN",
+      "domain": 3,
+      "title": "Latent inconsistency: functions.py:286-287 still references array_distinct for the `distinct` name (dead path today, footgun tomorrow)",
+      "spec_citation": "CQL \u00a722 List Operators / Appendix B \u2014 distinct must preserve first-occurrence ordering and retain a single NULL element (same spec anchor as QA-001).",
+      "evidence": "In `fhir4ds/cql/translator/functions.py:286-287`, `_translate_list_func(name=\"distinct\", ...)` returns `SQLFunctionCall(name=\"array_distinct\", args=[source])` \u2014 the same DuckDB native call that caused QA-001. The engineer's scope-discipline note (engineer_handoff.md) correctly identifies this path is overridden upstream by the dedicated `DistinctExpression` AST node handler (`_translate_distinct_expression` in `_lists.py:897`), so it is NOT load-bearing for the spec-defined function form today. Verified by grep: every reference to `DistinctExpression` in the translator uses `_translate_distinct_expression`, and `_translate_list_func` is only reached via generic function-call fallback when no dedicated AST node exists. The risk is that a future code path that routes a `distinct(...)` call through the generic function dispatcher (e.g. via a partial migration, a new helper, or a parser edge case that bypasses the DistinctExpression AST node) would silently re-introduce the same NULL-dropping / order-violating behavior that QA-001 just fixed.",
+      "impact": "No live bug. Future regression risk only. Severity LOW because the dispatch path is unreachable today and the engineer documented it.",
+      "fix_location": "fhir4ds/cql/translator/functions.py:286-287",
+      "recommended_fix": "Either (a) delete the dead branch entirely with an assertion that `distinct` is always handled by `_translate_distinct_expression`, or (b) route it to `SQLFunctionCall(name='\"Distinct\"', args=[source])` for defense-in-depth parity with the fluent form. Option (b) is preferred \u2014 it makes the two paths self-consistent regardless of which dispatcher reaches them."
+    },
+    {
+      "id": "ARCH-002",
+      "severity": "LOW",
+      "status": "OPEN",
+      "domain": 3,
+      "title": "Regression test TestFluentDistinctMacroEmission verifies SQL emission only, not runtime NULL retention or first-occurrence ordering",
+      "spec_citation": "CQL \u00a722 / Appendix B \u2014 distinct must preserve first-occurrence ordering AND retain a single NULL element.",
+      "evidence": "`fhir4ds/cql/tests/unit/test_sql_structure.py::TestFluentDistinctMacroEmission` (lines 153\u2013201) translates CQL to SQL and asserts the substring `\"DISTINCT\"(` appears and `ARRAY_DISTINCT` does not. It does NOT execute the SQL against DuckDB, so it cannot detect (a) NULL retention or (b) first-occurrence ordering. The macro `CQLListDistinctEq` was independently audited at the architect phase and DOES implement both invariants correctly via `generate_subscripts` + `NOT EXISTS previous equal element` filtering. However, if the macro definition were ever regressed (e.g. someone changed `CQLListDistinctEq` to call `array_distinct` internally), these tests would still pass while the runtime behavior silently breaks \u2014 the exact failure mode that allowed QA-001 to ship in the first place.",
+      "impact": "No live bug. The macro is correct today. Test-coverage gap only. Severity LOW because the existing macro-level tests in `fhir4ds/cql/duckdb/tests/` (referenced in AGENTS.md line 3679) cover `CQLListDistinctEq` directly, but those tests do not specifically cover the fluent-form dispatch path.",
+      "fix_location": "fhir4ds/cql/tests/unit/test_sql_structure.py (extend) or a new integration test that actually executes the emitted SQL.",
+      "recommended_fix": "Add a runtime test that registers the CQL macros, executes `\"Distinct\"([1, 2, 3, 1, 2, 3])`, `\"Distinct\"([NULL, NULL, NULL])`, and `\"Distinct\"(['a', NULL, 'a'])` via DuckDB, and asserts `[1, 2, 3]`, `[None]`, and `['a', None]` respectively. This converts the regression test from emission-shaped to behavior-shaped, matching the SKEPTIC QA personality's key-question coverage."
+    },
+    {
+      "id": "QA-002",
+      "status": "INTENDED",
+      "verified_in": "Iteration 2 \u2014 spec citation independently confirmed by architect against fixture CqlIntervalOperatorsTest.xml:914-918 (DateTimeIncludedInNull expects null for identical wall-clock bounds with differing precision). Full evidence appended to ARCHIVE_LOG.md."
+    },
+    {
+      "id": "QA-003",
+      "status": "DEFERRED",
+      "verified_in": "Iteration 2 \u2014 architect confirmed both defer conditions met (no eCQM conformance impact; fix requires net-new FHIR R4 CodeableConcept.code navigation shortcut, unimplemented in FHIRPath engine per source inspection). ACCEPTABLE_DEFER, flagged for future iteration. Full evidence appended to ARCHIVE_LOG.md."
+    },
+    {
+      "id": "QA-004",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 2 \u2014 architect confirmed typed TranslationError guard at fhir4ds/cql/translator/expressions/_property.py:240-258 is spec-grounded, minimal, and exercised by 2 regression tests in test_iter2_qa_regression.py. Full evidence appended to ARCHIVE_LOG.md."
+    },
+    {
+      "id": "QA-005",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 3"
+    },
+    {
+      "id": "ARCH-003",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "domain": 5,
+      "title": "repeat inside enclosing forEachOrNull shares the same parent-row-drop leak shape that QA-005 just fixed for nested forEach",
+      "spec_citation": "SQL-on-FHIR v2 ViewDefinition, Process(S, N) step 3 (same anchor as QA-005). When the outer forEachOrNull foci is empty, ALL columns under that select \u2014 including those produced by a nested `repeat` \u2014 must bind to NULL and exactly one row must be emitted.",
+      "evidence": "In `fhir4ds/viewdef/generator.py:1546-1558`, the `repeat` branch in `_process_selects` calls `generate_repeat_unnest(resolved_paths, current_var, alias)` (from `fhir4ds/viewdef/unnest.py:112-136`) and emits a plain `CROSS JOIN LATERAL` with no `null_preserve_var` parameter. `generate_repeat_unnest` does not even accept a `null_preserve_var` parameter. When a `repeat` is nested under an enclosing `forEachOrNull` whose foci is empty, the OUTER LEFT JOIN preserves the parent NULL row, but the repeat's `CROSS JOIN LATERAL` evaluates `fhirpath_repeat(NULL_alias, paths)` -> empty collection -> CROSS JOIN against zero rows -> parent's preserved NULL row eliminated. This is the exact same bug shape as QA-005 for `forEach`. The QA-005 fix did not extend to `repeat` because QA-005's reproducer only exercised `forEach` (not `repeat`), and the engineer's scope discipline stayed within that reproducer.",
+      "impact": "Silent data loss for any ViewDefinition that uses `forEachOrNull: optionalField` wrapping `repeat: optionalField.deepPaths` \u2014 the parent resource disappears from the output when the optional outer field is absent. No live test covers this combination today. Severity MEDIUM (vs QA-005's HIGH) because `repeat` under `forEachOrNull` is a rarer authoring pattern than `forEach` under `forEachOrNull`, and no production or conformance ViewDefinition is known to use it. Filed as a NEW finding for a future iteration; not addressed in iter-3.",
+      "fix_location": "fhir4ds/viewdef/unnest.py:112-187 (generate_repeat_unnest) and fhir4ds/viewdef/generator.py:1546-1564 (repeat branch in _process_selects).",
+      "recommended_fix": "Mirror the QA-005 fix: (1) add a `null_preserve_var` parameter to `generate_repeat_unnest` that, when set, gates the VALUES row on `{null_preserve_var} IS NOT NULL` and UNION ALLs a single synthetic NULL row when `{null_preserve_var} IS NULL`. (2) Thread the already-plumbed `null_preserve_var` from `_process_selects` into the `generate_repeat_unnest` call. (3) Extend `_collect_foreachornull_paths` tracking if `repeat` is also a wrapper that should suppress null rows across UNION ALL alternatives (likely yes for symmetry). Add a regression test analogous to `TestForeachOrNullNestedForeachSpecSofVd05Historian` but with `repeat` instead of `forEach`.",
+      "root_cause": "`generate_repeat_unnest` emitted an unconditional CROSS JOIN LATERAL against `fhirpath_repeat(resource_var, paths)`. When `resource_var` was the unnest alias of an enclosing forEachOrNull whose foci was empty (preserved NULL row), `fhirpath_repeat(NULL_alias, paths)` returned an empty collection, the CROSS JOIN against zero rows eliminated the parent's preserved NULL row, and the entire selection structure collapsed to 0 rows \u2014 violating Process(S, N) step 3 (one null row total). Same bug shape as QA-005; the QA-005 fix only patched `generate_foreach_unnest`, leaving `generate_repeat_unnest` unfixed because QA-005's reproducer only exercised nested `forEach`.",
+      "resolution": "Mirrored QA-005 fix. (1) `fhir4ds/viewdef/unnest.py:generate_repeat_unnest` gained a `null_preserve_var` parameter; when set, the source VALUES row is gated on `{null_preserve_var} IS NOT NULL` and a synthetic NULL row is UNION ALLed only when `{null_preserve_var} IS NULL`. (2) `fhir4ds/viewdef/generator.py:_process_selects` repeat branch threads `null_preserve_var` into the call. (3) `_collect_foreachornull_paths` did NOT need extension: it tracks forEachOrNull *wrappers* (the dedup unit), not inner unnests; `repeat` (like nested `forEach`) is an inner unnest consumer of the null-preserving var, so the existing dedup correctly handles UNION ALL alternatives. Added regression tests in `TestForeachOrNullNestedRepeatSpecSofVd05Architect` (3 cases: outer-empty, outer-non-empty, mixed).",
+      "verified_in": "Iteration 3"
+    },
+    {
+      "id": "QA-006",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 4 \u2014 architect APPROVED. isinstance(list) TypeError guard at notes_pipeline.py:391-394 mirrors load_resources contract. 4 regression tests pass. Full evidence appended to ARCHIVE_LOG.md."
+    },
+    {
+      "id": "QA-007",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 4 \u2014 architect APPROVED. __post_init__ on NotesPipelineConfig (notes_pipeline.py:168-193) and AutoCoderConfig (auto_coder.py:160-179) raises ValueError for non-positive workers/batch_size/parallel_threshold. Pattern matches viewdef/types.py:Column. 11 regression tests pass. Full evidence appended to ARCHIVE_LOG.md."
+    },
+    {
+      "id": "QA-008",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 4 \u2014 architect APPROVED. _FHIR_BUNDLE_TYPES frozenset at fhir_loader.py:38-50 matches canonical 9-code FHIR R4 value set. load_bundle at :528-539 rejects missing/empty/non-string/unknown type per 1..1 IsModifier=true cardinality. Transaction/batch entry.request enforcement deferred. 14 regression tests pass. Full evidence appended to ARCHIVE_LOG.md."
+    },
+    {
+      "id": "QA-009",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 4 \u2014 architect APPROVED. load_ndjson at :634-652 shares per-line FHIR validation block (object type, resourceType, id pattern, JSON serializability) between strict=True (raise with line number) and strict=False (warn + skip). Symmetric. 5 regression tests pass. Full evidence appended to ARCHIVE_LOG.md."
+    },
+    {
+      "id": "QA-010",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 4 \u2014 architect APPROVED. Dedup overwrite log upgraded from DEBUG to WARNING at fhir_loader.py:432-436 (source-source) and :470-475 (cross-source/derived). Last-write-wins semantics unchanged. 2 regression tests pass. Full evidence appended to ARCHIVE_LOG.md."
+    },
+    {
+      "id": "ARCH-004",
+      "severity": "LOW",
+      "status": "OPEN",
+      "domain": 6,
+      "title": "AutoCoder.augment_resources lacks the isinstance(list) guard that QA-006 added to its sibling NotesPipeline.extract_conditions_batch \u2014 structural asymmetry",
+      "spec_citation": "API-contract consistency. The loader's two batch entry points (FHIRDataLoader.load_resources and NotesPipeline.extract_conditions_batch) both enforce isinstance(list) at entry; AutoCoder.augment_resources is the third batch entry point in the same package and does not.",
+      "evidence": "`fhir4ds/cql/loader/auto_coder.py:257-282` (`AutoCoder.augment_resources`) takes `resources: list[dict]` and only checks `if not resources: return` before iterating via `for resource in resources` at line 286. A string caller would char-iterate silently (each character passed to `augment_resource` which checks isinstance(dict) and logs a warning but does not raise); a dict caller would crash with `TypeError: unhashable type: 'slice'` only if `_augment_batch_parallel` is reached (which it is not, because workers default to 1); a generator caller would iterate once and exhaust. The QA-006 fix at notes_pipeline.py:391-394 added `isinstance(list)` to the sibling method but did not propagate to auto_coder.py. Realistic risk is LOW because `augment_resources` is only called from `fhir_loader.py:382`, which is downstream of `load_resources`'s isinstance guard at `:367` \u2014 the contract is enforced one layer up. The asymmetry is structural fragility, not a live bug.",
+      "impact": "No live bug today (the upstream caller enforces the contract). Future regression risk if a new caller invokes `augment_resources` directly without going through `load_resources`. Severity LOW because the existing call path is safe and the failure mode (silent string char-iteration) is the same shape QA-006 already characterized.",
+      "fix_location": "fhir4ds/cql/loader/auto_coder.py:281 (augment_resources entry, immediately after `if not resources: return`)",
+      "recommended_fix": "Add `if not isinstance(resources, list): raise TypeError(f'Expected list of FHIR resource dicts, got {type(resources).__name__}')` mirroring notes_pipeline.py:391-394. Two-line change with no behavioral impact on the existing call path."
+    },
+    {
+      "id": "QA-011",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 6 \u2014 architect APPROVED. All 7 public __init__.py files report 0.0.11 matching pyproject.toml; runtime import probe confirms all subpackages; test_version.py 2/2 PASS. Full evidence appended to ARCHIVE_LOG.md."
+    },
+    {
+      "id": "QA-012",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 6 \u2014 architect APPROVED. load_file wraps json.JSONDecodeError into ValueError with file-path context; 4 regression tests PASS. Full evidence appended to ARCHIVE_LOG.md."
+    },
+    {
+      "id": "QA-013",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 6 \u2014 architect APPROVED. get_terminology_endpoint raises TypeError for non-TerminologyConfig input; 5 regression tests PASS. Full evidence appended to ARCHIVE_LOG.md."
+    },
+    {
+      "id": "QA-014",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 6 \u2014 architect APPROVED. HTTPTerminologyEndpoint validates base_url scheme + netloc at construction; 9 regression tests PASS. Full evidence appended to ARCHIVE_LOG.md."
+    },
+    {
+      "id": "QA-015",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 6 \u2014 architect APPROVED. register and load_resource wrap closed-connection errors into typed fhir4ds-namespaced messages; 3 regression tests PASS. Full evidence appended to ARCHIVE_LOG.md."
+    },
+    {
+      "id": "QA-016",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 7"
+    },
+    {
+      "id": "QA-017",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 7"
+    },
+    {
+      "id": "QA-018",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 7"
+    },
+    {
+      "id": "QA-019",
+      "status": "RESOLVED",
+      "verified_in": "Iteration 7"
+    },
+    {
+      "id": "REV-001",
+      "severity": "MEDIUM",
+      "status": "OPEN",
+      "domain": 9,
+      "title": "QA-017 pruning hardcodes CMS population-name strings (denominator_exclusion/numerator) in generic MeasureEvaluator logic; asymmetric vs denominator_exception",
+      "spec_citation": "GLOBAL_RULES 'Model Knowledge Must Be Data-Driven' \u2014 population names are FHIR R4 measure-population codes (http://hl7.org/fhir/R4/valueset-measure-population.html), but the causal-pruning relationship is a CMS eCQM Logic and Implementation Guidance rule, not a translator/evaluator branch. Acceptable to reference the canonical codes, but the asymmetric branch is fragile.",
+      "evidence": "`fhir4ds/dqm/evaluator.py:1541-1549` introduces a hardcoded branch keyed on `pop.audit_persona == AuditPersona.NUMERATOR and col_name == 'numerator' and 'denominator_exclusion' in df.columns`. The pruning only fires for the `denominator_exclusion -> numerator` causal pair. CMS eCQM logic has additional causal relationships that the same code shape should cover for narrative correctness: `denominator_exception -> numerator` (a patient in denominator_exception also has numerator unevaluated) and the reciprocal `denominator_exclusion -> numerator_exclusion` cases. The asymmetric implementation means narratives for the un-handled pairs will still show leaked evidence from the underlying audit SQL. Recommended fix: externalize the causal pairs to a small data-driven map (e.g., `_CAUSAL_SUPPRESSION_PAIRS: dict[str, set[str]] = {'numerator': {'denominator_exclusion', 'denominator_exception'}, ...}`) and iterate over it in `_prune`. No behavioral change for the existing `denominator_exclusion -> numerator` case; just generalizes the rule."
+    },
+    {
+      "id": "REV-002",
+      "severity": "LOW",
+      "status": "OPEN",
+      "domain": 3,
+      "title": "_is_complex_function_arg docstring claims to exclude trivial comparison primitives but returns True for ALL SQLFunctionCall instances",
+      "spec_citation": "NONE (code-comment/implementation consistency).",
+      "evidence": "`fhir4ds/cql/translator/expressions/_query.py:156-168`: `_is_complex_function_arg` docstring says 'Return True if `arg` is a SQLFunctionCall that is NOT a trivial comparison/equality primitive' but the body unconditionally `return True` for every SQLFunctionCall. The conservative behavior is intentional and correct (the QA-016 binder bug trigger is broad), but the docstring is misleading \u2014 a future maintainer reading the docstring may believe trivial comparisons are excluded and add a code path that relies on that. Recommended fix: either (a) update the docstring to say 'Returns True for any SQLFunctionCall \u2014 conservative because the binder trigger is broad' (preferred for honesty), or (b) actually exclude trivial comparison-shaped calls if benchmarking shows the narrow gate is safe."
+    },
+    {
+      "id": "REV-003",
+      "severity": "LOW",
+      "status": "OPEN",
+      "domain": 3,
+      "title": "_fully_demote_audit_to_bool and _audit_chain_has_complex_leaf lack recursion-depth guards; rely on well-formed AST",
+      "spec_citation": "NONE (defensive recursion).",
+      "evidence": "`fhir4ds/cql/translator/expressions/_query.py:131-261`: Both helpers recurse through the SQL AST without depth tracking or a visited set. For well-formed ASTs produced by the translator this is fine, but: (1) `_fully_demote_audit_to_bool` recurses into `audit_leaf.args[0]` then through SQLFunctionCall args (line 197-220) \u2014 if a future translator bug emits a self-referential AST node, Python hits its recursion limit and the user gets an opaque RecursionError instead of a typed TranslationError. (2) `_audit_chain_has_complex_leaf` line 148-149 only traverses one level of SQLUnaryOp nesting; deeply-nested NOT NOT NOT EXISTS could be missed (returns False), causing the QA-016 binder bug to resurface. Recommended fix: add a `depth: int = 0` parameter with a sane limit (e.g., 64) that raises TranslationError on overflow, and either iterate or use an explicit stack for the unary-op descent."
+    },
+    {
+      "id": "REV-004",
+      "severity": "LOW",
+      "status": "OPEN",
+      "domain": 6,
+      "title": "Closed-connection guard propagates the 'except duckdb.Error: pass' silent-swallow pattern to two new sites (core.py, fhir_loader.py)",
+      "spec_citation": "GLOBAL_RULES 'Error Hygiene' / 'No Silent Fallbacks'. Pre-existing pattern in cql/__init__.py:384-391; QA-015 propagates it.",
+      "evidence": "`fhir4ds/core.py:298-305` and `fhir4ds/cql/loader/fhir_loader.py:299-307` add a `con.execute('SELECT 1').fetchone()` probe with `except duckdb.Error: pass`. The intent is to distinguish `ConnectionException` (re-raised with a friendly message) from other DuckDB errors (swallowed because the connection is 'alive'). The risk: a real DuckDB internal error during the probe (e.g., a corrupted catalog) would be silently swallowed, then the subsequent real call would fail with a confusing error far from the probe. Acceptable as a defensive pattern (the probe is a no-op `SELECT 1`), but tracking it here so the pattern doesn't spread further. Recommended fix: narrow the swallow to `duckdb.InternalException` if such a type exists, or log a DEBUG line inside the swallow so a forensic query can find it."
+    },
+    {
+      "id": "REV-005",
+      "severity": "LOW",
+      "status": "OPEN",
+      "domain": 5,
+      "title": "_suppress_null_preserved_row uses raw string replacement on generated SQL; depends on a single '\\nWHERE ' marker appearing at the right scope",
+      "spec_citation": "NONE (stringly-typed SQL surgery).",
+      "evidence": "`fhir4ds/viewdef/generator.py:1804-1822` patches generated branch SQL by `branch_sql.replace('\\nWHERE ', f'\\nWHERE {filter_expr}\\n  AND ', 1)`. The approach assumes (a) the marker '\\nWHERE ' appears exactly once per branch, and (b) the marker is at the OUTER query's WHERE clause (not inside a subquery or CTE). If a future generator change emits a SELECT with a nested WHERE in a subquery before the outer WHERE, the replace would patch the wrong site, silently corrupting the query. The fallback (`f'{branch_sql}\\nWHERE {filter_expr}'`) appends a WHERE clause that may conflict with an existing one if the marker check fails for an unexpected reason. Recommended fix: thread the suppression filter through `_build_single_query` as an explicit `extra_where: list[str]` parameter appended to `where_conditions` before SQL emission, eliminating string surgery entirely."
+    },
+    {
+      "id": "BENCH-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "domain": 9,
+      "category": "PERFORMANCE",
+      "title": "CMS2 SQL bloat from inline _latN.value disambiguation CASEs \u2014 replaced with SQL macros",
+      "root_cause": "_translate_is_type_check in fhir4ds/cql/translator/expressions/_query.py:3244-3408 emitted inline 'CASE WHEN starts_with(LTRIM(R), '{') THEN json_extract_string(R, '$.start') IS NOT NULL ... ELSE FALSE END' blocks for CQL 'is Interval<DateTime>', 'is Interval<Quantity>', 'is Period', and 'is Range'. CMS2 referenced the same _latN.value 510+ times per CTE, producing ~150 KB of duplicated disambiguation CASE blocks (9.7% of the 1,552,792-byte noaudit SQL). A second inline CASE shape 'CASE WHEN starts_with(LTRIM(R), '{') THEN json_extract_string(R, '$.value') ELSE R END' for Quantity $.value extraction (fhir4ds/cql/translator/expressions/_operators.py:6925-6941 and 7011-7027, and _functions.py:2008-2019) recurred 85 times (~600 KB). Prior attempts (Option A emission-time LATERAL hoisting, Option C post-translation AST dedup) failed because the audit emission path in cte_manager.py copies expression fragments verbatim into __pre_... CTEs, leaving dangling _disN/_latN alias references in scopes where those LATERAL joins are not visible.",
+      "resolution": "Option D: encapsulated the disambiguation logic in four globally-resolvable DuckDB SQL macros defined in fhir4ds/cql/duckdb/macros/clinical.py:50-89 (cql_value_is_period, cql_value_is_range, cql_value_is_interval_like, cql_quantity_value). Registered them via registerClinicalMacros, now wired into register_all_macros (fhir4ds/cql/duckdb/macros/__init__.py:67) so they are available in BOTH the native C++ extension path (extension.py:237) and the forced Python fallback path (core.py:241). Refactored the four inline CASE emission sites in fhir4ds/cql/translator/expressions/_query.py:3254-3375 to emit SQLFunctionCall(name='cql_value_is_interval_like'/etc, args=[resource_expr]). Refactored the three Quantity $.value extraction sites in fhir4ds/cql/translator/expressions/_operators.py:6925-6933 and 7009-7017, and fhir4ds/cql/translator/expressions/_functions.py:2004-2012 to emit SQLFunctionCall(name='cql_quantity_value'). Unlike Option A/C, SQL macros are globally resolvable from any scope, so audit pre-compute CTEs that copy expression fragments verbatim can safely reference cql_value_is_period(x) without dangling.",
+      "verified_in": {
+        "cms2_noaudit_bytes_pre": 1552792,
+        "cms2_noaudit_bytes_post": 1324074,
+        "cms2_audit_bytes_pre": 1597938,
+        "cms2_audit_bytes_post": 1369230,
+        "reduction_pct": 14.7,
+        "audit_sweep": "4/5 FULL pass (CMS135/CMS165/CMS71/CMS996; CMS2 skipped_too_large \u2014 unchanged from baseline)",
+        "conformance_baseline": "1 PASS (2822/2822 implicit)",
+        "dqm_pytest": "187/187 pass",
+        "native_fallback_parity": "identical results for Period/Range/Quantity/bare-string/NULL inputs",
+        "cms2_full_audit": "executes and returns 36 rows at 1.37 MB",
+        "regression_test": "fhir4ds/cql/tests/integration/test_cms2_disambiguation_macros.py (4 tests)"
+      }
+    }
+  ]
+}

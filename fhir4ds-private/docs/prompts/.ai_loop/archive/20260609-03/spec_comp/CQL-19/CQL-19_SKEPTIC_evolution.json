@@ -1,0 +1,38 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-19: CQL \u2014 List Operators Part 2. Test these items: Last(list), Length(list), Not Equal (List), Not Equivalent (List), Properly Includes (list), Properly Included In (list), Singleton From (list), Skip(list, number), Tail(list), Take(list, number), Union (List). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "summary": "Direct Length(NULL::List<T>) now returns 0 while String/untyped null Length remains NULL.",
+      "verified_in": "CQL-19 SKEPTIC iteration 1; archived in ARCHIVE_LOG.md"
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "summary": "Skip/Take now reject non-Integer counts in direct macros and translated function/query forms.",
+      "verified_in": "CQL-19 SKEPTIC iteration 1; archived in ARCHIVE_LOG.md"
+    }
+  ],
+  "RETRY_QA": false
+}

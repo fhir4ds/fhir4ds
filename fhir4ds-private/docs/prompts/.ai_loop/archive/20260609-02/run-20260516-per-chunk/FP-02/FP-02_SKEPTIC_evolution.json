@@ -1,0 +1,40 @@
+{
+  "phase": "QA",
+  "iteration": 2,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-02: FHIRPath \u2014 \u00a74.2 Operators, \u00a74.3 Function Invocations, \u00a74.4 Null and Empty (Propagation), \u00a74.5 Singleton Evaluation of Collections. Test these items: Operator semantics, Function invocation syntax, Null propagation in expressions, Empty collection handling, Singleton evaluation rules. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a74.2-\u00a74.4",
+      "resolution": "Fixed Python DuckDB fallback literal-stripping validation for empty collection RHS after string/date literals.",
+      "verified_in": "Iteration 1: test_operator_parity.py; FP operator/null/singleton slice; native SQL suite; FHIRPath R4 conformance 935/935"
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath N1 \u00a74.5 and \u00a76.5",
+      "resolution": "Aligned Python logical operators and native C++ not() with singleton Boolean evaluation; rebuilt bundled FHIRPath extension.",
+      "verified_in": "Iteration 1: test_operator_parity.py; FP operator/null/singleton slice; native SQL suite; FHIRPath R4 conformance 935/935"
+    }
+  ],
+  "RETRY_QA": false
+}

@@ -1,0 +1,33 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-11: SQL-on-FHIR ViewDefinition \u2014 View Runner, Examples. Test these items: execute a ViewDefinition and return tabular rows, simple Patient and Observation example views, unrolling arrays such as Patient.address into row sets, filtered Observation/resource views, column type coercion into DuckDB result columns, official SQL-on-FHIR v2 spec_tests parity, parser, generator, and DuckDB execution agree for supported examples. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "SOF-VD-11-HISTORIAN-001",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR v2.1.0-pre ViewDefinition Environment Variables: %rowIndex type is integer; Type Hinting default mapping maps integer to INT.",
+      "evidence": "Fresh SOF-VD-11 HISTORIAN probe passed official spec_tests under native and forced fallback, then failed focused Patient.address View Runner type check: column path %rowIndex declared type integer returned DuckDB typeof(address_index)=BIGINT instead of INTEGER. Generated SQL bypassed SQLGenerator._TYPE_CAST because generate_column_expr returned COALESCE(alias__row_index, 0) directly for resolved_path == %rowIndex.",
+      "root_cause": "SQLGenerator.generate_column_expr() had a direct %rowIndex fast path that returned the DuckDB UNNEST ordinal expression unchanged, bypassing the existing declared integer SQL cast used by ordinary ViewDefinition columns.",
+      "resolution": "Cast direct %rowIndex column expressions through SQLGenerator._get_sql_cast(column.type), so type: integer emits TRY_CAST(... AS INTEGER) under native C++ and forced Python fallback execution. Added an integration regression asserting typeof(name_index)=INTEGER for a declared integer %rowIndex column in both backends.",
+      "verified_in": "Fresh SOF-VD-11 HISTORIAN probe PASS: official spec_tests native/fallback 268/268 plus focused runner examples; pytest fhir4ds/viewdef/tests/integration/test_duckdb.py::TestSimplePatientView::test_row_index_declared_integer_has_integer_sql_type_native_and_fallback -q (1 passed); pytest fhir4ds/viewdef/tests -q (977 passed); run_viewdef.py Summary 134/134; run_all.py overall 2822/2822."
+    }
+  ],
+  "RETRY_QA": false
+}

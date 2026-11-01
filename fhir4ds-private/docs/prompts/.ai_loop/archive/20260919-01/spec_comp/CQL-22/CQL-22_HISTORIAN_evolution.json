@@ -1,0 +1,41 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": ["evolution"],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-22: CQL — Errors and Messaging. Test these items: Message(source, condition, code, severity, message). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "category": "SPEC_GAP_DOCUMENTED",
+      "spec_citation": "CQL 1.5/2.0 Appendix B — Errors and Messaging — Message: severities Trace/Message/Warning are 'expected to be made available to the calling environment'",
+      "evidence": "Informational message channel (Trace/Message/Warning surfacing) remains unimplemented — inherent to a translate-to-SQL engine with no logging channel; non-Error severities correctly continue evaluation and pass source through on both engine paths. Same classification as the SKEPTIC launch (CQL-22 QA-001). Official fixtures (CqlErrorsAndMessagingOperatorsTest.xml 4/4) do not pin the informational channel.",
+      "root_cause": "Design: translate-to-SQL engine has no message/log sink",
+      "resolution": "Documented, not forced; carried forward as INTENDED",
+      "verified_in": "conformance gate 2832/2832"
+    },
+    {
+      "id": "QA-002",
+      "severity": "LOW",
+      "status": "UNCONFIRMED",
+      "category": "OBSERVATION",
+      "spec_citation": "CQL 1.5 Appendix B — Message: no normative error-text format for the run-time error",
+      "evidence": "Raised error text is engine-defined 'code: message' (lowercased severity match, case-insensitive); null code yields leading ': ' separator. Spec does not pin error text format; fixtures only assert the error is raised. Cosmetic; no fix required.",
+      "root_cause": null,
+      "resolution": "No action; noted for future error-text standardization",
+      "verified_in": "probe .temp/qa/probe2.py both engine paths"
+    }
+  ]
+}

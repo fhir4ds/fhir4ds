@@ -1,0 +1,44 @@
+{
+  "phase": "QA",
+  "iteration": 2,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-18: CQL \u2014 List Operators Part 1. Test these items: Contains(list, element), Distinct(list), Equal (List), Equivalent (List), Except (List), Exists(list), Flatten(list), First(list), In(element, list), Includes(list), Included In (list), IndexOf(list, element), Intersect (List). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL Reference v1.5.3 Appendix B: Equal for Code/Concept uses tuple equality by element name; List Equal uses element equality in order.",
+      "evidence": "Fresh probe .temp/qa/cql18_historian_probe.py: CQLListElementEqual(json({code,system,display}), json({display,system,code})) returned false across forced Python, native-loaded, and no-Python C++ paths; expected true. Code with missing display compared to Code with display returned false; expected null because clinical equality with different components specified is unknown.",
+      "root_cause": "CQLListElementEqual compared Code/Concept-shaped JSON after raw serialization equality, so object key order and missing optional clinical components did not follow CQL tuple equality semantics.",
+      "resolution": "Added structured clinical equality macros for Code and Concept values and routed list element equality through them before raw JSON comparison.",
+      "verified_in": "Fresh probe, list parity 8/8, list part1+part2 14/14, official list parser 212/212, full conformance 2822/2822."
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL Reference v1.5.3 Appendix B: Equal returns null when equality cannot be determined; Quantity equality returns null for incompatible dimensions; List operators use element equality semantics.",
+      "evidence": "Fresh probe .temp/qa/cql18_historian_probe.py: CQLListEqualEq([1 cm], [1 cm2]) and CQLListContainsEq([1 cm], 1 cm2) returned false across forced Python, native-loaded, and no-Python C++ paths; expected null because quantityCompare returns NULL for incompatible dimensions.",
+      "root_cause": "CQLListElementEqual wrapped quantityCompare(..., ==) in COALESCE(..., FALSE), erasing incompatible-dimension unknown/null equality results.",
+      "resolution": "Preserved quantityCompare NULL results and made list contains/includes/equality helpers propagate unknown when no definitive true/false result exists.",
+      "verified_in": "Fresh probe, list parity 8/8, list part1+part2 14/14, official list parser 212/212, full conformance 2822/2822."
+    }
+  ],
+  "RETRY_QA": false
+}

@@ -1,0 +1,17 @@
+{
+  "run": "spec-comp CQL-04 HISTORIAN",
+  "workflow": "evolution",
+  "pipeline": [
+    "evolution"
+  ],
+  "phase": "COMPLETE",
+  "qa_personality": "HISTORIAN",
+  "max_iterations": 3,
+  "fresh_start": true,
+  "issues": [],
+  "phase_transitions": {
+    "historian_started": "2026-10-02T13:30:00Z",
+    "historian_completed": "2026-10-02T13:30:35Z"
+  },
+  "exit_reason": "historian_complete_clean_0_issues"
+}

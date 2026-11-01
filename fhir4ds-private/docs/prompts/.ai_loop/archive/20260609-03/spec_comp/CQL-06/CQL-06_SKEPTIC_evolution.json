@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-06: CQL \u2014 Type Operators - Conversion Checks. Test these items: CanConvertQuantity, ConvertQuantity, ConvertsToBoolean, ConvertsToDate, ConvertsToDateTime, ConvertsToDecimal, ConvertsToLong, ConvertsToInteger, ConvertsToQuantity, ConvertsToRatio, ConvertsToString, ConvertsToTime. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B Type Operators - ToDate/ToDateTime/ToTime conversion functions",
+      "evidence": "`python3 .temp/qa/cql06_skeptic_probe.py` found that `fhir4ds/cql/duckdb/macros/conversion.py::_create_private_function` catches all `Exception` values and silently returns. A synthetic RuntimeError from private `ToDate`/`ToDateTime`/`ToTime` helper registration was swallowed, which can leave public conversion macros pointing at missing helpers instead of failing registration visibly.",
+      "root_cause": "`_create_private_function` used a blanket `except Exception: pass`, treating unexpected helper registration failures the same as duplicate registration conflicts.",
+      "resolution": "Changed private conversion helper registration to catch only DuckDB duplicate/catalog-style registration exceptions and log them; unexpected failures now raise. Added focused regression coverage.",
+      "verified_in": "python3 .temp/qa/cql06_skeptic_probe.py; python3 -m pytest fhir4ds/cql/duckdb/tests/integration/test_conversion_check_parity.py fhir4ds/cql/duckdb/tests/integration/test_core_forced_backend_parity.py -q; python3 -m pytest fhir4ds/cql/duckdb/tests/integration/test_conversion_function_parity.py fhir4ds/cql/duckdb/tests/integration/test_temporal_complex_parity.py -q; python3 conformance/scripts/run_all.py | grep -E \"FAIL|ERROR|accuracy|Suite|OVERALL|ViewDefinition|FHIRPath|CQL|DQM\""
+    }
+  ]
+}

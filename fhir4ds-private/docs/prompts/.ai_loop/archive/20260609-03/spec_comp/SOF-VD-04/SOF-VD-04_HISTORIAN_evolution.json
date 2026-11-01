@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-04: SQL-on-FHIR ViewDefinition \u2014 ViewDefinition.select.column.collection, ViewDefinition.select.column.type, ViewDefinition.select.column.tag. Test these items: collection default false when unset, error when multiple values are produced for a non-collection column, collection true multi-value output representation, type URI handling for primitive and non-primitive result expectations, type mismatch reporting for generated/executed columns, tag 0..* parsing with required tag.name and tag.value, database/implementation type-hint tags do not affect base semantics unless explicitly handled. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "SOFVD04-HISTORIAN-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR v2.0.0 ViewDefinition.select.column.type: the field is a FHIR StructureDefinition URI; implementations should report an error if returned type does not match the declared type, or if a non-primitive type is returned while type is unset.",
+      "evidence": "Fresh probe `.temp/qa/sof_vd04_historian_probe.py` showed native execution accepted `code.coding.where(system = 'http://loinc.org')` with unset `column.type`, returning a serialized Coding object as text instead of reporting the required non-primitive type error. The same expression declared as `type: string` also bypassed primitive mismatch reporting.",
+      "root_cause": "SQLGenerator applied full runtime type checks only to simple FHIRPath navigation paths. Non-simple expressions still got collection cardinality checks but could serialize complex JSON object/array results through `fhirpath_text()` when `column.type` was unset or primitive-declared.",
+      "resolution": "Added a narrow runtime complex-result guard for non-simple expressions. Simple paths retain full `type().name` validation; non-simple paths now reject physically complex JSON object/array values when runtime type names are absent or incompatible with unset/declared column type, while preserving primitive function outputs.",
+      "verified_in": "SOF-VD-04 HISTORIAN architect audit: fresh probe PASS; focused integration/unit pytest 23 passed; full ViewDefinition pytest 944 passed; ViewDefinition conformance 134/134; full conformance 2822/2822."
+    }
+  ]
+}

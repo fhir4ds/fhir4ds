@@ -1,0 +1,56 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-19: CQL \u2014 List Operators Part 2. Test these items: Last(list), Length(list), Not Equal (List), Not Equivalent (List), Properly Includes (list), Properly Included In (list), Singleton From (list), Skip(list, number), Tail(list), Take(list, number), Union (List). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "summary": "Count(retrieve union) BinderException; fixed via correlated COUNT over resolved union; verified iter 1 gate 2832/2832",
+      "verified_in": "Iteration 1 gate 2832/2832"
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "summary": "singleton from stored-list alias silently returned whole list; element-cardinality CASE fix; verified iter 1",
+      "verified_in": "Iteration 1 gate 2832/2832"
+    },
+    {
+      "id": "QA-003",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "summary": "dynamicList union null nested [[...]]; null-gate + predicate + define-marking fix; verified iter 1",
+      "verified_in": "Iteration 1 gate 2832/2832"
+    },
+    {
+      "id": "QA-004",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "summary": "navigation over retrieve union opaque binder error -> typed TranslationError; verified iter 1",
+      "verified_in": "Iteration 1 gate 2832/2832"
+    },
+    {
+      "id": "QA-005",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "summary": "retrieve-union row order nondeterministic across engine modes; content+dedup conformant; registry entry",
+      "verified_in": "Iteration 1"
+    }
+  ]
+}

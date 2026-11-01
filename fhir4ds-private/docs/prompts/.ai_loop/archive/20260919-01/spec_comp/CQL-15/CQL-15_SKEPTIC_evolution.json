@@ -1,0 +1,65 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-15: CQL \u2014 Interval Operators Part 1. Test these items: After precision (Interval), Before precision (Interval), Collapse(argument, [per]), Contains precision (Interval, point), End of (Interval), Ends precision, Equal (Interval), Equivalent (Interval), Except (Interval), Expand(argument, [per]), In precision (point, Interval), Includes precision (Interval). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 \u00a79 Ends (ends _precision_ (Interval, Interval))",
+      "evidence": "Interval[@2012-01-01,@2012-01-15] ends day of Interval[@2012-01-05,@2012-01-15] -> true; spec/reference EndsEvaluator: start(A)>=start(B) AND end(A)==end(B) at precision -> false. Point-precision variant Interval[@2024-01-01,@2024-01-05] ends day of @2024-01-05 also true (should be false; degenerate-interval promotion, consistent with no-precision path intervalEndsSame). Root: _translate_ends_op 'precision of' branch compares intervalEnd equality only. Repro: .temp/qa/cql15_skeptic/probe2.py EndsPrecSpec. Both engines.",
+      "root_cause": "_translate_ends_op 'precision of' branch compared intervalEnd equality only; dropped start(A)>=start(B) conjunct of CQL \u00a79 Ends",
+      "resolution": "ends <prec> now emits start(left)>=start(right) AND end(left)==end(right) at precision; point right promotes to degenerate-interval semantics",
+      "verified_in": "test_interval_part1_parity.py + .temp/qa/cql15_skeptic/probe{1,2}.py dual-engine; CQL conformance 1706/1706"
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 \u00a79 Collapse(argument, per) + reference CollapseEvaluator.kt",
+      "evidence": "collapse {Interval[1,3],Interval[5,6]} per 2 -> {[1,2],[5,6]} (truncates input bounds!); reference: per extends each interval's end by per for the merge decision -> {[1,6]}; per 1 fails to merge; Decimal per explodes {[1,3],[3.5,6]} per 1.0 into 6 singletons; output intervals must preserve original bounds. Root cause: translator lowers collapse(X,per) as collapse_intervals(expand(X,per)) (_functions.py _translate_collapse). Existing test pins (test_interval_part1_parity CollapseValidPer) encode the wrong behavior. Both engines.",
+      "root_cause": "_translate_collapse lowered collapse(X,per) as collapse_intervals(expand(X,per)), reusing expand grid semantics instead of per-extended merge windows",
+      "resolution": "collapse(X,per) lowers to new collapse_intervals_per UDF (Python udf/interval.py + native CollapseIntervalsPerFunc, md5-verified deploy 025c79ed...); per extends each interval's end for the merge decision only; output keeps original bounds; temporal per of 1/0 uses precision meets",
+      "verified_in": "test_interval_part1_parity.py + .temp/qa/cql15_skeptic/probe{1,2}.py dual-engine; CQL conformance 1706/1706"
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "ENGINE_DIVERGENCE",
+      "spec_citation": "CQL 1.5 \u00a79 Collapse per; reference: per value 0 -> intervals unchanged",
+      "evidence": "collapse {Interval[1,3],Interval[4,6]} per 0: Python path returns inverted intervals [1,0],[4,3] (invalid); native path returns []. Reference: merge via meets -> {[1,6]}. Same root cause as QA-002 (expand-wrap with 0 step).",
+      "root_cause": "expand-wrap with per value 0: Python emitted inverted intervals, native emitted [] \u2014 no shared merge semantics",
+      "resolution": "covered by QA-002 fix; per 0 \u2192 no extension \u2192 meets merge",
+      "verified_in": "test_interval_part1_parity.py + .temp/qa/cql15_skeptic/probe{1,2}.py dual-engine; CQL conformance 1706/1706"
+    },
+    {
+      "id": "QA-004",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 \u00a79 Except (List<T>, List<T>) with Interval->List implicit promotion",
+      "evidence": "{ Interval[1,5], Interval[10,12] } except Interval[2,3] -> BinderException 'array_length(VARCHAR)': CQLListExceptEq receives scalar intervalFromBounds VARCHAR as right arg; macro expects LIST. Valid CQL must coerce interval to singleton list. Both engines. Repro: probe2.py ExceptListArg.",
+      "root_cause": "list-except branch passed scalar intervalFromBounds VARCHAR into CQLListExceptEq(list,...) macro",
+      "resolution": "literal Interval operands coerced via list_value() before CQLListExceptEq; identifiers untouched",
+      "verified_in": "test_interval_part1_parity.py + .temp/qa/cql15_skeptic/probe{1,2}.py dual-engine; CQL conformance 1706/1706"
+    }
+  ]
+}

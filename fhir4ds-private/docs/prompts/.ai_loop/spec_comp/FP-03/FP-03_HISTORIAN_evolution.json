@@ -1,0 +1,22 @@
+{
+  "workflow": "evolution",
+  "pipeline": [
+    "evolution"
+  ],
+  "phase": "COMPLETE",
+  "iteration": 1,
+  "qa_personality": "HISTORIAN",
+  "max_iterations": 3,
+  "fresh_start": true,
+  "issues": [],
+  "config": {
+    "notes": "FP-03 FHIRPath 2018Sep \u00a75.1 Existence \u2014 systematic normative-table walk: empty/exists/all/allTrue/anyTrue/allFalse/anyFalse/subsetOf/supersetOf/count/distinct/isDistinct definitions, vacuous defaults, boolean-aggregate error rules, membership semantics."
+  },
+  "phase_transitions": {
+    "chunk_started": "2026-10-02T03:33:35Z",
+    "historian_started": "2026-10-02T03:36:23Z",
+    "historian_completed": "2026-10-02T03:36:23Z"
+  },
+  "exit_reason": "historian_complete_clean_0_issues",
+  "workflow_closed": null
+}

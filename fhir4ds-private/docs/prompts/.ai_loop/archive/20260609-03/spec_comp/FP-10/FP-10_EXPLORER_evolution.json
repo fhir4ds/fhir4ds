@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-10: FHIRPath \u2014 \u00a75.6.6-\u00a75.6.12 String Manipulation (Transform). Test these items: upper(), lower(), replace(pattern, substitution), matches(regex), replaceMatches(regex, substitution), length(), toChars(). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release \u00a75.6.6 upper() and \u00a75.6.7 lower()",
+      "evidence": "Fresh FP-10 EXPLORER probe compared native DuckDB C++ and forced Python fallback on Unicode string-transform cases. Native turkish_upper.lower() returned ['\u0130stanbul'] while fallback returned ['i\u0307stanbul']; native turkish_lower.upper() returned ['\u0131STANBUL'] while fallback returned ['ISTANBUL']; native greek_accent_lower.upper() returned ['\u03ac\u03ad\u03ae\u03af\u03cc\u03cd\u03ce'] while fallback returned ['\u0386\u0388\u0389\u038a\u038c\u038e\u038f']; native greek_accent_upper.lower() returned ['\u0386\u0388\u0389\u038a\u038c\u038e\u038f'] while fallback returned ['\u03ac\u03ad\u03ae\u03af\u03cc\u03cd\u03ce']. Probe log: .temp/qa/fp10_explorer_probe.log.",
+      "root_cause": "Native C++ fn_upper/fn_lower use a local UTF-8 case-mapping table. The table handled ASCII, Latin-1, much of Latin Extended-A, basic Greek, and Cyrillic, but omitted special-case dotted/dotless Turkish I and accented Greek vowel mappings.",
+      "resolution": "Extended native fn_upper/fn_lower case mapping for U+0130, U+0131, U+03AC/U+03AD/U+03AE/U+03AF/U+03CC/U+03CD/U+03CE and U+0386/U+0388/U+0389/U+038A/U+038C/U+038E/U+038F, plus Greek dialytika pairs U+03CA/U+03CB and U+03AA/U+03AB. Added native sqllogictest and native-vs-forced-fallback parity coverage, rebuilt and copied the bundled extension.",
+      "verified_in": ".temp/qa/fp10_explorer_probe_after_fix.log: 47 cases, 0 mismatches, 0 failures; pytest test_string_transform_parity.py: 4 passed; native unittest '*fhirpath*': 478 assertions passed; full conformance: 2822/2822"
+    }
+  ]
+}

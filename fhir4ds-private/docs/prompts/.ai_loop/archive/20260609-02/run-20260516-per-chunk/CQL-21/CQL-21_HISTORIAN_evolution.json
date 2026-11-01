@@ -1,0 +1,32 @@
+{
+  "phase": "QA",
+  "iteration": 2,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-21: CQL - Clinical Operators. Test these items: AgeInYears|Months|Weeks|Days|Hours|Minutes|Seconds(); AgeInYearsAt|MonthsAt|...At(asOf); CalculateAgeInYears|Months|...InYears(birthDate); CalculateAgeInYearsAt|MonthsAt|...At(birthDate, asOf); Equal (Code/Concept); Equivalent (Code/Concept); In (Codesystem); ExpandValueSet(ValueSet); In (Valueset). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nDo not inspect or rely on archived spec_comp outputs as proof of behavior; use current source, active state, official specs/fixtures, and fresh tests. When the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "DEFERRED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B: ExpandValueSet(ValueSet) returns List<Code>; aggregate Count over a list returns the number of list elements.",
+      "evidence": "Fresh HISTORIAN probe against current source: both forced Python fallback and native/C++ DuckDB registrations return ExpandValueSet(?) as VARCHAR[] with two codes and list_count(ExpandValueSet(?)) = 2, but direct public CQL surface Count(ExpandValueSet(?)) returns 1. Reproducer: SELECT Count(ExpandValueSet('{\"id\":\"http://example.org/fhir/ValueSet/vitals\"}')); Actual 1, expected 2.",
+      "root_cause": "Raw direct DuckDB SQL resolves Count(...) to DuckDB's built-in row aggregate, so a single list-valued expression is counted as one row. The CQL translator already special-cases Count over list-returning expressions, including ExpandValueSet, and emits list-counting SQL. Registering a public Count macro/UDF would shadow DuckDB's aggregate name and breaks COUNT(DISTINCT ...), FILTER, window, and row-aggregate usage.",
+      "resolution": "DEFERRED as direct raw-SQL API surface work. No production code changed because the spec-governed translated CQL path already returns Count(ExpandValueSet(VS)) = 2, and the obvious direct-SQL fixes are unsafe in DuckDB's function namespace. Root AGENTS.md records the boundary so future work must preserve row aggregate syntax if adding a direct list Count surface.",
+      "verified_in": "Focused clinical/type/no-Python runtime pytest: 16 passed. Full conformance: ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706, DQM 47/47, overall 2822/2822. Manual direct-SQL experiments showed Count macro/UDF shadowing is unsafe; translated CQL Count(ExpandValueSet(Vitals)) remains covered by test_clinical_operator_parity.py."
+    }
+  ]
+}

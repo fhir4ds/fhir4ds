@@ -1,0 +1,20 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-09: SQL-on-FHIR ViewDefinition - Key Elements: Where; ViewDefinition.where; ViewDefinition.where.path/description. Test items: where 0..* root-level FHIRPath constraints, every where constraint must evaluate true for resource inclusion, false, empty, and null filter results exclude rows as specified, non-boolean where results are rejected or surfaced as spec errors, where.description 0..1 human-readable text retention, constant references and complex FHIRPath expressions inside where clauses, filter SQL generation preserves intended root-resource scope. Fresh run; prior workflow outputs intentionally not consulted."
+  },
+  "issues": []
+}

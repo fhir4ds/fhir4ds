@@ -1,0 +1,32 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-05: SQL-on-FHIR ViewDefinition \u2014 ViewDefinition.select.select, Nested select contentReference. Test these items: nested select 0..* recursion through contentReference to ViewDefinition.select, child selects use the parent forEach/forEachOrNull context when present, default context is effectively $this when row generators are absent, parent and child columns combine into expected output rows, column name collision and duplicate-name validation behavior, empty nested select and column combinations produce defined output or errors. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "SOFVD05-EXPLORER-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR v2.0.0 ViewDefinition.select.select contentReference and ViewDefinition.where definitions: nested select is recursive, where is 0..* with required path and optional string description.",
+      "evidence": "Fresh probe .temp/qa/sof_vd05_explorer_probe.py. Direct dataclass ViewDefinition(resource=\"Patient\", select=[Select(column=[Column(path=\"id\", name=\"id\")], select=[Select(where=[{\"notPath\":\"active\"}])])]).to_dict() returned official JSON containing {\"where\":[{\"notPath\":\"active\"}]} instead of rejecting it. It also serialized nested where descriptions as null/non-string values. Parser and SQLGenerator validate the same shapes, so serializer can emit invalid recursive select JSON.",
+      "root_cause": "Select.to_dict() directly copied self.where dictionaries during official JSON serialization instead of using the shared validate_where_conditions() boundary already used by parser and SQLGenerator direct-input validation.",
+      "resolution": "Select.to_dict() now rejects where=None and normalizes non-empty where values through validate_where_conditions(), so recursive nested select serializers reject missing path and invalid/null description values. Added focused direct-dataclass nested select serializer regressions.",
+      "verified_in": ".temp/qa/sof_vd05_explorer_probe.py; focused pytest 14 passed; fhir4ds/viewdef/tests 948 passed; ViewDefinition conformance 134/134; full conformance 2822/2822; architect audit accepted scope and validator reuse."
+    }
+  ]
+}

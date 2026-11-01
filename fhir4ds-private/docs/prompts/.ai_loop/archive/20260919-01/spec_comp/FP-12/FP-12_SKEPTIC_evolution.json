@@ -1,0 +1,41 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 2,
+  "audit_status": "PENDING",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-12: FHIRPath \u2014 \u00a75.8 Tree Navigation, \u00a75.9 Utility Functions. Test these items: children(), descendants(), trace(name, [projection]), now(), timeOfDay(), today(). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "PARITY",
+      "spec_citation": "FHIRPath \u00a75.8.2; \u00a76.1.1",
+      "root_cause": "util.parse_value None sentinel",
+      "resolution": "fall-through to original value",
+      "verified_in": "iteration 1 (2832/2832)"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "API_GAP",
+      "spec_citation": "FHIRPath \u00a75.8.1/\u00a75.8.2/\u00a75.9.1",
+      "root_cause": "helpers never created",
+      "resolution": "functions/navigation.py children/descendants/trace",
+      "verified_in": "iteration 1 (2832/2832)"
+    }
+  ]
+}

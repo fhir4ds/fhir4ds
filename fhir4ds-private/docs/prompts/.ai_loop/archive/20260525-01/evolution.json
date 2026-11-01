@@ -1,0 +1,99 @@
+{
+  "phase": "SCRIBE",
+  "iteration": 8,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution",
+    "code_review",
+    "pre_release",
+    "docs_audit",
+    "scribe"
+  ],
+  "pipeline_step": 5,
+  "qa_personality": null,
+  "config": {
+    "min_iterations": 8,
+    "max_iterations": 24,
+    "exhaustive_mode": false,
+    "target_version": "0.0.7",
+    "feature_plan_path": null,
+    "focus_domains": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "qa_domain_sequence": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "current_focus_domain": 10,
+    "required_final_gates": [
+      "python3 conformance/scripts/run_all.py",
+      "full package pytest suite",
+      "native C++ extension and forced Python fallback parity for DuckDB-backed surfaces",
+      "release/package/import checks for version 0.0.7",
+      "performance benchmarks compared against prior baseline"
+    ],
+    "notes": "Primary mandate from USER_DIRECTIVES.md: pressure test and prepare release version 0.0.7. pyproject.toml currently declares fhir4ds-v2 version 0.0.6, so the directive target version overrides package metadata and release/package checks must verify version 0.0.7 before final completion. Evolution must run exactly one core QA domain pass for each domain 3-10 from SPEC_QA_DOMAINS.md, mapped as iteration 1 -> domain 3, 2 -> domain 4, 3 -> domain 5, 4 -> domain 6, 5 -> domain 7, 6 -> domain 8, 7 -> domain 9, 8 -> domain 10. Do not advance from a domain iteration while it has unresolved non-terminal CRITICAL, HIGH, or MEDIUM issues; fix and architect-review those issues first. Keep 100% spec compliance. The directive pipeline included benchmarks after docs_audit, but STATE_SCHEMA.md does not define a benchmarks workflow, so benchmarks are preserved here as a required final gate and must be covered by pre_release/docs/scribe reporting rather than as an invalid pipeline step. Release Engineer artifact gate is required because this campaign affects package metadata, native DuckDB extensions, wheel contents, WASM artifacts, public imports, benchmarks, and release behavior. Discovery note: git status in this workspace did not return within 20 seconds, likely due the large /mnt/d worktree; agents should use targeted status/diff commands when needed."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "verified_in": "Iteration 1 / domain 3",
+      "archive": "ARCHIVE_LOG.md#release-007-domain-3---cql-translation-semantic-correctness-2026-05-24",
+      "summary": "Optimized CQL temporal overlaps now coalesces null low bounds to the minimum sentinel."
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "API_CONTRACT",
+      "verified_in": "Iteration 4 / domain 6",
+      "archive": "ARCHIVE_LOG.md#release-007-domain-6---data-ingestion-and-schema-2026-05-24",
+      "summary": "FHIRDataLoader and ValueSet loader dynamic table identifiers are quoted, including SQL keyword table names."
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "API_CONTRACT",
+      "verified_in": "Iteration 6 / domain 8",
+      "archive": "ARCHIVE_LOG.md#release-007-domain-8---error-handling-robustness-and-api-contract-2026-05-24",
+      "summary": "Public JSON-loading boundaries reject non-object decoded JSON with actionable typed errors."
+    },
+    {
+      "id": "QA-004",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "DATA_HANDLING",
+      "verified_in": "Iteration 7 / domain 9",
+      "archive": "ARCHIVE_LOG.md#release-007-domain-9---audit-evidence-and-dqm-2026-05-24",
+      "summary": "DQM exclusion-style audit narratives use effective population masks while preserving raw CQL definition results."
+    },
+    {
+      "id": "QA-005",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "API_CONTRACT",
+      "verified_in": "Iteration 8 / domain 10",
+      "archive": "ARCHIVE_LOG.md#release-007-domain-10---installation-and-environment-2026-05-24",
+      "summary": "Release metadata, public versions, notebook install snippets, and wheel metadata now report 0.0.7."
+    }
+  ]
+}

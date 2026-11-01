@@ -1,0 +1,49 @@
+{
+    "phase": "QA",
+    "iteration": 1,
+    "audit_status": "PENDING",
+    "exit_reason": "CLEAN",
+    "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-21: CQL - Clinical Operators. Test these items: AgeInYears|Months|Weeks|Days|Hours|Minutes|Seconds(); AgeInYearsAt|MonthsAt|...At(asOf); CalculateAgeInYears|Months|...InYears(birthDate); CalculateAgeInYearsAt|MonthsAt|...At(birthDate, asOf); Equal (Code/Concept); Equivalent (Code/Concept); In (Codesystem); ExpandValueSet(ValueSet); In (Valueset). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nDo not inspect or rely on archived spec_comp outputs as proof of behavior; use current source, active state, official specs/fixtures, and fresh tests. When the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+        {
+            "id": "QA-001",
+            "severity": "HIGH",
+            "status": "RESOLVED",
+            "category": "SPEC_VIOLATION",
+            "verified_in": "CQL-21 SKEPTIC: focused clinical parity 21/21, full conformance 2822/2822, full pytest 7230 passed"
+        },
+        {
+            "id": "QA-002",
+            "severity": "HIGH",
+            "status": "RESOLVED",
+            "category": "SPEC_VIOLATION",
+            "verified_in": "CQL-21 SKEPTIC: focused clinical parity 21/21, full conformance 2822/2822, full pytest 7230 passed"
+        },
+        {
+            "id": "QA-003",
+            "severity": "HIGH",
+            "status": "RESOLVED",
+            "category": "SPEC_VIOLATION",
+            "verified_in": "CQL-21 SKEPTIC: focused clinical parity 21/21, full conformance 2822/2822, full pytest 7230 passed"
+        },
+        {
+            "id": "QA-004",
+            "severity": "MEDIUM",
+            "status": "RESOLVED",
+            "category": "SPEC_VIOLATION",
+            "verified_in": "CQL-21 SKEPTIC: focused clinical parity 21/21, full conformance 2822/2822, full pytest 7230 passed"
+        }
+  ]
+}

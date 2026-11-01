@@ -1,0 +1,43 @@
+{
+  "phase": "FIX",
+  "iteration": 1,
+  "audit_status": "PENDING",
+  "exit_reason": null,
+  "workflow": "evolution",
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-16: CQL \u2014 Interval Operators Part 2. Test these items: Included In precision, Intersect (Interval), Meets precision, Meets Before precision, Meets After precision, Not Equal (Interval), Not Equivalent (Interval), On Or After precision (Interval), On Or Before precision (Interval), Overlaps precision, Overlaps Before precision, Overlaps After precision. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL Reference v1.5.3 Appendix B, Interval Operators / Intersect: intersect returns the overlapping portion of both intervals and returns null when the arguments do not overlap.",
+      "evidence": ".temp/qa/cql16_skeptic_probe.py: Interval[1, 5) intersect Interval[5, 7] should be null because the first interval excludes 5. Forced Python and native-loaded return {\"low\":\"5\",\"high\":\"5\",\"lowClosed\":true,\"highClosed\":true}; no-Python C++ returns null. The same bad value is produced by translated CQL IntersectOpenDisjoint.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": null
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL Reference v1.5.3 Appendix B, Interval Operators / Overlaps: overlaps before/after are overlap plus boundary-order predicates using Start/End semantics; date/time precision comparisons can be unknown and incompatible Quantity comparisons propagate null.",
+      "evidence": ".temp/qa/cql16_skeptic_probe.py: partial temporal cases such as Interval[@2014, @2014] overlaps before Interval[@2014-06-01, @2014-06-02] return false on all three surfaces instead of null. Incompatible Quantity cases return false in forced Python/native-loaded and null in no-Python C++, causing both wrong semantics and parity divergence. Translated CQL reproduces the same false/null mismatch.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": null
+    }
+  ]
+}

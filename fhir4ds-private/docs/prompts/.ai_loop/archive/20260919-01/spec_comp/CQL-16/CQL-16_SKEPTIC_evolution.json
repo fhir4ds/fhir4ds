@@ -1,0 +1,65 @@
+{
+  "phase": null,
+  "iteration": 1,
+  "audit_status": "DONE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-16: CQL \u2014 Interval Operators Part 2. Test these items: Included In precision, Intersect (Interval), Meets precision, Meets Before precision, Meets After precision, Not Equal (Interval), Not Equivalent (Interval), On Or After precision (Interval), On Or Before precision (Interval), Overlaps precision, Overlaps Before precision, Overlaps After precision. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 \u00a79 Included In (interval-interval overload; `in` synonym) + reference InEvaluator.kt",
+      "evidence": "Interval[2, 3] in Interval[1, 5] -> BinderException 'Cannot mix values of type VARCHAR and INTEGER_LITERAL in BETWEEN clause' on BOTH native and Python engines (.temp/qa/cql16_skeptic_2026_08_22/probe2.py InKeywordInterval). Reference engine accepts interval-interval `in` via includedIn. Expected true.",
+      "root_cause": "_translate_in_op assumed a point-valued left operand; interval-valued left fell into the point-in-interval BETWEEN lowering -> DuckDB BinderException.",
+      "resolution": "translator/expressions/_operators.py _translate_in_op: interval-valued left operand + interval right (incl. 'precision of' wrapper) now lowers to intervalIncludedIn/intervalIncludedInPrecise, mirroring the 'included in' branch.",
+      "verified_in": "test_interval_part2_parity.py::test_cql_interval_part2_null_bound_sentinels_and_in_keyword_cql16_skeptic_2026_08 (py/cpp/no-python parity); probes probe1/probe2"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "INTENDED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 \u00a79 Intersect + \u00a79.14 Start (closed null low -> minimum value of point type)",
+      "evidence": "(Interval[1,5] intersect Interval[null,3]) contains -5 -> false on both engines; result low is raw left low (1) instead of effective start sentinel (min Integer = -2147483648). intervalStart(Interval[null,3]) itself returns -2147483648 correctly, so intersect uses raw low/high where reference IntersectEvaluator uses left.start/right.start effective boundaries. probe2.py IxNullLow_ContainsMin.",
+      "root_cause": "Probe-expectation error: reference IntersectEvaluator computes max(leftStart, rightStart) where a null closed low sentinizes to the point-type minimum, so max is still the finite low; engine output [1,3] matches the reference exactly.",
+      "resolution": "No change needed; behavior verified conformant against reference IntersectEvaluator.kt.",
+      "verified_in": ".temp/qa/cql16_skeptic_2026_08_22/probe2.py IxNullHigh_LowBound etc."
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 \u00a79.14 Start/\u00a79.15 End (closed null bounds -> min/max of point type) applied to Meets, On Or After/On Or Before (interval), Overlaps",
+      "evidence": "Interval[1,null] meets Interval[6,10] -> null (ref false: end1=max, successor overflow -> false via isMax guard); Interval[1,5] meets Interval[null,3] -> null (ref false); Interval[null,5] on or after Interval[1,3] -> null (ref false: start=min >= 3 false); Interval[6,10] on or after Interval[1,null] -> null (ref false); Interval[@2025-01-01,@2025-06-01] on or after Interval[@2024-01-01,null] -> null (ref true? end2=max so start1>=max false -> false; either way determined, not null); Interval[null,null] overlaps Interval[1,5] -> null (ref true: min/max sentinels). Both engines. probe2.py MeetsNullHigh/Low, OnOrAfterNullLow/High, OnOrAfterTemporalNullHigh, MeetsTemporalNullHigh, OvBothNull.",
+      "root_cause": "intervalMeets/MeetsBefore/OnOrAfter/OnOrBefore used _effective_start/_effective_end which return None for null bounds; CQL 1.5 \u00a79.14/\u00a79.15 make a CLOSED null bound the min/max of the point type. Also successor-of-max-sentinel overflow returned null (py raised OverflowError for temporal sentinel).",
+      "resolution": "Python udf/interval.py: added _sentinel_effective_start/_sentinel_effective_end (reuse _cql_minimum/maximum_for_peer_bound) wired into intervalMeets, intervalMeetsBefore, intervalOnOrAfter, intervalOnOrBefore; _successor_for_bound/_predecessor_for_bound now return None on OverflowError (Appendix C overflow rule). Native mirror in extensions/cql/src/cql/interval.cpp: sentinel_start_bound/sentinel_end_bound used by meets_before_nullable/on_or_after/on_or_before; successor overflow in meets_before_nullable now returns false (reference isMax guard). Extension rebuilt (md5 b9164ff5254bc5944d86109dd5e2cf94) and deployed to repo bundle + site-packages + duckdb cache cleared.",
+      "verified_in": "test_interval_part2_parity.py::test_cql_interval_part2_null_bound_sentinels_and_in_keyword_cql16_skeptic_2026_08 (13 cases x 3 engines); probes"
+    },
+    {
+      "id": "QA-004",
+      "severity": "MEDIUM",
+      "status": "INTENDED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 Appendix C Successor: 'For Quantity values, the successor is equivalent to adding 1 * the precision of the quantity value. The units are unchanged.' (also flagged out-of-scope in 2026-07-02 CQL-16 doctrine; now in chunk scope)",
+      "evidence": "Interval[1 'g', 3 'g'] meets Interval[4 'g', 6 'g'] -> false on both engines; reference SuccessorEvaluator.kt supports Quantity (+1 integer step, unit preserved) -> meets true. Interval[1 'days',3 'days'] meets Interval[4 'days',6 'days'] -> false. Decimal-valued quantity successor works (Interval[1.0,3.0] meets [3.00000001,6] -> true), integer-valued quantities do not. probe1.py Meets_Qty, probe2.py MeetsQtyDay.",
+      "root_cause": "Probe-expectation error: the live reference engine (SuccessorEvaluator.kt) converts Quantity values to Decimal and always steps 1e-8, so Interval[1 'g',3 'g'] meets Interval[4 'g',6 'g'] is FALSE in the reference. Official CqlIntervalOperatorsTest.xml pins only decimal-authored quantity meets (5.00000001 + 1e-8). Runtime Quantity JSON always serializes value as float by documented native-parity doctrine (udf/quantity.py _parse_quantity), so authored integer-ness is not recoverable at runtime. Fixtures + reference outrank the ambiguous spec prose reading.",
+      "resolution": "No change; decimal-step semantics retained on both engines. The 2026-07-02 'out-of-scope followup' expectation (true) is superseded by reference verification.",
+      "verified_in": ".temp/qa/cql16_skeptic_2026_08_22/probe1.py Meets_Dec/Meets_DateTimeMs; probe2.py MeetsQtyDecimal; official QuantityIntervalMeetsTrue/False fixtures (conformance suite)"
+    }
+  ]
+}

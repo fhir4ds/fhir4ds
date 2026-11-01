@@ -1,0 +1,76 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-10: CQL \u2014 Arithmetic Operators Part 1. Test these items: Abs, Add, Ceiling, Divide, Floor, Exp, Log, Ln, HighBoundary, LowBoundary. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL \u00a76.7 HighBoundary / \u00a76.9 LowBoundary ('greatest/least possible value of the input to the specified precision'); v2 ref examples HighBoundary(1.587,2)//1.59, LowBoundary(1.587,2)//1.58",
+      "evidence": "HighBoundary(1.587,2) -> 1.587 (expected 1.59); LowBoundary(1.587,2) -> 1.587 (expected 1.58); precision 0 -> unchanged (expected 2/1). Reproducer: .temp/qa/cql10/probe5.py. Affects Python UDF fhir4ds/cql/duckdb/udf/math.py (_decimal_boundary_text + int/float branches) AND extensions/cql/src/cql/boundary.cpp numeric paths.",
+      "root_cause": "Boundary code filled digits only when precision exceeded current decimals and returned the input unchanged otherwise; reference implementation appends 9s/zeros then truncates at the requested precision.",
+      "resolution": "Python UDF _decimal_boundary_text + numeric branches of highBoundary/lowBoundary rewritten to reference-impl semantics (append fill digit x8 then truncate DOWN at precision); C++ boundary.cpp decimal_boundary_text helper mirrors; extension rebuilt+redeployed (md5 774abbac349f6e6a755f7317ba4a4978, repo bundle + site-packages).",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL Ceiling/Floor: 'If the result of the operation cannot be represented as an Integer, the result is null' (v2 examples Ceiling(3147483647.05)//null, Floor(2147483648.2)//null)",
+      "evidence": "Ceiling(3147483647.05) -> 3147483648 (expected null); Floor(2147483648.2) -> 2147483648 (expected null); Ceiling(1e23) -> 10^23. Reproducer: .temp/qa/cql10/probe5.py. Macro path macros/math.py Ceiling/Floor.",
+      "root_cause": "Ceiling/Floor lowered to bare CEIL/FLOOR with no Integer typing or extent check.",
+      "resolution": "Ceiling/Floor narrowed to INTEGER via TRY_CAST in translator (expressions/__init__.py registry + functions.py) and macros/math.py; mathCeiling/mathFloor UDFs Integer-extent-guarded in Python udf/math.py and C++ math.cpp.",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-003",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL Add: 'With mixed Integer and Decimal or Long, the Integer argument will be implicitly converted'; overflow -> null",
+      "evidence": "1 + 2147483647L and 2147483647L + 1 raise DuckDB OutOfRangeError (INT32 overflow) instead of Long 2147483648. Generated SQL '1 + 2147483647' loses Long typing. Reproducer: .temp/qa/cql10/probe4.py.",
+      "root_cause": "Long literals within INT32 range lowered to untyped SQL integers; DuckDB computed INT32+INT32 and raised OutOfRangeError; no implicit Integer->Long promotion existed.",
+      "resolution": "Mixed Integer+Long (+,-,*) operands cast to BIGINT in _operators.py binary-op lowering per CQL implicit-conversion rule.",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-004",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL Abs: 'If the result ... cannot be represented (e.g. Abs(minimum Integer)), the result is null'",
+      "evidence": "Abs(-2147483648 - 0) -> 2147483648 (expected null); guard only matches literal AST shapes. Abs(-9223372036854775807L - 1L) correctly null. Reproducer: .temp/qa/cql10/probe5.py.",
+      "root_cause": "Abs overflow guard matched only four literal AST shapes (Step 2b), missing computed integral operands.",
+      "resolution": "_translate_abs_pre pre-translate hook with static integral type inference (literals/unary/binary arithmetic) narrows Abs to INTEGER/BIGINT with TRY_CAST; covers all statically integral operands.",
+      "verified_in": "Iteration 1"
+    },
+    {
+      "id": "QA-005",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL Exp/Ln/Log: signatures return Decimal; Integer/Long implicitly converted to Decimal",
+      "evidence": "Translator emits TRY_CAST(mathExp(...) AS DOUBLE); Exp(1) -> 2.71828182845905, expected scale-8 Decimal 2.71828183 (CQL-01 exact-Decimal doctrine). Ln/Log same. Reproducer: .temp/qa/cql10/probe1.py/probe7.py.",
+      "root_cause": "Exp/Ln/Log lowered to TRY_CAST(... AS DOUBLE), violating the Decimal return signatures.",
+      "resolution": "Exp/Ln/Log lowered to DECIMAL(38,8) (translator _functions.py + macros/math.py) per CQL Decimal return signatures and CQL-01 doctrine.",
+      "verified_in": "Iteration 1"
+    }
+  ]
+}

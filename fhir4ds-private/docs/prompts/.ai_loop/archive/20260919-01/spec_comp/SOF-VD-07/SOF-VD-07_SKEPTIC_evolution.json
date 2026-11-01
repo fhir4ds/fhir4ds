@@ -1,0 +1,45 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-07: SQL-on-FHIR ViewDefinition \u2014 ViewDefinition.select.repeat. Test these items: repeat 0..* FHIRPath expressions for recursive traversal, view runner recursively follows each path to any depth, multiple repeat paths are combined using union semantics, duplicates and ordering behavior for recursive results, cycle/depth guard behavior under malformed or cyclic structures, columns are evaluated against each repeated node context. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "summary": "repeat recursion-budget segfault \u2014 RESOLVED via _run_with_recursion_budget; verified_in: iteration 1 (details ARCHIVE_LOG.md SOF-VD-07)"
+    },
+    {
+      "id": "QA-002",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "summary": "value-based union dedup collapses identical siblings \u2014 doctrine pin"
+    },
+    {
+      "id": "QA-003",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "summary": "repeat row order unpinned (runner sorts) \u2014 doctrine pin"
+    },
+    {
+      "id": "QA-004",
+      "severity": "LOW",
+      "status": "INTENDED",
+      "summary": "primitive-yielding repeat paths empty \u2014 SOF-VD-05 pin"
+    }
+  ]
+}

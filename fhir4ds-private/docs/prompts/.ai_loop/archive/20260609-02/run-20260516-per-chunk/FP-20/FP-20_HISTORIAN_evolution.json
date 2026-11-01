@@ -1,0 +1,54 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-20: FHIRPath — §9 Environment Variables; §10 Types and Reflection; §11 Type Safety; §12 Formal Specifications. Test these items: environment variable access (%context, %resource, etc.), model information, SimpleTypeInfo, ClassInfo, ListTypeInfo, TupleTypeInfo, type safety rules, formal syntax (ANTLR), URI and media types. QA personality: HISTORIAN. Reconstruct behavior from the current spec text, official examples/conformance cases, and current code only. Do not inspect or rely on any prior workflow output under fhir4ds-private/docs/prompts/.ai_loop/spec_comp/**. For DuckDB-backed FHIRPath surfaces, independently test both the native/C++ extension path and the forced Python fallback path where both exist, and compare outputs between paths. Include historical edge cases around built-in variables, external constants, quoted and delimited variable names, %context/%resource/%rootResource behavior, type()/is/as reflection, namespace handling, model supertypes, invalid type specifiers, formal grammar acceptance/rejection, strict vs row-resilient error boundaries, and public wrapper validity. Use fresh probes, focused pytest coverage, and relevant conformance/unit/e2e validation. We are currently at 100% conformance; do not regress conformance or unit/e2e pytest surfaces. When the pipeline is fully complete, set workflow to null, set exit_reason, write qa_handoff.md, engineer_handoff.md, architect_handoff.md, update GLOBAL_KNOWLEDGE.md/ARCHIVE_LOG.md/AGENTS.md as appropriate, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-FP20-HIST-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath R4 §10 Types and Reflection; FHIR R4 model metadata for Reference and primitive uri",
+      "evidence": "Fresh native vs forced-fallback probes showed native fhirpath_text(Patient.managingOrganization.type().name) did not report Reference and native fhirpath_bool(Patient.managingOrganization.is(Reference)) returned false while the Python fallback returned true. Native type reflection also reported Questionnaire.url.type().name as string while fallback reported uri.",
+      "root_cause": "Native C++ type()/is() inference prioritized generic JSON/string handling and lacked FHIR datatype metadata for Reference objects and primitive uri choice fields.",
+      "resolution": "Native reflection now uses FHIR metadata before generic JSON fallback, normalizes value[x] choice suffixes to FHIRPath primitive names, detects Reference-like objects, and keeps TypeInfo JSON shape aligned with public Python fallback output.",
+      "verified_in": "python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_environment_type_parity.py fhir4ds/fhirpath/duckdb/tests/integration/test_type_parity.py -q; ./build/release/test/unittest \"*fhirpath*\"; python3 conformance/scripts/run_all.py"
+    },
+    {
+      "id": "QA-FP20-HIST-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath R4 §10 type() reflection over collections",
+      "evidence": "Fresh parity probe showed native fhirpath_json({}, '(1|2).type()') returned a single TypeInfo item while the forced Python fallback returned two TypeInfo items.",
+      "root_cause": "The native C++ type() branch only reflected input[0] instead of mapping type reflection over every item in the input collection.",
+      "resolution": "Native type() now iterates all input items and emits one TypeInfo per input item with deterministic public JSON ordering.",
+      "verified_in": "python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_environment_type_parity.py fhir4ds/fhirpath/duckdb/tests/integration/test_type_parity.py -q; ./build/release/test/unittest \"*fhirpath*\"; python3 conformance/scripts/run_all.py"
+    },
+    {
+      "id": "QA-FP20-HIST-003",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath R4 §10 Types and Reflection; FHIR R4 primitive type hierarchy for uri/code/string and Attachment.contentType",
+      "evidence": "Fresh probes showed DocumentReference.content.attachment.contentType.type().name was treated as string instead of code, and forced Python fallback rejected Questionnaire.url.is(string) despite uri being a string-compatible primitive subtype.",
+      "root_cause": "The Python model hierarchy did not include the uri -> string primitive parent edge and the shared R4 path metadata lacked a generic .contentType entry for media-type code reflection.",
+      "resolution": "Added generic .contentType -> code model metadata, Attachment shape inference, native code-field reflection for contentType, and a fallback model parent edge for uri -> string.",
+      "verified_in": "python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_environment_type_parity.py fhir4ds/fhirpath/duckdb/tests/integration/test_type_parity.py -q; ./build/release/test/unittest \"*fhirpath*\"; python3 conformance/scripts/run_all.py"
+    }
+  ]
+}

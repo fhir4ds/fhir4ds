@@ -1,0 +1,65 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "VERIFIED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-07: SQL-on-FHIR ViewDefinition \u2014 ViewDefinition.select.repeat. Test these items: repeat 0..* FHIRPath expressions for recursive traversal, view runner recursively follows each path to any depth, multiple repeat paths are combined using union semantics, duplicates and ordering behavior for recursive results, cycle/depth guard behavior under malformed or cyclic structures, columns are evaluated against each repeated node context. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR ViewDefinition.select.repeat: repeat is 0..* string and takes an array of FHIRPath expressions; runner evaluates each expression recursively and unions results from all levels/paths.",
+      "evidence": "Fresh native and forced-fallback probe with repeat=[\"item.where(text.exists())\"] over QuestionnaireResponse items returned [] on both paths. Expected rows for repeated nodes whose text exists because repeat paths are FHIRPath expressions, not simple dotted property keys.",
+      "root_cause": "repeat handling treated repeat entries as simple dotted paths and parser validation allowed scalar convenience shape, diverging from the SQL-on-FHIR repeat logical model.",
+      "resolution": "select.repeat now evaluates entries as FHIRPath expressions in Python fallback and native C++ fhirpath_repeat, collecting object results recursively.",
+      "verified_in": "Focused parser/generator/repeat tests: 11 passed; ViewDefinition pytest: 845 passed; native extension SQL tests: 294 assertions passed; fresh native/fallback probes matched for FHIRPath repeat expression, duplicate-path union, and 206-node depth; full conformance: ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706, DQM 47/47, overall 2822/2822; full package pytest: 7383 passed, 5 skipped, 9 warnings."
+    },
+    {
+      "id": "QA-002",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR ViewDefinition.select.repeat recursive traversal: recursively follows each path to any depth and continues until no more matches are found.",
+      "evidence": "Fresh probe with a 205-level QuestionnaireResponse.item chain returned 200 rows on native C++ and 0 rows on forced Python fallback. Expected all 206 repeated item nodes with parity between paths.",
+      "root_cause": "repeat handling treated repeat entries as simple dotted paths and parser validation allowed scalar convenience shape, diverging from the SQL-on-FHIR repeat logical model.",
+      "resolution": "removed the 200-level effective cap for parsed JSON traversal and fixed fallback deep-node serialization; native and fallback both return all 206 test nodes.",
+      "verified_in": "Focused parser/generator/repeat tests: 11 passed; ViewDefinition pytest: 845 passed; native extension SQL tests: 294 assertions passed; fresh native/fallback probes matched for FHIRPath repeat expression, duplicate-path union, and 206-node depth; full conformance: ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706, DQM 47/47, overall 2822/2822; full package pytest: 7383 passed, 5 skipped, 9 warnings."
+    },
+    {
+      "id": "QA-003",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR ViewDefinition.select.repeat: all results from all levels and all paths are combined using a union operation.",
+      "evidence": "Fresh native and forced-fallback probe with repeat=[\"item\", \"item\"] returned duplicated rows including repeated descendants. Expected the same node reached through duplicate repeat paths to appear once in the repeated-node result set.",
+      "root_cause": "repeat handling treated repeat entries as simple dotted paths and parser validation allowed scalar convenience shape, diverging from the SQL-on-FHIR repeat logical model.",
+      "resolution": "repeat traversal now tracks seen object JSON and unions duplicate node hits across repeat paths/levels.",
+      "verified_in": "Focused parser/generator/repeat tests: 11 passed; ViewDefinition pytest: 845 passed; native extension SQL tests: 294 assertions passed; fresh native/fallback probes matched for FHIRPath repeat expression, duplicate-path union, and 206-node depth; full conformance: ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706, DQM 47/47, overall 2822/2822; full package pytest: 7383 passed, 5 skipped, 9 warnings."
+    },
+    {
+      "id": "QA-004",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "category": "PARSER_VALIDATION",
+      "spec_citation": "SQL-on-FHIR ViewDefinition.select.repeat cardinality is 0..* string; in FHIR JSON, present repeating primitive elements are arrays.",
+      "evidence": "parse_view_definition accepted {\"repeat\":\"name\"} and normalized it to [\"name\"]. Expected parser/public boundaries to reject scalar repeat JSON shape.",
+      "root_cause": "repeat handling treated repeat entries as simple dotted paths and parser validation allowed scalar convenience shape, diverging from the SQL-on-FHIR repeat logical model.",
+      "resolution": "repeat logical-model validation now rejects scalar string repeat JSON at parser and direct generator boundaries.",
+      "verified_in": "Focused parser/generator/repeat tests: 11 passed; ViewDefinition pytest: 845 passed; native extension SQL tests: 294 assertions passed; fresh native/fallback probes matched for FHIRPath repeat expression, duplicate-path union, and 206-node depth; full conformance: ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706, DQM 47/47, overall 2822/2822; full package pytest: 7383 passed, 5 skipped, 9 warnings."
+    }
+  ]
+}

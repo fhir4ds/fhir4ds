@@ -1,0 +1,17 @@
+{
+  "run": "spec-comp CQL-06 EXPLORER",
+  "workflow": "evolution",
+  "pipeline": [
+    "evolution"
+  ],
+  "phase": "COMPLETE",
+  "qa_personality": "EXPLORER",
+  "max_iterations": 3,
+  "fresh_start": true,
+  "issues": [],
+  "phase_transitions": {
+    "explorer_started": "2026-10-02T13:43:00Z",
+    "explorer_completed": "2026-10-02T13:41:11Z"
+  },
+  "exit_reason": "explorer_complete_clean_0_issues"
+}

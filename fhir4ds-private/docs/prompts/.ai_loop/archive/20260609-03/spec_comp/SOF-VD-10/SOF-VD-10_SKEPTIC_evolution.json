@@ -1,0 +1,33 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-10: SQL-on-FHIR ViewDefinition \u2014 Terminology Bindings, Constraints: sql-name/sql-expressions, Cardinality and required fields. Test these items: sql-name regex for ViewDefinition.name, constant.name, and column.name, sql-expressions constraint: at most one of forEach, forEachOrNull, or repeat, required field validation for resource, select, column.path, column.name, constant.name, constant.value[x], and where.path, resource binding validation against FHIR ResourceType, fhirVersion binding validation against FHIRVersion, expectError official fixtures fail explicitly rather than being skipped, permissive versus strict validation modes are clearly separated. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "SOF-VD-10-SKEPTIC-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "SQL-on-FHIR ViewDefinition logical model 2.1.0-pre: root metadata elements are 0..1 primitives/objects; FHIR JSON elements, when present, must have a value/children and ordinary primitive properties are not represented as JSON null. See ViewDefinition JSON representation and HL7 FHIR JSON representation.",
+      "evidence": "Fresh probe .temp/qa/sof_vd_10_skeptic_probe.py: parse_view_definition() and ViewDefinition.from_dict() accepted present JSON null for resourceType, id, meta, url, version, status, title, and description. Expected: strict JSON parser/from_dict reject present null while direct dataclass None continues to mean omitted metadata.",
+      "root_cause": "parse_view_definition() used data.get(...) for optional root metadata, erasing absent versus present-null JSON shape before validation.",
+      "resolution": "Added parser-only _parse_optional_root_metadata() guard and routed resourceType/id/meta/url/version/status/title/description through it before validate_root_metadata_fields(). Direct dataclass None still serializes as absence.",
+      "verified_in": "python3 .temp/qa/sof_vd_10_skeptic_probe.py; python3 -m pytest fhir4ds/viewdef/tests/unit/test_parser.py -q --tb=short (204 passed); python3 -m pytest fhir4ds/viewdef/tests -q --tb=short (969 passed); python3 conformance/scripts/run_viewdef.py (134/134); python3 conformance/scripts/run_all.py | grep -E \"FAIL|ERROR|accuracy|Suite|OVERALL|ViewDefinition|FHIRPath|CQL|DQM\" (2822/2822); architect review: no retry/no new drift; closes REV-045-001"
+    }
+  ],
+  "RETRY_QA": false
+}

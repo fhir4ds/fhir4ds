@@ -1,0 +1,65 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASSED",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-09: CQL - Comparison Operators. Test these items: Between, Equal, Equivalent, Greater, GreaterOrEqual, Less, LessOrEqual, NotEqual, NotEquivalent. EXPLORER should focus on broad, unusual, and cross-surface paths: dynamic FHIR values, query/list/tuple/interval combinations, mixed primitive collections, temporal precision edge cases, Quantity duration/unit edge cases, direct public DuckDB helper calls, native-loaded versus forced Python fallback parity, and generated SQL execution in scalar and population-style contexts.\n\nThis is the actual per-chunk/per-personality workflow. Start from scratch for this chunk/personality and do not inspect or rely on any archived prior workflow outputs under .ai_loop/spec_comp/**, including CQL-09 SKEPTIC/HISTORIAN artifacts and any older CQL-09 consolidated-run artifacts. Current source code, active state files, GLOBAL_RULES.md, GLOBAL_KNOWLEDGE.md, AGENTS.md, and current tests may be inspected. Maintain 100% conformance and no pytest regressions.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-CQL09-EXPLORER-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5 comparison semantics for Quantity comparisons and FHIR choice values; FHIRPath numeric extraction rejects string-valued FHIR choices as numbers.",
+      "evidence": "Fresh EXPLORER probes found translated dynamic FHIR comparisons accepting valueString '5' as numeric and comparing valueQuantity against static CQL quantities without unit-aware semantics.",
+      "root_cause": "Generic numeric fallback used text extraction/casting for dynamic FHIR values and did not route JSON Quantity choices through quantity_compare.",
+      "resolution": "Dynamic FHIR numeric comparisons now use fhirpath_number for numeric evidence. Dynamic Quantity-vs-literal comparisons try parse_quantity/quantity_compare for JSON Quantity values and only use numeric fallback for primitive numeric choices.",
+      "verified_in": "cql09_explorer_probe.py; comparison parity pytest; full pytest; full conformance with CMS159 passing"
+    },
+    {
+      "id": "QA-CQL09-EXPLORER-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL equivalence semantics compare Decimal/Quantity values at the least precise operand, while equality remains exact/unit-aware.",
+      "evidence": "Fresh EXPLORER probes showed Quantity equivalence using exact numeric equality: 1.24 'mg' ~ 1.2 'mg' returned false instead of true.",
+      "root_cause": "Python and native C++ quantityCompare reused equality behavior for non-duration Quantity equivalence.",
+      "resolution": "quantityCompare now preserves authored JSON value precision, applies least-precision decimal rounding for non-duration '~'/'!~', and strips internal precision metadata from public parseQuantity output.",
+      "verified_in": "Python/native quantityCompare parity tests; C++ unittest; comparison parity pytest; full pytest"
+    },
+    {
+      "id": "QA-CQL09-EXPLORER-003",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "REGRESSION_RISK",
+      "spec_citation": "CQL comparison lowering must preserve typed operator semantics through SQL optimization; generated DQM SQL must remain executable.",
+      "evidence": "DQM CMS159 generated `(SELECT DepressionAssessment.value ...) < 5`, causing a DuckDB VARCHAR-vs-INTEGER binder error after precomputed-column optimization.",
+      "root_cause": "Scalar-subquery FHIRPath optimization replaced typed FHIRPath calls with precomputed VARCHAR columns without preserving numeric guards, and optimizer-created scalar subqueries were not cast before numeric literal comparisons.",
+      "resolution": "retrieve_optimizer now refuses to replace fhirpath_number with non-numeric precomputed columns and casts optimizer-created scalar subqueries when compared to numeric literals. CMS159 now emits fhirpath_number over the selected resource and passes.",
+      "verified_in": "test_sql_optimization.py scalar-subquery regressions; full conformance with CMS159 passing"
+    },
+    {
+      "id": "QA-CQL09-EXPLORER-004",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "REGRESSION_RISK",
+      "spec_citation": "CQL query tuple/property comparisons must preserve statically numeric CQL semantics after SQL JSON serialization; FHIRPath typed numeric extraction is only valid at dynamic FHIR value[x] boundaries.",
+      "evidence": "Full conformance after the first EXPLORER fixes dropped CMS871 to 70% accuracy. Generated SQL filtered internal tuple days with `fhirpath_number(_lt_EncounterDay, 'dayNumber') > 1`; those tuple day numbers were serialized text, so eligible hyperglycemic event days were empty.",
+      "root_cause": "The dynamic FHIR numeric projection helper rewrote every `fhirpath_text`/`fhirpath_scalar` numeric comparison to `fhirpath_number`, including internal CQL tuple JSON properties that are not FHIR resources.",
+      "resolution": "`_fhirpath_number_projection` is now limited to FHIR `value`/`value.*` paths. Internal tuple properties use the existing safe numeric cast path, while dynamic FHIR value[x] comparisons still reject string-valued choices as numeric evidence.",
+      "verified_in": "test_cql_internal_tuple_numeric_text_comparison_matches_cpp_and_python; CMS871 10/10; full conformance 2822/2822; full pytest 7166 passed; native C++ CQL unittest 628 assertions"
+    }
+  ]
+}

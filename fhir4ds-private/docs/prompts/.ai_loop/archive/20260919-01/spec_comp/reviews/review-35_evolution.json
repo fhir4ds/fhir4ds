@@ -1,0 +1,96 @@
+{
+  "phase": "REVIEW",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": ["code_review"],
+  "pipeline_step": 1,
+  "qa_personality": null,
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE MILESTONE REVIEW — 35 chunks completed.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all review files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "REV-002",
+      "severity": "MEDIUM",
+      "status": "OPEN",
+      "category": "MAINTAINABILITY",
+      "spec_citation": "GLOBAL_RULES.md Model Knowledge Must Be Data-Driven",
+      "evidence": "Hand-maintained resource/profile metadata maps in translator/fhirpath layers; no new instances in CQL-11..15 delta.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": "review-30.md, review-35 (this review)"
+    },
+    {
+      "id": "REV-003",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "HYGIENE",
+      "spec_citation": "NONE",
+      "evidence": "Untracked unrelated files remain: conformance/architecture/, fhir4ds/dqm/AGENTS.md.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": "review-30.md, review-35 (this review)"
+    },
+    {
+      "id": "REV-005",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "HARDENING",
+      "spec_citation": "NONE",
+      "evidence": "_compile_regex (fhir4ds/fhirpath/engine/invocations/strings.py:151) still compiles patterns verbatim; partially mitigated by _translate_pcre_ascii_classes/_translate_named_groups at call sites.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": "review-35 (this review)"
+    },
+    {
+      "id": "REV-008",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "category": "DEPLOYMENT",
+      "spec_citation": "GLOBAL_RULES.md — native fix landed only when binary is md5-matched across repo bundle and site-packages",
+      "evidence": "site-packages cql.duckdb_extension md5 025c79ed... (Aug 21 22:00) != repo bundle 98a8c858... (Aug 22 03:03). Final CQL-11..15 native fixes not live in installed package. Fix: re-deploy bundle to site-packages, re-verify md5.",
+      "root_cause": "Site-packages copy not refreshed after final cql_extension rebuild.",
+      "resolution": null,
+      "verified_in": "review-35 (this review)"
+    },
+    {
+      "id": "REV-009",
+      "severity": "MEDIUM",
+      "status": "OPEN",
+      "category": "RELIABILITY",
+      "spec_citation": "PROC_VALIDATION.md DQM gate",
+      "evidence": "Intermittent CMS871 ERROR \"Failed to load included library 'FHIRHelpers' ... 'Token' object is not subscriptable\" — 1 of 2 identical sequential run_dqm.py runs; second run 47/47. Suspects: shared library_cache (run_dqm.py:139) + include_handler.py:38-67. One-pass DQM gates are unreliable in both directions.",
+      "root_cause": null,
+      "resolution": null,
+      "verified_in": "review-35 (this review)"
+    },
+    {
+      "id": "REV-001",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "category": "HARDENING",
+      "spec_citation": "NONE",
+      "evidence": "All std::stoi/stol/stoll sites removed from evaluator.cpp during fhirpath native rework.",
+      "root_cause": null,
+      "resolution": "Refactored away",
+      "verified_in": "review-35 (this review)"
+    },
+    {
+      "id": "REV-004",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "category": "HARDENING",
+      "spec_citation": "NONE",
+      "evidence": "exactDecimalRatioText no longer exists in evaluator.cpp; no equivalent unbounded ratio helper found.",
+      "root_cause": null,
+      "resolution": "Refactored away",
+      "verified_in": "review-35 (this review)"
+    }
+  ]
+}

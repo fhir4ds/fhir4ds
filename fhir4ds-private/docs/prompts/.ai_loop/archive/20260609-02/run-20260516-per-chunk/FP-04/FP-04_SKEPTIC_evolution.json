@@ -1,0 +1,43 @@
+{
+  "phase": "QA",
+  "iteration": 1,
+  "audit_status": "PENDING",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK FP-04: FHIRPath \u2014 \u00a75.2 Filtering and Projection. Test these items: where(criteria), select(projection), repeat(projection), ofType(type). For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release §5.2.4 ofType(type : type specifier)",
+      "evidence": "Spec says ofType() returns items of the given type or a subclass. Reproducer: Bundle.entry.resource.ofType(Resource).id and .ofType(DomainResource).id over Patient+Observation resources returned [] in both Python core and native/fallback DuckDB paths; expected Patient/Observation ids because both resources inherit from DomainResource and Resource.",
+      "root_cause": "Python core and native C++ ofType() used exact type identity for all inputs, so FHIR resource supertypes such as DomainResource and Resource were not considered. The initial broad subtype fix was narrowed after R4 conformance confirmed primitive ofType(string) must still reject FHIR code.",
+      "resolution": "Added generated FHIR parent hierarchy awareness to Python TypeInfo and C++ fn_isType/evalOfType, applying subtype matching for non-primitive FHIR types while preserving primitive exactness. Rebuilt and copied the bundled DuckDB extension.",
+      "verified_in": "python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_filter_projection_parity.py -q; python3 -m pytest fhir4ds/fhirpath/tests/unit fhir4ds/fhirpath/duckdb/tests/integration -q; python3 conformance/scripts/run_fhirpath_r4.py; ./build/release/test/unittest \"*fhirpath*\""
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath Normative Release §5 function expression parameter rules and §5.2.3 repeat(projection)",
+      "evidence": "Spec says expression parameters are evaluated per input item and may refer to $this and $index. Python fallback leaves $index visible after where()/select() and does not bind it during repeat(). Reproducers: item.select(linkId) | $index returned ['a','b','1'] in fallback vs ['a','b'] native; item.repeat(iif($index = 0, item, {})).linkId returned [] fallback vs ['a1'] native.",
+      "root_cause": "Python macro implementations for where() and select() mutated the shared evaluation context without restoring $index, and repeat() never bound $index while evaluating each queued item.",
+      "resolution": "Wrapped where(), select(), and repeat() macro index binding in save/restore logic; repeat() now binds a monotonically increasing item index. Undefined $index/$total now evaluate to empty instead of raising, matching the wrapper contract and native behavior.",
+      "verified_in": "python3 -m pytest fhir4ds/fhirpath/duckdb/tests/integration/test_filter_projection_parity.py -q; python3 -m pytest fhir4ds/fhirpath/tests/unit fhir4ds/fhirpath/duckdb/tests/integration -q; python3 conformance/scripts/run_fhirpath_r4.py"
+    }
+  ]
+}

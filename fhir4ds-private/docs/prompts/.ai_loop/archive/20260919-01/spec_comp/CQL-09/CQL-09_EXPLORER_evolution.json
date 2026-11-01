@@ -1,0 +1,45 @@
+{
+  "phase": "DONE",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-09: CQL \u2014 Comparison Operators. Test these items: Between, Equal, Equivalent, Greater, GreaterOrEqual, Less, LessOrEqual, NotEqual, NotEquivalent. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "resolution": "unit-'1' promotion for static literals in _operators.py mixed branches",
+      "verified_in": "iteration 1 \u2014 parity test + 2832/2832 gate"
+    },
+    {
+      "id": "QA-002",
+      "severity": "MEDIUM",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "resolution": "same promotion in _translate_equivalence_op; no more BinderException",
+      "verified_in": "iteration 1 \u2014 parity test + 2832/2832 gate"
+    },
+    {
+      "id": "QA-003",
+      "severity": "LOW",
+      "status": "DEFERRED",
+      "category": "SPEC_AMBIGUITY",
+      "resolution": "UCUM-validity-gated fallback inside quantity_compare (dual-engine) \u2014 future work",
+      "verified_in": null
+    }
+  ]
+}

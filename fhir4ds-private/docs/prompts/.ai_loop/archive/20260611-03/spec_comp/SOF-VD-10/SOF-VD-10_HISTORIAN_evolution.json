@@ -1,0 +1,20 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "HISTORIAN",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-10: SQL-on-FHIR ViewDefinition \u2014 Terminology Bindings; Constraints: sql-name/sql-expressions; Cardinality and required fields. Test these items: sql-name regex for ViewDefinition.name, constant.name, and column.name; sql-expressions constraint: at most one of forEach, forEachOrNull, or repeat; required field validation for resource, select, column.path, column.name, constant.name, constant.value[x], and where.path; resource binding validation against FHIR ResourceType; fhirVersion binding validation against FHIRVersion; expectError official fixtures fail explicitly rather than being skipped; permissive versus strict validation modes are clearly separated. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk."
+  },
+  "issues": []
+}

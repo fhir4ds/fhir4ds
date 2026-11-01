@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "PASS",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "SKEPTIC",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK SOF-VD-11: SQL-on-FHIR ViewDefinition \u2014 View Runner, Examples. Test these items: execute a ViewDefinition and return tabular rows, simple Patient and Observation example views, unrolling arrays such as Patient.address into row sets, filtered Observation/resource views, column type coercion into DuckDB result columns, official SQL-on-FHIR v2 spec_tests parity, parser, generator, and DuckDB execution agree for supported examples. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "SOF-VD-11-SKEPTIC-001",
+      "severity": "HIGH",
+      "status": "VERIFIED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "FHIRPath lowBoundary/highBoundary utility functions; SQL-on-FHIR v2 local spec_tests/fn_boundary.json",
+      "evidence": "Fresh SOF-VD-11/SKEPTIC probe executed generated ViewDefinition SQL over a shared resources table with native C++ and forced Python fallback. For official fn_boundary decimal lowBoundary/highBoundary, resource o1 has valueQuantity.value 1.0 and expected 0.95/1.05. Native C++ returned -0.5/0.5 because value.ofType(Quantity).value.precision() returned 0, while forced fallback returned precision 1 and 0.95/1.05.",
+      "root_cause": "Native C++ FHIRPath member access did not preserve raw JSON number text for numeric children, and decimal boundary calculation read decimal_val from JSON-backed numeric FPValues instead of the JSON numeric accessor. The same official runner sweep exposed related native primitive metadata gaps for FHIR date/dateTime/time boundary coercion and root-level where(criteria), which fell through as a generic function instead of using the existing filter implementation.",
+      "resolution": "Updated native evaluator member access to preserve JSON numeric source_text, updated decimalBoundary to use getNumericValue() for JSON-backed numbers, added FHIR primitive metadata coercion for JSON date/dateTime/time strings before lowBoundary()/highBoundary(), and dispatched top-level where(criteria) through evalWhere(). Rebuilt and copied the bundled DuckDB extension. Added native/fallback FHIRPath parity and ViewDefinition runner regression tests.",
+      "verified_in": "SOF-VD-11/SKEPTIC iteration 1: fresh probe native/fallback custom cases and official spec_tests 134/134; focused regressions 4 passed; ViewDefinition pytest 976 passed; FHIRPath environment/type parity 11 passed; ViewDefinition conformance 134/134; full conformance 2822/2822."
+    }
+  ]
+}

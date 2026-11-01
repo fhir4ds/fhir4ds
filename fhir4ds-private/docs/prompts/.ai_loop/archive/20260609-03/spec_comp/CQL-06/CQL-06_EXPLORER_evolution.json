@@ -1,0 +1,32 @@
+{
+  "phase": "ARCHITECT",
+  "iteration": 1,
+  "audit_status": "COMPLETE",
+  "exit_reason": "CLEAN",
+  "workflow": null,
+  "pipeline": [
+    "evolution"
+  ],
+  "pipeline_step": 0,
+  "qa_personality": "EXPLORER",
+  "config": {
+    "min_iterations": 1,
+    "max_iterations": 3,
+    "exhaustive_mode": false,
+    "target_version": null,
+    "notes": "SPEC COMPLIANCE CHUNK CQL-06: CQL \u2014 Type Operators - Conversion Checks. Test these items: CanConvertQuantity, ConvertQuantity, ConvertsToBoolean, ConvertsToDate, ConvertsToDateTime, ConvertsToDecimal, ConvertsToLong, ConvertsToInteger, ConvertsToQuantity, ConvertsToRatio, ConvertsToString, ConvertsToTime. For DuckDB-backed FHIRPath/CQL surfaces, test both the native/C++ extension path and the Python fallback where both exist, and compare outputs between paths. For SQL-on-FHIR ViewDefinition chunks, test parser validation, SQL generation, DuckDB execution, and official spec fixtures/examples relevant to the chunk.\n\nWhen the pipeline is fully complete, set workflow to null, set exit_reason, write all handoff files, and return control to the outer spec compliance orchestrator."
+  },
+  "issues": [
+    {
+      "id": "QA-001",
+      "severity": "HIGH",
+      "status": "RESOLVED",
+      "category": "SPEC_VIOLATION",
+      "spec_citation": "CQL 1.5.3 Appendix B Type Operators, conversion table and ConvertsToString/ToString",
+      "evidence": "Fresh EXPLORER probe: native and forced Python fallback return true for ConvertsToString([1, 2]), ConvertsToString({'a': 1}), and translated CQL ConvertsToString({1, 2}) / ConvertsToString(Tuple { a: 1 }); ToString over those structural values returns DuckDB-cast text instead of NULL. The CQL conversion table defines String conversions for scalar primitive/temporal/Quantity/Ratio values, not List or Tuple.",
+      "root_cause": "Public ToString was a bare DuckDB CAST macro and translated generic ToString bypassed the macro with SQLCast, so structural CQL List/Tuple values inherited DuckDB stringification. ConvertsToString was a broad Python UDF returning true for every non-null value.",
+      "resolution": "Added structural type guards to the ToString and ConvertsToString macros, stopped registering the broad ConvertsToString Python UDF over that macro, hardened the fallback Python helper for direct list/dict values, and routed generic translated ToString through the public macro while preserving QuantityToString/RatioToString special cases.",
+      "verified_in": "python3 .temp/qa/cql06_explorer_probe.py; python3 -m pytest fhir4ds/cql/duckdb/tests/integration/test_conversion_check_parity.py fhir4ds/cql/duckdb/tests/integration/test_conversion_function_parity.py fhir4ds/cql/duckdb/tests/integration/test_core_forced_backend_parity.py fhir4ds/cql/duckdb/tests/test_macros_tier1.py fhir4ds/cql/tests/unit/test_v2_expressions.py -q; python3 conformance/scripts/run_all.py | grep -E \"FAIL|ERROR|accuracy|Suite|OVERALL|ViewDefinition|FHIRPath|CQL|DQM\""
+    }
+  ]
+}
