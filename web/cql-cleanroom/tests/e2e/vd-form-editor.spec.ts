@@ -77,21 +77,9 @@ test("journey: always-custom editor with Raw ⇄ Form presentation (no source sw
   expect(parsed.select?.[0]?.column?.length).toBe(2);
 });
 
-/** §2.1 discoverability: the custom raw editor advertises the form toggle. */
-test("journey: custom raw editor advertises the Form editor entry point", async ({ page }) => {
-  await boot(page);
-  await openCustomRawEditor(page);
-
-  // The hint names the Raw ⇄ switch and is visible in raw mode.
-  const hint = page.locator('[data-testid="vd-form-hint"]');
-  await expect(hint).toBeVisible();
-  await expect(hint).toContainText("Raw ⇄");
-
-  // Opening the form removes the hint (the form is self-evident).
-  await page.click('[data-testid="vd-presentation-toggle"]');
-  await page.waitForSelector("[data-testid=vd-form]", { timeout: 10_000 });
-  await expect(page.locator('[data-testid="vd-form-hint"]')).toHaveCount(0);
-});
+/** Joel 2026-11-01: the editor pane carries NO hint/spinner chrome — the
+ *  toggle is self-evident and the console owns run feedback. (The former
+ *  vd-form-hint and view-no-reports lines were removed on his review.) */
 
 /** §2.2/§2.4: "name/resource/status + select/column table … the table IS
  *  select[0].column (a 1:1 projection)" */

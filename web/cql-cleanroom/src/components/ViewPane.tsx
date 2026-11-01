@@ -10,7 +10,6 @@ import {
   type VdFormState,
 } from "../lib/vdForm";
 import { VdForm } from "./VdForm";
-import { Spinner } from "./Spinner";
 
 /**
  * ViewPane v3 — the View drawer inside Results (§3.5).
@@ -39,7 +38,6 @@ export function ViewPane({
   recalcMs = 2000,
   initialVd,
   connected = false,
-  reportsPending = false,
   onBusy,
 }: {
   measure: Record<string, unknown> | null;
@@ -57,9 +55,6 @@ export function ViewPane({
   /** S31: connected = server-side flatten (/api/view/run with explicit
    *  resources) — no in-browser engine boot. */
   connected?: boolean;
-  /** S32: the first heartbeat has not produced MeasureReports yet —
-   *  show a spinner rather than flashing the no-reports hint. */
-  reportsPending?: boolean;
   /** S32: reports the flatten busy state upward (console output spinner). */
   onBusy?: (busy: boolean) => void;
 }) {
@@ -247,29 +242,6 @@ export function ViewPane({
           {flipError}
         </div>
       )}
-      {/* FEATURE_VD_FORM_EDITOR discoverability (Joel 2026-10-31): the
-          form editor's ONLY entry point was the small Raw ⇄ switch, easy
-          to miss. Advertise it right where the raw editor lives; the
-          hint disappears once the form is open (the form is then
-          self-evident). */}
-      {!customForm && (
-        <p className="pane-hint" data-testid="vd-form-hint">
-          Form editor: flip the <strong>Raw ⇄</strong> switch above to edit
-          this ViewDefinition as a guarded form (Form ⇄ returns to raw
-          JSON; unsupported fields are flagged, never dropped).
-        </p>
-      )}
-      {!(measureReports?.length) &&
-        (reportsPending ? (
-          <p className="pane-hint" data-testid="view-reports-loading">
-            <Spinner label="waiting for MeasureReports" />
-          </p>
-        ) : (
-          <p className="pane-hint" data-testid="view-no-reports">
-            No MeasureReports yet — run an evaluation with a Measure mapping
-            first.
-          </p>
-        ))}
       {customForm && vdForm ? (
         <VdForm form={vdForm} onChange={applyVdForm} />
       ) : (
