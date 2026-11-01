@@ -290,3 +290,64 @@ $ git --no-pager diff --stat dev...HEAD
  test-results/serve-phase1.txt                      | 1858 ++++++++++++++++++++
  test-results/serve-phase2.txt                      |  279 +++
  72 files changed, 12668 insertions(+), 2 deletions(-)
+
+==================================================================
+== 9. ADDENDUM 2026-11-01T02:07:16Z: search + conditional writes
+==================================================================
+Closes the gaps listed at the phase-3 report: GET /{type} search,
+If-None-Exist conditional create, PUT /{type}?<filter> conditional update,
+and the registry-owned-type guard. `output[].type` grouping is unchanged
+by decision (docs/design/serve-writes.md decision 8).
+
+--- unit suites --------------------------------------------------
+$ PYTHONPATH=. pytest fhir4ds/serve/tests/test_search_local.py -q
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 18 passed, 1 warning in 1.59s =========================
+
+$ PYTHONPATH=. pytest fhir4ds/serve/tests -q
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================== 227 passed, 1 skipped, 1 warning in 32.38s ==================
+
+--- live transcript ----------------------------------------------
+### seed two Patients
+POST -> 201
+POST -> 201
+
+### GET /Patient?_count=1  (searchset + total)
+{"resourceType": "Bundle", "type": "searchset", "total": 2, "entry": [{"resource": {"resourceType": "Patient", "id": "syn-a", "identifier": [{"system": "urn:mrn", "value": "A1"}], "meta": {"versionId": "1", "lastUpdated": "2026-11-01T02:07:59Z"}}}]}
+
+### GET /Patient?identifier=urn:mrn|A1
+total: 1 ids: ['syn-a']
+
+### GET /Patient?name=Smith  (unsupported parameter -> 400)
+status=400
+{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"not-supported","diagnostics":"Unsupported search parameter 'name'. Supported: _count, _id, _offset, identifier","expression":["name"]}]}
+
+### POST /Patient with If-None-Exist: identifier=urn:mrn|A1  (match -> 200, no new version)
+status=200
+etag: W/"1"
+returned id: syn-a
+
+### POST /Patient with If-None-Exist: _id=syn-a,syn-b  (many -> 412)
+status=412
+
+### PUT /Patient?identifier=urn:mrn|B2  (one match -> 200, version bump)
+status=200
+etag: W/"3"
+location: Patient/syn-b
+   _history for syn-b:
+  versions: ['3', '2']
+
+### PUT /Patient?identifier=urn:mrn|NEW  (no match -> 201 create)
+status=201
+
+### PUT /Library/x  (registry owns the type -> 400 not-supported)
+status=400
+{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"not-supported","diagnostics":"Library is managed by the definition registry; use POST /Library and GET /Library/{id}","expression":["resourceType"]}]}
+
+server stopped
+
+--- ruff + protected paths ---------------------------------------
+All checks passed!
+ruff exit=0
+protected-path grep exit=1 (1 = untouched)

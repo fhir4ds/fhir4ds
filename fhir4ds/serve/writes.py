@@ -26,10 +26,11 @@ from typing import Any
 from fastapi import APIRouter, Body, Request
 from starlette.responses import Response
 
-from . import bulk_publish, versioning
+from . import bulk_publish, search, versioning
 from .config import context_for
-from .errors import Issue, ServeError, bad_request, not_found, unprocessable
+from .errors import Issue, ServeError, bad_request, not_found, unprocessable, unsupported
 from .parameters import decode_json_body
+from .resources import search_controls, searchset_bundle
 
 FHIR_JSON = "application/fhir+json"
 JSON_CONTENT_TYPES = ("application/fhir+json", "application/json")
@@ -39,6 +40,11 @@ ID_PATTERN = re.compile(r"^[A-Za-z0-9\-.]{1,64}$")
 
 #: Header reporting how many rows are still waiting for a Hub commit.
 PENDING_HEADER = "X-Pending-Commits"
+
+#: Types owned by the definition registry (phase 1/2). Generic resource writes
+#: would bypass the registry's canonical/url handling, so they are refused with
+#: a pointer at the routes that do own them.
+REGISTRY_OWNED_TYPES: tuple[str, ...] = ("Library", "ViewDefinition")
 
 #: Write result statuses as FHIR spells them in a bundle response.
 STATUS_CREATED = "201 Created"
@@ -437,6 +443,35 @@ def _decode(request: Request, body: Any) -> dict:
     return payload
 
 
+def reject_registry_owned(resource_type: str) -> None:
+    """Refuse generic writes for the types the definition registry owns."""
+    if resource_type in REGISTRY_OWNED_TYPES:
+        raise unsupported(
+            f"{resource_type} is managed by the definition registry; use "
+            f"POST /{resource_type} and GET /{resource_type}/{{id}}",
+            expression=["resourceType"],
+        )
+
+
+def _etag_of(resource: dict) -> str:
+    version = int(resource.get("meta", {}).get("versionId", 0) or 0)
+    return etag_for(version)
+
+
+def _conditional_query(request: Request, resource_type: str, header: str | None) -> Any:
+    """A search query from an ``If-None-Exist`` header or the query string."""
+    pairs = search.parse_query_string(header) if header else request.query_params
+    query = search.parse_search(resource_type, pairs)
+    if not query.has_filter:
+        raise bad_request(
+            "A conditional request needs a search filter (for example "
+            "identifier=urn:mrn|A1 or _id=abc)",
+            expression=["_id"],
+            code="required",
+        )
+    return query
+
+
 def _writer(request: Request) -> ResourceWriter:
     return context_for(request).writer
 
@@ -548,8 +583,34 @@ def create_resource(
 ) -> Response:
     """Create a resource; the server assigns an id when the body omits one."""
     require_json_content_type(request)
+    reject_registry_owned(resource_type)
     resource = _decode(request, body)
     context = context_for(request)
+
+    # FHIR conditional create: If-None-Exist names a search; zero matches means
+    # create, one means "already there" (200, no new version), many is a 412.
+    if_none_exist = request.headers.get("if-none-exist")
+    if if_none_exist:
+        query = _conditional_query(request, resource_type, if_none_exist)
+        matches = context.run_locked(search.match_count, context.connection, query)
+        if matches > 1:
+            raise precondition_failed(
+                f"If-None-Exist {if_none_exist!r} matches {matches} resources; "
+                "a conditional create needs zero or one"
+            )
+        if matches == 1:
+            existing = context.run_locked(search.first_match, context.connection, query)
+            return Response(
+                content=json.dumps(existing, ensure_ascii=False),
+                media_type=FHIR_JSON,
+                status_code=200,
+                headers={
+                    "ETag": _etag_of(existing),
+                    PENDING_HEADER: str(_pending(request)),
+                    "Location": f"{resource_type}/{existing['id']}",
+                },
+            )
+
     result = context.run_locked(context.writer.create, resource_type, resource)
     _enqueue(request, [result])
     return _resource_response(
@@ -557,6 +618,63 @@ def create_resource(
         pending=_pending(request),
         location=f"{resource_type}/{result.resource['id']}",
         status_code=201,
+    )
+
+
+@router.get("/{resource_type}", summary="Search resources by type")
+def search_resources(resource_type: str, request: Request) -> Response:
+    """Search the latest-wins view. Unsupported parameters are a 400."""
+    context = context_for(request)
+    query = search.parse_search(resource_type, request.query_params)
+    count, offset = search_controls(request.query_params)
+    capped = context.config.capped_limit(count)
+    resources, total = context.run_locked(
+        search.search, context.connection, query, count=capped, offset=offset
+    )
+    return Response(
+        content=json.dumps(searchset_bundle(resources, total), ensure_ascii=False),
+        media_type=FHIR_JSON,
+    )
+
+
+@router.put("/{resource_type}", summary="Conditional update")
+def conditional_update(
+    resource_type: str, request: Request, body: Any | None = Body(default=None)
+) -> Response:
+    """``PUT /{type}?<filter>``: zero matches create, one updates, many are 412."""
+    require_json_content_type(request)
+    reject_registry_owned(resource_type)
+    query = _conditional_query(request, resource_type, None)
+    resource = _decode(request, body)
+    context = context_for(request)
+
+    matches = context.run_locked(search.match_count, context.connection, query)
+    if matches > 1:
+        raise precondition_failed(
+            f"The conditional update filter matches {matches} resources; it must "
+            "match zero or one"
+        )
+
+    if matches == 0:
+        result = context.run_locked(context.writer.create, resource_type, resource)
+        status_code = 201
+    else:
+        existing = context.run_locked(search.first_match, context.connection, query)
+        result = context.run_locked(
+            context.writer.update,
+            resource_type,
+            existing["id"],
+            {**resource, "id": existing["id"]},
+            if_match=version_from_etag_header(request),
+        )
+        status_code = 200
+
+    _enqueue(request, [result])
+    return _resource_response(
+        result,
+        pending=_pending(request),
+        location=f"{resource_type}/{result.resource['id']}",
+        status_code=status_code,
     )
 
 
@@ -581,6 +699,7 @@ def update_resource(
 ) -> Response:
     """Create-or-update, honouring ``If-Match`` (a mismatch is 412)."""
     require_json_content_type(request)
+    reject_registry_owned(resource_type)
     resource = _decode(request, body)
     if_match = version_from_etag_header(request)
     context = context_for(request)
@@ -600,6 +719,7 @@ def update_resource(
 def delete_resource(resource_type: str, resource_id: str, request: Request) -> Response:
     """Tombstone: gone from reads, still visible in ``_history``."""
     require_json_content_type(request)
+    reject_registry_owned(resource_type)
     context = context_for(request)
     result = context.run_locked(context.writer.delete, resource_type, resource_id)
     _enqueue(request, [result])
@@ -668,4 +788,6 @@ __all__ = [
     "validate_id",
     "FHIR_JSON",
     "PENDING_HEADER",
+    "REGISTRY_OWNED_TYPES",
+    "reject_registry_owned",
 ]

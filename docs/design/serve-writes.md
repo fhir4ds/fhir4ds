@@ -87,6 +87,31 @@ a failing entry rolls everything back, and no publish rows reach the flush loop.
 `batch` behaves the same way (partial batches are defensible in FHIR, but not
 alongside a single flush boundary).
 
+## Search and conditional writes
+
+`search.py` is a deliberately small subset, and it is **strict**: `_id`,
+`identifier` (`system|value`, `|value`, `value`), `_count`, `_offset`. Any other
+parameter is a `400 not-supported` naming what is supported. Silently ignoring a
+filter would answer a different question than the client asked — the one failure
+mode a clinical API must not have. Adding a parameter means extending
+`parse_search` **and** `condition_sql`, with tests.
+
+`identifier` matches entries of the resource's `identifier` array via
+`json_each` (repeated parameters are ANDed, per FHIR). On top of that matcher:
+
+* **conditional create** — `POST /{type}` with `If-None-Exist: <filter>`:
+  zero matches create (`201`), one returns the existing resource (`200`, no new
+  version), many are `412`.
+* **conditional update** — `PUT /{type}?<filter>`: zero matches create (`201`),
+  one updates that id (`200`), many are `412`. A call with no filter at all is
+  `400 required`.
+* **`GET /{type}`** — `searchset` Bundle with `total` over all matches and a
+  page of `_count` (default 100, capped by `ServeConfig.max_rows`).
+
+Generic writes refuse the types the definition registry owns (`Library`,
+`ViewDefinition`) with `400 not-supported`: they would bypass the registry's
+canonical/`url` handling, so the registry routes stay the only way in.
+
 ## Commit discipline
 
 Writes never wait for the Hub. The row lands in the log (reads see it) and its
@@ -120,6 +145,18 @@ tick. `GET /health` reports `pending`, `last_commit`, `last_commit_at`,
    silent upsert would hide a client that meant `PUT`.
 6. **No cross-process locking**, by design and stated in the README: one writer,
    one DuckDB connection, one flush thread.
+7. **Unknown search parameters are a 400**, not ignored (see above). The FHIR
+   spec lets a server ignore unknown parameters; doing so would return
+   unfiltered data that looks filtered.
+8. **`output[].type` stays `"resources"` (no per-type grouping).** Bulk Data uses
+   per-type entries because each URL is a per-type NDJSON file. Here a URL is a
+   date-partitioned parquet **part** that spans types, so a per-type entry would
+   either name a URL that is not type-scoped or require a second, duplicated
+   copy of the data. Consumers filter columnarly
+   (`WHERE resourceType = 'Observation'`). Changing this means re-partitioning
+   parts by type (`resources/type=<Type>/dt=…/part-<seq>.parquet`), which
+   departs from the brief's fixed layout and re-publishes the dataset — offered,
+   not taken.
 
 ## Verification
 

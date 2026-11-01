@@ -119,6 +119,15 @@ Capabilities live in `fhir4ds/operations/capabilities/`
 - **The token is never in this package.** `HfDatasetStore` passes `token=None`
   and lets `huggingface_hub` read `HF_TOKEN`; nothing logs or stores it, and the
   unit suite must pass with no token at all (`LocalDirStore`).
+- **Search is an explicit subset and refuses the rest.** `search.py` supports
+  `_id`, `identifier`, `_count`, `_offset`; anything else is `400 not-supported`.
+  Never "just ignore" an unknown parameter — an unfiltered answer that looks
+  filtered is the worst failure mode here. Conditional create/update reuse the
+  same matcher, so a new parameter must land in `parse_search` **and**
+  `condition_sql` together.
+- **Generic writes refuse registry-owned types.** `Library`/`ViewDefinition`
+  are `400 not-supported` on the generic routes; the registry owns their
+  canonical handling. Do not "helpfully" route them into the log.
 - **Publish only to `fhir4ds/bulk-publish-demo`.** Other `fhir4ds/*` and
   `joelmontavon/*` repositories belong to other teams; data must stay synthetic
   because the repo and its history are public.
@@ -180,6 +189,13 @@ Capabilities live in `fhir4ds/operations/capabilities/`
   `--log-config /app/uvicorn-log.json` (uvicorn's default config with handlers
   pointed at `sys.stdout`) so `docker logs` shows a single unbuffered stream.
   Do not drop that flag while "simplifying" the CMD.
+- **Version ids are global `_seq`, not per-resource counters.** A second version
+  of the third resource is `W/"4"`, not `W/"2"`; tests that assume per-resource
+  numbering are wrong (one did).
+- **`GET /{type}` is registered before `GET /{type}/{id}`** but after every
+  phase-1/2 router: `/Library`, `/ViewDefinition`, `/metadata`, `/health`,
+  `/openapi.json`, `/docs` all keep winning by registration order. Adding a new
+  single-segment route means checking that list.
 - **The latest-wins view introduces no row order.** `row_number()` decides
   *which* row survives, not the order rows come back in, so ViewDefinition and
   SQLQuery output order can differ from insertion order. Tests must assert
