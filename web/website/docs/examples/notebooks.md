@@ -17,7 +17,7 @@ Try FHIR4DS in your browser using Google Colab. These notebooks demonstrate the 
 | **DQM** | Measure evaluation and clinical audit trails. | [![Open In Colab](https://img.shields.io/badge/Open%20In%20Colab-F9AB00?logo=googlecolab&logoColor=white)](https://colab.research.google.com/github/fhir4ds/fhir4ds/blob/main/docs/notebooks/dqm.ipynb) |
 | **OMOP** | FHIR R4 to OMOP CDM v5.5 — person, encounters, concept maps and the cross-resource medications union. | [![Open In Colab](https://img.shields.io/badge/Open%20In%20Colab-F9AB00?logo=googlecolab&logoColor=white)](https://colab.research.google.com/github/fhir4ds/fhir4ds/blob/main/docs/notebooks/omop-mapping.ipynb) |
 
-Each notebook begins with `pip install fhir4ds-v2==0.0.19` and imports from
+Each notebook begins with `pip install fhir4ds-v2==0.0.20` and imports from
 `fhir4ds`. No other setup is required. The OMOP notebook additionally
 downloads its cohort from
 [Hugging Face](https://huggingface.co/datasets/fhir4ds/omop-demo) (no token
@@ -31,7 +31,7 @@ builds `person` and the concept map by hand first.
 To run these notebooks locally, install the package and launch Jupyter:
 
 ```bash
-pip install "fhir4ds-v2[measures]==0.0.19"
+pip install "fhir4ds-v2[measures]==0.0.20"
 jupyter notebook docs/notebooks/
 ```
 
