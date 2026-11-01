@@ -117,13 +117,22 @@ def _bundled_extension_filename() -> str | None:
     1.6, 2.1, dev builds of unreleased lines) returns None → the caller
     falls back to Python UDFs rather than attempting an ABI-mismatched
     LOAD (FEATURE_DUCKDB2_DUAL_SUPPORT §3.2).
+
+    The 1.5 line is ABI-locked at PATCH level as of 1.5.6 (the v1.5.5
+    binary refuses to load in a 1.5.6 client), so the wheel bundles both:
+    ``.duckdb_extension`` (v1.5.5 ABI) and ``.duckdb156_extension``
+    (v1.5.6 ABI). Unsupported 1.5.x patches (1.5.0-1.5.4, 1.5.7+) keep
+    the legacy v1.5.5 selection and fall back on load failure.
     """
     import re
 
-    m = re.match(r"^(\d+)\.(\d+)", duckdb.__version__ or "")
+    m = re.match(r"^(\d+)\.(\d+)(?:\.(\d+))?", duckdb.__version__ or "")
     if not m:
         return None
     key = (int(m.group(1)), int(m.group(2)))
+    patch = int(m.group(3)) if m.group(3) else None
+    if key == (1, 5) and patch == 6:
+        return "cql.duckdb156_extension"
     return {
         (1, 5): "cql.duckdb_extension",
         (2, 0): "cql.duckdb2_extension",
@@ -141,6 +150,7 @@ def _staged_load_path(ext_path: "Path") -> "Path":
     size+mtime, so a wheel upgrade re-stages automatically.
     """
     import hashlib
+    import re
     import tempfile
     from pathlib import Path
 
@@ -154,7 +164,7 @@ def _staged_load_path(ext_path: "Path") -> "Path":
     # let a later stage overwrite the binary mid-use and segfault the loader.
     cache_dir = Path(tempfile.gettempdir()) / "fhir4ds-ext-cache" / key
     cache_dir.mkdir(parents=True, exist_ok=True)
-    staged = cache_dir / ext_path.name.replace(".duckdb2_extension", ".duckdb_extension")
+    staged = cache_dir / re.sub(r"\.duckdb[0-9]*_extension$", ".duckdb_extension", ext_path.name)
     if not staged.exists() or staged.stat().st_size != stat.st_size:
         staged.write_bytes(ext_path.read_bytes())
     return staged
@@ -209,9 +219,10 @@ def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
                 "columns. Fix: pip install fhir4ds-v2[duckdb2] (or pytz).",
                 _duckdb_version,
             )
-    # DuckDB 2.x enforces the `.duckdb_extension` suffix at LOAD: stage
-    # the bundled `.duckdb2_extension` binary into the loadable name first.
-    if ext_path.name.endswith(".duckdb2_extension"):
+    # Version-suffixed bundles (`.duckdb2_extension`, `.duckdb156_extension`)
+    # are staged into the loadable `.duckdb_extension` name before LOAD.
+    import re
+    if re.search(r"\.duckdb[0-9]+_extension$", ext_path.name):
         try:
             ext_path = _staged_load_path(ext_path)
         except OSError as exc:

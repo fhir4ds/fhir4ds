@@ -7,11 +7,11 @@
 [submodule "extensions/fhirpath/duckdb"]
 	path = extensions/fhirpath/duckdb
 	url = https://github.com/duckdb/duckdb
-	branch = v1.5.2
+	branch = v1.5.6
 [submodule "extensions/cql/duckdb"]
 	path = extensions/cql/duckdb
 	url = https://github.com/duckdb/duckdb
-	branch = v1.5.2
+	branch = v1.5.6
 [submodule "extensions/fhirpath/extension-ci-tools"]
 	path = extensions/fhirpath/extension-ci-tools
 	url = https://github.com/duckdb/extension-ci-tools

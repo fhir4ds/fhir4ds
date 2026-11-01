@@ -17,9 +17,7 @@
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/types/value.hpp"
-#include "duckdb/common/vector/flat_vector.hpp"
-#include "duckdb/common/vector/list_vector.hpp"
-#include "duckdb/common/vector/string_vector.hpp"
+#include "duckdb/common/types/vector.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include <algorithm>
 #include <cctype>
@@ -34,7 +32,49 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
+#if __cplusplus >= 201703L
 #include <shared_mutex>
+#else
+// duckdb's re2 third_party dir appends a directory-scoped -std=c++11 that can
+// land AFTER our target-level C++17 re-assert (last flag wins), so this TU may
+// compile as C++11. std::shared_mutex is C++17-only; shim it with a pthread
+// rwlock to stay flag-order-independent while keeping shared/exclusive
+// concurrency semantics for the valueset cache.
+#include <pthread.h>
+namespace std {
+class shared_mutex {
+	pthread_rwlock_t rw_ = PTHREAD_RWLOCK_INITIALIZER;
+
+public:
+	void lock() {
+		pthread_rwlock_wrlock(&rw_);
+	}
+	void unlock() {
+		pthread_rwlock_unlock(&rw_);
+	}
+	void lock_shared() {
+		pthread_rwlock_rdlock(&rw_);
+	}
+	void unlock_shared() {
+		pthread_rwlock_unlock(&rw_);
+	}
+};
+template <typename M>
+class shared_lock {
+	M &m_;
+
+public:
+	explicit shared_lock(M &m) : m_(m) {
+		m_.lock_shared();
+	}
+	~shared_lock() {
+		m_.unlock_shared();
+	}
+	shared_lock(const shared_lock &) = delete;
+	shared_lock &operator=(const shared_lock &) = delete;
+};
+} // namespace std
+#endif
 
 namespace duckdb {
 
@@ -279,13 +319,13 @@ static std::string CqlReplacementToStdRegex(const std::string &replacement) {
 static void CqlRegexMatchesFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat s_data, pattern_data;
-	args.data[0].ToUnifiedFormat(s_data);
-	args.data[1].ToUnifiedFormat(pattern_data);
+	args.data[0].ToUnifiedFormat(count, s_data);
+	args.data[1].ToUnifiedFormat(count, pattern_data);
 	auto s_vals = UnifiedVectorFormat::GetData<string_t>(s_data);
 	auto pattern_vals = UnifiedVectorFormat::GetData<string_t>(pattern_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto s_idx = s_data.sel->get_index(i);
 		auto p_idx = pattern_data.sel->get_index(i);
@@ -310,15 +350,15 @@ static void CqlRegexMatchesFunc(DataChunk &args, ExpressionState &state, Vector 
 static void CqlRegexReplaceMatchesFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat s_data, pattern_data, replacement_data;
-	args.data[0].ToUnifiedFormat(s_data);
-	args.data[1].ToUnifiedFormat(pattern_data);
-	args.data[2].ToUnifiedFormat(replacement_data);
+	args.data[0].ToUnifiedFormat(count, s_data);
+	args.data[1].ToUnifiedFormat(count, pattern_data);
+	args.data[2].ToUnifiedFormat(count, replacement_data);
 	auto s_vals = UnifiedVectorFormat::GetData<string_t>(s_data);
 	auto pattern_vals = UnifiedVectorFormat::GetData<string_t>(pattern_data);
 	auto replacement_vals = UnifiedVectorFormat::GetData<string_t>(replacement_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto s_idx = s_data.sel->get_index(i);
 		auto p_idx = pattern_data.sel->get_index(i);
@@ -347,11 +387,11 @@ static void CqlRegexReplaceMatchesFunc(DataChunk &args, ExpressionState &state, 
 static void CqlRegexSplitOnMatchesFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat s_data, pattern_data;
-	args.data[0].ToUnifiedFormat(s_data);
-	args.data[1].ToUnifiedFormat(pattern_data);
+	args.data[0].ToUnifiedFormat(count, s_data);
+	args.data[1].ToUnifiedFormat(count, pattern_data);
 	auto s_vals = UnifiedVectorFormat::GetData<string_t>(s_data);
 	auto pattern_vals = UnifiedVectorFormat::GetData<string_t>(pattern_data);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto &result_mask = FlatVector::Validity(result);
 	std::vector<idx_t> row_offsets(count);
 	std::vector<idx_t> row_counts(count);
 	std::vector<bool> row_null(count, false);
@@ -403,7 +443,7 @@ static void CqlRegexSplitOnMatchesFunc(DataChunk &args, ExpressionState &state, 
 			row_null[i] = true;
 		}
 	}
-	auto list_entries = FlatVector::GetDataMutable<list_entry_t>(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 		if (row_null[i]) {
@@ -448,13 +488,13 @@ static cql::DateTimeValue GetToday() {
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
 		idx_t count = args.size();                                                                                     \
 		UnifiedVectorFormat a_data, b_data;                                                                            \
-		args.data[0].ToUnifiedFormat(a_data);                                                                   \
-		args.data[1].ToUnifiedFormat(b_data);                                                                   \
+		args.data[0].ToUnifiedFormat(count, a_data);                                                                   \
+		args.data[1].ToUnifiedFormat(count, b_data);                                                                   \
 		auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);                                                  \
 		auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);                                                  \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto result_data = FlatVector::GetDataMutable<int64_t>(result);                                                       \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                              \
+		auto result_data = FlatVector::GetData<int64_t>(result);                                                       \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
 		for (idx_t i = 0; i < count; i++) {                                                                            \
 			auto a_idx = a_data.sel->get_index(i);                                                                     \
 			auto b_idx = b_data.sel->get_index(i);                                                                     \
@@ -481,13 +521,13 @@ static cql::DateTimeValue GetToday() {
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
 		idx_t count = args.size();                                                                                     \
 		UnifiedVectorFormat a_data, b_data;                                                                            \
-		args.data[0].ToUnifiedFormat(a_data);                                                                   \
-		args.data[1].ToUnifiedFormat(b_data);                                                                   \
+		args.data[0].ToUnifiedFormat(count, a_data);                                                                   \
+		args.data[1].ToUnifiedFormat(count, b_data);                                                                   \
 		auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);                                                  \
 		auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);                                                  \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto result_data = FlatVector::GetDataMutable<bool>(result);                                                          \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                              \
+		auto result_data = FlatVector::GetData<bool>(result);                                                          \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
 		for (idx_t i = 0; i < count; i++) {                                                                            \
 			auto a_idx = a_data.sel->get_index(i);                                                                     \
 			auto b_idx = b_data.sel->get_index(i);                                                                     \
@@ -508,11 +548,11 @@ static cql::DateTimeValue GetToday() {
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
 		idx_t count = args.size();                                                                                     \
 		UnifiedVectorFormat a_data;                                                                                    \
-		args.data[0].ToUnifiedFormat(a_data);                                                                   \
+		args.data[0].ToUnifiedFormat(count, a_data);                                                                   \
 		auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);                                                  \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto result_data = FlatVector::GetDataMutable<string_t>(result);                                                      \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                              \
+		auto result_data = FlatVector::GetData<string_t>(result);                                                      \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
 		for (idx_t i = 0; i < count; i++) {                                                                            \
 			auto a_idx = a_data.sel->get_index(i);                                                                     \
 			if (!a_data.validity.RowIsValid(a_idx)) {                                                                  \
@@ -531,13 +571,13 @@ static cql::DateTimeValue GetToday() {
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
 		idx_t count = args.size();                                                                                     \
 		UnifiedVectorFormat a_data, b_data;                                                                            \
-		args.data[0].ToUnifiedFormat(a_data);                                                                   \
-		args.data[1].ToUnifiedFormat(b_data);                                                                   \
+		args.data[0].ToUnifiedFormat(count, a_data);                                                                   \
+		args.data[1].ToUnifiedFormat(count, b_data);                                                                   \
 		auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);                                                  \
 		auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);                                                  \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto result_data = FlatVector::GetDataMutable<string_t>(result);                                                      \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                              \
+		auto result_data = FlatVector::GetData<string_t>(result);                                                      \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
 		for (idx_t i = 0; i < count; i++) {                                                                            \
 			auto a_idx = a_data.sel->get_index(i);                                                                     \
 			auto b_idx = b_data.sel->get_index(i);                                                                     \
@@ -796,12 +836,12 @@ static std::string MaximumForIntervalPointType(const cql::Interval &iv) {
 static void IntervalStartFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat iv_data;
-	args.data[0].ToUnifiedFormat(iv_data);
+	args.data[0].ToUnifiedFormat(count, iv_data);
 	auto intervals = UnifiedVectorFormat::GetData<string_t>(iv_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = iv_data.sel->get_index(i);
@@ -832,12 +872,12 @@ static void IntervalStartFunc(DataChunk &args, ExpressionState &state, Vector &r
 static void IntervalEndFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat iv_data;
-	args.data[0].ToUnifiedFormat(iv_data);
+	args.data[0].ToUnifiedFormat(count, iv_data);
 	auto intervals = UnifiedVectorFormat::GetData<string_t>(iv_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = iv_data.sel->get_index(i);
@@ -868,12 +908,12 @@ static void IntervalEndFunc(DataChunk &args, ExpressionState &state, Vector &res
 static void IntervalWidthFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat iv_data;
-	args.data[0].ToUnifiedFormat(iv_data);
+	args.data[0].ToUnifiedFormat(count, iv_data);
 	auto intervals = UnifiedVectorFormat::GetData<string_t>(iv_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = iv_data.sel->get_index(i);
@@ -1061,13 +1101,13 @@ static bool IntervalIncludesQuantityUnknown(const cql::Interval &container, cons
 static void IntervalContainsFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
 		auto b_idx = b_data.sel->get_index(i);
@@ -1143,13 +1183,13 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalProperlyContainsFunc, {
 static void IntervalOverlapsFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
 		auto b_idx = b_data.sel->get_index(i);
@@ -1234,13 +1274,13 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalProperlyIncludesFunc, {
 static void IntervalProperlyIncludedInFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
 		auto b_idx = b_data.sel->get_index(i);
@@ -1372,12 +1412,12 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalEqualsFunc, {
 static void IntervalEquivalentFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
+	auto result_data = FlatVector::GetData<bool>(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
 		auto b_idx = b_data.sel->get_index(i);
@@ -1535,15 +1575,15 @@ static bool PrecisionIntervalUncertainFor(const char *func_name, const cql::Inte
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                      \
 		idx_t count = args.size();                                                                                       \
 		UnifiedVectorFormat a_data, b_data, p_data;                                                                      \
-		args.data[0].ToUnifiedFormat(a_data);                                                                     \
-		args.data[1].ToUnifiedFormat(b_data);                                                                     \
-		args.data[2].ToUnifiedFormat(p_data);                                                                     \
+		args.data[0].ToUnifiedFormat(count, a_data);                                                                     \
+		args.data[1].ToUnifiedFormat(count, b_data);                                                                     \
+		args.data[2].ToUnifiedFormat(count, p_data);                                                                     \
 		auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);                                                    \
 		auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);                                                    \
 		auto p_vals = UnifiedVectorFormat::GetData<string_t>(p_data);                                                    \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                   \
-		auto result_data = FlatVector::GetDataMutable<bool>(result);                                                            \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                                \
+		auto result_data = FlatVector::GetData<bool>(result);                                                            \
+		auto &result_mask = FlatVector::Validity(result);                                                                \
 		for (idx_t i = 0; i < count; i++) {                                                                              \
 			auto a_idx = a_data.sel->get_index(i);                                                                       \
 			auto b_idx = b_data.sel->get_index(i);                                                                       \
@@ -1575,15 +1615,15 @@ DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsAfterPreciseFunc, iv1->overlaps_after(*
 static void IntervalIncludedInPreciseFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data, p_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
-	args.data[2].ToUnifiedFormat(p_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	args.data[2].ToUnifiedFormat(count, p_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	auto p_vals = UnifiedVectorFormat::GetData<string_t>(p_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
 		auto b_idx = b_data.sel->get_index(i);
@@ -1624,16 +1664,16 @@ static cql::Optional<cql::BoundValue> ParsePointValueForPrecision(const std::str
 static void IntervalContainsPreciseFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat iv_data, pt_data, p_data;
-	args.data[0].ToUnifiedFormat(iv_data);
-	args.data[1].ToUnifiedFormat(pt_data);
-	args.data[2].ToUnifiedFormat(p_data);
+	args.data[0].ToUnifiedFormat(count, iv_data);
+	args.data[1].ToUnifiedFormat(count, pt_data);
+	args.data[2].ToUnifiedFormat(count, p_data);
 	auto iv_vals = UnifiedVectorFormat::GetData<string_t>(iv_data);
 	auto pt_vals = UnifiedVectorFormat::GetData<string_t>(pt_data);
 	auto p_vals = UnifiedVectorFormat::GetData<string_t>(p_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto iv_idx = iv_data.sel->get_index(i);
@@ -1675,14 +1715,14 @@ static void IntervalContainsPreciseFunc(DataChunk &args, ExpressionState &state,
 static void TruncateIntervalFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat iv_data, p_data;
-	args.data[0].ToUnifiedFormat(iv_data);
-	args.data[1].ToUnifiedFormat(p_data);
+	args.data[0].ToUnifiedFormat(count, iv_data);
+	args.data[1].ToUnifiedFormat(count, p_data);
 	auto iv_vals = UnifiedVectorFormat::GetData<string_t>(iv_data);
 	auto p_vals = UnifiedVectorFormat::GetData<string_t>(p_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto iv_idx = iv_data.sel->get_index(i);
@@ -1703,10 +1743,10 @@ static void TruncateIntervalFunc(DataChunk &args, ExpressionState &state, Vector
 static void IntervalFromBoundsFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat low_data, high_data, lc_data, hc_data;
-	args.data[0].ToUnifiedFormat(low_data);
-	args.data[1].ToUnifiedFormat(high_data);
-	args.data[2].ToUnifiedFormat(lc_data);
-	args.data[3].ToUnifiedFormat(hc_data);
+	args.data[0].ToUnifiedFormat(count, low_data);
+	args.data[1].ToUnifiedFormat(count, high_data);
+	args.data[2].ToUnifiedFormat(count, lc_data);
+	args.data[3].ToUnifiedFormat(count, hc_data);
 
 	auto lows = UnifiedVectorFormat::GetData<string_t>(low_data);
 	auto highs = UnifiedVectorFormat::GetData<string_t>(high_data);
@@ -1714,8 +1754,8 @@ static void IntervalFromBoundsFunc(DataChunk &args, ExpressionState &state, Vect
 	auto hcs = UnifiedVectorFormat::GetData<bool>(hc_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto l_idx = low_data.sel->get_index(i);
@@ -2526,14 +2566,14 @@ DEFINE_ONE_STR_STR_UDF(ExpandPoints1Func, {
 static void ExpandPointsFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat interval_data, per_data;
-	args.data[0].ToUnifiedFormat(interval_data);
-	args.data[1].ToUnifiedFormat(per_data);
+	args.data[0].ToUnifiedFormat(count, interval_data);
+	args.data[1].ToUnifiedFormat(count, per_data);
 	auto intervals = UnifiedVectorFormat::GetData<string_t>(interval_data);
 	auto pers = UnifiedVectorFormat::GetData<string_t>(per_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto interval_idx = interval_data.sel->get_index(i);
@@ -2564,7 +2604,7 @@ static void ExpandListInternal(DataChunk &args, Vector &result, bool has_per) {
 	idx_t count = args.size();
 	auto &list_vec = args.data[0];
 	UnifiedVectorFormat list_data;
-	list_vec.ToUnifiedFormat(list_data);
+	list_vec.ToUnifiedFormat(count, list_data);
 	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
 	auto &child_vec = ListVector::GetEntry(list_vec);
 	UnifiedVectorFormat child_data;
@@ -2574,13 +2614,13 @@ static void ExpandListInternal(DataChunk &args, Vector &result, bool has_per) {
 	UnifiedVectorFormat per_data;
 	const string_t *pers = nullptr;
 	if (has_per) {
-		args.data[1].ToUnifiedFormat(per_data);
+		args.data[1].ToUnifiedFormat(count, per_data);
 		pers = UnifiedVectorFormat::GetData<string_t>(per_data);
 	}
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto list_idx = list_data.sel->get_index(i);
@@ -2653,17 +2693,17 @@ static void DateTimeTodayFunc(DataChunk &args, ExpressionState &state, Vector &r
 static void DateTimeSameAsFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data, p_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
-	args.data[2].ToUnifiedFormat(p_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	args.data[2].ToUnifiedFormat(count, p_data);
 
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	auto p_vals = UnifiedVectorFormat::GetData<string_t>(p_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
@@ -2709,17 +2749,17 @@ static void DateTimeSameAsFunc(DataChunk &args, ExpressionState &state, Vector &
 static void DateTimeSameOrBeforeFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data, p_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
-	args.data[2].ToUnifiedFormat(p_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	args.data[2].ToUnifiedFormat(count, p_data);
 
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	auto p_vals = UnifiedVectorFormat::GetData<string_t>(p_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
@@ -2764,17 +2804,17 @@ static void DateTimeSameOrBeforeFunc(DataChunk &args, ExpressionState &state, Ve
 static void DateTimeSameOrAfterFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data, p_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
-	args.data[2].ToUnifiedFormat(p_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	args.data[2].ToUnifiedFormat(count, p_data);
 
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	auto p_vals = UnifiedVectorFormat::GetData<string_t>(p_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
@@ -3102,13 +3142,13 @@ static cql::Optional<bool> EvalTemporalPredicate(const TemporalCompareResult &cm
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
 		idx_t count = args.size();                                                                                     \
 		UnifiedVectorFormat a_data, b_data;                                                                            \
-		args.data[0].ToUnifiedFormat(a_data);                                                                   \
-		args.data[1].ToUnifiedFormat(b_data);                                                                   \
+		args.data[0].ToUnifiedFormat(count, a_data);                                                                   \
+		args.data[1].ToUnifiedFormat(count, b_data);                                                                   \
 		auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);                                                  \
 		auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);                                                  \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto result_data = FlatVector::GetDataMutable<bool>(result);                                                          \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                              \
+		auto result_data = FlatVector::GetData<bool>(result);                                                          \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
 		for (idx_t i = 0; i < count; i++) {                                                                            \
 			auto a_idx = a_data.sel->get_index(i);                                                                     \
 			auto b_idx = b_data.sel->get_index(i);                                                                     \
@@ -3135,15 +3175,15 @@ static cql::Optional<bool> EvalTemporalPredicate(const TemporalCompareResult &cm
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
 		idx_t count = args.size();                                                                                     \
 		UnifiedVectorFormat a_data, b_data, p_data;                                                                    \
-		args.data[0].ToUnifiedFormat(a_data);                                                                   \
-		args.data[1].ToUnifiedFormat(b_data);                                                                   \
-		args.data[2].ToUnifiedFormat(p_data);                                                                   \
+		args.data[0].ToUnifiedFormat(count, a_data);                                                                   \
+		args.data[1].ToUnifiedFormat(count, b_data);                                                                   \
+		args.data[2].ToUnifiedFormat(count, p_data);                                                                   \
 		auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);                                                  \
 		auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);                                                  \
 		auto p_vals = UnifiedVectorFormat::GetData<string_t>(p_data);                                                  \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto result_data = FlatVector::GetDataMutable<bool>(result);                                                          \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                              \
+		auto result_data = FlatVector::GetData<bool>(result);                                                          \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
 		for (idx_t i = 0; i < count; i++) {                                                                            \
 			auto a_idx = a_data.sel->get_index(i);                                                                     \
 			auto b_idx = b_data.sel->get_index(i);                                                                     \
@@ -3188,13 +3228,13 @@ DEFINE_CQL_TEMPORAL_TWO_UDF(CqlDateTimeEqualFunc, TemporalPredicate::SameAs)
 static void CqlDateTimeEqualListElementFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
 		auto b_idx = b_data.sel->get_index(i);
@@ -3645,10 +3685,10 @@ static cql::Optional<std::string> AgeFromStringTexts(const std::string &birth_te
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
 		idx_t count = args.size();                                                                                     \
 		UnifiedVectorFormat res_data;                                                                                  \
-		args.data[0].ToUnifiedFormat(res_data);                                                                 \
+		args.data[0].ToUnifiedFormat(count, res_data);                                                                 \
 		auto resources = UnifiedVectorFormat::GetData<string_t>(res_data);                                             \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                              \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
 		auto as_of = AgeReferenceText(unit);                                                                           \
 		for (idx_t i = 0; i < count; i++) {                                                                            \
 			auto idx = res_data.sel->get_index(i);                                                                     \
@@ -3666,7 +3706,7 @@ static cql::Optional<std::string> AgeFromStringTexts(const std::string &birth_te
 			if (!age) {                                                                                                \
 				result_mask.SetInvalid(i);                                                                             \
 			} else {                                                                                                   \
-				FlatVector::GetDataMutable<string_t>(result)[i] =                                                             \
+				FlatVector::GetData<string_t>(result)[i] =                                                             \
 				    StringVector::AddString(result, *age);                                                             \
 			}                                                                                                          \
 		}                                                                                                              \
@@ -3676,12 +3716,12 @@ static cql::Optional<std::string> AgeFromStringTexts(const std::string &birth_te
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
 		idx_t count = args.size();                                                                                     \
 		UnifiedVectorFormat res_data, date_data;                                                                       \
-		args.data[0].ToUnifiedFormat(res_data);                                                                 \
-		args.data[1].ToUnifiedFormat(date_data);                                                                \
+		args.data[0].ToUnifiedFormat(count, res_data);                                                                 \
+		args.data[1].ToUnifiedFormat(count, date_data);                                                                \
 		auto resources = UnifiedVectorFormat::GetData<string_t>(res_data);                                             \
 		auto dates = UnifiedVectorFormat::GetData<string_t>(date_data);                                                \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                              \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
 		for (idx_t i = 0; i < count; i++) {                                                                            \
 			auto r_idx = res_data.sel->get_index(i);                                                                   \
 			auto d_idx = date_data.sel->get_index(i);                                                                  \
@@ -3699,7 +3739,7 @@ static cql::Optional<std::string> AgeFromStringTexts(const std::string &birth_te
 			if (!age) {                                                                                                \
 				result_mask.SetInvalid(i);                                                                             \
 			} else {                                                                                                   \
-				FlatVector::GetDataMutable<string_t>(result)[i] =                                                             \
+				FlatVector::GetData<string_t>(result)[i] =                                                             \
 				    StringVector::AddString(result, *age);                                                             \
 			}                                                                                                          \
 		}                                                                                                              \
@@ -3709,10 +3749,10 @@ static cql::Optional<std::string> AgeFromStringTexts(const std::string &birth_te
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
 		idx_t count = args.size();                                                                                     \
 		UnifiedVectorFormat birth_data;                                                                                \
-		args.data[0].ToUnifiedFormat(birth_data);                                                               \
+		args.data[0].ToUnifiedFormat(count, birth_data);                                                               \
 		auto births = UnifiedVectorFormat::GetData<string_t>(birth_data);                                              \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                              \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
 		auto as_of = AgeReferenceText(unit);                                                                           \
 		for (idx_t i = 0; i < count; i++) {                                                                            \
 			auto b_idx = birth_data.sel->get_index(i);                                                                 \
@@ -3724,7 +3764,7 @@ static cql::Optional<std::string> AgeFromStringTexts(const std::string &birth_te
 			if (!age) {                                                                                                \
 				result_mask.SetInvalid(i);                                                                             \
 			} else {                                                                                                   \
-				FlatVector::GetDataMutable<string_t>(result)[i] =                                                             \
+				FlatVector::GetData<string_t>(result)[i] =                                                             \
 				    StringVector::AddString(result, *age);                                                             \
 			}                                                                                                          \
 		}                                                                                                              \
@@ -3734,12 +3774,12 @@ static cql::Optional<std::string> AgeFromStringTexts(const std::string &birth_te
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
 		idx_t count = args.size();                                                                                     \
 		UnifiedVectorFormat birth_data, date_data;                                                                     \
-		args.data[0].ToUnifiedFormat(birth_data);                                                               \
-		args.data[1].ToUnifiedFormat(date_data);                                                                \
+		args.data[0].ToUnifiedFormat(count, birth_data);                                                               \
+		args.data[1].ToUnifiedFormat(count, date_data);                                                                \
 		auto births = UnifiedVectorFormat::GetData<string_t>(birth_data);                                              \
 		auto dates = UnifiedVectorFormat::GetData<string_t>(date_data);                                                \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                              \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
 		for (idx_t i = 0; i < count; i++) {                                                                            \
 			auto b_idx = birth_data.sel->get_index(i);                                                                 \
 			auto d_idx = date_data.sel->get_index(i);                                                                  \
@@ -3751,7 +3791,7 @@ static cql::Optional<std::string> AgeFromStringTexts(const std::string &birth_te
 			if (!age) {                                                                                                \
 				result_mask.SetInvalid(i);                                                                             \
 			} else {                                                                                                   \
-				FlatVector::GetDataMutable<string_t>(result)[i] =                                                             \
+				FlatVector::GetData<string_t>(result)[i] =                                                             \
 				    StringVector::AddString(result, *age);                                                             \
 			}                                                                                                          \
 		}                                                                                                              \
@@ -3879,15 +3919,15 @@ static std::string FormatUncertainRange(int64_t low, int64_t high) {
 static void CqlDurationBetweenFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data, u_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
-	args.data[2].ToUnifiedFormat(u_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	args.data[2].ToUnifiedFormat(count, u_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	auto u_vals = UnifiedVectorFormat::GetData<string_t>(u_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		auto bi = b_data.sel->get_index(i);
@@ -3908,15 +3948,15 @@ static void CqlDurationBetweenFunc(DataChunk &args, ExpressionState &state, Vect
 static void CqlDifferenceBetweenFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data, u_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
-	args.data[2].ToUnifiedFormat(u_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	args.data[2].ToUnifiedFormat(count, u_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	auto u_vals = UnifiedVectorFormat::GetData<string_t>(u_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		auto bi = b_data.sel->get_index(i);
@@ -3938,13 +3978,13 @@ static void CqlDifferenceBetweenFunc(DataChunk &args, ExpressionState &state, Ve
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                   \
 		idx_t count = args.size();                                                                                    \
 		UnifiedVectorFormat a_data, b_data;                                                                           \
-		args.data[0].ToUnifiedFormat(a_data);                                                                  \
-		args.data[1].ToUnifiedFormat(b_data);                                                                  \
+		args.data[0].ToUnifiedFormat(count, a_data);                                                                  \
+		args.data[1].ToUnifiedFormat(count, b_data);                                                                  \
 		auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);                                                 \
 		auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);                                                 \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                \
-		auto result_data = FlatVector::GetDataMutable<string_t>(result);                                                     \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                             \
+		auto result_data = FlatVector::GetData<string_t>(result);                                                     \
+		auto &result_mask = FlatVector::Validity(result);                                                             \
 		for (idx_t i = 0; i < count; i++) {                                                                           \
 			auto ai = a_data.sel->get_index(i);                                                                       \
 			auto bi = b_data.sel->get_index(i);                                                                       \
@@ -3974,8 +4014,8 @@ DEFINE_UNCERTAIN_ARITH(CqlUncertainMaxFunc, std::max(a->low, b->low), std::max(a
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                   \
 		idx_t count = args.size();                                                                                    \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                \
-		auto result_data = FlatVector::GetDataMutable<string_t>(result);                                                     \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                             \
+		auto result_data = FlatVector::GetData<string_t>(result);                                                     \
+		auto &result_mask = FlatVector::Validity(result);                                                             \
 		for (idx_t i = 0; i < count; i++) {                                                                           \
 			auto list_val = args.data[0].GetValue(i);                                                                 \
 			if (list_val.IsNull()) {                                                                                  \
@@ -4023,8 +4063,8 @@ DEFINE_UNCERTAIN_LIST_MINMAX(CqlUncertainListMaxFunc, std::max<int64_t>)
 static void CqlUncertainListSumFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto list_val = args.data[0].GetValue(i);
 		if (list_val.IsNull()) {
@@ -4064,13 +4104,13 @@ static void CqlUncertainListSumFunc(DataChunk &args, ExpressionState &state, Vec
 static void CqlUncertainMultiplyFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		auto bi = b_data.sel->get_index(i);
@@ -4090,15 +4130,15 @@ static void CqlUncertainMultiplyFunc(DataChunk &args, ExpressionState &state, Ve
 static void CqlUncertainCompareFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data, op_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
-	args.data[2].ToUnifiedFormat(op_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	args.data[2].ToUnifiedFormat(count, op_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	auto op_vals = UnifiedVectorFormat::GetData<string_t>(op_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		auto bi = b_data.sel->get_index(i);
@@ -4145,8 +4185,8 @@ static void LatestFunc(DataChunk &args, ExpressionState &state, Vector &result) 
 	idx_t count = args.size();
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto list_val = args.data[0].GetValue(i);
@@ -4181,8 +4221,8 @@ static void EarliestFunc(DataChunk &args, ExpressionState &state, Vector &result
 	idx_t count = args.size();
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto list_val = args.data[0].GetValue(i);
@@ -4216,15 +4256,15 @@ static void EarliestFunc(DataChunk &args, ExpressionState &state, Vector &result
 static void ClaimPrincipalDiagnosisFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat claim_data, enc_data;
-	args.data[0].ToUnifiedFormat(claim_data);
-	args.data[1].ToUnifiedFormat(enc_data);
+	args.data[0].ToUnifiedFormat(count, claim_data);
+	args.data[1].ToUnifiedFormat(count, enc_data);
 
 	auto claims = UnifiedVectorFormat::GetData<string_t>(claim_data);
 	auto encounters = UnifiedVectorFormat::GetData<string_t>(enc_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto c_idx = claim_data.sel->get_index(i);
@@ -4248,15 +4288,15 @@ static void ClaimPrincipalDiagnosisFunc(DataChunk &args, ExpressionState &state,
 static void ClaimPrincipalProcedureFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat claim_data, enc_data;
-	args.data[0].ToUnifiedFormat(claim_data);
-	args.data[1].ToUnifiedFormat(enc_data);
+	args.data[0].ToUnifiedFormat(count, claim_data);
+	args.data[1].ToUnifiedFormat(count, enc_data);
 
 	auto claims = UnifiedVectorFormat::GetData<string_t>(claim_data);
 	auto encounters = UnifiedVectorFormat::GetData<string_t>(enc_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto c_idx = claim_data.sel->get_index(i);
@@ -4303,8 +4343,8 @@ static std::vector<double> ExtractDoubleList(const Value &list_val) {
 static void StatisticalMedianFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<double>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto list_val = args.data[0].GetValue(i);
@@ -4322,8 +4362,8 @@ static void StatisticalMedianFunc(DataChunk &args, ExpressionState &state, Vecto
 static void StatisticalModeFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<double>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto list_val = args.data[0].GetValue(i);
@@ -4341,8 +4381,8 @@ static void StatisticalModeFunc(DataChunk &args, ExpressionState &state, Vector 
 static void StatisticalStdDevFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<double>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto list_val = args.data[0].GetValue(i);
@@ -4360,8 +4400,8 @@ static void StatisticalStdDevFunc(DataChunk &args, ExpressionState &state, Vecto
 static void StatisticalVarianceFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<double>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto list_val = args.data[0].GetValue(i);
@@ -4383,8 +4423,8 @@ static void StatisticalVarianceFunc(DataChunk &args, ExpressionState &state, Vec
 static void ExtractCodesFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat res_data, path_data;
-	args.data[0].ToUnifiedFormat(res_data);
-	args.data[1].ToUnifiedFormat(path_data);
+	args.data[0].ToUnifiedFormat(count, res_data);
+	args.data[1].ToUnifiedFormat(count, path_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(res_data);
 	auto paths = UnifiedVectorFormat::GetData<string_t>(path_data);
@@ -4415,7 +4455,7 @@ static void ExtractCodesFunc(DataChunk &args, ExpressionState &state, Vector &re
 		total_size += codes.size();
 	}
 
-	auto list_entries = FlatVector::GetDataMutable<list_entry_t>(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 	}
@@ -4426,15 +4466,15 @@ static void ExtractCodesFunc(DataChunk &args, ExpressionState &state, Vector &re
 static void ExtractFirstCodeFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat res_data, path_data;
-	args.data[0].ToUnifiedFormat(res_data);
-	args.data[1].ToUnifiedFormat(path_data);
+	args.data[0].ToUnifiedFormat(count, res_data);
+	args.data[1].ToUnifiedFormat(count, path_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(res_data);
 	auto paths = UnifiedVectorFormat::GetData<string_t>(path_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto r_idx = res_data.sel->get_index(i);
@@ -4458,15 +4498,15 @@ static void ExtractFirstCodeFunc(DataChunk &args, ExpressionState &state, Vector
 static void ExtractFirstCodeSystemFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat res_data, path_data;
-	args.data[0].ToUnifiedFormat(res_data);
-	args.data[1].ToUnifiedFormat(path_data);
+	args.data[0].ToUnifiedFormat(count, res_data);
+	args.data[1].ToUnifiedFormat(count, path_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(res_data);
 	auto paths = UnifiedVectorFormat::GetData<string_t>(path_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto r_idx = res_data.sel->get_index(i);
@@ -4490,15 +4530,15 @@ static void ExtractFirstCodeSystemFunc(DataChunk &args, ExpressionState &state, 
 static void ExtractFirstCodeValueFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat res_data, path_data;
-	args.data[0].ToUnifiedFormat(res_data);
-	args.data[1].ToUnifiedFormat(path_data);
+	args.data[0].ToUnifiedFormat(count, res_data);
+	args.data[1].ToUnifiedFormat(count, path_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(res_data);
 	auto paths = UnifiedVectorFormat::GetData<string_t>(path_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto r_idx = res_data.sel->get_index(i);
@@ -4523,12 +4563,12 @@ static void ExtractFirstCodeValueFunc(DataChunk &args, ExpressionState &state, V
 static void ResolveProfileUrlFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat url_data;
-	args.data[0].ToUnifiedFormat(url_data);
+	args.data[0].ToUnifiedFormat(count, url_data);
 	auto urls = UnifiedVectorFormat::GetData<string_t>(url_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto u_idx = url_data.sel->get_index(i);
@@ -4629,17 +4669,17 @@ static void UpdateValuesetProfile(bool enabled, const std::string &path, const s
 static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat res_data, path_data, url_data;
-	args.data[0].ToUnifiedFormat(res_data);
-	args.data[1].ToUnifiedFormat(path_data);
-	args.data[2].ToUnifiedFormat(url_data);
+	args.data[0].ToUnifiedFormat(count, res_data);
+	args.data[1].ToUnifiedFormat(count, path_data);
+	args.data[2].ToUnifiedFormat(count, url_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(res_data);
 	auto paths = UnifiedVectorFormat::GetData<string_t>(path_data);
 	auto urls = UnifiedVectorFormat::GetData<string_t>(url_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	bool profile_enabled = ValuesetProfilingEnabled();
 
 	// PERF phase2: one shared (read) lock per chunk; mutations only happen
@@ -4821,11 +4861,11 @@ static void ConceptToListCodeFunc(DataChunk &args, ExpressionState &state, Vecto
 	using namespace duckdb_yyjson;
 	idx_t count = args.size();
 	UnifiedVectorFormat in_data;
-	args.data[0].ToUnifiedFormat(in_data);
+	args.data[0].ToUnifiedFormat(count, in_data);
 	auto inputs = UnifiedVectorFormat::GetData<string_t>(in_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto &result_validity = FlatVector::ValidityMutable(result);
+	auto &result_validity = FlatVector::Validity(result);
 
 	std::vector<idx_t> row_offsets(count);
 	std::vector<idx_t> row_counts(count);
@@ -4883,7 +4923,7 @@ static void ConceptToListCodeFunc(DataChunk &args, ExpressionState &state, Vecto
 		yyjson_doc_free(doc);
 	}
 
-	auto list_entries = FlatVector::GetDataMutable<list_entry_t>(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 	}
@@ -5096,11 +5136,11 @@ static void CqlStructuralTraversalFunc(DataChunk &args, ExpressionState &state, 
                                        bool descendants) {
 	idx_t count = args.size();
 	UnifiedVectorFormat in_data;
-	args.data[0].ToUnifiedFormat(in_data);
+	args.data[0].ToUnifiedFormat(count, in_data);
 	auto inputs = UnifiedVectorFormat::GetData<string_t>(in_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto &result_validity = FlatVector::ValidityMutable(result);
+	auto &result_validity = FlatVector::Validity(result);
 
 	std::vector<idx_t> row_offsets(count);
 	std::vector<idx_t> row_counts(count);
@@ -5198,7 +5238,7 @@ static void CqlStructuralTraversalFunc(DataChunk &args, ExpressionState &state, 
 		duckdb_yyjson::yyjson_doc_free(doc);
 	}
 
-	auto list_entries = FlatVector::GetDataMutable<list_entry_t>(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 	}
@@ -5221,18 +5261,18 @@ static void CqlDescendantsFunc(DataChunk &args, ExpressionState &state, Vector &
 static void CodingMatchesFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat r_data, p_data, s_data, c_data;
-	args.data[0].ToUnifiedFormat(r_data);
-	args.data[1].ToUnifiedFormat(p_data);
-	args.data[2].ToUnifiedFormat(s_data);
-	args.data[3].ToUnifiedFormat(c_data);
+	args.data[0].ToUnifiedFormat(count, r_data);
+	args.data[1].ToUnifiedFormat(count, p_data);
+	args.data[2].ToUnifiedFormat(count, s_data);
+	args.data[3].ToUnifiedFormat(count, c_data);
 	auto rs = UnifiedVectorFormat::GetData<string_t>(r_data);
 	auto ps = UnifiedVectorFormat::GetData<string_t>(p_data);
 	auto ss = UnifiedVectorFormat::GetData<string_t>(s_data);
 	auto cs = UnifiedVectorFormat::GetData<string_t>(c_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto r_idx = r_data.sel->get_index(i);
@@ -5257,12 +5297,12 @@ static void CodingMatchesFunc(DataChunk &args, ExpressionState &state, Vector &r
 static void CodingMatchesExactFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat r_data, p_data, s_data, c_data, d_data, v_data;
-	args.data[0].ToUnifiedFormat(r_data);
-	args.data[1].ToUnifiedFormat(p_data);
-	args.data[2].ToUnifiedFormat(s_data);
-	args.data[3].ToUnifiedFormat(c_data);
-	args.data[4].ToUnifiedFormat(d_data);
-	args.data[5].ToUnifiedFormat(v_data);
+	args.data[0].ToUnifiedFormat(count, r_data);
+	args.data[1].ToUnifiedFormat(count, p_data);
+	args.data[2].ToUnifiedFormat(count, s_data);
+	args.data[3].ToUnifiedFormat(count, c_data);
+	args.data[4].ToUnifiedFormat(count, d_data);
+	args.data[5].ToUnifiedFormat(count, v_data);
 	auto rs = UnifiedVectorFormat::GetData<string_t>(r_data);
 	auto ps = UnifiedVectorFormat::GetData<string_t>(p_data);
 	auto ss = UnifiedVectorFormat::GetData<string_t>(s_data);
@@ -5271,8 +5311,8 @@ static void CodingMatchesExactFunc(DataChunk &args, ExpressionState &state, Vect
 	auto vs = UnifiedVectorFormat::GetData<string_t>(v_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto r_idx = r_data.sel->get_index(i);
@@ -5306,17 +5346,17 @@ static void CodingMatchesExactFunc(DataChunk &args, ExpressionState &state, Vect
 static void ValuesetCacheAddFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat url_data, system_data, code_data;
-	args.data[0].ToUnifiedFormat(url_data);
-	args.data[1].ToUnifiedFormat(system_data);
-	args.data[2].ToUnifiedFormat(code_data);
+	args.data[0].ToUnifiedFormat(count, url_data);
+	args.data[1].ToUnifiedFormat(count, system_data);
+	args.data[2].ToUnifiedFormat(count, code_data);
 
 	auto urls = UnifiedVectorFormat::GetData<string_t>(url_data);
 	auto systems = UnifiedVectorFormat::GetData<string_t>(system_data);
 	auto codes = UnifiedVectorFormat::GetData<string_t>(code_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	std::unique_lock<std::shared_mutex> lock(g_valueset_cache_mutex);
 	for (idx_t i = 0; i < count; i++) {
@@ -5413,15 +5453,15 @@ static void ValuesetProfileJsonFunc(DataChunk &args, ExpressionState &state, Vec
 static void DateComponentFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat date_data, comp_data;
-	args.data[0].ToUnifiedFormat(date_data);
-	args.data[1].ToUnifiedFormat(comp_data);
+	args.data[0].ToUnifiedFormat(count, date_data);
+	args.data[1].ToUnifiedFormat(count, comp_data);
 
 	auto dates = UnifiedVectorFormat::GetData<string_t>(date_data);
 	auto comps = UnifiedVectorFormat::GetData<string_t>(comp_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<int64_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto d_idx = date_data.sel->get_index(i);
@@ -5521,12 +5561,12 @@ static bool IsSupportedDateQuantityValue(double value, const std::string &unit) 
 static void QuantityToIntervalFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat q_data;
-	args.data[0].ToUnifiedFormat(q_data);
+	args.data[0].ToUnifiedFormat(count, q_data);
 	auto quantities = UnifiedVectorFormat::GetData<string_t>(q_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto q_idx = q_data.sel->get_index(i);
@@ -5874,15 +5914,15 @@ static cql::DateTimeValue ApplyQuantityAtInputPrecision(const cql::DateTimeValue
 static void DateAddQuantityFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat date_data, q_data;
-	args.data[0].ToUnifiedFormat(date_data);
-	args.data[1].ToUnifiedFormat(q_data);
+	args.data[0].ToUnifiedFormat(count, date_data);
+	args.data[1].ToUnifiedFormat(count, q_data);
 
 	auto dates = UnifiedVectorFormat::GetData<string_t>(date_data);
 	auto quantities = UnifiedVectorFormat::GetData<string_t>(q_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto d_idx = date_data.sel->get_index(i);
@@ -5937,15 +5977,15 @@ static void DateAddQuantityFunc(DataChunk &args, ExpressionState &state, Vector 
 static void DateSubtractQuantityFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat date_data, q_data;
-	args.data[0].ToUnifiedFormat(date_data);
-	args.data[1].ToUnifiedFormat(q_data);
+	args.data[0].ToUnifiedFormat(count, date_data);
+	args.data[1].ToUnifiedFormat(count, q_data);
 
 	auto dates = UnifiedVectorFormat::GetData<string_t>(date_data);
 	auto quantities = UnifiedVectorFormat::GetData<string_t>(q_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto d_idx = date_data.sel->get_index(i);
@@ -6005,15 +6045,15 @@ static void DateSubtractQuantityFunc(DataChunk &args, ExpressionState &state, Ve
 static void CqlDateTimeAddFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat date_data, q_data;
-	args.data[0].ToUnifiedFormat(date_data);
-	args.data[1].ToUnifiedFormat(q_data);
+	args.data[0].ToUnifiedFormat(count, date_data);
+	args.data[1].ToUnifiedFormat(count, q_data);
 
 	auto dates = UnifiedVectorFormat::GetData<string_t>(date_data);
 	auto quantities = UnifiedVectorFormat::GetData<string_t>(q_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto d_idx = date_data.sel->get_index(i);
@@ -6095,12 +6135,12 @@ static void CqlDateTimeAddFunc(DataChunk &args, ExpressionState &state, Vector &
 static void CollapseIntervalsFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat iv_data;
-	args.data[0].ToUnifiedFormat(iv_data);
+	args.data[0].ToUnifiedFormat(count, iv_data);
 	auto intervals = UnifiedVectorFormat::GetData<string_t>(iv_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = iv_data.sel->get_index(i);
@@ -6232,14 +6272,14 @@ static bool TemporalPrecisionMeetsOrOverlaps(const cql::DateTimeValue &high,
 static void CollapseIntervalsPerFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat iv_data, per_data;
-	args.data[0].ToUnifiedFormat(iv_data);
-	args.data[1].ToUnifiedFormat(per_data);
+	args.data[0].ToUnifiedFormat(count, iv_data);
+	args.data[1].ToUnifiedFormat(count, per_data);
 	auto intervals = UnifiedVectorFormat::GetData<string_t>(iv_data);
 	auto per_vals = UnifiedVectorFormat::GetData<string_t>(per_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = iv_data.sel->get_index(i);
@@ -6400,11 +6440,11 @@ static void CollapseIntervalsPerFunc(DataChunk &args, ExpressionState &state, Ve
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
 		idx_t count = args.size();                                                                                     \
 		UnifiedVectorFormat r_data;                                                                                    \
-		args.data[0].ToUnifiedFormat(r_data);                                                                   \
+		args.data[0].ToUnifiedFormat(count, r_data);                                                                   \
 		auto r_vals = UnifiedVectorFormat::GetData<string_t>(r_data);                                                  \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto result_data = FlatVector::GetDataMutable<double>(result);                                                        \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                              \
+		auto result_data = FlatVector::GetData<double>(result);                                                        \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
 		for (idx_t i = 0; i < count; i++) {                                                                            \
 			auto idx = r_data.sel->get_index(i);                                                                       \
 			if (!r_data.validity.RowIsValid(idx)) {                                                                    \
@@ -6425,11 +6465,11 @@ static void CollapseIntervalsPerFunc(DataChunk &args, ExpressionState &state, Ve
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
 		idx_t count = args.size();                                                                                     \
 		UnifiedVectorFormat r_data;                                                                                    \
-		args.data[0].ToUnifiedFormat(r_data);                                                                   \
+		args.data[0].ToUnifiedFormat(count, r_data);                                                                   \
 		auto r_vals = UnifiedVectorFormat::GetData<string_t>(r_data);                                                  \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
-		auto result_data = FlatVector::GetDataMutable<string_t>(result);                                                      \
-		auto &result_mask = FlatVector::ValidityMutable(result);                                                              \
+		auto result_data = FlatVector::GetData<string_t>(result);                                                      \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
 		for (idx_t i = 0; i < count; i++) {                                                                            \
 			auto idx = r_data.sel->get_index(i);                                                                       \
 			if (!r_data.validity.RowIsValid(idx)) {                                                                    \
@@ -6456,15 +6496,15 @@ DEFINE_RATIO_STR_UDF(RatioToStringFunc, cql::ratio_to_string)
 static void RatioCompareFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat l_data, r_data, o_data;
-	args.data[0].ToUnifiedFormat(l_data);
-	args.data[1].ToUnifiedFormat(r_data);
-	args.data[2].ToUnifiedFormat(o_data);
+	args.data[0].ToUnifiedFormat(count, l_data);
+	args.data[1].ToUnifiedFormat(count, r_data);
+	args.data[2].ToUnifiedFormat(count, o_data);
 	auto l_vals = UnifiedVectorFormat::GetData<string_t>(l_data);
 	auto r_vals = UnifiedVectorFormat::GetData<string_t>(r_data);
 	auto o_vals = UnifiedVectorFormat::GetData<string_t>(o_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto l_idx = l_data.sel->get_index(i);
 		auto r_idx = r_data.sel->get_index(i);
@@ -6496,12 +6536,12 @@ static void ParseQuantityFunc(DataChunk &args, ExpressionState &state, Vector &r
 	using namespace duckdb_yyjson; // NOLINT
 	idx_t count = args.size();
 	UnifiedVectorFormat q_data;
-	args.data[0].ToUnifiedFormat(q_data);
+	args.data[0].ToUnifiedFormat(count, q_data);
 	auto q_vals = UnifiedVectorFormat::GetData<string_t>(q_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = q_data.sel->get_index(i);
@@ -6589,12 +6629,12 @@ static void ParseQuantityFunc(DataChunk &args, ExpressionState &state, Vector &r
 static void QuantityValueFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat q_data;
-	args.data[0].ToUnifiedFormat(q_data);
+	args.data[0].ToUnifiedFormat(count, q_data);
 	auto q_vals = UnifiedVectorFormat::GetData<string_t>(q_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<double>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = q_data.sel->get_index(i);
@@ -6615,12 +6655,12 @@ static void QuantityValueFunc(DataChunk &args, ExpressionState &state, Vector &r
 static void QuantityUnitFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat q_data;
-	args.data[0].ToUnifiedFormat(q_data);
+	args.data[0].ToUnifiedFormat(count, q_data);
 	auto q_vals = UnifiedVectorFormat::GetData<string_t>(q_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = q_data.sel->get_index(i);
@@ -6641,16 +6681,16 @@ static void QuantityUnitFunc(DataChunk &args, ExpressionState &state, Vector &re
 static void QuantityCompareFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat q1_data, q2_data, op_data;
-	args.data[0].ToUnifiedFormat(q1_data);
-	args.data[1].ToUnifiedFormat(q2_data);
-	args.data[2].ToUnifiedFormat(op_data);
+	args.data[0].ToUnifiedFormat(count, q1_data);
+	args.data[1].ToUnifiedFormat(count, q2_data);
+	args.data[2].ToUnifiedFormat(count, op_data);
 	auto q1_vals = UnifiedVectorFormat::GetData<string_t>(q1_data);
 	auto q2_vals = UnifiedVectorFormat::GetData<string_t>(q2_data);
 	auto op_vals = UnifiedVectorFormat::GetData<string_t>(op_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto i1 = q1_data.sel->get_index(i);
@@ -6674,14 +6714,14 @@ static void QuantityCompareFunc(DataChunk &args, ExpressionState &state, Vector 
 static void QuantityAddFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat q1_data, q2_data;
-	args.data[0].ToUnifiedFormat(q1_data);
-	args.data[1].ToUnifiedFormat(q2_data);
+	args.data[0].ToUnifiedFormat(count, q1_data);
+	args.data[1].ToUnifiedFormat(count, q2_data);
 	auto q1_vals = UnifiedVectorFormat::GetData<string_t>(q1_data);
 	auto q2_vals = UnifiedVectorFormat::GetData<string_t>(q2_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto i1 = q1_data.sel->get_index(i);
@@ -6703,14 +6743,14 @@ static void QuantityAddFunc(DataChunk &args, ExpressionState &state, Vector &res
 static void QuantitySubtractFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat q1_data, q2_data;
-	args.data[0].ToUnifiedFormat(q1_data);
-	args.data[1].ToUnifiedFormat(q2_data);
+	args.data[0].ToUnifiedFormat(count, q1_data);
+	args.data[1].ToUnifiedFormat(count, q2_data);
 	auto q1_vals = UnifiedVectorFormat::GetData<string_t>(q1_data);
 	auto q2_vals = UnifiedVectorFormat::GetData<string_t>(q2_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto i1 = q1_data.sel->get_index(i);
@@ -6732,14 +6772,14 @@ static void QuantitySubtractFunc(DataChunk &args, ExpressionState &state, Vector
 static void QuantityConvertFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat q_data, unit_data;
-	args.data[0].ToUnifiedFormat(q_data);
-	args.data[1].ToUnifiedFormat(unit_data);
+	args.data[0].ToUnifiedFormat(count, q_data);
+	args.data[1].ToUnifiedFormat(count, unit_data);
 	auto q_vals = UnifiedVectorFormat::GetData<string_t>(q_data);
 	auto unit_vals = UnifiedVectorFormat::GetData<string_t>(unit_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto i1 = q_data.sel->get_index(i);
@@ -6780,11 +6820,11 @@ static void SingletonFromFunc(DataChunk &args, ExpressionState &state, Vector &r
 	idx_t count = args.size();
 	auto &list_vec = args.data[0];
 	UnifiedVectorFormat list_data;
-	list_vec.ToUnifiedFormat(list_data);
+	list_vec.ToUnifiedFormat(count, list_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
 	auto &child_vec = ListVector::GetEntry(list_vec);
@@ -6822,8 +6862,8 @@ static void SingletonFromAnyListFunc(DataChunk &args, ExpressionState &state, Ve
 	idx_t count = args.size();
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto list_val = args.data[0].GetValue(i);
@@ -6853,12 +6893,12 @@ static void ElementAtFunc(DataChunk &args, ExpressionState &state, Vector &resul
 	idx_t count = args.size();
 	auto &list_vec = args.data[0];
 	UnifiedVectorFormat list_data, idx_data;
-	list_vec.ToUnifiedFormat(list_data);
-	args.data[1].ToUnifiedFormat(idx_data);
+	list_vec.ToUnifiedFormat(count, list_data);
+	args.data[1].ToUnifiedFormat(count, idx_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
 	auto idx_vals = UnifiedVectorFormat::GetData<int64_t>(idx_data);
@@ -6902,8 +6942,8 @@ static void ElementAtAnyListFunc(DataChunk &args, ExpressionState &state, Vector
 	idx_t count = args.size();
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto list_val = args.data[0].GetValue(i);
@@ -6936,12 +6976,12 @@ static void ElementAtAnyListFunc(DataChunk &args, ExpressionState &state, Vector
 static void JsonConcatFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	// Collect offsets and push values first, then write list_entries
 	// to avoid stale pointer after ListVector::PushBack reallocation
@@ -6978,7 +7018,7 @@ static void JsonConcatFunc(DataChunk &args, ExpressionState &state, Vector &resu
 		total_size += entry_count;
 	}
 
-	auto list_entries = FlatVector::GetDataMutable<list_entry_t>(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 		if (row_null[i]) {
@@ -7035,8 +7075,8 @@ static void JsonConcatAnyFunc(DataChunk &args, ExpressionState &state, Vector &r
 		total_size += entry_count;
 	}
 
-	auto &result_mask = FlatVector::ValidityMutable(result);
-	auto list_entries = FlatVector::GetDataMutable<list_entry_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 		if (row_null[i]) {
@@ -7066,8 +7106,8 @@ static void JsonConcatListListFunc(DataChunk &args, ExpressionState &state, Vect
 	auto &a_vec = args.data[0];
 	auto &b_vec = args.data[1];
 	UnifiedVectorFormat a_data, b_data;
-	a_vec.ToUnifiedFormat(a_data);
-	b_vec.ToUnifiedFormat(b_data);
+	a_vec.ToUnifiedFormat(count, a_data);
+	b_vec.ToUnifiedFormat(count, b_data);
 	auto a_entries = UnifiedVectorFormat::GetData<list_entry_t>(a_data);
 	auto b_entries = UnifiedVectorFormat::GetData<list_entry_t>(b_data);
 
@@ -7079,7 +7119,7 @@ static void JsonConcatListListFunc(DataChunk &args, ExpressionState &state, Vect
 	auto a_child_vals = UnifiedVectorFormat::GetData<string_t>(a_child_data);
 	auto b_child_vals = UnifiedVectorFormat::GetData<string_t>(b_child_data);
 
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto &result_mask = FlatVector::Validity(result);
 	std::vector<idx_t> row_offsets(count);
 	std::vector<idx_t> row_counts(count);
 	std::vector<bool> row_null(count, false);
@@ -7107,7 +7147,7 @@ static void JsonConcatListListFunc(DataChunk &args, ExpressionState &state, Vect
 		total_size += entry_count;
 	}
 
-	auto list_entries = FlatVector::GetDataMutable<list_entry_t>(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 		if (row_null[i]) {
@@ -7122,8 +7162,8 @@ static void JsonConcatListScalarFunc(DataChunk &args, ExpressionState &state, Ve
 	idx_t count = args.size();
 	auto &list_vec = args.data[0];
 	UnifiedVectorFormat list_data, scalar_data;
-	list_vec.ToUnifiedFormat(list_data);
-	args.data[1].ToUnifiedFormat(scalar_data);
+	list_vec.ToUnifiedFormat(count, list_data);
+	args.data[1].ToUnifiedFormat(count, scalar_data);
 	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
 	auto scalar_vals = UnifiedVectorFormat::GetData<string_t>(scalar_data);
 	auto &child_vec = ListVector::GetEntry(list_vec);
@@ -7131,7 +7171,7 @@ static void JsonConcatListScalarFunc(DataChunk &args, ExpressionState &state, Ve
 	child_vec.ToUnifiedFormat(ListVector::GetListSize(list_vec), child_data);
 	auto child_vals = UnifiedVectorFormat::GetData<string_t>(child_data);
 
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto &result_mask = FlatVector::Validity(result);
 	std::vector<idx_t> row_offsets(count);
 	std::vector<idx_t> row_counts(count);
 	std::vector<bool> row_null(count, false);
@@ -7160,7 +7200,7 @@ static void JsonConcatListScalarFunc(DataChunk &args, ExpressionState &state, Ve
 		total_size += entry_count;
 	}
 
-	auto result_entries = FlatVector::GetDataMutable<list_entry_t>(result);
+	auto result_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		result_entries[i] = {row_offsets[i], row_counts[i]};
 		if (row_null[i]) {
@@ -7174,9 +7214,9 @@ static void JsonConcatListScalarFunc(DataChunk &args, ExpressionState &state, Ve
 static void JsonConcatScalarListFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat scalar_data, list_data;
-	args.data[0].ToUnifiedFormat(scalar_data);
+	args.data[0].ToUnifiedFormat(count, scalar_data);
 	auto &list_vec = args.data[1];
-	list_vec.ToUnifiedFormat(list_data);
+	list_vec.ToUnifiedFormat(count, list_data);
 	auto scalar_vals = UnifiedVectorFormat::GetData<string_t>(scalar_data);
 	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
 	auto &child_vec = ListVector::GetEntry(list_vec);
@@ -7184,7 +7224,7 @@ static void JsonConcatScalarListFunc(DataChunk &args, ExpressionState &state, Ve
 	child_vec.ToUnifiedFormat(ListVector::GetListSize(list_vec), child_data);
 	auto child_vals = UnifiedVectorFormat::GetData<string_t>(child_data);
 
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto &result_mask = FlatVector::Validity(result);
 	std::vector<idx_t> row_offsets(count);
 	std::vector<idx_t> row_counts(count);
 	std::vector<bool> row_null(count, false);
@@ -7213,7 +7253,7 @@ static void JsonConcatScalarListFunc(DataChunk &args, ExpressionState &state, Ve
 		total_size += entry_count;
 	}
 
-	auto result_entries = FlatVector::GetDataMutable<list_entry_t>(result);
+	auto result_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		result_entries[i] = {row_offsets[i], row_counts[i]};
 		if (row_null[i]) {
@@ -7250,15 +7290,15 @@ DEFINE_ONE_STR_STR_UDF(HighBoundaryFunc1, {
 static void HighBoundaryFunc2(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, p_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(p_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, p_data);
 
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto p_vals = UnifiedVectorFormat::GetData<int64_t>(p_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
@@ -7288,15 +7328,15 @@ DEFINE_ONE_STR_STR_UDF(LowBoundaryFunc1, {
 static void LowBoundaryFunc2(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, p_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(p_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, p_data);
 
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto p_vals = UnifiedVectorFormat::GetData<int64_t>(p_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
@@ -7318,13 +7358,13 @@ static void LowBoundaryFunc2(DataChunk &args, ExpressionState &state, Vector &re
 static void HighBoundaryDoubleFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, p_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(p_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, p_data);
 	auto a_vals = UnifiedVectorFormat::GetData<double>(a_data);
 	auto p_vals = UnifiedVectorFormat::GetData<int64_t>(p_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<double>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		auto pi = p_data.sel->get_index(i);
@@ -7343,11 +7383,11 @@ static void HighBoundaryDoubleFunc(DataChunk &args, ExpressionState &state, Vect
 static void HighBoundaryDoubleFunc1(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<double>(a_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<double>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(ai)) {
@@ -7365,13 +7405,13 @@ static void HighBoundaryDoubleFunc1(DataChunk &args, ExpressionState &state, Vec
 static void LowBoundaryDoubleFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, p_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(p_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, p_data);
 	auto a_vals = UnifiedVectorFormat::GetData<double>(a_data);
 	auto p_vals = UnifiedVectorFormat::GetData<int64_t>(p_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<double>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		auto pi = p_data.sel->get_index(i);
@@ -7390,11 +7430,11 @@ static void LowBoundaryDoubleFunc(DataChunk &args, ExpressionState &state, Vecto
 static void LowBoundaryDoubleFunc1(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<double>(a_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<double>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(ai)) {
@@ -7424,11 +7464,11 @@ DEFINE_ONE_STR_STR_UDF(SuccessorOfFunc, {
 static void PredecessorOfBigIntFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<int64_t>(a_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<int64_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(ai)) { result_mask.SetInvalid(i); continue; }
@@ -7443,11 +7483,11 @@ static void PredecessorOfBigIntFunc(DataChunk &args, ExpressionState &state, Vec
 static void SuccessorOfBigIntFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<int64_t>(a_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<int64_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(ai)) { result_mask.SetInvalid(i); continue; }
@@ -7462,11 +7502,11 @@ static void SuccessorOfBigIntFunc(DataChunk &args, ExpressionState &state, Vecto
 static void PredecessorOfDoubleFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<double>(a_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<double>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(ai)) { result_mask.SetInvalid(i); continue; }
@@ -7477,11 +7517,11 @@ static void PredecessorOfDoubleFunc(DataChunk &args, ExpressionState &state, Vec
 static void SuccessorOfDoubleFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<double>(a_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<double>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(ai)) { result_mask.SetInvalid(i); continue; }
@@ -7492,12 +7532,12 @@ static void SuccessorOfDoubleFunc(DataChunk &args, ExpressionState &state, Vecto
 static void CQLPrecisionFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<int64_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
@@ -7515,12 +7555,12 @@ static void CQLPrecisionFunc(DataChunk &args, ExpressionState &state, Vector &re
 static void CQLTimezoneOffsetFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<double>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
@@ -7606,13 +7646,13 @@ DEFINE_ONE_STR_STR_UDF(PointFromFunc, {
 static void MathRoundFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
@@ -7697,14 +7737,14 @@ DEFINE_ONE_STR_STR_UDF(MathTruncateFunc, {
 static void CqlDivideFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<hugeint_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<hugeint_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
@@ -7741,11 +7781,11 @@ static void CqlDivideFunc(DataChunk &args, ExpressionState &state, Vector &resul
 static void CqlMessageFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat src_data, cond_data, code_data, sev_data, msg_data;
-	args.data[0].ToUnifiedFormat(src_data);
-	args.data[1].ToUnifiedFormat(cond_data);
-	args.data[2].ToUnifiedFormat(code_data);
-	args.data[3].ToUnifiedFormat(sev_data);
-	args.data[4].ToUnifiedFormat(msg_data);
+	args.data[0].ToUnifiedFormat(count, src_data);
+	args.data[1].ToUnifiedFormat(count, cond_data);
+	args.data[2].ToUnifiedFormat(count, code_data);
+	args.data[3].ToUnifiedFormat(count, sev_data);
+	args.data[4].ToUnifiedFormat(count, msg_data);
 	auto src_vals = UnifiedVectorFormat::GetData<string_t>(src_data);
 	auto cond_vals = UnifiedVectorFormat::GetData<bool>(cond_data);
 	auto code_vals = UnifiedVectorFormat::GetData<string_t>(code_data);
@@ -7753,8 +7793,8 @@ static void CqlMessageFunc(DataChunk &args, ExpressionState &state, Vector &resu
 	auto msg_vals = UnifiedVectorFormat::GetData<string_t>(msg_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto src_idx = src_data.sel->get_index(i);
@@ -7837,12 +7877,12 @@ DEFINE_ONE_STR_STR_UDF(ToQuantityFunc, {
 static void ToQuantityDoubleFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<double>(a_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
@@ -7863,7 +7903,7 @@ static void ToQuantityDoubleFunc(DataChunk &args, ExpressionState &state, Vector
 static void ToQuantityBoolFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		result_mask.SetInvalid(i);
 	}
@@ -7879,7 +7919,7 @@ static void ToConceptListFunc(DataChunk &args, ExpressionState &state, Vector &r
 	idx_t count = args.size();
 	auto &list_vec = args.data[0];
 	UnifiedVectorFormat list_data;
-	list_vec.ToUnifiedFormat(list_data);
+	list_vec.ToUnifiedFormat(count, list_data);
 	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
 	auto &child_vec = ListVector::GetEntry(list_vec);
 	UnifiedVectorFormat child_data;
@@ -7887,8 +7927,8 @@ static void ToConceptListFunc(DataChunk &args, ExpressionState &state, Vector &r
 	auto child_vals = UnifiedVectorFormat::GetData<string_t>(child_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = list_data.sel->get_index(i);
@@ -8049,12 +8089,12 @@ static bool ToDateValidTimeAndTz(const char *s, idx_t len) {
 static void ToDateFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
@@ -8101,7 +8141,7 @@ static void ToDateTypedFunc(DataChunk &args, ExpressionState &state, Vector &res
 	if (text_vec.GetVectorType() != VectorType::FLAT_VECTOR) {
 		text_vec.Flatten(count);
 	}
-	auto vals = FlatVector::GetDataMutable<string_t>(text_vec);
+	auto vals = FlatVector::GetData<string_t>(text_vec);
 	auto &mask = FlatVector::Validity(text_vec);
 	for (idx_t i = 0; i < count; i++) {
 		if (!mask.RowIsValid(i)) {
@@ -8456,13 +8496,13 @@ static void ConvertsToFunc(DataChunk &args, ExpressionState &state, Vector &resu
 	idx_t count = args.size();
 	auto &input = args.data[0];
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	auto type_id = input.GetType().id();
 
 	if (type_id == LogicalTypeId::VARCHAR) {
 		UnifiedVectorFormat data;
-		input.ToUnifiedFormat(data);
+		input.ToUnifiedFormat(count, data);
 		auto values = UnifiedVectorFormat::GetData<string_t>(data);
 		for (idx_t i = 0; i < count; i++) {
 			auto idx = data.sel->get_index(i);
@@ -8524,12 +8564,12 @@ DEFINE_CONVERTS_TO_UDF(ConvertsToTimeFunc, ConversionTarget::TIME)
 static void ToDateTimeFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
@@ -8563,7 +8603,7 @@ static void ToDateTimeTypedFunc(DataChunk &args, ExpressionState &state, Vector 
 	if (text_vec.GetVectorType() != VectorType::FLAT_VECTOR) {
 		text_vec.Flatten(count);
 	}
-	auto vals = FlatVector::GetDataMutable<string_t>(text_vec);
+	auto vals = FlatVector::GetData<string_t>(text_vec);
 	auto &mask = FlatVector::Validity(text_vec);
 	for (idx_t i = 0; i < count; i++) {
 		if (!mask.RowIsValid(i)) {
@@ -8582,12 +8622,12 @@ static void ToDateTimeTypedFunc(DataChunk &args, ExpressionState &state, Vector 
 static void ToTimeFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
@@ -8629,7 +8669,7 @@ static void ToTimeTypedFunc(DataChunk &args, ExpressionState &state, Vector &res
 	VectorOperations::DefaultCast(args.data[0], text_args.data[0], count);
 	// Python `time.isoformat()` has no T marker; mirror that for typed TIME.
 	ToTimeFunc(text_args, state, result);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
 	auto &mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		if (!mask.RowIsValid(i)) {
@@ -8645,12 +8685,12 @@ static void ToTimeTypedFunc(DataChunk &args, ExpressionState &state, Vector &res
 static void ToLongFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<int64_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(a_idx)) {
@@ -8669,11 +8709,11 @@ static void ToLongFunc(DataChunk &args, ExpressionState &state, Vector &result) 
 static void ToLongBoolFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<bool>(a_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<int64_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(a_idx)) {
@@ -8687,11 +8727,11 @@ static void ToLongBoolFunc(DataChunk &args, ExpressionState &state, Vector &resu
 static void ToLongIntFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<int32_t>(a_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<int64_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(a_idx)) {
@@ -8705,11 +8745,11 @@ static void ToLongIntFunc(DataChunk &args, ExpressionState &state, Vector &resul
 static void ToLongBigIntFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<int64_t>(a_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<int64_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(a_idx)) {
@@ -8723,7 +8763,7 @@ static void ToLongBigIntFunc(DataChunk &args, ExpressionState &state, Vector &re
 static void ToLongAnyFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		result_mask.SetInvalid(i);
 	}
@@ -8732,11 +8772,11 @@ static void ToLongAnyFunc(DataChunk &args, ExpressionState &state, Vector &resul
 static void ToRatioFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
-	args.data[0].ToUnifiedFormat(a_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<string_t>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(a_idx)) {
@@ -8755,13 +8795,13 @@ static void ToRatioFunc(DataChunk &args, ExpressionState &state, Vector &result)
 static void CanConvertQuantityFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
 		auto b_idx = b_data.sel->get_index(i);
@@ -8805,12 +8845,12 @@ static void LogicalAllTrueFunc(DataChunk &args, ExpressionState &state, Vector &
 	auto count = args.size();
 	auto &input = args.data[0];
 	UnifiedVectorFormat input_data;
-	input.ToUnifiedFormat(input_data);
+	input.ToUnifiedFormat(count, input_data);
 	auto input_strings = UnifiedVectorFormat::GetData<string_t>(input_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = input_data.sel->get_index(i);
@@ -8827,12 +8867,12 @@ static void LogicalAnyTrueFunc(DataChunk &args, ExpressionState &state, Vector &
 	auto count = args.size();
 	auto &input = args.data[0];
 	UnifiedVectorFormat input_data;
-	input.ToUnifiedFormat(input_data);
+	input.ToUnifiedFormat(count, input_data);
 	auto input_strings = UnifiedVectorFormat::GetData<string_t>(input_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = input_data.sel->get_index(i);
@@ -8849,12 +8889,12 @@ static void LogicalAllFalseFunc(DataChunk &args, ExpressionState &state, Vector 
 	auto count = args.size();
 	auto &input = args.data[0];
 	UnifiedVectorFormat input_data;
-	input.ToUnifiedFormat(input_data);
+	input.ToUnifiedFormat(count, input_data);
 	auto input_strings = UnifiedVectorFormat::GetData<string_t>(input_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = input_data.sel->get_index(i);
@@ -8871,12 +8911,12 @@ static void LogicalAnyFalseFunc(DataChunk &args, ExpressionState &state, Vector 
 	auto count = args.size();
 	auto &input = args.data[0];
 	UnifiedVectorFormat input_data;
-	input.ToUnifiedFormat(input_data);
+	input.ToUnifiedFormat(count, input_data);
 	auto input_strings = UnifiedVectorFormat::GetData<string_t>(input_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = input_data.sel->get_index(i);
@@ -8893,7 +8933,7 @@ static void LogicalAllTrueBoolListFunc(DataChunk &args, ExpressionState &state, 
 	auto count = args.size();
 	auto &list_vec = args.data[0];
 	UnifiedVectorFormat list_data;
-	list_vec.ToUnifiedFormat(list_data);
+	list_vec.ToUnifiedFormat(count, list_data);
 	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
 	auto &child_vec = ListVector::GetEntry(list_vec);
 	UnifiedVectorFormat child_data;
@@ -8901,7 +8941,7 @@ static void LogicalAllTrueBoolListFunc(DataChunk &args, ExpressionState &state, 
 	auto child_vals = UnifiedVectorFormat::GetData<bool>(child_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
+	auto result_data = FlatVector::GetData<bool>(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = list_data.sel->get_index(i);
@@ -8926,7 +8966,7 @@ static void LogicalAnyTrueBoolListFunc(DataChunk &args, ExpressionState &state, 
 	auto count = args.size();
 	auto &list_vec = args.data[0];
 	UnifiedVectorFormat list_data;
-	list_vec.ToUnifiedFormat(list_data);
+	list_vec.ToUnifiedFormat(count, list_data);
 	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
 	auto &child_vec = ListVector::GetEntry(list_vec);
 	UnifiedVectorFormat child_data;
@@ -8934,7 +8974,7 @@ static void LogicalAnyTrueBoolListFunc(DataChunk &args, ExpressionState &state, 
 	auto child_vals = UnifiedVectorFormat::GetData<bool>(child_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
+	auto result_data = FlatVector::GetData<bool>(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = list_data.sel->get_index(i);
@@ -8959,7 +8999,7 @@ static void LogicalAllFalseBoolListFunc(DataChunk &args, ExpressionState &state,
 	auto count = args.size();
 	auto &list_vec = args.data[0];
 	UnifiedVectorFormat list_data;
-	list_vec.ToUnifiedFormat(list_data);
+	list_vec.ToUnifiedFormat(count, list_data);
 	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
 	auto &child_vec = ListVector::GetEntry(list_vec);
 	UnifiedVectorFormat child_data;
@@ -8967,7 +9007,7 @@ static void LogicalAllFalseBoolListFunc(DataChunk &args, ExpressionState &state,
 	auto child_vals = UnifiedVectorFormat::GetData<bool>(child_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
+	auto result_data = FlatVector::GetData<bool>(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = list_data.sel->get_index(i);
@@ -8992,7 +9032,7 @@ static void LogicalAnyFalseBoolListFunc(DataChunk &args, ExpressionState &state,
 	auto count = args.size();
 	auto &list_vec = args.data[0];
 	UnifiedVectorFormat list_data;
-	list_vec.ToUnifiedFormat(list_data);
+	list_vec.ToUnifiedFormat(count, list_data);
 	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
 	auto &child_vec = ListVector::GetEntry(list_vec);
 	UnifiedVectorFormat child_data;
@@ -9000,7 +9040,7 @@ static void LogicalAnyFalseBoolListFunc(DataChunk &args, ExpressionState &state,
 	auto child_vals = UnifiedVectorFormat::GetData<bool>(child_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
+	auto result_data = FlatVector::GetData<bool>(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = list_data.sel->get_index(i);
@@ -9041,15 +9081,15 @@ static void LogicalImpliesFunc(DataChunk &args, ExpressionState &state, Vector &
 	auto &b_vec = args.data[1];
 
 	UnifiedVectorFormat a_data, b_data;
-	a_vec.ToUnifiedFormat(a_data);
-	b_vec.ToUnifiedFormat(b_data);
+	a_vec.ToUnifiedFormat(count, a_data);
+	b_vec.ToUnifiedFormat(count, b_data);
 
 	auto a_strings = UnifiedVectorFormat::GetData<string_t>(a_data);
 	auto b_strings = UnifiedVectorFormat::GetData<string_t>(b_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
@@ -9090,14 +9130,14 @@ static void LogicalImpliesFunc(DataChunk &args, ExpressionState &state, Vector &
 static void LogicalImpliesBoolFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	auto count = args.size();
 	UnifiedVectorFormat a_data, b_data;
-	args.data[0].ToUnifiedFormat(a_data);
-	args.data[1].ToUnifiedFormat(b_data);
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
 	auto a_vals = UnifiedVectorFormat::GetData<bool>(a_data);
 	auto b_vals = UnifiedVectorFormat::GetData<bool>(b_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetDataMutable<bool>(result);
-	auto &result_mask = FlatVector::ValidityMutable(result);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);

@@ -87,7 +87,7 @@ static size_t utf8ByteToChar(const std::string &s, size_t byte_pos) {
 
 static int32_t readUtf8Codepoint(const std::string &s, size_t byte, int &char_bytes) {
 	char_bytes = 0;
-	int32_t cp = duckdb::Utf8Proc::UTF8ToCodepoint(s.c_str() + byte, char_bytes, s.size() - byte);
+	int32_t cp = duckdb::Utf8Proc::UTF8ToCodepoint(s.c_str() + byte, char_bytes);
 	if (char_bytes <= 0 || byte + static_cast<size_t>(char_bytes) > s.size()) {
 		char_bytes = 1;
 		return static_cast<unsigned char>(s[byte]);

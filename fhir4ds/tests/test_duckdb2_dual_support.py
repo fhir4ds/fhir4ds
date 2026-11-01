@@ -186,6 +186,27 @@ def test_pin_widening_atomicity() -> None:
             "in the same release."
         )
 
+    # Patch-level analog (2026-10-31, DuckDB 1.5.6 support): the 1.5.x pin
+    # resolves 1.5.6 for a plain `pip install fhir4ds`, and DuckDB 1.5.6
+    # rejects the v1.5.5-ABI bundle — so a pin that allows 1.5.6 MUST bundle
+    # the v1.5.6 binaries or installs silently fall back to Python UDFs.
+    lower = m.group(1)
+    pin_allows_156 = [
+        int(x) for x in lower.split(".")[:3] + ["0"] * (3 - min(3, len(lower.split("."))))
+    ] <= [1, 5, 6]
+    if pin_allows_156:
+        bundles156 = [
+            repo / "fhir4ds" / "fhirpath" / "duckdb" / "extensions" / "fhirpath.duckdb156_extension",
+            repo / "fhir4ds" / "cql" / "duckdb" / "extensions" / "cql.duckdb156_extension",
+        ]
+        assert all(b.exists() for b in bundles156), (
+            "ATOMICITY VIOLATION: pyproject duckdb pin allows 1.5.6 but the "
+            "wheel does not bundle the v1.5.6-ABI extension binaries "
+            "(fhirpath.duckdb156_extension / cql.duckdb156_extension) — a "
+            "1.5.6 install would silently run Python UDFs instead of the "
+            "gated native engine."
+        )
+
 
 class TestV2BundleSuffixStaging:
     """ext-2: DuckDB 2.x rejects LOAD of files without the
@@ -223,6 +244,9 @@ class TestV2BundleSuffixStaging:
 
         key = _major_minor()
         expected = {(1, 5): "fhirpath.duckdb_extension", (2, 0): "fhirpath.duckdb2_extension"}
+        # 1.5.6 is ABI-distinct from the v1.5.5 bundle (patch-level lock)
+        if duckdb.__version__.startswith("1.5.6"):
+            expected[(1, 5)] = "fhirpath.duckdb156_extension"
         assert _bundled_extension_filename() == expected.get(key)
 
     @pytest.mark.skipif(_major_minor() != (2, 0), reason="native LOAD only on the 2.0 leg")
