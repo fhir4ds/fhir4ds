@@ -27,13 +27,12 @@ support.
   population-identical to baseline.
 - **DuckDB 1.5.6 support**: 1.5.6 breaks the 1.5.5 extension ABI, so
   the wheel now bundles THREE binaries per extension — v1.5.5, v1.5.6
-  (`.duckdb156_extension`), and v2.0 (`.duckdb2_extension`, opt-in via
-  the `[duckdb2]` extra). The loader picks by runtime version (patch-
-  aware on the 1.5 line), so a plain `pip install fhir4ds` resolving
-  duckdb 1.5.6 loads the native C++ engine instead of silently falling
-  back to Python UDFs. Base pin stays `>=1.5.5,<2`: DuckDB 2.0 remains
-  opt-in pending the upstream 2.0 optimizer pathology on CMS2-class
-  SQL (~92% of wall time in the planner; duckdb/duckdb#28181).
+  (`.duckdb156_extension`), and v2.0 (`.duckdb2_extension`). The
+  loader picks by runtime version (patch-aware on the 1.5 line), so a
+  plain `pip install fhir4ds` resolving duckdb 1.5.6 loads the native
+  C++ engine instead of silently falling back to Python UDFs. Base pin
+  stays `>=1.5.5,<2`; **experimental** DuckDB 2.0.0 support is
+  available via the `[duckdb2]` opt-in extra.
 - **FHIR serve layer** (`fhir4ds.serve`, phases 1–3): a native FHIR R4
   HTTP surface — search, $cql facade, library/viewdefinition
   endpoints, typed search, conditional create/update, FHIR-native

@@ -19,3 +19,5 @@ dist/
 
 # fhir4ds serve: default local publish directory (phase 3)
 fhir4ds-publish/
+fhir4ds-private/
+test-results/
