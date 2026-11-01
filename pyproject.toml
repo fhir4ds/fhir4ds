@@ -75,6 +75,18 @@ duckdb1 = [
 duckdb2 = [
     "duckdb>=2.0.0,<2.1",
 ]
+# FHIR R4 / SQL-on-FHIR HTTP surface (``fhir4ds serve``).
+# The engine already depends on duckdb + pyarrow, so parquet output needs
+# nothing extra; fastapi/uvicorn are the only additions.
+serve = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+]
+# Phase-3 write surface: the Hub-backed publish store. `serve` works without
+# this extra (LocalDirStore only), so a unit run never needs a token.
+hf = [
+    "huggingface-hub>=0.20",
+]
 measures = [
     "pandas",
 ]

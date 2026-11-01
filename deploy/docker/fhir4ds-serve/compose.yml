@@ -1,0 +1,44 @@
+# fhir4ds serve — one container for the SQL-on-FHIR API and the $cql facade.
+#
+#   HF_TOKEN=... FHIR4DS_DATA=/path/to/fhir docker compose \
+#       -f deploy/docker/fhir4ds-serve/compose.yml up --build
+#
+# HF_TOKEN comes from the calling shell and is passed through the environment:
+# it is never written here, never an ARG, never an ENV in the image.
+
+services:
+  fhir4ds-serve:
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/fhir4ds-serve/Dockerfile
+    image: fhir4ds-serve:phase2
+    ports:
+      - "7860:7860"
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      # Data is a read-only mount; nothing is written into the image.
+      - ${FHIR4DS_DATA:-./data}:/data:ro
+    command:
+      - python
+      - -m
+      - fhir4ds.serve
+      - --host
+      - 0.0.0.0
+      - --port
+      - "7860"
+      - --data-root
+      - /data
+      - --resources
+      - /data
+      - --log-config
+      - /app/uvicorn-log.json
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7860/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 25s
+      retries: 3
+    # SIGTERM reaches uvicorn (exec-form command); give it time to drain.
+    stop_grace_period: 15s
+    restart: unless-stopped
