@@ -1,0 +1,40 @@
+# Files the Docker build context never needs.
+#
+# `deploy/docker/fhir4ds-serve/Dockerfile` copies only `pyproject.toml`,
+# `README.md`, `hatch_build.py`, `hatch.toml`, and `fhir4ds/`. Everything else is
+# excluded here so the context stays small: `tests/` alone is 1.6 GB in a
+# checkout with test data, and `.git` is a full clone's history.
+
+.git
+.gitattributes
+.github
+.gitmodules
+.opencode
+
+# Never in an image.
+.env
+.env.*
+*.pem
+*.key
+
+# Working data / caches / build output.
+.pytest_cache
+.ruff_cache
+.mypy_cache
+__pycache__
+*.pyc
+dist
+build
+test_report.json
+test-results
+
+# Not needed to install or run the package.
+tests
+web
+benchmarks
+conformance
+docs
+examples
+scripts
+extensions
+fhir4ds-private

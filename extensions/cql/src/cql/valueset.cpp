@@ -2,6 +2,7 @@
 #include "yyjson.hpp"
 
 #include <cctype>
+#include <cstring>
 #include <mutex>
 
 using namespace duckdb_yyjson; // NOLINT

@@ -1471,14 +1471,17 @@ def registerQuantityUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("ToQuantity", toQuantity, return_type="VARCHAR", null_handling="special")
     to_concept_exists = False
     try:
-        to_concept_exists = con.execute(
+        # DuckDB 2.0: drain fully — fetchone() leaves the pipelined result
+        # open, blocking subsequent create_function (ResourceInUse).
+        rows = con.execute(
             """
             SELECT 1
             FROM duckdb_functions()
             WHERE lower(function_name) = 'toconcept'
             LIMIT 1
             """
-        ).fetchone() is not None
+        ).fetchall()
+        to_concept_exists = bool(rows)
     except Exception:
         to_concept_exists = False
     if not to_concept_exists:

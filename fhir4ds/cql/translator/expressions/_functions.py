@@ -4624,6 +4624,7 @@ class FunctionsMixin:
                 order_by=select.order_by,
                 limit=select.limit,
                 distinct=select.distinct,
+                distinct_on=select.distinct_on,
             )
         return select
 

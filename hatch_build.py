@@ -39,6 +39,8 @@ EXTENSIONS = [
         "env_var": "DUCKDB_FHIRPATH_EXT",
         "cpp_dir": "extensions/fhirpath",
         "dst_dir": "fhir4ds/fhirpath/duckdb/extensions",
+        # DuckDB 1.5.x build line only (never grab a v2.* build).
+        "version_prefix": "v1.",
     },
     {
         "name": "cql",
@@ -46,11 +48,31 @@ EXTENSIONS = [
         "env_var": "DUCKDB_CQL_EXT",
         "cpp_dir": "extensions/cql",
         "dst_dir": "fhir4ds/cql/duckdb/extensions",
+        "version_prefix": "v1.",
+    },
+    {
+        # DuckDB 2.0.x build line (second bundle; OPTIONAL until the 2.0
+        # build lands — a wheel without it still builds and works on 1.x;
+        # the runtime selection warns on 2.x without it, per the design).
+        "name": "fhirpath",
+        "filename": "fhirpath.duckdb2_extension",
+        "env_var": "DUCKDB_FHIRPATH_EXT2",
+        "cpp_dir": "extensions/fhirpath",
+        "dst_dir": "fhir4ds/fhirpath/duckdb/extensions",
+        "version_prefix": "v2.",
+    },
+    {
+        "name": "cql",
+        "filename": "cql.duckdb2_extension",
+        "env_var": "DUCKDB_CQL_EXT2",
+        "cpp_dir": "extensions/cql",
+        "dst_dir": "fhir4ds/cql/duckdb/extensions",
+        "version_prefix": "v2.",
     },
 ]
 
 
-def _discover_versions(repo_dir: Path) -> list[str]:
+def _discover_versions(repo_dir: Path, prefix: str | None = None) -> list[str]:
     """Auto-discover DuckDB versions from the build/release/repository/ tree.
 
     Scans the directory for ``v*`` subdirectories and returns them sorted
@@ -60,7 +82,13 @@ def _discover_versions(repo_dir: Path) -> list[str]:
     if not repo_dir.is_dir():
         return []
     versions = sorted(
-        (d.name for d in repo_dir.iterdir() if d.is_dir() and d.name.startswith("v")),
+        (
+            d.name
+            for d in repo_dir.iterdir()
+            if d.is_dir()
+            and d.name.startswith("v")
+            and (prefix is None or d.name.startswith(prefix))
+        ),
         reverse=True,
     )
     return versions
@@ -86,14 +114,14 @@ class CustomBuildHook(BuildHookInterface):
         # 2. Relocated extensions/ directory (new layout)
         #    Auto-discover DuckDB versions so the list never goes stale.
         repo_dir = Path(ext_cfg["cpp_dir"]) / "build" / "release" / "repository"
-        versions = _discover_versions(repo_dir)
+        versions = _discover_versions(repo_dir, ext_cfg.get("version_prefix"))
         for platform in PLATFORMS:
             for ver in versions:
                 candidates.append(repo_dir / ver / platform / ext_cfg["filename"])
 
         # 3. Legacy sibling directory layout (fallback)
         legacy_repo = Path(f"duckdb-{ext_cfg['name']}-cpp") / "build" / "release" / "repository"
-        legacy_versions = _discover_versions(legacy_repo)
+        legacy_versions = _discover_versions(legacy_repo, ext_cfg.get("version_prefix"))
         for platform in PLATFORMS:
             for ver in legacy_versions:
                 candidates.append(legacy_repo / ver / platform / ext_cfg["filename"])

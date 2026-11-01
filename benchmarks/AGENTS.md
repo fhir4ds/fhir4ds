@@ -122,3 +122,37 @@ offsets added surfaces).
 Measurement doctrine: single-machine WSL runs differ by disk — /mnt/d (drvfs)
 reads ~12% slower than /tmp worktrees. This baseline was captured on /mnt/d
 (the normal development configuration); compare like-for-like.
+
+## Measure-scaling benchmark (2026-10-29)
+
+`benchmarks/scaling/` measures eCQM execution time as the patient corpus grows:
+`run_measures.py` (rungs 100/1,000/5,000 Synthea patients; `--memory-limit`,
+`--rss-abort-mb`, `--profile`), `analyze_profiles.py` (structural score +
+operator attribution), `make_report.py` -> `SCALING.md`.
+
+Durable findings and gotchas:
+- Amplification is rung-invariant: each retrieve CTE re-reads the whole
+  `resources` table, so rows scanned ~= scan sites x corpus (CMS130 42x, CMS2
+  18x, CMS68 7x at every rung). Exec cost is scan-dominated (64-99.5% of
+  exclusive operator time), not dedup (0.2-13%).
+- Static SQL size/counts rank complexity correctly but understate magnitude;
+  `rows evaluated` (scan sites x cohort type counts) is the better static
+  predictor, and per-row predicate weight only shows up in the profile.
+- Rung 5,000 needs > 33 GB. At `memory_limit=32GB` DuckDB spills (peak RSS
+  33.8 GB, CMS130 +17% vs 48 GB); at 48 GB there is no spill (peak RSS 43.9 GB).
+- An in-memory DuckDB database MUST set `temp_directory` or exceeding
+  `memory_limit` OOMs instead of spilling.
+- `EXPLAIN ANALYZE` with `SET enable_profiling='json'` returns the operator
+  profile as the second result column (no file needed). With parallel
+  execution, per-operator timings are summed across worker threads — use
+  shares, and `cumulative_rows_scanned` for true row totals.
+- Long runs launched from the agent shell must be `setsid nohup` + `exec` in a
+  wrapper script; otherwise the shell timeout kills the process group.
+
+Sequencing ruling (Joel, 2026-10-29): after the DuckDB 2.0.0 work (ext-2
+bundles from playground) lands, the next fhir4ds work is the ranked
+OPTIMIZATION CANDIDATES from `benchmarks/scaling/SCALING.md`; after
+implementing them, this benchmark MUST be re-run on BOTH DuckDB 1.5.5 and
+2.0.0 and compared against the committed baseline. Do not delete or overwrite
+the current baseline artifacts (`benchmarks/scaling/results/`) — they are the
+reference point for that dual-version retest.

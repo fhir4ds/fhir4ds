@@ -125,7 +125,14 @@ def get_terminology_endpoint(
 
     if cfg.mode == "in_process":
         # Lazy adapter import.
-        from .in_process_adapter import InProcessTerminologyEndpoint
+        from .in_process_adapter import InProcessTerminologyEndpoint, prefer_terminology_layout
+
+        # Provenance rule (Joel 2026-11-01): pin the medterm4ds artifact
+        # layout to the fhir4ds/terminology release BEFORE the first
+        # medterm4ds import below — importing the package pulls
+        # services.search, which reads MEDTERM4DS_LAYOUT at import time.
+        if cfg.medterm4ds_db_path is None and cfg.search_index_dir is None:
+            prefer_terminology_layout()
 
         try:
             import medterm4ds  # noqa: F401  pylint: disable=unused-import

@@ -637,7 +637,13 @@ class TestQA016SqlStructureRegression:
         # contained `struct_extract(audit_and(...), 'result')` directly in
         # the WHERE clause of the MedicationRequest EXISTS subquery. The
         # fix eliminates these macros via _fully_demote_audit_to_bool.
-        m = re.search(r'"Numerator" AS \((.*?)\),\n"', sql, re.DOTALL)
+        # (perf/retrieve-cache + phase2 opt made retrieve/definition CTEs
+        # MATERIALIZED, so the pattern tolerates the optional keyword.)
+        m = re.search(
+            r'"Numerator" AS (?:MATERIALIZED )?\((.*?)\),\s*\n"',
+            sql,
+            re.DOTALL,
+        )
         assert m, "Numerator CTE not found in CMS71 audit SQL"
         numerator_body = m.group(1)
 

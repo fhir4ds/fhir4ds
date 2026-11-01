@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
+from ..errors import TranslationError
 from .types import (
     SQLSelect,
     SQLIdentifier,
@@ -977,3 +978,168 @@ def build_patient_demographics_cte() -> Tuple[str, SQLSelect, Dict[str, ColumnIn
     )
 
     return cte_name, cte_ast, column_info_map
+
+
+def _flatten_and_chain(node):
+    """Flatten a left-deep AND chain of SQL expressions into a list of leaves."""
+    if isinstance(node, SQLBinaryOp) and node.operator == "AND":
+        return _flatten_and_chain(node.left) + _flatten_and_chain(node.right)
+    return [node]
+
+
+def _is_resource_type_predicate(node, resource_type: str) -> bool:
+    """True when *node* is ``r.resourceType = '<resource_type>'``."""
+    if not isinstance(node, SQLBinaryOp) or node.operator != "=":
+        return False
+    left, right = node.left, node.right
+    if not (isinstance(left, SQLQualifiedIdentifier) and left.parts == ["r", "resourceType"]):
+        return False
+    return isinstance(right, SQLLiteral) and right.value == resource_type
+
+
+def extract_retrieve_resource_type(cte_ast) -> Optional[str]:
+    """Return the resource type a retrieve CTE AST filters on, if any.
+
+    A retrieve CTE reads ``FROM resources r`` with a leading
+    ``r.resourceType = '<T>'`` predicate. Returns None for anything else
+    (let CTEs, definition CTEs, already-rewritten children).
+    """
+    if not isinstance(cte_ast, SQLSelect) or cte_ast.where is None:
+        return None
+    fc = cte_ast.from_clause
+    if not (isinstance(fc, SQLAlias) and isinstance(fc.expr, SQLIdentifier)
+            and fc.expr.name == "resources"):
+        return None
+    for leaf in _flatten_and_chain(cte_ast.where):
+        if isinstance(leaf, SQLBinaryOp) and leaf.operator == "=":
+            left, right = leaf.left, leaf.right
+            if (isinstance(left, SQLQualifiedIdentifier)
+                    and left.parts == ["r", "resourceType"]
+                    and isinstance(right, SQLLiteral)
+                    and isinstance(right.value, str)):
+                return right.value
+    return None
+
+
+def rewrite_retrieve_to_base(
+    cte_ast: SQLSelect,
+    base_name: str,
+    resource_type: str,
+) -> SQLSelect:
+    """Rewrite a retrieve CTE body to read from a per-type base CTE.
+
+    Drops the ``r.resourceType = '<T>'`` predicate and repoints
+    ``FROM resources r`` → ``FROM "<base_name>" r``. The base CTE projects
+    ``patient_ref AS patient_id`` and ``resource``, so child references to
+    ``r.patient_ref`` are rewritten to ``r.patient_id``.
+    """
+    leaves = [leaf for leaf in _flatten_and_chain(cte_ast.where)
+              if not _is_resource_type_predicate(leaf, resource_type)]
+    if not leaves:
+        new_where = None
+    elif len(leaves) == 1:
+        new_where = leaves[0]
+    else:
+        new_where = leaves[0]
+        for leaf in leaves[1:]:
+            new_where = SQLBinaryOp(operator="AND", left=new_where, right=leaf)
+
+    def rewrite_ref(node):
+        if isinstance(node, SQLQualifiedIdentifier):
+            if node.parts == ["r", "patient_ref"]:
+                return SQLQualifiedIdentifier(parts=["r", "patient_id"])
+            return node
+        if isinstance(node, SQLBinaryOp):
+            return SQLBinaryOp(
+                operator=node.operator,
+                left=rewrite_ref(node.left),
+                right=rewrite_ref(node.right),
+            )
+        if isinstance(node, SQLAlias):
+            return SQLAlias(expr=rewrite_ref(node.expr), alias=node.alias,
+                            implicit_alias=node.implicit_alias)
+        if isinstance(node, SQLFunctionCall):
+            return SQLFunctionCall(
+                name=node.name,
+                args=[rewrite_ref(a) for a in node.args],
+                distinct=node.distinct,
+            )
+        if isinstance(node, SQLUnaryOp):
+            return SQLUnaryOp(operator=node.operator, operand=rewrite_ref(node.operand))
+        if isinstance(node, SQLCast):
+            return SQLCast(
+                expression=rewrite_ref(node.expression),
+                target_type=node.target_type,
+                try_cast=node.try_cast,
+            )
+        if isinstance(node, SQLCase):
+            return SQLCase(
+                operand=rewrite_ref(node.operand) if node.operand else None,
+                when_clauses=[
+                    (rewrite_ref(cond), rewrite_ref(res))
+                    for cond, res in node.when_clauses
+                ],
+                else_clause=rewrite_ref(node.else_clause) if node.else_clause else None,
+            )
+        # SQLExists / SQLSubquery: their internals correlate against the
+        # CHILD's alias scope (or their own inner aliases like `m` in the
+        # medication-reference EXISTS), never against outer r.patient_ref —
+        # descending and rewriting here would corrupt inner-scope references.
+        # If that assumption ever breaks, the tripwire assert below fires.
+        return node
+
+    new_select = SQLSelect(
+        columns=[rewrite_ref(c) for c in cte_ast.columns],
+        from_clause=SQLAlias(
+            expr=SQLIdentifier(name=base_name, quoted=True),
+            alias="r",
+            implicit_alias=True,
+        ),
+        where=new_where,
+        joins=list(cte_ast.joins) if cte_ast.joins else None,
+        group_by=cte_ast.group_by,
+        having=cte_ast.having,
+        order_by=cte_ast.order_by,
+        limit=cte_ast.limit,
+        distinct=cte_ast.distinct,
+    )
+
+    # Tripwire (second-opinion risk 1): after the rewrite, no reference to
+    # r.patient_ref may survive — the base CTE does not project it. A leak
+    # would surface as a DuckDB binder error at execution; this turns it
+    # into a translate-time failure with the CTE's name attached.
+    _rendered = new_select.to_sql()
+    if "patient_ref" in _rendered:
+        raise TranslationError(
+            f"retrieve-cache rewrite leaked r.patient_ref into a child CTE "
+            f"reading from {base_name!r} (unhandled SQL AST node type in "
+            f"rewrite_retrieve_to_base). SQL: {_rendered[:300]}"
+        )
+    return new_select
+
+
+def build_resource_type_base_cte(resource_type: str) -> SQLSelect:
+    """Build the per-resourceType base CTE body all retrieves of that type share.
+
+    ``"_rt_<Type>" AS MATERIALIZED (
+        SELECT r.patient_ref AS patient_id, r.resourceType, r.resource
+        FROM resources r WHERE r.resourceType = '<Type>'
+    )``
+    """
+    return SQLSelect(
+        columns=[
+            SQLAlias(
+                expr=SQLQualifiedIdentifier(parts=["r", "patient_ref"]),
+                alias="patient_id",
+            ),
+            SQLQualifiedIdentifier(parts=["r", "resourceType"]),
+            SQLQualifiedIdentifier(parts=["r", "resource"]),
+        ],
+        from_clause=SQLAlias(expr=SQLIdentifier(name="resources"), alias="r",
+                             implicit_alias=True),
+        where=SQLBinaryOp(
+            operator="=",
+            left=SQLQualifiedIdentifier(parts=["r", "resourceType"]),
+            right=SQLLiteral(resource_type),
+        ),
+    )

@@ -247,11 +247,12 @@ function mrEntry(
 }
 
 async function openViewTab(page: Page) {
-  // REORG phase 6b: the ViewDefinition editor is a col1 tab; the "+"
-  // in the Views drawer creates a derived VD and opens it.
+  // REORG phase 6b + Joel 2026-10-31 (always-custom): the "+" in the
+  // Views drawer creates a derived VD and opens it DIRECTLY in the raw
+  // JSON editor (empty draft seeded from the measure).
   await page.click("[data-testid=nav-toggle-views]");
   await page.click("[data-testid=nav-add-views]");
-  await page.waitForSelector("[data-testid=view-mode]", {
+  await page.waitForSelector("[data-testid=vd-editor]", {
     timeout: 30_000,
   });
 }
@@ -292,7 +293,7 @@ test.describe("view pane flatten", () => {
     if (!first?.includes("Patient/")) throw new Error(`view row: ${first}`);
   });
 
-  test("per-column override forks the derived name", async ({ page }) => {
+  test("per-column name override via the seeded JSON text", async ({ page }) => {
     await bootReady(page);
     await loadDataset(page);
     await page.waitForSelector("[data-testid=results-table]", {
@@ -300,18 +301,36 @@ test.describe("view pane flatten", () => {
     });
     await openViewTab(page);
 
-    // Override the numerator column name (ghost-text default forks on edit).
-    await page.fill(
-      "[data-testid=view-col-name-numerator]",
-      "num_count",
+    // Joel 2026-10-31 (always-custom): the override UI is gone; the
+    // seeded derived-VD JSON is edited as text. Rename the numerator
+    // column by rewriting the draft and let auto-recalc flatten it.
+    // The empty draft is seeded from the measure on mount — wait for the
+    // seed text before rewriting it (textarea can render empty first).
+    const ed = page.locator("[data-testid=vd-editor]");
+    await expect
+      .poll(async () => await ed.inputValue(), { timeout: 10_000 })
+      .toContain("numerator");
+    const seeded = await ed.inputValue();
+    const renamed = seeded.replace(
+      /"name"\s*:\s*"numerator"/,
+      '"name": "num_count"',
     );
-    await page.waitForSelector("[data-testid=view-table]", {
-      timeout: 60_000,
-    });
+    expect(renamed).not.toBe(seeded);
+    await ed.fill(renamed);
+    // Auto-recalc (2s debounce) re-flattens; poll for the NEW header —
+    // waitForSelector would pass on the stale table from the seed run.
+    await expect
+      .poll(
+        async () =>
+          (await page
+            .locator("[data-testid=view-table] thead tr")
+            .textContent()) ?? "",
+        { timeout: 30_000 },
+      )
+      .toContain("num_count");
     const header = await page
       .locator("[data-testid=view-table] thead tr")
       .textContent();
-    if (!header?.includes("num_count")) throw new Error(`header: ${header}`);
     if (header?.includes("numerator")) throw new Error(`old name still present: ${header}`);
   });
 
@@ -323,8 +342,8 @@ test.describe("view pane flatten", () => {
     });
     await openViewTab(page);
 
-    // Custom mode: long-format projection of the engine's MeasureReports.
-    await page.click("[data-testid=view-mode]"); // switch: Form ⇄ -> Text
+    // Long-format projection of the engine's MeasureReports, edited as
+    // raw JSON (always-custom).
     await page.fill(
       "[data-testid=vd-editor]",
       JSON.stringify({

@@ -14,6 +14,7 @@
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/common/types/vector.hpp"
 #include "duckdb/common/vector_operations/unary_executor.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
@@ -375,7 +376,7 @@ static FhirpathState GetFhirpathState(ExpressionState &state) {
 	return FhirpathState();
 }
 
-static unique_ptr<FunctionData> FhirpathBind(ClientContext &context, ScalarFunction &function,
+static unique_ptr<FunctionData> FhirpathBind(ClientContext &context, ScalarFunction &bound_function,
                                              vector<unique_ptr<Expression>> &arguments) {
 	auto data = make_uniq<FhirpathBindData>();
 
@@ -386,7 +387,7 @@ static unique_ptr<FunctionData> FhirpathBind(ClientContext &context, ScalarFunct
 	if (arguments.size() >= 2 && arguments[1]->IsFoldable()) {
 		try {
 			// Try to get the constant value directly from the expression
-			if (arguments[1]->type == ExpressionType::VALUE_CONSTANT) {
+			if (arguments[1]->GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
 				auto &const_expr = arguments[1]->Cast<BoundConstantExpression>();
 				if (!const_expr.value.IsNull()) {
 					auto expr_str = const_expr.value.GetValue<string>();
@@ -1009,7 +1010,7 @@ static void FhirpathFunction(DataChunk &args, ExpressionState &state, Vector &re
 		total_size += fp_results.size();
 	}
 
-	auto list_entries = ListVector::GetData(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 		if (!row_valid[i]) {
@@ -1996,7 +1997,7 @@ static void FhirpathPredicateFunction(DataChunk &args, ExpressionState &state, V
 		total_size += 1;
 	}
 
-	auto list_entries = ListVector::GetData(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 		if (!row_valid[i]) {
@@ -2148,7 +2149,7 @@ static void FhirpathRepeatFunction(DataChunk &args, ExpressionState &state, Vect
 		}
 	}
 
-	auto list_entries = ListVector::GetData(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 	}
@@ -2167,49 +2168,49 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// fhirpath_text(JSON, VARCHAR) → VARCHAR
 	auto text_func = ScalarFunction("fhirpath_text", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                                LogicalType::VARCHAR, FhirpathTextFunction, FhirpathBind);
-	text_func.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
+	text_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 
 	loader.RegisterFunction(text_func);
 
 	// fhirpath_number(JSON, VARCHAR) → DOUBLE
 	auto number_func = ScalarFunction("fhirpath_number", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                                  LogicalType::DOUBLE, FhirpathNumberFunction, FhirpathBind);
-	number_func.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
+	number_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 
 	loader.RegisterFunction(number_func);
 
 	// fhirpath_date(JSON, VARCHAR) → VARCHAR
 	auto date_func = ScalarFunction("fhirpath_date", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                                LogicalType::VARCHAR, FhirpathDateFunction, FhirpathBind);
-	date_func.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
+	date_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 
 	loader.RegisterFunction(date_func);
 
 	// fhirpath_bool(JSON, VARCHAR) → BOOLEAN
 	auto bool_func = ScalarFunction("fhirpath_bool", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                                LogicalType::BOOLEAN, FhirpathBoolFunction, FhirpathBind);
-	bool_func.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
+	bool_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 
 	loader.RegisterFunction(bool_func);
 
 	// fhirpath_json(JSON, VARCHAR) → VARCHAR
 	auto json_func = ScalarFunction("fhirpath_json", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                                LogicalType::VARCHAR, FhirpathJsonFunction, FhirpathBind);
-	json_func.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
+	json_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 
 	loader.RegisterFunction(json_func);
 
 	// fhirpath_timestamp(JSON, VARCHAR) → VARCHAR
 	auto timestamp_func = ScalarFunction("fhirpath_timestamp", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                                     LogicalType::VARCHAR, FhirpathTimestampFunction, FhirpathBind);
-	timestamp_func.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
+	timestamp_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 
 	loader.RegisterFunction(timestamp_func);
 
 	// fhirpath_quantity(JSON, VARCHAR) → VARCHAR
 	auto quantity_func = ScalarFunction("fhirpath_quantity", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                                    LogicalType::VARCHAR, FhirpathQuantityFunction, FhirpathBind);
-	quantity_func.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
+	quantity_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 
 	loader.RegisterFunction(quantity_func);
 
@@ -2227,7 +2228,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// fhirpath_repeat(JSON, VARCHAR) → VARCHAR[]
 	auto repeat_func = ScalarFunction("fhirpath_repeat", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                                  LogicalType::LIST(LogicalType::VARCHAR), FhirpathRepeatFunction, FhirpathBind);
-	repeat_func.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
+	repeat_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 	loader.RegisterFunction(repeat_func);
 }
 

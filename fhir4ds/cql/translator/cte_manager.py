@@ -363,6 +363,7 @@ class CTEManagerMixin:
                 ] if expr.order_by else None,
                 limit=expr.limit,
                 distinct=expr.distinct,
+                distinct_on=expr.distinct_on,
             )
 
         if isinstance(expr, SQLSubquery):
@@ -2230,6 +2231,7 @@ class CTEManagerMixin:
                         order_by=node.order_by,
                         limit=node.limit,
                         distinct=node.distinct,
+                        distinct_on=node.distinct_on,
                     )
                 return node
             if isinstance(node, SQLAlias):

@@ -26,6 +26,13 @@ src/cql/logical.cpp
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} "" ${EXTENSION_SOURCES})
 
+# PERF phase2: the valueset cache uses std::shared_mutex (C++17) for
+# chunk-level shared reads. duckdb's re2 third_party dir adds a
+# directory-scoped -std=c++11 that bleeds into these targets; re-assert
+# C++17 AFTER target creation so it wins the command line ordering.
+target_compile_options(${EXTENSION_NAME} PRIVATE -std=c++17)
+target_compile_options(${LOADABLE_EXTENSION_NAME} PRIVATE -std=c++17)
+
 install(
     TARGETS ${EXTENSION_NAME}
     EXPORT "${DUCKDB_EXPORT_SET}"

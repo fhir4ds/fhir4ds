@@ -7,6 +7,51 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.20
+*November 2026*
+
+The performance + serve release: compile-to-SQL measure execution
+optimized end to end, a native FHIR serve layer, and DuckDB 1.5.6
+support.
+
+- **Measure-execution optimizations (Phase 1 + 2)**: shared
+  per-resourceType retrieve CTEs (`AS MATERIALIZED`, one base scan per
+  type instead of one per CQL define — CMS130 scans 43→10), the
+  `_patients` CTE rebuilt as a single Patient scan, `in_valueset`
+  global-mutex serialization fixed in the C++ extension (8.3x on that
+  hot path), and conditional CTE materialization by reference count.
+  Measured on the 5,000-patient Synthea rung (dual-version retest,
+  `benchmarks/scaling/`): CMS130 −79% (DuckDB 1.5.5) / −98% (2.0.0),
+  CMS68 −91%/−95%, CMS2 −71% on 1.5.5; scan amplification 42x→9x;
+  peak RSS 43.9 GB → 16–20 GB. All 27 measure/rung cells
+  population-identical to baseline.
+- **DuckDB 1.5.6 support**: 1.5.6 breaks the 1.5.5 extension ABI, so
+  the wheel now bundles THREE binaries per extension — v1.5.5, v1.5.6
+  (`.duckdb156_extension`), and v2.0 (`.duckdb2_extension`). The
+  loader picks by runtime version (patch-aware on the 1.5 line), so a
+  plain `pip install fhir4ds` resolving duckdb 1.5.6 loads the native
+  C++ engine instead of silently falling back to Python UDFs. Base pin
+  stays `>=1.5.5,<2`; **experimental** DuckDB 2.0.0 support is
+  available via the `[duckdb2]` opt-in extra.
+- **FHIR serve layer** (`fhir4ds.serve`, phases 1–3): a native FHIR R4
+  HTTP surface — search, $cql facade, library/viewdefinition
+  endpoints, typed search, conditional create/update, FHIR-native
+  writes with an append-only publish store, and a container image
+  (`deploy/docker/fhir4ds-serve`). 227+ serve tests; seven independent
+  review findings landed with failing-first tests.
+- **VD form editor** (cleanroom): guarded Form ⇄ Raw editing for
+  ViewDefinitions — unsupported fields flagged, never dropped.
+- **Terminology provenance**: medterm4ds pin 0.0.7→0.0.8 (licensing/
+  canonical release; integration surfaces unchanged, re-verified). New
+  provenance rule: in-process terminology search pins
+  `MEDTERM4DS_LAYOUT=terminology` so serving always binds the
+  HuggingFace `fhir4ds/terminology` release when cached — no silent
+  fallback to stale legacy caches.
+- **QA**: full 12-domain × 3-personality evolution pass (zero engine
+  defects; all findings traced to probe-authoring vs pinned doctrine),
+  plus a structural-cost benchmark suite (`benchmarks/scaling/`) with
+  EXPLAIN ANALYZE attribution and ranked optimization candidates.
+
 ## Version 0.0.19
 *October 2026*
 

@@ -610,6 +610,11 @@ class FHIRDataLoader:
                 })
                 key_temp = f"_{self.table_name}_bulk_dedup"
                 quoted_key_temp = quote_identifier(key_temp)
+                # DuckDB 2.0: a parameterized execute above leaves its
+                # result open and con.register() then fails with
+                # ResourceInUseException. A trivial no-param execute
+                # closes it (verified; 1.5-equivalent no-op).
+                self.con.execute("SELECT 1").fetchall()
                 self.con.register(key_temp, key_table)
                 try:
                     self.con.execute(

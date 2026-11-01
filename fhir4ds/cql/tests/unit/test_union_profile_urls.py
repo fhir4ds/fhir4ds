@@ -41,7 +41,7 @@ class TestUnionWithProfiles:
         # meta_profile_filter=True, so they produce separate CTEs with profile
         # WHERE clauses — one per profile, not deduplicated.
         lines = sql.split('\n')
-        condition_ctes = [l for l in lines if '"Condition' in l and 'AS (' in l]
+        condition_ctes = [l for l in lines if '"Condition' in l and ('AS (' in l or 'AS MATERIALIZED (' in l)]
 
         assert len(condition_ctes) == 2, \
             f"Expected 2 Condition CTEs (one per profile with meta_profile_filter), got {len(condition_ctes)}\nSQL:\n{sql[:3000]}"
@@ -86,7 +86,7 @@ class TestUnionWithProfiles:
         # meta_profile_filter=True, so each (profile, valueset) pair produces a
         # separate CTE — 6 CTEs total (3 valuesets × 2 profiles).
         lines = sql.split('\n')
-        condition_ctes = [l for l in lines if '"Condition' in l and 'AS (' in l]
+        condition_ctes = [l for l in lines if '"Condition' in l and ('AS (' in l or 'AS MATERIALIZED (' in l)]
         assert len(condition_ctes) == 6, \
             f"Expected 6 Condition CTEs (3 valuesets × 2 profiles with meta_profile_filter), got {len(condition_ctes)}\nSQL:\n{sql[:3000]}"
 
@@ -145,3 +145,78 @@ class TestUnionWithProfiles:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestRetrieveBaseSharing:
+    """perf/retrieve-cache: shared _rt_<Type> base CTEs + hardening."""
+
+    def _pop_sql(self, cql: str) -> str:
+        from ...translator import CQLToSQLTranslator
+        library = parse_cql(cql)
+        t = CQLToSQLTranslator()
+        return t.translate_library_to_population_sql(
+            library=library,
+            output_columns={"IP": "IP"},
+            parameters={"Measurement Period": ("2026-01-01", "2026-12-31")},
+        )
+
+    def test_shared_type_gets_base_cte_and_children(self):
+        sql = self._pop_sql("""
+        library Test version '1.0.0'
+        valueset "VS1": 'http://example.org/vs1'
+        valueset "VS2": 'http://example.org/vs2'
+        parameter "Measurement Period" Interval<DateTime>
+          default Interval[@2026-01-01T00:00:00.000, @2026-12-31T23:59:59.999]
+        context Patient
+        define "Cond1": [Condition: "VS1"]
+        define "Cond2": [Condition: "VS2"]
+        define "IP": exists "Cond1" or exists "Cond2"
+        """)
+        assert '"_rt_Condition" AS MATERIALIZED' in sql
+        assert sql.count('FROM "_rt_Condition" r') == 2
+        # children no longer carry the resourceType predicate. Extract each
+        # child CTE body by splitting on its FROM clause (the _rt_ base is
+        # also MATERIALIZED, so splitting on "AS MATERIALIZED (" would grab
+        # the base body instead of the children).
+        for seg in sql.split('FROM "_rt_Condition" r'):
+            child = seg.rsplit("AS (", 1)[-1]
+            assert "r.resourceType = 'Condition'" not in child
+
+    def test_single_type_stays_unshared(self):
+        sql = self._pop_sql("""
+        library Test version '1.0.0'
+        valueset "VS1": 'http://example.org/vs1'
+        parameter "Measurement Period" Interval<DateTime>
+          default Interval[@2026-01-01T00:00:00.000, @2026-12-31T23:59:59.999]
+        context Patient
+        define "Cond1": [Condition: "VS1"]
+        define "IP": exists "Cond1"
+        """)
+        assert "_rt_" not in sql
+        assert "r.resourceType = 'Condition'" in sql
+
+    def test_audit_mode_base_sharing_keeps_resource_type_column(self):
+        """Audit _audit_item references r.resourceType; the base CTE must
+        keep projecting resourceType so shared audit retrieves still bind."""
+        from ...translator import CQLToSQLTranslator
+        library = parse_cql("""
+        library Test version '1.0.0'
+        valueset "VS1": 'http://example.org/vs1'
+        valueset "VS2": 'http://example.org/vs2'
+        parameter "Measurement Period" Interval<DateTime>
+          default Interval[@2026-01-01T00:00:00.000, @2026-12-31T23:59:59.999]
+        context Patient
+        define "Cond1": [Condition: "VS1"]
+        define "Cond2": [Condition: "VS2"]
+        define "IP": exists "Cond1" or exists "Cond2"
+        """)
+        t = CQLToSQLTranslator(audit_mode=True)
+        sql = t.translate_library_to_population_sql(
+            library=library,
+            output_columns={"IP": "IP"},
+            parameters={"Measurement Period": ("2026-01-01", "2026-12-31")},
+        )
+        assert '"_rt_Condition" AS MATERIALIZED' in sql
+        # base projects resourceType explicitly
+        base = sql.split('"_rt_Condition" AS MATERIALIZED (')[1].split(")")[0]
+        assert "r.resourceType" in base

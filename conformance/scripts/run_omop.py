@@ -19,10 +19,10 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
 import fhir4ds  # noqa: E402
-from fhir4ds.viewdef.omop_runner import OMOP_DIR, create_omop_views  # noqa: E402
-from fhir4ds.viewdef.runner import load_manifest  # noqa: E402
-from fhir4ds.viewdef.parser import parse_view_definition  # noqa: E402
 from fhir4ds.viewdef.generator import SQLGenerator  # noqa: E402
+from fhir4ds.viewdef.omop_runner import OMOP_DIR, create_omop_views  # noqa: E402
+from fhir4ds.viewdef.parser import parse_view_definition  # noqa: E402
+from fhir4ds.viewdef.runner import load_manifest  # noqa: E402
 
 # CDM 5.5 required fields per table (the columns that MUST be non-null
 # given conformant input; concept ids may be 0 = no-map, never null).
@@ -80,7 +80,7 @@ def main():
     for table, reqs in REQUIRED_NON_NULL.items():
         def required_check(table=table, reqs=reqs):
             cols = ", ".join(f"count(*) FILTER (WHERE {c} IS NULL)" for c in reqs)
-            nulls = dict(zip(reqs, con.execute(f"SELECT {cols} FROM omop.{table}").fetchone()))
+            nulls = dict(zip(reqs, con.execute(f"SELECT {cols} FROM omop.{table}").fetchone(), strict=False))
             bad = {k: v for k, v in nulls.items() if v}
             assert not bad, f"{table} null violations: {bad}"
         check("required", f"{table} required non-null", required_check)
@@ -97,7 +97,7 @@ def main():
             ("death", ["death_type_concept_id"]),
         ]:
             sel = ", ".join(f"count(*) FILTER (WHERE {c} IS NULL)" for c in cols)
-            nulls = dict(zip(cols, con.execute(f"SELECT {sel} FROM omop.{table}").fetchone()))
+            nulls = dict(zip(cols, con.execute(f"SELECT {sel} FROM omop.{table}").fetchone(), strict=False))
             bad = {k: v for k, v in nulls.items() if v}
             assert not bad, f"{table} concept nulls: {bad}"
     check("required", "concept columns never null", concept_not_null)

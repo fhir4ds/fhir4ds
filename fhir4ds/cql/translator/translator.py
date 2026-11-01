@@ -817,10 +817,18 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             seen_cte_names.add('_patient_demographics')
 
         # 3. Build retrieve CTEs from optimization phase 2
-        # These must come BEFORE definition CTEs because definitions reference them
+        # These must come BEFORE definition CTEs because definitions reference them.
+        # PERF retrieve-cache: MATERIALIZED prevents DuckDB from inlining each
+        # retrieve into consuming definitions and pushing the heavy definition
+        # predicates (fhirpath_text/intervalEnd CASE chains) into table scans.
         for cte_name, cte_ast in phase2_result.ctes.items():
             quoted = f'"{cte_name}"'
             if quoted not in seen_cte_names:
+                # PERF phase2 item 3: materialization is AUTO (None) — the
+                # emission pass keeps MATERIALIZED only for multi-reference
+                # CTEs. The Phase-1 pathology (predicate pushdown into base
+                # scans) only re-appears when a multi-consumer CTE is inlined
+                # at several sites; single-consumer CTEs inline safely.
                 cte_defs.append(CTEDefinition(name=quoted, query=cte_ast))
                 seen_cte_names.add(quoted)
 
@@ -843,6 +851,71 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                         if cdef.name == quoted:
                             cte_defs[i] = CTEDefinition(name=quoted, query=cte_ast)
                             break
+
+        # 3.6. PERF retrieve-cache candidate 1: share ONE table scan per
+        # resource type. For every type with >= 2 retrieve CTEs, prepend a
+        # MATERIALIZED "_rt_<Type>" base CTE and rewrite the retrieve CTEs
+        # of that type to read from it (resourceType predicate dropped).
+        # CMS130 rung5k evidence: 38 retrieve CTEs = 42 resource-table
+        # scans reading 263M rows from a 6.2M-row table.
+        _retrieve_names = set(phase2_result.ctes.keys())
+        _retrieve_names.update(
+            name for name in self._included_retrieve_ctes
+        )
+        if _retrieve_names:
+            from .cte_builder import (
+                build_resource_type_base_cte,
+                extract_retrieve_resource_type,
+                rewrite_retrieve_to_base,
+            )
+            _type_of: dict[int, str] = {}
+            for _i, _cdef in enumerate(cte_defs):
+                if _cdef.name.strip('"') in _retrieve_names:
+                    _t = extract_retrieve_resource_type(_cdef.query)
+                    if _t:
+                        _type_of[_i] = _t
+            _by_type: dict[str, list[int]] = {}
+            for _i, _t in _type_of.items():
+                _by_type.setdefault(_t, []).append(_i)
+            _shared_types = {t for t, idxs in _by_type.items() if len(idxs) >= 2}
+            if _shared_types:
+                # Collision guard (second-opinion risk 5): a definition CTE
+                # legitimately named e.g. "Encounter" would collide with the
+                # _rt_ prefix only if a library defined exactly "_rt_X" —
+                # refuse loudly instead of silently dropping the later CTE.
+                for _t in _shared_types:
+                    _quoted_base = f'"_rt_{_t}"'
+                    if any(
+                        cdef.name == _quoted_base and _i not in _type_of
+                        for _i, cdef in enumerate(cte_defs)
+                    ):
+                        from ..errors import TranslationError
+                        raise TranslationError(
+                            f"retrieve-cache base CTE name collision: "
+                            f"{_quoted_base} already exists as a non-retrieve CTE"
+                        )
+                _base_defs = []
+                for _i, _cdef in enumerate(cte_defs):
+                    _t = _type_of.get(_i)
+                    if _t in _shared_types:
+                        _base_name = f"_rt_{_t}"
+                        cte_defs[_i] = CTEDefinition(
+                            name=_cdef.name,
+                            query=rewrite_retrieve_to_base(_cdef.query, _base_name, _t),
+                            columns=_cdef.columns,
+                        )
+                for _t in sorted(_shared_types):
+                    _base_defs.append(CTEDefinition(
+                        name=f'"_rt_{_t}"',
+                        query=build_resource_type_base_cte(_t),
+                        materialized=True,
+                    ))
+                    seen_cte_names.add(f'"_rt_{_t}"')
+                # Base CTEs must precede every consumer: insert after the
+                # last retrieve CTE but before any definition CTE (insert
+                # right before the first rewritten child's position).
+                _first_child = min(_by_type[t][0] for t in _shared_types)
+                cte_defs[_first_child:_first_child] = _base_defs
 
         # 3.7. Build mapping from provisional CTE names (valueset URLs) to actual
         # CTE names (display names) for let-variable CTE resolution.
@@ -993,6 +1066,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                         cte.query, self._context.column_registry
                     ),
                     columns=cte.columns,
+                    materialized=cte.materialized,
                 )
                 for cte in fragment.ctes
             ]
@@ -1015,59 +1089,6 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             from ..translator.expressions._query import demote_audit_in_text
             sql_text = demote_audit_in_text(sql_text)
         return sql_text
-
-    def _patient_resource_subquery(
-        self,
-        patient_id_expr: SQLExpression,
-    ) -> SQLSubquery:
-        """Return a scalar subquery for the current Patient resource JSON."""
-        return SQLSubquery(query=SQLSelect(
-            columns=[SQLQualifiedIdentifier(parts=["_pt_resource", "resource"])],
-            from_clause=SQLAlias(
-                expr=SQLIdentifier(name="resources"),
-                alias="_pt_resource",
-            ),
-            where=SQLBinaryOp(
-                operator="AND",
-                left=SQLBinaryOp(
-                    operator="=",
-                    left=SQLQualifiedIdentifier(parts=["_pt_resource", "resourceType"]),
-                    right=SQLLiteral(value="Patient"),
-                ),
-                right=SQLBinaryOp(
-                    operator="=",
-                    left=SQLQualifiedIdentifier(parts=["_pt_resource", "id"]),
-                    right=patient_id_expr,
-                ),
-            ),
-            limit=1,
-        ))
-
-    def _patient_exists_condition(
-        self,
-        patient_id_expr: SQLExpression,
-    ) -> SQLExists:
-        """Return an EXISTS predicate requiring a matching Patient resource."""
-        return SQLExists(subquery=SQLSubquery(query=SQLSelect(
-            columns=[SQLLiteral(value=1)],
-            from_clause=SQLAlias(
-                expr=SQLIdentifier(name="resources"),
-                alias="_pt",
-            ),
-            where=SQLBinaryOp(
-                operator="AND",
-                left=SQLBinaryOp(
-                    operator="=",
-                    left=SQLQualifiedIdentifier(parts=["_pt", "resourceType"]),
-                    right=SQLLiteral(value="Patient"),
-                ),
-                right=SQLBinaryOp(
-                    operator="=",
-                    left=SQLQualifiedIdentifier(parts=["_pt", "id"]),
-                    right=patient_id_expr,
-                ),
-            ),
-        )))
 
     def _build_patients_cte(
         self,
@@ -1095,50 +1116,102 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             user-defined CTEs like "Patients". DuckDB treats "patients" and
             "Patients" as the same identifier, so we use "_patients" as the
             internal name for the base patient reference table.
-        """
-        if patient_scope == "target_table":
-            patient_id_expr = SQLQualifiedIdentifier(parts=["_target", "patient_id"])
-            where_condition: SQLExpression = self._patient_exists_condition(patient_id_expr)
-            columns: List[SQLExpression] = [
-                SQLAlias(expr=patient_id_expr, alias="patient_id"),
-            ]
-            if include_patient_demographics:
-                patient_resource = self._patient_resource_subquery(patient_id_expr)
-                columns.extend([
-                    SQLAlias(expr=patient_resource, alias="patient_resource"),
-                    SQLAlias(
-                        expr=SQLFunctionCall(
-                            name="fhirpath_date",
-                            args=[patient_resource, SQLLiteral(value="birthDate")],
-                        ),
-                        alias="birth_date",
-                    ),
-                ])
-            return SQLSelect(
-                distinct=True,
-                columns=columns,
-                from_clause=SQLAlias(
-                    expr=SQLIdentifier(name="_fhir4ds_target_patients"),
-                    alias="_target",
-                ),
-                where=where_condition,
-            )
 
-        if patient_scope != "literal":
+        PERF phase2: this CTE previously enumerated ``patient_ref`` over EVERY
+        resource row and, per row, executed two correlated scalar subqueries
+        (the Patient resource fetch, duplicated for birth_date) plus an EXISTS
+        probe into ``resources`` -- a full pass over the whole table with
+        per-row correlated work (on the scaling cohort: 6.19M rows and ~27%
+        of CMS68 exclusive time). Every conformant source (``FHIRDataLoader``
+        and all built-in source adapters) sets ``patient_ref = id`` on
+        Patient rows, so the Patient row itself always contributes its own
+        id and membership reduces to "a Patient resource with this id
+        exists". The rewrite therefore scans Patient rows once (single
+        sequential scan / hash join); no per-row subqueries over resources.
+        """
+        if patient_scope not in ("literal", "target_table"):
             raise ValueError(
                 "patient_scope must be one of 'literal' or 'target_table', "
                 f"got {patient_scope!r}"
             )
 
-        outer_patient_id = SQLQualifiedIdentifier(parts=["_outer", "patient_ref"])
+        # Demographics columns come straight from the joined Patient row;
+        # fhirpath_date normalize() wraps itself in CAST(... AS VARCHAR),
+        # matching the historical CTE output shape.
+        def _demographics_columns(
+            resource_expr: SQLExpression,
+        ) -> List[SQLExpression]:
+            return [
+                SQLAlias(expr=resource_expr, alias="patient_resource"),
+                SQLAlias(
+                    expr=SQLFunctionCall(
+                        name="fhirpath_date",
+                        args=[resource_expr, SQLLiteral(value="birthDate")],
+                    ),
+                    alias="birth_date",
+                ),
+            ]
+
+        if patient_scope == "target_table":
+            columns: List[SQLExpression] = [
+                SQLAlias(
+                    expr=SQLQualifiedIdentifier(parts=["_target", "patient_id"]),
+                    alias="patient_id",
+                ),
+            ]
+            if include_patient_demographics:
+                columns.extend(_demographics_columns(
+                    SQLQualifiedIdentifier(parts=["p", "resource"])
+                ))
+            # INNER JOIN replaces the old per-row EXISTS probe with a hash
+            # join against the (small) Patient partition.
+            patient_join = SQLJoin(
+                join_type="INNER",
+                table=SQLAlias(expr=SQLIdentifier(name="resources"), alias="p"),
+                on_condition=SQLBinaryOp(
+                    operator="AND",
+                    left=SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["p", "resourceType"]),
+                        right=SQLLiteral(value="Patient"),
+                    ),
+                    right=SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["p", "id"]),
+                        right=SQLQualifiedIdentifier(parts=["_target", "patient_id"]),
+                    ),
+                ),
+            )
+            # DISTINCT ON (patient_id): one row per patient even when
+            # duplicate Patient rows exist (same id, different resource
+            # JSON). The old correlated-subquery LIMIT 1 guaranteed this;
+            # a plain DISTINCT over (id, resource) would keep every
+            # duplicate and fan out downstream joins (review finding 1.1).
+            return SQLSelect(
+                distinct_on=[SQLQualifiedIdentifier(parts=["_target", "patient_id"])]
+                if include_patient_demographics else None,
+                distinct=not include_patient_demographics,
+                columns=columns,
+                from_clause=SQLAlias(
+                    expr=SQLIdentifier(name="_fhir4ds_target_patients"),
+                    alias="_target",
+                ),
+                joins=[patient_join],
+            )
+
+        patient_id_expr = SQLQualifiedIdentifier(parts=["p", "id"])
         where_condition: SQLExpression = SQLBinaryOp(
             operator="AND",
             left=SQLBinaryOp(
                 operator="IS NOT",
-                left=outer_patient_id,
+                left=patient_id_expr,
                 right=SQLNull(),
             ),
-            right=self._patient_exists_condition(outer_patient_id),
+            right=SQLBinaryOp(
+                operator="=",
+                left=SQLQualifiedIdentifier(parts=["p", "resourceType"]),
+                right=SQLLiteral(value="Patient"),
+            ),
         )
         if patient_ids is not None and len(patient_ids) == 0:
             where_condition = SQLBinaryOp(
@@ -1155,31 +1228,27 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 left=where_condition,
                 right=SQLBinaryOp(
                     operator="IN",
-                    left=outer_patient_id,
+                    left=patient_id_expr,
                     right=SQLList(items=id_literals),
                 ),
             )
-        columns: List[SQLExpression] = [
-            SQLAlias(expr=outer_patient_id, alias="patient_id"),
+        columns = [
+            SQLAlias(expr=patient_id_expr, alias="patient_id"),
         ]
         if include_patient_demographics:
-            patient_resource = self._patient_resource_subquery(outer_patient_id)
-            columns.extend([
-                SQLAlias(expr=patient_resource, alias="patient_resource"),
-                SQLAlias(
-                    expr=SQLFunctionCall(
-                        name="fhirpath_date",
-                        args=[patient_resource, SQLLiteral(value="birthDate")],
-                    ),
-                    alias="birth_date",
-                ),
-            ])
+            columns.extend(_demographics_columns(
+                SQLQualifiedIdentifier(parts=["p", "resource"])
+            ))
+        # DISTINCT ON (p.id): one row per patient even when duplicate
+        # Patient rows exist (same id, different resource JSON) — the old
+        # correlated-subquery LIMIT 1 guaranteed this (review finding 1.1).
         return SQLSelect(
-            distinct=True,
+            distinct_on=[patient_id_expr] if include_patient_demographics else None,
+            distinct=not include_patient_demographics,
             columns=columns,
             from_clause=SQLAlias(
                 expr=SQLIdentifier(name="resources"),
-                alias="_outer",
+                alias="p",
             ),
             where=where_condition,
         )

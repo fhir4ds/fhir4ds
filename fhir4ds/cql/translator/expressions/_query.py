@@ -362,6 +362,7 @@ def _deep_demote_audit_in_sql(node: SQLExpression) -> SQLExpression:
                 limit=node.limit,
                 joins=new_joins,
                 distinct=node.distinct,
+                distinct_on=node.distinct_on,
             )
         return node
     if isinstance(node, SQLSubquery):

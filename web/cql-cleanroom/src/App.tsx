@@ -4731,16 +4731,15 @@ export default function App() {
                 setStatusNote(`saved patient ${pid} — restart kernel to reload`)
               }
               measureReports={lastReports}
-              viewConfig={viewConfig?.overrides ?? null}
-              onViewConfigChange={(overrides) => setViewConfig({ overrides })}
+              // Joel 2026-10-31 — always-custom ViewPane: the per-column
+              // override drilling is gone. App's persisted viewConfig state
+              // stays (workspace-state schema compatibility; it is no
+              // longer editable).
               onResult={setViewResult}
               recalcMs={recalcSeconds * 1000}
-              // S25: the EDITOR form spins only while a run is actually
-              // in flight — a perpetual "waiting for MeasureReports"
-              // spinner (former !evalResult) was confusing: with no run
-              // yet the pane shows the actionable text instead. The
-              // CONSOLE view output keeps the spinner for pending work.
-              viewReportsPending={evaluating}
+              // S25 + Joel 2026-11-01: the editor pane stays QUIET — no
+              // in-flight spinner here (the console owns that feedback);
+              // only the console view output spins for pending work.
               onViewBusy={setViewRunning}
               initialVd={
                 hostTab?.kind === "view" &&

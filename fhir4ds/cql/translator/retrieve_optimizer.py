@@ -265,7 +265,10 @@ def propagate_resource_column_lineage(
             merged = dict(inherited)
             merged.update(existing)
             registry.register_cte(cte_name, merged)
-            propagated.append(CTEDefinition(name=cte.name, query=updated_query, columns=cte.columns))
+            propagated.append(CTEDefinition(
+                name=cte.name, query=updated_query, columns=cte.columns,
+                materialized=cte.materialized,
+            ))
         else:
             propagated.append(cte)
 
@@ -503,6 +506,7 @@ def _materialize_select_inherited_columns(
                 order_by=select.order_by,
                 limit=select.limit,
                 distinct=select.distinct,
+                distinct_on=select.distinct_on,
             ),
             dict(inherited),
         )
@@ -542,6 +546,7 @@ def _materialize_select_inherited_columns(
             order_by=select.order_by,
             limit=select.limit,
             distinct=select.distinct,
+                distinct_on=select.distinct_on,
         ),
         inherited_available,
     )
@@ -1096,6 +1101,7 @@ def _replace_select_columns(select: SQLSelect, columns: List[SQLExpression]) -> 
         order_by=select.order_by,
         limit=select.limit,
         distinct=select.distinct,
+                distinct_on=select.distinct_on,
     )
 
 
@@ -1251,6 +1257,7 @@ def _recurse_ast(
                 for expr, direction in ast.order_by
             ] if ast.order_by else None,
             distinct=ast.distinct,
+            distinct_on=ast.distinct_on,
             limit=ast.limit
         )
 

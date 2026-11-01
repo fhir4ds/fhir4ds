@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 
 from . import cql, cql_server, dqm, fhirpath_cli, validate_resource, verify
+from . import serve as serve_cmd
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -41,6 +42,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     verify.configure_parser(verify_parser)
 
+    serve_parser = subparsers.add_parser(
+        "serve",
+        help="Serve the FHIR R4 / SQL-on-FHIR HTTP API (requires the [serve] extra)",
+    )
+    serve_cmd.configure_parser(serve_parser)
+
     from . import dev as dev_cmd
 
     dev_parser = subparsers.add_parser(
@@ -61,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
         return validate_resource.run(args)
     if args.command == "verify":
         return verify.run(args)
+    if args.command == "serve":
+        return serve_cmd.run(args)
     if args.command == "dev":
         return dev_cmd.run(args)
 

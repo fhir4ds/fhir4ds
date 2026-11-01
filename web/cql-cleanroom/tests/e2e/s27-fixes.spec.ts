@@ -15,8 +15,8 @@ let server: ChildProcess | null = null;
 test.beforeAll(async () => {
   server = spawn(
     "/usr/bin/python3",
-    ["-m", "fhir4ds.cli", "dev", "/mnt/d/fhir4ds/examples/cms125-workspace", "--port", "19237", "--no-open"],
-    { cwd: "/mnt/d/fhir4ds", env: { ...process.env, PYTHONPATH: "/mnt/d/fhir4ds", PATH: process.env.PATH ?? "" }, stdio: "ignore" },
+    ["-m", "fhir4ds.cli", "dev", "/mnt/d/fhir4ds-playground/examples/cms125-workspace", "--port", "19237", "--no-open"],
+    { cwd: "/mnt/d/fhir4ds-playground", env: { ...process.env, PYTHONPATH: "/mnt/d/fhir4ds-playground", PATH: process.env.PATH ?? "" }, stdio: "ignore" },
   );
   for (let i = 0; i < 90; i++) {
     try {
@@ -53,19 +53,15 @@ test("S27-5: views nav lists ViewDefinitions only; disk VD opens", async ({ page
   const viewPane = page.locator('[data-testid="view-pane"]');
   await expect(viewPane).toBeVisible({ timeout: 20000 });
   await expect(page.locator('[data-testid="view-error"]')).toHaveCount(0);
-  // S29: the mode control is the SAME switch widget as Builder/Cells.
-  // A disk-VD click opens the one-shot Custom (text) editor → ON.
-  const mode = page.locator('[data-testid="view-mode"]');
-  await expect(mode).toBeVisible();
-  await expect(mode).toHaveAttribute("role", "switch");
-  await expect(mode).toHaveAttribute("aria-checked", "true");
-  await expect(mode).toContainText("Form ⇄");
-  // The Custom VD editor takes the free vertical space.
+  // VD form editor (2026-10-31 always-custom): the row opens the view
+  // tab directly in the raw JSON editor; the ONLY switch left is the
+  // Form ⇄ Raw presentation toggle (form guarded, §2.2/§2.3).
+  await expect(page.locator('[data-testid="vd-source-toggle"]')).toHaveCount(0);
   const ed = page.locator('[data-testid="vd-editor"]');
-  if (await ed.count()) {
-    const box = await ed.boundingBox();
-    expect(box?.height ?? 0).toBeGreaterThan(160);
-  }
+  await expect(ed).toBeVisible();
+  await expect(page.locator('[data-testid="vd-presentation-toggle"]')).toBeVisible();
+  const box = await ed.boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThan(160);
 });
 
 test("S27-6: cells view splits on open and runs with output", async ({ page }) => {

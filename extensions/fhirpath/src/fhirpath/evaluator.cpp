@@ -789,7 +789,7 @@ static bool isNumericType(const FPValue &v);
 // Materialize a yyjson string into std::string preserving embedded NUL bytes.
 // Required because yyjson_get_str() returns a NUL-terminated const char*, and
 // the std::string(const char*) constructor stops at the first NUL byte. JSON
-// strings can validly contain U+0000 escaped as " " (RFC 8259 §7), and
+// strings can validly contain U+0000 escaped as "" (RFC 8259 §7), and
 // FHIRPath §5.6 String Manipulation functions operate on the full Unicode
 // content. Use yyjson_get_len() to capture the full byte range so length(),
 // indexOf(), substring(), startsWith(), endsWith(), and contains() all observe

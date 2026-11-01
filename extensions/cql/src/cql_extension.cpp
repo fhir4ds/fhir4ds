@@ -17,6 +17,7 @@
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/common/types/vector.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include <algorithm>
 #include <cctype>
@@ -31,6 +32,49 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
+#if __cplusplus >= 201703L
+#include <shared_mutex>
+#else
+// duckdb's re2 third_party dir appends a directory-scoped -std=c++11 that can
+// land AFTER our target-level C++17 re-assert (last flag wins), so this TU may
+// compile as C++11. std::shared_mutex is C++17-only; shim it with a pthread
+// rwlock to stay flag-order-independent while keeping shared/exclusive
+// concurrency semantics for the valueset cache.
+#include <pthread.h>
+namespace std {
+class shared_mutex {
+	pthread_rwlock_t rw_ = PTHREAD_RWLOCK_INITIALIZER;
+
+public:
+	void lock() {
+		pthread_rwlock_wrlock(&rw_);
+	}
+	void unlock() {
+		pthread_rwlock_unlock(&rw_);
+	}
+	void lock_shared() {
+		pthread_rwlock_rdlock(&rw_);
+	}
+	void unlock_shared() {
+		pthread_rwlock_unlock(&rw_);
+	}
+};
+template <typename M>
+class shared_lock {
+	M &m_;
+
+public:
+	explicit shared_lock(M &m) : m_(m) {
+		m_.lock_shared();
+	}
+	~shared_lock() {
+		m_.unlock_shared();
+	}
+	shared_lock(const shared_lock &) = delete;
+	shared_lock &operator=(const shared_lock &) = delete;
+};
+} // namespace std
+#endif
 
 namespace duckdb {
 
@@ -399,7 +443,7 @@ static void CqlRegexSplitOnMatchesFunc(DataChunk &args, ExpressionState &state, 
 			row_null[i] = true;
 		}
 	}
-	auto list_entries = ListVector::GetData(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 		if (row_null[i]) {
@@ -4411,7 +4455,7 @@ static void ExtractCodesFunc(DataChunk &args, ExpressionState &state, Vector &re
 		total_size += codes.size();
 	}
 
-	auto list_entries = ListVector::GetData(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 	}
@@ -4542,11 +4586,15 @@ static void ResolveProfileUrlFunc(DataChunk &args, ExpressionState &state, Vecto
 	}
 }
 
-// Global valueset cache with thread-safe access
-// Note: Using std::mutex since DuckDB extensions build with C++14.
-// Upgrade to std::shared_mutex (C++17) for concurrent read access when available.
+// Global valueset cache with thread-safe access.
+// PERF phase2: reads (per-row in_valueset) vastly outnumber writes (load/clear),
+// so the cache uses std::shared_mutex (include at top of file, OUTSIDE
+// namespace duckdb) — readers take a shared lock held once per VECTOR CHUNK;
+// load/clear take the unique lock. The previous std::mutex was acquired twice
+// per row, serializing all threads (measured rung-1000, 501k rows:
+// 573ms @1 thread vs 1079ms @32 threads).
 static cql::ValuesetCache g_valueset_cache;
-static std::mutex g_valueset_cache_mutex;
+static std::shared_mutex g_valueset_cache_mutex;
 
 struct ValuesetProfileEntry {
 	int64_t calls = 0;
@@ -4634,6 +4682,10 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 	auto &result_mask = FlatVector::Validity(result);
 	bool profile_enabled = ValuesetProfilingEnabled();
 
+	// PERF phase2: one shared (read) lock per chunk; mutations only happen
+	// under the unique lock in load/clear paths, never during execution.
+	std::shared_lock<std::shared_mutex> cache_read_lock(g_valueset_cache_mutex);
+
 	for (idx_t i = 0; i < count; i++) {
 		auto r_idx = res_data.sel->get_index(i);
 		auto p_idx = path_data.sel->get_index(i);
@@ -4651,11 +4703,7 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 		auto url_str = urls[u_idx].GetString();
 		UpdateValuesetProfile(profile_enabled, path_str, url_str, 1);
 
-		bool valueset_loaded = false;
-		{
-			std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
-			valueset_loaded = g_valueset_cache.find(url_str) != g_valueset_cache.end();
-		}
+		bool valueset_loaded = g_valueset_cache.find(url_str) != g_valueset_cache.end();
 		if (!valueset_loaded) {
 			UpdateValuesetProfile(profile_enabled, path_str, url_str, 0, 0, 1);
 			result_mask.SetInvalid(i);
@@ -4679,7 +4727,8 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 		bool found = false;
 		bool ambiguous = false;
 		{
-			std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
+			// PERF phase2: reads run under the chunk-level shared lock
+			// acquired above; no per-row lock here.
 			for (const auto &code : codes) {
 				auto norm_system = cql::normalize_system(code.system);
 				if (cql::in_valueset(code.code, norm_system, url_str, g_valueset_cache)) {
@@ -4749,7 +4798,7 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 }
 
 static void ValuesetCacheClearFunc(DataChunk &args, ExpressionState &state, Vector &result) {
-	std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
+	std::unique_lock<std::shared_mutex> lock(g_valueset_cache_mutex);
 	g_valueset_cache.clear();
 	result.SetVectorType(VectorType::CONSTANT_VECTOR);
 	ConstantVector::GetData<bool>(result)[0] = true;
@@ -4874,7 +4923,7 @@ static void ConceptToListCodeFunc(DataChunk &args, ExpressionState &state, Vecto
 		yyjson_doc_free(doc);
 	}
 
-	auto list_entries = ListVector::GetData(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 	}
@@ -5189,7 +5238,7 @@ static void CqlStructuralTraversalFunc(DataChunk &args, ExpressionState &state, 
 		duckdb_yyjson::yyjson_doc_free(doc);
 	}
 
-	auto list_entries = ListVector::GetData(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 	}
@@ -5309,7 +5358,7 @@ static void ValuesetCacheAddFunc(DataChunk &args, ExpressionState &state, Vector
 	auto result_data = FlatVector::GetData<bool>(result);
 	auto &result_mask = FlatVector::Validity(result);
 
-	std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
+	std::unique_lock<std::shared_mutex> lock(g_valueset_cache_mutex);
 	for (idx_t i = 0; i < count; i++) {
 		auto u_idx = url_data.sel->get_index(i);
 		auto c_idx = code_data.sel->get_index(i);
@@ -5336,7 +5385,8 @@ static void ValuesetCacheAddFunc(DataChunk &args, ExpressionState &state, Vector
 static void ValuesetCacheSizeFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	int64_t total = 0;
 	{
-		std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
+		// PERF phase2 (review note): pure read — shared lock, not unique.
+		std::shared_lock<std::shared_mutex> lock(g_valueset_cache_mutex);
 		for (const auto &entry : g_valueset_cache) {
 			total += static_cast<int64_t>(entry.second.size());
 		}
@@ -6968,7 +7018,7 @@ static void JsonConcatFunc(DataChunk &args, ExpressionState &state, Vector &resu
 		total_size += entry_count;
 	}
 
-	auto list_entries = ListVector::GetData(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 		if (row_null[i]) {
@@ -7026,7 +7076,7 @@ static void JsonConcatAnyFunc(DataChunk &args, ExpressionState &state, Vector &r
 	}
 
 	auto &result_mask = FlatVector::Validity(result);
-	auto list_entries = ListVector::GetData(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 		if (row_null[i]) {
@@ -7097,7 +7147,7 @@ static void JsonConcatListListFunc(DataChunk &args, ExpressionState &state, Vect
 		total_size += entry_count;
 	}
 
-	auto list_entries = ListVector::GetData(result);
+	auto list_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 		if (row_null[i]) {
@@ -7150,7 +7200,7 @@ static void JsonConcatListScalarFunc(DataChunk &args, ExpressionState &state, Ve
 		total_size += entry_count;
 	}
 
-	auto result_entries = ListVector::GetData(result);
+	auto result_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		result_entries[i] = {row_offsets[i], row_counts[i]};
 		if (row_null[i]) {
@@ -7203,7 +7253,7 @@ static void JsonConcatScalarListFunc(DataChunk &args, ExpressionState &state, Ve
 		total_size += entry_count;
 	}
 
-	auto result_entries = ListVector::GetData(result);
+	auto result_entries = FlatVector::GetData<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		result_entries[i] = {row_offsets[i], row_counts[i]};
 		if (row_null[i]) {
@@ -7219,8 +7269,8 @@ static void JsonConcatScalarListFunc(DataChunk &args, ExpressionState &state, Ve
 static void RegisterSpecialScalar(ExtensionLoader &loader, const std::string &name,
                                   const vector<LogicalType> &args, const LogicalType &ret,
                                   scalar_function_t func) {
-	auto sf = ScalarFunction(name, args, ret, func);
-	sf.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
+	auto sf = ScalarFunction(Identifier(name), args, ret, func);
+	sf.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 	loader.RegisterFunction(sf);
 }
 

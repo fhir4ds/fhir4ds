@@ -112,6 +112,22 @@ class TestPatientIdConsistency:
         # Should have a patients CTE
         assert "patients" in sql_lower
 
+    def test_patients_cte_is_single_patient_scan(self):
+        """PERF phase2: _patients must be a single Patient scan, not a
+        per-row correlated-subquery enumeration over all resources."""
+        cql = '''
+            library Test version '1.0'
+            define Diabetes: [Condition: "Diabetes"]
+        '''
+
+        sql = self._translate_population(cql)
+        # The patients CTE scans Patient rows directly...
+        assert "resourceType = 'Patient'" in sql
+        # ...and must NOT contain per-row EXISTS probes or correlated
+        # Patient-resource scalar subqueries.
+        assert "EXISTS (SELECT 1 FROM resources AS _pt" not in sql
+        assert "FROM resources AS _pt_resource" not in sql
+
 
 class TestDistinctUsage:
     """Verify DISTINCT is used appropriately."""
@@ -394,3 +410,66 @@ class TestCorrelatedSubqueryBooleanPreservation:
         sql_upper = sql.upper()
 
         assert "EXISTS" in sql_upper, "exists() must still produce EXISTS"
+
+
+class TestPatientsDuplicateCollapse:
+    """Phase 2 review finding 1.1: _patients must emit ONE row per patient
+    id even when duplicate Patient rows exist (same id, different resource
+    JSON — a state the resources table explicitly sanctions: no unique
+    index, loader docstring). The old correlated-subquery LIMIT 1
+    guaranteed it; the single-scan rewrite uses DISTINCT ON (p.id)."""
+
+    def _translate_population(self, cql: str) -> str:
+        from fhir4ds.cql.parser import parse_cql
+        translator = CQLToSQLTranslator()
+        return translator.translate_library_to_population_sql(parse_cql(cql))
+
+    def test_patients_cte_uses_distinct_on_with_demographics(self):
+        cql = """
+            library Test version '1.0'
+            context Patient
+            define "Age": AgeInYearsAt(Patient, @2026-01-01) >= 18
+        """
+        sql = self._translate_population(cql)
+        assert "SELECT DISTINCT ON (p.id)" in sql
+
+    def test_patients_cte_plain_distinct_without_demographics(self):
+        cql = '''
+            library Test version '1.0'
+            define Diabetes: [Condition: "Diabetes"]
+        '''
+        sql = self._translate_population(cql)
+        # id-only projection: plain DISTINCT collapses duplicates already
+        assert "SELECT DISTINCT p.id AS patient_id" in sql
+        assert "DISTINCT ON" not in sql
+
+    def test_duplicate_patients_do_not_fan_out_end_to_end(self):
+        """End-to-end: duplicate Patient rows + demographics CQL must yield
+        exactly one output row per patient id."""
+        import fhir4ds
+        from fhir4ds.cql import FHIRDataLoader
+        con = fhir4ds.create_connection()
+        loader = FHIRDataLoader(con)
+        loader.load_resources([
+            {"resourceType": "Patient", "id": "p1", "birthDate": "1980-01-01"},
+            {"resourceType": "Condition", "id": "c1",
+             "subject": {"reference": "Patient/p1"},
+             "code": {"coding": [{"system": "http://loinc.org", "code": "x"}]}},
+        ])
+        # raw-insert the sanctioned duplicate + an orphan Patient
+        con.execute(
+            "INSERT INTO resources VALUES "
+            "('p1', 'Patient', "
+            "'{\"resourceType\":\"Patient\",\"id\":\"p1\",\"birthDate\":\"1990-01-01\"}', 'p1')"
+        )
+        sql = self._translate_population(
+            """
+            library Test version '1.0'
+            context Patient
+            define "Age": AgeInYearsAt(Patient, @2026-01-01) >= 18
+            """
+        )
+        rows = con.execute(sql).fetchall()
+        assert sorted(r[0] for r in rows) == ["p1"], (
+            f"duplicate Patient rows fanned out the population output: {rows}"
+        )

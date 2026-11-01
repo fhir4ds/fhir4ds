@@ -35,6 +35,53 @@ from .types import CodeRef, SearchResult
 
 _logger = logging.getLogger(__name__)
 
+
+def prefer_terminology_layout(cache_root=None) -> str:
+    """Choose the medterm4ds artifact layout for in-process search.
+
+    Provenance rule (Joel, 2026-11-01): medterm4ds searches must serve
+    from the HuggingFace ``fhir4ds/terminology`` release. When that
+    release is cached locally (``<cache_root>/terminology/<release>``)
+    we pin ``MEDTERM4DS_LAYOUT=terminology`` so serving binds the
+    fhir4ds/terminology artifacts explicitly instead of silently
+    falling through to the legacy revision-keyed cache or a stale
+    auto-provisioned lookup database. When the release is NOT cached we
+    leave medterm4ds's ``auto`` resolution untouched (terminology ->
+    split -> legacy) so environments without the release keep working.
+
+    IMPORTANT: this function must NOT import medterm4ds — the package
+    ``__init__`` imports ``services.search``, which reads
+    ``MEDTERM4DS_LAYOUT`` at import time. The release check is therefore
+    purely filesystem-based (manifest.json presence).
+
+    Returns the layout value that was (or would be) pinned: never mutates
+    the environment if the operator already set ``MEDTERM4DS_LAYOUT``.
+    """
+    import json
+    import os
+    from pathlib import Path
+
+    if os.environ.get("MEDTERM4DS_LAYOUT"):
+        return os.environ["MEDTERM4DS_LAYOUT"]
+    if cache_root is None:
+        cache_root = Path.home() / ".cache" / "medterm4ds"
+    layout = "auto"
+    term_dir = Path(cache_root) / "terminology"
+    if term_dir.is_dir():
+        for release_dir in sorted(term_dir.iterdir()):
+            manifest = release_dir / "manifest.json"
+            if not manifest.is_file():
+                continue
+            try:
+                repo = (json.loads(manifest.read_text()) or {}).get("repo")
+            except (OSError, ValueError):
+                continue
+            if repo == "fhir4ds/terminology":
+                layout = "terminology"
+                break
+    os.environ["MEDTERM4DS_LAYOUT"] = layout
+    return layout
+
 # ----------------------------------------------------------------------
 # medterm4ds source-mnemonic -> FHIR canonical URL translation.
 #
@@ -94,6 +141,13 @@ class InProcessTerminologyEndpoint:
         # also at ``medterm4ds.engines.duckdb.engine.LocalDuckDBEngine``.
         # We try the canonical top-level path first; the full path is a
         # safety net in case a future medterm4ds drops the re-export.
+        # Provenance rule first: pin the artifact layout BEFORE any
+        # medterm4ds import — importing the medterm4ds package (even just
+        # a submodule) pulls services.search, which reads
+        # MEDTERM4DS_LAYOUT at import time.
+        if medterm4ds_db_path is None and search_index_dir is None:
+            _layout = prefer_terminology_layout()
+            _logger.debug("medterm4ds artifact layout: %s", _layout)
         try:
             from medterm4ds import LocalDuckDBEngine  # type: ignore
         except ImportError:
