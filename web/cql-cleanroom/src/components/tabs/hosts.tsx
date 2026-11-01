@@ -2,7 +2,6 @@ import type { EditorTab } from "../../lib/editorTabs";
 import { MeasurePane } from "../MeasurePane";
 import { ViewPane } from "../ViewPane";
 import { ValuesetEditor } from "./ValuesetEditor";
-import type { ViewOverrides } from "../../lib/viewDerivation";
 import type { LibraryClosure } from "../../lib/libraryGraph";
 import type { FlattenViewResult } from "../../lib/protocol";
 import type { ParamBinding } from "../../lib/params";
@@ -34,8 +33,7 @@ export interface TabHostProps {
   /* valueset */
   valueset: Record<string, unknown> | null;
   connected?: boolean;
-  /* S32: view loading spinners (reports pending + flatten busy). */
-  viewReportsPending?: boolean;
+  /* S32: view loading (flatten busy) reported to the console spinner. */
   onViewBusy?: (busy: boolean) => void;
   umlsReady?: boolean;
   umlsKey?: string;
@@ -51,8 +49,6 @@ export interface TabHostProps {
   onPatientSaved?: (pid: string) => void;
   /* view */
   measureReports: Array<Record<string, unknown>> | null;
-  viewConfig: ViewOverrides | null;
-  onViewConfigChange: (v: ViewOverrides) => void;
   onSql?: (sql: string | null) => void;
   onResult: (r: FlattenViewResult | null) => void;
   /* REORG 6e: settings recalc delay passed through to the view. */
@@ -105,14 +101,11 @@ export function TabHost(p: TabHostProps) {
         <ViewPane
           measure={p.measure}
           measureReports={p.measureReports}
-          viewConfig={p.viewConfig}
-          onViewConfigChange={p.onViewConfigChange}
           onSql={p.onSql}
           onResult={p.onResult}
           recalcMs={p.recalcMs}
           initialVd={p.initialVd}
           connected={p.connected}
-          reportsPending={p.viewReportsPending}
           onBusy={p.onViewBusy}
         />
       );

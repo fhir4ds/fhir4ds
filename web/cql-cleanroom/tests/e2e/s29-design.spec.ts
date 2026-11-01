@@ -10,10 +10,10 @@ let server: ChildProcess | null = null;
 test.beforeAll(async () => {
   server = spawn(
     "/usr/bin/python3",
-    ["-m", "fhir4ds.cli", "dev", "/mnt/d/fhir4ds/examples/cms125-workspace", "--port", "19239", "--no-open"],
+    ["-m", "fhir4ds.cli", "dev", "/mnt/d/fhir4ds-playground/examples/cms125-workspace", "--port", "19239", "--no-open"],
     {
-      cwd: "/mnt/d/fhir4ds",
-      env: { ...process.env, PYTHONPATH: "/mnt/d/fhir4ds", PATH: process.env.PATH ?? "" },
+      cwd: "/mnt/d/fhir4ds-playground",
+      env: { ...process.env, PYTHONPATH: "/mnt/d/fhir4ds-playground", PATH: process.env.PATH ?? "" },
       stdio: "ignore",
     },
   );
@@ -81,7 +81,7 @@ test("S29-2: nav is library-first; Config groups Measure + Parameters", async ({
   await expect(page.locator('[data-testid="nav-refresh-disk"]')).toHaveCount(0);
 });
 
-test("S29-3: Views toggles Form ⇄ Text with the standard switch", async ({ page }) => {
+test("S29-3: Views row opens the view tab; always-custom raw editor + Form toggle", async ({ page }) => {
   await boot(page);
   await page.locator('[data-testid="nav-toggle-views"]').click();
   const panel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
@@ -91,19 +91,23 @@ test("S29-3: Views toggles Form ⇄ Text with the standard switch", async ({ pag
     .click({ timeout: 20000 });
   const viewPane = page.locator('[data-testid="view-pane"]');
   await expect(viewPane).toBeVisible({ timeout: 20000 });
-  const mode = page.locator('[data-testid="view-mode"]');
-  await expect(mode).toHaveAttribute("role", "switch");
-  // A disk-VD click opens the one-shot Custom (text) editor: switch ON.
-  await expect(mode).toHaveAttribute("aria-checked", "true");
-  await expect(mode).toContainText("Form ⇄");
-  await expect(page.locator('[data-testid="vd-editor"]')).toBeVisible();
-  // Toggle to the From Measure form: switch OFF, text editor gone.
-  await mode.click();
-  await expect(mode).toHaveAttribute("aria-checked", "false");
-  await expect(mode).toContainText("Text ⇄");
-  await expect(page.locator('[data-testid="vd-editor"]')).toHaveCount(0);
-  // And back to text.
-  await mode.click();
-  await expect(mode).toHaveAttribute("aria-checked", "true");
-  await expect(page.locator('[data-testid="vd-editor"]')).toBeVisible();
+  // Joel 2026-10-31 always-custom: the row opens DIRECTLY in the raw
+  // JSON editor with the imported VD's text; the source switch is gone
+  // and only the Form ⇄ Raw presentation toggle remains.
+  await expect(page.locator('[data-testid="vd-source-toggle"]')).toHaveCount(0);
+  const ed = page.locator('[data-testid="vd-editor"]');
+  await expect(ed).toBeVisible();
+  const text = await ed.inputValue();
+  expect(text).toContain("MeasureReport");
+  // The presentation toggle attempts the guarded form flip: either the
+  // form opens (raw editor swapped out) or the guard explains why not
+  // and the raw text stays intact (§2.2/§2.3 — never a silent loss).
+  await page.locator('[data-testid="vd-presentation-toggle"]').click();
+  if ((await page.locator('[data-testid="vd-form"]').count()) > 0) {
+    await expect(page.locator('[data-testid="vd-editor"]')).toHaveCount(0);
+  } else {
+    await expect(page.locator('[data-testid="vd-flip-error"]')).toBeVisible();
+    await expect(ed).toBeVisible();
+    expect(await ed.inputValue()).toContain("MeasureReport");
+  }
 });
