@@ -33,8 +33,7 @@ export interface TabHostProps {
   /* valueset */
   valueset: Record<string, unknown> | null;
   connected?: boolean;
-  /* S32: view loading spinners (reports pending + flatten busy). */
-  viewReportsPending?: boolean;
+  /* S32: view loading (flatten busy) reported to the console spinner. */
   onViewBusy?: (busy: boolean) => void;
   umlsReady?: boolean;
   umlsKey?: string;
@@ -107,7 +106,6 @@ export function TabHost(p: TabHostProps) {
           recalcMs={p.recalcMs}
           initialVd={p.initialVd}
           connected={p.connected}
-          reportsPending={p.viewReportsPending}
           onBusy={p.onViewBusy}
         />
       );
