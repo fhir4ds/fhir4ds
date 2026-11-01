@@ -14,27 +14,27 @@ async function boot(page: Page) {
   await bootDemoReady(page);
 }
 
-/** Open the Views tab via "+" (creates the derived VD, per measure.spec). */
+/** Open the Views tab via "+" (Joel 2026-10-31: opens DIRECTLY in the
+ *  always-custom raw editor, seeded from the measure). */
 async function openCustomRawEditor(page: Page) {
   await page.click("[data-testid=nav-toggle-views]");
   await page.click("[data-testid=nav-add-views]");
-  await page.waitForSelector("[data-testid=vd-source-toggle]", {
+  await page.waitForSelector("[data-testid=vd-editor]", {
     timeout: 30_000,
   });
-  // Level 1 → Custom (Raw presentation by default).
-  await page.click("[data-testid=vd-source-custom]");
-  await page.waitForSelector("[data-testid=vd-editor]", { timeout: 10_000 });
 }
 
-/** §2.1: "Level 1 (Source) [From Measure | Custom] … Level 2 … Form ⇄ Raw" */
-test("journey: two-level control — source switch then Form/Raw presentation", async ({ page }) => {
+/** §2.1 (always-custom): "it should always be custom so no switch
+ *  needed. we do need to be able to toggle back and forth from raw and
+ *  form" — Joel 2026-10-31. */
+test("journey: always-custom editor with Raw ⇄ Form presentation (no source switch)", async ({ page }) => {
   await boot(page);
   await openCustomRawEditor(page);
 
-  // Level 1: Custom is selected; Level 2 toggle exists (Raw on).
+  // No source switch anymore; the presentation toggle is the only control.
   await expect(
-    page.locator("[data-testid=vd-source-custom]"),
-  ).toHaveAttribute("aria-selected", "true");
+    page.locator("[data-testid=vd-source-toggle]"),
+  ).toHaveCount(0);
   const presentation = page.locator('[data-testid="vd-presentation-toggle"]');
   await expect(presentation).toBeVisible();
   await expect(presentation).toHaveAttribute("role", "switch");
@@ -75,6 +75,22 @@ test("journey: two-level control — source switch then Form/Raw presentation", 
   };
   expect(parsed.resource).toBe("Patient");
   expect(parsed.select?.[0]?.column?.length).toBe(2);
+});
+
+/** §2.1 discoverability: the custom raw editor advertises the form toggle. */
+test("journey: custom raw editor advertises the Form editor entry point", async ({ page }) => {
+  await boot(page);
+  await openCustomRawEditor(page);
+
+  // The hint names the Raw ⇄ switch and is visible in raw mode.
+  const hint = page.locator('[data-testid="vd-form-hint"]');
+  await expect(hint).toBeVisible();
+  await expect(hint).toContainText("Raw ⇄");
+
+  // Opening the form removes the hint (the form is self-evident).
+  await page.click('[data-testid="vd-presentation-toggle"]');
+  await page.waitForSelector("[data-testid=vd-form]", { timeout: 10_000 });
+  await expect(page.locator('[data-testid="vd-form-hint"]')).toHaveCount(0);
 });
 
 /** §2.2/§2.4: "name/resource/status + select/column table … the table IS
@@ -275,24 +291,32 @@ test("journey: columns with description/tag carry them verbatim", async ({ page 
   expect(parsed.select[0].column[0].description).toBe("the id");
 });
 
-/** §2.6: "entering Custom with an EMPTY draft seeds it from the derived
- *  view … never overwrites existing text" */
-test("journey: Copy from Measure seeds an empty custom draft only", async ({ page }) => {
+/** §2.6 (always-custom): an EMPTY draft is seeded from the derived view
+ *  on open — and the user's text is the single source of truth after
+ *  that (seed never overwrites; the guarded flip preserves text). */
+test("journey: Copy from Measure seeds an empty draft once, then text is authoritative", async ({ page }) => {
   await boot(page);
   // Open the Views drawer FIRST (the + lives there), create a fresh VD.
   await page.click("[data-testid=nav-toggle-views]");
   await page.click("[data-testid=nav-add-views]");
-  await page.waitForSelector("[data-testid=vd-source-toggle]", { timeout: 30_000 });
-  await page.click("[data-testid=vd-source-custom]");
-  await page.waitForSelector("[data-testid=vd-editor]", { timeout: 10_000 });
-  // The seed fired on entering Custom with an empty draft.
-  const seeded = await page.inputValue("[data-testid=vd-editor]");
-  expect(seeded.trim()).not.toBe("");
+  const ed = page.locator("[data-testid=vd-editor]");
+  await ed.waitFor({ timeout: 30_000 });
+  // The seed fires on mount when the draft is empty.
+  await expect
+    .poll(async () => await ed.inputValue(), { timeout: 10_000 })
+    .not.toBe("");
+  const seeded = await ed.inputValue();
   expect(() => JSON.parse(seeded)).not.toThrow();
-  // Existing text is never overwritten: fill, leave, come back.
+  // Typed text replaces the seed and survives a Form ⇄ Raw round trip
+  // (the text stays the single source of truth, §2.5).
   const mine = '{"resource":"Patient","select":[{"column":[{"name":"id","path":"id"}]}]}';
-  await page.fill("[data-testid=vd-editor]", mine);
-  await page.click("[data-testid=vd-source-derived]");
-  await page.click("[data-testid=vd-source-custom]");
-  expect(await page.inputValue("[data-testid=vd-editor]")).toBe(mine);
+  await ed.fill(mine);
+  await page.click('[data-testid="vd-presentation-toggle"]');
+  await expect(page.locator("[data-testid=vd-form]")).toBeVisible();
+  await page.click('[data-testid="vd-presentation-toggle"]');
+  await expect(page.locator("[data-testid=vd-editor]")).toBeVisible();
+  const after = JSON.parse(await ed.inputValue()) as {
+    resource?: string;
+  };
+  expect(after.resource).toBe("Patient");
 });

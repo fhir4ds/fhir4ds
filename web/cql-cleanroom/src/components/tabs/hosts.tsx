@@ -2,7 +2,6 @@ import type { EditorTab } from "../../lib/editorTabs";
 import { MeasurePane } from "../MeasurePane";
 import { ViewPane } from "../ViewPane";
 import { ValuesetEditor } from "./ValuesetEditor";
-import type { ViewOverrides } from "../../lib/viewDerivation";
 import type { LibraryClosure } from "../../lib/libraryGraph";
 import type { FlattenViewResult } from "../../lib/protocol";
 import type { ParamBinding } from "../../lib/params";
@@ -51,8 +50,6 @@ export interface TabHostProps {
   onPatientSaved?: (pid: string) => void;
   /* view */
   measureReports: Array<Record<string, unknown>> | null;
-  viewConfig: ViewOverrides | null;
-  onViewConfigChange: (v: ViewOverrides) => void;
   onSql?: (sql: string | null) => void;
   onResult: (r: FlattenViewResult | null) => void;
   /* REORG 6e: settings recalc delay passed through to the view. */
@@ -105,8 +102,6 @@ export function TabHost(p: TabHostProps) {
         <ViewPane
           measure={p.measure}
           measureReports={p.measureReports}
-          viewConfig={p.viewConfig}
-          onViewConfigChange={p.onViewConfigChange}
           onSql={p.onSql}
           onResult={p.onResult}
           recalcMs={p.recalcMs}

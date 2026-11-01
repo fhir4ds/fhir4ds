@@ -53,17 +53,13 @@ test("S27-5: views nav lists ViewDefinitions only; disk VD opens", async ({ page
   const viewPane = page.locator('[data-testid="view-pane"]');
   await expect(viewPane).toBeVisible({ timeout: 20000 });
   await expect(page.locator('[data-testid="view-error"]')).toHaveCount(0);
-  // VD form editor (2026-10-28): the example ADOPTS the VD into the
-  // session on boot (same on the released build), so the row opens the
-  // view tab in From Measure mode — the segmented source control is the
-  // mode surface now (two-level: source, then Form/Raw presentation).
-  const derived = page.locator('[data-testid="vd-source-derived"]');
-  await expect(derived).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator('[data-testid="vd-presentation-toggle"]')).toHaveCount(0);
-  // Custom shows the raw editor, and it takes the free vertical space.
-  await page.locator('[data-testid="vd-source-custom"]').click();
+  // VD form editor (2026-10-31 always-custom): the row opens the view
+  // tab directly in the raw JSON editor; the ONLY switch left is the
+  // Form ⇄ Raw presentation toggle (form guarded, §2.2/§2.3).
+  await expect(page.locator('[data-testid="vd-source-toggle"]')).toHaveCount(0);
   const ed = page.locator('[data-testid="vd-editor"]');
   await expect(ed).toBeVisible();
+  await expect(page.locator('[data-testid="vd-presentation-toggle"]')).toBeVisible();
   const box = await ed.boundingBox();
   expect(box?.height ?? 0).toBeGreaterThan(160);
 });

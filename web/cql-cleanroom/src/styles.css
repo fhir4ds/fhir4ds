@@ -758,25 +758,9 @@ body { margin: 0; }
 }
 .vd-config { display: flex; flex-direction: column; gap: 8px; font-size: 13px; min-width: 0; }
 
-/* FEATURE_VD_FORM_EDITOR §2.1 — Level 1 segmented source control. */
-.vd-source-toggle {
-  display: inline-flex;
-  border: 1px solid #2a2f3a;
-  border-radius: 6px;
-  overflow: hidden;
-}
-.vd-source-toggle .vd-source-option {
-  background: transparent;
-  border: none;
-  color: #9fb0c3;
-  padding: 3px 10px;
-  font-size: 12px;
-  cursor: pointer;
-}
-.vd-source-toggle .vd-source-option.active {
-  background: rgba(90, 160, 255, 0.25);
-  color: #dce7f5;
-}
+/* FEATURE_VD_FORM_EDITOR — always-custom (Joel 2026-10-31): the Level-1
+   segmented source control is gone; only the Form ⇄ Raw presentation
+   switch remains (the shared .mode-switch widget). */
 /* §2.2 form fields + §2.3.1 scope pill / preserved pill. */
 .vd-form-fields {
   display: grid;
@@ -891,19 +875,6 @@ body { margin: 0; }
   border: 1px solid #6b5a1f;
   border-radius: 3px;
   padding: 0 4px;
-}
-.vd-base {
-  margin-left: 6px;
-  font-size: 10px;
-  color: #5b6a7d;
-}
-.orphan-note {
-  font-size: 12px;
-  color: #e8c268;
-  padding: 4px 8px;
-  border: 1px solid #6b5a1f;
-  border-radius: 4px;
-  margin: 6px 0;
 }
 .link-btn {
   background: none;

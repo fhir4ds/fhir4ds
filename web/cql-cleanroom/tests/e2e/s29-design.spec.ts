@@ -81,7 +81,7 @@ test("S29-2: nav is library-first; Config groups Measure + Parameters", async ({
   await expect(page.locator('[data-testid="nav-refresh-disk"]')).toHaveCount(0);
 });
 
-test("S29-3: Views row opens the view tab; source toggles From Measure | Custom", async ({ page }) => {
+test("S29-3: Views row opens the view tab; always-custom raw editor + Form toggle", async ({ page }) => {
   await boot(page);
   await page.locator('[data-testid="nav-toggle-views"]').click();
   const panel = page.locator('[data-testid="nav-panel"], .nav-panel').first();
@@ -91,17 +91,23 @@ test("S29-3: Views row opens the view tab; source toggles From Measure | Custom"
     .click({ timeout: 20000 });
   const viewPane = page.locator('[data-testid="view-pane"]');
   await expect(viewPane).toBeVisible({ timeout: 20000 });
-  // The cms125 example ADOPTS the ViewDefinition into the session on
-  // boot (verified identical on the released v0.0.19 build) — the row
-  // opens the view tab in From Measure mode, not the one-shot raw open.
-  const derived = page.locator('[data-testid="vd-source-derived"]');
-  await expect(derived).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator('[data-testid="vd-editor"]')).toHaveCount(0);
-  // Custom flips the source ON and shows the raw editor (VDF §2.1).
-  await page.locator('[data-testid="vd-source-custom"]').click();
-  await expect(page.locator('[data-testid="vd-source-custom"]')).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator('[data-testid="vd-editor"]')).toBeVisible();
-  // And back to From Measure: raw editor gone.
-  await page.locator('[data-testid="vd-source-derived"]').click();
-  await expect(page.locator('[data-testid="vd-editor"]')).toHaveCount(0);
+  // Joel 2026-10-31 always-custom: the row opens DIRECTLY in the raw
+  // JSON editor with the imported VD's text; the source switch is gone
+  // and only the Form ⇄ Raw presentation toggle remains.
+  await expect(page.locator('[data-testid="vd-source-toggle"]')).toHaveCount(0);
+  const ed = page.locator('[data-testid="vd-editor"]');
+  await expect(ed).toBeVisible();
+  const text = await ed.inputValue();
+  expect(text).toContain("MeasureReport");
+  // The presentation toggle attempts the guarded form flip: either the
+  // form opens (raw editor swapped out) or the guard explains why not
+  // and the raw text stays intact (§2.2/§2.3 — never a silent loss).
+  await page.locator('[data-testid="vd-presentation-toggle"]').click();
+  if ((await page.locator('[data-testid="vd-form"]').count()) > 0) {
+    await expect(page.locator('[data-testid="vd-editor"]')).toHaveCount(0);
+  } else {
+    await expect(page.locator('[data-testid="vd-flip-error"]')).toBeVisible();
+    await expect(ed).toBeVisible();
+    expect(await ed.inputValue()).toContain("MeasureReport");
+  }
 });

@@ -4731,8 +4731,10 @@ export default function App() {
                 setStatusNote(`saved patient ${pid} — restart kernel to reload`)
               }
               measureReports={lastReports}
-              viewConfig={viewConfig?.overrides ?? null}
-              onViewConfigChange={(overrides) => setViewConfig({ overrides })}
+              // Joel 2026-10-31 — always-custom ViewPane: the per-column
+              // override drilling is gone. App's persisted viewConfig state
+              // stays (workspace-state schema compatibility; it is no
+              // longer editable).
               onResult={setViewResult}
               recalcMs={recalcSeconds * 1000}
               // S25: the EDITOR form spins only while a run is actually

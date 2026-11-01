@@ -189,3 +189,28 @@ before the slice is called complete.
 Editing nested selects beyond the single root select's columns;
 constants editor; joins editor (blocked → Raw by design); migrating the
 derived ("From Measure") mode; viewing-room app.
+
+## 7. Amendment (2026-10-31, Joel review): always-custom
+
+> "i don't [think] we need `From Measure` vs `Custom`. it should always be
+> custom so no switch needed. we do need to be able to toggle back and
+> forth from raw and form"
+
+Landed after the first review session:
+
+- The Level-1 [From Measure | Custom] segmented control is REMOVED. The
+  Views pane is always the custom editor; the only control is the Form ⇄
+  Raw presentation switch (guarded flip unchanged, §2.2/§2.3).
+- An EMPTY draft is seeded once from the measure-derived VD on mount
+  (§2.6 semantics moved from "entering Custom" to "opening the tab";
+  never overwrites typed/imported text).
+- The derived per-column override table (ghost-text forks, orphan
+  cleanup) is REMOVED with the mode. App's persisted `viewConfig` state
+  stays for workspace-state schema compatibility (restored harmlessly,
+  no longer editable).
+- Discoverability: in Raw mode a `vd-form-hint` line advertises the
+  Form flip (removed while the form is open).
+- Tests: journey specs re-derived from the ruling's own words
+  (`vd-form-editor.spec.ts` first journey); s27-5/S29-3/measure-spec
+  view tests updated to always-custom; the override-fork measure test
+  now pins rename-via-seeded-JSON-text.
