@@ -1,0 +1,165 @@
+{
+  "phase": "EVOLUTION",
+  "iteration": 0,
+  "pipeline": [
+    "evolution",
+    "code_review",
+    "pre_release",
+    "docs_audit",
+    "benchmarks",
+    "scribe"
+  ],
+  "pipeline_step": 0,
+  "target_version": "0.0.20",
+  "qa_schedule": [
+    {
+      "domain": 1,
+      "personality": "SKEPTIC"
+    },
+    {
+      "domain": 1,
+      "personality": "HISTORIAN"
+    },
+    {
+      "domain": 1,
+      "personality": "EXPLORER"
+    },
+    {
+      "domain": 2,
+      "personality": "SKEPTIC"
+    },
+    {
+      "domain": 2,
+      "personality": "HISTORIAN"
+    },
+    {
+      "domain": 2,
+      "personality": "EXPLORER"
+    },
+    {
+      "domain": 3,
+      "personality": "SKEPTIC"
+    },
+    {
+      "domain": 3,
+      "personality": "HISTORIAN"
+    },
+    {
+      "domain": 3,
+      "personality": "EXPLORER"
+    },
+    {
+      "domain": 4,
+      "personality": "SKEPTIC"
+    },
+    {
+      "domain": 4,
+      "personality": "HISTORIAN"
+    },
+    {
+      "domain": 4,
+      "personality": "EXPLORER"
+    },
+    {
+      "domain": 5,
+      "personality": "SKEPTIC"
+    },
+    {
+      "domain": 5,
+      "personality": "HISTORIAN"
+    },
+    {
+      "domain": 5,
+      "personality": "EXPLORER"
+    },
+    {
+      "domain": 6,
+      "personality": "SKEPTIC"
+    },
+    {
+      "domain": 6,
+      "personality": "HISTORIAN"
+    },
+    {
+      "domain": 6,
+      "personality": "EXPLORER"
+    },
+    {
+      "domain": 7,
+      "personality": "SKEPTIC"
+    },
+    {
+      "domain": 7,
+      "personality": "HISTORIAN"
+    },
+    {
+      "domain": 7,
+      "personality": "EXPLORER"
+    },
+    {
+      "domain": 8,
+      "personality": "SKEPTIC"
+    },
+    {
+      "domain": 8,
+      "personality": "HISTORIAN"
+    },
+    {
+      "domain": 8,
+      "personality": "EXPLORER"
+    },
+    {
+      "domain": 9,
+      "personality": "SKEPTIC"
+    },
+    {
+      "domain": 9,
+      "personality": "HISTORIAN"
+    },
+    {
+      "domain": 9,
+      "personality": "EXPLORER"
+    },
+    {
+      "domain": 10,
+      "personality": "SKEPTIC"
+    },
+    {
+      "domain": 10,
+      "personality": "HISTORIAN"
+    },
+    {
+      "domain": 10,
+      "personality": "EXPLORER"
+    },
+    {
+      "domain": 11,
+      "personality": "SKEPTIC"
+    },
+    {
+      "domain": 11,
+      "personality": "HISTORIAN"
+    },
+    {
+      "domain": 11,
+      "personality": "EXPLORER"
+    },
+    {
+      "domain": 12,
+      "personality": "SKEPTIC"
+    },
+    {
+      "domain": 12,
+      "personality": "HISTORIAN"
+    },
+    {
+      "domain": 12,
+      "personality": "EXPLORER"
+    }
+  ],
+  "config": {
+    "target_version": "0.0.20",
+    "notes": "v0.0.20 release campaign (Joel 2026-11-01): medterm4ds pin 0.0.7->0.0.8 (local dist /mnt/d/medterm4ds/dist, not yet on PyPI), evolution over 12 QA domains x 3 personalities, then code review, release prep (BOTH distro packages), docs review incl release notes, benchmarks, scribe. Working on local dev; incremental checkpoint commits (Joel pushes)."
+  },
+  "issues": []
+}
