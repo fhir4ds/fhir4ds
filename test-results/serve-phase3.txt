@@ -1,0 +1,292 @@
+serve layer — phase 3 evidence transcript (FHIR writes + HF publish store)
+generated: 2026-11-01T01:56:20Z
+worktree:  /mnt/d/fhir4ds/.worktrees/feat-serve
+branch:    feat/serve-layer (51ded579286)
+base:      80fef086cb9 (dev)
+python:    Python 3.10.12  duckdb: 1.5.5
+image:     fhir4ds-serve:phase3 (686MB)
+
+==================================================================
+== 1. unit suites (no token anywhere)
+==================================================================
+$ PYTHONPATH=. pytest fhir4ds/serve/tests -q
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================== 209 passed, 1 skipped, 1 warning in 29.62s ==================
+
+$ PYTHONPATH=. pytest fhir4ds/cql/tests/unit -q   (criterion 7)
+fhir4ds/cql/tests/unit/test_window_functions.py ..................       [100%]
+
+======================= 1723 passed, 1 skipped in 53.16s =======================
+
+--- the phase-3 files specifically ---------------------------------
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=================== 43 passed, 1 skipped, 1 warning in 4.65s ===================
+
+==================================================================
+== 2. live Hub publish: 100 Observations -> flush -> publish
+==================================================================
+token source: HF_TOKEN from the environment (never echoed), non-empty: yes
+$ FHIR4DS_HF_INTEGRATION=1 pytest fhir4ds/serve/tests/test_store_hf.py -q
+  /home/jmontavon/.local/lib/python3.10/site-packages/huggingface_hub/hf_api.py:11610: UserWarning: Warnings while validating metadata in README.md:
+  - empty or missing yaml metadata in repo card
+    warnings.warn(f"Warnings while validating metadata in README.md:\n{message}")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 4 passed, 2 warnings in 11.04s ========================
+
+--- the criterion-3 query, run independently (hf:// read) ----------
+SELECT count(*) FROM 'hf://datasets/fhir4ds/bulk-publish-demo/resources/**/*.parquet'  ->  303
+published runs (run id, rows, max _seq):
+    ('8e533ae3', 101, 101)
+    ('5ec92fb1', 101, 202)
+    ('b154217e', 101, 303)
+
+per-run counts for the newest run 'b154217e':
+   version rows : 101
+   latest-wins  : 100
+   _history=2 ids: 1
+   parts        : 6
+   seq range    : (1, 303)
+
+==================================================================
+== 3. the published feed, fetched with plain curl (no auth)
+==================================================================
+$ curl -sSL https://huggingface.co/datasets/fhir4ds/bulk-publish-demo/resolve/main/%24bulk-publish
+{
+  "transactionTime": "2026-11-01T01:58:02Z",
+  "request": {
+    "method": "GET",
+    "url": "/$bulk-publish"
+  },
+  "output": [
+    {
+      "type": "resources",
+      "url": "https://huggingface.co/datasets/fhir4ds/bulk-publish-demo/resolve/main/resources/dt=2026-11-01/part-00000100.parquet"
+    },
+    {
+      "type": "resources",
+      "url": "https://huggingface.co/datasets/fhir4ds/bulk-publish-demo/resolve/main/resources/dt=2026-11-01/part-00000101.parquet"
+    },
+    {
+      "type": "resources",
+      "url": "https://huggingface.co/datasets/fhir4ds/bulk-publish-demo/resolve/main/resources/dt=2026-11-01/part-00000201.parquet"
+    },
+    {
+      "type": "resources",
+      "url": "https://huggingface.co/datasets/fhir4ds/bulk-publish-demo/resolve/main/resources/dt=2026-11-01/part-00000202.parquet"
+    },
+    {
+      "type": "resources",
+      "url": "https://huggingface.co/datasets/fhir4ds/bulk-publish-demo/resolve/main/resources/dt=2026-11-01/part-00000302.parquet"
+    },
+    {
+      "type": "resources",
+      "url": "https://huggingface.co/datasets/fhir4ds/bulk-publish-demo/resolve/main/resources/dt=2026-11-01/part-00000303.parquet"
+    }
+  ]
+}
+
+
+--- repo file listing --------------------------------------------
+files:
+    $bulk-publish
+    .gitattributes
+    README.md
+    meta/state.json
+    publishers/fhir4ds-serve/$bulk-publish
+    resources/dt=2026-11-01/part-00000100.parquet
+    resources/dt=2026-11-01/part-00000101.parquet
+    resources/dt=2026-11-01/part-00000201.parquet
+    resources/dt=2026-11-01/part-00000202.parquet
+    resources/dt=2026-11-01/part-00000302.parquet
+    resources/dt=2026-11-01/part-00000303.parquet
+lastModified: 2026-11-01T01:58:02.000Z
+
+--- one output url, plain curl + parquet parse -------------------
+$ curl -sSL 'https://huggingface.co/datasets/fhir4ds/bulk-publish-demo/resolve/main/resources/dt=2026-11-01/part-00000303.parquet'
+http=200 bytes=3626
+parsed: (1, 303, 303)
+
+==================================================================
+== 4. live server: writes, health payload, forced flush (local store)
+==================================================================
+### GET /health (cold start: nothing pending, nothing committed)
+{"status":"ok","pending":0,"last_commit":null,"last_commit_at":null,"last_error":null}
+
+### POST /Patient/syn-evidence-1 -> 201 + ETag + Location
+HTTP/1.1 201 Created
+date: Sun, 01 Nov 2026 01:58:16 GMT
+server: uvicorn
+etag: W/"1"
+x-pending-commits: 1
+location: Patient/syn-evidence-1
+content-length: 153
+content-type: application/fhir+json
+
+{"resourceType": "Patient", "id": "syn-evidence-1", "name": [{"family": "Synthetic"}], "meta": {"versionId": "1", "lastUpdated": "2026-11-01T01:58:17Z"}}
+### PUT /Patient/syn-evidence-1 with a WRONG If-Match -> 412
+status=412
+{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"conflict","diagnostics":"If-Match W/\"99\" does not match the current version W/\"1\" of Patient/syn-evidence-1"}]}
+
+### PUT with the CURRENT If-Match -> 200, version 2
+HTTP/1.1 200 OK
+date: Sun, 01 Nov 2026 01:58:16 GMT
+server: uvicorn
+etag: W/"2"
+x-pending-commits: 2
+location: Patient/syn-evidence-1
+content-length: 151
+content-type: application/fhir+json
+
+{"resourceType": "Patient", "id": "syn-evidence-1", "name": [{"family": "Updated"}], "meta": {"versionId": "2", "lastUpdated": "2026-11-01T01:58:17Z"}}
+### DELETE /Patient/syn-evidence-1 -> 204 (tombstone)
+status=204
+
+### GET /Patient/syn-evidence-1 after DELETE -> 410
+status=410
+{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"deleted","diagnostics":"Patient with id 'syn-evidence-1' was deleted (last version W/\"3\")"}]}
+
+### GET /Patient/syn-evidence-1/_history -> two versions + tombstone
+bundle type: history total: 3
+  version 3 204 No Content
+  version 2 200 OK
+  version 1 200 OK
+
+### GET /health after the writes (pending, no commit yet)
+{"status":"ok","pending":3,"last_commit":null,"last_commit_at":null,"last_error":null}
+
+### POST /admin/flush -> revision + committed
+{"revision": "3d93d8bd7ab4", "committed": 3, "pending": 0, "last_error": null}
+
+### GET /health after the flush
+{"status":"ok","pending":0,"last_commit":"3d93d8bd7ab4","last_commit_at":"2026-11-01T01:58:17Z","last_error":null}
+
+### GET /$bulk-publish (live manifest, local store -> file:// urls)
+{"transactionTime": "2026-11-01T01:58:17Z", "request": {"method": "GET", "url": "http://127.0.0.1:8767/$bulk-publish"}, "output": [{"type": "resources", "url": "file:///tmp/opencode/p3-evidence-publish/resources/dt%3D2026-11-01/part-00000003.parquet"}]}
+
+### dataset tree on disk
+$bulk-publish
+README.md
+meta/state.json
+publishers/fhir4ds-serve/$bulk-publish
+resources/dt=2026-11-01/part-00000003.parquet
+
+server stopped
+
+==================================================================
+== 5. no token anywhere (criterion 6)
+==================================================================
+$ docker history --no-trunc fhir4ds-serve:phase3 | grep -i token
+exit=1 (1 = no match)
+
+$ docker run --rm --entrypoint env fhir4ds-serve:phase3 | grep -i token
+exit=1 (1 = no match)
+
+$ git grep -nI "hf_[A-Za-z0-9]\{20,\}"   (-I skips binaries)
+exit=1 (1 = no match in source)
+
+NOTE: the same grep WITHOUT -I matches two vendored duckdb-wasm binaries
+(fhir4ds/devserver/static-*/assets/duckdb-eh-*.wasm, tracked before phase 3).
+The match is a C++ mangled symbol, not a token:
+fhir4ds/devserver/static-wasm/assets/duckdb-eh-GCigqcFu.wasm:6
+   matched bytes: hf_ZN6duckdb10FileSystem11ExtractNameERKNSt3
+
+==================================================================
+== 6. container smoke on the phase-3 image
+==================================================================
+  [PASS] docker stop returns — 0.7s
+  [PASS] uvicorn exits cleanly (code 0) — 0
+  [PASS] uvicorn logs go to stdout — uvicorn startup line on stdout
+  [PASS] image history carries no token
+
+== 24/24 checks passed
+
+==================================================================
+== 7. ruff (every new/changed file)
+==================================================================
+All checks passed!
+exit=0
+
+==================================================================
+== 8. protected paths untouched (criterion 8)
+==================================================================
+$ git --no-pager diff --stat dev...HEAD | grep -E "cql/fhir_server|viewdef/|sqlquery/runner.py"
+exit=1 (1 = no output = untouched)
+
+$ git --no-pager diff --stat dev...HEAD
+ .dockerignore                                      |   40 +
+ .gitignore                                         |    3 +
+ deploy/docker/fhir4ds-serve/Dockerfile             |   66 +
+ deploy/docker/fhir4ds-serve/README.md              |  126 ++
+ deploy/docker/fhir4ds-serve/compose.yml            |   44 +
+ deploy/docker/fhir4ds-serve/uvicorn-log.json       |   32 +
+ docs/design/serve-layer.md                         |  235 +++
+ docs/design/serve-writes.md                        |  133 ++
+ fhir4ds/cli/main.py                                |    9 +
+ fhir4ds/cli/serve.py                               |  221 +++
+ fhir4ds/operations/capabilities/__init__.py        |   28 +-
+ fhir4ds/operations/capabilities/sqlquery.py        |  146 ++
+ fhir4ds/operations/capabilities/tabular.py         |  212 +++
+ .../operations/capabilities/viewdefinition_run.py  |  129 ++
+ fhir4ds/serve/AGENTS.md                            |  250 +++
+ fhir4ds/serve/__init__.py                          |   35 +
+ fhir4ds/serve/__main__.py                          |   35 +
+ fhir4ds/serve/app.py                               |  218 +++
+ fhir4ds/serve/bulk_publish.py                      |  189 ++
+ fhir4ds/serve/config.py                            |  217 +++
+ fhir4ds/serve/errors.py                            |  182 ++
+ fhir4ds/serve/execution.py                         |  341 ++++
+ fhir4ds/serve/flusher.py                           |  177 ++
+ fhir4ds/serve/formats.py                           |  472 +++++
+ fhir4ds/serve/hf_store.py                          |  161 ++
+ fhir4ds/serve/metadata.py                          |  239 +++
+ fhir4ds/serve/parameters.py                        |  318 ++++
+ fhir4ds/serve/resources.py                         |  126 ++
+ fhir4ds/serve/routes/__init__.py                   |   19 +
+ fhir4ds/serve/routes/capability.py                 |   25 +
+ fhir4ds/serve/routes/cql.py                        |  234 +++
+ fhir4ds/serve/routes/health.py                     |   25 +
+ fhir4ds/serve/routes/library.py                    |  186 ++
+ fhir4ds/serve/routes/viewdefinition.py             |  171 ++
+ fhir4ds/serve/sources.py                           |  141 ++
+ fhir4ds/serve/store.py                             |  467 +++++
+ fhir4ds/serve/tests/__init__.py                    |    0
+ fhir4ds/serve/tests/_helpers.py                    |  117 ++
+ fhir4ds/serve/tests/conftest.py                    |   73 +
+ fhir4ds/serve/tests/container_smoke.py             |  360 ++++
+ fhir4ds/serve/tests/fixtures/README.md             |   64 +
+ .../Library-BloodPressureViewSqlView.json          |   33 +
+ .../libraries/Library-OmopFhirPatientJoin.json     |   71 +
+ .../libraries/Library-SqlOnFhirExample.json        |   78 +
+ .../Library-UniquePatientAddressesQuery.json       |   71 +
+ fhir4ds/serve/tests/fixtures/resources/bundle.json |  222 +++
+ .../fixtures/viewdefinitions/diagnoses-view.json   |   30 +
+ .../fixtures/viewdefinitions/fhir-patient.json     |   30 +
+ .../fixtures/viewdefinitions/omop-person.json      |   25 +
+ .../viewdefinitions/patient-address-view.json      |   51 +
+ .../fixtures/viewdefinitions/patient-view.json     |   30 +
+ fhir4ds/serve/tests/test_capability_envelopes.py   |  196 +++
+ fhir4ds/serve/tests/test_cql_facade.py             |  200 +++
+ fhir4ds/serve/tests/test_health_and_metadata.py    |   84 +
+ fhir4ds/serve/tests/test_live_server.py            |   84 +
+ fhir4ds/serve/tests/test_output_formats.py         |  320 ++++
+ fhir4ds/serve/tests/test_parameters.py             |  162 ++
+ fhir4ds/serve/tests/test_slim_entrypoint.py        |   44 +
+ fhir4ds/serve/tests/test_sources.py                |  151 ++
+ fhir4ds/serve/tests/test_sqlquery_run.py           |  327 ++++
+ fhir4ds/serve/tests/test_store_hf.py               |  240 +++
+ fhir4ds/serve/tests/test_store_local.py            |  125 ++
+ fhir4ds/serve/tests/test_versioning.py             |  179 ++
+ fhir4ds/serve/tests/test_viewdefinition_run.py     |  138 ++
+ fhir4ds/serve/tests/test_writes_local.py           |  421 +++++
+ fhir4ds/serve/versioning.py                        |  258 +++
+ fhir4ds/serve/writes.py                            |  671 +++++++
+ fhir4ds/sqlquery/types.py                          |   10 +
+ fhir4ds/tests/test_version.py                      |    4 +-
+ pyproject.toml                                     |   12 +
+ test-results/serve-phase1.txt                      | 1858 ++++++++++++++++++++
+ test-results/serve-phase2.txt                      |  279 +++
+ 72 files changed, 12668 insertions(+), 2 deletions(-)
