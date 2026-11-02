@@ -152,6 +152,7 @@ def _configure_writes(context: ServeContext, settings: ServeConfig) -> Any:
         from .rehydrate import rehydrate
 
         rehydrate(context.connection, publish_store, context.store)
+        _adopt_keys(context, publish_store)
     except Exception:  # noqa: BLE001 - the surface stays up, loudly
         logger.exception("dataset rehydration failed; serving from a fresh log")
 
@@ -163,9 +164,30 @@ def _configure_writes(context: ServeContext, settings: ServeConfig) -> Any:
         repository=settings.publish_repository,
         request_url="/$bulk-publish",
         definition_provider=lambda: _definitions(context),
+        key_provider=(
+            context.keys.write_key_map if context.keys is not None else None
+        ),
         autostart=settings.flush_autostart,
     )
     return writes_router
+
+
+def _adopt_keys(context: ServeContext, publish_store: Any) -> None:
+    """Load the persisted write-key snapshot from the dataset, when present."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    from .flusher import KEY_SNAPSHOT_PATH
+
+    if context.keys is None:
+        return
+    snapshot_file = _Path(publish_store.snapshot()) / KEY_SNAPSHOT_PATH
+    if not snapshot_file.is_file():
+        return
+    try:
+        context.keys.adopt_write_keys(_json.loads(snapshot_file.read_text("utf-8")))
+    except (OSError, ValueError):
+        logger.warning("write-key snapshot unreadable; using env bootstrap keys")
 
 
 def _definitions(context: ServeContext) -> list[dict]:

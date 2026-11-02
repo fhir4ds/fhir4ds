@@ -287,3 +287,41 @@ def test_slow_query_times_out_with_408(connection, tmp_path):
     response = client.post("/Library/slow-probe/$sqlquery-run")
     assert response.status_code == 408
     assert "interrupted" in response.json()["issue"][0]["diagnostics"]
+
+
+# -- key persistence via the dataset ----------------------------------------
+
+
+def test_write_keys_persist_to_dataset_and_adopt_on_boot(connection, tmp_path):
+    """Rotation survives restarts through meta/keys.json in the dataset."""
+    import pathlib
+
+    config = ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+        publish_dir=str(tmp_path),
+        flush_autostart=False,
+    )
+    client = plain_client(create_app(config, connection=connection))
+    new_key = "dataset-persisted-key-0001"
+    assert client.post(
+        "/admin/key",
+        json={"action": "add", "label": "publisher", "key": new_key},
+        headers=ADMIN,
+    ).status_code == 200
+    assert client.post("/admin/flush", headers=ADMIN).status_code == 200
+    assert (pathlib.Path(tmp_path) / "meta" / "keys.json").is_file()
+
+    # A fresh boot on the same dataset adopts the snapshot: the rotated key
+    # works, the revoked bootstrap key does not.
+    assert client.post(
+        "/admin/key", json={"action": "revoke", "label": "__env__"}, headers=ADMIN
+    ).status_code == 200
+    assert client.post("/admin/flush", headers=ADMIN).status_code == 200
+
+    second = plain_client(create_app(config, connection=connection))
+    probe = {**SLOT, "id": "adopted"}
+    assert second.post(
+        "/Slot", json=probe, headers={"X-Write-Key": new_key}
+    ).status_code == 201
+    assert second.post("/Slot", json=probe, headers=WRITE).status_code == 401

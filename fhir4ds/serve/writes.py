@@ -612,6 +612,14 @@ def manage_keys(request: Request, body: Any | None = Body(default=None)) -> Resp
             )
     except AuthError as exc:
         raise unprocessable(str(exc)) from None
+    # Persist the rotation to the dataset immediately (files-only commit);
+    # on failure the next row flush re-stages the snapshot.
+    flusher = context_for(request).flusher
+    if flusher is not None:
+        try:
+            flusher.publish_state()
+        except Exception:  # noqa: BLE001 - rotation succeeded; persistence retries
+            pass
     return Response(
         content=json.dumps(
             {"action": action, "label": label, "write_keys": registry.write_key_labels()},

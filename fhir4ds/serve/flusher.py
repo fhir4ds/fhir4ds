@@ -14,6 +14,7 @@ version.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from collections.abc import Callable, Iterable
@@ -24,6 +25,9 @@ from . import bulk_publish
 from .store import PublishStore
 
 logger = logging.getLogger(__name__)
+
+#: Path of the write-key snapshot inside the dataset tree.
+KEY_SNAPSHOT_PATH = "meta/keys.json"
 
 
 @dataclass(frozen=True)
@@ -47,6 +51,7 @@ class FlushManager:
         repository: str | None = None,
         request_url: str = "/$bulk-publish",
         definition_provider: Callable[[], Iterable[dict]] | None = None,
+        key_provider: Callable[[], dict[str, str]] | None = None,
         autostart: bool = True,
     ) -> None:
         self._store = store
@@ -56,6 +61,7 @@ class FlushManager:
         self._repository = repository
         self._request_url = request_url
         self._definition_provider = definition_provider
+        self._key_provider = key_provider
 
         self._buffer: list[dict[str, Any]] = []
         self._buffer_lock = threading.Lock()
@@ -177,21 +183,36 @@ class FlushManager:
             self._buffer[:0] = rows
         logger.warning("flush failed, %d row(s) kept: %s", len(rows), exc)
 
-    def _publish(self, rows: list[dict[str, Any]]) -> str:
-        self._store.append(rows)
-        highest = max(int(row["_seq"]) for row in rows)
+    def _generated_files(self) -> dict[str, str]:
+        """Non-row files of the next commit: manifests, definitions, keys."""
         definitions = (
             bulk_publish.definition_files(self._definition_provider())
             if self._definition_provider is not None
             else {}
         )
+        files = dict(definitions)
+        if self._key_provider is not None:
+            # The write-key registry persists with the dataset (meta/keys.json)
+            # so rotation survives restarts without persistent storage.
+            files[KEY_SNAPSHOT_PATH] = json.dumps(self._key_provider(), sort_keys=True)
+        return files
+
+    def publish_state(self) -> str:
+        """Stage and commit generated files with no rows (e.g. after key rotation)."""
+        for relative_path, text in self._generated_files().items():
+            self._store.stage_file(relative_path, text)
+        return self._store.commit()
+
+    def _publish(self, rows: list[dict[str, Any]]) -> str:
+        self._store.append(rows)
+        highest = max(int(row["_seq"]) for row in rows)
         files = bulk_publish.dataset_files(
             repository=self._repository,
             root=self._store.snapshot(),
             publisher=self._publisher,
             request_url=self._request_url,
             pending_part=bulk_publish.plan_part_path(highest),
-            definitions=definitions,
+            definitions=self._generated_files(),
         )
         for relative_path, text in files.items():
             self._store.stage_file(relative_path, text)

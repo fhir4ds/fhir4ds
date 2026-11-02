@@ -117,6 +117,23 @@ class KeyRegistry:
         with self._lock:
             return sorted(self._write_keys)
 
+    def write_key_map(self) -> dict[str, str]:
+        """The complete write-key map (snapshot for dataset persistence)."""
+        with self._lock:
+            return dict(self._write_keys)
+
+    def adopt_write_keys(self, keys: dict[str, str]) -> None:
+        """Replace the write-key set with a persisted snapshot (boot-time).
+
+        Complete-snapshot semantics: the persisted file is the full registry
+        at its last flush, so it wins outright over the env bootstrap. An
+        empty/invalid payload is ignored (env bootstrap remains).
+        """
+        if not isinstance(keys, dict) or not keys:
+            return
+        with self._lock:
+            self._write_keys = {str(k): str(v) for k, v in keys.items() if k and v}
+
     # -- internals ---------------------------------------------------------
 
     def _validate_label(self, label: Any) -> None:
