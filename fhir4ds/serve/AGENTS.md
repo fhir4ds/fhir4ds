@@ -5,7 +5,7 @@ operations `$sqlquery-run` and `$viewdefinition-run`/`$run`, the Library and
 ViewDefinition registries that back them, a derived CapabilityStatement, the CQL
 `$cql` conformance facade and container image (phase 2), and (phase 3) a
 FHIR-native **write** surface over a versioned append-only log that publishes to
-the `fhir4ds/bulk-publish-demo` dataset.
+the `fhir4ds/bulk-publish-demo-data` dataset.
 
 Design doc: `docs/design/serve-layer.md`. Container assets:
 `deploy/docker/fhir4ds-serve/`.
@@ -137,7 +137,7 @@ Capabilities live in `fhir4ds/operations/capabilities/`
 - **Generic writes refuse registry-owned types.** `Library`/`ViewDefinition`
   are `400 not-supported` on the generic routes; the registry owns their
   canonical handling. Do not "helpfully" route them into the log.
-- **Publish only to `fhir4ds/bulk-publish-demo`.** Other `fhir4ds/*` and
+- **Publish only to `fhir4ds/bulk-publish-demo-data`.** Other `fhir4ds/*` and
   `joelmontavon/*` repositories belong to other teams; data must stay synthetic
   because the repo and its history are public.
 

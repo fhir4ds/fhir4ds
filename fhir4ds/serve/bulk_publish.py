@@ -39,7 +39,7 @@ PART_OUTPUT_TYPE = "resources"
 DEFAULT_PUBLISHER = "fhir4ds-serve"
 
 #: Dataset repository this surface publishes to (only this one).
-DATASET_REPOSITORY = "fhir4ds/bulk-publish-demo"
+DATASET_REPOSITORY = "fhir4ds/bulk-publish-demo-data"
 
 README = """# fhir4ds bulk-publish demo
 
@@ -60,7 +60,7 @@ there is no patient data here.
 Query the whole dataset without this server:
 
 ```sql
-SELECT * FROM read_parquet('hf://datasets/fhir4ds/bulk-publish-demo/resources/**/*.parquet');
+SELECT * FROM read_parquet('hf://datasets/fhir4ds/bulk-publish-demo-data/resources/**/*.parquet');
 ```
 """
 

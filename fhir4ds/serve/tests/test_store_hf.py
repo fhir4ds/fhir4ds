@@ -5,7 +5,7 @@ and pin the semantics that matter: a ``409`` parent conflict re-reads the branch
 head and retries **once**, on top of the new head, and a second conflict is
 surfaced instead of looping.
 
-The live test publishes to ``fhir4ds/bulk-publish-demo`` only and is skipped
+The live test publishes to ``fhir4ds/bulk-publish-demo-data`` only and is skipped
 unless both conditions hold::
 
     FHIR4DS_HF_INTEGRATION=1 HF_TOKEN=... pytest fhir4ds/serve/tests/test_store_hf.py -q
@@ -24,7 +24,7 @@ import uuid
 
 import pytest
 
-REPO = "fhir4ds/bulk-publish-demo"
+REPO = "fhir4ds/bulk-publish-demo-data"
 FHIR_JSON = {"Content-Type": "application/fhir+json"}
 
 

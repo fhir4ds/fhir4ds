@@ -2,7 +2,7 @@
 
 Phase 2 adds two shapes beyond configured table names: a path under the
 mounted data root (loaded once, then reused) and dataset URIs such as
-``hf://datasets/fhir4ds/bulk-publish-demo``, which must be answered with a
+``hf://datasets/fhir4ds/bulk-publish-demo-data``, which must be answered with a
 clear ``OperationOutcome`` rather than a crash — the dataset store itself
 arrives in phase 3.
 """
@@ -103,7 +103,7 @@ def test_missing_path_is_404(connection, store, data_root):
 
 def test_hf_dataset_uri_is_a_clear_operation_outcome(connection, store, data_root):
     client = _app(connection, data_root=str(data_root))
-    response = client.post(VIEW_PATH, json=_source("hf://datasets/fhir4ds/bulk-publish-demo"))
+    response = client.post(VIEW_PATH, json=_source("hf://datasets/fhir4ds/bulk-publish-demo-data"))
 
     assert response.status_code == 400
     body = response.json()

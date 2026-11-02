@@ -1,0 +1,30 @@
+{
+  "id": "fhir-patient",
+  "url": "https://example.org/fhir/ViewDefinition/Patient",
+  "description": "FHIR-side patient table for the OMOP/FHIR join example.",
+  "resource": "Patient",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "id",
+          "type": "string",
+          "path": "getResourceKey()"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "path": "name.family.first()"
+        },
+        {
+          "name": "mrn",
+          "type": "string",
+          "path": "identifier.where(system = 'http://example.org/mrn').value.first()"
+        }
+      ]
+    }
+  ],
+  "resourceType": "ViewDefinition",
+  "status": "active",
+  "name": "fhir_patient"
+}

@@ -15,7 +15,7 @@ a path under ``ServeConfig.data_root``
 
 anything with a URI scheme (``hf://``, ``s3://``, …)
     Rejected with a clear ``OperationOutcome``. The Hugging Face dataset store
-    (``hf://datasets/fhir4ds/bulk-publish-demo``) arrives in phase 3; until then
+    (``hf://datasets/fhir4ds/bulk-publish-demo-data``) arrives in phase 3; until then
     that dataset holds no data and the surface must say so instead of crashing
     or silently querying nothing.
 
@@ -67,7 +67,7 @@ def _scheme_message(context: ServeContext, scheme: str, source: str) -> str:
         return (
             f"Source {source!r} is a Hugging Face dataset URI, which this "
             "surface does not serve yet: the dataset store arrives in phase 3, "
-            "and fhir4ds/bulk-publish-demo holds no data before then. "
+            "and fhir4ds/bulk-publish-demo-data holds no data before then. "
             "No query was executed."
         )
     available = sorted(context.config.sources)
