@@ -99,6 +99,7 @@ class ServeConfig:
     query_timeout_seconds: float = 30.0
     max_waiting_requests: int = 5
     default_limit: int = 1_000
+    cors_origins: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.host, str) or not self.host:
@@ -157,6 +158,10 @@ class ServeConfig:
             value = getattr(self, int_field)
             if not isinstance(value, int) or isinstance(value, bool) or value < 1:
                 raise ValueError(f"{int_field} must be a positive integer")
+        if not isinstance(self.cors_origins, tuple) or not all(
+            isinstance(origin, str) and origin for origin in self.cors_origins
+        ):
+            raise ValueError("cors_origins must be a tuple of non-empty strings")
         if not isinstance(self.query_timeout_seconds, (int, float)) or isinstance(
             self.query_timeout_seconds, bool
         ):

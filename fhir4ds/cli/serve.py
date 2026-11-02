@@ -122,6 +122,11 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
         help="bootstrap write API key (env FHIR4DS_WRITE_KEY; more via POST /admin/key)",
     )
     parser.add_argument(
+        "--cors-origins",
+        default=os.environ.get("FHIR4DS_CORS_ORIGINS"),
+        help="comma-separated allowed CORS origins (or *; env FHIR4DS_CORS_ORIGINS)",
+    )
+    parser.add_argument(
         "--key-store",
         default=os.environ.get("FHIR4DS_KEY_STORE"),
         help="JSON file persisting runtime-added write keys (use persistent storage)",
@@ -153,6 +158,11 @@ def build_config(args: argparse.Namespace) -> ServeConfig:
         admin_key=args.admin_key,
         write_key=args.write_key,
         key_store=args.key_store,
+        cors_origins=tuple(
+            origin.strip()
+            for origin in (args.cors_origins or "").split(",")
+            if origin.strip()
+        ),
     )
 
 

@@ -98,6 +98,27 @@ def create_app(
         max_request_bytes=settings.max_request_bytes,
     )
 
+    # Optional CORS: lets a trusted site (e.g. the docs page) run live
+    # examples against this API from the browser. Key headers are allowed so
+    # a keyed write can also run in-page; credentials mode stays off.
+    if settings.cors_origins:
+        from starlette.middleware.cors import CORSMiddleware
+
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.cors_origins),
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            allow_headers=[
+                "Content-Type",
+                "Accept",
+                "If-Match",
+                "Authorization",
+                "X-Admin-Key",
+                "X-Write-Key",
+            ],
+            max_age=600,
+        )
+
     for router in ROUTERS:
         app.include_router(router)
 

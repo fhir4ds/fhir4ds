@@ -325,3 +325,44 @@ def test_write_keys_persist_to_dataset_and_adopt_on_boot(connection, tmp_path):
         "/Slot", json=probe, headers={"X-Write-Key": new_key}
     ).status_code == 201
     assert second.post("/Slot", json=probe, headers=WRITE).status_code == 401
+
+
+# -- CORS ----------------------------------------------------------------------
+
+
+def test_cors_preflight_and_origin_headers(connection, tmp_path):
+    config = ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+        publish_dir=str(tmp_path),
+        flush_autostart=False,
+        cors_origins=("https://fhir4ds.com",),
+    )
+    client = plain_client(create_app(config, connection=connection))
+    preflight = client.options(
+        "/Slot",
+        headers={
+            "Origin": "https://fhir4ds.com",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "X-Write-Key",
+        },
+    )
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == "https://fhir4ds.com"
+    assert "x-write-key" in preflight.headers["access-control-allow-headers"].lower()
+
+    read = client.get("/health", headers={"Origin": "https://fhir4ds.com"})
+    assert read.headers["access-control-allow-origin"] == "https://fhir4ds.com"
+
+
+def test_cors_disallowed_origin_gets_no_allow_header(connection, tmp_path):
+    config = ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+        publish_dir=str(tmp_path),
+        flush_autostart=False,
+        cors_origins=("https://fhir4ds.com",),
+    )
+    client = plain_client(create_app(config, connection=connection))
+    read = client.get("/health", headers={"Origin": "https://evil.example"})
+    assert "access-control-allow-origin" not in read.headers
