@@ -204,9 +204,10 @@ def load_resources(context, path: Path) -> int:
 
     connection = context.connection
     scratch = "serve_import"
+    results = []
     with context.lock:
         loader = FHIRDataLoader(connection, table_name=scratch)
-        loaded = loader.load_directory(path) if path.is_dir() else loader.load_file(path)
+        loader.load_directory(path) if path.is_dir() else loader.load_file(path)
         rows = connection.execute(f"SELECT resource FROM {scratch}").fetchall()
         connection.execute(f"DROP TABLE {scratch}")
         payload = [
@@ -231,11 +232,26 @@ def load_resources(context, path: Path) -> int:
             if (entry["resource"].get("resourceType"), entry["resource"].get("id"))
             not in present
         ]
-        imported = context.writer.import_rows(absent)
+        results = context.writer.import_rows(absent)
         # The loader's resolve() macro was bound to the scratch table; rebind it
         # to the ``resources`` view (CREATE TABLE IF NOT EXISTS is a no-op there).
         FHIRDataLoader(connection, table_name=context.config.source_table)
-    return imported if imported is not None else loaded
+
+    # Publish OUTSIDE the context lock: the flusher's definition provider
+    # re-acquires it, so flushing under the lock would deadlock.
+    # A preload is a write: one synchronous flush publishes the whole seed as
+    # a single part — the background tick would otherwise commit 50 rows at a
+    # time — and on failure the rows stay buffered for the tick.
+    flusher = getattr(context, "flusher", None)
+    if flusher is not None and results:
+        flusher.enqueue(
+            [result.publish_row for result in results if result.publish_row]
+        )
+        try:
+            flusher.flush()
+        except Exception as exc:  # noqa: BLE001 - rows stay buffered for the tick
+            print(f"fhir4ds serve: seed publish deferred to flush tick: {exc}", file=sys.stderr)
+    return len(results)
 
 
 __all__ = ["configure_parser", "run", "build_config", "load_resources"]

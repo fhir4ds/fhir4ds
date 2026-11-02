@@ -157,3 +157,28 @@ def test_seed_preload_skips_restored_resources(connection, tmp_path):
     assert restored.json()["meta"]["versionId"] == "1", (
         "the dataset version must win over the seed copy"
     )
+
+
+def test_seed_preload_publishes_to_dataset(connection, tmp_path):
+    """A preload is a write: it must reach the dataset, not only the local log.
+
+    The durability claim is exactly this: a fresh boot WITHOUT re-running
+    ``--resources`` still serves the preloaded resource, because rehydration
+    restores it from the published part.
+    """
+    from fhir4ds.cli.serve import load_resources
+
+    first = boot(connection, tmp_path)
+    seed_dir = tmp_path / "seed"
+    seed_dir.mkdir()
+    (seed_dir / "slot-seed.ndjson").write_text(json.dumps(SLOT) + "\n", encoding="utf-8")
+    assert load_resources(first.app.state.serve, seed_dir) == 1
+    # load_resources publishes synchronously: nothing stays buffered.
+    assert first.app.state.serve.flusher.pending() == 0
+    assert first.post("/admin/flush").status_code == 200
+
+    # Fresh boot, NO --resources: the dataset alone must carry the resource.
+    second = restart(connection, tmp_path)
+    read = second.get("/Slot/slot-1")
+    assert read.status_code == 200, read.text
+    assert read.json()["meta"]["versionId"] == "1"

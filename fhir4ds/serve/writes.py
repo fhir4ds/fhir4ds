@@ -360,9 +360,14 @@ class ResourceWriter:
 
     # -- import ----------------------------------------------------------
 
-    def import_rows(self, rows: Iterable[dict]) -> int:
-        """Append pre-existing resources (``--resources`` preload) to the log."""
-        imported = 0
+    def import_rows(self, rows: Iterable[dict]) -> list[WriteResult]:
+        """Append pre-existing resources (``--resources`` preload) to the log.
+
+        Returns the write results so the caller can publish them — a preload
+        is a write like any other and belongs in the dataset, not only in the
+        local log.
+        """
+        imported: list[WriteResult] = []
         for row in rows:
             resource = row.get("resource")
             if not isinstance(resource, dict):
@@ -375,10 +380,11 @@ class ResourceWriter:
                 validate_id(str(resource_id))
             except ServeError:
                 continue
-            self._append(
-                str(resource_type), str(resource_id), resource, created=True
+            imported.append(
+                self._append(
+                    str(resource_type), str(resource_id), resource, created=True
+                )
             )
-            imported += 1
         return imported
 
 

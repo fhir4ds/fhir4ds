@@ -1,0 +1,51 @@
+{
+  "resourceType": "Library",
+  "id": "free-slots-query",
+  "url": "https://example.org/Library/free_slots_query",
+  "name": "FreeSlotsQuery",
+  "status": "active",
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "type": {
+    "coding": [
+      {
+        "system": "https://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "slot_view",
+      "resource": "https://example.org/ViewDefinition/slot_view"
+    },
+    {
+      "type": "depends-on",
+      "label": "schedule_view",
+      "resource": "https://example.org/ViewDefinition/schedule_view"
+    }
+  ],
+  "parameter": [
+    {
+      "name": "status",
+      "use": "in",
+      "type": "string"
+    }
+  ],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "LS0gRnJlZSBzbG90cyB3aXRoIHRoZWlyIHNjaGVkdWxlIGNvbnRleHQsIG5ld2VzdCB3aW5kb3dzIGZpcnN0LgotLSBEZXBlbmRzIG9uIHRoZSBWaWV3RGVmaW5pdGlvbnMgc2xvdF92aWV3IGFuZCBzY2hlZHVsZV92aWV3IChieSBjYW5vbmljYWwpLgpTRUxFQ1QKICBzLnNsb3RfaWQsCiAgcy5zdGFydHNfYXQsCiAgcy5lbmRzX2F0LAogIHNjLmFjdG9yX2Rpc3BsYXksCiAgc2Muc2VydmljZV90eXBlX2Rpc3BsYXkKRlJPTSBzbG90X3ZpZXcgQVMgcwpKT0lOIHNjaGVkdWxlX3ZpZXcgQVMgc2MKICBPTiBzcGxpdF9wYXJ0KHMuc2NoZWR1bGUsICcvJywgMikgPSBzYy5zY2hlZHVsZV9pZApXSEVSRSBzLnN0YXR1cyA9ICRzdGF0dXMKT1JERVIgQlkgcy5zdGFydHNfYXQKTElNSVQgMTAwCg==",
+      "extension": [
+        {
+          "url": "https://sql-on-fhir.org/ig/StructureDefinition/sql-text",
+          "valueString": "-- Free slots with their schedule context, newest windows first.\n-- Depends on the ViewDefinitions slot_view and schedule_view (by canonical).\nSELECT\n  s.slot_id,\n  s.starts_at,\n  s.ends_at,\n  sc.actor_display,\n  sc.service_type_display\nFROM slot_view AS s\nJOIN schedule_view AS sc\n  ON split_part(s.schedule, '/', 2) = sc.schedule_id\nWHERE s.status = $status\nORDER BY s.starts_at\nLIMIT 100\n"
+        }
+      ]
+    }
+  ]
+}
