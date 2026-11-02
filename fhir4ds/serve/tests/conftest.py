@@ -13,7 +13,10 @@ import pytest
 from ._helpers import (
     LIBRARY_FIXTURES,
     RESOURCE_BUNDLE,
+    TEST_ADMIN_KEY,
+    TEST_WRITE_KEY,
     VIEWDEFINITION_FIXTURES,
+    keyed_client,
     load_json_directory,
 )
 
@@ -59,7 +62,10 @@ def app(connection, store, publish_dir):
     from fhir4ds.serve.config import ServeConfig
 
     return create_app(
-        ServeConfig(publish_dir=str(publish_dir), flush_autostart=False),
+        ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+publish_dir=str(publish_dir), flush_autostart=False),
         connection=connection,
     )
 
@@ -67,7 +73,6 @@ def app(connection, store, publish_dir):
 @pytest.fixture()
 def client(app):
     """A TestClient over the application."""
-    from fastapi.testclient import TestClient
 
-    with TestClient(app) as test_client:
+    with keyed_client(app) as test_client:
         yield test_client

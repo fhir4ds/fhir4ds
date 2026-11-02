@@ -24,6 +24,8 @@ import uuid
 
 import pytest
 
+from ._helpers import TEST_ADMIN_KEY, TEST_WRITE_KEY, keyed_client
+
 REPO = "fhir4ds/bulk-publish-demo-data"
 FHIR_JSON = {"Content-Type": "application/fhir+json"}
 
@@ -154,7 +156,6 @@ def test_publish_100_observations_then_reput_one(tmp_path):
     if not os.environ.get("HF_TOKEN"):
         pytest.skip("HF_TOKEN is required to publish")
 
-    from fastapi.testclient import TestClient
 
     from fhir4ds.serve.app import create_app
     from fhir4ds.serve.config import ServeConfig
@@ -162,6 +163,9 @@ def test_publish_100_observations_then_reput_one(tmp_path):
     run_id = uuid.uuid4().hex[:8]
     app = create_app(
         ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+
             publish_dir=str(tmp_path / "cache"),
             publish_backend="hf",
             publish_repository=REPO,
@@ -169,7 +173,7 @@ def test_publish_100_observations_then_reput_one(tmp_path):
             flush_autostart=False,
         )
     )
-    client = TestClient(app)
+    client = keyed_client(app)
 
     for index in range(100):
         response = client.post(

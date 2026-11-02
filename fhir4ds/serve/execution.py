@@ -17,6 +17,7 @@ values and bound by the SQLQuery runner's prepared statements.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable, Mapping
 from typing import Any
 
@@ -28,7 +29,7 @@ from fhir4ds.operations.capabilities.viewdefinition_run import viewdefinition_ru
 
 from . import formats, sources
 from .config import ServeContext
-from .errors import bad_request, from_diagnostics
+from .errors import Issue, ServeError, bad_request, from_diagnostics
 from .parameters import ParametersBag, ParameterSpec
 
 # -- operation parameter declarations (IG tables) ---------------------------
@@ -249,8 +250,35 @@ def _declared_parameter_names(library: Any) -> set[str] | None:
 # -- execution --------------------------------------------------------------
 
 
-def execute_operation(
-    context: ServeContext,
+@contextlib.contextmanager
+def _query_watchdog(context: ServeContext):
+    """Interrupt a query that outlives ``query_timeout_seconds``.
+
+    DuckDB has no statement timeout; the watchdog arms a timer before the
+    query enters the connection lock and fires ``connection.interrupt()`` from
+    its own thread, which makes the query raise. The raised error is mapped
+    to a 408 by the caller-facing error handler.
+    """
+    import threading as _threading
+
+    seconds = context.config.query_timeout_seconds
+
+    def _fire() -> None:
+        try:
+            context.connection.interrupt()
+        except Exception:  # noqa: BLE001 - best-effort interruption
+            pass
+
+    timer = _threading.Timer(float(seconds), _fire)
+    timer.daemon = True
+    timer.start()
+    try:
+        yield
+    finally:
+        timer.cancel()
+
+
+def execute_operation(    context: ServeContext,
     bag: ParametersBag,
     *,
     parameter_specs: tuple[ParameterSpec, ...],
@@ -262,12 +290,57 @@ def execute_operation(
     # Format first: an unsupported _format is a 400 and must not run SQL.
     output_format = formats.negotiate_format(bag.code(FORMAT_PARAMETER), accept)
     header = bag.boolean(HEADER_PARAMETER)
-    limit = context.config.capped_limit(bag.integer(LIMIT_PARAMETER))
+    limit = bag.integer(LIMIT_PARAMETER)
+    if limit is None:
+        # Server default: an omitted _limit must not serialize an unbounded
+        # result (the cap is spec-allowed); explicit values are capped by config.
+        limit = min(context.config.default_limit, context.config.max_rows)
+    else:
+        limit = context.config.capped_limit(limit)
     source_table = resolve_source_table(context, bag)
 
-    result = context.run_locked(run, source_table, limit)
+    with _query_watchdog(context):
+        try:
+            result = context.run_locked(run, source_table, limit)
+        except Exception as exc:  # noqa: BLE001 - classified immediately below
+
+            if type(exc).__name__ == "InterruptException":
+                raise ServeError(
+                    408,
+                    [
+                        Issue(
+                            code="timeout",
+                            diagnostics=(
+                                f"query exceeded the server limit of "
+                                f"{context.config.query_timeout_seconds:g}s and was interrupted"
+                            ),
+                        )
+                    ],
+                ) from None
+            raise
 
     if not result.ok:
+        # The watchdog's interrupt surfaces here: capability layers convert
+        # the engine exception into a failed result carrying the type name in
+        # the structured ``detail`` field. Map it to 408 instead of a bare 422
+        # so a timeout reads as a timeout.
+        if any(
+            isinstance(getattr(item, "detail", None), str)
+            and getattr(item, "detail", "").endswith("InterruptException")
+            for item in result.diagnostics
+        ):
+            raise ServeError(
+                408,
+                [
+                    Issue(
+                        code="timeout",
+                        diagnostics=(
+                            f"query exceeded the server limit of "
+                            f"{context.config.query_timeout_seconds:g}s and was interrupted"
+                        ),
+                    )
+                ],
+            )
         raise from_diagnostics(result.diagnostics)
 
     body, content_type = formats.serialize(

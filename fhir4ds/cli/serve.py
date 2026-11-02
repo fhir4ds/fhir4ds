@@ -12,6 +12,7 @@ Status lines go to stderr so stdout stays free for structured output.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -110,6 +111,21 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
         help="uvicorn logging configuration (JSON/YAML/INI). The container "
         "passes one that writes to stdout instead of uvicorn's default stderr",
     )
+    parser.add_argument(
+        "--admin-key",
+        default=os.environ.get("FHIR4DS_ADMIN_KEY"),
+        help="admin API key (env FHIR4DS_ADMIN_KEY; grants everything incl. key management)",
+    )
+    parser.add_argument(
+        "--write-key",
+        default=os.environ.get("FHIR4DS_WRITE_KEY"),
+        help="bootstrap write API key (env FHIR4DS_WRITE_KEY; more via POST /admin/key)",
+    )
+    parser.add_argument(
+        "--key-store",
+        default=os.environ.get("FHIR4DS_KEY_STORE"),
+        help="JSON file persisting runtime-added write keys (use persistent storage)",
+    )
 
 
 def build_config(args: argparse.Namespace) -> ServeConfig:
@@ -134,6 +150,9 @@ def build_config(args: argparse.Namespace) -> ServeConfig:
         publish_backend=args.publish_backend,
         publish_repository=args.publish_repository,
         publisher=args.publisher,
+        admin_key=args.admin_key,
+        write_key=args.write_key,
+        key_store=args.key_store,
     )
 
 

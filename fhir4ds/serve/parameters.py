@@ -43,6 +43,28 @@ VALUE_FIELDS_BY_TYPE: dict[str, tuple[str, ...]] = {
 RESOURCE_VALUED_TYPES = frozenset({"resource", "parameters"})
 
 
+def _coerce_query_value(raw: Any, spec: ParameterSpec) -> Any:
+    """Coerce one query-string scalar to its declared FHIR value type."""
+    text = raw if isinstance(raw, str) else str(raw)
+    if spec.value_type == "integer":
+        try:
+            return int(text)
+        except ValueError:
+            raise bad_request(
+                f"query parameter {spec.name!r} must be an integer; got {text!r}",
+                expression=[spec.name],
+            ) from None
+    if spec.value_type == "boolean":
+        lowered = text.lower()
+        if lowered in ("true", "false"):
+            return lowered == "true"
+        raise bad_request(
+            f"query parameter {spec.name!r} must be true/false; got {text!r}",
+            expression=[spec.name],
+        )
+    return text
+
+
 @dataclass(frozen=True)
 class ParameterSpec:
     """One declared operation parameter."""
@@ -69,6 +91,7 @@ class ParametersBag:
     # -- construction ----------------------------------------------------
 
     @classmethod
+    @classmethod
     def from_body(cls, body: Any, *, label: str = "request body") -> ParametersBag:
         """Parse a request body into a bag.
 
@@ -76,6 +99,95 @@ class ParametersBag:
         a JSON string, or an already-decoded dict (FastAPI decodes
         ``application/json`` / ``application/fhir+json`` bodies itself).
         """
+        payload = decode_json_body(body, label=label)
+        if payload is None:
+            return cls({})
+        if not isinstance(payload, dict):
+            raise bad_request(
+                f"{label} must be a FHIR Parameters resource; got {type(payload).__name__}",
+                code="structure",
+            )
+        resource_type = payload.get("resourceType")
+        if resource_type != "Parameters":
+            raise bad_request(
+                f"{label} must be a FHIR Parameters resource; got resourceType "
+                f"{resource_type!r}",
+                code="structure",
+            )
+        raw_parameters = payload.get("parameter")
+        if raw_parameters is None:
+            return cls({})
+        if not isinstance(raw_parameters, list):
+            raise bad_request(
+                "Parameters.parameter must be an array", expression=["parameter"], code="structure"
+            )
+        entries: dict[str, dict] = {}
+        for index, entry in enumerate(raw_parameters):
+            where = [f"parameter[{index}]"]
+            if not isinstance(entry, dict):
+                raise bad_request(
+                    f"{label} parameter[{index}] must be an object",
+                    expression=where,
+                    code="structure",
+                )
+            name = entry.get("name")
+            if not isinstance(name, str) or not name:
+                raise bad_request(
+                    f"{label} parameter[{index}].name must be a non-empty string",
+                    expression=where + ["name"],
+                    code="structure",
+                )
+            if name in entries:
+                raise bad_request(
+                    f"parameter {name!r} appears more than once in {label}",
+                    expression=where,
+                    code="invalid",
+                )
+            entries[name] = entry
+        return cls(entries)
+
+    def merge_query(
+        self, query: Any, specs: tuple[ParameterSpec, ...]
+    ) -> ParametersBag:
+        """Overlay query-string operation parameters onto this bag.
+
+        FHIR convention: operation parameters may arrive in the query string
+        (``?_format=csv&_limit=2&status=free``). A name present in both the
+        body and the query string is an ambiguity and a 400 — the body does
+        not silently win. Values are strings, coerced to the parameter's
+        declared type; resource-valued parameters (``queryResource`` etc.)
+        cannot arrive by query string and are rejected. Unknown query names
+        are ignored (query strings may carry parameters this surface does not
+        define).
+        """
+        spec_by_name = {spec.name: spec for spec in specs}
+        additions: dict[str, dict] = {}
+        for raw_name, raw_value in query.multi_items() if hasattr(query, "multi_items") else query.items():
+            name = str(raw_name)
+            if name in additions:
+                continue
+            if name in self._entries:
+                raise bad_request(
+                    f"parameter {name!r} appears in both the body and the "
+                    "query string; specify it once",
+                    expression=[name],
+                )
+            spec = spec_by_name.get(name)
+            if spec is None or not spec.supported:
+                continue
+            if not VALUE_FIELDS_BY_TYPE[spec.value_type]:
+                raise bad_request(
+                    f"parameter {name!r} carries a resource and cannot be "
+                    "passed in the query string",
+                    expression=[name],
+                )
+            value_field = VALUE_FIELDS_BY_TYPE[spec.value_type][0]
+            additions[name] = {value_field: _coerce_query_value(raw_value, spec)}
+        return ParametersBag({**self._entries, **additions})
+
+    @classmethod
+    @classmethod
+    def _from_body_impl(cls, body: Any, label: str) -> ParametersBag:
         payload = decode_json_body(body, label=label)
         if payload is None:
             return cls({})

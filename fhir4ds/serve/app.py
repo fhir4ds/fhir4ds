@@ -67,6 +67,16 @@ def create_app(
     with context.lock:
         context.store.ensure_schema()
 
+    # API-key tiers (see auth.py). Fail-closed: a tier without a key answers
+    # 401 for everyone, and the boot log states which tiers are active.
+    from .auth import KeyRegistry
+
+    context.keys = KeyRegistry(
+        admin_key=settings.admin_key,
+        write_key=settings.write_key,
+        key_store=settings.key_store,
+    )
+
     # Phase 3: the versioned log, the publish store, and the flush loop. Built
     # before the app so the lifespan can shut the flush thread down.
     writes_router = _configure_writes(context, settings) if settings.writes_enabled else None
@@ -78,6 +88,15 @@ def create_app(
         lifespan=_lifespan(context),
     )
     app.state.serve = context
+
+    # The guard wraps everything: body cap + tier enforcement before routing.
+    from .guard import GuardMiddleware
+
+    app.add_middleware(
+        GuardMiddleware,
+        registry=context.keys,
+        max_request_bytes=settings.max_request_bytes,
+    )
 
     for router in ROUTERS:
         app.include_router(router)

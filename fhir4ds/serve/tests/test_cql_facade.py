@@ -26,6 +26,8 @@ from fhir4ds.serve.routes.cql import (
     facade_config,
 )
 
+from ._helpers import TEST_ADMIN_KEY, TEST_WRITE_KEY, keyed_client
+
 
 def cql_body(expression: str) -> dict:
     """A minimal ``$cql`` request: one ``expression`` valueString."""
@@ -86,7 +88,10 @@ def get_json(url: str) -> dict:
 
 
 def test_cql_mount_path_matches_the_facade_config():
-    config = facade_config(ServeConfig())
+    config = facade_config(ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+))
     assert CQL_PATH in config.cql_paths
     assert CQL_PATH == "/fhir/$cql"
 
@@ -106,9 +111,12 @@ def test_cql_rejects_an_oversized_body(connection, store):
     from fhir4ds.serve.app import create_app
 
     app = create_app(
-        ServeConfig(cql_max_request_bytes=64), connection=connection
+        ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+cql_max_request_bytes=64), connection=connection
     )
-    client = TestClient(app)
+    client = keyed_client(app)
     response = client.post(CQL_PATH, json=cql_body("'" + "x" * 200 + "'"))
     assert response.status_code == 413
     assert response.json()["resourceType"] == "OperationOutcome"
@@ -190,8 +198,11 @@ def test_cql_definition_matches_the_stdlib_facade_metadata(client, facade_server
 def test_cql_is_not_advertised_when_the_facade_is_disabled(connection, store):
     from fhir4ds.serve.app import create_app
 
-    app = create_app(ServeConfig(cql_facade=False), connection=connection)
-    client = TestClient(app)
+    app = create_app(ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+cql_facade=False), connection=connection)
+    client = keyed_client(app)
 
     names = {entry["name"] for entry in _operations(client.get("/metadata").json())}
     assert CQL_OPERATION not in names

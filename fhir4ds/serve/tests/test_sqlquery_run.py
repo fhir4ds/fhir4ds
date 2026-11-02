@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 
 import pytest
-from fastapi.testclient import TestClient
 
 from ._helpers import (
     LIBRARY_FIXTURES,
     SQLONFHIR_PARAMETERS,
+    TEST_ADMIN_KEY,
+    TEST_WRITE_KEY,
+    keyed_client,
     library_with_dependency,
     load_json_directory,
     parameter_body,
@@ -258,8 +260,11 @@ def test_limit_above_the_server_cap_is_not_an_error(connection, store):
     from fhir4ds.serve.app import create_app
     from fhir4ds.serve.config import ServeConfig
 
-    capped_app = create_app(ServeConfig(max_rows=1), connection=connection)
-    with TestClient(capped_app) as capped_client:
+    capped_app = create_app(ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+max_rows=1), connection=connection)
+    with keyed_client(capped_app) as capped_client:
         response = capped_client.post(
             "/Library/SqlOnFhirExample/$sqlquery-run",
             json=sqlonfhir_body({"name": "_limit", "valueInteger": 500}),

@@ -92,6 +92,13 @@ class ServeConfig:
     flush_interval_seconds: float = 30.0
     flush_batch_size: int = 50
     flush_autostart: bool = True
+    admin_key: str | None = None
+    write_key: str | None = None
+    key_store: str | None = None
+    max_request_bytes: int = 10_000_000
+    query_timeout_seconds: float = 30.0
+    max_waiting_requests: int = 5
+    default_limit: int = 1_000
 
     def __post_init__(self) -> None:
         if not isinstance(self.host, str) or not self.host:
@@ -138,6 +145,24 @@ class ServeConfig:
             raise ValueError("flush_interval_seconds must be >= 0")
         if self.flush_batch_size < 1:
             raise ValueError("flush_batch_size must be >= 1")
+        for key_field in ("admin_key", "write_key"):
+            value = getattr(self, key_field)
+            if value is not None and (not isinstance(value, str) or not value):
+                raise ValueError(f"{key_field} must be a non-empty string or None")
+        if self.key_store is not None and (
+            not isinstance(self.key_store, str) or not self.key_store
+        ):
+            raise ValueError("key_store must be a non-empty string or None")
+        for int_field in ("max_request_bytes", "max_waiting_requests", "default_limit"):
+            value = getattr(self, int_field)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                raise ValueError(f"{int_field} must be a positive integer")
+        if not isinstance(self.query_timeout_seconds, (int, float)) or isinstance(
+            self.query_timeout_seconds, bool
+        ):
+            raise ValueError("query_timeout_seconds must be a number")
+        if self.query_timeout_seconds <= 0:
+            raise ValueError("query_timeout_seconds must be > 0")
 
     def source_table_for(self, source: str | None) -> str:
         """Resolve the ``source`` operation parameter to a physical table.
@@ -196,10 +221,59 @@ class ServeContext:
     writer: Any = None
     flusher: Any = None
 
+    #: API-key registry (set by create_app; None until then).
+    keys: Any = None
+    #: Concurrency gate bookkeeping (see run_locked).
+    _gate_depth: threading.local = field(default_factory=threading.local)
+    _gate: Any = None
+    _gate_lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def _try_gate(self) -> bool:
+        with self._gate_lock:
+            if self._gate is None:
+                self._gate = threading.Semaphore(
+                    max(1, int(self.config.max_waiting_requests))
+                )
+            return self._gate.acquire(blocking=False)
+
+    def _release_gate(self) -> None:
+        with self._gate_lock:
+            self._gate.release()
+
     def run_locked(self, function: Any, *args: Any, **kwargs: Any) -> Any:
-        """Call ``function`` while holding the connection lock."""
-        with self.lock:
-            return function(*args, **kwargs)
+        """Call ``function`` while holding the connection lock.
+
+        A bounded number of requests may wait for the lock; beyond that the
+        call fails fast with 503 instead of piling onto an unbounded queue.
+        Reentrant calls (a locked function calling ``run_locked`` again on the
+        same thread) pass through so nested helpers keep working.
+        """
+        from .errors import Issue, ServeError
+
+        depth = getattr(self._gate_depth, "value", 0)
+        acquired = depth == 0 and self._try_gate()
+        if depth == 0 and not acquired:
+            limit = max(1, int(self.config.max_waiting_requests))
+            raise ServeError(
+                503,
+                [
+                    Issue(
+                        code="busy",
+                        diagnostics=(
+                            "server is busy; retry shortly "
+                            f"(more than {limit} requests are waiting)"
+                        ),
+                    )
+                ],
+            )
+        try:
+            self._gate_depth.value = depth + 1
+            with self.lock:
+                return function(*args, **kwargs)
+        finally:
+            self._gate_depth.value = depth
+            if acquired:
+                self._release_gate()
 
 
 def context_for(request: Any) -> ServeContext:

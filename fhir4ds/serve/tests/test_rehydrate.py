@@ -21,6 +21,8 @@ from fhir4ds.serve.config import ServeConfig
 from fhir4ds.serve.store import REGISTRY_TABLE
 from fhir4ds.serve.versioning import BASE_TABLE
 
+from ._helpers import TEST_ADMIN_KEY, TEST_WRITE_KEY, keyed_client
+
 SLOT = {
     "resourceType": "Slot",
     "id": "slot-1",
@@ -54,10 +56,13 @@ def connection():
 def boot(connection, publish_dir) -> TestClient:
     """Create an app against this connection and the (surviving) publish dir."""
     app = create_app(
-        ServeConfig(publish_dir=str(publish_dir), flush_autostart=False),
+        ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+publish_dir=str(publish_dir), flush_autostart=False),
         connection=connection,
     )
-    return TestClient(app)
+    return keyed_client(app)
 
 
 def restart(connection, publish_dir) -> TestClient:

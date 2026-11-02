@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import duckdb
 import pytest
-from fastapi.testclient import TestClient
 
 from fhir4ds.serve.app import create_app
 from fhir4ds.serve.config import ServeConfig
+
+from ._helpers import TEST_ADMIN_KEY, TEST_WRITE_KEY, keyed_client
 
 FHIR_JSON = {"Content-Type": "application/fhir+json"}
 
@@ -28,10 +29,13 @@ def connection():
 @pytest.fixture()
 def client(connection, tmp_path):
     app = create_app(
-        ServeConfig(publish_dir=str(tmp_path / "publish"), flush_autostart=False),
+        ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+publish_dir=str(tmp_path / "publish"), flush_autostart=False),
         connection=connection,
     )
-    return TestClient(app)
+    return keyed_client(app)
 
 
 def patient(resource_id: str, *, system: str | None = "urn:mrn", value: str = "A1") -> dict:

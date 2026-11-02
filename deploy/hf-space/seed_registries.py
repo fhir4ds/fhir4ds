@@ -13,6 +13,7 @@ process and must stay up even if seeding cannot reach it.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -22,10 +23,12 @@ SEED_DIR = Path(__file__).resolve().parent / "data" / "seed"
 RESOURCE_TYPE_ORDER = ("ViewDefinition", "Library")
 
 
-def request(base_url: str, path: str, payload: dict | None = None) -> tuple[int, str]:
+def request(base_url: str, path: str, payload: dict | None = None, admin_key: str = "") -> tuple[int, str]:
     """GET (payload None) or POST one registry resource; return (status, note)."""
     body = json.dumps(payload).encode("utf-8") if payload is not None else None
     headers = {"Content-Type": "application/fhir+json"} if body else {}
+    if admin_key:
+        headers["X-Admin-Key"] = admin_key
     req = urllib.request.Request(base_url + path, data=body, headers=headers,
                                  method="POST" if body else "GET")
     try:
@@ -40,6 +43,9 @@ def request(base_url: str, path: str, payload: dict | None = None) -> tuple[int,
 
 def main(argv: list[str]) -> int:
     base_url = (argv[1] if len(argv) > 1 else "http://127.0.0.1:7860").rstrip("/")
+    # Definition POSTs are admin-tier; the Space exposes ADMIN_KEY as an env
+    # secret, which this boot-side script (inside the container) may use.
+    admin_key = os.environ.get("ADMIN_KEY", "")
     if not SEED_DIR.is_dir():
         print(f"seed: {SEED_DIR} not found; nothing to seed")
         return 0
@@ -73,7 +79,7 @@ def main(argv: list[str]) -> int:
             failures += 1
             continue
 
-        status, note = request(base_url, f"/{resource_type}", resource)
+        status, note = request(base_url, f"/{resource_type}", resource, admin_key)
         if status in (200, 201):
             print(f"seed: {status} {resource_type}/{resource_id}")
         else:

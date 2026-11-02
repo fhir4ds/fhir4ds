@@ -115,3 +115,22 @@ def parameter_body(values: dict[str, str]) -> dict:
             ),
         }
     )
+
+
+#: Shared API keys for tests (the guard is fail-closed without them).
+TEST_ADMIN_KEY = "test-admin-key-0123456789"
+TEST_WRITE_KEY = "test-write-key-0123456789"
+
+TEST_KEY_HEADERS = {
+    "X-Admin-Key": TEST_ADMIN_KEY,
+    "X-Write-Key": TEST_WRITE_KEY,
+}
+
+
+def keyed_client(app):
+    """A TestClient whose requests carry the shared test keys."""
+    from fastapi.testclient import TestClient
+
+    client = TestClient(app)
+    client.headers.update(TEST_KEY_HEADERS)
+    return client

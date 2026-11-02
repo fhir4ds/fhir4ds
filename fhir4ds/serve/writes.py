@@ -391,9 +391,21 @@ class ResourceWriter:
 # -- helpers -----------------------------------------------------------------
 
 
+#: FHIR resource type names are UpperCamel ASCII (shape check at writes).
+RESOURCE_TYPE_PATTERN = re.compile(r"^[A-Z][A-Za-z0-9]{1,63}$")
+
+
 def _require_type(resource: Any, resource_type: str) -> None:
     if not isinstance(resource, dict):
         raise bad_request("Request body must be a FHIR resource", code="structure")
+    # Type names become part of the stored log and published dataset; reject
+    # obvious garbage at the boundary instead of persisting it forever.
+    if not RESOURCE_TYPE_PATTERN.match(resource_type):
+        raise bad_request(
+            f"{resource_type!r} is not a valid FHIR resource type name "
+            "(UpperCamel ASCII letters/digits)",
+            expression=["resourceType"],
+        )
     body_type = resource.get("resourceType")
     if body_type != resource_type:
         raise bad_request(
@@ -571,6 +583,40 @@ def bulk_publish_manifest(request: Request) -> Response:
     manifest = flusher.manifest(str(request.base_url).rstrip("/"))
     return Response(
         content=json.dumps(manifest, ensure_ascii=False),
+        media_type="application/json",
+    )
+
+
+@router.post("/admin/key", summary="Manage write keys (admin tier)")
+def manage_keys(request: Request, body: Any | None = Body(default=None)) -> Response:
+    """Add or revoke a labeled write key. Admin key required (guard-enforced).
+
+    Body: ``{"action": "add"|"revoke", "label": "...", "key": "..." (add only)}``.
+    Runtime-added keys persist to the configured key store; the registry can
+    never drop to zero write keys.
+    """
+    from .auth import AuthError
+
+    payload = _decode(request, body)
+    action = payload.get("action")
+    label = payload.get("label")
+    registry = context_for(request).keys
+    try:
+        if action == "add":
+            registry.add_write_key(label, payload.get("key"))
+        elif action == "revoke":
+            registry.revoke_write_key(label)
+        else:
+            raise bad_request(
+                "action must be 'add' or 'revoke'", expression=["action"]
+            )
+    except AuthError as exc:
+        raise unprocessable(str(exc)) from None
+    return Response(
+        content=json.dumps(
+            {"action": action, "label": label, "write_keys": registry.write_key_labels()},
+            ensure_ascii=False,
+        ),
         media_type="application/json",
     )
 

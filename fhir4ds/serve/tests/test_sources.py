@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from fhir4ds.serve.app import create_app
 from fhir4ds.serve.config import ServeConfig
 
-from ._helpers import RESOURCE_BUNDLE, parameters
+from ._helpers import RESOURCE_BUNDLE, TEST_ADMIN_KEY, TEST_WRITE_KEY, keyed_client, parameters
 
 VIEW_PATH = "/ViewDefinition/patient-view/$run"
 
@@ -33,8 +33,11 @@ def data_root(tmp_path):
 
 
 def _app(connection, **config_kwargs) -> TestClient:
-    app = create_app(ServeConfig(**config_kwargs), connection=connection)
-    return TestClient(app)
+    app = create_app(ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+**config_kwargs), connection=connection)
+    return keyed_client(app)
 
 
 def _source(value: str) -> dict:
@@ -135,12 +138,15 @@ def test_path_resolution_never_escapes_the_root(connection, store, data_root):
 
 def test_concurrent_path_source_requests_load_once(connection, store, data_root):
     """The load happens under the connection lock, once, even under races."""
-    app = create_app(ServeConfig(data_root=str(data_root)), connection=connection)
+    app = create_app(ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+data_root=str(data_root)), connection=connection)
     results: list[int] = []
 
     def call() -> None:
         # A client per thread: httpx clients are not safe to share.
-        results.append(TestClient(app).post(VIEW_PATH, json=_source(str(data_root))).status_code)
+        results.append(keyed_client(app).post(VIEW_PATH, json=_source(str(data_root))).status_code)
 
     threads = [threading.Thread(target=call) for _ in range(4)]
     for thread in threads:

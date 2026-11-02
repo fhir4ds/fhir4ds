@@ -13,14 +13,16 @@ PORT="${PORT:-7860}"
 APP_DIR=/home/user/app
 DATASET="${DATASET:-fhir4ds/bulk-publish-demo-data}"
 
-# Persistent storage, when enabled, mounts /data owned by UID 1000: keep the
-# publish cache (dataset snapshot) there so restarts reuse it. Without it,
-# /tmp works — meta/state.json lives in the Hub repo, so _seq still survives.
+# API keys arrive as Space secrets; the key store persists runtime-added
+# write keys across restarts (persistent storage mounts /data for UID 1000).
+KEY_STORE=/data/serve-keys.json
 if [ -d /data ] && [ -w /data ]; then
+    mkdir -p /data
     PUBLISH_DIR=/data/publish
     mkdir -p "$PUBLISH_DIR"
 else
     PUBLISH_DIR=/tmp/fhir4ds-publish
+    KEY_STORE=/tmp/serve-keys.json
 fi
 
 python -m fhir4ds.serve \
@@ -31,6 +33,9 @@ python -m fhir4ds.serve \
     --publish-backend hf \
     --publish-repository "$DATASET" \
     --publish-dir "$PUBLISH_DIR" \
+    --admin-key "${ADMIN_KEY:-}" \
+    --write-key "${WRITE_KEY:-}" \
+    --key-store "$KEY_STORE" \
     --log-config "$APP_DIR/uvicorn-log.json" &
 server_pid=$!
 
@@ -44,7 +49,6 @@ server_pid=$!
         sleep 1
     done
     python "$APP_DIR/seed_registries.py" "http://127.0.0.1:${PORT}" \
-        || echo "seed: demo registries not seeded (surface stays up)"
-) &
+        || echo "seed: demo registries not seeded (surface stays up)") &
 
 wait "$server_pid"
