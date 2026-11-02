@@ -225,6 +225,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'examples/serve-api',
+          label: 'FHIR REST API',
+        },
+        {
+          type: 'doc',
           id: 'examples/notebooks',
           label: 'Notebooks',
         },

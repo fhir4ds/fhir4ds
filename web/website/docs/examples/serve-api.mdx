@@ -1,0 +1,511 @@
+---
+id: serve-api
+title: FHIR REST API
+sidebar_label: FHIR REST API
+description: Write FHIR resources to the public FHIR4DS demo server, execute ViewDefinitions and SQL-on-FHIR queries with parameters, and read results back — live, with runnable examples.
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import TryIt from '@site/src/components/ServeApi/TryIt';
+
+# FHIR REST API
+
+Every example on this page runs **live** against the public demo server,
+**[bulk-publish-demo-server](https://fhir4ds-bulk-publish-demo-server.hf.space)** —
+a FHIR4DS instance seeded with the SMART Scheduling Links example dataset
+(11.5k `Slot`, 25 `Schedule`, plus `Location`, `PractitionerRole`, `Device`).
+Press **Run** and the real request executes from your browser; no setup, no key
+needed for reads.
+
+The API has two tiers:
+
+| Tier | What | Authentication |
+| --- | --- | --- |
+| **Open** | Reads, search, `_history`, running *stored* ViewDefinitions and SQL queries | None |
+| **Write** | `POST`/`PUT`/`DELETE` resources, `POST /Bundle`, flush | `X-Write-Key` header |
+
+The dataset behind the server stays private; this API is the window onto it.
+Every write is versioned and published to an append-only parquet dataset, so
+results survive server restarts.
+
+<Tabs>
+<TabItem value="curl" label="curl" default>
+
+```bash title="Setup (curl)"
+BASE="https://fhir4ds-bulk-publish-demo-server.hf.space"
+WRITE_KEY="<your-write-key>"   # request one from the demo maintainers
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python title="Setup (Python)"
+import requests
+
+BASE = "https://fhir4ds-bulk-publish-demo-server.hf.space"
+WRITE_KEY = "<your-write-key>"  # request one from the demo maintainers
+```
+
+</TabItem>
+<TabItem value="javascript" label="JavaScript">
+
+```javascript title="Setup (JavaScript)"
+const BASE = "https://fhir4ds-bulk-publish-demo-server.hf.space";
+const WRITE_KEY = "<your-write-key>"; // request one from the demo maintainers
+```
+
+</TabItem>
+</Tabs>
+
+## Discover the server
+
+Every FHIR conversation starts at the CapabilityStatement.
+
+<TryIt method="GET" path="/metadata" label="CapabilityStatement" />
+
+<TryIt method="GET" path="/health" label="health" />
+
+<Tabs>
+<TabItem value="curl" label="curl" default>
+
+```bash
+curl "$BASE/metadata" | jq '.fhirVersion, .rest[0].resource[].type'
+curl "$BASE/health"
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+capability = requests.get(f"{BASE}/metadata").json()
+print(capability["fhirVersion"])  # 4.0.1
+print([r["type"] for r in capability["rest"][0]["resource"]])
+```
+
+</TabItem>
+<TabItem value="javascript" label="JavaScript">
+
+```javascript
+const capability = await (await fetch(`${BASE}/metadata`)).json();
+console.log(capability.fhirVersion); // 4.0.1
+```
+
+</TabItem>
+</Tabs>
+
+## Post a resource
+
+Create a `Slot` (any FHIR resource type works — `Schedule`, `Patient`, …).
+The server assigns a version id and returns it as an `ETag`. Enter a write key
+below and run it for real — the resource lands on the demo server and appears
+in every later example on this page.
+
+<TryIt
+  method="POST"
+  path="/Slot"
+  label="create a Slot"
+  needsKey={true}
+  body={JSON.stringify({
+    resourceType: 'Slot',
+    id: 'docs-walkin-001',
+    status: 'free',
+    start: '2027-03-05T09:00:00Z',
+    end: '2027-03-05T09:30:00Z',
+    schedule: { reference: 'Schedule/10' },
+  })}
+/>
+
+<Tabs>
+<TabItem value="curl" label="curl" default>
+
+```bash
+curl -X POST "$BASE/Slot" \
+  -H "X-Write-Key: $WRITE_KEY" \
+  -H "Content-Type: application/fhir+json" \
+  -d '{
+    "resourceType": "Slot",
+    "id": "walkin-001",
+    "status": "free",
+    "start": "2027-03-05T09:00:00Z",
+    "end": "2027-03-05T09:30:00Z",
+    "schedule": {"reference": "Schedule/10"}
+  }'
+# HTTP/1.1 201 Created
+# ETag: W/"11630"
+# Location: Slot/walkin-001
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+slot = {
+    "resourceType": "Slot",
+    "id": "walkin-001",
+    "status": "free",
+    "start": "2027-03-05T09:00:00Z",
+    "end": "2027-03-05T09:30:00Z",
+    "schedule": {"reference": "Schedule/10"},
+}
+created = requests.post(
+    f"{BASE}/Slot", json=slot, headers={"X-Write-Key": WRITE_KEY},
+)
+print(created.status_code, created.headers["ETag"])  # 201 W/"11630"
+```
+
+</TabItem>
+<TabItem value="javascript" label="JavaScript">
+
+```javascript
+const created = await fetch(`${BASE}/Slot`, {
+  method: "POST",
+  headers: { "Content-Type": "application/fhir+json", "X-Write-Key": WRITE_KEY },
+  body: JSON.stringify({
+    resourceType: "Slot",
+    id: "walkin-001",
+    status: "free",
+    start: "2027-03-05T09:00:00Z",
+    end: "2027-03-05T09:30:00Z",
+    schedule: { reference: "Schedule/10" },
+  }),
+});
+console.log(created.status, created.headers.get("ETag")); // 201 W/"11630"
+```
+
+</TabItem>
+</Tabs>
+
+:::note No key, no writes
+Posting without a valid `X-Write-Key` returns `401` with a FHIR
+`OperationOutcome` — try the runner above with an empty key field. Reads never
+need a key.
+:::
+
+## Read, search, and history
+
+Anyone can read what has been written — run these anonymously:
+
+<TryIt method="GET" path="/Slot?status=free&_count=5" label="search free slots" />
+
+<TryIt method="GET" path="/Slot/docs-walkin-001/_history" label="history" />
+
+<Tabs>
+<TabItem value="curl" label="curl" default>
+
+```bash
+curl "$BASE/Slot/walkin-001"                  # read one (no key needed)
+curl "$BASE/Slot?status=free&_count=5"        # search with paging
+curl "$BASE/Schedule?_count=5"
+curl "$BASE/Slot/walkin-001/_history"         # versions, newest first
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+read = requests.get(f"{BASE}/Slot/walkin-001").json()
+search = requests.get(f"{BASE}/Slot", params={"status": "free", "_count": 5}).json()
+print(search["total"])
+history = requests.get(f"{BASE}/Slot/walkin-001/_history").json()
+```
+
+</TabItem>
+<TabItem value="javascript" label="JavaScript">
+
+```javascript
+const search = await (
+  await fetch(`${BASE}/Slot?status=free&_count=5`)
+).json();
+console.log(search.total);
+```
+
+</TabItem>
+</Tabs>
+
+## Update and delete (optimistic locking)
+
+Updates are versioned. Send `If-Match` with the `ETag` you received; a stale
+version is rejected with `412`. Deletes tombstone the resource (`410` on read)
+but `_history` keeps every version.
+
+<Tabs>
+<TabItem value="curl" label="curl" default>
+
+```bash
+curl -X PUT "$BASE/Slot/walkin-001" \
+  -H "X-Write-Key: $WRITE_KEY" -H "Content-Type: application/fhir+json" \
+  -H 'If-Match: W/"11630"' \
+  -d '{ ...same slot, status now "busy"... }'
+# HTTP/1.1 200 OK   ETag: W/"11631"
+
+curl -X DELETE -H "X-Write-Key: $WRITE_KEY" "$BASE/Slot/walkin-001"
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+updated = requests.put(
+    f"{BASE}/Slot/walkin-001",
+    json={**slot, "status": "busy"},
+    headers={"X-Write-Key": WRITE_KEY, "If-Match": created.headers["ETag"]},
+)
+requests.delete(f"{BASE}/Slot/walkin-001", headers={"X-Write-Key": WRITE_KEY})
+print(requests.get(f"{BASE}/Slot/walkin-001").status_code)  # 410
+```
+
+</TabItem>
+<TabItem value="javascript" label="JavaScript">
+
+```javascript
+const updated = await fetch(`${BASE}/Slot/walkin-001`, {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/fhir+json",
+    "X-Write-Key": WRITE_KEY,
+    "If-Match": created.headers.get("ETag"),
+  },
+  body: JSON.stringify({ ...slot, status: "busy" }),
+});
+```
+
+</TabItem>
+</Tabs>
+
+## Execute a stored ViewDefinition
+
+The server ships two stored views — `slot-view` (one row per `Slot`) and
+`schedule-view` (one row per `Schedule`). Running them is an open `POST`; the
+query string carries operation parameters (`_format`, `_limit`, `header`):
+
+<TryIt method="POST" path="/ViewDefinition/slot-view/$run?_format=json&_limit=3" label="run slot-view" />
+
+<Tabs>
+<TabItem value="curl" label="curl" default>
+
+```bash
+curl -X POST "$BASE/ViewDefinition/slot-view/\$run?_limit=3"              # ndjson
+curl -X POST "$BASE/ViewDefinition/slot-view/\$run?_format=csv&_limit=3"  # csv
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+rows = requests.post(f"{BASE}/ViewDefinition/slot-view/$run?_limit=3").json()
+for row in rows:
+    print(row["slot_id"], row["status"], row["starts_at"])
+```
+
+</TabItem>
+<TabItem value="javascript" label="JavaScript">
+
+```javascript
+const rows = await (
+  await fetch(`${BASE}/ViewDefinition/slot-view/$run?_limit=3`)
+).json();
+rows.forEach((row) => console.log(row.slot_id, row.status, row.starts_at));
+```
+
+</TabItem>
+</Tabs>
+
+## Execute a SQL-on-FHIR query with parameters
+
+The stored `free-slots-query` joins both views and takes a `status` parameter.
+Runtime parameter values arrive as a **nested** `Parameters` resource:
+
+<TryIt
+  method="POST"
+  path="/Library/free-slots-query/$sqlquery-run?_format=json&_limit=3"
+  label="free-slots-query, status=free"
+  body={JSON.stringify({
+    resourceType: 'Parameters',
+    parameter: [
+      {
+        name: 'parameters',
+        resource: {
+          resourceType: 'Parameters',
+          parameter: [{ name: 'status', valueString: 'free' }],
+        },
+      },
+    ],
+  })}
+/>
+
+<Tabs>
+<TabItem value="curl" label="curl" default>
+
+```bash
+curl -X POST "$BASE/Library/free-slots-query/\$sqlquery-run?_format=json&_limit=3" \
+  -H "Content-Type: application/fhir+json" \
+  -d '{
+    "resourceType": "Parameters",
+    "parameter": [{
+      "name": "parameters",
+      "resource": {
+        "resourceType": "Parameters",
+        "parameter": [{"name": "status", "valueString": "free"}]
+      }
+    }]
+  }'
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+body = {
+    "resourceType": "Parameters",
+    "parameter": [{
+        "name": "parameters",
+        "resource": {
+            "resourceType": "Parameters",
+            "parameter": [{"name": "status", "valueString": "free"}],
+        },
+    }],
+}
+result = requests.post(
+    f"{BASE}/Library/free-slots-query/$sqlquery-run?_format=json&_limit=3",
+    json=body,
+).json()
+for row in result:
+    print(row["starts_at"], row["actor_display"])
+```
+
+</TabItem>
+<TabItem value="javascript" label="JavaScript">
+
+```javascript
+const result = await (
+  await fetch(
+    `${BASE}/Library/free-slots-query/$sqlquery-run?_format=json&_limit=3`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/fhir+json" },
+      body: JSON.stringify({
+        resourceType: "Parameters",
+        parameter: [
+          {
+            name: "parameters",
+            resource: {
+              resourceType: "Parameters",
+              parameter: [{ name: "status", valueString: "free" }],
+            },
+          },
+        ],
+      }),
+    },
+  )
+).json();
+result.forEach((row) => console.log(row.starts_at, row.actor_display));
+```
+
+</TabItem>
+</Tabs>
+
+Try `"busy"` — or your own posted slot's id — new writes are visible to views
+and queries immediately.
+
+## Post a transaction Bundle
+
+Multiple writes ride one `POST /Bundle` with per-entry statuses:
+
+<Tabs>
+<TabItem value="python" label="Python" default>
+
+```python
+bundle = {
+    "resourceType": "Bundle",
+    "type": "transaction",
+    "entry": [
+        {
+            "request": {"method": "POST", "url": "Slot"},
+            "resource": {
+                "resourceType": "Slot", "id": "bundle-slot-1",
+                "status": "free",
+                "start": "2027-03-06T10:00:00Z",
+                "end": "2027-03-06T10:30:00Z",
+                "schedule": {"reference": "Schedule/10"},
+            },
+        },
+        {
+            "request": {"method": "POST", "url": "Slot"},
+            "resource": {
+                "resourceType": "Slot", "id": "bundle-slot-2",
+                "status": "free",
+                "start": "2027-03-06T11:00:00Z",
+                "end": "2027-03-06T11:30:00Z",
+                "schedule": {"reference": "Schedule/10"},
+            },
+        },
+    ],
+}
+response = requests.post(
+    f"{BASE}/Bundle", json=bundle, headers={"X-Write-Key": WRITE_KEY}
+)
+for entry in response.json()["entry"]:
+    print(entry["response"]["status"], entry["response"].get("location"))
+```
+
+</TabItem>
+<TabItem value="curl" label="curl">
+
+```bash
+curl -X POST "$BASE/Bundle" -H "X-Write-Key: $WRITE_KEY" \
+  -H "Content-Type: application/fhir+json" \
+  -d '{"resourceType":"Bundle","type":"transaction","entry":[
+    {"request":{"method":"POST","url":"Slot"},
+     "resource":{"resourceType":"Slot","id":"bundle-slot-1","status":"free",
+       "start":"2027-03-06T10:00:00Z","end":"2027-03-06T10:30:00Z",
+       "schedule":{"reference":"Schedule/10"}}},
+    {"request":{"method":"POST","url":"Slot"},
+     "resource":{"resourceType":"Slot","id":"bundle-slot-2","status":"free",
+       "start":"2027-03-06T11:00:00Z","end":"2027-03-06T11:30:00Z",
+       "schedule":{"reference":"Schedule/10"}}}
+  ]}'
+```
+
+</TabItem>
+</Tabs>
+
+## The bulk-publish feed
+
+`GET /$bulk-publish` serves the Bulk-Data-shaped manifest of the append-only
+dataset every write lands in:
+
+<TryIt method="GET" path="/$bulk-publish" label="manifest" />
+
+On this public demo the manifest's part URLs point into the private dataset,
+so they answer `401` anonymously — the API is the public window; direct
+dataset consumption is for key holders. The [Bulk Publish demo](./bulk-publish.mdx)
+shows the full client-side consume story against your own server.
+
+## Error behavior worth knowing
+
+| Situation | Response |
+| --- | --- |
+| Write or admin call without a valid key | `401` `OperationOutcome` |
+| Unknown or mistyped operation parameter | `400` naming the parameter |
+| Same parameter in body **and** query string | `400` (ambiguous) |
+| Update with a stale `If-Match` version | `412` |
+| Read of a deleted resource | `410 Gone` (`_history` still works) |
+| Request body over the server cap | `413` |
+| Query exceeding the server time limit | `408` |
+
+Interactive OpenAPI docs live at
+[`$BASE/docs`](https://fhir4ds-bulk-publish-demo-server.hf.space/docs).
+
+## Run your own
+
+The demo server is one `pip install` away:
+
+```bash
+pip install "fhir4ds-v2[serve,hf]"
+fhir4ds serve --port 8766 --resources ./fhir-data \
+  --admin-key "$ADMIN_KEY" --write-key "$WRITE_KEY"
+```
+
+See `deploy/hf-space/` in the [repository](https://github.com/FHIR4DS/fhir4ds)
+for the exact container this demo runs.

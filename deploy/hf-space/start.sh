@@ -36,6 +36,7 @@ python -m fhir4ds.serve \
     --admin-key "${ADMIN_KEY:-}" \
     --write-key "${WRITE_KEY:-}" \
     --key-store "$KEY_STORE" \
+    --cors-origins "${CORS_ORIGINS:-https://fhir4ds.com,https://www.fhir4ds.com,http://localhost:3000,http://127.0.0.1:3000}" \
     --log-config "$APP_DIR/uvicorn-log.json" &
 server_pid=$!
 
