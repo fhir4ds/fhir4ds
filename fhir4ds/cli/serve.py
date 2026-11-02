@@ -209,9 +209,29 @@ def load_resources(context, path: Path) -> int:
         loaded = loader.load_directory(path) if path.is_dir() else loader.load_file(path)
         rows = connection.execute(f"SELECT resource FROM {scratch}").fetchall()
         connection.execute(f"DROP TABLE {scratch}")
-        imported = context.writer.import_rows(
-            [{"resource": json.loads(row[0]) if isinstance(row[0], str) else row[0]} for row in rows]
-        )
+        payload = [
+            {"resource": json.loads(row[0]) if isinstance(row[0], str) else row[0]}
+            for row in rows
+        ]
+        # Skip-if-present (dataset wins): anything the rehydrated log already
+        # holds — including tombstoned ids — keeps its published version; a
+        # blanket re-import would resurrect deletes and write a duplicate part
+        # on every restart.
+        from fhir4ds.serve.versioning import BASE_TABLE
+
+        present = {
+            (resource_type, resource_id)
+            for resource_type, resource_id in connection.execute(
+                f"SELECT DISTINCT resourceType, id FROM {BASE_TABLE}"
+            ).fetchall()
+        }
+        absent = [
+            entry
+            for entry in payload
+            if (entry["resource"].get("resourceType"), entry["resource"].get("id"))
+            not in present
+        ]
+        imported = context.writer.import_rows(absent)
         # The loader's resolve() macro was bound to the scratch table; rebind it
         # to the ``resources`` view (CREATE TABLE IF NOT EXISTS is a no-op there).
         FHIRDataLoader(connection, table_name=context.config.source_table)

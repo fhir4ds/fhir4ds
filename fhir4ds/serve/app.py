@@ -124,6 +124,18 @@ def _configure_writes(context: ServeContext, settings: ServeConfig) -> Any:
     context.writer = ResourceWriter(
         context.connection, seq=max(database_seq, publish_store.current_seq())
     )
+
+    # Restart durability: fold the published dataset back into this process —
+    # log rows keep their original _seq/tombstones, definitions return to the
+    # registry. Per-file problems are logged and skipped inside; a snapshot
+    # failure here means the dataset itself is unreachable, which must surface.
+    try:
+        from .rehydrate import rehydrate
+
+        rehydrate(context.connection, publish_store, context.store)
+    except Exception:  # noqa: BLE001 - the surface stays up, loudly
+        logger.exception("dataset rehydration failed; serving from a fresh log")
+
     context.flusher = FlushManager(
         publish_store,
         interval=settings.flush_interval_seconds,

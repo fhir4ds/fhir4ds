@@ -442,7 +442,10 @@ def test_versions_survive_a_restart(publish_dir, app_connection):
     first.post("/Patient", json=patient("p1"), headers=FHIR_JSON)
     first.post("/admin/flush")
 
-    # A new process: fresh in-memory database, same dataset directory.
+    # A new process: fresh in-memory database, same dataset directory. Boot-time
+    # rehydration restores p1 (original _seq 1) from the published part before
+    # the surface serves, so the id exists: read it back and UPDATE it — a
+    # duplicate create would be a phantom rewrite of published history.
     second_connection = duckdb.connect()
     try:
         second = TestClient(
@@ -451,8 +454,13 @@ def test_versions_survive_a_restart(publish_dir, app_connection):
                 connection=second_connection,
             )
         )
-        response = second.post("/Patient", json=patient("p1", family="Next"), headers=FHIR_JSON)
-        assert response.status_code == 201
+        restored = second.get("/Patient/p1")
+        assert restored.status_code == 200, restored.text
+        assert restored.headers["etag"] == 'W/"1"'
+        response = second.put(
+            "/Patient/p1", json=patient("p1", family="Next"), headers=FHIR_JSON
+        )
+        assert response.status_code == 200
         assert response.headers["etag"] == 'W/"2"'
     finally:
         second_connection.close()
