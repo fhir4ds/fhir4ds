@@ -43,4 +43,4 @@ con = fhir4ds.create_connection()
 ```
 
 ## Using in the Browser (WASM)
-If you are building a web application, you can use the pre-compiled WASM extensions and Python wheels. See the [WASM Engine](/docs/integrations/wasm-engine) for details.
+If you are building a web application, you can use the pre-compiled WASM extensions and Python wheels. See the [WASM Engine](/docs/integrations/wasm-engine/) for details.

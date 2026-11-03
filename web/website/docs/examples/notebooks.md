@@ -23,7 +23,7 @@ downloads its cohort from
 [Hugging Face](https://huggingface.co/datasets/fhir4ds/omop-demo) (no token
 needed).
 
-New to the mapping? [FHIR → OMOP](/docs/examples/fhir-to-omop)
+New to the mapping? [FHIR → OMOP](/docs/examples/fhir-to-omop/)
 builds `person` and the concept map by hand first.
 
 ## Local Usage

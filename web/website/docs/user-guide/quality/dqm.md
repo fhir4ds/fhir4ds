@@ -27,13 +27,13 @@ For production jobs, prefer the CLI batch runner. For notebooks, tests, and
 custom applications, use `MeasureEvaluator` directly.
 
 For source-specific examples, see
-[Source-to-DQM Production Recipes](/docs/examples/dqm-recipes). For
+[Source-to-DQM Production Recipes](/docs/examples/dqm-recipes/). For
 CLI behavior and exit codes, see the
-[Command Line Interface](/docs/user-guide/interfaces/cli).
+[Command Line Interface](/docs/user-guide/interfaces/cli/).
 
 For HAPI FHIR PostgreSQL deployments that need event-driven recalculation and
 persisted patient-level measure results, see
-[HAPI FHIR Server Integration](/docs/integrations/hapi-fhir).
+[HAPI FHIR Server Integration](/docs/integrations/hapi-fhir/).
 
 ## 2. CLI Batch Runner
 

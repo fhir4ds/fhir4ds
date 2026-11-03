@@ -142,4 +142,4 @@ historical bodies are outside the v1 incremental scope.
 
 For event-driven DQM materialization with PostgreSQL triggers and
 `LISTEN/NOTIFY`, see
-[HAPI FHIR Server Integration](/docs/integrations/hapi-fhir).
+[HAPI FHIR Server Integration](/docs/integrations/hapi-fhir/).

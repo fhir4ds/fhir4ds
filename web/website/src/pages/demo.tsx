@@ -1,4 +1,5 @@
 import Layout from '@theme/Layout';
+import Head from '@docusaurus/Head';
 import Heading from '@theme/Heading';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 import WasmDemo from '@site/src/components/WasmDemo';
@@ -7,6 +8,9 @@ import type {ReactElement} from 'react';
 export default function DemoPage(): ReactElement {
   return (
     <Layout title="Live Demo">
+      <Head>
+        <meta name="robots" content="noindex" />
+      </Head>
       <main>
         <div className="container" style={{padding: '2rem 0'}}>
           <Heading as="h1" style={{color: '#f1f5f9'}}>

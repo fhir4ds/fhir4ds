@@ -544,7 +544,7 @@ expansion). Conformance rises to **2832/2832** across all four suites
 - `fhir4ds.sqlquery` ships `parse_library` / `parse_sqlquery` /
   `parse_sqlview` plus `SQLQueryRunner`, with typed errors for missing
   dependencies, dependency cycles, and parameter type mismatches.
-- See the [sqlquery API reference](/docs/api-reference/sqlquery) for the
+- See the [sqlquery API reference](/docs/api-reference/sqlquery/) for the
   profile model and a runnable example.
 
 ### Data ingestion correctness

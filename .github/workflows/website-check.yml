@@ -47,3 +47,7 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
+
+      - name: Internal link + sitemap consistency (AMUX-51 guard)
+        working-directory: web/website
+        run: python3 scripts/check_links.py

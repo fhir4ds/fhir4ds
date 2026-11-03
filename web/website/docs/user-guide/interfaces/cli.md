@@ -98,7 +98,7 @@ Depending on the output config, each measure directory can include:
 | `definitions.schema.json` | Mapping from output columns to authored CQL define names. |
 
 For full output details, see [Digital Quality Measures](../quality/dqm) and
-[Source-to-DQM Production Recipes](/docs/examples/dqm-recipes).
+[Source-to-DQM Production Recipes](/docs/examples/dqm-recipes/).
 
 ## CQL Facade Command
 
@@ -140,7 +140,7 @@ fhir4ds dqm hapi explain-scope --config hapi-dqm.yaml --patient-id patient-1
 fhir4ds dqm hapi listen --config hapi-dqm.yaml
 ```
 
-See [HAPI FHIR Server Integration](/docs/integrations/hapi-fhir) for table
+See [HAPI FHIR Server Integration](/docs/integrations/hapi-fhir/) for table
 layout, trigger behavior, and result persistence details.
 
 ## Mongo Materialization
@@ -161,7 +161,7 @@ fhir4ds dqm mongo listen --config mongo-dqm.yaml
 ```
 
 Mongo change streams require a replica set or sharded cluster. See
-[Mongo FHIR Server Integration](/docs/integrations/mongo-fhir-server) for queue,
+[Mongo FHIR Server Integration](/docs/integrations/mongo-fhir-server/) for queue,
 change-stream, and generated MeasureReport storage details.
 
 ## Audit Modes
