@@ -5,7 +5,10 @@ title: What's New
 
 # What's New
 
-This page summarizes the major changes in each release of FHIR4DS.
+This page summarizes the major changes in each release of FHIR4DS. Every
+entry follows the same format: **highlights**, **breaking changes** (always
+listed, even when there are none), topic sections, **conformance** (where
+recorded), **known issues**, and **upgrade** notes.
 
 ## Version 0.0.20
 *November 2026*
@@ -13,6 +16,8 @@ This page summarizes the major changes in each release of FHIR4DS.
 The performance + serve release: compile-to-SQL measure execution
 optimized end to end, a native FHIR serve layer, and DuckDB 1.5.6
 support.
+
+### Highlights
 
 - **Measure-execution optimizations (Phase 1 + 2)**: shared
   per-resourceType retrieve CTEs (`AS MATERIALIZED`, one base scan per
@@ -52,11 +57,28 @@ support.
   plus a structural-cost benchmark suite (`benchmarks/scaling/`) with
   EXPLAIN ANALYZE attribution and ranked optimization candidates.
 
+### Breaking changes
+
+None.
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.20
+```
+
+For experimental DuckDB 2.0.0 support: `pip install
+'fhir4ds-v2[duckdb2]'`. The base DuckDB pin stays `>=1.5.5,<2`.
+
+---
+
 ## Version 0.0.19
 *October 2026*
 
 The OMOP release: FHIR R4 → OMOP CDM v5.5 through standard SQL-on-FHIR
 artifacts only.
+
+### Highlights
 
 - **OMOP CDM v5.5 mapping library** (`fhir4ds.viewdef.resources.omop`):
   9 CDM tables (person, visit_occurrence, condition_occurrence,
@@ -84,67 +106,64 @@ artifacts only.
 - **Reference normalization**: bundle-local `urn:uuid:` references (the
   only form in Synthea's NDJSON) normalize to the target resource id
   alongside `Patient/{id}` and absolute URLs, so event-table foreign keys
-  actually join person (was 0/1,461). Referential integrity is now
+  actually join person (was 0/1,461). Also fixed: the old key projection
+  hashed NULL into a fabricated key (`hash(NULL)` is a constant);
+  optional foreign keys now stay NULL. Referential integrity is now
   checked for every event table in conformance.
 - **Pipelined unnest lowering**: `forEach` computes each array once per
-  parent row and expands it in a pipelined subquery chain — a 5,000 ×
-  100-element ConceptMap-shaped payload went 3.94 s / 4.9 GB → 0.05 s /
-  220 MB; previously-OOM'ing 50,000-row and nested cases complete in
-  under half a second. Monolithic 100k-element maps are the recommended
-  shape.
-- **Viewing Room**: five OMOP samples mirroring the library (person view
-  + SQLQuery, encounters SQLQuery, medications reshape + SQLQuery),
-  paged JSON trees for 100k+-element resources, BIGINT-safe keys, live
-  Hugging Face data. New **FHIR → OMOP** step-by-step walkthrough and
-  OMOP notebook in the docs.
+  parent row and expands it in a pipelined subquery chain (no more
+  correlated LATERAL joins) — a 5,000 × 100-element ConceptMap-shaped
+  payload went 3.94 s / 4.9 GB → 0.05 s / 220 MB; previously-OOM'ing
+  50,000-row and nested cases complete in under half a second.
+  Monolithic 100k-element maps are the recommended shape (chunking
+  retired).
+- **Viewing Room**: five OMOP samples mirroring the library — Person
+  (ViewDef), Person (SQLQuery), Encounters (SQLQuery), Medications
+  (ViewDef), and Medications (SQLQuery: 5 arms unioned, mapped, keyed —
+  1,461 rows over live Hugging Face data). The Browse tab renders
+  100k+-element resources smoothly (paged JSON trees, lazy groups), and
+  BIGINT-safe serialization keeps 63-bit keys exact in the browser.
+- **Docs**: new **FHIR → OMOP** step-by-step walkthrough
+  ([/docs/examples/fhir-to-omop/](/docs/examples/fhir-to-omop/)) —
+  reshape → translate → compose, with real cohort data and the demo
+  embedded; OMOP notebook in the Examples gallery (Colab); user-guide
+  mapping page updated to the SQLQuery architecture.
 - **medterm4ds 0.0.7** dependency (core and `[extraction]` extras, the
   Athena-complete pin): the terminology integration was re-verified
   deliberately — in-process adapter suite, notes pipeline + autocoding
   units, and the expansion/search contracts against the published 0.0.7.
-- **Conformance**: OMOP suite at 38 checks; master gate 2870/2870.
 
-  normalizes `Patient/{id}`, absolute URLs and `urn:uuid:` to the target
-  resource id, so `drug_exposure.person_id` actually joins `person` (was
-  0/1,461 before). Conformance now checks referential integrity for
-  every event table. Also fixed: the old key projection hashed NULL
-  into a fabricated key (`hash(NULL)` is a constant); optional foreign
-  keys now stay NULL.
-- **Pipelined unnest lowering** — `forEach` no longer lowers to
-  correlated LATERAL joins: each iterator computes its array once per
-  parent row and expands it in a pipelined subquery chain. A 5,000-row
-  × 100-element ConceptMap-shaped payload went 3.94 s / 4.9 GB →
-  0.05 s / 220 MB; 50,000-row and nested cases that previously OOM'd
-  now complete in under half a second. Monolithic 100k-element maps are
-  the recommended shape (chunking retired).
-- **Viewing Room OMOP suite** — five samples mirroring the library:
-  Person (ViewDef), Person (SQLQuery), Encounters (SQLQuery),
-  Medications (ViewDef), Medications (SQLQuery: 5 arms unioned, mapped,
-  keyed —
-  1,461 rows over live Hugging Face data). Browse tab renders 100k+
-  element resources smoothly (paged JSON trees, lazy groups).
-  BIGINT-safe serialization keeps 63-bit keys exact in the browser.
-- **Docs** — new **FHIR → OMOP** step-by-step walkthrough
-  (`/docs/examples/fhir-to-omop`): reshape → translate → compose, with
-  real cohort data and the demo embedded; OMOP notebook in the Examples
-  gallery (Colab); user-guide mapping page updated to the SQLQuery
-  architecture.
-- **Conformance**: sectioned OMOP suite grown to 38 checks (schema,
-  required, grain incl. per-table referential integrity, mapping,
-  vd-conformance); master gate **2870/2870**.
+### Breaking changes
 
-## Benchmarks (demo scale)
+None.
+
+### Conformance
+
+**2,870/2,870** (ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47),
+with the sectioned OMOP suite grown to 38 checks (schema, required,
+grain incl. per-table referential integrity, mapping, vd-conformance).
+
+### Benchmarks (demo scale)
 
 VD generation ~200 ms; composition ~450 ms flat from 10 to 2,000 staged
 resources; the unnest fix above is the headline perf change. Browser:
 1,461-row drug_exposure over the full ConceptMap executes in ~2.5 s in
 DuckDB-WASM.
 
-## Sources & attribution
+### Sources & attribution
 
 Field mappings mined from the OMOP-on-FHIR v5.4-R4 project with
 per-file attribution; the v5.5 delta (optional fields only) and the
 v5.4 variant are documented in the library manifest. Vocabulary data
 from OHDSI Athena (pinned snapshot).
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.19
+```
+
+---
 
 ## Version 0.0.18
 *October 2026*
@@ -154,10 +173,11 @@ CQL Cleanroom campaign. The translator gains deterministic definition
 ordering and patient-property evidence leaves; the operations layer and
 dev server become thread-safe and warm-starting; the connected workbench
 runs every evaluation path server-side; and the terminology integration
-moves to **medterm4ds 0.0.5**. The conformance baseline holds at
-**2832/2832** (ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47).
+moves to **medterm4ds 0.0.5**.
 
-**CQL translator**
+### Highlights
+
+#### CQL translator
 
 - Definitions are **topologically sorted** (Kahn's algorithm) before
   translation, so forward references and out-of-order dependents no longer
@@ -173,13 +193,13 @@ moves to **medterm4ds 0.0.5**. The conformance baseline holds at
   `audit_comparison`; the review-round merge blockers around the
   non-boolean leaf projection are fixed.
 
-**Cell editor definitions**
+#### Cell editor definitions
 
 - Cell markers accept quoted CQL define names with spaces
   (`[name: Initial Population]`), matching the engine's define grammar —
   cell labels, dependency graphs, and `// # %%` round-trips agree.
 
-**Operations layer**
+#### Operations layer
 
 - A bounded **translation LRU cache** (keyed on library texts, audit mode,
   output columns, parameters, patient ids) makes repeat evaluations
@@ -188,7 +208,7 @@ moves to **medterm4ds 0.0.5**. The conformance baseline holds at
   and first execution) and after workspace switches / kernel restarts, so
   the first heartbeat is warm.
 
-**Dev server**
+#### Dev server
 
 - Kernel operations are serialized behind a re-entrant lock (DuckDB
   connections are not thread-safe), and superseded kernels are **retired
@@ -206,14 +226,14 @@ moves to **medterm4ds 0.0.5**. The conformance baseline holds at
   eCQM test cases (66/66 matching expected results for CMS125), and the
   MADiE closure export was reworked for the canonical type-folder layout.
 
-**Terminology**
+#### Terminology
 
 - **medterm4ds 0.0.5** dependency (core and `[extraction]` extras). The
   in-process adapter and notes pipeline were re-verified against the new
   engine stack (LocalDuckDB hybrid serving); the fail-loud embedding-space
   / directory pin machinery is exercised by medterm4ds' own configuration.
 
-**WASM runtime parity**
+#### WASM runtime parity
 
 - `ToDate` is now a spec-aware **C++ extension scalar** with the same
   semantics as the desktop Python UDF: ISO date shapes are validated
@@ -232,7 +252,7 @@ moves to **medterm4ds 0.0.5**. The conformance baseline holds at
   surface, and a three-way harness asserts **spec-expected vs desktop vs
   browser** (value + DuckDB type).
 
-**Cleanroom surfaces** (web)
+#### Cleanroom surfaces (web)
 
 - Persistent footer status bar (workspace location, engine, save state,
   latest status/error, version) replaces header chips and top-of-page
@@ -261,9 +281,25 @@ moves to **medterm4ds 0.0.5**. The conformance baseline holds at
   (was 0.0.15, including a stale CQL extension binary) and viewing-room
   (was 0.0.17) upgraded alongside the cleanroom and playground.
 
-**Known limitations**
+### Breaking changes
+
+None.
+
+### Conformance
+
+**2,832/2,832** (ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47).
+
+### Known issues
 
 - 21 deep-comparator SQL macros remain browser-gap allowlisted.
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.18
+```
+
+---
 
 ## Version 0.0.17
 *September 2026*
@@ -273,10 +309,11 @@ workbench built on the operations layer. Every capability runs client-side:
 Pyodide hosts the fhir4ds wheel for stateless operations (parse, translate,
 validate), DuckDB-WASM executes the translated SQL, and the TS executor
 emits schema:1 envelopes that are **field-for-field identical** to the CLI
-and MCP adapters. The conformance baseline holds at **2832/2832**
-(ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47).
+and MCP adapters.
 
-**Operations layer (shared core)**
+### Highlights
+
+#### Operations layer (shared core)
 
 - New capabilities: `validate_resource` (loader-identity validation —
   a resource that passes validation always loads cleanly) and
@@ -290,7 +327,7 @@ and MCP adapters. The conformance baseline holds at **2832/2832**
 - CLI `verify --evidence` / `--baseline` writes and compares evidence
   artifacts; MCP gains `compare_evidence_tool`.
 
-**CQL Cleanroom (web/cql-cleanroom)**
+#### CQL Cleanroom (web/cql-cleanroom)
 
 - Monaco CQL editor with live diagnostics (markers from structured
   `Diagnostics.location`), parameter panel, and multi-library tabs with
@@ -306,18 +343,34 @@ and MCP adapters. The conformance baseline holds at **2832/2832**
 - Visual algorithm editor v1: graph → CQL emitter with a parse round-trip
   guard before applying to the library.
 
-**Parity & verification**
+#### Parity & verification
 
 - Three-way capability matrix: CLI == MCP == browser envelopes on the
   shared fixture, for both `run_tests` and `compare_evidence`.
 - Macro-sync contract test keeps the browser SQL macro surface in lockstep
   with the Python translator (`test_macro_sync.py`).
 
-**Known limitations**
+### Breaking changes
+
+None.
+
+### Conformance
+
+**2,832/2,832** (ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47).
+
+### Known issues
 
 - 21 deep-comparator SQL macros remain browser-gap allowlisted
   (`BROWSER_MACRO_GAP_ALLOWLIST`); the visual editor canvas is a beta seam
   over the JSON graph editor.
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.17
+```
+
+---
 
 ## Version 0.0.16
 *September 2026*
@@ -328,11 +381,12 @@ attaches typed metadata (`cql_type_ref`) to every library definition, and the
 `$cql` facade serializer flips to a **metadata-first** contract: declared
 types drive FHIR Parameters serialization, with runtime shape inference only
 as a silent fallback for `Any` or a logged rescue when known metadata would
-fail. The conformance baseline holds at **2832/2832** (ViewDefinition 144,
-FHIRPath 935, CQL 1706, DQM 47) and generated SQL is **byte-identical** to
-0.0.15 across the 47-measure DQM corpus — this is a metadata-only release.
+fail. Generated SQL is **byte-identical** to 0.0.15 across the 47-measure
+DQM corpus — this is a metadata-only release.
 
-**Type system**
+### Highlights
+
+#### Type system
 
 - New `fhir4ds/cql/types/typeref.py` canonical `CQLTypeRef` representation
   (List/Interval/Tuple generics) shared by the translator and the FHIR
@@ -344,7 +398,7 @@ FHIRPath 935, CQL 1706, DQM 47) and generated SQL is **byte-identical** to
   on imprecise operands) are deliberately typed `Any` so runtime interval
   results serialize correctly.
 
-**Facade (`$cql`)**
+#### Facade (`$cql`)
 
 - `CQLResultMetadata` fallback chain is now `cql_type_ref → cql_type →
   sql_result_type → Any`.
@@ -355,13 +409,29 @@ FHIRPath 935, CQL 1706, DQM 47) and generated SQL is **byte-identical** to
 - Rollback flag: `CQLServerConfig.metadata_first_serialization=False`
   restores the 0.0.15 value-first reconcile verbatim.
 
-**Consolidation**
+#### Consolidation
 
 - The legacy `_infer_cql_type` is now a thin wrapper over a verbatim
   compatibility port (byte-exactness proven by a 1049-define snapshot
   diff); two duplicated helpers were deleted and their callers now share
   `type_map` module functions; a CI drift tripwire pins builder-vs-legacy
   equivalence on a shared corpus.
+
+### Breaking changes
+
+None.
+
+### Conformance
+
+**2,832/2,832** (ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47).
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.16
+```
+
+---
 
 ## Version 0.0.15
 *September 2026*
@@ -370,11 +440,11 @@ Version 0.0.15 is the **DuckDB 1.5.5 reliability release**. The embedded
 engine is upgraded from DuckDB 1.5.2 to **1.5.5** (native and WebAssembly
 binaries rebuilt and redeployed in lockstep), and a full 36-iteration QA
 campaign across all twelve product domains hardened the FHIRPath engine,
-the CQL translator, ingestion, and the terminology surface. The conformance
-baseline holds at **2832/2832** (ViewDefinition 144, FHIRPath 935, CQL
-1706, DQM 47).
+the CQL translator, ingestion, and the terminology surface.
 
-**Platform**
+### Highlights
+
+#### Platform
 
 - DuckDB upgraded 1.5.2 → 1.5.5 (wheel pin, native extensions,
   duckdb-wasm 1.33.1-dev64.0, submodule trees). Cloud credential options
@@ -383,7 +453,7 @@ baseline holds at **2832/2832** (ViewDefinition 144, FHIRPath 935, CQL
   `PROVIDER service_principal`, and options removed upstream
   (`account_key`, `service_account_json`) now raise actionable errors.
 
-**FHIRPath engine (24 fixes, QA-001..QA-008)**
+#### FHIRPath engine (24 fixes, QA-001..QA-008)
 
 - Native/fallback parity: Decimal-typed `0/1` booleans, empty-expression
   row resilience, metadata-gated temporal `+` concatenation, JSON
@@ -393,7 +463,7 @@ baseline holds at **2832/2832** (ViewDefinition 144, FHIRPath 935, CQL
   propagation precedence in `('a'|'b') / {}`, and singleton-violation
   ordering for `in`/`contains`.
 
-**CQL translator (QA-009..QA-021)**
+#### CQL translator (QA-009..QA-021)
 
 - Dynamic FHIR interval `union`, bare `expand X.period per day` parsing,
   stored-list `expand`/`collapse` defines (`Count`/`First` consumers),
@@ -405,10 +475,26 @@ baseline holds at **2832/2832** (ViewDefinition 144, FHIRPath 935, CQL
   typed and actionable (`ValueError` / `TranslationError`) instead of
   leaking DuckDB CatalogExceptions.
 
-**Terminology (medterm4ds)**
+#### Terminology (medterm4ds)
 
 - `AutoCoderConfig.top_k` validated at construction; autocoding extension
   roundtrip and closure-table surfaces verified end-to-end.
+
+### Breaking changes
+
+None.
+
+### Conformance
+
+**2,832/2,832** (ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47).
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.15
+```
+
+---
 
 ## Version 0.0.14
 *September 2026*
@@ -416,11 +502,11 @@ baseline holds at **2832/2832** (ViewDefinition 144, FHIRPath 935, CQL
 Version 0.0.14 is the **WASM C++ parity release**. Ten translator-reachable
 CQL functions that previously existed only as Python UDFs now ship in the
 native C++ DuckDB extension, closing the last gaps between the desktop
-runtime and the no-Python browser (WebAssembly) runtime. The conformance
-baseline holds at **2832/2832** (ViewDefinition 144, FHIRPath 935, CQL
-1706, DQM 47).
+runtime and the no-Python browser (WebAssembly) runtime.
 
-**WASM C++ parity**
+### Highlights
+
+#### WASM C++ parity
 
 - Ported to the C++ extension: `cqlDivide` (exact scale-8 half-up decimal
   division), `CQLMessage`, `coding_matches`/`coding_matches_exact`,
@@ -442,7 +528,7 @@ baseline holds at **2832/2832** (ViewDefinition 144, FHIRPath 935, CQL
   verified against the rebuilt WebAssembly — including the previously
   failing decimal division case.
 
-**Fixes**
+#### Fixes
 
 - **`resolve()` macro bind failure** (latent since May): registering CQL
   macros shadowed DuckDB's built-in `trim(x, chars)`, breaking any
@@ -453,12 +539,28 @@ baseline holds at **2832/2832** (ViewDefinition 144, FHIRPath 935, CQL
   part (unscaled-BigInt rescale), and the four type-disambiguation macros
   required by quantity comparisons are registered in both web apps.
 
-**Integration**
+#### Integration
 
 - medterm4ds dependency bumped to **0.0.4** (`>=0.0.4,<0.0.5`) — CDC
   CPT↔CVX crosswalk, annotation fields on all surfaces, and
   whitespace-code 400s. Verified against the 0.0.4 candidate (runtime
   frozen at the release commit).
+
+### Breaking changes
+
+None.
+
+### Conformance
+
+**2,832/2,832** (ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47).
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.14
+```
+
+---
 
 ## Version 0.0.13
 *August 2026*
@@ -467,11 +569,12 @@ Version 0.0.13 is a reliability and integration release. It ships the
 **post-0.0.12 reliability fixes**, upgrades the **medterm4ds integration to
 0.0.3**, and lands a broad QA hardening pass over the ingestion,
 error-handling, audit, installation, and API surfaces. The conformance
-baseline holds at **2832/2832** (ViewDefinition 144, FHIRPath 935, CQL
-1706, DQM 47), now verified on the full **CI invocation across Python 3.10
+baseline is now verified on the full **CI invocation across Python 3.10
 and 3.11** with fresh orjson.
 
-**Reliability fixes**
+### Highlights
+
+#### Reliability fixes
 
 - **orjson 3.12 compatibility**: deep-nesting decode recovery now matches
   both orjson depth-limit wordings (≤3.11 "recursion depth", 3.12+ "depth
@@ -485,7 +588,7 @@ and 3.11** with fresh orjson.
 - **Recursion-limit import leak**: the raised limit is scoped to script
   execution instead of leaking into every importer's process.
 
-**medterm4ds 0.0.3**
+#### medterm4ds 0.0.3
 
 - Bounded dependency bumped on both extras: `medterm4ds>=0.0.3,<0.0.4`
   (`terminology`) and `medterm4ds[extraction]>=0.0.3,<0.0.4` (`ner`).
@@ -496,7 +599,7 @@ and 3.11** with fresh orjson.
   (`MEDTERM4DS_HF_REVISION`) and adds device auto-detection
   (`MEDTERM4DS_DEVICE`).
 
-**Hardening highlights**
+#### Hardening highlights
 
 - Native engine restorations: exact digit-string `div`/`mod` (never
   binary64 mediators — values beyond 2^53 are exact), 2^63 literal
@@ -515,11 +618,28 @@ and 3.11** with fresh orjson.
   `evaluate_measure` DataFrame contract) and the full documented entry
   point set exercised on both engines.
 
-**Known limitation**: five pre-release parity tests from a 0.0.12
-release-commit source-loss incident remain carried (structural-type trio,
-ratio tuple comparison, WASM no-Python gate); they sit outside the 2832
-conformance gate and the CI suite selection and are tracked for upstream
-tree recovery.
+### Breaking changes
+
+None.
+
+### Conformance
+
+**2,832/2,832** (ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47).
+
+### Known issues
+
+- Five pre-release parity tests from a 0.0.12 release-commit source-loss
+  incident remain carried (structural-type trio, ratio tuple comparison,
+  WASM no-Python gate); they sit outside the 2832 conformance gate and the
+  CI suite selection and are tracked for upstream tree recovery.
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.13
+```
+
+---
 
 ## Version 0.0.12
 *August 2026*
@@ -531,10 +651,11 @@ age-uncertainty semantics, list/aggregate correctness, and query-level
 Min/Max audit attribution), closes **FHIRPath dual-engine parity** work, and
 upgrades the **medterm4ds integration to 0.0.2** (bounded dependency
 `>=0.0.2,<0.0.3`, retired-code policy split, in-process intensional ValueSet
-expansion). Conformance rises to **2832/2832** across all four suites
-(ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47).
+expansion).
 
-### New: SQLQuery / SQLView (the SQL-on-FHIR v2 Analytics Layer)
+### Highlights
+
+#### New: SQLQuery / SQLView (the SQL-on-FHIR v2 Analytics Layer)
 
 - FHIR `Library` resources conforming to the
   [SQLQuery](https://build.fhir.org/ig/HL7/sql-on-fhir/StructureDefinition-SQLQuery.html) and
@@ -547,7 +668,7 @@ expansion). Conformance rises to **2832/2832** across all four suites
 - See the [sqlquery API reference](/docs/api-reference/sqlquery/) for the
   profile model and a runnable example.
 
-### Data ingestion correctness
+#### Data ingestion correctness
 
 - `patient_ref` attribution now follows a single Patient-typed doctrine
   across the loader and file sources: only Patient-typed references (and
@@ -557,14 +678,14 @@ expansion). Conformance rises to **2832/2832** across all four suites
 - Version-specific references (`Patient/123/_history/2`) resolve to the
   current resource instead of silently dropping.
 - UTF-8 BOM-prefixed JSON/NDJSON files (common from Windows tooling) load
-  cleanly; case-variant extensions (`.JSON`) and unreadable files no longer
-  break or silently skip during directory loads.
+  cleanly; case-variant extensions (`.JSON`) and unreadable files no
+  longer break or silently skip during directory loads.
 - Bundle entries are validated per-entry with index attribution; empty
   `entry.resource` objects are rejected with a clear error.
 - Batch ingestion is **~70-150x faster** (Arrow bulk path with automatic
   fallback); a 25,000-resource batch loads in ~0.3s.
 
-### Audit evidence and measure evaluation
+#### Audit evidence and measure evaluation
 
 - Min/Max aggregates over quantity queries now attribute the winning
   resource in audit evidence (`Observation/xyz`) with value and threshold —
@@ -577,7 +698,7 @@ expansion). Conformance rises to **2832/2832** across all four suites
   parameter names against the library — typos raise actionable errors
   instead of producing silently wrong results.
 
-### medterm4ds 0.0.2
+#### medterm4ds 0.0.2
 
 - Dependency bound `medterm4ds>=0.0.2,<0.0.3` on both the `terminology` and
   `ner` extras; expansion behavior verified against the installed wheel.
@@ -586,16 +707,33 @@ expansion). Conformance rises to **2832/2832** across all four suites
 - In-process intensional ValueSet expansion (`?fhir_vs=isa/…`) with graded
   code search (`lexical`/`hybrid`/`semantic`).
 
+### Breaking changes
+
+None.
+
+### Conformance
+
+**2,832/2,832** (ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47).
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.12
+```
+
+---
+
 ## Version 0.0.11
 *August 2026*
 
 Version 0.0.11 introduces the **medterm4ds integration** — a three-phase
 pipeline that adds terminology services, auto-coding, and clinical NER to
 fhir4ds. The release also ships a spec-compliance sweep across the
-translator and the data-ingestion surfaces. Conformance holds at **2822/2822**
-across all four suites.
+translator and the data-ingestion surfaces.
 
-### medterm4ds integration
+### Highlights
+
+#### medterm4ds integration
 
 The integration lands in three opt-in phases, each gated behind an install
 extra so the core `import fhir4ds` path stays zero-dependency.
@@ -609,7 +747,7 @@ extra so the core `import fhir4ds` path stays zero-dependency.
   `search_text()`, `search_batch()`, plus a per-instance circuit breaker
   for transient failures and a system-URL normalizer that expands UMLS
   mnemonics (`SNOMEDCT_US`) to FHIR canonical URLs (`http://snomed.info/sct`).
-  See the [Terminology Service docs](../user-guide/terminology/terminology-service.md).
+  See the [Terminology Service docs](/docs/user-guide/terminology/terminology-service/).
 
 - **Phase 2 — Auto-Coding** (same extra): `fhir4ds.cql.loader.auto_coder.AutoCoder`
   augments text-only `CodeableConcept`s (e.g. `Condition.code.text`) with
@@ -619,7 +757,7 @@ extra so the core `import fhir4ds` path stays zero-dependency.
   autocoding extension (`engine="medterm4ds"`, index version pinned). Cache
   keys are deterministic — re-running on the same input produces
   byte-identical output. See the
-  [Auto-Coding docs](../user-guide/terminology/autocoding.md).
+  [Auto-Coding docs](/docs/user-guide/terminology/autocoding/).
 
 - **Phase 4 — Clinical Notes Pipeline** (`pip install 'fhir4ds-v2[ner]'`):
   `fhir4ds.cql.loader.notes_pipeline.NotesPipeline.extract_conditions()`
@@ -632,14 +770,14 @@ extra so the core `import fhir4ds` path stays zero-dependency.
   re-runs byte-identical. The heavy ML deps (medspaCy, transformers, torch)
   are owned transitively by `medterm4ds[extraction]` — fhir4ds never
   imports them directly. See the
-  [Notes Pipeline docs](../user-guide/terminology/notes-pipeline.md).
+  [Notes Pipeline docs](/docs/user-guide/terminology/notes-pipeline/).
 
 medterm4ds is now declared as a normal PyPI dependency in the
 `[terminology]` and `[ner]` extras — no sibling-repo install, no
 `--find-links` pinning. The published wheel (medterm4ds 0.0.1 on PyPI)
 exposes the canonical surface this release targets.
 
-### Additional hardening
+#### Additional hardening
 
 A spec-compliance sweep across the translator and data-ingestion surfaces
 closed 19 release-gate findings (QA-001 through QA-019) without altering
@@ -654,15 +792,13 @@ SQL emission now runs on 4 of 5 sampled CMS measures (CMS135, CMS165,
 CMS71, CMS996) where it previously broke. Public `__version__` is aligned
 across all 7 subpackage `__init__.py` files.
 
+### Breaking changes
+
+None.
+
 ### Conformance
 
-| Suite | Passed | Total | Rate |
-|-------|-------:|------:|-----:|
-| ViewDefinition v2 | 134 | 134 | 100.0% |
-| FHIRPath R4 | 935 | 935 | 100.0% |
-| CQL | 1,706 | 1,706 | 100.0% |
-| DQM QI-Core 2025 | 47 | 47 | 100.0% |
-| Overall | 2,822 | 2,822 | 100.0% |
+**2,822/2,822** (ViewDefinition 134, FHIRPath 935, CQL 1706, DQM 47).
 
 ### Upgrade
 
@@ -727,15 +863,13 @@ release artifact surface.
   scribe handoff gates before completion. All four conformance suites
   (ViewDefinition, FHIRPath, CQL, DQM) remain at 100%.
 
+### Breaking changes
+
+None.
+
 ### Conformance
 
-| Suite | Passed | Total | Rate |
-|-------|-------:|------:|-----:|
-| ViewDefinition v2 | 134 | 134 | 100.0% |
-| FHIRPath R4 | 935 | 935 | 100.0% |
-| CQL | 1,706 | 1,706 | 100.0% |
-| DQM QI-Core 2025 | 47 | 47 | 100.0% |
-| Overall | 2,822 | 2,822 | 100.0% |
+**2,822/2,822** (ViewDefinition 134, FHIRPath 935, CQL 1706, DQM 47).
 
 ### Upgrade
 
@@ -761,8 +895,12 @@ release metadata, public documentation, browser assets, and benchmark evidence.
   versions, notebook snippets, website install references, and WASM translator
   wheel references are aligned with `0.0.9`.
 - **Validation Gates**: The release-prep pipeline includes conformance,
-  package pytest, documentation audit, benchmark validation, and final scribe
-  handoff gates before completion.
+  package pytest, documentation audit, benchmark validation, and final
+  scribe handoff gates before completion.
+
+### Breaking changes
+
+None.
 
 ### Upgrade
 
@@ -800,18 +938,6 @@ preserving the full conformance baseline.
   Section 5.1 existence-helper arities, including specialized `exists()` and
   FHIR-specific `hasValue()` dispatch paths, in parity with the Python
   fallback.
-- **Measurement Period Fidelity**: CQL-authored `Interval<DateTime>` parameter
-  defaults retain DateTime precision and authored open/closed boundary flags
-  through DQM population SQL generation.
-- **Public API Error Contracts**: DQM config loaders, HAPI/Mongo
-  materialization config parsing, and filesystem sources now raise actionable
-  package errors for malformed public inputs.
-- **Audit Evidence Accuracy**: Multi-group DQM audit pruning preserves
-  group-local causal resource targets, and Mongo compact materialization now
-  mirrors the HAPI compact result/full audit split.
-- **Release Artifact Consistency**: Package metadata, public subpackage
-  versions, notebook snippets, CQL runner metadata, wheel contents, and WASM
-  translator assets are aligned with `0.0.8`.
 
 ### Bug Fixes
 
@@ -839,15 +965,13 @@ preserving the full conformance baseline.
   versions, notebook snippets, CQL runner metadata, wheel contents, website
   release surfaces, and browser demo assets are aligned with `0.0.8`.
 
+### Breaking changes
+
+None.
+
 ### Conformance
 
-| Suite | Passed | Total | Rate |
-|-------|-------:|------:|-----:|
-| ViewDefinition v2 | 134 | 134 | 100.0% |
-| FHIRPath R4 | 935 | 935 | 100.0% |
-| CQL | 1,706 | 1,706 | 100.0% |
-| DQM QI-Core 2025 | 47 | 47 | 100.0% |
-| Overall | 2,822 | 2,822 | 100.0% |
+**2,822/2,822** (ViewDefinition 134, FHIRPath 935, CQL 1706, DQM 47).
 
 ### Upgrade
 
@@ -878,15 +1002,13 @@ Version 0.0.7 focuses on release readiness, SQL safety, audit evidence accuracy,
 - **Loader SQL Safety**: Custom resource and ValueSet table names are quoted consistently, including SQL keywords such as `select` and `where`.
 - **FHIR JSON Validation**: File, URL, directory, and DQM ValueSet loaders now reject non-object JSON cleanly instead of leaking implementation errors.
 
+### Breaking changes
+
+None.
+
 ### Conformance
 
-| Suite | Passed | Total | Rate |
-|-------|-------:|------:|-----:|
-| ViewDefinition v2 | 134 | 134 | 100.0% |
-| FHIRPath R4 | 935 | 935 | 100.0% |
-| CQL | 1,706 | 1,706 | 100.0% |
-| DQM QI-Core 2025 | 47 | 47 | 100.0% |
-| Overall | 2,822 | 2,822 | 100.0% |
+**2,822/2,822** (ViewDefinition 134, FHIRPath 935, CQL 1706, DQM 47).
 
 ### Upgrade
 
@@ -905,7 +1027,6 @@ Version 0.0.6 focuses on release hardening, browser runtime parity, and clinical
 
 - **C++ DuckDB WASM Parity**: Browser-required CQL interval, boundary, date/quantity, interval set, logical, list, valueset, and FHIRPath repeat functions are available through C++ extensions.
 - **No-Python Runtime Gate**: Added direct-extension tests that load packaged C++ extensions without registering Python fallback UDFs.
-- **100% Conformance Gate**: ViewDefinition (134/134), FHIRPath R4 (935/935), CQL (1,706/1,706), and DQM QI-Core 2025 (47/47) all pass.
 - **HEDIS Clinical Logic**: Calendar age helpers, episode aggregate folds, repeated-extension predicates, interval boundaries, stratifiers, and reference resolution were hardened for native DuckDB, Python fallback, and browser-style execution.
 - **DQM Reporting**: Measure group stratifiers are parsed, evaluated, summarized, and exported in MeasureReport output.
 - **Packaging Safety**: The wheel pins DuckDB to `1.5.2` so installed Python dependencies match the bundled native extension ABI.
@@ -919,6 +1040,14 @@ Version 0.0.6 focuses on release hardening, browser runtime parity, and clinical
 - **DQM**: Proportion summaries now assign patient/case population labels before aggregation so exclusions and exceptions are counted in the correct order.
 - **Sources**: Strict NDJSON loading is all-or-nothing for both malformed JSON and valid-JSON invalid-FHIR records.
 - **CSV Source**: Constructor inputs are validated at the public API boundary before SQL projection registration.
+
+### Breaking changes
+
+None.
+
+### Conformance
+
+**2,822/2,822** (ViewDefinition 134, FHIRPath 935, CQL 1706, DQM 47).
 
 ### Upgrade
 
@@ -938,7 +1067,7 @@ Version 0.0.5 continues the **100% Compliance Milestone** — every conformance 
 - **100% Spec Compliance**: All test suites now pass at 100% — CQL (1,706/1,706), FHIRPath (935/935), ViewDefinition (134/134), and DQM (47/47 measures).
 - **CQL Gap Closure**: Resolved remaining 2 CQL spec tests — `RolledOutIntervals` (DuckDB correlated UNNEST workaround) and `IntegerIntervalProperlyIncludedInNullBoundaries` (spec ambiguity resolved).
 - **DQM Full Pass Rate**: All 47 QI-Core 2025 CMS eCQMs now pass. 4 measures have documented upstream test data accuracy gaps (CMS135, CMS145, CMS157, CMS1017) that affect all conformant engines equally.
-- **ReactiveEvaluator API Update**: `ReactiveEvaluator` constructor now accepts `measure_bundle` and `cql_library_path` parameters, aligning with the `MeasureEvaluator` API.
+- **Performance**: C++/Python parity alignment and a broad translator/evaluator optimization pass (native valueset cache, temporal-bound and FHIRPath fast paths, DQM conformance translation speedups).
 - **Interval JSON Handling**: Fixed precision comparisons to correctly handle interval JSON in CQL temporal operations.
 
 ### Bug Fixes
@@ -953,6 +1082,14 @@ Version 0.0.5 continues the **100% Compliance Milestone** — every conformance 
 - **`ReactiveEvaluator.__init__`**: Parameters changed from `(con, measure, adapter)` to `(con, measure_bundle, cql_library_path, adapter)`.
 - **Version Bump**: All `fhir4ds` packages bumped to version `0.0.5`.
 - **WASM Assets**: Updated translator wheel for the 0.0.5 release series.
+
+### Breaking changes
+
+None.
+
+### Conformance
+
+**2,822/2,822** (ViewDefinition 134, FHIRPath 935, CQL 1706, DQM 47).
 
 ### Upgrade
 
@@ -972,7 +1109,10 @@ Version 0.0.4 marks the **100% Compliance Milestone** — every test suite now p
 - **100% Spec Compliance**: All test suites now pass at 100% — CQL (1,706/1,706), FHIRPath (935/935), ViewDefinition (134/134), and DQM (46/46 measures).
 - **CQL Gap Closure**: Resolved remaining 2 CQL spec tests — `RolledOutIntervals` (DuckDB correlated UNNEST workaround) and `IntegerIntervalProperlyIncludedInNullBoundaries` (spec ambiguity resolved).
 - **DQM Full Pass Rate**: All 46 QI-Core 2025 CMS eCQMs now pass. 4 measures have documented upstream test data accuracy gaps (CMS135, CMS145, CMS157, CMS1017) that affect all conformant engines equally.
-- **ReactiveEvaluator API Update**: `ReactiveEvaluator` constructor now accepts `measure_bundle` and `cql_library_path` parameters, aligning with the `MeasureEvaluator` API.
+- **FHIRPath Spec-Compliance Chunks**: Landed chunks FP-01 through FP-10 plus §5.7 Math and §6.7 Date Arithmetic conformance, with the C++ evaluator hardened for spec conformance and memory safety (use-after-free, fast-path, and serialization fixes).
+- **DQM/Audit Hardening**: API input validation and audit pipeline robustness fixes, evidence deduplication moved to Python.
+- **ViewDefinition**: Fixed `source_table` resourceType filtering and `forEachOrNull` NULL preservation.
+- **`ReactiveEvaluator` API Update**: `ReactiveEvaluator` constructor now accepts `measure_bundle` and `cql_library_path` parameters, aligning with the `MeasureEvaluator` API.
 - **Interval JSON Handling**: Fixed precision comparisons to correctly handle interval JSON in CQL temporal operations.
 
 ### Bug Fixes
@@ -987,6 +1127,14 @@ Version 0.0.4 marks the **100% Compliance Milestone** — every test suite now p
 - **`ReactiveEvaluator.__init__`**: Parameters changed from `(con, measure, adapter)` to `(con, measure_bundle, cql_library_path, adapter)`.
 - **Version Bump**: All `fhir4ds` packages bumped to version `0.0.4`.
 - **WASM Assets**: Updated translator wheel to `fhir4ds_v2-0.0.4-py3-none-any.whl`.
+
+### Breaking changes
+
+None.
+
+### Conformance
+
+**2,821/2,821** (ViewDefinition 134, FHIRPath 935, CQL 1706, DQM 46).
 
 ### Upgrade
 
@@ -1054,13 +1202,6 @@ Version 0.0.3 introduces the **Zero-ETL Source Adapter** architecture, enabling 
 - **Identifier Quoting**: `PostgresSource` and `ExistingTableSource` use `quote_identifier()` to prevent SQL injection from user-supplied table and column names.
 - **Scope Boundary**: `PostgresSource` documentation clearly states it requires FHIR JSON in a column — preventing misuse as a generic relational mapper.
 
-### Known Limitations
-
-- `PostgresSource` requires FHIR JSON in a Postgres column — constructing FHIR JSON from arbitrary relational schemas is not supported in this release.
-- `CSVSource` does not support incremental delta tracking.
-- `FileSystemSource` incremental tracking is mtime-based and may produce false positives.
-- Iceberg format does not support incremental delta tracking.
-
 ### Migration Guide
 
 Existing `FHIRDataLoader` users have **no breaking changes**. To adopt the adapter pattern:
@@ -1076,17 +1217,28 @@ source = ExistingTableSource()
 fhir4ds.attach(con, source)
 ```
 
-### Upgrade
-
-```bash
-pip install fhir4ds-v2==0.0.3
-```
-
 ### API Changes
 
 - **Version Bump**: All `fhir4ds` packages bumped to version `0.0.3`.
 - **WASM Assets**: Updated translator wheel to `fhir4ds_v2-0.0.3-py3-none-any.whl`.
 - **New Module**: `fhir4ds.sources` — exported from the top-level `fhir4ds` namespace.
+
+### Breaking changes
+
+None.
+
+### Known issues
+
+- `PostgresSource` requires FHIR JSON in a Postgres column — constructing FHIR JSON from arbitrary relational schemas is not supported in this release.
+- `CSVSource` does not support incremental delta tracking.
+- `FileSystemSource` incremental tracking is mtime-based and may produce false positives.
+- Iceberg format does not support incremental delta tracking.
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.3
+```
 
 ---
 
@@ -1148,13 +1300,28 @@ Version 0.0.2 focuses on reaching full spec compliance, enhancing performance th
 - **Version Bump**: The `fhir4ds`, `fhir4ds.cql`, `fhir4ds.fhirpath`, and `fhir4ds.viewdef` packages have all been bumped to version `0.0.2`.
 - **WASM Assets**: Updated the required WASM assets; integrations must now use the `0.0.2` translator wheel.
 
+### Breaking changes
+
+None.
+
+### Conformance
+
+99.8% across the CQL, DQM, FHIRPath, and ViewDefinition suites (over 150
+gaps resolved).
+
 ---
 
 ## Version 0.0.1
-*Initial Release - Early 2026*
+*April 2026*
 
 The initial release established the foundation for the FHIR4DS engine.
+
+### Highlights
 
 - **Unified Interface**: Provided a single entry point for CQL, FHIRPath, and ViewDefinition execution.
 - **DuckDB Integration**: Implemented the first set of Python-based UDFs for FHIR logic.
 - **Initial WASM Support**: Demonstrated browser-side clinical reasoning using Pyodide and DuckDB-WASM.
+
+### Breaking changes
+
+None.
