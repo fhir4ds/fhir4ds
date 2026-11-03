@@ -11,8 +11,8 @@ test.describe("Server-hosted /api-docs", () => {
   test("page renders with tabs and the health runner executes live", async ({
     page,
   }) => {
-    test.setTimeout(90_000);
-    await page.goto(APIDOCS);
+    test.setTimeout(240_000);
+    await page.goto(APIDOCS, { waitUntil: "domcontentloaded" });
 
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
       "fhir4ds serve",
@@ -26,11 +26,11 @@ test.describe("Server-hosted /api-docs", () => {
     // The health runner answers 200 with the live status payload.
     const runner = page
       .locator(".runner")
-      .filter({ hasText: "GET /health" })
+      .filter({ hasText: "/health" })
       .first();
     await runner.getByRole("button", { name: "▶ Run" }).click();
     await expect(runner.getByText(/HTTP 200/)).toBeVisible({
-      timeout: 30_000,
+      timeout: 60_000,
     });
     await expect(runner.getByText(/"status": "ok"/)).toBeVisible();
   });

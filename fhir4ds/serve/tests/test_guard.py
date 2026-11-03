@@ -376,5 +376,5 @@ def test_api_docs_page_is_open_and_complete(connection, tmp_path):
     page = client.get("/api-docs")
     assert page.status_code == 200
     assert page.headers["content-type"].startswith("text/html")
-    for marker in ("$sqlquery-run", "X-Write-Key", "/admin/key", "If-Match", "$bulk-publish"):
+    for marker in ("$sqlquery-run", "X-Write-Key", "/admin/key", "If-Match", "$bulk-publish", "fhir4ds.com"):
         assert marker in page.text

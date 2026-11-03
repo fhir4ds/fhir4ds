@@ -45,6 +45,7 @@
 <header>
   <h1>fhir4ds serve — FHIR R4 / SQL-on-FHIR API</h1>
   <p>This server's own documentation. Every runner below executes a real request against <code id="origin"></code> — same origin, no setup.</p>
+  <p style="margin-top:.6rem"><a href="https://fhir4ds.com" style="color:#9ecbff;font-weight:600">Powered by fhir4ds ↗</a> — FHIR R4 analytics on DuckDB: FHIRPath, CQL, SQL-on-FHIR v2.</p>
 </header>
 <main>
 
@@ -186,6 +187,7 @@ curl -X POST "$BASE/admin/key" -H "X-Admin-Key: $ADMIN_KEY" \
   <tr><td>Too many requests queued</td><td><code>503</code> busy — retry shortly</td></tr>
 </table>
 <p>Results are capped: an omitted <code>_limit</code> applies a server default (1,000 rows) and explicit limits are capped at the server maximum. Errors are always FHIR <code>OperationOutcome</code> resources.</p>
+<p style="color:var(--mut)">This API is <a href="https://fhir4ds.com">powered by fhir4ds</a> — open source, one <code>pip install fhir4ds-v2[serve]</code> away.</p>
 <p style="color:var(--mut)">Machine-readable route listing: <a href="/openapi.json">/openapi.json</a> · interactive: <a href="/docs" target="_blank">/docs</a></p>
 </main>
 <script>
