@@ -77,7 +77,7 @@ test.describe("FHIR REST API examples page", () => {
   }) => {
     test.setTimeout(90_000);
     // Leave the key field empty — the promise is a refusal, not silence.
-    const container = await run(page, /Run: create a Slot/);
+    const container = await run(page, /Run: upsert a Slot/);
     await expect(container.getByText(/HTTP 401/)).toBeVisible({
       timeout: 30_000,
     });

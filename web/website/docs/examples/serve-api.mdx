@@ -30,11 +30,11 @@ Every write is versioned and published to an append-only parquet dataset, so
 results survive server restarts.
 
 <Tabs>
-<TabItem value="curl" label="curl" default>
+<TabItem value="javascript" label="JavaScript" default>
 
-```bash title="Setup (curl)"
-BASE="https://fhir4ds-bulk-publish-demo-server.hf.space"
-WRITE_KEY="<your-write-key>"   # request one from the demo maintainers
+```javascript title="Setup (JavaScript)"
+const BASE = "https://fhir4ds-bulk-publish-demo-server.hf.space";
+const WRITE_KEY = "<your-write-key>"; // request one from the demo maintainers
 ```
 
 </TabItem>
@@ -48,11 +48,11 @@ WRITE_KEY = "<your-write-key>"  # request one from the demo maintainers
 ```
 
 </TabItem>
-<TabItem value="javascript" label="JavaScript">
+<TabItem value="curl" label="curl">
 
-```javascript title="Setup (JavaScript)"
-const BASE = "https://fhir4ds-bulk-publish-demo-server.hf.space";
-const WRITE_KEY = "<your-write-key>"; // request one from the demo maintainers
+```bash title="Setup (curl)"
+BASE="https://fhir4ds-bulk-publish-demo-server.hf.space"
+WRITE_KEY="<your-write-key>"   # request one from the demo maintainers
 ```
 
 </TabItem>
@@ -67,11 +67,12 @@ Every FHIR conversation starts at the CapabilityStatement.
 <TryIt method="GET" path="/health" label="health" />
 
 <Tabs>
-<TabItem value="curl" label="curl" default>
+<TabItem value="javascript" label="JavaScript" default>
 
-```bash
-curl "$BASE/metadata" | jq '.fhirVersion, .rest[0].resource[].type'
-curl "$BASE/health"
+```javascript
+const capability = await (await fetch(`${BASE}/metadata`)).json();
+console.log(capability.fhirVersion); // 4.0.1
+console.log(capability.rest[0].resource.map((r) => r.type));
 ```
 
 </TabItem>
@@ -84,11 +85,11 @@ print([r["type"] for r in capability["rest"][0]["resource"]])
 ```
 
 </TabItem>
-<TabItem value="javascript" label="JavaScript">
+<TabItem value="curl" label="curl">
 
-```javascript
-const capability = await (await fetch(`${BASE}/metadata`)).json();
-console.log(capability.fhirVersion); // 4.0.1
+```bash
+curl "$BASE/metadata" | jq '.fhirVersion, .rest[0].resource[].type'
+curl "$BASE/health"
 ```
 
 </TabItem>
@@ -97,14 +98,17 @@ console.log(capability.fhirVersion); // 4.0.1
 ## Post a resource
 
 Create a `Slot` (any FHIR resource type works — `Schedule`, `Patient`, …).
-The server assigns a version id and returns it as an `ETag`. Enter a write key
-below and run it for real — the resource lands on the demo server and appears
-in every later example on this page.
+The server assigns a version id and returns it as an `ETag`.
+
+The runner below uses `PUT` (create-or-update), so you can press Run as many
+times as you like — enter a write key and the resource lands on the demo
+server for real, then appears in every later example on this page. With an
+empty key you will see the `401` refusal.
 
 <TryIt
-  method="POST"
-  path="/Slot"
-  label="create a Slot"
+  method="PUT"
+  path="/Slot/docs-walkin-001"
+  label="upsert a Slot"
   needsKey={true}
   body={JSON.stringify({
     resourceType: 'Slot',
@@ -117,23 +121,22 @@ in every later example on this page.
 />
 
 <Tabs>
-<TabItem value="curl" label="curl" default>
+<TabItem value="javascript" label="JavaScript" default>
 
-```bash
-curl -X POST "$BASE/Slot" \
-  -H "X-Write-Key: $WRITE_KEY" \
-  -H "Content-Type: application/fhir+json" \
-  -d '{
-    "resourceType": "Slot",
-    "id": "walkin-001",
-    "status": "free",
-    "start": "2027-03-05T09:00:00Z",
-    "end": "2027-03-05T09:30:00Z",
-    "schedule": {"reference": "Schedule/10"}
-  }'
-# HTTP/1.1 201 Created
-# ETag: W/"11630"
-# Location: Slot/walkin-001
+```javascript
+const created = await fetch(`${BASE}/Slot`, {
+  method: "POST",
+  headers: { "Content-Type": "application/fhir+json", "X-Write-Key": WRITE_KEY },
+  body: JSON.stringify({
+    resourceType: "Slot",
+    id: "walkin-001",
+    status: "free",
+    start: "2027-03-05T09:00:00Z",
+    end: "2027-03-05T09:30:00Z",
+    schedule: { reference: "Schedule/10" },
+  }),
+});
+console.log(created.status, created.headers.get("ETag")); // 201 W/"11630"
 ```
 
 </TabItem>
@@ -155,22 +158,23 @@ print(created.status_code, created.headers["ETag"])  # 201 W/"11630"
 ```
 
 </TabItem>
-<TabItem value="javascript" label="JavaScript">
+<TabItem value="curl" label="curl">
 
-```javascript
-const created = await fetch(`${BASE}/Slot`, {
-  method: "POST",
-  headers: { "Content-Type": "application/fhir+json", "X-Write-Key": WRITE_KEY },
-  body: JSON.stringify({
-    resourceType: "Slot",
-    id: "walkin-001",
-    status: "free",
-    start: "2027-03-05T09:00:00Z",
-    end: "2027-03-05T09:30:00Z",
-    schedule: { reference: "Schedule/10" },
-  }),
-});
-console.log(created.status, created.headers.get("ETag")); // 201 W/"11630"
+```bash
+curl -X POST "$BASE/Slot" \
+  -H "X-Write-Key: $WRITE_KEY" \
+  -H "Content-Type: application/fhir+json" \
+  -d '{
+    "resourceType": "Slot",
+    "id": "walkin-001",
+    "status": "free",
+    "start": "2027-03-05T09:00:00Z",
+    "end": "2027-03-05T09:30:00Z",
+    "schedule": {"reference": "Schedule/10"}
+  }'
+# HTTP/1.1 201 Created
+# ETag: W/"11630"
+# Location: Slot/walkin-001
 ```
 
 </TabItem>
@@ -178,46 +182,54 @@ console.log(created.status, created.headers.get("ETag")); // 201 W/"11630"
 
 :::note No key, no writes
 Posting without a valid `X-Write-Key` returns `401` with a FHIR
-`OperationOutcome` — try the runner above with an empty key field. Reads never
-need a key.
+`OperationOutcome` — try the runner above with an empty key field. Re-posting
+an existing id is a `400`; use `PUT /Slot/{id}` to update it.
 :::
 
 ## Read, search, and history
 
-Anyone can read what has been written — run these anonymously:
+Anyone can read what has been written. Search supports `_id`, `identifier`,
+and paging (`_count`, `_offset`); richer filtering is what the
+ViewDefinitions below are for.
 
-<TryIt method="GET" path="/Slot?status=free&_count=5" label="search free slots" />
+<TryIt method="GET" path="/Slot/docs-walkin-001" label="read the slot you wrote" />
 
-<TryIt method="GET" path="/Slot/docs-walkin-001/_history" label="history" />
+<TryIt method="GET" path="/Slot?_count=5" label="search" />
+
+<TryIt method="GET" path="/Slot/1001/_history" label="history (seeded slot)" />
 
 <Tabs>
-<TabItem value="curl" label="curl" default>
+<TabItem value="javascript" label="JavaScript" default>
 
-```bash
-curl "$BASE/Slot/walkin-001"                  # read one (no key needed)
-curl "$BASE/Slot?status=free&_count=5"        # search with paging
-curl "$BASE/Schedule?_count=5"
-curl "$BASE/Slot/walkin-001/_history"         # versions, newest first
+```javascript
+const slot = await (await fetch(`${BASE}/Slot/docs-walkin-001`)).json();
+
+const search = await (await fetch(`${BASE}/Slot?_count=5`)).json();
+console.log(search.total);
+
+const history = await (
+  await fetch(`${BASE}/Slot/docs-walkin-001/_history`)
+).json();
 ```
 
 </TabItem>
 <TabItem value="python" label="Python">
 
 ```python
-read = requests.get(f"{BASE}/Slot/walkin-001").json()
-search = requests.get(f"{BASE}/Slot", params={"status": "free", "_count": 5}).json()
+read = requests.get(f"{BASE}/Slot/docs-walkin-001").json()
+search = requests.get(f"{BASE}/Slot", params={"_count": 5}).json()
 print(search["total"])
-history = requests.get(f"{BASE}/Slot/walkin-001/_history").json()
+history = requests.get(f"{BASE}/Slot/docs-walkin-001/_history").json()
 ```
 
 </TabItem>
-<TabItem value="javascript" label="JavaScript">
+<TabItem value="curl" label="curl">
 
-```javascript
-const search = await (
-  await fetch(`${BASE}/Slot?status=free&_count=5`)
-).json();
-console.log(search.total);
+```bash
+curl "$BASE/Slot/docs-walkin-001"            # read one (no key needed)
+curl "$BASE/Slot?_count=5"                   # search with paging
+curl "$BASE/Slot?_id=1001"                   # search by id
+curl "$BASE/Slot/docs-walkin-001/_history"   # versions, newest first
 ```
 
 </TabItem>
@@ -230,16 +242,24 @@ version is rejected with `412`. Deletes tombstone the resource (`410` on read)
 but `_history` keeps every version.
 
 <Tabs>
-<TabItem value="curl" label="curl" default>
+<TabItem value="javascript" label="JavaScript" default>
 
-```bash
-curl -X PUT "$BASE/Slot/walkin-001" \
-  -H "X-Write-Key: $WRITE_KEY" -H "Content-Type: application/fhir+json" \
-  -H 'If-Match: W/"11630"' \
-  -d '{ ...same slot, status now "busy"... }'
-# HTTP/1.1 200 OK   ETag: W/"11631"
+```javascript
+const updated = await fetch(`${BASE}/Slot/walkin-001`, {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/fhir+json",
+    "X-Write-Key": WRITE_KEY,
+    "If-Match": created.headers.get("ETag"),
+  },
+  body: JSON.stringify({ ...slot, status: "busy" }),
+});
+console.log(updated.status, updated.headers.get("ETag"));
 
-curl -X DELETE -H "X-Write-Key: $WRITE_KEY" "$BASE/Slot/walkin-001"
+await fetch(`${BASE}/Slot/walkin-001`, {
+  method: "DELETE",
+  headers: { "X-Write-Key": WRITE_KEY },
+});
 ```
 
 </TabItem>
@@ -256,18 +276,16 @@ print(requests.get(f"{BASE}/Slot/walkin-001").status_code)  # 410
 ```
 
 </TabItem>
-<TabItem value="javascript" label="JavaScript">
+<TabItem value="curl" label="curl">
 
-```javascript
-const updated = await fetch(`${BASE}/Slot/walkin-001`, {
-  method: "PUT",
-  headers: {
-    "Content-Type": "application/fhir+json",
-    "X-Write-Key": WRITE_KEY,
-    "If-Match": created.headers.get("ETag"),
-  },
-  body: JSON.stringify({ ...slot, status: "busy" }),
-});
+```bash
+curl -X PUT "$BASE/Slot/walkin-001" \
+  -H "X-Write-Key: $WRITE_KEY" -H "Content-Type: application/fhir+json" \
+  -H 'If-Match: W/"11630"' \
+  -d '{ ...same slot, status now "busy"... }'
+# HTTP/1.1 200 OK   ETag: W/"11631"
+
+curl -X DELETE -H "X-Write-Key: $WRITE_KEY" "$BASE/Slot/walkin-001"
 ```
 
 </TabItem>
@@ -277,16 +295,19 @@ const updated = await fetch(`${BASE}/Slot/walkin-001`, {
 
 The server ships two stored views — `slot-view` (one row per `Slot`) and
 `schedule-view` (one row per `Schedule`). Running them is an open `POST`; the
-query string carries operation parameters (`_format`, `_limit`, `header`):
+query string carries operation parameters (`_format`, `_limit`, `header`).
+This is also where real filtering lives — e.g. `status = 'free'`:
 
 <TryIt method="POST" path="/ViewDefinition/slot-view/$run?_format=json&_limit=3" label="run slot-view" />
 
 <Tabs>
-<TabItem value="curl" label="curl" default>
+<TabItem value="javascript" label="JavaScript" default>
 
-```bash
-curl -X POST "$BASE/ViewDefinition/slot-view/\$run?_limit=3"              # ndjson
-curl -X POST "$BASE/ViewDefinition/slot-view/\$run?_format=csv&_limit=3"  # csv
+```javascript
+const rows = await (
+  await fetch(`${BASE}/ViewDefinition/slot-view/$run?_limit=3`)
+).json();
+rows.forEach((row) => console.log(row.slot_id, row.status, row.starts_at));
 ```
 
 </TabItem>
@@ -299,13 +320,11 @@ for row in rows:
 ```
 
 </TabItem>
-<TabItem value="javascript" label="JavaScript">
+<TabItem value="curl" label="curl">
 
-```javascript
-const rows = await (
-  await fetch(`${BASE}/ViewDefinition/slot-view/$run?_limit=3`)
-).json();
-rows.forEach((row) => console.log(row.slot_id, row.status, row.starts_at));
+```bash
+curl -X POST "$BASE/ViewDefinition/slot-view/\$run?_limit=3"              # ndjson
+curl -X POST "$BASE/ViewDefinition/slot-view/\$run?_format=csv&_limit=3"  # csv
 ```
 
 </TabItem>
@@ -335,47 +354,7 @@ Runtime parameter values arrive as a **nested** `Parameters` resource:
 />
 
 <Tabs>
-<TabItem value="curl" label="curl" default>
-
-```bash
-curl -X POST "$BASE/Library/free-slots-query/\$sqlquery-run?_format=json&_limit=3" \
-  -H "Content-Type: application/fhir+json" \
-  -d '{
-    "resourceType": "Parameters",
-    "parameter": [{
-      "name": "parameters",
-      "resource": {
-        "resourceType": "Parameters",
-        "parameter": [{"name": "status", "valueString": "free"}]
-      }
-    }]
-  }'
-```
-
-</TabItem>
-<TabItem value="python" label="Python">
-
-```python
-body = {
-    "resourceType": "Parameters",
-    "parameter": [{
-        "name": "parameters",
-        "resource": {
-            "resourceType": "Parameters",
-            "parameter": [{"name": "status", "valueString": "free"}],
-        },
-    }],
-}
-result = requests.post(
-    f"{BASE}/Library/free-slots-query/$sqlquery-run?_format=json&_limit=3",
-    json=body,
-).json()
-for row in result:
-    print(row["starts_at"], row["actor_display"])
-```
-
-</TabItem>
-<TabItem value="javascript" label="JavaScript">
+<TabItem value="javascript" label="JavaScript" default>
 
 ```javascript
 const result = await (
@@ -403,6 +382,46 @@ result.forEach((row) => console.log(row.starts_at, row.actor_display));
 ```
 
 </TabItem>
+<TabItem value="python" label="Python">
+
+```python
+body = {
+    "resourceType": "Parameters",
+    "parameter": [{
+        "name": "parameters",
+        "resource": {
+            "resourceType": "Parameters",
+            "parameter": [{"name": "status", "valueString": "free"}],
+        },
+    }],
+}
+result = requests.post(
+    f"{BASE}/Library/free-slots-query/$sqlquery-run?_format=json&_limit=3",
+    json=body,
+).json()
+for row in result:
+    print(row["starts_at"], row["actor_display"])
+```
+
+</TabItem>
+<TabItem value="curl" label="curl">
+
+```bash
+curl -X POST "$BASE/Library/free-slots-query/\$sqlquery-run?_format=json&_limit=3" \
+  -H "Content-Type: application/fhir+json" \
+  -d '{
+    "resourceType": "Parameters",
+    "parameter": [{
+      "name": "parameters",
+      "resource": {
+        "resourceType": "Parameters",
+        "parameter": [{"name": "status", "valueString": "free"}]
+      }
+    }]
+  }'
+```
+
+</TabItem>
 </Tabs>
 
 Try `"busy"` — or your own posted slot's id — new writes are visible to views
@@ -413,7 +432,36 @@ and queries immediately.
 Multiple writes ride one `POST /Bundle` with per-entry statuses:
 
 <Tabs>
-<TabItem value="python" label="Python" default>
+<TabItem value="javascript" label="JavaScript" default>
+
+```javascript
+const bundle = {
+  resourceType: "Bundle",
+  type: "transaction",
+  entry: [1, 2].map((n) => ({
+    request: { method: "POST", url: "Slot" },
+    resource: {
+      resourceType: "Slot",
+      id: `bundle-slot-${n}`,
+      status: "free",
+      start: `2027-03-06T1${n}:00:00Z`,
+      end: `2027-03-06T1${n}:30:00Z`,
+      schedule: { reference: "Schedule/10" },
+    },
+  })),
+};
+const response = await fetch(`${BASE}/Bundle`, {
+  method: "POST",
+  headers: { "Content-Type": "application/fhir+json", "X-Write-Key": WRITE_KEY },
+  body: JSON.stringify(bundle),
+});
+(await response.json()).entry.forEach((e) =>
+  console.log(e.response.status, e.response.location),
+);
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
 
 ```python
 bundle = {
@@ -488,9 +536,11 @@ shows the full client-side consume story against your own server.
 | --- | --- |
 | Write or admin call without a valid key | `401` `OperationOutcome` |
 | Unknown or mistyped operation parameter | `400` naming the parameter |
+| Unsupported search parameter (only `_id`, `identifier`, paging) | `400` listing the supported set |
+| `POST` an id that already exists | `400` (use `PUT` to update) |
 | Same parameter in body **and** query string | `400` (ambiguous) |
 | Update with a stale `If-Match` version | `412` |
-| Read of a deleted resource | `410 Gone` (`_history` still works) |
+| Read of a deleted (or never-created) resource | `404` / `410 Gone` (`_history` keeps versions) |
 | Request body over the server cap | `413` |
 | Query exceeding the server time limit | `408` |
 

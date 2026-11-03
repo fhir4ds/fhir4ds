@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fhir4ds serve — API Documentation</title>
+<style>
+  :root { --line:#d8dce3; --ink:#1c2128; --mut:#57606a; --code:#f6f8fa; --acc:#0969da; --ok:#1a7f37; --bad:#cf222e; }
+  * { box-sizing: border-box; }
+  body { font: 15px/1.6 -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); margin: 0; background: #fff; }
+  header { background: #0d2b3e; color: #fff; padding: 1.5rem 2rem; }
+  header h1 { margin: 0 0 .3rem; font-size: 1.4rem; }
+  header p { margin: 0; opacity: .85; }
+  main { max-width: 60rem; margin: 0 auto; padding: 1.5rem 2rem 4rem; }
+  h2 { margin-top: 2.5rem; border-bottom: 1px solid var(--line); padding-bottom: .3rem; }
+  code, pre { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  code { background: var(--code); padding: .1rem .35rem; border-radius: 4px; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: .8rem 1rem; overflow: auto; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid var(--line); padding: .4rem .7rem; text-align: left; font-size: 14px; vertical-align: top; }
+  th { background: var(--code); }
+  .tabs { margin: .8rem 0; }
+  .tabbar { display: flex; gap: .3rem; border-bottom: 1px solid var(--line); }
+  .tab { padding: .35rem .9rem; cursor: pointer; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; color: var(--mut); background: none; font: inherit; font-size: 14px; }
+  .tab[aria-selected="true"] { background: var(--code); border-color: var(--line); color: var(--ink); font-weight: 600; }
+  .tabpane { display: none; border: 1px solid var(--line); border-top: none; border-radius: 0 0 6px 6px; padding: .8rem 1rem; background: #fff; }
+  .tabpane.active { display: block; }
+  .runner { margin: 1rem 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .runner .bar { display: flex; align-items: center; gap: .75rem; padding: .5rem .8rem; background: var(--code); flex-wrap: wrap; }
+  .runner .req { font: 13px ui-monospace, Menlo, monospace; flex: 1 1 auto; min-width: 12rem; word-break: break-all; }
+  .runner .method { font-weight: 700; color: var(--acc); margin-right: .35rem; }
+  .runner input { flex: 0 1 11rem; padding: .3rem .5rem; font-size: 13px; border: 1px solid var(--line); border-radius: 5px; }
+  .runner button { border: none; border-radius: 5px; background: var(--acc); color: #fff; padding: .35rem 1rem; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .runner button:disabled { opacity: .6; cursor: wait; }
+  .runner .statusline { display: flex; justify-content: space-between; padding: .35rem .8rem; font-size: 13px; border-top: 1px solid var(--line); }
+  .runner .ok { color: var(--ok); font-weight: 600; }
+  .runner .bad { color: var(--bad); font-weight: 600; }
+  .runner pre { margin: 0; border: none; border-radius: 0; max-height: 22rem; }
+  .note { border-left: 3px solid var(--acc); background: var(--code); padding: .6rem 1rem; margin: 1rem 0; border-radius: 0 6px 6px 0; }
+  .toc { columns: 2; font-size: 14px; }
+  @media (max-width: 640px) { .toc { columns: 1; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>fhir4ds serve — FHIR R4 / SQL-on-FHIR API</h1>
+  <p>This server's own documentation. Every runner below executes a real request against <code id="origin"></code> — same origin, no setup.</p>
+</header>
+<main>
+
+<nav class="toc">
+  <ul>
+    <li><a href="#tiers">Authentication tiers</a></li>
+    <li><a href="#discover">Discovery</a></li>
+    <li><a href="#writes">Creating resources</a></li>
+    <li><a href="#reads">Read, search, history</a></li>
+    <li><a href="#update">Update &amp; delete</a></li>
+    <li><a href="#bundles">Transaction bundles</a></li>
+    <li><a href="#run">ViewDefinition $run</a></li>
+    <li><a href="#sqlquery">$sqlquery-run</a></li>
+    <li><a href="#registry">Definition registry</a></li>
+    <li><a href="#bulk">Bulk publish feed</a></li>
+    <li><a href="#admin">Admin &amp; keys</a></li>
+    <li><a href="#limits">Limits &amp; errors</a></li>
+  </ul>
+</nav>
+
+<h2 id="tiers">Authentication tiers</h2>
+<p>Reads and stored-query execution are <strong>open</strong>. Writes need a <em>write key</em>;
+definition management, inline resources and admin operations need the <em>admin key</em>.
+Keys travel in headers (a <code>Bearer</code> authorization header also works):</p>
+<table>
+  <tr><th>Header</th><th>Tier</th><th>Grants</th></tr>
+  <tr><td><code>X-Write-Key</code></td><td>write</td><td>resource writes, <code>POST /Bundle</code>, <code>/admin/flush</code></td></tr>
+  <tr><td><code>X-Admin-Key</code></td><td>admin</td><td>everything, including key management and inline <code>queryResource</code>/<code>viewResource</code></td></tr>
+</table>
+<div class="note">Wrong or missing keys answer a uniform <code>401</code> OperationOutcome — the response never reveals which tier a guess nearly hit. Runners below that need a key show a key field (kept in this browser's localStorage only).</div>
+
+<h2 id="discover">Discovery</h2>
+<div class="runner" data-run='{"method":"GET","path":"/metadata"}'><div class="bar"><span class="req"><span class="method">GET</span>/metadata</span><button>▶ Run</button></div><div class="out"></div></div>
+<div class="runner" data-run='{"method":"GET","path":"/health"}'><div class="bar"><span class="req"><span class="method">GET</span>/health</span><button>▶ Run</button></div><div class="out"></div></div>
+<p>The <a href="/docs" target="_blank">interactive OpenAPI docs</a> list every route mechanically. This page is the semantic guide.</p>
+
+<h2 id="writes">Creating resources</h2>
+<p><code>POST /{resourceType}</code> with a FHIR resource body. The server assigns a monotonic version id, returned as <code>ETag</code> (<code>W/"&lt;seq&gt;"</code>) and mirrored in <code>meta.versionId</code>; <code>Location</code> names the new resource. Ids are optional — omit <code>id</code> and the server mints one.</p>
+<div class="runner" data-run='{"method":"PUT","path":"/Slot/docs-demo-slot","needsKey":true,"body":{"resourceType":"Slot","id":"docs-demo-slot","status":"free","start":"2027-03-05T09:00:00Z","end":"2027-03-05T09:30:00Z","schedule":{"reference":"Schedule/10"}}}'><div class="bar"><span class="req"><span class="method">PUT</span>/Slot/docs-demo-slot <em>(upsert — safe to re-run)</em></span><input type="password" placeholder="X-Write-Key" aria-label="write key"><button>▶ Run</button></div><div class="out"></div></div>
+<div class="tabs" data-tabs>
+  <div class="tabbar"><button class="tab" aria-selected="true">JavaScript</button><button class="tab" aria-selected="false">Python</button><button class="tab" aria-selected="false">curl</button></div>
+  <div class="tabpane active"><pre>const created = await fetch(`${location.origin}/Slot`, {
+  method: "POST",
+  headers: { "Content-Type": "application/fhir+json", "X-Write-Key": WRITE_KEY },
+  body: JSON.stringify({
+    resourceType: "Slot", id: "walkin-001", status: "free",
+    start: "2027-03-05T09:00:00Z", end: "2027-03-05T09:30:00Z",
+    schedule: { reference: "Schedule/10" },
+  }),
+});
+console.log(created.status, created.headers.get("ETag")); // 201 W/"42"</pre></div>
+  <div class="tabpane"><pre>import requests
+created = requests.post(f"{BASE}/Slot", json=slot, headers={"X-Write-Key": WRITE_KEY})
+print(created.status_code, created.headers["ETag"])</pre></div>
+  <div class="tabpane"><pre>curl -X POST "$BASE/Slot" -H "X-Write-Key: $WRITE_KEY" \
+  -H "Content-Type: application/fhir+json" -d @slot.json</pre></div>
+</div>
+<p>Conditional create: add <code>If-None-Exist: &lt;search&gt;</code> to create only when no match exists (200 if one match, 412 if many). Re-posting an existing id is a <code>400</code> — use <code>PUT</code> to update.</p>
+
+<h2 id="reads">Read, search, history</h2>
+<div class="runner" data-run='{"method":"GET","path":"/Slot/docs-demo-slot"}'><div class="bar"><span class="req"><span class="method">GET</span>/Slot/docs-demo-slot</span><button>▶ Run</button></div><div class="out"></div></div>
+<div class="runner" data-run='{"method":"GET","path":"/Slot?_count=5"}'><div class="bar"><span class="req"><span class="method">GET</span>/Slot?_count=5</span><button>▶ Run</button></div><div class="out"></div></div>
+<div class="runner" data-run='{"method":"GET","path":"/Slot/1001/_history"}'><div class="bar"><span class="req"><span class="method">GET</span>/Slot/1001/_history</span><button>▶ Run</button></div><div class="out"></div></div>
+<table>
+  <tr><th>Search parameter</th><th>Meaning</th></tr>
+  <tr><td><code>_id</code></td><td>one or more resource ids</td></tr>
+  <tr><td><code>identifier</code></td><td><code>system|value</code> or bare <code>value</code></td></tr>
+  <tr><td><code>_count</code>, <code>_offset</code></td><td>paging (page links ride <code>Link</code> headers)</td></tr>
+</table>
+<p>Anything else is a <code>400</code> listing the supported set — structured filtering belongs to the ViewDefinitions and SQL queries below. Every read has a twin versioned read: <code>GET /{type}/{id}/_history/{versionId}</code> returns that exact version.</p>
+
+<h2 id="update">Update &amp; delete</h2>
+<p><code>PUT /{type}/{id}</code> creates-or-updates. Send <code>If-Match: W/"&lt;seq&gt;"</code> for optimistic locking — a stale version is <code>412</code>. <code>DELETE /{type}/{id}</code> tombstones: reads answer <code>410 Gone</code>, <code>_history</code> keeps every version forever.</p>
+<div class="tabs" data-tabs>
+  <div class="tabbar"><button class="tab" aria-selected="true">JavaScript</button><button class="tab" aria-selected="false">Python</button><button class="tab" aria-selected="false">curl</button></div>
+  <div class="tabpane active"><pre>await fetch(`${BASE}/Slot/walkin-001`, {
+  method: "PUT",
+  headers: { "Content-Type": "application/fhir+json", "X-Write-Key": WRITE_KEY,
+             "If-Match": created.headers.get("ETag") },
+  body: JSON.stringify({ ...slot, status: "busy" }),
+});
+await fetch(`${BASE}/Slot/walkin-001`, { method: "DELETE", headers: { "X-Write-Key": WRITE_KEY } });</pre></div>
+  <div class="tabpane"><pre>requests.put(f"{BASE}/Slot/walkin-001", json={**slot, "status": "busy"},
+            headers={"X-Write-Key": WRITE_KEY, "If-Match": created.headers["ETag"]})
+requests.delete(f"{BASE}/Slot/walkin-001", headers={"X-Write-Key": WRITE_KEY})</pre></div>
+  <div class="tabpane"><pre>curl -X PUT "$BASE/Slot/walkin-001" -H "X-Write-Key: $WRITE_KEY" \
+  -H 'If-Match: W/"42"' -H "Content-Type: application/fhir+json" -d @slot.json
+curl -X DELETE -H "X-Write-Key: $WRITE_KEY" "$BASE/Slot/walkin-001"</pre></div>
+</div>
+
+<h2 id="bundles">Transaction bundles</h2>
+<p><code>POST /Bundle</code> with <code>type: transaction|batch</code> applies every entry in order — creates, updates, deletes — and returns one response Bundle with per-entry statuses, ETags and locations.</p>
+<div class="runner" data-run='{"method":"POST","path":"/Bundle","needsKey":true,"body":{"resourceType":"Bundle","type":"transaction","entry":[{"request":{"method":"POST","url":"Slot"},"resource":{"resourceType":"Slot","id":"docs-bundle-1","status":"free","start":"2027-03-06T10:00:00Z","end":"2027-03-06T10:30:00Z","schedule":{"reference":"Schedule/10"}}},{"request":{"method":"POST","url":"Slot"},"resource":{"resourceType":"Slot","id":"docs-bundle-2","status":"free","start":"2027-03-06T11:00:00Z","end":"2027-03-06T11:30:00Z","schedule":{"reference":"Schedule/10"}}}]}}'><div class="bar"><span class="req"><span class="method">POST</span>/Bundle <em>(two slots, one transaction)</em></span><input type="password" placeholder="X-Write-Key" aria-label="write key"><button>▶ Run</button></div><div class="out"></div></div>
+
+<h2 id="run">ViewDefinition <code>$run</code></h2>
+<p>The synchronous view evaluator. Instance level runs a <em>stored</em> view (open access):</p>
+<div class="runner" data-run='{"method":"POST","path":"/ViewDefinition/slot-view/$run?_format=json&_limit=3"}'><div class="bar"><span class="req"><span class="method">POST</span>/ViewDefinition/slot-view/$run?_format=json&amp;_limit=3</span><button>▶ Run</button></div><div class="out"></div></div>
+<div class="runner" data-run='{"method":"POST","path":"/ViewDefinition/schedule-view/$run?_format=json&_limit=3"}'><div class="bar"><span class="req"><span class="method">POST</span>/ViewDefinition/schedule-view/$run?_format=json&amp;_limit=3</span><button>▶ Run</button></div><div class="out"></div></div>
+<p>Operation parameters — <code>_format</code> (<code>json|ndjson|csv|parquet</code>, default <code>ndjson</code>), <code>_limit</code>, <code>header</code> (CSV on/off) — may travel in the query string or in a <code>Parameters</code> body, never both (that is a <code>400</code>). A <code>source</code> parameter can name an alternate data source when the server was started with sources configured. Type-level <code>POST /ViewDefinition/$run</code> additionally accepts an inline <code>viewResource</code> — admin tier, because it is author-supplied evaluation.</p>
+
+<h2 id="sqlquery">SQL-on-FHIR <code>$sqlquery-run</code></h2>
+<p>Runs a stored SQLQuery <code>Library</code> with bound parameters. Runtime values arrive as a <strong>nested</strong> <code>Parameters</code> resource; declared types are coerced (a <code>date</code> parameter gets a real DATE, not a string):</p>
+<div class="runner" data-run='{"method":"POST","path":"/Library/free-slots-query/$sqlquery-run?_format=json&_limit=3","body":{"resourceType":"Parameters","parameter":[{"name":"parameters","resource":{"resourceType":"Parameters","parameter":[{"name":"status","valueString":"free"}]}}]}}'><div class="bar"><span class="req"><span class="method">POST</span>/Library/free-slots-query/$sqlquery-run?_format=json&amp;_limit=3 <em>(status=free)</em></span><button>▶ Run</button></div><div class="out"></div></div>
+<p>Three levels: <code>/Library/{id}/$sqlquery-run</code> (stored, open), <code>/Library/$sqlquery-run</code> and <code>/$sqlquery-run</code> with a <code>queryReference</code> or inline <code>queryResource</code> (admin tier). Dependencies referenced by <code>relatedArtifact</code> labels are materialized as views first; cycles are detected and refused.</p>
+
+<h2 id="registry">Definition registry</h2>
+<p><code>GET /ViewDefinition</code> and <code>GET /Library</code> list registered definitions; <code>GET /{type}/{id}</code> reads one. Registering or replacing a definition is <code>POST /{type}</code> — admin tier, because definitions drive evaluation. Served definitions are versioned into the dataset on every flush and restored on restart.</p>
+<div class="runner" data-run='{"method":"GET","path":"/ViewDefinition"}'><div class="bar"><span class="req"><span class="method">GET</span>/ViewDefinition</span><button>▶ Run</button></div><div class="out"></div></div>
+
+<h2 id="bulk">Bulk publish feed</h2>
+<p>Every write is published to an append-only parquet dataset; <code>GET /$bulk-publish</code> serves the Bulk-Data-shaped manifest pointing at the parts. On a public server with a private dataset the part URLs need credentials — the manifest is the map, access is the token.</p>
+<div class="runner" data-run='{"method":"GET","path":"/$bulk-publish"}'><div class="bar"><span class="req"><span class="method">GET</span>/$bulk-publish</span><button>▶ Run</button></div><div class="out"></div></div>
+<p>Flushes are automatic (interval or row-count); <code>POST /admin/flush</code> (write tier) forces one synchronously. Rows keep their <code>_seq</code> across retries and restarts — a version id is never reused.</p>
+
+<h2 id="admin">Admin &amp; key management</h2>
+<p><code>POST /admin/key</code> (admin tier) manages the labeled write-key set at runtime — no restart:</p>
+<pre>curl -X POST "$BASE/admin/key" -H "X-Admin-Key: $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"add","label":"ci","key":"&lt;new-key&gt;"}'
+# {"action":"add","label":"ci","write_keys":["__env__","ci"]}
+
+# revoke (never the last one):
+curl -X POST "$BASE/admin/key" -H "X-Admin-Key: $ADMIN_KEY" \
+  -d '{"action":"revoke","label":"ci"}'</pre>
+<p>Rotation is two-step and zero-downtime: <code>add</code> the new key, switch clients, <code>revoke</code> the old. Runtime-added keys persist with the dataset and survive restarts; the environment bootstrap key (<code>__env__</code>) is the break-glass fallback. The admin key itself is environment-only by design — rotating it is a secret change plus a restart.</p>
+
+<h2 id="limits">Limits &amp; errors</h2>
+<table>
+  <tr><th>Situation</th><th>Response</th></tr>
+  <tr><td>Write/admin call without a valid key</td><td><code>401</code> OperationOutcome</td></tr>
+  <tr><td>Unknown or mistyped operation parameter</td><td><code>400</code> naming the parameter</td></tr>
+  <tr><td>Parameter in both body and query string</td><td><code>400</code> (ambiguous)</td></tr>
+  <tr><td>Unsupported search parameter</td><td><code>400</code> listing the supported set</td></tr>
+  <tr><td><code>POST</code> an id that already exists</td><td><code>400</code> — use <code>PUT</code></td></tr>
+  <tr><td>Stale <code>If-Match</code> on update</td><td><code>412</code></td></tr>
+  <tr><td>Read of a deleted resource</td><td><code>410 Gone</code></td></tr>
+  <tr><td>Body over the server cap (default 10 MB)</td><td><code>413</code></td></tr>
+  <tr><td>Query over the time limit (default 30 s)</td><td><code>408</code> — the query is interrupted</td></tr>
+  <tr><td>Too many requests queued</td><td><code>503</code> busy — retry shortly</td></tr>
+</table>
+<p>Results are capped: an omitted <code>_limit</code> applies a server default (1,000 rows) and explicit limits are capped at the server maximum. Errors are always FHIR <code>OperationOutcome</code> resources.</p>
+<p style="color:var(--mut)">Machine-readable route listing: <a href="/openapi.json">/openapi.json</a> · interactive: <a href="/docs" target="_blank">/docs</a></p>
+</main>
+<script>
+document.getElementById("origin").textContent = location.origin;
+
+// Tabs
+for (const group of document.querySelectorAll("[data-tabs]")) {
+  const tabs = [...group.querySelectorAll(".tab")];
+  const panes = [...group.querySelectorAll(".tabpane")];
+  tabs.forEach((tab, i) => tab.addEventListener("click", () => {
+    tabs.forEach((t, j) => { t.setAttribute("aria-selected", String(i === j)); panes[j].classList.toggle("active", i === j); });
+  }));
+}
+
+// Runners
+const KEY = "fhir4ds-write-key";
+const getKey = () => localStorage.getItem(KEY) || "";
+document.querySelectorAll(".runner input[type=password]").forEach((input) => {
+  input.value = getKey();
+  input.addEventListener("change", () => localStorage.setItem(KEY, input.value));
+});
+for (const runner of document.querySelectorAll(".runner")) {
+  const spec = JSON.parse(runner.dataset.run);
+  const button = runner.querySelector("button");
+  const out = runner.querySelector(".out");
+  button.addEventListener("click", async () => {
+    button.disabled = true; out.textContent = "";
+    const headers = { Accept: "application/json" };
+    if (spec.body) headers["Content-Type"] = "application/fhir+json";
+    if (spec.needsKey) headers["X-Write-Key"] = runner.querySelector("input")?.value || "";
+    try {
+      const response = await fetch(spec.path, { method: spec.method, headers, body: spec.body ? JSON.stringify(spec.body) : undefined });
+      const text = await response.text();
+      let pretty = text;
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed) && parsed.length > 5)
+          pretty = JSON.stringify(parsed.slice(0, 5), null, 2) + `\n… ${parsed.length - 5} more row(s) (use _limit)`;
+        else pretty = JSON.stringify(parsed, null, 2);
+      } catch { const lines = pretty.split("\n"); if (lines.length > 8) pretty = lines.slice(0, 8).join("\n") + `\n… ${lines.length - 8} more line(s)`; }
+      const cls = response.status < 400 ? "ok" : "bad";
+      out.innerHTML = `<div class="statusline"><span class="${cls}">HTTP ${response.status} ${response.statusText}</span><span>${response.headers.get("content-type") || "-"}</span></div><pre></pre>`;
+      out.querySelector("pre").textContent = pretty;
+    } catch (exc) {
+      out.innerHTML = `<div class="statusline"><span class="bad">request failed: ${exc}</span></div>`;
+    } finally { button.disabled = false; }
+  });
+}
+</script>
+</body>
+</html>

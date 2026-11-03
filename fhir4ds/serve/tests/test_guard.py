@@ -366,3 +366,15 @@ def test_cors_disallowed_origin_gets_no_allow_header(connection, tmp_path):
     client = plain_client(create_app(config, connection=connection))
     read = client.get("/health", headers={"Origin": "https://evil.example"})
     assert "access-control-allow-origin" not in read.headers
+
+
+# -- self-hosted API docs -------------------------------------------------------
+
+
+def test_api_docs_page_is_open_and_complete(connection, tmp_path):
+    client = boot(connection, tmp_path)
+    page = client.get("/api-docs")
+    assert page.status_code == 200
+    assert page.headers["content-type"].startswith("text/html")
+    for marker in ("$sqlquery-run", "X-Write-Key", "/admin/key", "If-Match", "$bulk-publish"):
+        assert marker in page.text
