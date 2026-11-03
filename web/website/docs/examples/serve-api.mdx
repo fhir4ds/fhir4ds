@@ -188,11 +188,11 @@ an existing id is a `400`; use `PUT /Slot/{id}` to update it.
 
 ## Read, search, and history
 
-Anyone can read what has been written. Search supports `_id`, `identifier`,
+Anyone can read what has been written — the runner reads a seeded slot, so it works without running the write example first (`GET /Slot/docs-walkin-001` returns your own write identically). Search supports `_id`, `identifier`,
 and paging (`_count`, `_offset`); richer filtering is what the
 ViewDefinitions below are for.
 
-<TryIt method="GET" path="/Slot/docs-walkin-001" label="read the slot you wrote" />
+<TryIt method="GET" path="/Slot/1001" label="read a seeded slot (keyless)" />
 
 <TryIt method="GET" path="/Slot?_count=5" label="search" />
 

@@ -11,6 +11,7 @@
   header { background: #0d2b3e; color: #fff; padding: 1.5rem 2rem; }
   header h1 { margin: 0 0 .3rem; font-size: 1.4rem; }
   header p { margin: 0; opacity: .85; }
+  header code { background: rgba(255,255,255,.14); color: #fff; padding: .1rem .45rem; border-radius: 4px; word-break: break-all; }
   main { max-width: 60rem; margin: 0 auto; padding: 1.5rem 2rem 4rem; }
   h2 { margin-top: 2.5rem; border-bottom: 1px solid var(--line); padding-bottom: .3rem; }
   code, pre { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -106,7 +107,8 @@ print(created.status_code, created.headers["ETag"])</pre></div>
 <p>Conditional create: add <code>If-None-Exist: &lt;search&gt;</code> to create only when no match exists (200 if one match, 412 if many). Re-posting an existing id is a <code>400</code> — use <code>PUT</code> to update.</p>
 
 <h2 id="reads">Read, search, history</h2>
-<div class="runner" data-run='{"method":"GET","path":"/Slot/docs-demo-slot"}'><div class="bar"><span class="req"><span class="method">GET</span>/Slot/docs-demo-slot</span><button>▶ Run</button></div><div class="out"></div></div>
+<p><code>GET /{type}/{id}</code> returns the current version. The runner reads a seeded slot; if you ran the upsert above, <code>GET /Slot/docs-demo-slot</code> returns your own write the same way.</p>
+<div class="runner" data-run='{"method":"GET","path":"/Slot/1001"}'><div class="bar"><span class="req"><span class="method">GET</span>/Slot/1001 <em>(seeded — works without a key)</em></span><button>▶ Run</button></div><div class="out"></div></div>
 <div class="runner" data-run='{"method":"GET","path":"/Slot?_count=5"}'><div class="bar"><span class="req"><span class="method">GET</span>/Slot?_count=5</span><button>▶ Run</button></div><div class="out"></div></div>
 <div class="runner" data-run='{"method":"GET","path":"/Slot/1001/_history"}'><div class="bar"><span class="req"><span class="method">GET</span>/Slot/1001/_history</span><button>▶ Run</button></div><div class="out"></div></div>
 <table>
