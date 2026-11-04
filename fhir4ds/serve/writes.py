@@ -360,9 +360,14 @@ class ResourceWriter:
 
     # -- import ----------------------------------------------------------
 
-    def import_rows(self, rows: Iterable[dict]) -> int:
-        """Append pre-existing resources (``--resources`` preload) to the log."""
-        imported = 0
+    def import_rows(self, rows: Iterable[dict]) -> list[WriteResult]:
+        """Append pre-existing resources (``--resources`` preload) to the log.
+
+        Returns the write results so the caller can publish them — a preload
+        is a write like any other and belongs in the dataset, not only in the
+        local log.
+        """
+        imported: list[WriteResult] = []
         for row in rows:
             resource = row.get("resource")
             if not isinstance(resource, dict):
@@ -375,19 +380,32 @@ class ResourceWriter:
                 validate_id(str(resource_id))
             except ServeError:
                 continue
-            self._append(
-                str(resource_type), str(resource_id), resource, created=True
+            imported.append(
+                self._append(
+                    str(resource_type), str(resource_id), resource, created=True
+                )
             )
-            imported += 1
         return imported
 
 
 # -- helpers -----------------------------------------------------------------
 
 
+#: FHIR resource type names are UpperCamel ASCII (shape check at writes).
+RESOURCE_TYPE_PATTERN = re.compile(r"^[A-Z][A-Za-z0-9]{1,63}$")
+
+
 def _require_type(resource: Any, resource_type: str) -> None:
     if not isinstance(resource, dict):
         raise bad_request("Request body must be a FHIR resource", code="structure")
+    # Type names become part of the stored log and published dataset; reject
+    # obvious garbage at the boundary instead of persisting it forever.
+    if not RESOURCE_TYPE_PATTERN.match(resource_type):
+        raise bad_request(
+            f"{resource_type!r} is not a valid FHIR resource type name "
+            "(UpperCamel ASCII letters/digits)",
+            expression=["resourceType"],
+        )
     body_type = resource.get("resourceType")
     if body_type != resource_type:
         raise bad_request(
@@ -541,7 +559,7 @@ def apply_bundle(request: Request, body: Any | None = Body(default=None)) -> Res
             {
                 "response": {
                     "status": result.status,
-                    "location": f"{result.resource['resourceType']}/{result.resource['id']}",
+                    "location": f"{result.resource['resourceType']}/{result.resource['id']}/_history/{result.seq}",
                     "etag": etag_for(result.seq),
                 }
             }
@@ -565,6 +583,48 @@ def bulk_publish_manifest(request: Request) -> Response:
     manifest = flusher.manifest(str(request.base_url).rstrip("/"))
     return Response(
         content=json.dumps(manifest, ensure_ascii=False),
+        media_type="application/json",
+    )
+
+
+@router.post("/admin/key", summary="Manage write keys (admin tier)")
+def manage_keys(request: Request, body: Any | None = Body(default=None)) -> Response:
+    """Add or revoke a labeled write key. Admin key required (guard-enforced).
+
+    Body: ``{"action": "add"|"revoke", "label": "...", "key": "..." (add only)}``.
+    Runtime-added keys persist to the configured key store; the registry can
+    never drop to zero write keys.
+    """
+    from .auth import AuthError
+
+    payload = _decode(request, body)
+    action = payload.get("action")
+    label = payload.get("label")
+    registry = context_for(request).keys
+    try:
+        if action == "add":
+            registry.add_write_key(label, payload.get("key"))
+        elif action == "revoke":
+            registry.revoke_write_key(label)
+        else:
+            raise bad_request(
+                "action must be 'add' or 'revoke'", expression=["action"]
+            )
+    except AuthError as exc:
+        raise unprocessable(str(exc)) from None
+    # Persist the rotation to the dataset immediately (files-only commit);
+    # on failure the next row flush re-stages the snapshot.
+    flusher = context_for(request).flusher
+    if flusher is not None:
+        try:
+            flusher.publish_state()
+        except Exception:  # noqa: BLE001 - rotation succeeded; persistence retries
+            pass
+    return Response(
+        content=json.dumps(
+            {"action": action, "label": label, "write_keys": registry.write_key_labels()},
+            ensure_ascii=False,
+        ),
         media_type="application/json",
     )
 
@@ -636,7 +696,7 @@ def create_resource(
         return _resource_response(
             result,
             pending=_pending(request),
-            location=f"{resource_type}/{result.resource['id']}",
+            location=f"{resource_type}/{result.resource['id']}/_history/{result.seq}",
             status_code=201,
         )
 
@@ -645,7 +705,7 @@ def create_resource(
     return _resource_response(
         result,
         pending=_pending(request),
-        location=f"{resource_type}/{result.resource['id']}",
+        location=f"{resource_type}/{result.resource['id']}/_history/{result.seq}",
         status_code=201,
     )
 
@@ -715,7 +775,7 @@ def conditional_update(
     return _resource_response(
         result,
         pending=_pending(request),
-        location=f"{resource_type}/{result.resource['id']}",
+        location=f"{resource_type}/{result.resource['id']}/_history/{result.seq}",
         status_code=status_code,
     )
 
@@ -752,7 +812,7 @@ def update_resource(
     return _resource_response(
         result,
         pending=_pending(request),
-        location=f"{resource_type}/{resource_id}",
+        location=f"{resource_type}/{resource_id}/_history/{result.seq}",
         status_code=200 if result.created is False else 201,
     )
 

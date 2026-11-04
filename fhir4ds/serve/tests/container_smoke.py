@@ -280,12 +280,12 @@ def run_checks(base: str) -> None:
         json.dumps(document)[:160],
     )
 
-    say("== source=hf://datasets/fhir4ds/bulk-publish-demo")
+    say("== source=hf://datasets/fhir4ds/bulk-publish-demo-data")
     status, _, body = call(
         base,
         "/ViewDefinition/patient-view/$run",
         parameters(
-            {"name": "source", "valueString": "hf://datasets/fhir4ds/bulk-publish-demo"}
+            {"name": "source", "valueString": "hf://datasets/fhir4ds/bulk-publish-demo-data"}
         ),
     )
     document = json.loads(body)

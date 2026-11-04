@@ -138,7 +138,9 @@ def type_level_view_run(
 ) -> Response:
     """Evaluate a ViewDefinition supplied by reference or inline."""
     context = context_for(request)
-    bag = ParametersBag.from_body(body)
+    bag = ParametersBag.from_body(body).merge_query(
+        request.query_params, VIEWDEFINITION_RUN_PARAMETERS
+    )
     bag.validate(VIEWDEFINITION_RUN_PARAMETERS)
     view = _resolve_type_level_view(context, bag)
     return viewdefinition_operation(
@@ -160,7 +162,9 @@ def instance_view_run(
 ) -> Response:
     """Evaluate the ViewDefinition identified by the request path."""
     context = context_for(request)
-    bag = ParametersBag.from_body(body)
+    bag = ParametersBag.from_body(body).merge_query(
+        request.query_params, VIEWDEFINITION_RUN_PARAMETERS
+    )
     view = context.run_locked(require_resource, context.store, RESOURCE, view_id)
     bag.forbid([VIEW_REFERENCE_PARAMETER.name, VIEW_RESOURCE_PARAMETER.name])
     return viewdefinition_operation(

@@ -31,7 +31,7 @@ surface produces identical results for the same inputs.
 The CLI exposes evidence workflows via `fhir4ds verify --evidence PATH`
 (write a baseline artifact) and `--baseline PATH` (print the delta); MCP
 exposes the same as `compare_evidence_tool`. The browser workbench
-([CQL Cleanroom](/docs/examples/cql-cleanroom)) is the third adapter —
+([CQL Cleanroom](/docs/examples/cql-cleanroom/)) is the third adapter —
 a three-way matrix test asserts identical envelopes across CLI, MCP, and
 the browser for `run_tests` and `compare_evidence`.
 

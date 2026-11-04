@@ -1,0 +1,40 @@
+{
+  "id": "schedule-view",
+  "url": "https://example.org/ViewDefinition/schedule_view",
+  "description": "One row per Schedule with its first actor reference and service type.",
+  "resource": "Schedule",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "schedule_id",
+          "type": "string",
+          "path": "id"
+        },
+        {
+          "name": "actor",
+          "type": "string",
+          "path": "actor.first().reference"
+        },
+        {
+          "name": "actor_display",
+          "type": "string",
+          "path": "actor.first().display"
+        },
+        {
+          "name": "service_type_code",
+          "type": "string",
+          "path": "serviceType.coding.first().code"
+        },
+        {
+          "name": "service_type_display",
+          "type": "string",
+          "path": "serviceType.coding.first().display"
+        }
+      ]
+    }
+  ],
+  "resourceType": "ViewDefinition",
+  "status": "active",
+  "name": "schedule_view"
+}

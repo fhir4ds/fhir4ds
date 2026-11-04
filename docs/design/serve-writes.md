@@ -9,7 +9,7 @@ A read-only projection cannot answer "what did I POST?" A FHIR API needs
 versions, history and conditional writes, and the demo needs a feed that keeps
 working when the server does not. Phase 3 adds both halves: a versioned write
 surface over DuckDB, and an append-only parquet dataset on the Hub
-(`fhir4ds/bulk-publish-demo`) that is the durable copy.
+(`fhir4ds/bulk-publish-demo-data`) that is the durable copy.
 
 ## Storage model — one place, three consumers
 

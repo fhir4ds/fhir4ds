@@ -107,10 +107,10 @@ FHIR4DS bridges the gap between healthcare standards and modern data science. By
 :::tip 
 
 Next Steps
-- Explore the [User Guide](/docs/user-guide/index) for conceptual deep dives.
-- Review the [Benchmarking & Accuracy](/docs/getting-started/benchmarking) report.
-- Try the [Interactive CQL Playground](/docs/examples/cql-playground).
-- Learn CQL step by step with the [CQL Clinic](/docs/examples/cql-clinic)
+- Explore the [User Guide](/docs/user-guide/index/) for conceptual deep dives.
+- Review the [Benchmarking & Accuracy](/docs/getting-started/benchmarking/) report.
+- Try the [Interactive CQL Playground](/docs/examples/cql-playground/).
+- Learn CQL step by step with the [CQL Clinic](/docs/examples/cql-clinic/)
   lessons.
 
 :::

@@ -7,7 +7,7 @@ import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
-const PRODUCT_VERSION = '0.0.20';
+const PRODUCT_VERSION = '0.0.21';
 const SQL_EXECUTION_MEAN_ALL_MEASURES = '~3.9ms';
 const SQL_EXECUTION_MEAN_SHARED_MEASURES = '~6.9ms';
 const JAVA_EXECUTION_MEAN_SHARED_MEASURES = '~936ms';
@@ -170,7 +170,7 @@ const FEATURES: Feature[] = [
         from clinical notes via medterm4ds — over HTTP or embedded in-process.
         <br />
         <Link
-          to="/docs/user-guide/terminology/terminology-service"
+          to="/docs/user-guide/terminology/terminology-service/"
           style={{fontSize: '0.85rem', fontWeight: 600, display: 'inline-block', marginTop: '0.5rem'}}
         >
           Learn more →
@@ -292,7 +292,7 @@ function ComparisonSection() {
           </table>
         </div>
         <div className="text--center" style={{marginTop: '2rem'}}>
-          <Link className="button button--outline button--primary" to="/docs/getting-started/benchmarking">
+          <Link className="button button--outline button--primary" to="/docs/getting-started/benchmarking/">
             View Full Benchmarking Report →
           </Link>
         </div>
@@ -311,10 +311,10 @@ function CtaSection() {
           and built for high-performance clinical quality measurement.
         </p>
         <div style={{display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap'}}>
-          <Link className="button button--primary button--lg" to="/docs/getting-started/installation">
+          <Link className="button button--primary button--lg" to="/docs/getting-started/installation/">
             Install fhir4ds
           </Link>
-          <Link className="button button--secondary button--lg" to="/docs/user-guide/index">
+          <Link className="button button--secondary button--lg" to="/docs/user-guide/index/">
             Explore User Guide
           </Link>
           <Link
@@ -351,14 +351,14 @@ function Hero() {
           for blazing fast, auditable population health analytics with zero server infrastructure.
         </p>
         <div style={{display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap'}}>
-          <Link className="button button--primary button--lg" to="/docs/getting-started/installation">
+          <Link className="button button--primary button--lg" to="/docs/getting-started/installation/">
             Get Started →
           </Link>
-          <Link className="button button--secondary button--lg" to="/docs/examples/cql-playground">
+          <Link className="button button--secondary button--lg" to="/docs/examples/cql-playground/">
             🌐 Live Demo
           </Link>
           <span className={styles.clinicButton}>
-            <Link className="button button--secondary button--lg" to="/docs/examples/cql-clinic">
+            <Link className="button button--secondary button--lg" to="/docs/examples/cql-clinic/">
               🎓 Learn CQL
             </Link>
             <span className={styles.newBadge}>New</span>

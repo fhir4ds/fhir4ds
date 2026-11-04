@@ -365,6 +365,19 @@ class TreeStore:
     def stage_file(self, relative_path: str, text: str) -> None:
         self._write_text(relative_path, text)
 
+    def pending_files(self) -> int:
+        """Files a failed flush committed but could not publish.
+
+        The local tree has no upload step: everything written is already
+        committed, so there is never anything to retry. (The flush loop's
+        ``_retry_pending`` calls this on every empty-buffer flush.)
+        """
+        return 0
+
+    def retry_publish(self) -> str:
+        """No-op counterpart of ``pending_files`` for the upload-free store."""
+        return self.revision()
+
     # -- for subclasses --------------------------------------------------
 
     @property

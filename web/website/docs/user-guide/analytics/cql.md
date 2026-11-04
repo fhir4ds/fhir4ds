@@ -9,9 +9,9 @@ sidebar_label: CQL
 Clinical Quality Language (CQL) is an HL7 standard designed for expressing clinical knowledge, such as quality measures and decision support rules. FHIR4DS provides a high-performance, SQL-native translator that allows you to execute complex clinical logic at population scale.
 
 :::tip
-New to CQL? Work through the [CQL Clinic](/docs/examples/cql-clinic) — twelve
+New to CQL? Work through the [CQL Clinic](/docs/examples/cql-clinic/) — twelve
 interactive lessons that run in your browser — then experiment freely in the
-[CQL Playground](/docs/examples/cql-playground).
+[CQL Playground](/docs/examples/cql-playground/).
 :::
 
 ## 1. Overview

@@ -5826,3 +5826,52 @@ Every identified UI/UX issue in the web surfaces gets confirmed via
 Playwright BEFORE the fix lands: write the failing repro test first
 (red), then fix, then confirm the SAME test green. Every handoff report
 states 'repro'd via Playwright: <test name>' for each fixed item.
+
+## Serve HTTP Surface Doctrine (v0.0.21 campaign, Domain 13, 2026-11-04)
+
+Known fragile areas — all FIXED in iterations 1-2, keep regression-tested:
+- **Rehydration is per-part, never all-or-nothing** (V22-QA-001):
+  `serve/rehydrate.py::_restore_rows` restores parts one at a time; a corrupt
+  part loses only its own rows (logged + `rehydrate_skipped_parts` on
+  `/health`; snapshot-level failure sets `rehydrate_error`). Never reintroduce
+  a single multi-part `read_parquet([...])` — one bad part used to discard the
+  whole dataset silently with `/health` green.
+- **Per-part restore also dedups overlapping `_seq`** (V22-QA-002): the
+  per-statement `NOT EXISTS` sees earlier parts' inserts. A version id is
+  restored exactly once even if two parts carry it.
+- **Query-string operation parameters face the same validation as body
+  parameters** (V22-QA-006): unknown names are a 400 naming the supported set
+  (`parameters.py::merge_query`), not silently ignored — a typo'd `?limitt=`
+  must never silently change the result set.
+- **Location headers are FHIR `/{type}/{id}/_history/{vid}`** (V22-QA-007)
+  on create/update and in bundle `entry.response.location`.
+- Streaming cap applies regardless of Content-Length (guard.py always installs
+  `capped_receive`); `adopt_write_keys` validates labels/values like runtime
+  adds (`__env__` label exempt).
+- NOT A BUG registry: bundle `entry.response.status` = "201 Created" (FHIR:
+  SHALL start with a 3-digit code, MAY carry the description); unknown
+  resourceType answers 400-with-reason (server choice vs 404); re-POST of an
+  existing id is 400 (documented; PUT is the update path).
+- Verified clean: transaction rollback (real BEGIN/ROLLBACK), If-None-Exist
+  0/1/many -> 201/200/412, If-Match stale -> 412, delete -> 410 with vread
+  survival, 408 watchdog interrupt (0.5s cap, recursive CTE), 503 gate
+  saturation, source path traversal rejection, tier matrix + uniform 401.
+
+## Native Extension Build Provenance (V22-QA-009, 2026-11-04)
+
+- **Each ABI variant must build from its matching source state**: 1.5.5
+  plain bundles ← `3e753080fbd^` (pre-port) @ v1.5.5 submodules; 1.5.6
+  bundles ← HEAD @ v1.5.6; 2.0 bundles ← `3e753080fbd` @ v2.0.0. HEAD
+  source does NOT compile against v2.0.0 (member-vs-accessor API split).
+- **The build tree can silently no-op**: artifacts newer than objects make
+  `make fhirpath_loadable_extension` claim success while linking nothing;
+  CMakeCache dirs copied from /mnt/d refuse or misdirect builds. After ANY
+  rebuild, VERIFY the artifact md5 actually changed and the behavior
+  changed; nuke the build dir (mv build/release aside) when in doubt.
+- The no-python parity harness loads from
+  `extensions/*/build/release/extension/*/{name}.duckdb_extension` — after
+  building a non-1.5.5 variant in the main tree, restore the 1.5.5 binary
+  to that path or the harness fails to LOAD on duckdb 1.5.5 (189 phantom
+  failures observed).
+- A 1.5.6-vs-1.5.5 LOAD failure message naming the binary's build version
+  is the fast tell that a wrong-ABI binary sits in a load path.

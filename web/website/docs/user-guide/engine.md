@@ -98,7 +98,7 @@ The `cql` module translates Clinical Quality Language into optimized DuckDB SQL 
 The `dqm` (Digital Quality Measures) module manages the full lifecycle of evaluation, from loading CMS bundles to generating auditable evidence.
 
 - **Workflow & Audit**: [DQM Orchestration](./quality/dqm)
-- **Production Recipes**: [Source-to-DQM Production Recipes](/docs/examples/dqm-recipes)
+- **Production Recipes**: [Source-to-DQM Production Recipes](/docs/examples/dqm-recipes/)
 </details>
 
 ## 5. Operations
@@ -112,6 +112,6 @@ For repeatable batch runs and project automation, use the operations guides:
 :::tip 
 
 Full API Reference
-For a complete list of functions, parameters, and return types, see the [API Reference](/docs/api-reference/fhir4ds).
+For a complete list of functions, parameters, and return types, see the [API Reference](/docs/api-reference/fhir4ds/).
 
 :::

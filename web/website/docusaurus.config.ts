@@ -44,6 +44,21 @@ const config: Config = {
           { from: '/docs/user-guide/extraction/duckdb', to: '/docs/user-guide/duckdb' },
           { from: '/docs/user-guide/quality/dqm-recipes', to: '/docs/examples/dqm-recipes' },
           { from: '/docs/user-guide/cli', to: '/docs/user-guide/interfaces/cli' },
+          // AMUX-51 batch (Search Console 2026-11-03 exports): restructure
+          // paths + FHIR canonical-URL stubs (meta-refresh client
+          // redirects; GH Pages cannot serve server-side ones).
+          { from: '/docs/user-guide/sources/data-sources', to: '/docs/user-guide/data-sources' },
+          { from: '/docs/user-guide/index/interfaces/cli', to: '/docs/user-guide/interfaces/cli' },
+          // FHIR canonical URLs cited in medterm4ds extension examples —
+          // resolve to the terminology docs that define them.
+          // source-adapter routes carry the id: prefix (sources-*) —
+          // the bare forms were linked pre-2026-11 and 404'd in Search Console
+          { from: '/docs/api-reference/sources/csv', to: '/docs/api-reference/sources/sources-csv' },
+          { from: '/docs/api-reference/sources/relational', to: '/docs/api-reference/sources/sources-relational' },
+          { from: '/docs/api-reference/sources/existing', to: '/docs/api-reference/sources/sources-existing' },
+          { from: '/docs/api-reference/sources/filesystem', to: '/docs/api-reference/sources/sources-filesystem' },
+          { from: '/fhir/StructureDefinition/autocoding', to: '/docs/user-guide/terminology/autocoding' },
+          { from: '/fhir/StructureDefinition/derived-from-text', to: '/docs/user-guide/terminology/notes-pipeline' },
         ],
       },
     ],
@@ -147,6 +162,12 @@ const config: Config = {
           editUrl: 'https://github.com/fhir4ds/fhir4ds/edit/main/web/website/',
         },
         blog: false,
+        sitemap: {
+          // AMUX-51 thin-page triage: standalone demo shells are UI
+          // surfaces, not content pages — keep them crawlable but out of
+          // the sitemap (Search Console "discovered, not indexed").
+          ignorePatterns: ['/apps/scheduling/**', '/demo/**'],
+        },
         theme: {
           customCss: './src/css/custom.css',
         },

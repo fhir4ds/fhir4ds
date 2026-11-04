@@ -14,10 +14,11 @@ import urllib.request
 
 import duckdb
 import pytest
-from fastapi.testclient import TestClient
 
 from fhir4ds.serve.app import create_app
 from fhir4ds.serve.config import ServeConfig
+
+from ._helpers import TEST_ADMIN_KEY, TEST_WRITE_KEY, keyed_client
 
 FHIR_JSON = {"Content-Type": "application/fhir+json"}
 
@@ -39,10 +40,13 @@ def app_connection():
 @pytest.fixture()
 def client(publish_dir, app_connection):
     app = create_app(
-        ServeConfig(publish_dir=str(publish_dir), flush_autostart=False),
+        ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+publish_dir=str(publish_dir), flush_autostart=False),
         connection=app_connection,
     )
-    return TestClient(app)
+    return keyed_client(app)
 
 
 def patient(resource_id: str | None = None, family: str = "Smith") -> dict:
@@ -69,7 +73,7 @@ def test_post_assigns_id_version_and_location(client):
     assert response.headers["etag"] == 'W/"1"'
     body = response.json()
     assert body["id"]
-    assert response.headers["location"] == f"Patient/{body['id']}"
+    assert response.headers["location"] == f"Patient/{body['id']}/_history/{body['meta']['versionId']}"
     assert body["meta"]["versionId"] == "1"
 
 
@@ -433,26 +437,38 @@ def test_admin_flush_commits_the_buffer(client, publish_dir):
 
 
 def test_versions_survive_a_restart(publish_dir, app_connection):
-    first = TestClient(
-        create_app(
-            ServeConfig(publish_dir=str(publish_dir), flush_autostart=False),
+    first = keyed_client(create_app(
+            ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+publish_dir=str(publish_dir), flush_autostart=False),
             connection=app_connection,
         )
     )
     first.post("/Patient", json=patient("p1"), headers=FHIR_JSON)
     first.post("/admin/flush")
 
-    # A new process: fresh in-memory database, same dataset directory.
+    # A new process: fresh in-memory database, same dataset directory. Boot-time
+    # rehydration restores p1 (original _seq 1) from the published part before
+    # the surface serves, so the id exists: read it back and UPDATE it — a
+    # duplicate create would be a phantom rewrite of published history.
     second_connection = duckdb.connect()
     try:
-        second = TestClient(
-            create_app(
-                ServeConfig(publish_dir=str(publish_dir), flush_autostart=False),
+        second = keyed_client(create_app(
+                ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+publish_dir=str(publish_dir), flush_autostart=False),
                 connection=second_connection,
             )
         )
-        response = second.post("/Patient", json=patient("p1", family="Next"), headers=FHIR_JSON)
-        assert response.status_code == 201
+        restored = second.get("/Patient/p1")
+        assert restored.status_code == 200, restored.text
+        assert restored.headers["etag"] == 'W/"1"'
+        response = second.put(
+            "/Patient/p1", json=patient("p1", family="Next"), headers=FHIR_JSON
+        )
+        assert response.status_code == 200
         assert response.headers["etag"] == 'W/"2"'
     finally:
         second_connection.close()
@@ -552,9 +568,11 @@ def test_bulk_publish_manifest_lists_the_published_part(client, publish_dir):
 
 def test_dataset_carries_served_definitions(client, publish_dir, connection, store):
     """Definitions the server serves are published alongside the data."""
-    installed = TestClient(
-        create_app(
-            ServeConfig(publish_dir=str(publish_dir), flush_autostart=False),
+    installed = keyed_client(create_app(
+            ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+publish_dir=str(publish_dir), flush_autostart=False),
             connection=connection,
         )
     )

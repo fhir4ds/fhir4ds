@@ -70,8 +70,8 @@ FHIR `MeasureReport` output, use the CLI:
 fhir4ds dqm run --config dqm-run.json
 ```
 
-See the [Command Line Interface](/docs/user-guide/interfaces/cli) and
-[DQM production recipes](/docs/examples/dqm-recipes) for end-to-end
+See the [Command Line Interface](/docs/user-guide/interfaces/cli/) and
+[DQM production recipes](/docs/examples/dqm-recipes/) for end-to-end
 batch examples.
 
 ## SQL-on-FHIR ViewDefinitions

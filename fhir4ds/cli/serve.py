@@ -12,6 +12,7 @@ Status lines go to stderr so stdout stays free for structured output.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -110,6 +111,26 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
         help="uvicorn logging configuration (JSON/YAML/INI). The container "
         "passes one that writes to stdout instead of uvicorn's default stderr",
     )
+    parser.add_argument(
+        "--admin-key",
+        default=os.environ.get("FHIR4DS_ADMIN_KEY"),
+        help="admin API key (env FHIR4DS_ADMIN_KEY; grants everything incl. key management)",
+    )
+    parser.add_argument(
+        "--write-key",
+        default=os.environ.get("FHIR4DS_WRITE_KEY"),
+        help="bootstrap write API key (env FHIR4DS_WRITE_KEY; more via POST /admin/key)",
+    )
+    parser.add_argument(
+        "--cors-origins",
+        default=os.environ.get("FHIR4DS_CORS_ORIGINS"),
+        help="comma-separated allowed CORS origins (or *; env FHIR4DS_CORS_ORIGINS)",
+    )
+    parser.add_argument(
+        "--key-store",
+        default=os.environ.get("FHIR4DS_KEY_STORE"),
+        help="JSON file persisting runtime-added write keys (use persistent storage)",
+    )
 
 
 def build_config(args: argparse.Namespace) -> ServeConfig:
@@ -134,6 +155,14 @@ def build_config(args: argparse.Namespace) -> ServeConfig:
         publish_backend=args.publish_backend,
         publish_repository=args.publish_repository,
         publisher=args.publisher,
+        admin_key=args.admin_key,
+        write_key=args.write_key,
+        key_store=args.key_store,
+        cors_origins=tuple(
+            origin.strip()
+            for origin in (args.cors_origins or "").split(",")
+            if origin.strip()
+        ),
     )
 
 
@@ -204,18 +233,54 @@ def load_resources(context, path: Path) -> int:
 
     connection = context.connection
     scratch = "serve_import"
+    results = []
     with context.lock:
         loader = FHIRDataLoader(connection, table_name=scratch)
-        loaded = loader.load_directory(path) if path.is_dir() else loader.load_file(path)
+        loader.load_directory(path) if path.is_dir() else loader.load_file(path)
         rows = connection.execute(f"SELECT resource FROM {scratch}").fetchall()
         connection.execute(f"DROP TABLE {scratch}")
-        imported = context.writer.import_rows(
-            [{"resource": json.loads(row[0]) if isinstance(row[0], str) else row[0]} for row in rows]
-        )
+        payload = [
+            {"resource": json.loads(row[0]) if isinstance(row[0], str) else row[0]}
+            for row in rows
+        ]
+        # Skip-if-present (dataset wins): anything the rehydrated log already
+        # holds — including tombstoned ids — keeps its published version; a
+        # blanket re-import would resurrect deletes and write a duplicate part
+        # on every restart.
+        from fhir4ds.serve.versioning import BASE_TABLE
+
+        present = {
+            (resource_type, resource_id)
+            for resource_type, resource_id in connection.execute(
+                f"SELECT DISTINCT resourceType, id FROM {BASE_TABLE}"
+            ).fetchall()
+        }
+        absent = [
+            entry
+            for entry in payload
+            if (entry["resource"].get("resourceType"), entry["resource"].get("id"))
+            not in present
+        ]
+        results = context.writer.import_rows(absent)
         # The loader's resolve() macro was bound to the scratch table; rebind it
         # to the ``resources`` view (CREATE TABLE IF NOT EXISTS is a no-op there).
         FHIRDataLoader(connection, table_name=context.config.source_table)
-    return imported if imported is not None else loaded
+
+    # Publish OUTSIDE the context lock: the flusher's definition provider
+    # re-acquires it, so flushing under the lock would deadlock.
+    # A preload is a write: one synchronous flush publishes the whole seed as
+    # a single part — the background tick would otherwise commit 50 rows at a
+    # time — and on failure the rows stay buffered for the tick.
+    flusher = getattr(context, "flusher", None)
+    if flusher is not None and results:
+        flusher.enqueue(
+            [result.publish_row for result in results if result.publish_row]
+        )
+        try:
+            flusher.flush()
+        except Exception as exc:  # noqa: BLE001 - rows stay buffered for the tick
+            print(f"fhir4ds serve: seed publish deferred to flush tick: {exc}", file=sys.stderr)
+    return len(results)
 
 
 __all__ = ["configure_parser", "run", "build_config", "load_resources"]

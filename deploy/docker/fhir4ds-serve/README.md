@@ -40,7 +40,7 @@ docker run --rm -p 7860:7860 \
 * `--data-root /data` lets an operation's `source` parameter name a path under
   `/data` (`source=/data/bundle.json`). Without it, path sources are refused
   with a 400 — the root is the only part of the filesystem a request may name.
-* `source=hf://datasets/fhir4ds/bulk-publish-demo` is answered with a 400
+* `source=hf://datasets/fhir4ds/bulk-publish-demo-data` is answered with a 400
   `OperationOutcome` in this phase: the Hugging Face dataset store arrives in
   phase 3 and that dataset holds no data before then.
 
@@ -62,7 +62,7 @@ docker run --rm -p 7860:7860 \
   fhir4ds-serve:phase2 \
   python -m fhir4ds.serve --host 0.0.0.0 --port 7860 --data-root /data \
     --publish-dir /publish --publish-backend hf \
-    --publish-repository fhir4ds/bulk-publish-demo
+    --publish-repository fhir4ds/bulk-publish-demo-data
 ```
 
 * **Single writer only.** One container, one DuckDB connection, one flush

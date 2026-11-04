@@ -1,0 +1,40 @@
+{
+  "id": "slot-view",
+  "url": "https://example.org/ViewDefinition/slot_view",
+  "description": "One row per Slot: status, window and owning Schedule reference.",
+  "resource": "Slot",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "slot_id",
+          "type": "string",
+          "path": "id"
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "path": "status"
+        },
+        {
+          "name": "starts_at",
+          "type": "dateTime",
+          "path": "start"
+        },
+        {
+          "name": "ends_at",
+          "type": "dateTime",
+          "path": "end"
+        },
+        {
+          "name": "schedule",
+          "type": "string",
+          "path": "schedule.reference"
+        }
+      ]
+    }
+  ],
+  "resourceType": "ViewDefinition",
+  "status": "active",
+  "name": "slot_view"
+}

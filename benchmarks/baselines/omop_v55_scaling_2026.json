@@ -1,0 +1,1291 @@
+{
+ "campaign": "omop-scaling-2026-11",
+ "date": "2026-11-03",
+ "config": {
+  "memory_limit": "8GB",
+  "threads": 16,
+  "source": "parquet-view",
+  "exec": "CTAS median",
+  "reps": {
+   "1000": 3,
+   "10000": 3,
+   "100000": 2
+  },
+  "corpus": "Synthea seed 20261102, 114666 patients, zstd parquet chunks (1000 patients each)"
+ },
+ "rungs": {
+  "1000": {
+   "staging": {
+    "patients_requested": 1000,
+    "patients_actual": 1000,
+    "resources": 876903,
+    "type_counts": {
+     "Observation": 568321,
+     "Procedure": 130216,
+     "Encounter": 58582,
+     "MedicationRequest": 52569,
+     "Condition": 36481,
+     "MedicationAdministration": 14807,
+     "Immunization": 14381,
+     "Patient": 1000,
+     "ConceptMap": 546
+    },
+    "json_bytes_staged": 913529791,
+    "parquet_corpus_mb": 35.3,
+    "db_file_mb": 0.262,
+    "stage_wall_s": 1.3,
+    "stage_peak_rss_mb": 147.9,
+    "db_path": "/home/jmontavon/omop-scaling-db/rung1000.duckdb",
+    "staging_path": "parquet-view",
+    "chunks": 1
+   },
+   "omop": {
+    "workload": "omop",
+    "compile": {
+     "vd_generate_ms": {
+      "conceptmap-view": 17.5,
+      "condition-occurrence-source-view": 30.7,
+      "death-source-view": 7.3,
+      "device-exposure-source-view": 11.6,
+      "drug-exposure-immunization-source-view": 15.6,
+      "drug-exposure-medication-administration-source-view": 24.8,
+      "drug-exposure-medication-dispense-source-view": 18.5,
+      "drug-exposure-medication-request-source-view": 22.8,
+      "drug-exposure-medication-statement-source-view": 38.8,
+      "measurement-source-view": 15.0,
+      "observation-source-view": 17.6,
+      "person-source-view": 7.6,
+      "procedure-occurrence-source-view": 20.9,
+      "visit-occurrence-source-view": 15.4
+     },
+     "view_create_ms": 1038.0
+    },
+    "exec_source_views": {
+     "drug-exposure-medication-request-source-view": {
+      "exec_ms": 17307.4,
+      "rows": 52569
+     },
+     "drug-exposure-medication-statement-source-view": {
+      "exec_ms": 752.7,
+      "rows": 0
+     },
+     "drug-exposure-medication-administration-source-view": {
+      "exec_ms": 4675.9,
+      "rows": 14807
+     },
+     "drug-exposure-medication-dispense-source-view": {
+      "exec_ms": 646.5,
+      "rows": 0
+     },
+     "drug-exposure-immunization-source-view": {
+      "exec_ms": 3032.5,
+      "rows": 14381
+     },
+     "person-source-view": {
+      "exec_ms": 866.4,
+      "rows": 1000
+     },
+     "visit-occurrence-source-view": {
+      "exec_ms": 6505.7,
+      "rows": 58582
+     },
+     "condition-occurrence-source-view": {
+      "exec_ms": 10864.4,
+      "rows": 36481
+     },
+     "procedure-occurrence-source-view": {
+      "exec_ms": 23911.8,
+      "rows": 130216
+     },
+     "measurement-source-view": {
+      "exec_ms": 97195.4,
+      "rows": 436304
+     },
+     "observation-source-view": {
+      "exec_ms": 35845.6,
+      "rows": 132017
+     },
+     "device-exposure-source-view": {
+      "exec_ms": 589.6,
+      "rows": 0
+     },
+     "death-source-view": {
+      "exec_ms": 1002.3,
+      "rows": 133
+     },
+     "conceptmap-view": {
+      "exec_ms": 1644.4,
+      "rows": 108683
+     }
+    },
+    "exec_final_tables": {
+     "person": {
+      "exec_ms": [
+       1179.1,
+       1179.4,
+       1193.7
+      ],
+      "exec_ms_median": 1179.4,
+      "rows": 1000,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 15997.7,
+        "Cached_mb": 11857.7,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3981.3
+       },
+       {
+        "MemAvailable_mb": 15910.8,
+        "Cached_mb": 11857.7,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3981.4
+       },
+       {
+        "MemAvailable_mb": 15891.0,
+        "Cached_mb": 11857.8,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3981.5
+       }
+      ]
+     },
+     "visit_occurrence": {
+      "exec_ms": [
+       6658.6,
+       6947.8,
+       7038.5
+      ],
+      "exec_ms_median": 6947.8,
+      "rows": 58582,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 15788.1,
+        "Cached_mb": 11857.8,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3981.5
+       },
+       {
+        "MemAvailable_mb": 15704.3,
+        "Cached_mb": 11865.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3982.5
+       },
+       {
+        "MemAvailable_mb": 15738.7,
+        "Cached_mb": 11857.4,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3983.7
+       }
+      ]
+     },
+     "condition_occurrence": {
+      "exec_ms": [
+       10554.2,
+       10312.3,
+       10246.0
+      ],
+      "exec_ms_median": 10312.3,
+      "rows": 36481,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 15714.7,
+        "Cached_mb": 11863.5,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3984.8
+       },
+       {
+        "MemAvailable_mb": 15704.1,
+        "Cached_mb": 11868.0,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3986.0
+       },
+       {
+        "MemAvailable_mb": 15494.6,
+        "Cached_mb": 11874.2,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3986.6
+       }
+      ]
+     },
+     "procedure_occurrence": {
+      "exec_ms": [
+       24333.5,
+       24223.3,
+       22783.2
+      ],
+      "exec_ms_median": 24223.3,
+      "rows": 130216,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 15447.1,
+        "Cached_mb": 11828.7,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3988.4
+       },
+       {
+        "MemAvailable_mb": 15710.1,
+        "Cached_mb": 11830.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3989.9
+       },
+       {
+        "MemAvailable_mb": 15711.7,
+        "Cached_mb": 11832.6,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3990.4
+       }
+      ]
+     },
+     "drug_exposure": {
+      "exec_ms": [
+       22419.7,
+       22571.7,
+       22657.5
+      ],
+      "exec_ms_median": 22571.7,
+      "rows": 81757,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 15919.0,
+        "Cached_mb": 11859.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3991.3
+       },
+       {
+        "MemAvailable_mb": 15997.4,
+        "Cached_mb": 12251.7,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 4346.1
+       },
+       {
+        "MemAvailable_mb": 14573.1,
+        "Cached_mb": 12244.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 5635.8
+       }
+      ]
+     },
+     "device_exposure": {
+      "exec_ms": [
+       635.2,
+       599.3,
+       585.3
+      ],
+      "exec_ms_median": 599.3,
+      "rows": 0,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 13004.1,
+        "Cached_mb": 12264.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 6437.8
+       },
+       {
+        "MemAvailable_mb": 13028.4,
+        "Cached_mb": 12264.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 6470.9
+       },
+       {
+        "MemAvailable_mb": 12993.4,
+        "Cached_mb": 12264.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 6508.3
+       }
+      ]
+     },
+     "measurement": {
+      "exec_ms": [
+       96980.4,
+       109808.3,
+       95255.2
+      ],
+      "exec_ms_median": 96980.4,
+      "rows": 436304,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 12964.8,
+        "Cached_mb": 12264.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 6541.4
+       },
+       {
+        "MemAvailable_mb": 16956.5,
+        "Cached_mb": 11403.5,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 11222.1
+       },
+       {
+        "MemAvailable_mb": 10847.6,
+        "Cached_mb": 11272.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 11283.8
+       }
+      ]
+     },
+     "observation": {
+      "exec_ms": [
+       38169.7,
+       39789.7,
+       85069.4
+      ],
+      "exec_ms_median": 39789.7,
+      "rows": 132017,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 10835.6,
+        "Cached_mb": 8459.5,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 10868.5
+       },
+       {
+        "MemAvailable_mb": 10360.7,
+        "Cached_mb": 9219.2,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 10882.3
+       },
+       {
+        "MemAvailable_mb": 9296.3,
+        "Cached_mb": 9134.9,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 10902.5
+       }
+      ]
+     },
+     "death": {
+      "exec_ms": [
+       1324.5,
+       2262.8,
+       12032.5
+      ],
+      "exec_ms_median": 2262.8,
+      "rows": 133,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 16963.6,
+        "Cached_mb": 6117.7,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 10910.3
+       },
+       {
+        "MemAvailable_mb": 17054.9,
+        "Cached_mb": 7641.5,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 10910.4
+       },
+       {
+        "MemAvailable_mb": 17275.9,
+        "Cached_mb": 12229.9,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 10910.1
+       }
+      ]
+     }
+    },
+    "rows_total": 876490,
+    "patients": 1000,
+    "db": "/home/jmontavon/omop-scaling-db/rung1000.duckdb",
+    "reps": 3,
+    "rss_cap_mb": 24000.0,
+    "rlimit_as_active": true,
+    "duckdb_memory_limit": "8GB",
+    "threads": 16,
+    "peak_rss_mb": 1154.9
+   },
+   "drug_sqlquery": {
+    "workload": "drug_sqlquery",
+    "compile": {
+     "vd_generate_ms": {
+      "drug-exposure-medication-request-source-view": 22.9,
+      "drug-exposure-medication-statement-source-view": 23.4,
+      "drug-exposure-medication-administration-source-view": 17.0,
+      "drug-exposure-medication-dispense-source-view": 19.8,
+      "drug-exposure-immunization-source-view": 10.0,
+      "conceptmap-view": 7.7
+     },
+     "view_create_ms": 329.5,
+     "sqlquery_parse_ms": 0.2,
+     "sql_chars": 1331
+    },
+    "exec": {
+     "exec_ms": [
+      22122.4,
+      22758.3,
+      23197.2
+     ],
+     "exec_ms_median": 22758.3,
+     "rows": 81757,
+     "host_meminfo_per_rep": [
+      {
+       "MemAvailable_mb": 14664.4,
+       "Cached_mb": 14435.8,
+       "SwapTotal_mb": 16384.0,
+       "SwapFree_mb": 10931.6
+      },
+      {
+       "MemAvailable_mb": 12312.8,
+       "Cached_mb": 12223.3,
+       "SwapTotal_mb": 16384.0,
+       "SwapFree_mb": 10744.4
+      },
+      {
+       "MemAvailable_mb": 10619.2,
+       "Cached_mb": 10982.2,
+       "SwapTotal_mb": 16384.0,
+       "SwapFree_mb": 10694.2
+      }
+     ]
+    },
+    "arm_rows": {
+     "drug_exposure__medication_request": 52569,
+     "drug_exposure__medication_statement": 0,
+     "drug_exposure__medication_administration": 14807,
+     "drug_exposure__medication_dispense": 0,
+     "drug_exposure__immunization": 14381
+    },
+    "rows_total": 81757,
+    "patients": 1000,
+    "db": "/home/jmontavon/omop-scaling-db/rung1000.duckdb",
+    "reps": 3,
+    "rss_cap_mb": 24000.0,
+    "rlimit_as_active": true,
+    "duckdb_memory_limit": "8GB",
+    "threads": 16,
+    "peak_rss_mb": 715.1
+   }
+  },
+  "10000": {
+   "staging": {
+    "patients_requested": 10000,
+    "patients_actual": 10000,
+    "resources": 8130089,
+    "type_counts": {
+     "Observation": 5128123,
+     "Procedure": 1284730,
+     "Encounter": 588099,
+     "MedicationRequest": 472021,
+     "Condition": 351397,
+     "MedicationAdministration": 150395,
+     "Immunization": 144778,
+     "Patient": 10000,
+     "ConceptMap": 546
+    },
+    "json_bytes_staged": 8415045781,
+    "parquet_corpus_mb": 331.6,
+    "db_file_mb": 0.262,
+    "stage_wall_s": 2.3,
+    "stage_peak_rss_mb": 562.2,
+    "db_path": "/home/jmontavon/omop-scaling-db/rung10000.duckdb",
+    "staging_path": "parquet-view",
+    "chunks": 10
+   },
+   "omop": {
+    "workload": "omop",
+    "compile": {
+     "vd_generate_ms": {
+      "conceptmap-view": 12.2,
+      "condition-occurrence-source-view": 19.6,
+      "death-source-view": 3.1,
+      "device-exposure-source-view": 7.8,
+      "drug-exposure-immunization-source-view": 9.0,
+      "drug-exposure-medication-administration-source-view": 15.7,
+      "drug-exposure-medication-dispense-source-view": 22.9,
+      "drug-exposure-medication-request-source-view": 18.9,
+      "drug-exposure-medication-statement-source-view": 23.9,
+      "measurement-source-view": 13.8,
+      "observation-source-view": 18.8,
+      "person-source-view": 4.3,
+      "procedure-occurrence-source-view": 11.7,
+      "visit-occurrence-source-view": 4.3
+     },
+     "view_create_ms": 435.8
+    },
+    "exec_source_views": {
+     "drug-exposure-medication-request-source-view": {
+      "exec_ms": 16598.0,
+      "rows": 472021
+     },
+     "drug-exposure-medication-statement-source-view": {
+      "exec_ms": 1437.0,
+      "rows": 0
+     },
+     "drug-exposure-medication-administration-source-view": {
+      "exec_ms": 6553.1,
+      "rows": 150395
+     },
+     "drug-exposure-medication-dispense-source-view": {
+      "exec_ms": 1572.9,
+      "rows": 0
+     },
+     "drug-exposure-immunization-source-view": {
+      "exec_ms": 3763.1,
+      "rows": 144778
+     },
+     "person-source-view": {
+      "exec_ms": 62418.9,
+      "rows": 10000
+     },
+     "visit-occurrence-source-view": {
+      "exec_ms": 8767.1,
+      "rows": 588099
+     },
+     "condition-occurrence-source-view": {
+      "exec_ms": 11806.7,
+      "rows": 351397
+     },
+     "procedure-occurrence-source-view": {
+      "exec_ms": 49722.6,
+      "rows": 1284730
+     },
+     "measurement-source-view": {
+      "exec_ms": 113431.9,
+      "rows": 3990907
+     },
+     "observation-source-view": {
+      "exec_ms": 46976.3,
+      "rows": 1137216
+     },
+     "device-exposure-source-view": {
+      "exec_ms": 1481.8,
+      "rows": 0
+     },
+     "death-source-view": {
+      "exec_ms": 1372.6,
+      "rows": 1221
+     },
+     "conceptmap-view": {
+      "exec_ms": 2754.2,
+      "rows": 108683
+     }
+    },
+    "exec_final_tables": {
+     "person": {
+      "exec_ms": [
+       3320.1,
+       3326.3,
+       3189.6
+      ],
+      "exec_ms_median": 3320.1,
+      "rows": 10000,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 12063.0,
+        "Cached_mb": 10142.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7315.7
+       },
+       {
+        "MemAvailable_mb": 11896.9,
+        "Cached_mb": 10168.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7315.8
+       },
+       {
+        "MemAvailable_mb": 11855.0,
+        "Cached_mb": 10215.1,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7316.0
+       }
+      ]
+     },
+     "visit_occurrence": {
+      "exec_ms": [
+       9810.4,
+       10265.6,
+       10216.7
+      ],
+      "exec_ms_median": 10216.7,
+      "rows": 588099,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 11768.0,
+        "Cached_mb": 10222.0,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7316.2
+       },
+       {
+        "MemAvailable_mb": 11394.0,
+        "Cached_mb": 10273.6,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7318.1
+       },
+       {
+        "MemAvailable_mb": 11495.8,
+        "Cached_mb": 10469.8,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7319.2
+       }
+      ]
+     },
+     "condition_occurrence": {
+      "exec_ms": [
+       14615.3,
+       14064.1,
+       14456.2
+      ],
+      "exec_ms_median": 14456.2,
+      "rows": 351397,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 11508.5,
+        "Cached_mb": 10491.5,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7319.4
+       },
+       {
+        "MemAvailable_mb": 11332.7,
+        "Cached_mb": 10519.5,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7320.4
+       },
+       {
+        "MemAvailable_mb": 11330.3,
+        "Cached_mb": 10584.9,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7321.1
+       }
+      ]
+     },
+     "procedure_occurrence": {
+      "exec_ms": [
+       30039.4,
+       29666.7,
+       28580.7
+      ],
+      "exec_ms_median": 29666.7,
+      "rows": 1284730,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 12436.7,
+        "Cached_mb": 10893.5,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7322.6
+       },
+       {
+        "MemAvailable_mb": 11752.6,
+        "Cached_mb": 11227.8,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7326.8
+       },
+       {
+        "MemAvailable_mb": 11630.8,
+        "Cached_mb": 11253.6,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7330.0
+       }
+      ]
+     },
+     "drug_exposure": {
+      "exec_ms": [
+       30405.8,
+       30421.0,
+       63077.6
+      ],
+      "exec_ms_median": 30421.0,
+      "rows": 767194,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 11575.2,
+        "Cached_mb": 11277.9,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7337.2
+       },
+       {
+        "MemAvailable_mb": 11611.6,
+        "Cached_mb": 11356.8,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7342.1
+       },
+       {
+        "MemAvailable_mb": 11701.1,
+        "Cached_mb": 11392.4,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7344.6
+       }
+      ]
+     },
+     "device_exposure": {
+      "exec_ms": [
+       1614.1,
+       1523.4,
+       1534.7
+      ],
+      "exec_ms_median": 1534.7,
+      "rows": 0,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 13579.2,
+        "Cached_mb": 13112.5,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7118.5
+       },
+       {
+        "MemAvailable_mb": 13681.9,
+        "Cached_mb": 13114.0,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7118.5
+       },
+       {
+        "MemAvailable_mb": 13684.9,
+        "Cached_mb": 13114.1,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7118.5
+       }
+      ]
+     },
+     "measurement": {
+      "exec_ms": [
+       134056.8,
+       169383.2,
+       123046.0
+      ],
+      "exec_ms_median": 134056.8,
+      "rows": 3990907,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 13581.1,
+        "Cached_mb": 13119.1,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 7118.5
+       },
+       {
+        "MemAvailable_mb": 10720.1,
+        "Cached_mb": 11130.4,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 6991.8
+       },
+       {
+        "MemAvailable_mb": 11504.0,
+        "Cached_mb": 11629.5,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 6738.3
+       }
+      ]
+     },
+     "observation": {
+      "exec_ms": [
+       48128.6,
+       44086.3,
+       42926.7
+      ],
+      "exec_ms_median": 44086.3,
+      "rows": 1137216,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 10976.3,
+        "Cached_mb": 9077.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 5529.0
+       },
+       {
+        "MemAvailable_mb": 12370.7,
+        "Cached_mb": 9638.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 5788.8
+       },
+       {
+        "MemAvailable_mb": 12083.0,
+        "Cached_mb": 10348.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 5808.7
+       }
+      ]
+     },
+     "death": {
+      "exec_ms": [
+       1432.5,
+       1280.0,
+       1429.4
+      ],
+      "exec_ms_median": 1429.4,
+      "rows": 1221,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 11625.1,
+        "Cached_mb": 10445.2,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 5817.6
+       },
+       {
+        "MemAvailable_mb": 11758.2,
+        "Cached_mb": 10447.6,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 5818.5
+       },
+       {
+        "MemAvailable_mb": 11678.4,
+        "Cached_mb": 10447.7,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 5818.7
+       }
+      ]
+     }
+    },
+    "rows_total": 8130764,
+    "patients": 10000,
+    "db": "/home/jmontavon/omop-scaling-db/rung10000.duckdb",
+    "reps": 3,
+    "rss_cap_mb": 24000.0,
+    "rlimit_as_active": true,
+    "duckdb_memory_limit": "8GB",
+    "threads": 16,
+    "peak_rss_mb": 3076.8
+   },
+   "drug_sqlquery": {
+    "workload": "drug_sqlquery",
+    "compile": {
+     "vd_generate_ms": {
+      "drug-exposure-medication-request-source-view": 24.9,
+      "drug-exposure-medication-statement-source-view": 21.8,
+      "drug-exposure-medication-administration-source-view": 15.9,
+      "drug-exposure-medication-dispense-source-view": 15.1,
+      "drug-exposure-immunization-source-view": 8.6,
+      "conceptmap-view": 7.5
+     },
+     "view_create_ms": 251.9,
+     "sqlquery_parse_ms": 0.2,
+     "sql_chars": 1331
+    },
+    "exec": {
+     "exec_ms": [
+      38266.1,
+      35144.8,
+      32346.6
+     ],
+     "exec_ms_median": 35144.8,
+     "rows": 767194,
+     "host_meminfo_per_rep": [
+      {
+       "MemAvailable_mb": 14176.3,
+       "Cached_mb": 14169.7,
+       "SwapTotal_mb": 16384.0,
+       "SwapFree_mb": 5473.4
+      },
+      {
+       "MemAvailable_mb": 14584.0,
+       "Cached_mb": 11281.1,
+       "SwapTotal_mb": 16384.0,
+       "SwapFree_mb": 4589.0
+      },
+      {
+       "MemAvailable_mb": 13543.9,
+       "Cached_mb": 11574.0,
+       "SwapTotal_mb": 16384.0,
+       "SwapFree_mb": 4644.9
+      }
+     ]
+    },
+    "arm_rows": {
+     "drug_exposure__medication_request": 472021,
+     "drug_exposure__medication_statement": 0,
+     "drug_exposure__medication_administration": 150395,
+     "drug_exposure__medication_dispense": 0,
+     "drug_exposure__immunization": 144778
+    },
+    "rows_total": 767194,
+    "patients": 10000,
+    "db": "/home/jmontavon/omop-scaling-db/rung10000.duckdb",
+    "reps": 3,
+    "rss_cap_mb": 24000.0,
+    "rlimit_as_active": true,
+    "duckdb_memory_limit": "8GB",
+    "threads": 16,
+    "peak_rss_mb": 1151.8
+   }
+  },
+  "100000": {
+   "staging": {
+    "patients_requested": 100000,
+    "patients_actual": 99951,
+    "resources": 82075791,
+    "type_counts": {
+     "Observation": 51846255,
+     "Procedure": 12865758,
+     "Encounter": 6014152,
+     "MedicationRequest": 4758707,
+     "Condition": 3525850,
+     "MedicationAdministration": 1522956,
+     "Immunization": 1441616,
+     "Patient": 99951,
+     "ConceptMap": 546
+    },
+    "json_bytes_staged": 84945345176,
+    "parquet_corpus_mb": 3343.2,
+    "db_file_mb": 0.262,
+    "stage_wall_s": 38.2,
+    "stage_peak_rss_mb": 1405.1,
+    "db_path": "/home/jmontavon/omop-scaling-db/rung100000.duckdb",
+    "staging_path": "parquet-view",
+    "chunks": 100
+   },
+   "omop": {
+    "workload": "omop",
+    "compile": {
+     "vd_generate_ms": {
+      "conceptmap-view": 11.9,
+      "condition-occurrence-source-view": 19.9,
+      "death-source-view": 3.1,
+      "device-exposure-source-view": 10.7,
+      "drug-exposure-immunization-source-view": 9.1,
+      "drug-exposure-medication-administration-source-view": 18.7,
+      "drug-exposure-medication-dispense-source-view": 19.4,
+      "drug-exposure-medication-request-source-view": 14.9,
+      "drug-exposure-medication-statement-source-view": 23.2,
+      "measurement-source-view": 12.5,
+      "observation-source-view": 16.2,
+      "person-source-view": 6.1,
+      "procedure-occurrence-source-view": 14.2,
+      "visit-occurrence-source-view": 4.9
+     },
+     "view_create_ms": 430.8
+    },
+    "exec_source_views": {
+     "drug-exposure-medication-request-source-view": {
+      "exec_ms": 109075.3,
+      "rows": 4758707
+     },
+     "drug-exposure-medication-statement-source-view": {
+      "exec_ms": 14930.8,
+      "rows": 0
+     },
+     "drug-exposure-medication-administration-source-view": {
+      "exec_ms": 39428.5,
+      "rows": 1522956
+     },
+     "drug-exposure-medication-dispense-source-view": {
+      "exec_ms": 14867.1,
+      "rows": 0
+     },
+     "drug-exposure-immunization-source-view": {
+      "exec_ms": 27986.8,
+      "rows": 1441616
+     },
+     "person-source-view": {
+      "exec_ms": 15992.4,
+      "rows": 99951
+     },
+     "visit-occurrence-source-view": {
+      "exec_ms": 61498.1,
+      "rows": 6014152
+     },
+     "condition-occurrence-source-view": {
+      "exec_ms": 88260.0,
+      "rows": 3525850
+     },
+     "procedure-occurrence-source-view": {
+      "exec_ms": 210266.0,
+      "rows": 12865758
+     },
+     "measurement-source-view": {
+      "exec_ms": 806983.4,
+      "rows": 40285883
+     },
+     "observation-source-view": {
+      "exec_ms": 292327.9,
+      "rows": 11560372
+     },
+     "device-exposure-source-view": {
+      "exec_ms": 15268.1,
+      "rows": 0
+     },
+     "death-source-view": {
+      "exec_ms": 10421.1,
+      "rows": 12769
+     },
+     "conceptmap-view": {
+      "exec_ms": 16779.7,
+      "rows": 108683
+     }
+    },
+    "exec_final_tables": {
+     "person": {
+      "exec_ms": [
+       31435.9,
+       31450.4
+      ],
+      "exec_ms_median": 31450.4,
+      "rows": 99951,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 15224.9,
+        "Cached_mb": 12900.7,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3641.3
+       },
+       {
+        "MemAvailable_mb": 14666.0,
+        "Cached_mb": 12909.1,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3641.7
+       }
+      ]
+     },
+     "visit_occurrence": {
+      "exec_ms": [
+       161179.6,
+       77116.7
+      ],
+      "exec_ms_median": 161179.6,
+      "rows": 6014152,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 14569.2,
+        "Cached_mb": 10596.9,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3642.1
+       },
+       {
+        "MemAvailable_mb": 14639.3,
+        "Cached_mb": 14609.4,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3598.1
+       }
+      ]
+     },
+     "condition_occurrence": {
+      "exec_ms": [
+       128438.3,
+       119046.4
+      ],
+      "exec_ms_median": 128438.3,
+      "rows": 3525850,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 14780.8,
+        "Cached_mb": 14752.2,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3553.3
+       },
+       {
+        "MemAvailable_mb": 14121.8,
+        "Cached_mb": 11687.9,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 2758.5
+       }
+      ]
+     },
+     "procedure_occurrence": {
+      "exec_ms": [
+       245934.7,
+       248040.2
+      ],
+      "exec_ms_median": 248040.2,
+      "rows": 12865758,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 16018.4,
+        "Cached_mb": 11002.0,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 2481.3
+       },
+       {
+        "MemAvailable_mb": 14271.7,
+        "Cached_mb": 12509.0,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 2087.9
+       }
+      ]
+     },
+     "drug_exposure": {
+      "exec_ms": [
+       235148.8,
+       227483.1
+      ],
+      "exec_ms_median": 235148.8,
+      "rows": 7723279,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 16737.3,
+        "Cached_mb": 16532.5,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 2043.4
+       },
+       {
+        "MemAvailable_mb": 16157.5,
+        "Cached_mb": 14882.3,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 1711.8
+       }
+      ]
+     },
+     "device_exposure": {
+      "exec_ms": [
+       15171.4,
+       15223.5
+      ],
+      "exec_ms_median": 15223.5,
+      "rows": 0,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 15397.3,
+        "Cached_mb": 15489.2,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 1752.4
+       },
+       {
+        "MemAvailable_mb": 15580.7,
+        "Cached_mb": 15498.6,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 1754.2
+       }
+      ]
+     },
+     "measurement": {
+      "exec_ms": [
+       920603.8,
+       851224.5
+      ],
+      "exec_ms_median": 920603.8,
+      "rows": 40285883,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 51923.0,
+        "Cached_mb": 13658.1,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3086.4
+       },
+       {
+        "MemAvailable_mb": 53449.2,
+        "Cached_mb": 39883.5,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 3948.7
+       }
+      ]
+     },
+     "observation": {
+      "exec_ms": [
+       316928.9,
+       348684.9
+      ],
+      "exec_ms_median": 348684.9,
+      "rows": 11560372,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 53334.9,
+        "Cached_mb": 29207.4,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 4117.4
+       },
+       {
+        "MemAvailable_mb": 49893.2,
+        "Cached_mb": 29560.9,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 4274.2
+       }
+      ]
+     },
+     "death": {
+      "exec_ms": [
+       10549.0,
+       10442.7
+      ],
+      "exec_ms_median": 10549.0,
+      "rows": 12769,
+      "host_meminfo_per_rep": [
+       {
+        "MemAvailable_mb": 44885.9,
+        "Cached_mb": 30002.7,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 4419.9
+       },
+       {
+        "MemAvailable_mb": 52908.4,
+        "Cached_mb": 29917.5,
+        "SwapTotal_mb": 16384.0,
+        "SwapFree_mb": 4420.2
+       }
+      ]
+     }
+    },
+    "rows_total": 82088014,
+    "patients": 100000,
+    "db": "/home/jmontavon/omop-scaling-db/rung100000.duckdb",
+    "reps": 2,
+    "rss_cap_mb": 24000.0,
+    "rlimit_as_active": true,
+    "duckdb_memory_limit": "8GB",
+    "threads": 16,
+    "peak_rss_mb": 8723.2
+   },
+   "drug_sqlquery": {
+    "workload": "drug_sqlquery",
+    "compile": {
+     "vd_generate_ms": {
+      "drug-exposure-medication-request-source-view": 30.3,
+      "drug-exposure-medication-statement-source-view": 25.8,
+      "drug-exposure-medication-administration-source-view": 19.6,
+      "drug-exposure-medication-dispense-source-view": 19.2,
+      "drug-exposure-immunization-source-view": 9.5,
+      "conceptmap-view": 7.7
+     },
+     "view_create_ms": 291.5,
+     "sqlquery_parse_ms": 0.2,
+     "sql_chars": 1331
+    },
+    "exec": {
+     "exec_ms": [
+      234322.9,
+      282434.4
+     ],
+     "exec_ms_median": 282434.4,
+     "rows": 7723279,
+     "host_meminfo_per_rep": [
+      {
+       "MemAvailable_mb": 17186.6,
+       "Cached_mb": 13917.0,
+       "SwapTotal_mb": 16384.0,
+       "SwapFree_mb": 3194.5
+      },
+      {
+       "MemAvailable_mb": 12735.6,
+       "Cached_mb": 13131.9,
+       "SwapTotal_mb": 16384.0,
+       "SwapFree_mb": 2000.1
+      }
+     ]
+    },
+    "arm_rows": {
+     "drug_exposure__medication_request": 4758707,
+     "drug_exposure__medication_statement": 0,
+     "drug_exposure__medication_administration": 1522956,
+     "drug_exposure__medication_dispense": 0,
+     "drug_exposure__immunization": 1441616
+    },
+    "rows_total": 7723279,
+    "patients": 100000,
+    "db": "/home/jmontavon/omop-scaling-db/rung100000.duckdb",
+    "reps": 2,
+    "rss_cap_mb": 24000.0,
+    "rlimit_as_active": true,
+    "duckdb_memory_limit": "8GB",
+    "threads": 16,
+    "peak_rss_mb": 2042.6
+   }
+  }
+ },
+ "ratios": {
+  "1000->10000": {
+   "omop": {
+    "patients": 10,
+    "exec": 1.31,
+    "per_patient": 0.13
+   },
+   "drug": {
+    "patients": 10,
+    "exec": 1.54,
+    "per_patient": 0.15
+   }
+  },
+  "10000->100000": {
+   "omop": {
+    "patients": 10,
+    "exec": 7.8,
+    "per_patient": 0.78
+   },
+   "drug": {
+    "patients": 10,
+    "exec": 8.04,
+    "per_patient": 0.8
+   }
+  }
+ }
+}

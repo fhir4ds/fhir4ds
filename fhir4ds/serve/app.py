@@ -17,9 +17,15 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+try:
+    from fastapi import FastAPI, Request
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
+except ImportError as exc:  # actionable: name the missing extra, not the module
+    raise RuntimeError(
+        "fhir4ds.serve requires the optional serve extra: "
+        "pip install 'fhir4ds-v2[serve]'"
+    ) from exc
 
 from .config import ServeConfig, ServeContext
 from .errors import Issue, ServeError
@@ -67,6 +73,16 @@ def create_app(
     with context.lock:
         context.store.ensure_schema()
 
+    # API-key tiers (see auth.py). Fail-closed: a tier without a key answers
+    # 401 for everyone, and the boot log states which tiers are active.
+    from .auth import KeyRegistry
+
+    context.keys = KeyRegistry(
+        admin_key=settings.admin_key,
+        write_key=settings.write_key,
+        key_store=settings.key_store,
+    )
+
     # Phase 3: the versioned log, the publish store, and the flush loop. Built
     # before the app so the lifespan can shut the flush thread down.
     writes_router = _configure_writes(context, settings) if settings.writes_enabled else None
@@ -78,6 +94,36 @@ def create_app(
         lifespan=_lifespan(context),
     )
     app.state.serve = context
+
+    # The guard wraps everything: body cap + tier enforcement before routing.
+    from .guard import GuardMiddleware
+
+    app.add_middleware(
+        GuardMiddleware,
+        registry=context.keys,
+        max_request_bytes=settings.max_request_bytes,
+    )
+
+    # Optional CORS: lets a trusted site (e.g. the docs page) run live
+    # examples against this API from the browser. Key headers are allowed so
+    # a keyed write can also run in-page; credentials mode stays off.
+    if settings.cors_origins:
+        from starlette.middleware.cors import CORSMiddleware
+
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.cors_origins),
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            allow_headers=[
+                "Content-Type",
+                "Accept",
+                "If-Match",
+                "Authorization",
+                "X-Admin-Key",
+                "X-Write-Key",
+            ],
+            max_age=600,
+        )
 
     for router in ROUTERS:
         app.include_router(router)
@@ -124,6 +170,22 @@ def _configure_writes(context: ServeContext, settings: ServeConfig) -> Any:
     context.writer = ResourceWriter(
         context.connection, seq=max(database_seq, publish_store.current_seq())
     )
+
+    # Restart durability: fold the published dataset back into this process —
+    # log rows keep their original _seq/tombstones, definitions return to the
+    # registry. Per-file problems are logged and skipped inside; a snapshot
+    # failure here means the dataset itself is unreachable, which must surface.
+    try:
+        from .rehydrate import rehydrate
+
+        _, _, context.rehydrate_skipped_parts = rehydrate(
+            context.connection, publish_store, context.store
+        )
+        _adopt_keys(context, publish_store)
+    except Exception as exc:  # noqa: BLE001 - the surface stays up, loudly
+        logger.exception("dataset rehydration failed; serving from a fresh log")
+        context.rehydrate_error = f"{type(exc).__name__}: {exc}"
+
     context.flusher = FlushManager(
         publish_store,
         interval=settings.flush_interval_seconds,
@@ -132,9 +194,30 @@ def _configure_writes(context: ServeContext, settings: ServeConfig) -> Any:
         repository=settings.publish_repository,
         request_url="/$bulk-publish",
         definition_provider=lambda: _definitions(context),
+        key_provider=(
+            context.keys.write_key_map if context.keys is not None else None
+        ),
         autostart=settings.flush_autostart,
     )
     return writes_router
+
+
+def _adopt_keys(context: ServeContext, publish_store: Any) -> None:
+    """Load the persisted write-key snapshot from the dataset, when present."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    from .flusher import KEY_SNAPSHOT_PATH
+
+    if context.keys is None:
+        return
+    snapshot_file = _Path(publish_store.snapshot()) / KEY_SNAPSHOT_PATH
+    if not snapshot_file.is_file():
+        return
+    try:
+        context.keys.adopt_write_keys(_json.loads(snapshot_file.read_text("utf-8")))
+    except (OSError, ValueError):
+        logger.warning("write-key snapshot unreadable; using env bootstrap keys")
 
 
 def _definitions(context: ServeContext) -> list[dict]:

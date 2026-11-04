@@ -131,7 +131,9 @@ def system_sqlquery_run(
 ) -> Response:
     """Execute a SQLQuery Library supplied by reference or inline."""
     context = context_for(request)
-    bag = ParametersBag.from_body(body)
+    bag = ParametersBag.from_body(body).merge_query(
+        request.query_params, SQLQUERY_RUN_PARAMETERS
+    )
     bag.validate(SQLQUERY_RUN_PARAMETERS)
     library = _resolve_type_level_library(context, bag)
     return sqlquery_operation(
@@ -153,7 +155,9 @@ def type_level_sqlquery_run(
 ) -> Response:
     """Execute a SQLQuery Library supplied by reference or inline."""
     context = context_for(request)
-    bag = ParametersBag.from_body(body)
+    bag = ParametersBag.from_body(body).merge_query(
+        request.query_params, SQLQUERY_RUN_PARAMETERS
+    )
     bag.validate(SQLQUERY_RUN_PARAMETERS)
     library = _resolve_type_level_library(context, bag)
     return sqlquery_operation(
@@ -175,7 +179,9 @@ def instance_sqlquery_run(
 ) -> Response:
     """Execute the stored Library identified by the request path."""
     context = context_for(request)
-    bag = ParametersBag.from_body(body)
+    bag = ParametersBag.from_body(body).merge_query(
+        request.query_params, SQLQUERY_RUN_PARAMETERS
+    )
     library = context.run_locked(require_resource, context.store, RESOURCE, library_id)
     bag.forbid([QUERY_REFERENCE_PARAMETER.name, QUERY_RESOURCE_PARAMETER.name])
     return sqlquery_operation(

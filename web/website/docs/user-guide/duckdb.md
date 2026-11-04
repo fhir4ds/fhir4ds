@@ -86,6 +86,6 @@ FHIR4DS uses a "hybrid" implementation strategy to ensure portability:
 :::tip 
 
 Full UDF Reference
-For a complete list of all registered SQL functions and their parameters, see the [API Reference](/docs/api-reference/fhir4ds).
+For a complete list of all registered SQL functions and their parameters, see the [API Reference](/docs/api-reference/fhir4ds/).
 
 :::
