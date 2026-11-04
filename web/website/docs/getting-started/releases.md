@@ -47,11 +47,6 @@ recorded), **known issues**, and **upgrade** notes.
 - 2870/2870 (ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47/47,
   OMOP Mapping 38).
 
-### Known issues
-
-- The HF demo Space's Dockerfile pins the dev-built 0.0.21 wheel; it reverts
-  to the PyPI pin at publish time.
-
 ### Upgrade
 
 ```bash
