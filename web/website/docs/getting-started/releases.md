@@ -10,6 +10,54 @@ entry follows the same format: **highlights**, **breaking changes** (always
 listed, even when there are none), topic sections, **conformance** (where
 recorded), **known issues**, and **upgrade** notes.
 
+## Version 0.0.21
+*November 2026*
+
+**Highlights**
+
+- **FHIR R4 REST write surface, hardened**: boot-time dataset rehydration
+  (original version ids, tombstones, served definitions, and write keys all
+  come back after a restart), two-tier API keys with runtime rotation
+  persisted to the dataset, request caps (10 MB body / 413, 30 s query
+  timeout / 408 with watchdog interrupt, bounded wait queue / 503, row caps),
+  query-string operation parameters, and configurable CORS.
+- **Self-hosted API docs**: every `fhir4ds serve` instance now ships
+  executable same-origin documentation at `/api-docs`.
+- **Durability fixes** (QA campaign): one corrupt parquet part no longer
+  discards the whole dataset on restart (per-part restore, surfaced on
+  `/health`); overlapping parts can never double-restore a version; a lying
+  `Content-Length` can no longer bypass the body cap; dataset-provided keys
+  are validated like runtime-added keys.
+- **FHIR conformance**: `Location` headers now carry the
+  `/{type}/{id}/_history/{vid}` form on create/update and in transaction
+  bundle responses; unknown operation parameters in the query string are a
+  400 naming the supported set (matching the body path), not silently ignored.
+- **Packaging**: `fhir4ds.serve` and `fhir4ds.sqlquery` version constants
+  join the release-consistency set; importing the serve app without the
+  `[serve]` extra raises an actionable error naming the install command.
+
+**Breaking changes**
+
+- None. (Unknown query-string operation parameters that were previously
+  ignored now return 400 — see highlights; anything relying on the old
+  silent-ignore behavior should drop the extra parameters.)
+
+**Conformance**
+
+- 2870/2870 (ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47/47,
+  OMOP Mapping 38).
+
+**Known issues**
+
+- The HF demo Space's Dockerfile pins the dev-built 0.0.21 wheel; it reverts
+  to the PyPI pin at publish time.
+
+**Upgrade**
+
+```bash
+pip install fhir4ds-v2==0.0.21
+```
+
 ## Version 0.0.20
 *November 2026*
 
