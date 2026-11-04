@@ -28,14 +28,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 ARG DUCKDB_VERSION=1.5.5
-COPY fhir4ds_v2-0.0.21-py3-none-any.whl /tmp/
 RUN python -m pip install --no-cache-dir \
-        "fhir4ds-v2[serve,hf] @ file:///tmp/fhir4ds_v2-0.0.21-py3-none-any.whl" \
-        "duckdb==${DUCKDB_VERSION}" \
-    && rm -f /tmp/fhir4ds_v2-0.0.21-py3-none-any.whl
-
-# TODO(at PyPI publish of 0.0.21): revert to the PyPI pin and drop the wheel:
-#   pip install --no-cache-dir "fhir4ds-v2[serve,hf]==0.0.21" && rm this COPY block
+        "fhir4ds-v2[serve,hf]==0.0.21" \
+        "duckdb==${DUCKDB_VERSION}"
 # Hugging Face runs the container as UID 1000; create it before any COPY so
 # the application files are owned by the runtime user.
 RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin user
