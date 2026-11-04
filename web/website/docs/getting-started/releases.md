@@ -13,7 +13,7 @@ recorded), **known issues**, and **upgrade** notes.
 ## Version 0.0.21
 *November 2026*
 
-**Highlights**
+### Highlights
 
 - **FHIR R4 REST write surface, hardened**: boot-time dataset rehydration
   (original version ids, tombstones, served definitions, and write keys all
@@ -36,23 +36,23 @@ recorded), **known issues**, and **upgrade** notes.
   join the release-consistency set; importing the serve app without the
   `[serve]` extra raises an actionable error naming the install command.
 
-**Breaking changes**
+### Breaking changes
 
 - None. (Unknown query-string operation parameters that were previously
   ignored now return 400 — see highlights; anything relying on the old
   silent-ignore behavior should drop the extra parameters.)
 
-**Conformance**
+### Conformance
 
 - 2870/2870 (ViewDefinition 144, FHIRPath 935, CQL 1706, DQM 47/47,
   OMOP Mapping 38).
 
-**Known issues**
+### Known issues
 
 - The HF demo Space's Dockerfile pins the dev-built 0.0.21 wheel; it reverts
   to the PyPI pin at publish time.
 
-**Upgrade**
+### Upgrade
 
 ```bash
 pip install fhir4ds-v2==0.0.21
