@@ -491,3 +491,163 @@ def test_location_header_carries_history_form_v22_qa007(connection, tmp_path):
     assert bundle.status_code == 200, bundle.text
     entry_loc = bundle.json()["entry"][0]["response"]["location"]
     assert entry_loc == "Slot/s9/_history/3", entry_loc
+
+
+# -- write-key expiration ------------------------------------------------------
+
+def test_write_key_expiration_add_report_and_validation(connection, tmp_path):
+    """Add-with-expiry reports ISO deadlines; invalid TTLs are typed 422s."""
+    client = boot(connection, tmp_path)
+    added = client.post(
+        "/admin/key",
+        json={
+            "action": "add",
+            "label": "temporary",
+            "key": "temporary-write-key-01",
+            "expires_in_days": 7,
+        },
+        headers=ADMIN,
+    )
+    assert added.status_code == 200
+    body = added.json()
+    assert body["expires_at"] is not None and body["expires_at"].startswith("20")
+    detail = {info["label"]: info for info in body["keys"]}
+    assert detail["temporary"]["expires_at"] == body["expires_at"]
+    assert detail["temporary"]["expired"] is False
+    assert detail["__env__"]["expires_at"] is None  # permanent stays permanent
+
+    for bad in (0, -1, "three", True):
+        denied = client.post(
+            "/admin/key",
+            json={
+                "action": "add",
+                "label": f"bad{abs(hash(bad)) % 1000}",
+                "key": "some-write-key-0000000",
+                "expires_in_days": bad,
+            },
+            headers=ADMIN,
+        )
+        assert denied.status_code == 422, (bad, denied.text)
+
+
+def test_expired_write_key_self_revokes(connection, tmp_path):
+    """Past-deadline keys are exactly as unauthorized as wrong keys."""
+    config = ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+        publish_dir=str(tmp_path),
+        flush_autostart=False,
+    )
+    client = plain_client(create_app(config, connection=connection))
+    ttl_key = "ttl-write-key-000001"
+    assert client.post(
+        "/admin/key",
+        json={
+            "action": "add",
+            "label": "ttl",
+            "key": ttl_key,
+            "expires_in_days": 1.157e-6,  # ~0.1 s
+        },
+        headers=ADMIN,
+    ).status_code == 200
+    assert client.post(
+        "/Slot", json=SLOT, headers={"X-Write-Key": ttl_key}
+    ).status_code == 201  # still valid before the deadline
+
+    import time
+
+    time.sleep(0.25)
+    denied = client.post(
+        "/Slot", json={**SLOT, "id": "s2"}, headers={"X-Write-Key": ttl_key}
+    )
+    assert denied.status_code == 401
+    # the lazy sweep dropped it; permanent keys keep working
+    listed = client.post(
+        "/admin/key", json={"action": "revoke", "label": "nonexistent"}, headers=ADMIN
+    )
+    assert listed.status_code in (404, 422)
+    assert client.post(
+        "/Slot", json={**SLOT, "id": "s3"}, headers=WRITE
+    ).status_code == 201
+
+
+def test_boot_adoption_sweeps_expired_keys(tmp_path):
+    """Boot-time adoption drops already-expired entries instead of adopting."""
+    import time as _time
+
+    from fhir4ds.serve.auth import KeyRegistry
+
+    registry = KeyRegistry(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+        key_store=tmp_path / "keys.json",
+    )
+    registry.add_write_key("keeper", "keeper-write-key-0001")
+    registry.add_write_key(
+        "gone", "expired-write-key-01", expires_in_days=1.157e-6
+    )
+    _time.sleep(0.25)
+
+    resumed = KeyRegistry(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+        key_store=tmp_path / "keys.json",
+    )
+    assert resumed.authenticate("expired-write-key-01") is None
+    assert resumed.authenticate("keeper-write-key-0001") == "write"
+    assert resumed.write_key_labels() == ["__env__", "keeper"]  # ttl swept at boot
+
+    # legacy snapshots (flat label→key maps, no expirations) still adopt
+    legacy = KeyRegistry(write_key=TEST_WRITE_KEY)
+    legacy.adopt_write_keys({"legacy": "legacy-write-key-0001"})
+    assert legacy.authenticate("legacy-write-key-0001") == "write"
+    assert legacy.write_key_info()[-1]["expires_at"] is None
+
+
+def test_expired_key_is_swept_from_dataset_snapshot_on_boot(connection, tmp_path):
+    """The dataset's meta/keys.json carries expirations; boot sweeps the stale."""
+    import pathlib
+
+    config = ServeConfig(
+        admin_key=TEST_ADMIN_KEY,
+        write_key=TEST_WRITE_KEY,
+        publish_dir=str(tmp_path),
+        flush_autostart=False,
+    )
+    client = plain_client(create_app(config, connection=connection))
+    ttl_key = "dataset-ttl-key-000001"
+    assert client.post(
+        "/admin/key",
+        json={
+            "action": "add",
+            "label": "ttl",
+            "key": ttl_key,
+            "expires_in_days": 1.157e-6,
+        },
+        headers=ADMIN,
+    ).status_code == 200
+    assert client.post("/admin/flush", headers=ADMIN).status_code == 200
+
+    snapshot = json.loads(
+        (pathlib.Path(tmp_path) / "meta" / "keys.json").read_text("utf-8")
+    )
+    assert snapshot["write_keys"]["ttl"] == ttl_key
+    assert "ttl" in snapshot["expirations"]  # expiry persists with the dataset
+
+    import time
+
+    time.sleep(0.25)
+    second = plain_client(create_app(
+        ServeConfig(
+            admin_key=TEST_ADMIN_KEY,
+            write_key=TEST_WRITE_KEY,
+            publish_dir=str(tmp_path),
+            flush_autostart=False,
+        ),
+        connection=connection,
+    ))
+    probe = {**SLOT, "id": "adopted-ttl"}
+    assert second.post(
+        "/Slot", json=probe, headers={"X-Write-Key": ttl_key}
+    ).status_code == 401  # swept at boot, not adopted
+    assert second.post("/Slot", json=probe, headers=WRITE).status_code == 201

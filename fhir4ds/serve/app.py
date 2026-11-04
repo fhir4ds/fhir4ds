@@ -195,7 +195,7 @@ def _configure_writes(context: ServeContext, settings: ServeConfig) -> Any:
         request_url="/$bulk-publish",
         definition_provider=lambda: _definitions(context),
         key_provider=(
-            context.keys.write_key_map if context.keys is not None else None
+            context.keys.key_snapshot if context.keys is not None else None
         ),
         autostart=settings.flush_autostart,
     )
