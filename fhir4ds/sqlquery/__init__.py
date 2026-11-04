@@ -52,7 +52,7 @@ from .parser import parse_library, parse_sqlquery, parse_sqlview
 from .validator import validate_sql_library, select_best_content
 from .runner import SQLQueryRunner, DependencyResolver
 
-__version__ = "0.0.20"
+__version__ = "0.0.21"
 
 __all__ = [
     # Version
