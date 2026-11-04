@@ -149,11 +149,11 @@ class GuardMiddleware:
                 received.append(message)
             return message
 
-        # Simple requests (no streaming abuse) pass through untouched.
-        await self.app(scope, receive if self._has_length(scope) else capped_receive, send)
-
-    def _has_length(self, scope: dict[str, Any]) -> bool:
-        return any(name == b"content-length" for name, _ in scope.get("headers", []))
+        # The streaming cap always applies: a lying Content-Length header
+        # (claiming less than the body actually sent) must not bypass it.
+        # Well-behaved requests pass through capped_receive untouched — it
+        # forwards every message verbatim while under the cap.
+        await self.app(scope, capped_receive, send)
 
     @staticmethod
     async def _deny(send: Any, status: int, code: str, message: str) -> None:

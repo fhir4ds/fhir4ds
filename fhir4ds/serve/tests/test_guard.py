@@ -378,3 +378,116 @@ def test_api_docs_page_is_open_and_complete(connection, tmp_path):
     assert page.headers["content-type"].startswith("text/html")
     for marker in ("$sqlquery-run", "X-Write-Key", "/admin/key", "If-Match", "$bulk-publish", "fhir4ds.com"):
         assert marker in page.text
+
+
+def test_lying_content_length_cannot_bypass_streaming_cap_v22_qa003(tmp_path):
+    """The streaming cap must hold even when Content-Length lies (V22-QA-003)."""
+    import asyncio
+
+    from fhir4ds.connection import create_connection
+    from fhir4ds.serve.guard import GuardMiddleware
+
+    con = create_connection(":memory:")
+    try:
+        app = create_app(
+            ServeConfig(
+                admin_key=TEST_ADMIN_KEY,
+                write_key=TEST_WRITE_KEY,
+                publish_dir=str(tmp_path / "lying"),
+                flush_autostart=False,
+                max_request_bytes=1000,
+            ),
+            connection=con,
+        )
+        chunks = [b"x" * 600, b"x" * 600]  # 1200 bytes > 1000 cap
+        messages = [
+            {"type": "http.request", "body": c, "more_body": i < len(chunks) - 1}
+            for i, c in enumerate(chunks)
+        ]
+
+        async def receive():
+            return messages.pop(0) if messages else {"type": "http.disconnect"}
+
+        sent = []
+
+        async def send(message):
+            sent.append(message)
+
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/Slot",
+            "query_string": b"",
+            "headers": [
+                (b"content-length", b"100"),  # lying: claims 100, streams 1200
+                (b"x-write-key", TEST_WRITE_KEY.encode()),
+            ],
+        }
+        guard = GuardMiddleware(
+            app, registry=app.state.serve.keys, max_request_bytes=1000
+        )
+        asyncio.run(guard(scope, receive, send))
+        status = next(
+            (m["status"] for m in sent if m["type"] == "http.response.start"), None
+        )
+        assert status == 413, f"oversized lying-CL body must be refused, got {status}"
+    finally:
+        con.close()
+
+
+def test_adopted_keys_are_validated_like_added_keys_v22_qa004(tmp_path):
+    """Dataset-provided keys face the same label/value rules as runtime adds.
+
+    Hostile labels (newline) and non-string values must be dropped at adopt
+    time, never enter the registry. The reserved ``__env__`` label is exempt
+    from the identifier pattern by design.
+    """
+    from fhir4ds.connection import create_connection
+
+    registry_client = boot(create_connection(":memory:"), tmp_path)
+    try:
+        keys = registry_client.app.state.serve.keys
+        keys.adopt_write_keys(
+            {
+                "__env__": "legitimate-env-key-00000001",
+                "evil\nlabel": "k-should-be-dropped-0001",
+                "bad-value": 12345,
+                "empty": "",
+                "good-label": "k-good-snapshot-key-01",
+            }
+        )
+        labels = keys.write_key_labels()
+        assert "evil\nlabel" not in labels, f"hostile label adopted: {labels}"
+        assert "bad-value" not in labels and "empty" not in labels
+        assert "__env__" in labels and "good-label" in labels
+        assert keys.authenticate("k-good-snapshot-key-01") == "write"
+        assert keys.authenticate("legitimate-env-key-00000001") == "write"
+    finally:
+        registry_client.app.state.serve.connection.close()
+
+
+def test_location_header_carries_history_form_v22_qa007(connection, tmp_path):
+    """FHIR R4 http.html 3.1.0.1: Location is {type}/{id}/_history/{vid}."""
+    client = boot(connection, tmp_path)
+    created = client.post("/Slot", json=SLOT, headers=WRITE)
+    assert created.status_code == 201
+    assert created.headers["Location"] == "Slot/s1/_history/1", created.headers["Location"]
+    updated = client.put("/Slot/s1", json={**SLOT, "status": "busy"}, headers=WRITE)
+    assert updated.status_code == 200
+    assert updated.headers["Location"] == "Slot/s1/_history/2", updated.headers["Location"]
+
+    bundle = client.post(
+        "/Bundle",
+        headers=WRITE,
+        json={
+            "resourceType": "Bundle",
+            "type": "transaction",
+            "entry": [
+                {"request": {"method": "POST", "url": "Slot"},
+                 "resource": {**SLOT, "id": "s9"}}
+            ],
+        },
+    )
+    assert bundle.status_code == 200, bundle.text
+    entry_loc = bundle.json()["entry"][0]["response"]["location"]
+    assert entry_loc == "Slot/s9/_history/3", entry_loc

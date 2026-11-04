@@ -73,7 +73,7 @@ def test_post_assigns_id_version_and_location(client):
     assert response.headers["etag"] == 'W/"1"'
     body = response.json()
     assert body["id"]
-    assert response.headers["location"] == f"Patient/{body['id']}"
+    assert response.headers["location"] == f"Patient/{body['id']}/_history/{body['meta']['versionId']}"
     assert body["meta"]["versionId"] == "1"
 
 

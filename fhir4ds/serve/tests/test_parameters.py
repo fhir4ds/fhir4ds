@@ -160,3 +160,34 @@ def test_forbid_rejects_supplied_names():
 def test_unknown_declared_value_type_is_a_programming_error():
     with pytest.raises(ValueError):
         ParameterSpec("a", "quantity")
+
+
+def test_unknown_query_parameter_is_rejected_v22_qa006(connection, tmp_path):
+    """Query-string operation parameters face the same unknown-name 400 as the body."""
+    from fhir4ds.serve.app import create_app
+    from fhir4ds.serve.config import ServeConfig
+
+    from ._helpers import TEST_ADMIN_KEY, TEST_WRITE_KEY, keyed_client
+    from .test_guard import SLOT_VIEW  # noqa: F401 - registers a stored view
+
+    app = create_app(
+        ServeConfig(
+            admin_key=TEST_ADMIN_KEY,
+            write_key=TEST_WRITE_KEY,
+            publish_dir=str(tmp_path),
+            flush_autostart=False,
+        ),
+        connection=connection,
+    )
+    client = keyed_client(app)
+    assert client.post("/ViewDefinition", json=SLOT_VIEW).status_code in (200, 201)
+
+    bad = client.post("/ViewDefinition/slot-view/$run?frobnicate=1")
+    assert bad.status_code == 400, bad.text
+    assert "frobnicate" in bad.text
+    # the documented contract also names the supported set
+    assert "_format" in bad.text or "_limit" in bad.text
+
+    # known params still work through the query string
+    ok = client.post("/ViewDefinition/slot-view/$run?_format=json&_limit=1")
+    assert ok.status_code == 200, ok.text

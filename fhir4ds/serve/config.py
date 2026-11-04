@@ -228,6 +228,10 @@ class ServeContext:
 
     #: API-key registry (set by create_app; None until then).
     keys: Any = None
+    #: Rehydration outcome (set by create_app boot; surfaced on /health so an
+    #: operator can see lost rows after a corrupt part or unreachable dataset).
+    rehydrate_skipped_parts: int = 0
+    rehydrate_error: str | None = None
     #: Concurrency gate bookkeeping (see run_locked).
     _gate_depth: threading.local = field(default_factory=threading.local)
     _gate: Any = None

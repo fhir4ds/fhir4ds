@@ -91,7 +91,6 @@ class ParametersBag:
     # -- construction ----------------------------------------------------
 
     @classmethod
-    @classmethod
     def from_body(cls, body: Any, *, label: str = "request body") -> ParametersBag:
         """Parse a request body into a bag.
 
@@ -156,9 +155,10 @@ class ParametersBag:
         body and the query string is an ambiguity and a 400 — the body does
         not silently win. Values are strings, coerced to the parameter's
         declared type; resource-valued parameters (``queryResource`` etc.)
-        cannot arrive by query string and are rejected. Unknown query names
-        are ignored (query strings may carry parameters this surface does not
-        define).
+        cannot arrive by query string and are rejected. Unknown and
+        known-but-unsupported query names are rejected exactly like their
+        body-path counterparts — a typo'd name (``?limitt=``) must surface as
+        a 400 naming the mistake, never silently change the result set.
         """
         spec_by_name = {spec.name: spec for spec in specs}
         additions: dict[str, dict] = {}
@@ -173,8 +173,16 @@ class ParametersBag:
                     expression=[name],
                 )
             spec = spec_by_name.get(name)
-            if spec is None or not spec.supported:
-                continue
+            if spec is None:
+                raise bad_request(
+                    f"Unknown parameter {name!r}. Supported parameters: "
+                    f"{', '.join(sorted(spec_by_name))}",
+                    expression=[name],
+                )
+            if not spec.supported:
+                raise unsupported(
+                    f"The server does not support the {name} parameter", expression=[name]
+                )
             if not VALUE_FIELDS_BY_TYPE[spec.value_type]:
                 raise bad_request(
                     f"parameter {name!r} carries a resource and cannot be "
@@ -185,7 +193,6 @@ class ParametersBag:
             additions[name] = {value_field: _coerce_query_value(raw_value, spec)}
         return ParametersBag({**self._entries, **additions})
 
-    @classmethod
     @classmethod
     def _from_body_impl(cls, body: Any, label: str) -> ParametersBag:
         payload = decode_json_body(body, label=label)

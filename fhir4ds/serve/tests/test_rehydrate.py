@@ -187,3 +187,59 @@ def test_seed_preload_publishes_to_dataset(connection, tmp_path):
     read = second.get("/Slot/slot-1")
     assert read.status_code == 200, read.text
     assert read.json()["meta"]["versionId"] == "1"
+
+
+# -- v0.0.22 iteration 1 (Domain 13 SKEPTIC) durability regressions ----------
+
+
+def _two_parts_on_disk(connection, tmp_path):
+    """Two flushes -> two parquet parts holding one Slot each."""
+    first = boot(connection, tmp_path)
+    assert first.post("/Slot", json=SLOT).status_code == 201
+    assert first.post("/admin/flush").status_code == 200
+    assert first.post("/Slot", json={**SLOT, "id": "slot-b"}).status_code == 201
+    assert first.post("/admin/flush").status_code == 200
+    parts = sorted((tmp_path / "resources").rglob("part-*.parquet"))
+    assert len(parts) == 2, f"expected two parts, got {[p.name for p in parts]}"
+    return first, parts
+
+
+def test_corrupt_part_is_skipped_not_fatal_v22_qa001(connection, tmp_path):
+    """One corrupt part must discard only that part's rows — never everything.
+
+    rehydrate's contract (module docstring): per-file problems are logged and
+    skipped. /health must also tell the operator that rows were lost.
+    """
+    _, parts = _two_parts_on_disk(connection, tmp_path)
+    parts[1].write_bytes(b"NOT-A-PARQUET")
+
+    second = restart(connection, tmp_path)
+
+    # The FIRST (healthy) part's row survives.
+    assert second.get("/Slot/slot-1").status_code == 200
+    # The corrupt part's row is gone — and the server stays up.
+    assert second.get("/Slot/slot-b").status_code == 404
+    health = second.get("/health").json()
+    assert health["status"] == "ok"
+    assert health.get("rehydrate_skipped_parts") == 1
+
+
+def test_duplicate_seq_across_parts_is_deduplicated_v22_qa002(connection, tmp_path):
+    """A dataset carrying the same _seq in two parts must restore it once.
+
+    A version is identified by its _seq; restoration is idempotent even when
+    parts overlap (manual repair, retried uploads under a new part name).
+    """
+    _, parts = _two_parts_on_disk(connection, tmp_path)
+    import shutil
+
+    shutil.copyfile(parts[0], parts[0].parent / "part-copy.parquet")
+
+    second = restart(connection, tmp_path)
+
+    dupes = connection.execute(
+        f"SELECT _seq, count(*) c FROM {BASE_TABLE} GROUP BY _seq HAVING c > 1"
+    ).fetchall()
+    assert dupes == [], f"double-inserted versions: {dupes}"
+    history = second.get("/Slot/slot-1/_history").json()["entry"]
+    assert len(history) == 1, "the same version must not appear twice in history"

@@ -17,9 +17,15 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+try:
+    from fastapi import FastAPI, Request
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
+except ImportError as exc:  # actionable: name the missing extra, not the module
+    raise RuntimeError(
+        "fhir4ds.serve requires the optional serve extra: "
+        "pip install 'fhir4ds-v2[serve]'"
+    ) from exc
 
 from .config import ServeConfig, ServeContext
 from .errors import Issue, ServeError
@@ -172,10 +178,13 @@ def _configure_writes(context: ServeContext, settings: ServeConfig) -> Any:
     try:
         from .rehydrate import rehydrate
 
-        rehydrate(context.connection, publish_store, context.store)
+        _, _, context.rehydrate_skipped_parts = rehydrate(
+            context.connection, publish_store, context.store
+        )
         _adopt_keys(context, publish_store)
-    except Exception:  # noqa: BLE001 - the surface stays up, loudly
+    except Exception as exc:  # noqa: BLE001 - the surface stays up, loudly
         logger.exception("dataset rehydration failed; serving from a fresh log")
+        context.rehydrate_error = f"{type(exc).__name__}: {exc}"
 
     context.flusher = FlushManager(
         publish_store,

@@ -559,7 +559,7 @@ def apply_bundle(request: Request, body: Any | None = Body(default=None)) -> Res
             {
                 "response": {
                     "status": result.status,
-                    "location": f"{result.resource['resourceType']}/{result.resource['id']}",
+                    "location": f"{result.resource['resourceType']}/{result.resource['id']}/_history/{result.seq}",
                     "etag": etag_for(result.seq),
                 }
             }
@@ -696,7 +696,7 @@ def create_resource(
         return _resource_response(
             result,
             pending=_pending(request),
-            location=f"{resource_type}/{result.resource['id']}",
+            location=f"{resource_type}/{result.resource['id']}/_history/{result.seq}",
             status_code=201,
         )
 
@@ -705,7 +705,7 @@ def create_resource(
     return _resource_response(
         result,
         pending=_pending(request),
-        location=f"{resource_type}/{result.resource['id']}",
+        location=f"{resource_type}/{result.resource['id']}/_history/{result.seq}",
         status_code=201,
     )
 
@@ -775,7 +775,7 @@ def conditional_update(
     return _resource_response(
         result,
         pending=_pending(request),
-        location=f"{resource_type}/{result.resource['id']}",
+        location=f"{resource_type}/{result.resource['id']}/_history/{result.seq}",
         status_code=status_code,
     )
 
@@ -812,7 +812,7 @@ def update_resource(
     return _resource_response(
         result,
         pending=_pending(request),
-        location=f"{resource_type}/{resource_id}",
+        location=f"{resource_type}/{resource_id}/_history/{result.seq}",
         status_code=200 if result.created is False else 201,
     )
 

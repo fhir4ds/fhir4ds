@@ -43,63 +43,81 @@ def rehydrate(
     connection: Any,
     publish_store: Any,
     registry_store: ResourceStore,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """Restore log rows and definitions from ``publish_store``'s snapshot.
 
-    Returns ``(restored_rows, restored_definitions)``. Never raises for
-    per-file problems (a corrupt part or definition is logged and skipped) —
+    Returns ``(restored_rows, restored_definitions, skipped_parts)``. Never
+    raises for per-file problems (a corrupt part or definition is logged and
+    skipped — only that part's rows are lost) —
     boot must not take the surface down — but a failure of the snapshot step
     itself (e.g. the dataset cannot be downloaded) propagates to the caller.
     """
     snapshot = Path(publish_store.snapshot())
-    restored_rows = _restore_rows(connection, snapshot)
+    restored_rows, skipped_parts = _restore_rows(connection, snapshot)
     restored_definitions = _restore_definitions(registry_store, snapshot)
     if restored_rows or restored_definitions:
         logger.info(
-            "rehydrated from published dataset: %d row(s), %d definition(s)",
+            "rehydrated from published dataset: %d row(s), %d definition(s), "
+            "%d unreadable part(s) skipped",
             restored_rows,
             restored_definitions,
+            skipped_parts,
         )
-    return restored_rows, restored_definitions
+    return restored_rows, restored_definitions, skipped_parts
 
 
-def _restore_rows(connection: Any, snapshot: Path) -> int:
+def _restore_rows(connection: Any, snapshot: Path) -> tuple[int, int]:
     """Insert every published version row whose ``_seq`` is not in the log.
 
     Original ``_seq``, ``_deleted`` and ``_ingested_at`` values are preserved,
     so a restored server reports the same versionIds the dataset carries and
     ``_history`` reproduces the published order.
+
+    Parts are restored one at a time: a corrupt part loses only its own rows
+    (logged, counted, skipped) instead of failing the whole read, and the
+    per-part ``NOT EXISTS`` check sees earlier parts' inserts — so a ``_seq``
+    appearing in two parts (overlapping parts from a retried upload or a
+    manual dataset repair) is restored exactly once.
     """
     resources_root = snapshot / "resources"
     if not resources_root.is_dir():
-        return 0
+        return 0, 0
     parts = sorted(str(path) for path in resources_root.rglob(_PART_GLOB))
     if not parts:
-        return 0
+        return 0, 0
 
-    # Explicit file list (not a glob): auto Hive partitioning would inject a
-    # phantom `dt` column the base table does not have.
-    part_list = "[" + ", ".join(f"'{path.replace(chr(39), chr(39) * 2)}'" for path in parts) + "]"
-    rows = connection.execute(
-        f"""
-        INSERT INTO {BASE_TABLE}
-            (id, resourceType, resource, patient_ref, _seq, _deleted, _ingested_at)
-        SELECT
-            p.id,
-            p.resourceType,
-            CAST(p.resource AS JSON),
-            p.patient_ref,
-            p._seq,
-            p._deleted,
-            CAST(p._ingested_at AS TIMESTAMP)
-        FROM read_parquet({part_list}) AS p
-        WHERE NOT EXISTS (
-            SELECT 1 FROM {BASE_TABLE} AS b WHERE b._seq = p._seq
-        )
-        RETURNING _seq
-        """
-    ).fetchall()
-    return len(rows)
+    restored = 0
+    skipped = 0
+    for part in parts:
+        # Explicit file (not a glob): auto Hive partitioning would inject a
+        # phantom `dt` column the base table does not have.
+        literal = "'" + part.replace(chr(39), chr(39) * 2) + "'"
+        try:
+            rows = connection.execute(
+                f"""
+                INSERT INTO {BASE_TABLE}
+                    (id, resourceType, resource, patient_ref, _seq, _deleted, _ingested_at)
+                SELECT
+                    p.id,
+                    p.resourceType,
+                    CAST(p.resource AS JSON),
+                    p.patient_ref,
+                    p._seq,
+                    p._deleted,
+                    CAST(p._ingested_at AS TIMESTAMP)
+                FROM read_parquet([{literal}]) AS p
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM {BASE_TABLE} AS b WHERE b._seq = p._seq
+                )
+                RETURNING _seq
+                """
+            ).fetchall()
+        except Exception as exc:  # noqa: BLE001 - one bad part must not sink the rest
+            skipped += 1
+            logger.warning("rehydrate: skipping unreadable part %s: %s", part, exc)
+            continue
+        restored += len(rows)
+    return restored, skipped
 
 
 def _restore_definitions(registry_store: ResourceStore, snapshot: Path) -> int:

@@ -128,11 +128,27 @@ class KeyRegistry:
         Complete-snapshot semantics: the persisted file is the full registry
         at its last flush, so it wins outright over the env bootstrap. An
         empty/invalid payload is ignored (env bootstrap remains).
+
+        Entries face the same shape rules as runtime adds: labels must be
+        boring identifiers (the reserved ``__env__`` bootstrap label excepted)
+        and key values must be non-empty strings — hostile labels and junk
+        values from a tampered snapshot are dropped, never adopted.
         """
         if not isinstance(keys, dict) or not keys:
             return
+        adopted: dict[str, str] = {}
+        for label, key in keys.items():
+            if not isinstance(label, str) or not isinstance(key, str) or not key:
+                logger.warning("key snapshot: dropping malformed entry %r", label)
+                continue
+            if label != self._bootstrap_label and not LABEL_PATTERN.match(label):
+                logger.warning("key snapshot: dropping entry with unsafe label %r", label)
+                continue
+            adopted[label] = key
+        if not adopted:
+            return
         with self._lock:
-            self._write_keys = {str(k): str(v) for k, v in keys.items() if k and v}
+            self._write_keys = adopted
 
     # -- internals ---------------------------------------------------------
 

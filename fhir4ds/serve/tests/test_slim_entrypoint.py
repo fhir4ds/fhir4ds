@@ -42,3 +42,30 @@ def test_module_entrypoint_does_not_import_pandas():
     )
     assert result.returncode == 0, result.stderr[-2000:]
     assert result.stdout.strip() == "[]", result.stdout
+
+
+def test_serve_extra_import_error_is_actionable_v22_qa008():
+    """Without fastapi, importing serve.app names the missing extra (V22-QA-008).
+
+    Runs in a subprocess: this suite imports fhir4ds.serve.app everywhere, so
+    an in-process import would hit the cached module and skip the guard.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    code = (
+        "import sys\n"
+        "sys.modules['fastapi'] = None\n"  # blocks the import machinery
+        "try:\n"
+        "    import fhir4ds.serve.app\n"
+        "    print('unexpected: import succeeded')\n"
+        "except RuntimeError as exc:\n"
+        "    print('RuntimeError:', exc)\n"
+    )
+    repo_root = str(Path(__file__).resolve().parents[3])
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, cwd=repo_root
+    )
+    assert "fhir4ds-v2[serve]" in result.stdout, (result.stdout, result.stderr)
+    assert "unexpected" not in result.stdout

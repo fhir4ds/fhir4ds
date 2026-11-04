@@ -26,6 +26,15 @@ def health(request: Request) -> dict[str, Any]:
     flusher = getattr(context, "flusher", None) if context is not None else None
     if flusher is not None:
         payload.update(flusher.health())
+    # Rehydration outcome: an operator must be able to see that a restart
+    # lost rows (corrupt part) or served a fresh log (unreachable dataset)
+    # instead of discovering it as silently missing resources.
+    if context is not None:
+        if getattr(context, "rehydrate_error", None):
+            payload["rehydrate_error"] = context.rehydrate_error
+        skipped = int(getattr(context, "rehydrate_skipped_parts", 0) or 0)
+        if skipped:
+            payload["rehydrate_skipped_parts"] = skipped
     return payload
 
 
