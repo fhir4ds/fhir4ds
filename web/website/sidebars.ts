@@ -210,6 +210,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'examples/autocoding',
+          label: 'Auto-Coding',
+        },
+        {
+          type: 'doc',
           id: 'examples/sdc-playground',
           label: 'SDC Forms',
         },
