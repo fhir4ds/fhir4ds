@@ -245,3 +245,294 @@
   border: none;
   width: 100%;
 }
+
+/* -- Blog "Save as PDF" -------------------------------------------------- */
+
+.blog-pdf-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -0.4rem;
+}
+
+.blog-pdf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--ifm-color-emphasis-100);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 99px;
+  padding: 0.25rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ifm-font-color-base);
+  cursor: pointer;
+}
+
+.blog-pdf-btn:hover {
+  background: var(--ifm-color-emphasis-200);
+}
+
+@media print {
+  /* Hide site chrome; keep only the article. */
+  body > nav.navbar,
+  footer.footer,
+  aside.theme-doc-toc-desktop,
+  .theme-doc-sidebar-container,
+  .blog-pdf-bar,
+  .table-of-contents,
+  .pagination-nav,
+  .blog-post-comments {
+    display: none !important;
+  }
+  html.theme-light,
+  html.theme-dark {
+    --ifm-color-content: #000;
+  }
+  main.container {
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+  article {
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+  a {
+    text-decoration: none !important;
+    color: inherit !important;
+  }
+  tr, img, pre {
+    break-inside: avoid;
+  }
+}
+
+/* -- Blog sidebar timeline ------------------------------------------------ */
+
+.blog-timeline {
+  padding-right: 0.5rem;
+}
+
+.blog-timeline-heading {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.blog-timeline-year {
+  position: relative;
+  margin-bottom: 1rem;
+  padding-left: 1.1rem;
+  border-left: 2px solid var(--ifm-color-emphasis-300);
+}
+
+.blog-timeline-year-label {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--ifm-color-primary);
+  margin: 0.4rem 0 0.35rem -1.1rem;
+  position: relative;
+}
+
+.blog-timeline-year-label::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ifm-color-primary);
+  margin-right: 0.5rem;
+  transform: translateY(-1px);
+}
+
+.blog-timeline-item {
+  display: grid;
+  grid-template-columns: 3rem 1fr;
+  grid-template-areas: "month title";
+  align-items: baseline;
+  position: relative;
+  padding: 0.28rem 0.4rem 0.28rem 0;
+  border-radius: var(--ifm-global-radius);
+  color: var(--ifm-font-color-base);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.blog-timeline-item:hover {
+  background: var(--ifm-color-emphasis-100);
+  text-decoration: none;
+}
+
+.blog-timeline-item::before {
+  content: "";
+  position: absolute;
+  left: -1.1rem;
+  top: 0.72rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ifm-color-emphasis-400);
+  transform: translateX(-5px); /* center on the 2px line */
+  box-sizing: border-box;
+}
+
+.blog-timeline-item.active {
+  background: color-mix(in srgb, var(--ifm-color-primary) 12%, transparent);
+}
+
+.blog-timeline-item.active::before {
+  background: var(--ifm-color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ifm-color-primary) 25%, transparent);
+}
+
+.blog-timeline-month {
+  grid-area: month;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ifm-color-emphasis-600);
+}
+
+.blog-timeline-title {
+  grid-area: title;
+  line-height: 1.25;
+}
+
+.blog-timeline-item.active .blog-timeline-title {
+  font-weight: 700;
+}
+
+@media print {
+  .blog-timeline {
+    display: none !important;
+  }
+}
+
+/* -- Blog "More posts" footer --------------------------------------------- */
+
+.blog-more-posts {
+  margin-top: 2.5rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--ifm-color-emphasis-300);
+}
+
+.blog-more-posts h4 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ifm-color-emphasis-700);
+  margin-bottom: 0.5rem;
+}
+
+.blog-more-posts ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.blog-more-posts li {
+  padding: 0.25rem 0;
+}
+
+/* -- Blog timeline: compact on article pages ------------------------------- */
+
+.blog-timeline--compact .blog-timeline-inner {
+  position: relative;
+  transition: none;
+}
+
+/* Collapsed state: months + dots only; titles and the heading hidden. */
+.blog-timeline--compact .blog-timeline-heading {
+  visibility: hidden;
+  height: 1.2rem;
+  margin: 0;
+}
+
+.blog-timeline--compact .blog-timeline-year-label {
+  font-size: 0.7rem;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  min-height: 2.2rem;
+  margin-bottom: 0.4rem;
+}
+
+.blog-timeline--compact .blog-timeline-item {
+  grid-template-columns: 1fr;
+  grid-template-areas: "month";
+  padding-right: 0;
+}
+
+.blog-timeline--compact .blog-timeline-item .blog-timeline-title {
+  display: none;
+}
+
+.blog-timeline--compact .blog-timeline-month {
+  font-size: 0.6rem;
+}
+
+/* Expanded: hover pops the full timeline out over the content (no reflow). */
+.blog-timeline--compact:hover .blog-timeline-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 30;
+  width: 260px;
+  padding: 0.8rem 0.9rem;
+  background: var(--ifm-background-color);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-global-radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.blog-timeline--compact:hover .blog-timeline-heading {
+  visibility: visible;
+  height: auto;
+  margin-bottom: 0.5rem;
+}
+
+.blog-timeline--compact:hover .blog-timeline-year-label {
+  writing-mode: horizontal-tb;
+  transform: none;
+  min-height: 0;
+}
+
+.blog-timeline--compact:hover .blog-timeline-item {
+  grid-template-columns: 3rem 1fr;
+  grid-template-areas: "month title";
+  padding-right: 0.4rem;
+}
+
+.blog-timeline--compact:hover .blog-timeline-item .blog-timeline-title {
+  display: block;
+}
+
+.blog-timeline--compact:hover .blog-timeline-month {
+  font-size: 0.72rem;
+}
+
+/* -- PDF capture: force light-surface colors regardless of site theme ---- */
+
+.pdf-light-capture,
+.pdf-light-capture * {
+  color: #1b1b1b !important;
+  background-color: transparent !important;
+  border-color: #d0d0d0 !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+.pdf-light-capture a {
+  color: #14539a !important;
+}
+
+.pdf-light-capture code,
+.pdf-light-capture pre {
+  background-color: #f5f6f7 !important;
+  color: #1b1b1b !important;
+}
+
+.pdf-light-capture table th,
+.pdf-light-capture table td {
+  border-color: #cfcfcf !important;
+}

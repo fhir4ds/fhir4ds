@@ -1,0 +1,160 @@
+---
+title: "Standards-Compliant Clinical Reasoning, Zero-ETL Analytics & Query-Time OMOP Mapping"
+description: "The FHIR4DS executive solution brief: open-standards compliance verified against the official HL7 test suites, zero-infrastructure analytics, and query-time OMOP CDM v5.5 mapping with the performance numbers behind it."
+authors: joel
+tags: [fhir, cql, sql-on-fhir, omop, analytics]
+date: 2026-11-01T09:00:00Z
+slug: /fhir4ds-solution-brief
+---
+
+Translational researchers, clinical informaticians, and healthcare data
+architects face a fundamental architectural divide: operational systems
+exchange deeply nested FHIR JSON, while observational research, clinical
+logic evaluation, and population analytics require relational tables.
+FHIR4DS bridges this divide with an open-standards, SQL-native analytical
+engine built directly on DuckDB.
+
+## Open Standards Compliance & Interoperability
+
+FHIR4DS is engineered for 100% specification compliance with official
+healthcare standards, ensuring your clinical logic and data models remain
+completely portable without proprietary lock-in:
+
+1. **HL7 FHIRPath** — the standard expression language for navigating
+   complex clinical trees. Enables path traversal, deep collection
+   extraction, and polymorphic choice types directly within SQL queries
+   over raw FHIR JSON.
+2. **HL7 Clinical Quality Language (CQL)** — the interoperable standard
+   for expressing computable clinical knowledge. Authors write
+   human-readable clinical definitions — patient cohort eligibility,
+   screening criteria, disease phenotypes — that compile directly to
+   portable SQL.
+3. **HL7 SQL-on-FHIR v2** — the open community standard for defining
+   flattened, tabular views of hierarchical FHIR resources. An
+   interoperable, vendor-neutral method to reshape complex JSON documents
+   into clean relational projections.
+4. **OHDSI OMOP Common Data Model (v5.5)** — the international standard
+   for observational health research. FHIR4DS maps FHIR R4 to OMOP CDM
+   v5.5 tables on-the-fly, resolving concepts across standard medical
+   vocabularies at query time without offline ETL staging.
+
+### What the compliance claim is tested against
+
+Each of the specs FHIR4DS implements — FHIRPath, CQL, and SQL-on-FHIR v2
+— ships with its own HL7-community-built reference implementation and a
+test suite designed to validate other implementations. FHIR4DS passes
+**all 2,785 of them at 100%**:
+
+| Suite | Tests | Passing |
+|---|---|---|
+| CQL — official HL7 `cql-tests` corpus | 1,706 | 100% |
+| FHIRPath — official reference suite | 935 | 100% |
+| SQL-on-FHIR v2 — official `spec_tests` | 144 | 100% |
+| CMS eCQM measures (QI-Core 2025) — evaluated end-to-end | 47 | 100% |
+
+The OMOP CDM v5.5 mapping library carries its own example suite (38
+expected-output tests — OMOP has no official test suite), kept green in
+the same runner.
+
+These are not self-authored checks where it matters: the FHIRPath suite
+is the one the reference evaluator runs, the CQL suite is the official HL7
+`cql-tests` corpus, and the ViewDefinition suite is the SQL-on-FHIR
+community's `spec_tests`. Where an official suite disagrees with the
+implementation, the suite wins — and the conformance runner ships in the
+repository so anyone can reproduce the numbers. Beyond the suites, all 47
+CMS eCQM measures from the QI-Core 2025 content package evaluate
+end-to-end (real FHIRHelpers/QICoreCommon resolution, real ValueSets,
+real patient data), and the OMOP CDM v5.5 mapping library carries its
+own example suite (38 expected-output tests — OMOP has no official test
+suite) kept green in the same runner.
+
+## Ease of Use: Zero Infrastructure, Run Anywhere
+
+- **Runs directly in notebooks & Python** — no JVM, no Docker
+  containers, no server infrastructure. `pip install fhir4ds-v2` and
+  execute clinical queries inside local Jupyter notebooks, Python
+  scripts, or automated analytical workflows.
+- **Zero-ETL direct data attachment** — mount raw clinical data where it
+  already lives: local/cloud Parquet, NDJSON bulk exports, AWS S3,
+  PostgreSQL/HAPI read replicas, and MongoDB, with no pre-flattening,
+  data duplication, or pipeline synchronization lag.
+- **Native DataFrame & lakehouse ecosystem** — results return as Pandas
+  DataFrames, Polars relations, or Apache Arrow tables, immediately
+  ready for biostatistics and machine-learning pipelines.
+- **In-browser & zero-egress deployment (WASM)** — compiles directly to
+  WebAssembly via DuckDB-WASM and Pyodide. Run clinical reasoning 100%
+  client-side inside SMART on FHIR browser applications — zero PHI ever
+  leaves the user's computer.
+
+## Architectural & Standards Matrix
+
+| Dimension | Traditional clinical engines / warehouses | FHIR4DS (SQL-native engine) |
+|---|---|---|
+| Standards compliance | Fragmented across separate tools | 100% compliant: CQL, FHIRPath & SQL-on-FHIR v2 |
+| Flattening mechanism | Custom proprietary scripts / ETL staging | Standardized SQL-on-FHIR ViewDefinitions |
+| OMOP CDM integration | Multi-stage offline batch ETL jobs | Query-time view mapping with standard vocabularies |
+| Data storage & ingestion | Requires pre-flattened relational DB | Zero-ETL on raw JSON, Parquet & live DBs |
+| Runtime footprint | Dedicated servers, Docker & heavy runtimes | Zero-server (Python & browser WASM) |
+| Evidence & audit trail | Opaque summary counts & black-box logs | Traceable logic trails & clinical narratives |
+
+## Tailored Informatics Applications & Workflows
+
+1. **Query-Time OMOP CDM v5.5 Harmonization** — bridges clinical care to
+   observational research. Maps FHIR data to standardized OMOP CDM v5.5
+   tables on-the-fly, resolving clinical concepts across standard coding
+   systems at query time without offline ETL pipelines.
+2. **Computable Guidelines & Phenotyping (CQL)** — express clinical logic
+   in interoperable CQL and evaluate it directly across longitudinal
+   data inside your analysis notebook.
+3. **Zero-Egress SMART on FHIR Apps (WASM)** — clinical reasoning 100%
+   client-side in the browser via DuckDB-WASM. SMART on FHIR tools
+   perform risk scores and guideline matching without transmitting
+   sensitive patient records to external servers.
+4. **Terminology, Auto-Coding & Notes Pipeline** — maps codes between
+   code systems, automatically resolves free text to standard codes, and
+   derives structured Condition resources directly from clinical
+   progress notes.
+
+### The performance behind query-time OMOP
+
+The query-time mapping is practical because the projections ride the same
+vectorized engine. We benchmarked the **SQL-on-FHIR OMOP views themselves**
+on synthetic FHIR R4 (Synthea) at 1k → 10k → 100k patients — roughly 820
+FHIR resources per patient, 0.9 GB → 81 GB of raw JSON — materializing the
+full OMOP CDM v5.5 table set (person through death, via ViewDefinitions
+and the composition SQLQueries) on a single workstation (13th-gen Intel
+Core i9-13900KF, 32 threads, DuckDB capped at an 8 GB working set).
+Timings are exec-only, median of 3, forced full evaluation:
+
+| Patients | FHIR resources (JSON) | CDM rows materialized | Total exec | Peak RSS |
+|---|---|---|---|---|
+| 1,000 | 876,903 (0.9 GB) | 876,490 | 205 s | 1.2 GB |
+| 10,000 | 8.1 M (8 GB) | 8.1 M | 269 s | 3.1 GB |
+| 100,000 | 82.1 M (81 GB) | 82.1 M | 35 min | 8.7 GB |
+
+The scaling is the story: **100× the patients costs ~10× the time** —
+per-patient materialization cost drops roughly 10× with scale, because a
+ViewDefinition compiles to columnar SQL whose cost tracks the scan, not
+per-record transformation. A representative composition query
+(drug-exposure across the 5 source resources) runs in 282 s at the 100k
+rung, producing 7.7 M rows under the same 8 GB cap. Nothing is staged,
+copied, or synchronized ahead of time — the artifacts are the small,
+versioned ViewDefinition + SQLQuery files, and the engine treats them as
+queries (full methodology in `benchmarks/` in the repository).
+
+## Licensing & Community Collaboration
+
+FHIR4DS supports both open academic science and enterprise software
+environments:
+
+- **Open-source (AGPL-3.0)** — freely accessible for academic medical
+  centers, informatics departments, grant research, and open-science
+  evaluations.
+- **Commercial Enterprise License** — tailored for health tech
+  companies, EHR integration partners, and health systems requiring
+  proprietary embedding, priority support, and high-performance C++
+  extensions.
+
+Install via `pip install fhir4ds-v2` · Interactive demos at
+[fhir4ds.com](https://fhir4ds.com) · Academic & commercial inquiries:
+[contact@fhir4ds.com](mailto:contact@fhir4ds.com)

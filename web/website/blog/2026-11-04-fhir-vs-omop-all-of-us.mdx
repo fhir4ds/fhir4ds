@@ -78,11 +78,16 @@ because OMOP is often the destination downstream teams need.
 encoding, not in FHIR.** Data that is never properly mapped and coded —
 documented in text rather than structured entries — yields poor research
 data in *either* standard; OMOP overcomes it only through funded ETL
-curation, and default FHIR exports simply haven't had that curation. Even
-the striking encounter gap (1.5% of participants with FHIR Encounters
-versus 97% with OMOP visits) traces to USCDI not requiring encounters in
-exports until 2026 — an acquisition-policy artifact with a known expiry
-date, correctly pinned down by the authors.
+curation, and default FHIR exports simply haven't had that curation. The
+encounter gap is the clearest case: the study's window (January 2020 –
+March 2024) sat entirely inside the **USCDI v1** regulatory baseline,
+which had no Encounter data class at all — encounters only entered USCDI
+in **v2 (2021)**, and only as a voluntary update; the mandatory
+certification baseline (USCDI v3, per the HTI-1 rule) took effect
+**January 1, 2026**. The finding that just 1.5% of participants had FHIR
+Encounters (versus 97% with OMOP visits) measures a v1-era export floor,
+not a FHIR limitation — and the mandate the authors said would fix it
+had already taken effect by the time the paper published.
 
 ## Where the framing needs a correction
 
@@ -182,16 +187,19 @@ artifacts.
 Skeptics are right to ask what "spec compliant" means. Each of the
 specifications FHIR4DS implements ships an HL7-community-built reference
 implementation and an official test suite designed to validate other
-implementations. FHIR4DS passes all of them — **2,870 official conformance
-tests at 100%** in release 0.021:
+implementations. FHIR4DS passes all of them — **2,785 official conformance
+tests at 100%** in release 0.0.21:
 
-| Specification | Official tests | Passing |
+| Suite | Tests | Passing |
 |---|---|---|
-| CQL (Clinical Quality Language) | 1,706 | 100% |
-| FHIRPath | 935 | 100% |
-| SQL-on-FHIR v2 ViewDefinition | 144 | 100% |
-| DQM eCQM measures | 47 | 100% |
-| OMOP CDM mapping examples | 38 | 100% |
+| CQL — official HL7 `cql-tests` corpus | 1,706 | 100% |
+| FHIRPath — official reference suite | 935 | 100% |
+| SQL-on-FHIR v2 — official `spec_tests` | 144 | 100% |
+| CMS eCQM measures (QI-Core 2025) — evaluated end-to-end | 47 | 100% |
+
+The OMOP CDM v5.5 mapping library carries its own example suite (38
+expected-output tests — OMOP has no official test suite), kept green in
+the same runner.
 
 The conformance runner ships in the repository — anyone can reproduce the
 numbers.
@@ -204,10 +212,10 @@ to OMOP is sound for programs that already have both. But its own evidence
 points past its framing: the cost it identified was not FHIR's ability to
 represent clinical reality — it was the absence of native analysis tooling
 for FHIR payloads. That absence is what FHIR4DS removes. As bulk exports
-fatten (USCDI encounter requirements land in 2026) and standard mapping
-artifacts accumulate, the "OMOP richer, FHIR raw" tradeoff narrows from
-both ends — and the multi-provider data only FHIR captures becomes
-queryable the day it arrives.
+fatten under the USCDI v3 mandate (in force since January 2026) and
+standard mapping artifacts accumulate, the "OMOP richer, FHIR raw"
+tradeoff narrows from both ends — and the multi-provider data only FHIR
+captures becomes queryable the day it arrives.
 
 Want to see the extraction barrier dissolved end to end? Run the
 [FHIR → OMOP walkthrough](/docs/examples/fhir-to-omop) — it executes live
