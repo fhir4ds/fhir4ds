@@ -47,7 +47,6 @@ import dataclasses
 import hashlib
 import json
 import logging
-import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -82,9 +81,24 @@ DEFAULT_PATHS: dict[str, list[str]] = {
 
 # Match-grade order: results at-or-above the configured threshold are
 # kept (lower index = stronger match). Used by _keep_if_match_grade.
+#
+# Vocabulary alignment (medterm4ds 0.0.9, QA it1-d12 SKEPTIC): the
+# authoritative order is medterm4ds's ``services/extraction.py
+# _GRADE_ORDER`` — {"certain": 0, "exact": 0, "probable": 1,
+# "possible": 2, "broader": 3}. medterm4ds NEVER emits 'ambiguous' or
+# 'no-match'; those spellings are kept ONLY as legacy aliases so cache
+# rows written by older fhir4ds runs (whose in-process adapter
+# fabricated 'ambiguous') still parse. Previously 'possible'/'exact'/
+# 'broader' fell through to the rank-3 default, silently dropping
+# genuine results at relaxed thresholds and dropping 'exact' (the
+# STRONGEST grade) even at min='certain'.
 _MATCH_GRADE_ORDER: dict[str, int] = {
     "certain":    0,
+    "exact":      0,
     "probable":   1,
+    "possible":   2,
+    "broader":    3,
+    # Legacy aliases (pre-0.0.9-alignment cache rows only).
     "ambiguous":  2,
     "no-match":   3,
 }
@@ -482,7 +496,19 @@ class AutoCoder:
     def _filter_and_truncate(
         self, results: list[dict]
     ) -> list[dict]:
-        """Filter by min_match_grade, sort by score desc, take top_k."""
+        """Filter by min_match_grade, preserve engine order, take top_k.
+
+        medterm4ds 0.0.9 doctrine (CHANGELOG AMUX-46): hybrid ranking is
+        reciprocal-rank fusion (sum 1/(10+rank)); the ``score`` field is
+        the calibrated UNDERLYING value on TWO scales (cosine when the
+        semantic system saw the row, else normalized BM25), documented
+        per-row by ``match_grade``. Re-sorting by raw score therefore
+        mixes scales — a lexical-only BM25 row (score 1.0, 'possible')
+        would leapfrog an agreement-aware 'certain' row (cosine 0.93),
+        destroying the fusion ranking the engine deliberately returns.
+        The engine's returned order IS the ranking; we only filter and
+        truncate (QA it1-d12 SKEPTIC).
+        """
         threshold_rank = _MATCH_GRADE_ORDER.get(
             self._config.min_match_grade, 0
         )
@@ -491,19 +517,6 @@ class AutoCoder:
             if _MATCH_GRADE_ORDER.get(r.get("match_grade", "ambiguous"), 3)
             <= threshold_rank
         ]
-        # Sort by score descending. Stable sort preserves search-engine
-        # ordering for ties. Defensive: NaN scores (shouldn't happen
-        # but engines can produce them) sort LAST under reverse=True
-        # with a key function that treats NaN as -inf.
-        def _score_key(r: dict) -> float:
-            s = r.get("score", 0.0)
-            try:
-                sf = float(s)
-            except (TypeError, ValueError):
-                return float("-inf")
-            return sf if math.isfinite(sf) else float("-inf")
-
-        kept.sort(key=_score_key, reverse=True)
         return kept[: self._config.top_k]
 
     # ── cache plumbing ──────────────────────────────────────────────

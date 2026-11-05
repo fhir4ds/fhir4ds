@@ -104,8 +104,20 @@ def _extract_match_grade(resource: dict, search_meta: dict | None) -> str:
 
 
 def _extract_search_mode(resource: dict, search_meta: dict | None, default: str) -> str:
-    """Pull the search mode (lexical/hybrid/semantic) from one of three locations."""
-    if isinstance(search_meta, dict) and isinstance(search_meta.get("mode"), str):
+    """Pull the search mode (lexical/hybrid/semantic) from one of three locations.
+
+    The Bundle ``entry.search.mode`` field is SKIPPED when it equals the
+    FHIR searchset-entry constant ``"match"`` — medterm4ds's
+    ``build_bundle_search`` (engines/fhir/responses.py) always sets
+    ``search.mode = "match"`` there, so reading it unconditionally made
+    every HTTP SearchResult record ``search_mode='match'`` instead of the
+    requested mode (which then persisted into autocoding extensions).
+    """
+    if (
+        isinstance(search_meta, dict)
+        and isinstance(search_meta.get("mode"), str)
+        and search_meta["mode"] != "match"
+    ):
         return search_meta["mode"]
     if isinstance(resource, dict) and isinstance(resource.get("searchMode"), str):
         return resource["searchMode"]
