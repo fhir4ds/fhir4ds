@@ -104,6 +104,41 @@ _MATCH_GRADE_ORDER: dict[str, int] = {
 }
 
 
+def _has_coded_entry(coding: Any) -> bool:
+    """True when ``coding`` carries at least one entry with a ``code``.
+
+    A ``coding[]`` whose entries all lack a ``code`` (display-only) is a
+    text carrier from a legacy export, not a manual coding — INV-4 must
+    not treat it as "already coded" (AMUX-60 Gap 1).
+    """
+    if not isinstance(coding, list) or not coding:
+        return False
+    return any(
+        isinstance(entry, dict) and isinstance(entry.get("code"), str) and entry["code"].strip()
+        for entry in coding
+    )
+
+
+def _uncoded_display(cc: dict) -> str | None:
+    """The display of a code-less coding entry, when one carries text.
+
+    Query-text fallback for CodeableConcepts without ``text`` whose only
+    content is ``coding[0].display`` — the shape EHR exports produce when
+    the source knew the name but not the code.
+    """
+    coding = cc.get("coding")
+    if not isinstance(coding, list):
+        return None
+    for entry in coding:
+        if _has_coded_entry([entry]):
+            continue
+        if isinstance(entry, dict):
+            display = entry.get("display")
+            if isinstance(display, str) and display.strip():
+                return display
+    return None
+
+
 @dataclass(frozen=True)
 class AutoCoderConfig:
     """Configuration for :class:`AutoCoder`.
@@ -416,18 +451,25 @@ class AutoCoder:
         is a non-empty string.
 
         Guards (FDD INV-2/INV-3/INV-4):
-            * Empty/missing/whitespace-only text → skip.
-            * Existing ``coding[]`` → skip (no double-coding).
+            * Query text = ``coalesce(code.text, code.coding[].display)`` —
+              a ``coding[]`` whose entries ALL lack a ``code`` is a text
+              carrier, not a coding (common legacy-export shape); its
+              display becomes the query text and the entry is preserved
+              alongside the auto-coded additions (AMUX-60 Gap 1).
+            * Empty/missing query text → skip.
+            * ``coding[]`` with at least one coded entry (has ``code``)
+              → skip (no double-coding).
             * Search returns 0 results → no Codings appended, no cache
               write (the cache stores the FULL pre-filter result, so
               re-runs with a stricter threshold will still hit cache).
         """
         text = cc.get("text")
         if not isinstance(text, str) or not text.strip():
-            return  # INV-3: resources without text are untouched.
+            text = _uncoded_display(cc)
+        if not isinstance(text, str) or not text.strip():
+            return  # INV-3: resources without usable text are untouched.
 
-        existing_coding = cc.get("coding")
-        if isinstance(existing_coding, list) and existing_coding:
+        if _has_coded_entry(cc.get("coding")):
             # INV-4: existing manual coding → do NOT re-code.
             return
 
