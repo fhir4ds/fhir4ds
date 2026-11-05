@@ -591,9 +591,10 @@ def bulk_publish_manifest(request: Request) -> Response:
 def manage_keys(request: Request, body: Any | None = Body(default=None)) -> Response:
     """Add or revoke a labeled write key. Admin key required (guard-enforced).
 
-    Body: ``{"action": "add"|"revoke", "label": "...", "key": "..." (add only)}``.
-    Runtime-added keys persist to the configured key store; the registry can
-    never drop to zero write keys.
+    Body: ``{"action": "add"|"revoke", "label": "...", "key": "..." (add only),
+    "expires_in_days": N (add only, optional — the key self-revokes once the
+    deadline passes)}``. Runtime-added keys persist to the configured key
+    store; the registry can never drop to zero write keys.
     """
     from .auth import AuthError
 
@@ -603,7 +604,9 @@ def manage_keys(request: Request, body: Any | None = Body(default=None)) -> Resp
     registry = context_for(request).keys
     try:
         if action == "add":
-            registry.add_write_key(label, payload.get("key"))
+            registry.add_write_key(
+                label, payload.get("key"), payload.get("expires_in_days")
+            )
         elif action == "revoke":
             registry.revoke_write_key(label)
         else:
@@ -620,9 +623,19 @@ def manage_keys(request: Request, body: Any | None = Body(default=None)) -> Resp
             flusher.publish_state()
         except Exception:  # noqa: BLE001 - rotation succeeded; persistence retries
             pass
+    added = next(
+        (info for info in registry.write_key_info() if info["label"] == label),
+        None,
+    )
     return Response(
         content=json.dumps(
-            {"action": action, "label": label, "write_keys": registry.write_key_labels()},
+            {
+                "action": action,
+                "label": label,
+                "expires_at": added["expires_at"] if added else None,
+                "write_keys": registry.write_key_labels(),
+                "keys": registry.write_key_info(),
+            },
             ensure_ascii=False,
         ),
         media_type="application/json",

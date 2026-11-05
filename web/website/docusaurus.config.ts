@@ -161,7 +161,11 @@ const config: Config = {
           sidebarPath: './sidebars.ts',
           editUrl: 'https://github.com/fhir4ds/fhir4ds/edit/main/web/website/',
         },
-        blog: false,
+        blog: {
+          editUrl: 'https://github.com/fhir4ds/fhir4ds/edit/main/web/website/',
+          showReadingTime: true,
+          postsPerPage: 8,
+        },
         sitemap: {
           // AMUX-51 thin-page triage: standalone demo shells are UI
           // surfaces, not content pages — keep them crawlable but out of
@@ -219,6 +223,7 @@ const config: Config = {
             {label: 'Live Demo', to: '/docs/examples/cql-playground'},
             {label: 'Documentation', to: '/docs/user-guide/index'},
             {label: 'Whitepaper', to: '/docs/getting-started/whitepaper'},
+            {label: 'Blog', to: '/blog'},
           ],
         },
         {

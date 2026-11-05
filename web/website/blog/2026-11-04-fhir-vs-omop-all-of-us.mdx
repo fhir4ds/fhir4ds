@@ -1,0 +1,222 @@
+---
+title: "What the All of Us FHIR-vs-OMOP Study Actually Measured"
+description: "The 2026 All of Us comparison found OMOP dramatically richer than FHIR — but it compared acquisition pipelines, not data models. What that means for FHIR analytics, with the standard-artifact answer."
+authors: joel
+tags: [fhir, omop, sql-on-fhir, analytics]
+date: 2026-11-04T10:00:00Z
+slug: /fhir-vs-omop-all-of-us
+---
+
+A 2026 study from the All of Us Research Program compared
+the same 29,512 participants' data as OMOP tables and as FHIR R4 payloads —
+Patterson et al., *JAMIA* 33(9):1593–1604
+([doi:10.1093/jamia/ocag095](https://doi.org/10.1093/jamia/ocag095)). The
+headline numbers are stark:
+
+| Median events per person | OMOP | FHIR |
+|---|---|---|
+| Measurement | 846 | 832 |
+| Condition | 258 | 11 |
+| Procedure | 72 | 4 |
+| Participants with visits/encounters | 97% | 1.5% |
+
+The conclusion many people draw — *OMOP is richer, FHIR is not ready for
+research* — deserves a harder look, because the study itself tells you
+exactly what it measured. It is careful, honest work — and with AMIA
+ahead, it is likely to shape how people talk about FHIR analytics. Here is
+what it did and did not
+show, and the concrete answer to the barrier it identified.
+
+## What the study actually compared
+
+The two data streams reached the researchers through very different
+pipelines:
+
+- **OMOP** arrived through institution-level ETL, built per site by
+  engineers who map concepts from *anywhere* in the EHR into the standard
+  vocabulary, with an iterative submission-and-feedback loop until the data
+  passed quality review.
+- **FHIR** arrived as participants connected to FHIR providers through
+  digital participant portals, which *"extract data via API from clinical
+  datasets in the FHIR format"*; a data aggregator then *"moderately
+  standardizes the data and submits it to AoURP"* — with, per the authors,
+  *"no feedback cycle,"* and FHIR limited to *"standard mappings used in its
+  default bulk export functionality,"* which are determined by the EHR
+  vendor.
+
+The authors say this themselves: *"clinical data documented in an unexpected
+area of the EHR are often excluded from FHIR exports"* because vendor
+defaults decide what leaves the building. But the underlying challenge is
+not FHIR-specific. Clinical data that is never properly mapped and encoded —
+documented in free text instead of coded into structured entries — is hard
+to use in *either* standard; OMOP confronts exactly the same problem and
+solves it by throwing institution-funded ETL engineers at the source. That
+is a curation investment, not a model capability. FHIR itself is very rich
+in the information it can hold and handle — when data is properly encoded
+into its resources, nothing in the Condition or Procedure domains is beyond
+it. The Condition 258-vs-11 gap is therefore a statement about acquisition
+pipelines and encoding discipline, not about the expressive power of the
+two data models.
+
+The study also quantified a real and durable tradeoff: FHIR's blocking,
+ingestion-time validation produced structurally cleaner data (unique ids,
+resolvable references), while OMOP's non-blocking post-hoc checks traded
+conformance for yield. Both findings are worth keeping.
+
+## Where we agree
+
+**OMOP is the right tool for observational research today.** It is
+purpose-built for it: flat, regular tables, standardized concept ids, and a
+decade of methods and tooling that assume its shape. If your institution
+has already paid for an OMOP ETL, use it. We are not arguing against OMOP —
+FHIR4DS (the open-source engine behind this blog) ships an OMOP CDM
+mapping library, and the
+[FHIR → OMOP walkthrough](/docs/examples/fhir-to-omop) exists precisely
+because OMOP is often the destination downstream teams need.
+
+**The gaps the study found are real — but they live in acquisition and
+encoding, not in FHIR.** Data that is never properly mapped and coded —
+documented in text rather than structured entries — yields poor research
+data in *either* standard; OMOP overcomes it only through funded ETL
+curation, and default FHIR exports simply haven't had that curation. The
+encounter gap is the clearest case: the study's window (January 2020 –
+March 2024) sat entirely inside the **USCDI v1** regulatory baseline,
+which had no Encounter data class at all — encounters only entered USCDI
+in **v2 (2021)**, and only as a voluntary update; the mandatory
+certification baseline (USCDI v3, per the HTI-1 rule) took effect
+**January 1, 2026**. The finding that just 1.5% of participants had FHIR
+Encounters (versus 97% with OMOP visits) measures a v1-era export floor,
+not a FHIR limitation — and the mandate the authors said would fix it
+had already taken effect by the time the paper published.
+
+## Where the framing needs a correction
+
+The headline many people take away — "OMOP has 20× more clinical data than
+FHIR" — conflates the data model with the pipeline that filled it. The fair
+statement is:
+
+> Institutionally-funded ETL currently yields more research-ready data than
+> zero-configuration vendor exports, regardless of the destination model.
+
+Three observations from the study itself point at what is actually missing
+— and each one is answered by a standard that already exists. The relevant
+body of work is **SQL-on-FHIR v2**, an HL7-community specification —
+maintained under the FHIR project, with an official conformance test
+suite — that makes FHIR resources queryable as tables. Its artifacts, plus
+one plain-FHIR resource for vocabulary, are worth knowing by name because
+they turn "extracting data from FHIR payloads" from a per-institution
+engineering project into a set of small, versioned, shareable files.
+FHIR4DS is a DuckDB-based engine that runs all of them — plus CQL and
+FHIRPath — directly over FHIR payloads, in a notebook or in the browser.
+
+**1. The FHIR analyses were only possible after a third party added a
+terminology-mapping layer.** Raw FHIR payloads were not directly analyzable
+by the research team without it. That is a correct diagnosis of the
+*tooling*, not the data — and the vocabulary step is a solved problem in
+the specification itself. A **ConceptMap** is a standard FHIR resource
+whose entire job is "this code in this system means that concept" —
+vocabulary translation as *data* rather than as a bespoke mapping program:
+
+```json
+{
+  "resourceType": "ConceptMap",
+  "group": [{
+    "source": "http://hl7.org/fhir/administrative-gender",
+    "target": "urn:omop:concept",
+    "element": [
+      { "code": "male",   "target": [{ "code": "8507", "equivalence": "equivalent" }] },
+      { "code": "female", "target": [{ "code": "8532", "equivalence": "equivalent" }] }
+    ]
+  }]
+}
+```
+
+Flatten it once with a ViewDefinition (next paragraph) and it is an
+ordinary lookup table — `source_system + code → concept_id` — joined in a
+query. No third party required: the mapping ships with the pipeline, and
+the [OMOP CDM mapping library](/docs/user-guide/modeling/omop-mapping)
+carries one covering 108,683 codes.
+
+**2. The stated obstacle was "extracting data from FHIR payloads"** — a
+data-engineering problem, not a clinical-content problem. And the gap stops
+being expensive when the extraction becomes a **shareable standard
+artifact**. The **ViewDefinition** is SQL-on-FHIR v2's reshaping artifact:
+a small JSON file that declares, per resource type, which elements become
+which columns, with FHIRPath expressions for paths — declarative and
+precise rather than procedural code. Where an OMOP ETL is months of local
+engineering, the same reshape is one of these, runnable by any conformant
+engine against any FHIR export:
+
+```json
+{
+  "name": "omop_person_source",
+  "resource": "Patient",
+  "select": [
+    { "column": [
+      { "name": "person_source_value", "path": "id", "type": "id" },
+      { "name": "year_of_birth", "path": "birthDate.substring(0, 4)", "type": "string" },
+      { "name": "gender_source_value", "path": "gender", "type": "code" }
+    ] }
+  ]
+}
+```
+
+A **SQLQuery** then composes the views: a standard FHIR `Library` resource
+whose body is ordinary SQL over the view names — joins, unions, and
+derived columns live there, portable across engines. Write the mapping
+once, version it, publish it, cite it — a mapping you *review and share*,
+not one you rebuild at every institution. The
+[FHIR → OMOP walkthrough](/docs/examples/fhir-to-omop) builds a complete
+`person` table this way, live in the browser, and every other OMOP table is
+the same recipe.
+
+**3. FHIR captured what OMOP could not.** 6,300 participants had
+multi-provider FHIR data versus 20 in OMOP, and 18.4% of timeline segments
+existed *only* in FHIR — care delivered at outside institutions the
+institutional ETL never saw. The study recommends FHIR as a *supplement*;
+we agree, and would add that a supplement you cannot query is a supplement
+you cannot use. Native FHIR querying — ViewDefinitions, CQL, FHIRPath,
+straight over the payloads — makes the multi-provider slice analyzable the
+day it lands, with no second ETL project. The two models compose rather
+than compete: query FHIR natively for what only FHIR has, and project into
+OMOP where the research ecosystem demands it, from the same standard
+artifacts.
+
+## Standards conformance, not vendor claims
+
+Skeptics are right to ask what "spec compliant" means. Each of the
+specifications FHIR4DS implements ships an HL7-community-built reference
+implementation and an official test suite designed to validate other
+implementations. FHIR4DS passes all of them — **2,785 official conformance
+tests at 100%** in release 0.0.21:
+
+| Suite | Tests | Passing |
+|---|---|---|
+| CQL — official HL7 `cql-tests` corpus | 1,706 | 100% |
+| FHIRPath — official reference suite | 935 | 100% |
+| SQL-on-FHIR v2 — official `spec_tests` | 144 | 100% |
+| CMS eCQM measures (QI-Core 2025) — evaluated end-to-end | 47 | 100% |
+
+The OMOP CDM v5.5 mapping library carries its own example suite (38
+expected-output tests — OMOP has no official test suite), kept green in
+the same runner.
+
+The conformance runner ships in the repository — anyone can reproduce the
+numbers.
+
+## The bottom line
+
+The All of Us study is a valuable census of what today's *default*
+acquisition paths deliver, and its recommendation of FHIR as a supplement
+to OMOP is sound for programs that already have both. But its own evidence
+points past its framing: the cost it identified was not FHIR's ability to
+represent clinical reality — it was the absence of native analysis tooling
+for FHIR payloads. That absence is what FHIR4DS removes. As bulk exports
+fatten under the USCDI v3 mandate (in force since January 2026) and
+standard mapping artifacts accumulate, the "OMOP richer, FHIR raw"
+tradeoff narrows from both ends — and the multi-provider data only FHIR
+captures becomes queryable the day it arrives.
+
+Want to see the extraction barrier dissolved end to end? Run the
+[FHIR → OMOP walkthrough](/docs/examples/fhir-to-omop) — it executes live
+in your browser, standard artifacts only.
