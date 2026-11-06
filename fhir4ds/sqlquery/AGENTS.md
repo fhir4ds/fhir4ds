@@ -163,3 +163,17 @@ where joins appear as raw SQL `JOIN` keywords inside `content[].data`.
   dependency views are static CREATE VIEW statements.
 - Suites: sqlquery+viewdef 1354 passed; master gate recorded in launch
   handoffs (final tree).
+
+## Single dispatch + lint (AMUX-35, 2026-11-06)
+
+- `fhir4ds.sqlquery.run_sql(con, artifact, ...)` (also exported top-level
+  as `fhir4ds.run_sql`) is the ONE analytics-layer entry point: routes
+  SQLQuery/SQLView (instance/dict/JSON path) → SQLQueryRunner, ViewDefinition
+  (instance/dict/path) → generate+execute, composition manifest PATH →
+  `viewdef.runner.run_composition`. Manifest dicts are rejected typed
+  (stems resolve relative to the manifest dir — a path is required).
+- `lint.py::lint_sql_body` statically flags common non-DuckDB dialect
+  constructs (T-SQL/MySQL/Oracle/Postgres) in `content[].data` bodies;
+  `run_sql(lint=True)` logs findings at WARNING before execution. Zero
+  false positives on valid DuckDB is the bar — every pattern must match
+  syntax DuckDB rejects or misreads; do not add "style" rules here.
