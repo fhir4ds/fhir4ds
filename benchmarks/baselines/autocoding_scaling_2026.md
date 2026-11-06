@@ -19,7 +19,8 @@
    **the batched API is ~9× faster (39 notes/s on short notes, sustained to
    1k)**. Bulk annotation should batch and shard; 1M short notes ≈ 7 h
    batched-serial. It is an ingestion-time tool, not a corpus-wide sweep.
-3. **The shipped in-process adapter is not the scored engine (finding, pre-v0.0.22).**
+3. **The shipped in-process adapter is not the scored engine (finding —
+   RESOLVED by the v0.0.22 train).**
    `InProcessTerminologyEndpoint.search_text` calls
    `medterm4ds.services.discovery.search_names`, whose `NameSearchResult`
    carries no `score`/`match_grade` — the adapter's `getattr(..., 0.0/"ambiguous")`
@@ -27,8 +28,11 @@
    the AutoCoder threshold (default `certain`) silently drops everything: 0/40
    coded in the smoke test. The scored engine the HTTP surface serves is
    `medterm4ds.services.search.search(mode=...)`. This benchmark drives the
-   scored engine through a benchmark-only endpoint; the adapter fix (route to
-   `services.search` and honor `mode`) belongs on the v0.0.22 fix branch.
+   scored engine through a benchmark-only endpoint. **Status 2026-11-06: the
+   fix (route to `services.search`, honor `mode`, availability gating) landed
+   via the `fix/autocoding-amux60-amux62` merge to dev; re-verified live —
+   in-process search now returns real grades/scores (4/5 `certain` at
+   0.88–0.94) and the AutoCoder codes in-process.**
 4. **Two input-dependent crash classes exist in the NER dependency stack**
    (PyRuSH sentence splitter `UnboundLocalError` + one observed heap
    corruption; medspaCy ConText `TypeError`) — see Annotations ladder below.
