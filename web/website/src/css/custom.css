@@ -536,3 +536,91 @@
 .pdf-light-capture table td {
   border-color: #cfcfcf !important;
 }
+
+/* -- Notes demo: inline annotation viewer (medterm4ds styling) ---------- */
+
+.adc-note-wrap {
+  border: 1px solid rgba(84, 198, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(84, 198, 255, 0.03);
+  padding: 0.8rem 1rem;
+  margin: 0.75rem 0;
+  line-height: 1.9;
+  font-size: 0.92rem;
+}
+
+.adc-term {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.adc-term-mark {
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 0.05rem 0.35rem;
+  border-width: 1.5px;
+  border-style: solid;
+}
+
+.adc-term--affirmed .adc-term-mark {
+  background: rgba(142, 230, 193, 0.18);
+  border-color: rgba(142, 230, 193, 0.55);
+}
+
+.adc-term--family .adc-term-mark {
+  background: rgba(196, 154, 255, 0.22);
+  border-color: rgba(196, 154, 255, 0.65);
+}
+
+.adc-term--historical .adc-term-mark,
+.adc-term--uncertain .adc-term-mark {
+  background: rgba(240, 196, 110, 0.2);
+  border-color: rgba(240, 196, 110, 0.6);
+}
+
+.adc-term--negated .adc-term-mark {
+  background: rgba(240, 130, 130, 0.16);
+  border-color: rgba(240, 130, 130, 0.6);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: rgba(240, 130, 130, 0.7);
+}
+
+/* Resolved concept + code: outlined pill in a contrasting (blue) tone */
+.adc-term-pill {
+  display: inline-block;
+  margin: 0 0.25rem;
+  padding: 0.02rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: rgba(84, 198, 255, 0.06);
+  border: 1px solid rgba(84, 198, 255, 0.4);
+  color: var(--ifm-font-color-base);
+  white-space: nowrap;
+}
+
+/* Status tag sits right of the code pill */
+.adc-term-tag {
+  display: inline-block;
+  margin-left: 0.15rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  vertical-align: baseline;
+  background: transparent;
+  border: 1px dashed rgba(142, 230, 193, 0.55);
+  color: var(--ifm-font-color-base);
+}
+
+.adc-term--family .adc-term-tag {
+  border-color: rgba(196, 154, 255, 0.65);
+}
+
+.adc-term--historical .adc-term-tag,
+.adc-term--uncertain .adc-term-tag {
+  border-color: rgba(240, 196, 110, 0.6);
+}
+
+.adc-term--negated .adc-term-tag {
+  border-color: rgba(240, 130, 130, 0.6);
+}
