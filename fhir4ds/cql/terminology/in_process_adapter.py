@@ -64,7 +64,16 @@ def prefer_terminology_layout(cache_root=None) -> str:
     if os.environ.get("MEDTERM4DS_LAYOUT"):
         return os.environ["MEDTERM4DS_LAYOUT"]
     if cache_root is None:
-        cache_root = Path.home() / ".cache" / "medterm4ds"
+        # Mirror medterm4ds.core.paths.cache_dir() without importing
+        # medterm4ds: MEDTERM4DS_CACHE_DIR (operator-managed, used as-is,
+        # with ~ expanded) wins over the default ~/.cache/medterm4ds root
+        # (QA-005 — operator caches must also receive the terminology
+        # release pin).
+        env_root = os.getenv("MEDTERM4DS_CACHE_DIR")
+        if env_root:
+            cache_root = Path(env_root).expanduser()
+        else:
+            cache_root = Path.home() / ".cache" / "medterm4ds"
     layout = "auto"
     term_dir = Path(cache_root) / "terminology"
     if term_dir.is_dir():
@@ -527,6 +536,56 @@ class InProcessTerminologyEndpoint:
         )
         return []
 
+    #: Modes accepted by medterm4ds 0.0.9 ``SearchService.search``.
+    #: Mirrors the HTTP ``$search`` ``searchMode`` surface (MT-002).
+    _SEARCH_MODES = frozenset({"lexical", "semantic", "hybrid", "canonical"})
+
+    def _service_artifact_available(self, service: Any, kind: str) -> bool:
+        """Mirror the sidecar's availability gate for one artifact family.
+
+        Prefers ``ensure_lexical()``/``ensure_semantic()`` (0.0.8+):
+        read-PROVISIONING probes that attempt first-use loading when the
+        dirs are unpinned (a fresh install serves its first $search
+        instead of erroring). Pinned dirs keep the plain unavailable
+        contract. Falls back to the read-only ``*_available`` properties
+        (no download) on older/patched builds where the ensure* methods
+        are missing; both probes never raise.
+        """
+        try:
+            ensure = getattr(service, f"ensure_{kind}", None)
+            if callable(ensure):
+                return bool(ensure())
+        except Exception:  # pragma: no cover - provisioning best-effort
+            pass
+        try:
+            return bool(getattr(service, f"{kind}_available"))
+        except Exception:  # pragma: no cover - availability probe best-effort
+            return False
+
+    def _availability_error(self, mode: str, service: Any) -> RuntimeError:
+        """Actionable error for a mode whose artifacts are not local."""
+        lexical_ok = semantic_ok = False
+        try:
+            lexical_ok = bool(service.lexical_available)
+            semantic_ok = bool(service.semantic_available)
+        except Exception:  # pragma: no cover - availability probe best-effort
+            pass
+        missing = (
+            "SapBERT model + FAISS/lexical indexes"
+            if not (lexical_ok or semantic_ok)
+            else ("SapBERT model" if not semantic_ok else "BM25 lexical indexes")
+        )
+        return RuntimeError(
+            f"medterm4ds search artifacts unavailable for mode={mode!r} "
+            f"(lexical_available={lexical_ok}, semantic_available={semantic_ok}; "
+            f"missing: {missing}). Semantic/hybrid search require the SapBERT "
+            "model; lexical search requires the BM25 indexes. Remediation: "
+            "provision artifacts via 'medterm4ds data cache-refresh "
+            "--terminology', point MEDTERM4DS_CACHE_DIR at an operator-managed "
+            "cache holding the release, or use mode='lexical' when only BM25 "
+            "indexes are present."
+        )
+
     def search_text(
         self,
         query: str,
@@ -534,7 +593,27 @@ class InProcessTerminologyEndpoint:
         *,
         mode: str = "hybrid",
     ) -> list[SearchResult]:
-        """Search terminology names via medterm4ds discovery service.
+        """Search terminology via medterm4ds's unified search service.
+
+        Routes through ``medterm4ds.services.search.get_search_service().
+        search(query, mode=..., sources=..., count=25, engine=...)`` —
+        the SAME entry point the HTTP sidecar uses — so in-process search
+        gets medterm4ds 0.0.9's RRF hybrid fusion and agreement-aware
+        ``match_grade`` (certain/exact/probable/possible/broader). The
+        legacy ``services.discovery.search_names`` LIKE path is used only
+        as a fallback for medterm4ds builds without ``services.search``.
+
+        Mode semantics (mirroring the HTTP adapter, MT-002):
+            ``lexical`` — BM25 only; works with NO SapBERT model.
+            ``semantic`` / ``hybrid`` — require the SapBERT model. When
+            the artifacts are not available locally this raises an
+            actionable ``RuntimeError`` (mirroring medterm4ds's own
+            FHIR-side 503 availability gate) instead of silently
+            returning ``[]``.
+            ``canonical`` — canonical value-set search; anchor code/system
+            is mapped like any other result.
+
+        Unknown modes raise ``ValueError``.
 
         Short-circuits to ``[]`` when the circuit breaker is open.
         """
@@ -548,36 +627,123 @@ class InProcessTerminologyEndpoint:
             )
             return []
 
-        # Imported lazily so module load stays cheap and isolated.
-        # Re-imported on every call so tests that monkeypatch
-        # medterm4ds.services.discovery.search_names take effect.
-        from medterm4ds.services.discovery import (  # type: ignore
-            search_names,
-        )
-
-        # Category maps to medterm4ds source filter (e.g. "condition" -> SNOMEDCT_US).
-        sources = _category_to_sources(category)
-        try:
-            raw_results = search_names(
-                query,
-                engine=self._engine,
-                sources=sources,
-                limit=25,
+        if mode not in self._SEARCH_MODES:
+            raise ValueError(
+                f"Unknown search mode: {mode!r}. Use one of "
+                f"{sorted(self._SEARCH_MODES)}."
             )
-        except Exception as e:  # pragma: no cover - medterm4ds drift guard
-            _logger.warning("in_process search_text failed for %r: %s", query, e)
-            self._on_call_failure()
-            return []
+
+        try:
+            # Imported lazily so module load stays cheap and isolated.
+            # Re-imported on every call so tests that monkeypatch
+            # medterm4ds.services.search take effect.
+            from medterm4ds.services.search import (  # type: ignore
+                get_search_service,
+            )
+        except ImportError:
+            get_search_service = None  # fall back to the legacy LIKE path
+
+        # Category maps to medterm4ds source filter (e.g. "condition" ->
+        # SNOMEDCT_US); None means all sources (the medterm semantic).
+        sources = _category_to_sources(category)
+        source_list = list(sources) if sources else None
+
+        if get_search_service is not None:
+            service = get_search_service()
+            # Actionable degradation (QA-001): a mode whose artifacts are
+            # missing must NOT silently return []. medterm4ds's own FHIR
+            # $search availability gate (apps/fhir_api.py $search) calls
+            # ensure_lexical()/ensure_semantic() FIRST — first-use
+            # provisioning (downloading the terminology release when the
+            # dirs are unpinned) — and 503s when still unavailable. We
+            # mirror that gate with a RuntimeError naming the remediation.
+            needs_semantic = mode in ("semantic", "hybrid")
+            needs_lexical = mode in ("lexical", "hybrid")
+            try:
+                if needs_lexical and not self._service_artifact_available(
+                    service, "lexical"
+                ):
+                    raise self._availability_error(mode, service)
+                if needs_semantic and not self._service_artifact_available(
+                    service, "semantic"
+                ):
+                    raise self._availability_error(mode, service)
+            except RuntimeError:
+                raise
+            try:
+                raw_results = service.search(
+                    query,
+                    mode=mode,
+                    sources=source_list,
+                    count=25,
+                    # engine= canonicalizes displays to the preferred term
+                    # (medterm4ds QC-400) exactly like the HTTP sidecar.
+                    engine=self._engine,
+                )
+            except Exception as e:  # pragma: no cover - medterm4ds drift guard
+                _logger.warning(
+                    "in_process search_text failed for %r (mode=%s): %s",
+                    query,
+                    mode,
+                    e,
+                )
+                self._on_call_failure()
+                return []
+        else:
+            # Legacy fallback: medterm4ds without services.search (pre-0.0.9
+            # drift). Keeps the old LIKE-path behavior including its
+            # degraded metadata (no score/grade available there).
+            from medterm4ds.services.discovery import (  # type: ignore
+                search_names,
+            )
+            try:
+                raw_results = search_names(
+                    query,
+                    engine=self._engine,
+                    sources=sources,
+                    limit=25,
+                )
+            except Exception as e:  # pragma: no cover - medterm4ds drift guard
+                _logger.warning(
+                    "in_process search_text failed for %r: %s", query, e
+                )
+                self._on_call_failure()
+                return []
 
         results: list[SearchResult] = []
         for r in raw_results:
-            code_obj = getattr(r, "code", None)
-            system = getattr(code_obj, "source", None) if code_obj is not None else None
-            ref = self._to_coderef(
-                system,
-                getattr(code_obj, "code", None),
-                getattr(r, "name", None),
-            )
+            if get_search_service is not None:
+                # SearchService SearchResult exposes code / source
+                # (mnemonic or URL) / display / score / match_grade.
+                # CanonicalSearchResult (mode='canonical') carries
+                # canonical_id / anchor_system / anchor_code /
+                # patient_friendly_name instead — map the ANCHOR row
+                # exactly like the HTTP sidecar's $search canonical
+                # branch (apps/fhir_api.py: anchor code/system/display
+                # with score + match_grade), so in-process and HTTP
+                # return the same codes for canonical mode.
+                # index_version is not part of the 0.0.9 contract
+                # (None -> AutoCoder pins "unknown").
+                if getattr(r, "canonical_id", None) is not None:
+                    system = getattr(r, "anchor_system", None)
+                    code = getattr(r, "anchor_code", None)
+                    display = getattr(r, "patient_friendly_name", None)
+                else:
+                    system = getattr(r, "source", None)
+                    code = getattr(r, "code", None)
+                    display = getattr(r, "display", None)
+                score = getattr(r, "score", None)
+                match_grade = getattr(r, "match_grade", None)
+            else:
+                code_obj = getattr(r, "code", None)
+                system = (
+                    getattr(code_obj, "source", None) if code_obj is not None else None
+                )
+                code = getattr(code_obj, "code", None)
+                display = getattr(r, "name", None)
+                score = getattr(r, "score", 0.0)
+                match_grade = getattr(r, "match_grade", "ambiguous")
+            ref = self._to_coderef(system, code, display)
             if ref is None:
                 continue
             results.append(
@@ -585,8 +751,8 @@ class InProcessTerminologyEndpoint:
                     system=ref.system,
                     code=ref.code,
                     display=ref.display,
-                    score=float(getattr(r, "score", 0.0)),
-                    match_grade=str(getattr(r, "match_grade", "ambiguous")),
+                    score=float(score) if score is not None else 0.0,
+                    match_grade=str(match_grade) if match_grade else "ambiguous",
                     search_mode=mode,
                     index_version=getattr(r, "index_version", None),
                 )

@@ -70,8 +70,10 @@ def build_autocoding_extension(
             ``json.dumps(allow_nan=False)`` would later refuse them
             during resource serialization (see
             :func:`fhir4ds.cql.loader.fhir_loader._serialize_resource`).
-        match_grade: Match bucket (``certain``/``probable``/
-            ``ambiguous``/``no-match``).
+        match_grade: Match bucket from medterm4ds 0.0.9's authoritative
+            vocabulary (``certain``/``exact``/``probable``/``possible``/
+            ``broader``; ``ambiguous``/``no-match`` survive only as
+            legacy cache-row aliases).
         index_version: Optional version tag of the terminology index.
             ``None`` is normalized to the literal string ``"unknown"``
             so the field always has a value (Phase 5 staleness sweeps

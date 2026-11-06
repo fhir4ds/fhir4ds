@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import types
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -110,6 +111,14 @@ class NotesPipelineConfig:
             :data:`DEFAULT_NOTE_PATHS`.
         mode: Search mode (``"lexical"``/``"semantic"``/``"hybrid"``).
             ``None`` lets medterm4ds pick its default (hybrid).
+        extraction_endpoint: FHIR root URL of a terminology server that
+            exposes ``CodeSystem/$extract`` (e.g. a medterm4ds sidecar).
+            When set, extraction runs REMOTELY — the heavy medspaCy/
+            GLiNER/SapBERT stack is never imported locally (AMUX-60
+            Gap 2), enabling browser/edge deployments. The remote
+            response is mapped onto the same concept shape the local
+            ``medterm4ds.extract`` returns, so the downstream Condition
+            wrapping (extensions, grades, negation filtering) is shared.
         min_grade: Minimum match grade to keep (``"certain"``/``"probable"``
             /``"possible"``). Default ``"certain"``.
         include_negated: When ``True``, also emit Conditions for negated
@@ -152,6 +161,7 @@ class NotesPipelineConfig:
 
     note_paths: dict[str, list[str]] = field(default_factory=lambda: dict(DEFAULT_NOTE_PATHS))
     mode: Optional[str] = None
+    extraction_endpoint: Optional[str] = None
     min_grade: Optional[str] = "certain"
     include_negated: bool = False
     include_uncertain: bool = False
@@ -232,6 +242,13 @@ class NotesPipeline:
         short-circuit on the cached ``self._extract_fn``.
         """
         if self._extract_fn is not None:
+            return
+        if self._config.extraction_endpoint:
+            # Remote extraction (AMUX-60 Gap 2): the terminology sidecar's
+            # CodeSystem/$extract runs the same NER cascade; map its Bundle
+            # onto the concept shape _build_condition consumes.
+            self._extract_fn = self._remote_extract
+            self._index_version = "unknown"
             return
         try:
             import medterm4ds  # type: ignore[import-not-found]
@@ -546,6 +563,52 @@ class NotesPipeline:
         paths build identical kwargs (audit QA-002).
         """
         return self._extract_fn(text, **self._extract_kwargs())
+
+    # -- remote extraction (AMUX-60 Gap 2) --------------------------------
+
+    _EXTRACT_CONCEPT_FIELDS = (
+        "code", "source", "system", "display", "matched_text", "status",
+        "section", "confidence", "match_grade", "ner_label", "result_type",
+        "canonical_id", "combination_members", "span_start", "span_end",
+    )
+
+    def _remote_extract(self, text: str, **kwargs: Any) -> list[Any]:
+        """Run ``CodeSystem/$extract`` on the configured sidecar.
+
+        Returns concepts in the attribute-access shape ``_build_condition``
+        expects (same contract as local ``medterm4ds.extract``). Keyword
+        filters (``min_grade`` etc.) are applied server-side when the
+        sidecar supports them and mirrored client-side for the strict
+        fields, keeping remote/local posture identical.
+        """
+        import httpx
+
+        base = self._config.extraction_endpoint or ""
+        response = httpx.get(
+            f"{base.rstrip('/')}/CodeSystem/$extract",
+            params={"text": text},
+            timeout=120.0,
+        )
+        response.raise_for_status()
+        bundle = response.json()
+        min_grade = kwargs.get("min_grade")
+        grade_rank = {"certain": 0, "exact": 0, "probable": 1, "possible": 2, "broader": 3}
+        concepts: list[Any] = []
+        for entry in bundle.get("entry", []) if isinstance(bundle, dict) else []:
+            resource = entry.get("resource", {}) if isinstance(entry, dict) else {}
+            if not resource:
+                continue
+            concept = types.SimpleNamespace(**{
+                field: resource.get(field)
+                for field in self._EXTRACT_CONCEPT_FIELDS
+            })
+            if (
+                min_grade is not None
+                and grade_rank.get(concept.match_grade, 3) > grade_rank.get(min_grade, 0)
+            ):
+                continue
+            concepts.append(concept)
+        return concepts
 
     def _build_condition(
         self,
