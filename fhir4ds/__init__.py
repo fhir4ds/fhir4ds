@@ -74,6 +74,28 @@ def generate_view_sql(view_definition_or_json, *, source_table="resources"):
     return SQLGenerator(source_table=source_table).generate(view_definition_or_json)
 
 
+def run_sql(con, artifact, *, parameters=None, resolver=None,
+            source_table="resources", lint=True):
+    """Execute any SQL-on-FHIR analytics artifact against a connection.
+
+    Single-dispatch entry point (AMUX-35): routes SQLQuery / SQLView
+    Libraries (instance, dict, or JSON path), ViewDefinitions (instance,
+    dict, or JSON path), and composition manifests (path, e.g. the OMOP
+    mapping) to the right runner. See
+    :func:`fhir4ds.sqlquery.run_sql` for the full routing table.
+
+    Returns:
+        Result rows (Library / ViewDefinition) or a table -> view-name
+        map (manifest compositions).
+    """
+    from .sqlquery.dispatch import run_sql as _run_sql
+
+    return _run_sql(
+        con, artifact, parameters=parameters, resolver=resolver,
+        source_table=source_table, lint=lint,
+    )
+
+
 def parse_view_definition(json_or_dict):
     """Parse a SQL-on-FHIR v2 ViewDefinition from a JSON string or dict.
 
@@ -149,6 +171,9 @@ __all__ = [
     # SQL-on-FHIR v2
     "generate_view_sql",
     "parse_view_definition",
+    # Analytics-layer single dispatch (SQLQuery / SQLView / ViewDefinition
+    # / composition manifests)
+    "run_sql",
     # Zero-ETL source adapters
     "SourceAdapter",
     "SchemaValidationError",
