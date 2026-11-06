@@ -689,11 +689,100 @@ def test_notes_pipeline_remote_extraction_amux60_gap2(monkeypatch):
     monkeypatch.setattr("httpx.get", _get)
 
     pipe = NotesPipeline(NotesPipelineConfig(
-        extraction_endpoint="https://example.test/fhir", min_grade="probable"))
+        extraction_endpoint="https://example.test/fhir", min_grade="probable",
+        include_negated=True))
     resource = {"resourceType": "ClinicalImpression", "id": "ci",
                 "subject": {"reference": "Patient/p"},
                 "summary": "history of type 2 diabetes"}
     conds = pipe.extract_conditions(resource)
     assert calls and "$extract" in calls[0][0]
+    # REV-001: config flags are FORWARDED — the sidecar excludes
+    # non-affirmed statuses unless includeNegated/includeUncertain/
+    # includeHistorical are set, so client-side filtering alone would
+    # silently drop opted-in concepts.
+    sent = calls[0][1]
+    assert sent["includeNegated"] is True
+    assert sent["includeUncertain"] is False
+    assert sent["includeHistorical"] is False
+    assert sent["minGrade"] == "probable"
+    assert sent["format"] == "codes"
     assert len(conds) == 1
     assert conds[0]["code"]["coding"][0]["code"] == "44054006"
+
+
+def test_notes_pipeline_forwards_include_family_v22_qa003(monkeypatch):
+    """V22-QA-003: include_family is forwarded to BOTH extraction paths.
+
+    medterm4ds 0.0.10 supports ``include_family`` locally and
+    ``includeFamily`` on the ``$extract`` sidecar, but the pipeline config
+    had no knob — family-history concepts were silently unreachable (same
+    class as REV-001). The local kwargs and the remote query params must
+    both carry the flag, and a family-status concept must be gated by it.
+    """
+    import fhir4ds.cql.loader.notes_pipeline as np_mod
+    from fhir4ds.cql.loader import NotesPipeline, NotesPipelineConfig
+
+    # Remote path: includeFamily forwarded when opted in, absent-False when not
+    bundle = {"resourceType": "Bundle", "type": "searchset", "entry": [
+        {"resource": {"code": "160303001", "source": "SNOMEDCT_US",
+                      "display": "Family history of diabetes",
+                      "matched_text": "family history of diabetes",
+                      "status": "family", "confidence": 0.95,
+                      "match_grade": "exact", "ner_label": "disorder",
+                      "result_type": "condition", "span_start": 0, "span_end": 27}}]}
+    calls = []
+    class _Resp:
+        def raise_for_status(self): pass
+        def json(self): return bundle
+    def _get(url, params=None, timeout=None):
+        calls.append((url, params))
+        return _Resp()
+    monkeypatch.setattr("httpx.get", _get)
+
+    resource = {"resourceType": "ClinicalImpression", "id": "ci",
+                "subject": {"reference": "Patient/p"},
+                "summary": "family history of diabetes"}
+
+    pipe_on = NotesPipeline(NotesPipelineConfig(
+        extraction_endpoint="https://example.test/fhir", include_family=True))
+    conds_on = pipe_on.extract_conditions(resource)
+    sent_on = calls[0][1]
+    assert sent_on["includeFamily"] is True
+    assert len(conds_on) == 1
+    assert conds_on[0]["code"]["coding"][0]["code"] == "160303001"
+
+    calls.clear()
+    pipe_off = NotesPipeline(NotesPipelineConfig(
+        extraction_endpoint="https://example.test/fhir"))
+    conds_off = pipe_off.extract_conditions(resource)
+    sent_off = calls[0][1]
+    assert sent_off["includeFamily"] is False
+    # Client-side gate mirrors the flag: family concepts dropped when off
+    assert conds_off == []
+
+    # Local path: _extract_kwargs carries include_family
+    pipe_local = NotesPipeline(NotesPipelineConfig(include_family=True))
+    kwargs = pipe_local._extract_kwargs()
+    assert kwargs["include_family"] is True
+    assert kwargs["include_negated"] is False
+
+
+def test_auto_coder_config_rejects_bogus_enum_knobs_v22_qa004():
+    """V22-QA-004: search_mode and min_match_grade are enum-constrained.
+
+    A typo'd mode or grade otherwise flows to medterm4ds and surfaces as
+    a deep runtime error or silently-empty results — construction-time
+    ValueError per the AutoCoderConfig validation doctrine.
+    """
+    import pytest
+    from fhir4ds.cql.loader.auto_coder import AutoCoderConfig
+
+    with pytest.raises(ValueError, match="search_mode"):
+        AutoCoderConfig(search_mode="bogus")
+    with pytest.raises(ValueError, match="min_match_grade"):
+        AutoCoderConfig(min_match_grade="definite")
+    # Real vocabulary accepted (incl. legacy aliases)
+    for grade in ("certain", "exact", "probable", "possible", "broader", "ambiguous"):
+        AutoCoderConfig(min_match_grade=grade)
+    for mode in ("lexical", "hybrid", "semantic"):
+        AutoCoderConfig(search_mode=mode)

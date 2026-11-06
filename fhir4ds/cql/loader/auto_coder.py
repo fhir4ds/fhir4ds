@@ -103,6 +103,12 @@ _MATCH_GRADE_ORDER: dict[str, int] = {
     "no-match":   3,
 }
 
+#: V22-QA-004: enum-constrained config knobs, validated at construction.
+_VALID_SEARCH_MODES = frozenset({"lexical", "hybrid", "semantic"})
+#: Grades accepted for ``min_match_grade`` (medterm4ds 0.0.9 vocabulary
+#: per ``_MATCH_GRADE_ORDER``, including the legacy cache-row aliases).
+_VALID_MATCH_GRADES = frozenset(_MATCH_GRADE_ORDER)
+
 
 def _has_coded_entry(coding: Any) -> bool:
     """True when ``coding`` carries at least one entry with a ``code``.
@@ -155,7 +161,9 @@ class AutoCoderConfig:
             :meth:`TerminologyEndpoint.search_batch`. One of
             ``lexical``/``hybrid``/``semantic``. Default ``hybrid``.
         min_match_grade: Threshold below which results are dropped.
-            One of ``certain``/``probable``/``ambiguous``/``no-match``.
+            One of ``certain``/``exact``/``probable``/``possible``/
+            ``broader`` (medterm4ds 0.0.9 vocabulary; the legacy
+            ``ambiguous``/``no-match`` spellings are also accepted).
             Default ``certain`` (strict). Lowering to ``probable``
             multiplies recall at the cost of precision.
         top_k: Maximum number of Codings to append per CodeableConcept.
@@ -232,6 +240,20 @@ class AutoCoderConfig:
             raise ValueError(
                 f"AutoCoderConfig.top_k must be a positive int (>=1), "
                 f"got {self.top_k!r}"
+            )
+        # Enum-constrained knobs (V22-QA-004): a typo'd mode or grade
+        # otherwise flows to medterm4ds and surfaces as a deep runtime
+        # error or silently-empty results — same "tell the caller at
+        # construction" doctrine as the numeric knobs above.
+        if self.search_mode not in _VALID_SEARCH_MODES:
+            raise ValueError(
+                f"AutoCoderConfig.search_mode must be one of "
+                f"{sorted(_VALID_SEARCH_MODES)}, got {self.search_mode!r}"
+            )
+        if self.min_match_grade not in _VALID_MATCH_GRADES:
+            raise ValueError(
+                f"AutoCoderConfig.min_match_grade must be one of "
+                f"{sorted(_VALID_MATCH_GRADES)}, got {self.min_match_grade!r}"
             )
 
 

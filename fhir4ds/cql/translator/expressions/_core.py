@@ -564,6 +564,14 @@ class CoreMixin:
             if temporal_source is not None and self._is_static_temporal_definition(temporal_source):
                 return self.translate(temporal_source, usage=usage)
 
+        # V22-QA-001: scalar literal defines (Integer/Decimal/String/
+        # Boolean/null, incl. alias chains) are library constants; inline
+        # them for the same patient-correlated-CTE reason.
+        if not self.context.is_alias(name):
+            scalar_source = self._definition_source_ast(name)
+            if scalar_source is not None and self._is_static_scalar_literal_definition(scalar_source):
+                return self.translate(scalar_source, usage=usage)
+
         # Check if this definition is promoted to a global CTE for deduplication.
         # If so, we MUST return a subquery lookup instead of the full AST
         # to prevent combinatorial explosion.

@@ -337,3 +337,82 @@ class TestDecimalLiteralExtent:
 
     def test_plain_decimal_literals_unaffected(self):
         assert evaluate("0.1 + 0.2 = 0.3") is True
+
+
+class TestStaticLiteralDefineInlining:
+    """V22-QA-001 (v0.0.22 Domain 3 HISTORIAN): static scalar-literal
+    defines (String/Boolean/null/Quantity and pure-literal lists) are
+    library constants and must be INLINED at reference sites. Without
+    inlining, references emit patient-correlated lookups against literal
+    CTEs (``SELECT 'hello'``) that have no ``patient_id`` column —
+    BinderException end-to-end on ``translate_library_to_sql`` for valid
+    CQL like ``define S: 'hello'; define T: S``. Numeric literals keep
+    the alias-subquery cast path (CQL-01 arithmetic-exactness doctrine).
+    """
+
+    def _run(self, body: str, final: str):
+        from ...parser import parse_cql
+        from ...translator import translate_library_to_sql
+        cql = "library V22QA001 version '1.0.0'\ncontext Patient\n" + body
+        sql = translate_library_to_sql(parse_cql(cql), final_definition=final)
+        con = duckdb.connect()
+        register_cql(con)
+        try:
+            con.execute(
+                "CREATE TABLE resources (id VARCHAR, resourceType VARCHAR, "
+                "resource JSON, patient_ref VARCHAR)"
+            )
+            con.execute(
+                "INSERT INTO resources VALUES ('p1', 'Patient', "
+                "'{\"resourceType\":\"Patient\",\"id\":\"p1\"}'::JSON, 'p1')"
+            )
+            return con.execute(sql).fetchall()
+        finally:
+            con.close()
+
+    def test_string_literal_define_alias_executes(self):
+        rows = self._run(
+            "define S: 'hello'\ndefine T: S & ' world'\n", "T"
+        )
+        assert rows == [("hello world",)]
+
+    def test_boolean_literal_define_alias_executes(self):
+        rows = self._run(
+            "define B: true\ndefine C: B and true\n", "C"
+        )
+        assert rows == [(True,)]
+
+    def test_null_literal_define_alias_executes(self):
+        rows = self._run(
+            "define Z: null\ndefine O: Coalesce(Z, 'fallback')\n", "O"
+        )
+        assert rows == [("fallback",)]
+
+    def test_literal_list_define_aggregates_execute(self):
+        rows = self._run(
+            "define L: {1, 2, 3}\ndefine S: Sum(L)\n", "S"
+        )
+        assert rows == [(6.0,)]
+
+    def test_string_alias_chain_through_two_defines(self):
+        rows = self._run(
+            "define A: 'x'\ndefine B: A\ndefine C: B & 'y'\n", "C"
+        )
+        assert rows == [("xy",)]
+
+    def test_message_severity_define_still_reaches_cqlmessage(self):
+        """CQL-22 doctrine: identifier severities keep the CQLMessage
+        wrapper even when the identifier statically resolves to a string
+        literal via the V22-QA-001 inlining (runtime Error severity must
+        still stop evaluation)."""
+        from ...parser import parse_cql
+        from ...translator import translate_library_to_sql
+        sql = translate_library_to_sql(
+            parse_cql(
+                "library V22QA001b version '1.0.0'\ncontext Patient\n"
+                "define ErrorLevel: 'Error'\n"
+                "define M: Message('src', true, 'code', ErrorLevel, 'm')\n"
+            ),
+            final_definition="M",
+        )
+        assert "CQLMessage" in sql
