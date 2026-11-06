@@ -58,7 +58,9 @@ test.describe("Auto-Coding example", () => {
 
     // The augmented resource renders as a tree containing a SNOMED coding
     // with the audit extension and userSelected: false.
-    const tree = page.locator(".adc-tree-lg");
+    // .first(): the Annotations demo (same NLP page) also renders an
+    // .adc-tree-lg once its engine finishes — scope to the Auto-Coding one.
+    const tree = page.locator(".adc-tree-lg").first();
     await expect(tree).toBeVisible({ timeout: 30_000 });
     await expect(tree.locator(".json-tree-key", { hasText: "coding" }).first()).toBeVisible();
     await expect(tree.getByText("snomed.info")).toBeVisible();

@@ -35,7 +35,7 @@ interface WorkerReply {
 const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v0.27.7/full/';
 const TERMINOLOGY_BASE =
   'https://fhir4ds-terminology-demo-server.hf.space/fhir';
-const FHIR4DS_WHEEL_FALLBACK = 'fhir4ds_v2-0.0.21-py3-none-any.whl';
+const FHIR4DS_WHEEL_FALLBACK = 'fhir4ds_v2-0.0.22-py3-none-any.whl';
 
 function getAssetBase(): string {
   return `${self.location.origin}/bulk-publisher-app`;
@@ -51,7 +51,11 @@ async function findWheelUrl(): Promise<string> {
         ...html.matchAll(/href="([^"]*fhir4ds_v2-[^"]*-py3-none-any\.whl)"/g),
       ];
       if (matches.length > 0) {
-        const name = matches[matches.length - 1][1].split('/').pop()!;
+        // Directory listings may HTML-escape slashes (&#47;); split on
+        // both so the bare filename is extracted either way.
+        const name = matches[matches.length - 1][1]
+          .split(/\/|&#47;/)
+          .pop()!;
         return `${base}/${name}`;
       }
     }
@@ -117,26 +121,14 @@ def run_autocode(resource_json, min_grade, top_k, search_mode):
         global _captured_query, _captured_category
         _captured_query, _captured_category = query, category
         results = real_search(query, category, mode=mode)
-        # The 0.0.21 wheel's AutoCoder reads results with the dict API while
-        # the HTTP adapter returns SearchResult dataclasses; convert here so
-        # the shipped pairing works (fixed in the dev tree upstream).
-        dicts = [
-            {
-                "code": getattr(r, "code", None),
-                "system": getattr(r, "system", None),
-                "display": getattr(r, "display", None),
-                "score": getattr(r, "score", None),
-                "match_grade": getattr(r, "match_grade", None),
-                "search_mode": getattr(r, "search_mode", None) or mode,
-                "index_version": getattr(r, "index_version", None),
-            }
+        # 0.0.22: the wheel's AutoCoder accepts SearchResult dataclasses
+        # directly (_result_to_dict handles both shapes) — no dict
+        # conversion here (AMUX-62 workaround removed).
+        _captured_rows[:] = [
+            {k: getattr(r, k, None) for k in ("code", "system", "display", "score", "match_grade")}
             for r in results
         ]
-        _captured_rows[:] = [
-            {k: d[k] for k in ("code", "system", "display", "score", "match_grade")}
-            for d in dicts
-        ]
-        return dicts
+        return results
     endpoint.search_text = capturing
 
     coder = AutoCoder(endpoint, None,

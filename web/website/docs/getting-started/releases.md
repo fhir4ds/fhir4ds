@@ -10,6 +10,70 @@ entry follows the same format: **highlights**, **breaking changes** (always
 listed, even when there are none), topic sections, **conformance** (where
 recorded), **known issues**, and **upgrade** notes.
 
+## Version 0.0.22
+*November 2026*
+
+### Highlights
+
+- **Auto-Coding that actually codes** (`fhir4ds.cql.loader.AutoCoder`): the
+  shipped in-process terminology adapter now routes to medterm4ds's scored
+  search engine (`services.search`) with `searchMode` honored — results carry
+  real `score`/`match_grade` values the AutoCoder threshold can act on
+  (previously every in-process result graded `ambiguous` at 0.0 and the
+  default threshold silently dropped everything). The HTTP search-mode
+  contract is regression-tested against the sidecar.
+- **One analytics entry point** (`fhir4ds.run_sql`): a single dispatcher for
+  the SQL-on-FHIR Analytics Layer — pass a SQLQuery/SQLView Library, a
+  ViewDefinition, or a composition manifest path and it routes to the right
+  runner. Ships with a static SQL dialect linter
+  (`fhir4ds.sqlquery.lint_sql_body`) that flags common non-DuckDB syntax
+  (T-SQL `TOP`/`ISNULL`, MySQL backticks/`LIMIT o,c`, Oracle `NVL`/`ROWNUM`,
+  Postgres `DISTINCT ON`, ...) before execution.
+- **Notes pipeline family-history support**: `NotesPipelineConfig.
+  include_family` forwards to both extraction paths (local `medterm4ds.
+  extract` and sidecar `$extract?includeFamily=`), so family-history
+  concepts are reachable at all — medterm4ds excludes them by default, and
+  client-side filtering alone could never surface them.
+- **CQL translator**: static scalar-literal defines referenced by alias
+  (`define S: 'hello'; define T: S`) no longer Binder-error — library
+  constants inline at reference sites, mirroring the clinical/temporal
+  inlining doctrines. Message severities written as define references
+  correctly reach `CQLMessage` (runtime Error severity stops evaluation).
+- **AutoCoder config validation**: `search_mode` and `min_match_grade` are
+  enum-validated at construction (a typo now fails fast instead of silently
+  returning empty results).
+- **Build integrity**: the wheel build hook now pins the default extension
+  slots to the pyproject duckdb version floor — a stray newer-ABI build in
+  the tree can no longer silently ship an unloadable default binary.
+
+### Website / demos
+
+- The NLP example's Auto-Coding demo runs on the 0.0.22 wheel with the
+  workaround-free worker; the demo's wheel discovery handles HTML-escaped
+  directory listings.
+- Bulk-publisher, wasm-demo, cql-clinic, cql-cleanroom, and viewing-room
+  apps all carry the 0.0.22 wheel.
+
+### Breaking changes
+
+- None.
+
+### Conformance
+
+- Full conformance suite: **2870/2870** (ViewDefinition 144, FHIRPath 935,
+  CQL 1706, DQM 47, OMOP 38).
+
+### Known issues
+
+- Audit evidence findings for where-filtered retrieves are retrieve-level:
+  they list every candidate resource examined, including ones that did not
+  satisfy the filter (result values remain correct). Per-finding
+  qualification metadata is planned.
+
+### Upgrade
+
+- `pip install fhir4ds-v2==0.0.22` — no migration steps.
+
 ## Version 0.0.21
 *November 2026*
 
