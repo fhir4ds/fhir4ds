@@ -209,17 +209,21 @@
 
 .adc-table .badge {
   display: inline-block;
-  padding: 0.1rem 0.5rem;
+  margin-left: 0.15rem;
+  padding: 0 0.4rem;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 600;
-  text-transform: uppercase;
+  vertical-align: baseline;
+  background: transparent;
+  border: 1px dashed;
 }
 
-.badge.certain { background: #16a34a; color: white; }
-.badge.probable { background: #2563eb; color: white; }
-.badge.possible { background: #d97706; color: white; }
-.badge.broader { background: #6b7280; color: white; }
+/* Grade colors aligned with the annotation status tags */
+.badge.certain { border-color: rgba(142, 230, 193, 0.8); color: inherit; }
+.badge.probable { border-color: rgba(84, 198, 255, 0.65); color: inherit; }
+.badge.possible { border-color: rgba(240, 196, 110, 0.7); color: inherit; }
+.badge.broader { border-color: rgba(150, 150, 160, 0.6); color: inherit; }
 
 .adc-output {
   max-height: 420px;
