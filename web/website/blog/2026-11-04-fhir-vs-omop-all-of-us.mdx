@@ -71,7 +71,7 @@ decade of methods and tooling that assume its shape. If your institution
 has already paid for an OMOP ETL, use it. We are not arguing against OMOP —
 FHIR4DS (the open-source engine behind this blog) ships an OMOP CDM
 mapping library, and the
-[FHIR → OMOP walkthrough](/docs/examples/fhir-to-omop) exists precisely
+[FHIR → OMOP walkthrough](/docs/examples/fhir-to-omop/) exists precisely
 because OMOP is often the destination downstream teams need.
 
 **The gaps the study found are real — but they live in acquisition and
@@ -134,7 +134,7 @@ vocabulary translation as *data* rather than as a bespoke mapping program:
 Flatten it once with a ViewDefinition (next paragraph) and it is an
 ordinary lookup table — `source_system + code → concept_id` — joined in a
 query. No third party required: the mapping ships with the pipeline, and
-the [OMOP CDM mapping library](/docs/user-guide/modeling/omop-mapping)
+the [OMOP CDM mapping library](/docs/user-guide/modeling/omop-mapping/)
 carries one covering 108,683 codes.
 
 **2. The stated obstacle was "extracting data from FHIR payloads"** — a
@@ -166,7 +166,7 @@ whose body is ordinary SQL over the view names — joins, unions, and
 derived columns live there, portable across engines. Write the mapping
 once, version it, publish it, cite it — a mapping you *review and share*,
 not one you rebuild at every institution. The
-[FHIR → OMOP walkthrough](/docs/examples/fhir-to-omop) builds a complete
+[FHIR → OMOP walkthrough](/docs/examples/fhir-to-omop/) builds a complete
 `person` table this way, live in the browser, and every other OMOP table is
 the same recipe.
 
@@ -218,5 +218,5 @@ tradeoff narrows from both ends — and the multi-provider data only FHIR
 captures becomes queryable the day it arrives.
 
 Want to see the extraction barrier dissolved end to end? Run the
-[FHIR → OMOP walkthrough](/docs/examples/fhir-to-omop) — it executes live
+[FHIR → OMOP walkthrough](/docs/examples/fhir-to-omop/) — it executes live
 in your browser, standard artifacts only.
