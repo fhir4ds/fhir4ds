@@ -1225,6 +1225,60 @@ class QueryMixin:
                 return self._is_static_temporal_definition(nested, depth + 1)
         return False
 
+    def _is_static_scalar_literal_definition(self, node: Any, depth: int = 0) -> bool:
+        """True when a definition body is a static scalar literal value.
+
+        V22-QA-001 (Domain 3 HISTORIAN, 2026-11-06): scalar literal
+        defines (Integer/Decimal/String/Boolean/Long/null ``Literal``
+        nodes, including through define-alias chains) are library
+        constants with no retrieve/query dependency. Without inlining,
+        every reference emits a patient-correlated lookup against a
+        literal CTE that has no ``patient_id`` column — Binder error
+        end-to-end for any library like ``define N: 0.1; define M: N +
+        0.2``. Mirrors the CQL-02 clinical / CQL-03 temporal inlining.
+        """
+        return self._is_pure_static_scalar_expression(node, depth)
+
+    def _is_pure_static_scalar_expression(self, node: Any, depth: int = 0) -> bool:
+        """True for expression trees composed ONLY of scalar literals.
+
+        Accepted: String/Boolean/null Literals, Quantity literals, and
+        ListExpressions of Literals, plus define-alias chains to those.
+        NOT accepted: bare Integer/Decimal/Long Literals — CQL-01 pins
+        alias-chain arithmetic semantics (DECIMAL(28,8) scale, DECIMAL(38,0)
+        wide-compute + narrow, Long typing) that ride the definition-alias
+        subquery cast path in ``_operators.py``; inlining a numeric alias
+        would silently reroute it onto the literal exact-fold path. Also
+        rejected: Binary/Unary expressions, retrieves, queries, properties,
+        function calls — those keep their CTE semantics (DQM lowering
+        routes must not change).
+        """
+        if depth > 8:
+            return False
+        if isinstance(node, Literal):
+            if isinstance(node.value, bool) or node.value is None:
+                return True
+            if isinstance(node.value, str):
+                return True
+            # Numeric literals: keep the alias-subquery cast path.
+            return False
+        if isinstance(node, Quantity):
+            return True
+        if isinstance(node, ListExpression):
+            # Inside a list, bare numeric Literals are fine — stored-list
+            # consumers (Sum/Count/...) have no CQL-01 arithmetic-cast
+            # doctrine tied to the alias-subquery shape.
+            return all(
+                isinstance(e, Literal)
+                or self._is_pure_static_scalar_expression(e, depth + 1)
+                for e in node.elements
+            )
+        if isinstance(node, Identifier):
+            nested = self._definition_source_ast(node.name)
+            if nested is not None and nested is not node:
+                return self._is_pure_static_scalar_expression(nested, depth + 1)
+        return False
+
     def _static_conversion_source_node(self, node: Any) -> Optional[Any]:
         """Return the definition body for conversion operands that are safe to inline.
 

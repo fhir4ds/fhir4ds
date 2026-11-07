@@ -174,6 +174,7 @@ def test_extract_kwargs_matches_call_medterm4ds(monkeypatch):
         include_negated=True,
         include_uncertain=False,
         include_historical=True,
+        include_family=True,
     )
     pipe = NotesPipeline(cfg)
     expected = {
@@ -183,6 +184,7 @@ def test_extract_kwargs_matches_call_medterm4ds(monkeypatch):
         "include_negated": True,
         "include_uncertain": False,
         "include_historical": True,
+        "include_family": True,
     }
     assert pipe._extract_kwargs() == expected
 

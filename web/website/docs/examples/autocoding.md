@@ -40,7 +40,7 @@ NER cascade — is served live by the public
    engine, engine version, search mode, score, match grade.
 
 The same flow in Python is three lines — see the
-[Auto-Coding guide](/docs/user-guide/terminology/autocoding):
+[Auto-Coding guide](/docs/user-guide/terminology/autocoding/):
 
 ```python
 from fhir4ds.cql.loader import AutoCoder
@@ -79,11 +79,11 @@ Condition resource: coded, audit-trailed, and queryable.
 
 ## Where to go next
 
-- [Auto-Coding guide](/docs/user-guide/terminology/autocoding) — the Python
+- [Auto-Coding guide](/docs/user-guide/terminology/autocoding/) — the Python
   API, batch mode, caching, and config reference.
-- [Terminology service](/docs/user-guide/terminology/terminology-service) —
+- [Terminology service](/docs/user-guide/terminology/terminology-service/) —
   endpoints: in-process medterm4ds or any FHIR R4 sidecar.
-- [Notes pipeline](/docs/user-guide/terminology/notes-pipeline) — free-text
+- [Notes pipeline](/docs/user-guide/terminology/notes-pipeline/) — free-text
   notes to derived Condition resources (NER cascade).
 - [Terminology search demo](https://terminology.fhir4ds.com/docs/examples/terminology-search) —
   the terminology operations themselves, live.

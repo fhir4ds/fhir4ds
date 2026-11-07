@@ -1,0 +1,263 @@
+{
+  "omop-mapping": {
+    "tests": [
+      {
+        "name": "schema::person column set",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "schema::visit_occurrence column set",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "schema::condition_occurrence column set",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "schema::procedure_occurrence column set",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "schema::drug_exposure column set",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "schema::device_exposure column set",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "schema::measurement column set",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "schema::observation column set",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "schema::death column set",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "required::person required non-null",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "required::visit_occurrence required non-null",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "required::condition_occurrence required non-null",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "required::procedure_occurrence required non-null",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "required::drug_exposure required non-null",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "required::measurement required non-null",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "required::observation required non-null",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "required::death required non-null",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "required::concept columns never null",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "grain::row counts match fixture",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "grain::union = sum of children",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "grain::referential integrity person<->events",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "mapping::concept hits resolve",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "mapping::measurement+observation = observations",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "mapping::stable positive 63-bit keys",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "vd-conformance::conceptmap-view parse+generate+execute",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "vd-conformance::condition-occurrence-source-view parse+generate+execute",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "vd-conformance::death-source-view parse+generate+execute",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "vd-conformance::device-exposure-source-view parse+generate+execute",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "vd-conformance::drug-exposure-immunization-source-view parse+generate+execute",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "vd-conformance::drug-exposure-medication-administration-source-view parse+generate+execute",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "vd-conformance::drug-exposure-medication-dispense-source-view parse+generate+execute",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "vd-conformance::drug-exposure-medication-request-source-view parse+generate+execute",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "vd-conformance::drug-exposure-medication-statement-source-view parse+generate+execute",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "vd-conformance::measurement-source-view parse+generate+execute",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "vd-conformance::observation-source-view parse+generate+execute",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "vd-conformance::person-source-view parse+generate+execute",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "vd-conformance::procedure-occurrence-source-view parse+generate+execute",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "vd-conformance::visit-occurrence-source-view parse+generate+execute",
+        "result": {
+          "passed": true
+        }
+      }
+    ]
+  },
+  "_meta": {
+    "suite": "omop-mapping",
+    "omop_version": "5.5",
+    "total": 38,
+    "passed": 38,
+    "failed": 0,
+    "sections": {
+      "schema": {
+        "passed": 9,
+        "failed": 0
+      },
+      "required": {
+        "passed": 9,
+        "failed": 0
+      },
+      "grain": {
+        "passed": 3,
+        "failed": 0
+      },
+      "mapping": {
+        "passed": 3,
+        "failed": 0
+      },
+      "vd-conformance": {
+        "passed": 14,
+        "failed": 0
+      }
+    }
+  }
+}

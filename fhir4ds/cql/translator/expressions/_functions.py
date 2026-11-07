@@ -1638,6 +1638,30 @@ class FunctionsMixin:
                         cte_name, first=name.lower() == "first"
                     )
 
+        # CQL Message (§22.15): intercept before generic arg translation so
+        # the severity-fold decision can see the AST (CQL-22 doctrine:
+        # identifier-referenced severities must reach CQLMessage so runtime
+        # Error severity stops evaluation — even when the identifier
+        # statically resolves to a string literal via the V22-QA-001
+        # scalar-define inlining).
+        if name.lower() == "message" and len(func.arguments) == 5:
+            arg_nodes = list(func.arguments)
+            self._validate_message_signature_args(arg_nodes)
+            args = [self.translate(a) for a in arg_nodes]
+            sev_node = func.arguments[3]
+            # Only DEFINITION references keep the CQLMessage wrapper;
+            # parameter references (with compile-time defaults) fold per
+            # the pinned ParameterSeverity expectation, and unresolved
+            # identifiers translate to SQLParameterRef/getvariable below.
+            sev_is_define_ref = (
+                isinstance(sev_node, Identifier)
+                and sev_node.name not in self.context.parameters
+                and self._definition_source_ast(sev_node.name) is not None
+            )
+            return self._translate_message(
+                args, severity_was_identifier=sev_is_define_ref
+            )
+
         # Step 1: Check for pre-translate strategies (aggregates on Queries, maximum/minimum)
         function_registry = self._get_function_registry()
         pre_strategy = function_registry.get_pre_translate(name, arity)
@@ -3930,11 +3954,19 @@ class FunctionsMixin:
         src = self.translate(arg, usage=ExprUsage.SCALAR)
         return self._apply_singleton_from_list_value(src)
 
-    def _translate_message(self, args: list) -> SQLExpression:
+    def _translate_message(self, args: list, severity_was_identifier: bool = False) -> SQLExpression:
         """Translate CQL Message (§22.15) — return source or raise on Error severity.
 
         Message(source, condition, code, severity, message) — if severity is
         the literal 'Error', raise at runtime via the CQLMessage UDF.
+
+        ``severity_was_identifier``: True when the severity argument was
+        written as an identifier in the CQL source (e.g. ``ErrorLevel``
+        referencing ``define ErrorLevel: 'Error'``). Per the CQL-22
+        doctrine, such severities must reach ``CQLMessage`` (runtime
+        evaluation) rather than being folded to the bare source — even
+        when the V22-QA-001 scalar-define inlining resolved them to a
+        string literal at translation time.
         """
         if not args:
             return SQLNull()
@@ -3949,7 +3981,11 @@ class FunctionsMixin:
         if isinstance(severity, SQLIdentifier):
             severity = SQLParameterRef(name=severity.name)
             args = [source, condition, args[2], severity, args[4]]
-        if isinstance(severity, SQLLiteral) and str(severity.value).lower() != 'error':
+        if (
+            not severity_was_identifier
+            and isinstance(severity, SQLLiteral)
+            and str(severity.value).lower() != 'error'
+        ):
             return source
 
         return SQLFunctionCall(name="CQLMessage", args=args[:5])
