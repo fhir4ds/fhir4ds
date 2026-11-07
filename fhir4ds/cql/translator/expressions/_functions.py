@@ -1458,6 +1458,21 @@ class FunctionsMixin:
 
         # Inject patient correlation.
         _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
+        # Scope guard: the correlation target must be a table actually IN the
+        # built select's FROM/JOIN chain (or _pt). context.resource_alias can
+        # hold the ENCLOSING query's alias-under-definition when this query is
+        # translated as a FROM source (CMS129: subquery aliased LastPSATest
+        # correlated to itself) — fall back to _pt there.
+        if _outer_pid != "_pt":
+            _scope_aliases = set()
+            for _ref in [prop_select.from_clause] + list(prop_select.joins or []):
+                _r = _ref.table if isinstance(_ref, SQLJoin) else _ref
+                if isinstance(_r, SQLAlias):
+                    _scope_aliases.add(_r.alias)
+                elif isinstance(_r, SQLIdentifier):
+                    _scope_aliases.add(_r.name)
+            if _outer_pid not in _scope_aliases:
+                _outer_pid = "_pt"
         if _src_alias:
             _corr = SQLBinaryOp(
                 operator="=",

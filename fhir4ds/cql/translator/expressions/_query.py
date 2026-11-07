@@ -5324,7 +5324,19 @@ class QueryMixin:
                     # expression from inlined fluent functions over sub-elements
                     # like Claim.item), wrap it in a SELECT that provides
                     # resource and patient_id columns so property access works.
-                    outer_corr_alias = alias or self.context.resource_alias or "_pt"
+                    # Correlate to THIS query's own source alias when it has
+                    # one — context.resource_alias may still hold the
+                    # ENCLOSING query's alias-under-definition when this query
+                    # is being translated as a FROM source (CMS129: with-clause
+                    # inside `Last(...) LastPSATest return ...` correlated to
+                    # LastPSATest, which does not exist in the inner scope).
+                    _own_src = node.source[0] if isinstance(node.source, list) and node.source else node.source
+                    _own_alias = getattr(_own_src, 'alias', None) if _own_src is not None else None
+                    outer_corr_alias = (
+                        _own_alias or alias or "_pt"
+                        if _own_alias or alias
+                        else (self.context.resource_alias or "_pt")
+                    )
                     if not isinstance(wc_source_sql, (SQLSelect, SQLSubquery, SQLUnion, SQLIntersect, SQLExcept, SQLIdentifier, SQLQualifiedIdentifier, SQLAlias, RetrievePlaceholder)):
                         wc_source_sql = SQLSubquery(query=SQLSelect(
                             columns=[
