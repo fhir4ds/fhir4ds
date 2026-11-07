@@ -86,6 +86,23 @@ class ProfileRegistry:
         raw_prefixes = data.get("profile_name_prefixes")
         if raw_prefixes:
             registry._fallback_prefixes = tuple(raw_prefixes)
+        # Merge US Core / USQualityCore named profiles (GENERATED from the
+        # dqm-content-cms-2025 modelinfos; see the JSON's _comment). The
+        # primary config stays the authority on name collisions. Loaded from
+        # the packaged resources dir (the primary config may be a versioned
+        # qicore-profiles.json elsewhere).
+        uscore_path = Path(get_resource_path(
+            "profiles", "uscore-usqualitycore-profiles.json"
+        ))
+        if uscore_path.exists():
+            try:
+                with open(uscore_path, encoding="utf-8") as f:
+                    extra = json.load(f).get("named_profiles", {})
+                merged = dict(extra)
+                merged.update(registry._named_profiles)
+                registry._named_profiles = merged
+            except (OSError, ValueError) as exc:
+                logger.warning("Could not load %s: %s", uscore_path, exc)
         return registry
 
     @classmethod
@@ -166,6 +183,13 @@ class ProfileRegistry:
         info = self._named_profiles.get(profile_name)
         if info is not None:
             return (info["base_type"], info.get("url"))
+        # Some authored content retrieves profile types by their modelinfo
+        # LABEL in quoted form (e.g. ["Vital Signs Profile"] for
+        # VitalSignsProfile) — resolve through the label alias map.
+        if info is None and profile_name:
+            for candidate in self._named_profiles.values():
+                if candidate.get("label") == profile_name:
+                    return (candidate["base_type"], candidate.get("url"))
         # Fallback: strip known profile-name prefixes (configurable via JSON)
         for prefix in self._fallback_prefixes:
             if profile_name.startswith(prefix):

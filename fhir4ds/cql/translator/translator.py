@@ -889,7 +889,11 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                         cdef.name == _quoted_base and _i not in _type_of
                         for _i, cdef in enumerate(cte_defs)
                     ):
-                        from ..errors import TranslationError
+                        # NOTE: no local import here — a function-local
+                        # `from ..errors import TranslationError` shadows the
+                        # module-level import for the WHOLE function scope,
+                        # turning the earlier required-parameter raise into
+                        # UnboundLocalError.
                         raise TranslationError(
                             f"retrieve-cache base CTE name collision: "
                             f"{_quoted_base} already exists as a non-retrieve CTE"

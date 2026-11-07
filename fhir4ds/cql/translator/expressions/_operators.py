@@ -1299,9 +1299,17 @@ class OperatorsMixin:
                             # InferenceMixin; infer primitive Property defines
                             # straight from FHIR schema metadata so Boolean
                             # elements validate (CQL-04 EXPLORER QA-003).
-                            element_type = infer_fhir_property_type_str(
-                                self.context, ast_def.source.name, ast_def.path
-                            )
+                            # Guard (CMS-DEF-06): the schema lookup needs a
+                            # NAMED source (Identifier). A Property whose
+                            # source is a QuerySource (return-clause element
+                            # over an aliased query, CMS129) has no .name —
+                            # fall through to the define's stored cql_type
+                            # instead of crashing.
+                            _src = ast_def.source
+                            if isinstance(_src, Identifier):
+                                element_type = infer_fhir_property_type_str(
+                                    self.context, _src.name, ast_def.path
+                                )
                         if element_type not in ("Any", None):
                             return element_type
                 return meta.cql_type
@@ -2619,6 +2627,15 @@ class OperatorsMixin:
             if source_node is not None:
                 left = self.translate(source_node, usage=ExprUsage.SCALAR)
             target_type_name = getattr(expr.right, 'name', '') if hasattr(expr, 'right') else ''
+            # Convert-to-Quantity-unit: `convert X to 'm2'` — the right
+            # operand is a quoted UCUM unit string (Literal), not a type
+            # specifier. Lower to quantityConvert over the VARCHAR transport.
+            if isinstance(expr.right, Literal) and isinstance(expr.right.value, str):
+                return SQLFunctionCall(
+                    name="quantityConvert",
+                    args=[SQLCast(expression=left, target_type="VARCHAR"),
+                          SQLLiteral(value=expr.right.value)],
+                )
             if isinstance(expr.right, NamedTypeSpecifier):
                 if self._is_cql_conversion_unit_target(expr.right.name):
                     return left
