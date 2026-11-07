@@ -1,0 +1,453 @@
+{
+  "_comment": "GENERATED from USQualityCore 0.1.0-cibuild modelinfo (dqm-content-cms-2025 submodule, input/cql/usqualitycore-modelinfo-0.1.0-cibuild.xml) and USCore 6.1.0-derived modelinfo (vendored at tests/data/cql/dqm-content-cms-2025/uscore-modelinfo-6.1.0-derived.xml from HL7/us-cql-ig@2.0.0-ballot, commit fb23fc7bca47). Regenerate with tests/data/cql/dqm-content-cms-2025/regen_profiles.py.",
+  "named_profiles": {
+    "BMIProfile": {
+      "base_type": "Observation",
+      "label": "BMI Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-bmi"
+    },
+    "BloodPressureProfile": {
+      "base_type": "Observation",
+      "label": "Blood Pressure Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-blood-pressure"
+    },
+    "BodyHeightProfile": {
+      "base_type": "Observation",
+      "label": "Body Height Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-height"
+    },
+    "BodyTemperatureProfile": {
+      "base_type": "Observation",
+      "label": "Body Temperature Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-temperature"
+    },
+    "BodyWeightProfile": {
+      "base_type": "Observation",
+      "label": "Body Weight Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-weight"
+    },
+    "CarePlanProfile": {
+      "base_type": "CarePlan",
+      "label": "CarePlan Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+    },
+    "CommunicationNotDone": {
+      "base_type": "Communication",
+      "label": "US Quality Core Communication Not Done",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-communicationnotdone"
+    },
+    "ConditionEncounterDiagnosis": {
+      "base_type": "Condition",
+      "label": "US Quality Core Condition Encounter Diagnosis",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-condition-encounter-diagnosis"
+    },
+    "ConditionEncounterDiagnosisProfile": {
+      "base_type": "Condition",
+      "label": "Condition Encounter Diagnosis Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-condition-encounter-diagnosis"
+    },
+    "ConditionProblemsHealthConcerns": {
+      "base_type": "Condition",
+      "label": "US Quality Core Condition Problems Health Concerns",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-condition-problems-health-concerns"
+    },
+    "ConditionProblemsHealthConcernsProfile": {
+      "base_type": "Condition",
+      "label": "Condition Problems and Health Concerns Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-condition-problems-health-concerns"
+    },
+    "CoverageProfile": {
+      "base_type": "Coverage",
+      "label": "Coverage Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-coverage"
+    },
+    "DeviceNotRequested": {
+      "base_type": "DeviceRequest",
+      "label": "US Quality Core Device Not Requested",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-devicenotrequested"
+    },
+    "DiagnosticReportLab": {
+      "base_type": "DiagnosticReport",
+      "label": "US Quality Core DiagnosticReport Profile for Laboratory Results Reporting",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-diagnosticreport-lab"
+    },
+    "DiagnosticReportNote": {
+      "base_type": "DiagnosticReport",
+      "label": "US Quality Core DiagnosticReport Profile for Report and Note Exchange",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-diagnosticreport-note"
+    },
+    "DiagnosticReportProfileLaboratoryReporting": {
+      "base_type": "DiagnosticReport",
+      "label": "DiagnosticReport Profile for Laboratory Results Reporting",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-diagnosticreport-lab"
+    },
+    "DiagnosticReportProfileNoteExchange": {
+      "base_type": "DiagnosticReport",
+      "label": "DiagnosticReport Profile for Report and Note Exchange",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-diagnosticreport-note"
+    },
+    "DocumentReferenceProfile": {
+      "base_type": "DocumentReference",
+      "label": "DocumentReference Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-documentreference"
+    },
+    "EncounterProfile": {
+      "base_type": "Encounter",
+      "label": "Encounter Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-encounter"
+    },
+    "GoalProfile": {
+      "base_type": "Goal",
+      "label": "Goal Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-goal"
+    },
+    "HeadCircumferenceProfile": {
+      "base_type": "Observation",
+      "label": "Head Circumference Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-head-circumference"
+    },
+    "HeartRateProfile": {
+      "base_type": "Observation",
+      "label": "Heart Rate Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-heart-rate"
+    },
+    "ImmunizationNotDone": {
+      "base_type": "Immunization",
+      "label": "US Quality Core Immunization Not Done",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-immunizationnotdone"
+    },
+    "ImmunizationProfile": {
+      "base_type": "Immunization",
+      "label": "Immunization Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-immunization"
+    },
+    "ImplantableDeviceProfile": {
+      "base_type": "Device",
+      "label": "Implantable Device Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-implantable-device"
+    },
+    "LaboratoryResultObservation": {
+      "base_type": "Observation",
+      "label": "US Quality Core Laboratory Result Observation",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-observation-lab"
+    },
+    "LaboratoryResultObservationProfile": {
+      "base_type": "Observation",
+      "label": "Laboratory Result Observation Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab"
+    },
+    "MedicationAdministrationNotDone": {
+      "base_type": "MedicationAdministration",
+      "label": "US Quality Core MedicationAdministration Not Done",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-medicationadministrationnotdone"
+    },
+    "MedicationDispenseDeclined": {
+      "base_type": "MedicationDispense",
+      "label": "US Quality Core MedicationDispense Declined",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-medicationdispensedeclined"
+    },
+    "MedicationDispenseProfile": {
+      "base_type": "MedicationDispense",
+      "label": "MedicationDispense Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-medicationdispense"
+    },
+    "MedicationNotRequested": {
+      "base_type": "MedicationRequest",
+      "label": "US Quality Core Medication Not Requested",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-medicationnotrequested"
+    },
+    "MedicationProfile": {
+      "base_type": "Medication",
+      "label": "Medication Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-medication"
+    },
+    "MedicationRequestProfile": {
+      "base_type": "MedicationRequest",
+      "label": "MedicationRequest Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-medicationrequest"
+    },
+    "NonPatientObservation": {
+      "base_type": "Observation",
+      "label": "US Quality Core NonPatient Observation",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-nonpatient-observation"
+    },
+    "ObservationCancelled": {
+      "base_type": "Observation",
+      "label": "US Quality Core Observation Cancelled",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-observationcancelled"
+    },
+    "ObservationClinicalResult": {
+      "base_type": "Observation",
+      "label": "US Quality Core Observation Clinical Result",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-observation-clinical-result"
+    },
+    "ObservationClinicalResultProfile": {
+      "base_type": "Observation",
+      "label": "Observation Clinical Result Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-clinical-result"
+    },
+    "ObservationOccupationProfile": {
+      "base_type": "Observation",
+      "label": "Observation Occupation Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-occupation"
+    },
+    "ObservationPregnancyIntentProfile": {
+      "base_type": "Observation",
+      "label": "Observation Pregnancy Intent Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-pregnancyintent"
+    },
+    "ObservationPregnancyStatusProfile": {
+      "base_type": "Observation",
+      "label": "Observation Pregnancy Status Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-pregnancystatus"
+    },
+    "ObservationScreeningAssessment": {
+      "base_type": "Observation",
+      "label": "US Quality Core Observation Screening Assessment",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-observation-screening-assessment"
+    },
+    "ObservationScreeningAssessmentProfile": {
+      "base_type": "Observation",
+      "label": "Observation Screening Assessment Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-screening-assessment"
+    },
+    "ObservationSexualOrientationProfile": {
+      "base_type": "Observation",
+      "label": "Observation Sexual Orientation Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-sexual-orientation"
+    },
+    "OrganizationProfile": {
+      "base_type": "Organization",
+      "label": "Organization Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-organization"
+    },
+    "PatientProfile": {
+      "base_type": "Patient",
+      "label": "Patient Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+    },
+    "PediatricBMIforAgeObservationProfile": {
+      "base_type": "Observation",
+      "label": "Pediatric BMI for Age Observation Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/pediatric-bmi-for-age"
+    },
+    "PediatricHeadOccipitalFrontalCircumferencePercentileProfile": {
+      "base_type": "Observation",
+      "label": "Pediatric Head Occipital Frontal Circumference Percentile Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/head-occipital-frontal-circumference-percentile"
+    },
+    "PediatricWeightForHeightObservationProfile": {
+      "base_type": "Observation",
+      "label": "Pediatric Weight for Height Observation Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/pediatric-weight-for-height"
+    },
+    "PractitionerProfile": {
+      "base_type": "Practitioner",
+      "label": "Practitioner Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitioner"
+    },
+    "PractitionerRoleProfile": {
+      "base_type": "PractitionerRole",
+      "label": "PractitionerRole Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-practitionerrole"
+    },
+    "ProcedureNotDone": {
+      "base_type": "Procedure",
+      "label": "US Quality Core Procedure Not Done",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-procedurenotdone"
+    },
+    "ProcedureProfile": {
+      "base_type": "Procedure",
+      "label": "Procedure Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+    },
+    "PulseOximetryProfile": {
+      "base_type": "Observation",
+      "label": "Pulse Oximetry Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-pulse-oximetry"
+    },
+    "QuestionnaireResponseProfile": {
+      "base_type": "QuestionnaireResponse",
+      "label": "QuestionnaireResponse Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-questionnaireresponse"
+    },
+    "RelatedPersonProfile": {
+      "base_type": "RelatedPerson",
+      "label": "RelatedPerson Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-relatedperson"
+    },
+    "RespiratoryRateProfile": {
+      "base_type": "Observation",
+      "label": "Respiratory Rate Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-respiratory-rate"
+    },
+    "ServiceNotRequested": {
+      "base_type": "ServiceRequest",
+      "label": "US Quality Core Service Not Requested",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-servicenotrequested"
+    },
+    "ServiceRequestProfile": {
+      "base_type": "ServiceRequest",
+      "label": "ServiceRequest Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-servicerequest"
+    },
+    "SimpleObservation": {
+      "base_type": "Observation",
+      "label": "US Quality Core Simple Observation",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-simple-observation"
+    },
+    "SimpleObservationProfile": {
+      "base_type": "Observation",
+      "label": "Simple Observation Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-simple-observation"
+    },
+    "SmokingStatusProfile": {
+      "base_type": "Observation",
+      "label": "Smoking Status Observation Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-smokingstatus"
+    },
+    "SpecimenProfile": {
+      "base_type": "Specimen",
+      "label": "Specimen Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-specimen"
+    },
+    "TaskRejected": {
+      "base_type": "Task",
+      "label": "US Quality Core Task Rejected",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-taskrejected"
+    },
+    "VitalSignsProfile": {
+      "base_type": "Observation",
+      "label": "Vital Signs Profile",
+      "meta_profile_filter": true,
+      "namespace": "USCore",
+      "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-vital-signs"
+    }
+  }
+}

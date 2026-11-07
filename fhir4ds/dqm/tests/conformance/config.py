@@ -16,6 +16,7 @@ OUTPUT_CQL_PY_DIR = TESTS_ROOT / "output"
 # Suite roots (now inside data/)
 SUITE_2025_DIR = DATA_DIR / "ecqm-content-qicore-2025"
 SUITE_2026_DIR = DATA_DIR / "dqm-content-qicore-2026"
+SUITE_CMS_2025_DIR = DATA_DIR / "dqm-content-cms-2025"
 
 # Default suite (2025)
 SUBMODULE_DIR = SUITE_2025_DIR
@@ -34,13 +35,16 @@ def get_suite_paths(suite: str = "2025") -> dict:
     Return path configuration for a specific content suite year.
 
     Args:
-        suite: "2025" (ecqm-content-qicore-2025) or "2026" (dqm-content-qicore-2026)
+        suite: "2025" (ecqm-content-qicore-2025), "2026" (dqm-content-qicore-2026),
+            or "cms2025" (dqm-content-cms-2025 — US Core / USQualityCore measures)
 
     Returns:
         Dict with keys: suite_dir, cql_dir, valueset_dir, tests_dir, bundle_dir
     """
     if suite == "2026":
         suite_dir = SUITE_2026_DIR
+    elif suite == "cms2025":
+        suite_dir = SUITE_CMS_2025_DIR
     else:
         suite_dir = SUITE_2025_DIR
     return {

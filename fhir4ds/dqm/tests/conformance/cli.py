@@ -68,9 +68,9 @@ def main():
     )
     parser.add_argument(
         "--suite",
-        choices=["2025", "2026"],
+        choices=["2025", "2026", "cms2025"],
         default="2025",
-        help="Content suite to benchmark: '2025' (ecqm-content-qicore-2025, default) or '2026' (dqm-content-qicore-2026)",
+        help="Content suite: '2025' (ecqm-content-qicore-2025, default), '2026' (dqm-content-qicore-2026), or 'cms2025' (dqm-content-cms-2025 US Core measures)",
     )
     parser.add_argument(
         "--verbose", "-v",
@@ -368,7 +368,8 @@ def _discover_measures(suite: str = "2025"):
     """Auto-discover all measures from the selected content suite.
 
     Args:
-        suite: "2025" for ecqm-content-qicore-2025, "2026" for dqm-content-qicore-2026.
+        suite: "2025" (ecqm-content-qicore-2025), "2026" (dqm-content-qicore-2026),
+            or "cms2025" (dqm-content-cms-2025 US Core measures).
     """
     from .config import (
         SUPPLEMENTAL_VALUESET_DIR,
@@ -397,6 +398,12 @@ def _discover_measures(suite: str = "2025"):
             continue
 
         measure_name = entry.name
+
+        # dqm-content-cms-2025 ships its own CQL-engine unit tests
+        # (testE15*, ...) under input/tests/measure — they are not measures.
+        if measure_name.startswith("test"):
+            continue
+
         test_dir = Path(entry.path)
 
         # Find CQL file
@@ -425,14 +432,26 @@ def _discover_measures(suite: str = "2025"):
         if measure_vs_bundle.exists():
             vs_paths.append(measure_vs_bundle)
 
-        # For 2026, also include 2025 CQL dir for shared libraries
-        # (CumulativeMedicationDuration, FHIRHelpers, etc.)
+        # For 2026 and cms2025, also include 2025 CQL dir for shared libraries
+        # (CumulativeMedicationDuration, FHIRHelpers, etc.). The CMS US Core
+        # repo references hl7.fhir.uv.cql.FHIRHelpers 4.0.1 but does not ship
+        # the CQL source (IG tooling resolves it at build time).
         inc_paths = [cql_dir]
-        if suite == "2026":
+        if suite in ("2026", "cms2025"):
             from .config import SUITE_2025_DIR
             fallback_cql = SUITE_2025_DIR / "input" / "cql"
             if fallback_cql.exists():
                 inc_paths.append(fallback_cql)
+        if suite in ("2026", "cms2025"):
+            # Vendored shared libraries (FHIRCommon, USCoreCommon,
+            # USCoreElements) that the CMS repo — and the 2026 QI-Core repo
+            # since its US CQL 1.0.0 dependency update — reference but do not
+            # ship. See tests/data/cql/dqm-content-cms-2025/README.md for
+            # provenance.
+            from .config import DATA_DIR
+            supplemental_cql = DATA_DIR / "cql" / "dqm-content-cms-2025"
+            if supplemental_cql.exists():
+                inc_paths.append(supplemental_cql)
 
         measures.append(MeasureConfig(
             id=_extract_measure_id(measure_name),
