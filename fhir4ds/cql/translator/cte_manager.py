@@ -493,6 +493,139 @@ class CTEManagerMixin:
         from ..translator.types import SQLAlias as _SQLAliasCol
         return _contains_agg(cols[0].expr if isinstance(cols[0], _SQLAliasCol) else cols[0])
 
+    def _fix_stale_pt_references(self, sql_ast: "SQLExpression", from_alias: str) -> "SQLExpression":
+        """Re-anchor stale top-level ``_pt`` references for a CTE whose FROM
+        is a table/subquery alias (no ``_pt`` in scope).
+
+        Two behaviors (CMS129):
+        - Nested scopes inside the FROM subquery keep their ``_pt`` refs —
+          those bind to the patient context. If any exist, give them a real
+          ``_pt`` by joining the patients table laterally
+          (``FROM _patients _pt CROSS JOIN LATERAL (<subq>) AS <alias>``).
+          Rewriting them to the FROM alias instead breaks inner correlations
+          (the inner scope cannot see its own wrapper alias —
+          ``PSATest.patient_id = LastPSATest.patient_id`` binder error).
+        - Otherwise rewrite ONLY the top-level ``_pt.X`` refs (columns,
+          WHERE, ORDER BY, HAVING) to ``<from_alias>.X``; nested subquery
+          scopes are left untouched.
+        """
+        from ..translator.types import (
+            SQLSelect, SQLAlias, SQLIdentifier, SQLJoin,
+            SQLSubquery, SQLExists, SQLBinaryOp, SQLUnaryOp,
+            SQLFunctionCall, SQLCase, SQLQualifiedIdentifier,
+        )
+
+        def _has_nested_pt_ref(node) -> bool:
+            stack = [node]
+            seen = set()
+            while stack:
+                cur = stack.pop()
+                if cur is None or id(cur) in seen:
+                    continue
+                seen.add(id(cur))
+                if isinstance(cur, SQLQualifiedIdentifier) and cur.parts and cur.parts[0] == "_pt":
+                    return True
+                if isinstance(cur, (list, tuple)):
+                    stack.extend(cur)
+                    continue
+                for f in getattr(cur, "__dataclass_fields__", {}):
+                    stack.append(getattr(cur, f, None))
+            return False
+
+        if not isinstance(sql_ast, SQLSelect):
+            # Union-style operands arrive as subqueries: unwrap, fix, re-wrap.
+            if isinstance(sql_ast, SQLSubquery) and isinstance(sql_ast.query, SQLSelect):
+                return SQLSubquery(query=self._fix_stale_pt_references(sql_ast.query, from_alias))
+            return sql_ast
+
+        fc = sql_ast.from_clause
+        # Split by FROM shape:
+        # - FROM <subquery> AS a: `_pt` refs INSIDE the subquery keep their
+        #   patient-context meaning — re-anchor by joining _patients laterally
+        #   (rewriting them to `a` breaks them: the inner scope cannot see
+        #   its own wrapper alias — CMS129).
+        # - Otherwise (bare CTE reference, or subquery without internal _pt
+        #   refs): deep-rewrite `_pt` -> `a`. The CTE/subquery rows are
+        #   patient-keyed, so nested patient references resolve correctly
+        #   through `a.patient_id` (NHSNGlycemic relies on this).
+        from ..translator.types import SQLSubquery as _SubQ, SQLSelect as _SelQ
+        if (
+            isinstance(fc, SQLAlias)
+            and isinstance(fc.expr, (_SubQ, _SelQ))
+            and _has_nested_pt_ref(fc.expr)
+        ):
+            return SQLSelect(
+                columns=sql_ast.columns,
+                from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="_pt"),
+                joins=list(sql_ast.joins or []) + [
+                    SQLJoin(join_type="CROSS JOIN LATERAL", table=fc.expr, alias=fc.alias)
+                ],
+                where=sql_ast.where,
+                group_by=sql_ast.group_by,
+                having=sql_ast.having,
+                order_by=sql_ast.order_by,
+                distinct=sql_ast.distinct,
+                distinct_on=sql_ast.distinct_on,
+                limit=sql_ast.limit,
+            )
+
+        # Patient-keyed FROM: deep-rewrite every `_pt.X` (nested scopes
+        # included) to `<from_alias>.X` — the rows carry patient_id, so
+        # nested patient references are correct through the alias.
+        from ..translator.ast_utils import replace_qualified_alias as _rqa_deep
+        return _rqa_deep(sql_ast, "_pt", from_alias)
+
+        def _rqa_shallow(node):
+            """Rewrite `_pt.X` -> `<from_alias>.X` at this level only."""
+            if node is None or isinstance(node, (SQLSubquery, SQLExists)):
+                return node
+            if isinstance(node, SQLQualifiedIdentifier):
+                if node.parts and node.parts[0] == "_pt":
+                    return SQLQualifiedIdentifier(parts=[from_alias] + list(node.parts[1:]))
+                return node
+            if isinstance(node, SQLBinaryOp):
+                return SQLBinaryOp(
+                    operator=node.operator,
+                    left=_rqa_shallow(node.left),
+                    right=_rqa_shallow(node.right),
+                )
+            if isinstance(node, SQLUnaryOp):
+                return SQLUnaryOp(
+                    operator=node.operator,
+                    operand=_rqa_shallow(node.operand),
+                    prefix=node.prefix,
+                )
+            if isinstance(node, SQLFunctionCall):
+                cls = type(node)
+                new_args = [
+                    a if isinstance(a, (SQLSubquery, SQLExists)) else _rqa_shallow(a)
+                    for a in (node.args or [])
+                ]
+                try:
+                    return cls(name=node.name, args=new_args, distinct=getattr(node, "distinct", None))
+                except TypeError:
+                    return cls(name=node.name, args=new_args)
+            if isinstance(node, SQLAlias):
+                return SQLAlias(expr=_rqa_shallow(node.expr), alias=node.alias)
+            if isinstance(node, SQLCase):
+                nc = [(_rqa_shallow(c), _rqa_shallow(r)) for c, r in node.when_clauses]
+                ne = _rqa_shallow(node.else_clause) if node.else_clause is not None else None
+                return SQLCase(when_clauses=nc, else_clause=ne)
+            return node
+
+        return SQLSelect(
+            columns=[_rqa_shallow(c) for c in (sql_ast.columns or [])],
+            from_clause=sql_ast.from_clause,
+            joins=sql_ast.joins,
+            where=_rqa_shallow(sql_ast.where),
+            group_by=sql_ast.group_by,
+            having=_rqa_shallow(sql_ast.having),
+            order_by=[(_rqa_shallow(e), d) for e, d in sql_ast.order_by] if sql_ast.order_by else None,
+            distinct=sql_ast.distinct,
+            distinct_on=sql_ast.distinct_on,
+            limit=sql_ast.limit,
+        )
+
     def _wrap_definition_cte(
         self,
         name: str,
@@ -993,7 +1126,6 @@ class CTEManagerMixin:
                 sql_ast = sql_ast.query
 
             # Fix stale "_pt" alias references (same issue as RESOURCE_ROWS).
-            from ..translator.ast_utils import replace_qualified_alias as _rqa_mv
             if isinstance(sql_ast, SQLSelect):
                 _from_alias = None
                 if isinstance(sql_ast.from_clause, SQLAlias):
@@ -1001,7 +1133,7 @@ class CTEManagerMixin:
                 elif isinstance(sql_ast.from_clause, SQLIdentifier) and sql_ast.from_clause.quoted:
                     _from_alias = sql_ast.from_clause.name
                 if _from_alias and _from_alias != "_pt":
-                    sql_ast = _rqa_mv(sql_ast, "_pt", _from_alias)
+                    sql_ast = self._fix_stale_pt_references(sql_ast, _from_alias)
             elif isinstance(sql_ast, (SQLUnion, SQLIntersect, SQLExcept)):
                 _fixed_ops = []
                 for _op in sql_ast.operands:
@@ -1013,7 +1145,7 @@ class CTEManagerMixin:
                         elif isinstance(_inner.from_clause, SQLIdentifier) and _inner.from_clause.quoted:
                             _op_alias = _inner.from_clause.name
                     if _op_alias and _op_alias != "_pt":
-                        _fixed_ops.append(_rqa_mv(_op, "_pt", _op_alias))
+                        _fixed_ops.append(self._fix_stale_pt_references(_op, _op_alias))
                     else:
                         _fixed_ops.append(_op)
                 _cls = type(sql_ast)
@@ -1272,8 +1404,7 @@ class CTEManagerMixin:
                     from_alias = sql_ast.from_clause.name
                     from_cte_name = sql_ast.from_clause.name
                 if from_alias and from_alias != "_pt":
-                    sql_ast = replace_qualified_alias(sql_ast, "_pt", from_alias)
-
+                    sql_ast = self._fix_stale_pt_references(sql_ast, from_alias)
                 # In audit mode, pass _audit_item through BEFORE _ensure_resource_column
                 # so that the subquery wrapping can propagate it to the outer SELECT.
                 if self._context.audit_mode and from_cte_name and isinstance(sql_ast, SQLSelect):
