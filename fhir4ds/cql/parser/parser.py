@@ -2081,6 +2081,23 @@ class CQLParser:
         self.expect(TokenType.AND, "Expected 'and'")
         right = self.parse_implies_expression()
 
+        # Same trailing-`in`-Interval restructure as _parse_difference_between.
+        from .ast_nodes import Interval as _CqlInterval
+        if (
+            isinstance(right, BinaryExpression)
+            and right.operator == "in"
+            and isinstance(right.right, _CqlInterval)
+        ):
+            return BinaryExpression(
+                operator="in",
+                left=DurationBetween(
+                    precision=precision,
+                    operand_left=left,
+                    operand_right=right.left,
+                ),
+                right=right.right,
+            )
+
         return DurationBetween(precision=precision, operand_left=left, operand_right=right)
 
     def _parse_difference_between(self) -> DifferenceBetween:
@@ -2095,6 +2112,27 @@ class CQLParser:
         left = self.parse_equality_expression()
         self.expect(TokenType.AND, "Expected 'and'")
         right = self.parse_implies_expression()
+
+        # CMS2025 (CMS771): `difference in months between A and B in Interval[6, 12]`
+        # — the official content means (difference) in Interval; the loose
+        # right-operand parse absorbs the trailing `in` clause into B.
+        # Restructure when the right operand is exactly a membership `in`
+        # over an Interval literal.
+        from .ast_nodes import Interval as _CqlInterval
+        if (
+            isinstance(right, BinaryExpression)
+            and right.operator == "in"
+            and isinstance(right.right, _CqlInterval)
+        ):
+            return BinaryExpression(
+                operator="in",
+                left=DifferenceBetween(
+                    precision=precision,
+                    operand_left=left,
+                    operand_right=right.left,
+                ),
+                right=right.right,
+            )
 
         return DifferenceBetween(precision=precision, operand_left=left, operand_right=right)
 

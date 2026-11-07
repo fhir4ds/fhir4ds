@@ -254,6 +254,10 @@ def propagate_resource_column_lineage(
         cte_name = _normalize_cte_name(cte.name)
         if isinstance(query, SQLSelect):
             updated_query, inherited = _propagate_select_resource_columns(query, registry)
+            if not inherited:
+                # SELECT ... FROM (<union>) AS a — lineage stops at the
+                # union; propagate into the operands instead (CMS-DEF-01B).
+                updated_query, inherited = _propagate_select_over_union(query, registry)
         elif isinstance(query, SQLUnion):
             updated_query, inherited = _propagate_union_resource_columns(query, registry)
         else:
@@ -549,6 +553,49 @@ def _materialize_select_inherited_columns(
                 distinct_on=select.distinct_on,
         ),
         inherited_available,
+    )
+
+
+def _propagate_select_over_union(
+    select: SQLSelect,
+    registry: ColumnRegistry,
+) -> Tuple[SQLSelect, Dict[str, ColumnInfo]]:
+    """Propagate precomputed columns through ``SELECT ... FROM (<union>) AS a``.
+
+    The pattern (CMS-DEF-01B): a define CTE whose FROM is an alias over a
+    UNION of resource CTE subqueries. The operands only project
+    (patient_id, resource) while downstream where-clauses reference
+    precomputed columns (``a.period``, ``a.status``). Materialize the
+    common lineage columns into the UNION operands, then report them as
+    inherited so the CTE gets registered and the alias references resolve.
+    """
+    from_clause = select.from_clause
+    union = None
+    if isinstance(from_clause, SQLAlias):
+        inner = from_clause.expr
+        if isinstance(inner, SQLSubquery) and isinstance(inner.query, SQLUnion):
+            union = inner.query
+        elif isinstance(inner, SQLUnion):
+            union = inner
+    if union is None:
+        return select, {}
+    if select.group_by or select.having or select.joins:
+        return select, {}
+
+    updated_union, common = _propagate_union_resource_columns(union, registry)
+    if not common:
+        return select, {}
+    return (
+        SQLSelect(
+            columns=select.columns,
+            from_clause=SQLAlias(expr=updated_union, alias=from_clause.alias),
+            where=select.where,
+            joins=select.joins,
+            order_by=select.order_by,
+            distinct=select.distinct,
+            limit=select.limit,
+        ),
+        common,
     )
 
 

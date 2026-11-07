@@ -1728,12 +1728,34 @@ class SQLFragment:
         if select.from_clause is None:
             return
 
-        # 1) Collect candidate expressions and their serialized forms.
-        # Lateral aliases appended to this SELECT are visible to the projection
-        # and WHERE clause, but not to earlier JOIN ON conditions.
-        candidates = {}  # sql_str -> (node, count)
-        self._collect_candidates(select.columns, candidates, min_occ)
-        self._collect_candidates(select.where, candidates, min_occ)
+        # (Star projections are qualified AFTER lateral construction —
+        # see below — so appending laterals cannot widen them.)
+
+        # Aliases a LATERAL attached to this SELECT may legally reference:
+        # its own FROM alias + JOIN aliases. Outer-scope (correlated) aliases
+        # are NOT visible to the lateral (DuckDB limitation).
+        local_aliases = set()
+        for join in list(select.joins or []):
+            if isinstance(join, SQLJoin):
+                if join.alias:
+                    local_aliases.add(join.alias)
+                if isinstance(join.table, SQLAlias):
+                    local_aliases.add(join.table.alias)
+        if isinstance(select.from_clause, SQLAlias):
+            local_aliases.add(select.from_clause.alias)
+        elif isinstance(select.from_clause, SQLIdentifier):
+            local_aliases.add(select.from_clause.name)
+        prev_aliases = getattr(self, "_current_dedup_aliases", None)
+        self._current_dedup_aliases = local_aliases
+        try:
+            # 1) Collect candidate expressions and their serialized forms.
+            # Lateral aliases appended to this SELECT are visible to the projection
+            # and WHERE clause, but not to earlier JOIN ON conditions.
+            candidates = {}  # sql_str -> (node, count)
+            self._collect_candidates(select.columns, candidates, min_occ)
+            self._collect_candidates(select.where, candidates, min_occ)
+        finally:
+            self._current_dedup_aliases = prev_aliases
 
         if not candidates:
             return
@@ -1760,6 +1782,23 @@ class SQLFragment:
 
         if not lateral_joins:
             return
+
+        # Appending laterals widens a bare star projection (the lateral's
+        # columns would join the FROM table's) — qualify the star with the
+        # FROM alias (`a.*`) so the projection stays the FROM table's
+        # columns only. Keeps UNION operand alignment (CMS-DEF-04/CMS22)
+        # without skipping the dedup entirely (a skip exploded CMS0334
+        # SQL 15x and hung the gate).
+        _cols = select.columns or []
+        if len(_cols) == 1 and isinstance(_cols[0], SQLIdentifier) and _cols[0].name == "*":
+            if isinstance(select.from_clause, SQLAlias):
+                select.columns = [SQLQualifiedIdentifier(
+                    parts=[select.from_clause.alias, "*"]
+                )]
+            elif isinstance(select.from_clause, SQLIdentifier):
+                select.columns = [SQLQualifiedIdentifier(
+                    parts=[select.from_clause.name, "*"]
+                )]
 
         # 3) Replace occurrences in projection and WHERE with lateral references.
         select.columns = self._replace_alias_value(select.columns, alias_map)
@@ -1837,14 +1876,16 @@ class SQLFragment:
             # Only consider larger correlated subqueries. Small subqueries do not
             # materially affect CMS1218 SQL size and are less worth the join churn.
             if 'patient_id' in sql_str and len(sql_str) > 200:
-                count = candidates.get(sql_str, (None, 0))[1] + 1
-                candidates[sql_str] = (node, count)
+                if self._lateral_candidate_scope_safe(node):
+                    count = candidates.get(sql_str, (None, 0))[1] + 1
+                    candidates[sql_str] = (node, count)
             return
 
         if self._is_lateral_scalar_candidate(node):
-            sql_str = node.to_sql()
-            count = candidates.get(sql_str, (None, 0))[1] + 1
-            candidates[sql_str] = (node, count)
+            if self._lateral_candidate_scope_safe(node):
+                sql_str = node.to_sql()
+                count = candidates.get(sql_str, (None, 0))[1] + 1
+                candidates[sql_str] = (node, count)
             return
 
         if isinstance(node, SQLExists):
@@ -1854,6 +1895,59 @@ class SQLFragment:
 
         for child in self._iter_child_expressions(node):
             self._collect_candidates(child, candidates, min_occ)
+
+    def _lateral_candidate_scope_safe(self, node: 'SQLExpression') -> bool:
+        """Whether hoisting this expression into a LATERAL is scope-safe.
+
+        A CROSS JOIN LATERAL can only correlate to the aliases of the SELECT
+        it is attached to — NOT to that SELECT's own outer-scope (correlated)
+        aliases. A repeated subquery that references an outer-scope alias
+        (CMS-DEF-01B/CMS135: fluent-inlined bodies referencing the query
+        alias from deep EXISTS nesting) must keep its inline position, or
+        DuckDB raises ``Referenced table "<alias>" not found`` at bind time.
+
+        AST-level check: references to aliases the candidate DEFINES inside
+        itself (its own FROM aliases) are fine; any other qualified
+        reference must resolve to a local alias of the enclosing SELECT
+        (``_current_dedup_aliases``) or ``_pt``.
+        """
+        local = self._current_dedup_aliases
+        if local is None:
+            return True
+
+        internal: set = set()
+        referenced: list = []
+        stack = [node]
+        seen = set()
+        while stack:
+            cur = stack.pop()
+            if cur is None or id(cur) in seen:
+                continue
+            seen.add(id(cur))
+            if isinstance(cur, SQLAlias):
+                internal.add(cur.alias)
+            elif isinstance(cur, SQLSelect) and cur.from_clause is not None:
+                fr = cur.from_clause
+                if isinstance(fr, SQLAlias):
+                    internal.add(fr.alias)
+                elif isinstance(fr, SQLIdentifier):
+                    internal.add(fr.name)
+            elif isinstance(cur, SQLQualifiedIdentifier) and cur.parts:
+                referenced.append(cur.parts[0])
+            # Bare identifiers are column references, not alias
+            # qualifications — they cannot produce the "Referenced table
+            # not found" binder class, so they are not tracked.
+            if isinstance(cur, (list, tuple)):
+                stack.extend(cur)
+                continue
+            for field_name in getattr(cur, "__dataclass_fields__", {}):
+                stack.append(getattr(cur, field_name, None))
+
+        for alias in referenced:
+            if alias in internal or alias in local or alias == "_pt":
+                continue
+            return False
+        return True
 
     @staticmethod
     def _is_lateral_scalar_candidate(node: Any) -> bool:

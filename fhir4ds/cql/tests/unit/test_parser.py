@@ -827,3 +827,49 @@ class TestDqmContentCms2025Syntax:
         lib = self._parse_expr("R.context")
         node = lib.statements[0].expression
         assert getattr(node, "path", None) == "context"
+
+
+class TestDifferenceBetweenTrailingIn:
+    """CMS771: `difference in months between A and B in Interval[6, 12]` —
+    the trailing `in Interval` applies to the whole difference expression
+    (official CMS content semantics), not to operand B alone."""
+
+    def _parse(self, text):
+        from ...parser import parse_cql
+        lib = parse_cql(
+            "library T version '1'\nusing FHIR version '4.0.1'\n"
+            "include FHIRHelpers version '4.0.1' called FHIRHelpers\n"
+            "context Patient\n" + text
+        )
+        for stmt in lib.statements:
+            if type(stmt).__name__ == "Definition" and stmt.name == "T":
+                return stmt.expression
+        raise AssertionError("define T not found")
+
+    def test_difference_between_trailing_in_interval(self):
+        e = self._parse(
+            "define T:\n"
+            "  difference in months between @2024-01-01 and @2024-06-01 in Interval[6, 12]"
+        )
+        from ...parser.ast_nodes import BinaryExpression, DifferenceBetween
+        assert isinstance(e, BinaryExpression) and e.operator == "in", type(e)
+        assert isinstance(e.left, DifferenceBetween)
+        # The interval high operand must be the bare date, not `date in Interval`.
+        assert str(e.left.operand_right).find("Interval") == -1
+
+    def test_duration_between_trailing_in_interval(self):
+        e = self._parse(
+            "define T:\n"
+            "  months between @2024-01-01 and @2024-06-01 in Interval[6, 12]"
+        )
+        from ...parser.ast_nodes import BinaryExpression, DurationBetween
+        assert isinstance(e, BinaryExpression) and e.operator == "in", type(e)
+        assert isinstance(e.left, DurationBetween)
+
+    def test_difference_between_plain(self):
+        e = self._parse(
+            "define T:\n"
+            "  difference in months between @2024-01-01 and @2024-06-01"
+        )
+        from ...parser.ast_nodes import DifferenceBetween
+        assert isinstance(e, DifferenceBetween)

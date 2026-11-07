@@ -4021,7 +4021,13 @@ class QueryMixin:
                     )
                     self.context.add_alias(alias, table_alias=alias, cte_name=cte_name)
                 else:
-                    source_expr = self.translate(_pi_expr, usage=ExprUsage.SCALAR)
+                    # LIST, not SCALAR: a FROM source iterates rows. SCALAR
+                    # lowers define references (incl. library-qualified ones
+                    # like VTE."Qualifying Encounter" Q) to a LIMIT-1
+                    # correlated subquery whose correlation alias is the
+                    # alias UNDER DEFINITION here — self-referential SQL
+                    # (CMS-DEF-01A). LIST emits SELECT * FROM "CTE".
+                    source_expr = self.translate(_pi_expr, usage=ExprUsage.LIST)
                     source_expr = self._preserve_quantity_literals_in_array(
                         source_expr,
                         _pi_expr,
