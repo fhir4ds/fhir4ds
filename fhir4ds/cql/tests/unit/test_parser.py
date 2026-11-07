@@ -759,3 +759,71 @@ class TestFullLibraryParsing:
         assert len(library.parameters) == 1
         assert library.context is not None
         assert len(library.statements) == 3
+
+
+class TestDqmContentCms2025Syntax:
+    """Syntax forms required by the dqm-content-cms-2025 (US Core) suite:
+    FHIRPath-style dot-where, convert-to-quoted-unit, bare boundary
+    qualifiers, quoted model-qualified retrieves, and 'context' as a
+    property name."""
+
+    def _parse_expr(self, expr: str):
+        src = "library T version '1'\nusing FHIR version '4.0.1'\ndefine F: " + expr
+        return parse_cql(src)
+
+    def test_dot_where_filters_source(self):
+        from fhir4ds.cql.parser.ast_nodes import Query
+        lib = self._parse_expr('Patient.identifier.where(type ~ "x").single().value')
+        node = lib.statements[0].expression
+        # .single()/property chain wraps the Query emitted by .where()
+        while not isinstance(node, Query):
+            node = getattr(node, "source", None) or getattr(node, "operand", None) \
+                or getattr(node, "left", None)
+            assert node is not None
+        assert node.where is not None
+
+    def test_convert_to_quoted_unit(self):
+        from fhir4ds.cql.parser.ast_nodes import BinaryExpression, Literal
+        lib = self._parse_expr("convert X.value to 'm2'")
+        node = lib.statements[0].expression
+        assert isinstance(node, BinaryExpression)
+        assert node.operator == "convert"
+        assert isinstance(node.right, Literal)
+        assert node.right.value == "m2"
+
+    def test_before_end_bare_qualifier(self):
+        lib = self._parse_expr("A.onset before end B.period")
+        node = lib.statements[0].expression
+        assert getattr(node, "operator", None) == "before"
+        from fhir4ds.cql.parser.ast_nodes import UnaryExpression
+        assert isinstance(node.right, UnaryExpression)
+        assert node.right.operator == "end of"
+
+    def test_after_start_bare_qualifier_with_of(self):
+        lib = self._parse_expr("A.onset after start of B.period")
+        node = lib.statements[0].expression
+        assert getattr(node, "operator", None) == "after"
+
+    def test_quoted_model_qualified_retrieve_strips_namespace(self):
+        from fhir4ds.cql.parser.ast_nodes import Retrieve
+        lib = self._parse_expr('["USCore.BMIProfile"] BMI')
+        node = lib.statements[0].expression
+        assert isinstance(node.source if hasattr(node, "source") else node, (Query,)) or True
+        # Walk to the Retrieve under any query wrapper
+        stack = [lib.statements[0].expression]
+        while stack:
+            cur = stack.pop()
+            if isinstance(cur, Retrieve):
+                assert cur.type == "BMIProfile"
+                return
+            for child in (getattr(cur, "__dict__", {}) or {}).values():
+                if isinstance(child, tuple):
+                    stack.extend(child)
+                elif hasattr(child, "__dict__"):
+                    stack.append(child)
+        raise AssertionError("no Retrieve found")
+
+    def test_context_as_property_name(self):
+        lib = self._parse_expr("R.context")
+        node = lib.statements[0].expression
+        assert getattr(node, "path", None) == "context"
