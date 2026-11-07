@@ -1,0 +1,252 @@
+{
+ "benchmark": "autocoding_and_annotations_scaling",
+ "date": "2026-11-06",
+ "machine": "13th Gen Intel i9-13900KF (32 threads), 62 GiB RAM, WSL2",
+ "autocoding": {
+  "benchmark": "autocoding_scaling",
+  "date": "2026-11-05",
+  "engine": "medterm4ds services.search.search(mode='semantic') via BenchSemanticEndpoint (scored semantic, in-process)",
+  "medterm4ds_version": "0.0.10",
+  "terminology_release": "fhir4ds/terminology 2026.11.05.1",
+  "config": {
+   "search_mode": "semantic",
+   "min_match_grade": "probable",
+   "top_k": 1
+  },
+  "runs": [
+   {
+    "label": "natural_1000_cold",
+    "rows": 1000,
+    "precoded_rows": 0,
+    "wall_s": 25.38,
+    "rows_per_s": 39.4,
+    "engine_calls": 194,
+    "distinct_texts": 194,
+    "dedup_hit_rate": 0.806,
+    "engine_ms_p50": 102.2,
+    "engine_ms_p95": 126.2,
+    "engine_throughput_per_s": 7.6,
+    "coded_resources": 980,
+    "rss_peak_mb": 4205.0
+   },
+   {
+    "label": "natural_1000_warm",
+    "rows": 1000,
+    "precoded_rows": 0,
+    "wall_s": 0.43,
+    "rows_per_s": 2302.3,
+    "engine_calls": 0,
+    "distinct_texts": 194,
+    "dedup_hit_rate": 1.0,
+    "engine_ms_p50": null,
+    "engine_ms_p95": null,
+    "engine_throughput_per_s": null,
+    "coded_resources": 980,
+    "rss_peak_mb": 4203.0
+   },
+   {
+    "label": "natural_10000_cold",
+    "rows": 10000,
+    "precoded_rows": 0,
+    "wall_s": 51.83,
+    "rows_per_s": 192.9,
+    "engine_calls": 482,
+    "distinct_texts": 491,
+    "dedup_hit_rate": 0.9518,
+    "engine_ms_p50": 88.2,
+    "engine_ms_p95": 147.4,
+    "engine_throughput_per_s": 9.3,
+    "coded_resources": 9764,
+    "rss_peak_mb": 4221.0
+   },
+   {
+    "label": "natural_10000_warm",
+    "rows": 10000,
+    "precoded_rows": 0,
+    "wall_s": 5.46,
+    "rows_per_s": 1831.9,
+    "engine_calls": 0,
+    "distinct_texts": 491,
+    "dedup_hit_rate": 1.0,
+    "engine_ms_p50": null,
+    "engine_ms_p95": null,
+    "engine_throughput_per_s": null,
+    "coded_resources": 9764,
+    "rss_peak_mb": 4221.0
+   },
+   {
+    "label": "natural_100000_cold",
+    "rows": 100000,
+    "precoded_rows": 0,
+    "wall_s": 154.38,
+    "rows_per_s": 647.8,
+    "engine_calls": 946,
+    "distinct_texts": 989,
+    "dedup_hit_rate": 0.9905,
+    "engine_ms_p50": 108.9,
+    "engine_ms_p95": 129.2,
+    "engine_throughput_per_s": 6.1,
+    "coded_resources": 97723,
+    "rss_peak_mb": 4225.0
+   },
+   {
+    "label": "natural_100000_warm",
+    "rows": 100000,
+    "precoded_rows": 0,
+    "wall_s": 59.79,
+    "rows_per_s": 1672.6,
+    "engine_calls": 0,
+    "distinct_texts": 989,
+    "dedup_hit_rate": 1.0,
+    "engine_ms_p50": null,
+    "engine_ms_p95": null,
+    "engine_throughput_per_s": null,
+    "coded_resources": 97723,
+    "rss_peak_mb": 4225.0
+   },
+   {
+    "label": "mixed_10k_50pct_coded",
+    "rows": 10000,
+    "precoded_rows": 5000,
+    "wall_s": 41.72,
+    "rows_per_s": 239.7,
+    "engine_calls": 371,
+    "distinct_texts": 491,
+    "dedup_hit_rate": 0.9258,
+    "engine_ms_p50": 111.5,
+    "engine_ms_p95": 123.5,
+    "engine_throughput_per_s": 8.9,
+    "coded_resources": 4886,
+    "rss_peak_mb": 4226.0
+   },
+   {
+    "label": "distinct_1000",
+    "rows": 1000,
+    "precoded_rows": 0,
+    "wall_s": 56.71,
+    "rows_per_s": 17.6,
+    "engine_calls": 999,
+    "distinct_texts": 998,
+    "dedup_hit_rate": 0.001,
+    "engine_ms_p50": 50.8,
+    "engine_ms_p95": 64.1,
+    "engine_throughput_per_s": 17.6,
+    "coded_resources": 956,
+    "rss_peak_mb": 4246.0
+   },
+   {
+    "label": "distinct_10000",
+    "rows": 10000,
+    "precoded_rows": 0,
+    "wall_s": 569.3,
+    "rows_per_s": 17.6,
+    "engine_calls": 9987,
+    "distinct_texts": 9986,
+    "dedup_hit_rate": 0.0013,
+    "engine_ms_p50": 50.9,
+    "engine_ms_p95": 62.4,
+    "engine_throughput_per_s": 17.5,
+    "coded_resources": 9539,
+    "rss_peak_mb": 4316.0
+   }
+  ]
+ },
+ "annotations": {
+  "benchmark": "annotations_ner_scaling",
+  "date": "2026-11-06",
+  "engine": "medterm4ds.services.extraction.extract (NER cascade, in-process)",
+  "medterm4ds_version": "0.0.10",
+  "flags": {
+   "include_family": true,
+   "include_historical": true,
+   "include_uncertain": true
+  },
+  "note": "long bucket + batched rungs re-run with per-item exception guards after two input-dependent crash classes (PyRuSH UnboundLocalError + observed heap corruption; medspaCy ConText TypeError); crashes were non-deterministic across identical replays. See baseline md.",
+  "runs": [
+   {
+    "label": "batched_sentence_100",
+    "notes": 100,
+    "words_per_note": 18,
+    "wall_s": 2.54,
+    "notes_per_s": 39.4,
+    "ms_per_note": 25.4
+   },
+   {
+    "label": "batched_sentence_1000",
+    "notes": 1000,
+    "notes_ok": 1000,
+    "error_chunks": 0,
+    "wall_s": 25.47,
+    "notes_per_s": 39.3,
+    "ms_per_note": 25.5
+   },
+   {
+    "label": "long_2000w_20",
+    "notes": 20,
+    "notes_ok": 20,
+    "errors": 0,
+    "words_per_note": 2007,
+    "concepts_per_note": 126.2,
+    "wall_s": 236.45,
+    "ms_per_note": 11822.4,
+    "notes_per_s": 0.085
+   },
+   {
+    "label": "long_2000w_50",
+    "notes": 50,
+    "notes_ok": 50,
+    "errors": 0,
+    "words_per_note": 2007,
+    "concepts_per_note": 120.0,
+    "wall_s": 600.08,
+    "ms_per_note": 12001.6,
+    "notes_per_s": 0.083
+   },
+   {
+    "label": "medium_200w_100",
+    "notes": 100,
+    "words_per_note": 203,
+    "concepts_per_note": 37.6,
+    "wall_s": 221.84,
+    "notes_per_s": 0.5,
+    "ms_per_note": 2218.4
+   },
+   {
+    "label": "medium_200w_300",
+    "notes": 300,
+    "words_per_note": 204,
+    "concepts_per_note": 37.2,
+    "wall_s": 657.45,
+    "notes_per_s": 0.5,
+    "ms_per_note": 2191.5
+   },
+   {
+    "label": "sentence_100",
+    "notes": 100,
+    "words_per_note": 18,
+    "concepts_per_note": 6.5,
+    "wall_s": 32.1,
+    "notes_per_s": 3.1,
+    "ms_per_note": 321.0
+   },
+   {
+    "label": "sentence_1000",
+    "notes": 1000,
+    "words_per_note": 21,
+    "concepts_per_note": 6.8,
+    "wall_s": 236.95,
+    "notes_per_s": 4.2,
+    "ms_per_note": 237.0
+   },
+   {
+    "label": "sentence_10000",
+    "notes": 10000,
+    "words_per_note": 16,
+    "concepts_per_note": 6.6,
+    "wall_s": 2265.14,
+    "notes_per_s": 4.4,
+    "ms_per_note": 226.5
+   }
+  ]
+ }
+}

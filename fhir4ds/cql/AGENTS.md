@@ -6656,3 +6656,61 @@ verified: findings.target names winning resources).
   cql-tests-runner is the strict authority for null-vs-false semantics;
   when fixing nullological bugs, verify against the external runner, not
   only the internal suite.
+
+## Notes Pipeline Remote Extraction (v0.0.22 code review, REV-001/002)
+
+`NotesPipeline._remote_extract` must FORWARD the include_* config flags
+and min_grade/mode as the sidecar `$extract` query params
+(`includeNegated`/`includeUncertain`/`includeHistorical`/`minGrade`/
+`mode`) — the sidecar EXCLUDES non-affirmed statuses by default, so
+client-side filtering alone silently drops concepts the config opted
+into. httpx failures surface as typed RuntimeError naming the endpoint
+(never raw httpx errors / import-time ImportError). Regression:
+test_notes_pipeline_remote_extraction_amux60_gap2.
+
+## Static Scalar-Literal Define Inlining (V22-QA-001, v0.0.22 Domain 3)
+
+- `translate_library_to_sql` Binder-failed end-to-end for valid CQL where a
+  static scalar-literal define was referenced by alias (`define S: 'hello';
+  define T: S`): references emit patient-correlated lookups
+  (`SELECT sub.value FROM "S" ... WHERE sub.patient_id = _pt.patient_id`)
+  against literal CTEs (`SELECT 'hello'`) that have NO patient_id column.
+- Fix (same pattern as CQL-02 clinical / CQL-03 temporal inlining):
+  `_is_static_scalar_literal_definition` +
+  `_is_pure_static_scalar_expression` in `_query.py` with a choke point in
+  `_core.py::_translate_identifier`. INLINED: String/Boolean/null Literals,
+  Quantity literals, ListExpressions of Literals (numeric literals allowed
+  INSIDE lists), and alias chains to those. NOT inlined: bare
+  Integer/Decimal/Long Literals — CQL-01 pins alias-chain arithmetic
+  semantics (DECIMAL(28,8)/DECIMAL(38,0)-narrow cast path in
+  `_operators.py`) that ride the definition-alias SUBQUERY shape; inlining
+  a numeric alias silently reroutes it onto the literal exact-fold path.
+  Binary/Unary expression defines are likewise kept on the CTE path.
+- Message severity (CQL-22 doctrine preserved): `_translate_function_ref`
+  intercepts 5-arg Message before generic dispatch;
+  `severity_was_identifier=True` only for DEFINITION references (parameter
+  refs keep folding per the pinned ParameterSeverity expectation). The
+  inlined severity literal now flows INTO CQLMessage (better runtime SQL
+  than the old SQLParameterRef/getvariable shape for resolved defines).
+- Known residual (convenience surface only): numeric-literal and
+  arithmetic-expression defines referenced by alias still Binder-fail on
+  `translate_library_to_sql` (population SQL — the real evaluator surface —
+  handles them correctly and is pinned by TestDefineAliasArithmeticExactness).
+  Regression tests: `TestStaticLiteralDefineInlining` in
+  `fhir4ds/cql/tests/unit/test_cql01_primitive_types.py`.
+- Pre-existing flake (NOT this fix): 3 test_in_process_adapter search tests
+  fail order-dependently in the full-suite run (mock pollution), pass in
+  isolation, fail identically on the pre-change tree.
+
+## Notes pipeline family-status knob (V22-QA-003, v0.0.22 loop)
+
+`NotesPipelineConfig.include_family` (default False) is forwarded to BOTH
+extraction paths: local `medterm4ds.extract(include_family=...)` and the
+sidecar `$extract?includeFamily=` query param. medterm4ds 0.0.10 defaults
+family-history concepts OFF at the extraction layer, so client-side gating
+alone can never surface them — the flag must reach extraction. The
+`_build_condition` family-status guard mirrors the flag for defense in
+depth. Same doctrine as REV-001: every extraction-side status flag needs a
+config knob that reaches BOTH paths; keep
+`test_notes_pipeline_forwards_include_family_v22_qa003` green when adding
+new status flags.

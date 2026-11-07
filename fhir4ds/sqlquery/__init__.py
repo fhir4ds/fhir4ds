@@ -51,8 +51,10 @@ from .types import (
 from .parser import parse_library, parse_sqlquery, parse_sqlview
 from .validator import validate_sql_library, select_best_content
 from .runner import SQLQueryRunner, DependencyResolver
+from .dispatch import run_sql, SQLDispatchError
+from .lint import lint_sql_body, LintWarning
 
-__version__ = "0.0.21"
+__version__ = "0.0.22"
 
 __all__ = [
     # Version
@@ -65,6 +67,11 @@ __all__ = [
     "select_best_content",
     "SQLQueryRunner",
     "DependencyResolver",
+    # Single-dispatch entry point + static lint
+    "run_sql",
+    "SQLDispatchError",
+    "lint_sql_body",
+    "LintWarning",
     # Types
     "SQLQuery",
     "SQLView",

@@ -47,7 +47,6 @@ import dataclasses
 import hashlib
 import json
 import logging
-import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -82,12 +81,68 @@ DEFAULT_PATHS: dict[str, list[str]] = {
 
 # Match-grade order: results at-or-above the configured threshold are
 # kept (lower index = stronger match). Used by _keep_if_match_grade.
+#
+# Vocabulary alignment (medterm4ds 0.0.9, QA it1-d12 SKEPTIC): the
+# authoritative order is medterm4ds's ``services/extraction.py
+# _GRADE_ORDER`` — {"certain": 0, "exact": 0, "probable": 1,
+# "possible": 2, "broader": 3}. medterm4ds NEVER emits 'ambiguous' or
+# 'no-match'; those spellings are kept ONLY as legacy aliases so cache
+# rows written by older fhir4ds runs (whose in-process adapter
+# fabricated 'ambiguous') still parse. Previously 'possible'/'exact'/
+# 'broader' fell through to the rank-3 default, silently dropping
+# genuine results at relaxed thresholds and dropping 'exact' (the
+# STRONGEST grade) even at min='certain'.
 _MATCH_GRADE_ORDER: dict[str, int] = {
     "certain":    0,
+    "exact":      0,
     "probable":   1,
+    "possible":   2,
+    "broader":    3,
+    # Legacy aliases (pre-0.0.9-alignment cache rows only).
     "ambiguous":  2,
     "no-match":   3,
 }
+
+#: V22-QA-004: enum-constrained config knobs, validated at construction.
+_VALID_SEARCH_MODES = frozenset({"lexical", "hybrid", "semantic"})
+#: Grades accepted for ``min_match_grade`` (medterm4ds 0.0.9 vocabulary
+#: per ``_MATCH_GRADE_ORDER``, including the legacy cache-row aliases).
+_VALID_MATCH_GRADES = frozenset(_MATCH_GRADE_ORDER)
+
+
+def _has_coded_entry(coding: Any) -> bool:
+    """True when ``coding`` carries at least one entry with a ``code``.
+
+    A ``coding[]`` whose entries all lack a ``code`` (display-only) is a
+    text carrier from a legacy export, not a manual coding — INV-4 must
+    not treat it as "already coded" (AMUX-60 Gap 1).
+    """
+    if not isinstance(coding, list) or not coding:
+        return False
+    return any(
+        isinstance(entry, dict) and isinstance(entry.get("code"), str) and entry["code"].strip()
+        for entry in coding
+    )
+
+
+def _uncoded_display(cc: dict) -> str | None:
+    """The display of a code-less coding entry, when one carries text.
+
+    Query-text fallback for CodeableConcepts without ``text`` whose only
+    content is ``coding[0].display`` — the shape EHR exports produce when
+    the source knew the name but not the code.
+    """
+    coding = cc.get("coding")
+    if not isinstance(coding, list):
+        return None
+    for entry in coding:
+        if _has_coded_entry([entry]):
+            continue
+        if isinstance(entry, dict):
+            display = entry.get("display")
+            if isinstance(display, str) and display.strip():
+                return display
+    return None
 
 
 @dataclass(frozen=True)
@@ -106,7 +161,9 @@ class AutoCoderConfig:
             :meth:`TerminologyEndpoint.search_batch`. One of
             ``lexical``/``hybrid``/``semantic``. Default ``hybrid``.
         min_match_grade: Threshold below which results are dropped.
-            One of ``certain``/``probable``/``ambiguous``/``no-match``.
+            One of ``certain``/``exact``/``probable``/``possible``/
+            ``broader`` (medterm4ds 0.0.9 vocabulary; the legacy
+            ``ambiguous``/``no-match`` spellings are also accepted).
             Default ``certain`` (strict). Lowering to ``probable``
             multiplies recall at the cost of precision.
         top_k: Maximum number of Codings to append per CodeableConcept.
@@ -183,6 +240,20 @@ class AutoCoderConfig:
             raise ValueError(
                 f"AutoCoderConfig.top_k must be a positive int (>=1), "
                 f"got {self.top_k!r}"
+            )
+        # Enum-constrained knobs (V22-QA-004): a typo'd mode or grade
+        # otherwise flows to medterm4ds and surfaces as a deep runtime
+        # error or silently-empty results — same "tell the caller at
+        # construction" doctrine as the numeric knobs above.
+        if self.search_mode not in _VALID_SEARCH_MODES:
+            raise ValueError(
+                f"AutoCoderConfig.search_mode must be one of "
+                f"{sorted(_VALID_SEARCH_MODES)}, got {self.search_mode!r}"
+            )
+        if self.min_match_grade not in _VALID_MATCH_GRADES:
+            raise ValueError(
+                f"AutoCoderConfig.min_match_grade must be one of "
+                f"{sorted(_VALID_MATCH_GRADES)}, got {self.min_match_grade!r}"
             )
 
 
@@ -402,18 +473,25 @@ class AutoCoder:
         is a non-empty string.
 
         Guards (FDD INV-2/INV-3/INV-4):
-            * Empty/missing/whitespace-only text → skip.
-            * Existing ``coding[]`` → skip (no double-coding).
+            * Query text = ``coalesce(code.text, code.coding[].display)`` —
+              a ``coding[]`` whose entries ALL lack a ``code`` is a text
+              carrier, not a coding (common legacy-export shape); its
+              display becomes the query text and the entry is preserved
+              alongside the auto-coded additions (AMUX-60 Gap 1).
+            * Empty/missing query text → skip.
+            * ``coding[]`` with at least one coded entry (has ``code``)
+              → skip (no double-coding).
             * Search returns 0 results → no Codings appended, no cache
               write (the cache stores the FULL pre-filter result, so
               re-runs with a stricter threshold will still hit cache).
         """
         text = cc.get("text")
         if not isinstance(text, str) or not text.strip():
-            return  # INV-3: resources without text are untouched.
+            text = _uncoded_display(cc)
+        if not isinstance(text, str) or not text.strip():
+            return  # INV-3: resources without usable text are untouched.
 
-        existing_coding = cc.get("coding")
-        if isinstance(existing_coding, list) and existing_coding:
+        if _has_coded_entry(cc.get("coding")):
             # INV-4: existing manual coding → do NOT re-code.
             return
 
@@ -482,7 +560,19 @@ class AutoCoder:
     def _filter_and_truncate(
         self, results: list[dict]
     ) -> list[dict]:
-        """Filter by min_match_grade, sort by score desc, take top_k."""
+        """Filter by min_match_grade, preserve engine order, take top_k.
+
+        medterm4ds 0.0.9 doctrine (CHANGELOG AMUX-46): hybrid ranking is
+        reciprocal-rank fusion (sum 1/(10+rank)); the ``score`` field is
+        the calibrated UNDERLYING value on TWO scales (cosine when the
+        semantic system saw the row, else normalized BM25), documented
+        per-row by ``match_grade``. Re-sorting by raw score therefore
+        mixes scales — a lexical-only BM25 row (score 1.0, 'possible')
+        would leapfrog an agreement-aware 'certain' row (cosine 0.93),
+        destroying the fusion ranking the engine deliberately returns.
+        The engine's returned order IS the ranking; we only filter and
+        truncate (QA it1-d12 SKEPTIC).
+        """
         threshold_rank = _MATCH_GRADE_ORDER.get(
             self._config.min_match_grade, 0
         )
@@ -491,19 +581,6 @@ class AutoCoder:
             if _MATCH_GRADE_ORDER.get(r.get("match_grade", "ambiguous"), 3)
             <= threshold_rank
         ]
-        # Sort by score descending. Stable sort preserves search-engine
-        # ordering for ties. Defensive: NaN scores (shouldn't happen
-        # but engines can produce them) sort LAST under reverse=True
-        # with a key function that treats NaN as -inf.
-        def _score_key(r: dict) -> float:
-            s = r.get("score", 0.0)
-            try:
-                sf = float(s)
-            except (TypeError, ValueError):
-                return float("-inf")
-            return sf if math.isfinite(sf) else float("-inf")
-
-        kept.sort(key=_score_key, reverse=True)
         return kept[: self._config.top_k]
 
     # ── cache plumbing ──────────────────────────────────────────────

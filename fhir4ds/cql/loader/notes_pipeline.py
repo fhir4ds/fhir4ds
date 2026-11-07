@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import types
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -110,6 +111,14 @@ class NotesPipelineConfig:
             :data:`DEFAULT_NOTE_PATHS`.
         mode: Search mode (``"lexical"``/``"semantic"``/``"hybrid"``).
             ``None`` lets medterm4ds pick its default (hybrid).
+        extraction_endpoint: FHIR root URL of a terminology server that
+            exposes ``CodeSystem/$extract`` (e.g. a medterm4ds sidecar).
+            When set, extraction runs REMOTELY — the heavy medspaCy/
+            GLiNER/SapBERT stack is never imported locally (AMUX-60
+            Gap 2), enabling browser/edge deployments. The remote
+            response is mapped onto the same concept shape the local
+            ``medterm4ds.extract`` returns, so the downstream Condition
+            wrapping (extensions, grades, negation filtering) is shared.
         min_grade: Minimum match grade to keep (``"certain"``/``"probable"``
             /``"possible"``). Default ``"certain"``.
         include_negated: When ``True``, also emit Conditions for negated
@@ -118,6 +127,11 @@ class NotesPipelineConfig:
             uncertain concepts. Default ``False``.
         include_historical: When ``True``, also emit Conditions for
             historical concepts. Default ``False``.
+        include_family: When ``True``, also emit Conditions for
+            family-history concepts (status == ``"family"``). Forwarded
+            to medterm4ds ``include_family`` / sidecar ``includeFamily``
+            so extraction emits them at all (medterm4ds 0.0.10 default
+            excludes family; V22-QA-003). Default ``False``.
         verification_status: Default ``verificationStatus.coding[0].code``
             on derived Conditions. Default ``"unconfirmed"``.
         clinical_status: Default ``clinicalStatus.coding[0].code`` on
@@ -152,10 +166,12 @@ class NotesPipelineConfig:
 
     note_paths: dict[str, list[str]] = field(default_factory=lambda: dict(DEFAULT_NOTE_PATHS))
     mode: Optional[str] = None
+    extraction_endpoint: Optional[str] = None
     min_grade: Optional[str] = "certain"
     include_negated: bool = False
     include_uncertain: bool = False
     include_historical: bool = False
+    include_family: bool = False
     verification_status: str = "unconfirmed"
     clinical_status: str = "active"
     batch_size: int = 1
@@ -232,6 +248,13 @@ class NotesPipeline:
         short-circuit on the cached ``self._extract_fn``.
         """
         if self._extract_fn is not None:
+            return
+        if self._config.extraction_endpoint:
+            # Remote extraction (AMUX-60 Gap 2): the terminology sidecar's
+            # CodeSystem/$extract runs the same NER cascade; map its Bundle
+            # onto the concept shape _build_condition consumes.
+            self._extract_fn = self._remote_extract
+            self._index_version = "unknown"
             return
         try:
             import medterm4ds  # type: ignore[import-not-found]
@@ -438,6 +461,7 @@ class NotesPipeline:
         kwargs["include_negated"] = self._config.include_negated
         kwargs["include_uncertain"] = self._config.include_uncertain
         kwargs["include_historical"] = self._config.include_historical
+        kwargs["include_family"] = self._config.include_family
         return kwargs
 
     def _extract_batch_parallel(
@@ -547,6 +571,81 @@ class NotesPipeline:
         """
         return self._extract_fn(text, **self._extract_kwargs())
 
+    # -- remote extraction (AMUX-60 Gap 2) --------------------------------
+
+    _EXTRACT_CONCEPT_FIELDS = (
+        "code", "source", "system", "display", "matched_text", "status",
+        "section", "confidence", "match_grade", "ner_label", "result_type",
+        "canonical_id", "combination_members", "span_start", "span_end",
+    )
+
+    def _remote_extract(self, text: str, **kwargs: Any) -> list[Any]:
+        """Run ``CodeSystem/$extract`` on the configured sidecar.
+
+        Returns concepts in the attribute-access shape ``_build_condition``
+        expects (same contract as local ``medterm4ds.extract``). Keyword
+        filters (``mode``/``min_grade``/``include_negated``/
+        ``include_uncertain``/``include_historical``/``include_family``) are FORWARDED as the
+        sidecar's documented query params (``minGrade``/``includeNegated``/
+        ``includeUncertain``/``includeHistorical``) so remote and local
+        extraction see the same candidate set (REV-001: forwarding only
+        ``text`` made the sidecar's non-affirmed-status defaults silently
+        drop concepts the config had opted into). ``min_grade`` is also
+        mirrored client-side for sidecars with a different default.
+        """
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover - extra missing
+            raise RuntimeError(
+                "NotesPipelineConfig(extraction_endpoint=...) requires the "
+                "httpx client: pip install 'fhir4ds-v2[terminology]'"
+            ) from exc
+
+        base = self._config.extraction_endpoint or ""
+        params: dict[str, Any] = {"text": text, "format": "codes"}
+        if kwargs.get("mode") is not None:
+            params["mode"] = kwargs["mode"]
+        if kwargs.get("min_grade") is not None:
+            params["minGrade"] = kwargs["min_grade"]
+        # include_* flags must be forwarded, not just filtered client-side:
+        # the sidecar EXCLUDES non-affirmed statuses by default, so a config
+        # that opted in would otherwise never receive those concepts.
+        params["includeNegated"] = bool(kwargs.get("include_negated", False))
+        params["includeUncertain"] = bool(kwargs.get("include_uncertain", False))
+        params["includeHistorical"] = bool(kwargs.get("include_historical", False))
+        params["includeFamily"] = bool(kwargs.get("include_family", False))
+        try:
+            response = httpx.get(
+                f"{base.rstrip('/')}/CodeSystem/$extract",
+                params=params,
+                timeout=120.0,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise RuntimeError(
+                f"remote CodeSystem/$extract failed for endpoint "
+                f"{self._config.extraction_endpoint!r}: {exc}"
+            ) from exc
+        bundle = response.json()
+        min_grade = kwargs.get("min_grade")
+        grade_rank = {"certain": 0, "exact": 0, "probable": 1, "possible": 2, "broader": 3}
+        concepts: list[Any] = []
+        for entry in bundle.get("entry", []) if isinstance(bundle, dict) else []:
+            resource = entry.get("resource", {}) if isinstance(entry, dict) else {}
+            if not resource:
+                continue
+            concept = types.SimpleNamespace(**{
+                field: resource.get(field)
+                for field in self._EXTRACT_CONCEPT_FIELDS
+            })
+            if (
+                min_grade is not None
+                and grade_rank.get(concept.match_grade, 3) > grade_rank.get(min_grade, 0)
+            ):
+                continue
+            concepts.append(concept)
+        return concepts
+
     def _build_condition(
         self,
         concept: Any,
@@ -568,6 +667,8 @@ class NotesPipeline:
             if status == "uncertain" and not self._config.include_uncertain:
                 return None
             if status == "historical" and not self._config.include_historical:
+                return None
+            if status == "family" and not self._config.include_family:
                 return None
 
         code = _safe_getattr(concept, "code")

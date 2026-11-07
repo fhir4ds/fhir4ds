@@ -474,3 +474,315 @@ def test_missing_codeable_path_skipped(duckdb_con, endpoint):
     ac.augment_resource(resource)
     assert resource == snapshot
     assert endpoint.search_batch_calls == []
+
+
+# ── medterm4ds 0.0.9 alignment (it1 Domain 12 SKEPTIC) ────────────────
+
+
+def test_match_grade_order_matches_medterm4ds_vocabulary_it1d12():
+    """QA-002: 'possible'/'exact'/'broader' are real medterm4ds grades.
+
+    medterm4ds services/extraction.py ``_GRADE_ORDER`` is the
+    authoritative order: certain=exact=0, probable=1, possible=2,
+    broader=3. 'ambiguous'/'no-match' are legacy fhir4ds aliases kept
+    only for pre-alignment cache rows.
+    """
+    from fhir4ds.cql.loader.auto_coder import _MATCH_GRADE_ORDER as order
+
+    assert order["certain"] == 0
+    assert order["exact"] == 0
+    assert order["probable"] == 1
+    assert order["possible"] == 2
+    assert order["broader"] == 3
+    # Legacy aliases rank at the weakest tiers (cache-row compat only).
+    assert order["ambiguous"] >= order["possible"]
+    assert order["no-match"] >= order["broader"]
+
+
+def test_possible_grade_survives_relaxed_threshold_it1d12(duckdb_con):
+    """QA-002: min_match_grade='ambiguous'/'no-match' must keep 'possible'.
+
+    Under medterm4ds 0.0.9 every hybrid row that is neither certain nor
+    probable grades 'possible'. The pre-fix rank map defaulted unknown
+    grades to 3, dropping them at the 'ambiguous' threshold.
+    """
+    endpoint = _StubEndpoint(default_results=[
+        _StubSearchResult(
+            system="http://snomed.info/sct", code="C", display=None,
+            score=0.60, match_grade="possible",
+            search_mode="hybrid", index_version=None,
+        ),
+    ])
+    ac = AutoCoder(endpoint, duckdb_con, config=AutoCoderConfig(
+        index_version="v1", min_match_grade="ambiguous", top_k=3,
+    ))
+    resource = _text_only_condition("Type 2 Diabetes Mellitus")
+    ac.augment_resource(resource)
+    codes = [c["code"] for c in resource["code"]["coding"]]
+    assert "C" in codes
+
+
+def test_exact_grade_survives_certain_threshold_it1d12(duckdb_con):
+    """QA-002: 'exact' (canonical mode, rank 0) must survive min='certain'.
+
+    medterm4ds ranks 'exact' EQUAL to 'certain'; the pre-fix map treated
+    it as unknown (rank 3) and dropped it at every threshold.
+    """
+    endpoint = _StubEndpoint(default_results=[
+        _StubSearchResult(
+            system="http://snomed.info/sct", code="D", display=None,
+            score=1.0, match_grade="exact",
+            search_mode="canonical", index_version=None,
+        ),
+    ])
+    ac = AutoCoder(endpoint, duckdb_con, config=AutoCoderConfig(
+        index_version="v1", min_match_grade="certain", top_k=3,
+    ))
+    resource = _text_only_condition("Type 2 Diabetes Mellitus")
+    ac.augment_resource(resource)
+    codes = [c["code"] for c in resource["code"]["coding"]]
+    assert "D" in codes
+
+
+def test_engine_ranking_order_preserved_over_two_scale_scores_it1d12(duckdb_con):
+    """QA-003: no score re-sort — 0.0.9 'score' is two-scaled.
+
+    medterm4ds 0.0.9 hybrid returns RRF-fused order; score is the
+    calibrated underlying value (cosine when semantic saw the row, else
+    normalized BM25). A lexical-only BM25 row (score 1.0, 'possible')
+    must NOT leapfrog an agreement-aware 'certain' row (cosine 0.93).
+    """
+    endpoint = _StubEndpoint(default_results=[
+        _StubSearchResult(
+            system="http://snomed.info/sct", code="FUSED-CERTAIN",
+            display=None, score=0.93, match_grade="certain",
+            search_mode="hybrid", index_version=None,
+        ),
+        _StubSearchResult(
+            system="http://snomed.info/sct", code="LEX-ONLY-BM25",
+            display=None, score=1.0, match_grade="possible",
+            search_mode="hybrid", index_version=None,
+        ),
+    ])
+    ac = AutoCoder(endpoint, duckdb_con, config=AutoCoderConfig(
+        index_version="v1", min_match_grade="no-match", top_k=2,
+    ))
+    resource = _text_only_condition("Type 2 Diabetes Mellitus")
+    ac.augment_resource(resource)
+    codes = [c["code"] for c in resource["code"]["coding"]]
+    assert codes == ["FUSED-CERTAIN", "LEX-ONLY-BM25"], (
+        "engine (RRF) order must be preserved; raw-score re-sort mixes "
+        "cosine and BM25 scales"
+    )
+
+
+# -- AMUX-60 Gap 1: display-only codings --------------------------------------
+
+def test_display_only_coding_is_coded_amux60_gap1(duckdb_con):
+    """A coding[] whose entries all lack a code is a text carrier.
+
+    The display becomes the query text; the original entry is preserved
+    and the coded result is appended (legacy-export shape: the source
+    knew the name but not the code).
+    """
+    endpoint = _StubEndpoint(default_results=[
+        _StubSearchResult(
+            system="http://snomed.info/sct", code="38341003",
+            display="Hypertensive disorder", score=0.93,
+            match_grade="certain", search_mode="semantic", index_version=None,
+        ),
+    ])
+    ac = AutoCoder(endpoint, duckdb_con, config=AutoCoderConfig(
+        index_version="v1", min_match_grade="certain", top_k=3,
+    ))
+    resource = {
+        "resourceType": "Condition", "id": "c1",
+        "code": {"coding": [{"display": "Essential hypertension"}]},
+    }
+    ac.augment_resource(resource)
+    codings = resource["code"]["coding"]
+    assert codings[0] == {"display": "Essential hypertension"}  # preserved
+    assert codings[1]["code"] == "38341003"  # coded from the display text
+
+
+def test_genuinely_coded_concept_is_never_recoded_amux60_gap1(duckdb_con):
+    """INV-4 intact: coding[] with at least one coded entry → untouched."""
+    endpoint = _StubEndpoint(default_results=[
+        _StubSearchResult(
+            system="http://snomed.info/sct", code="X", display=None,
+            score=1.0, match_grade="certain",
+            search_mode="semantic", index_version=None,
+        ),
+    ])
+    ac = AutoCoder(endpoint, duckdb_con, config=AutoCoderConfig(
+        index_version="v1", min_match_grade="certain", top_k=3,
+    ))
+    original = {"system": "http://snomed.info/sct", "code": "38341003"}
+    resource = {
+        "resourceType": "Condition", "id": "c2",
+        "code": {"coding": [dict(original)], "text": "Essential hypertension"},
+    }
+    ac.augment_resource(resource)
+    assert resource["code"]["coding"] == [original]
+
+
+# -- AMUX-62: HTTP SearchResult dataclass contract -----------------------------
+
+def test_http_dataclass_results_flow_through_autocoder_amux62(duckdb_con):
+    """Pin the 0.0.21-bug contract: adapters may return SearchResult
+    dataclasses (the HTTP adapter does); the AutoCoder must normalize
+    them before its dict-API filtering/augmentation path.
+    """
+    import dataclasses
+
+    from fhir4ds.cql.terminology.types import SearchResult
+
+    @dataclasses.dataclass
+    class _HTTPShapedEndpoint:
+        default: list[SearchResult]
+
+        def search_batch(self, queries, *, mode="hybrid"):
+            return [list(self.default)]
+
+        def search_text(self, query, category, *, mode="hybrid"):
+            return list(self.default)
+
+        def expand(self, valueset_url):
+            return []
+
+    endpoint = _HTTPShapedEndpoint(default=[
+        SearchResult(
+            system="http://snomed.info/sct", code="44054006",
+            display="Type 2 diabetes mellitus", score=0.93,
+            match_grade="certain", search_mode="hybrid", index_version="v1",
+        ),
+    ])
+    ac = AutoCoder(endpoint, duckdb_con, config=AutoCoderConfig(
+        index_version="v1", min_match_grade="certain", top_k=3,
+    ))
+    resource = _text_only_condition("uncontrolled type 2 diabetes")
+    ac.augment_resource(resource)
+    codes = [c["code"] for c in resource["code"]["coding"]]
+    assert codes == ["44054006"]
+
+
+def test_notes_pipeline_remote_extraction_amux60_gap2(monkeypatch):
+    """extraction_endpoint routes $extract remotely; no medterm4ds import."""
+    import json as _json
+
+    import fhir4ds.cql.loader.notes_pipeline as np_mod
+    from fhir4ds.cql.loader import NotesPipeline, NotesPipelineConfig
+
+    bundle = {"resourceType": "Bundle", "type": "searchset", "entry": [
+        {"resource": {"code": "44054006", "source": "SNOMEDCT_US",
+                      "display": "Type 2 Diabetes", "matched_text": "diabetes",
+                      "status": "affirmed", "confidence": 0.97,
+                      "match_grade": "exact", "ner_label": "disorder",
+                      "result_type": "condition", "span_start": 12, "span_end": 20}}]}
+    calls = []
+    class _Resp:
+        def raise_for_status(self): pass
+        def json(self): return bundle
+    def _get(url, params=None, timeout=None):
+        calls.append((url, params))
+        return _Resp()
+    monkeypatch.setattr("httpx.get", _get)
+
+    pipe = NotesPipeline(NotesPipelineConfig(
+        extraction_endpoint="https://example.test/fhir", min_grade="probable",
+        include_negated=True))
+    resource = {"resourceType": "ClinicalImpression", "id": "ci",
+                "subject": {"reference": "Patient/p"},
+                "summary": "history of type 2 diabetes"}
+    conds = pipe.extract_conditions(resource)
+    assert calls and "$extract" in calls[0][0]
+    # REV-001: config flags are FORWARDED — the sidecar excludes
+    # non-affirmed statuses unless includeNegated/includeUncertain/
+    # includeHistorical are set, so client-side filtering alone would
+    # silently drop opted-in concepts.
+    sent = calls[0][1]
+    assert sent["includeNegated"] is True
+    assert sent["includeUncertain"] is False
+    assert sent["includeHistorical"] is False
+    assert sent["minGrade"] == "probable"
+    assert sent["format"] == "codes"
+    assert len(conds) == 1
+    assert conds[0]["code"]["coding"][0]["code"] == "44054006"
+
+
+def test_notes_pipeline_forwards_include_family_v22_qa003(monkeypatch):
+    """V22-QA-003: include_family is forwarded to BOTH extraction paths.
+
+    medterm4ds 0.0.10 supports ``include_family`` locally and
+    ``includeFamily`` on the ``$extract`` sidecar, but the pipeline config
+    had no knob — family-history concepts were silently unreachable (same
+    class as REV-001). The local kwargs and the remote query params must
+    both carry the flag, and a family-status concept must be gated by it.
+    """
+    import fhir4ds.cql.loader.notes_pipeline as np_mod
+    from fhir4ds.cql.loader import NotesPipeline, NotesPipelineConfig
+
+    # Remote path: includeFamily forwarded when opted in, absent-False when not
+    bundle = {"resourceType": "Bundle", "type": "searchset", "entry": [
+        {"resource": {"code": "160303001", "source": "SNOMEDCT_US",
+                      "display": "Family history of diabetes",
+                      "matched_text": "family history of diabetes",
+                      "status": "family", "confidence": 0.95,
+                      "match_grade": "exact", "ner_label": "disorder",
+                      "result_type": "condition", "span_start": 0, "span_end": 27}}]}
+    calls = []
+    class _Resp:
+        def raise_for_status(self): pass
+        def json(self): return bundle
+    def _get(url, params=None, timeout=None):
+        calls.append((url, params))
+        return _Resp()
+    monkeypatch.setattr("httpx.get", _get)
+
+    resource = {"resourceType": "ClinicalImpression", "id": "ci",
+                "subject": {"reference": "Patient/p"},
+                "summary": "family history of diabetes"}
+
+    pipe_on = NotesPipeline(NotesPipelineConfig(
+        extraction_endpoint="https://example.test/fhir", include_family=True))
+    conds_on = pipe_on.extract_conditions(resource)
+    sent_on = calls[0][1]
+    assert sent_on["includeFamily"] is True
+    assert len(conds_on) == 1
+    assert conds_on[0]["code"]["coding"][0]["code"] == "160303001"
+
+    calls.clear()
+    pipe_off = NotesPipeline(NotesPipelineConfig(
+        extraction_endpoint="https://example.test/fhir"))
+    conds_off = pipe_off.extract_conditions(resource)
+    sent_off = calls[0][1]
+    assert sent_off["includeFamily"] is False
+    # Client-side gate mirrors the flag: family concepts dropped when off
+    assert conds_off == []
+
+    # Local path: _extract_kwargs carries include_family
+    pipe_local = NotesPipeline(NotesPipelineConfig(include_family=True))
+    kwargs = pipe_local._extract_kwargs()
+    assert kwargs["include_family"] is True
+    assert kwargs["include_negated"] is False
+
+
+def test_auto_coder_config_rejects_bogus_enum_knobs_v22_qa004():
+    """V22-QA-004: search_mode and min_match_grade are enum-constrained.
+
+    A typo'd mode or grade otherwise flows to medterm4ds and surfaces as
+    a deep runtime error or silently-empty results — construction-time
+    ValueError per the AutoCoderConfig validation doctrine.
+    """
+    import pytest
+    from fhir4ds.cql.loader.auto_coder import AutoCoderConfig
+
+    with pytest.raises(ValueError, match="search_mode"):
+        AutoCoderConfig(search_mode="bogus")
+    with pytest.raises(ValueError, match="min_match_grade"):
+        AutoCoderConfig(min_match_grade="definite")
+    # Real vocabulary accepted (incl. legacy aliases)
+    for grade in ("certain", "exact", "probable", "possible", "broader", "ambiguous"):
+        AutoCoderConfig(min_match_grade=grade)
+    for mode in ("lexical", "hybrid", "semantic"):
+        AutoCoderConfig(search_mode=mode)

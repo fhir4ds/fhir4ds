@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fhir4ds-v2"
-version = "0.0.21"
+version = "0.0.22"
 description = "FHIR for Data Science — unified package for FHIRPath, CQL, and SQL-on-FHIR analytics"
 readme = "README.md"
 license = {text = "AGPL-3.0-only"}
@@ -103,8 +103,12 @@ mongo = [
 # adapter. medterm4ds is published on PyPI so it is declared normally —
 # pip install 'fhir4ds-v2[terminology]' pulls both.
 #
-# Bounded to <0.0.10: medterm4ds 0.0.9 (search fusion release — hybrid
-# search is now reciprocal-rank fusion over the UNION of lexical +
+# Bounded to <0.0.11: medterm4ds 0.0.10 (search performance release —
+# cached lexical orphan surfaces, hybrid fusion depth 25, v3-index-ready
+# posting keys with a 2-char acronym casing guard; reviewed
+# independently 2026-11-05, SHIP-WITH-FINDINGS, v2-index behavior
+# verified bit-identical for the fhir4ds consumer). 0.0.9 was the search
+# fusion release (reciprocal-rank fusion over the UNION of lexical +
 # semantic candidates with agreement-aware match_grade; exact-surface
 # lexical tier + acronym/2-char token search; single-source path
 # defaults via medterm4ds.core.paths). The 0.0.8 integration surfaces
@@ -118,7 +122,7 @@ mongo = [
 # USER_DIRECTIVES in fhir4ds-private/docs/prompts/.ai_loop/.
 terminology = [
     "httpx>=0.24",
-    "medterm4ds>=0.0.9,<0.0.10",
+    "medterm4ds>=0.0.10,<0.0.11",
 ]
 # Phase 4 — Clinical Notes NER. Pulls the medspaCy + HuggingFace NER +
 # SapBERT cascade transitively via medterm4ds[extraction]. fhir4ds

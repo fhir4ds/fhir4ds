@@ -49,7 +49,8 @@ test("FHIR to OMOP page teaches the three artifacts", async ({ page }) => {
   );
   await expect(page.locator(".pagination-nav__link--next")).toHaveAttribute(
     "href",
-    /\/docs\/examples\/sdc-playground\/$/,
+    // NLP example page (v0.0.22 train) slots in after FHIR → OMOP.
+    /\/docs\/examples\/autocoding\/$/,
   );
 
   // One section per step, in reading order.

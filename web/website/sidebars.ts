@@ -211,7 +211,7 @@ const sidebars: SidebarsConfig = {
         {
           type: 'doc',
           id: 'examples/autocoding',
-          label: 'Auto-Coding',
+          label: 'NLP',
         },
         {
           type: 'doc',
