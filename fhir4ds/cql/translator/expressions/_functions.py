@@ -2750,13 +2750,16 @@ class FunctionsMixin:
                         if _resolved is not None:
                             return _resolved
                     # Resource-backed define whose AST is not itself a
-                    # retrieve/union (e.g. First([...]) date defines,
-                    # CMS137) — keep the CTE identifier as the union
+                    # retrieve/union — keep the CTE identifier as the union
                     # operand; the union translation projects
-                    # (patient_id, resource) from its CTE. Non-resource
-                    # (scalar value) defines must NOT take this path —
-                    # their CTEs have no resource column (QI-Core gate
-                    # regression on CMS506/CMS74 when unrestricted).
+                    # (patient_id, resource) from its CTE.
+                    return node
+                if meta is not None:
+                    # Scalar/value CTE defines: keep the identifier as the
+                    # union operand too — the union translation projects
+                    # their (patient_id, value/resource) columns. Needed for
+                    # CMS137 `Min("First(...) Dates" union "First(...) Dates")`
+                    # where the defines are scalar but union-able.
                     return node
             return None
 
