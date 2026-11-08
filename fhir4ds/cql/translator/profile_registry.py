@@ -99,6 +99,21 @@ class ProfileRegistry:
                 with open(uscore_path, encoding="utf-8") as f:
                     extra = json.load(f).get("named_profiles", {})
                 merged = dict(extra)
+                # Collision handling: the primary (QI-Core) config stays the
+                # authority, BUT the CMS 2025 US Core suite's test data
+                # carries the USQualityCore canonical URLs in meta.profile —
+                # dropping the alternate entirely made profiled retrieves
+                # (USQualityCore.ConditionEncounterDiagnosis) filter on the
+                # QI-Core URL and match ZERO resources (CMS137 IP empty for
+                # every patient). Keep the primary entry and record the
+                # alternate URLs so the meta.profile filter can OR-chain.
+                for name, primary in registry._named_profiles.items():
+                    if name in extra:
+                        alts = list(primary.get("alternate_urls") or [])
+                        alt_url = extra[name].get("url")
+                        if alt_url and alt_url != primary.get("url") and alt_url not in alts:
+                            alts.append(alt_url)
+                        primary["alternate_urls"] = alts
                 merged.update(registry._named_profiles)
                 registry._named_profiles = merged
             except (OSError, ValueError) as exc:
@@ -296,6 +311,26 @@ class ProfileRegistry:
             if info.get("url") == profile_url:
                 return bool(info.get("meta_profile_filter"))
         return False
+
+    def profile_filter_urls(self, profile_url: str) -> list:
+        """All meta.profile URLs a retrieve with this profile_url should match.
+
+        Returns the primary URL plus any recorded ``alternate_urls``
+        (registry name-collision alternates — e.g. the USQualityCore
+        canonical for a QI-Core-primary name). The meta.profile filter
+        OR-chains these; CMS 2025 US Core test data declares the
+        USQualityCore canonicals.
+        """
+        if not profile_url:
+            return []
+        for _name, info in self._named_profiles.items():
+            if info.get("url") == profile_url:
+                urls = [profile_url]
+                for alt in info.get("alternate_urls") or []:
+                    if alt not in urls:
+                        urls.append(alt)
+                return urls
+        return [profile_url]
 
     # --- Compatibility helpers ---
 

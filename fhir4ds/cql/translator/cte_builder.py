@@ -772,27 +772,37 @@ def build_retrieve_cte(
     # resource type (e.g., qicore-condition) does NOT get filtered — it
     # matches all resources of that type.
     if profile_url and _registry.needs_profile_filter(resource_type, profile_url):
-        where_conditions.append(
+        # OR-chain the primary URL and any registry alternates (name-collision
+        # alternates — CMS 2025 US Core data declares USQualityCore
+        # canonicals for QI-Core-primary names; matching only the primary
+        # returned zero resources).
+        _filter_urls = _registry.profile_filter_urls(profile_url)
+        _profile_json = SQLFunctionCall(
+            name="from_json",
+            args=[
+                SQLFunctionCall(
+                    name="json_extract",
+                    args=[
+                        SQLQualifiedIdentifier(parts=["r", "resource"]),
+                        SQLLiteral("$.meta.profile"),
+                    ],
+                ),
+                SQLLiteral('["VARCHAR"]'),
+            ],
+        )
+        _contains_checks = [
             SQLFunctionCall(
                 name="list_contains",
-                args=[
-                    SQLFunctionCall(
-                        name="from_json",
-                        args=[
-                            SQLFunctionCall(
-                                name="json_extract",
-                                args=[
-                                    SQLQualifiedIdentifier(parts=["r", "resource"]),
-                                    SQLLiteral("$.meta.profile"),
-                                ],
-                            ),
-                            SQLLiteral('["VARCHAR"]'),
-                        ],
-                    ),
-                    SQLLiteral(profile_url),
-                ],
+                args=[_profile_json, SQLLiteral(u)],
             )
-        )
+            for u in _filter_urls
+        ]
+        _profile_check = _contains_checks[0]
+        for _extra_check in _contains_checks[1:]:
+            _profile_check = SQLBinaryOp(
+                operator="OR", left=_profile_check, right=_extra_check,
+            )
+        where_conditions.append(_profile_check)
 
     # Add audit evidence item column when audit_mode is enabled
     if context and context.audit_mode:

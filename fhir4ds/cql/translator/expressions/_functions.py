@@ -2829,8 +2829,60 @@ class FunctionsMixin:
             and (getattr(arg, "operator", "") or "").strip().lower() in {"union", "|"}
         ):
             _mm_resolved = _resolve_union_leaf(arg)
+            _mm_union = None
             if _mm_resolved is not None:
                 _mm_union = self.translate(_mm_resolved, usage=ExprUsage.LIST)
+                if isinstance(_mm_union, SQLSubquery) and isinstance(_mm_union.query, SQLUnion):
+                    _mm_union = _mm_union.query
+                if isinstance(_mm_union, SQLUnion):
+                    # Value-column define operands arrive as bare quoted CTE
+                    # identifiers; the render-time set-operand normalizer
+                    # projects `resource` blindly — for VALUE defines
+                    # (First(...) date defines) that feeds raw resource JSON
+                    # into the aggregate (CMS137 CAST-AS-TIMESTAMP
+                    # conversion error). Replace identifier operands whose
+                    # define meta says value-column with subqueries that
+                    # project the VALUE column.
+                    _new_ops = []
+                    for _op in _mm_union.operands:
+                        _cand = _op
+                        if isinstance(_cand, SQLSubquery) and isinstance(_cand.query, SQLSelect):
+                            _cand = _cand.query
+                        _cte_name = None
+                        if isinstance(_cand, SQLIdentifier) and _cand.quoted:
+                            _cte_name = _cand.name
+                        elif (
+                            isinstance(_cand, SQLSelect)
+                            and isinstance(_cand.from_clause, SQLAlias)
+                            and isinstance(_cand.from_clause.expr, SQLIdentifier)
+                            and _cand.from_clause.expr.quoted
+                        ):
+                            _cte_name = _cand.from_clause.expr.name
+                        elif (
+                            isinstance(_cand, SQLSelect)
+                            and isinstance(_cand.from_clause, SQLIdentifier)
+                            and _cand.from_clause.quoted
+                        ):
+                            _cte_name = _cand.from_clause.name
+                        if _cte_name is not None:
+                            _m = self.context.definition_meta.get(_cte_name)
+                            if _m is not None and not getattr(_m, "has_resource", False):
+                                _vc = getattr(_m, "value_column", None) or "value"
+                                _op = SQLSubquery(query=SQLSelect(
+                                    columns=[
+                                        SQLIdentifier(name="patient_id"),
+                                        SQLAlias(
+                                            expr=SQLIdentifier(name=_vc),
+                                            alias="resource",
+                                        ),
+                                    ],
+                                    from_clause=SQLAlias(
+                                        expr=SQLIdentifier(name=_cte_name, quoted=True),
+                                        alias="sub",
+                                    ),
+                                ))
+                        _new_ops.append(_op)
+                    _mm_union.operands = _new_ops
                 if isinstance(_mm_union, SQLUnion):
                     # Correlate to the PATIENT context: this aggregate is
                     # commonly a with-clause SOURCE (`with (Min("A" union

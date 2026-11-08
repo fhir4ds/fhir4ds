@@ -2122,11 +2122,32 @@ class QueryMixin:
             if isinstance(expr_node, Identifier):
                 name = expr_node.name
                 if hasattr(self.context, '_definition_names') and name in self.context._definition_names:
+                    _meta = self.context.definition_meta.get(name)
                     if _definition_has_resource_rows(name):
                         return SQLSubquery(query=SQLSelect(
                             columns=[
                                 SQLIdentifier(name="patient_id"),
                                 SQLIdentifier(name="resource"),
+                            ],
+                            from_clause=SQLAlias(
+                                expr=SQLIdentifier(name=name, quoted=True),
+                                alias="sub",
+                            ),
+                        ))
+                    # Value-column defines (e.g. First(...) date defines —
+                    # CMS137 "Treatment Initiation With ... Dates"): project
+                    # the define's VALUE column as the operand's element
+                    # column. Review MEDIUM-5: reading `.resource` on value
+                    # defines fed raw resource JSON into temporal casts.
+                    if _meta is not None:
+                        _val_col = getattr(_meta, "value_column", None) or "value"
+                        return SQLSubquery(query=SQLSelect(
+                            columns=[
+                                SQLIdentifier(name="patient_id"),
+                                SQLAlias(
+                                    expr=SQLIdentifier(name=_val_col),
+                                    alias="resource",
+                                ),
                             ],
                             from_clause=SQLAlias(
                                 expr=SQLIdentifier(name=name, quoted=True),
