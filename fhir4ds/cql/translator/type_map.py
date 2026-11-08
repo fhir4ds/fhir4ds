@@ -818,7 +818,12 @@ class TypeMapBuilder:
                 and isinstance(sources[0], N.QuerySource)
             ):
                 source_type = self.type_of(sources[0].expression)
-                if source_type.bare_name != "List":
+                # Only apply the singular rule when the source type is KNOWN
+                # and non-list. Unknown/Any-typed sources (dynamic FHIR
+                # properties, untyped aliases) may well be lists — treating
+                # them as singular silently mistypes the query (review
+                # HIGH-3).
+                if source_type.bare_name not in ("List", "Any"):
                     return element_type
             if element_type.bare_name != "Any":
                 return CQLTypeRef("List", args=(element_type,))
@@ -1560,7 +1565,13 @@ def infer_cql_type_compat(context: Any, ast_node: Any) -> str:
                 _sources = ast_node.source if isinstance(ast_node.source, list) else [ast_node.source]
                 if len(_sources) == 1 and isinstance(_sources[0], QuerySource):
                     _src_type = infer_cql_type_compat(context, _sources[0].expression)
-                    if not _src_type.startswith("List<"):
+                    # Only apply the singular rule when the source type is
+                    # KNOWN and non-list — Any-typed sources may be lists
+                    # (review HIGH-3).
+                    if (
+                        _src_type != "Any"
+                        and not _src_type.startswith("List<")
+                    ):
                         return return_type
                 return f"List<{return_type}>"
         # No return clause: type is same as source

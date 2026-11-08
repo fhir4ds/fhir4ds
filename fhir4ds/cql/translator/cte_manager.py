@@ -575,56 +575,6 @@ class CTEManagerMixin:
         from ..translator.ast_utils import replace_qualified_alias as _rqa_deep
         return _rqa_deep(sql_ast, "_pt", from_alias)
 
-        def _rqa_shallow(node):
-            """Rewrite `_pt.X` -> `<from_alias>.X` at this level only."""
-            if node is None or isinstance(node, (SQLSubquery, SQLExists)):
-                return node
-            if isinstance(node, SQLQualifiedIdentifier):
-                if node.parts and node.parts[0] == "_pt":
-                    return SQLQualifiedIdentifier(parts=[from_alias] + list(node.parts[1:]))
-                return node
-            if isinstance(node, SQLBinaryOp):
-                return SQLBinaryOp(
-                    operator=node.operator,
-                    left=_rqa_shallow(node.left),
-                    right=_rqa_shallow(node.right),
-                )
-            if isinstance(node, SQLUnaryOp):
-                return SQLUnaryOp(
-                    operator=node.operator,
-                    operand=_rqa_shallow(node.operand),
-                    prefix=node.prefix,
-                )
-            if isinstance(node, SQLFunctionCall):
-                cls = type(node)
-                new_args = [
-                    a if isinstance(a, (SQLSubquery, SQLExists)) else _rqa_shallow(a)
-                    for a in (node.args or [])
-                ]
-                try:
-                    return cls(name=node.name, args=new_args, distinct=getattr(node, "distinct", None))
-                except TypeError:
-                    return cls(name=node.name, args=new_args)
-            if isinstance(node, SQLAlias):
-                return SQLAlias(expr=_rqa_shallow(node.expr), alias=node.alias)
-            if isinstance(node, SQLCase):
-                nc = [(_rqa_shallow(c), _rqa_shallow(r)) for c, r in node.when_clauses]
-                ne = _rqa_shallow(node.else_clause) if node.else_clause is not None else None
-                return SQLCase(when_clauses=nc, else_clause=ne)
-            return node
-
-        return SQLSelect(
-            columns=[_rqa_shallow(c) for c in (sql_ast.columns or [])],
-            from_clause=sql_ast.from_clause,
-            joins=sql_ast.joins,
-            where=_rqa_shallow(sql_ast.where),
-            group_by=sql_ast.group_by,
-            having=_rqa_shallow(sql_ast.having),
-            order_by=[(_rqa_shallow(e), d) for e, d in sql_ast.order_by] if sql_ast.order_by else None,
-            distinct=sql_ast.distinct,
-            distinct_on=sql_ast.distinct_on,
-            limit=sql_ast.limit,
-        )
 
     def _wrap_definition_cte(
         self,
@@ -1773,16 +1723,13 @@ class CTEManagerMixin:
         provisional = fc.expr.name
         actual = prov_to_actual.get(provisional, provisional)
         if actual != provisional:
+            import dataclasses as _dc
             new_ident = SQLIdentifier(name=actual, quoted=True)
             new_from = SQLAlias(expr=new_ident, alias=fc.alias)
-            return SQLSelect(
-                columns=cte_body.columns,
-                from_clause=new_from,
-                where=cte_body.where,
-                group_by=cte_body.group_by,
-                order_by=cte_body.order_by,
-                limit=cte_body.limit,
-            )
+            # dataclasses.replace preserves ALL clauses (joins, having,
+            # distinct, distinct_on) — the hand-built reconstruction silently
+            # dropped them (review MEDIUM-10).
+            return _dc.replace(cte_body, from_clause=new_from)
         return cte_body
 
     @staticmethod

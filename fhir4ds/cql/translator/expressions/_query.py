@@ -2060,7 +2060,7 @@ class QueryMixin:
         if not isinstance(op, str):
             return None
         op_lower = op.lower()
-        if op_lower not in ('intersect', 'union', 'except'):
+        if op_lower not in ('intersect', 'union', 'except', '|'):
             return None
 
         def _definition_has_resource_rows(name: str, visited: set[str] | None = None) -> bool:
@@ -2207,7 +2207,7 @@ class QueryMixin:
             # For nested set operations, recurse
             if isinstance(expr_node, BinaryExpression):
                 nested_op = getattr(expr_node, 'operator', '')
-                if isinstance(nested_op, str) and nested_op.lower() in ('intersect', 'union', 'except'):
+                if isinstance(nested_op, str) and nested_op.lower() in ('intersect', 'union', 'except', '|'):
                     nested = self._try_set_op_source(expr_node, alias, node, usage)
                     if nested is not None:
                         return SQLSubquery(query=nested) if not isinstance(nested, SQLSubquery) else nested

@@ -1699,14 +1699,17 @@ class SQLFragment:
         """
         for cte_def in self.ctes:
             self._dedup_cte(cte_def, min_occurrences)
-        # Laterals may end up attached to a scope that cannot see their
-        # references (transforms after dedup can relocate/wrap selects —
-        # e.g. _ensure_resource_column wrapping). Unwrap any lateral whose
-        # referenced aliases are not visible at its FINAL attach scope:
-        # DuckDB raises "Referenced table X not found" at bind time
-        # otherwise (CMS156 pattern: lateral referencing an alias defined
-        # inside the FROM chain's derived tables).
-        self._unwrap_scope_unsafe_laterals(cte_def.query)
+            # Laterals may end up attached to a scope that cannot see their
+            # references (transforms after dedup can relocate/wrap selects —
+            # e.g. _ensure_resource_column wrapping). Unwrap any lateral whose
+            # referenced aliases are not visible at its FINAL attach scope:
+            # DuckDB raises "Referenced table X not found" at bind time
+            # otherwise (CMS156 pattern: lateral referencing an alias defined
+            # inside the FROM chain's derived tables).
+            self._unwrap_scope_unsafe_laterals(cte_def.query)
+        # The main query is validated too — laterals on the outermost select
+        # have the same visibility constraints (review HIGH-1).
+        self._unwrap_scope_unsafe_laterals(self.main_query)
 
     def _unwrap_scope_unsafe_laterals(self, node) -> None:
         """Recursively validate lateral joins and remove scope-unsafe ones."""
@@ -1903,9 +1906,19 @@ class SQLFragment:
         # FROM alias (`a.*`) so the projection stays the FROM table's
         # columns only. Keeps UNION operand alignment (CMS-DEF-04/CMS22)
         # without skipping the dedup entirely (a skip exploded CMS0334
-        # SQL 15x and hung the gate).
+        # SQL 15x and hung the gate). When the select has JOINS, qualifying
+        # would drop the joined tables' columns AND appending laterals
+        # would widen the star — neither is safe, so skip the dedup for
+        # star+joins selects entirely (review MEDIUM-8).
         _cols = select.columns or []
-        if len(_cols) == 1 and isinstance(_cols[0], SQLIdentifier) and _cols[0].name == "*":
+        _is_star = (
+            len(_cols) == 1
+            and isinstance(_cols[0], SQLIdentifier)
+            and _cols[0].name == "*"
+        )
+        if _is_star and select.joins:
+            return
+        if _is_star:
             if isinstance(select.from_clause, SQLAlias):
                 select.columns = [SQLQualifiedIdentifier(
                     parts=[select.from_clause.alias, "*"]

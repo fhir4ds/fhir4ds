@@ -2773,7 +2773,12 @@ class FunctionsMixin:
             if resolved is not None:
                 union_sql = self.translate(resolved, usage=ExprUsage.LIST)
                 if isinstance(union_sql, SQLUnion):
-                    _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
+                    # Correlate to the PATIENT context: this aggregate can be
+                    # a with-clause SOURCE (`with (Count(...) ...) X`) where
+                    # resource_alias points at the alias being defined —
+                    # self-correlation (mirrors the Min/Max-union branch;
+                    # review MEDIUM-4).
+                    _outer_pid = self.context.patient_alias or "_pt"
                     correlated = SQLSubquery(query=SQLSelect(
                         columns=[SQLFunctionCall(name="COUNT", args=[SQLIdentifier(name="*")])],
                         from_clause=SQLAlias(expr=union_sql, alias="_agg_src"),

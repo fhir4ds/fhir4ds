@@ -593,6 +593,7 @@ def _propagate_select_over_union(
             joins=select.joins,
             order_by=select.order_by,
             distinct=select.distinct,
+            distinct_on=select.distinct_on,
             limit=select.limit,
         ),
         common,

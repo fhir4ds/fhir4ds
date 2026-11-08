@@ -1731,6 +1731,14 @@ class ListsMixin:
 
         if isinstance(expr, CQLIdentifier):
             # Bare identifier → property of the source alias
+            # NOTE (review MEDIUM-12, deliberately NOT applied): skipping
+            # qualification for names that match parameters/let-variables
+            # breaks real content — included-library sorts (CQMCommon)
+            # share the main context's let_variables, so a sort identifier
+            # named like a main-library let (CMS871 `period`) would skip
+            # qualification and dangle (verified A/B on the QI-Core gate).
+            # The hypothetical it protects (a parameter ref inside a sort
+            # expression) has no occurrence in any measure corpus.
             if not self.context.is_alias(expr.name) and not self.context.lookup_symbol(expr.name):
                 return Property(source=CQLIdentifier(name=alias), path=expr.name)
             return expr
