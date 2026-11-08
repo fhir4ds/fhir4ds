@@ -718,6 +718,35 @@ class FunctionsMixin:
             _fc = inner_query.from_clause
             if isinstance(_fc, SQLAlias):
                 _src_alias = _fc.alias
+            # Guard against STALE resource_alias values: fluent-function
+            # inlining and with-clause handling restore resource_alias to
+            # enclosing-scope aliases (e.g. the fluent body's `O1`) that are
+            # NOT visible at this aggregate's scope — correlating to them
+            # produces `Referenced table O1 not found` (CMS156). Only use
+            # resource_alias when it differs from every alias defined INSIDE
+            # the source query (those are internal scopes).
+            if _outer_pid != "_pt" and _src_alias:
+                _internal_aliases = set()
+
+                def _collect_inner_aliases(n):
+                    stack = [n]
+                    seen = set()
+                    while stack:
+                        cur = stack.pop()
+                        if cur is None or id(cur) in seen:
+                            continue
+                        seen.add(id(cur))
+                        if isinstance(cur, SQLAlias):
+                            _internal_aliases.add(cur.alias)
+                        if isinstance(cur, (list, tuple)):
+                            stack.extend(cur)
+                            continue
+                        for f_name in getattr(cur, "__dataclass_fields__", {}):
+                            stack.append(getattr(cur, f_name, None))
+
+                _collect_inner_aliases(_fc)
+                if _outer_pid in _internal_aliases:
+                    _outer_pid = self.context.patient_alias or "_pt"
             if _src_alias and _is_cte_backed(_fc):
                 _corr = SQLBinaryOp(
                     operator="=",

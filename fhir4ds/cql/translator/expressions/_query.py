@@ -5419,7 +5419,8 @@ class QueryMixin:
             # previous clause's alias (transitively linked to the outer
             # patient through clause 1). Single-with queries produce the
             # same flat shape as before (no behavioral change).
-            _with_parts = []  # (exists_expr, without, alias) per clause
+            _with_parts = []  # (exists_expr, without, alias, source_sql) per clause
+            self._active_with_parts = _with_parts
             self.context.push_scope()
             try:
                 _prior_with_aliases: list[str] = []
@@ -5526,7 +5527,7 @@ class QueryMixin:
                         where=full_condition,
                     ))
                     exists_expr = SQLExists(subquery=exists_subquery) if not is_without else SQLUnaryOp(operator="NOT", operand=SQLExists(subquery=exists_subquery))
-                    _with_parts.append((exists_expr, is_without, wc_alias))
+                    _with_parts.append((exists_expr, is_without, wc_alias, wc_source_sql))
             finally:
                 self.context.pop_scope()
 
@@ -5534,7 +5535,7 @@ class QueryMixin:
             # nests inside clause i-1's EXISTS WHERE (before its patient_corr
             # is irrelevant — appended via AND; the previous alias binds).
             for _idx in range(1, len(_with_parts)):
-                _prev_exists, _prev_without, _prev_alias = _with_parts[_idx - 1]
+                _prev_exists, _prev_without, _prev_alias = _with_parts[_idx - 1][:3]
                 _this_exists = _with_parts[_idx][0]
                 _prev_sel = _prev_exists.subquery if isinstance(_prev_exists, SQLExists) else _prev_exists.operand.subquery
                 _inner_sel = _prev_sel.query
@@ -5558,6 +5559,109 @@ class QueryMixin:
                 )
 
             exists_expr = _with_parts[0][0]
+
+            # `return all <with-alias>` (CMS156): the whole-element return
+            # references the WITH-clause alias. Swap the composition: FROM =
+            # the with source (aliased as the with alias); WHERE = a FLIPPED
+            # EXISTS iterating the PRIMARY source, correlating to the outer
+            # with alias — the such-that references both aliases and both
+            # roles resolve naturally.
+            from ...parser.ast_nodes import Identifier as _WithRetIdent
+            _ret_node = getattr(node.return_clause, "expression", None) if getattr(node, "return_clause", None) else None
+            if (
+                isinstance(_ret_node, _WithRetIdent)
+                and len(_with_parts) == 1
+                and not _with_parts[0][1]
+                and isinstance(result, SQLSelect)
+                and result.from_clause is not None
+            ):
+                _w_alias = _with_parts[0][2]
+                if _ret_node.name == _w_alias:
+                    _w_src = _with_parts[0][3]
+                    # Normalize the with source to a rows FROM: bare CTE
+                    # identifiers / placeholders become
+                    # (SELECT patient_id, resource FROM <cte>).
+                    _w_from_expr = _w_src
+                    if isinstance(_w_from_expr, RetrievePlaceholder):
+                        # Resolve to a rows FROM at phase 3 (the placeholder
+                        # becomes the CTE name inside FROM).
+                        _w_from_expr = SQLSubquery(query=SQLSelect(
+                            columns=[SQLIdentifier(name="patient_id"), SQLIdentifier(name="resource")],
+                            from_clause=SQLAlias(expr=_w_src, alias="_ws"),
+                        ))
+                    elif isinstance(_w_from_expr, SQLIdentifier) and _w_from_expr.quoted:
+                        _w_from_expr = SQLSubquery(query=SQLSelect(
+                            columns=[SQLIdentifier(name="patient_id"), SQLIdentifier(name="resource")],
+                            from_clause=SQLAlias(expr=_w_src, alias="_ws"),
+                        ))
+                    elif isinstance(_w_from_expr, SQLSubquery) and isinstance(_w_from_expr.query, SQLSelect):
+                        # The with handler's scalar wrapper renders bare CTE
+                        # identifiers as COLUMN expressions
+                        # (`SELECT "CTE" AS resource, ...`) — detect and
+                        # rebuild as a proper rows FROM.
+                        _cols = _w_from_expr.query.columns or []
+                        if (
+                            len(_cols) == 2
+                            and all(isinstance(c, SQLAlias) for c in _cols)
+                            and isinstance(_cols[0].expr, SQLIdentifier)
+                            and _cols[0].expr.quoted
+                            and _cols[0].alias == "resource"
+                        ):
+                            _w_from_expr = SQLSubquery(query=SQLSelect(
+                                columns=[SQLIdentifier(name="patient_id"), SQLIdentifier(name="resource")],
+                                from_clause=SQLAlias(expr=_cols[0].expr, alias="_ws"),
+                            ))
+                    else:
+                        _w_from_expr = SQLSubquery(query=SQLSelect(
+                            columns=[
+                                SQLAlias(expr=_w_from_expr, alias="resource"),
+                                SQLAlias(
+                                    expr=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
+                                    alias="patient_id",
+                                ),
+                            ],
+                        ))
+                    # FLIPPED exists: iterate the primary source (result's
+                    # FROM + WHERE) correlating to the outer with alias.
+                    _prim_alias = None
+                    if isinstance(result.from_clause, SQLAlias):
+                        _prim_alias = result.from_clause.alias
+                    if _prim_alias:
+                        _such = _with_parts[0][0]
+                        _inner_where = None
+                        if isinstance(_such, SQLExists) and isinstance(_such.subquery, SQLSubquery):
+                            _inner_sel = _such.subquery.query
+                            _inner_where = _inner_sel.where
+                        if _inner_where is not None:
+                            _corr = SQLBinaryOp(
+                                operator="=",
+                                left=SQLQualifiedIdentifier(parts=[_prim_alias, "patient_id"]),
+                                right=SQLQualifiedIdentifier(parts=[_w_alias, "patient_id"]),
+                            )
+                            _flip_where = (
+                                SQLBinaryOp(operator="AND", left=_inner_where, right=_corr)
+                                if _inner_where else _corr
+                            )
+                            if result.where is not None:
+                                _flip_where = SQLBinaryOp(
+                                    operator="AND", left=result.where, right=_flip_where,
+                                )
+                            _swapped = SQLSelect(
+                                columns=[
+                                    SQLQualifiedIdentifier(parts=[_w_alias, "resource"]),
+                                    # Aggregate consumers correlate
+                                    # <outer>.patient_id = _pt.patient_id over
+                                    # this select — project patient_id too.
+                                    SQLQualifiedIdentifier(parts=[_w_alias, "patient_id"]),
+                                ],
+                                from_clause=SQLAlias(expr=_w_from_expr, alias=_w_alias),
+                                where=SQLExists(subquery=SQLSubquery(query=SQLSelect(
+                                    columns=[SQLLiteral(value=1)],
+                                    from_clause=result.from_clause,
+                                    where=_flip_where,
+                                ))),
+                            )
+                            return _swapped
 
             # Add to existing WHERE clause
             if isinstance(result, SQLSelect):
@@ -5596,6 +5700,12 @@ class QueryMixin:
 
         # Apply RETURN clause if present (skip when multi-source already handled it)
         if not _multi_source_done and node.return_clause:
+            # `return all <with-alias>` (CMS156): the whole-element return
+            # references a WITH-clause alias, not the primary source. The
+            # with alias's rows live inside the correlated EXISTS, so the
+            # correct shape swaps the FROM to the WITH source (aliased as
+            # the referenced alias) and keeps the EXISTS as the WHERE —
+            # the such-that's references to both aliases resolve naturally.
             # Special case: when source is a list-producing function call
             # (e.g., collapse_intervals, fhirpath_text) with an iteration alias
             # and a return clause, use list_transform to apply per-element
