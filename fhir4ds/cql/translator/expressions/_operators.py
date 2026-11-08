@@ -4648,6 +4648,13 @@ class OperatorsMixin:
             promoted = _promote_fhirpath_text_list(sql_node)
             return promoted, promoted is not sql_node
 
+        import os as _os_uo
+        if _os_uo.environ.get("F4DS_DEBUG_DR"):
+            try:
+                print("[uo-in] left:", left.to_sql()[:100])
+                print("[uo-in] right:", right.to_sql()[:100])
+            except Exception:
+                print("[uo-in] left:", type(left).__name__, "right:", type(right).__name__)
         _right_peer_rows = _operand_rows_shaped(right, getattr(expr, "right", None))
         _left_peer_rows = _operand_rows_shaped(left, getattr(expr, "left", None))
         # Capture the PRE-promotion operands for interval detection: a
@@ -4778,6 +4785,19 @@ class OperatorsMixin:
                 if (len(cols) >= 1 and len(cols) <= 2
                         and from_ident and from_ident.quoted
                         and not inner.joins):
+                    # Only widen PLAIN column references (bare/qualified
+                    # identifiers naming CTE columns). A computed column —
+                    # e.g. the ToDate(...) CASE from a query's RETURN
+                    # expression (`return all <let>`) — carries the query's
+                    # semantic payload; widening to SELECT * discards it and
+                    # the union arms project raw resources instead of the
+                    # returned values (CMS137 Treatment Initiation Dates).
+                    def _is_plain_col_ref(c):
+                        if isinstance(c, SQLAlias):
+                            c = c.expr
+                        return isinstance(c, (SQLIdentifier, SQLQualifiedIdentifier))
+                    if not all(_is_plain_col_ref(c) for c in cols):
+                        return expr
                     if effective_where is None:
                         return SQLSubquery(query=SQLSelect(
                             columns=[SQLIdentifier(name="*")],
