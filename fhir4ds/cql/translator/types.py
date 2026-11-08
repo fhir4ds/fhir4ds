@@ -1699,6 +1699,121 @@ class SQLFragment:
         """
         for cte_def in self.ctes:
             self._dedup_cte(cte_def, min_occurrences)
+        # Laterals may end up attached to a scope that cannot see their
+        # references (transforms after dedup can relocate/wrap selects —
+        # e.g. _ensure_resource_column wrapping). Unwrap any lateral whose
+        # referenced aliases are not visible at its FINAL attach scope:
+        # DuckDB raises "Referenced table X not found" at bind time
+        # otherwise (CMS156 pattern: lateral referencing an alias defined
+        # inside the FROM chain's derived tables).
+        self._unwrap_scope_unsafe_laterals(cte_def.query)
+
+    def _unwrap_scope_unsafe_laterals(self, node) -> None:
+        """Recursively validate lateral joins and remove scope-unsafe ones."""
+        if node is None:
+            return
+        if isinstance(node, (list, tuple)):
+            for item in node:
+                self._unwrap_scope_unsafe_laterals(item)
+            return
+        if not hasattr(node, "__dataclass_fields__"):
+            return
+
+        if isinstance(node, SQLSelect) and node.joins:
+            visible = set()
+            if isinstance(node.from_clause, SQLAlias):
+                visible.add(node.from_clause.alias)
+            elif isinstance(node.from_clause, SQLIdentifier):
+                visible.add(node.from_clause.name)
+            visible.add("_pt")
+            kept_joins = []
+            for join in node.joins:
+                if (
+                    isinstance(join, SQLJoin)
+                    and join.join_type == "CROSS JOIN LATERAL"
+                    and isinstance(join.table, SQLSelect)
+                    and not self._lateral_join_scope_safe(join, visible)
+                ):
+                    # Unwrap: restore the original expression in place of
+                    # <alias>.value references and drop the join.
+                    lat_alias = join.alias
+                    orig_expr = None
+                    cols = join.table.columns or []
+                    if cols and isinstance(cols[0], SQLAlias):
+                        orig_expr = cols[0].expr
+                    if orig_expr is not None and lat_alias:
+                        node.columns = [
+                            self._restore_lateral_ref(c, lat_alias, orig_expr)
+                            for c in (node.columns or [])
+                        ]
+                        if node.where is not None:
+                            node.where = self._restore_lateral_ref(
+                                node.where, lat_alias, orig_expr
+                            )
+                    continue
+                kept_joins.append(join)
+            node.joins = kept_joins or None
+
+        for field_name in node.__dataclass_fields__:
+            self._unwrap_scope_unsafe_laterals(getattr(node, field_name, None))
+
+    def _lateral_join_scope_safe(self, join: "SQLJoin", visible: set) -> bool:
+        """A lateral may reference only its attach scope's visible aliases
+        (or aliases it defines internally). Nested-subquery references to
+        visible aliases are allowed (DuckDB supports nested correlation to
+        the lateral's own scope chain)."""
+        internal = set()
+        referenced = []
+        stack = [join.table]
+        seen = set()
+        while stack:
+            cur = stack.pop()
+            if cur is None or id(cur) in seen:
+                continue
+            seen.add(id(cur))
+            if isinstance(cur, SQLAlias):
+                internal.add(cur.alias)
+            elif isinstance(cur, SQLSelect) and cur.from_clause is not None:
+                fr = cur.from_clause
+                if isinstance(fr, SQLAlias):
+                    internal.add(fr.alias)
+                elif isinstance(fr, SQLIdentifier):
+                    internal.add(fr.name)
+            elif isinstance(cur, SQLQualifiedIdentifier) and cur.parts:
+                referenced.append(cur.parts[0])
+            if isinstance(cur, (list, tuple)):
+                stack.extend(cur)
+                continue
+            for field_name in getattr(cur, "__dataclass_fields__", {}):
+                stack.append(getattr(cur, field_name, None))
+        return all(alias in internal or alias in visible for alias in referenced)
+
+    def _restore_lateral_ref(self, node, lat_alias: str, orig_expr):
+        """Replace `<lat_alias>.value` references with the original expression."""
+        if node is None:
+            return node
+        if isinstance(node, SQLQualifiedIdentifier) and node.parts == [lat_alias, "value"]:
+            return orig_expr
+        if isinstance(node, (list, tuple)):
+            new_items = [self._restore_lateral_ref(c, lat_alias, orig_expr) for c in node]
+            return type(node)(new_items) if isinstance(node, tuple) else new_items
+        if not hasattr(node, "__dataclass_fields__"):
+            return node
+        # Do not descend into nested query scopes: lateral references do
+        # not occur there (laterals only replace projection/WHERE refs).
+        if isinstance(node, (SQLSubquery, SQLExists)):
+            return node
+        changed = False
+        for field_name in node.__dataclass_fields__:
+            val = getattr(node, field_name, None)
+            new_val = self._restore_lateral_ref(val, lat_alias, orig_expr)
+            if new_val is not val:
+                try:
+                    setattr(node, field_name, new_val)
+                    changed = True
+                except Exception:
+                    pass
+        return node
 
     def _dedup_cte(self, cte_def: 'CTEDefinition', min_occ: int) -> None:
         """Apply lateral alias deduplication to a single CTE definition."""

@@ -1313,6 +1313,12 @@ class CTEManagerMixin:
                         else:
                             value_columns.append((col, "value"))
                     new_columns = [patient_id_col] + value_columns
+                    # Preserve the select's OWN joins (e.g. the
+                    # _fix_stale_pt_references lateral re-anchor attaches
+                    # the original FROM subquery as a CROSS JOIN LATERAL
+                    # join — dropping it here orphans every alias reference
+                    # in the value columns; CMS129).
+                    _existing_joins = list(sql_ast.joins) if sql_ast.joins else []
                     if joins:
                         # Fix JOIN conditions: replace "_pt" alias with actual FROM alias
                         from ..translator.types import SQLAlias as SQLAlias3, SQLQualifiedIdentifier as SQLQI3
@@ -1347,6 +1353,7 @@ class CTEManagerMixin:
                     return SQLSelect(
                         columns=new_columns,
                         from_clause=sql_ast.from_clause,
+                        joins=_existing_joins or None,
                         where=sql_ast.where,
                         group_by=sql_ast.group_by,
                         having=sql_ast.having,

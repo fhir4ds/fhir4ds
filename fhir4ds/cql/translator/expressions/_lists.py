@@ -1727,7 +1727,7 @@ class ListsMixin:
         of the query source. This rewrites them as Property(source=Identifier(alias), path=name)
         so they translate correctly.
         """
-        from ...parser.ast_nodes import Identifier as CQLIdentifier, Property, MethodInvocation, UnaryExpression
+        from ...parser.ast_nodes import Identifier as CQLIdentifier, Property, MethodInvocation, UnaryExpression, FunctionRef
 
         if isinstance(expr, CQLIdentifier):
             # Bare identifier → property of the source alias
@@ -1743,6 +1743,17 @@ class ListsMixin:
         if isinstance(expr, UnaryExpression):
             # Qualify the operand
             expr.operand = self._qualify_sort_identifiers(expr.operand, alias)
+            return expr
+
+        if isinstance(expr, FunctionRef):
+            # Component-extraction sorts parse as FunctionRefs
+            # (``sort by date from authoredOn`` -> FunctionRef('date',
+            # [Identifier('authoredOn')])). Qualify bare identifier args
+            # so they resolve against the source alias (CMS50).
+            expr.arguments = [
+                self._qualify_sort_identifiers(a, alias)
+                for a in (expr.arguments or [])
+            ]
             return expr
 
         if isinstance(expr, Property):

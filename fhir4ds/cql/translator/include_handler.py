@@ -413,6 +413,27 @@ class IncludeHandlerMixin:
             self._included_definitions[prefixed_name] = sql_expr
             self._context.register_included_definition(prefixed_name)
 
+            # Copy let-variable CTEs promoted while the child translated
+            # this definition, keyed under the PREFIXED name so the CTE
+            # emission injects them BEFORE this definition's CTE. Without
+            # this, the let-lookup references inside the definition body
+            # forward-reference CTEs that are only emitted much later
+            # (CMS104 "Table _let_... does not exist"). Bodies get the
+            # same intra-library prefix rewrite so child-local CTE refs
+            # resolve in the parent's namespace.
+            _child_lets = getattr(
+                included_translator._context, "_let_variable_ctes", {}
+            ).get(def_name)
+            if _child_lets:
+                _parent_lets = self._context._let_variable_ctes.setdefault(
+                    prefixed_name, {}
+                )
+                for _let_cte_name, _let_body in _child_lets.items():
+                    if _let_cte_name not in _parent_lets:
+                        _parent_lets[_let_cte_name] = self._prefix_intra_library_refs(
+                            _let_body, alias, _def_names_in_lib
+                        )
+
             # Copy DefinitionMeta so _build_included_definition_cte uses proper
             # metadata-based wrapping instead of the fallback path.
             included_meta = included_translator._context.definition_meta.get(def_name)

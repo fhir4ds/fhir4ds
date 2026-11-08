@@ -932,6 +932,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # These must come before main definitions so they can be referenced
         # Topologically sort included definitions so dependencies come first
         included_ordered = self._sort_included_definitions(self._included_definitions)
+        # Track CTE names case-insensitively (DuckDB CTE names are
+        # case-insensitive) — initialized BEFORE section 4 so the included
+        # let-CTE injection can dedupe against existing names.
+        seen_lower: dict[str, str] = {}
         # Reset the pre-compute name map so it accumulates fresh for this SQL generation.
         # Compound boolean definitions reference constituent boolean CTEs by name; the map
         # lets the pre-compute body substitute audit-CTE names with pre-compute equivalents,
@@ -945,6 +949,20 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             for precte in self._pending_precte:
                 cte_defs.append(precte)
             self._pending_precte.clear()
+            # Inject let-variable CTEs registered under this included
+            # definition BEFORE its CTE — without this, lets promoted while
+            # translating the included define's body are only injected in the
+            # main-definitions loop below, i.e. AFTER this consumer, and
+            # DuckDB raises "Table _let_... does not exist" (forward
+            # reference; CMS104).
+            for let_cte_name, let_cte_body in list(
+                self._context._let_variable_ctes.get(prefixed_name, {}).items()
+            ):
+                _fixed_body = self._resolve_let_cte_source(let_cte_body, _prov_to_actual)
+                quoted = f'"{let_cte_name}"'
+                if quoted.lower() not in seen_lower:
+                    seen_lower[quoted.lower()] = quoted
+                    cte_defs.append(CTEDefinition(name=quoted, query=_fixed_body))
             cte_defs.append(CTEDefinition(name=f'"{prefixed_name}"', query=cte_ast))
 
         # 5. Build CTEs for each definition (in dependency order)
@@ -964,7 +982,6 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             definition_ctes[prefixed_name] = (quoted_name, inc_has_resource)
 
         # Track CTE names case-insensitively (DuckDB CTE names are case-insensitive)
-        seen_lower: dict[str, str] = {}
         for cte in cte_defs:
             seen_lower[cte.name.lower()] = cte.name
 
