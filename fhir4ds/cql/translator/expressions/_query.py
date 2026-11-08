@@ -2135,6 +2135,75 @@ class QueryMixin:
                         ))
                     # Non-resource definitions: fall through
                     return None
+            # Bare retrieves as union operands (CMS137):
+            # ([Procedure: "VS"]) union ... — the retrieve translates to its
+            # CTE reference; project (patient_id, resource) from it.
+            if isinstance(expr_node, Retrieve):
+                _rt_sql = self.translate(expr_node, usage=ExprUsage.LIST)
+                _rt_from = _rt_sql
+                if isinstance(_rt_from, SQLSubquery):
+                    _rt_from = _rt_from.query
+                return SQLSubquery(query=SQLSelect(
+                    columns=[
+                        SQLIdentifier(name="patient_id"),
+                        SQLIdentifier(name="resource"),
+                    ],
+                    from_clause=SQLAlias(expr=_rt_from, alias="sub"),
+                ))
+            # Fluent-call operands (CMS137 ([Procedure: "VS"]).isProcedurePerformed()):
+            # translate to rows form; accept selects that already carry
+            # (patient_id, resource) columns — the fluent body is a filtered
+            # query over the retrieve.
+            if isinstance(expr_node, MethodInvocation):
+                try:
+                    _mi_sql = self.translate(expr_node, usage=ExprUsage.LIST)
+                except Exception:  # noqa: BLE001 - fall back to generic path
+                    _mi_sql = None
+                _mi_inner = _mi_sql.query if isinstance(_mi_sql, SQLSubquery) and isinstance(_mi_sql.query, SQLSelect) else _mi_sql
+                if isinstance(_mi_inner, SQLSelect) and _mi_inner.columns:
+                    _col_names = []
+                    for c in _mi_inner.columns:
+                        e = c.expr if isinstance(c, SQLAlias) else c
+                        if isinstance(e, SQLIdentifier):
+                            _col_names.append(e.name)
+                        elif isinstance(e, SQLQualifiedIdentifier):
+                            _col_names.append(e.parts[-1])
+                        else:
+                            _col_names.append(None)
+                    if _col_names == ["patient_id", "resource"]:
+                        return SQLSubquery(query=SQLSelect(
+                            columns=[
+                                SQLIdentifier(name="patient_id"),
+                                SQLIdentifier(name="resource"),
+                            ],
+                            from_clause=_mi_inner.from_clause,
+                            where=_mi_inner.where,
+                            joins=_mi_inner.joins,
+                            distinct=_mi_inner.distinct,
+                            limit=_mi_inner.limit,
+                        ))
+                    if len(_mi_inner.columns) == 1:
+                        # Single resource-ish projection with patient rows —
+                        # re-project with the source alias's patient_id.
+                        _mi_alias = None
+                        if isinstance(_mi_inner.from_clause, SQLAlias):
+                            _mi_alias = _mi_inner.from_clause.alias
+                        if _mi_alias:
+                            return SQLSubquery(query=SQLSelect(
+                                columns=[
+                                    SQLQualifiedIdentifier(parts=[_mi_alias, "patient_id"]),
+                                    SQLAlias(
+                                        expr=_mi_inner.columns[0].expr if isinstance(_mi_inner.columns[0], SQLAlias) else _mi_inner.columns[0],
+                                        alias="resource",
+                                    ),
+                                ],
+                                from_clause=_mi_inner.from_clause,
+                                where=_mi_inner.where,
+                                joins=_mi_inner.joins,
+                                distinct=_mi_inner.distinct,
+                                limit=_mi_inner.limit,
+                            ))
+                return None
             # For nested set operations, recurse
             if isinstance(expr_node, BinaryExpression):
                 nested_op = getattr(expr_node, 'operator', '')
@@ -5631,6 +5700,52 @@ class QueryMixin:
                         order_by=result.order_by,
                         limit=result.limit,
                         distinct=result.distinct or _return_distinct,
+                    )
+                elif isinstance(result, (SQLUnion, SQLIntersect, SQLExcept)):
+                    # Set-operation source with a RETURN clause referencing
+                    # the iteration alias (CMS137 `(A union B) X with ...
+                    # return all X`): the alias-ref return would inline the
+                    # union into column position. Rebind the alias as a
+                    # TABLE alias over the set operation and re-translate
+                    # the return so it projects the FROM's columns.
+                    _set_alias = alias or "_set_src"
+                    self.context.add_alias(_set_alias, table_alias=_set_alias)
+                    _set_return = self.translate(node.return_clause, usage=ExprUsage.SCALAR)
+                    # The alias machinery may still inline the SOURCE UNION
+                    # object itself into the return (alias ast_expr route).
+                    # Any node identical to the set-op FROM expression is
+                    # the whole-element reference (`return all X`) — replace
+                    # with the FROM's resource column.
+                    _set_from = result
+
+                    def _replace_setop_inline(n):
+                        if n is None or n is _set_from:
+                            return (
+                                SQLQualifiedIdentifier(parts=[_set_alias, "resource"])
+                                if n is _set_from else n
+                            )
+                        if isinstance(n, (list, tuple)):
+                            items = [_replace_setop_inline(c) for c in n]
+                            return type(n)(items) if isinstance(n, tuple) else items
+                        if not hasattr(n, "__dataclass_fields__"):
+                            return n
+                        if isinstance(n, (SQLSubquery, SQLExists)):
+                            return n
+                        for f_name in n.__dataclass_fields__:
+                            v = getattr(n, f_name, None)
+                            nv = _replace_setop_inline(v)
+                            if nv is not v:
+                                try:
+                                    setattr(n, f_name, nv)
+                                except Exception:  # noqa: BLE001
+                                    pass
+                        return n
+
+                    _set_return = _replace_setop_inline(_set_return)
+                    result = SQLSelect(
+                        columns=[_set_return],
+                        from_clause=SQLAlias(expr=result, alias=_set_alias),
+                        distinct=_return_distinct,
                     )
                 elif isinstance(result, SQLSubquery):
                     result = SQLSelect(
