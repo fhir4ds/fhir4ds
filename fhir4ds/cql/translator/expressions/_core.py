@@ -1338,4 +1338,4 @@ class CoreMixin:
             else self.context.resource_alias or "E"
         )
 
-        return self._make_function_cte_lookup(fn_cte_name, source_alias)
+        return self._make_function_cte_lookup(fn_cte_name, source_alias, func_name=func_name)

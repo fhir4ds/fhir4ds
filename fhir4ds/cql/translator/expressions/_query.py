@@ -1787,7 +1787,8 @@ class QueryMixin:
             where=where_cond,
         ))
 
-    def _make_function_cte_lookup(self, cte_name: str, source_alias: str) -> SQLExpression:
+    def _make_function_cte_lookup(self, cte_name: str, source_alias: str,
+                                   func_name: Optional[str] = None) -> SQLExpression:
         """Build (SELECT value FROM fn_cte WHERE patient_id AND _row_key = fhirpath_text(resource, 'id'))."""
         where_cond = SQLBinaryOp(
             left=SQLBinaryOp(
@@ -1808,7 +1809,7 @@ class QueryMixin:
                 ),
             ),
         )
-        return SQLSubquery(query=SQLSelect(
+        lookup = SQLSubquery(query=SQLSelect(
             columns=[SQLIdentifier(name="value")],
             from_clause=SQLAlias(
                 expr=SQLIdentifier(name=cte_name, quoted=True),
@@ -1816,6 +1817,51 @@ class QueryMixin:
             ),
             where=where_cond,
         ))
+        # List-valued promoted functions (e.g. encounterDiagnosis()) store a
+        # LIST in the CTE value column. Consumers (in_valueset's list guard,
+        # list operators) need to know the lookup is list-returning — tag the
+        # result_type so `_is_list_returning_sql` sees through the
+        # scalar-shaped subquery (CMS0334 `in_valueset(JSON[], ...)` binder
+        # error). Detection: (1) the built promotion CTE body's value
+        # expression, when already built; (2) the function's CQL body AST —
+        # set-operation bodies are list-valued — for lookups emitted BEFORE
+        # the CTE body is built.
+        from ._utils import _is_list_returning_sql
+        _is_list = False
+        for _fn_ctes in getattr(self.context, "_function_promotion_ctes", {}).values():
+            _body = _fn_ctes.get(cte_name)
+            if isinstance(_body, SQLSelect) and _body.columns:
+                _col = _body.columns[0]
+                _col_expr = _col.expr if isinstance(_col, SQLAlias) else _col
+                _is_list = _is_list_returning_sql(_col_expr)
+                break
+        if not _is_list and func_name:
+            inliner = getattr(self.context, "function_inliner", None)
+            if inliner is not None:
+                from ...parser.ast_nodes import BinaryExpression as _BinExpr, Query as _QueryAST
+                for _fdef in list(getattr(inliner, "_functions", {}).values()):
+                    _fname = getattr(_fdef, "name", None)
+                    if _fname is None or _fname.rsplit(".", 1)[-1] != func_name.rsplit(".", 1)[-1]:
+                        continue
+                    _body_ast = getattr(_fdef, "body", None)
+                    if (
+                        isinstance(_body_ast, _BinExpr)
+                        and (getattr(_body_ast, "operator", "") or "").strip().lower()
+                        in {"union", "|", "intersect", "except"}
+                    ):
+                        # Set-operation bodies are list-valued (CQL-19 union
+                        # doctrine).
+                        _is_list = True
+                        break
+                    if isinstance(_body_ast, _QueryAST):
+                        # A CQL query body makes the function list-valued
+                        # (one result element per source element; e.g.
+                        # CQMCommon.encounterDiagnosis).
+                        _is_list = True
+                        break
+        if _is_list:
+            lookup.result_type = "List<Any>"
+        return lookup
 
     def _process_let_clauses(self, let_clauses: list, node=None) -> None:
         """Translate let clauses and register them in context.let_variables.

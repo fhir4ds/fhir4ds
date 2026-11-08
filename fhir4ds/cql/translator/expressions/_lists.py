@@ -998,7 +998,7 @@ class ListsMixin:
         from ...translator.cte_manager import generate_function_cte_name
         fn_cte_name = generate_function_cte_name(func_name, cql_def_name)
         source_alias = alias_name
-        return self._make_function_cte_lookup(fn_cte_name, source_alias)
+        return self._make_function_cte_lookup(fn_cte_name, source_alias, func_name=func_name)
 
     def _translate_alias_ref(self, ref: AliasRef, boolean_context: bool = False) -> SQLExpression:
         """Translate an alias reference to SQL."""
