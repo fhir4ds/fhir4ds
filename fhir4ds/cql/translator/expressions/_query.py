@@ -2183,19 +2183,30 @@ class QueryMixin:
                             limit=_mi_inner.limit,
                         ))
                     if len(_mi_inner.columns) == 1:
-                        # Single resource-ish projection with patient rows —
-                        # re-project with the source alias's patient_id.
+                        # Single projection with patient rows — re-project
+                        # with the source alias's patient_id. A bare `*`
+                        # projection cannot be aliased (`* AS resource` is
+                        # invalid SQL) — use the FROM alias's resource
+                        # column instead.
                         _mi_alias = None
                         if isinstance(_mi_inner.from_clause, SQLAlias):
                             _mi_alias = _mi_inner.from_clause.alias
                         if _mi_alias:
+                            _first = _mi_inner.columns[0]
+                            _first_expr = _first.expr if isinstance(_first, SQLAlias) else _first
+                            if (
+                                isinstance(_first_expr, SQLIdentifier)
+                                and _first_expr.name == "*"
+                            ):
+                                _value_expr = SQLQualifiedIdentifier(
+                                    parts=[_mi_alias, "resource"]
+                                )
+                            else:
+                                _value_expr = _first_expr
                             return SQLSubquery(query=SQLSelect(
                                 columns=[
                                     SQLQualifiedIdentifier(parts=[_mi_alias, "patient_id"]),
-                                    SQLAlias(
-                                        expr=_mi_inner.columns[0].expr if isinstance(_mi_inner.columns[0], SQLAlias) else _mi_inner.columns[0],
-                                        alias="resource",
-                                    ),
+                                    SQLAlias(expr=_value_expr, alias="resource"),
                                 ],
                                 from_clause=_mi_inner.from_clause,
                                 where=_mi_inner.where,
@@ -4536,6 +4547,14 @@ class QueryMixin:
                 if _set_op_result is not None:
                     source_expr = _set_op_result
                     alias = source_alias
+                    if alias and isinstance(source_expr, (SQLUnion, SQLIntersect, SQLExcept)):
+                        # Set-op sources become FROM aliases (`FROM (union)
+                        # AS <alias>` in the select assembly below). Register
+                        # the alias as a TABLE alias — an ast_expr registration
+                        # makes `return all X` inline the union into column
+                        # position (CMS137).
+                        self.context.add_alias(alias, table_alias=alias)
+                        self.context._alias_source_asts[alias] = source_expr_node
                 else:
                     # Check for MethodInvocation returning a list (e.g.,
                     # Alias.claimDiagnosis()) used as a query source.
@@ -4655,8 +4674,6 @@ class QueryMixin:
 
         # Start with the source query
         result = source_expr
-
-        # Helper function to check if an expression is or contains a CTE reference
         def _is_cte_ref(expr):
             """Check if expression is a CTE reference (SQLIdentifier with quoted name or RetrievePlaceholder)."""
             if isinstance(expr, SQLIdentifier):
@@ -4801,11 +4818,16 @@ class QueryMixin:
                         alias=alias
                     )
                 )
+                # table_alias ONLY (no ast_expr): an ast_expr registration
+                # makes `return all X` inline the whole set-op SQL into
+                # column position (2-column union as one column — CMS137).
+                # The FROM here is (patient_id, resource) rows — the same
+                # shape as a retrieve CTE — so the table_alias route
+                # (X.resource-style refs) is correct.
                 self.context.add_alias(
                     alias,
                     table_alias=alias,
                     cte_name=provisional_cte_name,
-                    ast_expr=source_expr,
                 )
             elif contains_placeholder(source_expr):
                 # Source contains unresolved placeholders. Extract the inner placeholder(s)
@@ -5687,7 +5709,6 @@ class QueryMixin:
                             from_clause=result,
                         )
                 elif isinstance(result, SQLSelect):
-                    # Reuse the existing SQLSelect to preserve FROM clause alias visibility
                     # The alias (e.g., BPExam) in "FROM CTE AS BPExam" must remain visible
                     # to the return expression
                     result = SQLSelect(
