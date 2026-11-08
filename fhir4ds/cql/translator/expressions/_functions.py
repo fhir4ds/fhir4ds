@@ -2710,32 +2710,62 @@ class FunctionsMixin:
         # Retrieves (so heterogeneous CTE columns do not collide), then
         # count the union rows in a patient-correlated subquery — the same
         # shape as the single-Retrieve branch above.
+        from ...parser.ast_nodes import Retrieve as _UnionRetrieve, Query as _UnionQuery
+
+        def _collect_union_leaves(node, out: list) -> bool:
+            # Collect union operand leaves: plain retrieves and QUERY
+            # leaves (with-clauses + returns — CMS137) are kept whole;
+            # resource-define identifiers resolve to their ASTs.
+            if isinstance(node, (_UnionRetrieve, _UnionQuery)):
+                out.append(node)
+                return True
+            if isinstance(node, BinaryExpression) and (getattr(node, "operator", "") or "").strip().lower() in {"union", "|"}:
+                return _collect_union_leaves(node.left, out) and _collect_union_leaves(node.right, out)
+            if isinstance(node, Identifier):
+                meta = self.context.definition_meta.get(node.name)
+                if meta is not None and getattr(meta, "has_resource", False):
+                    definition_ast = self._definition_ast_for_identifier(node)
+                    if definition_ast is not None:
+                        return _collect_union_leaves(definition_ast, out)
+            return False
+
+        def _resolve_union_leaf(node):
+            if isinstance(node, _UnionRetrieve):
+                return node
+            if isinstance(node, BinaryExpression) and (getattr(node, "operator", "") or "").strip().lower() in {"union", "|"}:
+                left = _resolve_union_leaf(node.left)
+                right = _resolve_union_leaf(node.right)
+                if left is None or right is None:
+                    return None
+                return BinaryExpression(
+                    operator=node.operator, left=left, right=right,
+                    strict=getattr(node, "strict", False),
+                )
+            if isinstance(node, Identifier):
+                meta = self.context.definition_meta.get(node.name)
+                if meta is not None and getattr(meta, "has_resource", False):
+                    definition_ast = self._definition_ast_for_identifier(node)
+                    if definition_ast is not None:
+                        _resolved = _resolve_union_leaf(definition_ast)
+                        if _resolved is not None:
+                            return _resolved
+                    # Resource-backed define whose AST is not itself a
+                    # retrieve/union (e.g. First([...]) date defines,
+                    # CMS137) — keep the CTE identifier as the union
+                    # operand; the union translation projects
+                    # (patient_id, resource) from its CTE. Non-resource
+                    # (scalar value) defines must NOT take this path —
+                    # their CTEs have no resource column (QI-Core gate
+                    # regression on CMS506/CMS74 when unrestricted).
+                    return node
+            return None
+
+
         if (
             agg_func == "COUNT"
             and isinstance(arg, BinaryExpression)
             and (getattr(arg, "operator", "") or "").strip().lower() in {"union", "|"}
         ):
-            from ...parser.ast_nodes import Retrieve as _UnionRetrieve
-
-            def _resolve_union_leaf(node):
-                if isinstance(node, _UnionRetrieve):
-                    return node
-                if isinstance(node, BinaryExpression) and (getattr(node, "operator", "") or "").strip().lower() in {"union", "|"}:
-                    left = _resolve_union_leaf(node.left)
-                    right = _resolve_union_leaf(node.right)
-                    if left is None or right is None:
-                        return None
-                    return BinaryExpression(
-                        operator=node.operator, left=left, right=right,
-                        strict=getattr(node, "strict", False),
-                    )
-                if isinstance(node, Identifier):
-                    meta = self.context.definition_meta.get(node.name)
-                    if meta is not None and getattr(meta, "has_resource", False):
-                        definition_ast = self._definition_ast_for_identifier(node)
-                        return _resolve_union_leaf(definition_ast) if definition_ast is not None else None
-                return None
-
             resolved = _resolve_union_leaf(arg)
             if resolved is not None:
                 union_sql = self.translate(resolved, usage=ExprUsage.LIST)
@@ -2751,6 +2781,130 @@ class FunctionsMixin:
                         ),
                     ))
                     return _maybe_negate(correlated)
+
+        # Min/Max over a union (CMS137 `with (Min("A" union "B"))`):
+        # the generic scalar path embeds the 2-column union in column
+        # position (LEAST(((SELECT ...) UNION (...))) — binder error).
+        # Derived table over the rows union + correlated aggregate.
+        if (
+            agg_func in ("MIN", "MAX")
+            and isinstance(arg, BinaryExpression)
+            and (getattr(arg, "operator", "") or "").strip().lower() in {"union", "|"}
+        ):
+            _mm_resolved = _resolve_union_leaf(arg)
+            if _mm_resolved is not None:
+                _mm_union = self.translate(_mm_resolved, usage=ExprUsage.LIST)
+                if isinstance(_mm_union, SQLUnion):
+                    # Correlate to the PATIENT context: this aggregate is
+                    # commonly a with-clause SOURCE (`with (Min("A" union
+                    # "B")) X`) where resource_alias may already point at
+                    # the alias being defined — self-correlation. The union
+                    # CTEs are patient-keyed (_pt doctrine).
+                    _outer_pid = self.context.patient_alias or "_pt"
+                    correlated = SQLSubquery(query=SQLSelect(
+                        columns=[
+                            SQLAlias(
+                                expr=SQLFunctionCall(
+                                    name=agg_func,
+                                    args=[SQLQualifiedIdentifier(parts=["_agg_src", "resource"])],
+                                ),
+                                # Alias the aggregate column: DuckDB fails to
+                                # bind the derived table's alias downstream when
+                                # the aggregate column is unaliased (misleading
+                                # "Referenced table X not found"; verified on
+                                # duckdb 1.5.x with a minimal repro).
+                                alias="resource",
+                            ),
+                            # Project patient_id (GROUP BY shape): the with-
+                            # clause consumer correlates
+                            # <alias>.patient_id = <outer>.patient_id, and the
+                            # aggregate-only projection has no patient_id
+                            # column (CMS137).
+                            SQLAlias(
+                                expr=SQLQualifiedIdentifier(parts=["_agg_src", "patient_id"]),
+                                alias="patient_id",
+                            ),
+                        ],
+                        from_clause=SQLAlias(expr=_mm_union, alias="_agg_src"),
+                        where=SQLBinaryOp(
+                            operator="=",
+                            left=SQLQualifiedIdentifier(parts=["_agg_src", "patient_id"]),
+                            right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+                        ),
+                        group_by=[SQLQualifiedIdentifier(parts=["_agg_src", "patient_id"])],
+                    ))
+                    return _maybe_negate(correlated)
+
+        # CMS137: unions whose leaves are QUERIES (with-clauses +
+        # returns) cannot use the rows-union fast path — the generic
+        # union translation embeds operands in column position.
+        # Translate each leaf to its per-patient element list, unnest
+        # into rows selects, UNION them, then the correlated COUNT(*).
+        _leaves: list = []
+        if (
+            agg_func == "COUNT"
+            and _collect_union_leaves(arg, _leaves)
+            and any(isinstance(_leaf, _UnionQuery) for _leaf in _leaves)
+        ):
+            from ..types import SQLUnion as _SQLUnionU
+            from ._utils import _coerce_query_rows_to_list as _cql_rows
+            _unnest_selects = []
+            _ok = True
+            for _leaf in _leaves:
+                try:
+                    _leaf_sql = self.translate(_leaf, usage=ExprUsage.LIST)
+                except Exception:  # noqa: BLE001 - fall back to generic path
+                    _ok = False
+                    break
+                # Patient-correlate the leaf BEFORE coercion: the rows
+                # select spans ALL patients; without the correlation every
+                # patient counts every row (QI-Core gate over-count on
+                # CMS74/CMS149/CMS506).
+                _ls_inner = (
+                    _leaf_sql.query if isinstance(_leaf_sql, SQLSubquery)
+                    and isinstance(_leaf_sql.query, SQLSelect) else _leaf_sql
+                )
+                if isinstance(_ls_inner, SQLSelect) and isinstance(
+                    _ls_inner.from_clause, SQLAlias
+                ) and _ls_inner.from_clause.alias:
+                    from ._query import _patient_correlated_where
+                    _ls_inner.where = _patient_correlated_where(
+                        _ls_inner.where,
+                        _ls_inner.from_clause.alias,
+                        "_pt",
+                    )
+                _coerced = _cql_rows(_leaf_sql)
+                if _coerced is not _leaf_sql:
+                    _leaf_sql = _coerced
+                if not _is_list_returning_sql(_leaf_sql):
+                    _ok = False
+                    break
+                # SQLSubquery so union operands and the final FROM render
+                # parenthesized (bare SQLSelect in FROM produces
+                # `FROM SELECT ...` — parser error, caught by the QI-Core
+                # gate on CMS149).
+                _unnest_selects.append(SQLSubquery(query=SQLSelect(
+                    columns=[SQLAlias(
+                        expr=SQLFunctionCall(name="unnest", args=[_leaf_sql]),
+                        alias="_elem",
+                    )],
+                )))
+            if _ok and _unnest_selects:
+                _union_body = _unnest_selects[0]
+                for _extra in _unnest_selects[1:]:
+                    _union_body = _SQLUnionU(
+                        operands=[_union_body, _extra], distinct=True,
+                    )
+                correlated = SQLSubquery(query=SQLSelect(
+                    # COUNT(<col>) not COUNT(*): CQL Count counts non-null
+                    # elements only (the pre-existing lowering counted
+                    # COUNT(_val) over DISTINCT values — COUNT(*) admitted
+                    # NULL elements and over-counted; QI-Core gate
+                    # CMS74/CMS149/CMS506).
+                    columns=[SQLFunctionCall(name="COUNT", args=[SQLIdentifier(name="_elem")])],
+                    from_clause=SQLAlias(expr=_union_body, alias="_agg_src"),
+                ))
+                return _maybe_negate(correlated)
 
         # Aggregate on distinct(query) — e.g., Count(distinct(query)) (CMS117).
         # Translate the inner query and wrap with COUNT(DISTINCT col) instead of
