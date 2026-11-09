@@ -221,9 +221,9 @@ def optimize_property_access(
             fhirpath_date(t1.resource, 'onsetDateTime')
 
         After (if onset_date is precomputed in the CTE):
-    _FHIRPATH_OPT_MEMO.clear()
             t1.onset_date
     """
+    _FHIRPATH_OPT_MEMO.clear()
     # Extract alias-to-CTE mapping from the AST if not provided
     if alias_to_cte is None:
         alias_to_cte = _extract_alias_to_cte_mapping(ast)

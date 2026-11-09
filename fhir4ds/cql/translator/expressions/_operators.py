@@ -905,6 +905,12 @@ def _literal_is_null(node: object) -> bool:
     return isinstance(node, Literal) and node.value is None
 
 
+# Minimum AST node count before the list-union CSE hoist engages
+# (CMS136: operands reach ~11 MB of rendered SQL; ordinary measures'
+# union operands stay well below this).
+_CSE_HOIST_MIN_NODES = 300
+
+
 class OperatorsMixin:
     """Mixin providing binary and unary operator translations."""
 
@@ -5073,6 +5079,12 @@ class OperatorsMixin:
         # values from subqueries. Wrap in order-preserving Distinct for CQL dedup.
         # CQL §20.29: For list union, null is treated as empty list — return
         # the other argument. Use COALESCE to handle runtime nulls.
+        if not left_is_rows and not right_is_rows:
+            # CSE hoist BEFORE the CASE construction: the arms below embed
+            # each operand ~4x, quadrupling per union level on left-nested
+            # chains (CMS136 measured 45 MB from one define).
+            left = self._hoist_list_union_operand(left)
+            right = self._hoist_list_union_operand(right)
         inner = SQLFunctionCall(
             name='"Distinct"',
             args=[SQLFunctionCall(name="jsonConcat", args=[left, right])],
@@ -5102,6 +5114,138 @@ class OperatorsMixin:
                 else_clause=SQLArray([]),
             )
         return inner
+
+    def _hoist_list_union_operand(self, operand: SQLExpression) -> SQLExpression:
+        """Hoist a LARGE list-union operand into a per-patient value CTE.
+
+        The jsonConcat fallback of ``_translate_union_op`` embeds each
+        operand ~4x (IS NOT NULL arms + the concat args). For the deeply
+        left-nested unions of CMS136 (``A union (B union (C ...))``, each
+        branch carrying fully inlined fluent bodies) the rendered SQL
+        quadruples per level — a single define measured 45 MB / 305,832
+        repeated sub-expressions. This helper evaluates a big operand ONCE
+        per patient in a value CTE and leaves a small correlated lookup in
+        every embedding position, making the chain linear.
+
+        Guards (all must hold):
+        - operand node count > ``_CSE_HOIST_MIN_NODES``
+        - operand is not already a ``_cse_``/``_let_`` value-CTE lookup
+        - operand is self-contained: every qualified-identifier alias root
+          is a global (``_pt``/``_patients``/``_lv``) or an alias bound
+          INSIDE the operand (FROM/JOIN aliases). Row-scoped operands stay
+          inline (hoisting would break their correlation).
+        - not inside a function-promotion CTE build (row-scoped context)
+
+        The CTE body registers in ``context._let_variable_ctes`` under the
+        current definition: the existing injection emits it adjacent to the
+        consumer CTE (after ``_patients``), and Phase 3 resolves retrieve
+        placeholders inside it like any let body.
+        """
+        from ..types import SQLAlias as _TSQLAlias, SQLIdentifier as _TSQLIdentifier
+
+        if getattr(self.context, "_building_function_promotion_cte", False):
+            return operand
+
+        # Cheap shapes stay inline
+        if isinstance(operand, (SQLLiteral, SQLNull, SQLArray, SQLIdentifier,
+                                SQLQualifiedIdentifier, SQLRaw)):
+            return operand
+
+        # Already a value-CTE lookup: (SELECT value FROM "_cse_*" AS _lv ...)
+        if (
+            isinstance(operand, SQLSubquery)
+            and isinstance(operand.query, SQLSelect)
+            and len(operand.query.columns or []) == 1
+        ):
+            col = operand.query.columns[0]
+            _c = col.expr if isinstance(col, SQLAlias) else col
+            frm = operand.query.from_clause
+            if (
+                isinstance(_c, SQLIdentifier)
+                and _c.name == "value"
+                and isinstance(frm, _TSQLAlias)
+                and isinstance(frm.expr, _TSQLIdentifier)
+                and frm.expr.quoted
+                and (frm.expr.name.startswith("_cse_") or frm.expr.name.startswith("_let_"))
+            ):
+                return operand
+
+        # Size gate + self-containment: single walk, placeholder-safe.
+        stack = [operand]
+        seen = set()
+        node_count = 0
+        bound_inside = set()
+        _globals_ok = {"_pt", "_patients", "_lv"}
+        foreign_root = None
+        while stack:
+            n = stack.pop()
+            if n is None or id(n) in seen:
+                continue
+            seen.add(id(n))
+            node_count += 1
+            if isinstance(n, SQLQualifiedIdentifier):
+                root = n.parts[0]
+                if not (root in _globals_ok or root.startswith("_lt_")
+                        or root.lower() in bound_inside):
+                    foreign_root = root
+                    break
+                continue
+            if isinstance(n, SQLAlias):
+                bound_inside.add(n.alias.lower())
+            if hasattr(n, "__dataclass_fields__"):
+                for f in n.__dataclass_fields__:
+                    stack.append(getattr(n, f, None))
+            elif isinstance(n, (list, tuple)):
+                stack.extend(n)
+
+        if node_count <= _CSE_HOIST_MIN_NODES:
+            return operand
+        if foreign_root is not None:
+            return operand  # row-scoped operand: hoisting would break correlation
+
+        # Register the value CTE under the current definition
+        scope_name = self.context._current_definition or "__unknown__"
+        if scope_name not in self.context._let_variable_ctes:
+            self.context._let_variable_ctes[scope_name] = {}
+        existing = self.context._let_variable_ctes[scope_name]
+        _cse_counters = getattr(self.context, "_cse_cte_counters", None)
+        if _cse_counters is None:
+            _cse_counters = {}
+            self.context._cse_cte_counters = _cse_counters
+        _cse_counters[scope_name] = _cse_counters.get(scope_name, 0) + 1
+        import re as _re
+        safe_scope = _re.sub(r"[^A-Za-z0-9_]+", "_", scope_name).strip("_") or "scope"
+        cte_name = f"_cse_{safe_scope[:32]}_{_cse_counters[scope_name]}"
+        while cte_name in existing:
+            _cse_counters[scope_name] += 1
+            cte_name = f"_cse_{safe_scope[:32]}_{_cse_counters[scope_name]}"
+
+        body = SQLSelect(
+            columns=[SQLAlias(expr=operand, alias="value")],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name="_patients", quoted=True),
+                alias="_pt",
+            ),
+        )
+        existing[cte_name] = body
+
+        lookup = SQLSubquery(query=SQLSelect(
+            columns=[SQLIdentifier(name="value")],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name=cte_name, quoted=True),
+                alias="_lv",
+            ),
+            where=SQLBinaryOp(
+                operator="=",
+                left=SQLQualifiedIdentifier(parts=["_lv", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=[
+                    self.context.resource_alias or "_pt", "patient_id",
+                ]),
+            ),
+        ))
+        # Preserve list typing so population wrapping does not nest lists
+        lookup.result_type = getattr(operand, "result_type", None) or "List<Any>"
+        return lookup
 
     def _promote_list_setop_scalar_operands(self, left, right, expr):
         """CQL-18 EXPLORER QA-001 residual: CQL 1.5 App B List Operators note
