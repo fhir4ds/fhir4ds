@@ -627,6 +627,26 @@ class PropertyMixin:
                         source_sql, path, boolean_context
                     )
                 return self._make_fhirpath_call(source_sql, path, boolean_context)
+            elif isinstance(source_sql, RetrievePlaceholder):
+                # Fluent receiver bound to a bare retrieve
+                # (``([MedicationRequest: "VS"]).isMedicationOrder()`` —
+                # CMS136). The placeholder is rows-shaped and resolves to a
+                # retrieve CTE; inside a query scope the receiver is already
+                # aliased (e.g. ``AtomoxetineMed``), so navigate that alias
+                # — mirroring the SQLSelect branch above.
+                if self.context.resource_alias:
+                    resource_col = SQLQualifiedIdentifier(
+                        parts=[self.context.resource_alias, "resource"]
+                    )
+                else:
+                    from ...errors import TranslationError as _TE
+                    raise _TE(
+                        message=(
+                            f"Property '{path}' on an un-aliased retrieve-typed "
+                            f"function parameter; bind the fluent call result "
+                            f"to a query alias (e.g. '(...) X return X.{path}')"
+                        )
+                    )
             elif isinstance(source_sql, (SQLSelect, SQLSubquery, SQLUnion, SQLIntersect, SQLExcept)):
                 # The parameter resolved to a full query expression, but we
                 # are inside a query scope where the source is already aliased

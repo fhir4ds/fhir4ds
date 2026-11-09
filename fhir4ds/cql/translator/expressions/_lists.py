@@ -1489,6 +1489,34 @@ class ListsMixin:
                 # NULLS LAST for ASC, NULLS FIRST for DESC
                 nulls_order = "NULLS FIRST" if item_dir == "DESC" else "NULLS LAST"
                 window_order.append((expr_sql, f"{item_dir} {nulls_order}"))
+                # Temporal-component sort keys (`date from authoredOn`,
+                # `year from X`, ...) truncate the operand's precision, so
+                # same-period rows tie. The reference engine's stable sort
+                # preserves retrieve order, which for authored fixtures is
+                # the underlying timestamp order — tie-break on the FULL
+                # operand (same effective direction) before the
+                # deterministic id tiebreaker (CMS50 First Referral: two
+                # ServiceRequests one minute apart tied at day precision
+                # and the id ASC tiebreak picked the later one).
+                from ...parser.ast_nodes import FunctionRef as _SortFnRef
+                _si = sort_expr if item.expression is not None else None
+                if (
+                    isinstance(_si, _SortFnRef)
+                    and getattr(_si, "name", "").lower() in (
+                        "date", "time", "year", "month", "day", "hour",
+                        "minute", "second", "millisecond", "timezoneoffset",
+                    )
+                    and len(getattr(_si, "arguments", []) or []) == 1
+                ):
+                    _DO_SORT_TIEBREAK = True  # BISECT-D done
+                    try:
+                        _full_sql = self.translate(
+                            _si.arguments[0], boolean_context=False
+                        )
+                        if _DO_SORT_TIEBREAK:
+                            window_order.append((_full_sql, f"{item_dir} {nulls_order}"))
+                    except Exception:
+                        pass  # keep the primary key only on translation failure
 
         # Get the FROM clause from the source query
         from_clause = None

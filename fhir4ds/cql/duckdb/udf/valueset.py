@@ -191,6 +191,14 @@ def _extract_codes_from_element(element: dict) -> List[Tuple[str, str]]:
                 code = coding.get('code', '')
                 if code:
                     codes.append((system, code))
+    elif 'codes' in element and isinstance(element.get('codes'), list):
+        # CQL Concept JSON shape (ToConcept output): { codes: [ { system,
+        # code, ... }, ... ] } — Concept ~ Code/Concept equivalence lowers
+        # through coding_matches with the Concept value as the element
+        # (CMS156 medication strength matching).
+        for code_obj in element['codes']:
+            if isinstance(code_obj, dict) and code_obj.get('code'):
+                codes.append((code_obj.get('system', ''), code_obj.get('code', '')))
     elif 'system' in element and 'code' in element:
         codes.append((element.get('system', ''), element.get('code', '')))
     return codes

@@ -320,7 +320,9 @@ class FileSystemSource:
             r'^(urn:uuid:.+|Patient/[^/]+|https?://.*/Patient/[^/]+)'
             r'(/_history/[^/]+)?$'
         )
-        for path in ("$.subject", "$.patient", "$.beneficiary"):
+        # ``for`` included: Task's patient compartment reference (same
+        # Patient-typed guard; mirrors the loader's path tuple).
+        for path in ("$.subject", "$.patient", "$.beneficiary", "$.for"):
             ref_expr = (
                 f"CASE WHEN json_type({resource_expr}, '{path}') = 'ARRAY' THEN "
                 f"list_extract(list_filter(from_json(json_extract({resource_expr}, "

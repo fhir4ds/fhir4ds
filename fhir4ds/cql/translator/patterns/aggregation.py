@@ -23,6 +23,7 @@ from ...parser.ast_nodes import (
     ExistsExpression,
     Expression,
     FirstExpression,
+    FunctionRef,
     LastExpression,
     ListExpression,
     Query,
@@ -499,6 +500,31 @@ class AggregationTranslator:
                 # NULLS LAST for ASC, NULLS FIRST for DESC
                 nulls_order = "NULLS FIRST" if item_dir == "DESC" else "NULLS LAST"
                 window_order.append((expr_sql, f"{item_dir} {nulls_order}"))
+                # Temporal-component sort keys (`date from authoredOn`,
+                # `year from X`, ...) truncate the operand's precision, so
+                # same-period rows tie. The reference engine's stable sort
+                # preserves retrieve order, which for authored fixtures is
+                # the underlying timestamp order — tie-break on the FULL
+                # operand (same direction) before the deterministic id
+                # tiebreaker (CMS50 First Referral: two ServiceRequests one
+                # minute apart tied at day precision and the id ASC
+                # tiebreak picked the later one).
+                _si = item.expression
+                if (
+                    isinstance(_si, FunctionRef)
+                    and getattr(_si, "name", "").lower() in (
+                        "date", "time", "year", "month", "day", "hour",
+                        "minute", "second", "millisecond", "timezoneoffset",
+                    )
+                    and len(getattr(_si, "arguments", []) or []) == 1
+                ):
+                    try:
+                        _full_sql = self.expr_translator.translate(
+                            _si.arguments[0], boolean_context=False
+                        )
+                        window_order.append((_full_sql, f"{item_dir} {nulls_order}"))
+                    except Exception:
+                        pass  # keep the primary key only on translation failure
 
         # Add tie-breaker: json_extract_string(resource, '$.id') ASC (ensures deterministic results)
         # Per design doc §9.4 and §7.1 - this guarantees deterministic ordering when multiple

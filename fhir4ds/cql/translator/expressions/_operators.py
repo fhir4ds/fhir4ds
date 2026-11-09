@@ -1890,6 +1890,33 @@ class OperatorsMixin:
             return True
         if isinstance(node, Quantity):
             return True
+        # Dynamic FHIR property paths typed Quantity via the FHIR schema
+        # (e.g. MedicationRequest.dispenseRequest.quantity). Without this,
+        # `Order.dispenseRequest.quantity * MedicationStrength` treated the
+        # dynamic FHIR Quantity operand as a bare scalar and lowered to
+        # TRY_CAST(fhirpath_text(<path>) AS DOUBLE) — the path resolves to
+        # the whole Quantity JSON object, so the cast is always NULL and
+        # the product silently vanished (CMS156 averageDailyDose).
+        if isinstance(node, Property):
+            parts = []
+            current = node
+            while isinstance(current, Property) and current.path:
+                parts.append(current.path)
+                current = current.source
+            parts.reverse()
+            if parts and isinstance(current, Identifier):
+                res_type = self.context._alias_resource_types.get(current.name)
+                if not res_type:
+                    res_type = self.context.resource_type
+                if res_type and self.context.fhir_schema:
+                    el_type = self.context.fhir_schema.get_element_type(
+                        res_type, ".".join(parts)
+                    )
+                    if el_type in (
+                        "Quantity", "Duration", "Age", "Count",
+                        "SimpleQuantity", "Distance",
+                    ):
+                        return True
         # CQL-03 QA-004: Ratio component accessors (.numerator/.denominator)
         # yield Quantity values and must participate in Quantity arithmetic.
         if isinstance(node, Property) and getattr(node, "path", None) in ("numerator", "denominator"):
@@ -1960,6 +1987,36 @@ class OperatorsMixin:
                 return True
             if meta and self._bare_cql_type_name(meta.cql_type) == "Quantity":
                 return True
+            # Let-clause alias: look through to the let's CQL AST (CMS156
+            # MedicationStrength -> medicationStrengthPerUnit() Quantity).
+            let_ast = self.context._let_clause_asts.get(node.name)
+            if let_ast is not None and let_ast is not node:
+                return self._is_cql_quantity_expr(let_ast, _depth + 1)
+        # Case expressions are Quantity when any branch result is Quantity
+        # (e.g. medicationStrengthPerUnit's `case Strength ~ ... then 0.25 'mg'`).
+        try:
+            from ...parser.ast_nodes import CaseExpression as _CaseExpr
+        except ImportError:
+            _CaseExpr = None
+        if _CaseExpr is not None and isinstance(node, _CaseExpr):
+            for item in (node.case_items or []):
+                if self._is_cql_quantity_expr(item.then, _depth + 1):
+                    return True
+            if node.else_expr is not None:
+                return self._is_cql_quantity_expr(node.else_expr, _depth + 1)
+            return False
+        # Fluent method invocations (X.f()): the function body decides the
+        # type (CMS156 `Order.getMedicationCode().medicationStrengthPerUnit()`
+        # is a Quantity — without this the operand fell to the scalar DOUBLE
+        # path and TRY_CAST(<Quantity JSON> AS DOUBLE) NULLed the product).
+        try:
+            from ...parser.ast_nodes import MethodInvocation as _MethodInv
+        except ImportError:
+            _MethodInv = None
+        if _MethodInv is not None and isinstance(node, _MethodInv):
+            func_info = self.context.get_function(node.method)
+            if func_info and func_info.expression:
+                return self._is_cql_quantity_expr(func_info.expression, _depth + 1)
         # FunctionRef: check built-in aggregates and user-defined functions
         if isinstance(node, FunctionRef):
             if node.name.lower() == "coalesce":
@@ -5328,30 +5385,73 @@ class OperatorsMixin:
             # are handled above so dynamic/resource intervals keep measure
             # behavior stable.
             left_start = self._ensure_date_cast(self._truncate_to_precision(left_start_raw, precision))
-            left_end_raw = self._ensure_date_cast(self._truncate_to_precision(left_end_raw_bound, precision))
-            left_end = SQLFunctionCall(
-                name="COALESCE",
-                args=[left_end_raw, SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE")],
-            )
+            # NOTE: no COALESCE-to-sentinel on the END bounds. intervalEnd
+            # already implements the CQL §9.14/§9.15 doctrine: a CLOSED
+            # null high bound returns the max sentinel (9999-12-31, truly
+            # unbounded) while an OPEN null high bound returns NULL
+            # (unknown). Coalescing NULL to the sentinel here defeated the
+            # open-bound case — a resolved condition with no abatement
+            # (prevalenceInterval `Interval[start, null)`) evaluated as
+            # unbounded and overlapped the measurement period (CMS129
+            # false-positive Initial Population). Let the unknown NULL
+            # propagate through the comparison (NULL >= x → NULL → row
+            # excluded), per CQL uncertainty semantics.
+            left_end = self._ensure_date_cast(self._truncate_to_precision(left_end_raw_bound, precision))
             right_start = self._ensure_date_cast(self._truncate_to_precision(right_start_raw, precision))
-            right_end_raw = self._ensure_date_cast(self._truncate_to_precision(right_end_raw_bound, precision))
-            right_end = SQLFunctionCall(
+            right_end = self._ensure_date_cast(self._truncate_to_precision(right_end_raw_bound, precision))
+            # Interval-invariant-aware unknown ends (CQL §9 overlaps over
+            # open-null-high bounds, e.g. prevalenceInterval of an
+            # inactive/resolved condition without abatement →
+            # Interval[start, null)). intervalEnd returns NULL for the OPEN
+            # null bound (unknown) and the max sentinel for the CLOSED one
+            # (unbounded). For an unknown end, the interval invariant
+            # end >= start still entails `end >= other.start` whenever
+            # start >= other.start is known TRUE — so the overlap is TRUE
+            # (not null) when the KNOWN start already lies at/after the
+            # other interval's start. When it doesn't, the comparison stays
+            # NULL and the row is excluded (uncertain). This satisfies both
+            # fixture families: CMS1154 (onset inside the look-back →
+            # exclusion fires) and CMS129 (onset years before the
+            # measurement period → unknown → excluded).
+            left_end_entailed = SQLFunctionCall(
                 name="COALESCE",
-                args=[right_end_raw, SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE")],
+                args=[
+                    left_end,
+                    SQLCase(
+                        when_clauses=[(
+                            SQLBinaryOp(operator=">=", left=left_start, right=right_start),
+                            right_start,
+                        )],
+                        else_clause=SQLNull(),
+                    ),
+                ],
+            )
+            right_end_entailed = SQLFunctionCall(
+                name="COALESCE",
+                args=[
+                    right_end,
+                    SQLCase(
+                        when_clauses=[(
+                            SQLBinaryOp(operator=">=", left=right_start, right=left_start),
+                            left_start,
+                        )],
+                        else_clause=SQLNull(),
+                    ),
+                ],
             )
             overlaps_result = SQLBinaryOp(
                 operator="AND",
-                left=SQLBinaryOp(operator="<=", left=left_start, right=right_end),
-                right=SQLBinaryOp(operator=">=", left=left_end, right=right_start),
+                left=SQLBinaryOp(operator="<=", left=left_start, right=right_end_entailed),
+                right=SQLBinaryOp(operator=">=", left=left_end_entailed, right=right_start),
             )
             precision_guard = self._temporal_precision_guard_for_intervals(
                 precision,
                 left,
                 interval_expr,
                 left_start,
-                left_end_raw,
+                left_end,
                 right_start,
-                right_end_raw,
+                right_end,
             )
             if precision_guard is not None:
                 overlaps_result = SQLCase(

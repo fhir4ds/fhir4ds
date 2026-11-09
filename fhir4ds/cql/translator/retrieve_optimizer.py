@@ -221,6 +221,7 @@ def optimize_property_access(
             fhirpath_date(t1.resource, 'onsetDateTime')
 
         After (if onset_date is precomputed in the CTE):
+    _FHIRPATH_OPT_MEMO.clear()
             t1.onset_date
     """
     # Extract alias-to-CTE mapping from the AST if not provided
@@ -974,7 +975,34 @@ def optimize_rendered_property_access(
     return _optimize_raw_fhirpath_resource_calls(sql_text, registry, alias_to_cte or {})
 
 
+# Identity memo for _optimize_fhirpath_calls. Inlined fluent bodies share
+# AST subtrees by reference, so the rebuild-per-parent optimizer expands a
+# shared DAG into an exponential tree (CMS136). Entries store the ORIGINAL
+# node object alongside the result: the node stays referenced (its id()
+# cannot be recycled) and identity is re-validated on every hit.
+_FHIRPATH_OPT_MEMO: dict = {}
+
+
 def _optimize_fhirpath_calls(
+    ast: SQLExpression,
+    registry: ColumnRegistry,
+    alias_to_cte: Dict[str, str]
+) -> SQLExpression:
+    """
+    Memoized entry point — see _optimize_fhirpath_calls_uncached.
+    """
+    if ast is None or isinstance(ast, SQLSelect):
+        return _optimize_fhirpath_calls_uncached(ast, registry, alias_to_cte)
+    memo_key = (id(ast), id(alias_to_cte))
+    entry = _FHIRPATH_OPT_MEMO.get(memo_key)
+    if entry is not None and entry[0] is ast:
+        return entry[1]
+    result = _optimize_fhirpath_calls_uncached(ast, registry, alias_to_cte)
+    _FHIRPATH_OPT_MEMO[memo_key] = (ast, result)
+    return result
+
+
+def _optimize_fhirpath_calls_uncached(
     ast: SQLExpression,
     registry: ColumnRegistry,
     alias_to_cte: Dict[str, str]
@@ -1236,10 +1264,18 @@ def _try_optimize_interval_bound_call(
         cte_name, alias, column_name = selected
         bound_col_name = f"{column_name}_{suffix}"
         if registry.has_column(cte_name, bound_col_name):
+            optimized_col: SQLExpression = SQLQualifiedIdentifier(parts=[alias, bound_col_name])
+            # Closed-null sentinel doctrine — see the qualified-identifier
+            # branch below for the full rationale (CMS996 ongoing periods).
+            sentinel = "9999-12-31" if call.name == "intervalEnd" else "0001-01-01"
+            optimized_col = SQLFunctionCall(
+                name="COALESCE",
+                args=[optimized_col, SQLLiteral(value=sentinel)],
+            )
             return SQLSubquery(
                 query=_replace_select_columns(
                     arg.query,
-                    [SQLQualifiedIdentifier(parts=[alias, bound_col_name])],
+                    [optimized_col],
                 )
             )
         return None
@@ -1253,7 +1289,26 @@ def _try_optimize_interval_bound_call(
         return None
     bound_col_name = f"{column_name}_{suffix}"
     if registry.has_column(cte_name, bound_col_name):
-        return SQLQualifiedIdentifier(parts=[alias, bound_col_name])
+        optimized: SQLExpression = SQLQualifiedIdentifier(parts=[alias, bound_col_name])
+        # FHIR Periods are CLOSED intervals; a missing bound means
+        # unbounded (ongoing), and the intervalStart/intervalEnd UDFs
+        # implement that via min/max sentinels. Replacing the call with
+        # the RAW precomputed column loses the sentinel substitution:
+        # intervalEnd(period) over an ongoing Encounter (period_end NULL)
+        # returned NULL instead of 9999-12-31, failing
+        # `period overlaps day of X` exclusions (CMS996 hospice
+        # discharge-disposition). Restore the closed-null sentinel here.
+        if call.name == "intervalEnd":
+            optimized = SQLFunctionCall(
+                name="COALESCE",
+                args=[optimized, SQLLiteral(value="9999-12-31")],
+            )
+        else:
+            optimized = SQLFunctionCall(
+                name="COALESCE",
+                args=[optimized, SQLLiteral(value="0001-01-01")],
+            )
+        return optimized
     return None
 
 

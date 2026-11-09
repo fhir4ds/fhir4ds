@@ -610,6 +610,19 @@ static void ResolveSegment(const std::vector<yyjson_val *> &input, const std::st
 			continue;
 		}
 		if (!yyjson_is_obj(node)) {
+			// FHIR object-model idiom over raw JSON: in the object model a
+			// FHIR primitive (FHIR.code, FHIR.string, ...) is a wrapper whose
+			// `.value` is the scalar; raw FHIR JSON flattens the primitive
+			// to the scalar itself. `.value` on a scalar node resolves to
+			// the node (identity) — inlined FHIRHelpers conversions navigate
+			// `coding.code.value` on raw Coding JSON (CMS156 medication
+			// strength matching produced empty results without this).
+			// Mirrors the Python engine branch in
+			// create_reduce_member_invocation and the evaluator branch in
+			// Evaluator::evalMemberAccess.
+			if (segment == "value") {
+				output.push_back(node);
+			}
 			continue;
 		}
 
@@ -878,6 +891,9 @@ static fhirpath::FPCollection EvaluateFhirpath(FhirpathState &state, const char 
 		return {};
 	}
 	auto ast = GetOrCompile(state, expr_str);
+	if (getenv("F4DS_DBG_EVAL")) {
+		fprintf(stderr, "[eval] expr=%s ast_ok=%d\n", expr_str.c_str(), (int)(ast != nullptr));
+	}
 	if (!ast) {
 		return {};
 	}

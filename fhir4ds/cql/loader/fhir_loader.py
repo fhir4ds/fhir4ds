@@ -329,8 +329,8 @@ class FHIRDataLoader:
         Extract the patient identity from a FHIR resource.
 
         - For Patient resources: returns the resource id.
-        - For other resources: extracts from ``subject``, ``patient``, or
-          ``beneficiary`` when the reference is Patient-typed
+        - For other resources: extracts from ``subject``, ``patient``,
+          ``beneficiary``, or ``for`` when the reference is Patient-typed
           (``Patient/{id}``, an absolute URL ending ``/Patient/{id}``, or a
           version-specific ``Patient/{id}/_history/{vid}`` resolved to the
           current id), or a bundle-local ``urn:uuid:`` reference whose
@@ -345,7 +345,11 @@ class FHIRDataLoader:
         if resource_type == "Patient":
             return resource.get("id")
 
-        for path in ("subject", "patient", "beneficiary"):
+        # ``for`` is the patient compartment reference for Task (FHIR R4:
+        # Task.for 0..1 Reference(Patient|RelatedPerson|...) — the same
+        # Patient-typed guard applies; without it CMS50-style
+        # [Task: "Fulfill"] retrieves are invisible in patient context).
+        for path in ("subject", "patient", "beneficiary", "for"):
             value = resource.get(path)
             # List-valued patient references (e.g. Appointment.patient 0..*
             # in FHIR R4) are scanned for the first Patient-typed entry.

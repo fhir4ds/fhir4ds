@@ -75,6 +75,16 @@ def run_measure(
     _clear_runtime_state(conn)
     timings = {}
 
+    # Generated measure SQL (deeply nested fluent-inlined CASE chains, e.g.
+    # CMS156 averageDailyDose) can exceed DuckDB's default 1000-node
+    # expression-depth cap at bind time — on BOTH the audit and non-audit
+    # execution paths. Raise it once up front (same knob the audit path
+    # and MeasureEvaluator._execute_compiled_group already use).
+    try:
+        conn.execute("SET max_expression_depth TO 10000")
+    except Exception:
+        pass
+
     # Parse CQL (shared across audit and non-audit attempts)
     start = time.perf_counter()
     from fhir4ds.cql.parser import parse_cql

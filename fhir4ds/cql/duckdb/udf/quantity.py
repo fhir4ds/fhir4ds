@@ -1347,6 +1347,27 @@ def toConcept(code_json: str | None) -> str | None:
     """CQL §22.30: ToConcept — wrap a Code in a Concept."""
     data = _load_clinical_json(code_json)
     if isinstance(data, dict):
+        # FHIR CodeableConcept shape: inlined FHIRHelpers.ToConcept bodies
+        # can hand the WHOLE CodeableConcept JSON here (dynamic medication
+        # choice values) — unwrap the coding array into List<Code>
+        # (CMS156 averageDailyDose strength matching produced null codes).
+        if "coding" in data or "text" in data:
+            codings = data.get("coding") or []
+            if not isinstance(codings, list):
+                codings = [codings]
+            normalized = []
+            for c in codings:
+                if isinstance(c, str):
+                    c = _load_clinical_json(c)
+                code = _normalize_code_object(c) if c is not None else None
+                if code is not None:
+                    normalized.append(code)
+            if not normalized:
+                return None
+            concept = {"codes": normalized}
+            if data.get("text") is not None:
+                concept["display"] = data["text"]
+            return orjson.dumps(concept).decode("utf-8")
         code = _normalize_code_object(data)
         if code is None:
             return None

@@ -758,8 +758,136 @@ class FunctionsMixin:
                     SQLBinaryOp(operator="AND", left=_existing_where, right=_corr)
                     if _existing_where else _corr
                 )
+                _new_cols = inner_query.columns
+                # Reconcile dangling projection aliases: the composition
+                # machinery (with-swap / set-op / fluent inlining) can leave
+                # the projection referencing an alias that is NOT in this
+                # select's FROM chain (e.g. `AntiInfectives.resource` while
+                # the FROM is the OrderMedication1/2 rows chain) — the rows
+                # are the same underlying resources, so rewrite dangling
+                # TOP-LEVEL first-parts to the FROM's primary alias (CMS156).
+                _primary = (
+                    inner_query.from_clause.alias
+                    if isinstance(inner_query.from_clause, SQLAlias)
+                    else None
+                )
+                if _primary:
+                    _from_aliases = {_primary, "_pt", _outer_pid}
+                    for _jn in inner_query.joins or []:
+                        if isinstance(_jn, SQLJoin) and _jn.alias:
+                            _from_aliases.add(_jn.alias)
+
+                    def _fix_dangling(n, depth_limit=40):
+                        if n is None or depth_limit <= 0:
+                            return n
+                        if isinstance(n, (SQLSubquery, SQLExists)):
+                            return n  # inner scopes keep their own bindings
+                        if isinstance(n, SQLQualifiedIdentifier) and n.parts:
+                            if n.parts[0] not in _from_aliases:
+                                return SQLQualifiedIdentifier(
+                                    parts=[_primary] + list(n.parts[1:])
+                                )
+                            return n
+                        if isinstance(n, (list, tuple)):
+                            items = [_fix_dangling(c, depth_limit) for c in n]
+                            return type(n)(items) if isinstance(n, tuple) else items
+                        if not hasattr(n, "__dataclass_fields__"):
+                            return n
+                        for _fn3 in n.__dataclass_fields__:
+                            _v3 = getattr(n, _fn3, None)
+                            _nv3 = _fix_dangling(_v3, depth_limit - 1)
+                            if _nv3 is not _v3:
+                                try:
+                                    setattr(n, _fn3, _nv3)
+                                except Exception:  # noqa: BLE001
+                                    pass
+                        return n
+
+                    _new_cols = [_fix_dangling(c) for c in _new_cols]
+
+                    # DuckDB FLATTENS derived tables whose projection is a
+                    # single bare alias passthrough (`SELECT O1.resource FROM
+                    # (...) AS O1`) — the outer alias then dangles and the
+                    # injected <alias>.patient_id correlation fails
+                    # ("Referenced table X not found"; minimal repro
+                    # verified on duckdb 1.5.x). Widen such derived tables
+                    # in our FROM chain to also project patient_id.
+                    def _widen_passthrough_dt(fc):
+                        if not (
+                            isinstance(fc, SQLAlias)
+                            and isinstance(fc.expr, SQLSubquery)
+                            and isinstance(fc.expr.query, SQLSelect)
+                        ):
+                            return fc
+                        _dt_sel = fc.expr.query
+                        _dt_cols = _dt_sel.columns or []
+                        if len(_dt_cols) != 1:
+                            return fc
+                        _c0 = _dt_cols[0]
+                        _c0e = _c0.expr if isinstance(_c0, SQLAlias) else _c0
+                        if not isinstance(_c0e, SQLQualifiedIdentifier):
+                            return fc
+                        _src_a = _c0e.parts[0]
+                        _dt_fr = _dt_sel.from_clause
+                        _dt_fr_alias = (
+                            _dt_fr.alias if isinstance(_dt_fr, SQLAlias) else None
+                        )
+                        if _dt_fr_alias != _src_a:
+                            return fc
+                        return SQLAlias(
+                            expr=SQLSubquery(query=SQLSelect(
+                                columns=[
+                                    _c0,
+                                    SQLQualifiedIdentifier(
+                                        parts=[_src_a, "patient_id"]
+                                    ),
+                                ],
+                                from_clause=_dt_sel.from_clause,
+                                where=_dt_sel.where,
+                                joins=_dt_sel.joins,
+                                distinct=_dt_sel.distinct,
+                                limit=_dt_sel.limit,
+                            )),
+                            alias=fc.alias,
+                        )
+
+                    _new_from = _widen_passthrough_dt(inner_query.from_clause)
+                    if _new_from is not inner_query.from_clause:
+                        inner_query = SQLSelect(
+                            columns=_new_cols,
+                            from_clause=_new_from,
+                            where=_new_where,
+                            joins=inner_query.joins,
+                            group_by=inner_query.group_by,
+                            having=inner_query.having,
+                            order_by=inner_query.order_by,
+                            limit=inner_query.limit,
+                            distinct=inner_query.distinct,
+                        )
+                        _new_cols = inner_query.columns
+                if inner_query.columns and not any(
+                    (
+                        isinstance(c, SQLAlias) and c.alias == "patient_id"
+                    ) or (
+                        isinstance(c, SQLIdentifier) and c.name == "patient_id"
+                    ) or (
+                        isinstance(c, SQLQualifiedIdentifier) and c.parts[-1] == "patient_id"
+                    )
+                    for c in inner_query.columns
+                ):
+                    # DuckDB flattens derived tables whose projection is a
+                    # bare alias passthrough (SELECT O1.resource ...) — the
+                    # outer alias then dangles and the injected
+                    # <alias>.patient_id correlation fails with "Referenced
+                    # table not found" (CMS156). Project patient_id
+                    # explicitly alongside the value so the alias binds.
+                    _new_cols = list(inner_query.columns) + [
+                        SQLQualifiedIdentifier(
+                            parts=[_src_alias, "patient_id"]
+                        )
+                    ]
                 inner_query = SQLSelect(
-                    columns=inner_query.columns,
+                    columns=_new_cols,
                     from_clause=inner_query.from_clause,
                     where=_new_where,
                     joins=inner_query.joins,

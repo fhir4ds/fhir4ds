@@ -469,6 +469,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         resolved_asts, phase1_result, phase2_result, opt_stats = run_optimization_phases(
             library, self._context, self
         )
+        self._phase2_cte_name_map = phase2_result.cte_name_map
 
         # Copy column registry from phase2_result to context for property access optimization
         # This enables property access in expressions.py to use precomputed columns
@@ -581,7 +582,31 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             from_clause=SQLIdentifier(name=final_name, quoted=True),
         )
         fragment = SQLFragment(main_query=final_select_ast, ctes=cte_defs)
-        return fragment.to_sql()
+        return self._substitute_fold_placeholders(fragment.to_sql())
+
+
+    def _substitute_fold_placeholders(self, sql_text: str) -> str:
+        """Replace fold-marker identifiers with quoted retrieve CTE names.
+
+        The aggregate fold lowering serializes source expressions to raw SQL
+        strings; unresolved RetrievePlaceholder nodes inside them were swapped
+        for ``__f4ds_ph_N__`` markers (see _translate_query). Phase 2 built the
+        retrieve CTEs for those placeholders; swap the marker text for the
+        quoted CTE reference here (CMS136).
+        """
+        markers = getattr(self._context, "_fold_marker_placeholders", None)
+        if not markers:
+            return sql_text
+        cte_map = getattr(self, "_phase2_cte_name_map", None) or {}
+        import re as _re
+        def _sub(m):
+            idx = int(m.group(1))
+            if 0 <= idx < len(markers):
+                cte_name = cte_map.get(markers[idx].key)
+                if cte_name:
+                    return f'"{cte_name}"'
+            return m.group(0)
+        return _re.sub(r"__f4ds_ph_(\d+)__", _sub, sql_text)
 
     def translate_library_to_population_sql(
         self,
@@ -735,6 +760,8 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             resolved_asts, phase1_result, phase2_result, opt_stats = run_optimization_phases(
                 library, self._context, self
             )
+            self._phase2_cte_name_map = phase2_result.cte_name_map
+
         except RecursionError:
             resolving = list(self._context._resolving_definitions)
             if resolving:
@@ -1099,7 +1126,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         if os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP", "1") != "0":
             min_occurrences = int(os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP_MIN", "2"))
             fragment.deduplicate_lateral_aliases(min_occurrences=min_occurrences)
-        sql_text = fragment.to_sql()
+        sql_text = self._substitute_fold_placeholders(fragment.to_sql())
         if self._context.column_registry:
             sql_text = optimize_rendered_property_access(
                 sql_text, self._context.column_registry
@@ -1300,7 +1327,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             order_by=[(SQLIdentifier(name="patient_id"), "ASC")],
         )
         fragment = SQLFragment(main_query=final, ctes=[cte])
-        return fragment.to_sql()
+        return self._substitute_fold_placeholders(fragment.to_sql())
 
     def _has_unresolved_refs(self, expr: "SQLExpression") -> bool:
         """Check if AST has obvious unresolved references (single-letter identifiers).
