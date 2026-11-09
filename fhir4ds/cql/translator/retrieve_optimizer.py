@@ -280,6 +280,13 @@ def propagate_resource_column_lineage(
     return propagated
 
 
+# Sentinel alias→CTE value for derived-table aliases (FROM (SELECT/UNION...)
+# AS x). These bind no CTE: optimizers must never substitute precomputed
+# columns against them, and their assignment shadows inherited same-named
+# mappings (CMS145 ValidEncounter.period over a union alias).
+_DERIVED_TABLE = "\x00__derived_table__"
+
+
 def _extract_alias_to_cte_mapping(ast: SQLExpression) -> Dict[str, str]:
     """
     Extract mapping from SQL table aliases to CTE names from the AST.
@@ -330,6 +337,16 @@ def _extract_alias_from_table_ref(
         table_ref: The table reference (SQLIdentifier, SQLAlias, SQLQualifiedIdentifier)
         alias_map: Dict to update with mappings
         explicit_alias: Optional explicit alias from JOIN
+
+    Derived-table aliases (``FROM (SELECT/UNION/...) AS x``) are recorded as
+    ``_DERIVED_TABLE`` sentinels: they bind NO CTE, and the assignment SHADOWS
+    any same-named mapping inherited from a sibling query in the global map.
+    Without the sentinel, a sibling define that legitimately binds the same
+    CQL alias name to a real CTE leaks into this scope and the fhirpath
+    optimizer substitutes that CTE's precomputed columns onto the derived
+    alias — the union only exposes (patient_id, resource), producing
+    ``Values list "X" does not have a column named "period"`` binder errors
+    (CMS145 ValidEncounter.period).
     """
     if isinstance(table_ref, SQLAlias):
         # Pattern: SQLAlias(expr=SQLIdentifier("CTE Name"), alias="t1")
@@ -338,6 +355,11 @@ def _extract_alias_from_table_ref(
             cte_name = table_ref.expr.name
         elif isinstance(table_ref.expr, SQLQualifiedIdentifier) and len(table_ref.expr.parts) == 1:
             cte_name = table_ref.expr.parts[0]
+        elif isinstance(table_ref.expr, (SQLSubquery, SQLUnion, SQLIntersect, SQLExcept)):
+            # Derived table: binds no CTE; shadow any inherited mapping so a
+            # same-named alias from a sibling query cannot leak in.
+            alias_map[table_ref.alias] = _DERIVED_TABLE
+            return
 
         if cte_name:
             alias_map[table_ref.alias] = cte_name
@@ -862,6 +884,12 @@ _RAW_CTE_ALIAS_RE = re.compile(
     r'\b(?:FROM|JOIN)\s+"((?:[^"]|"")*)"\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)',
     re.IGNORECASE,
 )
+# Derived-table aliases: `...) AS x` — binds no CTE (CMS145 doctrine).
+_RAW_DERIVED_ALIAS_RE = re.compile(
+    r"\)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)",
+    re.IGNORECASE,
+)
+
 _RAW_UNQUOTED_ALIAS_RE = re.compile(
     r"\b(?:FROM|JOIN)\s+(?!\")([A-Za-z_][A-Za-z0-9_.]*)"
     r"(?:\s+AS)?\s+([A-Za-z_][A-Za-z0-9_]*)",
@@ -893,6 +921,18 @@ def _merge_raw_alias_mapping(
     """
     merged = dict(alias_to_cte)
     conflicts: Set[str] = set()
+
+    # Derived-table aliases: `...) AS x` (FROM (SELECT/UNION...) AS x).
+    # These bind no CTE; if the same alias name is ALSO bound to a real CTE
+    # elsewhere in the fragment (a sibling query reusing the CQL alias name),
+    # the derived binding must win for the whole fragment — substituting the
+    # sibling CTE's columns onto the derived alias produces binder errors
+    # (CMS145 ValidEncounter.period over an inlined union). Conservative by
+    # design: skipping an optimization is always safe.
+    for alias in _RAW_DERIVED_ALIAS_RE.findall(raw_sql):
+        merged.pop(alias, None)
+        conflicts.discard(alias)
+        merged[alias] = _DERIVED_TABLE
 
     for raw_cte_name, alias in _RAW_CTE_ALIAS_RE.findall(raw_sql):
         cte_name = raw_cte_name.replace('""', '"')
@@ -940,7 +980,7 @@ def _optimize_raw_fhirpath_resource_calls(
         alias = match.group(2)
         path = match.group(3).replace("''", "'")
         cte_name = raw_alias_to_cte.get(alias)
-        if not cte_name:
+        if not cte_name or cte_name == _DERIVED_TABLE:
             return match.group(0)
         column_info = None
         for info in registry.get_columns(cte_name).values():
@@ -1124,7 +1164,10 @@ def _try_optimize_fhirpath_call(
 
     # Look up the CTE name for this alias
     cte_name = alias_to_cte.get(alias)
-    if not cte_name:
+    if not cte_name or cte_name == _DERIVED_TABLE:
+        # Derived-table (union/subquery) aliases bind no CTE: substituting a
+        # same-named sibling CTE's columns onto them produces binder errors
+        # (CMS145). Keep the fhirpath_* call form, which navigates .resource.
         return None
 
     # Look up the column in the registry
@@ -1285,7 +1328,7 @@ def _try_optimize_interval_bound_call(
     alias = arg.parts[-2]
     column_name = arg.parts[-1]
     cte_name = alias_to_cte.get(alias)
-    if not cte_name:
+    if not cte_name or cte_name == _DERIVED_TABLE:
         return None
     bound_col_name = f"{column_name}_{suffix}"
     if registry.has_column(cte_name, bound_col_name):
@@ -1778,6 +1821,8 @@ def run_optimization_phases(
             phase2_result.column_registry
         )
 
+        from .derived_alias_refs import fix_derived_alias_column_refs
+        optimized_ast = fix_derived_alias_column_refs(optimized_ast, phase2_result.column_registry)
         resolved_asts[def_name] = optimized_ast
 
         # Also resolve placeholders in let-variable CTE bodies for this definition
