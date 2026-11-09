@@ -22,4 +22,4 @@
 	branch = main
 [submodule "tests/data/dqm-content-cms-2025"]
 	path = tests/data/dqm-content-cms-2025
-	url = https://github.com/cqframework/dqm-content-cms-2025.git
+	url = https://github.com/fhir4ds/dqm-content-cms-2025.git
