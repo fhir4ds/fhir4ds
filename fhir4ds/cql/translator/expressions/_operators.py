@@ -5842,20 +5842,15 @@ class OperatorsMixin:
             right_start = self._ensure_date_cast(self._truncate_to_precision(right_start_raw, precision))
             left_end_raw = self._ensure_date_cast(self._truncate_to_precision(left_end_raw_bound, precision))
             right_end_raw = self._ensure_date_cast(self._truncate_to_precision(right_end_raw_bound, precision))
-            left_end = SQLFunctionCall(
-                name="COALESCE",
-                args=[
-                    left_end_raw,
-                    SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE"),
-                ],
-            )
-            right_end = SQLFunctionCall(
-                name="COALESCE",
-                args=[
-                    right_end_raw,
-                    SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE"),
-                ],
-            )
+            # NOTE: no sentinel COALESCE on intervalEnd-derived bounds —
+            # intervalEnd returns the point-type maximum for CLOSED null
+            # bounds (definitely unbounded) and NULL for OPEN null bounds
+            # (UNKNOWN, CQL §9.14/§9.15). Coalescing here converted unknown
+            # into definitely-unbounded (CMS133: prevalenceInterval
+            # [recordedDate, null) overlaps before surgery excluded patients
+            # the reference leaves in).
+            left_end = left_end_raw
+            right_end = right_end_raw
             overlap_check = SQLBinaryOp(
                 operator="AND",
                 left=SQLBinaryOp(operator="<=", left=left_start, right=right_end),
@@ -5915,20 +5910,15 @@ class OperatorsMixin:
             right_start = self._ensure_date_cast(self._truncate_to_precision(right_start_raw, precision))
             left_end_raw = self._ensure_date_cast(self._truncate_to_precision(left_end_raw_bound, precision))
             right_end_raw = self._ensure_date_cast(self._truncate_to_precision(right_end_raw_bound, precision))
-            left_end = SQLFunctionCall(
-                name="COALESCE",
-                args=[
-                    left_end_raw,
-                    SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE"),
-                ],
-            )
-            right_end = SQLFunctionCall(
-                name="COALESCE",
-                args=[
-                    right_end_raw,
-                    SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE"),
-                ],
-            )
+            # NOTE: no sentinel COALESCE on intervalEnd-derived bounds —
+            # intervalEnd returns the point-type maximum for CLOSED null
+            # bounds (definitely unbounded) and NULL for OPEN null bounds
+            # (UNKNOWN, CQL §9.14/§9.15). Coalescing here converted unknown
+            # into definitely-unbounded (CMS133: prevalenceInterval
+            # [recordedDate, null) overlaps before surgery excluded patients
+            # the reference leaves in).
+            left_end = left_end_raw
+            right_end = right_end_raw
             overlap_check = SQLBinaryOp(
                 operator="AND",
                 left=SQLBinaryOp(operator="<=", left=left_start, right=right_end),

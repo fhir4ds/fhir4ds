@@ -1148,6 +1148,22 @@ static void IntervalContainsFunc(DataChunk &args, ExpressionState &state, Vector
 	}
 }
 
+
+// CQL §2/§9.14/§9.15: a null bound with an OPEN boundary flag is UNKNOWN
+// (Start/End return null); a null CLOSED bound is unbounded. Relationship
+// predicates evaluate through Start/End, so open null bounds make the
+// result uncertain -> NULL (mirrors Python _open_null_bound_uncertain;
+// CMS133 prevalenceInterval [recorded, null) vs surgery).
+static bool interval_open_null_uncertain(const cql::Interval &iv) {
+	if (!iv.low.has_value() && !iv.low_closed) {
+		return true;
+	}
+	if (!iv.high.has_value() && !iv.high_closed) {
+		return true;
+	}
+	return false;
+}
+
 DEFINE_TWO_STR_BOOL_UDF(IntervalProperlyContainsFunc, {
 	auto iv = cql::Interval::parse(a_str);
 	if (!iv) {
@@ -1203,6 +1219,7 @@ static void IntervalOverlapsFunc(DataChunk &args, ExpressionState &state, Vector
 			result_data[i] = false;
 			continue;
 		}
+		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
 		auto tri = DateTimeOverlapsTriState(*iv1, *iv2);
 		if (tri == CqlTriBool::Unknown) {
 			result_mask.SetInvalid(i);
@@ -1219,18 +1236,21 @@ static void IntervalOverlapsFunc(DataChunk &args, ExpressionState &state, Vector
 DEFINE_TWO_STR_BOOL_UDF(IntervalBeforeFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
+		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
 	result_data[i] = (iv1 && iv2) ? iv1->before(*iv2) : false;
 })
 
 DEFINE_TWO_STR_BOOL_UDF(IntervalAfterFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
+		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
 	result_data[i] = (iv1 && iv2) ? iv1->after(*iv2) : false;
 })
 
 DEFINE_TWO_STR_BOOL_UDF(IntervalMeetsFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
+		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
 	if (!iv1 || !iv2) {
 		result_data[i] = false;
 		continue;
@@ -1246,12 +1266,14 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalMeetsFunc, {
 DEFINE_TWO_STR_BOOL_UDF(IntervalIncludesFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
+		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
 	result_data[i] = (iv1 && iv2) ? iv1->includes(*iv2) : false;
 })
 
 DEFINE_TWO_STR_BOOL_UDF(IntervalIncludedInFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
+		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
 	if (iv1 && iv2 && iv1->low && iv2->low && iv1->low->dt_val && iv2->low->dt_val &&
 	    iv1->low->compare(*iv2->low) == 0 && iv1->low->dt_val->precision != iv2->low->dt_val->precision) {
 		result_mask.SetInvalid(i);
@@ -1268,6 +1290,7 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalIncludedInFunc, {
 DEFINE_TWO_STR_BOOL_UDF(IntervalProperlyIncludesFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
+		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
 	result_data[i] = (iv1 && iv2) ? iv1->properly_includes(*iv2) : false;
 })
 
@@ -1305,6 +1328,7 @@ static void IntervalProperlyIncludedInFunc(DataChunk &args, ExpressionState &sta
 DEFINE_TWO_STR_BOOL_UDF(IntervalOverlapsBeforeFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
+		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
 	if (iv1 && iv2) {
 		auto tri = DateTimeOverlapsTriState(*iv1, *iv2);
 		if (tri == CqlTriBool::Unknown) {
@@ -1326,6 +1350,7 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalOverlapsBeforeFunc, {
 DEFINE_TWO_STR_BOOL_UDF(IntervalOverlapsAfterFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
+		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
 	if (iv1 && iv2) {
 		auto tri = DateTimeOverlapsTriState(*iv1, *iv2);
 		if (tri == CqlTriBool::Unknown) {
@@ -1347,6 +1372,7 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalOverlapsAfterFunc, {
 DEFINE_TWO_STR_BOOL_UDF(IntervalMeetsBeforeFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
+		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
 	if (!iv1 || !iv2) {
 		result_data[i] = false;
 		continue;
@@ -1362,6 +1388,7 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalMeetsBeforeFunc, {
 DEFINE_TWO_STR_BOOL_UDF(IntervalMeetsAfterFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
+		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
 	if (!iv1 || !iv2) {
 		result_data[i] = false;
 		continue;
@@ -1377,6 +1404,7 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalMeetsAfterFunc, {
 DEFINE_TWO_STR_BOOL_UDF(IntervalStartsSameFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
+		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
 	if (!iv1 || !iv2 || !iv1->low || !iv2->low || !iv1->high || !iv2->high) {
 		result_mask.SetInvalid(i);
 		continue;
@@ -1387,6 +1415,7 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalStartsSameFunc, {
 DEFINE_TWO_STR_BOOL_UDF(IntervalEndsSameFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
+		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
 	if (!iv1 || !iv2 || !iv1->low || !iv2->low || !iv1->high || !iv2->high) {
 		result_mask.SetInvalid(i);
 		continue;

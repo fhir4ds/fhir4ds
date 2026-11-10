@@ -1594,6 +1594,24 @@ def _unwrap_bound_for_json(val):
     return val
 
 
+
+def _open_null_bound_uncertain(iv: dict) -> bool:
+    """CQL §2/§9.14/§9.15: a null bound with an OPEN boundary flag is an
+    UNKNOWN boundary (Start/End return null), while a null CLOSED bound is
+    unbounded (Start/End return the point-type extremum). Relationship
+    predicates evaluate through Start/End, so an open null bound makes the
+    result uncertain -> None (CMS133: prevalenceInterval [recordedDate,
+    null) vs surgery — open-null high wrongly treated as definitely
+    unbounded excluded patients the reference leaves in)."""
+    if not iv:
+        return False
+    if iv.get("low") is None and not iv.get("low_closed", True):
+        return True
+    if iv.get("high") is None and not iv.get("high_closed", True):
+        return True
+    return False
+
+
 def intervalOverlaps(interval1: str | None, interval2: str | None) -> bool | None:
     """Check if two intervals overlap.
 
@@ -1603,6 +1621,8 @@ def intervalOverlaps(interval1: str | None, interval2: str | None) -> bool | Non
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
+    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
+        return None
 
     if not iv1 or not iv2:
         return None
@@ -1652,6 +1672,8 @@ def intervalBefore(interval1: str | None, interval2: str | None) -> bool | None:
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
+    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
+        return None
 
     if not iv1 or not iv2:
         return None
@@ -1673,6 +1695,8 @@ def intervalAfter(interval1: str | None, interval2: str | None) -> bool | None:
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
+    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
+        return None
 
     if not iv1 or not iv2:
         return None
@@ -1759,6 +1783,8 @@ def intervalMeets(interval1: str | None, interval2: str | None) -> bool | None:
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
+    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
+        return None
 
     if not iv1 or not iv2:
         return None
@@ -1970,6 +1996,8 @@ def intervalIncludes(interval1: str | None, interval2: str | None) -> bool | Non
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
+    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
+        return None
     if not iv1 or not iv2:
         return None
     start1 = _effective_start(iv1)
@@ -2120,6 +2148,8 @@ def intervalEquals(interval1: str | None, interval2: str | None) -> bool | None:
         return None
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
+    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
+        return None
     if not iv1 or not iv2:
         return None
     starts_equal = _interval_bound_equals_nullable(iv1, iv2, "low")
@@ -2139,6 +2169,8 @@ def intervalEquivalent(interval1: str | None, interval2: str | None) -> bool:
         return interval1 is None and interval2 is None
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
+    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
+        return None
     if not iv1 or not iv2:
         return False
     starts_equal = _interval_bound_equals_nullable(iv1, iv2, "low")
@@ -2178,6 +2210,8 @@ def intervalProperlyIncludes(interval1: str | None, interval2: str | None) -> bo
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
+    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
+        return None
     if not iv1 or not iv2:
         return None
     start1 = _effective_start(iv1)
@@ -2228,6 +2262,8 @@ def intervalProperlyIncludedIn(interval1: str | None, interval2: str | None) -> 
     interval with typed-null bounds.  ``Interval[null, null]`` is unbounded;
     ``null as Interval<T>`` yields SQL NULL for this operator.
     """
+    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
+        return None
     return intervalProperlyIncludes(interval2, interval1)
 
 
@@ -2238,6 +2274,8 @@ def intervalOverlapsBefore(interval1: str | None, interval2: str | None) -> bool
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
+    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
+        return None
     if not iv1 or not iv2:
         return None
     # Must overlap AND iv1 starts before iv2
@@ -2266,6 +2304,8 @@ def intervalOverlapsAfter(interval1: str | None, interval2: str | None) -> bool 
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
+    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
+        return None
     if not iv1 or not iv2:
         return None
     # Must overlap AND iv1 ends after iv2
@@ -2310,6 +2350,8 @@ def intervalMeetsBefore(interval1: str | None, interval2: str | None) -> bool | 
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
+    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
+        return None
     if not iv1 or not iv2:
         return None
     end1 = _sentinel_effective_end(iv1)
@@ -2340,6 +2382,8 @@ def intervalStartsSame(interval1: str | None, interval2: str | None) -> bool | N
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
+    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
+        return None
     if not iv1 or not iv2:
         return None
     if iv1["low"] is None or iv2["low"] is None:
@@ -2363,6 +2407,8 @@ def intervalEndsSame(interval1: str | None, interval2: str | None) -> bool | Non
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
+    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
+        return None
     if not iv1 or not iv2:
         return None
     if iv1["high"] is None or iv2["high"] is None:
