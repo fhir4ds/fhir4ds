@@ -4234,9 +4234,18 @@ class FunctionsMixin:
                 and _c0e.name in ("fhirpath_text", "fhirpath_scalar")
                 and _c0e.args
             ):
+                # `fhirpath` returns a LIST per row; the list() AGGREGATE
+                # would collect those into a list-of-lists (LIST_EXTRACT
+                # then returned the first row's LIST, not a scalar — CMS136
+                # IPSD became ['2026-01-01'] and downstream temporal parses
+                # failed on '[2026-01-01]'). Flatten: First/Last select from
+                # the per-patient element list.
                 _agg = SQLFunctionCall(
-                    name="list",
-                    args=[SQLFunctionCall(name="fhirpath", args=list(_c0e.args))],
+                    name="flatten",
+                    args=[SQLFunctionCall(
+                        name="list",
+                        args=[SQLFunctionCall(name="fhirpath", args=list(_c0e.args))],
+                    )],
                 )
                 from ..types import SQLSelect as _Sel, SQLAlias as _Al
                 _new_col = (
