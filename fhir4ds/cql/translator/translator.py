@@ -1055,7 +1055,23 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     quoted = f'"{let_cte_name}"'
                     if quoted.lower() not in seen_lower:
                         seen_lower[quoted.lower()] = quoted
-                        cte_defs.append(CTEDefinition(name=quoted, query=_fixed_body))
+                        # CSE union-chain CTEs MUST be MATERIALIZED: their
+                        # bodies carry aggregate folds (WITH RECURSIVE) and
+                        # are consumed via correlated lookups
+                        # `(SELECT value FROM cte AS _lv WHERE ...)`.
+                        # DuckDB inlines plain CTEs into those lookup
+                        # subqueries, and an inlined recursive fold breaks
+                        # the lookup's scope binding (Binder Error
+                        # "Referenced table _lv not found, candidates: _pt";
+                        # CMS136 — verified: stubbing the cse body OR
+                        # forcing MATERIALIZED resolves it). AUTO counting
+                        # also under-counts these refs (lookups live in
+                        # sibling let-CTE bodies, not the final select).
+                        cte_defs.append(CTEDefinition(
+                            name=quoted,
+                            query=_fixed_body,
+                            materialized=True if let_cte_name.startswith("_cse_") else None,
+                        ))
             cte_name = self._unique_cte_name(name, seen_lower)
             quoted_name = f'"{cte_name}"'
             cte_defs.append(CTEDefinition(name=quoted_name, query=cte_ast))

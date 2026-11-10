@@ -474,6 +474,42 @@ class CoreMixin:
         """
         return self._clinical_code_literal(cs.code, cs.system, cs.display)
 
+
+    def _outer_pid_alias_for_definition_lookup(self) -> str:
+        """Correlation alias for definition-reference lookups.
+
+        ``resource_alias`` may name a query alias bound to an ELEMENT-VALUE
+        source (ast_expr registration — unnest/lambda iteration over a list).
+        Such aliases have no table binding: no rows in scope carry
+        ``<alias>.patient_id``. Correlating to them dangles inside the
+        elementwise expression (CMS136 "ADHD Medications Taken on IPSD...":
+        IPSD lookups inside ``return all X intersect ...`` correlated to
+        ``ADHDMedication.patient_id`` — Binder Error "Referenced table
+        ADHDMedication not found, candidates: _lt_unnest"). Fall back to the
+        patient-table alias, which the enclosing patient-scoped select
+        always binds.
+        """
+        ra = self.context.resource_alias
+        if ra and ra not in ("_pt", "_patients"):
+            sym = None
+            try:
+                sym = self.context.lookup_symbol(ra)
+            except Exception:
+                sym = None
+            has_table = bool(
+                sym is not None
+                and (
+                    getattr(sym, "table_alias", None)
+                    or (
+                        getattr(sym, "cte_name", None)
+                        and getattr(sym, "cte_name", None) != ra
+                    )
+                )
+            )
+            if not has_table:
+                return self.context.patient_alias or "_pt"
+        return ra or self.context.patient_alias or "_pt"
+
     def _build_promoted_definition_lookup(self, name: str, usage: ExprUsage) -> SQLExpression:
         """Build a correlated subquery lookup for a promoted global definition.
 
@@ -489,7 +525,7 @@ class CoreMixin:
         if strategy.kind == _RefKind.EXISTS:
             return self._build_correlated_exists(name)
 
-        _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
+        _outer_pid_alias = self._outer_pid_alias_for_definition_lookup()
         select = SQLSelect(
             columns=[SQLQualifiedIdentifier(parts=["sub", strategy.column])],
             from_clause=SQLAlias(
@@ -778,7 +814,7 @@ class CoreMixin:
                             suggestion="Use First() or Last() for explicit single-value selection"
                         )
                     # SCALAR always wants a single value: emit a LIMIT-1 subquery.
-                    _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
+                    _outer_pid_alias = self._outer_pid_alias_for_definition_lookup()
                     subq = SQLSubquery(query=SQLSelect(
                         columns=[SQLQualifiedIdentifier(parts=["sub", strategy.column])],
                         from_clause=SQLAlias(
@@ -1244,11 +1280,7 @@ class CoreMixin:
                     strategy = self._classify_definition_ref(full_name, usage, meta)
                     if strategy.kind == _RefKind.EXISTS:
                         return self._build_correlated_exists(full_name)
-                    _outer_pid_alias = (
-                        self.context.resource_alias
-                        or self.context.patient_alias
-                        or "_pt"
-                    )
+                    _outer_pid_alias = self._outer_pid_alias_for_definition_lookup()
                     subquery = SQLSubquery(query=SQLSelect(
                         columns=[SQLQualifiedIdentifier(parts=["sub", strategy.column])],
                         from_clause=SQLAlias(

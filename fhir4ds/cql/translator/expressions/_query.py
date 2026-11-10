@@ -2024,8 +2024,19 @@ class QueryMixin:
                 let_expr_sql = _wrap_as_json_array_agg(let_expr_sql)
 
             # Decide: promote to CTE or inline?
+            # Subquery-bearing lets are promoted even at ONE reference when
+            # they are used in the query body: correlated subqueries cannot
+            # survive inside elementwise (lambda/unnest) return expressions —
+            # DuckDB forbids correlated subqueries in lambda bodies, and the
+            # lookup's correlation alias does not exist in the lambda scope
+            # (CMS136 "ADHD Medications Taken on IPSD...": the
+            # IPSDAndContinuationMaintenancePhase let inlines `Interval["IPSD",
+            # ...]` bounds whose patient-scalar lookups correlate to the
+            # query alias, which lowered to an unnest lambda).
             if (
-                ref_counts.get(let_name, 0) >= self._LET_CTE_THRESHOLD
+                (
+                    ref_counts.get(let_name, 0) >= self._LET_CTE_THRESHOLD
+                )
                 and self.context.resource_alias
                 and not _is_coll  # collection-typed lets can't be promoted
             ):

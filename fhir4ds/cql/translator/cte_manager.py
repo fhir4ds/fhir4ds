@@ -149,6 +149,36 @@ def generate_function_cte_name(func_name: str, cql_def_name: str) -> str:
 
 
 
+
+_AGGREGATE_FUNCTION_NAMES = frozenset({
+    "list", "count", "sum", "min", "max", "avg", "string_agg",
+    "bool_and", "bool_or", "array_agg", "json_group_array",
+})
+
+
+def _expr_contains_aggregate(node) -> bool:
+    """True when the SQL subtree contains a bare aggregate function call.
+
+    Used to decide GROUP BY when patient_id is prepended to a select whose
+    value columns aggregate over the source rows.
+    """
+    stack = [node]
+    seen = set()
+    while stack:
+        cur = stack.pop()
+        if cur is None or id(cur) in seen:
+            continue
+        seen.add(id(cur))
+        name = getattr(cur, "name", None)
+        if isinstance(name, str) and name.lower() in _AGGREGATE_FUNCTION_NAMES:
+            return True
+        if isinstance(cur, (list, tuple)):
+            stack.extend(cur)
+            continue
+        for f in getattr(cur, "__dataclass_fields__", {}):
+            stack.append(getattr(cur, f, None))
+    return False
+
 class CTEManagerMixin:
     """Mixin providing CTE management methods for CQLToSQLTranslator."""
 
@@ -1283,6 +1313,18 @@ class CTEManagerMixin:
                         else:
                             value_columns.append((col, "value"))
                     new_columns = [patient_id_col] + value_columns
+                    # If a value column contains an aggregate (e.g. the
+                    # elementwise-return lowering's `list(...)` over the
+                    # source rows), prepending the bare patient_id column
+                    # makes the select a mixed aggregate query — DuckDB
+                    # requires GROUP BY patient_id (CMS136 "ADHD Medications
+                    # Taken on IPSD...": SELECT _pt.patient_id, list(...)).
+                    _needs_group = sql_ast.group_by is None and any(
+                        _expr_contains_aggregate(col) for col in value_columns
+                    )
+                    _group_by = (
+                        [patient_id_col] if _needs_group else sql_ast.group_by
+                    )
                     # Preserve the select's OWN joins (e.g. the
                     # _fix_stale_pt_references lateral re-anchor attaches
                     # the original FROM subquery as a CROSS JOIN LATERAL
@@ -1314,7 +1356,7 @@ class CTEManagerMixin:
                             from_clause=sql_ast.from_clause,
                             joins=existing + joins,
                             where=sql_ast.where,
-                            group_by=sql_ast.group_by,
+                            group_by=_group_by,
                             having=sql_ast.having,
                             order_by=sql_ast.order_by,
                             distinct=sql_ast.distinct,
@@ -1325,7 +1367,7 @@ class CTEManagerMixin:
                         from_clause=sql_ast.from_clause,
                         joins=_existing_joins or None,
                         where=sql_ast.where,
-                        group_by=sql_ast.group_by,
+                        group_by=_group_by,
                         having=sql_ast.having,
                         order_by=sql_ast.order_by,
                         distinct=sql_ast.distinct,

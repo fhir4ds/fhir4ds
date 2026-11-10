@@ -4206,6 +4206,14 @@ class FunctionsMixin:
         element). List consumers (First/Last/Count) must operate on the full
         element list, so swap in the list-returning ``fhirpath`` UDF with the
         same arguments.
+
+        Also handles the subquery-wrapped shape
+        ``(SELECT fhirpath_text(r.resource, p) FROM <rows CTE> ...)``
+        (property access over a multi-value definition): swap the inner UDF
+        AND aggregate with list() — the source CTE has one row per element,
+        and without the aggregation LIST_EXTRACT string-slices the scalar
+        VARCHAR (CMS136 "First ADHD Medication Prescribed...": date
+        '2026-...' -> '2').
         """
         if (
             isinstance(expr, SQLFunctionCall)
@@ -4213,6 +4221,38 @@ class FunctionsMixin:
             and expr.args
         ):
             return SQLFunctionCall(name="fhirpath", args=list(expr.args))
+        if (
+            isinstance(expr, SQLSubquery)
+            and isinstance(expr.query, SQLSelect)
+            and len(expr.query.columns or []) == 1
+            and not expr.query.group_by
+        ):
+            _c0 = expr.query.columns[0]
+            _c0e = _c0.expr if isinstance(_c0, SQLAlias) else _c0
+            if (
+                isinstance(_c0e, SQLFunctionCall)
+                and _c0e.name in ("fhirpath_text", "fhirpath_scalar")
+                and _c0e.args
+            ):
+                _agg = SQLFunctionCall(
+                    name="list",
+                    args=[SQLFunctionCall(name="fhirpath", args=list(_c0e.args))],
+                )
+                from ..types import SQLSelect as _Sel, SQLAlias as _Al
+                _new_col = (
+                    SQLAlias(expr=_agg, alias=_c0.alias)
+                    if isinstance(_c0, SQLAlias)
+                    else _agg
+                )
+                return SQLSubquery(query=_Sel(
+                    columns=[_new_col],
+                    from_clause=expr.query.from_clause,
+                    where=expr.query.where,
+                    joins=expr.query.joins,
+                    order_by=expr.query.order_by,
+                    limit=expr.query.limit,
+                    distinct=expr.query.distinct,
+                ))
         return expr
 
     @staticmethod
@@ -4824,8 +4864,63 @@ class FunctionsMixin:
             # to the per grid and corrupted results (QA-002) — route to the
             # dedicated collapse_intervals_per UDF instead.
             if isinstance(arg, SQLSubquery):
-                # Subqueries produce a json_group_array VARCHAR scalar.
-                pass
+                # Subqueries produce a json_group_array VARCHAR scalar —
+                # EXCEPT list-typed sources, which return a DuckDB list and
+                # must serialize via to_json before the JSON-array-string
+                # UDF: (a) CSE union-chain value-CTE lookups carry
+                # result_type List<Any>; (b) definition-reference lookups
+                # `SELECT sub.value FROM "<Define>" ...` whose define is
+                # List-typed (meta.cql_type) — CMS136 rolloutIntervals over
+                # "ADHD Medications Taken on IPSD...".
+                _rt = getattr(arg, "result_type", None)
+                if _rt and str(_rt).startswith("List"):
+                    arg = SQLFunctionCall(name="to_json", args=[arg])
+                else:
+                    # Bare definition-value lookups (`SELECT sub.value FROM
+                    # "<CTE>" ...`): the value column's physical type is not
+                    # statically known here (definition_meta/symbol may be
+                    # out of scope — CMS136). Rewrite the projection with a
+                    # runtime typeof discriminator: DuckDB lists serialize
+                    # via to_json; VARCHAR JSON-array strings pass through.
+                    _q = arg.query
+                    if (
+                        isinstance(_q, SQLSelect)
+                        and len(_q.columns or []) == 1
+                        and isinstance(_q.from_clause, SQLAlias)
+                        and isinstance(_q.from_clause.expr, SQLIdentifier)
+                        and _q.from_clause.expr.quoted
+                        and not _q.joins
+                        and not _q.group_by
+                    ):
+                        _c0 = _q.columns[0]
+                        _c0e = _c0.expr if isinstance(_c0, SQLAlias) else _c0
+                        if (
+                            isinstance(_c0e, SQLQualifiedIdentifier)
+                            and len(_c0e.parts) == 2
+                            and _c0e.parts[0] == _q.from_clause.alias
+                            and _c0e.parts[1] == "value"
+                        ):
+                            from ..types import SQLCase as _SQLCase2
+                            _val = SQLQualifiedIdentifier(parts=[_c0e.parts[0], "value"])
+                            arg = SQLSubquery(query=SQLSelect(
+                                columns=[_SQLCase2(
+                                    when_clauses=[(
+                                        SQLBinaryOp(
+                                            left=SQLFunctionCall(name="ends_with", args=[
+                                                SQLFunctionCall(name="typeof", args=[_val]),
+                                                SQLLiteral(value="[]"),
+                                            ]),
+                                            operator="=",
+                                            right=SQLLiteral(value=True),
+                                        ),
+                                        SQLFunctionCall(name="to_json", args=[_val]),
+                                    )],
+                                    else_clause=_val,
+                                )],
+                                from_clause=_q.from_clause,
+                                where=_q.where,
+                                limit=_q.limit,
+                            ))
             elif _is_list_returning_sql(arg):
                 arg = SQLFunctionCall(name="to_json", args=[arg])
             elif isinstance(arg, SQLArray):

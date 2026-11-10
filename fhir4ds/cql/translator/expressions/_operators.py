@@ -5258,8 +5258,18 @@ class OperatorsMixin:
             _cse_counters[scope_name] += 1
             cte_name = f"_cse_{safe_scope[:32]}_{_cse_counters[scope_name]}"
 
+        # The body MUST project patient_id alongside value: the correlated
+        # lookup does `_lv.patient_id = <X>.patient_id`, and a missing
+        # column makes DuckDB fail the whole alias binding with a
+        # misleading "Referenced table _lv not found" Binder Error
+        # (CMS136 — misdiagnosed for several rounds as a scope/recursive
+        # interaction; minimal repro: any CTE without patient_id
+        # referenced via `_lv.patient_id`).
         body = SQLSelect(
-            columns=[SQLAlias(expr=operand, alias="value")],
+            columns=[
+                SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
+                SQLAlias(expr=operand, alias="value"),
+            ],
             from_clause=SQLAlias(
                 expr=SQLIdentifier(name="_patients", quoted=True),
                 alias="_pt",
