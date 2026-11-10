@@ -554,8 +554,28 @@ class CTEManagerMixin:
             and isinstance(fc.expr, (_SubQ, _SelQ))
             and _has_nested_pt_ref(fc.expr)
         ):
+            # The lateral now exposes its own patient_id (e.g. a rehydrated
+            # rows source `SELECT patient_id, resource FROM "<CTE>" AS sub`);
+            # bare top-level `patient_id` column projections would be
+            # AMBIGUOUS between `_pt` and the lateral alias — qualify them
+            # to `_pt.patient_id` (CMS136 "Encounter During Initiation
+            # Phase" Binder Error).
+            from ..translator.ast_utils import replace_qualified_alias as _rqa_nop
+            _fixed_cols = []
+            for _c in (sql_ast.columns or []):
+                _ce = _c.expr if isinstance(_c, SQLAlias) else _c
+                if isinstance(_ce, SQLIdentifier) and _ce.name == "patient_id" and not _ce.quoted:
+                    if isinstance(_c, SQLAlias):
+                        _fixed_cols.append(SQLAlias(
+                            expr=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
+                            alias=_c.alias,
+                        ))
+                    else:
+                        _fixed_cols.append(SQLQualifiedIdentifier(parts=["_pt", "patient_id"]))
+                else:
+                    _fixed_cols.append(_c)
             return SQLSelect(
-                columns=sql_ast.columns,
+                columns=_fixed_cols,
                 from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="_pt"),
                 joins=list(sql_ast.joins or []) + [
                     SQLJoin(join_type="CROSS JOIN LATERAL", table=fc.expr, alias=fc.alias)

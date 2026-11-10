@@ -86,6 +86,58 @@ if TYPE_CHECKING:
     from ...translator.expressions import ExpressionTranslator
 
 
+def _demoted_rows_source_cte(sql_expr) -> "str | None":
+    """Recognize the scalar LIMIT-1 demotion of a RESOURCE_ROWS definition.
+
+    Shape (built at the definition-reference boundary, ``_core.py`` scalar
+    context):
+
+        (SELECT sub.resource FROM "<CTE>" AS sub
+         WHERE sub.patient_id = <X>.patient_id LIMIT 1)
+
+    Returns the quoted CTE name when *sql_expr* matches exactly, else None.
+    Used by the query-source assembly to rehydrate fluent-call sources over
+    RESOURCE_ROWS definitions to row iteration.
+    """
+    if not isinstance(sql_expr, SQLSubquery):
+        return None
+    q = sql_expr.query
+    if not isinstance(q, SQLSelect):
+        return None
+    if q.limit != 1 or q.joins or q.group_by or q.having or q.order_by or q.distinct:
+        return None
+    cols = q.columns or []
+    if len(cols) != 1:
+        return None
+    c0 = cols[0].expr if isinstance(cols[0], SQLAlias) else cols[0]
+    if not (
+        isinstance(c0, SQLQualifiedIdentifier)
+        and len(c0.parts) == 2
+        and c0.parts[0] == "sub"
+    ):
+        return None
+    fc = q.from_clause
+    if not (
+        isinstance(fc, SQLAlias)
+        and isinstance(fc.expr, SQLIdentifier)
+        and fc.expr.quoted
+        and fc.alias == "sub"
+    ):
+        return None
+    w = q.where
+    if not (
+        isinstance(w, SQLBinaryOp)
+        and w.operator == "="
+        and isinstance(w.left, SQLQualifiedIdentifier)
+        and list(w.left.parts) == ["sub", "patient_id"]
+        and isinstance(w.right, SQLQualifiedIdentifier)
+        and w.right.parts
+        and w.right.parts[-1] == "patient_id"
+    ):
+        return None
+    return fc.expr.name
+
+
 def _patient_correlated_where(existing_where, row_alias: str, outer_pid: str):
     """AND a patient correlation predicate onto an existing WHERE.
 
@@ -4654,6 +4706,26 @@ class QueryMixin:
                     return self._translate_query_on_alias(
                         node, _pp_base, source_alias,
                     )
+                # Fluent receiver demoted to a scalar LIMIT-1 subquery over a
+                # RESOURCE_ROWS definition CTE (the receiver is translated as
+                # a scalar function argument). A fluent function applies
+                # ELEMENTWISE over a list receiver, so as a QUERY SOURCE the
+                # alias must iterate the receiver's ROWS: rehydrate to
+                # `FROM "<CTE>" AS <alias>` (CMS136 "Encounter 31 to 300
+                # Days..." — the demotion projects only `resource`, so the
+                # wrapper's `patient_id` projection and downstream
+                # `<alias>.patient_id` correlations dangled).
+                _pp_demoted = _demoted_rows_source_cte(source_expr_node.sql_expr)
+                if _pp_demoted and source_alias:
+                    source_expr = SQLSelect(
+                        from_clause=SQLAlias(
+                            expr=SQLIdentifier(name=_pp_demoted, quoted=True),
+                            alias=source_alias,
+                        ),
+                    )
+                    self.context.add_alias(source_alias, table_alias=source_alias)
+                    self.context._alias_source_asts[source_alias] = source_expr_node
+                    alias = source_alias
                 else:
                     source_expr = self.translate(source_expr_node, usage=ExprUsage.LIST)
                     source_expr = self._preserve_quantity_literals_in_array(
@@ -4703,6 +4775,31 @@ class QueryMixin:
                         source_expr_node,
                     )
                     alias = source_alias
+                    # Fluent-call query source over a RESOURCE_ROWS
+                    # definition (CMS136: `("Qualifying Numerator
+                    # Encounter".isEncounterPerformed()) ValidNumeratorEncounter
+                    # where ... return ...`): generic translation demotes the
+                    # RECEIVER to a scalar LIMIT-1 subquery over the
+                    # definition CTE. As a QUERY SOURCE the alias must
+                    # iterate the receiver ROWS (CQL fluent functions apply
+                    # elementwise over list receivers) — rehydrate the
+                    # demotion to `FROM "<CTE>" AS <alias>` so the inlined
+                    # fluent body (already per-row in the WHERE) filters
+                    # elementwise and downstream `<alias>.patient_id`
+                    # correlations resolve (the demoted lateral projected
+                    # only `resource`, so IPSD lookups correlated to
+                    # `ValidNumeratorEncounter.patient_id` raised Binder
+                    # Error "does not have a column named patient_id").
+                    _demoted_cte = _demoted_rows_source_cte(source_expr)
+                    if _demoted_cte and alias:
+                        source_expr = SQLSelect(
+                            from_clause=SQLAlias(
+                                expr=SQLIdentifier(name=_demoted_cte, quoted=True),
+                                alias=alias,
+                            ),
+                        )
+                        self.context.add_alias(alias, table_alias=alias)
+                        self.context._alias_source_asts[alias] = source_expr_node
                     # QA-017: List literals as query source need unnesting AND
                     # proper alias binding when the query has WHERE/RETURN that
                     # reference the iteration variable.  Only wrap when the

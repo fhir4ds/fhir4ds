@@ -4995,12 +4995,29 @@ class OperatorsMixin:
                 if self._is_static_null_case(left) and self._is_static_null_case(right):
                     return SQLArray([])
             if left_typed_empty is not None and right_typed_empty is not None:
-                left_safe = SQLFunctionCall(
-                    name="COALESCE", args=[left, left_typed_empty]
-                )
-                right_safe = SQLFunctionCall(
-                    name="COALESCE", args=[right, right_typed_empty]
-                )
+                # CSE hoist BEFORE the COALESCE embedding (2x per operand,
+                # compounding on left-nested union chains — see
+                # _hoist_list_union_operand).
+                left_h = self._hoist_list_union_operand(left)
+                right_h = self._hoist_list_union_operand(right)
+                left_typed_empty_h = self._typed_empty_array_for(left_h)
+                right_typed_empty_h = self._typed_empty_array_for(right_h)
+                if left_typed_empty_h is None or right_typed_empty_h is None:
+                    # Hoisted lookup lost the typed-array inference — keep
+                    # the original inline form rather than breaking typing.
+                    left_safe = SQLFunctionCall(
+                        name="COALESCE", args=[left, left_typed_empty]
+                    )
+                    right_safe = SQLFunctionCall(
+                        name="COALESCE", args=[right, right_typed_empty]
+                    )
+                else:
+                    left_safe = SQLFunctionCall(
+                        name="COALESCE", args=[left_h, left_typed_empty_h]
+                    )
+                    right_safe = SQLFunctionCall(
+                        name="COALESCE", args=[right_h, right_typed_empty_h]
+                    )
                 return SQLFunctionCall(
                     name='"Distinct"',
                     args=[SQLFunctionCall(name="list_concat", args=[left_safe, right_safe])],
@@ -5057,6 +5074,14 @@ class OperatorsMixin:
             and _is_list_returning_sql(left)
             and _is_list_returning_sql(right)
         ):
+            # CSE hoist BEFORE the CASE construction: the arms below embed
+            # each operand 4x, quadrupling per union level on left-nested
+            # chains. Union-result operands are ALWAYS hoisted (see
+            # _hoist_list_union_operand) even though their shared-DAG node
+            # count is small — the wrap stage rebuilds without object
+            # sharing and re-exponentiates (CMS136: 201 -> 327,775 nodes).
+            left = self._hoist_list_union_operand(left)
+            right = self._hoist_list_union_operand(right)
             left_null = SQLUnaryOp(operator="IS NULL", operand=left, prefix=False)
             right_null = SQLUnaryOp(operator="IS NULL", operand=right, prefix=False)
             result = SQLFunctionCall(
@@ -5177,12 +5202,25 @@ class OperatorsMixin:
         bound_inside = set()
         _globals_ok = {"_pt", "_patients", "_lv"}
         foreign_root = None
+        _union_result_shape = False
         while stack:
             n = stack.pop()
             if n is None or id(n) in seen:
                 continue
             seen.add(id(n))
             node_count += 1
+            if isinstance(n, SQLFunctionCall) and n.name in (
+                '"Distinct"', "list_concat", "jsonConcat",
+            ):
+                # The operand is ITSELF a list-union result. The AST is a
+                # shared DAG (the union lowering embeds each operand ~4x by
+                # object reference), so unique-node counts stay tiny even
+                # though the rendered tree is exponential — a left-nested
+                # N-level union renders 4^N copies once the wrap rebuilds
+                # without sharing (CMS136 measured 201 resolved nodes ->
+                # 327,775 wrapped). Always hoist union-result operands to
+                # flatten the chain into flat CTE references.
+                _union_result_shape = True
             if isinstance(n, SQLQualifiedIdentifier):
                 root = n.parts[0]
                 if not (root in _globals_ok or root.startswith("_lt_")
@@ -5198,7 +5236,7 @@ class OperatorsMixin:
             elif isinstance(n, (list, tuple)):
                 stack.extend(n)
 
-        if node_count <= _CSE_HOIST_MIN_NODES:
+        if node_count <= _CSE_HOIST_MIN_NODES and not _union_result_shape:
             return operand
         if foreign_root is not None:
             return operand  # row-scoped operand: hoisting would break correlation

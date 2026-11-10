@@ -756,7 +756,44 @@ class ListsMixin:
             if method.lower() in {"first", "last", "singletonfrom", "count", "distinct", "where", "select"}
             else ExprUsage.SCALAR
         )
-        source = self.translate(expr.source, usage=source_usage)
+        # Fluent receiver that is a RESOURCE_ROWS definition (CMS136:
+        # `("Qualifying Numerator Encounter".isEncounterPerformed())`):
+        # CQL fluent functions apply ELEMENTWISE over list receivers, but
+        # generic SCALAR translation demotes the definition reference to a
+        # LIMIT-1 subquery projecting only `resource` — the inlined body
+        # query then builds `SELECT patient_id, resource FROM (<demotion>)`
+        # (dangling patient_id) and downstream `<query-alias>.patient_id`
+        # correlations fail (Binder Error). Build the rows SELECT directly,
+        # mirroring what retrieve receivers produce.
+        _rows_def_cte = None
+        if (
+            source_usage == ExprUsage.SCALAR
+            and isinstance(expr.source, Identifier)
+        ):
+            _rows_def_cte = self._definition_resource_cte_name(expr.source.name)
+        if _rows_def_cte is not None:
+            _outer_pid = (
+                self.context.resource_alias
+                or self.context.patient_alias
+                or "_pt"
+            )
+            source = SQLSubquery(query=SQLSelect(
+                columns=[
+                    SQLIdentifier(name="patient_id"),
+                    SQLIdentifier(name="resource"),
+                ],
+                from_clause=SQLAlias(
+                    expr=SQLIdentifier(name=_rows_def_cte, quoted=True),
+                    alias="sub",
+                ),
+                where=SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
+                    right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+                ),
+            ))
+        else:
+            source = self.translate(expr.source, usage=source_usage)
         args = [self.translate(arg, boolean_context=False) for arg in expr.arguments]
 
         # Element-selection methods need the LIST-returning fhirpath UDF as
