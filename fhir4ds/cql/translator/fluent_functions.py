@@ -1132,13 +1132,31 @@ class FluentFunctionTranslator:
                 prop_name = str(resource_expr.args[1].value)
                 if prop_name in _CHOICE_DATE_PROPERTIES:
                     res = resource_expr.args[0]  # The resource expression
+                    # QICoreCommon latest() semantics: end of period when the
+                    # period HAS an end, otherwise START of period. Bare
+                    # intervalEnd() materializes the closed-null-high sentinel
+                    # (9999-12-31T23:59:59.999) for start-only Periods
+                    # (CMS1188 gonorrhea obs effectivePeriod with no end).
+                    _period_json = SQLFunctionCall(
+                        name="fhirpath_text", args=[res, SQLLiteral(f"{prop_name}Period")]
+                    )
+                    _end = SQLFunctionCall(name="intervalEnd", args=[_period_json])
+                    _start = SQLFunctionCall(name="intervalStart", args=[_period_json])
+                    _end_finite = SQLFunctionCall(
+                        name="nullif",
+                        args=[
+                            SQLFunctionCall(
+                                name="replace", args=[_end, SQLLiteral("+00:00"), SQLLiteral("Z")]
+                            ),
+                            SQLLiteral("9999-12-31T23:59:59.999Z"),
+                        ],
+                    )
                     return SQLFunctionCall(
                         name="COALESCE",
                         args=[
                             SQLFunctionCall(name="fhirpath_date", args=[res, SQLLiteral(f"{prop_name}DateTime")]),
-                            SQLFunctionCall(name="intervalEnd", args=[
-                                SQLFunctionCall(name="fhirpath_text", args=[res, SQLLiteral(f"{prop_name}Period")])
-                            ]),
+                            _end_finite,
+                            _start,
                         ],
                     )
 
@@ -1218,13 +1236,30 @@ class FluentFunctionTranslator:
                 prop_name = str(resource_expr.args[1].value)
                 if prop_name in _CHOICE_DATE_PROPERTIES:
                     res = resource_expr.args[0]
+                    # QICoreCommon earliest(): start of period when it has a
+                    # start, otherwise END (mirror of latest — bare
+                    # intervalStart materializes the 0001-01-01 closed-null
+                    # low sentinel for end-only Periods).
+                    _period_json = SQLFunctionCall(
+                        name="fhirpath_text", args=[res, SQLLiteral(f"{prop_name}Period")]
+                    )
+                    _end = SQLFunctionCall(name="intervalEnd", args=[_period_json])
+                    _start = SQLFunctionCall(name="intervalStart", args=[_period_json])
+                    _start_finite = SQLFunctionCall(
+                        name="nullif",
+                        args=[
+                            SQLFunctionCall(
+                                name="replace", args=[_start, SQLLiteral("+00:00"), SQLLiteral("Z")]
+                            ),
+                            SQLLiteral("0001-01-01T00:00:00.000Z"),
+                        ],
+                    )
                     return SQLFunctionCall(
                         name="COALESCE",
                         args=[
                             SQLFunctionCall(name="fhirpath_date", args=[res, SQLLiteral(f"{prop_name}DateTime")]),
-                            SQLFunctionCall(name="intervalStart", args=[
-                                SQLFunctionCall(name="fhirpath_text", args=[res, SQLLiteral(f"{prop_name}Period")])
-                            ]),
+                            _start_finite,
+                            _end,
                         ],
                     )
 

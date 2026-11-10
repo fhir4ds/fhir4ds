@@ -1707,6 +1707,25 @@ class OperatorsMixin:
             "today", "now", "timeofday",
         ):
             return True
+        # maximum/minimum DateTime|Date|Time are temporal extents
+        # (CMS1188 hasEnd: `end of period = maximum DateTime` compared with
+        # raw string equality missed timezone normalization — intervalEnd
+        # renders +00:00 while the extent literal carries Z).
+        if isinstance(node, FunctionRef) and node.name.lower() in ("maximum", "minimum"):
+            if node.arguments:
+                _ta = node.arguments[0]
+                _tn = (
+                    _ta.name
+                    if isinstance(_ta, (Identifier, NamedTypeSpecifier))
+                    else ""
+                )
+                if str(_tn).split(".")[-1].lower() in ("datetime", "date", "time"):
+                    return True
+        # end of / start of over an interval operand are temporal points
+        if isinstance(node, UnaryExpression) and str(node.operator or "").lower() in (
+            "end of", "start of",
+        ):
+            return True
         # Arithmetic on DateTime: DateTime + Quantity → DateTime
         if isinstance(node, BinaryExpression) and node.operator in ("+", "-"):
             if self._is_temporal_cql_expr(node.left, _depth + 1):
@@ -7520,6 +7539,44 @@ class OperatorsMixin:
             if isinstance(resource_expr, SQLFunctionCall) and resource_expr.name in ("fhirpath_text", "fhirpath_date", "fhirpath_bool"):
                 # Use the first arg (the resource reference)
                 resource_ref = resource_expr.args[0]
+            elif isinstance(resource_expr, SQLCase):
+                # Choice-cast `X.value as FHIR.CodeableConcept` lowers to a
+                # type-check CASE whose arms extract the value. coding_matches
+                # wants the RESOURCE (its path resolves FHIR choice fields
+                # natively); passing the extracted concept JSON makes the
+                # path dangle (CMS1056 ctScanQualifies: concept match always
+                # False -> Numerator false for all three CT measures).
+                _inner_ref = None
+                _stack = [resource_expr.else_clause] + [w[1] for w in (resource_expr.when_clauses or [])]
+                while _stack:
+                    _n = _stack.pop()
+                    if _n is None:
+                        continue
+                    if (
+                        isinstance(_n, SQLFunctionCall)
+                        and _n.name in ("fhirpath_text", "fhirpath_date", "fhirpath_bool")
+                        and _n.args
+                    ):
+                        _inner_path = _n.args[1].value if (
+                            len(_n.args) > 1
+                            and isinstance(_n.args[1], SQLLiteral)
+                            and isinstance(_n.args[1].value, str)
+                        ) else None
+                        # Only re-anchor when the CASE extracts the SAME path
+                        # the coding-exists expression navigates (the choice-
+                        # cast `X.value as FHIR.CodeableConcept` shape). When
+                        # the CASE extracts a DEEPER path (component codings
+                        # etc.), the concept-JSON argument with the short
+                        # path is the correct form (CMS156 strength match).
+                        if _inner_path == base_path:
+                            _inner_ref = _n.args[0]
+                        break
+                    if hasattr(_n, "__dataclass_fields__"):
+                        for _f2 in _n.__dataclass_fields__:
+                            _stack.append(getattr(_n, _f2, None))
+                    elif isinstance(_n, (list, tuple)):
+                        _stack.extend(_n)
+                resource_ref = _inner_ref if _inner_ref is not None else resource_expr
             elif isinstance(resource_expr, SQLQualifiedIdentifier) and len(resource_expr.parts) >= 2:
                 # E.type → E.resource (replace last part with "resource")
                 resource_ref = SQLQualifiedIdentifier(parts=resource_expr.parts[:-1] + ["resource"])
