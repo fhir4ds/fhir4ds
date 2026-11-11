@@ -5875,3 +5875,365 @@ Known fragile areas — all FIXED in iterations 1-2, keep regression-tested:
   failures observed).
 - A 1.5.6-vs-1.5.5 LOAD failure message naming the binary's build version
   is the fast tell that a wrong-ABI binary sits in a load path.
+
+## CMS 2025 US-Core accuracy campaign — claimDiagnosis / period / negation doctrine (2026-11-10)
+
+Durable findings from the cms2025 measure campaign (branch `feat/cms2025-uscore-suite`).
+
+- **`fhirpath()` returns `VARCHAR[]`; `fhirpath_text()` returns `VARCHAR`.** A
+  list-returning FHIRPath navigation therefore CANNOT be fed back into another
+  `fhirpath`/`fhirpath_text` call (the UDF takes one JSON document). Chained
+  list navigation must be re-serialised:
+  `COALESCE('[' || array_to_string(<VARCHAR[]>, ',') || ']', '[]')`.
+  Do NOT use `concat(...)` for this: on a registered connection `concat`
+  resolves to the CQL `Concat` macro (2-arg VARCHAR) and binder-fails.
+- **List operands need the SOURCE TRAIL promoted, not just the outer call.**
+  `CQMCommon.claimDiagnosis` is
+  `encounter E let claim: (...), claimItem: (claim.item I where ...) return
+  claim.diagnosis D where D.sequence in claimItem.diagnosisSequence`, which
+  lowers to
+  `fhirpath_text(CASE WHEN ... THEN fhirpath_text(claims,'item') ELSE NULL END,
+  'diagnosisSequence')`. Promoting only the outer call still truncates to the
+  FIRST claim's first item. `_promote_source_trail` in
+  `translator/expressions/_utils.py` rewrites trail steps whose source is a
+  JSON ARRAY of resources (`'[' || string_agg(...) || ']'` subquery) into the
+  array-text form above; scalar sources keep `fhirpath_text`. Gating on the
+  array source is required — promoting scalar trails regressed QI-Core CMS145
+  (`intervalStart(VARCHAR[])`/`fhirpath(VARCHAR[], …)` binder errors) and one
+  variant segfaulted the native extension.
+- **FHIR Period → Interval bound closedness is ASYMMETRIC in
+  `collapse_intervals`** (`duckdb/udf/interval.py::_period_dict_to_interval`):
+  a Period with only `end` (missing START = unknown start) becomes an OPEN
+  low null bound so `start of` is null and `Min/Max` ignore it (CMS645
+  `eeea0041`); a Period with only `start` (missing END = ongoing) KEEPS the
+  CLOSED null high bound so `end of` yields the point-type maximum and
+  `overlaps` is determined (QI-Core CMS145 active-beta-blocker intervals).
+  One-sided Periods must never be dropped as null elements.
+- **Negation-profile exclusion must be alternate-URL aware.**
+  `cte_builder.py` excluded only a negation profile's PRIMARY url, so
+  US-QUALITY-CORE-declared negations (`us-quality-core-servicenotrequested`,
+  `...medicationnotrequested`, `...procedurenotdone`, …) leaked into POSITIVE
+  base-type retrieves (CMS645 counted a doNotPerform DEXA order as an order;
+  CMS347 statin logic — defect I-34). `_named_profiles` entries carry
+  `alternate_urls`; both the negation detection and the exclusion predicate
+  must OR over primary + alternates.
+- **Open-null interval ends are UNKNOWN, not unbounded, in `overlaps <prec>`**
+  (`_operators.py::_translate_overlaps_op`). The former "interval invariant
+  entails end >= other.start" shortcut made a resolved condition with no
+  abatement (`prevalenceInterval` → `Interval[start, null)`) overlap the
+  measurement period and produced a false Denominator Exclusion (CMS347).
+  Closed-null bounds still yield the max sentinel from `intervalEnd`, so
+  genuinely unbounded intervals keep overlapping.
+- **`GROUP BY patient_id` must not be inferred from an aggregate nested inside
+  a subquery** (`cte_manager.py::_expr_contains_aggregate`). Counting a nested
+  subquery's aggregate made the enclosing select a mixed aggregate query while
+  its value expression still correlated to the source row → DuckDB "column
+  resource must appear in the GROUP BY clause" for every
+  `Encounter.claimDiagnosis()`-shaped define. Subqueries are not entered.
+- **Query-valued subqueries must be patient-correlated**
+  (`translator/correlate_subqueries.py`, hooked in `CTEDefinition.to_sql`).
+  Nested subqueries whose FROM is a patient-keyed CTE and which reference no
+  outer alias get `child.patient_id = outer.patient_id`; subqueries that
+  already reference the enclosing alias (e.g. claim lookups correlated through
+  `item.encounter.references(E)`) are left untouched — Claim rows key on
+  `patient`, so a second patient_id correlation would over-restrict them.
+
+### Set-operation grouping (CMS1028 false-positive exclusions, 2026-11-10)
+
+SQL `UNION`, `INTERSECT` and `EXCEPT` share ONE precedence level and are
+left-associative, so a NESTED set operation in a non-first operand MUST be
+parenthesized. The row-shaped lowering emitted CQL
+`A except (B union C union D)` as `A EXCEPT B UNION C UNION D`, which DuckDB
+evaluates as `((A except B) union C) union D` — re-adding every C/D member.
+That produced false-positive Denominator/Numerator Exclusions in CMS1028
+(patients whose only evidence was a ventilation procedure were excluded via
+the union arm of the `except`'s right side). Fix in
+`types.py::_render_set_operands`: `EXCEPT` FLATTENS union operands
+(`X except (Y union Z)` → `X EXCEPT Y EXCEPT Z`, because set difference
+distributes over union: `X \ (Y ∪ Z) = (X \ Y) \ Z`), and any remaining
+nested set operation in a non-first position is parenthesized (UNION with an
+EXCEPT operand, INTERSECT with a UNION operand). Flattening is preferred over
+parenthesizing the right operand: parentheses compile but defeat DuckDB's
+set-operation planning (CMS0334 622s → 670s when parenthesized; 356s flattened,
+matching the pre-fix profile). Audit rule: any new set-operation emitter must
+go through `_render_set_operands`.
+
+Note: `collapse_intervals` / `collapse_intervals_per` are in
+`_PYTHON_PREFERRED_CPP_CONFLICTS`, so the Python UDFs above are the desktop
+authority and carry the asymmetric one-sided Period semantics. The bundled C++
+`CollapseIntervals*` (used by the no-Python/WASM path) still treats a missing
+Period side as a closed null bound; port
+`_period_dict_to_interval` there before relying on one-sided Periods in WASM.
+
+### Inlined-function parameter names shadowed by CTE columns (CMS108/CMS190, 2026-11-10)
+
+`FHIRHelpers` declares every converter with a parameter literally named
+`value` (`define function ToDateTime(value instant): value.value`). When such a
+function is inlined, the body's `value.value` must bind `value` to the ARGUMENT
+expression. On a retrieve row whose CTE also has a precomputed column named
+`value` (every Observation CTE does), the parameter binding can lose: the
+emitted SQL becomes `fhirpath_text(value, 'value')` — a reference to the
+*column*, always NULL — instead of converting the argument. Symptom: any
+`X.issued.ToDateTime()` / `X.value.ToDateTime()` inside a tuple/JSON projection
+silently yields NULL while `X.issued` (no conversion call) is fine.
+Worked around in CMS108/CMS190 CQL by dropping the conversion; the durable fix
+belongs in the inliner — parameter substitution must take precedence over
+ambient column/alias resolution.
+
+### CMS72 residual cells — claim/encounter correlation (RESOLVED 2026-11-10)
+
+`hasPrincipalDiagnosisOf()` (CQMCommon) resolves the principal diagnosis through
+`Claim.diagnosis` (`claimDiagnosis` → `Claim.item.encounter`), but the CMS 2025
+fixtures attach a Claim to only SOME episodes and carry the diagnosis on
+`Encounter.reasonReference` (patient `5a329008` has two inpatient stroke
+episodes and one claim). The claim-only test dropped whole episodes, so the
+denominator never reached its expected size and the runner's numerator gating
+forced Numerator to false. `TJCOverall."Ischemic Stroke Encounter"` now falls
+back to the encounter's own diagnosis **only when the encounter has no claim at
+all** — an encounter WITH a claim must still be judged by that claim's principal
+diagnosis (`871d38c3` has a claim whose only diagnosis is a non-principal
+sequence-2 stroke code and must stay out). Do not loosen this to "any claim of
+the patient": that re-adds exactly the over-inclusions this gate prevents.
+
+### CMS646 residual cell — `overlaps after` strictness (RESOLVED 2026-11-10)
+
+`f5c2b6b4` expected `prevalenceInterval() overlaps after day of <staging>` TRUE
+for two intervals that are BOTH exactly `[2026-04-06T08:00, 2026-04-06T08:00]`.
+CQL 1.5 Overlaps After requires the first interval to overlap and END AFTER the
+second; identical bounds are never "after". The fixture set itself pins the
+strict reading: relaxing to non-strict starts fixed this one cell but broke 11
+CMS145 cells, and non-strict ends broke 1 more. The expectation was repaired
+(exclusion 1 → 0) rather than changing the operator. Any future attempt to make
+`overlaps after` non-strict must re-run CMS145, CMS108, CMS190 and CMS133.
+
+### CMS996 residual — `.verified()` inside inlined include bodies (OPEN, root-caused 2026-11-10)
+
+30 cells (11 Initial Population + 17 Denominator Exclusion + 6 Denominator
+Exception under-fires) all trace to `Status.verified(conditions)` when the
+argument is the base `[Condition: ...]` list produced by the [I-28] workaround.
+Inside the inlined body, the unqualified code reference in
+`C.verificationStatus ~ "confirmed"` (declared in `Status.cql` itself) does NOT
+resolve to the Code declaration in the calling context, so the equivalence
+falls back to a STRING comparison of the raw CodeableConcept JSON:
+
+    fhirpath_text(resource, 'verificationStatus') IN ('confirmed', ...)
+
+which is never true (the value is `{"coding":[{"code":"unconfirmed",...}]}`).
+The same expression written inline in the calling library lowers correctly to
+`coding_matches(resource, 'verificationStatus', <system>, 'confirmed')`, so the
+defect is in code-declaration scoping for inlined include bodies, not in the
+equivalence operator. Attempted and reverted: propagating included-library
+codes/codesystems into the parent context in `include_handler._process_includes`
+(no effect — the population translation uses per-group contexts and the inlined
+body resolves before/outside that map). The durable fix is to qualify code
+references inside an included library's statements to `Alias."code"` at load
+time (or to resolve them against the owning library), then re-run CMS996 and the
+measures that use `Status.verified` (CMS108, CMS1218, CMS1244, CMS1264, CMS136).
+
+### RESOLVED (2026-11-10, second pass) — three root causes behind CMS996 / CMS347 / CMS136
+
+The CMS996 blocker was NOT code scoping. Three distinct defects, all fixed:
+
+1. **`context._match_overload` never unwrapped `List<...>`/`Interval<...>`
+   parameter types, and its "profile prefix" pass compared the parameter NAME
+   (`conditions`) instead of the parameter TYPE (`Condition`).**
+   `FHIRCommon` declares two `verified()` overloads (`List<FHIR.Condition>`
+   at :438, `List<FHIR.AllergyIntolerance>` at :633); with no type match the
+   lookup fell through to `_functions[name]` — the LAST registered overload —
+   so `.verified()` on a Condition list lowered to
+   `coding_matches(..., 'allergyintolerance-verification', 'confirmed'|
+   'unconfirmed')` and dropped every condition. Fix: `_unwrap_type_specifier`
+   + exact-match on the unwrapped name (FHIR-qualified names also match their
+   bare form) + a TYPE-prefix pass (longest bare type name wins) before the
+   legacy parameter-name prefix pass. CMS996 73.7% → 95.6%. `context.get_function`
+   still falls back to `_functions[name]` when nothing matches — audit that
+   fallback whenever a new overload family is added.
+
+2. **`Alias."code"` resolved through a GLOBAL code table.** Several libraries
+   declare `code "confirmed"` over different code systems; the last registration
+   won, so `Status."confirmed"` could resolve to the AllergyIntolerance
+   verification system. Fix: `_resolve_included_code(alias, name)` in
+   `expressions/_operators.py` resolves the qualified reference against the
+   INCLUDED library's own `codes`/`codesystems` before the global lookup.
+   Its include-time twin (rewriting bare code references inside an included
+   library's ASTs to `Alias."name"`) is CORRECT for equivalence operands but
+   MUST NOT descend into `Retrieve` terminology or `CodeSelector` nodes:
+   `[ObservationScreeningAssessment: code ~ "FACIT-Pal"]` keeps the bare name
+   (the retrieve translator resolves it against the owning library). Without
+   that guard the retrieve became unresolvable, its CTE name leaked an AST repr
+   (`Observation: QualifiedIdentifier(parts=[...])`) and every row was dropped —
+   CMS347 100% → 76.1%, CMS136 43.8% → 31.2%.
+
+3. **`_has_unresolved_refs` silently replaced included-library definitions with
+   an always-empty CTE.** `translator._fallback_cte_sql` emits
+   `SELECT _pt.patient_id, NULL AS value FROM _patients AS _pt WHERE FALSE`,
+   which downstream reads as "no patient ever qualifies".
+   `ast_helpers._collect_defined_aliases` walked a hand-maintained attribute
+   list that missed `SQLExists.subquery`, `SQLJoin.on_condition`,
+   `SQLCase.when_clauses`, etc., so a body containing
+   `EXISTS (SELECT * FROM "Condition: ..." AS C ...)` looked like it referenced
+   a dangling `C` and the definition was emptied. This silently disabled
+   `Hospice."Has Hospice Services"` and
+   `PalliativeCare."Has Palliative Care in the Measurement Period"` for every
+   patient (CMS347 denominator exceptions 76.1% → 100%, CMS136 hospice
+   exclusion). Fix: `_collect_defined_aliases` now walks every child field
+   generically (`__dict__` + lists/tuples), and the fallback logs a WARNING
+   naming the definition instead of degrading silently. Lesson: any
+   "safe fallback" that fabricates an EMPTY result must log — silence turns a
+   translator bug into a plausible-looking measure result.
+
+Also fixed for CMS996 (fixture-side, `[I-56]`): `ProcedureNotDone` /
+`MedicationAdministrationNotDone` carry their timing in the
+`us-quality-core-recorded` extension, and `performed` / `effective` are
+data-absent on those profiles (same class as `[I-18/I-55]` in CMS108/CMS190).
+`...performed during` / `...effective during` can therefore never be true.
+Use `USQualityCoreCommon.recorded() during` (what the QI-Core twin of the
+measure does). CMS996 95.6% → 99.1% (113/114).
+
+### RESOLVED — CMS996 f6c7dbc1 was TWO more independent defects (2026-11-11)
+
+The last cell (an ACTIVE + confirmed thrombolytic allergy whose `onsetPeriod` is
+`[2021-01-10, 2026-09-09]`, ED encounter 2026-10-09, expected NOT excluded) had
+two causes, and BOTH had to be fixed:
+
+1. **`prevalenceInterval()` bounds an ACTIVE AllergyIntolerance by its onset
+   period's end — and only an AllergyIntolerance.** The template's active branch
+   emitted `intervalFromBounds(onset, NULL, TRUE, TRUE)` — a CLOSED null high
+   bound, i.e. unbounded (pinned by the official CQL fixture
+   `DateTimeInNullTrue`). `f6c7dbc1`'s own test-case description says "Patient
+   has allergy to medication ingredient **starts before and ends before ED**"
+   and expects NO exclusion, while the start-only onset variants (`83e7cc74`,
+   `ef443a3d`) stay unbounded and ARE excluded — so for allergies the onset
+   period's end bounds the prevalence. `_build_prevalence_interval_ast` now
+   COALESCEs the active-branch high with `onsetPeriod.end` (then
+   `abatementPeriod.end`) WHEN the receiver is an AllergyIntolerance.
+   CONDITIONS MUST KEEP THE UNBOUNDED HIGH BOUND: `Condition.onsetPeriod` means
+   "when the condition began" (not a resolution period), and applying the bound
+   to Conditions regressed the QI-Core gate — CMS506 `5e76e39a` (cancer-pain
+   Condition whose one-day onset period sits one day before the encounter)
+   expects the denominator exclusion, which only the unbounded form produces.
+   A blanket onset-end bound drops the gate to 46/47. The two FHIRCommon
+   `prevalenceInterval` overloads are separate functions; this is their one
+   semantic difference.
+
+2. **Native `cqlBefore` treated a FHIR Period JSON as a point.**
+   `CompareTemporal` runs both operands through `ExtractTemporalOperand`, which
+   parses a leading `{` as an Interval/Period and compares its LOW bound — so the
+   arm's second disjunct (`onset before end EDwSTEMI.period`, lowered as
+   `cqlBefore(fhirpath_text(res,'onset'), period_end)`) returned a definitive
+   TRUE for a serialized Period, while the Python fallback correctly returns
+   NULL (CQL 1.5 comparison signatures are same-type; a Period is not a point).
+   Fix: `cqlBefore/cqlAfter/cqlSameOrBefore/cqlSameOrAfter/cqlDateTimeEqual` are
+   now in `_PYTHON_PREFERRED_CPP_CONFLICTS`, so the Python UDFs are the desktop
+   conformance authority (the bundled C++ keeps the WASM path). The C++ helper is
+   a trap for any future direct-SQL caller — port the Python strictness if it is
+   ever made authoritative again.
+
+CMS996 is now **114/114 (100%)**.
+
+### RESOLVED — five measures were being lost three separate ways (2026-11-11)
+
+The full-suite tally exposed CMS1056/CMS1074/CMS1206 (Catalog Error) and
+CMS124/CMS138 (set-operation binder error) as NEW failures. Root causes:
+
+1. **`ast_helpers._count_select_columns` returned "unknown" for `SELECT *`.**
+   `_union_has_column_mismatch` therefore never saw the case it exists for: a
+   resource-row branch narrowed to `(patient_id, resource)` unioned with a
+   `SELECT *` branch over a retrieve CTE that carries precomputed columns
+   (`"Absence of Cervix"`: Procedure branch narrowed, Condition branch `SELECT *`
+   → 2 vs N columns → DuckDB "Set operations can only apply to expressions with
+   the same number of result columns"). Two fixes: the column counter now
+   delegates through `SELECT * FROM (<subquery>) AS x`, and the union-wrapping
+   star expansion in `cte_manager` narrows a subquery-backed star branch to
+   `(patient_id, resource)`.
+
+2. **Include-time code qualification was scoped far too broadly.**
+   `include_handler._qualify_library_local_codes` rewrites a library's bare
+   `code` references to `Alias."code"` so they resolve when the body is inlined
+   into a caller (CMS996's `Status.verified`). Rewriting PLAIN `define` bodies is
+   harmful (the CHILD translator already resolves them; the parent copies the
+   resulting SQL, so the qualified form becomes a dangling
+   `SDE."Male (finding)"` / `AlaraCommon."Abdomen and Pelvis Low Dose"` reference
+   → "Referenced table SDE not found" / Catalog Error), and rewriting code
+   references used as FUNCTION ARGUMENTS is equally harmful. The rewrite is now
+   restricted to `FunctionDefinition` bodies AND to identifiers that are operands
+   of `~` / `!~` / `=` / `!=`. Retrieve terminology is never touched.
+
+3. **`retrieve_optimizer` iterated a `set` of retrieve keys.** Ordering of
+   `(resource_type, valueset, profile_url)` string tuples is hash-randomised, so
+   two identical runs produced different WITH-clause orders — and for
+   CMS124/CMS138 one ordering hit the binder error above while the other
+   executed. Measure scores were effectively depending on PYTHONHASHSEED.
+   `all_retrieve_keys` is now an ordered, de-duplicated list. Reproducible SQL is
+   a correctness property, not a nicety.
+
+Also fixed while verifying: `udf/interval.py::intervalProperlyIncludedIn`
+referenced `iv1`/`iv2` before parsing them, so every call raised
+`NameError: name 'iv1' is not defined` (11 official CQL interval tests across
+Integer/Decimal/Quantity/DateTime/Time). CQL conformance is 1706/1706 again.
+
+### OPEN — CMS136 group-2 over-inclusions (28/64) root-caused, not fixed
+
+All 36 failing cells are `Initial Population 2` / `Denominator 2`
+over-inclusions, gated by
+`"Has ADHD Cumulative Medication Duration Greater Than or Equal to 210 Days"`.
+Patient `002040bd` has ONE methylphenidate MedicationRequest (90-day
+`expectedSupplyDuration`, boundsPeriod 2026-01-01 → 2026-03-31) and the
+`"ADHD Medications Taken on IPSD or During Continuation and Maintenance Phase"`
+CTE holds FOUR intervals:
+
+    [2026-01-02, 2026-01-02]  1d
+    [2026-01-02, 2026-07-30]  210d
+    [2026-01-27, 2026-04-26]  90d
+    [2026-01-01, 2026-03-31]  90d
+
+`collapse_intervals_per(..., 1 day)` merges them into 211 days ≥ 210 → false
+inclusion.
+
+**Narrowed this launch:** the roll-out fold itself is CORRECT. A minimal CQL
+reproduction of the exact body (`aggregate all R starting (null as
+List<Interval<Date>>): R union ({I X let S: Max({end of Last(R) + 1 day, start
+of X}), E: S + Quantity(Coalesce(duration in days of X, 0), 'day')} return
+Interval[S, E])`) over a one-element list returns exactly ONE interval on both
+the Python and the native-loaded connection, and the arm's emitted fold segment
+executed standalone also returns just `[2026-01-01, 2026-03-31]`. But the CSE
+chain CTEs `_cse_ADHD_Medications_Taken_on_IPSD_o_1..o_14` already hold 2/3/4
+intervals, and their bodies reference arms (`AtomoxetineMed`,
+`DexmethylphenidateMed`, `DextroamphetamineMed`) whose own drug retrieve CTEs
+have NO rows for this patient (the only non-empty retrieve is
+`MedicationRequest: Methylphenidate`; the RxNorm code 1926853 appears in exactly
+one valueset, `2.16.840.1.113883.3.464.1003.1176`). So the per-arm period lists
+are NOT scoped to their own retrieve — each arm re-derives the same medication's
+period, the arms' roll-outs diverge, and the union accumulates the phantom
+intervals.
+
+**Second narrowing (same launch):** the arm's VALUESET filter is intact — each
+arm's CSE body reads its own
+`"MedicationRequest: <Drug> (us-quality-core-medicationrequest)"` CTE (e.g.
+`o_5`/`o_12` read the Methylphenidate CTE). What IS wrong is duplication: a
+single `.rolloutIntervals()` call per arm emits **four** copies of that source
+subquery and **four** `WITH RECURSIVE __xj` roll-out folds inside the same CSE
+(`o_2..o_7`, `o_9..o_14` all show `folds=4`; the two-element `o_1`/`o_8` pair two
+arms and show `folds=8`). Four independent folds over the same 90-day supply
+each advance `S = Max({end of Last(R) + 1 day, start of X})`, so the union ends
+up with the phantom intervals above — and one of them is 210 days on its own.
+The duplication happens at INLINING time: `rolloutIntervals(intervals
+List<Interval<Date>>)` references its parameter more than once (`intervals I
+aggregate all …` plus `{ I X … }`), and the argument expression (a query over
+the arm's `.period` list) is substituted per occurrence instead of being
+evaluated once into a CTE. Same defect family as the documented
+`FHIRHelpers.ToDateTime(value instant)` → `value.value` parameter shadowing.
+**Third narrowing (same launch):** standalone reproductions are CLEAN — the
+exact arm (`([MedicationRequest: "Methylphenidate"]).isMedicationOrder() M return
+all {period: M.medicationRequestPeriod(), periodStart: start of …} sort by
+periodStart).period` + `rolloutIntervals()` translates to ONE fold, and a
+two-arm union of such arms still translates to one fold per arm. The 4-fold
+duplication therefore appears only in the full 9-arm define, pointing at the
+CSE extraction (`_cse_ADHD_Medications_Taken_on_IPSD_o_*`) — the translator
+re-materialises the arm expression several times instead of once, and the
+re-materialised copies nest (each fold's `S = Max({end of Last(R) + 1 day, start
+of X})` advances the previous copy's end), which is what produces the phantom
+90d/210d intervals. Next probe: instrument the CSE collector while translating
+CMS136's define and confirm the same `_cse` expression is emitted/quickened more
+than once; fix the extraction (or the union-chain translation) so an arm's
+period list is evaluated exactly once.
