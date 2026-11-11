@@ -2352,15 +2352,20 @@ def _is_set_operation_node(op) -> bool:
 def _flatten_except_union_operands(operands) -> list:
     """Rewrite ``X except (Y union Z)`` into ``X except Y except Z``.
 
-    Set difference distributes over union — ``X \\ (Y ∪ Z) = (X \\ Y) \\ Z`` —
-    so the flattened form is semantically identical and needs no parentheses.
-    SQL's UNION / INTERSECT / EXCEPT share one precedence level and are
-    left-associative, so the un-flattened text ``X EXCEPT Y UNION Z`` evaluates
-    as ``(X except Y) union Z`` and RE-ADDS every Z member. This was the
-    CMS1028 false-positive Numerator Exclusion (patients whose only evidence
-    was a ventilation procedure returned through the union arm of the except's
-    right side). Flattening also keeps the fast SQL shape: parenthesizing the
-    right operand compiles but defeats DuckDB's set-operation planning.
+    Set difference distributes over union ONLY on the subtracted side —
+    ``X \\ (Y ∪ Z) = (X \\ Y) \\ Z`` — so the flattened form is semantically
+    identical and needs no parentheses. SQL's UNION / INTERSECT / EXCEPT share
+    one precedence level and are left-associative, so the un-flattened text
+    ``X EXCEPT Y UNION Z`` evaluates as ``(X except Y) union Z`` and RE-ADDS
+    every Z member. This was the CMS1028 false-positive Numerator Exclusion
+    (patients whose only evidence was a ventilation procedure returned through
+    the union arm of the except's right side). Flattening also keeps the fast
+    SQL shape: parenthesizing the right operand compiles but defeats DuckDB's
+    set-operation planning.
+
+    NEVER pass the minuend (operand 0) here. ``(A ∪ B) \\ C`` is not
+    ``(A \\ B) \\ C``: flattening the first operand subtracts B from A and
+    silently loses B's rows (review REV-003).
     """
     flat = []
     for op in operands:
@@ -2382,7 +2387,10 @@ def _render_set_operands(operands, keyword: str, precedence: int) -> str:
     position needs none: left-associative evaluation already matches the tree.
     """
     if keyword == "EXCEPT":
-        operands = _flatten_except_union_operands(list(operands))
+        # Only the SUBTRACTED operands may be flattened: X ∖ (Y ∪ Z) =
+        # (X ∖ Y) ∖ Z holds, but (A ∪ B) ∖ C ≠ (A ∖ B) ∖ C. Flattening the
+        # minuend silently drops the union's non-first branches (REV-003).
+        operands = [operands[0], *_flatten_except_union_operands(list(operands[1:]))]
     parts = []
     for idx, op in enumerate(operands):
         sql = _normalize_set_operand(op, precedence)
