@@ -6324,15 +6324,64 @@ user-facing mode rather than an implicit rule.
 | CMS108 | 100.0% | 99.3% |
 | CMS72 | 100.0% | 99.4% |
 
-Worked example (CMS22 patient `92d6fd00`): the fixture carries exactly one
-Condition — SNOMED `10725009` "Benign hypertension", category
-`encounter-diagnosis`, `meta.profile` =
-`us-quality-core-condition-encounter-diagnosis`. CMS22's exclusion retrieve is
-`[USQualityCore.ConditionProblemsHealthConcerns: "Diagnosis of Hypertension"]`.
-Strict mode correctly excludes it (no DENEX, matching the expected result);
-non-strict mode matches it by base type `Condition` and invents a Denominator
-Exclusion. Do not "fix" the paired-profile filter by relaxing it — the filter IS
-the `Condition.category` distinction.
+The same relaxation costs the QI-Core suite: `--suite 2025 --no-strict-profiles`
+is 45/47, regressing the same two families (CMS72 99.4%, CMS832 97.1%).
+
+**The six regressions are the standard working, not a bug to chase.** The
+fixtures test this deliberately, in both directions. CMS22 ships an explicit
+paired matrix — same hypertension value set (`2.16.840.1.113883.3.600.263`,
+which does contain SNOMED `10725009`), differentiated ONLY by `meta.profile`:
+
+| test case | Condition profile | expected DENEX |
+|---|---|---|
+| `DENEXPass/HypertensionBeforeEnc` | `condition-problems-health-concerns` | **1** |
+| `DENEXPass/HTNOneDayBeforeEnc` | `condition-problems-health-concerns` | **1** |
+| `DENEXFail/HypertensionAfterEnc` | `condition-encounter-diagnosis` | **0** |
+| `DENEXFail/HypertensionDuringEnc` | `us-quality-core-enounter-diagnosis` (fixture typo) | **0** |
+
+Mechanisms behind the other four, all the same class and each verified by
+diffing the generated SQL/CSV between modes:
+
+- **CMS72** (`9f4bc5cc`): the tPA-prior-to-arrival retrieve
+  `[ConditionProblemsHealthConcerns: "Intravenous or Intraarterial Thrombolytic
+  tPA Therapy Prior to Arrival"]` (single-code VS, ICD-10 `Z92.82` "status post
+  administration of tPA … prior to admission") picks up a Condition tagged
+  `condition-encounter-diagnosis` → `Denominator Exclusions` `[]` →
+  `['Encounter/b82aaea4…']`.
+- **CMS108** (`23f1ece5`): a Condition tagged the **abstract base**
+  `us-quality-core-condition` (code `1001000119102`) is matched by the
+  "prior or present diagnosis of atrial fibrillation" retrieve → `Numerator`
+  `[]` → `['Encounter/daa71c31…']`.
+- **CMS832** (`fcb1c94b`): same abstract-base tag, code `100801000119107`, which
+  **is** in "Obstetrics and VTE Obstetrics". `encounterDiagnosis().code in
+  "Obstetrics…"` starts firing, so `where not (...)` drops the encounter from
+  Initial Population — the one case that moves the other way (under-inclusion;
+  a `where not` gains a match).
+- **CMS138** (`4e4e6417`): an Observation tagged base `us-quality-core-observation`
+  is matched by the `us-core-smokingstatus` retrieve → `Numerator 1` and
+  `Denominator 2` false → true.
+- **CMS155** (`055edb62`): the patient's **`us-core-bmi`** Observation (LOINC
+  `39156-5`) is also matched by the `pediatric-bmi-for-age` retrieve, because
+  sibling BMI/vital-sign profiles share the same codes → `Numerator 1` false →
+  true.
+
+A base-only-tagged Condition/Observation is not a valid instance of any
+concrete US Quality Core sub-profile, which is exactly what the strict filter
+encodes.
+
+**Do NOT "fix" these by relaxing the filter, and do not add a "category
+fallback" that guesses profile membership from `Condition.category`** — that
+re-implements the membership rule with data-dependent semantics and would break
+`meta.profile` being the single source of truth.
+
+Note: 10 measures contain resources with **no** `meta.profile` at all
+(CMS1017 42 Organizations, CMS177 17 Conditions/17 Encounters, CMS108 4
+Procedures, …) and strict mode is still 100%, so no current expectation depends
+on including an unlabelled resource in a profiled retrieve. Fixture defect worth
+reporting upstream (inert here): `DENEXFail/HypertensionDuringEnc` misspells the
+profile `us-quality-core-enounter-diagnosis` (missing `c`), which makes that
+Condition invisible to *every* Condition retrieve; the expected DENEX of 0 still
+holds, but the case is not exercising what its name claims.
 
 Verification on the strict-mode tree: `--suite cms2025 --skip-errors` 73/73,
 `--suite 2025 --skip-errors` 47/47, CQL conformance 1706/1706.
