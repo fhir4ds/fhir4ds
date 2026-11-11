@@ -4847,13 +4847,6 @@ class OperatorsMixin:
             promoted = _promote_fhirpath_text_list(sql_node)
             return promoted, promoted is not sql_node
 
-        import os as _os_uo
-        if _os_uo.environ.get("F4DS_DEBUG_DR"):
-            try:
-                print("[uo-in] left:", left.to_sql()[:100])
-                print("[uo-in] right:", right.to_sql()[:100])
-            except Exception:
-                print("[uo-in] left:", type(left).__name__, "right:", type(right).__name__)
         _right_peer_rows = _operand_rows_shaped(right, getattr(expr, "right", None))
         _left_peer_rows = _operand_rows_shaped(left, getattr(expr, "left", None))
         # Capture the PRE-promotion operands for interval detection: a
@@ -7410,11 +7403,6 @@ class OperatorsMixin:
                             }
                 return None
             if isinstance(operand_ast, QualifiedIdentifier) and len(operand_ast.parts) >= 2:
-                # Library-qualified code ref: resolve against THAT library's own
-                # code/codesystem declarations first (a global lookup returns
-                # whichever library registered the name last, e.g. the
-                # AllergyIntolerance verification system instead of
-                # condition-ver-status).
                 # Library-qualified code ref: resolve it against THAT library's
                 # own code/codesystem declarations first. A global name lookup
                 # returns whichever library registered the name last, so

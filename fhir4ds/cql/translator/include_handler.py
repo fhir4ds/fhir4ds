@@ -262,9 +262,6 @@ class IncludeHandlerMixin:
             # Deep-copy so the alias-scoped code qualification below never
             # mutates the shared library AST cache (the same library may be
             # included under another alias by another caller).
-            # Deep-copy so the alias-scoped code qualification below never
-            # mutates the shared library AST cache (the same library may be
-            # included under another alias by another caller).
             included_library = _copy.deepcopy(self._load_required_library(inc.path, alias))
             self._qualify_library_local_codes(included_library, alias)
 

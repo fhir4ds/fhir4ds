@@ -891,9 +891,6 @@ static fhirpath::FPCollection EvaluateFhirpath(FhirpathState &state, const char 
 		return {};
 	}
 	auto ast = GetOrCompile(state, expr_str);
-	if (getenv("F4DS_DBG_EVAL")) {
-		fprintf(stderr, "[eval] expr=%s ast_ok=%d\n", expr_str.c_str(), (int)(ast != nullptr));
-	}
 	if (!ast) {
 		return {};
 	}

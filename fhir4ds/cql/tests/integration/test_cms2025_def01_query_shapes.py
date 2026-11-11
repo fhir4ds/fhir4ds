@@ -286,13 +286,6 @@ def test_lateral_dedup_qualifies_star_projection():
         ),
         limit=1,
     ))
-    repeated.to_sql = lambda: (
-        "SELECT sub.value FROM \"Some CTE\" AS sub WHERE sub.patient_id = "
-        "X.patient_id AND <padding to exceed the 200-char size gate "
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa>"
-        " LIMIT 1"
-    ) if False else None
     # pad via a longer where so the serialized form clears the size gate
     from ...translator.types import SQLFunctionCall, SQLLiteral
     repeated = SQLSubquery(query=SQLSelect(

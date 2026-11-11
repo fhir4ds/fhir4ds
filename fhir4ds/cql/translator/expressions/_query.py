@@ -6414,12 +6414,6 @@ class QueryMixin:
                     args=[_early_lt_source, SQLLambda(param=_early_lt_param, body=_lt_body)]
                 )
 
-        import os as _os_dr2
-        if _os_dr2.environ.get("F4DS_DEBUG_DR") and node.return_clause is not None and getattr(node.return_clause, 'expression', None) is not None and type(getattr(node.return_clause.expression, 'name', None)) is str and 'treatment' in str(getattr(node.return_clause.expression, 'name', '')):
-            try:
-                print("[dr-final]", type(result).__name__, "::", result.to_sql()[:160])
-            except Exception:
-                print("[dr-final]", type(result).__name__)
         # Apply SORT clause if present (CQL §19.29)
         if node.sort and node.sort.by:
             sort_item = node.sort.by[0]

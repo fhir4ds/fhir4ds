@@ -1545,13 +1545,11 @@ class ListsMixin:
                     )
                     and len(getattr(_si, "arguments", []) or []) == 1
                 ):
-                    _DO_SORT_TIEBREAK = True  # BISECT-D done
                     try:
                         _full_sql = self.translate(
                             _si.arguments[0], boolean_context=False
                         )
-                        if _DO_SORT_TIEBREAK:
-                            window_order.append((_full_sql, f"{item_dir} {nulls_order}"))
+                        window_order.append((_full_sql, f"{item_dir} {nulls_order}"))
                     except Exception:
                         pass  # keep the primary key only on translation failure
 
