@@ -3070,6 +3070,9 @@ class FunctionsMixin:
             for _leaf in _leaves:
                 try:
                     _leaf_sql = self.translate(_leaf, usage=ExprUsage.LIST)
+                except TranslationError:
+                    # Static validation errors are not "fall back" material.
+                    raise
                 except Exception:  # noqa: BLE001 - fall back to generic path
                     _ok = False
                     break

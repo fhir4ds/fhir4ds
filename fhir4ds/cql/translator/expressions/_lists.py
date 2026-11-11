@@ -1550,7 +1550,11 @@ class ListsMixin:
                             _si.arguments[0], boolean_context=False
                         )
                         window_order.append((_full_sql, f"{item_dir} {nulls_order}"))
-                    except Exception:
+                    except TranslationError:
+                        # A rejected static expression must not be silently
+                        # dropped from the sort key.
+                        raise
+                    except Exception:  # noqa: BLE001
                         pass  # keep the primary key only on translation failure
 
         # Get the FROM clause from the source query

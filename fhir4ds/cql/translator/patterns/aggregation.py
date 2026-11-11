@@ -15,6 +15,8 @@ Reference: docs/PLAN-CQL-TO-SQL-TRANSLATOR.md
 
 from __future__ import annotations
 
+from ...errors import TranslationError
+
 from typing import TYPE_CHECKING, List, Optional, Union
 
 from ...translator.context import ExprUsage
@@ -523,7 +525,11 @@ class AggregationTranslator:
                             _si.arguments[0], boolean_context=False
                         )
                         window_order.append((_full_sql, f"{item_dir} {nulls_order}"))
-                    except Exception:
+                    except TranslationError:
+                        # A rejected static expression must not be silently
+                        # dropped from the sort key.
+                        raise
+                    except Exception:  # noqa: BLE001
                         pass  # keep the primary key only on translation failure
 
         # Add tie-breaker: json_extract_string(resource, '$.id') ASC (ensures deterministic results)

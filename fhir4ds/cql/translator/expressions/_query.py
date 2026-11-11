@@ -29,6 +29,7 @@ from ...parser.ast_nodes import (
     TupleTypeSpecifier,
     UnaryExpression,
 )
+from ...errors import TranslationError
 from ...translator.context import ExprUsage, RowShape
 from ...translator.function_inliner import ParameterPlaceholder
 from ...translator.placeholder import (
@@ -2509,6 +2510,10 @@ class QueryMixin:
             if isinstance(expr_node, MethodInvocation):
                 try:
                     _mi_sql = self.translate(expr_node, usage=ExprUsage.LIST)
+                except TranslationError:
+                    # A static CQL validation error must reach the caller; only
+                    # shape/dialect surprises fall back to the generic path.
+                    raise
                 except Exception:  # noqa: BLE001 - fall back to generic path
                     _mi_sql = None
                 _mi_inner = _mi_sql.query if isinstance(_mi_sql, SQLSubquery) and isinstance(_mi_sql.query, SQLSelect) else _mi_sql

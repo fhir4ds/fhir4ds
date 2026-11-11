@@ -272,10 +272,12 @@ from .types import SQLCase  # noqa: E402  (used in _walk isinstance check)
 
 
 def correlate_count_subqueries(ast: SQLExpression) -> SQLExpression:
-    """Entry point: add patient_id correlation to flattened Count subqueries."""
-    changed: list = []
-    try:
-        _walk(ast, set(), changed)
-    except Exception:  # noqa: BLE001 - best-effort post-pass, never break translation
-        return ast
+    """Entry point: add patient_id correlation to flattened Count subqueries.
+
+    Deliberately NOT wrapped in a blanket ``except Exception``. It used to be,
+    which meant any bug in the walk silently returned the input AST and a
+    miscorrelated ``Count`` shipped as a wrong measure result with no signal
+    (review REV-010). A failure here is a translator bug and must surface.
+    """
+    _walk(ast, set(), [])
     return ast
