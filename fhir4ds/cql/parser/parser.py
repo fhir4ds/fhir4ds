@@ -2686,15 +2686,14 @@ class CQLParser:
             return distinct <expr>
         """
         self.expect(TokenType.RETURN, "Expected 'return'")
-        # NOTE (deferred): CQL 1.5 `return` (without `all`) is defined to
-        # eliminate duplicate results. Enabling that here fixes CMS136's last
-        # cell ("Two more encounters during C&M phase but on the same day")
-        # but regresses CMS56 93.1% (54/58, QI gate 46/47): in that measure the
-        # DISTINCT is applied to an inner SELECT whose FROM alias is the source
-        # alias (TotalHip) while the return expression references the QUERY
-        # alias (THAProcedure), so the derived-table rebind is skipped and every
-        # exists() under-fires. Re-enable once that alias binding is fixed.
-        distinct = False
+        # CQL 1.5 §Query: `return` eliminates duplicate results; `return all`
+        # keeps them (`return distinct` is the redundant explicit form).
+        # The translator honours the flag ONLY at a definition root, where the
+        # query materialises into a CTE; applying it to nested/inlined query
+        # selects leaks DISTINCT into scalar property extractions
+        # (`intervalStart((SELECT DISTINCT …))`) and breaks CMS56's
+        # `with … such that` correlation.
+        distinct = True
         if self.match_and_advance(TokenType.DISTINCT, TokenType.DISTINCT_FN):
             distinct = True
         elif self.match_and_advance(TokenType.ALL):

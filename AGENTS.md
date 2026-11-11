@@ -6206,18 +6206,24 @@ patients'** medications. Three defects stacked:
    body). Verified with a minimal repro: `(null as List<Interval<Date>>) I
    aggregate all …` used to return `[None]`, now returns NULL.
 
-**Remaining cell (`fcd9a2f3`, Numerator 2 over-fires).** The measure's own test
-case is "Two more encounters during C&M phase but on the same day" and expects
-the numerator to be FALSE — i.e. CQL `return` (without `all`) must ELIMINATE
+**Last cell (`fcd9a2f3`, Numerator 2) — RESOLVED by root-scoped `return` distinct.**
+The measure's own test case is "Two more encounters during C&M phase but on the
+same day" and expects Numerator FALSE: CQL `return` (without `all`) eliminates
 duplicate results, so two same-day encounters collapse to one date and
-`Count(...) >= 2` is false. `parser.parse_return_clause` currently treats plain
-`return` as `all` (`distinct=False`); CQL 1.5 §Query says duplicates are removed
-unless `all` is given. Enabling that fixes CMS136 to 64/64 **but regresses
-CMS56 to 54/58** (QI gate 46/47): in CMS56 the DISTINCT lands on an inner SELECT
-whose FROM alias is the source alias (`TotalHip`) while the return expression
-references the QUERY alias (`THAProcedure`), so the derived-table rebind is
-skipped and every `exists()` under-fires. The parser change is therefore
-reverted with a pointer comment; re-enable it after fixing that alias binding
-(the distinct belongs on the return projection, never on an inner property
-source). Verified: `Count(({1,1,2}) X return X)` must be 2,
-`return all` must be 3.
+`Count(...) >= 2` is false. `parse_return_clause` now marks plain `return` as
+`distinct=True` (`return all` keeps duplicates, `return distinct` is the
+redundant explicit form — verified: `Count(({1,1,2}) X return X)` = 2,
+`return all` = 3), BUT the translator honours the flag **only at a definition
+root** (`_translate_query`: `_root_ast is node`). That scoping is load-bearing:
+a definition-root query materialises into a CTE (`SELECT DISTINCT patient_id,
+value`), whereas a NESTED query select keeps its DISTINCT when its alias is
+inlined, and that leaks into scalar property extractions — CMS56's
+`return THAProcedure.performed.toInterval()` produced
+`intervalEnd((SELECT DISTINCT … FROM "Total Hip Arthroplasty Procedure" AS
+THAProcedure))`; DISTINCT over the 2-row set changes the scalar's shape and every
+`with … such that` correlation stops matching (CMS56 54/58, QI gate 46/47).
+Bisecting the four SELECT DISTINCT sites in that CTE confirmed exactly one site
+breaks it. Rule for future work: return-level de-duplication belongs at the
+CTE/definition boundary, never on an inner query select.
+
+CMS136 is now **64/64 (100%)**.

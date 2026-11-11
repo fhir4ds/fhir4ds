@@ -6209,7 +6209,23 @@ class QueryMixin:
 
             if not _did_list_transform:
                 return_expr = self.translate(node.return_clause, usage=ExprUsage.SCALAR)
-                _return_distinct = getattr(node.return_clause, 'distinct', False)
+                # Only the definition ROOT query can apply return-distinct
+                # safely: it materialises into a CTE (`SELECT DISTINCT
+                # patient_id, value`). A nested query select keeps its DISTINCT
+                # when its alias is inlined, and that leaks into scalar property
+                # extractions — `intervalStart((SELECT DISTINCT …))` over a
+                # multi-row set changes shape and breaks `with … such that`
+                # correlation (CMS56 54/58, QI gate 46/47).
+                _cur_def = getattr(self.context, "_current_definition", None)
+                _root_ast = (
+                    getattr(self.context, "_definition_cql_asts", {}).get(_cur_def)
+                    if _cur_def
+                    else None
+                )
+                _is_def_root = _root_ast is node
+                _return_distinct = bool(
+                    getattr(node.return_clause, 'distinct', False)
+                ) and _is_def_root
                 # When early_list_transform is active, result is a lambda
                 # parameter placeholder (e.g., _lt_DayNumber).  The return
                 # expression already references the parameter directly, so
