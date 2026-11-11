@@ -6172,68 +6172,52 @@ referenced `iv1`/`iv2` before parsing them, so every call raised
 `NameError: name 'iv1' is not defined` (11 official CQL interval tests across
 Integer/Decimal/Quantity/DateTime/Time). CQL conformance is 1706/1706 again.
 
-### OPEN — CMS136 group-2 over-inclusions (28/64) root-caused, not fixed
+### CMS136 — RESOLVED to 63/64 (2026-11-11): aggregate sources were never patient-correlated
 
-All 36 failing cells are `Initial Population 2` / `Denominator 2`
-over-inclusions, gated by
-`"Has ADHD Cumulative Medication Duration Greater Than or Equal to 210 Days"`.
-Patient `002040bd` has ONE methylphenidate MedicationRequest (90-day
-`expectedSupplyDuration`, boundsPeriod 2026-01-01 → 2026-03-31) and the
-`"ADHD Medications Taken on IPSD or During Continuation and Maintenance Phase"`
-CTE holds FOUR intervals:
+`Initial Population 2` / `Denominator 2` were over-included for 36 of 64
+patients because every drug arm's medication-period list contained **other
+patients'** medications. Three defects stacked:
 
-    [2026-01-02, 2026-01-02]  1d
-    [2026-01-02, 2026-07-30]  210d
-    [2026-01-27, 2026-04-26]  90d
-    [2026-01-01, 2026-03-31]  90d
+1. **Inlined query sources lose the patient predicate.** A CQL query used as a
+   `define` becomes a CTE, and consumers add
+   `"<CTE>".patient_id = _pt.patient_id`. When the same query is INLINED
+   (`(<tuple query>).period` fed to `rolloutIntervals()`) there is no boundary to
+   carry that predicate, so the aggregate iterated every patient's rows.
+   `_query._correlate_inlined_aggregate_source` now correlates the inlined
+   aggregate source (walking down `from_clause` subqueries, since a list
+   projection wraps the row query one level deeper, and using
+   `context.patient_alias` — `resource_alias` is the aggregate's element alias
+   `I`, which produced `AtomoxetineMed.patient_id = I.patient_id`).
 
-`collapse_intervals_per(..., 1 day)` merges them into 211 days ≥ 210 → false
-inclusion.
+2. **`.field` over a tuple query lowered to a SCALAR subquery**, silently
+   keeping one row of a multi-row query (DuckDB takes the first). Patient
+   `a46db6aa` has two atomoxetine requests (209-day and 1-day supply) but only
+   the 1-day period survived (cumulative duration 1 day instead of 210).
+   `_query._listify_tuple_projection` rewrites
+   `json_extract_string((SELECT json_object(...) FROM ...), '$.field')` to
+   `(SELECT list(json_extract_string(t.v, '$.field')) FROM (<query>) AS t)` for
+   unlimited multi-row tuple projections used as aggregate sources.
 
-**Narrowed this launch:** the roll-out fold itself is CORRECT. A minimal CQL
-reproduction of the exact body (`aggregate all R starting (null as
-List<Interval<Date>>): R union ({I X let S: Max({end of Last(R) + 1 day, start
-of X}), E: S + Quantity(Coalesce(duration in days of X, 0), 'day')} return
-Interval[S, E])`) over a one-element list returns exactly ONE interval on both
-the Python and the native-loaded connection, and the arm's emitted fold segment
-executed standalone also returns just `[2026-01-01, 2026-03-31]`. But the CSE
-chain CTEs `_cse_ADHD_Medications_Taken_on_IPSD_o_1..o_14` already hold 2/3/4
-intervals, and their bodies reference arms (`AtomoxetineMed`,
-`DexmethylphenidateMed`, `DextroamphetamineMed`) whose own drug retrieve CTEs
-have NO rows for this patient (the only non-empty retrieve is
-`MedicationRequest: Methylphenidate`; the RxNorm code 1926853 appears in exactly
-one valueset, `2.16.840.1.113883.3.464.1003.1176`). So the per-arm period lists
-are NOT scoped to their own retrieve — each arm re-derives the same medication's
-period, the arms' roll-outs diverge, and the union accumulates the phantom
-intervals.
+3. **`undefensive` fold seed:** `unnest([NULL])` fabricated ONE element for a
+   null source, so an aggregate body ran once against NULL. The single-source
+   fold seed now emits
+   `CASE WHEN <src> IS NULL THEN CAST([] AS VARCHAR[]) ELSE [<src>] END`
+   (CQL 1.5 §19.27: an aggregate over a null/empty list does not evaluate its
+   body). Verified with a minimal repro: `(null as List<Interval<Date>>) I
+   aggregate all …` used to return `[None]`, now returns NULL.
 
-**Second narrowing (same launch):** the arm's VALUESET filter is intact — each
-arm's CSE body reads its own
-`"MedicationRequest: <Drug> (us-quality-core-medicationrequest)"` CTE (e.g.
-`o_5`/`o_12` read the Methylphenidate CTE). What IS wrong is duplication: a
-single `.rolloutIntervals()` call per arm emits **four** copies of that source
-subquery and **four** `WITH RECURSIVE __xj` roll-out folds inside the same CSE
-(`o_2..o_7`, `o_9..o_14` all show `folds=4`; the two-element `o_1`/`o_8` pair two
-arms and show `folds=8`). Four independent folds over the same 90-day supply
-each advance `S = Max({end of Last(R) + 1 day, start of X})`, so the union ends
-up with the phantom intervals above — and one of them is 210 days on its own.
-The duplication happens at INLINING time: `rolloutIntervals(intervals
-List<Interval<Date>>)` references its parameter more than once (`intervals I
-aggregate all …` plus `{ I X … }`), and the argument expression (a query over
-the arm's `.period` list) is substituted per occurrence instead of being
-evaluated once into a CTE. Same defect family as the documented
-`FHIRHelpers.ToDateTime(value instant)` → `value.value` parameter shadowing.
-**Third narrowing (same launch):** standalone reproductions are CLEAN — the
-exact arm (`([MedicationRequest: "Methylphenidate"]).isMedicationOrder() M return
-all {period: M.medicationRequestPeriod(), periodStart: start of …} sort by
-periodStart).period` + `rolloutIntervals()` translates to ONE fold, and a
-two-arm union of such arms still translates to one fold per arm. The 4-fold
-duplication therefore appears only in the full 9-arm define, pointing at the
-CSE extraction (`_cse_ADHD_Medications_Taken_on_IPSD_o_*`) — the translator
-re-materialises the arm expression several times instead of once, and the
-re-materialised copies nest (each fold's `S = Max({end of Last(R) + 1 day, start
-of X})` advances the previous copy's end), which is what produces the phantom
-90d/210d intervals. Next probe: instrument the CSE collector while translating
-CMS136's define and confirm the same `_cse` expression is emitted/quickened more
-than once; fix the extraction (or the union-chain translation) so an arm's
-period list is evaluated exactly once.
+**Remaining cell (`fcd9a2f3`, Numerator 2 over-fires).** The measure's own test
+case is "Two more encounters during C&M phase but on the same day" and expects
+the numerator to be FALSE — i.e. CQL `return` (without `all`) must ELIMINATE
+duplicate results, so two same-day encounters collapse to one date and
+`Count(...) >= 2` is false. `parser.parse_return_clause` currently treats plain
+`return` as `all` (`distinct=False`); CQL 1.5 §Query says duplicates are removed
+unless `all` is given. Enabling that fixes CMS136 to 64/64 **but regresses
+CMS56 to 54/58** (QI gate 46/47): in CMS56 the DISTINCT lands on an inner SELECT
+whose FROM alias is the source alias (`TotalHip`) while the return expression
+references the QUERY alias (`THAProcedure`), so the derived-table rebind is
+skipped and every `exists()` under-fires. The parser change is therefore
+reverted with a pointer comment; re-enable it after fixing that alias binding
+(the distinct belongs on the return projection, never on an inner property
+source). Verified: `Count(({1,1,2}) X return X)` must be 2,
+`return all` must be 3.

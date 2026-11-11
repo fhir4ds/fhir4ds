@@ -138,6 +138,152 @@ def _demoted_rows_source_cte(sql_expr) -> "str | None":
     return fc.expr.name
 
 
+def _references_qualified(expr, alias: str, column: str) -> bool:
+    """True when `expr` references `<alias>.<column>` anywhere."""
+    from ...translator.types import SQLQualifiedIdentifier
+
+    stack = [expr]
+    seen = set()
+    while stack:
+        node = stack.pop()
+        if node is None or id(node) in seen:
+            continue
+        seen.add(id(node))
+        if isinstance(node, SQLQualifiedIdentifier):
+            if node.parts[:2] == [alias, column]:
+                return True
+            continue
+        if isinstance(node, (list, tuple)):
+            stack.extend(node)
+            continue
+        if hasattr(node, "__dataclass_fields__"):
+            for f in node.__dataclass_fields__:
+                stack.append(getattr(node, f, None))
+    return False
+
+
+def _listify_tuple_projection(node):
+    """Turn a SCALAR tuple-field extraction into a LIST projection.
+
+    ``(<tuple query>).field`` lowers to
+    ``json_extract_string((SELECT json_object(...) FROM ...), '$.field')`` —
+    a scalar subquery that silently keeps ONE row of a multi-row query (DuckDB
+    returns the first). For an aggregate source that loses every medication but
+    one: CMS136 `a46db6aa` has two atomoxetine requests (209-day and 1-day
+    supply) and only the 1-day period survived, so the cumulative duration was
+    1 day instead of 210.
+
+    Rewrite to ``(SELECT list(json_extract_string(t.v, '$.field')) FROM
+    (<query>) AS t)`` when the extraction wraps an unlimited multi-row tuple
+    projection.
+    """
+    from ...translator.types import (
+        SQLAlias, SQLFunctionCall, SQLQualifiedIdentifier, SQLSelect, SQLSubquery,
+    )
+
+    if not (isinstance(node, SQLFunctionCall)
+            and node.name in ("json_extract_string", "json_extract")
+            and node.args):
+        return node
+    inner = node.args[0]
+    if not (isinstance(inner, SQLSubquery) and isinstance(inner.query, SQLSelect)):
+        return node
+    sel = inner.query
+    if sel.limit is not None:
+        return node
+    cols = sel.columns or []
+    if len(cols) != 1:
+        return node
+    col = cols[0]
+    col_expr = col.expr if isinstance(col, SQLAlias) else col
+    is_tuple = (
+        isinstance(col_expr, SQLFunctionCall)
+        and col_expr.name in ("json_object", "to_json")
+    )
+    if not is_tuple:
+        return node
+    path_arg = node.args[1] if len(node.args) > 1 else None
+    if path_arg is None:
+        return node
+    aliased = SQLAlias(expr=col_expr, alias="v")
+    new_inner = SQLSelect(
+        columns=[aliased],
+        from_clause=sel.from_clause,
+        where=sel.where,
+        joins=sel.joins,
+        group_by=sel.group_by,
+        having=sel.having,
+        distinct=sel.distinct,
+    )
+    list_call = SQLFunctionCall(
+        name="list",
+        args=[SQLFunctionCall(
+            name="json_extract_string",
+            args=[
+                SQLQualifiedIdentifier(parts=["t", "v"]),
+                path_arg,
+            ],
+        )],
+    )
+    return SQLSubquery(query=SQLSelect(
+        columns=[list_call],
+        from_clause=SQLAlias(expr=SQLSubquery(query=new_inner), alias="t"),
+    ))
+
+
+def _correlate_inlined_aggregate_source(
+    node, select_has_patient_id, outer_pid: str, _depth: int = 0
+):
+    """Patient-correlate an aggregate source that is an INLINED row query.
+
+    A CQL query used as a define becomes a CTE and consumers add
+    ``"<CTE>".patient_id = _pt.patient_id``. When the same query is inlined —
+    e.g. ``(<tuple query>).period`` fed to ``rolloutIntervals()`` — there is no
+    boundary to carry that predicate, so the aggregate iterated every patient's
+    rows. CMS136: each drug arm's period list contained ALL patients'
+    medications, and the roll-out chain turned one 90-day supply into 210 days.
+
+    Walks down ``from_clause`` subqueries (a list projection wraps the row
+    query one level deeper) until it finds the row-scoped SELECT to correlate.
+    """
+    from ...translator.types import SQLAlias, SQLIdentifier, SQLSelect, SQLSubquery
+
+    if node is None or _depth > 4:
+        return node
+    target = node
+    if hasattr(target, "args") and target.args:
+        inner = target.args[0]
+        if isinstance(inner, SQLSubquery) and isinstance(inner.query, SQLSelect):
+            target = inner
+    if not (isinstance(target, SQLSubquery) and isinstance(target.query, SQLSelect)):
+        return node
+    sel = target.query
+    frm = sel.from_clause
+    if not isinstance(frm, SQLAlias) or not frm.alias:
+        return node
+    alias = frm.alias
+    inner_expr = frm.expr
+    row_scoped = False
+    if isinstance(inner_expr, SQLSubquery) and isinstance(inner_expr.query, SQLSelect):
+        row_scoped = select_has_patient_id(inner_expr.query)
+    elif isinstance(inner_expr, SQLIdentifier) and inner_expr.quoted:
+        row_scoped = True
+    if row_scoped:
+        if not _references_qualified(sel.where, alias, "patient_id"):
+            sel.where = _patient_correlated_where(sel.where, alias, outer_pid)
+        return node
+    # Not row-shaped at this level: descend into the FROM subquery (list
+    # projection over a row query) and correlate there.
+    if isinstance(inner_expr, (SQLSubquery, SQLSelect)):
+        _correlate_inlined_aggregate_source(
+            inner_expr if not isinstance(inner_expr, SQLSelect) else SQLSubquery(query=inner_expr),
+            select_has_patient_id,
+            outer_pid,
+            _depth + 1,
+        )
+    return node
+
+
 def _patient_correlated_where(existing_where, row_alias: str, outer_pid: str):
     """AND a patient correlation predicate onto an existing WHERE.
 
@@ -6625,6 +6771,16 @@ class QueryMixin:
                     # ── Single-source list-accumulator aggregate: recursive CTE fold ──
                     # source_list is the array expression (SQLArray or SQLFunctionCall).
                     source_list = _fold_marker_swap(source_list)
+                    from ...translator.ast_helpers import ASTHelpersMixin as _AHM
+                    source_list = _listify_tuple_projection(source_list)
+                    source_list = _correlate_inlined_aggregate_source(
+                        source_list,
+                        _AHM._select_has_patient_id.__get__(self, type(self)),
+                        # The aggregate body binds the element alias (e.g. "I")
+                        # as resource_alias, so correlate to the PATIENT alias,
+                        # which is the enclosing "_patients AS _pt" scope.
+                        self.context.patient_alias or "_pt",
+                    )
                     if isinstance(source_list, SQLArray):
                         _arr_sql = source_list.to_sql()
                     elif isinstance(source_list, SQLFunctionCall) and source_list.name == "unnest":
@@ -6634,7 +6790,21 @@ class QueryMixin:
                     elif _is_list_returning_sql(source_list):
                         _arr_sql = source_list.to_sql()
                     else:
-                        _arr_sql = f"[{source_list.to_sql()}]"
+                        # Scalar-shaped source: the fold iterates ONE element.
+                        # A NULL scalar must iterate ZERO times — CQL 1.5
+                        # §19.27: an aggregate over a null/empty list does not
+                        # evaluate its body, and the result is the starting
+                        # value. `unnest([NULL])` fabricates one row, so the
+                        # body ran once against NULL and produced a phantom
+                        # element (CMS136: every drug arm whose list extraction
+                        # was NULL contributed a bogus interval, and the
+                        # roll-out chain turned a 90-day supply into 210 days).
+                        _scalar_src_sql = source_list.to_sql()
+                        _arr_sql = (
+                            f"CASE WHEN {_scalar_src_sql} IS NULL "
+                            f"THEN CAST([] AS VARCHAR[]) "
+                            f"ELSE [{_scalar_src_sql}] END"
+                        )
 
                     _distinct_kw = "DISTINCT " if agg.distinct else ""
 
