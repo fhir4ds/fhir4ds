@@ -104,6 +104,16 @@ def _rewrite_scope(
             ]
         if node.group_by:
             node.group_by = [_rewrite_scope(g, alias, reverse_cols, rebound) for g in node.group_by]
+        # JOINs and DISTINCT ON live outside the column/where/having block and
+        # were previously skipped entirely, so `alias.col` inside a join's ON
+        # condition or a DISTINCT ON list kept the optimized column name while
+        # the derived table renamed it (review REV-007).
+        if node.joins:
+            node.joins = [_rewrite_scope(j, alias, reverse_cols, rebound) for j in node.joins]
+        if node.distinct_on:
+            node.distinct_on = [
+                _rewrite_scope(d, alias, reverse_cols, rebound) for d in node.distinct_on
+            ]
         return node
 
     if isinstance(node, SQLQualifiedIdentifier) and len(node.parts) == 2:
@@ -116,18 +126,40 @@ def _rewrite_scope(
                 return rewritten
         return node
 
-    # Generic recursion over dataclass fields / lists
+    # Generic recursion over dataclass fields / lists / tuples
     if hasattr(node, "__dict__"):
         for name, value in list(vars(node).items()):
-            if isinstance(value, SQLExpression):
-                setattr(node, name, _rewrite_scope(value, alias, reverse_cols, rebound))
-            elif isinstance(value, list):
-                setattr(node, name, [
-                    _rewrite_scope(v, alias, reverse_cols, rebound)
-                    if isinstance(v, SQLExpression) else v
-                    for v in value
-                ])
+            rewritten = _rewrite_value(value, alias, reverse_cols, rebound)
+            if rewritten is not value:
+                setattr(node, name, rewritten)
     return node
+
+
+def _rewrite_value(value, alias: str, reverse_cols: Dict[str, str], rebound: Set[str]):
+    """Rewrite a dataclass field value: expression, list, or 2-tuple.
+
+    Tuples carry ``SQLCase.when_clauses`` pairs, ``(expr, alias)`` column
+    entries and ``(expr, 'ASC')`` order-by entries. Skipping them meant a
+    rewritten column inside a CASE was left referring to the pre-optimization
+    name (review REV-007).
+    """
+    if isinstance(value, SQLExpression):
+        return _rewrite_scope(value, alias, reverse_cols, rebound)
+    if isinstance(value, tuple):
+        items = tuple(
+            _rewrite_scope(v, alias, reverse_cols, rebound)
+            if isinstance(v, SQLExpression) else v
+            for v in value
+        )
+        return items if items != value else value
+    if isinstance(value, list):
+        items = [
+            _rewrite_value(v, alias, reverse_cols, rebound)
+            if isinstance(v, (SQLExpression, tuple, list)) else v
+            for v in value
+        ]
+        return items if items != value else value
+    return value
 
 
 def _reverse_column_ref(alias: str, col: str, reverse_cols: Dict[str, str]) -> Optional[SQLExpression]:
@@ -187,8 +219,16 @@ def fix_derived_alias_column_refs(ast: SQLExpression, registry) -> SQLExpression
             # continue walking to find nested derived selects
         if hasattr(node, "__dict__"):
             for value in vars(node).values():
-                if isinstance(value, SQLExpression):
-                    stack.append(value)
-                elif isinstance(value, list):
-                    stack.extend(v for v in value if isinstance(v, SQLExpression))
+                stack.extend(_child_expressions(value))
     return ast
+
+
+def _child_expressions(value) -> list:
+    """Flatten a field value into child expressions, descending lists/tuples."""
+    found = []
+    if isinstance(value, SQLExpression):
+        found.append(value)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            found.extend(_child_expressions(item))
+    return found
