@@ -5967,12 +5967,17 @@ Durable findings from the cms2025 measure campaign (branch `feat/cms2025-uscore-
   resource must appear in the GROUP BY clause" for every
   `Encounter.claimDiagnosis()`-shaped define. Subqueries are not entered.
 - **Query-valued subqueries must be patient-correlated**
-  (`translator/correlate_subqueries.py`, hooked in `CTEDefinition.to_sql`).
-  Nested subqueries whose FROM is a patient-keyed CTE and which reference no
-  outer alias get `child.patient_id = outer.patient_id`; subqueries that
-  already reference the enclosing alias (e.g. claim lookups correlated through
+  (`translator/correlate_counts.py`, called from `RetrieveOptimizer.optimize`;
+  it must also be reachable from the plain-translation slot). Nested subqueries
+  whose FROM is a patient-keyed CTE and which reference no outer alias get
+  `child.patient_id = outer.patient_id`; subqueries that already reference the
+  enclosing alias (e.g. claim lookups correlated through
   `item.encounter.references(E)`) are left untouched — Claim rows key on
   `patient`, so a second patient_id correlation would over-restrict them.
+  NOTE (2026-11-11): this module was once untracked in git while
+  `retrieve_optimizer.py` imported it unconditionally, so every clean checkout
+  raised `ModuleNotFoundError`. It is tracked now; `tests/test_packaging.py`
+  guards the whole class by failing on any untracked `.py` under `fhir4ds/`.
 
 ### Set-operation grouping (CMS1028 false-positive exclusions, 2026-11-10)
 
