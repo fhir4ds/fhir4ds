@@ -6274,3 +6274,65 @@ and flipped the numerator on one patient (37/38, gate 46/47).
 `explicit OR (distinct AND at_definition_root)`.
 
 CMS136 is now **64/64 (100%)**.
+
+## STRICT PROFILE MODE — `meta.profile` membership is ON by default (2026-11-11)
+
+A profile-qualified retrieve (`[USQualityCore.MedicationRequest: …]`,
+`[USCore.BodyWeightProfile: …]`, `[ConditionProblemsHealthConcerns: …]`) is a
+**membership test**, not a type hint: the generated CTE requires the profile
+canonical in the resource's `meta.profile`. That behaviour is now an explicit,
+user-facing mode rather than an implicit rule.
+
+- **Flag:** `strict_profiles: bool = True` on `CQLToSQLTranslator`,
+  `translate_library_to_sql`, `translate_cql`, `evaluate_measure`, and the DQM
+  CLI (`--no-strict-profiles`). Included-library child translators and every
+  per-library context inherit it, so a profiled retrieve inside `FHIRHelpers`
+  or `QICoreCommon` behaves exactly like one in the caller.
+- **ON (default):** profile-qualified retrieves emit
+  `list_contains(from_json(json_extract(r.resource, '$.meta.profile'),
+  '["VARCHAR"]'), '<canonical>')` OR-chained across registry alternate
+  spellings. A resource with **no** `meta.profile` yields NULL from that
+  membership test, and a NULL WHERE drops the row — so unlabelled data is
+  invisible to a profiled retrieve. That is the correct US Core / QI-Core
+  reading, and it is what US Quality Core relies on to keep its **paired**
+  Condition profiles apart.
+- **OFF:** the conjunct is omitted and the retrieve matches the base resource
+  type. Intended for data that does not populate `meta.profile`.
+- **Never gated:** the negation-profile EXCLUSION
+  (`meta.profile IS NULL OR NOT (list_contains(...))`). It only removes
+  not-done resources and already tolerates a missing `meta.profile`, so
+  disabling strict mode cannot surface a `*notrequested` / `*notdone` record as
+  positive evidence. Pinned by
+  `fhir4ds/cql/tests/integration/test_profile_strict_mode_rows.py`.
+- **Only the 65 named profiles** marked `meta_profile_filter: true` in
+  `fhir4ds/cql/resources/profiles/uscore-usqualitycore-profiles.json` are
+  membership-tested. Base profiles (plain `[Condition]`, base
+  `us-quality-core-condition`) are deliberately exempt and match every
+  resource of their type.
+
+**Non-strict is a real trade-off, and the CMS 2025 data shows the cost.** Full
+`--suite cms2025` tally: strict **73/73 PERFECT**; `--no-strict-profiles`
+**67/73**, mean accuracy 99.78%. The six regressions are all over-inclusion —
+5 of them false-positive Denominator Exclusions:
+
+| measure | strict | non-strict |
+|---|---|---|
+| CMS22 | 100.0% | 93.2% |
+| CMS155 | 100.0% | 97.1% |
+| CMS832 | 100.0% | 97.3% |
+| CMS138 | 100.0% | 97.9% |
+| CMS108 | 100.0% | 99.3% |
+| CMS72 | 100.0% | 99.4% |
+
+Worked example (CMS22 patient `92d6fd00`): the fixture carries exactly one
+Condition — SNOMED `10725009` "Benign hypertension", category
+`encounter-diagnosis`, `meta.profile` =
+`us-quality-core-condition-encounter-diagnosis`. CMS22's exclusion retrieve is
+`[USQualityCore.ConditionProblemsHealthConcerns: "Diagnosis of Hypertension"]`.
+Strict mode correctly excludes it (no DENEX, matching the expected result);
+non-strict mode matches it by base type `Condition` and invents a Denominator
+Exclusion. Do not "fix" the paired-profile filter by relaxing it — the filter IS
+the `Condition.category` distinction.
+
+Verification on the strict-mode tree: `--suite cms2025 --skip-errors` 73/73,
+`--suite 2025 --skip-errors` 47/47, CQL conformance 1706/1706.

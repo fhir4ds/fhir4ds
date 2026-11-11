@@ -491,6 +491,13 @@ class SQLTranslationContext:
     # Configuration
     _use_fhirpath_udfs: bool = True
     _connection: Optional[Any] = None
+    # STRICT PROFILE MODE (default ON). When True, a profile-qualified retrieve
+    # returns only resources whose `meta.profile` declares that canonical — the
+    # US Core / QI-Core membership rule. When False the `meta.profile` conjunct
+    # is omitted, so a profiled retrieve matches resources of the base type
+    # (useful for data that does not populate meta.profile). The negation-profile
+    # EXCLUSION stays active in both modes.
+    strict_profiles: bool = True
     _audit_mode: bool = False
     _audit_expressions: bool = True  # False → population-only audit (no expression wrapping)
     _audit_or_strategy: str = "true_branch"

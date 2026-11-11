@@ -792,7 +792,18 @@ def build_retrieve_cte(
     # URL in their meta.profile array.  The generic/base profile for the
     # resource type (e.g., qicore-condition) does NOT get filtered — it
     # matches all resources of that type.
-    if profile_url and _registry.needs_profile_filter(resource_type, profile_url):
+    # STRICT PROFILE MODE (default ON). Off = do not require the canonical in
+    # `meta.profile`; the retrieve matches the base resource type instead. The
+    # negation-profile EXCLUSION below is deliberately NOT gated: it only ever
+    # removes not-done resources and already tolerates a missing meta.profile
+    # (`IS NULL OR NOT (...)`), so keeping it avoids surfacing negated records
+    # as positive evidence in non-strict mode.
+    _strict_profiles = getattr(context, "strict_profiles", True)
+    if (
+        profile_url
+        and _strict_profiles
+        and _registry.needs_profile_filter(resource_type, profile_url)
+    ):
         # OR-chain the primary URL and any registry alternates (name-collision
         # alternates — CMS 2025 US Core data declares USQualityCore
         # canonicals for QI-Core-primary names; matching only the primary

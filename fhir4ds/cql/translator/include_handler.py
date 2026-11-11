@@ -289,6 +289,11 @@ class IncludeHandlerMixin:
                 # in the CHILD pass where the property marker lives.
                 audit_mode=context.audit_mode,
                 audit_expressions=context.audit_expressions,
+                # Inherit STRICT PROFILE MODE so a profiled retrieve inside an
+                # included library behaves exactly like one in the caller.
+                strict_profiles=getattr(
+                    self, "_strict_profiles", getattr(context, "strict_profiles", True)
+                ),
             )
 
             try:

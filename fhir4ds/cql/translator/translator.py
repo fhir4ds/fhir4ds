@@ -203,6 +203,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         audit_expressions: bool = True,
         closure_loaded: bool = False,
         terminology_endpoint: Optional[Any] = None,
+        strict_profiles: bool = True,
     ) -> None:
         """
         Initialize the translator.
@@ -228,6 +229,13 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 stored on the translator as ``self.terminology_endpoint`` for
                 use by future retrieve-time ValueSet expansion hooks. ``None``
                 (the default) preserves existing behavior byte-for-byte.
+            strict_profiles: STRICT PROFILE MODE, default True. When True a
+                profile-qualified retrieve (``[USCore.BodyWeightProfile: ...]``)
+                requires the profile canonical in the resource's
+                ``meta.profile`` (US Core / QI-Core membership). When False that
+                conjunct is omitted and the retrieve matches the base resource
+                type instead — use it for data that does not populate
+                ``meta.profile``. The negation-profile exclusion is unaffected.
         """
         from .model_config import ModelConfig, DEFAULT_MODEL_CONFIG
         self._model_config = model_config or DEFAULT_MODEL_CONFIG
@@ -239,6 +247,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 warnings.warn(f"Schema config issue: {e}", stacklevel=2)
 
         self._connection = connection
+        self._strict_profiles = strict_profiles
         self._use_fhirpath_udfs = use_fhirpath_udfs
         self._library_loader = library_loader
         # Shared cache across all translator instances in the recursion.
@@ -3127,6 +3136,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         Args:
             library: The parsed CQL library.
         """
+        # STRICT PROFILE MODE: every context this translator creates (main
+        # library and included libraries) inherits the flag; the retrieve
+        # builder reads it to decide whether a profile-qualified retrieve
+        # requires the canonical in `meta.profile`.
+        self._context.strict_profiles = getattr(self, "_strict_profiles", True)
+
         # Set up code systems before value sets so ValueSet codesystems
         # overrides can be resolved into structured CodeSystem references.
         for cs in library.codesystems:

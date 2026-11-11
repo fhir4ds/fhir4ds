@@ -77,6 +77,16 @@ def main():
         action="store_true",
         help="Print verbose output",
     )
+    parser.add_argument(
+        "--no-strict-profiles",
+        action="store_true",
+        help=(
+            "Disable STRICT PROFILE MODE (on by default). Profiled retrieves "
+            "then match the base resource type instead of requiring the profile "
+            "canonical in meta.profile — use for data that does not populate "
+            "meta.profile. Negation-profile exclusion stays active."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -192,6 +202,7 @@ def main():
                 all_columns=args.all_columns,
                 audit=args.audit,
                 library_cache=library_cache,
+                strict_profiles=not getattr(args, "no_strict_profiles", False),
             )
 
             # Write outputs
