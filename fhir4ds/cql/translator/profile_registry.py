@@ -114,6 +114,7 @@ class ProfileRegistry:
                         if alt_url and alt_url != primary.get("url") and alt_url not in alts:
                             alts.append(alt_url)
                         primary["alternate_urls"] = alts
+
                 merged.update(registry._named_profiles)
                 registry._named_profiles = merged
             except (OSError, ValueError) as exc:
@@ -211,6 +212,33 @@ class ProfileRegistry:
                 return (profile_name[len(prefix):], None)
         return None
 
+    def resolve_qualified_profile(
+        self, model_qualifier: str, local_name: str
+    ) -> Optional[Tuple[str, Optional[str]]]:
+        """Resolve a MODEL-QUALIFIED retrieve type (e.g. USQualityCore +
+        MedicationRequest) to (base_type, profile_url).
+
+        Only considers named-profile entries whose ``namespace`` equals the
+        model qualifier (skipping plain FHIR): a profiled-model retrieve maps
+        to that model's profile URL, so e.g.
+        ``[USQualityCore.MedicationRequest]`` filters on the US Quality Core
+        medicationrequest profile and does NOT match resources profiled as
+        ``us-quality-core-medicationnotrequested`` (doNotPerform negations,
+        CMS144). Unqualified ``[MedicationRequest]`` keeps base-type
+        semantics via resolve_named_profile.
+        """
+        for _name, info in self._named_profiles.items():
+            if info.get("namespace") != model_qualifier:
+                continue
+            candidates = {_name}
+            if _name.endswith("Profile"):
+                candidates.add(_name[: -len("Profile")])
+            if _name.startswith(model_qualifier):
+                candidates.add(_name[len(model_qualifier):])
+            if local_name in candidates:
+                return (info["base_type"], info.get("url"))
+        return None
+
     # --- Lookups replacing USCORE_PROFILE_TO_FHIR_TYPE ---
 
     def resolve_url_to_type(self, url: str) -> Optional[str]:
@@ -283,8 +311,11 @@ class ProfileRegistry:
             return explicit
 
         # Check named profiles for meta_profile_filter or negation_filter
+        # (alternate-aware: the resolved profile URL may be a registry
+        # alternate — e.g. the US Quality Core canonical preferred for
+        # USQualityCore-model libraries)
         for _name, info in self._named_profiles.items():
-            if info.get("url") == url:
+            if info.get("url") == url or url in (info.get("alternate_urls") or []):
                 if info.get("meta_profile_filter") or info.get("negation_filter"):
                     last_segment = url.rsplit("/", 1)[-1]
                     # Strip common implementation-guide prefixes for readability
@@ -308,27 +339,61 @@ class ProfileRegistry:
         if not profile_url:
             return False
         for _name, info in self._named_profiles.items():
-            if info.get("url") == profile_url:
+            if info.get("url") == profile_url or profile_url in (
+                info.get("alternate_urls") or []
+            ):
                 return bool(info.get("meta_profile_filter"))
         return False
+
+    # US Quality Core 0.1.0-cibuild (QI-Core 6) unifies the paired
+    # Condition profiles: a retrieve on EITHER flavor matches both flavors'
+    # us-quality-core URLs (Condition.category carries the authoring
+    # distinction). The BASE us-quality-core-condition profile stays
+    # excluded (CMS108 fixture 23f1ece5). QI-Core (5/6) retrieves keep the
+    # flavors DISTINCT (CMS72 fixture 9f4bc5cc).
+    _UNIFIED_USQC_PAIRS = {
+        # One-directional: a ConditionEncounterDiagnosis retrieve also
+        # matches problems-health-concerns conditions (CMS135/146 fixtures);
+        # a ConditionProblemsHealthConcerns retrieve stays strict
+        # (CMS108/CMS72 fixtures distinguish the other direction).
+        "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/"
+        "us-quality-core-condition-encounter-diagnosis": [
+            "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/"
+            "us-quality-core-condition-problems-health-concerns",
+        ],
+        # The registry's primary URL is QI-Core; key the unification on the
+        # qicore ConditionEncounterDiagnosis canonical too so retrieves
+        # resolving through the primary chain get the sibling.
+        "http://hl7.org/fhir/us/qicore/StructureDefinition/"
+        "qicore-condition-encounter-diagnosis": [
+            "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/"
+            "us-quality-core-condition-problems-health-concerns",
+        ],
+    }
 
     def profile_filter_urls(self, profile_url: str) -> list:
         """All meta.profile URLs a retrieve with this profile_url should match.
 
-        Returns the primary URL plus any recorded ``alternate_urls``
+        Returns the primary URL plus same-family ``alternate_urls``
         (registry name-collision alternates — e.g. the USQualityCore
         canonical for a QI-Core-primary name). The meta.profile filter
-        OR-chains these; CMS 2025 US Core test data declares the
-        USQualityCore canonicals.
+        OR-chains these. Alternates from a DIFFERENT IG family are dropped
+        so QI-Core retrieves stay strict while US Quality Core retrieves
+        match their unified sibling flavor.
         """
         if not profile_url:
             return []
         for _name, info in self._named_profiles.items():
-            if info.get("url") == profile_url:
-                urls = [profile_url]
-                for alt in info.get("alternate_urls") or []:
-                    if alt not in urls:
+            urls = [profile_url]
+            if info.get("url") == profile_url or profile_url in (
+                info.get("alternate_urls") or []
+            ):
+                for alt in [info.get("url")] + list(info.get("alternate_urls") or []):
+                    if alt and alt not in urls:
                         urls.append(alt)
+                for unified in self._UNIFIED_USQC_PAIRS.get(profile_url, []):
+                    if unified not in urls:
+                        urls.append(unified)
                 return urls
         return [profile_url]
 

@@ -120,6 +120,26 @@ class ParameterInfo:
     placeholder: Optional[str] = None
 
 
+def _unwrap_type_specifier(spec: Any) -> Any:
+    """Unwrap List<...>/Interval<...> wrappers to the element type specifier.
+
+    Fluent parameters are almost always declared as ``List<FHIR.Condition>``;
+    matching only on the wrapper's own ``name``/``choices`` attributes never
+    matched anything, so a ``.verified()`` call on a Condition list fell back to
+    the LAST registered overload — FHIRCommon's AllergyIntolerance overload —
+    and every verification predicate became a comparison against the
+    allergyintolerance-verification code system (CMS996's ED-STEMI population).
+    """
+    for _ in range(4):
+        if spec is None:
+            return None
+        inner = getattr(spec, "element_type", None)
+        if inner is None:
+            break
+        spec = inner
+    return spec
+
+
 def _match_overload(
     overloads: List[Any], resource_type: str
 ) -> Optional[Any]:
@@ -145,17 +165,25 @@ def _match_overload(
         ptype = getattr(first_param, "type", None)
         if ptype is None:
             continue
-        # NamedTypeSpecifier: exact name match
-        type_name = getattr(ptype, "name", None)
-        if type_name and type_name.lower() == rt_lower:
-            return func
-        # ChoiceTypeSpecifier: check each choice
-        choices = getattr(ptype, "choices", None)
+        # NamedTypeSpecifier (possibly wrapped in List<...>/Interval<...>):
+        # exact name match. FHIR-qualified names ("FHIR.Condition") also match
+        # their bare form.
+        spec = _unwrap_type_specifier(ptype)
+        type_name = getattr(spec, "name", None)
+        if type_name:
+            bare = type_name.split(".")[-1]
+            if type_name.lower() == rt_lower or bare.lower() == rt_lower:
+                return func
+        # ChoiceTypeSpecifier: check each choice (unwrapping nested wrappers)
+        choices = getattr(spec, "choices", None)
         if choices:
             for choice in choices:
+                choice = _unwrap_type_specifier(choice)
                 choice_name = getattr(choice, "name", None)
-                if choice_name and choice_name.lower() == rt_lower:
-                    return func
+                if choice_name:
+                    bare = choice_name.split(".")[-1]
+                    if choice_name.lower() == rt_lower or bare.lower() == rt_lower:
+                        return func
 
     # Pass 2: exact match on parameter name
     for func in overloads:
@@ -166,8 +194,38 @@ def _match_overload(
         if param_name and param_name.lower() == rt_lower:
             return func
 
-    # Pass 3: prefix match — profile names often start with the base type
-    # e.g., "ConditionProblemsHealthConcerns" starts with "Condition"
+    # Pass 3: prefix match on the PARAMETER TYPE — FHIR profiles are named
+    # "<Base><Qualifier>", e.g. "ConditionProblemsHealthConcerns" and
+    # "ConditionEncounterDiagnosis" both start with "Condition".  This is what
+    # disambiguates overload families declared over different resource types
+    # (FHIRCommon.verified has a Condition and an AllergyIntolerance overload);
+    # without it the call fell through to whichever overload was registered
+    # last, so `.verified()` on a Condition list used the AllergyIntolerance
+    # code system and dropped every condition (CMS996).
+    best = None
+    best_len = 0
+    for func in overloads:
+        params = getattr(func, "parameters", None)
+        if not params:
+            continue
+        ptype = getattr(params[0], "type", None)
+        if ptype is None:
+            continue
+        spec = _unwrap_type_specifier(ptype)
+        for candidate in [getattr(spec, "name", None)] + [
+            getattr(_unwrap_type_specifier(c), "name", None)
+            for c in (getattr(spec, "choices", None) or [])
+        ]:
+            if not candidate:
+                continue
+            bare = candidate.split(".")[-1].lower()
+            if bare and rt_lower.startswith(bare) and len(bare) > best_len:
+                best = func
+                best_len = len(bare)
+    if best is not None:
+        return best
+
+    # Pass 4: prefix match on the parameter NAME (legacy heuristic)
     for func in overloads:
         params = getattr(func, "parameters", None)
         if not params:
@@ -515,6 +573,12 @@ class SQLTranslationContext:
 
     # Profile registry for QI Core profile/model knowledge (Layer 2)
     profile_registry: Optional["ProfileRegistry"] = None
+    # Data-model using declarations of the library being translated (e.g.
+    # ['USQualityCore', 'USCore', 'FHIR']). Profiled retrieves scope their
+    # meta.profile URL family from this: US Quality Core 0.1.0-cibuild
+    # (QI-Core 6) unifies the paired Condition profiles; QI-Core retrieves
+    # distinguish them.
+    library_models: list = field(default_factory=list)
 
     # Precomputed column name mappings (FHIRPath → SQL column), from versioned FHIR R4 dir
     column_mappings: Optional[Dict[str, str]] = None

@@ -648,7 +648,8 @@ def build_retrieve_cte(
     _negation_filter = None
     _is_negation = False
     for _np_name, _np_info in _registry._named_profiles.items():
-        if _np_info.get("url") in all_profile_urls and "negation_filter" in _np_info:
+        _np_urls = [_np_info.get("url")] + list(_np_info.get("alternate_urls") or [])
+        if any(u in all_profile_urls for u in _np_urls if u) and "negation_filter" in _np_info:
             _negation_filter = _np_info["negation_filter"]
             _is_negation = True
             break
@@ -727,9 +728,21 @@ def build_retrieve_cte(
                         )
                     )
 
-                # Exclude resources that declare the negation profile URL
+                # Exclude resources that declare the negation profile URL.
+                # Alternate-aware: a named negation profile carries a primary
+                # URL (typically the QI-Core canonical) plus registry
+                # alternates (the US Quality Core canonical used by the CMS
+                # 2025 fixtures). Matching only the primary left USQC-declared
+                # negation resources (e.g. us-quality-core-servicenotrequested)
+                # visible to POSITIVE base-type retrieves (CMS645 d07cf359
+                # counted a doNotPerform DEXA order as a real order).
                 neg_profile_url = _np_info.get("url")
-                if neg_profile_url:
+                _neg_urls = [
+                    u
+                    for u in ([neg_profile_url] + list(_np_info.get("alternate_urls") or []))
+                    if u
+                ]
+                if _neg_urls:
                     _meta_profile = SQLFunctionCall(
                         name="json_extract",
                         args=[
@@ -737,6 +750,26 @@ def build_retrieve_cte(
                             SQLLiteral("$.meta.profile"),
                         ],
                     )
+                    _profile_list = SQLFunctionCall(
+                        name="from_json",
+                        args=[
+                            _meta_profile,
+                            SQLLiteral('["VARCHAR"]'),
+                        ],
+                    )
+                    _contains_any = SQLFunctionCall(
+                        name="list_contains",
+                        args=[_profile_list, SQLLiteral(_neg_urls[0])],
+                    )
+                    for _alt_url in _neg_urls[1:]:
+                        _contains_any = SQLBinaryOp(
+                            operator="OR",
+                            left=_contains_any,
+                            right=SQLFunctionCall(
+                                name="list_contains",
+                                args=[_profile_list, SQLLiteral(_alt_url)],
+                            ),
+                        )
                     where_conditions.append(
                         SQLBinaryOp(
                             operator="OR",
@@ -747,19 +780,7 @@ def build_retrieve_cte(
                             ),
                             right=SQLUnaryOp(
                                 operator="NOT",
-                                operand=SQLFunctionCall(
-                                    name="list_contains",
-                                    args=[
-                                        SQLFunctionCall(
-                                            name="from_json",
-                                            args=[
-                                                _meta_profile,
-                                                SQLLiteral('["VARCHAR"]'),
-                                            ],
-                                        ),
-                                        SQLLiteral(neg_profile_url),
-                                    ],
-                                ),
+                                operand=_contains_any,
                             ),
                         )
                     )

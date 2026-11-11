@@ -3128,6 +3128,16 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         for cs in library.codesystems:
             self._context.add_codesystem(cs.name, cs.id, cs.version)
 
+        # Record the library's data-model using declarations (e.g. `using
+        # USQualityCore` vs `using QICore`) so profiled retrieves can scope
+        # their meta.profile URL families: US Quality Core 0.1.0-cibuild
+        # (QI-Core 6) unifies the paired Condition profiles; QI-Core 5/6
+        # retrieves distinguish them (CMS72 vs CMS135 fixture semantics).
+        self._context.library_models = [
+            getattr(u, "model", None) or getattr(u, "local_identifier", "") or ""
+            for u in (library.using or [])
+        ]
+
         # Set up value sets
         for vs in library.valuesets:
             url = vs.id

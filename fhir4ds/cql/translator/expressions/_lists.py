@@ -1846,6 +1846,24 @@ class ListsMixin:
             return None
         return name.split(".")[-1]
 
+    def _profile_base_resource_type(self, type_name: Optional[str]) -> Optional[str]:
+        """Resolve a profile type name to its base FHIR resource type.
+
+        Uses the profile registry's named_profiles (name -> base_type), e.g.
+        "ConditionEncounterDiagnosis" -> "Condition". Returns None when the
+        name is not a known profile (plain resource names have no registry
+        entry and are handled by the caller).
+        """
+        if not type_name:
+            return None
+        registry = getattr(self.context, "profile_registry", None)
+        if registry is None:
+            return None
+        info = getattr(registry, "_named_profiles", {}).get(type_name)
+        if isinstance(info, dict):
+            return info.get("base_type")
+        return None
+
     def _resource_type_from_cql_type(self, cql_type: Optional[str]) -> Optional[str]:
         """Extract a concrete list element/resource type from a CQL type hint."""
         if not cql_type:
@@ -2051,6 +2069,25 @@ class ListsMixin:
             )
             if left_type and right_type and left_type == right_type:
                 return left_type
+            if left_type and right_type:
+                # Different profile types over the same base resource are
+                # common in 2025 US Core content (e.g. a union of
+                # ConditionProblemsHealthConcerns and ConditionEncounterDiagnosis
+                # retrieves). Resolve both sides to their profile BASE type
+                # and use it when they agree — otherwise fluent overload
+                # resolution on the union alias gets no type and falls back
+                # to a stale ambient context type, inlining the WRONG
+                # overload body (CMS144 "Has Diagnosis of Allergy..." inlined
+                # the Observation overload's `.effective` chain on a
+                # Condition union and emptied the define for every patient).
+                # Normalize each side to its profile BASE (plain resource
+                # names pass through unchanged) so nested unions — inner
+                # pair already resolved to the base, outer operand still a
+                # profile name — compare equal.
+                left_base = self._profile_base_resource_type(left_type) or left_type
+                right_base = self._profile_base_resource_type(right_type) or right_type
+                if left_base == right_base:
+                    return left_base
             return None
 
         if isinstance(expr, Query):

@@ -1177,6 +1177,7 @@ class PropertyMixin:
         # single JSON resource value.
         source_sql = self._narrow_to_resource_column(source_sql)
 
+
         # Flatten nested fhirpath calls: fhirpath_X(fhirpath_text(res, 'a'), 'b')
         # → fhirpath_X(res, 'a.b').  fhirpath_text extracts a sub-object as text;
         # chaining another fhirpath on that text is fragile (the UDF may receive a

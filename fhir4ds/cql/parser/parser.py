@@ -1956,13 +1956,18 @@ class CQLParser:
         # Parse the resource type
         resource_type = self._parse_identifier_name()
         # Handle model-qualified retrieve type: QICore.Procedure, FHIR.Claim, etc.
-        # Discard the model qualifier and keep only the local type name.
+        # Discard the model qualifier for the local type name but PRESERVE it on
+        # the AST node so profiled-model retrieves can resolve through the
+        # named-profile registry (translator-side).
+        model_qualifier = None
         if self.match(TokenType.DOT):
+            model_qualifier = resource_type
             self.advance()  # consume DOT
             resource_type = self._parse_identifier_name()
         # Quoted model-qualified retrieves keep the prefix embedded in one
         # identifier (["USCore.BMIProfile"]) — strip it the same way.
         if "." in resource_type:
+            model_qualifier = model_qualifier or resource_type.split(".", 1)[0]
             resource_type = resource_type.split(".", 1)[1]
 
         terminology = None
@@ -1984,7 +1989,7 @@ class CQLParser:
             terminology = self.parse_expression()
 
         self.expect(TokenType.RBRACKET, "Expected ']'")
-        return Retrieve(type=resource_type, terminology=terminology, terminology_property=terminology_property, navigation_path=navigation_path)
+        return Retrieve(type=resource_type, terminology=terminology, terminology_property=terminology_property, navigation_path=navigation_path, model=model_qualifier)
 
     def parse_tuple_expression(self) -> TupleExpression:
         """Parse a tuple literal expression."""

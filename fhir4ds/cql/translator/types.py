@@ -2326,13 +2326,70 @@ class SQLUnion(SQLExpression):
             else:
                 return op.to_sql(self.precedence)
 
-        operand_sqls = [_normalize_operand(op) for op in self.operands]
+        operand_sqls = []
+        for idx, op in enumerate(self.operands):
+            sql = _normalize_operand(op)
+            if idx > 0 and _is_set_operation_node(op):
+                sql = f"({sql})"
+            operand_sqls.append(sql)
         result = f" {union_keyword} ".join(operand_sqls)
 
         if self.needs_parentheses(parent_precedence):
             return f"({result})"
 
         return result
+
+
+def _is_set_operation_node(op) -> bool:
+    """True for UNION / INTERSECT / EXCEPT nodes (set-operation operands).
+
+    Resolved at call time — SQLIntersect/SQLExcept are defined below this
+    helper in the module.
+    """
+    return isinstance(op, (SQLUnion, SQLIntersect, SQLExcept))
+
+
+def _flatten_except_union_operands(operands) -> list:
+    """Rewrite ``X except (Y union Z)`` into ``X except Y except Z``.
+
+    Set difference distributes over union — ``X \\ (Y ∪ Z) = (X \\ Y) \\ Z`` —
+    so the flattened form is semantically identical and needs no parentheses.
+    SQL's UNION / INTERSECT / EXCEPT share one precedence level and are
+    left-associative, so the un-flattened text ``X EXCEPT Y UNION Z`` evaluates
+    as ``(X except Y) union Z`` and RE-ADDS every Z member. This was the
+    CMS1028 false-positive Numerator Exclusion (patients whose only evidence
+    was a ventilation procedure returned through the union arm of the except's
+    right side). Flattening also keeps the fast SQL shape: parenthesizing the
+    right operand compiles but defeats DuckDB's set-operation planning.
+    """
+    flat = []
+    for op in operands:
+        if isinstance(op, SQLUnion):
+            flat.extend(_flatten_except_union_operands(op.operands))
+        else:
+            flat.append(op)
+    return flat
+
+
+def _render_set_operands(operands, keyword: str, precedence: int) -> str:
+    """Render set-operation operands with correct grouping.
+
+    ``EXCEPT`` flattens union operands (see
+    :func:`_flatten_except_union_operands`). Any remaining nested set
+    operation in a NON-FIRST position is parenthesized, because SQL's
+    UNION / INTERSECT / EXCEPT share one precedence level and are
+    left-associative — without parentheses the tree would flatten. First
+    position needs none: left-associative evaluation already matches the tree.
+    """
+    if keyword == "EXCEPT":
+        operands = _flatten_except_union_operands(list(operands))
+    parts = []
+    for idx, op in enumerate(operands):
+        sql = _normalize_set_operand(op, precedence)
+        if idx > 0 and _is_set_operation_node(op):
+            sql = f"({sql})"
+        parts.append(sql)
+    return f" {keyword} ".join(parts)
 
 
 def _normalize_set_operand(op: "SQLExpression", precedence: int) -> str:
@@ -2396,8 +2453,7 @@ class SQLIntersect(SQLExpression):
         if not self.operands:
             return "SELECT NULL WHERE FALSE"
 
-        operand_sqls = [_normalize_set_operand(op, self.precedence) for op in self.operands]
-        result = " INTERSECT ".join(operand_sqls)
+        result = _render_set_operands(self.operands, "INTERSECT", self.precedence)
 
         if self.needs_parentheses(parent_precedence):
             return f"({result})"
@@ -2420,8 +2476,7 @@ class SQLExcept(SQLExpression):
         if not self.operands:
             return "SELECT NULL WHERE FALSE"
 
-        operand_sqls = [_normalize_set_operand(op, self.precedence) for op in self.operands]
-        result = " EXCEPT ".join(operand_sqls)
+        result = _render_set_operands(self.operands, "EXCEPT", self.precedence)
 
         if self.needs_parentheses(parent_precedence):
             return f"({result})"

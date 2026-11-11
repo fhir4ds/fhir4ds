@@ -161,6 +161,15 @@ def _expr_contains_aggregate(node) -> bool:
 
     Used to decide GROUP BY when patient_id is prepended to a select whose
     value columns aggregate over the source rows.
+
+    Subqueries are NOT entered: an aggregate inside a nested SELECT belongs to
+    that subquery, not to the enclosing select. Counting it made the enclosing
+    select look like an aggregate query, so ``GROUP BY patient_id`` was added
+    while the value expression still correlated to the source row — DuckDB
+    then rejected the correlated column ("column \\"resource\\" must appear in
+    the GROUP BY clause"), which is how every ``Encounter.claimDiagnosis()``
+    define (CQL 1.5 let-bound claim + nested subquery over Claim) failed
+    (CMS1017).
     """
     stack = [node]
     seen = set()
@@ -174,6 +183,8 @@ def _expr_contains_aggregate(node) -> bool:
             return True
         if isinstance(cur, (list, tuple)):
             stack.extend(cur)
+            continue
+        if cur is not node and type(cur).__name__ == "SQLSelect":
             continue
         for f in getattr(cur, "__dataclass_fields__", {}):
             stack.append(getattr(cur, f, None))
@@ -1548,6 +1559,27 @@ class CTEManagerMixin:
                                         distinct=inner.distinct,
                                         limit=inner.limit,
                                     )
+                            else:
+                                # SELECT * FROM (<subquery>) AS alias: the star hides an
+                                # arbitrary column list (a retrieve CTE's precomputed
+                                # columns). Narrow to the resource-row shape so the
+                                # branch matches its siblings — otherwise the union
+                                # mixes 2-column and N-column operands and DuckDB
+                                # rejects the statement ("Set operations can only apply
+                                # to expressions with the same number of result
+                                # columns" — CMS124 "Absence of Cervix", CMS138).
+                                inner = SQLSelect(
+                                    columns=[
+                                        SQLIdentifier(name="patient_id"),
+                                        SQLIdentifier(name="resource"),
+                                    ],
+                                    from_clause=inner.from_clause,
+                                    where=inner.where,
+                                    joins=inner.joins,
+                                    order_by=inner.order_by,
+                                    distinct=inner.distinct,
+                                    limit=inner.limit,
+                                )
                     if was_subquery:
                         inner = SQLSubquery(query=inner)
                     expanded_operands.append(inner)
@@ -2071,7 +2103,7 @@ class CTEManagerMixin:
             )
         else:
             # Build: SELECT _pt.patient_id, <expr> AS value FROM _patients AS p
-            return SQLSelect(
+            _select = SQLSelect(
                 columns=[
                     SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     (expr, "value"),  # Tuple for aliased column
@@ -2079,6 +2111,7 @@ class CTEManagerMixin:
                 from_clause=patients_from,
                 joins=[],  # JOINs will be added by _build_cte_from_ast
             )
+            return _select
 
     def _build_cte_from_ast(
         self,

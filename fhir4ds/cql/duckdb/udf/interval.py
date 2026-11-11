@@ -2262,6 +2262,13 @@ def intervalProperlyIncludedIn(interval1: str | None, interval2: str | None) -> 
     interval with typed-null bounds.  ``Interval[null, null]`` is unbounded;
     ``null as Interval<T>`` yields SQL NULL for this operator.
     """
+    # Parse BEFORE probing the bounds: `iv1`/`iv2` were referenced before being
+    # assigned, so every call raised NameError (11 official CQL interval tests:
+    # intervalProperlyIncludedIn* across Integer/Decimal/Quantity/DateTime/Time).
+    iv1 = _parse_interval(interval1)
+    iv2 = _parse_interval(interval2)
+    if not iv1 or not iv2:
+        return None
     if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
         return None
     return intervalProperlyIncludes(interval2, interval1)
@@ -3076,6 +3083,41 @@ def _temporal_precision_meets_or_overlaps(
     return l_t <= succ[:n]
 
 
+def _period_dict_to_interval(item: dict) -> Optional[dict]:
+    """Parse an interval-shaped OR period-shaped dict into a collapse entry.
+
+    Interval shape: {low, high, lowClosed, highClosed}. Period shape:
+    {start, end}. Missing sides follow the asymmetric FHIR Period doctrine:
+    a missing START is UNKNOWN (open null bound → ``start of`` is null, so
+    Min/Max ignore it) while a missing END is ONGOING (closed null bound →
+    the point-type maximum, so ``overlaps`` stays determined). See the
+    inline comment for the fixture that pins each side.
+
+    Delegates to :func:`_parse_interval` so the standard bound normalization
+    (discrete open→closed, quantity/time detection) stays in one place.
+    """
+    is_period_shape = "low" not in item and "high" not in item
+    if is_period_shape:
+        low_val = item.get("start")
+        high_val = item.get("end")
+        payload: dict = {}
+        if low_val is not None:
+            payload["low"] = low_val
+        if high_val is not None:
+            payload["high"] = high_val
+        # FHIR Period semantics for a MISSING side:
+        #   * missing END  -> the period is ONGOING: unbounded high. Keep the
+        #     CLOSED null bound so `end of` yields the point-type maximum and
+        #     `overlaps` is determined (CMS145 active-beta-blocker intervals).
+        #   * missing START -> the start is UNKNOWN: represent it as an OPEN
+        #     null bound so `start of` is null and Min/Max ignore it instead of
+        #     picking up the 0001-01-01 sentinel (CMS645 eeea0041).
+        payload["lowClosed"] = item.get("lowClosed", True) if low_val is not None else False
+        payload["highClosed"] = item.get("highClosed", True) if high_val is not None else True
+        item = payload
+    return _parse_interval(orjson.dumps(item).decode())
+
+
 def collapse_intervals(intervals_json: str | None, per_json: Any = None) -> str | None:
     """Collapse a list of intervals into non-overlapping, merged intervals.
 
@@ -3104,6 +3146,13 @@ def collapse_intervals(intervals_json: str | None, per_json: Any = None) -> str 
     except JSONDecodeError as e:
         _logger.warning("collapse_intervals JSON parse failed: %s", e)
         return None
+    if isinstance(raw_list, dict):
+        # Single-interval transport: query-define value columns can carry one
+        # interval object (not wrapped in an array) when the patient has a
+        # single element — the translator's scalar/list duality guard
+        # (`ends_with(typeof(x), '[]')`) only converts list-typed values.
+        # Collapse of a single interval is the interval itself.
+        raw_list = [raw_list]
     if not isinstance(raw_list, list):
         return None
     if len(raw_list) == 0:
@@ -3144,21 +3193,27 @@ def collapse_intervals(intervals_json: str | None, per_json: Any = None) -> str 
     parsed = []
     for item in raw_list:
         if isinstance(item, str):
-            iv = _parse_interval(item)
+            # Period-shaped JSON strings ({"start":...}/{"end":...}) with a
+            # missing side are VALID one-sided intervals — route them through
+            # the period parser so the missing side keeps the asymmetric
+            # semantics instead of being dropped (CMS645 end-only dosage
+            # bounds were previously discarded entirely).
+            try:
+                decoded = orjson.loads(item)
+            except (JSONDecodeError, TypeError, ValueError):
+                decoded = None
+            if isinstance(decoded, dict) and "low" not in decoded and "high" not in decoded:
+                iv = _period_dict_to_interval(decoded)
+            else:
+                iv = _parse_interval(item)
         elif isinstance(item, dict):
-            low_val = item.get("low") if "low" in item else item.get("start")
-            high_val = item.get("high") if "high" in item else item.get("end")
-            iv = {
-                "low": _parse_interval_bound(low_val),
-                "high": _parse_interval_bound(high_val),
-                "low_closed": item.get("lowClosed", True),
-                "high_closed": item.get("highClosed", True),
-                "low_raw": low_val,
-                "high_raw": high_val,
-            }
+            iv = _period_dict_to_interval(item)
         else:
             iv = None
-        if iv and iv["low"] is not None:
+        # Keep one-sided intervals (a missing FHIR Period side is a VALID
+        # unknown bound, not a null element); only fully-null entries are
+        # null elements to exclude per CQL §9.3.
+        if iv is not None and (iv["low"] is not None or iv["high"] is not None):
             parsed.append(iv)
 
     if not parsed:

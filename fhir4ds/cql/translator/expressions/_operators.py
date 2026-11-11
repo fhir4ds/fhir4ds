@@ -2505,6 +2505,74 @@ class OperatorsMixin:
                         expression=SQLArray(elements=[]),
                         target_type=_sql_list_type_for_cql_list_specifier(expr.right),
                     ))
+                # FHIRHelpers implicit conversion: `X as Interval<DateTime>`
+                # where X carries FHIR.Period-shaped JSON ({start, end}).
+                # The reference engine converts Period → Interval via
+                # FHIRHelpers.ToInterval, so `.low/.high`/`start of/end of`
+                # see interval bounds; a raw passthrough leaves Period JSON
+                # where `boundsPeriod."high"` reads nothing (CMS128
+                # medicationRequestPeriod fell to the null branch and the
+                # overlap decomposition's 9999-12-31 sentinel made the
+                # denominator exclusion wrongly true). Interval JSON uses
+                # low/high keys, so already-interval values pass through the
+                # CASE unchanged.
+                if (
+                    (
+                        isinstance(expr.right, IntervalTypeSpecifier)
+                        or target_name.startswith("Interval<")
+                    )
+                    and isinstance(left, SQLFunctionCall)
+                    and left.name
+                    in ("fhirpath_text", "fhirpath", "fhirpath_scalar", "fhirpath_bool")
+                ):
+                    # CAST to VARCHAR: the operand may be a non-JSON
+                    # literal (typed null, INTEGER) — json_extract_string
+                    # on a non-JSON string yields NULL and the CASE falls
+                    # through to the original value unchanged.
+                    _left_json = SQLCast(expression=left, target_type="VARCHAR")
+                    start_v = SQLFunctionCall(
+                        name="json_extract_string",
+                        args=[_left_json, SQLLiteral(value="$.start")],
+                    )
+                    end_v = SQLFunctionCall(
+                        name="json_extract_string",
+                        args=[_left_json, SQLLiteral(value="$.end")],
+                    )
+                    return _strict_cast_result(SQLCase(
+                        when_clauses=[(
+                            SQLBinaryOp(
+                                operator="OR",
+                                left=SQLUnaryOp(
+                                    operator="IS NOT NULL", operand=start_v,
+                                    prefix=False,
+                                ),
+                                right=SQLUnaryOp(
+                                    operator="IS NOT NULL", operand=end_v,
+                                    prefix=False,
+                                ),
+                            ),
+                            SQLFunctionCall(
+                                name="intervalFromBounds",
+                                args=[
+                                    start_v,
+                                    end_v,
+                                    SQLCase(
+                                        when_clauses=[(
+                                            SQLUnaryOp(
+                                                operator="IS NOT NULL",
+                                                operand=start_v,
+                                                prefix=False,
+                                            ),
+                                            SQLLiteral(value=True),
+                                        )],
+                                        else_clause=SQLLiteral(value=False),
+                                    ),
+                                    SQLLiteral(value=True),
+                                ],
+                            ),
+                        )],
+                        else_clause=left,
+                    ))
                 primitive_targets = {
                     "Boolean", "boolean",
                     "Integer", "integer",
@@ -4580,13 +4648,13 @@ class OperatorsMixin:
             and right.name == "fhirpath_text"
             and len(right.args) == 2
         ):
-            all_values = SQLFunctionCall(
-                name="from_json",
-                args=[
-                    SQLFunctionCall(name="fhirpath", args=right.args),
-                    SQLLiteral(value='["VARCHAR"]'),
-                ],
-            )
+            # Route through the shared promotion so the SOURCE TRAIL is
+            # promoted too: a let-bound trail keeps scalar navigations inside
+            # the source argument (`fhirpath(CASE WHEN ... THEN
+            # fhirpath_text(claims,'item') ... END, 'diagnosisSequence')`),
+            # and those truncated every claim/item/diagnosis after the first
+            # (CQMCommon.claimDiagnosis → CMS1028 Numerator, CMS1017 POA).
+            all_values = _promote_fhirpath_text_list(right)
             return SQLFunctionCall(
                 name="list_contains", args=[all_values, left],
             )
@@ -5624,32 +5692,25 @@ class OperatorsMixin:
             # fixture families: CMS1154 (onset inside the look-back →
             # exclusion fires) and CMS129 (onset years before the
             # measurement period → unknown → excluded).
-            left_end_entailed = SQLFunctionCall(
-                name="COALESCE",
-                args=[
-                    left_end,
-                    SQLCase(
-                        when_clauses=[(
-                            SQLBinaryOp(operator=">=", left=left_start, right=right_start),
-                            right_start,
-                        )],
-                        else_clause=SQLNull(),
-                    ),
-                ],
-            )
-            right_end_entailed = SQLFunctionCall(
-                name="COALESCE",
-                args=[
-                    right_end,
-                    SQLCase(
-                        when_clauses=[(
-                            SQLBinaryOp(operator=">=", left=right_start, right=left_start),
-                            left_start,
-                        )],
-                        else_clause=SQLNull(),
-                    ),
-                ],
-            )
+            # Interval-invariant-aware unknown ends (CQL §9 overlaps over
+            # open-null-high bounds, e.g. prevalenceInterval of an
+            # inactive/resolved condition without abatement →
+            # Interval[start, null)). intervalEnd returns NULL for the OPEN
+            # null bound (unknown) and the max sentinel for the CLOSED one
+            # (unbounded).
+            #
+            # DOCTRINE (CMS347 695b64d8): an OPEN null high bound is UNKNOWN,
+            # never "unbounded", so the comparison must stay NULL and the row
+            # is excluded. Earlier code ENTITLED the unknown end to the other
+            # interval's start whenever the known start already lay at/after
+            # it (CMS1154 look-back family); that made a resolved condition
+            # with no abatement (`Interval[onset, null)`) overlap the
+            # measurement period and reported a false Denominator Exclusion
+            # (CMS347). Closed-null bounds still yield the max sentinel from
+            # intervalEnd, so genuinely unbounded intervals keep overlapping
+            # (CMS1154/CMS129 stay green).
+            left_end_entailed = left_end
+            right_end_entailed = right_end
             overlaps_result = SQLBinaryOp(
                 operator="AND",
                 left=SQLBinaryOp(operator="<=", left=left_start, right=right_end_entailed),
@@ -7060,6 +7121,70 @@ class OperatorsMixin:
             result = SQLUnaryOp(operator="NOT", operand=result)
         return result
 
+    def _resolve_included_code(self, lib_alias: str, code_name: str) -> Optional[dict]:
+        """Resolve `Alias."code"` against the INCLUDED library's declarations."""
+        includes = getattr(self.context, "includes", None) or {}
+        try:
+            inc = includes.get(lib_alias)
+        except AttributeError:
+            inc = None
+        library = getattr(inc, "library_ast", None) if inc is not None else None
+        if library is None:
+            return None
+        cs_map = {cs.name: cs.id for cs in (getattr(library, "codesystems", None) or [])}
+        for code in (getattr(library, "codes", None) or []):
+            if getattr(code, "name", None) != code_name:
+                continue
+            info = {
+                "code": code.code,
+                "codesystem": cs_map.get(code.codesystem, code.codesystem),
+                "display": getattr(code, "display", None),
+            }
+            version = getattr(code, "version", None)
+            if version is not None:
+                info["version"] = version
+            return info
+        return None
+
+    def _resolve_included_concept(self, lib_alias: str, concept_name: str) -> Optional[dict]:
+        """Resolve `Alias."concept"` against the INCLUDED library's declarations."""
+        includes = getattr(self.context, "includes", None) or {}
+        try:
+            inc = includes.get(lib_alias)
+        except AttributeError:
+            inc = None
+        library = getattr(inc, "library_ast", None) if inc is not None else None
+        if library is None:
+            return None
+        cs_map = {cs.name: cs.id for cs in (getattr(library, "codesystems", None) or [])}
+        code_map = {
+            c.name: c for c in (getattr(library, "codes", None) or [])
+            if getattr(c, "name", None)
+        }
+        for concept in (getattr(library, "concepts", None) or []):
+            if getattr(concept, "name", None) != concept_name:
+                continue
+            members = []
+            for ref in (getattr(concept, "codes", None) or []):
+                ref_name = ref if isinstance(ref, str) else getattr(ref, "name", None)
+                declared = code_map.get(ref_name)
+                if declared is None:
+                    continue
+                member = {
+                    "code": declared.code,
+                    "system": cs_map.get(declared.codesystem, declared.codesystem),
+                }
+                display = getattr(declared, "display", None)
+                if display:
+                    member["display"] = display
+                members.append(member)
+            info: dict = {"codes": members}
+            display = getattr(concept, "display", None)
+            if display:
+                info["display"] = display
+            return info
+        return None
+
     def _resolve_code_ref_inline(self, operand_ast) -> Optional[dict]:
         """Phase 3 inline code-ref resolver used by ``_translate_code_is_op``.
 
@@ -7236,7 +7361,22 @@ class OperatorsMixin:
                             }
                 return None
             if isinstance(operand_ast, QualifiedIdentifier) and len(operand_ast.parts) >= 2:
-                # Library-qualified code ref: QICoreCommon."confirmed" → look up "confirmed"
+                # Library-qualified code ref: resolve against THAT library's own
+                # code/codesystem declarations first (a global lookup returns
+                # whichever library registered the name last, e.g. the
+                # AllergyIntolerance verification system instead of
+                # condition-ver-status).
+                # Library-qualified code ref: resolve it against THAT library's
+                # own code/codesystem declarations first. A global name lookup
+                # returns whichever library registered the name last, so
+                # Status."confirmed" could resolve to the AllergyIntolerance
+                # verification code system instead of condition-ver-status —
+                # every verification predicate then matched nothing (CMS996).
+                scoped = self._resolve_included_code(
+                    operand_ast.parts[0], operand_ast.parts[-1]
+                )
+                if scoped is not None:
+                    return scoped
                 code_name = operand_ast.parts[-1]
                 return self.context.get_code(code_name)
             if isinstance(operand_ast, Property) and isinstance(operand_ast.source, Identifier):

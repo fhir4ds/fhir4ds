@@ -1491,9 +1491,20 @@ class QueryMixin:
         # Normalize resource type (e.g., USCoreBloodPressureProfile -> Observation)
         profile_url = None
         registry = self.context.profile_registry
-        resolved = registry.resolve_named_profile(resource_type)
+        _profile_name = resource_type
+        # Model-QUALIFIED retrieves ([USQualityCore.MedicationRequest]) resolve
+        # through the profiled model's registry entry FIRST so they carry the
+        # model's profile URL (and meta.profile filter); unqualified/plain-FHIR
+        # retrieves keep the existing bare-name/base-type semantics.
+        _model_qualifier = getattr(node, "model", None)
+        resolved = None
+        if _model_qualifier and _model_qualifier not in ("FHIR", "System"):
+            resolved = registry.resolve_qualified_profile(_model_qualifier, resource_type)
+        if resolved is None:
+            resolved = registry.resolve_named_profile(resource_type)
         if resolved is not None:
             resource_type, profile_url = resolved
+
 
         # Reject unknown resource types at translation time (BUGFIX-002/U1):
         # an unrecognized type would otherwise lower to an empty CTE
@@ -5689,7 +5700,24 @@ class QueryMixin:
                     self.context.add_alias(wc_alias, table_alias=wc_alias, cte_name=_wc_cte_name)
                     _prior_with_aliases.append(wc_alias)
 
-                    # Set resource_alias so Patient correlation uses the with-clause alias
+                    # Track the FHIR resource type for the with-clause alias.
+                    # Without this, fluent overload resolution on the alias
+                    # (e.g. `HeartFailure.isVerified()` where HeartFailure is
+                    # a [Condition: ...] with-alias) falls back to the stale
+                    # ambient context.resource_type — an earlier Allergy-
+                    # Intolerance retrieve's type leaked across defines and
+                    # resolved the WRONG overload (allergy verification codes
+                    # applied to Conditions; CMS135/144 initial populations
+                    # emptied).
+                    wc_rt = self._infer_resource_type_from_cql_expr(wc_expr)
+                    if wc_rt:
+                        self.context._alias_resource_types[wc_alias] = wc_rt
+
+                    # Set resource_alias so Patient correlation uses the
+                    # with-clause alias. The ambient context.resource_type is
+                    # deliberately NOT set here: other machinery reads it with
+                    # different expectations, and alias registration above is
+                    # what fluent overload resolution needs.
                     old_resource_alias = self.context.resource_alias
                     self.context.resource_alias = wc_alias
                     try:

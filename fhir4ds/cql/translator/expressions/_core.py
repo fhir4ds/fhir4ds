@@ -1237,6 +1237,28 @@ class CoreMixin:
             # e.g., FHIRHelpers.ToDateTime or AIFrailLTCF."Some Definition"
             if len(parts) >= 2:
                 full_name = ".".join(parts)
+                # A qualified reference may name one of the INCLUDED library's own
+                # `code` / `concept` declarations rather than a definition. Codes
+                # and definitions live in separate CQL namespaces, so resolve the
+                # code first: falling through to definition handling emitted a
+                # reference to a non-existent CTE
+                # (`AlaraCommon."Abdomen and Pelvis Low Dose"` — CMS1056/1074/1206
+                # Catalog Error; CMS124/138 set-operation column mismatch).
+                _inc_code = None
+                if hasattr(self, "_resolve_included_code"):
+                    _inc_code = self._resolve_included_code(first, parts[-1])
+                if _inc_code is not None:
+                    return self._clinical_code_literal(
+                        _inc_code.get("code"),
+                        _inc_code.get("codesystem"),
+                        _inc_code.get("display"),
+                        _inc_code.get("version"),
+                    )
+                _inc_concept = None
+                if hasattr(self, "_resolve_included_concept"):
+                    _inc_concept = self._resolve_included_concept(first, parts[-1])
+                if _inc_concept is not None:
+                    return self._clinical_concept_literal(_inc_concept)
                 # Check if this definition was successfully loaded
                 if hasattr(self.context, 'has_included_definition') and not self.context.has_included_definition(full_name):
                     # Definition wasn't loaded (library failed to parse)

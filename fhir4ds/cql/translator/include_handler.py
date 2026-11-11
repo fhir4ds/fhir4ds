@@ -103,6 +103,18 @@ class IncludeHandlerMixin:
             # Validate: check for unresolved aliases (single-letter identifiers in
             # FROM-less contexts indicate a failed query source translation)
             if self._has_unresolved_refs(wrapped_ast):
+                # Never silently degrade: the fallback empties the definition
+                # (NULL value + WHERE FALSE), which reads downstream as
+                # "no patient qualifies". A false positive here silently
+                # disabled Hospice."Has Hospice Services" and
+                # PalliativeCare."Has Palliative Care in the Measurement
+                # Period" for every patient (CMS347 denominator exceptions,
+                # CMS136 hospice exclusion).
+                _logger.warning(
+                    "Included definition %r has unresolved single-letter "
+                    "references; falling back to an always-empty CTE",
+                    name,
+                )
                 return self._fallback_cte_sql(name, meta)
             return wrapped_ast
 
@@ -228,7 +240,11 @@ class IncludeHandlerMixin:
             )
             if cache_key in self._library_cache:
                 cached = self._library_cache[cache_key]
-                lib_info.library_ast = cached["library_ast"]
+                # Per-alias qualified copy (see _qualify_library_local_codes):
+                # the cached AST belongs to whichever alias loaded it first.
+                _cached_ast = _copy.deepcopy(cached["library_ast"])
+                self._qualify_library_local_codes(_cached_ast, alias)
+                lib_info.library_ast = _cached_ast
                 self._apply_included_library_results(
                     cached["translator"],
                     # Deep-copy resolved ASTs because _prefix_intra_library_refs
@@ -243,7 +259,14 @@ class IncludeHandlerMixin:
             # Cache miss — load and fully translate the library.
             # For namespaced paths (e.g. hl7.fhir.uv.cql.FHIRHelpers), also try
             # the last segment as the library name.
-            included_library = self._load_required_library(inc.path, alias)
+            # Deep-copy so the alias-scoped code qualification below never
+            # mutates the shared library AST cache (the same library may be
+            # included under another alias by another caller).
+            # Deep-copy so the alias-scoped code qualification below never
+            # mutates the shared library AST cache (the same library may be
+            # included under another alias by another caller).
+            included_library = _copy.deepcopy(self._load_required_library(inc.path, alias))
+            self._qualify_library_local_codes(included_library, alias)
 
             # Store the parsed AST on the library info for downstream analysis.
             lib_info.library_ast = included_library
@@ -271,6 +294,7 @@ class IncludeHandlerMixin:
             try:
                 # Set up context from included library declarations
                 included_translator._setup_context(included_library)
+
 
                 # Process parameters
                 included_translator._process_parameters(included_library, included_translator._context)
@@ -613,6 +637,101 @@ class IncludeHandlerMixin:
             limit=cte_ast.limit,
             distinct=cte_ast.distinct,
         )
+
+    def _qualify_library_local_codes(self, library, alias: str) -> None:
+        """Qualify library-local code references used as EQUIVALENCE operands.
+
+        A fluent function body may reference its library's own ``code``
+        declarations by bare name (``S.verificationStatus ~ "confirmed"`` in
+        ``Status.verified``). Function bodies are INLINED into the caller, whose
+        context does not carry the included library's code declarations, so the
+        equivalence degrades to a STRING comparison of the raw CodeableConcept
+        JSON and is never true. Qualifying the reference (``Alias."name"``) makes
+        it resolve as a Code and lower to ``coding_matches(...)``.
+
+        SCOPE IS DELIBERATELY NARROW — only bare identifiers that are operands of
+        ``~`` / ``!~`` / ``=`` / ``!=`` are rewritten:
+
+        * Plain ``define`` bodies are excluded: the CHILD translator resolves the
+          bare name against its own context and the parent copies the resulting
+          SQL, so rewriting them only creates dangling references
+          (``SDE."Male (finding)"`` → "Referenced table SDE not found", CMS124/138).
+        * Code references passed as FUNCTION ARGUMENTS are excluded: qualifying
+          them produced table/scalar lookups against a non-existent CTE
+          (``AlaraCommon."Abdomen and Pelvis Low Dose"`` → Catalog Error,
+          CMS1056/1074/1206). Argument references keep resolving in the child.
+        * Retrieve terminology is excluded for the same reason
+          (``[Observation: code ~ "FACIT-Pal"]`` — CMS347 palliative care).
+
+        Runs on a per-include COPY of the library AST so the shared cache stays
+        pristine and two aliases never cross-qualify.
+        """
+        from ..parser.ast_nodes import (
+            BinaryExpression,
+            FunctionDefinition,
+            Identifier,
+            QualifiedIdentifier,
+        )
+
+        names = {c.name for c in getattr(library, "codes", []) or []}
+        if not names:
+            return
+
+        _EQ_OPS = {"~", "!~", "=", "!=", "equivalent", "not equivalent"}
+
+        def rewrite(expr, _depth=0):
+            if expr is None or _depth > 200:
+                return expr
+            if isinstance(expr, (list, tuple)):
+                items = [rewrite(e, _depth + 1) for e in expr]
+                return type(expr)(items) if isinstance(expr, tuple) else items
+            if isinstance(expr, BinaryExpression):
+                changed = False
+                left, right = expr.left, expr.right
+                if (expr.operator or "").strip().lower() in _EQ_OPS:
+                    if isinstance(left, Identifier) and left.name in names:
+                        left = QualifiedIdentifier(parts=[alias, left.name])
+                        changed = True
+                    if isinstance(right, Identifier) and right.name in names:
+                        right = QualifiedIdentifier(parts=[alias, right.name])
+                        changed = True
+                new_left = rewrite(left, _depth + 1)
+                new_right = rewrite(right, _depth + 1)
+                if new_left is not left or new_right is not right:
+                    changed = True
+                if not changed:
+                    return expr
+                fields = {
+                    f: getattr(expr, f)
+                    for f in expr.__dataclass_fields__
+                }
+                fields["left"] = new_left
+                fields["right"] = new_right
+                try:
+                    return type(expr)(**fields)
+                except TypeError:
+                    expr.left, expr.right = new_left, new_right
+                    return expr
+            if not hasattr(expr, "__dataclass_fields__"):
+                return expr
+            changed = False
+            fields = {}
+            for f in expr.__dataclass_fields__:
+                val = getattr(expr, f, None)
+                new_val = rewrite(val, _depth + 1)
+                if new_val is not val:
+                    changed = True
+                fields[f] = new_val
+            return type(expr)(**fields) if changed else expr
+
+        for stmt in getattr(library, "statements", []) or []:
+            if not isinstance(stmt, FunctionDefinition):
+                continue
+            body = getattr(stmt, "expression", None)
+            if body is not None:
+                new_body = rewrite(body)
+                if new_body is not body:
+                    stmt.expression = new_body
 
     def _prefix_intra_library_refs(
         self, node: "SQLExpression", alias: str, def_names: set

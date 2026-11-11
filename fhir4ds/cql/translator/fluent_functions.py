@@ -778,7 +778,10 @@ class FluentFunctionTranslator:
         if self._has_dynamic_status_filter(func_def.name, context):
             return self._build_status_filter_ast(func_def.name, resource_expr, context)
         elif func_def.name == "prevalenceInterval":
-            return self._build_prevalence_interval_ast(resource_expr, args, context)
+            return self._build_prevalence_interval_ast(
+                resource_expr, args, context,
+                resource_type=getattr(func_def, "resource_type", None),
+            )
         elif func_def.name == "latest":
             return self._build_latest_ast(resource_expr, args, context)
         elif func_def.name == "earliest":
@@ -973,6 +976,7 @@ class FluentFunctionTranslator:
         resource_expr: SQLExpression,
         args: List[SQLExpression],
         context: SQLTranslationContext,
+        resource_type: Optional[str] = None,
     ) -> SQLExpression:
         """
         Build AST for .prevalenceInterval() - extracts onset/abatement interval.
@@ -1008,6 +1012,26 @@ class FluentFunctionTranslator:
                 SQLFunctionCall(name="fhirpath_text", args=[res, SQLLiteral("onsetPeriod.start")]),
                 SQLFunctionCall(name="fhirpath_text", args=[res, SQLLiteral("recordedDate")]),
             ]
+        )
+        # AllergyIntolerance.onsetPeriod is "date(/time) when manifestations
+        # showed" — a CLOSED period therefore ends when the manifestations
+        # stopped, so an ACTIVE allergy whose onset period has an end is bounded
+        # by it (CMS996 f6c7dbc1: test-case description "allergy … starts before
+        # and ends before ED" expects NO exclusion, while the start-only onset
+        # variants are unbounded and ARE excluded).
+        # Condition.onsetPeriod is "when the condition BEGAN", not a resolution
+        # period, so Conditions keep the unbounded closed-null high bound —
+        # CMS506 5e76e39a (cancer-pain Condition with a one-day onset period a day
+        # before the encounter) requires the exclusion. The two FHIRCommon
+        # overloads are separate functions; this is the one semantic difference.
+        _is_allergy = bool(resource_type) and "allergyintolerance" in str(resource_type).lower()
+        onset_end_coalesce = SQLFunctionCall(
+            name="COALESCE",
+            args=[
+                SQLFunctionCall(name="fhirpath_text", args=[res, SQLLiteral("onsetPeriod.end")]),
+                SQLFunctionCall(name="fhirpath_text", args=[res, SQLLiteral("abatementPeriod.end")]),
+                SQLNull(),
+            ],
         )
         # When onset is NULL (e.g. Observations have no onset/recorded fields),
         # return SQL NULL so COALESCE falls through to the next alternative.
@@ -1062,7 +1086,11 @@ class FluentFunctionTranslator:
                                     name="intervalFromBounds",
                                     args=[
                                         onset_coalesce,
-                                        SQLNull(),
+                                        (
+                                            onset_end_coalesce
+                                            if _is_allergy
+                                            else SQLNull()
+                                        ),
                                         SQLLiteral(True),
                                         SQLLiteral(True),
                                     ],

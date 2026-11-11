@@ -1741,10 +1741,22 @@ def run_optimization_phases(
     # resource+valueset).  We must MERGE properties across all keys that map to
     # the same CTE before building, otherwise a key with empty properties will
     # overwrite an earlier build that had precomputed columns.
-    all_retrieve_keys = set()
+    # ORDERED, unique retrieve keys. This must be a list, not a set: iterating a
+    # set of (resource_type, valueset, profile_url) STRING tuples is ordered by
+    # hash randomisation, so the WITH-clause emission order changed between
+    # processes. That produced byte-different SQL for identical input — and for
+    # CMS124/CMS138 one of the orderings hits a DuckDB binder error ("Set
+    # operations can only apply to expressions with the same number of result
+    # columns") while the other executes, i.e. the measure result depended on
+    # PYTHONHASHSEED. Deterministic order = reproducible SQL and reproducible
+    # measure scores.
+    all_retrieve_keys: List[Tuple] = []
+    _seen_retrieve_keys = set()
     code_property_map: Dict[Tuple, Optional[str]] = {}
     for placeholder in phase1_result.placeholders:
-        all_retrieve_keys.add(placeholder.key)
+        if placeholder.key not in _seen_retrieve_keys:
+            _seen_retrieve_keys.add(placeholder.key)
+            all_retrieve_keys.append(placeholder.key)
         if placeholder.code_property:
             code_property_map[placeholder.key] = placeholder.code_property
 
@@ -1764,7 +1776,7 @@ def run_optimization_phases(
         merged_properties = set()
         merged_code_property = code_property_map.get(key)
         merged_profile_urls = []
-        for other_key in all_retrieve_keys:
+        for other_key in all_retrieve_keys:  # ordered (see above)
             o_rt, o_vs, o_profile = other_key
             if o_rt == resource_type and o_vs == valueset:
                 merged_properties.update(phase1_result.property_usage.get(other_key, set()))
@@ -1823,6 +1835,8 @@ def run_optimization_phases(
 
         from .derived_alias_refs import fix_derived_alias_column_refs
         optimized_ast = fix_derived_alias_column_refs(optimized_ast, phase2_result.column_registry)
+        from .correlate_counts import correlate_count_subqueries
+        optimized_ast = correlate_count_subqueries(optimized_ast)
         resolved_asts[def_name] = optimized_ast
 
         # Also resolve placeholders in let-variable CTE bodies for this definition
