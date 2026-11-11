@@ -2169,8 +2169,11 @@ def intervalEquivalent(interval1: str | None, interval2: str | None) -> bool:
         return interval1 is None and interval2 is None
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
-    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
-        return None
+    # NOTE: open-null bounds are NOT uncertain here. CQL §9.7 defines
+    # equivalence as two-valued (this signature is `-> bool`), and an open null
+    # bound means "unbounded", which is perfectly comparable: Interval[1, null)
+    # is equivalent to itself and not to Interval[1, 2]. Returning None here
+    # made `~`/`!~` produce NULL, which no conversion can recover (REV-004).
     if not iv1 or not iv2:
         return False
     starts_equal = _interval_bound_equals_nullable(iv1, iv2, "low")
